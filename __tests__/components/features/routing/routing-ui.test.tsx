@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { renderWithProviders } from "test-utils";
 import RoutingService from "#/api/routing-service/routing-service.api";
 import type {
+  RoutingAuditItem,
   RoutingConfig,
   RoutingLocalRuntimes,
   RoutingRegistrySnapshot,
@@ -18,6 +19,7 @@ import { DryRunConsole } from "#/components/features/routing/dry-run-console";
 import { GoalGuardrails } from "#/components/features/routing/goal-guardrails";
 import { TaxonomyEditor } from "#/components/features/routing/taxonomy-editor";
 import { RouterModelChooser } from "#/components/features/routing/router-model-chooser";
+import { SwitchHistory } from "#/components/features/routing/switch-history";
 import { BenchmarkSources } from "#/components/features/routing/benchmark-sources";
 import { ModelRegistryBrowser } from "#/components/features/routing/model-registry";
 import { RoutingPage } from "#/components/features/routing/routing-page";
@@ -470,6 +472,98 @@ describe("DryRunConsole", () => {
   });
 });
 
+describe("SwitchHistory", () => {
+  const items: RoutingAuditItem[] = [
+    {
+      id: "switch-1",
+      created_at: "2026-09-06T00:00:00Z",
+      kind: "switch",
+      card_id: "card-1",
+      run_id: "run-1",
+      payload: {
+        from: {
+          provider_key: "anthropic",
+          model: "anthropic/claude-opus-4-6",
+        },
+        to: {
+          provider_key: "opencode",
+          model: "opencode/anthropic/claude-sonnet-4-6",
+        },
+        reason: "struggle",
+      },
+    },
+    {
+      id: "resolve-1",
+      created_at: "2026-09-06T00:00:00Z",
+      kind: "resolve",
+      card_id: "card-1",
+      run_id: "run-1",
+      payload: {
+        decision: {
+          provider_key: "anthropic",
+          model: "anthropic/claude-opus-4-6",
+          score: 0.86,
+          rule_id: "route-default",
+          registry_version: "v1",
+          target: "auto",
+          usable: true,
+          goal: "quality",
+        },
+        trace: {
+          task_text: "implement a parser",
+          classification: {
+            work_type: "coding",
+            sensitivity: "default",
+            complexity: "medium",
+            confidence: 1,
+            reason: "",
+          },
+          classifier_version: "v1-taxonomy",
+          route_id: "route-default",
+          filters: [],
+          ranked: [
+            {
+              id: "anthropic/claude-opus-4-6",
+              provider_key: "anthropic",
+              score: 0.86,
+              score_source: "benchmark:coding",
+              cost_per_1k: 0.03,
+            },
+          ],
+          chosen: {
+            provider_key: "anthropic",
+            model: "anthropic/claude-opus-4-6",
+            score: 0.86,
+            rule_id: "route-default",
+            registry_version: "v1",
+            target: "auto",
+            usable: true,
+            goal: "quality",
+          },
+          reason: "auto",
+        },
+      },
+    },
+  ];
+
+  it("renders switch-from/to and cost-per-task", () => {
+    renderWithProviders(<SwitchHistory items={items} />);
+    expect(screen.getByTestId("routing-switch-history")).toBeInTheDocument();
+    expect(screen.getByTestId("routing-switch-from-switch-1")).toHaveTextContent(
+      "anthropic/claude-opus-4-6",
+    );
+    expect(screen.getByTestId("routing-switch-to-switch-1")).toHaveTextContent(
+      "opencode/anthropic/claude-sonnet-4-6",
+    );
+    expect(
+      screen.getByTestId("routing-switch-reason-switch-1"),
+    ).toHaveTextContent(I18nKey.ROUTING$STRUGGLE);
+    expect(screen.getByTestId("routing-audit-cost-resolve-1")).toHaveTextContent(
+      "$0.03",
+    );
+  });
+});
+
 describe("ingest failure toast", () => {
   it("toasts when ingest reports a failed source", async () => {
     const user = userEvent.setup();
@@ -520,6 +614,12 @@ describe("ingest failure toast", () => {
       runtimes: {
         ollama: { alive: true, models: ["qwen3-coder:16b"], error: null },
       },
+    });
+    vi.spyOn(RoutingService, "getAudit").mockResolvedValue({
+      items: [],
+      total: 0,
+      limit: 50,
+      offset: 0,
     });
     vi.spyOn(RoutingService, "resolve").mockResolvedValue({
       decision: {

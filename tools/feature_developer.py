@@ -80,6 +80,9 @@ class FeatureDeveloper:
         llm_complete: Callable[[str], str] | None = None,
         implement_fn: ImplementFn | None = None,
         cost_cap: float | None = None,
+        router_store: Any | None = None,
+        dispatch_runner: Callable[..., dict[str, Any]] | None = None,
+        connected_providers: list[str] | None = None,
     ) -> None:
         self.db_path = db_path
         self.kanban_store = kanban_store or KanbanStore()
@@ -90,6 +93,9 @@ class FeatureDeveloper:
         self.llm_complete = llm_complete or stub_llm_complete
         self.implement_fn = implement_fn
         self.cost_cap = cost_cap
+        self.router_store = router_store
+        self.dispatch_runner = dispatch_runner
+        self.connected_providers = connected_providers
         self._lock = threading.RLock()
         self.conn = sqlite3.connect(db_path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
@@ -388,11 +394,12 @@ class FeatureDeveloper:
             status=TICKET_IN_PROGRESS,
             started_at=utc_now(),
         )
+        routing = self._resolve_ticket(run, ticket)
         try:
             if self.implement_fn is not None:
                 result = self.implement_fn(self.get_run(run_id), ticket)
             else:
-                result = self._implement_ticket(run, ticket)
+                result = self._implement_ticket(run, ticket, routing=routing)
         except Exception as exc:
             self._patch_ticket(
                 ticket["id"],
@@ -423,8 +430,43 @@ class FeatureDeveloper:
                 )
                 self.conn.commit()
 
-    def _implement_ticket(
+    def _resolve_ticket(
         self, run: dict[str, Any], ticket: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        if self.router_store is None:
+            return None
+        from router_runtime import persist_dispatch_trace, resolve_for_dispatch
+
+        card = {}
+        if ticket.get("card_id"):
+            try:
+                card = self.kanban_store.get_card(ticket["card_id"])
+            except Exception:
+                card = {}
+        task_text = (
+            f"{ticket.get('title') or ''}\n"
+            f"{card.get('description') or ticket.get('description') or ''}"
+        ).strip()
+        routing = resolve_for_dispatch(
+            self.router_store,
+            task_text=task_text,
+            run_id=run["id"],
+            card_id=ticket.get("card_id"),
+            connected_providers=self.connected_providers,
+            local_runtimes={},
+        )
+        persist_dispatch_trace(
+            routing,
+            kanban_store=self.kanban_store,
+            card_id=ticket.get("card_id"),
+        )
+        return routing
+
+    def _implement_ticket(
+        self,
+        run: dict[str, Any],
+        ticket: dict[str, Any],
+        routing: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         branch = f"feat/{slugify(ticket['title'])}"
         worktree_dir = None
@@ -453,6 +495,41 @@ class FeatureDeveloper:
             if result.get("status") != STATUS_PASSED:
                 status = TICKET_FAILED
                 error = json.dumps(result.get("run") or {"status": result.get("status")})
+                if self.router_store is not None and routing is not None:
+                    from router_runtime import escalate_on_struggle, record_outcome
+
+                    decision = routing.get("decision") or {}
+                    record_outcome(
+                        "coding",
+                        str(decision.get("provider_key") or ""),
+                        str(decision.get("model") or ""),
+                        False,
+                    )
+                    if worktree_dir:
+                        escalate_on_struggle(
+                            self.router_store,
+                            task_text=str(ticket.get("title") or ""),
+                            failed_result=routing,
+                            failed_output=error,
+                            worktree_dir=worktree_dir,
+                            branch=session.get("branch_name") or branch,
+                            ticket=str(ticket.get("title") or ""),
+                            run_id=run["id"],
+                            card_id=ticket.get("card_id"),
+                            connected_providers=self.connected_providers,
+                            local_runtimes={},
+                            runner=self.dispatch_runner,
+                        )
+            elif self.router_store is not None and routing is not None:
+                from router_runtime import record_outcome
+
+                decision = routing.get("decision") or {}
+                record_outcome(
+                    "coding",
+                    str(decision.get("provider_key") or ""),
+                    str(decision.get("model") or ""),
+                    True,
+                )
         return {
             "status": status,
             "actual_usd": actual,

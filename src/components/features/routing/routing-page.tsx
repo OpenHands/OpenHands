@@ -13,6 +13,7 @@ import { HowAutoRoutes } from "#/components/features/routing/how-auto-routes";
 import { ModelRegistryBrowser } from "#/components/features/routing/model-registry";
 import { RouterModelChooser } from "#/components/features/routing/router-model-chooser";
 import { RoutesTable } from "#/components/features/routing/routes-table";
+import { SwitchHistory } from "#/components/features/routing/switch-history";
 import { TaxonomyEditor } from "#/components/features/routing/taxonomy-editor";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import {
@@ -20,6 +21,7 @@ import {
   usePutRoutingConfig,
   usePutRoutingRouterModel,
   usePutRoutingTaxonomy,
+  useRoutingAudit,
   useRoutingConfig,
   useRoutingLocalRuntimes,
   useRoutingRegistry,
@@ -44,6 +46,7 @@ export function RoutingPage() {
   const putRouterModel = usePutRoutingRouterModel();
   const ingest = useIngestRoutingBenchmarks();
   const resolve = useRoutingResolve();
+  const auditQuery = useRoutingAudit();
   const [traceResult, setTraceResult] =
     React.useState<RoutingResolveResult | null>(null);
   const [previews, setPreviews] = React.useState<Record<string, string>>({});
@@ -130,6 +133,7 @@ export function RoutingPage() {
         <ModelRegistryBrowser registry={registryQuery.data} />
       ) : null}
       <HowAutoRoutes />
+      <SwitchHistory items={auditQuery.data?.items ?? []} />
       <DryRunConsole
         pending={resolve.isPending}
         result={traceResult}

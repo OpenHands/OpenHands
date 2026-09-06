@@ -130,11 +130,15 @@ class LoopTriggerService:
         loop_store: LoopStore | None = None,
         project_store: Any | None = None,
         poll_seconds: float = DEFAULT_POLL_SECONDS,
+        router_store: Any | None = None,
+        kanban_store: Any | None = None,
     ) -> None:
         self.db_path = db_path
         self.loop_store = loop_store or LoopStore()
         self.project_store = project_store
         self.poll_seconds = poll_seconds
+        self.router_store = router_store
+        self.kanban_store = kanban_store
         self._owns_loop_store = loop_store is None
         self._lock = threading.RLock()
         self._stop = threading.Event()
@@ -410,7 +414,32 @@ class LoopTriggerService:
         event = self._record_event(
             trigger_id, run["id"], EVENT_FIRED, context.get("reason")
         )
-        return {"event": event, "run": run}
+        result: dict[str, Any] = {"event": event, "run": run}
+        if self.router_store is not None:
+            from router_runtime import persist_dispatch_trace, resolve_for_dispatch
+
+            payload = trigger.get("payload") or {}
+            task_text = str(
+                context.get("task_text")
+                or payload.get("task_text")
+                or f"{trigger['trigger_type']} {trigger['loop_definition_id']}"
+            )
+            routing = resolve_for_dispatch(
+                self.router_store,
+                task_text=task_text,
+                run_id=run["id"],
+                card_id=context.get("card_id") or payload.get("card_id"),
+                connected_providers=context.get("connected_providers"),
+                local_runtimes=context.get("local_runtimes") or {},
+            )
+            persist_dispatch_trace(
+                routing,
+                worktree_dir=worktree_dir,
+                kanban_store=self.kanban_store,
+                card_id=context.get("card_id") or payload.get("card_id"),
+            )
+            result["routing"] = routing
+        return result
 
     def tick(
         self,

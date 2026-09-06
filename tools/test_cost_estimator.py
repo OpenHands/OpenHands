@@ -18,6 +18,9 @@ from cost_estimator import (  # noqa: E402
     BUDGET_WARNING,
     apply_estimate,
     budget_status,
+    empirical_pass_rate,
+    record_routing_outcome,
+    reset_routing_outcomes,
     estimate_cost_usd,
     estimate_task,
     record_actuals,
@@ -106,6 +109,22 @@ class StoreIntegrationTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(payload["estimate"]["model"], "glm-5.2")
         self.assertIn("budget", payload)
+
+
+class RoutingOutcomeTests(unittest.TestCase):
+    def tearDown(self) -> None:
+        reset_routing_outcomes()
+
+    def test_empirical_pass_rate_from_scripted_outcomes(self) -> None:
+        reset_routing_outcomes()
+        record_routing_outcome("coding", "openhands", "openhands/glm-5.2", True)
+        record_routing_outcome("coding", "openhands", "openhands/glm-5.2", True)
+        record_routing_outcome("coding", "openhands", "openhands/glm-5.2", False)
+        self.assertAlmostEqual(
+            empirical_pass_rate("coding", "openhands", "openhands/glm-5.2") or 0,
+            2 / 3,
+        )
+        self.assertIsNone(empirical_pass_rate("coding", "anthropic", "missing"))
 
 
 if __name__ == "__main__":

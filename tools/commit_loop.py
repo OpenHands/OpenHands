@@ -93,12 +93,18 @@ class CommitLoopService:
         fleet_store: Any | None = None,
         project_store: Any | None = None,
         fix_agent: FixAgent | None = None,
+        router_store: Any | None = None,
+        dispatch_runner: Any | None = None,
+        connected_providers: list[str] | None = None,
     ) -> None:
         self.loop_store = loop_store or LoopStore()
         self.kanban_store = kanban_store
         self.fleet_store = fleet_store
         self.project_store = project_store
         self.fix_agent = fix_agent
+        self.router_store = router_store
+        self.dispatch_runner = dispatch_runner
+        self.connected_providers = connected_providers
         self._owns_loop_store = loop_store is None
 
     def close(self) -> None:
@@ -149,11 +155,32 @@ class CommitLoopService:
         project_id = str(session["project_id"])
         definition = self.setup(project_id)
         worktree = worktree_dir or self._worktree_dir(session)
+        card = self._card(session)
         run = self.loop_store.start_run(
             definition["id"],
             worktree_dir=worktree,
             session_id=session_id,
         )
+        routing = None
+        if self.router_store is not None:
+            from router_runtime import persist_dispatch_trace, resolve_for_dispatch
+
+            routing = resolve_for_dispatch(
+                self.router_store,
+                task_text=str(
+                    card.get("title") or session.get("branch_name") or "commit loop"
+                ),
+                run_id=run["id"],
+                card_id=card.get("id"),
+                connected_providers=self.connected_providers,
+                local_runtimes={},
+            )
+            persist_dispatch_trace(
+                routing,
+                worktree_dir=worktree,
+                kanban_store=self.kanban_store,
+                card_id=card.get("id"),
+            )
         fixer = fix_agent or self.fix_agent
         while run["status"] == STATUS_RUNNING:
             payload = self.loop_store.request_fix(run["id"])
@@ -163,6 +190,32 @@ class CommitLoopService:
                 "worktree_dir": worktree,
                 "session": session,
             }
+            if (
+                self.router_store is not None
+                and routing is not None
+                and worktree
+            ):
+                from router_runtime import escalate_on_struggle
+
+                nxt = escalate_on_struggle(
+                    self.router_store,
+                    task_text=str(card.get("title") or ""),
+                    failed_result=routing,
+                    failed_output=str(payload.get("last_output") or ""),
+                    worktree_dir=worktree,
+                    branch=str(session.get("branch_name") or ""),
+                    ticket=str(card.get("title") or ""),
+                    run_id=run["id"],
+                    card_id=card.get("id"),
+                    connected_providers=self.connected_providers,
+                    local_runtimes={},
+                    runner=self.dispatch_runner,
+                    stage_type=str(payload.get("stage_name") or "fix"),
+                )
+                if nxt.get("switched"):
+                    routing = nxt
+                    ctx["resume_prompt"] = nxt.get("resume_prompt")
+                    ctx["routing"] = nxt
             if fixer is None:
                 break
             fixer(ctx)
@@ -173,6 +226,7 @@ class CommitLoopService:
                 "run": run,
                 "commit_sha": None,
                 "commit_message": None,
+                "routing": routing,
             }
         card = self._card(session)
         message = conventional_commit_message(
@@ -195,6 +249,7 @@ class CommitLoopService:
                 tests_passed=True,
                 actual_cost=float(run["total_cost_usd"] or 0),
                 agent_time=float(run["iteration"] or 0),
+                model_used=((routing or {}).get("decision") or {}).get("model"),
             )
             self.kanban_store.update_card(
                 card["id"],
@@ -218,6 +273,7 @@ class CommitLoopService:
             "commit_sha": sha,
             "commit_message": message,
             "pr": pr,
+            "routing": routing,
         }
 
     def _definition_for(self, project_id: str) -> dict[str, Any] | None:

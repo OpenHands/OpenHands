@@ -238,8 +238,8 @@ export interface RoutingAuditItem {
   payload: {
     decision?: RoutingDecision;
     trace?: RoutingTrace;
-    from?: RoutingDecision;
-    to?: RoutingDecision;
+    from?: { provider_key?: string | null; model?: string | null };
+    to?: { provider_key?: string | null; model?: string | null };
     reason?: string;
   };
 }

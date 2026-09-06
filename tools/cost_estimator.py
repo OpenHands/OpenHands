@@ -26,6 +26,25 @@ BUDGET_OK = "ok"
 BUDGET_WARNING = "warning"
 BUDGET_OVER = "over"
 BUDGET_WARNING_RATIO = 0.8
+_ROUTING_OUTCOMES: dict[str, list[bool]] = {}
+
+
+def record_routing_outcome(
+    work_type: str, provider: str, model: str, passed: bool
+) -> None:
+    key = f"{work_type}:{provider}:{model}"
+    _ROUTING_OUTCOMES.setdefault(key, []).append(bool(passed))
+
+
+def empirical_pass_rate(work_type: str, provider: str, model: str) -> float | None:
+    outcomes = _ROUTING_OUTCOMES.get(f"{work_type}:{provider}:{model}")
+    if not outcomes:
+        return None
+    return sum(1 for item in outcomes if item) / len(outcomes)
+
+
+def reset_routing_outcomes() -> None:
+    _ROUTING_OUTCOMES.clear()
 
 
 def resolve_model(model: str | None) -> str:
