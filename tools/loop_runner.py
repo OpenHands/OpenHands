@@ -25,14 +25,23 @@ STATUS_RUNNING = "running"
 STATUS_PASSED = "passed"
 STATUS_FAILED = "failed"
 STATUS_ABORTED = "aborted"
+STATUS_AWAITING_INPUT = "awaiting_input"
+STATUS_SKIPPED = "skipped"
 RUN_STATUSES = (
     STATUS_PENDING,
     STATUS_RUNNING,
     STATUS_PASSED,
     STATUS_FAILED,
     STATUS_ABORTED,
+    STATUS_AWAITING_INPUT,
 )
-STAGE_STATUSES = (STATUS_PENDING, STATUS_RUNNING, STATUS_PASSED, STATUS_FAILED)
+STAGE_STATUSES = (
+    STATUS_PENDING,
+    STATUS_RUNNING,
+    STATUS_PASSED,
+    STATUS_FAILED,
+    STATUS_SKIPPED,
+)
 ON_FAILURE_STOP = "stop"
 ON_FAILURE_AUTO_FIX = "auto_fix"
 ON_FAILURE_NOTIFY = "notify"
@@ -356,7 +365,7 @@ class LoopStore:
 
     def request_fix(self, run_id: str) -> dict[str, Any]:
         run = self.get_run(run_id)
-        if run["status"] != STATUS_RUNNING:
+        if run["status"] not in (STATUS_RUNNING, STATUS_AWAITING_INPUT):
             raise LoopError("run is not waiting for a fix")
         failed = self._current_failed_stage(run)
         if failed is None:
@@ -370,7 +379,7 @@ class LoopStore:
 
     def retry_stage(self, run_id: str) -> dict[str, Any]:
         run = self.get_run(run_id)
-        if run["status"] != STATUS_RUNNING:
+        if run["status"] not in (STATUS_RUNNING, STATUS_AWAITING_INPUT, STATUS_FAILED):
             raise LoopError("run is not retryable")
         failed = self._current_failed_stage(run)
         if failed is None:
@@ -378,7 +387,49 @@ class LoopStore:
         definition = self.get_definition(run["definition_id"])
         names = [stage["name"] for stage in definition["stages"]]
         index = names.index(failed["stage_name"])
+        self._set_run(
+            run_id,
+            status=STATUS_RUNNING,
+            current_stage=failed["stage_name"],
+        )
         return self._continue_run(run_id, from_index=index)
+
+    def pause_for_input(self, run_id: str) -> dict[str, Any]:
+        run = self.get_run(run_id)
+        self._set_run(
+            run_id,
+            status=STATUS_AWAITING_INPUT,
+            current_stage=run["current_stage"],
+        )
+        return self.get_run(run_id)
+
+    def submit_feedback(
+        self,
+        run_id: str,
+        approve: bool,
+        note: str | None = None,
+    ) -> dict[str, Any]:
+        run = self.get_run(run_id)
+        if run["status"] not in (STATUS_RUNNING, STATUS_AWAITING_INPUT, STATUS_FAILED):
+            raise LoopError("run is not waiting for feedback")
+        if note:
+            failed = self._current_failed_stage(run)
+            if failed is not None:
+                output = ((failed["last_output"] or "") + f"\nfeedback: {note}").strip()
+                self._upsert_stage(
+                    run_id,
+                    failed["stage_name"],
+                    status=failed["status"],
+                    attempt=failed["attempt"],
+                    last_output=output,
+                )
+        if approve:
+            run = self.retry_stage(run_id)
+            definition = self.get_definition(run["definition_id"])
+            if run["status"] == STATUS_RUNNING and definition["name"] == "manual-loop":
+                return self.pause_for_input(run["id"])
+            return run
+        return self.abort_run(run_id)
 
     def abort_run(self, run_id: str) -> dict[str, Any]:
         self.get_run(run_id)
@@ -483,6 +534,8 @@ class LoopStore:
                 )
             except Exception as exc:
                 passed, output = False, str(exc)
+            skipped = passed == STATUS_SKIPPED or passed == "skipped"
+            passed_bool = skipped or passed is True
             output = (output or "").strip()
         else:
             cmd = resolve_stage_cmd(stage, worktree_dir)
@@ -495,13 +548,25 @@ class LoopStore:
                 check=False,
             )
             output = ((result.stdout or "") + (result.stderr or "")).strip()
-            passed = result.returncode == 0
+            passed_bool = result.returncode == 0
+            skipped = False
         duration = time.monotonic() - t0
         cost = estimate_attempt_cost(duration)
         self._add_cost(run_id, cost)
         updated = self.get_run(run_id)
         over_budget = float(updated["total_cost_usd"]) > float(definition["max_cost_usd"])
-        if passed and not over_budget:
+        if skipped and not over_budget:
+            self._upsert_stage(
+                run_id,
+                stage["name"],
+                status=STATUS_SKIPPED,
+                attempt=attempt,
+                last_output=output,
+                started_at=started,
+                finished_at=utc_now(),
+            )
+            return STATUS_PASSED
+        if passed_bool and not over_budget:
             self._upsert_stage(
                 run_id,
                 stage["name"],
