@@ -1046,11 +1046,13 @@ export const SETTINGS_HANDLERS = [
           >
         )?.api_key);
 
-    // Reuse the persisted misc_settings.app_preferences for repeat fetches,
-    // but always fall back to the default-empty block so the GUI sees a
-    // deterministic shape on first read.
+    // Reuse the persisted misc_settings for repeat fetches, but always fall
+    // back to defaults so the GUI sees a deterministic shape on first read.
     const storedMisc = (settings as Record<string, unknown>).misc_settings as
-      | { app_preferences?: Record<string, unknown> }
+      | {
+          app_preferences?: Record<string, unknown>;
+          ui_preferences?: Record<string, unknown>;
+        }
       | undefined;
     const appPreferences = {
       ...DEFAULT_APP_PREFERENCES,
@@ -1061,7 +1063,12 @@ export const SETTINGS_HANDLERS = [
       agent_settings: agentSettings,
       conversation_settings: settings.conversation_settings ?? {},
       llm_api_key_is_set: llmApiKeySet,
-      misc_settings: { app_preferences: appPreferences },
+      misc_settings: {
+        app_preferences: appPreferences,
+        ...(storedMisc?.ui_preferences
+          ? { ui_preferences: storedMisc.ui_preferences }
+          : {}),
+      },
     });
   }),
 
@@ -1073,6 +1080,7 @@ export const SETTINGS_HANDLERS = [
       conversation_settings_diff?: Record<string, SettingsValue>;
       misc_settings_diff?: {
         app_preferences?: Record<string, unknown>;
+        ui_preferences?: Record<string, unknown>;
       };
     } | null;
 
@@ -1127,20 +1135,33 @@ export const SETTINGS_HANDLERS = [
     if (body.misc_settings_diff) {
       const existingMisc = (current as Record<string, unknown>)
         .misc_settings as
-        | { app_preferences?: Record<string, unknown> }
+        | {
+            app_preferences?: Record<string, unknown>;
+            ui_preferences?: Record<string, unknown>;
+          }
         | undefined;
       // Deep-merge: nested `app_preferences` overlays field-by-field;
       // `disabled_skills` lists are replaced wholesale. This mirrors the
       // SDK's `_deep_merge` behaviour for the two-level shape currently
       // stored in `misc_settings`.
-      const nextMisc: { app_preferences?: Record<string, unknown> } = {
-        ...(existingMisc ?? {}),
-      };
+      const nextMisc: {
+        app_preferences?: Record<string, unknown>;
+        ui_preferences?: Record<string, unknown>;
+      } = { ...(existingMisc ?? {}) };
       if (body.misc_settings_diff.app_preferences) {
         nextMisc.app_preferences = {
           ...(existingMisc?.app_preferences ?? {}),
           ...body.misc_settings_diff.app_preferences,
         };
+      }
+      if (body.misc_settings_diff.ui_preferences) {
+        nextMisc.ui_preferences = deepMerge(
+          ((existingMisc as Record<string, unknown>)?.ui_preferences as Record<
+            string,
+            unknown
+          >) ?? {},
+          body.misc_settings_diff.ui_preferences,
+        );
       }
       (nextSettings as Record<string, unknown>).misc_settings = nextMisc;
     }
@@ -1154,7 +1175,10 @@ export const SETTINGS_HANDLERS = [
       llm_api_key_is_set: nextSettings.llm_api_key_set ?? false,
       misc_settings: ((nextSettings as Record<string, unknown>)
         .misc_settings as
-        | { app_preferences?: Record<string, unknown> }
+        | {
+            app_preferences?: Record<string, unknown>;
+            ui_preferences?: Record<string, unknown>;
+          }
         | undefined) ?? { app_preferences: {} },
     });
   }),

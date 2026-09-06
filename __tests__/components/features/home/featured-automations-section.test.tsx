@@ -10,7 +10,6 @@ import type { AppConversation } from "#/api/conversation-service/agent-server-co
 import { PinnedAutomationsDashboard } from "#/components/features/home/featured-automations/pinned-automations-dashboard";
 import { RunningAutomationsList } from "#/components/features/home/featured-automations/running-automations-list";
 import { NavigationProvider } from "#/context/navigation-context";
-import { HOME_PINNED_AUTOMATIONS_KEY } from "#/hooks/use-home-pinned-automations";
 import { AUTOMATION_STACK_SECTION_BOTTOM_CLASS } from "#/utils/automation-stack-section";
 import {
   AutomationRunStatus,
@@ -117,13 +116,6 @@ function makeConversation(id: string, title: string | null): AppConversation {
   };
 }
 
-/** Pins are stored under a backend/org-scoped key; find it by prefix. */
-function getStoredPinnedIds(): string | null {
-  const key = Object.keys(window.localStorage).find((storageKey) =>
-    storageKey.startsWith(HOME_PINNED_AUTOMATIONS_KEY),
-  );
-  return key ? window.localStorage.getItem(key) : null;
-}
 
 function renderHomeAutomations(ui: React.ReactElement) {
   const queryClient = new QueryClient({
@@ -441,8 +433,6 @@ describe("home automations composer layout", () => {
     expect(
       within(dashboard).getByText("AUTOMATIONS$DETAIL$NO_CONVERSATION"),
     ).toBeInTheDocument();
-
-    expect(getStoredPinnedIds()).toContain("auto-1");
 
     expect(
       screen.queryByTestId("pinned-automation-run-now-auto-1"),
