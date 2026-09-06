@@ -25,14 +25,23 @@ STATUS_RUNNING = "running"
 STATUS_PASSED = "passed"
 STATUS_FAILED = "failed"
 STATUS_ABORTED = "aborted"
+STATUS_AWAITING_INPUT = "awaiting_input"
+STATUS_SKIPPED = "skipped"
 RUN_STATUSES = (
     STATUS_PENDING,
     STATUS_RUNNING,
     STATUS_PASSED,
     STATUS_FAILED,
     STATUS_ABORTED,
+    STATUS_AWAITING_INPUT,
 )
-STAGE_STATUSES = (STATUS_PENDING, STATUS_RUNNING, STATUS_PASSED, STATUS_FAILED)
+STAGE_STATUSES = (
+    STATUS_PENDING,
+    STATUS_RUNNING,
+    STATUS_PASSED,
+    STATUS_FAILED,
+    STATUS_SKIPPED,
+)
 ON_FAILURE_STOP = "stop"
 ON_FAILURE_AUTO_FIX = "auto_fix"
 ON_FAILURE_NOTIFY = "notify"
@@ -42,6 +51,11 @@ DEFAULT_MAX_COST_USD = 5.0
 DEFAULT_ON_FAILURE = ON_FAILURE_AUTO_FIX
 TOKENS_PER_SECOND = 50
 MIN_STAGE_COST_USD = 0.000001
+STAGE_HANDLERS: dict[str, Any] = {}
+
+
+def register_stage_handler(definition_name: str, stage_name: str, handler: Any) -> None:
+    STAGE_HANDLERS[f"{definition_name}:{stage_name}"] = handler
 
 
 class LoopError(Exception):
@@ -140,6 +154,7 @@ class LoopStore:
                 max_iterations INTEGER NOT NULL,
                 max_cost_usd REAL NOT NULL,
                 on_failure TEXT NOT NULL,
+                config TEXT NOT NULL DEFAULT '{}',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
@@ -171,6 +186,14 @@ class LoopStore:
             );
             """
         )
+        columns = [
+            row[1]
+            for row in self.conn.execute("PRAGMA table_info(loop_definitions)")
+        ]
+        if "config" not in columns:
+            self.conn.execute(
+                "ALTER TABLE loop_definitions ADD COLUMN config TEXT NOT NULL DEFAULT '{}'"
+            )
         self.conn.commit()
 
     def create_definition(
@@ -181,6 +204,7 @@ class LoopStore:
         max_iterations: int | None = None,
         max_cost_usd: float | None = None,
         on_failure: str | None = None,
+        config: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         name = (name or "").strip()
         project_id = (project_id or "").strip()
@@ -198,6 +222,10 @@ class LoopStore:
         cost_cap = float(max_cost_usd if max_cost_usd is not None else DEFAULT_MAX_COST_USD)
         if cost_cap < 0:
             raise LoopError("max_cost_usd must be >= 0")
+        if config is None:
+            config = {}
+        if not isinstance(config, dict):
+            raise LoopError("config must be an object")
         definition_id = new_id()
         now = utc_now()
         with self._lock:
@@ -205,8 +233,8 @@ class LoopStore:
                 """
                 INSERT INTO loop_definitions (
                     id, name, project_id, stages, max_iterations, max_cost_usd,
-                    on_failure, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    on_failure, config, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     definition_id,
@@ -216,6 +244,7 @@ class LoopStore:
                     iterations,
                     cost_cap,
                     mode,
+                    json.dumps(config),
                     now,
                     now,
                 ),
@@ -241,7 +270,27 @@ class LoopStore:
         if row is None:
             raise NotFoundError(f"Loop definition {definition_id} not found")
         row["stages"] = json.loads(row["stages"])
+        row["config"] = json.loads(row.get("config") or "{}")
         return row
+
+    def set_definition_config(
+        self, definition_id: str, config: dict[str, Any]
+    ) -> dict[str, Any]:
+        self.get_definition(definition_id)
+        if not isinstance(config, dict):
+            raise LoopError("config must be an object")
+        now = utc_now()
+        with self._lock:
+            self.conn.execute(
+                """
+                UPDATE loop_definitions
+                SET config = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (json.dumps(config), now, definition_id),
+            )
+            self.conn.commit()
+        return self.get_definition(definition_id)
 
     def list_runs(self, definition_id: str) -> list[dict[str, Any]]:
         self.get_definition(definition_id)
@@ -316,7 +365,7 @@ class LoopStore:
 
     def request_fix(self, run_id: str) -> dict[str, Any]:
         run = self.get_run(run_id)
-        if run["status"] != STATUS_RUNNING:
+        if run["status"] not in (STATUS_RUNNING, STATUS_AWAITING_INPUT):
             raise LoopError("run is not waiting for a fix")
         failed = self._current_failed_stage(run)
         if failed is None:
@@ -330,7 +379,7 @@ class LoopStore:
 
     def retry_stage(self, run_id: str) -> dict[str, Any]:
         run = self.get_run(run_id)
-        if run["status"] != STATUS_RUNNING:
+        if run["status"] not in (STATUS_RUNNING, STATUS_AWAITING_INPUT, STATUS_FAILED):
             raise LoopError("run is not retryable")
         failed = self._current_failed_stage(run)
         if failed is None:
@@ -338,7 +387,49 @@ class LoopStore:
         definition = self.get_definition(run["definition_id"])
         names = [stage["name"] for stage in definition["stages"]]
         index = names.index(failed["stage_name"])
+        self._set_run(
+            run_id,
+            status=STATUS_RUNNING,
+            current_stage=failed["stage_name"],
+        )
         return self._continue_run(run_id, from_index=index)
+
+    def pause_for_input(self, run_id: str) -> dict[str, Any]:
+        run = self.get_run(run_id)
+        self._set_run(
+            run_id,
+            status=STATUS_AWAITING_INPUT,
+            current_stage=run["current_stage"],
+        )
+        return self.get_run(run_id)
+
+    def submit_feedback(
+        self,
+        run_id: str,
+        approve: bool,
+        note: str | None = None,
+    ) -> dict[str, Any]:
+        run = self.get_run(run_id)
+        if run["status"] not in (STATUS_RUNNING, STATUS_AWAITING_INPUT, STATUS_FAILED):
+            raise LoopError("run is not waiting for feedback")
+        if note:
+            failed = self._current_failed_stage(run)
+            if failed is not None:
+                output = ((failed["last_output"] or "") + f"\nfeedback: {note}").strip()
+                self._upsert_stage(
+                    run_id,
+                    failed["stage_name"],
+                    status=failed["status"],
+                    attempt=failed["attempt"],
+                    last_output=output,
+                )
+        if approve:
+            run = self.retry_stage(run_id)
+            definition = self.get_definition(run["definition_id"])
+            if run["status"] == STATUS_RUNNING and definition["name"] == "manual-loop":
+                return self.pause_for_input(run["id"])
+            return run
+        return self.abort_run(run_id)
 
     def abort_run(self, run_id: str) -> dict[str, Any]:
         self.get_run(run_id)
@@ -431,24 +522,51 @@ class LoopStore:
             current_stage=stage["name"],
             iteration=int(run["iteration"]) + 1,
         )
-        cmd = resolve_stage_cmd(stage, worktree_dir)
+        handler = STAGE_HANDLERS.get(f"{definition['name']}:{stage['name']}")
         t0 = time.monotonic()
-        result = subprocess.run(
-            cmd,
-            cwd=worktree_dir,
-            shell=True,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        if handler is not None:
+            try:
+                passed, output = handler(
+                    run_id=run_id,
+                    stage=stage,
+                    worktree_dir=worktree_dir,
+                    definition=definition,
+                )
+            except Exception as exc:
+                passed, output = False, str(exc)
+            skipped = passed == STATUS_SKIPPED or passed == "skipped"
+            passed_bool = skipped or passed is True
+            output = (output or "").strip()
+        else:
+            cmd = resolve_stage_cmd(stage, worktree_dir)
+            result = subprocess.run(
+                cmd,
+                cwd=worktree_dir,
+                shell=True,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            output = ((result.stdout or "") + (result.stderr or "")).strip()
+            passed_bool = result.returncode == 0
+            skipped = False
         duration = time.monotonic() - t0
         cost = estimate_attempt_cost(duration)
-        output = ((result.stdout or "") + (result.stderr or "")).strip()
-        passed = result.returncode == 0
         self._add_cost(run_id, cost)
         updated = self.get_run(run_id)
         over_budget = float(updated["total_cost_usd"]) > float(definition["max_cost_usd"])
-        if passed and not over_budget:
+        if skipped and not over_budget:
+            self._upsert_stage(
+                run_id,
+                stage["name"],
+                status=STATUS_SKIPPED,
+                attempt=attempt,
+                last_output=output,
+                started_at=started,
+                finished_at=utc_now(),
+            )
+            return STATUS_PASSED
+        if passed_bool and not over_budget:
             self._upsert_stage(
                 run_id,
                 stage["name"],

@@ -30,6 +30,9 @@ RUN_ABORT_PATH_RE = re.compile(r"^/api/loops/runs/(?P<run_id>[^/]+)/abort$")
 RUN_CHECKPOINT_PATH_RE = re.compile(
     r"^/api/loops/runs/(?P<run_id>[^/]+)/resume-checkpoint$"
 )
+RUN_FEEDBACK_PATH_RE = re.compile(
+    r"^/api/loops/runs/(?P<run_id>[^/]+)/feedback$"
+)
 
 
 def _json_body(body: JsonBody) -> dict[str, Any]:
@@ -108,6 +111,19 @@ def _resume_checkpoint(
     return 200, store.resume_checkpoint(params["run_id"])
 
 
+def _feedback(
+    store: LoopStore, params: dict[str, str], body: JsonBody
+) -> tuple[int, Any]:
+    payload = _json_body(body)
+    if "approve" not in payload:
+        raise LoopError("approve is required")
+    return 200, store.submit_feedback(
+        params["run_id"],
+        approve=bool(payload.get("approve")),
+        note=payload.get("note"),
+    )
+
+
 ROUTES: tuple[tuple[str, re.Pattern[str], Handler], ...] = (
     ("GET", re.compile(rf"^{LOOPS_PATH}$"), _list_definitions),
     ("POST", re.compile(rf"^{LOOPS_PATH}$"), _create_definition),
@@ -117,6 +133,7 @@ ROUTES: tuple[tuple[str, re.Pattern[str], Handler], ...] = (
     ("POST", RUN_FIX_PATH_RE, _request_fix),
     ("POST", RUN_RETRY_PATH_RE, _retry_stage),
     ("POST", RUN_ABORT_PATH_RE, _abort_run),
+    ("POST", RUN_FEEDBACK_PATH_RE, _feedback),
     ("GET", RUN_PATH_RE, _get_run),
 )
 
