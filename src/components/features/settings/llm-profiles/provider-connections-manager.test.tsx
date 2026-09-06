@@ -43,10 +43,18 @@ vi.mock("#/hooks/query/use-llm-subscription-models", () => ({
 }));
 
 const saveProfileMutate = vi.hoisted(() => vi.fn());
+const activateProfileMutate = vi.hoisted(() => vi.fn());
 
 vi.mock("#/hooks/mutation/use-save-llm-profile", () => ({
   useSaveLlmProfile: () => ({
     mutateAsync: saveProfileMutate,
+    isPending: false,
+  }),
+}));
+
+vi.mock("#/hooks/mutation/use-activate-llm-profile", () => ({
+  useActivateLlmProfile: () => ({
+    mutateAsync: activateProfileMutate,
     isPending: false,
   }),
 }));
@@ -77,6 +85,9 @@ describe("ProviderConnectionsManager", () => {
     displayErrorToast.mockReset();
     displaySuccessToast.mockReset();
     saveProfileMutate.mockReset();
+    saveProfileMutate.mockResolvedValue({ name: "Local" });
+    activateProfileMutate.mockReset();
+    activateProfileMutate.mockResolvedValue({ name: "Local" });
     openaiSubscriptionStatusMock.mockReset();
     openaiSubscriptionStatusMock.mockReturnValue({
       data: { connected: false },
@@ -306,6 +317,7 @@ describe("ProviderConnectionsManager", () => {
         }),
       );
     });
+    expect(activateProfileMutate).toHaveBeenCalledWith("ChatGPT");
   });
 
   it("lets Anthropic connect with a Claude subscription instead of an API key", async () => {
@@ -403,7 +415,7 @@ describe("ProviderConnectionsManager", () => {
     expect(createSpy).not.toHaveBeenCalled();
   });
 
-  it("requires a base URL for Ollama and not an API key", async () => {
+  it("prefills the local Ollama URL and does not require an API key", async () => {
     const user = userEvent.setup();
 
     renderWith(
@@ -427,13 +439,68 @@ describe("ProviderConnectionsManager", () => {
     await user.click(providerSelector);
     await user.click(screen.getByTestId("provider-item-ollama"));
 
-    expect(screen.getByTestId("provider-connection-submit")).toBeDisabled();
-
-    await user.type(
+    expect(
       screen.getByTestId("provider-connection-base-url-input"),
-      "http://127.0.0.1:11434",
-    );
+    ).toHaveValue("http://127.0.0.1:11434");
     expect(screen.getByTestId("provider-connection-submit")).toBeEnabled();
+  });
+
+  it("creates a linked LLM profile for a local or remote Ollama connection", async () => {
+    const user = userEvent.setup();
+    const createSpy = vi
+      .spyOn(ProviderConnectionsService, "create")
+      .mockResolvedValue({
+        ...connection,
+        id: "conn-ollama",
+        display_name: "Office GPU",
+        provider: "ollama",
+        base_url: "http://gpu.home:11434",
+      });
+
+    renderWith(
+      <ProviderConnectionsManager
+        connections={[]}
+        linkedCountById={{}}
+        isLoading={false}
+        loadError={null}
+      />,
+    );
+
+    await user.click(screen.getByTestId("add-provider-connection"));
+    await user.type(
+      screen.getByTestId("provider-connection-name-input"),
+      "Office GPU",
+    );
+
+    const providerSelector = screen.getByRole("combobox", {
+      name: /provider/i,
+    });
+    await user.click(providerSelector);
+    await user.click(screen.getByTestId("provider-item-ollama"));
+
+    const urlInput = screen.getByTestId("provider-connection-base-url-input");
+    await user.clear(urlInput);
+    await user.type(urlInput, "http://gpu.home:11434");
+    await user.click(screen.getByTestId("provider-connection-submit"));
+
+    await waitFor(() => {
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: "ollama",
+          base_url: "http://gpu.home:11434",
+        }),
+      );
+    });
+    expect(saveProfileMutate).toHaveBeenCalledWith({
+      name: "Office-GPU",
+      request: {
+        llm: {
+          model: "ollama/llama3.2",
+          provider_connection_id: "conn-ollama",
+        },
+      },
+    });
+    expect(activateProfileMutate).toHaveBeenCalledWith("Office-GPU");
   });
 
   it("submits the raw provider id when creating a connection", async () => {
@@ -479,6 +546,16 @@ describe("ProviderConnectionsManager", () => {
         expect.objectContaining({ provider: "anthropic" }),
       );
     });
+    expect(saveProfileMutate).toHaveBeenCalledWith({
+      name: "My-Anthropic",
+      request: {
+        llm: {
+          model: "anthropic/claude-sonnet-4-5",
+          provider_connection_id: "conn-anthropic",
+        },
+      },
+    });
+    expect(activateProfileMutate).toHaveBeenCalledWith("My-Anthropic");
   });
 
   it("lists a row per connection with its display name and provider", () => {

@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { ProviderConnection } from "#/api/provider-connections-service/provider-connections-service.api";
 import {
+  CURSOR_CLI_ACP_COMMAND,
   HOST_DETECTED_CONNECTION_PREFIX,
+  OPENCODE_ACP_COMMAND,
   isHostDetectedConnection,
   mergeHostDetectedConnections,
+  pickPreferredHostLaunch,
 } from "#/utils/host-detected-provider-connections";
 
 function connection(
@@ -90,5 +93,73 @@ describe("isHostDetectedConnection", () => {
         connection({ id: "conn-1", provider: "openai" }),
       ),
     ).toBe(false);
+  });
+});
+
+describe("pickPreferredHostLaunch", () => {
+  it("prefers Claude Code when Claude and Cursor are both signed in", () => {
+    expect(
+      pickPreferredHostLaunch([
+        connection({
+          id: `${HOST_DETECTED_CONNECTION_PREFIX}cursor-cli`,
+          provider: "cursor-cli",
+        }),
+        connection({
+          id: `${HOST_DETECTED_CONNECTION_PREFIX}anthropic`,
+          provider: "anthropic",
+        }),
+      ]),
+    ).toEqual({
+      kind: "acp",
+      acpServer: "claude-code",
+      profileName: "claude-code",
+    });
+  });
+
+  it("falls back to ChatGPT when no Claude login is present", () => {
+    expect(
+      pickPreferredHostLaunch([
+        connection({
+          id: `${HOST_DETECTED_CONNECTION_PREFIX}chatgpt`,
+          provider: "openai",
+        }),
+        connection({
+          id: `${HOST_DETECTED_CONNECTION_PREFIX}cursor-cli`,
+          provider: "cursor-cli",
+        }),
+      ]),
+    ).toEqual({ kind: "chatgpt" });
+  });
+
+  it("launches Cursor CLI via custom ACP when that is the only subscription", () => {
+    expect(
+      pickPreferredHostLaunch([
+        connection({
+          id: `${HOST_DETECTED_CONNECTION_PREFIX}cursor-cli`,
+          provider: "cursor-cli",
+        }),
+      ]),
+    ).toEqual({
+      kind: "acp",
+      acpServer: "custom",
+      profileName: "cursor-cli",
+      command: [...CURSOR_CLI_ACP_COMMAND],
+    });
+  });
+
+  it("launches OpenCode via custom ACP when that is the only subscription", () => {
+    expect(
+      pickPreferredHostLaunch([
+        connection({
+          id: `${HOST_DETECTED_CONNECTION_PREFIX}opencode`,
+          provider: "opencode",
+        }),
+      ]),
+    ).toEqual({
+      kind: "acp",
+      acpServer: "custom",
+      profileName: "opencode",
+      command: [...OPENCODE_ACP_COMMAND],
+    });
   });
 });

@@ -16,6 +16,7 @@ import { SecretsService } from "#/api/secrets-service";
 import { useCreateProviderConnection } from "#/hooks/mutation/use-create-provider-connection";
 import { useUpdateProviderConnection } from "#/hooks/mutation/use-update-provider-connection";
 import { useSaveLlmProfile } from "#/hooks/mutation/use-save-llm-profile";
+import { useActivateLlmProfile } from "#/hooks/mutation/use-activate-llm-profile";
 import { useOpenAISubscriptionStatus } from "#/hooks/query/use-llm-subscription-status";
 import { useOpenAISubscriptionModels } from "#/hooks/query/use-llm-subscription-models";
 import { useAcpAuthStatus } from "#/hooks/query/use-acp-auth-status";
@@ -24,10 +25,8 @@ import {
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
 import { getApiErrorMessage } from "#/utils/api-error-message";
-import {
-  deriveProfileNameFromModel,
-  isProfileNameValid,
-} from "#/utils/derive-profile-name";
+import { profileNameFromDisplayName } from "#/utils/derive-profile-name";
+import { linkedLlmProfileFromConnection } from "#/utils/linked-llm-profile-from-connection";
 import { I18nKey } from "#/i18n/declaration";
 import { mapProvider } from "#/utils/map-provider";
 import { formControlSettingsFieldClassName } from "#/utils/form-control-classes";
@@ -40,6 +39,9 @@ import {
   getProviderConnectionOption,
   isCliSubscriptionAuth,
   listProviderConnectionOptions,
+  OLLAMA_DEFAULT_BASE_URL,
+  OLLAMA_PLACEHOLDER_API_KEY,
+  OLLAMA_PROVIDER_ID,
   PROVIDER_CONNECTION_AUTH_API_KEY,
   PROVIDER_CONNECTION_AUTH_ANTHROPIC_SUBSCRIPTION,
   PROVIDER_CONNECTION_AUTH_OPENAI_SUBSCRIPTION,
@@ -48,8 +50,6 @@ import {
 } from "#/constants/provider-connection-options";
 
 const DEFAULT_PROVIDER = "custom";
-const OLLAMA_BASE_URL_PLACEHOLDER = "http://127.0.0.1:11434";
-const OLLAMA_PLACEHOLDER_API_KEY = "ollama";
 
 interface ProviderConnectionModalProps {
   /** When `null` the modal is closed; otherwise it edits that connection. */
@@ -59,11 +59,6 @@ interface ProviderConnectionModalProps {
   onClose: () => void;
   /** Called with the saved connection so a caller can select it (create flow). */
   onSaved?: (connection: ProviderConnection) => void;
-}
-
-function profileNameFromDisplayName(displayName: string): string {
-  if (isProfileNameValid(displayName, { isRequired: true })) return displayName;
-  return deriveProfileNameFromModel(displayName);
 }
 
 /**
@@ -81,6 +76,7 @@ export function ProviderConnectionModal({
   const createConnection = useCreateProviderConnection();
   const updateConnection = useUpdateProviderConnection();
   const saveProfile = useSaveLlmProfile();
+  const activateProfile = useActivateLlmProfile();
   const firstFieldRef = useRef<HTMLInputElement>(null);
 
   const [displayName, setDisplayName] = useState("");
@@ -121,7 +117,8 @@ export function ProviderConnectionModal({
   const isPending =
     createConnection.isPending ||
     updateConnection.isPending ||
-    saveProfile.isPending;
+    saveProfile.isPending ||
+    activateProfile.isPending;
   const trimmedName = displayName.trim();
   const trimmedKey = apiKey.trim();
   const trimmedBaseUrl = baseUrl.trim();
@@ -166,6 +163,9 @@ export function ProviderConnectionModal({
     const next = getProviderConnectionOption(key);
     if (!next) return;
     setAuth(next.authModes.includes(auth) ? auth : next.authModes[0]);
+    if (key === OLLAMA_PROVIDER_ID && !baseUrl.trim()) {
+      setBaseUrl(OLLAMA_DEFAULT_BASE_URL);
+    }
   };
 
   const authItems = (option?.authModes ?? []).flatMap((mode) => {
@@ -217,6 +217,7 @@ export function ProviderConnectionModal({
             },
           },
         });
+        await activateProfile.mutateAsync(name);
         displaySuccessToast(t(I18nKey.SETTINGS$PROFILE_CREATED, { name }));
         onClose();
         return;
@@ -246,6 +247,9 @@ export function ProviderConnectionModal({
             (fields.apiKey === "optional" ? OLLAMA_PLACEHOLDER_API_KEY : ""),
           base_url: trimmedBaseUrl || null,
         });
+        const linked = linkedLlmProfileFromConnection(created);
+        await saveProfile.mutateAsync(linked);
+        await activateProfile.mutateAsync(linked.name);
         displaySuccessToast(
           t(I18nKey.SETTINGS$PROVIDER_CONNECTION_CREATED, {
             name: created.display_name,
@@ -455,7 +459,14 @@ export function ProviderConnectionModal({
             className="w-full"
             value={baseUrl}
             placeholder={
-              provider === "ollama" ? OLLAMA_BASE_URL_PLACEHOLDER : undefined
+              provider === OLLAMA_PROVIDER_ID
+                ? OLLAMA_DEFAULT_BASE_URL
+                : undefined
+            }
+            hint={
+              provider === OLLAMA_PROVIDER_ID
+                ? t(I18nKey.SCHEMA$LLM$OLLAMA_BASE_URL$DESCRIPTION)
+                : undefined
             }
             onChange={setBaseUrl}
             showOptionalTag={fields.baseUrl === "optional"}

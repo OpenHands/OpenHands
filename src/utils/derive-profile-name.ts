@@ -47,3 +47,9 @@ export function deriveProfileNameFromModel(model: string): string {
 
   return sanitized || "default-profile";
 }
+
+/** Turn a connection display name into a valid LLM profile name. */
+export function profileNameFromDisplayName(displayName: string): string {
+  if (isProfileNameValid(displayName, { isRequired: true })) return displayName;
+  return deriveProfileNameFromModel(displayName);
+}

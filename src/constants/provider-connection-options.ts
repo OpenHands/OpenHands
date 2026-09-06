@@ -40,6 +40,11 @@ export interface ProviderConnectionOption {
   oauthSecretName?: string;
 }
 
+export const OLLAMA_PROVIDER_ID = "ollama";
+export const OLLAMA_DEFAULT_BASE_URL = "http://127.0.0.1:11434";
+export const OLLAMA_PLACEHOLDER_API_KEY = "ollama";
+export const DEFAULT_OLLAMA_MODEL = "ollama/llama3.2";
+
 const OPTIONS: readonly ProviderConnectionOption[] = [
   {
     id: "openai",
@@ -147,7 +152,7 @@ const OPTIONS: readonly ProviderConnectionOption[] = [
     baseUrl: "optional",
   },
   {
-    id: "ollama",
+    id: OLLAMA_PROVIDER_ID,
     authModes: [PROVIDER_CONNECTION_AUTH_API_KEY],
     apiKey: "optional",
     baseUrl: "required",

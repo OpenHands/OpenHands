@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   PROFILE_NAME_PATTERN,
   deriveProfileNameFromModel,
+  profileNameFromDisplayName,
 } from "#/utils/derive-profile-name";
 
 describe("PROFILE_NAME_PATTERN", () => {
@@ -131,5 +132,15 @@ describe("deriveProfileNameFromModel", () => {
     // "/" splits to ["", ""], falls back to "/" which sanitizes to empty,
     // then returns "default-profile"
     expect(deriveProfileNameFromModel("/")).toBe("default-profile");
+  });
+});
+
+describe("profileNameFromDisplayName", () => {
+  it("keeps an already-valid name", () => {
+    expect(profileNameFromDisplayName("Local")).toBe("Local");
+  });
+
+  it("sanitizes spaces in a display name", () => {
+    expect(profileNameFromDisplayName("Office GPU")).toBe("Office-GPU");
   });
 });

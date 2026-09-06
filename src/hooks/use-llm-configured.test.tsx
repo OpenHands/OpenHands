@@ -33,6 +33,13 @@ vi.mock("#/api/profiles-service/profiles-service.api", () => ({
   },
 }));
 
+vi.mock("#/hooks/query/use-host-detected-connections", () => ({
+  useHostDetectedConnections: () => ({
+    connections: [],
+    isChecking: false,
+  }),
+}));
+
 const localBackend: Backend = {
   id: "test-local",
   name: "Test Local",
@@ -140,6 +147,28 @@ describe("useLlmConfigured", () => {
 
     expect(result.current.isConfigured).toBe(true);
     // The fast path must not fetch active profile detail.
+    expect(mockGetProfile).not.toHaveBeenCalled();
+  });
+
+  it("treats a connection-linked Ollama profile without an inline key as configured", async () => {
+    mockListProfiles.mockResolvedValue({
+      active_profile: "local-ollama",
+      profiles: [
+        {
+          name: "local-ollama",
+          model: "ollama/llama3.2",
+          base_url: null,
+          api_key_set: false,
+          provider_connection_id: "conn-ollama",
+        },
+      ],
+    });
+
+    const { result } = renderLlmConfiguredHook();
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.isConfigured).toBe(true);
     expect(mockGetProfile).not.toHaveBeenCalled();
   });
 

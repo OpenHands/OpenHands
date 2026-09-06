@@ -14,6 +14,7 @@ import { SidebarMobileNavProvider } from "#/components/features/sidebar/sidebar-
 import { SidebarMobileMenuBar } from "#/components/features/sidebar/sidebar-mobile-menu-bar";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useEnsureActiveProfile } from "#/hooks/use-ensure-active-profile";
+import { useEnsurePreferredSubscriptionLaunch } from "#/hooks/use-ensure-preferred-subscription-launch";
 import { useMigrateEnabledSkills } from "#/hooks/use-migrate-enabled-skills";
 import { useSyncTelemetryConsent } from "#/hooks/use-sync-telemetry-consent";
 import { useSyncAutomationTelemetryConsent } from "#/hooks/use-sync-automation-telemetry-consent";
@@ -87,6 +88,7 @@ export default function MainApp() {
   useTelemetryIdentity();
   // Local-mode policy: keep a profile active so a usable LLM is always selected.
   useEnsureActiveProfile();
+  useEnsurePreferredSubscriptionLaunch();
   // One-shot move from the catalog deny-list to an explicit allow-list.
   useMigrateEnabledSkills();
 
