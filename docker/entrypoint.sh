@@ -32,6 +32,9 @@
 #                          the proxy route.
 #   PUBLIC_MODE_PORT     – If set, starts a second static server on this port
 #                          with --auth-required (no session key injected)
+#   AGENT_CANVAS_ALLOW_LAN_SESSION_KEY – Set to true only when the published
+#                          host port is restricted to loopback and you accept
+#                          embedding the session key in the served HTML
 #   OH_SECRET_KEY        – Secret key for settings encryption (auto-generated
 #                          and persisted if not provided)
 #   OPENHANDS_AUTOMATION_API_KEY – Override automation backend auth key
@@ -386,10 +389,22 @@ RUNTIME_SERVICES_INFO="$(node /opt/agent-canvas/runtime-services-info.mjs \
   --agent-server-url "$AGENT_SERVER_URL" \
   --automation-url "$AUTOMATION_BASE_URL")"
 
-# EFFECTIVE_SESSION_KEY is set above from LOCAL_BACKEND_API_KEY or the persisted api-key.txt
+# EFFECTIVE_SESSION_KEY is set above from LOCAL_BACKEND_API_KEY or the persisted api-key.txt.
+# --host :: is required so Docker published ports can reach the process. Because
+# the container cannot tell whether the host published that port on loopback or
+# every interface, session-key injection stays disabled unless the operator
+# explicitly opts in.
+# >>> docker-session-key-policy: extracted by the regression test below.
+STATIC_SERVER_SESSION_KEY_ARGS=()
+if [ "${AGENT_CANVAS_ALLOW_LAN_SESSION_KEY:-false}" = "true" ]; then
+  log "WARNING: Embedding the session API key in frontend HTML; publish port $PORT on host loopback only."
+  STATIC_SERVER_SESSION_KEY_ARGS+=(--allow-lan-session-key)
+fi
+# <<< docker-session-key-policy
 node /opt/agent-canvas/static-server.mjs \
   --port "$PORT" \
   --host :: \
+  "${STATIC_SERVER_SESSION_KEY_ARGS[@]}" \
   --dir /opt/agent-canvas/frontend \
   --base-path "$AGENT_CANVAS_BASE_PATH" \
   --session-api-key "$EFFECTIVE_SESSION_KEY" \
