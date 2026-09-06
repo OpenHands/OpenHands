@@ -340,6 +340,13 @@ class ChannelHost:
         messages = self.list_messages(correlation_id=correlation_id, limit=1)
         return messages[0]
 
+    def update_config(self, channel_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        adapter = self._adapter(channel_id)
+        updater = getattr(adapter, "update_config", None)
+        if callable(updater):
+            updater(payload)
+        return self.get_channel(channel_id)
+
     def list_messages(
         self,
         *,

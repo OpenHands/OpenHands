@@ -36,6 +36,7 @@ import {
 } from "./feature-developer-handlers";
 import { LOOP_HANDLERS, resetLoopMockData } from "./loop-handlers";
 import { ROUTING_HANDLERS, resetRoutingMockData } from "./routing-handlers";
+import { CHANNEL_HANDLERS, resetChannelMockData } from "./channel-handlers";
 
 export const handlers = [
   ...FILE_SERVICE_HANDLERS,
@@ -56,6 +57,7 @@ export const handlers = [
   ...FEATURE_DEV_HANDLERS,
   ...LOOP_HANDLERS,
   ...ROUTING_HANDLERS,
+  ...CHANNEL_HANDLERS,
 ];
 
 export {
@@ -69,6 +71,7 @@ export {
   resetFeatureDevMockData,
   resetLoopMockData,
   resetRoutingMockData,
+  resetChannelMockData,
 };
 
 export {

@@ -129,6 +129,12 @@ export const ROUTING_QUERY_KEYS = {
   audit: () => ["routing", "audit"] as const,
 } as const;
 
+export const CHANNELS_QUERY_KEYS = {
+  all: ["channels"] as const,
+  list: () => ["channels", "list"] as const,
+  messages: () => ["channels", "messages"] as const,
+} as const;
+
 export const LOCAL_PLANNER_MUTATION_KEYS = {
   create: ["create-local-planning-conversation"] as const,
 } as const;

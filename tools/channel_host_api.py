@@ -24,6 +24,7 @@ MESSAGES_PATH = "/api/channels/messages"
 CHANNEL_PATH_RE = re.compile(r"^/api/channels/(?P<channel_id>[^/]+)$")
 START_PATH_RE = re.compile(r"^/api/channels/(?P<channel_id>[^/]+)/start$")
 STOP_PATH_RE = re.compile(r"^/api/channels/(?P<channel_id>[^/]+)/stop$")
+CONFIG_PATH_RE = re.compile(r"^/api/channels/(?P<channel_id>[^/]+)/config$")
 
 
 def _query(path: str) -> dict[str, str]:
@@ -55,6 +56,13 @@ def _stop_channel(
     return 200, host.stop(params["channel_id"])
 
 
+def _update_config(
+    host: ChannelHost, params: dict[str, str], body: JsonBody
+) -> tuple[int, Any]:
+    payload = body if isinstance(body, dict) else {}
+    return 200, host.update_config(params["channel_id"], payload)
+
+
 def _list_messages(
     host: ChannelHost, params: dict[str, str], _body: JsonBody
 ) -> tuple[int, Any]:
@@ -75,6 +83,7 @@ ROUTES: tuple[tuple[str, re.Pattern[str], Handler], ...] = (
     ("GET", re.compile(rf"^{MESSAGES_PATH}$"), _list_messages),
     ("POST", START_PATH_RE, _start_channel),
     ("POST", STOP_PATH_RE, _stop_channel),
+    ("PUT", CONFIG_PATH_RE, _update_config),
     ("GET", CHANNEL_PATH_RE, _get_channel),
 )
 
@@ -114,6 +123,9 @@ class ChannelRequestHandler(BaseHTTPRequestHandler):
         self._dispatch()
 
     def do_POST(self) -> None:  # noqa: N802
+        self._dispatch()
+
+    def do_PUT(self) -> None:  # noqa: N802
         self._dispatch()
 
     def _dispatch(self) -> None:

@@ -245,6 +245,28 @@ ROUTES: tuple[tuple[str, re.Pattern[str], Handler], ...] = (
 )
 
 
+_CHANNEL_HOST = None
+
+
+def _channel_host():
+    global _CHANNEL_HOST
+    if _CHANNEL_HOST is None:
+        from channel_host import ChannelHost
+        from channel_host import default_db_path as channel_db_path
+
+        host = ChannelHost(channel_db_path())
+        factories = {}
+        try:
+            from slack_adapter import SlackAdapter
+
+            factories["slack"] = SlackAdapter
+        except ImportError:
+            pass
+        host.discover_adapters(factories)
+        _CHANNEL_HOST = host
+    return _CHANNEL_HOST
+
+
 def handle_request(
     store: KanbanStore,
     method: str,
@@ -253,6 +275,10 @@ def handle_request(
 ) -> tuple[int, Any]:
     parsed = urlparse(path)
     pathname = parsed.path
+    if pathname.startswith("/api/channels"):
+        from channel_host_api import handle_request as handle_channels
+
+        return handle_channels(_channel_host(), method, path, body)
     try:
         for route_method, pattern, handler in ROUTES:
             if route_method != method:
@@ -283,6 +309,9 @@ class KanbanRequestHandler(BaseHTTPRequestHandler):
         self._dispatch()
 
     def do_PATCH(self) -> None:  # noqa: N802
+        self._dispatch()
+
+    def do_PUT(self) -> None:  # noqa: N802
         self._dispatch()
 
     def do_DELETE(self) -> None:  # noqa: N802

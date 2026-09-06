@@ -727,6 +727,7 @@ describe("stack mode routing", () => {
       "/api/columns",
       "/api/cards",
       "/api/project",
+      "/api/channels",
     ]);
 
     for (const prefix of KANBAN_ROUTE_PREFIXES) {

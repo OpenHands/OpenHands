@@ -737,6 +737,7 @@ const KANBAN_ROUTE_PREFIXES = [
   "/api/columns",
   "/api/cards",
   "/api/project",
+  "/api/channels",
 ];
 const AGENT_SERVER_ROUTE_PREFIXES = [
   "/api",

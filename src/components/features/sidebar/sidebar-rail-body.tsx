@@ -9,9 +9,11 @@ import {
   PanelsTopLeft,
   Zap,
   Waypoints,
+  Radio,
 } from "lucide-react";
 import { OpenHandsLogoButton } from "#/components/shared/buttons/openhands-logo-button";
 import { ROUTING_PATH } from "#/api/routing-service/routing-constants";
+import { CHANNELS_PATH } from "#/api/channel-service/channel-constants";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import {
   automationListPath,
@@ -250,6 +252,17 @@ export function SidebarRailBody({
             "sidebar-pin-home-toggle-routing",
           )}
           icon={<Waypoints width={ICON_SIZE} height={ICON_SIZE} />}
+        />
+        <SidebarNavLink
+          to={CHANNELS_PATH}
+          label={t(I18nKey.CHANNELS$NAV)}
+          testId="sidebar-channels-link"
+          collapsed={collapsed}
+          pinAction={buildPinAction(
+            CHANNELS_PATH,
+            "sidebar-pin-home-toggle-channels",
+          )}
+          icon={<Radio width={ICON_SIZE} height={ICON_SIZE} />}
         />
         <SidebarNavLink
           to="/loops"
