@@ -632,7 +632,6 @@ function buildNormalizedLlmSettings(value: unknown): SettingsRecord {
     llm.auth_type = LLM_AUTH_TYPE_SUBSCRIPTION;
     llm.subscription_vendor = OPENAI_SUBSCRIPTION_VENDOR;
     delete llm.api_key;
-    delete llm.base_url;
   } else {
     delete llm.auth_type;
     delete llm.subscription_vendor;
