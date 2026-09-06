@@ -19,6 +19,7 @@
   "ports": {
     "agentServer": 18000,
     "automation": 18001,
+    "kanban": 18004,
     "proxy": 8000,
     "_vscodeComment": "Port the bundled editor binds to inside the container; agent-server's own default. Only the Docker entrypoint reads this — the npm launchers derive the editor port from the agent-server port so several stacks can run side by side. It is never published: the editor is reached through paths.vscodeBasePath on the proxy port.",
     "vscode": 8001

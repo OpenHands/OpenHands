@@ -33,6 +33,8 @@ import {
   DEFAULT_AUTOMATION_VERSION,
   DEFAULT_BACKEND_PORT,
   DEFAULT_AUTOMATION_PORT,
+  DEFAULT_KANBAN_PORT,
+  KANBAN_ROUTE_PREFIXES,
 } from "../../scripts/dev-with-automation.mjs";
 import {
   buildAgentServerEnv,
@@ -266,7 +268,7 @@ describe("buildConfig", () => {
    *
    * Also redirects all service ports to high port numbers so that buildConfig's
    * assertPortsFree check passes even when a real dev stack is running on the
-   * default ports (18000, 18001, 3001, 8000).
+   * default ports (18000, 18001, 18004, 3001, 8000).
    */
   function envWithIsolatedKeyPath(
     extra: Record<string, string> = {},
@@ -280,6 +282,7 @@ describe("buildConfig", () => {
       OH_CANVAS_SAFE_BACKEND_PORT: "19900",
       OH_CANVAS_SAFE_AUTOMATION_PORT: "19901",
       OH_CANVAS_SAFE_VITE_PORT: "19903",
+      OH_CANVAS_SAFE_KANBAN_PORT: "19904",
       ...extra,
     };
   }
@@ -297,15 +300,17 @@ describe("buildConfig", () => {
     expect(typeof config.vitePort).toBe("number");
     expect(config.vitePort).toBeGreaterThan(0);
     expect(config.vscodePort).toBe(config.agentServerPort + 1000);
+    expect(config.kanbanPort).toBe(19904);
 
-    // All four main ports should be unique
+    // All five main ports should be unique
     const ports = new Set([
       config.ingressPort,
       config.agentServerPort,
       config.autoBackendPort,
       config.vitePort,
+      config.kanbanPort,
     ]);
-    expect(ports.size).toBe(4);
+    expect(ports.size).toBe(5);
   });
 
   it("lets --automation-git-ref win over an exported OH_AUTOMATION_LOCAL_PATH", async () => {
@@ -493,6 +498,7 @@ describe("stack mode routing", () => {
       OH_CANVAS_SAFE_BACKEND_PORT: "19800",
       OH_CANVAS_SAFE_AUTOMATION_PORT: "19801",
       OH_CANVAS_SAFE_VITE_PORT: "19803",
+      OH_CANVAS_SAFE_KANBAN_PORT: "19804",
       ...extra,
     };
   }
@@ -709,6 +715,36 @@ describe("stack mode routing", () => {
     );
   });
 
+  it("routes kanban API prefixes to the sidecar, not the agent-server", async () => {
+    const config = await buildConfig({}, envWithIsolatedKeyPath());
+    const kanbanBackend = `http://127.0.0.1:${config.kanbanPort}`;
+    const agentBackend = `http://127.0.0.1:${config.agentServerPort}`;
+    const routes = getLocalServiceRoutes(config);
+    const route = createRouter(Object.fromEntries(routes));
+
+    expect(KANBAN_ROUTE_PREFIXES).toEqual([
+      "/api/boards",
+      "/api/columns",
+      "/api/cards",
+      "/api/project",
+    ]);
+
+    for (const prefix of KANBAN_ROUTE_PREFIXES) {
+      expect(routes).toContainEqual([prefix, kanbanBackend]);
+    }
+
+    expect(route("/api/boards")).toBe(kanbanBackend);
+    expect(route("/api/boards/abc")).toBe(kanbanBackend);
+    expect(route("/api/boards/abc/costs")).toBe(kanbanBackend);
+    expect(route("/api/columns/col-1/cards")).toBe(kanbanBackend);
+    expect(route("/api/cards/card-1/move")).toBe(kanbanBackend);
+    expect(route("/api/project/init")).toBe(kanbanBackend);
+    expect(route("/api/conversations")).toBe(agentBackend);
+    expect(route("/api/automation/docs")).toBe(
+      `http://127.0.0.1:${config.autoBackendPort}`,
+    );
+  });
+
   it("addresses the agent-server over IPv4 for readiness and secret seeding", async () => {
     const config = await buildConfig({}, envWithIsolatedKeyPath());
 
@@ -756,6 +792,10 @@ describe("default constants", () => {
 
   it("has expected default backend port", () => {
     expect(DEFAULT_BACKEND_PORT).toBe(18000);
+  });
+
+  it("has expected default kanban port", () => {
+    expect(DEFAULT_KANBAN_PORT).toBe(18004);
   });
 
   it("has expected default automation port", () => {

@@ -2,9 +2,10 @@
 
 The dispatcher is intentionally stdlib-only so unit tests and a tiny HTTP
 server can share one implementation. Mounting these routes on the agent-server
-is a later SDK change; until then run:
+is a later SDK change; until then the canvas launcher runs this sidecar and
+proxies /api/boards, /api/columns, /api/cards, and /api/project to it.
 
-    python3 tools/kanban_api.py --host 127.0.0.1 --port 18002
+    python3 tools/kanban_api.py --host 127.0.0.1 --port 18004
 """
 
 from __future__ import annotations
@@ -28,6 +29,8 @@ from project_bootstrap import (
 
 JsonBody = dict[str, Any] | None
 Handler = Callable[[KanbanStore, dict[str, str], JsonBody], tuple[int, Any]]
+
+SESSION_API_KEY_HEADER = "X-Session-API-Key"
 
 BOARDS_PATH = "/api/boards"
 BOARD_PATH_RE = re.compile(r"^/api/boards/(?P<board_id>[^/]+)$")
@@ -286,6 +289,17 @@ class KanbanRequestHandler(BaseHTTPRequestHandler):
         self._dispatch()
 
     def _dispatch(self) -> None:
+        expected = os.environ.get("OH_SESSION_API_KEYS_0") or os.environ.get(
+            "SESSION_API_KEY"
+        )
+        if expected and self.headers.get(SESSION_API_KEY_HEADER) != expected:
+            body = json.dumps({"error": "Unauthorized"}).encode()
+            self.send_response(401)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         length = int(self.headers.get("Content-Length") or 0)
         raw = self.rfile.read(length) if length else b""
         payload: JsonBody = json.loads(raw) if raw else None
@@ -328,7 +342,7 @@ def serve_kanban(
 def main() -> None:
     parser = argparse.ArgumentParser(description="Local kanban HTTP API")
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=18002)
+    parser.add_argument("--port", type=int, default=18004)
     parser.add_argument("--db", default=None)
     args = parser.parse_args()
     server = serve_kanban(args.host, args.port, db_path=args.db)

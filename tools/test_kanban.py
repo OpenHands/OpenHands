@@ -350,6 +350,30 @@ class KanbanHttpServerTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(listed[0]["id"], board["id"])
 
+    def test_rejects_missing_session_key_when_configured(self) -> None:
+        previous = os.environ.get("OH_SESSION_API_KEYS_0")
+        os.environ["OH_SESSION_API_KEYS_0"] = "test-session-key"
+        self.addCleanup(
+            lambda: (
+                os.environ.__setitem__("OH_SESSION_API_KEYS_0", previous)
+                if previous is not None
+                else os.environ.pop("OH_SESSION_API_KEYS_0", None)
+            )
+        )
+        status, payload = self._http("GET", "/api/boards")
+        self.assertEqual(status, 401)
+        self.assertIn("error", payload)
+
+        conn = HTTPConnection("127.0.0.1", self.port, timeout=5)
+        conn.request(
+            "GET",
+            "/api/boards",
+            headers={"X-Session-API-Key": "test-session-key"},
+        )
+        response = conn.getresponse()
+        self.assertEqual(response.status, 200)
+        conn.close()
+
 
 if __name__ == "__main__":
     unittest.main()
