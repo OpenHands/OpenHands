@@ -6,6 +6,13 @@ import { http, HttpResponse } from "msw";
 import App, { links } from "#/root";
 import { server } from "#/mocks/node";
 import { __resetActiveStoreForTests } from "#/api/backend-registry/active-store";
+import { LOCKED_CLOUD_BACKEND_ID } from "#/api/backend-registry/default-backend";
+import { __resetHealthStoreForTests } from "#/api/backend-registry/health-store";
+import {
+  BACKEND_HEALTH_STORAGE_KEY,
+  MAX_CONSECUTIVE_FAILURES,
+} from "#/api/backend-registry/health-storage";
+import { CLOUD_BACKEND_LOGGED_OUT_ERROR } from "#/hooks/query/use-backends-health";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { ONBOARDING_COMPLETED_STORAGE_KEY } from "#/components/features/onboarding/use-onboarding-completion";
 
@@ -102,9 +109,39 @@ const renderApp = (initialEntries: string[] = ["/"]) =>
     ),
   });
 
+const COOKIE_DEPLOYMENT_ORIGIN = "https://pr-254.staging.openhands.dev";
+
+/**
+ * Simulate an OHE-hosted Canvas: served from the locked Cloud host itself, so
+ * the single locked backend authenticates with the main-app session cookie.
+ * Returns the `window.location.assign` spy that observes login redirects.
+ */
+function mockLockedCookieDeployment() {
+  const assign = vi.fn();
+  Object.defineProperty(window, "location", {
+    configurable: true,
+    value: {
+      ...ORIGINAL_LOCATION,
+      origin: COOKIE_DEPLOYMENT_ORIGIN,
+      hostname: "pr-254.staging.openhands.dev",
+      pathname: "/canvas",
+      search: "",
+      hash: "",
+      assign,
+    },
+  });
+  vi.stubEnv("VITE_LOCK_TO_CLOUD", COOKIE_DEPLOYMENT_ORIGIN);
+  vi.stubEnv("VITE_SESSION_API_KEY", "");
+  delete (window as unknown as Record<string, unknown>)
+    .__AGENT_CANVAS_SESSION_API_KEY__;
+  __resetActiveStoreForTests();
+  return assign;
+}
+
 describe("App root agent-server availability guard", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    __resetHealthStoreForTests();
     vi.unstubAllEnvs();
     delete (window as unknown as Record<string, unknown>)
       .__AGENT_CANVAS_AUTH_REQUIRED__;
@@ -726,6 +763,72 @@ describe("App root agent-server availability guard", () => {
       );
     });
     expect(screen.queryByTestId("app-outlet")).not.toBeInTheDocument();
+  });
+
+  it("redirects to main app login when the cookie session expires after the Canvas loaded", async () => {
+    // Arrange: the session is valid at load, then expires — the Cloud probe
+    // starts returning 401 and the next main-app auth check confirms it.
+    const assign = mockLockedCookieDeployment();
+    let sessionExpired = false;
+    server.use(
+      http.post("*/api/authenticate", () =>
+        sessionExpired
+          ? HttpResponse.json({ error: "unauthenticated" }, { status: 401 })
+          : HttpResponse.json({ ok: true }),
+      ),
+      http.get(`${COOKIE_DEPLOYMENT_ORIGIN}/api/organizations`, () => {
+        sessionExpired = true;
+        return HttpResponse.json(
+          { detail: "Not authenticated" },
+          { status: 401 },
+        );
+      }),
+    );
+
+    // Act
+    renderApp(["/"]);
+
+    // Assert: main-app login, not the device-flow recovery modal.
+    await waitFor(() => {
+      expect(assign).toHaveBeenCalledWith("/login?returnTo=%2Fcanvas");
+    });
+    expect(
+      screen.queryByTestId("manage-backends-modal"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("app-outlet")).not.toBeInTheDocument();
+  });
+
+  it("keeps a valid cookie session on the app when a stale logged-out health entry is persisted", async () => {
+    // Arrange: a previous visit left the locked backend persisted as disabled
+    // and "Logged out", but the user has since logged back in on the main app.
+    const assign = mockLockedCookieDeployment();
+    window.localStorage.setItem(
+      BACKEND_HEALTH_STORAGE_KEY,
+      JSON.stringify({
+        [LOCKED_CLOUD_BACKEND_ID]: {
+          consecutiveFailures: MAX_CONSECUTIVE_FAILURES,
+          lastError: CLOUD_BACKEND_LOGGED_OUT_ERROR,
+          lastFailureAt: 1,
+          disabled: true,
+        },
+      }),
+    );
+    __resetHealthStoreForTests();
+    server.use(
+      http.get(`${COOKIE_DEPLOYMENT_ORIGIN}/api/organizations`, () =>
+        HttpResponse.json({ items: [], current_org_id: null }),
+      ),
+    );
+
+    // Act
+    renderApp(["/"]);
+
+    // Assert: the stale health verdict must not bounce a valid session to
+    // /login (which would loop back via returnTo); the app renders instead.
+    await waitFor(() => {
+      expect(screen.getByTestId("app-outlet")).toBeInTheDocument();
+    });
+    expect(assign).not.toHaveBeenCalled();
   });
 
   it("hides first-run onboarding immediately after Cloud login completes in locked-to-Cloud mode (no flicker)", async () => {

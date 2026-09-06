@@ -632,7 +632,12 @@ async function fillLlmProfileEditorAndSave(
   await apiKeyInput.click();
   await apiKeyInput.fill(apiKey);
 
-  await page.getByTestId("save-profile-btn").click();
+  const saveButton = page.getByTestId("save-profile-btn");
+  if (await saveButton.isEnabled()) {
+    await saveButton.click();
+  } else {
+    await page.getByTestId("back-to-profiles").click();
+  }
   await waitForTestId(page, "add-llm-profile");
 }
 
@@ -699,8 +704,13 @@ export async function deleteProfileIfExists(page: Page, profileName: string) {
     const confirmBtn = page.getByTestId("delete-profile-confirm");
     await confirmBtn.waitFor({ state: "visible", timeout: 5_000 });
     await confirmBtn.click();
+    // The profile list remains visible behind the modal, so merely waiting for
+    // `add-llm-profile` does not prove the delete mutation has finished. Wait
+    // for both the modal and the exact row to disappear before a caller tries
+    // to delete or create another profile.
     await expect(confirmBtn).toBeHidden({ timeout: 30_000 });
-    await expect(row).toBeHidden({ timeout: 30_000 });
+    await expect(row).toHaveCount(0, { timeout: 30_000 });
+    await waitForTestId(page, "add-llm-profile");
   } else {
     await page.keyboard.press("Escape");
   }

@@ -1,4 +1,5 @@
 import { ACP_SETTINGS_KEYS } from "@openhands/typescript-client";
+import type { HookConfig } from "@openhands/typescript-client";
 import { ServerClient } from "@openhands/typescript-client/clients";
 import { SKILLS_CATALOG } from "@openhands/extensions/skills";
 import { DEFAULT_SETTINGS } from "#/services/settings";
@@ -50,6 +51,14 @@ import {
   LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL,
   LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
 } from "./launch-child-conversation-client-tool";
+import {
+  buildPlanPath,
+  LOCAL_PLANNER_PARENT_TAG_KEY,
+  PLAN_STRUCTURE_TEXT,
+  PLANNING_AGENT_INSTRUCTION,
+  PLANNING_FILE_EDITOR_TOOL_NAME,
+  PLANNING_SYSTEM_PROMPT_FILENAME,
+} from "#/utils/plan-file";
 
 export interface DirectConversationInfo {
   id: string;
@@ -114,11 +123,26 @@ export interface DirectConversationInfo {
     agent_profile_id: string;
     revision: number;
   } | null;
+  /**
+   * Server-owned, derived from the catalog's ``parent_conversation_id`` link
+   * (agent-server >= 1.37.1, SDK #4188) — a conversation started with a
+   * parent is discoverable here on any browser, which is what makes the
+   * local planner's relationship server state rather than a browser-local
+   * hint. Absent on older agent-servers and on the cloud wire shape.
+   */
+  sub_conversation_ids?: string[] | null;
 }
 
 const DEFAULT_TOOL_NAMES = ["terminal", "file_editor", "task_tracker"];
 const BROWSER_TOOL_SET_NAME = "browser_tool_set";
 const TASK_TOOL_SET_NAME = "task_tool_set";
+// Falls back to the same default the code agent uses when the user has not
+// configured `conversation_settings.max_iterations` (see buildConfiguredConversationSettings).
+const DEFAULT_MAX_ITERATIONS = 500;
+
+function resolveMaxIterations(value: unknown): number {
+  return typeof value === "number" ? value : DEFAULT_MAX_ITERATIONS;
+}
 
 function browserToolsEnabled() {
   return import.meta.env.VITE_ENABLE_BROWSER_TOOLS !== "false";
@@ -405,7 +429,7 @@ export function toAppConversation(
       working_dir: info.workspace?.working_dir ?? getAgentServerWorkingDir(),
     },
     public: false,
-    sub_conversation_ids: [],
+    sub_conversation_ids: info.sub_conversation_ids ?? [],
   };
 }
 
@@ -414,7 +438,9 @@ export function toConversationPage(data: {
   next_page_id?: string | null;
 }): AppConversationPage {
   return {
-    items: data.items.map(toAppConversation),
+    items: data.items
+      .filter((item) => !item.tags?.[LOCAL_PLANNER_PARENT_TAG_KEY])
+      .map(toAppConversation),
     next_page_id: data.next_page_id ?? null,
   };
 }
@@ -486,14 +512,20 @@ export const AUTOMATION_TAG_KEYS: readonly string[] = [
  * - git / repo / branch / workspace stamps → repo-branch metadata + directory
  *   footer / hovercard rows (``selected_repository``, ``selected_branch``,
  *   ``git_provider``, ``workspace.working_dir``)
- * - ``automationid`` / ``automationrunid`` → raw UUIDs consumed by the
- *   conversation panel's automation filter (chip noise), while
- *   ``automationname`` / ``automationtrigger`` stay visible
+ * - the automation family (``automationtrigger`` / ``automationid`` /
+ *   ``automationname`` / ``automationrunid``) → provenance the SDK stamps at
+ *   creation; the conversation panel's automation filter is its first-class
+ *   UI source. The tag surface is user organization data, so machine stamps
+ *   stay out of it — and users can't edit or spoof automation classification.
+ * - ``localplannerparent`` → internal routing for the local planner; already
+ *   surfaced by the hidden-from-list planner filter
  */
 export const RESERVED_CONVERSATION_TAG_KEYS: ReadonlySet<string> = new Set([
   ACP_SERVER_TAG_KEY,
   CLIENT_SOURCE_TAG_KEY,
+  AUTOMATION_TRIGGER_TAG_KEY,
   AUTOMATION_ID_TAG_KEY,
+  AUTOMATION_NAME_TAG_KEY,
   AUTOMATION_RUN_ID_TAG_KEY,
   "title",
   "git_provider",
@@ -505,6 +537,7 @@ export const RESERVED_CONVERSATION_TAG_KEYS: ReadonlySet<string> = new Set([
   "archiveworkspacepath",
   "workspace",
   "working_dir",
+  LOCAL_PLANNER_PARENT_TAG_KEY,
 ]);
 
 /**
@@ -540,7 +573,9 @@ export function getDisplayConversationTags(
       ([key, value]) =>
         !RESERVED_CONVERSATION_TAG_KEYS.has(key.trim().toLowerCase()) &&
         typeof value === "string" &&
-        value.trim().length > 0,
+        // Bare tags (empty value) are displayable — chips/tooltips render
+        // the key. Whitespace-only values stay dropped (raw-write junk).
+        (value === "" || value.trim().length > 0),
     )
     .sort(([a], [b]) => {
       const aRank = priorityRank(a);
@@ -578,6 +613,40 @@ function normalizeSecretString(value: unknown): string | undefined {
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function buildNormalizedLlmSettings(value: unknown): SettingsRecord {
+  const llm = toRecord(value);
+
+  llm.model =
+    typeof llm.model === "string" && llm.model.trim().length > 0
+      ? llm.model
+      : DEFAULT_SETTINGS.llm_model;
+
+  const apiKey = normalizeSecretString(llm.api_key);
+  if (apiKey) {
+    llm.api_key = apiKey;
+  } else {
+    delete llm.api_key;
+  }
+
+  const baseUrl = normalizeSecretString(llm.base_url);
+  if (baseUrl) {
+    llm.base_url = baseUrl;
+  } else {
+    delete llm.base_url;
+  }
+
+  if (isSubscriptionLlmConfig(llm)) {
+    llm.auth_type = LLM_AUTH_TYPE_SUBSCRIPTION;
+    llm.subscription_vendor = OPENAI_SUBSCRIPTION_VENDOR;
+    delete llm.api_key;
+  } else {
+    delete llm.auth_type;
+    delete llm.subscription_vendor;
+  }
+
+  return llm;
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -923,40 +992,11 @@ function buildConfiguredOpenHandsAgentSettings(
   query?: string,
 ): AgentSettingsPayload {
   const agentSettings = toRecord(settings.agent_settings);
-  const llm = toRecord(agentSettings.llm);
-
-  llm.model =
-    typeof llm.model === "string" && llm.model.trim().length > 0
-      ? llm.model
-      : DEFAULT_SETTINGS.llm_model;
+  const llm = buildNormalizedLlmSettings(agentSettings.llm);
 
   // Stream assistant tokens (parity with ACP agents). The agent-server only
   // emits StreamingDeltaEvents for SDK LLM agents when an LLM has stream=True.
   llm.stream = true;
-
-  const apiKey = normalizeSecretString(llm.api_key);
-  if (apiKey) {
-    llm.api_key = apiKey;
-  } else {
-    delete llm.api_key;
-  }
-
-  const baseUrl = normalizeSecretString(llm.base_url);
-  if (baseUrl) {
-    llm.base_url = baseUrl;
-  } else {
-    delete llm.base_url;
-  }
-
-  if (isSubscriptionLlmConfig(llm)) {
-    llm.auth_type = LLM_AUTH_TYPE_SUBSCRIPTION;
-    llm.subscription_vendor = OPENAI_SUBSCRIPTION_VENDOR;
-    delete llm.api_key;
-    delete llm.base_url;
-  } else {
-    delete llm.auth_type;
-    delete llm.subscription_vendor;
-  }
 
   const mcpConfig = toRecord(agentSettings.mcp_config);
   if (Object.keys(mcpConfig).length === 0) {
@@ -1054,18 +1094,17 @@ interface LookupSecret {
   description?: string;
 }
 
-type StartConversationPayload = Record<string, unknown> & {
-  // Omitted when launching via ``agent_profile_id`` — the two are mutually
-  // exclusive agent sources; the server resolves the profile server-side.
-  agent_settings?: AgentSettingsPayload;
-  agent_profile_id?: string;
+/** A custom secret's public identity — name + optional description, no value. */
+type CustomSecretInput = { name: string; description?: string };
+
+type StartConversationPayloadBase = Record<string, unknown> & {
   workspace: WorkspacePayload;
   confirmation_policy: SettingsRecord;
   security_analyzer?: SettingsRecord;
   initial_message?: InitialMessagePayload;
   max_iterations: number;
   stuck_detection: true;
-  autotitle: true;
+  autotitle: boolean;
   title_llm_profile?: string;
   worktree: boolean;
   secrets_encrypted?: true;
@@ -1075,6 +1114,23 @@ type StartConversationPayload = Record<string, unknown> & {
   tags?: Record<string, string>;
   client_tools: ClientToolSpec[];
   tool_module_qualnames?: Record<string, string>;
+};
+
+type AgentSettingsStartConversationPayload = StartConversationPayloadBase & {
+  // Omitted when launching via ``agent_profile_id`` — the two are mutually
+  // exclusive agent sources; the server resolves the profile server-side.
+  agent_settings?: AgentSettingsPayload;
+  agent_profile_id?: string;
+  agent?: never;
+};
+
+// The local planner bypasses agent assembly entirely and sends a raw agent
+// spec, so neither of the two managed agent sources applies.
+type RawAgentStartConversationPayload = StartConversationPayloadBase & {
+  agent: SettingsRecord;
+  agent_settings?: never;
+  agent_profile_id?: never;
+  parent_conversation_id?: string;
 };
 
 export interface StartConversationOptions {
@@ -1093,7 +1149,7 @@ export interface StartConversationOptions {
   encryptedAgentSettings?: Record<string, SettingsValue>;
   encryptedConversationSettings?: Record<string, SettingsValue>;
   secretsEncrypted?: boolean;
-  customSecrets?: Array<{ name: string; description?: string }>;
+  customSecrets?: CustomSecretInput[];
   // When set, the conversation launches from this AgentProfile (resolved
   // server-side) instead of an inline ``agent_settings`` dump (#3727).
   agentProfileId?: string;
@@ -1101,11 +1157,44 @@ export interface StartConversationOptions {
   titleLlmProfile?: string;
   runtimeServicesInfo?: RuntimeServicesInfo | null;
   executionRuntime?: string;
+  workspaceHookConfig?: HookConfig | null;
+}
+
+/**
+ * Build the `request.secrets` map shared by the standard and planning
+ * conversation builders. Every saved secret rides as a LookupSecret the
+ * agent-server resolves from its own store at spawn time — `request.secrets` is
+ * the sole channel, uniform for ACP and non-ACP (agent-canvas#1039). For ACP the
+ * resolution runs off the event loop (software-agent-sdk#3510, >=1.25.0), so the
+ * loopback fetch can't deadlock. Returns `undefined` when there are no custom
+ * secrets so callers can omit the field.
+ */
+function buildCustomSecrets(
+  customSecrets: CustomSecretInput[] | undefined,
+): Record<string, LookupSecret> | undefined {
+  if (!customSecrets?.length) return undefined;
+
+  const backend = getEffectiveLocalBackend();
+  const headers = backend ? buildAuthHeaders(backend) : {};
+
+  const secrets: Record<string, LookupSecret> = {};
+  for (const secret of customSecrets) {
+    const lookupSecret: LookupSecret = {
+      kind: "LookupSecret",
+      url: `/api/settings/secrets/${encodeURIComponent(secret.name)}`,
+      description: secret.description,
+    };
+    if (Object.keys(headers).length > 0) {
+      lookupSecret.headers = headers;
+    }
+    secrets[secret.name] = lookupSecret;
+  }
+  return secrets;
 }
 
 export function buildStartConversationRequest(
   options: StartConversationOptions,
-): StartConversationPayload {
+): AgentSettingsStartConversationPayload {
   const sourceAgentSettings = options.encryptedAgentSettings
     ? { ...options.settings, agent_settings: options.encryptedAgentSettings }
     : options.settings;
@@ -1140,7 +1229,7 @@ export function buildStartConversationRequest(
     executionRuntime: options.executionRuntime,
   });
 
-  const payload: StartConversationPayload = {
+  const payload: AgentSettingsStartConversationPayload = {
     // ``agent_profile_id`` and ``agent_settings`` are mutually exclusive agent
     // sources; the profile path lets the server resolve the profile (#3727).
     //
@@ -1177,10 +1266,7 @@ export function buildStartConversationRequest(
         : [],
     confirmation_policy:
       getConversationConfirmationPolicy(conversationSettings),
-    max_iterations:
-      typeof conversationSettings.max_iterations === "number"
-        ? conversationSettings.max_iterations
-        : 500,
+    max_iterations: resolveMaxIterations(conversationSettings.max_iterations),
     stuck_detection: true,
     autotitle: true,
     ...(options.titleLlmProfile
@@ -1243,6 +1329,8 @@ export function buildStartConversationRequest(
 
   if (conversationSettings.hook_config) {
     payload.hook_config = conversationSettings.hook_config;
+  } else if (options.workspaceHookConfig) {
+    payload.hook_config = options.workspaceHookConfig;
   }
 
   const toolModuleQualnames = {
@@ -1261,34 +1349,240 @@ export function buildStartConversationRequest(
     payload.agent_definitions = conversationSettings.agent_definitions;
   }
 
-  // Every saved secret rides as a LookupSecret the agent-server resolves back
-  // from its own store at spawn time — ``request.secrets`` is the sole channel,
-  // uniform for ACP and non-ACP (agent-canvas#1039). For ACP the resolution
-  // runs off the event loop (software-agent-sdk#3510, >=1.25.0), so the loopback
-  // fetch can't deadlock.
-  if (options.customSecrets && options.customSecrets.length > 0) {
-    const backend = getEffectiveLocalBackend();
-    const headers = backend ? buildAuthHeaders(backend) : {};
-
-    const secrets: Record<string, LookupSecret> = {};
-    for (const secret of options.customSecrets) {
-      const lookupSecret: LookupSecret = {
-        kind: "LookupSecret",
-        url: `/api/settings/secrets/${encodeURIComponent(secret.name)}`,
-        description: secret.description,
-      };
-
-      if (Object.keys(headers).length > 0) {
-        lookupSecret.headers = headers;
-      }
-
-      secrets[secret.name] = lookupSecret;
-    }
-
+  const secrets = buildCustomSecrets(options.customSecrets);
+  if (secrets) {
     payload.secrets = secrets;
   }
 
   return payload;
+}
+
+export function buildStartPlanningConversationRequest(options: {
+  encryptedAgentSettings: Record<string, SettingsValue>;
+  workingDir: string;
+  parentConversationId: string;
+  initialMessage?: string;
+  secretsEncrypted?: boolean;
+  customSecrets?: CustomSecretInput[];
+  /** Mirrors the parent's configured `conversation_settings.max_iterations` — see DEFAULT_MAX_ITERATIONS. */
+  maxIterations?: number;
+  /** Mirrors the code agent's skill filtering — see buildConfiguredOpenHandsAgentSettings. */
+  skillEnablement?: SkillEnablement;
+}): RawAgentStartConversationPayload {
+  const agentSettings = toRecord(options.encryptedAgentSettings);
+  const llm = buildNormalizedLlmSettings(agentSettings.llm);
+  // Stream assistant tokens, matching the code agent (see
+  // buildConfiguredOpenHandsAgentSettings) — otherwise the agent-server never
+  // emits StreamingDeltaEvents for the planner and its replies would appear
+  // all at once instead of token-by-token.
+  llm.stream = true;
+
+  const planPath = buildPlanPath(options.workingDir);
+
+  // Put the planner's directive + boundaries in the system prompt (matching the
+  // OpenHands app-server's PLANNING_AGENT_INSTRUCTION), preserving any suffix
+  // buildAgentContext already set (e.g. the runtime-services block).
+  const agentContext = buildAgentContext(
+    agentSettings,
+    undefined,
+    options.skillEnablement,
+  );
+  const existingSuffix = agentContext.system_message_suffix;
+  agentContext.system_message_suffix =
+    typeof existingSuffix === "string"
+      ? `${PLANNING_AGENT_INSTRUCTION}\n\n${existingSuffix}`
+      : PLANNING_AGENT_INSTRUCTION;
+
+  // Idle planner: "Create a Plan" only switches to plan mode and provisions
+  // this conversation; the user sends the first message themselves, so nothing
+  // is injected into the chat. An explicit initialMessage is still honored.
+  const initialMessage = buildInitialMessage(options.initialMessage);
+
+  const payload: RawAgentStartConversationPayload = {
+    agent: {
+      kind: "Agent",
+      llm,
+      tools: [
+        { name: "glob", params: {} },
+        { name: "grep", params: {} },
+        {
+          name: PLANNING_FILE_EDITOR_TOOL_NAME,
+          params: { plan_path: planPath },
+        },
+      ],
+      system_prompt_filename: PLANNING_SYSTEM_PROMPT_FILENAME,
+      system_prompt_kwargs: { plan_structure: PLAN_STRUCTURE_TEXT },
+      // agent_context (skills + project context) is intentionally included so
+      // the planner shares the code agent's project context. This goes beyond
+      // the bare SDK `get_planning_agent()` preset (which sets no context); it
+      // mirrors how the frontend builds every agent, so the local planner is
+      // not context-starved relative to the code agent.
+      agent_context: agentContext,
+      // Mirror the SDK planning preset's condenser (openhands-tools preset
+      // `get_planning_condenser`): a larger rolling window and more pinned
+      // initial context than the default, with its own usage_id so its
+      // summarization LLM calls are attributed separately. The planning
+      // conversation is sent as a raw agent spec (it bypasses the agent-server's
+      // default agent assembly), so without this it would never condense —
+      // diverging from the canonical planning agent on long sessions.
+      condenser: {
+        kind: "LLMSummarizingCondenser",
+        llm: { ...llm, usage_id: "planning_condenser" },
+        max_size: 100,
+        keep_first: 6,
+      },
+    },
+    workspace: {
+      kind: "LocalWorkspace",
+      working_dir: options.workingDir,
+    },
+    // No Canvas UI client tool: the planner's only output is PLAN.md, which the
+    // Planner tab surfaces on its own via PlanningFileEditorObservation. Handing
+    // it the panel-control tool would only let it navigate the right-side panel
+    // away from the plan the user is reading.
+    client_tools: [],
+    confirmation_policy: { kind: "NeverConfirm" },
+    max_iterations: options.maxIterations ?? DEFAULT_MAX_ITERATIONS,
+    stuck_detection: true,
+    autotitle: false,
+    worktree: false,
+    // Two independent links to the parent, for two different jobs:
+    //
+    // - ``parent_conversation_id`` is the server-owned relationship (SDK
+    //   #4188, agent-server >= 1.37.1). The parent's ``sub_conversation_ids``
+    //   is derived from it, so the planner is recoverable from the server on
+    //   any browser and after storage loss. Older agent-servers ignore the
+    //   field (``StartConversationRequest`` does not forbid extras), which is
+    //   why the client-side metadata hint is still written as a fallback.
+    // - The tag is what hides the helper from the conversation list; it is
+    //   also the only marker on agent-servers too old for the parent link.
+    parent_conversation_id: options.parentConversationId,
+    tags: { [LOCAL_PLANNER_PARENT_TAG_KEY]: options.parentConversationId },
+    ...(initialMessage ? { initial_message: initialMessage } : {}),
+  };
+
+  if (options.secretsEncrypted) {
+    payload.secrets_encrypted = true;
+  }
+
+  const secrets = buildCustomSecrets(options.customSecrets);
+  if (secrets) {
+    payload.secrets = secrets;
+  }
+
+  return payload;
+}
+
+/**
+ * Resolve the encrypted LLM config for a named LLM profile, so a planner can
+ * run the parent conversation's *current* model (`active_profile`, tracking
+ * `/model` and `SwitchLLMTool`) rather than a stale launch-time value.
+ * Returns `null` — caller falls back further — if unknown or lookup fails.
+ */
+async function resolveLlmProfileSettings(
+  profileName: string,
+): Promise<SettingsRecord | null> {
+  try {
+    const { default: ProfilesService } =
+      await import("./profiles-service/profiles-service.api");
+    // ``encrypted`` matches ``secrets_encrypted`` on the payload: the
+    // agent-server decrypts with the same cipher it encrypted with.
+    const detail = await ProfilesService.getProfile(profileName, "encrypted");
+    return isPlainRecord(detail.config) ? detail.config : null;
+  } catch (error) {
+    console.warn(
+      `Falling back: could not resolve LLM profile ${profileName}`,
+      error,
+    );
+    return null;
+  }
+}
+
+/**
+ * Resolve the encrypted LLM config the given AgentProfile launches with, as a
+ * fallback for `resolveLlmProfileSettings`. AgentProfiles hold a reference
+ * (`llm_profile_ref`), not credentials, so this is a two-hop lookup: profile
+ * id -> llm profile name -> encrypted LLM config. Returns `null` — caller
+ * falls back to global settings — for an unknown/ACP/dangling-ref profile or
+ * a failed lookup, none of which should block plan creation outright.
+ */
+async function resolveAgentProfileLlmSettings(
+  agentProfileId: string,
+): Promise<SettingsRecord | null> {
+  try {
+    const { default: AgentProfilesService } =
+      await import("./agent-profiles-service/agent-profiles-service.api");
+
+    const { profiles } = await AgentProfilesService.listProfiles();
+    const summary = profiles.find(
+      (profile) => profile.id === agentProfileId && profile.llm_profile_ref,
+    );
+    if (!summary?.llm_profile_ref) return null;
+
+    return await resolveLlmProfileSettings(summary.llm_profile_ref);
+  } catch (error) {
+    console.warn(
+      `Falling back to global agent settings: could not resolve the LLM for agent profile ${agentProfileId}`,
+      error,
+    );
+    return null;
+  }
+}
+
+export async function buildStartPlanningConversationRequestWithEncryptedSettings(options: {
+  workingDir: string;
+  parentConversationId: string;
+  /**
+   * The parent conversation's current LLM profile (`AppConversation.active_profile`,
+   * tracking `/model` and `SwitchLLMTool`). Takes priority over
+   * `parentAgentProfileId` so a model switch on the parent carries over to a
+   * planner created afterward, without a *different* conversation's global
+   * profile activation repointing it.
+   */
+  parentActiveProfileName?: string | null;
+  /**
+   * `launched_agent_profile.agent_profile_id` of the parent, when started
+   * from an AgentProfile. Fallback for when `parentActiveProfileName` can't
+   * be resolved (e.g. an ACP parent, whose `active_profile` is a stale
+   * launch-time snapshot rather than anything the ACP agent itself runs).
+   */
+  parentAgentProfileId?: string | null;
+  initialMessage?: string;
+}): Promise<RawAgentStartConversationPayload> {
+  const { SecretsService } = await import("./secrets-service");
+
+  const [settingsResult, customSecrets] = await Promise.all([
+    SettingsService.getSettingsForConversation(),
+    SecretsService.getSecrets(),
+  ]);
+
+  const profileLlm =
+    (options.parentActiveProfileName
+      ? await resolveLlmProfileSettings(options.parentActiveProfileName)
+      : null) ??
+    (options.parentAgentProfileId
+      ? await resolveAgentProfileLlmSettings(options.parentAgentProfileId)
+      : null);
+  const encryptedAgentSettings: Record<string, SettingsValue> = profileLlm
+    ? { ...settingsResult.agentSettings, llm: profileLlm as SettingsValue }
+    : settingsResult.agentSettings;
+
+  await assertSubscriptionAuthReady(encryptedAgentSettings);
+
+  // Mirror the code agent's configured cap (see DEFAULT_MAX_ITERATIONS) rather
+  // than hardcoding a different value the planner could silently stop against.
+  const maxIterations = resolveMaxIterations(
+    settingsResult.conversationSettings.max_iterations,
+  );
+
+  return buildStartPlanningConversationRequest({
+    ...options,
+    encryptedAgentSettings,
+    secretsEncrypted: settingsResult.secretsEncrypted,
+    customSecrets,
+    maxIterations,
+    skillEnablement: settingsResult.skillEnablement,
+  });
 }
 
 export const SUBSCRIPTION_LOGIN_REQUIRED_ERROR =
@@ -1320,17 +1614,28 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
   conversationId?: string;
   parentConversationId?: string;
   workingDir?: string;
+  /** Workspace root for the hooks lookup, not the per-conversation `workingDir` (#16907). */
+  hooksProjectDir?: string;
   worktree?: boolean;
   agentProfileId?: string;
   agentProfileKind?: AgentKind;
   titleLlmProfile?: string;
 }): Promise<Record<string, unknown>> {
-  const { SecretsService } = await import("./secrets-service");
+  const [{ SecretsService }, { default: HooksService }] = await Promise.all([
+    import("./secrets-service"),
+    import("./hooks-service"),
+  ]);
 
-  const [settingsResult, customSecrets, serverInfo] = await Promise.all([
+  const [
+    settingsResult,
+    customSecrets,
+    serverInfo,
+    workspaceHookConfig,
+  ] = await Promise.all([
     SettingsService.getSettingsForConversation(),
     SecretsService.getSecrets(),
     fetchBackendServerInfo(),
+    HooksService.loadWorkspaceHooks(options.hooksProjectDir),
   ]);
 
   const { agentSettings, conversationSettings, secretsEncrypted } =
@@ -1355,6 +1660,7 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
     customSecrets,
     runtimeServicesInfo,
     executionRuntime,
+    workspaceHookConfig,
   });
 }
 
