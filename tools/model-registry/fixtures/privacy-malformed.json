@@ -1,0 +1,7 @@
+{
+  "version": "v1",
+  "last_updated": "2026-09-07T00:00:00Z",
+  "models": [
+    {"id": "openai/gpt-4o", "retention": "telepathy", "watermark": "none"}
+  ]
+}

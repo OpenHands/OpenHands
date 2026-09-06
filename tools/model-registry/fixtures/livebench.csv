@@ -1,0 +1,4 @@
+model,coding,reasoning
+anthropic/claude-sonnet-4-5,0.81,0.84
+openai/gpt-4o,0.66,0.71
+totally-unknown-model,0.11,0.12

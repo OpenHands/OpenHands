@@ -1,0 +1,112 @@
+{
+  "version": "v1",
+  "last_updated": "2026-09-06T00:00:00Z",
+  "curated_fields": "retention and watermark are manually researched and versioned; no public benchmark source publishes them",
+  "update_url": "https://raw.githubusercontent.com/OpenHands/OpenHands/main/tools/model-registry/privacy.v1.json",
+  "models": [
+    {
+      "id": "openhands/glm-5.2",
+      "retention": "none",
+      "watermark": "none",
+      "researched_at": "2026-09-06T00:00:00Z",
+      "source_url": "https://docs.z.ai/legal/privacy-policy",
+      "notes": "Z.AI / GLM API docs do not disclose output watermarking. API training-retention language is thinner than OpenAI/Anthropic; treated as none for API-style hosted keys, revisit on refresh."
+    },
+    {
+      "id": "openai/gpt-4o",
+      "retention": "none",
+      "watermark": "none",
+      "researched_at": "2026-09-06T00:00:00Z",
+      "source_url": "https://developers.openai.com/api/docs/guides/your-data",
+      "notes": "API platform does not train on inputs/outputs by default (opt-in to share). Consumer ChatGPT is a different product and may train unless opted out. No public API text-watermark disclosure."
+    },
+    {
+      "id": "openai/gpt-5.4",
+      "retention": "none",
+      "watermark": "none",
+      "researched_at": "2026-09-06T00:00:00Z",
+      "source_url": "https://openai.com/business-data/",
+      "notes": "Same API-platform default as other OpenAI API models: not trained on org/API data by default."
+    },
+    {
+      "id": "anthropic/claude-sonnet-4-5",
+      "retention": "none",
+      "watermark": "none",
+      "researched_at": "2026-09-06T00:00:00Z",
+      "source_url": "https://privacy.anthropic.com/en/articles/7996885-how-do-you-use-personal-data-in-model-training",
+      "notes": "Commercial/API traffic is not used to train by default. No public fingerprinting disclosure for API text."
+    },
+    {
+      "id": "anthropic/claude-opus-4-6",
+      "retention": "none",
+      "watermark": "none",
+      "researched_at": "2026-09-06T00:00:00Z",
+      "source_url": "https://privacy.anthropic.com/en/articles/7996885-how-do-you-use-personal-data-in-model-training",
+      "notes": "Same Anthropic API training default as Sonnet."
+    },
+    {
+      "id": "google/gemini-2.5-pro",
+      "retention": "opt-out",
+      "watermark": "always",
+      "researched_at": "2026-09-06T00:00:00Z",
+      "source_url": "https://ai.google.dev/gemini-api/terms",
+      "notes": "Paid Gemini API is not used for training; unpaid/consumer surfaces are less clear so retention is opt-out (strictest ambiguous reading). Google documents SynthID watermarking for generated media; treat watermark as always for sensitive-ip until a text-specific exclusion is confirmed."
+    },
+    {
+      "id": "cursor-cli/composer",
+      "retention": "opt-out",
+      "watermark": "none",
+      "researched_at": "2026-09-06T00:00:00Z",
+      "source_url": "https://cursor.com/privacy",
+      "notes": "Cursor Privacy Mode / data-sharing controls are account settings, not a hard API none. Strictest reading: opt-out. No public output-watermark disclosure."
+    },
+    {
+      "id": "opencode/anthropic/claude-sonnet-4-6",
+      "retention": "opt-out",
+      "watermark": "none",
+      "researched_at": "2026-09-06T00:00:00Z",
+      "source_url": "https://opencode.ai/docs",
+      "notes": "OpenCode is a local CLI that forwards to the user's configured providers. Privacy follows the backing provider; seed uses opt-out until a provider-specific row overrides it."
+    },
+    {
+      "id": "ollama/qwen3-coder:16b",
+      "retention": "none",
+      "watermark": "none",
+      "researched_at": "2026-09-06T00:00:00Z",
+      "source_url": "https://github.com/ollama/ollama",
+      "notes": "Local inference. No vendor training retention or watermark when the runtime stays on-device."
+    },
+    {
+      "id": "ollama/llama3.1:8b",
+      "retention": "none",
+      "watermark": "none",
+      "researched_at": "2026-09-06T00:00:00Z",
+      "source_url": "https://github.com/ollama/ollama",
+      "notes": "Local inference."
+    },
+    {
+      "id": "ollama/llama3.2:3b",
+      "retention": "none",
+      "watermark": "none",
+      "researched_at": "2026-09-06T00:00:00Z",
+      "source_url": "https://github.com/ollama/ollama",
+      "notes": "Local inference."
+    },
+    {
+      "id": "ollama/deepseek-r1:14b",
+      "retention": "none",
+      "watermark": "none",
+      "researched_at": "2026-09-06T00:00:00Z",
+      "source_url": "https://github.com/ollama/ollama",
+      "notes": "Local inference."
+    },
+    {
+      "id": "ollama/qwen2.5-coder:7b",
+      "retention": "none",
+      "watermark": "none",
+      "researched_at": "2026-09-06T00:00:00Z",
+      "source_url": "https://github.com/ollama/ollama",
+      "notes": "Local inference."
+    }
+  ]
+}

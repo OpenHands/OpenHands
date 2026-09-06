@@ -1,0 +1,32 @@
+{
+  "status": 200,
+  "data": [
+    {
+      "id": "gpt-4o",
+      "name": "GPT-4o",
+      "median_output_tokens_per_second": 80,
+      "median_time_to_first_token_seconds": 0.4,
+      "evaluations": {
+        "artificial_analysis_intelligence_index": 42,
+        "artificial_analysis_coding_index": 38
+      },
+      "pricing": {
+        "price_1m_input_tokens": 2.5,
+        "price_1m_output_tokens": 10.0
+      }
+    },
+    {
+      "id": "claude-sonnet-4-5",
+      "name": "Claude Sonnet 4.5",
+      "median_time_to_first_token_seconds": 0.6,
+      "evaluations": {
+        "artificial_analysis_intelligence_index": 48,
+        "artificial_analysis_coding_index": 45
+      },
+      "pricing": {
+        "price_1m_input_tokens": 3.0,
+        "price_1m_output_tokens": 15.0
+      }
+    }
+  ]
+}

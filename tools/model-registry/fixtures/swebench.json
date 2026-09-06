@@ -1,0 +1,7 @@
+{
+  "models": [
+    {"name": "Claude Sonnet 4.5", "resolved": 80, "total": 100},
+    {"name": "GPT-4o", "resolved": 0.65, "total": 1},
+    {"name": "mystery-lab-9", "resolved": 12, "total": 100}
+  ]
+}
