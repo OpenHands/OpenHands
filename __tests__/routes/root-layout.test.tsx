@@ -6,6 +6,11 @@ import MainApp from "#/routes/root-layout";
 
 const useConfigMock = vi.fn();
 const useSettingsMock = vi.fn();
+const needsDesktopTitlebarMock = vi.fn(() => false);
+
+vi.mock("#/utils/desktop-shell", () => ({
+  needsDesktopTitlebar: () => needsDesktopTitlebarMock(),
+}));
 
 vi.mock("#/hooks/query/use-config", () => ({
   useConfig: () => useConfigMock(),
@@ -77,6 +82,7 @@ const RouterStub = createRoutesStub([
 describe("root layout", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    needsDesktopTitlebarMock.mockReturnValue(false);
     useConfigMock.mockReturnValue({
       isLoading: false,
       data: {
@@ -149,5 +155,27 @@ describe("root layout", () => {
     });
 
     expect(new Set(classNames).size).toBe(1);
+  });
+
+  it("does not reserve a desktop titlebar in the browser", () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <RouterStub initialEntries={["/"]} />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.queryByTestId("desktop-titlebar")).not.toBeInTheDocument();
+  });
+
+  it("reserves a desktop titlebar in the macOS Electron shell", () => {
+    needsDesktopTitlebarMock.mockReturnValue(true);
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <RouterStub initialEntries={["/"]} />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByTestId("desktop-titlebar")).toBeInTheDocument();
   });
 });

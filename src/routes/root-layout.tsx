@@ -25,6 +25,8 @@ import { ReactRouterNavigationProvider } from "./react-router-navigation-provide
 import { OnboardingHost } from "#/components/features/onboarding";
 import { isOnboardingPreviewActive } from "#/components/features/onboarding/onboarding-preview";
 import { CanvasExtensionsRuntimeProvider } from "#/components/features/canvas-extensions/canvas-extensions-runtime";
+import { DesktopTitlebar } from "#/components/features/desktop/desktop-titlebar";
+import { needsDesktopTitlebar } from "#/utils/desktop-shell";
 
 const EnvironmentSwitchOverlay = React.lazy(
   () => import("#/components/features/backends/environment-switch-overlay"),
@@ -115,32 +117,37 @@ export default function MainApp() {
         <SidebarMobileNavProvider>
           <div
             data-testid="root-layout"
-            className="h-screen lg:min-w-5xl flex flex-col md:flex-row bg-base overflow-hidden p-0"
+            className="h-screen lg:min-w-5xl flex flex-col bg-base overflow-hidden p-0"
           >
             <title>{appTitle}</title>
-            <Sidebar />
+            {needsDesktopTitlebar() ? <DesktopTitlebar /> : null}
+            <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+              <Sidebar />
 
-            <div className="flex min-h-0 flex-col w-full min-w-0 h-full gap-3">
-              {!hideMobileSidebarMenuBar ? <SidebarMobileMenuBar /> : null}
-              {config.data &&
-                (config.data.maintenance_start_time ||
-                  (config.data.faulty_models &&
-                    config.data.faulty_models.length > 0) ||
-                  config.data.error_message) && (
-                  <React.Suspense fallback={null}>
-                    <AlertBanner
-                      maintenanceStartTime={config.data.maintenance_start_time}
-                      faultyModels={config.data.faulty_models}
-                      errorMessage={config.data.error_message}
-                      updatedAt={config.data.updated_at}
-                    />
-                  </React.Suspense>
-                )}
-              <div
-                id="root-outlet"
-                className="relative flex-1 overflow-auto px-0 custom-scrollbar"
-              >
-                <Outlet />
+              <div className="flex min-h-0 flex-col w-full min-w-0 h-full gap-3">
+                {!hideMobileSidebarMenuBar ? <SidebarMobileMenuBar /> : null}
+                {config.data &&
+                  (config.data.maintenance_start_time ||
+                    (config.data.faulty_models &&
+                      config.data.faulty_models.length > 0) ||
+                    config.data.error_message) && (
+                    <React.Suspense fallback={null}>
+                      <AlertBanner
+                        maintenanceStartTime={
+                          config.data.maintenance_start_time
+                        }
+                        faultyModels={config.data.faulty_models}
+                        errorMessage={config.data.error_message}
+                        updatedAt={config.data.updated_at}
+                      />
+                    </React.Suspense>
+                  )}
+                <div
+                  id="root-outlet"
+                  className="relative flex-1 overflow-auto px-0 custom-scrollbar"
+                >
+                  <Outlet />
+                </div>
               </div>
             </div>
           </div>

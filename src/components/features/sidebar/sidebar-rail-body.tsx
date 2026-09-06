@@ -3,15 +3,11 @@ import { useTranslation } from "react-i18next";
 import {
   ChevronLeft,
   ChevronRight,
-  FolderKanban,
   Plus,
   Server,
   Settings,
   PanelsTopLeft,
-  WandSparkles,
 } from "lucide-react";
-import { FEATURE_DEV_PATH } from "#/api/feature-developer-service/feature-developer-constants";
-import { PROJECTS_PATH } from "#/api/projects-service/projects-constants";
 import { OpenHandsLogoButton } from "#/components/shared/buttons/openhands-logo-button";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import {
@@ -256,28 +252,6 @@ export function SidebarRailBody({
             )}
           />
         )}
-        <SidebarNavLink
-          to={PROJECTS_PATH}
-          label={t(I18nKey.PROJECTS$TITLE)}
-          testId="sidebar-projects-link"
-          collapsed={collapsed}
-          icon={<FolderKanban width={ICON_SIZE} height={ICON_SIZE} />}
-          pinAction={buildPinAction(
-            PROJECTS_PATH,
-            "sidebar-pin-home-toggle-projects",
-          )}
-        />
-        <SidebarNavLink
-          to={FEATURE_DEV_PATH}
-          label={t(I18nKey.FEATURE_DEV$NAV)}
-          testId="sidebar-feature-dev-link"
-          collapsed={collapsed}
-          icon={<WandSparkles width={ICON_SIZE} height={ICON_SIZE} />}
-          pinAction={buildPinAction(
-            FEATURE_DEV_PATH,
-            "sidebar-pin-home-toggle-feature-dev",
-          )}
-        />
         {canvasExtensionPages.map((page) => (
           <SidebarNavLink
             key={`${page.extension.name}:${page.contribution.id}`}
