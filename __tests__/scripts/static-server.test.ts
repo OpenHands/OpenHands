@@ -4,7 +4,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { parseArgs, startStaticServer } from "../../scripts/static-server.mjs";
+import {
+  parseArgs,
+  serializeForInlineScript,
+  startStaticServer,
+} from "../../scripts/static-server.mjs";
 
 describe("static-server.mjs", () => {
   const servers: Server[] = [];
@@ -194,6 +198,31 @@ describe("static-server.mjs", () => {
     it("treats empty string as null for runtime services info", () => {
       const config = parseArgs(["--runtime-services-info", ""]);
       expect(config.runtimeServicesInfo).toBeNull();
+    });
+  });
+
+  describe("serializeForInlineScript", () => {
+    it("escapes '<' and '>' to prevent breaking out of script tags", () => {
+      const input = "</script><script>alert(1)</script>";
+      const result = serializeForInlineScript(input);
+      expect(result).not.toContain("<");
+      expect(result).not.toContain(">");
+      expect(result).toBe('"\\u003c/script\\u003e\\u003cscript\\u003ealert(1)\\u003c/script\\u003e"');
+    });
+
+    it("escapes line and paragraph separators U+2028 and U+2029", () => {
+      const input = "line1\u2028line2\u2029line3";
+      const result = serializeForInlineScript(input);
+      expect(result).toContain("\\u2028");
+      expect(result).toContain("\\u2029");
+      expect(result).not.toContain("\u2028");
+      expect(result).not.toContain("\u2029");
+    });
+
+    it("serializes complex objects properly with escaping", () => {
+      const input = { key: "<test>", count: 42 };
+      const result = serializeForInlineScript(input);
+      expect(result).toBe('{"key":"\\u003ctest\\u003e","count":42}');
     });
   });
 
@@ -655,7 +684,7 @@ describe("static-server.mjs", () => {
       expect(body).not.toContain("should-not-inject");
     });
 
-    it("sets Cache-Control: no-cache for injected index.html", async () => {
+    it("sets Cache-Control: no-store when session key is injected", async () => {
       const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
       tempDirs.push(buildDir);
       writeFileSync(
@@ -666,7 +695,49 @@ describe("static-server.mjs", () => {
       const origin = await startServerWithKey(buildDir, "cache-test-key");
       const response = await fetch(`${origin}/`);
 
+      expect(response.headers.get("cache-control")).toBe("no-store");
+    });
+
+    it("sets Cache-Control: no-cache when session key is not present but other config is injected", async () => {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      writeFileSync(
+        path.join(buildDir, "index.html"),
+        "<html><head></head><body>app</body></html>",
+      );
+
+      const server = await startStaticServer({
+        port: 0,
+        host: "127.0.0.1",
+        dir: buildDir,
+        routes: {},
+        authRequired: true,
+      });
+      servers.push(server);
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("No port");
+      const origin = `http://127.0.0.1:${(address as { port: number }).port}`;
+
+      const response = await fetch(`${origin}/`);
+
       expect(response.headers.get("cache-control")).toBe("no-cache");
+    });
+
+    it("escapes HTML special characters and script closing tags in injected values", async () => {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      writeFileSync(
+        path.join(buildDir, "index.html"),
+        "<html><head></head><body>app</body></html>",
+      );
+
+      const payload = '</script><script>alert("xss")</script>';
+      const origin = await startServerWithKey(buildDir, payload);
+      const response = await fetch(`${origin}/`);
+      const body = await response.text();
+
+      expect(body).not.toContain("</script><script>");
+      expect(body).toContain("\\u003c/script\\u003e\\u003cscript\\u003e");
     });
 
     it("does not inject when sessionApiKey is null", async () => {
