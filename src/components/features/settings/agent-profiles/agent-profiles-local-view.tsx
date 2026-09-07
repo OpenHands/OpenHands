@@ -12,7 +12,6 @@ import {
 import AgentProfilesService, {
   type AgentProfile,
   type AgentProfileSummary,
-  type AgentProfileSaveInput,
 } from "#/api/agent-profiles-service/agent-profiles-service.api";
 import { useSaveAgentProfile } from "#/hooks/mutation/use-save-agent-profile";
 import { useRenameAgentProfile } from "#/hooks/mutation/use-rename-agent-profile";
@@ -64,6 +63,7 @@ function toAgentSettingsOverride(
     enable_sub_agents: profile.enable_sub_agents,
     enable_switch_llm_tool: switchLlmToolEnabled,
     tool_concurrency_limit: profile.tool_concurrency_limit,
+    verification: { ...profile.verification },
   };
 }
 
@@ -188,17 +188,21 @@ export function AgentProfilesLocalView() {
 
     // Build the variant-specific fields from the embedded form (may throw on
     // invalid input, e.g. a bad concurrency value).
-    let input: AgentProfileSaveInput;
+    let input: Parameters<typeof mergeAgentProfileSaveInput>[1];
     try {
       const fields = saveControl.buildAgentProfileFields();
+
       if (fields.agent_kind === "openhands") {
         if (!llmProfileRef) {
           displayErrorToast(t(I18nKey.SETTINGS$AGENT_PROFILE_LLM_REQUIRED));
           return;
         }
-        input = { ...fields, llm_profile_ref: llmProfileRef };
+        input = {
+          ...fields,
+          llm_profile_ref: llmProfileRef,
+        };
       } else {
-        input = fields as AgentProfileSaveInput;
+        input = fields;
       }
     } catch (error) {
       displayErrorToast(

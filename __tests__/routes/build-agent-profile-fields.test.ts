@@ -16,6 +16,9 @@ const baseAcp = {
   toolConcurrency: "",
   mcpMode: "standard" as const,
   selectedMcpServers: [],
+  verificationDirty: false,
+  criticEnabled: false,
+  iterativeRefinementEnabled: false,
 };
 
 const switchLlmToolField: SettingsFieldSchema = {
@@ -109,6 +112,9 @@ describe("buildAgentProfileFields — OpenHands", () => {
     toolConcurrency: "",
     mcpMode: "standard" as const,
     selectedMcpServers: [],
+    criticEnabled: false,
+    iterativeRefinementEnabled: false,
+    verificationDirty: false,
   };
 
   it("passes through enable_sub_agents and omits concurrency when the field is absent", () => {
@@ -201,6 +207,46 @@ describe("buildAgentProfileFields — OpenHands", () => {
         toolConcurrency: "abc",
       }),
     ).toThrow();
+  });
+  it("does not emit verification when verification settings are unchanged", () => {
+    const fields = buildAgentProfileFields({
+      ...baseOh,
+      criticEnabled: false,
+      iterativeRefinementEnabled: false,
+      verificationDirty: false,
+    });
+
+    expect(fields).not.toHaveProperty("verification");
+  });
+  it("emits critic and iterative refinement settings when changed", () => {
+    const fields = buildAgentProfileFields({
+      ...baseOh,
+      criticEnabled: true,
+      iterativeRefinementEnabled: true,
+      verificationDirty: true,
+    });
+
+    expect(fields).toMatchObject({
+      verification: {
+        critic_enabled: true,
+        enable_iterative_refinement: true,
+      },
+    });
+  });
+  it("disables iterative refinement when critic is disabled", () => {
+    const fields = buildAgentProfileFields({
+      ...baseOh,
+      criticEnabled: false,
+      iterativeRefinementEnabled: true,
+      verificationDirty: true,
+    });
+
+    expect(fields).toMatchObject({
+      verification: {
+        critic_enabled: false,
+        enable_iterative_refinement: false,
+      },
+    });
   });
 });
 
