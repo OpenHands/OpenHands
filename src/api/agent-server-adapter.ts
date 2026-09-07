@@ -473,9 +473,11 @@ interface LocalWorkspacePayload {
   working_dir: string;
 }
 
+const DOCKER_EXECUTION_WORKING_DIR = "/workspace" as const;
+
 interface DockerExecutionWorkspacePayload {
   kind: "DockerExecutionWorkspace";
-  working_dir: "/workspace";
+  working_dir: typeof DOCKER_EXECUTION_WORKING_DIR;
 }
 
 type WorkspacePayload = LocalWorkspacePayload | DockerExecutionWorkspacePayload;
@@ -1074,7 +1076,10 @@ function buildConfiguredConversationSettings(options: {
 
   const workspace: WorkspacePayload =
     executionRuntime === "docker"
-      ? { kind: "DockerExecutionWorkspace", working_dir: "/workspace" }
+      ? {
+          kind: "DockerExecutionWorkspace",
+          working_dir: DOCKER_EXECUTION_WORKING_DIR,
+        }
       : {
           kind: "LocalWorkspace",
           working_dir: workingDir ?? getAgentServerWorkingDir(),
@@ -1446,7 +1451,10 @@ export function buildStartPlanningConversationRequest(options: {
     },
     workspace:
       options.executionRuntime === "docker"
-        ? { kind: "DockerExecutionWorkspace", working_dir: "/workspace" }
+        ? {
+            kind: "DockerExecutionWorkspace",
+            working_dir: DOCKER_EXECUTION_WORKING_DIR,
+          }
         : {
             kind: "LocalWorkspace",
             working_dir: options.workingDir,
