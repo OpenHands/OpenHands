@@ -301,6 +301,19 @@ def handle_request(
             path,
             body,
         )
+    if pathname.startswith("/api/standards"):
+        from standards.api import StandardsService, handle_request as handle_standards
+        from standards.registry import get_active_registry, start_default_registry
+
+        registry = get_active_registry() or start_default_registry()
+        if registry is None:
+            from standards.audit_store import default_db_path
+            from standards.registry import StandardsRegistry, set_active_registry
+
+            registry = StandardsRegistry(default_db_path())
+            registry.discover()
+            set_active_registry(registry)
+        return handle_standards(StandardsService(registry), method, path, body)
     try:
         for route_method, pattern, handler in ROUTES:
             if route_method != method:

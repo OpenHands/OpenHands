@@ -135,6 +135,16 @@
         "src/mocks/canvas-extensions-handlers.ts"
       ],
       "tests": ["canvas-extensions"]
+    },
+    {
+      "comment": "Standards plugin gallery, enforcement, console, and audit log",
+      "sources": [
+        "src/components/features/standards/**",
+        "src/routes/standards.tsx",
+        "src/api/standards-service/**",
+        "src/mocks/standards-handlers.ts"
+      ],
+      "tests": ["regressions"]
     }
   ],
 

@@ -135,6 +135,13 @@ export const GRAPH_QUERY_KEYS = {
   config: () => ["graph", "config"] as const,
 } as const;
 
+export const STANDARDS_QUERY_KEYS = {
+  all: ["standards"] as const,
+  plugins: () => ["standards", "plugins"] as const,
+  config: () => ["standards", "config"] as const,
+  audit: () => ["standards", "audit"] as const,
+} as const;
+
 export const CHANNELS_QUERY_KEYS = {
   all: ["channels"] as const,
   list: () => ["channels", "list"] as const,

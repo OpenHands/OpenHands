@@ -57,6 +57,7 @@ export default [
     route("automations/:automationId", "routes/automation-detail.tsx"),
     route("routing", "routes/routing.tsx"),
     route("graph", "routes/graph.tsx"),
+    route("standards", "routes/standards.tsx"),
     route("loops", "routes/loops.tsx"),
     route("loops/runs/:runId", "routes/loops-detail.tsx"),
   ]),

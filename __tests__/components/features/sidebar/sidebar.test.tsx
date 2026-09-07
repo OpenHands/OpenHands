@@ -488,6 +488,7 @@ describe("Sidebar", () => {
       "sidebar-automations-link",
       "sidebar-skills-link",
       "sidebar-channels-link",
+      "sidebar-standards-link",
     ]) {
       const link = screen.getByTestId(testId);
       expect(link.querySelector("svg")).not.toBeNull();
@@ -517,6 +518,9 @@ describe("Sidebar", () => {
     ).not.toBeInTheDocument();
     expect(screen.getByTestId("sidebar-channels-link")).toHaveTextContent(
       "Channels",
+    );
+    expect(screen.getByTestId("sidebar-standards-link")).toHaveTextContent(
+      "Standards",
     );
     expect(
       screen.queryByTestId("sidebar-projects-link"),

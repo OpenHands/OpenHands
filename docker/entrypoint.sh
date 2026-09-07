@@ -274,7 +274,7 @@ export AUTOMATION_AGENT_SERVER_URL="${AUTOMATION_AGENT_SERVER_URL:-http://127.0.
 # FinishTool registration lets automation runs resolve the tool on their
 # remote conversations (see the note at the bottom of tools/canvas_ui_tool.py).
 export OH_EXTRA_PYTHON_PATH="${OH_EXTRA_PYTHON_PATH:-/opt/agent-canvas/tools}"
-AGENT_SERVER_IMPORT_MODULES="canvas_ui_tool,cursor_tool,opencode_tool,loop_triggers,graph_indexer"
+AGENT_SERVER_IMPORT_MODULES="canvas_ui_tool,cursor_tool,opencode_tool,loop_triggers,graph_indexer,standards_api"
 
 # Track child PIDs so we can clean up on exit.
 PIDS=()
@@ -411,6 +411,7 @@ node /opt/agent-canvas/static-server.mjs \
   --route "/api/project=http://127.0.0.1:${KANBAN_PORT}" \
   --route "/api/channels=http://127.0.0.1:${KANBAN_PORT}" \
   --route "/api/meetings=http://127.0.0.1:${KANBAN_PORT}" \
+  --route "/api/standards=http://127.0.0.1:${KANBAN_PORT}" \
   --route "/api=http://127.0.0.1:${AGENT_SERVER_PORT}" \
   --route "/server_info=http://127.0.0.1:${AGENT_SERVER_PORT}" \
   --route "/sockets=http://127.0.0.1:${AGENT_SERVER_PORT}" \
@@ -469,6 +470,7 @@ if [ -n "${PUBLIC_MODE_PORT:-}" ]; then
     --route "/api/project=http://127.0.0.1:${KANBAN_PORT}" \
     --route "/api/channels=http://127.0.0.1:${KANBAN_PORT}" \
     --route "/api/meetings=http://127.0.0.1:${KANBAN_PORT}" \
+    --route "/api/standards=http://127.0.0.1:${KANBAN_PORT}" \
     --route "/api=http://127.0.0.1:${AGENT_SERVER_PORT}" \
     --route "/server_info=http://127.0.0.1:${AGENT_SERVER_PORT}" \
     --route "/sockets=http://127.0.0.1:${AGENT_SERVER_PORT}" \
