@@ -443,6 +443,22 @@ class LoopTriggerService:
                 result["prompt"] = graph["spec_text"]
         except Exception:
             pass
+        try:
+            from standards_agent_hooks import apply_dispatch_standards_context
+
+            standards = apply_dispatch_standards_context(
+                {
+                    "spec_text": result.get("prompt") or "",
+                    "task_text": task_text,
+                    "worktree_dir": worktree_dir,
+                    "root": worktree_dir or context.get("root"),
+                }
+            )
+            if standards.get("spec_text"):
+                result["prompt"] = standards["spec_text"]
+            result["standards_block"] = standards.get("standards_block")
+        except Exception:
+            pass
         if self.router_store is not None:
             from router_runtime import persist_dispatch_trace, resolve_for_dispatch
 

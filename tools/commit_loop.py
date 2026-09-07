@@ -22,6 +22,7 @@ from loop_runner import (
     STATUS_FAILED,
     STATUS_PASSED,
     STATUS_RUNNING,
+    register_stage_handler,
 )
 from pr_creator import (
     CONVENTIONAL_TYPES,
@@ -35,6 +36,7 @@ COMMIT_LOOP_STAGES: list[dict[str, Any]] = [
     {"name": "typecheck", "cmd": None, "iterative": True},
     {"name": "test", "cmd": None, "iterative": True},
     {"name": "build", "cmd": None, "iterative": True},
+    {"name": "standards", "cmd": None, "iterative": True},
 ]
 FixAgent = Callable[[dict[str, Any]], None]
 
@@ -181,6 +183,24 @@ class CommitLoopService:
             )
             run["graph_context"] = graph.get("graph_context")
             run["prompt"] = graph.get("spec_text")
+        except Exception:
+            pass
+        try:
+            from standards_agent_hooks import apply_dispatch_standards_context
+
+            standards = apply_dispatch_standards_context(
+                {
+                    "spec_text": run.get("prompt") or "",
+                    "task_text": str(
+                        card.get("title") or session.get("branch_name") or "commit loop"
+                    ),
+                    "worktree_dir": worktree,
+                    "root": worktree,
+                }
+            )
+            if standards.get("spec_text"):
+                run["prompt"] = standards["spec_text"]
+            run["standards_block"] = standards.get("standards_block")
         except Exception:
             pass
         routing = None
@@ -350,3 +370,8 @@ class CommitLoopService:
             if result.returncode != 0:
                 raise CommitLoopError((result.stderr or result.stdout or "").strip())
         return _run_git(worktree_dir, "rev-parse", "HEAD")
+
+
+from standards_gate import handle_standards_stage
+
+register_stage_handler(COMMIT_LOOP_NAME, "standards", handle_standards_stage)

@@ -118,7 +118,7 @@ class CommitLoopTests(unittest.TestCase):
         self.assertEqual(definition["name"], COMMIT_LOOP_NAME)
         self.assertEqual(definition["project_id"], "proj-1")
         names = [stage["name"] for stage in definition["stages"]]
-        self.assertEqual(names, ["lint", "typecheck", "test", "build"])
+        self.assertEqual(names, ["lint", "typecheck", "test", "build", "standards"])
         again = self.service.setup("proj-1")
         self.assertEqual(again["id"], definition["id"])
 

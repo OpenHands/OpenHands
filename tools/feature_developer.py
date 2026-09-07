@@ -429,6 +429,31 @@ class FeatureDeveloper:
                 }
                 if attached.get("spec_text"):
                     self._set_run(run_id, spec_text=attached["spec_text"])
+            try:
+                from standards_agent_hooks import apply_dispatch_standards_context
+
+                current = self.get_run(run_id)
+                standards = apply_dispatch_standards_context(
+                    {
+                        "spec_text": current.get("spec_text") or "",
+                        "task_text": str(ticket.get("title") or ""),
+                        "root": (
+                            self.graph_store.status().get("root")
+                            if self.graph_store is not None
+                            else None
+                        ),
+                    }
+                )
+                if standards.get("spec_text"):
+                    ticket = {
+                        **ticket,
+                        "description": standards.get("spec_text")
+                        or ticket.get("description"),
+                        "_standards_block": standards.get("standards_block"),
+                    }
+                    self._set_run(run_id, spec_text=standards["spec_text"])
+            except Exception:
+                pass
             if self.implement_fn is not None:
                 result = self.implement_fn(self.get_run(run_id), ticket)
             else:
