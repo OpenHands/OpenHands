@@ -494,6 +494,13 @@ function buildTrigger(
       .filter(([, value]) => hasPayloadValue(value)),
   );
 
+  const filter = entry.setup.filter
+    ? interpolateText(entry.setup.filter, {
+        form: values,
+        automation: entry,
+      })
+    : undefined;
+
   return {
     type: trigger.kind,
     ...derived,
@@ -501,13 +508,7 @@ function buildTrigger(
       ...(!("source" in derived) && {
         source: repoPicker?.field.provider ?? "",
       }),
-      ...(entry.setup.filter &&
-        hasPayloadValue(fieldText(values.filter)) && {
-          filter: interpolateText(entry.setup.filter, {
-            form: values,
-            automation: entry,
-          }),
-        }),
+      ...(hasPayloadValue(filter) && { filter }),
     }),
   };
 }

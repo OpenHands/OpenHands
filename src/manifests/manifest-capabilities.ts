@@ -11,6 +11,7 @@ import type {
   DeploymentCapabilities,
   SetupActionKind,
   SetupEntry,
+  SetupTriggerKind,
 } from "./types";
 
 /**
@@ -51,6 +52,18 @@ export function supportedActionKinds(
   const actions = entry.setup.actions ?? {};
   return (Object.keys(actions) as SetupActionKind[]).filter((kind) =>
     actionSupportsCapabilities(actions[kind]?.features ?? [], reported),
+  );
+}
+
+export function supportedTriggerKinds(
+  entry: SetupEntry,
+  reported: DeploymentCapabilities,
+): SetupTriggerKind[] {
+  const triggers = Object.keys(
+    entry.setup.form.triggers ?? {},
+  ) as SetupTriggerKind[];
+  return triggers.filter((kind) =>
+    (reported.triggerKinds ?? []).includes(kind),
   );
 }
 

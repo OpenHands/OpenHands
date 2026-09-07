@@ -46,4 +46,66 @@ describe("custom automation setup actions", () => {
       ).toEqual(createBody);
     },
   );
+
+  it("keeps event filters rendered from non-filter form fields", () => {
+    const entry: SetupEntry = {
+      id: "mention-responder",
+      name: "Mention responder",
+      description: "Respond to matching comments.",
+      requires: { integrations: {} },
+      setup: {
+        version: "1.0",
+        mode: "direct",
+        form: {
+          triggers: {
+            event: {
+              source: {
+                type: "event-source",
+                label: "Source",
+                help: "Where events come from.",
+                required: true,
+              },
+              on: {
+                type: "event-type",
+                label: "Event",
+                help: "Which event to watch.",
+                required: true,
+              },
+              mention: {
+                type: "text",
+                label: "Mention",
+                help: "Text that must appear in the comment.",
+                required: true,
+              },
+            },
+          },
+          args: {},
+        },
+        prompt: "Handle {{form.mention}}.",
+        filter: "icontains(comment.body, '{{form.mention}}')",
+      },
+    };
+
+    expect(
+      buildCreatePayload(
+        entry,
+        {
+          source: "github",
+          on: "issue_comment.created",
+          mention: "@openhands",
+        },
+        undefined,
+        "event",
+      ),
+    ).toEqual({
+      name: "Mention responder",
+      prompt: "Handle @openhands.",
+      trigger: {
+        type: "event",
+        source: "github",
+        on: "issue_comment.created",
+        filter: "icontains(comment.body, '@openhands')",
+      },
+    });
+  });
 });

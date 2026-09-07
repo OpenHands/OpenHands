@@ -15,7 +15,10 @@ import { useSetupCapabilities } from "#/hooks/query/use-manifest-capabilities";
 import { useSetupPrerequisites } from "#/hooks/query/use-manifest-prerequisites";
 import { useSetupPreflight } from "#/hooks/use-manifest-preflight";
 import { useSetupAction } from "#/manifests/manifest-actions";
-import { supportedActionKinds } from "#/manifests/manifest-capabilities";
+import {
+  supportedActionKinds,
+  supportedTriggerKinds,
+} from "#/manifests/manifest-capabilities";
 import {
   buildCreatePayload,
   deriveErrorMap,
@@ -107,7 +110,13 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   } = useTracking();
 
   const [step, setStep] = useState<SetupStep>("prerequisites");
-  const triggerOptions = useMemo(() => triggerKinds(entry.setup), [entry]);
+  const allTriggerOptions = useMemo(() => triggerKinds(entry.setup), [entry]);
+  const triggerOptions = useMemo(() => {
+    if (allTriggerOptions.length === 0) return [];
+    return capabilities.capabilities
+      ? supportedTriggerKinds(entry, capabilities.capabilities)
+      : allTriggerOptions;
+  }, [allTriggerOptions, capabilities.capabilities, entry]);
   const allActionOptions = useMemo(() => actionKinds(entry.setup), [entry]);
   const [selectedTrigger, setSelectedTrigger] = useState<string | null>(() =>
     initialTriggerKind(entry.setup),
@@ -225,6 +234,17 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     setLocalErrors({});
     setServiceErrors(NO_SERVICE_ERRORS);
   };
+
+  useEffect(() => {
+    if (allTriggerOptions.length === 0 || capabilities.isLoading) return;
+    if (selectedTrigger && triggerOptions.includes(selectedTrigger)) return;
+    if (triggerOptions.length > 0) setTriggerValue(triggerOptions[0]);
+  }, [
+    triggerOptions,
+    allTriggerOptions.length,
+    capabilities.isLoading,
+    selectedTrigger,
+  ]);
 
   useEffect(() => {
     if (allActionOptions.length === 0 || capabilities.isLoading) return;
