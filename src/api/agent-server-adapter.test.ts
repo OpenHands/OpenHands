@@ -197,6 +197,39 @@ describe("buildStartConversationRequest", () => {
     expect(payload.parent_conversation_id).toBe("parent-1");
   });
 
+  it("requests DockerExecutionWorkspace for the planner on Docker execution servers", () => {
+    const payload = buildStartPlanningConversationRequest({
+      encryptedAgentSettings: {
+        agent_kind: "openhands",
+        llm: { model: "openhands/minimax-m2.7" },
+      },
+      workingDir: "/workspace",
+      parentConversationId: "parent-1",
+      executionRuntime: "docker",
+    });
+
+    expect(payload.workspace).toEqual({
+      kind: "DockerExecutionWorkspace",
+      working_dir: "/workspace",
+    });
+  });
+
+  it("defaults the planner to LocalWorkspace when executionRuntime is not docker", () => {
+    const payload = buildStartPlanningConversationRequest({
+      encryptedAgentSettings: {
+        agent_kind: "openhands",
+        llm: { model: "openhands/minimax-m2.7" },
+      },
+      workingDir: "/host/workspace/project",
+      parentConversationId: "parent-1",
+    });
+
+    expect(payload.workspace).toEqual({
+      kind: "LocalWorkspace",
+      working_dir: "/host/workspace/project",
+    });
+  });
+
   it("defaults the planner's max_iterations to 500 when not provided", () => {
     const payload = buildStartPlanningConversationRequest({
       encryptedAgentSettings: {
@@ -648,6 +681,33 @@ describe("buildStartPlanningConversationRequestWithEncryptedSettings", () => {
     const skillNames = getPlannerAgentContextSkillNames(payload);
     expect(skillNames).not.toContain("agent-memory");
     expect(skillNames).toContain("add-javadoc");
+  });
+
+  it("threads executionRuntime through to DockerExecutionWorkspace selection", async () => {
+    const payload =
+      await buildStartPlanningConversationRequestWithEncryptedSettings({
+        workingDir: "/workspace",
+        parentConversationId: "parent-1",
+        executionRuntime: "docker",
+      });
+
+    expect(payload.workspace).toEqual({
+      kind: "DockerExecutionWorkspace",
+      working_dir: "/workspace",
+    });
+  });
+
+  it("defaults to LocalWorkspace when executionRuntime is not provided", async () => {
+    const payload =
+      await buildStartPlanningConversationRequestWithEncryptedSettings({
+        workingDir: "/host/workspace/project",
+        parentConversationId: "parent-1",
+      });
+
+    expect(payload.workspace).toEqual({
+      kind: "LocalWorkspace",
+      working_dir: "/host/workspace/project",
+    });
   });
 });
 

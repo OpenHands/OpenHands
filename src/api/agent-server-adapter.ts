@@ -227,6 +227,14 @@ export async function fetchBackendRuntimeServicesInfo(): Promise<RuntimeServices
   );
 }
 
+export async function fetchBackendExecutionRuntime(): Promise<
+  string | undefined
+> {
+  const serverInfo = await fetchBackendServerInfo();
+  return (serverInfo as { execution_runtime?: string } | null)
+    ?.execution_runtime;
+}
+
 /**
  * Return the deployment mode from the runtime services info, e.g. "docker",
  * "dev:automation", etc. Returns `null` when no runtime info is supplied.
@@ -1368,6 +1376,8 @@ export function buildStartPlanningConversationRequest(options: {
   maxIterations?: number;
   /** Mirrors the code agent's skill filtering — see buildConfiguredOpenHandsAgentSettings. */
   skillEnablement?: SkillEnablement;
+  /** Mirrors the main conversation's workspace selection — see buildConfiguredConversationSettings. */
+  executionRuntime?: string;
 }): RawAgentStartConversationPayload {
   const agentSettings = toRecord(options.encryptedAgentSettings);
   const llm = buildNormalizedLlmSettings(agentSettings.llm);
@@ -1432,10 +1442,13 @@ export function buildStartPlanningConversationRequest(options: {
         keep_first: 6,
       },
     },
-    workspace: {
-      kind: "LocalWorkspace",
-      working_dir: options.workingDir,
-    },
+    workspace:
+      options.executionRuntime === "docker"
+        ? { kind: "DockerExecutionWorkspace", working_dir: "/workspace" }
+        : {
+            kind: "LocalWorkspace",
+            working_dir: options.workingDir,
+          },
     // No Canvas UI client tool: the planner's only output is PLAN.md, which the
     // Planner tab surfaces on its own via PlanningFileEditorObservation. Handing
     // it the panel-control tool would only let it navigate the right-side panel
@@ -1548,6 +1561,8 @@ export async function buildStartPlanningConversationRequestWithEncryptedSettings
    */
   parentAgentProfileId?: string | null;
   initialMessage?: string;
+  /** The server's `execution_runtime` — threads through to workspace selection. */
+  executionRuntime?: string;
 }): Promise<RawAgentStartConversationPayload> {
   const { SecretsService } = await import("./secrets-service");
 

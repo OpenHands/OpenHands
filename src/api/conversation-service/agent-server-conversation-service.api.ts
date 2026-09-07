@@ -43,6 +43,7 @@ import {
   buildStartConversationRequestWithEncryptedSettings,
   buildStartPlanningConversationRequestWithEncryptedSettings,
   emptyHooksResponse,
+  fetchBackendExecutionRuntime,
   getDefaultConversationTitle,
   toAppConversation,
   toConversationPage,
@@ -592,10 +593,17 @@ class AgentServerConversationService {
     const workingDir =
       parent?.workspace?.working_dir ?? getAgentServerWorkingDir();
 
+    // The planner must use the same workspace variety as the parent
+    // conversation's server. A Docker execution server enforces one workspace
+    // variety per server, so requesting LocalWorkspace for the planner would
+    // be rejected.
+    const executionRuntime = await fetchBackendExecutionRuntime();
+
     const payload =
       await buildStartPlanningConversationRequestWithEncryptedSettings({
         workingDir,
         parentConversationId,
+        executionRuntime,
         // Pin the planner to the parent's own current model. Only meaningful
         // for "openhands"-kind parents: an ACP parent's active_profile is a
         // stale launch-time snapshot (/model is a no-op for ACP), not a live
