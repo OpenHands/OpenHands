@@ -38,6 +38,7 @@ import { ImportAutomationModal } from "#/components/features/automations/import-
 import { RecommendedAutomationsLauncher } from "#/components/features/automations/recommended-automations-launcher";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { useTracking } from "#/hooks/use-tracking";
+import { useAutomationPermissions } from "#/hooks/use-automation-permissions";
 import type { Automation, AutomationSpec } from "#/types/automation";
 import {
   getAutomationExportFilename,
@@ -121,6 +122,9 @@ export default function AutomationsList() {
   // Edit is a local-backend-only feature in MVP — cloud automations
   // are managed elsewhere and we don't yet surface them here.
   const canEdit = active.backend.kind === "local";
+  // Creating an automation requires manage_automations (no owner escape hatch
+  // — it's a new record, not a mutation of an existing one).
+  const { canManage } = useAutomationPermissions();
 
   const {
     data: healthData,
@@ -385,10 +389,12 @@ export default function AutomationsList() {
               {t(I18nKey.AUTOMATIONS$GIT_SYNC$NAV_BUTTON)}
             </BrandButton>
           )}
-          <AddAutomationMenu
-            onAdd={() => setIsAddAutomationOpen(true)}
-            onImport={() => setIsImportOpen(true)}
-          />
+          {canManage ? (
+            <AddAutomationMenu
+              onAdd={() => setIsAddAutomationOpen(true)}
+              onImport={() => setIsImportOpen(true)}
+            />
+          ) : null}
         </div>
       </div>
 

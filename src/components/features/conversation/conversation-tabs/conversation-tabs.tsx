@@ -19,7 +19,7 @@ import { useSelectConversationTab } from "#/hooks/use-select-conversation-tab";
 import { useTaskList } from "#/hooks/use-task-list";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useHandleBuildPlanClick } from "#/hooks/use-handle-build-plan-click";
-import { useAgentState } from "#/hooks/use-agent-state";
+import { useAgentState, usePlanningAgentState } from "#/hooks/use-agent-state";
 import { AgentState } from "#/types/agent-state";
 import { Typography } from "#/ui/typography";
 import { mobileTopBarIconClassName } from "#/utils/mobile-top-bar-icon-button-classes";
@@ -45,6 +45,7 @@ export function ConversationTabs({
 
   const { handleBuildPlanClick } = useHandleBuildPlanClick();
   const { curAgentState } = useAgentState();
+  const { isPlanningAgentRunning } = usePlanningAgentState();
 
   const {
     selectTab,
@@ -155,10 +156,8 @@ export function ConversationTabs({
 
   // Pinned tabs always show in the bar. Unpinned tabs stay hidden unless the
   // user has that tab selected — then it appears while active so the bar
-  // matches the open panel. Hide Planner on local backends — the planning
-  // agent isn't supported locally.
+  // matches the open panel.
   const visibleTabs = tabs.filter((tab) => {
-    if (tab.tabValue === "planner" && backend.kind !== "cloud") return false;
     if (!persistedState.unpinnedTabs.includes(tab.tabValue)) return true;
     return selectedTab === tab.tabValue;
   });
@@ -167,7 +166,8 @@ export function ConversationTabs({
 
   const isAgentRunning =
     curAgentState === AgentState.RUNNING ||
-    curAgentState === AgentState.LOADING;
+    curAgentState === AgentState.LOADING ||
+    isPlanningAgentRunning;
   const isBuildDisabled = isAgentRunning || !planContent;
 
   const tabsRowInnerRef = useRef<HTMLDivElement>(null);

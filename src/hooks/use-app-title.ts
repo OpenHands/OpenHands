@@ -8,8 +8,10 @@ const APP_TITLE = "OpenHands";
 export const useAppTitle = () => {
   const { conversationId } = useParams<{ conversationId: string }>();
   const { data: conversation } = useUserConversation(conversationId ?? null);
-  const liveExecutionStatus = useConversationStateStore(
-    (state) => state.execution_status,
+  const liveExecutionStatus = useConversationStateStore((state) =>
+    conversationId
+      ? (state.executionStatusByConversation[conversationId] ?? null)
+      : null,
   );
 
   const conversationTitle = conversation?.title;
