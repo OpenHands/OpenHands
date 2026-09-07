@@ -1,4 +1,5 @@
 export const KANBAN_PATH = "/kanban";
+export const KANBAN_ALL_WORKSPACES_PATH = "__all__";
 export const PROJECT_INIT_PATH = "/project-init";
 export const KANBAN_API_BOARDS_PATH = "/api/boards";
 export const KANBAN_API_COLUMNS_PATH = "/api/columns";

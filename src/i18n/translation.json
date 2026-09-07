@@ -42975,6 +42975,23 @@
     "zh-CN": "进行中",
     "zh-TW": "進行中"
   },
+  "KANBAN$OPEN_ALL_WORKSPACES": {
+    "ar": "Open combined kanban for all workspaces",
+    "ca": "Open combined kanban for all workspaces",
+    "de": "Kombiniertes Kanban für alle Arbeitsbereiche öffnen",
+    "en": "Open combined kanban for all workspaces",
+    "es": "Abrir el kanban combinado de todos los espacios de trabajo",
+    "fr": "Ouvrir le kanban combiné de tous les espaces de travail",
+    "it": "Open combined kanban for all workspaces",
+    "ja": "すべてのワークスペースの結合カンバンを開く",
+    "ko-KR": "Open combined kanban for all workspaces",
+    "no": "Open combined kanban for all workspaces",
+    "pt": "Open combined kanban for all workspaces",
+    "tr": "Open combined kanban for all workspaces",
+    "uk": "Open combined kanban for all workspaces",
+    "zh-CN": "打开全部工作区的合并看板",
+    "zh-TW": "開啟全部工作區的合併看板"
+  },
   "PROJECTS$WORKTREE_REVIEWING": {
     "ar": "قيد المراجعة",
     "ca": "En revisió",

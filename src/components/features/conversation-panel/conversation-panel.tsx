@@ -2,7 +2,10 @@ import React from "react";
 import { Tooltip } from "@heroui/react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
-import { KANBAN_PATH } from "#/api/kanban-service/kanban-constants";
+import {
+  KANBAN_ALL_WORKSPACES_PATH,
+  KANBAN_PATH,
+} from "#/api/kanban-service/kanban-constants";
 import { writeKanbanWorkspacePath } from "#/components/features/kanban/kanban-workspace";
 import { useNavigation } from "#/context/navigation-context";
 import { useActiveBackend } from "#/contexts/active-backend-context";
@@ -1083,7 +1086,22 @@ export function ConversationPanel({
             className="flex min-w-0 flex-nowrap items-center gap-x-2 py-2 pl-4 pr-2.5 text-[var(--oh-muted)]"
           >
             <span className="min-w-0 truncate text-sm font-medium text-[var(--oh-muted)]">
-              {t(I18nKey.SIDEBAR$CONVERSATIONS)}
+              {organizeMode === "grouped" && activeBackend.kind === "local" ? (
+                <button
+                  type="button"
+                  data-testid="workspaces-kanban-link"
+                  aria-label={t(I18nKey.KANBAN$OPEN_ALL_WORKSPACES)}
+                  onClick={() => {
+                    writeKanbanWorkspacePath(KANBAN_ALL_WORKSPACES_PATH);
+                    navigate(KANBAN_PATH);
+                  }}
+                  className="truncate hover:text-[var(--oh-foreground)]"
+                >
+                  {t(I18nKey.HOME$WORKSPACES_TAB)}
+                </button>
+              ) : (
+                t(I18nKey.SIDEBAR$CONVERSATIONS)
+              )}
             </span>
             <div className="ml-auto flex shrink-0 items-center gap-0.5">
               <ConversationPanelNewThreadPicker

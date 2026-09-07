@@ -1,5 +1,6 @@
 import { HOME_SELECTED_WORKSPACE_PATH_KEY } from "#/components/features/home/workspace-selection-form";
 import type { KanbanBoardSummary } from "#/api/kanban-service/kanban-types";
+import { KANBAN_ALL_WORKSPACES_PATH } from "#/api/kanban-service/kanban-constants";
 
 export const KANBAN_SELECTED_WORKSPACE_PATH_KEY =
   "oh:kanban-selected-workspace-path";
@@ -48,8 +49,14 @@ export function subscribeKanbanWorkspacePath(
 
 export function writeKanbanWorkspacePath(path: string | null): void {
   writeStorage(KANBAN_SELECTED_WORKSPACE_PATH_KEY, path);
-  writeStorage(HOME_SELECTED_WORKSPACE_PATH_KEY, path);
+  if (path !== KANBAN_ALL_WORKSPACES_PATH) {
+    writeStorage(HOME_SELECTED_WORKSPACE_PATH_KEY, path);
+  }
   kanbanWorkspacePathListeners.forEach((listener) => listener(path));
+}
+
+export function isAllWorkspacesPath(path: string | null): boolean {
+  return path === KANBAN_ALL_WORKSPACES_PATH;
 }
 
 export function boardForWorkspace(
