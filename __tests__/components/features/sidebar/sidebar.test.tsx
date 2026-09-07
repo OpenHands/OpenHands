@@ -214,7 +214,10 @@ function getDesktopSidebar(collapsed?: boolean): HTMLElement {
   return sidebar;
 }
 
-function renderSidebar(currentPath: string) {
+function renderSidebar(
+  currentPath: string,
+  layout: "sidebar" | "desk" = "desk",
+) {
   const navigate = vi.fn();
   const value: NavigationContextValue = {
     currentPath,
@@ -227,7 +230,7 @@ function renderSidebar(currentPath: string) {
     <QueryClientProvider client={new QueryClient()}>
       <NavigationProvider value={value}>
         <SidebarMobileNavProvider>
-          <Sidebar />
+          <Sidebar layout={layout} />
           <SidebarMobileMenuBar />
         </SidebarMobileNavProvider>
       </NavigationProvider>
@@ -312,14 +315,17 @@ describe("Sidebar", () => {
     expect(sidebar.dataset.collapsed).toBe("false");
   });
 
-  it("shows the version tile above the backend selector when expanded", () => {
+  it("keeps backend controls in the header and version information in the index", () => {
     renderSidebar("/conversations");
 
-    const versionTile = screen.getByTestId("agent-canvas-version-tile");
-    const backendSelector = screen.getByTestId("backend-selector");
-    expect(versionTile.compareDocumentPosition(backendSelector)).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING,
-    );
+    expect(
+      within(screen.getByTestId("ruckus-header")).getByTestId(
+        "backend-selector",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(getDesktopSidebar()).getByTestId("agent-canvas-version-tile"),
+    ).toBeInTheDocument();
   });
 
   it("hides the version tile when the sidebar is collapsed", () => {
@@ -354,12 +360,16 @@ describe("Sidebar", () => {
     useSidebarStore.setState({ collapsed: true });
     renderSidebar("/conversations");
 
-    expect(screen.queryByTestId("backend-selector")).not.toBeInTheDocument();
+    expect(
+      within(getDesktopSidebar()).queryByTestId("backend-selector"),
+    ).not.toBeInTheDocument();
     const trigger = screen.getByTestId("collapsed-backend-selector-link");
     const wrapper = trigger.parentElement;
     if (!wrapper) throw new Error("Popover wrapper not found");
     fireEvent.mouseEnter(wrapper);
-    expect(await screen.findByTestId("backend-selector")).toBeInTheDocument();
+    expect(
+      await within(getDesktopSidebar()).findByTestId("backend-selector"),
+    ).toBeInTheDocument();
   });
 
   it("does NOT expand the sidebar when a backend option in the popover is clicked", async () => {
@@ -376,7 +386,9 @@ describe("Sidebar", () => {
     const popoverContainer = trigger.parentElement;
     if (!popoverContainer) throw new Error("Popover container not found");
     fireEvent.mouseEnter(popoverContainer);
-    const option = await screen.findByTestId("mock-backend-option");
+    const option = await within(getDesktopSidebar()).findByTestId(
+      "mock-backend-option",
+    );
 
     fireEvent.click(option);
 
@@ -398,7 +410,9 @@ describe("Sidebar", () => {
     if (!popoverContainer) throw new Error("Popover container not found");
     fireEvent.mouseEnter(popoverContainer);
 
-    fireEvent.click(await screen.findByTestId("mock-add-backend"));
+    fireEvent.click(
+      await within(getDesktopSidebar()).findByTestId("mock-add-backend"),
+    );
 
     // Cursor moves toward the modal -> popover times out and closes.
     fireEvent.mouseLeave(popoverContainer);
@@ -406,7 +420,9 @@ describe("Sidebar", () => {
       setTimeout(resolve, 200);
     });
 
-    expect(screen.queryByTestId("backend-selector")).not.toBeInTheDocument();
+    expect(
+      within(getDesktopSidebar()).queryByTestId("backend-selector"),
+    ).not.toBeInTheDocument();
     expect(await screen.findByTestId("add-backend-modal")).toBeInTheDocument();
   });
 
@@ -419,13 +435,17 @@ describe("Sidebar", () => {
     if (!popoverContainer) throw new Error("Popover container not found");
     fireEvent.mouseEnter(popoverContainer);
 
-    fireEvent.click(await screen.findByTestId("mock-manage-backends"));
+    fireEvent.click(
+      await within(getDesktopSidebar()).findByTestId("mock-manage-backends"),
+    );
     fireEvent.mouseLeave(popoverContainer);
     await new Promise((resolve) => {
       setTimeout(resolve, 200);
     });
 
-    expect(screen.queryByTestId("backend-selector")).not.toBeInTheDocument();
+    expect(
+      within(getDesktopSidebar()).queryByTestId("backend-selector"),
+    ).not.toBeInTheDocument();
     expect(
       await screen.findByTestId("manage-backends-modal"),
     ).toBeInTheDocument();
@@ -463,21 +483,22 @@ describe("Sidebar", () => {
     }
   });
 
-  it("renders the Getting Started checklist above the bottom backend bar", () => {
-    renderSidebar("/conversations");
+  it("keeps primary navigation accessible when the conversation index collapses", () => {
+    useSidebarStore.setState({ collapsed: true });
+    const { navigate } = renderSidebar("/conversations");
+    const header = within(screen.getByTestId("ruckus-header"));
+    fireEvent.click(header.getByTestId("sidebar-automations-link"));
+    expect(navigate).toHaveBeenCalledWith("/automations", { replace: false });
+    expect(header.getByTestId("sidebar-skills-link")).toBeInTheDocument();
+  });
 
-    const automations = screen.getByTestId("sidebar-automations-link");
-    const checklist = screen.getByTestId("sidebar-onboarding-checklist");
-    const backendBar = screen.getByTestId("backend-selector");
-
-    expect(
-      automations.compareDocumentPosition(checklist) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(
-      checklist.compareDocumentPosition(backendBar) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+  it("keeps navigation and backend controls inside the standalone library sidebar", () => {
+    renderSidebar("/conversations", "sidebar");
+    expect(screen.queryByTestId("ruckus-header")).not.toBeInTheDocument();
+    const sidebar = within(getDesktopSidebar());
+    expect(sidebar.getByTestId("sidebar-automations-link")).toBeInTheDocument();
+    expect(sidebar.getByTestId("sidebar-skills-link")).toBeInTheDocument();
+    expect(sidebar.getByTestId("backend-selector")).toBeInTheDocument();
   });
 
   it("renders icons for every top-level nav item so they remain meaningful in the collapsed rail", () => {

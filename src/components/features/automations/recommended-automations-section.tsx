@@ -28,6 +28,7 @@ import {
   getAutomationIcon,
   getAutomationLaunchPrompt,
   getIntegrationIds,
+  isExcludedAutomation,
 } from "#/utils/automation-catalog";
 import { getAutomationsByPopularity } from "#/utils/recommended-automation-rail";
 import { cn } from "#/utils/utils";
@@ -51,12 +52,13 @@ interface RecommendedAutomationsSectionProps {
 
 export { getAutomationsByPopularity };
 
-const RECOMMENDED_AUTOMATIONS = getAutomationsByPopularity(AUTOMATION_CATALOG);
+const RECOMMENDED_AUTOMATIONS = getAutomationsByPopularity(
+  AUTOMATION_CATALOG.filter((automation) => !isExcludedAutomation(automation)),
+);
 
 // Proven automations are featured above the Beta group. The set is owned by
-// the interface manifest (falling back to the host default), not derived from
-// popularityRank: slack-standup-digest@94 outranks slack-channel-monitor@92
-// yet is Beta.
+// the interface manifest (falling back to the host default), not derived
+// from popularityRank.
 function isProvenAutomation(automation: RecommendedAutomation): boolean {
   return getFeaturedAutomationIds().includes(automation.id);
 }

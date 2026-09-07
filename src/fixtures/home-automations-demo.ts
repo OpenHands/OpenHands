@@ -262,7 +262,7 @@ const DEMO_SPECS: DemoSpec[] = [
     automation: makeAutomation(
       "demo-pin-failed-no-conv",
       "Card: failed, no conversation",
-      { type: "event", source: "slack", on: "message" },
+      { type: "event", source: "webhook", on: "message" },
     ),
     runState: {
       latestRun: makeRun("run-failed-no-conv", AutomationRunStatus.FAILED, {

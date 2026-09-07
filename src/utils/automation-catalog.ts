@@ -101,6 +101,23 @@ const CATALOG_ENTRY_BY_ID = new Map<string, RecommendedAutomation>(
   AUTOMATION_CATALOG.map((entry) => [entry.id, entry]),
 );
 
+/**
+ * Catalog automations Ruckus does not offer. These all require the Slack
+ * integration, which is excluded from the marketplace — offering them would
+ * present setup flows for a service that can no longer be connected.
+ */
+const EXCLUDED_AUTOMATION_IDS = new Set([
+  "slack-standup-digest",
+  "slack-channel-monitor",
+  "incident-retrospective-drafter",
+]);
+
+export function isExcludedAutomation(
+  automation: Pick<RecommendedAutomation, "id">,
+): boolean {
+  return EXCLUDED_AUTOMATION_IDS.has(automation.id);
+}
+
 /** Rejects markup the same way the catalog schema's copy rule does. */
 const MARKUP_PATTERN = /<[A-Za-z/!]/;
 

@@ -1,7 +1,7 @@
 export const FREE_MODEL_BADGE_LABEL = "Free";
 
 export const FREE_OPENHANDS_MODELS = {
-  "openhands/deepseek-v4-flash": "OpenHands DeepSeek V4 Flash (free)",
+  "openhands/deepseek-v4-flash": "Ruckus DeepSeek V4 Flash (free)",
 } as const;
 
 export const FREE_OPENHANDS_MODEL_IDS = Object.keys(FREE_OPENHANDS_MODELS);
@@ -16,7 +16,7 @@ export const isOpenHandsProviderModel = (
   model: string | null | undefined,
 ): boolean => Boolean(model?.startsWith("openhands/"));
 
-export const FREE_OPENHANDS_MODEL_NOTE = `Free OpenHands models: ${FREE_OPENHANDS_MODEL_IDS.join(
+export const FREE_OPENHANDS_MODEL_NOTE = `Free Ruckus models: ${FREE_OPENHANDS_MODEL_IDS.join(
   ", ",
 )}. Other provider endpoints with similar model names may require separate billing.`;
 

@@ -180,7 +180,7 @@ describe("useSlashCommand", () => {
     expect(
       result.current.filteredItems.find((i) => i.command === "/model free")
         ?.skill.content,
-    ).toBe("Switch to OpenHands DeepSeek V4 Flash (free)");
+    ).toBe("Switch to Ruckus DeepSeek V4 Flash (free)");
   });
 
   it("filters saved LLM profile suggestions by profile name or model", () => {

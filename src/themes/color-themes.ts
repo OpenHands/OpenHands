@@ -1,4 +1,5 @@
 export type ColorThemeKey =
+  | "ruckus"
   | "openhands-deepsea"
   | "openhands-neutral"
   | "openhands-neo";
@@ -105,9 +106,56 @@ const NEO_WHITE_BUTTON_TOKENS: Record<
   "--oh-warning": "#ffffff",
 };
 
+const RUCKUS_SCALE = {
+  "--cool-grey-50": "#F5F1F7",
+  "--cool-grey-100": "#EDE5F0",
+  "--cool-grey-200": "#DACFE0",
+  "--cool-grey-300": "#C8B9D0",
+  "--cool-grey-400": "#AE9CBA",
+  "--cool-grey-500": "#8F7E9B",
+  "--cool-grey-600": "#71617C",
+  "--cool-grey-700": "#51435B",
+  "--cool-grey-800": "#3D3047",
+  "--cool-grey-900": "#302437",
+  "--cool-grey-925": "#251B2D",
+  "--cool-grey-950": "#19131F",
+  "--cool-grey-975": "#110D16",
+};
+
+const RUCKUS_HSL: Record<string, string> = {
+  "0 0% 96.86%": "280.00 27.27% 95.69%",
+  "0 0% 92.55%": "283.64 26.83% 91.96%",
+  "0 0% 86.27%": "278.82 21.52% 84.51%",
+  "0 0% 74.51%": "279.13 19.66% 77.06%",
+  "0 0% 59.22%": "276.00 17.86% 67.06%",
+  "0 0% 45.1%": "275.17 12.66% 55.10%",
+  "0 0% 33.73%": "275.56 12.22% 43.33%",
+  "0 0% 25.1%": "275.00 15.19% 30.98%",
+  "0 0% 19.22%": "277.89 20.88% 17.84%",
+  "0 0% 15.69%": "273.33 25.00% 14.12%",
+  "0 0% 12.55%": "273.33 25.00% 14.12%",
+  "0 0% 9.41%": "270.00 24.00% 9.80%",
+  "0 0% 6.27%": "266.67 25.71% 6.86%",
+};
+
 export const COLOR_THEMES: Record<ColorThemeKey, ColorThemeDefinition> = {
+  ruckus: {
+    label: "Ruckus",
+    scale: RUCKUS_SCALE,
+    heroui: Object.fromEntries(
+      Object.entries(NEUTRAL_HEROUI).map(([key, value]) => [
+        key,
+        RUCKUS_HSL[value] ?? value,
+      ]),
+    ),
+    tokens: {
+      "--oh-color-primary": "#D9F266",
+      "--oh-accent": "#D9F266",
+      "--oh-warning": "#D9F266",
+    },
+  },
   "openhands-deepsea": {
-    label: "OpenHands-DeepSea",
+    label: "Ruckus-DeepSea",
     // Matches the values already set by index.css; included so switching back
     // from another theme restores the original palette explicitly.
     scale: {
@@ -165,7 +213,7 @@ export const COLOR_THEMES: Record<ColorThemeKey, ColorThemeDefinition> = {
   },
 
   "openhands-neutral": {
-    label: "OpenHands-Neutral",
+    label: "Ruckus-Neutral",
     scale: NEUTRAL_SCALE,
     // Each stop follows the same positional mapping as hero.ts:
     //   heroui-default-100 ← cool-grey-950 position ← neutral-950 (#181818)
@@ -175,14 +223,14 @@ export const COLOR_THEMES: Record<ColorThemeKey, ColorThemeDefinition> = {
   },
 
   "openhands-neo": {
-    label: "OpenHands-Neo",
+    label: "Ruckus-Neo",
     scale: NEUTRAL_SCALE,
     heroui: NEUTRAL_HEROUI,
     tokens: NEO_WHITE_BUTTON_TOKENS,
   },
 };
 
-export const DEFAULT_COLOR_THEME: ColorThemeKey = "openhands-neutral";
+export const DEFAULT_COLOR_THEME: ColorThemeKey = "ruckus";
 
 export const AVAILABLE_COLOR_THEMES = Object.entries(COLOR_THEMES).map(
   ([key, def]) => ({ key: key as ColorThemeKey, label: def.label }),

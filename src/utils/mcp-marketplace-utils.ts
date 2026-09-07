@@ -107,10 +107,24 @@ export function getMcpOAuthAuthenticationConfig(
   return Object.keys(authentication).length > 1 ? authentication : undefined;
 }
 
+/**
+ * Catalog entries we do not offer. Slack is intentionally excluded — Ruckus
+ * has no Slack workspace, so the Slack integration is hidden from the
+ * marketplace, credential validation, and logo overrides.
+ */
+const EXCLUDED_MARKETPLACE_ENTRY_IDS = new Set(["slack"]);
+
 export function getMcpMarketplaceCatalog(
   catalog: MarketplaceEntry[],
 ): MarketplaceEntry[] {
-  return catalog.filter(isMcpInstallableEntry);
+  return catalog.filter(
+    (entry) =>
+      isMcpInstallableEntry(entry) && !isExcludedMarketplaceEntry(entry),
+  );
+}
+
+export function isExcludedMarketplaceEntry(entry: MarketplaceEntry): boolean {
+  return EXCLUDED_MARKETPLACE_ENTRY_IDS.has(entry.id);
 }
 
 /**
@@ -254,9 +268,9 @@ export function marketplaceEntryMatchesQuery(
 /**
  * Search match for an installed (already-configured) server. We
  * search the server's own identifying fields and — if it's a catalog
- * entry — its catalog name/keywords too, so typing "Slack" matches
- * the installed Slack tile even though the persisted server is just
- * `{ type: "stdio", name: "slack", ... }`.
+ * entry — its catalog name/keywords too, so typing "GitHub" matches
+ * the installed GitHub tile even though the persisted server is just
+ * `{ type: "stdio", name: "github", ... }`.
  */
 export function installedServerMatchesQuery(
   server: MCPServerConfig,

@@ -3,7 +3,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { AutomationSpec } from "#/types/automation";
 import { I18nKey } from "#/i18n/declaration";
-import { AUTOMATION_FILE_FORMAT_DOCS_URL } from "#/manifests/automation-interface";
 import { ImportAutomationModal } from "./import-automation-modal";
 
 vi.mock("react-i18next", () => ({
@@ -59,9 +58,9 @@ describe("ImportAutomationModal", () => {
       screen.getByTestId("import-automation-choose-file"),
     ).toBeInTheDocument();
     expect(screen.getByTestId("automations-import-file")).toBeInTheDocument();
-    const docsLink = screen.getByTestId("import-automation-format-docs");
-    expect(docsLink).toHaveAttribute("href", AUTOMATION_FILE_FORMAT_DOCS_URL);
-    expect(docsLink).toHaveTextContent(I18nKey.AUTOMATIONS$IMPORT_FORMAT_DOCS);
+    expect(
+      screen.queryByTestId("import-automation-format-docs"),
+    ).not.toBeInTheDocument();
   });
 
   it("passes a dropped file to onFile", () => {

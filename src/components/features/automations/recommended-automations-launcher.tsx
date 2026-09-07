@@ -202,7 +202,7 @@ export function RecommendedAutomationsLauncher({
       return;
     }
 
-    // GitHub/Slack responders poll continuously; let the user choose where the
+    // GitHub responders poll continuously; let the user choose where the
     // responder runs before committing to the local setup flow.
     if (isResponderAutomation(automation)) {
       setDeploymentChoiceAutomation(automation);

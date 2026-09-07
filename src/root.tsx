@@ -12,6 +12,7 @@ import {
 } from "react-router";
 import "./tailwind.css";
 import "./index.css";
+import "./styles/ruckus.css";
 import React from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Toaster } from "react-hot-toast";
@@ -222,8 +223,8 @@ export const links: LinksFunction = () => [
 ];
 
 export const meta: MetaFunction = () => [
-  { title: "OpenHands" },
-  { name: "description", content: "Let's Start Building!" },
+  { title: "Ruckus" },
+  { name: "description", content: "Let's do this shit!" },
 ];
 
 export default function App() {

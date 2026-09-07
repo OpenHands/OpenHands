@@ -2,7 +2,6 @@ import { useRef, useState, type DragEvent } from "react";
 import { FileUp } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
-import { AUTOMATION_FILE_FORMAT_DOCS_URL } from "#/manifests/automation-interface";
 import type { AutomationSpec } from "#/types/automation";
 import { formatEventOn } from "#/utils/automation-schedule";
 import { cn } from "#/utils/utils";
@@ -48,16 +47,7 @@ function ImportAutomationPicker({ onFile }: { onFile: (file: File) => void }) {
   return (
     <div className="flex flex-col gap-5 px-6 pb-6">
       <p className="text-sm leading-relaxed text-tertiary-light">
-        {t(I18nKey.AUTOMATIONS$IMPORT_EXPLAIN)}{" "}
-        <a
-          href={AUTOMATION_FILE_FORMAT_DOCS_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          data-testid="import-automation-format-docs"
-          className="text-white no-underline transition-colors hover:text-white"
-        >
-          {t(I18nKey.AUTOMATIONS$IMPORT_FORMAT_DOCS)}
-        </a>
+        {t(I18nKey.AUTOMATIONS$IMPORT_EXPLAIN)}
       </p>
       <p className="text-sm text-tertiary-light">
         {t(I18nKey.AUTOMATIONS$IMPORT_DISABLED_NOTICE)}

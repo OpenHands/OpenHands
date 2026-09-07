@@ -9,7 +9,7 @@ const TABLE_DEMO_USER_MESSAGE =
 export const TABLE_DEMO_AGENT_MARKDOWN = [
   "Here is a wide comparison table. Scroll horizontally to read every column:",
   "",
-  "| Feature | OpenHands | Claude Code | Codex | Gemini CLI | Cursor | Windsurf | Cline | Aider | Devin | Continue |",
+  "| Feature | Ruckus | Claude Code | Codex | Gemini CLI | Cursor | Windsurf | Cline | Aider | Devin | Continue |",
   "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
   "| CLI | Yes | Yes | Yes | Yes | IDE | IDE | IDE | Terminal | Cloud | IDE |",
   "| MCP support | Yes | Yes | Partial | Partial | Yes | Yes | Yes | No | Yes | Yes |",

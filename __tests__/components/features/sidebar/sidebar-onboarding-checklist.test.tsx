@@ -13,15 +13,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ONBOARDING_COMPLETED_STORAGE_KEY } from "#/components/features/onboarding/use-onboarding-completion";
 import { SidebarOnboardingChecklist } from "#/components/features/sidebar/sidebar-onboarding-checklist";
 import {
-  OPENHANDS_SLACK_COMMUNITY_URL,
   SIDEBAR_ONBOARDING_CHECKLIST_CUSTOMIZE_EXPLORED_STORAGE_KEY,
   SIDEBAR_ONBOARDING_CHECKLIST_MINIMIZED_STORAGE_KEY,
-  SIDEBAR_ONBOARDING_CHECKLIST_SLACK_JOINED_STORAGE_KEY,
 } from "#/components/features/sidebar/sidebar-onboarding-checklist.constants";
-import {
-  readSidebarOnboardingChecklistMinimized,
-  readSidebarOnboardingChecklistSlackJoined,
-} from "#/components/features/sidebar/sidebar-onboarding-checklist-storage";
+import { readSidebarOnboardingChecklistMinimized } from "#/components/features/sidebar/sidebar-onboarding-checklist-storage";
 import {
   NavigationProvider,
   type NavigationContextValue,
@@ -88,12 +83,11 @@ describe("SidebarOnboardingChecklist", () => {
   beforeEach(() => {
     window.localStorage.clear();
     window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
-    window.localStorage.removeItem(SIDEBAR_ONBOARDING_CHECKLIST_MINIMIZED_STORAGE_KEY);
     window.localStorage.removeItem(
-      SIDEBAR_ONBOARDING_CHECKLIST_CUSTOMIZE_EXPLORED_STORAGE_KEY,
+      SIDEBAR_ONBOARDING_CHECKLIST_MINIMIZED_STORAGE_KEY,
     );
     window.localStorage.removeItem(
-      SIDEBAR_ONBOARDING_CHECKLIST_SLACK_JOINED_STORAGE_KEY,
+      SIDEBAR_ONBOARDING_CHECKLIST_CUSTOMIZE_EXPLORED_STORAGE_KEY,
     );
 
     mockUsePaginatedConversations.mockReturnValue({
@@ -122,7 +116,7 @@ describe("SidebarOnboardingChecklist", () => {
     });
   });
 
-  it("renders setup items including LLM keys, agent profiles, schedule a task, and Slack", () => {
+  it("renders setup items including LLM keys, agent profiles, and schedule a task", () => {
     renderChecklist();
 
     expect(
@@ -141,35 +135,25 @@ describe("SidebarOnboardingChecklist", () => {
       screen.getByTestId("sidebar-onboarding-checklist-item-customize-agent"),
     ).toHaveAttribute("href", "/settings/agents");
     expect(
-      screen.getByTestId("sidebar-onboarding-checklist-item-join-slack"),
-    ).toHaveAttribute("href", OPENHANDS_SLACK_COMMUNITY_URL);
-    expect(
-      screen.getByTestId("sidebar-onboarding-checklist-item-join-slack"),
-    ).toHaveAttribute("target", "_blank");
+      screen.queryByTestId("sidebar-onboarding-checklist-item-join-slack"),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByText(I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_CONFIGURE_LLM),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_JOIN_SLACK),
-    ).toBeInTheDocument();
   });
 
-  it("marks Join Slack complete after the invite link is clicked", async () => {
-    const user = userEvent.setup();
+  it("marks Connect MCP complete after an MCP server is configured", () => {
+    mockUseSettings.mockReturnValue({
+      data: {
+        agent_settings: {
+          mcp_config: { mcpServers: { github: { command: "npx" } } },
+        },
+      },
+    });
     renderChecklist();
 
-    const slackItem = screen.getByTestId(
-      "sidebar-onboarding-checklist-item-join-slack",
-    );
     expect(
-      screen.getByText(I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_JOIN_SLACK),
-    ).not.toHaveClass("line-through");
-
-    await user.click(slackItem);
-
-    expect(readSidebarOnboardingChecklistSlackJoined()).toBe(true);
-    expect(
-      screen.getByText(I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_JOIN_SLACK),
+      screen.getByText(I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_CONNECT_MCP),
     ).toHaveClass("line-through");
   });
 
@@ -277,7 +261,10 @@ describe("SidebarOnboardingChecklist", () => {
 
   it("hides when collapsed", () => {
     const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
     });
     const navigation: NavigationContextValue = {
       currentPath: "/",
@@ -317,21 +304,21 @@ describe("SidebarOnboardingChecklist", () => {
         ([name]) => name === "onboarding_link_clicked",
       );
 
-    it("captures a single onboarding_link_clicked when the Join Slack row is clicked", async () => {
+    it("captures a single onboarding_link_clicked when the Connect MCP row is clicked", async () => {
       const user = userEvent.setup();
       renderChecklist();
 
       await user.click(
-        screen.getByTestId("sidebar-onboarding-checklist-item-join-slack"),
+        screen.getByTestId("sidebar-onboarding-checklist-item-connect-mcp"),
       );
 
       expect(linkClickEvents()).toHaveLength(1);
       expect(linkClickEvents()[0][1]).toMatchObject({
-        link_id: "join_slack",
-        destination_type: "community",
+        link_id: "connect_mcp",
+        destination_type: "integration",
         surface: "landing_checklist",
-        checklist_item: "join_slack",
-        is_external: true,
+        checklist_item: "connect_mcp",
+        is_external: false,
       });
     });
 
@@ -353,29 +340,6 @@ describe("SidebarOnboardingChecklist", () => {
       });
       expect(navigate).toHaveBeenCalledWith("/settings/llm", {
         replace: false,
-      });
-    });
-
-    it("captures open_docs with the owning checklist item when a preview docs link is clicked", async () => {
-      const user = userEvent.setup();
-      renderChecklist();
-
-      await user.hover(
-        screen.getByTestId("sidebar-onboarding-checklist-item-connect-mcp"),
-      );
-      await user.click(
-        await screen.findByTestId(
-          "sidebar-onboarding-checklist-preview-docs-connect-mcp",
-        ),
-      );
-
-      expect(linkClickEvents()).toHaveLength(1);
-      expect(linkClickEvents()[0][1]).toMatchObject({
-        link_id: "open_docs",
-        destination_type: "documentation",
-        surface: "landing_checklist",
-        checklist_item: "connect_mcp",
-        is_external: true,
       });
     });
 

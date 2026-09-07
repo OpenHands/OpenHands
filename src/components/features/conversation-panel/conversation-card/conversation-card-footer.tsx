@@ -33,14 +33,14 @@ interface ConversationCardFooterProps {
   /**
    * Whether to render the agent/model chip. Wired to the conversation
    * panel's "LLM model" toggle; gates the chip uniformly
-   * for both ACP and OpenHands cards.
+   * for both ACP and Ruckus cards.
    */
   showAgentChip?: boolean;
   /**
    * High-level kind of the conversation's agent. Drives the chip's icon:
-   * the OpenHands logo for native conversations and the resolved ACP brand
+   * the Ruckus mark for native conversations and the resolved ACP brand
    * mark for ACP conversations. Defensive against stray ``acpServer``
-   * values reaching an OpenHands card.
+   * values reaching a Ruckus card.
    */
   agentKind?: "openhands" | "acp" | null;
   /**
@@ -54,7 +54,7 @@ interface ConversationCardFooterProps {
   /**
    * Server-side conversation tags (``AppConversation.tags``). Non-reserved
    * entries render as value-only chips so API-/automation-born
-   * conversations can surface attribution (e.g. ``origin: slack`` → ``slack``).
+   * conversations can surface attribution (e.g. ``origin: discord`` → ``discord``).
    */
   tags?: Record<string, string> | null;
   /**
@@ -169,7 +169,7 @@ export function ConversationCardFooter({
             className={CONVERSATION_CARD_META_CHIP_CLASSNAME}
             title={chip.tooltip}
           >
-            {/* Same line-height slot as tag chips; width flexes for the wider OpenHands mark. */}
+            {/* Same line-height slot as tag chips. */}
             <span
               className="inline-flex h-4 shrink-0 items-center justify-center [&_svg]:block"
               aria-hidden

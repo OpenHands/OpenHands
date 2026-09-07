@@ -61,7 +61,7 @@ export function ConversationMain() {
             chat input doesn't slam the floor. */}
         <div
           className={cn(
-            "flex flex-col bg-base overflow-hidden",
+            "ruckus-paper ruckus-conversation flex flex-col bg-base overflow-hidden",
             isMobile
               ? "flex-1"
               : cn(
@@ -84,7 +84,7 @@ export function ConversationMain() {
           <div
             data-testid="chat-pane-header"
             className={cn(
-              "flex h-10 min-h-10 shrink-0 items-center",
+              "ruckus-conversation-heading flex h-10 min-h-10 shrink-0 items-center",
               isSidebarRailHidden && "gap-2 pl-2.5",
             )}
           >
@@ -118,15 +118,15 @@ export function ConversationMain() {
             }}
           >
             <div className="flex h-full w-full flex-col">
-              <div className="flex flex-col flex-1 min-h-0 bg-[var(--oh-surface)] border-l border-[var(--oh-border)] overflow-hidden">
-                <div
-                  data-testid="tabs-pane-header"
-                  className="flex shrink-0 flex-col border-b border-[var(--oh-border)]"
-                >
-                  <ConversationTabs isPanelResizing={isDragging} />
-                </div>
+              <div className="ruckus-tool-panel flex flex-col flex-1 min-h-0 bg-[var(--oh-surface)] border-l border-[var(--oh-border)] overflow-hidden">
                 <div className="flex-1 min-h-0 flex flex-col">
                   <ConversationTabContent />
+                </div>
+                <div
+                  data-testid="tabs-pane-header"
+                  className="ruckus-tool-dock flex shrink-0 flex-col border-t border-[var(--oh-border)]"
+                >
+                  <ConversationTabs isPanelResizing={isDragging} />
                 </div>
               </div>
             </div>

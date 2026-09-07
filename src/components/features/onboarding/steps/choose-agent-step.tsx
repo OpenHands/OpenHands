@@ -39,9 +39,7 @@ function getAgentOptionIcon(id: string): AgentBrandIconKind {
 export function AgentOptionIcon({ id, muted }: { id: string; muted: boolean }) {
   const icon = getAgentOptionIcon(id);
 
-  // The OpenHands wordmark is wider than the square brand marks (24×16 vs
-  // 18×18) and dims via opacity rather than a muted text colour — its paths
-  // inherit ``currentColor`` so it stays white on the tile.
+  // All agent marks are square and dim via opacity on muted tiles.
   if (icon === "openhands") {
     return (
       <AgentBrandIcon
@@ -71,13 +69,13 @@ interface AgentOption {
 
 // Onboarding tile list is *derived* from the ACP registry so adding a
 // new provider (or changing a display name) only needs one edit in
-// ``acp-providers.ts``. The OpenHands tile is the only synthetic
+// ``acp-providers.ts``. The Ruckus tile is the only synthetic
 // entry — it isn't an ACP provider, just the canonical default.
 function getAgentOptions(): AgentOption[] {
   return [
     {
       id: "openhands",
-      label: "OpenHands",
+      label: "Ruckus",
       descriptionKey: I18nKey.ONBOARDING$AGENT_OPENHANDS_DESCRIPTION,
     },
     ...ACP_PROVIDERS.map<AgentOption>((provider) => ({

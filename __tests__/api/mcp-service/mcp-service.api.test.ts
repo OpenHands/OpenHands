@@ -128,116 +128,6 @@ describe("McpService.testServer", () => {
   });
 
   // -------------------------------------------------------------------------
-  // Credential verification for marketplace servers (Slack)
-  //
-  // The Slack MCP server lists its tools with any credentials and reports
-  // upstream auth failures as ordinary text content, so the service attaches
-  // a read-only verification tool call and interprets its payload.
-  // -------------------------------------------------------------------------
-
-  const SLACK_SERVER: MCPServerConfig = {
-    id: "slack",
-    type: "stdio",
-    name: "slack",
-    command: "npx",
-    args: ["-y", "@zencoderai/slack-mcp-server"],
-    env: { SLACK_TEAM_ID: "T01", SLACK_BOT_TOKEN: "xoxb-abc" },
-  };
-
-  const slackToolResult = (text: string, isError = false) => ({
-    ok: true,
-    tools: ["slack_list_channels"],
-    tool_result: { is_error: isError, text },
-  });
-
-  it("attaches the read-only Slack verification tool call to the request", async () => {
-    mockTestServer.mockResolvedValue({ ok: true, tools: [] });
-
-    await McpService.testServer(SLACK_SERVER);
-
-    expect(mockTestServer).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tool_call: { name: "slack_list_channels", arguments: { limit: 1 } },
-      }),
-    );
-  });
-
-  it("maps an in-band Slack auth error to a credentials failure", async () => {
-    mockTestServer.mockResolvedValue(
-      slackToolResult('{"ok":false,"error":"invalid_auth"}'),
-    );
-
-    const result = await McpService.testServer(SLACK_SERVER);
-
-    expect(result).toEqual({
-      ok: false,
-      error: "invalid_auth",
-      error_kind: "credentials",
-    });
-  });
-
-  it("does not flag non-auth Slack errors (missing_scope) as bad credentials", async () => {
-    // A valid token lacking a scope authenticated successfully — failing it
-    // would block correctly-configured installs.
-    const response = slackToolResult('{"ok":false,"error":"missing_scope"}');
-    mockTestServer.mockResolvedValue(response);
-
-    const result = await McpService.testServer(SLACK_SERVER);
-
-    expect(result).toEqual(response);
-  });
-
-  it("passes a succeeding Slack payload through unchanged", async () => {
-    const response = slackToolResult('{"ok":true,"channels":[]}');
-    mockTestServer.mockResolvedValue(response);
-
-    const result = await McpService.testServer(SLACK_SERVER);
-
-    expect(result).toEqual(response);
-  });
-
-  it("maps an errored verification call to a credentials failure", async () => {
-    mockTestServer.mockResolvedValue(
-      slackToolResult("Tool 'slack_list_channels' call timed out", true),
-    );
-
-    const result = await McpService.testServer(SLACK_SERVER);
-
-    expect(result).toEqual({
-      ok: false,
-      error: "Tool 'slack_list_channels' call timed out",
-      error_kind: "credentials",
-    });
-  });
-
-  it("returns the response unchanged when an older backend omits tool_result", async () => {
-    mockTestServer.mockResolvedValue({ ok: true, tools: ["a", "b"] });
-
-    const result = await McpService.testServer(SLACK_SERVER);
-
-    expect(result).toEqual({ ok: true, tools: ["a", "b"] });
-  });
-
-  it("skips credential interpretation when the probe tool is not advertised", async () => {
-    // A server variant that doesn't expose the probe tool (e.g. Slack's
-    // hosted MCP) returns a deterministic "not advertised" tool error; that
-    // proves nothing about credentials and must not block the install.
-    const response = {
-      ok: true,
-      tools: ["conversations_history"],
-      tool_result: {
-        is_error: true,
-        text: "Tool 'slack_list_channels' not advertised by server",
-      },
-    };
-    mockTestServer.mockResolvedValue(response);
-
-    const result = await McpService.testServer(SLACK_SERVER);
-
-    expect(result).toEqual(response);
-  });
-
-  // -------------------------------------------------------------------------
   // Read-only credential probes for the hosted GitHub and Linear servers
   // -------------------------------------------------------------------------
 
@@ -324,9 +214,13 @@ describe("McpService.testServer", () => {
   // the test exercises the real credentials.
   // -------------------------------------------------------------------------
 
-  const REDACTED_SLACK_SERVER: MCPServerConfig = {
-    ...SLACK_SERVER,
-    env: { SLACK_TEAM_ID: "T01", SLACK_BOT_TOKEN: REDACTED_MCP_SECRET_VALUE },
+  const REDACTED_GITHUB_SERVER: MCPServerConfig = {
+    id: "github",
+    type: "stdio",
+    name: "github",
+    command: "npx",
+    args: ["-y", "@github/mcp-server"],
+    env: { GITHUB_TOKEN: REDACTED_MCP_SECRET_VALUE },
   };
 
   it("substitutes redacted env values with encrypted stored values", async () => {
@@ -334,12 +228,12 @@ describe("McpService.testServer", () => {
     vi.spyOn(SettingsService, "fetchSettingsFromApi").mockResolvedValue({
       agent_settings: {
         mcp_config: {
-          slack: { env: { SLACK_BOT_TOKEN: "gAAAAA-encrypted-token" } },
+          github: { env: { GITHUB_TOKEN: "gAAAAA-encrypted-token" } },
         },
       },
     } as unknown as SettingsApiResponse);
 
-    await McpService.testServer(REDACTED_SLACK_SERVER);
+    await McpService.testServer(REDACTED_GITHUB_SERVER);
 
     expect(SettingsService.fetchSettingsFromApi).toHaveBeenCalledWith(
       "encrypted",
@@ -348,10 +242,7 @@ describe("McpService.testServer", () => {
       expect.objectContaining({
         server: expect.objectContaining({
           // Placeholder replaced by ciphertext; typed value left untouched.
-          env: {
-            SLACK_TEAM_ID: "T01",
-            SLACK_BOT_TOKEN: "gAAAAA-encrypted-token",
-          },
+          env: { GITHUB_TOKEN: "gAAAAA-encrypted-token" },
         }),
       }),
     );
@@ -365,15 +256,12 @@ describe("McpService.testServer", () => {
       new Error("503 no cipher"),
     );
 
-    await McpService.testServer(REDACTED_SLACK_SERVER);
+    await McpService.testServer(REDACTED_GITHUB_SERVER);
 
     expect(mockTestServer).toHaveBeenCalledWith(
       expect.objectContaining({
         server: expect.objectContaining({
-          env: {
-            SLACK_TEAM_ID: "T01",
-            SLACK_BOT_TOKEN: REDACTED_MCP_SECRET_VALUE,
-          },
+          env: { GITHUB_TOKEN: REDACTED_MCP_SECRET_VALUE },
         }),
       }),
     );
@@ -384,7 +272,7 @@ describe("McpService.testServer", () => {
     // /api/mcp/test endpoint is not reachable. Previously, the helper threw
     // `NoBackendAvailableError("No backend is configured.")` which surfaced
     // in the install modal and blocked users from creating any MCP server
-    // (e.g. Slack) on a cloud session.
+    // (e.g. GitHub) on a cloud session.
     cloudActive();
 
     const result = await McpService.testServer(SERVER);

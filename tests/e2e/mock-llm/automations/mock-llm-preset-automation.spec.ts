@@ -1,5 +1,5 @@
 /**
- * Mock-LLM E2E test: preset automation card → slash command → skill activation.
+ * Mock-LLM E2E test: preset automation slash command → skill activation.
  *
  * The `slack-standup-digest` skill ships in the public OpenHands extensions
  * repo with `triggers: ["/standup-digest:setup"]`. The frontend bundles
@@ -8,13 +8,10 @@
  * SDK's trigger matching activates them without the agent-server needing
  * to clone the extensions repo (`load_public_skills: false`).
  *
- * Two tests:
- *   1. **Card flow**: configure a dummy Slack MCP server so the automation
- *      card is launchable, click the card, choose "Poll locally" in the
- *      responder-deployment modal, then verify it sends the correct slash
- *      command and triggers skill activation.
- *   2. **Direct slash command**: send the slash command from the home page
- *      (no MCP needed), verify skill activation + agent reply.
+ * The Slack-based automation *cards* are excluded from the recommended UI
+ * (Ruckus has no Slack workspace), so this spec sends the slash command
+ * directly from the home page (no MCP needed) and verifies skill
+ * activation + agent reply.
  */
 
 import { test, expect } from "@playwright/test";
@@ -24,7 +21,6 @@ import {
   seedLocalStorage,
   routeSessionApiKey,
   dismissAnalyticsModal,
-  waitForTestId,
   waitForPath,
   getConversationIdFromURL,
   waitForNonUserMessageText,
@@ -37,7 +33,6 @@ import {
 } from "../utils/mock-llm-helpers";
 
 const SLASH_COMMAND = "/standup-digest:setup";
-const AUTOMATION_CARD_ID = "slack-standup-digest";
 const REPLY_TOKEN = "PRESET_AUTOMATION_REPLY_OK";
 
 // ── Shared helpers ────────────────────────────────────────────────────
@@ -136,114 +131,7 @@ test.describe("preset automation → slash command conversation", () => {
       .catch(() => {});
   });
 
-  // ── Test 1: automation card sends the correct slash command ────────
-  //
-  // Configure a dummy Slack MCP server so the frontend sees it as
-  // "installed" and the card is clickable without the install modal.
-  // The dummy `echo` command can't do MCP JSON-RPC, so the agent-server
-  // will error during tool initialization — but we only care that the
-  // card click navigated to a conversation and sent the right prompt.
-  // The end-to-end skill activation + agent reply is tested in test 2
-  // (without MCP).
-
-  test("automation card sends the correct slash command to a conversation", async ({
-    page,
-    request,
-  }) => {
-    await ensureMockLLMProfile(page);
-
-    // Configure a dummy Slack MCP server so the card is launchable
-    await test.step("configure dummy Slack MCP", async () => {
-      const resp = await request.patch(`${BACKEND_URL}/api/settings`, {
-        headers: {
-          "X-Session-API-Key": SESSION_API_KEY,
-          "Content-Type": "application/json",
-        },
-        data: {
-          agent_settings_diff: {
-            mcp_config: {
-              slack: {
-                command: "echo",
-                args: ["dummy-slack-mcp"],
-                env: {
-                  SLACK_BOT_TOKEN: "xoxb-test-token",
-                  SLACK_TEAM_ID: "T0000000000",
-                },
-              },
-            },
-          },
-        },
-      });
-      expect(resp.ok(), `PATCH settings: ${resp.status()}`).toBe(true);
-    });
-
-    await routeSessionApiKey(page);
-    // The catalog launcher lives on the Templates sub-page, which is where
-    // the interface manifest places it.
-    await page.goto("/automations/templates", {
-      waitUntil: "domcontentloaded",
-    });
-    await dismissAnalyticsModal(page);
-
-    // Click the Slack standup digest automation card
-    await test.step("click automation card", async () => {
-      await waitForTestId(page, "recommended-automations-section", 15_000);
-      const card = page.getByTestId(
-        `recommended-automation-card-${AUTOMATION_CARD_ID}`,
-      );
-      await expect(card).toBeVisible({ timeout: 10_000 });
-      await card.click();
-    });
-
-    // Slack/GitHub responders now prompt for a deployment target first.
-    // Choose "Poll locally on your laptop" to resume the existing local
-    // setup + launch flow this test exercises.
-    await test.step("choose local deployment", async () => {
-      const modal = page.getByTestId("responder-deployment-modal");
-      await expect(modal).toBeVisible({ timeout: 10_000 });
-      await page.getByTestId("responder-deployment-continue-local").click();
-    });
-
-    // Should navigate to a new conversation
-    await waitForPath(page, /\/conversations\/.+/, 30_000);
-    const conversationId = getConversationIdFromURL(page);
-    conversationIds.add(conversationId);
-
-    // Verify: the slash command was submitted as a user message.
-    // The card calls setMessageToSend(prompt) which auto-submits.
-    // Give it a moment, then fall back to manual submit if needed.
-    await test.step("verify slash command is sent as user message", async () => {
-      // Wait for either the user message to appear or the input to be populated
-      await page.waitForTimeout(3_000);
-
-      const userMessages = page.locator('[data-testid="user-message"]');
-      const hasSentMessage = await userMessages
-        .filter({ hasText: SLASH_COMMAND })
-        .count()
-        .then((c) => c > 0)
-        .catch(() => false);
-
-      if (!hasSentMessage) {
-        // Message may still be in the input — submit it manually
-        const inputEl = page.getByTestId("chat-input");
-        const inputText = await inputEl.textContent().catch(() => "");
-        if (inputText?.includes(SLASH_COMMAND)) {
-          await page.getByTestId("submit-button").click();
-        } else {
-          // Card didn't populate the input — type and submit
-          await setChatInput(page, SLASH_COMMAND);
-          await page.getByTestId("submit-button").click();
-        }
-      }
-
-      // Now verify the slash command appears as a sent user message
-      await expect(
-        userMessages.filter({ hasText: SLASH_COMMAND }),
-      ).toBeVisible({ timeout: 15_000 });
-    });
-  });
-
-  // ── Test 2: direct slash command (no MCP needed) ──────────────────
+  // ── Test: direct slash command (no MCP needed) ──────────────────
 
   test("direct slash command from home page triggers skill activation", async ({
     page,

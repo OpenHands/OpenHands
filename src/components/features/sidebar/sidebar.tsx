@@ -1,3 +1,11 @@
+import { RuckusBrand } from "./ruckus-brand";
+import { RuckusPrimaryNavigation } from "./ruckus-primary-navigation";
+import { CommandMenuTrigger } from "#/components/features/command-menu/command-menu-trigger";
+import { BackendSelector } from "#/components/features/backends/backend-selector";
+import {
+  useBreakpoint,
+  SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH,
+} from "#/hooks/use-breakpoint";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { SidebarRailBody } from "./sidebar-rail-body";
@@ -36,8 +44,13 @@ const ManageBackendsModal = React.lazy(() =>
 
 const MOBILE_DRAWER_TRANSITION_MS = 250;
 
-export function Sidebar() {
+export function Sidebar({
+  layout = "sidebar",
+}: {
+  layout?: "sidebar" | "desk";
+}) {
   const { t } = useTranslation("openhands");
+  const isMobile = useBreakpoint(SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH);
   const { currentPath } = useNavigation();
   const { data: config } = useConfig();
   const {
@@ -177,19 +190,11 @@ export function Sidebar() {
   const showCollapsedExpandButton =
     collapsed && collapsedRailHovered && !suppressCollapsedExpandRef.current;
 
-  const isExtensionsActive =
-    currentPath === "/customize" ||
-    currentPath.startsWith("/skills") ||
-    currentPath === "/plugins" ||
-    currentPath === "/extensions" ||
-    currentPath === "/mcp";
-
   const railBodyProps = {
     collapseToggleLabel,
     onCollapse: handleCollapse,
     onExpand: () => setCollapsed(false),
     showCollapsedExpandButton,
-    isExtensionsActive,
     currentPath,
     activeBackend: active.backend,
     activeBackendHealth,
@@ -203,6 +208,26 @@ export function Sidebar() {
 
   return (
     <>
+      {layout === "desk" && !isMobile && (
+        <header className="ruckus-header" data-testid="ruckus-header">
+          <RuckusBrand />
+          <nav
+            className="ruckus-primary-nav"
+            aria-label={t(I18nKey.SIDEBAR$NAVIGATION_LABEL)}
+          >
+            <RuckusPrimaryNavigation />
+          </nav>
+          <div className="ruckus-header-search">
+            <CommandMenuTrigger collapsed={false} />
+          </div>
+          <div className="ruckus-header-backend">
+            <BackendSelector
+              onOpenAddBackend={() => setAddBackendModalOpen(true)}
+              onOpenManageBackends={() => setManageBackendsModalOpen(true)}
+            />
+          </div>
+        </header>
+      )}
       {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- the aside acts as a hit-area for the collapsed rail; nested controls handle their own keyboard interactions. */}
       <aside
         aria-label={t(I18nKey.SIDEBAR$NAVIGATION_LABEL)}
@@ -218,16 +243,18 @@ export function Sidebar() {
         }}
         className={cn(
           "max-md:hidden flex bg-base flex-col min-h-0 transition-[width,min-width] duration-200",
+          layout === "desk" && "ruckus-sidebar",
           "md:border-r md:border-[var(--oh-border)] md:h-full",
           collapsed
             ? "md:w-[60px] md:min-w-[60px] md:px-2.5"
-            : "md:w-[300px] md:min-w-[300px] pb-2 md:pl-2.5 md:pr-0",
+            : "md:w-[264px] md:min-w-[264px] pb-2 md:pl-2.5 md:pr-0",
           currentPath === "/" && "md:pb-3",
         )}
       >
         <SidebarRailBody
           collapsed={collapsed}
           showCollapseToggle
+          showPrimaryNavigation={layout === "sidebar"}
           {...railBodyProps}
         />
       </aside>
@@ -251,7 +278,7 @@ export function Sidebar() {
             data-testid="sidebar-mobile-drawer"
             aria-hidden={!mobileDrawerVisible}
             className={cn(
-              "fixed inset-y-0 left-0 z-50 flex min-h-0 w-[min(300px,85vw)] flex-col bg-base",
+              "ruckus-mobile-drawer fixed inset-y-0 left-0 z-50 flex min-h-0 w-[min(300px,85vw)] flex-col bg-base",
               "border-r border-[var(--oh-border)] pb-2 pl-2.5 pr-0 md:hidden",
               "transition-transform ease-in-out motion-reduce:transition-none",
               mobileDrawerVisible ? "translate-x-0" : "-translate-x-full",

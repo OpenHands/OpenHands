@@ -38,7 +38,7 @@ export const ONBOARDING_DEFAULT_LLM_MODEL = "openai/gpt-5.6-sol";
  * Note: returning Cloud users who already have an LLM configured are
  * intercepted upstream by `OnboardingHost`, so they never reach this
  * step. Users who do reach it are first-time installs (Cloud or Local)
- * who want the OpenHands default pre-filled.
+ * who want the Ruckus default pre-filled.
  */
 export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
   const { t } = useTranslation("openhands");

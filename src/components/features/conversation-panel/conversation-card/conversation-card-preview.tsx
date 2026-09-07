@@ -27,7 +27,7 @@ interface ConversationCardPreviewProps {
   /**
    * High-level kind of the conversation's agent. Drives the model row's brand
    * mark exactly like the card chip does — without it an ACP conversation
-   * would show the OpenHands wordmark next to a Claude Code / Codex / Gemini
+   * would show the Ruckus mark next to a Claude Code / Codex / Gemini
    * model, contradicting the chip on the very card being hovered.
    */
   agentKind?: "openhands" | "acp" | null;
@@ -71,7 +71,7 @@ function PreviewRow({ label, children }: PreviewRowProps) {
  * Icon + value for preview rows. The icon sits in a box matching the first
  * line's height (``leading-4``) so it stays optically centered when the value
  * wraps to multiple lines. The slot has a 12px *minimum* rather than a fixed
- * width so the wider OpenHands wordmark (18px at ``size={12}``) is not clipped,
+ * width so the brand mark (12px at ``size={12}``) is not clipped,
  * while the square icons still share one column.
  */
 function PreviewValueWithIcon({

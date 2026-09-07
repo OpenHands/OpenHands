@@ -62,7 +62,6 @@ export function getRunHealthLabelKey(health: AutomationRunHealth): I18nKey {
 const TRIGGER_SOURCE_LABELS: Record<string, string> = {
   github: "GitHub",
   gitlab: "GitLab",
-  slack: "Slack",
   linear: "Linear",
   jira: "Jira",
 };

@@ -1,0 +1,36 @@
+# ADMIN-ONLY STAGING. This all-in-one runtime is not an employee sandbox.
+# Run after installing local images and privately importing the admin settings.
+services:
+  canvas:
+    image: ruckus-canvas:staging
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      AGENT_CANVAS_BASE_PATH: /
+      VITE_DO_NOT_TRACK: "1"
+      OH_TELEMETRY_ENABLED: "false"
+    volumes:
+      - /srv/ruckus/state/openhands:/home/openhands/.openhands
+      - /srv/ruckus/state/workspaces:/projects
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  gateway:
+    image: ruckus-iap-gateway:staging
+    restart: unless-stopped
+    network_mode: host
+    env_file: gateway.env
+    environment:
+      RUCKUS_UPSTREAM: http://127.0.0.1:8000
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,noexec,nosuid
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    depends_on:
+      - canvas

@@ -53,22 +53,20 @@ export function ConversationTabNav({
 
   const iconElement = <Icon className={cn("h-4 w-4 shrink-0 text-inherit")} />;
 
-  const labelElement =
-    label && isActive ? (
-      <span className="whitespace-nowrap text-sm font-normal">{label}</span>
-    ) : null;
+  const labelElement = label ? (
+    <span className="whitespace-nowrap text-sm font-normal">{label}</span>
+  ) : null;
 
   const animatedLabelElement = label ? (
     <motion.span
       initial={false}
       animate={{
-        maxWidth: isActive ? TAB_LABEL_MAX_WIDTH_PX : 0,
-        opacity: isActive ? 1 : 0,
-        marginLeft: isActive ? 8 : 0,
+        maxWidth: TAB_LABEL_MAX_WIDTH_PX,
+        opacity: 1,
+        marginLeft: 8,
       }}
       transition={tabLabelTransition}
       className="block overflow-hidden whitespace-nowrap text-sm font-normal"
-      aria-hidden={!isActive}
     >
       {label}
     </motion.span>
@@ -78,6 +76,7 @@ export function ConversationTabNav({
     return (
       <button
         type="button"
+        aria-pressed={isActive}
         onClick={onClick}
         {...(measureOnly
           ? {}
@@ -95,6 +94,7 @@ export function ConversationTabNav({
     <motion.button
       layout={enableLayoutAnimation ? "position" : false}
       type="button"
+      aria-pressed={isActive}
       onClick={onClick}
       {...(measureOnly
         ? {}

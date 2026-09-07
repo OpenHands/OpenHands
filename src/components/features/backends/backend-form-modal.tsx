@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, Globe, Info, Monitor } from "lucide-react";
 import { ServerClient } from "@openhands/typescript-client/clients";
-import OpenHandsLogoWhite from "#/assets/branding/openhands-logo-white.svg?react";
+import RuckusMark from "#/assets/branding/ruckus-mark.svg?react";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import {
   MODAL_MAX_WIDTH_VIEWPORT,
@@ -34,7 +34,6 @@ import {
   modalTitleLgClassName,
   modalTitleLgMediumClassName,
 } from "#/utils/modal-classes";
-import ExternalLinkIcon from "#/icons/external-link.svg?react";
 import ServerIcon from "#/icons/server.svg?react";
 import { getBackendStatusLabel } from "./backend-status-label";
 import { BackendStatusDot } from "./backend-status-dot";
@@ -146,12 +145,6 @@ function isValidHostUrl(host: string): boolean {
 
 const DEFAULT_OPENHANDS_CLOUD_HOST = "https://app.all-hands.dev";
 const LOCAL_BACKEND_COMMAND = "agent-canvas --backend-only --port 8001";
-const LOCAL_AGENT_SERVER_DOCS_URL =
-  "https://github.com/OpenHands/OpenHands/blob/main/docs/DEVELOPMENT.md#alternative-development-workflows";
-const REMOTE_AGENT_SERVER_DOCS_URL =
-  "https://github.com/OpenHands/OpenHands/blob/main/docs/SELF_HOSTING.md";
-const DEPLOYMENT_OPTIONS_URL =
-  "https://docs.openhands.dev/overview/introduction";
 export type BackendConnectionMethod = "manual" | "cloud_login";
 
 export type BackendAddedSource = CloudConnectionSource;
@@ -985,7 +978,7 @@ function CloudLoginColumn({
   const handleLoginSuccess = (apiKey: string) => {
     onConnected(
       {
-        name: "OpenHands Cloud",
+        name: "Ruckus Cloud",
         host: normalizeHost(effectiveHost),
         apiKey,
         kind: "cloud",
@@ -998,7 +991,7 @@ function CloudLoginColumn({
     <div className="flex w-full min-w-0 flex-col items-center gap-3">
       {showBranding ? (
         <div className="flex flex-col items-center gap-1">
-          <OpenHandsLogoWhite width={56} height={56} aria-hidden />
+          <RuckusMark width={56} height={56} aria-hidden />
 
           <h4
             className={modalTitleLgMediumClassName}
@@ -1228,12 +1221,6 @@ function AgentServerGuidance({ location }: { location: AgentServerLocation }) {
   const description = isRemote
     ? t(I18nKey.BACKEND$REMOTE_SETUP_DESCRIPTION)
     : t(I18nKey.BACKEND$LOCAL_SETUP_DESCRIPTION);
-  const docsHref = isRemote
-    ? REMOTE_AGENT_SERVER_DOCS_URL
-    : LOCAL_AGENT_SERVER_DOCS_URL;
-  const docsLabel = isRemote
-    ? t(I18nKey.BACKEND$REMOTE_SETUP_DOCS)
-    : t(I18nKey.BACKEND$LOCAL_SETUP_DOCS);
   const testIdRoot = isRemote ? "add-backend-remote" : "add-backend-local";
   const toggleId = `${testIdRoot}-guidance-toggle`;
   const bodyId = `${testIdRoot}-guidance-body`;
@@ -1315,18 +1302,6 @@ function AgentServerGuidance({ location }: { location: AgentServerLocation }) {
                 {LOCAL_BACKEND_COMMAND}
               </code>
             )}
-
-            <a
-              href={docsHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              data-testid={`${testIdRoot}-docs-link`}
-              tabIndex={isExpanded ? undefined : -1}
-              className="inline-flex w-fit items-center gap-1.5 text-primary hover:underline"
-            >
-              <span>{docsLabel}</span>
-              <ExternalLinkIcon className="size-4 shrink-0" aria-hidden />
-            </a>
           </div>
         </div>
       </div>
@@ -1367,7 +1342,7 @@ function AddBackendChooser({
           title={t(I18nKey.BACKEND$CLOUD_TITLE)}
           description={t(I18nKey.BACKEND$CLOUD_OPTION_DESCRIPTION)}
           icon={
-            <OpenHandsLogoWhite
+            <RuckusMark
               width={32}
               height={32}
               data-testid="add-backend-option-cloud-logo"
@@ -1571,21 +1546,7 @@ export function BackendFormModal({
                 className="mt-2 text-sm leading-6 text-[var(--oh-muted)]"
                 data-testid="add-backend-description"
               >
-                {t(I18nKey.BACKEND$CHOOSER_DESCRIPTION)}{" "}
-                <a
-                  href={DEPLOYMENT_OPTIONS_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label={t(I18nKey.BACKEND$DEPLOYMENT_OPTIONS)}
-                  data-testid="add-backend-deployment-options-link"
-                  className="text-primary hover:underline"
-                >
-                  {t(I18nKey.CTA$LEARN_MORE)}
-                  <ExternalLinkIcon
-                    className="ml-1 inline size-3.5 align-[-0.125em]"
-                    aria-hidden
-                  />
-                </a>
+                {t(I18nKey.BACKEND$CHOOSER_DESCRIPTION)}
               </p>
             </div>
           )}

@@ -17,7 +17,7 @@ export const SEEDED_DEFAULT_BACKEND_ID = "default-local";
 
 export const DEFAULT_LOCAL_BACKEND_NAME = "Local";
 export const LOCKED_CLOUD_BACKEND_ID = "locked-cloud";
-export const LOCKED_CLOUD_BACKEND_NAME = "OpenHands Cloud";
+export const LOCKED_CLOUD_BACKEND_NAME = "Ruckus Cloud";
 
 export function makeLockedCloudBackend(): Backend | null {
   if (!getLockedCloudHost()) return null;

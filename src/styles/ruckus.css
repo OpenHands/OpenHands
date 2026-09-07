@@ -1,0 +1,471 @@
+/* Ruckus control desk. App-only chrome; backend and library contracts stay shared. */
+[data-agent-server-ui] {
+  --ruckus-paper: #f3f0e8;
+  --ruckus-ink: #251b2d;
+  --ruckus-acid: #d9f266;
+  font-family:
+    "Outfit",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+.ruckus-shell {
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: 76px minmax(0, 1fr);
+  padding: 0 10px 10px;
+  gap: 0;
+}
+
+.ruckus-header {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  min-width: 0;
+}
+
+.ruckus-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  width: 254px;
+  flex-shrink: 0;
+  padding-left: 8px;
+  color: #f3f0e8;
+  font-size: 30px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: -1.4px;
+  line-height: 1;
+}
+
+.ruckus-brand svg {
+  width: 44px;
+  height: 44px;
+  transition: transform 180ms ease;
+  filter: drop-shadow(0 3px 0 #0003);
+}
+
+.ruckus-brand:hover svg {
+  transform: translateY(-2px) rotate(-5deg);
+}
+.ruckus-brand:active svg {
+  transform: translateY(1px);
+}
+
+.ruckus-primary-nav {
+  display: flex;
+  align-self: stretch;
+  align-items: end;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.ruckus-primary-nav > * {
+  flex-shrink: 0;
+}
+.ruckus-primary-nav a {
+  width: auto;
+  height: 54px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 6px 6px 0 0;
+  padding-left: 15px;
+  font-size: 14px;
+  font-weight: 500;
+  gap: 9px;
+}
+.ruckus-primary-nav a[data-active="true"] {
+  color: var(--oh-accent);
+  background: var(--oh-surface);
+  border-color: var(--oh-border-subtle);
+  box-shadow: inset 0 3px 0 var(--oh-accent);
+}
+.ruckus-primary-nav > div > button {
+  top: 55%;
+}
+.ruckus-header-search {
+  width: 216px;
+  flex-shrink: 0;
+}
+.ruckus-header-search button {
+  height: 38px;
+  border-radius: 4px;
+}
+.ruckus-header-search kbd {
+  padding: 2px 4px;
+  letter-spacing: 0;
+}
+.ruckus-header-backend {
+  width: 192px;
+  flex-shrink: 0;
+}
+.ruckus-header-backend button {
+  border-radius: 4px;
+}
+
+.ruckus-sidebar {
+  background: var(--oh-surface);
+  border: 1px solid var(--oh-border-subtle);
+  border-radius: 6px 0 0 6px;
+  padding-top: 8px;
+}
+.ruckus-index-heading {
+  margin-bottom: 8px;
+}
+.ruckus-index-logo {
+  display: flex;
+}
+.ruckus-sidebar:not([data-collapsed="true"]) .ruckus-index-logo {
+  display: none;
+}
+.ruckus-index-label {
+  color: var(--oh-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font:
+    10px "IBM Plex Mono",
+    monospace;
+}
+.ruckus-sidebar[data-collapsed="true"] .ruckus-index-logo {
+  display: flex;
+}
+.ruckus-sidebar-backend {
+  background: transparent;
+}
+
+:is(.ruckus-sidebar, .ruckus-mobile-drawer)
+  [data-testid="sidebar-conversations-link"] {
+  background: var(--oh-accent);
+  color: #251b2d;
+  border-radius: 4px;
+  font-weight: 600;
+  box-shadow:
+    inset 0 1px 0 #ffffff60,
+    0 2px 0 #0003;
+  margin-bottom: 10px;
+}
+:is(.ruckus-sidebar, .ruckus-mobile-drawer)
+  [data-testid="sidebar-conversations-link"]:active {
+  transform: translateY(1px);
+}
+:is(.ruckus-sidebar, .ruckus-mobile-drawer)
+  [data-testid="sidebar-conversations-link"]
+  svg {
+  color: #251b2d;
+}
+.ruckus-main {
+  border: 1px solid var(--oh-border-subtle);
+  border-left: 0;
+  border-radius: 0 6px 6px 0;
+  overflow: hidden;
+}
+
+/* A local light palette makes inherited semantic controls work on the paper.
+   Redeclare aliases here: CSS variables containing var() resolve at their owner. */
+.ruckus-paper {
+  color-scheme: light;
+  --cool-grey-50: #251b2d;
+  --cool-grey-100: #312738;
+  --cool-grey-200: #443b49;
+  --cool-grey-300: #5e5365;
+  --cool-grey-400: #716677;
+  --cool-grey-500: #7e7482;
+  --cool-grey-600: #a89dac;
+  --cool-grey-700: #c7becb;
+  --cool-grey-800: #d9d1dc;
+  --cool-grey-900: #e5dfe7;
+  --cool-grey-925: #ebe6ed;
+  --cool-grey-950: #f3f0e8;
+  --cool-grey-975: #faf8f2;
+  --color-white: #251b2d;
+  --oh-color-base: #f3f0e8;
+  --oh-color-base-secondary: #ebe6ed;
+  --oh-color-basic: #716677;
+  --oh-color-tertiary: #e5dfe7;
+  --oh-color-tertiary-light: #5e5365;
+  --oh-color-content: #312738;
+  --oh-color-content-2: #251b2d;
+  --oh-background: #f3f0e8;
+  --oh-foreground: #251b2d;
+  --oh-surface: #faf8f2;
+  --oh-surface-foreground: #251b2d;
+  --oh-surface-raised: #e5dfe7;
+  --oh-surface-deep: #faf8f2;
+  --oh-overlay: #faf8f2;
+  --oh-overlay-foreground: #251b2d;
+  --oh-muted: #716677;
+  --oh-text-secondary: #5e5365;
+  --oh-text-tertiary: #443b49;
+  --oh-text-dim: #7e7482;
+  --oh-text-subtle: #716677;
+  --oh-interactive-hover: #d9d1dc;
+  --oh-interactive-hover-low: #ebe6ed;
+  --oh-interactive-active: #e5dfe7;
+  --oh-interactive-selected: #d9d1dc;
+  --oh-default: #e5dfe7;
+  --oh-default-foreground: #251b2d;
+  --oh-accent-foreground: #251b2d;
+  --oh-border: #c7becb;
+  --oh-border-input: #b3a7b7;
+  --oh-border-subtle: #d9d1dc;
+  --oh-separator: #d9d1dc;
+  --oh-focus: #51435b;
+  --oh-link: #51435b;
+  --oh-scrollbar: #c7becb;
+  --oh-scrollbar-hover: #a89dac;
+  --oh-status-success: #437227;
+  --oh-success: #437227;
+  --oh-success-foreground: #faf8f2;
+  --oh-warning-foreground: #251b2d;
+  --oh-status-warning: #866600;
+  --oh-bg-dark: #f3f0e8;
+  --oh-bg-light: #e5dfe7;
+  --oh-bg-input: #faf8f2;
+  color: var(--ruckus-ink);
+  background: var(--ruckus-paper);
+}
+.ruckus-paper .text-neutral-400 {
+  color: #716677;
+}
+.ruckus-paper .text-yellow-400 {
+  color: #866600;
+}
+.ruckus-paper .mcp-logo-badge {
+  --oh-surface: #251b2d;
+  --oh-color-tertiary: #251b2d;
+  --oh-foreground: #f3f0e8;
+}
+.ruckus-paper .prose {
+  --tw-prose-invert-body: #312738;
+  --tw-prose-invert-headings: #251b2d;
+  --tw-prose-invert-links: #51435b;
+  --tw-prose-invert-bold: #251b2d;
+  --tw-prose-invert-code: #51435b;
+}
+.ruckus-paper .markdown-body {
+  font-size: 15px;
+  line-height: 1.75;
+}
+.ruckus-conversation-heading {
+  height: 64px;
+  min-height: 64px;
+  border-bottom: 1px solid #d9d1dc;
+  padding: 0 16px;
+}
+.ruckus-conversation-heading button {
+  color: #251b2d;
+}
+.ruckus-conversation [data-testid="chat-scroll-container"] {
+  gap: 16px;
+  padding-top: 24px;
+}
+.ruckus-composer {
+  border: 1px solid var(--oh-border-input);
+  border-radius: 6px;
+  padding: 16px;
+  box-shadow: 0 3px 0 #251b2d0a;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+.ruckus-composer:focus-within {
+  border-color: #8f7e9b;
+  box-shadow:
+    0 0 0 2px #8f7e9b16,
+    0 3px 0 #251b2d0a;
+}
+.ruckus-composer .chat-input {
+  min-height: 54px;
+  line-height: 1.55;
+}
+.ruckus-tool-panel {
+  background: var(--oh-color-base);
+}
+.ruckus-tool-dock {
+  background: var(--oh-surface);
+  padding: 4px 2px;
+}
+.ruckus-tool-dock button[data-testid^="conversation-tab-"] {
+  border-radius: 4px;
+  min-height: 38px;
+}
+.ruckus-tool-dock button[aria-pressed="true"] {
+  color: #251b2d;
+  background: var(--oh-accent);
+  box-shadow: inset 0 1px 0 #ffffff60;
+}
+.ruckus-tool-dock svg {
+  stroke-width: 2;
+}
+.ruckus-home {
+  min-height: 100%;
+  border-radius: 0;
+}
+.ruckus-home-launcher {
+  padding-top: clamp(72px, 15vh, 170px);
+}
+.ruckus-home-title {
+  font-size: clamp(38px, 4.6vw, 64px);
+  font-weight: 750;
+  letter-spacing: -0.055em;
+  line-height: 1.06;
+  padding-bottom: 20px;
+  max-width: none;
+}
+.ruckus-home .ruckus-composer {
+  min-height: 154px;
+  justify-content: space-between;
+}
+.ruckus-shell h1,
+.ruckus-shell h2 {
+  letter-spacing: -0.035em;
+}
+.ruckus-shell :is(button, a):focus-visible {
+  outline: 2px solid var(--oh-accent);
+  outline-offset: 3px;
+}
+.ruckus-paper :is(button, a):focus-visible {
+  outline-color: #51435b;
+}
+.ruckus-shell button {
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+
+@media (min-width: 768px) and (max-width: 1200px) {
+  .ruckus-shell {
+    grid-template-rows: 68px minmax(0, 1fr);
+  }
+  .ruckus-brand {
+    width: auto;
+    font-size: 23px;
+    padding-left: 0;
+  }
+  .ruckus-brand svg {
+    width: 34px;
+    height: 34px;
+  }
+  .ruckus-header {
+    gap: 12px;
+  }
+  .ruckus-primary-nav a {
+    padding-left: 10px;
+    font-size: 13px;
+  }
+  .ruckus-primary-nav a > span:first-child {
+    display: none;
+  }
+  .ruckus-header-search {
+    width: 40px;
+  }
+  .ruckus-header-search button {
+    padding: 8px;
+  }
+  .ruckus-header-search button > span > span:last-child,
+  .ruckus-header-search kbd {
+    display: none;
+  }
+  .ruckus-header-backend {
+    width: 164px;
+  }
+  .ruckus-sidebar:not([data-collapsed="true"]) {
+    width: 230px;
+    min-width: 230px;
+  }
+}
+
+@media (max-width: 767px) {
+  .ruckus-shell {
+    display: flex;
+    padding: 0;
+  }
+  .ruckus-main {
+    border: 0;
+    border-radius: 0;
+    gap: 0;
+  }
+  .ruckus-index-logo {
+    display: flex;
+  }
+  .ruckus-index-label {
+    margin-left: 10px;
+  }
+  .ruckus-mobile-drawer .ruckus-index-label {
+    font:
+      800 24px "Outfit",
+      sans-serif;
+    letter-spacing: -1px;
+    color: #f3f0e8;
+    text-transform: uppercase;
+  }
+  .ruckus-home-launcher {
+    padding-top: 54px;
+  }
+  .ruckus-home-title {
+    font-size: 42px;
+    padding-bottom: 12px;
+  }
+  .ruckus-conversation-heading {
+    min-height: 54px;
+    height: 54px;
+    padding: 0 8px;
+  }
+  .ruckus-composer {
+    padding: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ruckus-shell *,
+  .ruckus-shell *::before,
+  .ruckus-shell *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .ruckus-brand:hover svg {
+    transform: none;
+  }
+}
+
+:is(.ruckus-sidebar, .ruckus-mobile-drawer)
+  [data-testid="conversation-card"][data-active="true"] {
+  --color-white: #251b2d;
+  --oh-muted: #51435b;
+  --oh-text-secondary: #51435b;
+  --oh-text-dim: #51435b;
+  background: var(--ruckus-acid);
+  color: #251b2d;
+  border-radius: 4px;
+}
+.ruckus-conversation-heading [data-testid="conversation-name"] {
+  font-size: 20px;
+  font-weight: 650;
+  height: auto;
+  letter-spacing: -0.025em;
+}
+.ruckus-brand[data-running="true"] svg {
+  animation: ruckus-working 2.4s ease-in-out infinite;
+}
+@keyframes ruckus-working {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px) rotate(-4deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ruckus-brand[data-running="true"] svg {
+    animation: none;
+  }
+}

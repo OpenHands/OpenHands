@@ -33,7 +33,6 @@ import {
 } from "lucide-react";
 import { FaBitbucket, FaGithub, FaGitlab } from "react-icons/fa6";
 import type { IconType } from "react-icons/lib";
-import SlackIcon from "#/icons/slack.svg?react";
 
 /**
  * Any icon renderable inside a tag chip / overflow row. Lucide, react-icons,
@@ -117,7 +116,6 @@ const KEY_ICONS: Record<string, ConversationTagIcon> = {
  * ``git_provider``, …), keyed by the lowercase stamp value.
  */
 const SOURCE_VALUE_ICONS: Record<string, ConversationTagIcon> = {
-  slack: SlackIcon,
   discord: MessagesSquare,
   github: FaGithub,
   gitlab: FaGitlab,

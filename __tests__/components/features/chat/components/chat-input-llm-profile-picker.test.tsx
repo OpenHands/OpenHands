@@ -115,7 +115,7 @@ describe("ChatInputLlmProfilePicker", () => {
     fireEvent.click(screen.getByTestId("chat-input-llm-profile"));
 
     expect(
-      screen.getByText("OpenHands DeepSeek V4 Flash (free)"),
+      screen.getByText("Ruckus DeepSeek V4 Flash (free)"),
     ).toBeInTheDocument();
   });
 
@@ -132,7 +132,7 @@ describe("ChatInputLlmProfilePicker", () => {
 
     expect(
       screen.getByTestId("chat-input-llm-profile-current"),
-    ).toHaveTextContent("OpenHands DeepSeek V4 Flash (free)");
+    ).toHaveTextContent("Ruckus DeepSeek V4 Flash (free)");
   });
 
   it("links to the LLM profiles settings page", () => {

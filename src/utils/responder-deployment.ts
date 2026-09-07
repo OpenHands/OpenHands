@@ -10,10 +10,10 @@ export const OPENHANDS_CLOUD_INTEGRATIONS_URL = `${PRODUCT_URL.PRODUCTION}/setti
 /**
  * Single source of truth for "does this automation get the deployment-choice
  * modal?" — true only for automations whose required integrations are
- * exclusively responder ones (owned by the interface manifest, GitHub/Slack by
- * default), so multi-tool digests (e.g. slack + linear + notion) are not
- * treated as Slack responders. An integration the automation can start without
- * does not decide where it runs, so only the required ones are classified.
+ * exclusively responder ones (owned by the interface manifest, GitHub by
+ * default), so multi-tool digests are not treated as responders. An
+ * integration the automation can start without does not decide where it
+ * runs, so only the required ones are classified.
  */
 export function isResponderAutomation(
   automation: RecommendedAutomation,

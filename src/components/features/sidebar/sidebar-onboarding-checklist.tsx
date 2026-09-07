@@ -7,7 +7,6 @@ import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 import {
   getSidebarOnboardingChecklistHref,
-  isExternalSidebarOnboardingChecklistItem,
   SIDEBAR_ONBOARDING_CHECKLIST_DESTINATION_TYPES,
   SIDEBAR_ONBOARDING_CHECKLIST_I18N_KEYS,
   SIDEBAR_ONBOARDING_CHECKLIST_LINK_IDS,
@@ -66,19 +65,9 @@ function ChecklistItem({
       destinationType: SIDEBAR_ONBOARDING_CHECKLIST_DESTINATION_TYPES[id],
       surface: "landing_checklist",
       checklistItem: linkId,
-      isExternal: href.kind === "external",
+      isExternal: false,
     });
     onActivate?.();
-  };
-
-  const handleDocsClick = () => {
-    trackOnboardingLinkClicked({
-      linkId: "open_docs",
-      destinationType: "documentation",
-      surface: "landing_checklist",
-      checklistItem: linkId,
-      isExternal: true,
-    });
   };
 
   const itemClassName = cn(
@@ -108,31 +97,17 @@ function ChecklistItem({
           <SidebarOnboardingChecklistItemPreview
             id={id}
             onActionClick={handleLinkClick}
-            onDocsClick={handleDocsClick}
           />
         }
       >
-        {href.kind === "external" ? (
-          <a
-            href={href.href}
-            target="_blank"
-            rel="noreferrer"
-            data-testid={`sidebar-onboarding-checklist-item-${id}`}
-            className={itemClassName}
-            onClick={handleLinkClick}
-          >
-            {label}
-          </a>
-        ) : (
-          <NavigationLink
-            to={href.href}
-            data-testid={`sidebar-onboarding-checklist-item-${id}`}
-            className={itemClassName}
-            onClick={handleLinkClick}
-          >
-            {label}
-          </NavigationLink>
-        )}
+        <NavigationLink
+          to={href.href}
+          data-testid={`sidebar-onboarding-checklist-item-${id}`}
+          className={itemClassName}
+          onClick={handleLinkClick}
+        >
+          {label}
+        </NavigationLink>
       </Tooltip>
     </li>
   );
@@ -142,14 +117,8 @@ export function SidebarOnboardingChecklist({
   collapsed,
 }: SidebarOnboardingChecklistProps) {
   const { t } = useTranslation("openhands");
-  const {
-    items,
-    completedCount,
-    isVisible,
-    isMinimized,
-    toggleMinimized,
-    markJoinSlackComplete,
-  } = useSidebarOnboardingChecklist();
+  const { items, completedCount, isVisible, isMinimized, toggleMinimized } =
+    useSidebarOnboardingChecklist();
 
   if (collapsed || !isVisible) {
     return null;
@@ -223,11 +192,6 @@ export function SidebarOnboardingChecklist({
               key={item.id}
               id={item.id}
               isComplete={item.isComplete}
-              onActivate={
-                isExternalSidebarOnboardingChecklistItem(item.id)
-                  ? markJoinSlackComplete
-                  : undefined
-              }
             />
           ))}
         </ul>

@@ -8,7 +8,6 @@ import { BrandButton } from "#/components/features/settings/brand-button";
 import { useLaunchSkillInChat } from "#/hooks/use-launch-skill-in-chat";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useTracking } from "#/hooks/use-tracking";
-import { getAutomationsDocsUrl } from "#/manifests/automation-interface";
 
 function InlineExampleWrap({ children }: { children?: ReactNode }) {
   return <span className="whitespace-nowrap">{children}</span>;
@@ -68,15 +67,7 @@ export function CreateInstructionsContent({
           i18nKey={I18nKey.AUTOMATIONS$EMPTY_OPTION_CONVERSATION_DESC}
           components={CREATE_INSTRUCTIONS_INLINE_COMPONENTS}
         />{" "}
-        {t(I18nKey.AUTOMATIONS$CREATE_INSTRUCTIONS_GUIDANCE)}{" "}
-        <a
-          href={getAutomationsDocsUrl()}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-muted underline transition-colors hover:text-foreground"
-        >
-          {t(I18nKey.AUTOMATIONS$EMPTY_LEARN_MORE)}
-        </a>
+        {t(I18nKey.AUTOMATIONS$CREATE_INSTRUCTIONS_GUIDANCE)}
       </p>
 
       <div className="flex justify-center">

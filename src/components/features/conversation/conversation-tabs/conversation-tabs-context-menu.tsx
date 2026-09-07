@@ -1,3 +1,12 @@
+import {
+  RuckusFilesIcon as DocumentIcon,
+  RuckusCommitsIcon as LuFileDiff,
+  RuckusTerminalIcon as SquareChevronRight,
+  RuckusBrowserIcon as Globe,
+  RuckusPlannerIcon as ListTodo,
+  RuckusTasksIcon as DoubleCheckIcon,
+  RuckusUsageIcon as Gauge,
+} from "#/components/shared/ruckus-tool-icons";
 import React, { useLayoutEffect, useState } from "react";
 import ReactDOM from "react-dom";
 import { useTranslation } from "react-i18next";
@@ -10,12 +19,8 @@ import {
   type ConversationTab,
 } from "#/stores/conversation-store";
 import { I18nKey } from "#/i18n/declaration";
-import { Gauge, Globe, ListTodo, SquareChevronRight } from "lucide-react";
-import { LuFileDiff } from "react-icons/lu";
-import DocumentIcon from "#/icons/document.svg?react";
 import PillIcon from "#/icons/pill.svg?react";
 import PillFillIcon from "#/icons/pill-fill.svg?react";
-import DoubleCheckIcon from "#/icons/double-check.svg?react";
 import { useTaskList } from "#/hooks/use-task-list";
 import { useSelectConversationTab } from "#/hooks/use-select-conversation-tab";
 import { useIsArchivedConversation } from "#/hooks/use-is-archived-conversation";
@@ -57,11 +62,19 @@ export function ConversationTabsContextMenu({
       if (!rect) return;
 
       const gap = 8;
+      const openUpward = rect.top > window.innerHeight / 2;
       setPortalStyle({
         position: "fixed",
         zIndex: 9999,
-        top: rect.bottom + gap,
-        left: rect.left,
+        ...(openUpward
+          ? { bottom: window.innerHeight - rect.top + gap }
+          : { top: rect.bottom + gap }),
+        left: Math.max(gap, Math.min(rect.left, window.innerWidth - 256 - gap)),
+        maxHeight: Math.max(
+          0,
+          (openUpward ? rect.top : window.innerHeight - rect.bottom) - gap * 2,
+        ),
+        overflowY: "auto",
       });
     };
 

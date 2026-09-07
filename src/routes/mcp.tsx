@@ -57,8 +57,8 @@ export default function MCPPage() {
 
   // Filter installed servers by the search query. We pair each server
   // with its catalog entry (if any) so the search can match friendly
-  // names like "Slack" against a stdio server whose own `.name` is
-  // just "slack".
+  // names like "GitHub" against a stdio server whose own `.name` is
+  // just "github".
   const filteredInstalledServers = allServers.filter((server) =>
     installedServerMatchesQuery(
       server,

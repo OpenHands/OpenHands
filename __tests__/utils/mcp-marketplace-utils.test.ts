@@ -11,12 +11,12 @@ import {
 import { INTEGRATION_CATALOG as MCP_MARKETPLACE } from "@openhands/extensions/integrations";
 
 const mcpMarketplace = getMcpMarketplaceCatalog(MCP_MARKETPLACE);
-const slackEntry = mcpMarketplace.find((e) => e.id === "slack")!;
+const githubEntry = mcpMarketplace.find((e) => e.id === "github")!;
 const tavilyEntry = mcpMarketplace.find((e) => e.id === "tavily")!;
 const linearEntry = mcpMarketplace.find((e) => e.id === "linear")!;
 const filesystemEntry = mcpMarketplace.find((e) => e.id === "filesystem")!;
 
-function optionTransport(entry: typeof slackEntry, optionId = "api") {
+function optionTransport(entry: typeof githubEntry, optionId = "api") {
   const transport = entry.connectionOptions.find(
     (option) => option.id === optionId,
   )?.transport;
@@ -26,20 +26,20 @@ function optionTransport(entry: typeof slackEntry, optionId = "api") {
 
 describe("findInstalledMatch", () => {
   it("matches stdio servers by name", () => {
-    const result = findInstalledMatch(optionTransport(slackEntry), [
+    const result = findInstalledMatch(optionTransport(tavilyEntry), [
       {
         id: "stdio-0",
         type: "stdio",
-        name: "slack",
+        name: "tavily",
         command: "npx",
-        args: ["-y", "@zencoderai/slack-mcp-server"],
+        args: ["-y", "tavily-mcp"],
       },
     ]);
     expect(result).toEqual(expect.objectContaining({ id: "stdio-0" }));
   });
 
   it("does not match a different stdio name", () => {
-    const result = findInstalledMatch(optionTransport(slackEntry), [
+    const result = findInstalledMatch(optionTransport(tavilyEntry), [
       {
         id: "stdio-0",
         type: "stdio",
@@ -90,18 +90,24 @@ describe("findInstalledMatch", () => {
 });
 
 describe("getInstallableMcpConnectionOption", () => {
-  it("prefers Slack's API fallback over the default OAuth option", () => {
-    const option = getInstallableMcpConnectionOption(slackEntry);
+  it("excludes Slack from the installable marketplace catalog", () => {
+    const catalog = getMcpMarketplaceCatalog(MCP_MARKETPLACE);
+    expect(catalog.some((entry) => entry.id === "slack")).toBe(false);
+    expect(catalog.some((entry) => entry.id === "github")).toBe(true);
+  });
+
+  it("prefers GitHub's API fallback over the default OAuth option", () => {
+    const option = getInstallableMcpConnectionOption(githubEntry);
     expect(option?.id).toBe("api");
     expect(option?.auth.strategy).toBe("api_key");
-    expect(option?.transport.kind).toBe("stdio");
+    expect(option?.transport.kind).toBe("shttp");
   });
 
   it("returns undefined for provider OAuth entries without a local MCP auth contract", () => {
     const oauthOnlyEntry: Parameters<
       typeof getInstallableMcpConnectionOption
     >[0] = {
-      ...slackEntry,
+      ...githubEntry,
       id: "oauth-only",
       connectionOptions: [
         {
@@ -122,7 +128,7 @@ describe("getInstallableMcpConnectionOption", () => {
     const oauthOnlyEntry: Parameters<
       typeof getInstallableMcpConnectionOption
     >[0] = {
-      ...slackEntry,
+      ...githubEntry,
       id: "oauth-only",
       connectionOptions: [
         {
@@ -148,7 +154,7 @@ describe("getInstallableMcpConnectionOption", () => {
     const noOptionsEntry: Parameters<
       typeof getInstallableMcpConnectionOption
     >[0] = {
-      ...slackEntry,
+      ...githubEntry,
       id: "no-mcp",
       connectionOptions: [],
     };
@@ -159,12 +165,12 @@ describe("getInstallableMcpConnectionOption", () => {
 
 describe("marketplaceEntryMatchesQuery", () => {
   it("matches by name (case-insensitive)", () => {
-    expect(marketplaceEntryMatchesQuery(slackEntry, "slack")).toBe(true);
-    expect(marketplaceEntryMatchesQuery(slackEntry, "SLACK")).toBe(true);
+    expect(marketplaceEntryMatchesQuery(githubEntry, "github")).toBe(true);
+    expect(marketplaceEntryMatchesQuery(githubEntry, "GITHUB")).toBe(true);
   });
 
   it("matches by keyword", () => {
-    expect(marketplaceEntryMatchesQuery(slackEntry, "messaging")).toBe(true);
+    expect(marketplaceEntryMatchesQuery(githubEntry, "repo")).toBe(true);
   });
 
   it("matches by substring of description", () => {
@@ -172,35 +178,35 @@ describe("marketplaceEntryMatchesQuery", () => {
   });
 
   it("returns true for empty/whitespace queries", () => {
-    expect(marketplaceEntryMatchesQuery(slackEntry, "")).toBe(true);
-    expect(marketplaceEntryMatchesQuery(slackEntry, "   ")).toBe(true);
+    expect(marketplaceEntryMatchesQuery(githubEntry, "")).toBe(true);
+    expect(marketplaceEntryMatchesQuery(githubEntry, "   ")).toBe(true);
   });
 
   it("returns false for non-matches", () => {
-    expect(marketplaceEntryMatchesQuery(slackEntry, "zzzz-no-match")).toBe(
+    expect(marketplaceEntryMatchesQuery(githubEntry, "zzzz-no-match")).toBe(
       false,
     );
   });
 });
 
 describe("installedServerMatchesQuery", () => {
-  const slackServer = {
+  const tavilyServer = {
     id: "stdio-0",
     type: "stdio" as const,
-    name: "slack",
+    name: "tavily",
     command: "npx",
-    args: ["-y", "@zencoderai/slack-mcp-server"],
+    args: ["-y", "tavily-mcp"],
   };
 
   it("matches by stdio server name", () => {
-    expect(installedServerMatchesQuery(slackServer, undefined, "slack")).toBe(
+    expect(installedServerMatchesQuery(tavilyServer, undefined, "tavily")).toBe(
       true,
     );
   });
 
   it("matches via the catalog entry's name even if server.name differs", () => {
-    const renamed = { ...slackServer, name: "my-slack-instance" };
-    expect(installedServerMatchesQuery(renamed, slackEntry, "slack")).toBe(
+    const renamed = { ...tavilyServer, name: "my-tavily-instance" };
+    expect(installedServerMatchesQuery(renamed, tavilyEntry, "tavily")).toBe(
       true,
     );
   });
@@ -217,12 +223,12 @@ describe("installedServerMatchesQuery", () => {
   });
 
   it("empty query always matches", () => {
-    expect(installedServerMatchesQuery(slackServer, undefined, "")).toBe(true);
+    expect(installedServerMatchesQuery(tavilyServer, undefined, "")).toBe(true);
   });
 });
 
 describe("findCatalogEntryForServer", () => {
-  it("finds the Slack catalog entry for an installed Slack stdio server", () => {
+  it("no longer matches an installed Slack stdio server once Slack is excluded", () => {
     const match = findCatalogEntryForServer(
       {
         id: "stdio-0",
@@ -233,7 +239,7 @@ describe("findCatalogEntryForServer", () => {
       },
       mcpMarketplace,
     );
-    expect(match?.id).toBe("slack");
+    expect(match).toBeUndefined();
   });
 
   it("returns undefined for unknown servers", () => {

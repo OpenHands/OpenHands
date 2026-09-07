@@ -12,8 +12,8 @@ import {
 const prReviewer = AUTOMATION_CATALOG.find(
   (entry) => entry.id === "github-pr-reviewer",
 )!;
-const slackStandup = AUTOMATION_CATALOG.find(
-  (entry) => entry.id === "slack-standup-digest",
+const linearTriage = AUTOMATION_CATALOG.find(
+  (entry) => entry.id === "linear-triage-assistant",
 )!;
 const upstreamFork = AUTOMATION_CATALOG.find(
   (entry) => entry.id === "upstream-fork-sync",
@@ -39,7 +39,7 @@ describe("recommended automation rail", () => {
       isCatalogAutomationAdded(prReviewer, [{ name: "github-pr-reviewer" }]),
     ).toBe(true);
     expect(
-      isCatalogAutomationAdded(slackStandup, [{ name: "Daily digest" }]),
+      isCatalogAutomationAdded(linearTriage, [{ name: "Daily digest" }]),
     ).toBe(false);
   });
 
@@ -50,7 +50,6 @@ describe("recommended automation rail", () => {
 
     expect(groups.proven.map((entry) => entry.id)).toEqual([
       "github-issue-to-pr",
-      "slack-channel-monitor",
       "github-agents-md-maintainer",
       "news-digest",
     ]);
@@ -63,12 +62,10 @@ describe("recommended automation rail", () => {
     expect(groups.proven.map((entry) => entry.id)).toEqual([
       "github-pr-reviewer",
       "github-issue-to-pr",
-      "slack-channel-monitor",
       "github-agents-md-maintainer",
       "news-digest",
     ]);
     expect(conversationIds).toEqual([
-      "slack-standup-digest",
       "linear-triage-assistant",
       "linear-issue-to-github-pr",
       "linear-issue-to-gitlab-mr",
@@ -85,7 +82,7 @@ describe("recommended automation rail", () => {
     expect(conversationIds).not.toContain("github-repo-monitor");
     // Same for `qa-changes` (extensions 0.19.0): host form, so neither group.
     expect(conversationIds).not.toContain("qa-changes");
-    expect(isConversationLaunchAutomation(slackStandup)).toBe(true);
+    expect(isConversationLaunchAutomation(linearTriage)).toBe(true);
     expect(isConversationLaunchAutomation(upstreamFork)).toBe(false);
     expect(SETUP_REGISTRY.findById(upstreamFork.id)).not.toBeNull();
   });
@@ -94,10 +91,8 @@ describe("recommended automation rail", () => {
     const groups = getRecommendedRailGroups([
       { name: "GitHub Code Review Agent" },
       { name: "GitHub Issue to PR Agent" },
-      { name: "Slack channel monitor" },
       { name: "AGENTS.md Maintainer" },
       { name: "Daily news digest" },
-      { name: "Slack standup digest" },
       { name: "Linear issue triage assistant" },
       { name: "Jira issue to GitHub PR" },
       { name: "Research brief writer" },

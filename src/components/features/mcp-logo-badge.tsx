@@ -1,7 +1,6 @@
 import type { ComponentType, ReactNode, SVGProps } from "react";
 import { Bot } from "lucide-react";
 import type { IntegrationCatalogEntry } from "@openhands/extensions/integrations";
-import SlackIcon from "#/icons/slack.svg?react";
 import { cn } from "#/utils/utils";
 
 type McpLogoEntry = Pick<
@@ -26,15 +25,13 @@ const sizeClassNames = {
   md: "h-10 w-10 rounded-lg [&>svg]:h-5 [&>svg]:w-5",
 };
 
-// Catalog entries whose remote logoUrl is unreliable (e.g. Slack's was removed
-// from cdn.simpleicons.org and now 404s) render a bundled mark instead, keyed
-// by IntegrationCatalogEntry.id.
+// Catalog entries whose remote logoUrl is unreliable render a bundled mark
+// instead, keyed by IntegrationCatalogEntry.id. Currently empty — entries
+// are added here only when a catalog logo 404s.
 const LOCAL_LOGO_ICONS: Record<
   string,
   ComponentType<SVGProps<SVGSVGElement>>
-> = {
-  slack: SlackIcon,
-};
+> = {};
 
 export function McpLogoBadge({
   entry,
@@ -50,14 +47,14 @@ export function McpLogoBadge({
       title={entry?.name}
       data-testid={testId}
       className={cn(
-        "inline-flex shrink-0 items-center justify-center overflow-hidden",
+        "mcp-logo-badge inline-flex shrink-0 items-center justify-center overflow-hidden",
         "border border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]",
         sizeClassNames[size],
         className,
       )}
       style={{
         backgroundColor: entry?.iconBg ?? "var(--oh-color-tertiary)",
-        color: entry?.iconColor ?? "#FFFFFF",
+        color: entry?.iconColor ?? "var(--oh-foreground)",
       }}
     >
       {LocalLogoIcon ? (

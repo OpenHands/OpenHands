@@ -423,20 +423,20 @@ describe("useTracking", () => {
   describe("trackOnboardingLinkClicked", () => {
     it("captures onboarding_link_clicked with the typed link contract and commonProperties", () => {
       getTracking().trackOnboardingLinkClicked({
-        linkId: "join_slack",
-        destinationType: "community",
+        linkId: "connect_mcp",
+        destinationType: "integration",
         surface: "landing_checklist",
-        checklistItem: "join_slack",
-        isExternal: true,
+        checklistItem: "connect_mcp",
+        isExternal: false,
       });
 
       expect(captureMock).toHaveBeenCalledWith("onboarding_link_clicked", {
-        link_id: "join_slack",
-        destination_type: "community",
+        link_id: "connect_mcp",
+        destination_type: "integration",
         surface: "landing_checklist",
-        checklist_item: "join_slack",
+        checklist_item: "connect_mcp",
         step_id: undefined,
-        is_external: true,
+        is_external: false,
         ...COMMON,
       });
     });

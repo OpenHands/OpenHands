@@ -75,6 +75,7 @@ export function SidebarNavLink({
       to={to}
       end={end}
       data-testid={testId}
+      data-active={active ? "true" : undefined}
       tabIndex={disabled ? -1 : 0}
       aria-label={collapsed ? label : undefined}
       // Announce the disabled state to assistive tech. The visual disabled

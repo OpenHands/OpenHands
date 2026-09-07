@@ -7,7 +7,7 @@ export function HomeHeaderTitle() {
 
   return (
     <div className="flex w-full items-center justify-center py-2">
-      <Typography.H1 className="w-full text-center leading-normal">
+      <Typography.H1 className="ruckus-home-title w-full text-left leading-normal">
         {t(I18nKey.HOME$LETS_START_BUILDING)}
       </Typography.H1>
     </div>

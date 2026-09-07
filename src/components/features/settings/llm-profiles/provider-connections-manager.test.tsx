@@ -84,7 +84,7 @@ describe("ProviderConnectionsManager", () => {
 
     expect(screen.getByText("OpenAI")).toBeInTheDocument();
     expect(screen.getByText("Anthropic")).toBeInTheDocument();
-    expect(screen.getByText("OpenHands")).toBeInTheDocument();
+    expect(screen.getByText("Ruckus")).toBeInTheDocument();
     expect(screen.getByText("Azure")).toBeInTheDocument();
 
     await user.click(screen.getByText("Anthropic"));
@@ -173,7 +173,7 @@ describe("ProviderConnectionsManager", () => {
     await user.click(providerSelector);
 
     expect(screen.getByText("Anthropic")).toBeInTheDocument();
-    expect(screen.getByText("OpenHands")).toBeInTheDocument();
+    expect(screen.getByText("Ruckus")).toBeInTheDocument();
   });
 
   it("surfaces the server message when deleting a referenced connection fails", async () => {

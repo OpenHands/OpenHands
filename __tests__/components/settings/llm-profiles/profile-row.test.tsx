@@ -61,7 +61,7 @@ describe("ProfileRow", () => {
     );
 
     expect(
-      screen.getByText("OpenHands DeepSeek V4 Flash (free)"),
+      screen.getByText("Ruckus DeepSeek V4 Flash (free)"),
     ).toHaveAttribute("title", "openhands/deepseek-v4-flash");
   });
 

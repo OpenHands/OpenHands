@@ -3,7 +3,6 @@ import {
   SIDEBAR_ONBOARDING_CHECKLIST_DISMISSED_CHANGE_EVENT,
   SIDEBAR_ONBOARDING_CHECKLIST_DISMISSED_STORAGE_KEY,
   SIDEBAR_ONBOARDING_CHECKLIST_MINIMIZED_STORAGE_KEY,
-  SIDEBAR_ONBOARDING_CHECKLIST_SLACK_JOINED_STORAGE_KEY,
 } from "./sidebar-onboarding-checklist.constants";
 
 export function readSidebarOnboardingChecklistDismissed(): boolean {
@@ -92,26 +91,5 @@ export function writeSidebarOnboardingChecklistCustomizeExplored(
   window.localStorage.setItem(
     SIDEBAR_ONBOARDING_CHECKLIST_CUSTOMIZE_EXPLORED_STORAGE_KEY,
     explored ? "true" : "false",
-  );
-}
-
-export function readSidebarOnboardingChecklistSlackJoined(): boolean {
-  if (typeof window === "undefined") {
-    return false;
-  }
-
-  return (
-    window.localStorage.getItem(
-      SIDEBAR_ONBOARDING_CHECKLIST_SLACK_JOINED_STORAGE_KEY,
-    ) === "true"
-  );
-}
-
-export function writeSidebarOnboardingChecklistSlackJoined(
-  joined: boolean,
-): void {
-  window.localStorage.setItem(
-    SIDEBAR_ONBOARDING_CHECKLIST_SLACK_JOINED_STORAGE_KEY,
-    joined ? "true" : "false",
   );
 }

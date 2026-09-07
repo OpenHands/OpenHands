@@ -3,10 +3,7 @@ import { Trans, useTranslation } from "react-i18next";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import { ModalCloseButton } from "#/components/shared/modals/modal-close-button";
 import { BrandButton } from "#/components/features/settings/brand-button";
-import {
-  ADD_SKILL_DOCS_URL,
-  ADD_SKILL_EXAMPLE_COMMAND,
-} from "#/constants/skills-docs";
+import { ADD_SKILL_EXAMPLE_COMMAND } from "#/constants/skills-docs";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 import { modalTitleLgClassName } from "#/utils/modal-classes";
@@ -183,16 +180,6 @@ export function AddSkillModal({ onClose }: AddSkillModalProps) {
           <AddSkillTransParagraph
             i18nKey={I18nKey.SETTINGS$SKILLS_ADD_MODAL_PRIVATE_REPOS}
           />
-
-          <a
-            href={ADD_SKILL_DOCS_URL}
-            target="_blank"
-            rel="noreferrer"
-            data-testid="add-skill-modal-docs-link"
-            className="self-start text-xs text-[var(--oh-muted)] transition-colors hover:text-white hover:underline"
-          >
-            {t(I18nKey.SETTINGS$SKILLS_ADD_MODAL_VIEW_DOCS)}
-          </a>
         </div>
 
         <footer className="flex flex-shrink-0 justify-end gap-2 px-6 pb-6 pt-4">

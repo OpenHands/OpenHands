@@ -207,11 +207,9 @@ describe("recommended automations", () => {
     expect(cardIds).toEqual([
       "github-pr-reviewer",
       "github-issue-to-pr",
-      "slack-channel-monitor",
       "github-agents-md-maintainer",
       "news-digest",
       "github-repo-monitor",
-      "slack-standup-digest",
       "linear-triage-assistant",
       "linear-issue-to-github-pr",
       "linear-issue-to-gitlab-mr",
@@ -222,7 +220,6 @@ describe("recommended automations", () => {
       "research-brief-writer",
       "jira-issue-to-bitbucket-pr",
       "upstream-fork-sync",
-      "incident-retrospective-drafter",
     ]);
   });
 
@@ -238,7 +235,7 @@ describe("recommended automations", () => {
     const provenHeading = screen.getByText(
       I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_TITLE,
     ).parentElement!;
-    expect(within(provenHeading).getByText("5")).toBeInTheDocument();
+    expect(within(provenHeading).getByText("4")).toBeInTheDocument();
 
     const betaHeading = screen.getByTestId(
       "recommended-automations-beta-heading",
@@ -246,14 +243,14 @@ describe("recommended automations", () => {
     expect(betaHeading).toHaveTextContent(
       I18nKey.RECOMMENDED_AUTOMATIONS$BETA_LABEL,
     );
-    expect(within(betaHeading).getByText("13")).toBeInTheDocument();
+    expect(within(betaHeading).getByText("11")).toBeInTheDocument();
 
     const betaSection = screen.getByTestId(
       "recommended-automations-beta-section",
     );
     expect(
       within(betaSection).getByTestId(
-        "recommended-automation-card-slack-standup-digest",
+        "recommended-automation-card-linear-triage-assistant",
       ),
     ).toBeInTheDocument();
     expect(
@@ -290,13 +287,13 @@ describe("recommended automations", () => {
       <RecommendedAutomationsSection
         backendKind="local"
         installedServers={[]}
-        query="standup"
+        query="triage"
         onSelect={vi.fn()}
       />,
     );
 
     expect(
-      screen.getByTestId("recommended-automation-card-slack-standup-digest"),
+      screen.getByTestId("recommended-automation-card-linear-triage-assistant"),
     ).toBeInTheDocument();
     expect(
       screen.queryByTestId("recommended-automation-card-github-pr-reviewer"),
@@ -319,10 +316,8 @@ describe("recommended automations", () => {
       screen.getByTestId("recommended-automation-icon-research-brief-writer"),
     ).toHaveAttribute("data-layout", "overlap");
     expect(
-      screen.getByTestId(
-        "recommended-automation-icon-incident-retrospective-drafter",
-      ),
-    ).toHaveAttribute("data-layout", "quadrants");
+      screen.getByTestId("recommended-automation-icon-jira-issue-to-pr"),
+    ).toHaveAttribute("data-layout", "overlap");
   });
 
   it("shows the declared glyph instead of a logo stack when an entry names one", () => {
@@ -823,30 +818,6 @@ describe("recommended automations", () => {
     expect(draft).toBe("/linear-triage:setup");
   });
 
-  it("launches without waiting for an integration the automation can start without", () => {
-    // Arrange — Slack and Linear are connected; Notion, which the entry marks
-    // as connectable later, is not.
-    mockUseSettings.mockReturnValue({
-      data: settingsWithMcpConfig({
-        slack: { url: "https://mcp.slack.com/mcp" },
-        linear: { url: "https://mcp.linear.app/mcp" },
-      }),
-    });
-
-    renderLauncher();
-
-    // Act
-    fireEvent.click(
-      screen.getByTestId(
-        "recommended-automation-card-incident-retrospective-drafter",
-      ),
-    );
-
-    // Assert — nothing stands between the click and the launch.
-    expect(screen.queryByTestId("mcp-install-modal")).not.toBeInTheDocument();
-    expect(mockNavigate).toHaveBeenCalledTimes(1);
-  });
-
   it("prompts to install when the required MCP server is disabled", async () => {
     // A disabled server is withheld from the agent, so treating it as
     // installed would launch an automation that then fails at runtime.
@@ -944,7 +915,7 @@ describe("recommended automations", () => {
     ).not.toBeInTheDocument();
     expect(
       screen.getByTestId(
-        "recommended-automation-rail-card-slack-standup-digest",
+        "recommended-automation-rail-card-linear-triage-assistant",
       ),
     ).toBeInTheDocument();
   });

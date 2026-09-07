@@ -107,7 +107,7 @@ describe("backend-registry storage", () => {
     expect(result).toEqual([
       {
         id: "locked-cloud",
-        name: "OpenHands Cloud",
+        name: "Ruckus Cloud",
         host: window.location.origin,
         apiKey: "",
         kind: "cloud",
@@ -129,7 +129,7 @@ describe("backend-registry storage", () => {
     expect(readStoredBackends()).toEqual([
       {
         id: "locked-cloud",
-        name: "OpenHands Cloud",
+        name: "Ruckus Cloud",
         host: "https://pr-254.staging.openhands.dev",
         apiKey: "",
         kind: "cloud",

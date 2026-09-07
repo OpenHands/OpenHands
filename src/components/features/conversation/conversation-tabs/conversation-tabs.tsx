@@ -1,10 +1,15 @@
+import {
+  RuckusFilesIcon as DocumentIcon,
+  RuckusCommitsIcon as LuFileDiff,
+  RuckusTerminalIcon as SquareChevronRight,
+  RuckusBrowserIcon as Globe,
+  RuckusPlannerIcon as ListTodo,
+  RuckusTasksIcon as DoubleCheckIcon,
+  RuckusUsageIcon as Gauge,
+} from "#/components/shared/ruckus-tool-icons";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LayoutGroup } from "framer-motion";
-import { Gauge, Globe, ListTodo, SquareChevronRight } from "lucide-react";
-import { LuFileDiff } from "react-icons/lu";
-import DocumentIcon from "#/icons/document.svg?react";
-import DoubleCheckIcon from "#/icons/double-check.svg?react";
 import { EllipsisButton } from "#/components/features/conversation-panel/ellipsis-button";
 import { cn } from "#/utils/utils";
 import { useConversationLocalStorageState } from "#/utils/conversation-local-storage";

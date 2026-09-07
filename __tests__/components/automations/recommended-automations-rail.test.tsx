@@ -66,10 +66,8 @@ describe("RecommendedAutomationsRail", () => {
 
     expect(cardIds).toEqual([
       "github-issue-to-pr",
-      "slack-channel-monitor",
       "github-agents-md-maintainer",
       "news-digest",
-      "slack-standup-digest",
       "linear-triage-assistant",
       "linear-issue-to-github-pr",
       "linear-issue-to-gitlab-mr",
@@ -109,11 +107,13 @@ describe("RecommendedAutomationsRail", () => {
     );
 
     await user.click(
-      screen.getByTestId("recommended-automation-rail-card-slack-standup-digest"),
+      screen.getByTestId(
+        "recommended-automation-rail-card-linear-triage-assistant",
+      ),
     );
 
     expect(onSelect).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "slack-standup-digest" }),
+      expect.objectContaining({ id: "linear-triage-assistant" }),
     );
   });
 
@@ -175,7 +175,9 @@ describe("RecommendedAutomationsRail", () => {
         />,
       );
 
-      const scroller = screen.getByTestId("recommended-automations-rail-scroll");
+      const scroller = screen.getByTestId(
+        "recommended-automations-rail-scroll",
+      );
       const leftFade = screen.getByTestId(
         "recommended-automations-rail-fade-left",
       );
@@ -237,7 +239,7 @@ describe("RecommendedAutomationsRail", () => {
         />,
       );
       const card = screen.getByTestId(
-        "recommended-automation-rail-card-slack-standup-digest",
+        "recommended-automation-rail-card-linear-triage-assistant",
       );
 
       fireEvent.mouseDown(card, { button: 0, clientX: 300 });
@@ -263,7 +265,7 @@ describe("RecommendedAutomationsRail", () => {
         />,
       );
       const card = screen.getByTestId(
-        "recommended-automation-rail-card-slack-standup-digest",
+        "recommended-automation-rail-card-linear-triage-assistant",
       );
 
       fireEvent.mouseDown(card, { button: 0, clientX: 300 });

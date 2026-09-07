@@ -39,7 +39,7 @@ describe("useAppTitle", () => {
   it("returns the OSS app title outside conversations", async () => {
     const { result } = renderAppTitleHook();
 
-    await waitFor(() => expect(result.current).toBe("OpenHands"));
+    await waitFor(() => expect(result.current).toBe("Ruckus"));
   });
 
   it("returns the conversation title with the OSS app name", async () => {
@@ -52,7 +52,7 @@ describe("useAppTitle", () => {
     const { result } = renderAppTitleHook();
 
     await waitFor(() =>
-      expect(result.current).toBe("My Conversation | OpenHands"),
+      expect(result.current).toBe("My Conversation | Ruckus"),
     );
   });
 
@@ -63,7 +63,7 @@ describe("useAppTitle", () => {
 
     const { result } = renderAppTitleHook();
 
-    await waitFor(() => expect(result.current).toBe("OpenHands"));
+    await waitFor(() => expect(result.current).toBe("Ruckus"));
   });
 
   it.each([
@@ -87,7 +87,7 @@ describe("useAppTitle", () => {
       const { result } = renderAppTitleHook();
 
       await waitFor(() =>
-        expect(result.current).toBe(`${emoji} My Conversation | OpenHands`),
+        expect(result.current).toBe(`${emoji} My Conversation | Ruckus`),
       );
     },
   );
@@ -105,7 +105,7 @@ describe("useAppTitle", () => {
     const { result } = renderAppTitleHook();
 
     await waitFor(() =>
-      expect(result.current).toBe("🟢 My Conversation | OpenHands"),
+      expect(result.current).toBe("🟢 My Conversation | Ruckus"),
     );
   });
 
@@ -119,7 +119,7 @@ describe("useAppTitle", () => {
     const { result } = renderAppTitleHook();
 
     await waitFor(() =>
-      expect(result.current).toBe("My Conversation | OpenHands"),
+      expect(result.current).toBe("My Conversation | Ruckus"),
     );
   });
 });

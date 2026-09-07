@@ -247,7 +247,7 @@ const MOCK_AGENT_SETTINGS_SCHEMA: NonNullable<
           key: "verification.critic_api_key",
           label: "Critic API Key",
           description:
-            "If OpenHands is selected as your active LLM provider, leave this empty; the critic reuses the OpenHands Provider LLM Key.",
+            "If Ruckus is selected as your active LLM provider, leave this empty; the critic reuses the Ruckus Provider LLM Key.",
           section: "verification",
           section_label: "Verification",
           value_type: "string",
@@ -439,7 +439,7 @@ const MOCK_CONVERSATION_SETTINGS_SCHEMA: NonNullable<
           key: "security_analyzer",
           label: "Security analyzer",
           description:
-            "Choose how OpenHands should analyze actions before asking for confirmation.",
+            "Choose how Ruckus analyzes actions before asking for confirmation.",
 
           section: "verification",
           section_label: "Verification",

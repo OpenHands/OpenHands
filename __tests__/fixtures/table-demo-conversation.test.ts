@@ -17,7 +17,7 @@ describe("table demo conversation fixture", () => {
         : null;
     expect(agentText).toMatchObject({ type: "text" });
     if (agentText && "text" in agentText) {
-      expect(agentText.text).toContain("| Feature | OpenHands |");
+      expect(agentText.text).toContain("| Feature | Ruckus |");
       expect(agentText.text).toContain("| Continue |");
     }
   });

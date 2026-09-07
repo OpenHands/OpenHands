@@ -14,7 +14,6 @@ import SkillsSettingsScreen from "#/routes/skills-settings";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import SkillsService from "#/api/skills-service";
 import {
-  ADD_SKILL_DOCS_URL,
   ADD_SKILL_EXAMPLE_COMMAND,
 } from "#/constants/skills-docs";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
@@ -455,7 +454,7 @@ Full skill body.`,
     expect(screen.getByTestId("skills-no-match")).toBeInTheDocument();
   });
 
-  it("opens the add skill modal with docs link and closes it", async () => {
+  it("opens the add skill modal and closes it", async () => {
     const user = userEvent.setup();
     vi.spyOn(SkillsService, "getSkills").mockResolvedValue([]);
 
@@ -467,12 +466,11 @@ Full skill body.`,
     const modal = await screen.findByTestId("add-skill-modal");
     expect(modal).toBeInTheDocument();
     expect(screen.getByTestId("add-skill-modal-example")).toHaveTextContent(
-      "/add-skill https://github.com/OpenHands/extensions/tree/main/skills/codereview",
+      "/add-skill https://github.com/Ruckus/extensions/tree/main/skills/codereview",
     );
-    expect(screen.getByTestId("add-skill-modal-docs-link")).toHaveAttribute(
-      "href",
-      ADD_SKILL_DOCS_URL,
-    );
+    expect(
+      screen.queryByTestId("add-skill-modal-docs-link"),
+    ).not.toBeInTheDocument();
 
     await user.click(screen.getByTestId("add-skill-modal-dismiss"));
 

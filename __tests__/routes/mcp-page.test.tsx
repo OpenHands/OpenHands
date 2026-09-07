@@ -60,7 +60,7 @@ describe("MCPPage", () => {
     expect(screen.getByTestId("mcp-marketplace-grid")).toBeInTheDocument();
   });
 
-  it("lists GitHub, Slack, and Tavily as the first three marketplace tiles", async () => {
+  it("lists GitHub and Tavily as the first marketplace tiles", async () => {
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
 
     renderPage();
@@ -75,12 +75,11 @@ describe("MCPPage", () => {
     );
     expect(cards[1]).toHaveAttribute(
       "data-testid",
-      "mcp-marketplace-card-slack",
-    );
-    expect(cards[2]).toHaveAttribute(
-      "data-testid",
       "mcp-marketplace-card-tavily",
     );
+    expect(
+      screen.queryByTestId("mcp-marketplace-card-slack"),
+    ).not.toBeInTheDocument();
   });
 
   it("opens the install modal when clicking a marketplace tile", async () => {
@@ -88,20 +87,17 @@ describe("MCPPage", () => {
 
     renderPage();
 
-    await screen.findByTestId("mcp-marketplace-card-slack");
-    fireEvent.click(screen.getByTestId("mcp-marketplace-card-slack"));
+    await screen.findByTestId("mcp-marketplace-card-tavily");
+    fireEvent.click(screen.getByTestId("mcp-marketplace-card-tavily"));
 
     await waitFor(() => {
       expect(screen.getByTestId("mcp-install-modal")).toBeInTheDocument();
     });
     expect(
       screen.getByTestId("mcp-install-field-command-readonly"),
-    ).toHaveValue("npx -y @zencoderai/slack-mcp-server");
+    ).toHaveValue("npx -y tavily-mcp");
     expect(
-      screen.getByTestId("mcp-install-field-SLACK_BOT_TOKEN"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByTestId("mcp-install-field-SLACK_TEAM_ID"),
+      screen.getByTestId("mcp-install-field-TAVILY_API_KEY"),
     ).toBeInTheDocument();
     expect(screen.queryByTestId("mcp-install-field-url")).toBeNull();
     expect(screen.queryByTestId("mcp-install-field-api_key")).toBeNull();
@@ -113,11 +109,11 @@ describe("MCPPage", () => {
     renderPage();
 
     const search = await screen.findByTestId("mcp-search-input");
-    fireEvent.change(search, { target: { value: "Slack" } });
+    fireEvent.change(search, { target: { value: "Tavily" } });
 
     await waitFor(() => {
       expect(
-        screen.getByTestId("mcp-marketplace-card-slack"),
+        screen.getByTestId("mcp-marketplace-card-tavily"),
       ).toBeInTheDocument();
     });
     expect(
@@ -219,10 +215,10 @@ describe("MCPPage", () => {
         agent_settings: {
           ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
           mcp_config: {
-            slack: {
+            tavily: {
               command: "npx",
-              args: ["-y", "@zencoderai/slack-mcp-server"],
-              env: { SLACK_BOT_TOKEN: "xoxb-abc", SLACK_TEAM_ID: "T01" },
+              args: ["-y", "tavily-mcp"],
+              env: { TAVILY_API_KEY: "tvly-secret" },
             },
           },
         },
@@ -237,22 +233,22 @@ describe("MCPPage", () => {
   });
 
   it("deletes an installed stdio server through the confirmation modal", async () => {
-    // Pre-install a Slack stdio server via the SDK-shaped mcp_config
+    // Pre-install a Tavily stdio server via the SDK-shaped mcp_config
     // the route reads from agent_settings.mcp_config.
-    const settingsWithSlack = buildSettings({
+    const settingsWithTavily = buildSettings({
       agent_settings: {
         ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
         mcp_config: {
-          slack: {
+          tavily: {
             command: "npx",
-            args: ["-y", "@zencoderai/slack-mcp-server"],
-            env: { SLACK_BOT_TOKEN: "xoxb-abc", SLACK_TEAM_ID: "T01" },
+            args: ["-y", "tavily-mcp"],
+            env: { TAVILY_API_KEY: "tvly-secret" },
           },
         },
       },
     });
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      settingsWithSlack,
+      settingsWithTavily,
     );
     const deleteSpy = vi
       .spyOn(SettingsService, "deleteMcpServer")
@@ -267,7 +263,7 @@ describe("MCPPage", () => {
     fireEvent.click(confirmBtn);
 
     await waitFor(() => expect(deleteSpy).toHaveBeenCalledTimes(1));
-    expect(deleteSpy).toHaveBeenCalledWith("slack");
+    expect(deleteSpy).toHaveBeenCalledWith("tavily");
   });
 
   it("shows the catalog description and URL on installed server cards", async () => {
@@ -329,7 +325,7 @@ describe("MCPPage", () => {
   it("opens the install modal in add-only mode for a marketplace tile that's already installed", async () => {
     // Regression test: clicking an installed marketplace tile must
     // open a fresh "Install" modal so the user can add a second
-    // instance (e.g. a second Slack workspace). Previously this
+    // instance (e.g. a second Tavily key). Previously this
     // coerced into edit mode and `Save changes` overwrote the
     // existing entry, so the second instance never landed and the
     // first one got clobbered.
@@ -338,10 +334,10 @@ describe("MCPPage", () => {
         agent_settings: {
           ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
           mcp_config: {
-            slack: {
+            tavily: {
               command: "npx",
-              args: ["-y", "@zencoderai/slack-mcp-server"],
-              env: { SLACK_BOT_TOKEN: "xoxb-old", SLACK_TEAM_ID: "T01" },
+              args: ["-y", "tavily-mcp"],
+              env: { TAVILY_API_KEY: "tvly-old" },
             },
           },
         },
@@ -353,8 +349,8 @@ describe("MCPPage", () => {
 
     renderPage();
 
-    const tile = await screen.findByTestId("mcp-marketplace-card-slack");
-    expect(screen.getByTestId("mcp-marketplace-toggle-slack")).toHaveAttribute(
+    const tile = await screen.findByTestId("mcp-marketplace-card-tavily");
+    expect(screen.getByTestId("mcp-marketplace-toggle-tavily")).toHaveAttribute(
       "aria-checked",
       "false",
     );
@@ -366,20 +362,17 @@ describe("MCPPage", () => {
       "MCP$INSTALL_BUTTON",
     );
 
-    fireEvent.change(screen.getByTestId("mcp-install-field-SLACK_BOT_TOKEN"), {
-      target: { value: "xoxb-new" },
-    });
-    fireEvent.change(screen.getByTestId("mcp-install-field-SLACK_TEAM_ID"), {
-      target: { value: "T02" },
+    fireEvent.change(screen.getByTestId("mcp-install-field-TAVILY_API_KEY"), {
+      target: { value: "tvly-new" },
     });
     fireEvent.click(screen.getByTestId("mcp-install-submit"));
 
     await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
-    expect(saveSpy).toHaveBeenCalledWith("slack_1", {
+    expect(saveSpy).toHaveBeenCalledWith("tavily_1", {
       transport: "stdio",
       command: "npx",
-      args: ["-y", "@zencoderai/slack-mcp-server"],
-      env: { SLACK_BOT_TOKEN: "xoxb-new", SLACK_TEAM_ID: "T02" },
+      args: ["-y", "tavily-mcp"],
+      env: { TAVILY_API_KEY: "tvly-new" },
     });
   });
 

@@ -22,12 +22,10 @@ export type OnboardingLinkId =
   | "schedule_task"
   | "customize_agent"
   | "connect_mcp"
-  | "join_slack"
   | "open_docs";
 
 /** Controlled destination category for `onboarding_link_clicked`. */
 export type OnboardingLinkDestinationType =
-  | "community"
   | "integration"
   | "documentation"
   | "settings"

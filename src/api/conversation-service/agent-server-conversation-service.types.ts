@@ -167,7 +167,7 @@ export interface AppConversation {
    * Server-side key-value tags from the agent-server's
    * ``ConversationInfo.tags`` (settable at creation and via
    * ``PATCH /api/conversations/{id}``). Automations and API clients use these
-   * for attribution (e.g. ``origin=slack``, ``owner=alice``). Includes
+   * for attribution (e.g. ``origin=automation``, ``owner=alice``). Includes
    * reserved/internal keys such as ``acpserver`` — display consumers should
    * go through ``getDisplayConversationTags`` in ``agent-server-adapter.ts``
    * rather than reading this raw. ``null``/absent for Cloud conversations

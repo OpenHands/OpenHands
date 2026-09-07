@@ -4,6 +4,7 @@ import {
 } from "@openhands/extensions/automations";
 import { getFeaturedAutomationIds } from "#/manifests/automation-interface";
 import { SETUP_REGISTRY } from "#/manifests/manifest-sources";
+import { isExcludedAutomation } from "#/utils/automation-catalog";
 import type { Automation } from "#/types/automation";
 
 export function getAutomationsByPopularity(
@@ -75,8 +76,11 @@ export function getRecommendedRailGroups(
   // Every catalog entry is offerable: one that declares no integration needs
   // nothing connected, and one that names an integration this host cannot
   // resolve stays visible so the drift is actionable rather than hidden.
+  // Slack-based automations are excluded outright (see isExcludedAutomation).
   const available = getAutomationsByPopularity(AUTOMATION_CATALOG).filter(
-    (entry) => !isCatalogAutomationAdded(entry, installed),
+    (entry) =>
+      !isExcludedAutomation(entry) &&
+      !isCatalogAutomationAdded(entry, installed),
   );
 
   return {

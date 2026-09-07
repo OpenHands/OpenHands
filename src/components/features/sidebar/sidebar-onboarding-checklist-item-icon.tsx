@@ -2,7 +2,6 @@ import { Plus } from "lucide-react";
 import ClockIcon from "#/icons/clock.svg?react";
 import KeyIcon from "#/icons/key.svg?react";
 import ServerProcessIcon from "#/icons/server-process.svg?react";
-import SlackIcon from "#/icons/slack.svg?react";
 import { cn } from "#/utils/utils";
 import type { SidebarOnboardingChecklistItemId } from "./sidebar-onboarding-checklist.constants";
 
@@ -97,17 +96,6 @@ export function SidebarOnboardingChecklistItemIcon({
       return (
         <span data-testid={testId} className="inline-flex shrink-0">
           <ServerProcessIcon
-            width={PREVIEW_ICON_SIZE}
-            height={PREVIEW_ICON_SIZE}
-            className={iconClassName}
-            aria-hidden
-          />
-        </span>
-      );
-    case "join-slack":
-      return (
-        <span data-testid={testId} className="inline-flex shrink-0">
-          <SlackIcon
             width={PREVIEW_ICON_SIZE}
             height={PREVIEW_ICON_SIZE}
             className={iconClassName}

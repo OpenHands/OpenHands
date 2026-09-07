@@ -129,7 +129,7 @@ describe("ModelMessages", () => {
     );
 
     expect(
-      screen.getByText(/model:\s+OpenHands DeepSeek V4 Flash \(free\)/),
+      screen.getByText(/model:\s+Ruckus DeepSeek V4 Flash \(free\)/),
     ).toBeInTheDocument();
   });
 });

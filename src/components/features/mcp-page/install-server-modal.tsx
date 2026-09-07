@@ -142,7 +142,7 @@ function makeInitialState(entry: MarketplaceEntry): FieldState {
 
 // The marketplace install modal is intentionally add-only: clicking
 // a catalog tile always appends a new server (the user might want
-// two Slack workspaces, two Postgres connections, etc.) even when
+// two GitHub accounts, two Postgres connections, etc.) even when
 // one of the same template kind is already installed. Editing an
 // existing server is reached via the installed-server-card's edit
 // button, which opens `CustomServerEditor` instead.

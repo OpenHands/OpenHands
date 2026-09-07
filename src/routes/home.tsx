@@ -15,7 +15,7 @@ function HomeScreen() {
   return (
     <div
       data-testid="home-screen"
-      className="custom-scrollbar-always h-full overflow-y-auto rounded-xl bg-transparent px-4 md:px-0 lg:px-[42px]"
+      className="ruckus-home ruckus-paper custom-scrollbar-always h-full overflow-y-auto rounded-xl bg-transparent px-4 md:px-0 lg:px-[42px]"
     >
       <div className="md:px-4 lg:px-0">
         <LlmNotConfiguredBanner />

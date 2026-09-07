@@ -132,15 +132,8 @@ describe("AddBackendModal – connection chooser", () => {
       "BACKEND$CHOOSER_DESCRIPTION",
     );
     expect(
-      screen.getByTestId("add-backend-deployment-options-link"),
-    ).toHaveAttribute(
-      "href",
-      "https://docs.openhands.dev/overview/introduction",
-    );
-    // Short inline link so the description reads as one flowing sentence.
-    expect(
-      screen.getByTestId("add-backend-deployment-options-link"),
-    ).toHaveTextContent("CTA$LEARN_MORE");
+      screen.queryByTestId("add-backend-deployment-options-link"),
+    ).not.toBeInTheDocument();
   });
 
   it("hides the Advanced host disclosure while authorization is pending", async () => {
@@ -191,10 +184,9 @@ describe("AddBackendModal – connection chooser", () => {
     expect(
       screen.getByTestId("add-backend-local-guidance"),
     ).toBeInTheDocument();
-    expect(screen.getByTestId("add-backend-local-docs-link")).toHaveAttribute(
-      "href",
-      expect.stringContaining("docs/DEVELOPMENT.md"),
-    );
+    expect(
+      screen.queryByTestId("add-backend-local-docs-link"),
+    ).not.toBeInTheDocument();
     expect(screen.getByTestId("add-backend-name")).toBeInTheDocument();
     expect(screen.getByTestId("add-backend-host")).toBeInTheDocument();
     expect(screen.getByTestId("add-backend-api-key")).toBeInTheDocument();
@@ -310,10 +302,9 @@ describe("AddBackendModal – connection chooser", () => {
     expect(
       screen.getByTestId("add-backend-remote-guidance"),
     ).toBeInTheDocument();
-    expect(screen.getByTestId("add-backend-remote-docs-link")).toHaveAttribute(
-      "href",
-      expect.stringContaining("docs/SELF_HOSTING.md"),
-    );
+    expect(
+      screen.queryByTestId("add-backend-remote-docs-link"),
+    ).not.toBeInTheDocument();
 
     await user.type(screen.getByTestId("add-backend-name"), "Remote GPU");
     await user.type(

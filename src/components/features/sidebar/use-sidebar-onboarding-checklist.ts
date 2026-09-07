@@ -17,13 +17,11 @@ import { isConfigureLlmChecklistItemComplete } from "./sidebar-onboarding-checkl
 import {
   readSidebarOnboardingChecklistCustomizeExplored,
   readSidebarOnboardingChecklistMinimized,
-  readSidebarOnboardingChecklistSlackJoined,
   subscribeSidebarOnboardingChecklistDismissed,
   getSidebarOnboardingChecklistDismissedSnapshot,
   writeSidebarOnboardingChecklistCustomizeExplored,
   writeSidebarOnboardingChecklistDismissed,
   writeSidebarOnboardingChecklistMinimized,
-  writeSidebarOnboardingChecklistSlackJoined,
 } from "./sidebar-onboarding-checklist-storage";
 
 export interface SidebarOnboardingChecklistItemState {
@@ -48,9 +46,6 @@ export function useSidebarOnboardingChecklist() {
   );
   const [hasExploredCustomize, setHasExploredCustomize] = useState(
     readSidebarOnboardingChecklistCustomizeExplored,
-  );
-  const [hasJoinedSlack, setHasJoinedSlack] = useState(
-    readSidebarOnboardingChecklistSlackJoined,
   );
 
   const { data: settings } = useSettings();
@@ -97,13 +92,11 @@ export function useSidebarOnboardingChecklist() {
       "start-conversation": hasConversation,
       "schedule-task": hasAutomation,
       "customize-agent": hasExploredCustomize,
-      "join-slack": hasJoinedSlack,
     } satisfies Record<SidebarOnboardingChecklistItemId, boolean>;
   }, [
     automationsData?.total,
     conversationPage?.pages,
     hasExploredCustomize,
-    hasJoinedSlack,
     isLlmConfigured,
     isLlmConfiguredLoading,
     isProfilesLoading,
@@ -138,14 +131,6 @@ export function useSidebarOnboardingChecklist() {
     });
   };
 
-  const markJoinSlackComplete = () => {
-    if (hasJoinedSlack) {
-      return;
-    }
-    writeSidebarOnboardingChecklistSlackJoined(true);
-    setHasJoinedSlack(true);
-  };
-
   return {
     items,
     completedCount,
@@ -154,6 +139,5 @@ export function useSidebarOnboardingChecklist() {
     isMinimized,
     dismiss,
     toggleMinimized,
-    markJoinSlackComplete,
   };
 }

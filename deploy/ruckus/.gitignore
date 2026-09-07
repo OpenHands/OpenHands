@@ -1,0 +1,8 @@
+.terraform/
+*.tfstate*
+*.tfplan
+*.tfvars
+*.tfvars.json
+gateway.env
+*.tar
+state/

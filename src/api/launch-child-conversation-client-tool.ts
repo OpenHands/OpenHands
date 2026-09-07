@@ -23,10 +23,10 @@ Choosing target:
   Fast, no repository clone, no sandbox provisioning. Use this by default when
   the work is on code that is already checked out here.
 
-* target="cloud" — runs on OpenHands Cloud in its own isolated sandbox, from a
+* target="cloud" — runs on Ruckus Cloud in its own isolated sandbox, from a
   git repository. Use this when the work should not touch the user's machine or
   when it needs a repository that is not checked out locally. Requires the user
-  to have an OpenHands Cloud backend connected in Agent Canvas; if none is
+  to have a Ruckus Cloud backend connected in Agent Canvas; if none is
   connected you will be told so and should fall back to target="local".
 
 Writing the task brief:
@@ -69,7 +69,7 @@ export const LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL: ClientToolSpec = {
         type: "string",
         enum: [...CHILD_CONVERSATION_TARGETS],
         description:
-          "Where the child runs. 'local' reuses this machine and this conversation's workspace; 'cloud' runs in an isolated OpenHands Cloud sandbox.",
+          "Where the child runs. 'local' reuses this machine and this conversation's workspace; 'cloud' runs in an isolated Ruckus Cloud sandbox.",
       },
       task: {
         type: "string",

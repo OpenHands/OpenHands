@@ -9,12 +9,12 @@ import {
   GitBranch,
   House,
   Layers,
+  MessagesSquare,
   Tag,
   Waypoints,
   Wrench,
 } from "lucide-react";
 import { FaGithub } from "react-icons/fa6";
-import SlackIcon from "#/icons/slack.svg?react";
 import { getConversationTagIcon } from "#/components/features/conversation-panel/conversation-card/conversation-tag-icons";
 
 describe("getConversationTagIcon", () => {
@@ -39,7 +39,7 @@ describe("getConversationTagIcon", () => {
   });
 
   it("prefers source brand icons for origin and git_provider values", () => {
-    expect(getConversationTagIcon("origin", "slack")).toBe(SlackIcon);
+    expect(getConversationTagIcon("origin", "discord")).toBe(MessagesSquare);
     expect(getConversationTagIcon("git_provider", "GitHub")).toBe(FaGithub);
   });
 

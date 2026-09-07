@@ -35,7 +35,7 @@ export type ConversationTagLabelKind =
  * kinds so chips and hovercards show friendly labels instead of the wire key.
  *
  * ``origin`` / ``source`` deliberately stay "other" (humanized to "Origin" /
- * "Source"): they name where a conversation came from — Slack, an API call, an
+ * "Source"): they name where a conversation came from — an API call, an
  * automation — which is not a git fact. Only ``git_provider`` is "Git".
  */
 export function getConversationTagLabelKind(
@@ -131,7 +131,7 @@ export function formatConversationTagTooltip(
  * stays available via tooltip / overflow popover.
  *
  * Measures and slices by code point rather than UTF-16 code unit: values
- * stamped by Slack / Discord automations carry emoji, and cutting between the
+ * stamped by chat automations carry emoji, and cutting between the
  * halves of a surrogate pair leaves a lone surrogate that browsers draw as a
  * replacement glyph.
  */

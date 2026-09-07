@@ -51,6 +51,32 @@ describe("ConversationTabsContextMenu", () => {
     });
   });
 
+  it("keeps the tool menu above a dock anchored at the bottom of the viewport", () => {
+    const anchor = document.createElement("button");
+    document.body.appendChild(anchor);
+    vi.spyOn(anchor, "getBoundingClientRect").mockReturnValue({
+      top: window.innerHeight - 48,
+      bottom: window.innerHeight - 8,
+      left: 200,
+      right: 240,
+      width: 40,
+      height: 40,
+      x: 200,
+      y: window.innerHeight - 48,
+      toJSON: () => ({}),
+    });
+    render(
+      <ConversationTabsContextMenu
+        isOpen
+        onClose={vi.fn()}
+        anchorRef={{ current: anchor }}
+      />,
+    );
+    const menu = screen.getByText("COMMON$FILES").closest("ul");
+    expect(menu?.parentElement).toHaveStyle({ bottom: "56px" });
+    anchor.remove();
+  });
+
   it("should render nothing when isOpen is false", () => {
     const { container } = render(
       <ConversationTabsContextMenu isOpen={false} onClose={vi.fn()} />,
@@ -100,7 +126,9 @@ describe("ConversationTabsContextMenu", () => {
 
     render(<ConversationTabsContextMenu isOpen={true} onClose={vi.fn()} />);
 
-    await user.click(screen.getByTestId("conversation-tabs-menu-open-terminal"));
+    await user.click(
+      screen.getByTestId("conversation-tabs-menu-open-terminal"),
+    );
 
     expect(useConversationStore.getState().selectedTab).toBe("terminal");
     const storedState = JSON.parse(
