@@ -402,6 +402,16 @@ export function validateFrontendDependencies(
 }
 
 /**
+ * Modules the agent-server imports at startup (`--import-modules`). They are
+ * resolved from `tools/`, which `buildAgentServerEnv` exposes through
+ * OH_EXTRA_PYTHON_PATH. Importing `canvas_ui_tool` eagerly registers the SDK's
+ * builtin FinishTool so automation presets (openhands-automation >= 1.9.0) can
+ * resolve it on the remote conversations they dispatch — see the note at the
+ * bottom of tools/canvas_ui_tool.py.
+ */
+export const AGENT_SERVER_IMPORT_MODULES = "canvas_ui_tool";
+
+/**
  * Build the uvx command and arguments for running agent-server.
  *
  * Environment variables (highest precedence first):
@@ -411,7 +421,7 @@ export function validateFrontendDependencies(
  *   edits are picked up without a manual reinstall. The agent-server itself
  *   is rebuilt from local source on each invocation (--reinstall).
  * - OH_AGENT_SERVER_GIT_REF: Git commit SHA or branch name
- * - OH_AGENT_SERVER_VERSION: Specific PyPI version (e.g., "1.42.1")
+ * - OH_AGENT_SERVER_VERSION: Specific PyPI version (e.g., "1.44.1")
  *
  * If none are set, defaults to the released version specified by
  * DEFAULT_AGENT_SERVER_VERSION. Set OH_AGENT_SERVER_GIT_REF to use a
@@ -515,6 +525,10 @@ export function buildAgentServerCommand(env = process.env) {
     uvxArgs.push("agent-server");
     source = `PyPI (${DEFAULT_AGENT_SERVER_VERSION}, default)`;
   }
+
+  // Everything after the executable name is an agent-server CLI argument.
+  // Import the registration module before any conversation is created.
+  uvxArgs.push("--import-modules", AGENT_SERVER_IMPORT_MODULES);
 
   return {
     command: "uvx",

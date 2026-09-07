@@ -6,6 +6,7 @@ import {
   Plus,
   Server,
   Settings,
+  PanelsTopLeft,
 } from "lucide-react";
 import { OpenHandsLogoButton } from "#/components/shared/buttons/openhands-logo-button";
 import { NavigationLink } from "#/components/shared/navigation-link";
@@ -40,6 +41,8 @@ import {
   sidebarNavListClassName,
   sidebarNavRowClassName,
 } from "./sidebar-layout";
+import { useCanvasExtensionsRuntime } from "#/components/features/canvas-extensions/canvas-extensions-runtime";
+import type { Backend } from "#/api/backend-registry/types";
 
 const ICON_SIZE = 18;
 const SIDEBAR_LOGO_WIDTH = 34;
@@ -56,6 +59,7 @@ export interface SidebarRailBodyProps {
   showCollapsedExpandButton: boolean;
   isExtensionsActive: boolean;
   currentPath: string;
+  activeBackend: Backend;
   activeBackendHealth: { isConnected: boolean | null } | undefined;
   collapsedBackendPopoverOpen: boolean;
   setCollapsedBackendPopoverOpen: (open: boolean) => void;
@@ -78,6 +82,7 @@ export function SidebarRailBody({
   showCollapsedExpandButton,
   isExtensionsActive,
   currentPath,
+  activeBackend,
   activeBackendHealth,
   collapsedBackendPopoverOpen,
   setCollapsedBackendPopoverOpen,
@@ -87,6 +92,7 @@ export function SidebarRailBody({
   onOpenManageBackends,
 }: SidebarRailBodyProps) {
   const { t } = useTranslation("openhands");
+  const { pages: canvasExtensionPages } = useCanvasExtensionsRuntime();
   const backendCloseTimerRef = collapsedBackendCloseTimer;
   const { isPinnedRoute, togglePinnedRoute } = usePinnedHomeRoute();
 
@@ -101,6 +107,11 @@ export function SidebarRailBody({
       testId,
     };
   };
+
+  const isCloudBackend = activeBackend.kind === "cloud";
+  const cloudSettingsUrl = isCloudBackend
+    ? `${activeBackend.host.replace(/\/+$/, "")}/settings`
+    : null;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -241,6 +252,16 @@ export function SidebarRailBody({
             )}
           />
         )}
+        {canvasExtensionPages.map((page) => (
+          <SidebarNavLink
+            key={`${page.extension.name}:${page.contribution.id}`}
+            to={page.href}
+            label={page.contribution.nav_label || page.contribution.title}
+            testId={`sidebar-canvas-extension-${page.extension.name}-${page.contribution.id}`}
+            collapsed={collapsed}
+            icon={<PanelsTopLeft width={ICON_SIZE} height={ICON_SIZE} />}
+          />
+        ))}
       </nav>
 
       <SidebarConversationList collapsed={collapsed} />
@@ -256,21 +277,39 @@ export function SidebarRailBody({
             content={t(I18nKey.SIDEBAR$SETTINGS)}
             placement="right"
           >
-            <NavigationLink
-              to="/settings"
-              data-testid="collapsed-settings-link"
-              aria-label={t(I18nKey.SIDEBAR$SETTINGS)}
-              className={sidebarNavRowClassName({ collapsed: true })}
-            >
-              <SidebarCollapsedIconSlot
-                active={currentPath.startsWith("/settings")}
+            {isCloudBackend && cloudSettingsUrl ? (
+              <a
+                href={cloudSettingsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid="collapsed-settings-link"
+                aria-label={t(I18nKey.SIDEBAR$SETTINGS)}
+                className={sidebarNavRowClassName({ collapsed: true })}
               >
-                <Settings width={ICON_SIZE} height={ICON_SIZE} />
-              </SidebarCollapsedIconSlot>
-              <span className={sidebarNavLabelClassName(true)}>
-                {t(I18nKey.SIDEBAR$SETTINGS)}
-              </span>
-            </NavigationLink>
+                <SidebarCollapsedIconSlot active={false}>
+                  <Settings width={ICON_SIZE} height={ICON_SIZE} />
+                </SidebarCollapsedIconSlot>
+                <span className={sidebarNavLabelClassName(true)}>
+                  {t(I18nKey.SIDEBAR$SETTINGS)}
+                </span>
+              </a>
+            ) : (
+              <NavigationLink
+                to="/settings"
+                data-testid="collapsed-settings-link"
+                aria-label={t(I18nKey.SIDEBAR$SETTINGS)}
+                className={sidebarNavRowClassName({ collapsed: true })}
+              >
+                <SidebarCollapsedIconSlot
+                  active={currentPath.startsWith("/settings")}
+                >
+                  <Settings width={ICON_SIZE} height={ICON_SIZE} />
+                </SidebarCollapsedIconSlot>
+                <span className={sidebarNavLabelClassName(true)}>
+                  {t(I18nKey.SIDEBAR$SETTINGS)}
+                </span>
+              </NavigationLink>
+            )}
           </StyledTooltip>
           <div
             className="relative"

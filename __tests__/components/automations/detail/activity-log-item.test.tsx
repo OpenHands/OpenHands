@@ -180,6 +180,64 @@ describe("ActivityLogItem — Conversation not created label", () => {
   });
 });
 
+describe("ActivityLogItem — task outcome display", () => {
+  beforeEach(() => {
+    __resetActiveStoreForTests();
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+  });
+
+  afterEach(() => {
+    __resetActiveStoreForTests();
+  });
+
+  it("shows a blocked task badge and task summary for a completed run", () => {
+    const run = makeRun({
+      status: AutomationRunStatus.COMPLETED,
+      error_detail: "HUBSPOT_API_KEY was unavailable.",
+      run_metadata: {
+        finish_tool_response: {
+          status: "blocked",
+          outcome_summary:
+            "Attempted HubSpot CRM contact search but HUBSPOT_API_KEY was unavailable.",
+        },
+      },
+    });
+
+    renderItem(run);
+
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$BLOCKED),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Attempted HubSpot CRM contact search but HUBSPOT_API_KEY was unavailable.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(I18nKey.AUTOMATIONS$DETAIL$SUCCESSFUL),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("HUBSPOT_API_KEY was unavailable."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows failed lifecycle errors as neutral row summaries", () => {
+    const run = makeRun({
+      status: AutomationRunStatus.FAILED,
+      error_detail: "The run stopped before the task finished.",
+    });
+
+    renderItem(run);
+
+    const summary = screen.getByText(
+      "The run stopped before the task finished.",
+    );
+    expect(summary).toBeInTheDocument();
+    expect(summary.className).not.toContain("oh-status-error");
+  });
+});
+
 describe("ActivityLogItem — timestamp fallback", () => {
   beforeEach(() => {
     __resetActiveStoreForTests();

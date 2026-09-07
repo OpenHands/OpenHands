@@ -16,6 +16,7 @@ interface ConversationCardActionsProps {
   onUnarchive?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onStop?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onEdit?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onEditTags?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDownloadViaVSCode?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDownloadConversation?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   executionStatus?: ExecutionStatus | null;
@@ -31,6 +32,7 @@ export function ConversationCardActions({
   onUnarchive,
   onStop,
   onEdit,
+  onEditTags,
   onDownloadViaVSCode,
   onDownloadConversation,
   executionStatus,
@@ -118,6 +120,7 @@ export function ConversationCardActions({
               onUnarchive={onUnarchive}
               onStop={isActive ? onStop : undefined}
               onEdit={onEdit}
+              onEditTags={onEditTags}
               onDownloadViaVSCode={
                 conversationId && showOptions ? onDownloadViaVSCode : undefined
               }

@@ -21,6 +21,7 @@ import { getDemoConversationTitle } from "#/fixtures/home-automations-demo";
 import { useUserConversation } from "#/hooks/query/use-user-conversation";
 import { I18nKey } from "#/i18n/declaration";
 import { AutomationRunStatus, type Automation } from "#/types/automation";
+import { getAutomationRunDisplay } from "#/utils/automation-run-display";
 import { formatRelativeTime } from "#/utils/format-relative-time";
 import { cn } from "#/utils/utils";
 import { automationCardStatusStripClassName } from "#/components/features/automations/automation-view-mode";
@@ -33,8 +34,8 @@ import { buildPinnedAutomationMenuItems } from "./build-pinned-automation-menu-i
 import { HomeAutomationMenu } from "./home-automation-menu";
 import {
   getLastRunTimestamp,
-  shortenAutomationErrorDetail,
-  shouldShowAutomationErrorHovercard,
+  shortenAutomationRunSummary,
+  shouldShowAutomationRunSummaryHovercard,
 } from "./automation-run-health";
 
 interface PinnedAutomationCardProps {
@@ -93,17 +94,13 @@ export function PinnedAutomationCard({
     [automation, scheduleLabel],
   );
   const showPhase = shouldShowRunPhase(latestRun?.status);
-  const errorDetail =
-    latestRun?.status === AutomationRunStatus.FAILED
-      ? latestRun.error_detail?.trim() || null
-      : null;
-  const shortErrorDetail = errorDetail
-    ? shortenAutomationErrorDetail(errorDetail)
-    : null;
-  const showErrorHovercard =
-    errorDetail != null &&
-    shortErrorDetail != null &&
-    shouldShowAutomationErrorHovercard(errorDetail, shortErrorDetail);
+  const display = latestRun ? getAutomationRunDisplay(latestRun) : null;
+  const summary = display?.summary ?? null;
+  const shortSummary = summary ? shortenAutomationRunSummary(summary) : null;
+  const showSummaryHovercard =
+    summary != null &&
+    shortSummary != null &&
+    shouldShowAutomationRunSummaryHovercard(summary, shortSummary);
   const disableAnimation = import.meta.env.MODE === "test";
   const cardRef = useRef<HTMLElement>(null);
   const insights = getDashboardSpec()?.insights;
@@ -279,7 +276,7 @@ export function PinnedAutomationCard({
           {latestRun ? (
             <>
               <RunStatusBadge
-                status={latestRun.status}
+                status={display?.badgeStatus ?? latestRun.status}
                 iconOnly
                 showLabel={
                   latestRun.status === AutomationRunStatus.PENDING ||
@@ -298,12 +295,12 @@ export function PinnedAutomationCard({
                 />
               ) : null}
 
-              {shortErrorDetail ? (
-                showErrorHovercard && errorDetail ? (
+              {shortSummary ? (
+                showSummaryHovercard && summary ? (
                   <Tooltip
                     content={
                       <p className="max-w-xs whitespace-pre-wrap break-words p-2 text-xs">
-                        {errorDetail}
+                        {summary}
                       </p>
                     }
                     placement="top"
@@ -311,13 +308,13 @@ export function PinnedAutomationCard({
                     disableAnimation={disableAnimation}
                     className="rounded-xl border border-[var(--oh-border)] bg-base-secondary p-0 text-white shadow-xl"
                   >
-                    <span className="min-w-0 flex-1 cursor-default truncate text-[var(--oh-status-error)]">
-                      {shortErrorDetail}
+                    <span className="min-w-0 flex-1 cursor-default truncate text-[var(--oh-text-secondary)]">
+                      {shortSummary}
                     </span>
                   </Tooltip>
                 ) : (
-                  <p className="min-w-0 flex-1 truncate text-[var(--oh-status-error)]">
-                    {shortErrorDetail}
+                  <p className="min-w-0 flex-1 truncate text-[var(--oh-text-secondary)]">
+                    {shortSummary}
                   </p>
                 )
               ) : null}

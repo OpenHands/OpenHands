@@ -26,6 +26,13 @@ export interface Automation {
   name: string;
   trigger: AutomationTrigger;
   enabled: boolean;
+  /**
+   * UUID of the user who created this automation. The backend returns it in
+   * `AutomationResponse.user_id`; the frontend uses it to implement the
+   * "creator escape hatch" — a member (view-only) may still edit their own
+   * automations even without `manage_automations`.
+   */
+  user_id?: string;
   repository?: string;
   /** LLM/model profile name used for automation runs. */
   model?: string | null;
@@ -43,11 +50,18 @@ export interface Automation {
   notification?: string;
   timezone?: string;
   last_triggered_at?: string | null;
+  /**
+   * Service-owned preset state, returned verbatim. The GUI reads only the
+   * `template` provenance block inside it ({id, version, config}, written at
+   * setup time), and only through the guarded helper in
+   * `#/utils/automation-catalog`.
+   */
+  preset_metadata?: Record<string, unknown> | null;
 }
 
 export type AutomationSpec = Omit<
   Automation,
-  "id" | "created_at" | "updated_at" | "last_triggered_at"
+  "id" | "created_at" | "updated_at" | "last_triggered_at" | "preset_metadata"
 >;
 
 /** The envelope constants come from the interface manifest's import/export spec. */
@@ -72,6 +86,37 @@ export enum AutomationRunStatus {
   SKIPPED = "SKIPPED",
 }
 
+export type AutomationTaskOutcomeStatus =
+  | "success"
+  | "partial_success"
+  | "blocked"
+  | "failed"
+  | "unknown";
+
+export interface AutomationFinishToolResponse {
+  status?: AutomationTaskOutcomeStatus | string;
+  outcome_summary?: string;
+  [key: string]: unknown;
+}
+
+export interface AutomationRunMetadata {
+  finish_tool_response?: AutomationFinishToolResponse | string | null;
+  [key: string]: unknown;
+}
+
+export interface AutomationRunStatusDetail {
+  phase?: string;
+  kind?: string;
+  detail?: string;
+  formatted_detail?: string;
+  transient?: boolean;
+  source?: string;
+  operation?: string;
+  code?: string;
+  status_code?: number;
+  [key: string]: unknown;
+}
+
 export interface AutomationRun {
   id: string;
   status: AutomationRunStatus;
@@ -85,6 +130,8 @@ export interface AutomationRun {
    */
   bash_command_id: string | null;
   error_detail: string | null;
+  status_detail?: AutomationRunStatusDetail | null;
+  run_metadata?: AutomationRunMetadata | null;
   /**
    * Accumulated LLM cost of the run in USD, reported by the SDK in the
    * completion callback. `null` means unknown — the run predates cost
@@ -115,6 +162,13 @@ export interface AutomationRun {
 export interface AutomationRunsResponse {
   runs: AutomationRun[];
   total: number;
+  /**
+   * Lifetime run counts by status, unaffected by pagination. Sparse — a
+   * status with no runs has no key, so when the field is present a missing
+   * key means zero. Absent entirely when the automation service is older
+   * than the release that added it.
+   */
+  status_counts?: Partial<Record<AutomationRunStatus, number>>;
 }
 
 export type ActivityLogExportFormat = "json" | "csv";

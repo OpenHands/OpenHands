@@ -101,27 +101,29 @@ describe("ChatInputLlmProfilePicker", () => {
         profiles: [
           {
             name: "Free",
-            model: "openhands/glm-5.2",
+            model: "openhands/deepseek-v4-flash",
             base_url: null,
             api_key_set: true,
           },
         ],
         currentProfileName: "Free",
-        currentProfileModel: "openhands/glm-5.2",
+        currentProfileModel: "openhands/deepseek-v4-flash",
       }),
     );
 
     renderWithProviders(<ChatInputLlmProfilePicker />);
     fireEvent.click(screen.getByTestId("chat-input-llm-profile"));
 
-    expect(screen.getByText("OpenHands GLM-5.2 (free)")).toBeInTheDocument();
+    expect(
+      screen.getByText("OpenHands DeepSeek V4 Flash (free)"),
+    ).toBeInTheDocument();
   });
 
   it("labels a free OpenHands route in the read-only profile menu", () => {
     useChatInputLlmProfileStateMock.mockReturnValue(
       state({
         canSwitchProfile: false,
-        currentProfileModel: "openhands/glm-5.2",
+        currentProfileModel: "openhands/deepseek-v4-flash",
       }),
     );
 
@@ -130,7 +132,7 @@ describe("ChatInputLlmProfilePicker", () => {
 
     expect(
       screen.getByTestId("chat-input-llm-profile-current"),
-    ).toHaveTextContent("OpenHands GLM-5.2 (free)");
+    ).toHaveTextContent("OpenHands DeepSeek V4 Flash (free)");
   });
 
   it("links to the LLM profiles settings page", () => {
