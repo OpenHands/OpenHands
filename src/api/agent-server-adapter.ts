@@ -14,6 +14,7 @@ import { getAgentServerClientOptions } from "./agent-server-client-options";
 import {
   getCachedAgentServerInfo,
   isAgentServerToolAvailable,
+  type AgentServerInfo,
 } from "./agent-server-compatibility";
 import { getAgentServerWorkingDir } from "./agent-server-config";
 import { getEffectiveLocalBackend } from "./backend-registry/active-store";
@@ -202,7 +203,7 @@ export function parseRuntimeServicesInfo(
   return parsed;
 }
 
-async function fetchBackendServerInfo() {
+async function fetchBackendServerInfo(): Promise<AgentServerInfo | null> {
   let clientOptions: ReturnType<typeof getAgentServerClientOptions>;
   try {
     clientOptions = getAgentServerClientOptions({ timeout: 3000 });
@@ -214,7 +215,9 @@ async function fetchBackendServerInfo() {
   if (cached) return cached;
 
   try {
-    return await new ServerClient(clientOptions).getServerInfo();
+    return (await new ServerClient(
+      clientOptions,
+    ).getServerInfo()) as AgentServerInfo;
   } catch {
     return null;
   }
@@ -228,11 +231,10 @@ export async function fetchBackendRuntimeServicesInfo(): Promise<RuntimeServices
 }
 
 export async function fetchBackendExecutionRuntime(): Promise<
-  string | undefined
+  AgentServerInfo["execution_runtime"]
 > {
   const serverInfo = await fetchBackendServerInfo();
-  return (serverInfo as { execution_runtime?: string } | null)
-    ?.execution_runtime;
+  return serverInfo?.execution_runtime;
 }
 
 /**
@@ -1053,7 +1055,7 @@ function buildConfiguredConversationSettings(options: {
   conversationInstructions?: string;
   plugins?: PluginSpec[];
   workingDir?: string;
-  executionRuntime?: string;
+  executionRuntime?: AgentServerInfo["execution_runtime"];
 }): ConversationSettingsPayload {
   const {
     settings,
@@ -1164,7 +1166,7 @@ export interface StartConversationOptions {
   agentProfileKind?: AgentKind;
   titleLlmProfile?: string;
   runtimeServicesInfo?: RuntimeServicesInfo | null;
-  executionRuntime?: string;
+  executionRuntime?: AgentServerInfo["execution_runtime"];
   workspaceHookConfig?: HookConfig | null;
 }
 
@@ -1377,7 +1379,7 @@ export function buildStartPlanningConversationRequest(options: {
   /** Mirrors the code agent's skill filtering — see buildConfiguredOpenHandsAgentSettings. */
   skillEnablement?: SkillEnablement;
   /** Mirrors the main conversation's workspace selection — see buildConfiguredConversationSettings. */
-  executionRuntime?: string;
+  executionRuntime?: AgentServerInfo["execution_runtime"];
 }): RawAgentStartConversationPayload {
   const agentSettings = toRecord(options.encryptedAgentSettings);
   const llm = buildNormalizedLlmSettings(agentSettings.llm);
@@ -1562,7 +1564,7 @@ export async function buildStartPlanningConversationRequestWithEncryptedSettings
   parentAgentProfileId?: string | null;
   initialMessage?: string;
   /** The server's `execution_runtime` — threads through to workspace selection. */
-  executionRuntime?: string;
+  executionRuntime?: AgentServerInfo["execution_runtime"];
 }): Promise<RawAgentStartConversationPayload> {
   const { SecretsService } = await import("./secrets-service");
 
@@ -1654,8 +1656,7 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
   const runtimeServicesInfo = parseRuntimeServicesInfo(
     (serverInfo as { runtime_services?: unknown } | null)?.runtime_services,
   );
-  const executionRuntime = (serverInfo as { execution_runtime?: string } | null)
-    ?.execution_runtime;
+  const executionRuntime = serverInfo?.execution_runtime;
 
   // A profile launch resolves the LLM server-side, so the current-settings
   // subscription check doesn't apply (and can't see the profile's LLM).
