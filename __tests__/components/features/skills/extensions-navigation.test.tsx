@@ -90,6 +90,7 @@ describe("ExtensionsNavigation", () => {
       "MCP Servers",
       "Skills",
       "Plugins",
+      "Extensions",
     ]);
   });
 
@@ -126,7 +127,7 @@ describe("ExtensionsNavigation", () => {
       );
     });
 
-    it("hides the Plugins item", () => {
+    it("hides the Plugins and Extensions items", () => {
       setRegisteredBackends([cloudBackend]);
       setActiveSelection({ backendId: cloudBackend.id });
 
@@ -135,6 +136,9 @@ describe("ExtensionsNavigation", () => {
       const nav = screen.getByTestId("extensions-navbar-desktop");
       expect(
         within(nav).queryByTestId("sidebar-extensions-/plugins"),
+      ).not.toBeInTheDocument();
+      expect(
+        within(nav).queryByTestId("sidebar-extensions-/extensions"),
       ).not.toBeInTheDocument();
     });
 

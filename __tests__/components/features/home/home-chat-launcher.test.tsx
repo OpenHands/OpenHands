@@ -7,6 +7,10 @@ import toast from "react-hot-toast";
 import { HomeChatLauncher } from "#/components/features/home/home-chat-launcher";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import WorkspacesService from "#/api/workspaces-service/workspaces-service.api";
+import {
+  LAST_LOCAL_WORKSPACE_MODE_STORAGE_KEY,
+  writeStoredLocalWorkspaceMode,
+} from "#/utils/workspace-mode";
 
 const mockNavigate = vi.fn();
 const mockUseActiveBackend = vi.fn();
@@ -194,6 +198,13 @@ vi.mock("#/components/features/home/home-git-control-bar-preview", () => ({
       >
         New Worktree
       </button>
+      <button
+        type="button"
+        data-testid="stub-workspace-mode-local-repo"
+        onClick={() => onWorkspaceModeChange("local_repo")}
+      >
+        Local Repo
+      </button>
     </div>
   ),
 }));
@@ -201,18 +212,21 @@ vi.mock("#/components/features/home/home-git-control-bar-preview", () => ({
 // Stub the picker modal: pressing it selects one plugin then closes, mirroring
 // the real modal's `onChange` + `onClose` contract. The picker catalog itself
 // is covered by plugin-picker.test.tsx.
-vi.mock("#/components/features/automations/recommended-automations-launcher", () => ({
-  RecommendedAutomationsLauncher: ({
-    variant,
-    className,
-  }: {
-    variant?: string;
-    className?: string;
-  }) =>
-    variant === "rail" ? (
-      <div data-testid="recommended-automations-rail" className={className} />
-    ) : null,
-}));
+vi.mock(
+  "#/components/features/automations/recommended-automations-launcher",
+  () => ({
+    RecommendedAutomationsLauncher: ({
+      variant,
+      className,
+    }: {
+      variant?: string;
+      className?: string;
+    }) =>
+      variant === "rail" ? (
+        <div data-testid="recommended-automations-rail" className={className} />
+      ) : null,
+  }),
+);
 
 vi.mock("#/components/features/plugins/plugin-picker-modal", () => ({
   PluginPickerModal: ({
@@ -311,6 +325,7 @@ describe("HomeChatLauncher", () => {
       fileUrls: [],
       timestamp: "2020-01-01T00:00:00.000Z",
     });
+    window.localStorage.removeItem(LAST_LOCAL_WORKSPACE_MODE_STORAGE_KEY);
     vi.spyOn(WorkspacesService, "listWorkspaces").mockResolvedValue({
       workspaces: [],
       workspaceParents: [],
@@ -319,6 +334,7 @@ describe("HomeChatLauncher", () => {
 
   afterEach(() => {
     toast.remove();
+    window.localStorage.removeItem(LAST_LOCAL_WORKSPACE_MODE_STORAGE_KEY);
   });
 
   it("creates a conversation with just the typed query and navigates when no workspace is selected", async () => {
@@ -418,6 +434,38 @@ describe("HomeChatLauncher", () => {
     });
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith("/conversations/conv-wt"),
+    );
+  });
+
+  it("restores and updates the last selected local workspace mode", async () => {
+    writeStoredLocalWorkspaceMode("new_worktree");
+    const { unmount } = renderLauncher();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId("open-workspace-button"));
+    await user.click(
+      await screen.findByTestId("stub-workspace-dialog-confirm"),
+    );
+
+    expect(screen.getByTestId("stub-workspace-mode")).toHaveTextContent(
+      "local:new_worktree",
+    );
+
+    await user.click(screen.getByTestId("stub-workspace-mode-local-repo"));
+    expect(screen.getByTestId("stub-workspace-mode")).toHaveTextContent(
+      "local:local_repo",
+    );
+
+    unmount();
+    renderLauncher();
+
+    await user.click(screen.getByTestId("open-workspace-button"));
+    await user.click(
+      await screen.findByTestId("stub-workspace-dialog-confirm"),
+    );
+
+    expect(screen.getByTestId("stub-workspace-mode")).toHaveTextContent(
+      "local:local_repo",
     );
   });
 

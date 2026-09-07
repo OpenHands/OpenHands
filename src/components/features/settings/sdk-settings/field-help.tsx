@@ -16,7 +16,7 @@ export const FIELD_HELP_LINKS: Record<
     href: string;
     /** Skip rendering the schema description separately when the help text already includes it. */
     hideDescription?: boolean;
-    /** Optional trailing copy rendered after the link (e.g. " tab of OpenHands Cloud."). */
+    /** Optional trailing copy rendered after the link (e.g. " section of OpenHands Cloud."). */
     suffixKey?: string;
   }
 > = {
@@ -30,7 +30,7 @@ export const FIELD_HELP_LINKS: Record<
   // LLM key when the critic key is empty.
   "verification.critic_api_key": {
     textKey: "SCHEMA$VERIFICATION$CRITIC_API_KEY$HELP_TEXT",
-    linkTextKey: "SETTINGS$NAV_API_KEYS",
+    linkTextKey: "SETTINGS$OPENHANDS_API_KEY_HELP_LINK",
     suffixKey: "SCHEMA$VERIFICATION$CRITIC_API_KEY$HELP_SUFFIX",
     href: "https://app.all-hands.dev/settings/api-keys",
     hideDescription: true,

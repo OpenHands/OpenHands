@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { ExternalLink } from "lucide-react";
+import { Blocks, ExternalLink } from "lucide-react";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { cn } from "#/utils/utils";
 import SkillsIcon from "#/icons/skills.svg?react";
@@ -15,8 +15,8 @@ import { isNoBackend } from "#/api/backend-registry/active-store";
 
 /** Only the Skills item points to a cloud-hosted page today. */
 const CLOUD_LINKED_EXTENSION_PATH = "/skills";
-/** Plugins are not available on Cloud backends, so this item is hidden there. */
-const CLOUD_HIDDEN_EXTENSION_PATH = "/plugins";
+/** Backend-installed artifacts are not available on Cloud backends yet. */
+const CLOUD_HIDDEN_EXTENSION_PATHS = new Set(["/plugins", "/extensions"]);
 
 interface ExtensionNavItem {
   to: string;
@@ -62,6 +62,12 @@ export const EXTENSIONS_NAV_ITEMS: ExtensionNavItem[] = [
     ),
     end: true,
   },
+  {
+    to: "/extensions",
+    label: "Extensions",
+    icon: <Blocks width={16} height={16} aria-hidden="true" />,
+    end: true,
+  },
 ];
 
 export function ExtensionsNavigation() {
@@ -81,7 +87,7 @@ export function ExtensionsNavigation() {
       <div className="flex flex-col gap-0.5 pt-0.5">
         {EXTENSIONS_NAV_ITEMS.filter(
           (item) =>
-            !(item.to === CLOUD_HIDDEN_EXTENSION_PATH && isCloudBackend),
+            !(CLOUD_HIDDEN_EXTENSION_PATHS.has(item.to) && isCloudBackend),
         ).map((item) => {
           const isCloudSkillsLink =
             item.to === CLOUD_LINKED_EXTENSION_PATH && isCloudBackend;

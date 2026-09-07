@@ -17,10 +17,7 @@ describe("formatNativeModelName", () => {
 
   it("labels only configured OpenHands free-model routes as free", () => {
     expect(Object.keys(FREE_OPENHANDS_MODELS)).toEqual([
-      "openhands/kimi-k3",
-      "openhands/glm-5.2",
       "openhands/deepseek-v4-flash",
-      "openhands/minimax-m2.7",
     ]);
 
     for (const [model, label] of Object.entries(FREE_OPENHANDS_MODELS)) {
@@ -39,9 +36,7 @@ describe("formatNativeModelName", () => {
   });
 
   it("keeps free OpenHands labels on native conversation chips", () => {
-    expect(formatNativeModelName("openhands/glm-5.2")).toBe(
-      FREE_OPENHANDS_MODELS["openhands/glm-5.2"],
-    );
+    expect(formatNativeModelName("openhands/glm-5.2")).toBe("glm-5.2");
     expect(formatNativeModelName("openhands/deepseek-v4-flash")).toBe(
       FREE_OPENHANDS_MODELS["openhands/deepseek-v4-flash"],
     );

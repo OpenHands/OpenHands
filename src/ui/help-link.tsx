@@ -24,6 +24,11 @@ interface HelpLinkProps extends VariantProps<typeof helpLinkVariants> {
   linkText: string;
   href: string;
   suffix?: string;
+  /** Optional second link rendered after the suffix. */
+  suffixLinkText?: string;
+  suffixLinkHref?: string;
+  /** Trailing text rendered after the second link (e.g. a period). */
+  trailing?: string;
   className?: string;
   linkTextClassName?: string;
   suffixClassName?: string;
@@ -35,6 +40,9 @@ export function HelpLink({
   linkText,
   href,
   suffix,
+  suffixLinkText,
+  suffixLinkHref,
+  trailing,
   size,
   linkColor,
   className,
@@ -60,6 +68,24 @@ export function HelpLink({
         {linkText}
       </a>
       {suffix && <span className={suffixClassName}>{suffix}</span>}
+      {suffixLinkText && suffixLinkHref ? (
+        <>
+          {" "}
+          <a
+            href={suffixLinkHref}
+            rel="noreferrer noopener"
+            target="_blank"
+            className={cn(
+              "underline underline-offset-2",
+              helpLinkVariants({ size, linkColor }),
+              linkTextClassName,
+            )}
+          >
+            {suffixLinkText}
+          </a>
+          {trailing}
+        </>
+      ) : null}
     </p>
   );
 }
