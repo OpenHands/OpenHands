@@ -50,9 +50,17 @@ function toAgentSettingsOverride(
       acp_model: profile.acp_model ?? "",
     };
   }
+  // `enable_switch_llm_tool` rides untyped — the pinned ts-client predates it
+  // on the profile model (same pattern as `disabled_skills` in the merge
+  // fixtures). Fall back to the SDK default (true) when a stored profile
+  // predates the field.
+  const switchLlmToolEnabled =
+    (profile as { enable_switch_llm_tool?: boolean }).enable_switch_llm_tool ??
+    true;
   return {
     agent_kind: "openhands",
     enable_sub_agents: profile.enable_sub_agents,
+    enable_switch_llm_tool: switchLlmToolEnabled,
     tool_concurrency_limit: profile.tool_concurrency_limit,
   };
 }
@@ -272,6 +280,18 @@ export function AgentProfilesLocalView() {
       ? t(I18nKey.SETTINGS$PROFILE_LOADED, { name: editingProfile.name })
       : t(I18nKey.SETTINGS$PROFILE_SAVE_HINT);
   const isOpenHands = saveControl?.agentType !== "acp";
+  const nameDirty = viewMode === "edit" && profileName !== editingProfile?.name;
+  const loadedLlmRef =
+    editingProfile?.agent_kind === "openhands"
+      ? editingProfile.llm_profile_ref
+      : "";
+  const llmRefDirty =
+    viewMode === "edit" && isOpenHands && llmProfileRef !== loadedLlmRef;
+  const hasUnsavedChanges =
+    viewMode === "create" ||
+    Boolean(saveControl?.isDirty) ||
+    nameDirty ||
+    llmRefDirty;
 
   return (
     <div className="flex flex-col gap-6">
@@ -345,7 +365,12 @@ export function AgentProfilesLocalView() {
           type="button"
           variant="primary"
           onClick={handleSave}
-          isDisabled={!isNameValid || isSaving || !saveControl?.isValid}
+          isDisabled={
+            !isNameValid ||
+            isSaving ||
+            !saveControl?.isValid ||
+            !hasUnsavedChanges
+          }
           aria-busy={isSaving}
         >
           {isSaving ? t(I18nKey.SETTINGS$SAVING) : t(I18nKey.BUTTON$SAVE)}

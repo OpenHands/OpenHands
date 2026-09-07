@@ -4,16 +4,19 @@ HUMAN:
 
 <!-- Human contributors: add a short note about your testing. -->
 
+---
+
 AGENT:
 
 <!-- AI/LLM agents:
 Do not edit the HUMAN section.
+Write a concise summary of what changed and link any reviewer artifacts, such
+as files under `.pr/`. For HTML artifacts, include a rendered preview link:
+https://htmlpreview.github.io/?https://github.com/<owner>/<repo>/blob/<branch>/.pr/<file>.html
 In this AGENT section and the template fields below, provide evidence that the
 code runs properly end-to-end. Just running unit tests is NOT sufficient. Explain
 exactly what command you ran and include logs, screenshots, or reproduction notes.
 -->
-
----
 
 ## Why
 

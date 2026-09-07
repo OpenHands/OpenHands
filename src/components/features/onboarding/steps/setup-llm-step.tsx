@@ -16,16 +16,12 @@ interface SetupLlmStepProps {
 }
 
 /**
- * Pre-fills the LLM form with the OpenHands provider's free default model
- * (`openhands/kimi-k3`), matching `DEFAULT_SETTINGS.llm_model`. The OpenHands
- * provider is the agent the user just selected, so the onboarding override
- * keeps the LLM provider aligned with that choice rather than silently
- * switching to OpenAI. Canvas stores provider-qualified LiteLLM model ids,
- * so the override uses this OpenHands-prefixed model id, and keeping it as an
- * explicit override marks the model dirty so the Next button persists the
- * suggested default immediately.
+ * Pre-fills the LLM form with the OpenAI GPT-5.6 Sol default
+ * (`openai/gpt-5.6-sol`), matching `DEFAULT_SETTINGS.llm_model`. The explicit
+ * override marks the model dirty so the Next button persists the suggested
+ * default immediately.
  */
-export const ONBOARDING_DEFAULT_LLM_MODEL = "openhands/kimi-k3";
+export const ONBOARDING_DEFAULT_LLM_MODEL = "openai/gpt-5.6-sol";
 
 /**
  * Step 2: embed the LLM settings form. The screen runs in `embedded`

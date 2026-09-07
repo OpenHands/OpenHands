@@ -1,6 +1,7 @@
 import { useQueries } from "@tanstack/react-query";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
+import { automationRunRequestsLimiter } from "#/hooks/query/concurrency-limiter";
 import {
   AutomationRunStatus,
   type Automation,
@@ -53,11 +54,15 @@ export function useLatestAutomationRuns(
         active.backend.id,
         active.orgId,
       ],
-      queryFn: () =>
-        AutomationService.getAutomationRuns(
-          automation.id,
-          AUTOMATION_RUN_ACTIVITY_LIMIT,
-          0,
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        automationRunRequestsLimiter.run(
+          () =>
+            AutomationService.getAutomationRuns(
+              automation.id,
+              AUTOMATION_RUN_ACTIVITY_LIMIT,
+              0,
+            ),
+          signal,
         ),
       staleTime: 60 * 1000,
       // No retries: the home section settles into its degraded "unknown"

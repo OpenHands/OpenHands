@@ -103,6 +103,10 @@ export function useDispatchAutomation() {
       queryClient.invalidateQueries({
         queryKey: [...AUTOMATION_RUNS_QUERY_KEY, id],
       });
+      // Runs carry a conversation_id surfaced in the sidebar, and the
+      // conversation poll is paused on automation routes, so refresh the list
+      // explicitly (same prefix all conversation mutations invalidate).
+      queryClient.invalidateQueries({ queryKey: ["user", "conversations"] });
       trackAutomationExecuted({ backendKind: active.backend.kind });
     },
   });
@@ -119,6 +123,9 @@ export function useCancelAutomationRun() {
       queryClient.invalidateQueries({
         queryKey: [...AUTOMATION_RUNS_QUERY_KEY, automationId],
       });
+      // Same staleness hole as dispatch: the cancelled run's conversation
+      // shows in the sidebar while the poll is paused on automation routes.
+      queryClient.invalidateQueries({ queryKey: ["user", "conversations"] });
     },
   });
 }

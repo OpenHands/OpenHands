@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
-import { useSaveSettings } from "#/hooks/mutation/use-save-settings";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useConversationSkills } from "#/hooks/query/use-conversation-skills";
+import { useSkillEnablement } from "#/hooks/use-skill-enablement";
 import { SkillCard } from "#/components/features/skills/skill-card";
 import { SkillDetailModal } from "#/components/features/skills/skill-detail-modal";
 import { AddSkillModal } from "#/components/features/skills/add-skill-modal";
@@ -24,8 +24,6 @@ import {
   extensionModuleCardGridContainerClassName,
   extensionModuleEmptyStateClassName,
 } from "#/utils/extension-module-card-classes";
-import { displayErrorToast } from "#/utils/custom-toast-handlers";
-import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
 import type { SkillInfo } from "#/types/settings";
 import { cn } from "#/utils/utils";
 import {
@@ -45,17 +43,14 @@ export function ConversationOverviewSkillsPanel({
   openAdd,
 }: ConversationOverviewSkillsPanelProps) {
   const { t } = useTranslation("openhands");
-  const { mutate: saveSettings } = useSaveSettings();
-  const { data: settings, isLoading: settingsLoading } = useSettings();
+  const { isLoading: settingsLoading } = useSettings();
   const { data: conversation } = useActiveConversation();
   const { data: skills, isLoading: skillsLoading } = useConversationSkills();
+  const { isEnabled, setEnabled } = useSkillEnablement();
   const addRequestKey =
     useConversationOverviewDrawerOptional()?.addRequestKey ?? 0;
   const projectDir = conversation?.selected_workspace ?? null;
 
-  const [disabledSet, setDisabledSet] = useState<Set<string>>(new Set());
-  const [hasHydratedInitialSettings, setHasHydratedInitialSettings] =
-    useState(false);
   const [projectScope, setProjectScope] =
     useState<ConversationOverviewProjectScope>(
       CONVERSATION_OVERVIEW_PROJECT_SCOPE.project,
@@ -66,14 +61,6 @@ export function ConversationOverviewSkillsPanel({
   const [isFiltersModalOpen, setIsFiltersModalOpen] = useState(false);
   const [selectedSkill, setSelectedSkill] = useState<SkillInfo | null>(null);
   const [showAddSkillModal, setShowAddSkillModal] = useState(false);
-
-  useEffect(() => {
-    if (settingsLoading || !settings) {
-      return;
-    }
-    setDisabledSet(new Set(settings.disabled_skills ?? []));
-    setHasHydratedInitialSettings(true);
-  }, [settingsLoading, settings?.disabled_skills]);
 
   useEffect(() => {
     if (!openAdd) {
@@ -88,22 +75,6 @@ export function ConversationOverviewSkillsPanel({
     }
     setShowAddSkillModal(true);
   }, [addRequestKey]);
-
-  useEffect(() => {
-    if (!hasHydratedInitialSettings) {
-      return;
-    }
-    saveSettings(
-      { disabled_skills: Array.from(disabledSet) },
-      {
-        onError: (error) => {
-          displayErrorToast(
-            retrieveAxiosErrorMessage(error) || t(I18nKey.ERROR$GENERIC),
-          );
-        },
-      },
-    );
-  }, [disabledSet, hasHydratedInitialSettings, saveSettings, t]);
 
   const scopedSkills = useMemo(() => {
     if (!skills) {
@@ -120,21 +91,9 @@ export function ConversationOverviewSkillsPanel({
   }, [skills, projectScope, projectDir]);
 
   const filteredSkills = useMemo(
-    () => applySkillFilters(scopedSkills, disabledSet, filter),
-    [scopedSkills, disabledSet, filter],
+    () => applySkillFilters(scopedSkills, isEnabled, filter),
+    [scopedSkills, isEnabled, filter],
   );
-
-  const handleToggle = (skillName: string, enabled: boolean) => {
-    setDisabledSet((previous) => {
-      const next = new Set(previous);
-      if (enabled) {
-        next.delete(skillName);
-      } else {
-        next.add(skillName);
-      }
-      return next;
-    });
-  };
 
   if (skillsLoading || settingsLoading) {
     return (
@@ -217,9 +176,9 @@ export function ConversationOverviewSkillsPanel({
               <SkillCard
                 key={skill.name}
                 skill={skill}
-                enabled={!disabledSet.has(skill.name)}
+                enabled={isEnabled(skill)}
                 onOpen={() => setSelectedSkill(skill)}
-                onToggle={(enabled) => handleToggle(skill.name, enabled)}
+                onToggle={(enabled) => setEnabled(skill.name, enabled)}
               />
             ))}
           </div>
@@ -229,8 +188,8 @@ export function ConversationOverviewSkillsPanel({
       {selectedSkill ? (
         <SkillDetailModal
           skill={selectedSkill}
-          enabled={!disabledSet.has(selectedSkill.name)}
-          onToggle={(enabled) => handleToggle(selectedSkill.name, enabled)}
+          enabled={isEnabled(selectedSkill)}
+          onToggle={(enabled) => setEnabled(selectedSkill.name, enabled)}
           onClose={() => setSelectedSkill(null)}
         />
       ) : null}
@@ -241,7 +200,7 @@ export function ConversationOverviewSkillsPanel({
 
       {isFiltersModalOpen ? (
         <SkillFiltersModal
-          groups={buildSkillFacetGroups(scopedSkills, disabledSet, filter)}
+          groups={buildSkillFacetGroups(scopedSkills, isEnabled, filter)}
           activeCount={countActiveFilters(filter)}
           onToggle={(groupId, value) =>
             setFilter((previous) =>

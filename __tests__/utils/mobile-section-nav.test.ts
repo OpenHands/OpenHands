@@ -29,6 +29,17 @@ describe("getMobileTopBarState", () => {
     });
   });
 
+  it("backs from the canvas extensions management page but not extension pages", () => {
+    expect(getMobileTopBarState("/extensions")).toEqual({
+      mode: "back",
+      backTo: "/customize",
+      backLabelKey: I18nKey.NAV$CUSTOMIZE,
+    });
+    expect(getMobileTopBarState("/extensions/demo-page/hello")).toEqual({
+      mode: "menu",
+    });
+  });
+
   it("shows menu on main app routes", () => {
     expect(getMobileTopBarState("/conversations")).toEqual({ mode: "menu" });
   });
