@@ -1,12 +1,7 @@
 import { KANBAN_DONE_STATUS } from "#/api/kanban-service/kanban-constants";
 import type { KanbanCard } from "#/api/kanban-service/kanban-types";
 
-export function formatUsd(amount: number | null | undefined): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(Number(amount ?? 0));
-}
+export { formatUsd } from "#/stores/cost-currency-store";
 
 export function cardDisplayCost(card: KanbanCard): {
   amount: number;
@@ -19,4 +14,10 @@ export function cardDisplayCost(card: KanbanCard): {
     return { amount: Number(card.actual_cost ?? 0), kind: "actual" };
   }
   return { amount: Number(card.estimate_cost ?? 0), kind: "estimate" };
+}
+
+export function cardCostAt(card: KanbanCard): string {
+  return cardDisplayCost(card).kind === "actual"
+    ? card.updated_at
+    : card.created_at;
 }

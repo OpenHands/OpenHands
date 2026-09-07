@@ -8,15 +8,27 @@ import type {
 import { I18nKey } from "#/i18n/declaration";
 import { formControlFieldClassName } from "#/utils/form-control-classes";
 import { cn } from "#/utils/utils";
-import { formatUsd } from "./kanban-cost";
+import {
+  useConvertUsd,
+  useFormatCostAmount,
+} from "#/stores/cost-currency-store";
+import { cardCostAt, cardDisplayCost } from "./kanban-cost";
 import { KanbanCard as KanbanCardView } from "./kanban-card";
 
 export interface KanbanColumnProps {
   column: KanbanColumn;
   aggregateCost: number;
   onSelectCard?: (card: KanbanCard) => void;
-  onAddCard?: (columnId: string, title: string) => void;
-  onDropCard?: (cardId: string, columnId: string, position: number) => void;
+  onAddCard?: (columnId: string, title: string, laneId: string | null) => void;
+  onDropCard?: (
+    cardId: string,
+    columnId: string,
+    position: number,
+    laneId: string | null,
+  ) => void;
+  hideHeader?: boolean;
+  laneId?: string | null;
+  allowDrop?: boolean;
 }
 
 export function KanbanColumn({
@@ -25,11 +37,22 @@ export function KanbanColumn({
   onSelectCard,
   onAddCard,
   onDropCard,
+  hideHeader = false,
+  laneId = null,
+  allowDrop = true,
 }: KanbanColumnProps) {
   const { t } = useTranslation("openhands");
+  const convertUsd = useConvertUsd();
+  const formatAmount = useFormatCostAmount();
   const [draft, setDraft] = React.useState("");
   const [composing, setComposing] = React.useState(false);
   const cards = column.cards ?? [];
+  const convertedTotal = cards.length
+    ? cards.reduce((sum, card) => {
+        const { amount } = cardDisplayCost(card);
+        return sum + convertUsd(amount, cardCostAt(card));
+      }, 0)
+    : convertUsd(aggregateCost);
 
   const handleDrop = (
     event: React.DragEvent<HTMLElement>,
@@ -37,51 +60,61 @@ export function KanbanColumn({
   ) => {
     event.preventDefault();
     const cardId = event.dataTransfer.getData("text/plain");
-    if (cardId) onDropCard?.(cardId, column.id, position);
+    if (cardId && allowDrop) onDropCard?.(cardId, column.id, position, laneId);
   };
 
   const finishCompose = () => {
     const title = draft.trim();
-    if (title) onAddCard?.(column.id, title);
+    if (title) onAddCard?.(column.id, title, laneId);
     setDraft("");
     setComposing(false);
   };
 
+  const columnTestId = laneId
+    ? `kanban-column-${column.id}-${laneId}`
+    : `kanban-column-${column.id}`;
+
   return (
     <section
-      data-testid={`kanban-column-${column.id}`}
+      data-testid={columnTestId}
       className="flex h-full min-h-0 min-w-[17rem] flex-1 flex-col"
-      onDragOver={(event) => event.preventDefault()}
+      onDragOver={(event) => {
+        if (allowDrop) event.preventDefault();
+      }}
       onDrop={(event) => handleDrop(event, cards.length)}
     >
-      <header className="flex items-center justify-between gap-2 px-1 pb-2 pt-0.5">
-        <div className="flex min-w-0 items-center gap-2">
-          {column.color ? (
-            <span
-              className="h-2 w-2 shrink-0 rounded-full"
-              style={{ backgroundColor: column.color }}
-              aria-hidden
-            />
-          ) : null}
-          <h2 className="truncate text-[13px] font-medium leading-5 text-[var(--oh-foreground)]">
-            {column.name}
-          </h2>
-          <span className="rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[11px] tabular-nums leading-4 text-[var(--oh-muted)]">
-            {cards.length}
+      {hideHeader ? null : (
+        <header className="flex items-center justify-between gap-2 px-1 pb-2 pt-0.5">
+          <div className="flex min-w-0 items-center gap-2">
+            {column.color ? (
+              <span
+                className="h-2 w-2 shrink-0 rounded-full"
+                style={{ backgroundColor: column.color }}
+                aria-hidden
+              />
+            ) : null}
+            <h2 className="truncate text-[13px] font-medium leading-5 text-[var(--oh-foreground)]">
+              {column.name}
+            </h2>
+            <span className="rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[11px] tabular-nums leading-4 text-[var(--oh-muted)]">
+              {cards.length}
+            </span>
+          </div>
+          <span
+            data-testid={`kanban-column-cost-${column.id}`}
+            className="shrink-0 text-[11px] tabular-nums text-[var(--oh-muted)]"
+          >
+            {formatAmount(convertedTotal)}
           </span>
-        </div>
-        <span
-          data-testid={`kanban-column-cost-${column.id}`}
-          className="shrink-0 text-[11px] tabular-nums text-[var(--oh-muted)]"
-        >
-          {formatUsd(aggregateCost)}
-        </span>
-      </header>
+        </header>
+      )}
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-0.5 pb-1">
         {cards.map((card, index) => (
           <div
             key={card.id}
-            onDragOver={(event) => event.preventDefault()}
+            onDragOver={(event) => {
+              if (allowDrop) event.preventDefault();
+            }}
             onDrop={(event) => {
               event.stopPropagation();
               handleDrop(event, index);

@@ -163,7 +163,7 @@ describe("KanbanBoardView", () => {
     fireEvent.drop(review, {
       dataTransfer: { getData: () => "card-1" },
     });
-    expect(onMoveCard).toHaveBeenCalledWith("card-1", "col-2", 0);
+    expect(onMoveCard).toHaveBeenCalledWith("card-1", "col-2", 0, null);
   });
 
   it("keeps the new-card composer collapsed until New is clicked", () => {

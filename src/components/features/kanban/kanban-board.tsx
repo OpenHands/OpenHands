@@ -8,21 +8,42 @@ import type {
 } from "#/api/kanban-service/kanban-types";
 import { I18nKey } from "#/i18n/declaration";
 import { formControlFieldClassName } from "#/utils/form-control-classes";
+import {
+  alignBoardColumns,
+  columnsForLane,
+  laneCards,
+  normalizeColumnName,
+  type SwimlaneNode,
+} from "#/utils/kanban-swimlanes";
 import { cn } from "#/utils/utils";
 import { KanbanColumn } from "./kanban-column";
+import { KanbanSwimlaneHeader } from "./kanban-swimlane-header";
 
 export interface KanbanBoardViewProps {
   board: KanbanBoard;
+  boards?: KanbanBoard[];
   costs?: KanbanBoardCosts | null;
+  lanes?: SwimlaneNode[];
+  collapsedLaneIds?: string[];
+  onToggleLane?: (laneId: string) => void;
   onSelectCard?: (card: KanbanCard) => void;
-  onAddCard?: (columnId: string, title: string) => void;
-  onMoveCard?: (cardId: string, columnId: string, position: number) => void;
+  onAddCard?: (columnId: string, title: string, laneId: string | null) => void;
+  onMoveCard?: (
+    cardId: string,
+    columnId: string,
+    position: number,
+    laneId: string | null,
+  ) => void;
   onAddColumn?: (name: string) => void;
 }
 
 export function KanbanBoardView({
   board,
+  boards,
   costs,
+  lanes = [],
+  collapsedLaneIds = [],
+  onToggleLane,
   onSelectCard,
   onAddCard,
   onMoveCard,
@@ -36,6 +57,91 @@ export function KanbanBoardView({
       column.actual_cost || column.estimate_cost,
     ]),
   );
+  const allBoards = boards && boards.length > 0 ? boards : [board];
+  const aligned = alignBoardColumns(allBoards);
+  const boardById = new Map(allBoards.map((item) => [item.id, item]));
+
+  const renderColumns = (
+    sourceBoard: KanbanBoard,
+    cards: KanbanCard[],
+    laneId: string | null,
+    hideHeader: boolean,
+  ) =>
+    columnsForLane(sourceBoard, aligned, cards).map((column) => {
+      const realColumn = sourceBoard.columns.some(
+        (item) => item.id === column.id,
+      );
+      return (
+        <KanbanColumn
+          key={`${laneId ?? "board"}-${column.id}`}
+          column={column}
+          aggregateCost={costByColumn.get(column.id) ?? 0}
+          hideHeader={hideHeader}
+          laneId={laneId}
+          allowDrop={realColumn}
+          onSelectCard={onSelectCard}
+          onAddCard={realColumn ? onAddCard : undefined}
+          onDropCard={realColumn ? onMoveCard : undefined}
+        />
+      );
+    });
+
+  const renderLane = (lane: SwimlaneNode) => {
+    const collapsed = collapsedLaneIds.includes(lane.id);
+    const sourceBoard = boardById.get(lane.boardId) ?? board;
+    const hasChildren = lane.children.length > 0;
+    return (
+      <div key={lane.id}>
+        <KanbanSwimlaneHeader
+          lane={lane}
+          collapsed={collapsed}
+          onToggle={(id) => onToggleLane?.(id)}
+        />
+        {collapsed ? null : hasChildren ? (
+          lane.children.map(renderLane)
+        ) : (
+          <div className="flex min-h-[8rem] gap-4">
+            {renderColumns(sourceBoard, laneCards(lane), lane.id, true)}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  if (lanes.length > 0) {
+    return (
+      <div
+        data-testid="kanban-board"
+        className="flex h-full min-h-0 flex-1 flex-col overflow-auto"
+      >
+        <div className="sticky top-0 z-10 flex min-w-max gap-4 bg-[var(--oh-background)] pb-2">
+          {aligned.map((column) => {
+            const sample = allBoards
+              .flatMap((boardItem) => boardItem.columns)
+              .find((item) => normalizeColumnName(item.name) === column.key);
+            return (
+              <div
+                key={column.key}
+                className="flex min-w-[17rem] flex-1 items-center gap-2 px-1 pt-0.5"
+              >
+                {sample?.color ? (
+                  <span
+                    className="h-2 w-2 shrink-0 rounded-full"
+                    style={{ backgroundColor: sample.color }}
+                    aria-hidden
+                  />
+                ) : null}
+                <h2 className="truncate text-[13px] font-medium leading-5 text-[var(--oh-foreground)]">
+                  {column.name}
+                </h2>
+              </div>
+            );
+          })}
+        </div>
+        <div className="min-w-max flex-1">{lanes.map(renderLane)}</div>
+      </div>
+    );
+  }
 
   return (
     <div

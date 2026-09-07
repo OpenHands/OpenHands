@@ -6,7 +6,8 @@ import { I18nKey } from "#/i18n/declaration";
 import { formatRelativeTime } from "#/utils/format-relative-time";
 import { formControlTransitionClassName } from "#/utils/form-control-classes";
 import { cn } from "#/utils/utils";
-import { cardDisplayCost, formatUsd } from "./kanban-cost";
+import { CostText } from "#/components/shared/cost-text";
+import { cardCostAt, cardDisplayCost } from "./kanban-cost";
 import { pullRequestChipLabel } from "./kanban-pr-label";
 
 const PRIORITY_CLASS: Record<string, string> = {
@@ -110,7 +111,7 @@ export function KanbanCard({ card, onSelect }: KanbanCardProps) {
             data-testid={`kanban-card-cost-${card.id}`}
             className="text-[var(--oh-foreground)]"
           >
-            {formatUsd(cost.amount)}
+            <CostText amount={cost.amount} at={cardCostAt(card)} />
           </span>
         </span>
       </div>

@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import type { KanbanBoardCosts } from "#/api/kanban-service/kanban-types";
 import { I18nKey } from "#/i18n/declaration";
-import { formatUsd } from "./kanban-cost";
+import { CostText } from "#/components/shared/cost-text";
 
 export interface CostSummaryProps {
   costs: KanbanBoardCosts;
@@ -10,6 +10,9 @@ export interface CostSummaryProps {
 export function CostSummary({ costs }: CostSummaryProps) {
   const { t } = useTranslation("openhands");
   const total = costs.total_actual_cost || costs.total_estimate_cost;
+
+  // Board totals arrive pre-summed in USD without per-card dates, so convert
+  // at today's rate. Column headers re-sum converted cards when cards exist.
 
   return (
     <div
@@ -21,7 +24,7 @@ export function CostSummary({ costs }: CostSummaryProps) {
         data-testid="kanban-board-total-cost"
         className="tabular-nums text-[var(--oh-foreground)]"
       >
-        {formatUsd(total)}
+        <CostText amount={total} />
       </span>
     </div>
   );

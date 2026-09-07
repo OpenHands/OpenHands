@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import KanbanService from "#/api/kanban-service/kanban-service.api";
 import type {
   CreateBoardPayload,
@@ -21,6 +21,16 @@ export function useKanbanBoard(boardId: string | null) {
     queryKey: KANBAN_QUERY_KEYS.board(boardId ?? ""),
     queryFn: () => KanbanService.getBoard(boardId!),
     enabled: Boolean(boardId),
+  });
+}
+
+export function useKanbanBoardsDetail(boardIds: string[]) {
+  return useQueries({
+    queries: boardIds.map((boardId) => ({
+      queryKey: KANBAN_QUERY_KEYS.board(boardId),
+      queryFn: () => KanbanService.getBoard(boardId),
+      enabled: Boolean(boardId),
+    })),
   });
 }
 
