@@ -1,4 +1,6 @@
 export const CHANNELS_PATH = "/channels";
+export const CHANNELS_MESSAGES_PAGE_PATH = `${CHANNELS_PATH}/messages`;
+export const CHANNELS_MEETILY_PATH = `${CHANNELS_PATH}/meetily`;
 export const CHANNELS_API_PATH = "/api/channels";
 export const CHANNELS_MESSAGES_PATH = `${CHANNELS_API_PATH}/messages`;
 export const SESSION_API_KEY_HEADER = "X-Session-API-Key";

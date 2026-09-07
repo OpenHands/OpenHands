@@ -1,5 +1,6 @@
 import { useLocalStorage } from "@uidotdev/usehooks";
 import { useCallback, useMemo } from "react";
+import { CHANNELS_PATH } from "#/api/channel-service/channel-constants";
 import {
   getActiveBackend,
   isNoBackend,
@@ -38,6 +39,7 @@ export function getPinnedHomeRouteKey(
  */
 export function isPinnableRoute(path: string): boolean {
   if (path === CUSTOMIZE_PATH) return true;
+  if (path === CHANNELS_PATH) return true;
   if (path === automationListPath()) return hasAutomationInterface();
   return false;
 }

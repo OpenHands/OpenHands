@@ -1,17 +1,8 @@
-import React from "react";
-import {
-  RoutingPage,
-  RoutingPageHeader,
-} from "#/components/features/routing/routing-page";
-import { kanbanPageScrollShellClassName } from "#/utils/kanban-page-layout-classes";
+import { redirect } from "react-router";
+import { ROUTING_PATH } from "#/api/routing-service/routing-constants";
 
-export default function RoutingRoute() {
-  return (
-    <main data-testid="routing-page" className={kanbanPageScrollShellClassName}>
-      <header className="mb-4">
-        <RoutingPageHeader />
-      </header>
-      <RoutingPage />
-    </main>
-  );
+export const clientLoader = () => redirect(ROUTING_PATH);
+
+export default function RoutingLegacyRedirect() {
+  return null;
 }

@@ -118,6 +118,13 @@ describe("RoutesTable", () => {
     expect(
       screen.getByTestId("routing-chip-work-route-locked"),
     ).toHaveTextContent("coding");
+    expect(screen.getByTestId("routing-flow")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("routing-flow-arrow-route-locked"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("routing-destination-route-locked"),
+    ).toHaveTextContent("anthropic/claude-sonnet-4-5");
   });
 });
 

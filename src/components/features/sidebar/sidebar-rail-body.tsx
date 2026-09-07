@@ -7,14 +7,9 @@ import {
   Server,
   Settings,
   PanelsTopLeft,
-  Zap,
-  Waypoints,
-  Network,
   Radio,
 } from "lucide-react";
 import { OpenHandsLogoButton } from "#/components/shared/buttons/openhands-logo-button";
-import { ROUTING_PATH } from "#/api/routing-service/routing-constants";
-import { GRAPH_PATH } from "#/api/graph-service/graph-constants";
 import { CHANNELS_PATH } from "#/api/channel-service/channel-constants";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import {
@@ -244,47 +239,6 @@ export function SidebarRailBody({
             </svg>
           }
         />
-        <SidebarNavLink
-          to={ROUTING_PATH}
-          label={t(I18nKey.ROUTING$NAV)}
-          testId="sidebar-routing-link"
-          collapsed={collapsed}
-          pinAction={buildPinAction(
-            ROUTING_PATH,
-            "sidebar-pin-home-toggle-routing",
-          )}
-          icon={<Waypoints width={ICON_SIZE} height={ICON_SIZE} />}
-        />
-        <SidebarNavLink
-          to={GRAPH_PATH}
-          label={t(I18nKey.GRAPH$NAV)}
-          testId="sidebar-graph-link"
-          collapsed={collapsed}
-          pinAction={buildPinAction(
-            GRAPH_PATH,
-            "sidebar-pin-home-toggle-graph",
-          )}
-          icon={<Network width={ICON_SIZE} height={ICON_SIZE} />}
-        />
-        <SidebarNavLink
-          to={CHANNELS_PATH}
-          label={t(I18nKey.CHANNELS$NAV)}
-          testId="sidebar-channels-link"
-          collapsed={collapsed}
-          pinAction={buildPinAction(
-            CHANNELS_PATH,
-            "sidebar-pin-home-toggle-channels",
-          )}
-          icon={<Radio width={ICON_SIZE} height={ICON_SIZE} />}
-        />
-        <SidebarNavLink
-          to="/loops"
-          label={t(I18nKey.LOOPS$NAV)}
-          testId="sidebar-loops-link"
-          collapsed={collapsed}
-          pinAction={buildPinAction("/loops", "sidebar-pin-home-toggle-loops")}
-          icon={<Zap width={ICON_SIZE} height={ICON_SIZE} />}
-        />
         {/* The interface manifest owns this entry's label, so an absent
             manifest leaves the rail without it rather than with host copy. */}
         {hasAutomationInterface() && (
@@ -300,6 +254,18 @@ export function SidebarRailBody({
             )}
           />
         )}
+        <SidebarNavLink
+          to={CHANNELS_PATH}
+          label={t(I18nKey.CHANNELS$NAV)}
+          testId="sidebar-channels-link"
+          collapsed={collapsed}
+          forceActive={currentPath.startsWith(CHANNELS_PATH)}
+          pinAction={buildPinAction(
+            CHANNELS_PATH,
+            "sidebar-pin-home-toggle-channels",
+          )}
+          icon={<Radio width={ICON_SIZE} height={ICON_SIZE} />}
+        />
         {canvasExtensionPages.map((page) => (
           <SidebarNavLink
             key={`${page.extension.name}:${page.contribution.id}`}

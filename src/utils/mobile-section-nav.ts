@@ -2,6 +2,7 @@ import { I18nKey } from "#/i18n/declaration";
 
 const SETTINGS_PREFIX = "/settings";
 const CUSTOMIZE_HUB = "/customize";
+const CHANNELS_HUB = "/channels";
 const EXTENSIONS_DETAIL_PATHS = ["/skills", "/mcp", "/plugins"] as const;
 // Exact match only: /extensions/:name/* routes are extension pages, which are
 // rail-level destinations rather than Customize details.
@@ -33,6 +34,21 @@ export function getMobileTopBarState(pathname: string): MobileTopBarState {
 
   if (pathname === CUSTOMIZE_HUB) {
     return { mode: "menu" };
+  }
+
+  if (pathname === CHANNELS_HUB) {
+    return { mode: "menu" };
+  }
+
+  if (
+    pathname.startsWith(`${CHANNELS_HUB}/`) &&
+    pathname.length > CHANNELS_HUB.length
+  ) {
+    return {
+      mode: "back",
+      backTo: CHANNELS_HUB,
+      backLabelKey: I18nKey.CHANNELS$NAV,
+    };
   }
 
   if (

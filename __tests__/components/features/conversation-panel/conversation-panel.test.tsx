@@ -2531,7 +2531,7 @@ describe("ConversationPanel", () => {
     });
   });
 
-  it("labels the session list Spaces when grouped on a local backend", async () => {
+  it("labels the session list Workspaces when grouped on a local backend", async () => {
     useConversationPanelPreferencesStore.setState({ organizeMode: "grouped" });
     vi.spyOn(
       AgentServerConversationService,
@@ -2550,7 +2550,7 @@ describe("ConversationPanel", () => {
     renderConversationPanel();
 
     const summary = await screen.findByTestId("older-conversations-summary");
-    expect(summary).toHaveTextContent("PROJECTS$TITLE");
+    expect(summary).toHaveTextContent("HOME$WORKSPACES_TAB");
     expect(
       await screen.findByTestId("thread-folder-ws--workspace-alpha"),
     ).toBeInTheDocument();

@@ -6,6 +6,7 @@ describe("getMobileTopBarState", () => {
   it("shows menu on settings and customize hubs", () => {
     expect(getMobileTopBarState("/settings")).toEqual({ mode: "menu" });
     expect(getMobileTopBarState("/customize")).toEqual({ mode: "menu" });
+    expect(getMobileTopBarState("/channels")).toEqual({ mode: "menu" });
   });
 
   it("backs from settings detail pages to the settings hub", () => {
@@ -37,6 +38,19 @@ describe("getMobileTopBarState", () => {
     });
     expect(getMobileTopBarState("/extensions/demo-page/hello")).toEqual({
       mode: "menu",
+    });
+  });
+
+  it("backs from channels sub-pages to the channels hub", () => {
+    expect(getMobileTopBarState("/channels/messages")).toEqual({
+      mode: "back",
+      backTo: "/channels",
+      backLabelKey: I18nKey.CHANNELS$NAV,
+    });
+    expect(getMobileTopBarState("/channels/meetily")).toEqual({
+      mode: "back",
+      backTo: "/channels",
+      backLabelKey: I18nKey.CHANNELS$NAV,
     });
   });
 

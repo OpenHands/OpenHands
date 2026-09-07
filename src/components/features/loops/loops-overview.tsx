@@ -1,32 +1,31 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { loopRunPath } from "#/api/loop-service/loop-constants";
 import type {
   CreateLoopTriggerPayload,
-  LoopDefinition,
   LoopTrigger,
   LoopTriggerType,
 } from "#/api/loop-service/loop-types";
+import { LoopDefinitionCard } from "#/components/features/loops/loop-definition-card";
 import { TriggerEventsFeed } from "#/components/features/loops/trigger-events-feed";
 import { TriggerForm } from "#/components/features/loops/trigger-form";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { ApiKeyModalBase } from "#/components/features/settings/api-key-modal-base";
-import { formatUsd } from "#/components/features/kanban/kanban-cost";
-import { useNavigation } from "#/context/navigation-context";
 import {
   useCreateLoopTrigger,
   useFireLoopTrigger,
   useLoopDefinitions,
   useLoopEvents,
-  useLoopRuns,
   useLoopTriggers,
   useUpdateLoopTrigger,
 } from "#/hooks/query/use-loops";
 import { I18nKey } from "#/i18n/declaration";
 import { ToggleSwitch } from "#/ui/toggle-switch";
 import { Typography } from "#/ui/typography";
-import { extensionModuleCardPillClassName } from "#/utils/extension-module-card-classes";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import {
+  extensionModuleCardGridClassName,
+  extensionModuleCardGridContainerClassName,
+} from "#/utils/extension-module-card-classes";
 import { cn } from "#/utils/utils";
 
 function triggerTypeKey(triggerType: LoopTriggerType): I18nKey {
@@ -34,61 +33,6 @@ function triggerTypeKey(triggerType: LoopTriggerType): I18nKey {
   if (triggerType === "on_commit") return I18nKey.LOOPS$TYPE_ON_COMMIT;
   if (triggerType === "on_pr") return I18nKey.LOOPS$TYPE_ON_PR;
   return I18nKey.LOOPS$TYPE_MANUAL;
-}
-
-function runStatusKey(status: string): I18nKey {
-  if (status === "passed") return I18nKey.FEATURE_DEV$STATUS_PASSED;
-  if (status === "failed") return I18nKey.FEATURE_DEV$STATUS_FAILED;
-  if (status === "aborted") return I18nKey.FEATURE_DEV$STATUS_ABORTED;
-  if (status === "awaiting_input") return I18nKey.FEATURE_DEV$STATUS_PAUSED;
-  if (status === "pending") return I18nKey.FEATURE_DEV$STATUS_PENDING;
-  return I18nKey.FEATURE_DEV$STATUS_RUNNING;
-}
-
-function DefinitionCard({ definition }: { definition: LoopDefinition }) {
-  const { t } = useTranslation("openhands");
-  const { navigate } = useNavigation();
-  const runsQuery = useLoopRuns(definition.id);
-  const last = runsQuery.data?.[runsQuery.data.length - 1];
-
-  return (
-    <article
-      data-testid={`loop-definition-${definition.id}`}
-      className="rounded-xl bg-base-secondary p-3"
-    >
-      <div className="flex items-center justify-between gap-2">
-        <h3 className="text-sm font-medium text-white">{definition.name}</h3>
-        {last ? (
-          <button
-            type="button"
-            data-testid={`loop-definition-last-run-${definition.id}`}
-            className={cn(extensionModuleCardPillClassName, "text-white")}
-            onClick={() => navigate(loopRunPath(last.id))}
-          >
-            {t(runStatusKey(last.status))}
-          </button>
-        ) : (
-          <span className="text-xs text-tertiary-light">
-            {t(I18nKey.LOOPS$LAST_RUN)}
-          </span>
-        )}
-      </div>
-      <pre
-        data-testid={`loop-definition-config-${definition.id}`}
-        className="mt-2 overflow-x-auto text-xs text-tertiary-light"
-      >
-        {JSON.stringify(definition.config ?? {}, null, 2)}
-      </pre>
-      {last ? (
-        <p className="mt-2 text-xs text-tertiary-light">
-          {t(I18nKey.LOOPS$COST)}
-          <span className="ml-1 tabular-nums text-white">
-            {formatUsd(last.total_cost_usd)}
-          </span>
-        </p>
-      ) : null}
-    </article>
-  );
 }
 
 function TriggerRow({ trigger }: { trigger: LoopTrigger }) {
@@ -148,20 +92,36 @@ export function LoopsOverview() {
   const definitions = definitionsQuery.data ?? [];
   const triggers = triggersQuery.data ?? [];
   const events = eventsQuery.data ?? [];
+  const runTriggerByDefinition = React.useMemo(() => {
+    const map = new Map<string, string>();
+    for (const trigger of triggers) {
+      if (!trigger.enabled || map.has(trigger.loop_definition_id)) continue;
+      map.set(trigger.loop_definition_id, trigger.id);
+    }
+    return map;
+  }, [triggers]);
 
   return (
     <div data-testid="loops-overview" className="flex flex-col gap-8">
       <section>
         <Typography.H3>{t(I18nKey.LOOPS$DEFINITIONS)}</Typography.H3>
-        <div className="mt-3 flex flex-col gap-2">
+        <div className={cn("mt-3", extensionModuleCardGridContainerClassName)}>
           {definitions.length === 0 ? (
             <p className="text-sm text-tertiary-light">
               {t(I18nKey.LOOPS$EMPTY_DEFINITIONS)}
             </p>
           ) : (
-            definitions.map((definition) => (
-              <DefinitionCard key={definition.id} definition={definition} />
-            ))
+            <div className={extensionModuleCardGridClassName}>
+              {definitions.map((definition) => (
+                <LoopDefinitionCard
+                  key={definition.id}
+                  definition={definition}
+                  runTriggerId={
+                    runTriggerByDefinition.get(definition.id) ?? null
+                  }
+                />
+              ))}
+            </div>
           )}
         </div>
       </section>

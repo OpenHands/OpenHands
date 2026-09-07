@@ -1,4 +1,4 @@
-export const ROUTING_PATH = "/routing";
+export const ROUTING_PATH = "/settings/routing";
 export const ROUTING_API_PATH = "/api/routing";
 export const SESSION_API_KEY_HEADER = "X-Session-API-Key";
 

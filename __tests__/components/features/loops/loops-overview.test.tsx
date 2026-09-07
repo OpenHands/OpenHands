@@ -8,6 +8,11 @@ import type {
   LoopRun,
   LoopTrigger,
 } from "#/api/loop-service/loop-types";
+import {
+  LOOPS_PATH,
+  loopRunIdFromPath,
+  loopRunPath,
+} from "#/api/loop-service/loop-constants";
 import { LoopsOverview } from "#/components/features/loops/loops-overview";
 import { I18nKey } from "#/i18n/declaration";
 
@@ -108,5 +113,14 @@ describe("LoopsOverview", () => {
     await waitFor(() => {
       expect(fireTrigger).toHaveBeenCalledWith("trigger-1");
     });
+  });
+});
+
+describe("loop paths", () => {
+  it("lives under Automate, not a top-level rail page", () => {
+    expect(LOOPS_PATH).toBe("/automations/loops");
+    expect(loopRunPath("run-1")).toBe("/automations/loops/runs/run-1");
+    expect(loopRunIdFromPath("/automations/loops/runs/run-1")).toBe("run-1");
+    expect(loopRunIdFromPath("/loops/runs/run-1")).toBeNull();
   });
 });

@@ -1,4 +1,4 @@
-export const GRAPH_PATH = "/graph";
+export const GRAPH_PATH = "/settings/agent-context";
 export const GRAPH_API_PATH = "/api/graph";
 export const SESSION_API_KEY_HEADER = "X-Session-API-Key";
 

@@ -31,7 +31,6 @@ import {
   useRoutingTaxonomy,
 } from "#/hooks/query/use-routing";
 import { I18nKey } from "#/i18n/declaration";
-import { Typography } from "#/ui/typography";
 
 export function RoutingPage() {
   const { t } = useTranslation("openhands");
@@ -152,9 +151,4 @@ export function RoutingPage() {
       />
     </div>
   );
-}
-
-export function RoutingPageHeader() {
-  const { t } = useTranslation("openhands");
-  return <Typography.H2>{t(I18nKey.ROUTING$TITLE)}</Typography.H2>;
 }

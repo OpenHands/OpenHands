@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BrandButton } from "#/components/features/settings/brand-button";
+import { NavigationLink } from "#/components/shared/navigation-link";
 import { RenameProfileModal } from "./rename-profile-modal";
 import { DeleteProfileModal } from "./delete-profile-modal";
 import { ProfilesBody } from "./profiles-body";
@@ -10,6 +11,7 @@ import ProfilesService, {
   ProfileInfo,
   type SaveProfileRequest,
 } from "#/api/profiles-service/profiles-service.api";
+import { ROUTING_PATH } from "#/api/routing-service/routing-constants";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useProviderConnections } from "#/hooks/query/use-provider-connections";
 import { useSubscriptionModelCatalog } from "#/hooks/query/use-subscription-model-catalog";
@@ -145,6 +147,13 @@ export function LlmProfilesManager({
               <p className="text-sm text-[var(--oh-muted)]">
                 {t(I18nKey.SETTINGS$LLM_PROFILES_SUBLINE)}
               </p>
+              <NavigationLink
+                to={ROUTING_PATH}
+                data-testid="llm-task-routing-link"
+                className="w-fit text-sm text-[var(--oh-muted)] underline-offset-2 hover:text-white hover:underline"
+              >
+                {t(I18nKey.SETTINGS$LLM_TASK_ROUTING)}
+              </NavigationLink>
             </div>
             {onAddProfile && canManage ? (
               <BrandButton

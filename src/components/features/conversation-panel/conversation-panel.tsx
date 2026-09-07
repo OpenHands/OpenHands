@@ -1084,7 +1084,7 @@ export function ConversationPanel({
           >
             <span className="min-w-0 truncate text-sm font-medium text-[var(--oh-muted)]">
               {organizeMode === "grouped" && activeBackend.kind === "local"
-                ? t(I18nKey.PROJECTS$TITLE)
+                ? t(I18nKey.HOME$WORKSPACES_TAB)
                 : t(I18nKey.SIDEBAR$CONVERSATIONS)}
             </span>
             <div className="ml-auto flex shrink-0 items-center gap-0.5">

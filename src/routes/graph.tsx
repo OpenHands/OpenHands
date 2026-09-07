@@ -1,17 +1,8 @@
-import React from "react";
-import {
-  GraphPage,
-  GraphPageHeader,
-} from "#/components/features/graph/graph-page";
-import { kanbanPageScrollShellClassName } from "#/utils/kanban-page-layout-classes";
+import { redirect } from "react-router";
+import { GRAPH_PATH } from "#/api/graph-service/graph-constants";
 
-export default function GraphRoute() {
-  return (
-    <main data-testid="graph-page" className={kanbanPageScrollShellClassName}>
-      <header className="mb-4">
-        <GraphPageHeader />
-      </header>
-      <GraphPage />
-    </main>
-  );
+export const clientLoader = () => redirect(GRAPH_PATH);
+
+export default function GraphLegacyRedirect() {
+  return null;
 }

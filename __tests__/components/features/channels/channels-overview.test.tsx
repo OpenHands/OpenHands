@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithProviders } from "test-utils";
@@ -8,6 +8,7 @@ import type {
   ChannelRecord,
 } from "#/api/channel-service/channel-types";
 import { ChannelsOverview } from "#/components/features/channels/channels-overview";
+import { ChannelsSubpageLayout } from "#/components/features/channels/channels-subpage-layout";
 import { I18nKey } from "#/i18n/declaration";
 
 const SLACK: ChannelRecord = {
@@ -59,6 +60,29 @@ describe("ChannelsOverview", () => {
 describe("channel i18n keys", () => {
   it("exposes the overview copy keys", () => {
     expect(I18nKey.CHANNELS$NAV).toBe("CHANNELS$NAV");
+    expect(I18nKey.CHANNELS$CONNECTIONS).toBe("CHANNELS$CONNECTIONS");
     expect(I18nKey.CHANNELS$START).toBe("CHANNELS$START");
+  });
+});
+
+describe("ChannelsSubpageLayout", () => {
+  it("mirrors Customize/Automate with an inner aside for channels, messages, and Meetily", () => {
+    renderWithProviders(
+      <ChannelsSubpageLayout>
+        <div />
+      </ChannelsSubpageLayout>,
+    );
+
+    const nav = screen.getByTestId("channels-navbar-desktop");
+    expect(nav).toBeInTheDocument();
+    expect(
+      within(nav).getByTestId("channels-navigation-channels"),
+    ).toHaveAttribute("href", "/channels");
+    expect(
+      within(nav).getByTestId("channels-navigation-messages"),
+    ).toHaveAttribute("href", "/channels/messages");
+    expect(
+      within(nav).getByTestId("channels-navigation-meetily"),
+    ).toHaveAttribute("href", "/channels/meetily");
   });
 });

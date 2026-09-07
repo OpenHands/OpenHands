@@ -1,4 +1,4 @@
-import { AppWindow, Brain, Shield } from "lucide-react";
+import { AppWindow, Brain, Shield, Waypoints } from "lucide-react";
 import KeyIcon from "#/icons/key.svg?react";
 import MemoryIcon from "#/icons/memory_icon.svg?react";
 import CircuitIcon from "#/icons/u-circuit.svg?react";
@@ -28,6 +28,12 @@ export const OSS_NAV_ITEMS: SettingsNavItem[] = [
     to: "/settings/llm",
     text: "SETTINGS$NAV_LLM",
     subtitle: "SETTINGS$PAGE_LLM_SUBLINE",
+  },
+  {
+    icon: <Waypoints className="size-4" strokeWidth={2} aria-hidden />,
+    to: "/settings/routing",
+    text: "SETTINGS$NAV_ROUTING",
+    subtitle: "SETTINGS$PAGE_ROUTING_SUBLINE",
   },
   {
     icon: <MemoryIcon width={16} height={16} />,

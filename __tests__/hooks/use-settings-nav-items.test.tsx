@@ -130,8 +130,10 @@ describe("useSettingsNavItems", () => {
       .map((item) => (item.type === "item" ? item.item.to : null));
 
     expect(paths).not.toContain("/settings/llm");
+    expect(paths).not.toContain("/settings/routing");
     expect(paths).toContain("/settings/app");
     expect(paths).toContain("/settings/secrets");
+    expect(paths).not.toContain("/settings/channels");
   });
 
   it("never lists removed settings sub-pages", () => {
@@ -146,6 +148,7 @@ describe("useSettingsNavItems", () => {
     expect(paths).not.toContain("/settings/integrations");
     expect(paths).not.toContain("/settings/skills");
     expect(paths).not.toContain("/settings/mcp");
+    expect(paths).not.toContain("/settings/channels");
   });
 
   it("keeps every settings library enabled while an ACP profile is active", () => {
@@ -170,6 +173,7 @@ describe("useSettingsNavItems", () => {
 
     for (const path of [
       "/settings/llm",
+      "/settings/routing",
       "/settings/condenser",
       "/settings/verification",
     ]) {

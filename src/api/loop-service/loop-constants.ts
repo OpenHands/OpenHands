@@ -1,4 +1,4 @@
-export const LOOPS_PATH = "/loops";
+export const LOOPS_PATH = "/automations/loops";
 export const LOOPS_API_PATH = "/api/loops";
 export const LOOPS_TRIGGERS_API_PATH = "/api/loops/triggers";
 export const SESSION_API_KEY_HEADER = "X-Session-API-Key";

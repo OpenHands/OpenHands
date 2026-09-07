@@ -22,6 +22,7 @@ vi.mock("react-i18next", () => ({
           "No subscription models yet. Connect a provider below, or add a custom profile.",
         SETTINGS$LLM_PROFILES_SUBLINE:
           "Models from your signed-in subscriptions. Turn one off to hide it from chat.",
+        SETTINGS$LLM_TASK_ROUTING: "Configure task routing",
         SETTINGS$CUSTOM_LLM_PROFILES: "Custom profiles",
         SETTINGS$LLM_AUTH_TYPE_SUBSCRIPTION: "ChatGPT subscription",
         SETTINGS$LLM_AUTH_TYPE_CLAUDE_SUBSCRIPTION: "Claude subscription",
@@ -137,6 +138,10 @@ describe("LlmProfilesManager", () => {
     renderManager();
 
     expect(screen.getByText("Available LLM Profiles")).toBeInTheDocument();
+    expect(screen.getByTestId("llm-task-routing-link")).toHaveAttribute(
+      "href",
+      "/settings/routing",
+    );
   });
 
   it("shows Add LLM Profile button when onAddProfile is provided", async () => {

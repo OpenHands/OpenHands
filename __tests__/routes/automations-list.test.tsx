@@ -9,6 +9,12 @@ import { HttpError } from "@openhands/typescript-client";
 import { I18nKey } from "#/i18n/declaration";
 
 import AutomationService from "#/api/automation-service/automation-service.api";
+import LoopService from "#/api/loop-service/loop-service.api";
+import type {
+  LoopDefinition,
+  LoopTrigger,
+} from "#/api/loop-service/loop-types";
+import { NavigationProvider } from "#/context/navigation-context";
 import {
   __resetActiveStoreForTests,
   setActiveSelection,
@@ -38,6 +44,16 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
 vi.mock("#/utils/custom-toast-handlers", () => ({
   displaySuccessToast: vi.fn(),
   displayErrorToast: vi.fn(),
+}));
+
+vi.mock("#/api/loop-service/loop-service.api", () => ({
+  default: {
+    listDefinitions: vi.fn(),
+    listTriggers: vi.fn(),
+    listRuns: vi.fn(),
+    listEvents: vi.fn(),
+    fireTrigger: vi.fn(),
+  },
 }));
 
 // Mock permission hooks so cloud-backend tests don't need a real /me endpoint.
@@ -83,11 +99,42 @@ const listResponse: AutomationsResponse = {
   total: 1,
 };
 
+const loopDefinition: LoopDefinition = {
+  id: "def-commit",
+  name: "commit-loop",
+  project_id: "proj-1",
+  stages: [{ name: "lint", cmd: null, iterative: true }],
+  max_iterations: 10,
+  max_cost_usd: 5,
+  on_failure: "auto_fix",
+  config: {},
+  created_at: "2026-01-01T00:00:00Z",
+  updated_at: "2026-01-01T00:00:00Z",
+};
+
+const loopTrigger: LoopTrigger = {
+  id: "trigger-1",
+  project_id: "proj-1",
+  loop_definition_id: "def-commit",
+  trigger_type: "manual",
+  schedule_type: null,
+  cron_expr: null,
+  interval_seconds: null,
+  payload: {},
+  enabled: true,
+  last_fired_at: null,
+  created_at: "2026-01-01T00:00:00Z",
+  updated_at: "2026-01-01T00:00:00Z",
+};
+
 function renderList(queryClient?: QueryClient) {
   const client =
     queryClient ??
     new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
     });
   return render(
     <QueryClientProvider client={client}>
@@ -109,6 +156,15 @@ beforeEach(() => {
   vi.mocked(AutomationService.getAutomations).mockResolvedValue(listResponse);
   vi.mocked(AutomationService.updateAutomation).mockReset();
   vi.mocked(AutomationService.dispatchAutomation).mockReset();
+  vi.mocked(LoopService.listDefinitions).mockReset();
+  vi.mocked(LoopService.listDefinitions).mockResolvedValue([]);
+  vi.mocked(LoopService.listTriggers).mockReset();
+  vi.mocked(LoopService.listTriggers).mockResolvedValue([]);
+  vi.mocked(LoopService.listRuns).mockReset();
+  vi.mocked(LoopService.listRuns).mockResolvedValue([]);
+  vi.mocked(LoopService.listEvents).mockReset();
+  vi.mocked(LoopService.listEvents).mockResolvedValue([]);
+  vi.mocked(LoopService.fireTrigger).mockReset();
   setRegisteredBackends([localBackend, cloudBackend]);
   setActiveSelection({ backendId: localBackend.id });
 });
@@ -310,9 +366,7 @@ describe("AutomationsList — Run now toasts", () => {
     });
     const user = userEvent.setup();
     renderList();
-    await screen.findByTestId(
-      `automation-list-row-${disabledAutomation.id}`,
-    );
+    await screen.findByTestId(`automation-list-row-${disabledAutomation.id}`);
     const button = screen.getByTestId(
       `automation-run-now-${disabledAutomation.id}`,
     );
@@ -382,9 +436,9 @@ describe("AutomationsList — add automation menu", () => {
     ).not.toBeInTheDocument();
 
     await user.click(addTrigger);
-    expect(screen.getByTestId("automations-add-automation-menu")).not.toHaveClass(
-      "mt-2",
-    );
+    expect(
+      screen.getByTestId("automations-add-automation-menu"),
+    ).not.toHaveClass("mt-2");
     expect(
       screen.getByTestId("automations-import-automation"),
     ).toBeInTheDocument();
@@ -433,7 +487,10 @@ describe("AutomationsList — list freshness on remount", () => {
         total: 2,
       });
     const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
     });
 
     // Act — first mount lands on the original list, then unmount and remount
@@ -446,5 +503,103 @@ describe("AutomationsList — list freshness on remount", () => {
     // Assert — the remount refetched and surfaced the newly created
     // automation, which is the user-observable behavior the bug blocked.
     await screen.findByText(newAutomation.name);
+  });
+});
+
+describe("AutomationsList — loops extend the dashboard", () => {
+  it("shows local loop definitions on the dashboard and omits a sibling Loops tab", async () => {
+    vi.mocked(LoopService.listDefinitions).mockResolvedValue([loopDefinition]);
+    renderList();
+
+    expect(
+      await screen.findByTestId("loop-definition-def-commit"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("loops-dashboard-section")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automations-navigation-loops"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("hides loops on a cloud backend", async () => {
+    setActiveSelection({ backendId: cloudBackend.id });
+    vi.mocked(LoopService.listDefinitions).mockResolvedValue([loopDefinition]);
+    renderList();
+    await screen.findByText(automation.name);
+
+    expect(
+      screen.queryByTestId("loops-dashboard-section"),
+    ).not.toBeInTheDocument();
+    expect(LoopService.listDefinitions).not.toHaveBeenCalled();
+  });
+
+  it("opens the loops management page from a dashboard card", async () => {
+    const navigate = vi.fn();
+    vi.mocked(LoopService.listDefinitions).mockResolvedValue([loopDefinition]);
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <NavigationProvider
+          value={{
+            currentPath: "/automations",
+            conversationId: null,
+            isNavigating: false,
+            navigate,
+          }}
+        >
+          <ActiveBackendProvider>
+            <MemoryRouter initialEntries={["/automations"]}>
+              <AutomationsList />
+            </MemoryRouter>
+          </ActiveBackendProvider>
+        </NavigationProvider>
+      </QueryClientProvider>,
+    );
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByTestId("loop-definition-def-commit"));
+    expect(navigate).toHaveBeenCalledWith("/automations/loops");
+  });
+
+  it("runs an enabled trigger from the dashboard card", async () => {
+    vi.mocked(LoopService.listDefinitions).mockResolvedValue([loopDefinition]);
+    vi.mocked(LoopService.listTriggers).mockResolvedValue([loopTrigger]);
+    vi.mocked(LoopService.fireTrigger).mockResolvedValue({
+      event: {
+        id: "event-1",
+        trigger_id: "trigger-1",
+        loop_run_id: "run-1",
+        fired_at: "2026-01-01T00:00:00Z",
+        status: "fired",
+        reason: "manual",
+      },
+      run: {
+        id: "run-1",
+        definition_id: "def-commit",
+        project_id: "proj-1",
+        session_id: null,
+        worktree_dir: null,
+        status: "passed",
+        current_stage: null,
+        iteration: 1,
+        total_cost_usd: 0.01,
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+        stages: [],
+      },
+    });
+    const user = userEvent.setup();
+    renderList();
+
+    await user.click(
+      await screen.findByTestId("loop-definition-run-now-def-commit"),
+    );
+    await waitFor(() => {
+      expect(LoopService.fireTrigger).toHaveBeenCalledWith("trigger-1");
+    });
   });
 });
