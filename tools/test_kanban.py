@@ -110,6 +110,24 @@ class KanbanStoreTests(unittest.TestCase):
         self.assertEqual(progress_titles, ["B"])
         self.assertEqual(first["id"], loaded["columns"][0]["cards"][1]["id"])
 
+
+    def test_update_card_persists_lane_and_origin(self) -> None:
+        board = self.store.create_board("Work")
+        column_id = board["columns"][0]["id"]
+        card = self.store.create_card(column_id, title="Tracked")
+        updated = self.store.update_card(
+            card["id"],
+            lane_id="lane-auth",
+            origin="remote",
+            external_id="LIN-1",
+            source_id="linear-1",
+        )
+        self.assertEqual(updated["lane_id"], "lane-auth")
+        self.assertEqual(updated["origin"], "remote")
+        self.assertEqual(updated["external_id"], "LIN-1")
+        loaded = self.store.get_card(card["id"])
+        self.assertEqual(loaded["source_id"], "linear-1")
+
     def test_delete_column_cascades_cards(self) -> None:
         board = self.store.create_board("Work")
         column_id = board["columns"][0]["id"]

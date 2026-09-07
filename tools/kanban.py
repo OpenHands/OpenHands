@@ -42,6 +42,10 @@ CARD_PATCH_FIELDS = (
     "tool_calls",
     "agent_time",
     "agent_session_id",
+    "lane_id",
+    "origin",
+    "external_id",
+    "source_id",
 )
 NUMERIC_CARD_FIELDS = {
     "estimate_tokens",
@@ -147,6 +151,16 @@ class KanbanStore:
             );
             """
         )
+        for statement in (
+            "ALTER TABLE cards ADD COLUMN lane_id TEXT",
+            "ALTER TABLE cards ADD COLUMN origin TEXT NOT NULL DEFAULT 'local'",
+            "ALTER TABLE cards ADD COLUMN external_id TEXT",
+            "ALTER TABLE cards ADD COLUMN source_id TEXT",
+        ):
+            try:
+                self.conn.execute(statement)
+            except sqlite3.OperationalError:
+                pass
         self.conn.commit()
 
     def create_board(
@@ -323,8 +337,9 @@ class KanbanStore:
                     id, column_id, board_id, title, description, priority, status,
                     assignee, linked_branch, linked_pr, estimate_tokens, estimate_cost,
                     actual_tokens, actual_cost, model_used, tool_calls, agent_time,
-                    agent_session_id, position, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    agent_session_id, lane_id, origin, external_id, source_id,
+                    position, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     card_id,
@@ -345,6 +360,10 @@ class KanbanStore:
                     fields.get("tool_calls"),
                     fields.get("agent_time"),
                     fields.get("agent_session_id"),
+                    fields.get("lane_id"),
+                    fields.get("origin") or "local",
+                    fields.get("external_id"),
+                    fields.get("source_id"),
                     position,
                     now,
                     now,
