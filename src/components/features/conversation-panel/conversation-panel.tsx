@@ -2,6 +2,8 @@ import React from "react";
 import { Tooltip } from "@heroui/react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
+import { KANBAN_PATH } from "#/api/kanban-service/kanban-constants";
+import { writeKanbanWorkspacePath } from "#/components/features/kanban/kanban-workspace";
 import { useNavigation } from "#/context/navigation-context";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useBackendScopedPath } from "#/hooks/use-backend-scoped-path";
@@ -714,6 +716,15 @@ export function ConversationPanel({
     [createConversation, isCreatingConversationFlow, navigate],
   );
 
+  const openSpaceKanban = React.useCallback(
+    (launch: ConversationGroupLaunch) => {
+      if (!launch.workingDir) return;
+      writeKanbanWorkspacePath(launch.workingDir);
+      navigate(KANBAN_PATH);
+    },
+    [navigate],
+  );
+
   const handleDeleteProject = React.useCallback(
     (conversationId: string, title: string) => {
       setConfirmDeleteModalVisible(true);
@@ -1188,6 +1199,8 @@ export function ConversationPanel({
             isCreatingConversationFlow={isCreatingConversationFlow}
             activeConversationId={currentConversationId}
             onLaunchFromGroup={launchFromGroup}
+            onOpenSpace={openSpaceKanban}
+            onCreateIssue={openSpaceKanban}
             renderConversationCard={(conversation) =>
               renderConversationCard(conversation)
             }

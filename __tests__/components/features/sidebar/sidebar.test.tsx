@@ -507,6 +507,10 @@ describe("Sidebar", () => {
     expect(screen.getByTestId("sidebar-automations-link")).toHaveTextContent(
       "Automate",
     );
+    expect(screen.queryByTestId("sidebar-kanban-link")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("sidebar-projects-link"),
+    ).not.toBeInTheDocument();
   });
 
   it("pins and unpins a sidebar page as the home route without navigating", () => {

@@ -156,6 +156,7 @@ describe("ConversationPanel", () => {
       selectedAutomationNames: [],
       selectedTagFacets: [],
       showTagsMetadata: false,
+      organizeMode: "chronological",
     });
     // Setup default mock for searchConversations
     vi.spyOn(

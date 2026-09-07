@@ -59,6 +59,7 @@ const LAYOUT_PRESETS: LayoutPreset[] = [
     labelKey: I18nKey.CONVERSATION_PANEL$LAYOUT_RECENT_ACTIVITY,
     settings: {
       ...DEFAULT_LAYOUT_SETTINGS,
+      organizeMode: "chronological",
       showOlderConversations: false,
     },
   },
@@ -68,6 +69,7 @@ const LAYOUT_PRESETS: LayoutPreset[] = [
     labelKey: I18nKey.CONVERSATION_PANEL$LAYOUT_FOCUSED,
     settings: {
       ...DEFAULT_LAYOUT_SETTINGS,
+      organizeMode: "chronological",
       threadScope: "relevant",
       showOlderConversations: false,
     },
@@ -78,6 +80,7 @@ const LAYOUT_PRESETS: LayoutPreset[] = [
     labelKey: I18nKey.CONVERSATION_PANEL$LAYOUT_MINIMAL,
     settings: {
       ...DEFAULT_LAYOUT_SETTINGS,
+      organizeMode: "chronological",
       threadScope: "relevant",
       showOlderConversations: false,
       showRepoBranchMetadata: false,

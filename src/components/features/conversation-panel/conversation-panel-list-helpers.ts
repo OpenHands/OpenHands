@@ -351,6 +351,17 @@ export type ConversationGroupLaunch = {
   };
 };
 
+const WORKSPACE_GROUP_ID_PREFIX = "ws:";
+
+/** Local workspace path encoded in a grouped-list id, or null for other groups. */
+export function workspacePathFromGroupId(id: string): string | null {
+  if (!id.startsWith(WORKSPACE_GROUP_ID_PREFIX)) {
+    return null;
+  }
+  const path = id.slice(WORKSPACE_GROUP_ID_PREFIX.length);
+  return path.length > 0 ? path : null;
+}
+
 function buildGroupLaunch(
   id: string,
   backendKind: BackendKind,

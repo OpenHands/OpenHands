@@ -1,15 +1,19 @@
 import { motion } from "framer-motion";
 import { Folder, FolderOpen, Plus } from "lucide-react";
-import { useRef, type DragEvent, type ReactNode } from "react";
+import { useRef, useState, type DragEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
+import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import { usePopoverFixedPlacement } from "#/hooks/use-popover-fixed-placement";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
-import type {
-  ConversationGroupLaunch,
-  GroupFolderDropPosition,
+import { dropdownMenuRowClassName } from "#/utils/dropdown-classes";
+import {
+  getGroupConversationPreview,
+  type ConversationGroupLaunch,
+  type GroupFolderDropPosition,
 } from "./conversation-panel-list-helpers";
-import { getGroupConversationPreview } from "./conversation-panel-list-helpers";
+import { NEW_CONVERSATION_DROPDOWN_SURFACE } from "./new-conversation-dropdown-styles";
 
 interface ConversationGroup {
   id: string;
@@ -36,6 +40,8 @@ interface ConversationGroupFolderRowProps {
   onDrop: (event: DragEvent<HTMLElement>) => void;
   onTogglePreviewExpanded: () => void;
   onLaunchFromGroup: () => void;
+  onOpenSpace?: () => void;
+  onCreateIssue?: () => void;
   renderConversationCard: (conversation: AppConversation) => ReactNode;
 }
 
@@ -57,18 +63,96 @@ export function ConversationGroupFolderRow({
   onDrop,
   onTogglePreviewExpanded,
   onLaunchFromGroup,
+  onOpenSpace,
+  onCreateIssue,
   renderConversationCard,
 }: ConversationGroupFolderRowProps) {
   const { t } = useTranslation("openhands");
   const sectionRef = useRef<HTMLElement>(null);
+  const plusTriggerRef = useRef<HTMLButtonElement>(null);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const plusWrapRef = useClickOutsideElement<HTMLDivElement>(() =>
+    setAddMenuOpen(false),
+  );
   const headingId = `thread-folder-${group.id.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
   const groupTestIdSuffix = group.id.replace(/[^a-zA-Z0-9_-]/g, "-");
+  const showAddMenu = Boolean(onCreateIssue);
+  const addMenuBox = usePopoverFixedPlacement(plusTriggerRef, {
+    open: addMenuOpen && showAddMenu,
+    enabled: true,
+    targetWidth: 12 * 16,
+  });
   const { visibleConversations, isPreviewTruncated, isShowingAll } =
     getGroupConversationPreview(group.conversations, {
       expanded: previewExpanded,
       activeConversationId,
       discoveryConversationIds: discoveryConversationIds ?? undefined,
     });
+
+  const handleDragStart = (event: DragEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    const { dataTransfer } = event;
+    if (dataTransfer) {
+      dataTransfer.effectAllowed = "move";
+      dataTransfer.setData("text/plain", group.id);
+      const node = sectionRef.current;
+      if (node && typeof dataTransfer.setDragImage === "function") {
+        const rect = node.getBoundingClientRect();
+        // Render the floating preview from an off-screen clone so we
+        // can give it a rounded, surfaced background without altering
+        // the in-list row, and anchor it to the exact grab point.
+        const dragImage = node.cloneNode(true) as HTMLElement;
+        dragImage.style.position = "fixed";
+        dragImage.style.top = "0";
+        dragImage.style.left = "-9999px";
+        dragImage.style.width = `${rect.width}px`;
+        dragImage.style.margin = "0";
+        dragImage.style.pointerEvents = "none";
+        dragImage.style.borderRadius = "0.5rem";
+        dragImage.style.padding = "0.25rem";
+        dragImage.style.backgroundColor = "var(--oh-surface-raised)";
+        dragImage.style.boxShadow = "0 8px 24px rgba(0, 0, 0, 0.35)";
+        document.body.appendChild(dragImage);
+        dataTransfer.setDragImage(
+          dragImage,
+          event.clientX - rect.left,
+          event.clientY - rect.top,
+        );
+        // Remove after the browser has rasterized the drag image.
+        window.setTimeout(() => dragImage.remove(), 0);
+      }
+    }
+    onDragStart();
+  };
+
+  const folderIcons = (
+    <>
+      <Folder
+        className={cn(
+          "h-4 w-4 shrink-0",
+          expanded
+            ? "hidden group-hover/folder:block"
+            : "block group-hover/folder:hidden",
+        )}
+        aria-hidden
+      />
+      <FolderOpen
+        className={cn(
+          "h-4 w-4 shrink-0",
+          expanded
+            ? "block group-hover/folder:hidden"
+            : "hidden group-hover/folder:block",
+        )}
+        aria-hidden
+      />
+    </>
+  );
+
+  const toggleButtonClassName = cn(
+    "group/folder flex min-h-8 cursor-grab items-center gap-2 rounded-md py-1 text-left text-inherit outline-none active:cursor-grabbing",
+    "focus-visible:ring-1 focus-visible:ring-[var(--oh-border)]",
+    onOpenSpace ? "shrink-0 px-0.5" : "min-w-0 flex-1",
+  );
 
   return (
     <motion.section
@@ -106,7 +190,7 @@ export function ConversationGroupFolderRow({
           <button
             type="button"
             draggable
-            id={headingId}
+            id={onOpenSpace ? undefined : headingId}
             aria-expanded={expanded}
             aria-controls={`thread-folder-content-${groupTestIdSuffix}`}
             data-testid={`thread-folder-drag-${groupTestIdSuffix}`}
@@ -120,99 +204,130 @@ export function ConversationGroupFolderRow({
                   })
             }
             onClick={onToggleExpanded}
-            onDragStart={(event) => {
-              event.stopPropagation();
-              const { dataTransfer } = event;
-              if (dataTransfer) {
-                dataTransfer.effectAllowed = "move";
-                dataTransfer.setData("text/plain", group.id);
-                const node = sectionRef.current;
-                if (node && typeof dataTransfer.setDragImage === "function") {
-                  const rect = node.getBoundingClientRect();
-                  // Render the floating preview from an off-screen clone so we
-                  // can give it a rounded, surfaced background without altering
-                  // the in-list row, and anchor it to the exact grab point.
-                  const dragImage = node.cloneNode(true) as HTMLElement;
-                  dragImage.style.position = "fixed";
-                  dragImage.style.top = "0";
-                  dragImage.style.left = "-9999px";
-                  dragImage.style.width = `${rect.width}px`;
-                  dragImage.style.margin = "0";
-                  dragImage.style.pointerEvents = "none";
-                  dragImage.style.borderRadius = "0.5rem";
-                  dragImage.style.padding = "0.25rem";
-                  dragImage.style.backgroundColor = "var(--oh-surface-raised)";
-                  dragImage.style.boxShadow = "0 8px 24px rgba(0, 0, 0, 0.35)";
-                  document.body.appendChild(dragImage);
-                  dataTransfer.setDragImage(
-                    dragImage,
-                    event.clientX - rect.left,
-                    event.clientY - rect.top,
-                  );
-                  // Remove after the browser has rasterized the drag image.
-                  window.setTimeout(() => dragImage.remove(), 0);
-                }
-              }
-              onDragStart();
-            }}
+            onDragStart={handleDragStart}
             onDragEnd={(event) => {
               event.stopPropagation();
               onDragEnd();
             }}
-            className={cn(
-              "group/folder flex min-h-8 min-w-0 flex-1 cursor-grab items-center gap-2 rounded-md py-1 text-left text-inherit outline-none active:cursor-grabbing",
-              "focus-visible:ring-1 focus-visible:ring-[var(--oh-border)]",
-            )}
+            className={toggleButtonClassName}
           >
-            <Folder
-              className={cn(
-                "h-4 w-4 shrink-0",
-                expanded
-                  ? "hidden group-hover/folder:block"
-                  : "block group-hover/folder:hidden",
-              )}
-              aria-hidden
-            />
-            <FolderOpen
-              className={cn(
-                "h-4 w-4 shrink-0",
-                expanded
-                  ? "block group-hover/folder:hidden"
-                  : "hidden group-hover/folder:block",
-              )}
-              aria-hidden
-            />
-            <span className="truncate">{group.label}</span>
-          </button>
-          <button
-            type="button"
-            className={cn(
-              "inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md",
-              "text-inherit transition-colors",
-              "hover:bg-white/10 hover:text-white",
-              "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--oh-border)]",
-              "disabled:cursor-not-allowed disabled:opacity-50",
+            {folderIcons}
+            {onOpenSpace ? null : (
+              <span className="truncate">{group.label}</span>
             )}
-            disabled={isCreatingConversationFlow}
-            aria-label={t(
-              I18nKey.CONVERSATION_PANEL$ADD_CONVERSATION_TO_GROUP,
-              {
+          </button>
+          {onOpenSpace ? (
+            <button
+              type="button"
+              id={headingId}
+              data-testid={`thread-folder-open-${groupTestIdSuffix}`}
+              aria-label={t(I18nKey.CONVERSATION_PANEL$OPEN_SPACE, {
                 label: group.label,
-              },
-            )}
-            data-testid={`add-conversation-to-group-${groupTestIdSuffix}`}
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              onLaunchFromGroup();
-            }}
-          >
-            <Plus
-              className="h-3.5 w-3.5 shrink-0"
-              aria-hidden
-              strokeWidth={2}
-            />
-          </button>
+              })}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onOpenSpace();
+              }}
+              className={cn(
+                "flex min-h-8 min-w-0 flex-1 items-center rounded-md py-1 text-left text-inherit outline-none",
+                "focus-visible:ring-1 focus-visible:ring-[var(--oh-border)]",
+              )}
+            >
+              <span className="truncate">{group.label}</span>
+            </button>
+          ) : null}
+          <div ref={plusWrapRef} className="relative shrink-0">
+            <button
+              ref={plusTriggerRef}
+              type="button"
+              className={cn(
+                "inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md",
+                "text-inherit transition-colors",
+                "hover:bg-white/10 hover:text-white",
+                "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--oh-border)]",
+                "disabled:cursor-not-allowed disabled:opacity-50",
+              )}
+              disabled={isCreatingConversationFlow}
+              aria-expanded={showAddMenu ? addMenuOpen : undefined}
+              aria-haspopup={showAddMenu ? "menu" : undefined}
+              aria-label={
+                showAddMenu
+                  ? t(I18nKey.CONVERSATION_PANEL$ADD_TO_SPACE, {
+                      label: group.label,
+                    })
+                  : t(I18nKey.CONVERSATION_PANEL$ADD_CONVERSATION_TO_GROUP, {
+                      label: group.label,
+                    })
+              }
+              data-testid={`add-conversation-to-group-${groupTestIdSuffix}`}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (showAddMenu) {
+                  setAddMenuOpen((open) => !open);
+                  return;
+                }
+                onLaunchFromGroup();
+              }}
+            >
+              <Plus
+                className="h-3.5 w-3.5 shrink-0"
+                aria-hidden
+                strokeWidth={2}
+              />
+            </button>
+            {addMenuOpen && showAddMenu ? (
+              <div
+                role="menu"
+                className={cn(
+                  NEW_CONVERSATION_DROPDOWN_SURFACE,
+                  "absolute right-0 top-full mt-0.5 min-w-[12rem]",
+                )}
+                style={
+                  addMenuBox
+                    ? {
+                        position: "fixed",
+                        top: addMenuBox.top,
+                        left: addMenuBox.left,
+                        width: addMenuBox.width,
+                      }
+                    : undefined
+                }
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  data-testid={`add-to-space-new-chat-${groupTestIdSuffix}`}
+                  className={dropdownMenuRowClassName}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setAddMenuOpen(false);
+                    onLaunchFromGroup();
+                  }}
+                >
+                  {t(I18nKey.CONVERSATION_PANEL$ADD_CONVERSATION_TO_GROUP, {
+                    label: group.label,
+                  })}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  data-testid={`add-to-space-new-issue-${groupTestIdSuffix}`}
+                  className={dropdownMenuRowClassName}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setAddMenuOpen(false);
+                    onCreateIssue?.();
+                  }}
+                >
+                  {t(I18nKey.CONVERSATION_PANEL$NEW_ISSUE_IN_SPACE)}
+                </button>
+              </div>
+            ) : null}
+          </div>
         </div>
         {expanded ? (
           <div

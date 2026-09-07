@@ -8,14 +8,14 @@ describe("conversation-panel-preferences store", () => {
     window.localStorage.clear();
   });
 
-  it("defaults to showing older conversations, chronological list, and expected toggles", () => {
+  it("defaults to showing older conversations, grouped spaces, and expected toggles", () => {
     const state = useConversationPanelPreferencesStore.getState();
     expect(state.showOlderConversations).toBe(true);
     expect(state.olderConversationCutoff).toBe("7d");
     expect(state.showRepoBranchMetadata).toBe(false);
     expect(state.showLlmProfiles).toBe(false);
     expect(state.showTagsMetadata).toBe(true);
-    expect(state.organizeMode).toBe("chronological");
+    expect(state.organizeMode).toBe("grouped");
     expect(state.conversationSort).toBe("updated");
     expect(state.threadScope).toBe("all");
     expect(state.automationFilterMode).toBe("all");
@@ -277,7 +277,7 @@ describe("conversation-panel-preferences store", () => {
       showRepoBranchMetadata: true,
       // Filled with defaults for missing fields.
       showLlmProfiles: false,
-      organizeMode: "chronological",
+      organizeMode: "grouped",
       conversationSort: "updated",
       threadScope: "all",
     });
@@ -301,5 +301,24 @@ describe("conversation-panel-preferences store", () => {
     expect(
       useConversationPanelPreferencesStore.getState().showLlmProfiles,
     ).toBe(true);
+  });
+
+  it("migrates v0 chronological lists to grouped spaces", async () => {
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        state: {
+          organizeMode: "chronological",
+          showOlderConversations: false,
+        },
+        version: 0,
+      }),
+    );
+
+    await useConversationPanelPreferencesStore.persist.rehydrate();
+
+    const state = useConversationPanelPreferencesStore.getState();
+    expect(state.organizeMode).toBe("grouped");
+    expect(state.showOlderConversations).toBe(false);
   });
 });
