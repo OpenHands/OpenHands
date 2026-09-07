@@ -133,6 +133,7 @@ describe("useSettingsNavItems", () => {
     expect(paths).not.toContain("/settings/routing");
     expect(paths).toContain("/settings/app");
     expect(paths).toContain("/settings/secrets");
+    expect(paths).toContain("/settings/macros");
     expect(paths).not.toContain("/settings/channels");
   });
 

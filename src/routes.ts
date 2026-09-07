@@ -42,6 +42,7 @@ export default [
       route("app", "routes/app-settings.tsx"),
       route("channels", "routes/settings-channels.tsx"),
       route("secrets", "routes/secrets-settings.tsx"),
+      route("macros", "routes/settings-macros.tsx"),
     ]),
     route("oauth/device/verify", "routes/device-verify.tsx"),
     route("automations", "routes/automations-list.tsx"),
