@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import type { RoutingAuditItem } from "#/api/routing-service/routing-types";
-import { formatUsd } from "#/components/features/kanban/kanban-cost";
+import { CostText } from "#/components/shared/cost-text";
 import { I18nKey } from "#/i18n/declaration";
 
 export interface SwitchHistoryProps {
@@ -75,7 +75,8 @@ export function SwitchHistory({ items }: SwitchHistoryProps) {
               </p>
               {typeof cost === "number" ? (
                 <p data-testid={`routing-audit-cost-${item.id}`}>
-                  {t(I18nKey.ROUTING$COST_PER_TASK)}: {formatUsd(cost)}
+                  {t(I18nKey.ROUTING$COST_PER_TASK)}:{" "}
+                  <CostText amount={cost} at={item.created_at} />
                 </p>
               ) : null}
             </li>

@@ -5,7 +5,7 @@ import type {
   ProjectSummary,
 } from "#/api/projects-service/projects-types";
 import { I18nKey } from "#/i18n/declaration";
-import { formatUsd } from "#/components/features/kanban/kanban-cost";
+import { CostText } from "#/components/shared/cost-text";
 import { extensionModuleCardPillClassName } from "#/utils/extension-module-card-classes";
 import { formControlTransitionClassName } from "#/utils/form-control-classes";
 import { cn } from "#/utils/utils";
@@ -67,7 +67,9 @@ export function ProjectCard({ project, onSelect }: ProjectCardProps) {
           className="tabular-nums text-white"
         >
           {t(I18nKey.PROJECTS$COST)}
-          <span className="ml-1">{formatUsd(project.cost_cap)}</span>
+          <span className="ml-1">
+            <CostText amount={project.cost_cap} />
+          </span>
         </span>
       </div>
     </button>

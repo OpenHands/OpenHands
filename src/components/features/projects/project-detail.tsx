@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 import { KANBAN_PATH } from "#/api/kanban-service/kanban-constants";
 import { PROJECTS_PATH } from "#/api/projects-service/projects-constants";
 import type { Project } from "#/api/projects-service/projects-types";
-import { formatUsd } from "#/components/features/kanban/kanban-cost";
+import { CostText } from "#/components/shared/cost-text";
 import { WorktreePanel } from "#/components/features/projects/worktree-panel";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { useNavigation } from "#/context/navigation-context";
@@ -69,7 +69,7 @@ export function ProjectDetail({
             {t(I18nKey.PROJECTS$COST_CAP)}
           </dt>
           <dd className="tabular-nums text-white">
-            {formatUsd(project.cost_cap)}
+            <CostText amount={project.cost_cap} />
           </dd>
           {project.description ? (
             <>

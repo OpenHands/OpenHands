@@ -8,7 +8,7 @@ import {
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
 import { SettingsInput } from "#/components/features/settings/settings-input";
-import { formatUsd } from "#/components/features/kanban/kanban-cost";
+import { CostText } from "#/components/shared/cost-text";
 import { I18nKey } from "#/i18n/declaration";
 import { formControlMultilineFieldClassName } from "#/utils/form-control-classes";
 
@@ -124,7 +124,7 @@ export function SpecInput({ projects, isPending, onStart }: SpecInputProps) {
         >
           {t(I18nKey.FEATURE_DEV$ESTIMATE_PREVIEW)}
           <span className="ml-2 tabular-nums text-white">
-            {formatUsd(estimate)}
+            <CostText amount={estimate} />
           </span>
         </p>
         <BrandButton

@@ -6,7 +6,7 @@ import type {
 } from "#/api/feature-developer-service/feature-developer-types";
 import type { GraphRelevantFile } from "#/api/graph-service/graph-types";
 import { RelevantFilesCard } from "#/components/features/graph/relevant-files-card";
-import { formatUsd } from "#/components/features/kanban/kanban-cost";
+import { CostText } from "#/components/shared/cost-text";
 import { I18nKey } from "#/i18n/declaration";
 import { extensionModuleCardPillClassName } from "#/utils/extension-module-card-classes";
 import { cn } from "#/utils/utils";
@@ -81,7 +81,12 @@ export function RunTimeline({
           className="tabular-nums text-white"
         >
           {t(I18nKey.FEATURE_DEV$TOTAL_COST)}
-          <span className="ml-2">{formatUsd(run.total_actual_usd)}</span>
+          <span className="ml-2">
+            <CostText
+              amount={run.total_actual_usd}
+              at={run.updated_at ?? run.created_at}
+            />
+          </span>
         </span>
       </div>
       {onGraphToggle ? (
@@ -121,7 +126,10 @@ export function RunTimeline({
               <span data-testid={`feature-dev-ticket-cost-${item.id}`}>
                 {t(I18nKey.FEATURE_DEV$COST)}
                 <span className="ml-1 tabular-nums text-white">
-                  {formatUsd(item.actual_usd ?? item.estimate_usd)}
+                  <CostText
+                    amount={item.actual_usd ?? item.estimate_usd}
+                    at={item.finished_at ?? item.started_at ?? run.created_at}
+                  />
                 </span>
               </span>
               {item.branch_name ? (

@@ -9,7 +9,7 @@ import { ConfirmationModal } from "#/components/shared/modals/confirmation-modal
 import { I18nKey } from "#/i18n/declaration";
 import { formControlMultilineFieldClassName } from "#/utils/form-control-classes";
 import { cn } from "#/utils/utils";
-import { formatUsd } from "./kanban-cost";
+import { CostText } from "#/components/shared/cost-text";
 
 export interface CardDetailPanelProps {
   card: KanbanCard;
@@ -102,7 +102,7 @@ export function CardDetailPanel({
             {t(I18nKey.KANBAN$COST_ESTIMATE)}
           </dt>
           <dd data-testid="kanban-detail-estimate" className="tabular-nums">
-            {formatUsd(card.estimate_cost)}
+            <CostText amount={card.estimate_cost} at={card.created_at} />
           </dd>
         </div>
         <div className="flex justify-between gap-3">
@@ -110,7 +110,7 @@ export function CardDetailPanel({
             {t(I18nKey.KANBAN$COST_ACTUAL)}
           </dt>
           <dd data-testid="kanban-detail-actual" className="tabular-nums">
-            {formatUsd(card.actual_cost)}
+            <CostText amount={card.actual_cost} at={card.updated_at} />
           </dd>
         </div>
         <div className="flex justify-between gap-3">

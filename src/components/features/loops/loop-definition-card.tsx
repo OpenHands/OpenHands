@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 import { LOOPS_PATH, loopRunPath } from "#/api/loop-service/loop-constants";
 import type { LoopDefinition } from "#/api/loop-service/loop-types";
 import { automationIconActionButtonClassName } from "#/components/features/automations/automation-action-button-classes";
-import { formatUsd } from "#/components/features/kanban/kanban-cost";
+import { CostText } from "#/components/shared/cost-text";
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { useNavigation } from "#/context/navigation-context";
 import { useFireLoopTrigger, useLoopRuns } from "#/hooks/query/use-loops";
@@ -116,7 +116,10 @@ export function LoopDefinitionCard({
           <span className="text-xs text-tertiary-light">
             {t(I18nKey.LOOPS$COST)}
             <span className="ml-1 tabular-nums text-white">
-              {formatUsd(last.total_cost_usd)}
+              <CostText
+                amount={last.total_cost_usd}
+                at={last.updated_at ?? last.created_at}
+              />
             </span>
           </span>
         ) : null}

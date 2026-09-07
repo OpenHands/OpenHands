@@ -10,7 +10,7 @@ import { SpecInput } from "#/components/features/feature-developer/spec-input";
 import { RunTimeline } from "#/components/features/feature-developer/run-timeline";
 import { ReportView } from "#/components/features/feature-developer/report-view";
 import { BrandButton } from "#/components/features/settings/brand-button";
-import { formatUsd } from "#/components/features/kanban/kanban-cost";
+import { CostText } from "#/components/shared/cost-text";
 import { useNavigation } from "#/context/navigation-context";
 import {
   useFeatureDevReport,
@@ -138,7 +138,10 @@ export default function FeatureDeveloperPage() {
                     )}
                   </span>
                   <span className="tabular-nums text-white">
-                    {formatUsd(run.total_actual_usd)}
+                    <CostText
+                      amount={run.total_actual_usd}
+                      at={run.updated_at ?? run.created_at}
+                    />
                   </span>
                 </button>
               </li>

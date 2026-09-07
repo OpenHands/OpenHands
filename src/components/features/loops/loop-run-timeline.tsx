@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 import type { GraphRelevantFile } from "#/api/graph-service/graph-types";
 import type { LoopRun, LoopRunStatus } from "#/api/loop-service/loop-types";
 import { RelevantFilesCard } from "#/components/features/graph/relevant-files-card";
-import { formatUsd } from "#/components/features/kanban/kanban-cost";
+import { CostText } from "#/components/shared/cost-text";
 import { I18nKey } from "#/i18n/declaration";
 import { extensionModuleCardPillClassName } from "#/utils/extension-module-card-classes";
 import { cn } from "#/utils/utils";
@@ -73,7 +73,12 @@ export function LoopRunTimeline({
         </span>
         <span data-testid="loop-run-cost" className="tabular-nums text-white">
           {t(I18nKey.LOOPS$COST)}
-          <span className="ml-2">{formatUsd(run.total_cost_usd)}</span>
+          <span className="ml-2">
+            <CostText
+              amount={run.total_cost_usd}
+              at={run.updated_at ?? run.created_at}
+            />
+          </span>
         </span>
       </div>
       {triggerReason ? (
