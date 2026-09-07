@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { fireEvent, screen } from "@testing-library/react";
 import { renderWithProviders } from "test-utils";
 import { KANBAN_DONE_STATUS } from "#/api/kanban-service/kanban-constants";
+import { useCostCurrencyStore } from "#/stores/cost-currency-store";
 import type {
   KanbanBoard,
   KanbanBoardCosts,
@@ -12,6 +13,7 @@ import { CostSummary } from "#/components/features/kanban/cost-summary";
 import { KanbanBoardView } from "#/components/features/kanban/kanban-board";
 import { KanbanCard as KanbanCardView } from "#/components/features/kanban/kanban-card";
 import { KanbanList } from "#/components/features/kanban/kanban-list";
+import type { SwimlaneNode } from "#/utils/kanban-swimlanes";
 import { pullRequestChipLabel } from "#/components/features/kanban/kanban-pr-label";
 import { HOME_SELECTED_WORKSPACE_PATH_KEY } from "#/components/features/home/workspace-selection-form";
 import {
@@ -118,6 +120,27 @@ describe("KanbanCard", () => {
     );
   });
 
+  it("converts the card cost at the card's date, not the latest FX rate", () => {
+    useCostCurrencyStore.setState({
+      currency: "GBP",
+      latestRates: { GBP: 0.5 },
+      rates: { "2026-09-01:GBP": 0.8 },
+      rateRevision: 1,
+    });
+
+    renderWithProviders(<KanbanCardView card={makeCard()} />);
+
+    expect(screen.getByTestId("kanban-card-cost-card-1")).toHaveTextContent(
+      new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "GBP",
+      }).format(1),
+    );
+    expect(screen.getByTestId("kanban-card-cost-card-1")).not.toHaveTextContent(
+      "$1.25",
+    );
+  });
+
   it("chips a linked pull request number and a live session", () => {
     renderWithProviders(
       <KanbanCardView
@@ -169,7 +192,7 @@ describe("KanbanBoardView", () => {
     fireEvent.drop(review, {
       dataTransfer: { getData: () => "card-1" },
     });
-    expect(onMoveCard).toHaveBeenCalledWith("card-1", "col-2", 0);
+    expect(onMoveCard).toHaveBeenCalledWith("card-1", "col-2", 0, null);
   });
 
   it("keeps the new-card composer collapsed until New is clicked", () => {
@@ -251,6 +274,17 @@ describe("boardForWorkspace", () => {
       window.sessionStorage.getItem(HOME_SELECTED_WORKSPACE_PATH_KEY),
     ).toBe("/tmp/openhands");
   });
+
+  it("does not treat the all-workspaces sentinel as a home folder", () => {
+    writeKanbanWorkspacePath("/tmp/openhands");
+    writeKanbanWorkspacePath("__all__");
+    expect(
+      window.sessionStorage.getItem(KANBAN_SELECTED_WORKSPACE_PATH_KEY),
+    ).toBe("__all__");
+    expect(
+      window.sessionStorage.getItem(HOME_SELECTED_WORKSPACE_PATH_KEY),
+    ).toBe("/tmp/openhands");
+  });
 });
 
 describe("pullRequestChipLabel", () => {
@@ -282,5 +316,68 @@ describe("KanbanList", () => {
     const rows = screen.getAllByTestId(/kanban-list-row-/);
     expect(rows[0]).toHaveAttribute("data-testid", "kanban-list-row-older");
     expect(rows[1]).toHaveAttribute("data-testid", "kanban-list-row-newer");
+  });
+
+  it("groups rows by swimlane and shows lane cost", () => {
+    const auth = makeCard({ id: "auth", title: "Auth", estimate_cost: 3 });
+    const other = makeCard({ id: "other", title: "Other", estimate_cost: 1 });
+    const lanes: SwimlaneNode[] = [
+      {
+        id: "lane-auth",
+        name: "Auth",
+        kind: "remote",
+        boardId: "board-1",
+        sourceId: "linear-1",
+        depth: 0,
+        cards: [auth],
+        children: [],
+      },
+      {
+        id: "board-1:ungrouped",
+        name: "ungrouped",
+        kind: "ungrouped",
+        boardId: "board-1",
+        sourceId: null,
+        depth: 0,
+        cards: [other],
+        children: [],
+      },
+    ];
+    renderWithProviders(
+      <KanbanList board={makeBoard([auth, other])} lanes={lanes} />,
+    );
+    expect(screen.getByTestId("kanban-list-lane-lane-auth")).toHaveTextContent(
+      "Auth",
+    );
+    expect(
+      screen.getByTestId("kanban-list-lane-cost-lane-auth"),
+    ).toHaveTextContent("$3.00");
+  });
+});
+
+describe("KanbanBoardView swimlanes", () => {
+  it("renders a swimlane row with its cost", () => {
+    const auth = makeCard({ id: "auth", title: "Auth", estimate_cost: 4 });
+    const lanes: SwimlaneNode[] = [
+      {
+        id: "lane-auth",
+        name: "Auth",
+        kind: "remote",
+        boardId: "board-1",
+        sourceId: "linear-1",
+        depth: 0,
+        cards: [auth],
+        children: [],
+      },
+    ];
+    renderWithProviders(
+      <KanbanBoardView board={makeBoard([auth])} lanes={lanes} />,
+    );
+    expect(screen.getByTestId("kanban-swimlane-lane-auth")).toHaveTextContent(
+      "Auth",
+    );
+    expect(
+      screen.getByTestId("kanban-swimlane-cost-lane-auth"),
+    ).toHaveTextContent("$4.00");
   });
 });

@@ -6,7 +6,9 @@ import {
   readKanbanWorkspacePath,
   subscribeKanbanWorkspacePath,
   writeKanbanWorkspacePath,
+  isAllWorkspacesPath,
 } from "#/components/features/kanban/kanban-workspace";
+import { KANBAN_ALL_WORKSPACES_PATH } from "#/api/kanban-service/kanban-constants";
 
 export function useKanbanWorkspace() {
   const { data: workspacesData, error: workspacesError } = useLocalWorkspaces();
@@ -25,10 +27,16 @@ export function useKanbanWorkspace() {
 
   const selected =
     workspaces.find((workspace) => workspace.path === path) ?? null;
+  const isAllWorkspaces = isAllWorkspacesPath(path);
 
   const setSelected = React.useCallback((workspace: LocalWorkspace | null) => {
     setPath(workspace?.path ?? null);
     writeKanbanWorkspacePath(workspace?.path ?? null);
+  }, []);
+
+  const setAllWorkspaces = React.useCallback(() => {
+    setPath(KANBAN_ALL_WORKSPACES_PATH);
+    writeKanbanWorkspacePath(KANBAN_ALL_WORKSPACES_PATH);
   }, []);
 
   React.useEffect(
@@ -40,14 +48,21 @@ export function useKanbanWorkspace() {
     if (isLoading) return;
     if (!didInit.current) {
       didInit.current = true;
-      if (path && workspaces.some((workspace) => workspace.path === path)) {
+      if (
+        isAllWorkspacesPath(path) ||
+        (path && workspaces.some((workspace) => workspace.path === path))
+      ) {
         return;
       }
       const fallback = workspaces[0] ?? null;
       if (fallback) setSelected(fallback);
       return;
     }
-    if (path && !workspaces.some((workspace) => workspace.path === path)) {
+    if (
+      path &&
+      !isAllWorkspacesPath(path) &&
+      !workspaces.some((workspace) => workspace.path === path)
+    ) {
       setSelected(workspaces[0] ?? null);
     }
   }, [isLoading, path, workspaces, setSelected]);
@@ -57,7 +72,9 @@ export function useKanbanWorkspace() {
     parents,
     workspaceParents,
     selected,
+    isAllWorkspaces,
     setSelected,
+    setAllWorkspaces,
     isLoading,
     isError,
     listError: workspacesError ?? resolvedError,

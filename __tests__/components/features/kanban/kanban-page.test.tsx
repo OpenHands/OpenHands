@@ -1,18 +1,27 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithProviders } from "test-utils";
 import KanbanService from "#/api/kanban-service/kanban-service.api";
+import { KANBAN_ALL_WORKSPACES_PATH } from "#/api/kanban-service/kanban-constants";
 import WorkspacesService from "#/api/workspaces-service/workspaces-service.api";
+import { writeKanbanWorkspacePath } from "#/components/features/kanban/kanban-workspace";
 import { I18nKey } from "#/i18n/declaration";
 import { resetKanbanMockData } from "#/mocks/handlers";
 import KanbanPage from "#/routes/kanban";
+import { useKanbanSyncStore } from "#/stores/kanban-sync-store";
 import type { LocalWorkspace } from "#/types/workspace";
 
 const ALPHA: LocalWorkspace = {
   id: "ws-alpha",
   name: "alpha",
   path: "/tmp/alpha",
+};
+
+const BETA: LocalWorkspace = {
+  id: "ws-beta",
+  name: "beta",
+  path: "/tmp/beta",
 };
 
 const { mockSearchSubdirectories } = vi.hoisted(() => ({
@@ -46,6 +55,8 @@ describe("KanbanPage", () => {
     vi.restoreAllMocks();
     resetKanbanMockData();
     window.sessionStorage.clear();
+    window.localStorage.clear();
+    useKanbanSyncStore.getState().reset();
     mockSearchSubdirectories.mockResolvedValue({ items: [] });
   });
 
@@ -116,5 +127,70 @@ describe("KanbanPage", () => {
     expect(screen.getByTestId(`kanban-list-row-${card.id}`)).toHaveTextContent(
       "Alpha task",
     );
+  });
+
+  it("shows a combined board with a swimlane per workspace", async () => {
+    mockWorkspaces([ALPHA, BETA]);
+    const alpha = await KanbanService.createBoard({
+      name: "Alpha board",
+      project_id: "/tmp/alpha",
+    });
+    const beta = await KanbanService.createBoard({
+      name: "Beta board",
+      project_id: "/tmp/beta",
+    });
+    await KanbanService.createCard(alpha.columns[0].id, {
+      title: "Alpha task",
+    });
+    await KanbanService.createCard(beta.columns[0].id, { title: "Beta task" });
+    writeKanbanWorkspacePath(KANBAN_ALL_WORKSPACES_PATH);
+
+    renderWithProviders(<KanbanPage />);
+
+    expect(
+      await screen.findByTestId(`kanban-swimlane-workspace:${alpha.id}`),
+    ).toHaveTextContent("alpha");
+    expect(
+      screen.getByTestId(`kanban-swimlane-workspace:${beta.id}`),
+    ).toHaveTextContent("beta");
+    expect(screen.getByText("Alpha task")).toBeInTheDocument();
+    expect(screen.getByText("Beta task")).toBeInTheDocument();
+  });
+
+  it("maps a source and opens reconcile with a recommendation", async () => {
+    mockWorkspaces([ALPHA]);
+    const matched = await KanbanService.createBoard({
+      name: "Alpha board",
+      project_id: "/tmp/alpha",
+    });
+    await KanbanService.createCard(matched.columns[0].id, {
+      title: "Ship login",
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<KanbanPage />);
+
+    expect(await screen.findByTestId("kanban-board")).toBeInTheDocument();
+    await user.click(screen.getByTestId("kanban-map-source"));
+    expect(screen.getByTestId("kanban-map-source-modal")).toBeInTheDocument();
+    await user.type(screen.getByTestId("kanban-source-label"), "Linear");
+    fireEvent.change(screen.getByTestId("kanban-source-issues"), {
+      target: {
+        value: JSON.stringify([
+          {
+            id: "LIN-1",
+            title: "Ship login",
+            description: "Remote copy",
+            group: "Auth",
+          },
+        ]),
+      },
+    });
+    await user.click(screen.getByTestId("kanban-map-source-submit"));
+
+    expect(
+      await screen.findByTestId("kanban-reconcile-modal"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("kanban-conflict-banner")).toBeInTheDocument();
+    expect(screen.getByText("Auth")).toBeInTheDocument();
   });
 });

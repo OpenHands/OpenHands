@@ -10,6 +10,8 @@ export interface KanbanBoardSummary {
   updated_at: string;
 }
 
+export type KanbanCardOrigin = "local" | "remote" | "code";
+
 export interface KanbanCard {
   id: string;
   column_id: string;
@@ -29,6 +31,10 @@ export interface KanbanCard {
   tool_calls: number | null;
   agent_time: number | null;
   agent_session_id: string | null;
+  lane_id?: string | null;
+  origin?: KanbanCardOrigin | null;
+  external_id?: string | null;
+  source_id?: string | null;
   activity_log?: { timestamp: string; message: string }[];
   position: number;
   created_at: string;
@@ -85,6 +91,10 @@ export interface CreateCardPayload {
   assignee?: string | null;
   estimate_tokens?: number | null;
   estimate_cost?: number | null;
+  lane_id?: string | null;
+  origin?: KanbanCardOrigin | null;
+  external_id?: string | null;
+  source_id?: string | null;
 }
 
 export interface MoveCardPayload {
@@ -110,6 +120,10 @@ export type UpdateCardPayload = Partial<
     | "tool_calls"
     | "agent_time"
     | "agent_session_id"
+    | "lane_id"
+    | "origin"
+    | "external_id"
+    | "source_id"
   >
 >;
 

@@ -19,9 +19,11 @@ export interface KanbanWorkspacePickerProps {
   parents: LocalWorkspaceParent[];
   workspaceParents: LocalWorkspaceParent[];
   selected: LocalWorkspace | null;
+  isAllWorkspaces?: boolean;
   isLoading: boolean;
   listError: unknown;
   onChange: (workspace: LocalWorkspace | null) => void;
+  onSelectAll?: () => void;
   className?: string;
 }
 
@@ -30,9 +32,11 @@ export function KanbanWorkspacePicker({
   parents,
   workspaceParents,
   selected,
+  isAllWorkspaces = false,
   isLoading,
   listError,
   onChange,
+  onSelectAll,
   className,
 }: KanbanWorkspacePickerProps) {
   const { t } = useTranslation("openhands");
@@ -49,29 +53,56 @@ export function KanbanWorkspacePicker({
   return (
     <>
       <div
-        className={cn("w-full max-w-[14rem]", className)}
+        className={cn(
+          "flex w-full max-w-[22rem] items-center gap-2",
+          className,
+        )}
         data-testid="kanban-workspace-picker"
       >
-        <WorkspaceDropdown
-          key={selected?.path ?? "empty-workspace-selection"}
-          workspaces={workspaces}
-          parents={parents}
-          value={selected}
-          placeholder={
-            unsupported
-              ? t(I18nKey.HOME$WORKSPACES_UNSUPPORTED_PLACEHOLDER)
-              : disabled
-                ? t(I18nKey.HOME$LOADING)
-                : t(I18nKey.HOME$WORKSPACE_PLACEHOLDER)
-          }
-          disabled={disabled}
-          disabledTooltip={unsupported}
-          showManage={workspaces.length > 0 || workspaceParents.length > 0}
-          className="w-full"
-          onChange={onChange}
-          onAddClick={() => setIsBrowserOpen(true)}
-          onManageClick={() => setIsManageOpen(true)}
-        />
+        {onSelectAll ? (
+          <button
+            type="button"
+            data-testid="kanban-all-workspaces"
+            aria-pressed={isAllWorkspaces}
+            onClick={onSelectAll}
+            className={cn(
+              "h-9 shrink-0 rounded-lg border px-2.5 text-xs font-medium",
+              isAllWorkspaces
+                ? "border-[var(--oh-border)] bg-[var(--oh-interactive-hover)] text-[var(--oh-foreground)]"
+                : "border-[var(--oh-border)] text-[var(--oh-muted)] hover:bg-[var(--oh-interactive-hover)] hover:text-[var(--oh-foreground)]",
+            )}
+          >
+            {t(I18nKey.KANBAN$ALL_WORKSPACES)}
+          </button>
+        ) : null}
+        <div className="min-w-0 flex-1">
+          <WorkspaceDropdown
+            key={
+              isAllWorkspaces
+                ? "all-workspaces"
+                : (selected?.path ?? "empty-workspace-selection")
+            }
+            workspaces={workspaces}
+            parents={parents}
+            value={isAllWorkspaces ? null : selected}
+            placeholder={
+              unsupported
+                ? t(I18nKey.HOME$WORKSPACES_UNSUPPORTED_PLACEHOLDER)
+                : isAllWorkspaces
+                  ? t(I18nKey.KANBAN$ALL_WORKSPACES)
+                  : disabled
+                    ? t(I18nKey.HOME$LOADING)
+                    : t(I18nKey.HOME$WORKSPACE_PLACEHOLDER)
+            }
+            disabled={disabled}
+            disabledTooltip={unsupported}
+            showManage={workspaces.length > 0 || workspaceParents.length > 0}
+            className="w-full"
+            onChange={onChange}
+            onAddClick={() => setIsBrowserOpen(true)}
+            onManageClick={() => setIsManageOpen(true)}
+          />
+        </div>
       </div>
       <FolderBrowserModal
         isOpen={isBrowserOpen}
