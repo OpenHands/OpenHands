@@ -12,10 +12,13 @@
  *   2. **Multiple backends**: A frontend-only instance connects to
  *      two separate backend-only instances and switches between them.
  *
- *   3. **Pinned backend on sidebar links**: cmd/ctrl-clicking a sidebar
- *      conversation opens the new tab on the backend that owns the
- *      conversation, not on whichever backend localStorage happens to
- *      name (#15573).
+ *   3. **Pinned backend on sidebar links**: a new tab opened from a
+ *      sidebar conversation lands on the backend that owns it, not on
+ *      whichever backend localStorage happens to name (#15573). A
+ *      cmd/ctrl-clicked tab starts with empty sessionStorage and boots
+ *      from that localStorage fallback; the test reproduces the same
+ *      empty-sessionStorage tab by opening the pinned href in a fresh
+ *      page (headless Chromium on Linux CI often swallows Control+click).
  *
  * These tests spawn their own child processes (not the webServer
  * entries in playwright.mock-llm.config.ts) so each test controls
@@ -662,7 +665,7 @@ test.describe("cross-connect: sidebar links pin their backend", () => {
     stateDirs.length = 0;
   });
 
-  test("cmd-clicking a sidebar conversation opens it on the owning backend", async ({
+  test("opening a sidebar conversation in a new tab uses the owning backend", async ({
     page,
     context,
   }) => {
@@ -803,7 +806,7 @@ test.describe("cross-connect: sidebar links pin their backend", () => {
       "tab 1's session-scoped backend should still be A",
     ).toBe(backendAId);
 
-    // ── 6. Cmd-click the conversation in tab 1's sidebar ──────────────
+    // ── 6. Open the conversation in a fresh tab from tab 1's sidebar ──
     await page.bringToFront();
     // Match on the conversation id in the href rather than the title: the
     // agent-server assigns its own generated title.
@@ -814,14 +817,23 @@ test.describe("cross-connect: sidebar links pin their backend", () => {
     await expect(card).toBeVisible({ timeout: 20_000 });
 
     const href = await card.getAttribute("href");
+    expect(
+      new URL(href ?? "", feUrl).searchParams.get("backend"),
+      "sidebar link should pin backend A",
+    ).toBe(backendAId);
 
-    const newTabPromise = context.waitForEvent("page");
-    await card.click({ modifiers: ["ControlOrMeta"] });
-    const newTab = await newTabPromise;
+    // A cmd-clicked tab starts with empty sessionStorage and boots from
+    // localStorage (which names B). Headless Chromium on Linux CI often
+    // swallows Control+click, so `waitForEvent("page")` can sit until the
+    // 6-minute test timeout. Opening the pinned href in a fresh page
+    // reproduces the same empty-sessionStorage tab.
+    const newTab = await context.newPage();
+    await suppressAnalytics(newTab);
+    await newTab.goto(new URL(href ?? "", feUrl).toString(), {
+      waitUntil: "domcontentloaded",
+    });
 
     // ── 7. The new tab must resolve the conversation on backend A ─────
-    // A freshly opened tab starts at about:blank, so wait for the real
-    // navigation before reading the URL.
     await newTab.waitForURL(/\/conversations\//, { timeout: 30_000 });
     await newTab.waitForLoadState("domcontentloaded", { timeout: 20_000 });
     await dismissAnalyticsModal(newTab);
@@ -840,11 +852,5 @@ test.describe("cross-connect: sidebar links pin their backend", () => {
     await expect(newTab.getByTestId("chat-interface")).toBeVisible({
       timeout: 30_000,
     });
-
-    // ── 8. And the mechanism: the link named the owning backend ───────
-    expect(
-      new URL(href ?? "", feUrl).searchParams.get("backend"),
-      "sidebar link should pin backend A",
-    ).toBe(backendAId);
   });
 });
