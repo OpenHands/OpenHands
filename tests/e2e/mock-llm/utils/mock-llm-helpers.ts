@@ -113,6 +113,20 @@ export async function seedLocalStorage(page: Page) {
           },
         ]),
       );
+
+      window.localStorage.setItem(
+        "openhands-active-backend",
+        JSON.stringify({
+          backendId: "default-local",
+        }),
+      );
+
+      window.sessionStorage.setItem(
+        "openhands-active-backend",
+        JSON.stringify({
+          backendId: "default-local",
+        }),
+      );
     },
     { apiKey: SESSION_API_KEY },
   );
