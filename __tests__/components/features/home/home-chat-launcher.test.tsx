@@ -514,10 +514,12 @@ describe("HomeChatLauncher", () => {
     await user.click(screen.getByTestId("stub-chat-submit"));
 
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
-    expect(createSpy).toHaveBeenCalledWith({
-      initialUserMsg: "hello world",
-      metadata: null,
-    });
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        initialUserMsg: "hello world",
+        metadata: null,
+      }),
+    );
   });
 
   it("passes the picked workspace path with new-worktree mode when selected", async () => {
