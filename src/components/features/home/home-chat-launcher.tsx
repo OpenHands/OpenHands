@@ -302,13 +302,11 @@ export function HomeChatLauncher() {
           />
         </div>
 
-        {isAutomateMode && (
-          <div className="mt-8 flex w-full flex-col gap-8">
-            <RecommendedAutomationsLauncher variant="rail" />
-            <PinnedAutomationsDashboard />
-            <RunningAutomationsList />
-          </div>
-        )}
+        <div className="mt-8 flex w-full flex-col gap-8">
+          <RecommendedAutomationsLauncher variant="rail" />
+          <PinnedAutomationsDashboard />
+          <RunningAutomationsList />
+        </div>
       </div>
 
       {isLocal ? (
