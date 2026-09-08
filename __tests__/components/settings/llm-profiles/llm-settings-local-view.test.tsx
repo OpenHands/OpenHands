@@ -428,6 +428,41 @@ describe("LlmSettingsLocalView", () => {
       // The key "new-profile" should be used, ensuring a fresh form mount
       // that doesn't inherit any existing profile data
     });
+
+    it("shows a skeleton until the DB default query settles, then mounts the form with the resolved default", async () => {
+      // Start with the flags unset (hydrator has not resolved yet), so the
+      // create form must wait instead of mounting with the static fallback.
+      useFreeModelsStore.getState().resetFlags();
+
+      const user = userEvent.setup();
+      renderWithProviders(<LlmSettingsLocalView />);
+
+      await user.click(screen.getByTestId("add-llm-profile"));
+
+      // While the DB default is unresolved, the form is replaced by a skeleton
+      // (no model input / save control to accept yet).
+      expect(screen.getByTestId("app-settings-skeleton")).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("mock-basic-model-input"),
+      ).not.toBeInTheDocument();
+
+      // The DB default resolves to a concrete model.
+      useFreeModelsStore.getState().setFlags({
+        freeModels: new Set(["openhands/gpt-5.2"]),
+        defaultModel: "openhands/gpt-5.2",
+      });
+
+      // The keyed form now mounts with the resolved default, not the static
+      // fallback.
+      await waitFor(() => {
+        expect(screen.getByTestId("mock-basic-model-input")).toHaveValue(
+          "openhands/gpt-5.2",
+        );
+      });
+      expect(
+        screen.queryByTestId("app-settings-skeleton"),
+      ).not.toBeInTheDocument();
+    });
   });
 
   describe("edit mode form initialization", () => {
@@ -1001,6 +1036,13 @@ describe("LlmSettingsLocalView - OpenHands provider on cloud", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+
+    // Mark the DB default query as settled so the create-mode form mounts
+    // (the gate renders a skeleton until `defaultModelReady` is true).
+    useFreeModelsStore.getState().setFlags({
+      freeModels: new Set(),
+      defaultModel: null,
+    });
 
     vi.mocked(useLlmProfilesHook.useLlmProfiles).mockReturnValue(
       createMockLlmProfilesReturn({
