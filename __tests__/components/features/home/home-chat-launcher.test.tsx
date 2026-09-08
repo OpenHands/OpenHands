@@ -365,13 +365,35 @@ describe("HomeChatLauncher", () => {
     window.localStorage.removeItem(LAST_LOCAL_WORKSPACE_MODE_STORAGE_KEY);
   });
 
-  it("asks for an engineering task in the launcher input placeholder", async () => {
+  it("defaults to Automate mode and switches back to Code mode", async () => {
     renderLauncher();
+    const user = userEvent.setup();
 
+    expect(screen.getByTestId("home-launcher-mode-automate")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
     expect(screen.getByTestId("stub-chat-submit")).toHaveAttribute(
       "data-placeholder",
-      "HOME$DESCRIBE_ENGINEERING_TASK",
+      "HOME$AUTOMATE_PROMPT_PLACEHOLDER",
     );
+    expect(
+      screen.getByTestId("recommended-automations-rail"),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("home-launcher-mode-code"));
+
+    expect(screen.getByTestId("home-launcher-mode-code")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByTestId("stub-chat-submit")).toHaveAttribute(
+      "data-placeholder",
+      "SUGGESTIONS$WHAT_TO_BUILD",
+    );
+    expect(
+      screen.queryByTestId("recommended-automations-rail"),
+    ).not.toBeInTheDocument();
   });
 
   it("creates a conversation with just the typed query and navigates when no workspace is selected", async () => {
@@ -716,7 +738,7 @@ describe("HomeChatLauncher", () => {
     });
   });
 
-  it("always renders the recommended automations rail above pinned activity", () => {
+  it("renders the recommended automations rail above pinned activity in Automate mode", () => {
     renderLauncher();
 
     expect(

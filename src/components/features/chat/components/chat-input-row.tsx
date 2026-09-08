@@ -3,6 +3,7 @@ import { ChatInputField } from "./chat-input-field";
 
 interface ChatInputRowProps {
   chatInputRef: React.RefObject<HTMLDivElement | null>;
+  placeholder?: string;
   isNewConversationPending?: boolean;
   placeholder?: string;
   onInput: () => void;
@@ -14,6 +15,7 @@ interface ChatInputRowProps {
 
 export function ChatInputRow({
   chatInputRef,
+  placeholder,
   isNewConversationPending = false,
   placeholder,
   onInput,
@@ -27,6 +29,7 @@ export function ChatInputRow({
       <div className="basis-0 box-border content-stretch flex flex-row gap-4 grow items-end justify-start min-h-px min-w-px p-0 relative shrink-0">
         <ChatInputField
           chatInputRef={chatInputRef}
+          placeholder={placeholder}
           disabled={isNewConversationPending}
           placeholder={placeholder}
           onInput={onInput}
