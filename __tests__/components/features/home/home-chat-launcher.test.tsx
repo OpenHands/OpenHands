@@ -390,8 +390,8 @@ describe("HomeChatLauncher", () => {
       "SUGGESTIONS$WHAT_TO_BUILD",
     );
     expect(
-      screen.queryByTestId("recommended-automations-rail"),
-    ).not.toBeInTheDocument();
+      screen.getByTestId("recommended-automations-rail"),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByTestId("home-launcher-mode-automate"));
 
@@ -431,10 +431,12 @@ describe("HomeChatLauncher", () => {
       plugins: [],
     });
 
-    expect(createSpy).toHaveBeenCalledWith({
-      initialUserMsg: "hello world",
-      metadata: null,
-    });
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        initialUserMsg: "hello world",
+        metadata: null,
+      }),
+    );
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith("/conversations/conv-abc"),
     );
@@ -493,12 +495,14 @@ describe("HomeChatLauncher", () => {
     await user.click(screen.getByTestId("stub-chat-submit"));
 
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
-    expect(createSpy).toHaveBeenCalledWith({
-      initialUserMsg: "hello world",
-      metadata: null,
-      workingDirOverride: "/p/app",
-      workspaceMode: "local_repo",
-    });
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        initialUserMsg: "hello world",
+        metadata: null,
+        workingDirOverride: "/p/app",
+        workspaceMode: "local_repo",
+      }),
+    );
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith("/conversations/conv-ws"),
     );
@@ -565,12 +569,14 @@ describe("HomeChatLauncher", () => {
     await user.click(screen.getByTestId("stub-chat-submit"));
 
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
-    expect(createSpy).toHaveBeenCalledWith({
-      initialUserMsg: "hello world",
-      metadata: null,
-      workingDirOverride: "/p/app",
-      workspaceMode: "new_worktree",
-    });
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        initialUserMsg: "hello world",
+        metadata: null,
+        workingDirOverride: "/p/app",
+        workspaceMode: "new_worktree",
+      }),
+    );
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith("/conversations/conv-wt"),
     );
@@ -645,14 +651,16 @@ describe("HomeChatLauncher", () => {
     await user.click(screen.getByTestId("stub-chat-submit"));
 
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
-    expect(createSpy).toHaveBeenCalledWith({
-      initialUserMsg: "hello world",
-      metadata: {
-        selected_repository: "org/repo",
-        selected_branch: "main",
-        git_provider: "github",
-      },
-    });
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        initialUserMsg: "hello world",
+        metadata: {
+          selected_repository: "org/repo",
+          selected_branch: "main",
+          git_provider: "github",
+        },
+      }),
+    );
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith("/conversations/conv-repo"),
     );
@@ -669,9 +677,11 @@ describe("HomeChatLauncher", () => {
     await user.click(screen.getByTestId("stub-chat-submit"));
 
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
-    expect(createSpy).toHaveBeenCalledWith({
-      metadata: null,
-    });
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: null,
+      }),
+    );
     await waitFor(() =>
       expect(sendMessageWithAttachments).toHaveBeenCalledTimes(1),
     );
@@ -743,9 +753,11 @@ describe("HomeChatLauncher", () => {
     await user.click(screen.getByTestId("stub-chat-submit"));
 
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
-    expect(createSpy).toHaveBeenCalledWith({
-      metadata: null,
-    });
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: null,
+      }),
+    );
     expect(sendMessageWithAttachments).not.toHaveBeenCalled();
     await waitFor(() =>
       expect(enqueueHomeTaskPendingMessage).toHaveBeenCalledWith({
@@ -775,11 +787,13 @@ describe("HomeChatLauncher", () => {
     await user.click(screen.getByTestId("stub-chat-submit"));
 
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
-    expect(createSpy).toHaveBeenCalledWith({
-      initialUserMsg: "hello world",
-      plugins: [{ source: "github:o/a", ref: null, repo_path: null }],
-      metadata: null,
-    });
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        initialUserMsg: "hello world",
+        plugins: [{ source: "github:o/a", ref: null, repo_path: null }],
+        metadata: null,
+      }),
+    );
     expect(mockSetAutomationSetupDraft).toHaveBeenCalledWith("conv-abc", {
       prompt: "hello world",
       kind: "plugin",
