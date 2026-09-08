@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { cn } from "#/utils/utils";
 import { ChatInterfaceWrapper } from "./chat-interface-wrapper";
 import { ConversationTabContent } from "../conversation-tabs/conversation-tab-content/conversation-tab-content";
@@ -6,6 +7,13 @@ import { ConversationTabs } from "../conversation-tabs/conversation-tabs";
 import { ResizeHandle } from "../../../ui/resize-handle";
 import { useResizablePanels } from "#/hooks/use-resizable-panels";
 import { useConversationStore } from "#/stores/conversation-store";
+import { AutomationSetupPanel } from "#/components/features/automations/setup/automation-setup-panel";
+import {
+  clearAutomationSetupDraft,
+  getAutomationSetupDraft,
+  type AutomationSetupDraft,
+} from "#/api/automation-setup-draft-store";
+import { useConversationId } from "#/hooks/use-conversation-id";
 import {
   useBreakpoint,
   SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH,
@@ -21,9 +29,15 @@ function getDesktopTabPanelClass(isRightPanelShown: boolean) {
 }
 
 export function ConversationMain() {
+  const { conversationId } = useConversationId();
   const isMobile = useBreakpoint();
   const isSidebarRailHidden = useBreakpoint(SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH);
-  const { isRightPanelShown } = useConversationStore();
+  const { isRightPanelShown, setHasRightPanelToggled, setIsRightPanelShown } =
+    useConversationStore();
+  const [automationSetupDraft, setAutomationSetupDraftState] =
+    useState<AutomationSetupDraft | null>(() =>
+      getAutomationSetupDraft(conversationId),
+    );
   const overviewDrawer = useConversationOverviewDrawerOptional();
   const isSecondaryDrawerOpen = Boolean(overviewDrawer?.section);
 
@@ -34,6 +48,22 @@ export function ConversationMain() {
       maxLeftWidth: 80,
       storageKey: "desktop-layout-panel-width",
     });
+
+  useEffect(() => {
+    setAutomationSetupDraftState(getAutomationSetupDraft(conversationId));
+  }, [conversationId]);
+
+  useEffect(() => {
+    if (!automationSetupDraft) return;
+    setHasRightPanelToggled(true);
+    setIsRightPanelShown(true);
+  }, [automationSetupDraft, setHasRightPanelToggled, setIsRightPanelShown]);
+
+  const closeAutomationSetup = () => {
+    if (conversationId) clearAutomationSetupDraft(conversationId);
+    setAutomationSetupDraftState(null);
+    setIsRightPanelShown(false);
+  };
 
   return (
     <div
@@ -119,15 +149,24 @@ export function ConversationMain() {
           >
             <div className="flex h-full w-full flex-col">
               <div className="flex flex-col flex-1 min-h-0 bg-[var(--oh-surface)] border-l border-[var(--oh-border)] overflow-hidden">
-                <div
-                  data-testid="tabs-pane-header"
-                  className="flex shrink-0 flex-col border-b border-[var(--oh-border)]"
-                >
-                  <ConversationTabs isPanelResizing={isDragging} />
-                </div>
-                <div className="flex-1 min-h-0 flex flex-col">
-                  <ConversationTabContent />
-                </div>
+                {automationSetupDraft ? (
+                  <AutomationSetupPanel
+                    draft={automationSetupDraft}
+                    onClose={closeAutomationSetup}
+                  />
+                ) : (
+                  <>
+                    <div
+                      data-testid="tabs-pane-header"
+                      className="flex shrink-0 flex-col border-b border-[var(--oh-border)]"
+                    >
+                      <ConversationTabs isPanelResizing={isDragging} />
+                    </div>
+                    <div className="flex-1 min-h-0 flex flex-col">
+                      <ConversationTabContent />
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </div>
