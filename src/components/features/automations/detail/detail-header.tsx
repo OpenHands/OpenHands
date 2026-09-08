@@ -13,10 +13,7 @@ import { ActiveStatusBadge } from "./active-status-badge";
 interface DetailHeaderProps {
   automation: Automation;
   onToggle: () => void;
-  /**
-   * When provided, the kebab menu shows an Edit entry. Omitted for cloud
-   * backends where the Edit feature is not supported in MVP.
-   */
+  /** When provided (and the user can manage), the kebab menu shows an Edit entry. */
   onEdit?: () => void;
   onDelete: () => void;
   onExport: () => void;
