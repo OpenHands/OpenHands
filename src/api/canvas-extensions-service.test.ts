@@ -101,6 +101,41 @@ describe("CanvasExtensionsService", () => {
     });
   });
 
+  it.each([
+    {
+      source: "/repository-name/",
+      repoPath: "/demo-extension",
+      expectedSource: "/repository-name/demo-extension",
+    },
+    {
+      source: "/repository-name",
+      repoPath: "demo-extension",
+      expectedSource: "/repository-name/demo-extension",
+    },
+    {
+      source: "/repository-name/demo-extension",
+      repoPath: null,
+      expectedSource: "/repository-name/demo-extension",
+    },
+  ])(
+    "resolves a local extension from source $source and path $repoPath",
+    async ({ source, repoPath, expectedSource }) => {
+      post.mockResolvedValue(extension);
+
+      await CanvasExtensionsService.install({
+        source,
+        ref: null,
+        repo_path: repoPath,
+      });
+
+      expect(post).toHaveBeenCalledWith("/api/canvas-extensions/install", {
+        source: expectedSource,
+        ref: null,
+        repo_path: null,
+      });
+    },
+  );
+
   it("maps a missing router to an explicit unsupported-backend error", async () => {
     get.mockRejectedValue(
       Object.assign(new Error("Not Found"), {
