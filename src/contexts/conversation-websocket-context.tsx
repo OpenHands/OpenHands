@@ -38,6 +38,7 @@ import {
   isBrowserNavigateActionEvent,
   isSwitchLLMObservationEvent,
   isCanvasUIActionEvent,
+  isAutomationFormUpdateActionEvent,
   isStreamingDeltaEvent,
   isLaunchChildConversationActionEvent,
 } from "#/types/agent-server/type-guards";
@@ -46,6 +47,7 @@ import {
   StreamingDeltaBatcher,
 } from "#/utils/streaming-delta-batcher";
 import { handleCanvasUIAction } from "#/services/canvas-ui";
+import { handleAutomationFormUpdateAction } from "#/services/automation-form";
 import { handleLaunchChildConversationAction } from "#/services/child-conversation-launch";
 import { ConversationStateUpdateEventStats } from "#/types/agent-server/core/events/conversation-state-event";
 import type {
@@ -741,6 +743,15 @@ export function ConversationWebSocketProvider({
           // the actual UI change happens here on the client.
           if (isCanvasUIActionEvent(event)) {
             handleCanvasUIAction(event.action, conversationId ?? null);
+          }
+
+          if (isAutomationFormUpdateActionEvent(event)) {
+            handleAutomationFormUpdateAction(
+              event.action,
+              conversationId ?? null,
+              event.id,
+              event.timestamp,
+            );
           }
 
           // Same client-tool pattern, but the work is a network call: launch

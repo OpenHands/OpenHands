@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CANVAS_UI_CLIENT_TOOL_NAME } from "#/constants/canvas-ui";
 import { LAUNCH_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversation";
+import { AUTOMATION_FORM_UPDATE_TOOL_NAME } from "#/constants/automation-form";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import type { Settings } from "#/types/settings";
 import {
@@ -641,6 +642,24 @@ describe("buildStartConversationRequest — agentProfileId path", () => {
     expect(payload.client_tools.map((tool) => tool.name)).toEqual([
       CANVAS_UI_CLIENT_TOOL_NAME,
       LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
+    ]);
+  });
+
+  it("adds automation form tool only for automation setup starts", () => {
+    const settings = makeSettings({ agent_kind: "openhands" });
+    const regularPayload = buildStartConversationRequest({ settings });
+    const automationPayload = buildStartConversationRequest({
+      settings,
+      automationSetup: true,
+    });
+
+    expect(regularPayload.client_tools.map((tool) => tool.name)).not.toContain(
+      AUTOMATION_FORM_UPDATE_TOOL_NAME,
+    );
+    expect(automationPayload.client_tools.map((tool) => tool.name)).toEqual([
+      CANVAS_UI_CLIENT_TOOL_NAME,
+      LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
+      AUTOMATION_FORM_UPDATE_TOOL_NAME,
     ]);
   });
 
