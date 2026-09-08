@@ -1,16 +1,18 @@
-import { ArrowUp } from "lucide-react";
+import { ArrowUp, Loader2 } from "lucide-react";
 import { cn } from "#/utils/utils";
 
 export interface ChatSendButtonProps {
   buttonClassName: string;
   handleSubmit: () => void;
   disabled: boolean;
+  isPending?: boolean;
 }
 
 export function ChatSendButton({
   buttonClassName,
   handleSubmit,
   disabled,
+  isPending = false,
 }: ChatSendButtonProps) {
   return (
     <button
@@ -26,11 +28,20 @@ export function ChatSendButton({
       data-testid="submit-button"
       onClick={handleSubmit}
       disabled={disabled}
+      aria-busy={isPending}
     >
-      <ArrowUp
-        className="w-4 h-4"
-        color={disabled ? "var(--oh-muted)" : "white"}
-      />
+      {isPending ? (
+        <Loader2
+          data-testid="submit-button-pending-icon"
+          className="size-4 animate-spin text-[var(--oh-muted)]"
+          aria-hidden
+        />
+      ) : (
+        <ArrowUp
+          className="w-4 h-4"
+          color={disabled ? "var(--oh-muted)" : "white"}
+        />
+      )}
     </button>
   );
 }
