@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   runAction: vi.fn(),
   prerequisites: vi.fn(),
   capabilities: vi.fn(),
+  llmProfiles: vi.fn(),
   missingCreateEndpoints: vi.fn<(entry: SetupEntry) => string[]>(() => []),
   tracking: {
     trackAutomationSetupOpened: vi.fn(),
@@ -51,6 +52,11 @@ vi.mock("#/hooks/query/use-manifest-capabilities", () => ({
 
 vi.mock("#/hooks/query/use-manifest-prerequisites", () => ({
   useSetupPrerequisites: () => mocks.prerequisites(),
+}));
+
+vi.mock("#/hooks/query/use-llm-profiles", () => ({
+  useLlmProfiles: (options: { enabled?: boolean } = {}) =>
+    mocks.llmProfiles(options),
 }));
 
 // Which endpoints an entry cannot be created without is read off the published
@@ -116,6 +122,10 @@ beforeEach(() => {
     capabilities: null,
     supported: "unknown",
     unmet: [],
+    isLoading: false,
+  });
+  mocks.llmProfiles.mockReturnValue({
+    data: { profiles: [] },
     isLoading: false,
   });
   vi.mocked(AutomationService.validateDraft).mockResolvedValue({
@@ -208,6 +218,26 @@ const EVENT_FIRST_MIXED_TRIGGER_ENTRY: SetupEntry = (() => {
         },
       },
       filter: "icontains(comment.body, '{{form.mention}}')",
+    }),
+  });
+})();
+
+const LLM_PROFILE_ENTRY: SetupEntry = (() => {
+  const { form } = createSetup();
+  return createSetupEntry({
+    setup: createSetup({
+      form: {
+        ...form,
+        args: {
+          ...form.args,
+          model: {
+            type: "llm-profile",
+            label: "LLM profile",
+            help: "Which saved profile should run this automation.",
+            required: false,
+          },
+        },
+      },
     }),
   });
 })();
@@ -307,6 +337,56 @@ describe("SetupDialog", () => {
     );
     expect(mocks.runAction.mock.calls[0][2]).toEqual({
       name: "Widget monitor - OpenHands/agent-server-gui",
+      prompt: "Report on Widgets in OpenHands/agent-server-gui.",
+      repos: [{ url: "OpenHands/agent-server-gui", provider: "github" }],
+      trigger: { type: "cron", schedule: "*/15 * * * *" },
+    });
+  });
+
+  it("waits for LLM profiles before continuing", () => {
+    // Arrange — profile names come from the backend, not the manifest, so the
+    // form should not validate while that closed set is still unknown.
+    mocks.llmProfiles.mockReturnValue({ data: undefined, isLoading: true });
+
+    // Act
+    renderDialog(LLM_PROFILE_ENTRY);
+
+    // Assert
+    expect(mocks.llmProfiles).toHaveBeenCalledWith({ enabled: true });
+    expect(screen.getByTestId("setup-continue-button")).toBeDisabled();
+    expect(screen.getByTestId("setup-field-model")).toHaveAttribute(
+      "role",
+      "combobox",
+    );
+    expect(screen.getByTestId("setup-field-model")).toBeDisabled();
+  });
+
+  it("submits a selected backend LLM profile name", async () => {
+    // Arrange
+    mocks.llmProfiles.mockReturnValue({
+      data: { profiles: [{ name: "Fast" }, { name: "Smart" }] },
+      isLoading: false,
+    });
+    mocks.runAction.mockResolvedValue({ response: { id: "automation-1" } });
+    const { user } = renderDialog(LLM_PROFILE_ENTRY);
+
+    // Act
+    const modelInput = screen.getByTestId("setup-field-model");
+    expect(modelInput).toHaveAttribute("role", "combobox");
+    await user.click(modelInput);
+    await user.click(await screen.findByText("Smart"));
+    await fillForm(user);
+    await user.click(screen.getByTestId("setup-continue-button"));
+    await waitFor(() =>
+      expect(screen.getByTestId("setup-review")).toBeInTheDocument(),
+    );
+    await user.click(screen.getByTestId("setup-continue-button"));
+
+    // Assert
+    await waitFor(() => expect(mocks.runAction).toHaveBeenCalled());
+    expect(mocks.runAction.mock.calls[0][2]).toEqual({
+      name: "Widget monitor - OpenHands/agent-server-gui",
+      model: "Smart",
       prompt: "Report on Widgets in OpenHands/agent-server-gui.",
       repos: [{ url: "OpenHands/agent-server-gui", provider: "github" }],
       trigger: { type: "cron", schedule: "*/15 * * * *" },

@@ -28,6 +28,8 @@ export interface SetupFormFieldProps {
   error?: string;
   /** Declared options, or the ones the deployment supplied. */
   options: SetupFieldOption[];
+  /** Whether dynamic options for this field are still loading. */
+  isOptionsLoading?: boolean;
   /** The picked repository, kept so the picker can show what is selected. */
   repository: GitRepository | null;
   disabled: boolean;
@@ -50,6 +52,7 @@ export function SetupFormField({
   value,
   error,
   options,
+  isOptionsLoading = false,
   repository,
   disabled,
   onChange,
@@ -114,16 +117,20 @@ export function SetupFormField({
     );
   }
 
-  // A timezone field declares no options of its own: the accepted zones are the
-  // deployment's, so it renders as a list once they are known and as a plain
-  // input when they are not.
-  if (
+  // A timezone or event field declares no options of its own: the accepted
+  // values are the deployment's, so it renders as a list once they are known and
+  // as a plain input when they are not. LLM profiles are different: they are a
+  // semantic closed set owned by the current backend, so an unavailable list is
+  // still shown as a disabled dropdown rather than an unrestricted text input.
+  const shouldRenderDropdown =
     field.type === "select" ||
-    (["timezone", "llm-profile", "event-source", "event-type"].includes(
-      field.type,
-    ) &&
-      options.length > 0)
-  ) {
+    field.type === "llm-profile" ||
+    (["timezone", "event-source", "event-type"].includes(field.type) &&
+      options.length > 0);
+  if (shouldRenderDropdown) {
+    const hasOptions = options.length > 0;
+    const profileOptionsUnavailable =
+      field.type === "llm-profile" && !isOptionsLoading && !hasOptions;
     return (
       <div className="flex w-full flex-col gap-2.5">
         <SettingsDropdownInput
@@ -135,8 +142,13 @@ export function SetupFormField({
             label: option.label,
           }))}
           selectedKey={fieldText(value) || undefined}
-          placeholder={field.placeholder}
-          isDisabled={disabled}
+          placeholder={
+            profileOptionsUnavailable
+              ? t(I18nKey.MODEL$NO_SAVED_PROFILES)
+              : field.placeholder
+          }
+          isDisabled={disabled || profileOptionsUnavailable}
+          isLoading={isOptionsLoading}
           required={field.required}
           onSelectionChange={(key) => {
             onChange(key === null ? "" : String(key));

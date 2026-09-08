@@ -13,6 +13,7 @@ import { getApiErrorBody } from "#/utils/api-error-message";
 import { useTracking } from "#/hooks/use-tracking";
 import { useSetupCapabilities } from "#/hooks/query/use-manifest-capabilities";
 import { useSetupPrerequisites } from "#/hooks/query/use-manifest-prerequisites";
+import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useSetupPreflight } from "#/hooks/use-manifest-preflight";
 import { useSetupAction } from "#/manifests/manifest-actions";
 import {
@@ -164,16 +165,47 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     () => collectFields(entry.setup, selectedTrigger, selectedAction),
     [entry, selectedTrigger, selectedAction],
   );
-  const overrides = useMemo(
-    () =>
-      resolveFieldOverrides(
-        entry.setup,
-        capabilities.capabilities,
-        selectedTrigger,
-        selectedAction,
-      ),
-    [entry, capabilities.capabilities, selectedTrigger, selectedAction],
+  const hasLlmProfileField = useMemo(
+    () => Object.values(fields).some((field) => field.type === "llm-profile"),
+    [fields],
   );
+  const { data: profilesData, isLoading: isLoadingProfiles } = useLlmProfiles({
+    enabled: hasLlmProfileField,
+  });
+  const llmProfileOptions = useMemo(
+    () =>
+      (profilesData?.profiles ?? []).map((profile) => ({
+        value: profile.name,
+        label: profile.name,
+      })),
+    [profilesData?.profiles],
+  );
+  const overrides = useMemo(() => {
+    const base = resolveFieldOverrides(
+      entry.setup,
+      capabilities.capabilities,
+      selectedTrigger,
+      selectedAction,
+    );
+    if (!hasLlmProfileField || isLoadingProfiles) return base;
+
+    return Object.entries(fields).reduce(
+      (next, [fieldName, field]) =>
+        field.type === "llm-profile"
+          ? { ...next, [fieldName]: { options: llmProfileOptions } }
+          : next,
+      base,
+    );
+  }, [
+    entry.setup,
+    capabilities.capabilities,
+    selectedTrigger,
+    selectedAction,
+    hasLlmProfileField,
+    isLoadingProfiles,
+    fields,
+    llmProfileOptions,
+  ]);
   const payload = useMemo(
     () =>
       buildCreatePayload(
@@ -376,6 +408,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   };
 
   const isLoading = capabilities.isLoading || prerequisites.isLoading;
+  const isLoadingLlmProfileOptions = hasLlmProfileField && isLoadingProfiles;
 
   const title = (() => {
     if (isUnsupported) return t(I18nKey.SETUP$UNAVAILABLE_TITLE);
@@ -508,6 +541,9 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
                   options={getFieldOptions(name, field, overrides)}
                   repository={repositories[name] ?? null}
                   disabled={isSubmitting}
+                  isOptionsLoading={
+                    field.type === "llm-profile" && isLoadingLlmProfileOptions
+                  }
                   onChange={(value) => setFieldValue(name, value)}
                   onRepositoryChange={(repository) =>
                     setRepositories((current) => ({
@@ -584,6 +620,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
               variant="primary"
               isDisabled={
                 isLoading ||
+                isLoadingLlmProfileOptions ||
                 isSubmitting ||
                 (currentStep === "prerequisites" && prerequisites.isBlocked)
               }
