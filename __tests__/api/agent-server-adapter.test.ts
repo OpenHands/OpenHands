@@ -3,6 +3,7 @@ import type { MockInstance } from "vitest";
 import { getAcpProvider as getClientAcpProvider } from "@openhands/typescript-client";
 import { CANVAS_UI_CLIENT_TOOL_NAME } from "#/constants/canvas-ui";
 import { LAUNCH_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversation";
+import { AUTOMATION_FORM_UPDATE_TOOL_NAME } from "#/constants/automation-form";
 
 import {
   ACP_SERVER_TAG_KEY,
@@ -843,6 +844,25 @@ describe("buildStartConversationRequest", () => {
       expect(payload.client_tools.map((tool) => tool.name)).toEqual([
         CANVAS_UI_CLIENT_TOOL_NAME,
         LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
+      ]);
+    });
+
+    it("adds the automation form client tool only for automation setup starts", () => {
+      const regularPayload = buildStartConversationRequest({
+        settings: DEFAULT_SETTINGS,
+      });
+      const automationPayload = buildStartConversationRequest({
+        settings: DEFAULT_SETTINGS,
+        automationSetup: true,
+      });
+
+      expect(
+        regularPayload.client_tools.map((tool) => tool.name),
+      ).not.toContain(AUTOMATION_FORM_UPDATE_TOOL_NAME);
+      expect(automationPayload.client_tools.map((tool) => tool.name)).toEqual([
+        CANVAS_UI_CLIENT_TOOL_NAME,
+        LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
+        AUTOMATION_FORM_UPDATE_TOOL_NAME,
       ]);
     });
 
