@@ -29,8 +29,8 @@ describe("getMobileTopBarState", () => {
     });
   });
 
-  it("backs from the canvas extensions management page but not extension pages", () => {
-    expect(getMobileTopBarState("/extensions")).toEqual({
+  it("backs from the apps management page but not extension pages", () => {
+    expect(getMobileTopBarState("/apps")).toEqual({
       mode: "back",
       backTo: "/customize",
       backLabelKey: I18nKey.NAV$CUSTOMIZE,
