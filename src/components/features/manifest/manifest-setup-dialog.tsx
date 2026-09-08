@@ -268,11 +268,27 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     return entry.name;
   })();
 
+  // The review panel owns the scroll area, so it replaces the form wrapper
+  // rather than sitting inside it. Loading and unsupported still belong in the
+  // wrapper: on review they are the only thing left to show.
+  const showReview = currentStep === "review" && !isLoading && !isUnsupported;
+
+  const formErrorMessages = serviceErrors.formErrors.map((message) => (
+    <p
+      key={message}
+      role="alert"
+      data-testid="setup-form-error"
+      className="pt-4 text-sm text-red-400"
+    >
+      {message}
+    </p>
+  ));
+
   return (
     <ModalBackdrop onClose={onClose} aria-label={entry.name}>
       <div
         data-testid="setup-dialog"
-        className="relative flex max-h-[85vh] w-[92vw] max-w-lg flex-col rounded-xl border border-[var(--oh-border)] bg-base-secondary"
+        className="relative flex max-h-[85vh] w-[min(36rem,calc(100vw-2rem))] flex-col rounded-xl border border-[var(--oh-border)] bg-base-secondary"
       >
         <ModalCloseButton
           onClose={onClose}
@@ -281,90 +297,101 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
         />
         <header className="flex-shrink-0 px-6 pb-4 pt-6">
           <h2 className={cn("pr-6", modalTitleLgClassName)}>{title}</h2>
+          {currentStep === "review" && (
+            <p className="mt-2 text-sm text-tertiary-light">
+              {t(I18nKey.SETUP$REVIEW_DESCRIPTION)}
+            </p>
+          )}
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-6">
-          {isLoading && (
-            <div className="flex justify-center py-6">
-              <LoadingSpinner size="small" />
-            </div>
-          )}
+        {showReview ? (
+          <SetupReviewStep
+            setup={entry.setup}
+            values={values}
+            automationName={entry.name}
+          />
+        ) : (
+          <div className="min-h-0 flex-1 overflow-y-auto px-6">
+            {isLoading && (
+              <div className="flex justify-center py-6">
+                <LoadingSpinner size="small" />
+              </div>
+            )}
 
-          {!isLoading && isUnsupported && (
-            <div className="flex flex-col gap-2">
-              <p className="text-sm text-[var(--oh-muted)]">
-                {t(I18nKey.SETUP$UNSUPPORTED_MESSAGE)}
-              </p>
-              {/* The unmet requirements are the names both sides of the
-                  contract already use, so they are printed rather than
-                  translated. Without them the block is undiagnosable: the
-                  deployment answered, and the host would be discarding the
-                  one thing it learned. */}
-              {unmet.length > 0 && (
-                <p
-                  data-testid="setup-unmet-requirements"
-                  className="text-sm text-[var(--oh-muted)]"
-                >
-                  {unmet.join(", ")}
-                </p>
-              )}
-            </div>
-          )}
-
-          {!isLoading && !isUnsupported && currentStep === "prerequisites" && (
-            <SetupPrerequisitesStep prerequisites={prerequisites} />
-          )}
-
-          {!isLoading && !isUnsupported && currentStep === "form" && (
-            <div className="flex flex-col gap-5">
-              <p className="text-sm text-[var(--oh-muted)]">
-                {entry.description}
-              </p>
-              {entry.setup.form.note && (
+            {!isLoading && isUnsupported && (
+              <div className="flex flex-col gap-2">
                 <p className="text-sm text-[var(--oh-muted)]">
-                  {entry.setup.form.note}
+                  {t(I18nKey.SETUP$UNSUPPORTED_MESSAGE)}
                 </p>
+                {/* The unmet requirements are the names both sides of the
+                    contract already use, so they are printed rather than
+                    translated. Without them the block is undiagnosable: the
+                    deployment answered, and the host would be discarding the
+                    one thing it learned. */}
+                {unmet.length > 0 && (
+                  <p
+                    data-testid="setup-unmet-requirements"
+                    className="text-sm text-[var(--oh-muted)]"
+                  >
+                    {unmet.join(", ")}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {!isLoading &&
+              !isUnsupported &&
+              currentStep === "prerequisites" && (
+                <SetupPrerequisitesStep prerequisites={prerequisites} />
               )}
-              {Object.entries(fields).map(([name, field]) => (
-                <SetupFormField
-                  key={name}
-                  name={name}
-                  field={field}
-                  value={values[name] ?? ""}
-                  error={resolveFieldError(name)}
-                  options={getFieldOptions(name, field, overrides)}
-                  repository={repositories[name] ?? null}
-                  disabled={isSubmitting}
-                  onChange={(value) => setFieldValue(name, value)}
-                  onRepositoryChange={(repository) =>
-                    setRepositories((current) => ({
-                      ...current,
-                      [name]: repository,
-                    }))
-                  }
-                  onBlur={handleFieldBlur}
-                />
-              ))}
-            </div>
+
+            {!isLoading && !isUnsupported && currentStep === "form" && (
+              <div className="flex flex-col gap-5">
+                <p className="text-sm text-[var(--oh-muted)]">
+                  {entry.description}
+                </p>
+                {entry.setup.form.note && (
+                  <p className="text-sm text-[var(--oh-muted)]">
+                    {entry.setup.form.note}
+                  </p>
+                )}
+                {Object.entries(fields).map(([name, field]) => (
+                  <SetupFormField
+                    key={name}
+                    name={name}
+                    field={field}
+                    value={values[name] ?? ""}
+                    error={resolveFieldError(name)}
+                    options={getFieldOptions(name, field, overrides)}
+                    repository={repositories[name] ?? null}
+                    disabled={isSubmitting}
+                    onChange={(value) => setFieldValue(name, value)}
+                    onRepositoryChange={(repository) =>
+                      setRepositories((current) => ({
+                        ...current,
+                        [name]: repository,
+                      }))
+                    }
+                    onBlur={handleFieldBlur}
+                  />
+                ))}
+              </div>
+            )}
+
+            {formErrorMessages}
+          </div>
+        )}
+
+        {showReview && formErrorMessages.length > 0 && (
+          <div className="px-6">{formErrorMessages}</div>
+        )}
+
+        <footer
+          className={cn(
+            "flex flex-shrink-0 justify-end px-6",
+            currentStep === "review" ? "gap-3 py-5" : "gap-2 pb-6 pt-4",
           )}
-
-          {!isLoading && !isUnsupported && currentStep === "review" && (
-            <SetupReviewStep setup={entry.setup} values={values} />
-          )}
-
-          {serviceErrors.formErrors.map((message) => (
-            <p
-              key={message}
-              role="alert"
-              data-testid="setup-form-error"
-              className="pt-4 text-sm text-red-400"
-            >
-              {message}
-            </p>
-          ))}
-        </div>
-
-        <footer className="flex flex-shrink-0 justify-end gap-2 px-6 pb-6 pt-4">
+        >
           {currentStep === "review" && (
             <BrandButton
               testId="setup-back-button"

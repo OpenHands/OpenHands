@@ -1,6 +1,17 @@
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import {
+  AutomationPreviewField,
+  automationPreviewListClassName,
+} from "#/components/features/automations/automation-preview-field";
+import { previewChipItems } from "#/components/features/automations/automation-preview-chips";
+import { setupPreviewFieldIcon } from "#/components/features/automations/automation-preview-icons";
+import {
+  isPreviewIdentityField,
+  sortPreviewFields,
+  type PreviewFieldKind,
+} from "#/components/features/automations/automation-preview-order";
+import {
   collectFields,
   fieldValues,
 } from "#/manifests/manifest-local-validation";
@@ -9,33 +20,78 @@ import type { SetupBlock, SetupFormValues } from "#/manifests/types";
 export interface SetupReviewStepProps {
   setup: SetupBlock;
   values: SetupFormValues;
+  /** Catalog name, shown first when the form has no name/title field. */
+  automationName?: string;
+}
+
+interface ReviewRow {
+  name: string;
+  label: string;
+  value: string;
+  kind: PreviewFieldKind;
+  parts: string[];
 }
 
 /**
  * Stage 7 — the plain-language summary the user confirms.
  *
- * The last cheap moment to catch a wrong answer, and the last point at which
- * nothing has been created yet. A manifest declares no summary of its own: one
- * row per declared field, labelled the way the field was labelled, says the
- * same thing without asking every entry to restate it.
+ * Rows follow the shared preview order (identity, when, where, inputs, body,
+ * add-ons). A manifest declares no order of its own.
  */
-export function SetupReviewStep({ setup, values }: SetupReviewStepProps) {
+export function SetupReviewStep({
+  setup,
+  values,
+  automationName,
+}: SetupReviewStepProps) {
   const { t } = useTranslation("openhands");
+  const declared = Object.entries(collectFields(setup));
+  const rows: ReviewRow[] = [];
+
+  if (
+    automationName &&
+    !declared.some(([name]) => isPreviewIdentityField(name))
+  ) {
+    rows.push({
+      name: "name",
+      label: t(I18nKey.AUTOMATIONS$NAME),
+      value: automationName,
+      kind: "name",
+      parts: [automationName],
+    });
+  }
+
+  for (const [name, field] of declared) {
+    const parts = fieldValues(values[name]);
+    rows.push({
+      name,
+      label: field.label,
+      value: parts.join("\n") || t(I18nKey.SETUP$EMPTY_VALUE),
+      kind: field.type,
+      parts,
+    });
+  }
+
+  const ordered = sortPreviewFields(
+    rows,
+    (row) => row.name,
+    (row) => row.kind,
+  );
 
   return (
-    <div className="flex flex-col gap-4" data-testid="setup-review">
-      <dl className="flex flex-col gap-3">
-        {Object.entries(collectFields(setup)).map(([name, field]) => (
-          <div key={name} className="flex flex-col gap-0.5">
-            <dt className="text-xs text-[var(--oh-muted)]">{field.label}</dt>
-            <dd className="text-sm break-words">
-              {/* A field collecting several values reads as a list of them. */}
-              {fieldValues(values[name]).join(", ") ||
-                t(I18nKey.SETUP$EMPTY_VALUE)}
-            </dd>
-          </div>
-        ))}
-      </dl>
-    </div>
+    <dl className={automationPreviewListClassName} data-testid="setup-review">
+      {ordered.map((row) => {
+        const Icon = setupPreviewFieldIcon(row.name, row.kind);
+        return (
+          <AutomationPreviewField
+            key={row.name}
+            icon={<Icon className="size-3.5" />}
+            label={row.label}
+            value={row.value}
+            chips={previewChipItems(row.name, row.kind, row.parts)}
+            layout={row.value.includes("\n") ? "stacked" : "inline"}
+          />
+        );
+      })}
+    </dl>
   );
 }
