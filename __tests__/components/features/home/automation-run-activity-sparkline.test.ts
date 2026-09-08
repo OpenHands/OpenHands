@@ -102,4 +102,19 @@ describe("barColorClassForStatus", () => {
     expect(classes).toContain("var(--oh-muted)");
     expect(classes).toContain("var(--oh-border)");
   });
+
+  it("uses warning color for blocked task outcomes", () => {
+    expect(barColorClassForStatus("blocked")).toContain(
+      "bg-[var(--oh-warning)]",
+    );
+  });
+
+  it("uses warning color for partial and unknown task outcomes", () => {
+    expect(barColorClassForStatus("partial_success")).toContain(
+      "bg-[var(--oh-warning)]",
+    );
+    expect(barColorClassForStatus("unknown")).toContain(
+      "bg-[var(--oh-warning)]",
+    );
+  });
 });

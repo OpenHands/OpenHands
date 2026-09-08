@@ -22,8 +22,8 @@ import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
 import { getLockedCloudHost } from "#/api/agent-server-config";
 import { isOpenHandsCloudHost } from "#/api/device-flow-client";
 import {
-  assertAgentServerVersionIsSupported,
   getDisplayAgentServerVersion,
+  validateLocalBackend,
 } from "#/api/agent-server-compatibility";
 import ChevronDownSmallIcon from "#/icons/chevron-down-small.svg?react";
 import { I18nKey } from "#/i18n/declaration";
@@ -182,16 +182,8 @@ async function testBackendConnection(
 ): Promise<BackendConnectionTestMetadata> {
   // Cloud backends authenticate via OAuth; preflight GET is not applicable.
   if (backend.kind !== "local") return { agentServerVersion: null };
-
-  const serverInfo = await new ServerClient(
-    getAgentServerClientOptions({
-      host: backend.host,
-      sessionApiKey: backend.apiKey || null,
-      timeout: 5000,
-    }),
-  ).getServerInfo();
-  assertAgentServerVersionIsSupported(serverInfo);
-  return { agentServerVersion: getDisplayAgentServerVersion(serverInfo) };
+  const agentServerVersion = await validateLocalBackend(backend, 5000);
+  return { agentServerVersion };
 }
 
 /**

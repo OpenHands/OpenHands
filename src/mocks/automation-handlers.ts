@@ -216,10 +216,15 @@ export const AUTOMATION_HANDLERS = [
     const offset = Number(url.searchParams.get("offset") ?? "0");
     const allRuns = MOCK_AUTOMATION_RUNS[id] ?? [];
     const page = allRuns.slice(offset, offset + limit);
+    const statusCounts: AutomationRunsResponse["status_counts"] = {};
+    for (const run of allRuns) {
+      statusCounts[run.status] = (statusCounts[run.status] ?? 0) + 1;
+    }
 
     const response: AutomationRunsResponse = {
       runs: page,
       total: allRuns.length,
+      status_counts: statusCounts,
     };
 
     return HttpResponse.json(response);

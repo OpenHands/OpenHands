@@ -60,6 +60,49 @@ describe("EventMessage - ACPToolCallEvent dispatch", () => {
     expect(screen.getByText("ACTION_MESSAGE$ACP_RUN")).toBeInTheDocument();
   });
 
+  it("shows the command event's recorded timestamp on hover", async () => {
+    const user = userEvent.setup();
+    const event = makeEvent();
+
+    renderWithProviders(
+      <EventMessage
+        event={event}
+        messages={[]}
+        isLastMessage={false}
+        isInLast10Actions={false}
+      />,
+    );
+
+    const title = screen.getByTestId("generic-event-message-title");
+    await user.hover(title);
+
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip.querySelector("time")).toHaveAttribute(
+      "datetime",
+      event.timestamp,
+    );
+  });
+
+  it("shows the timestamp when the existing expand control receives focus", async () => {
+    const user = userEvent.setup();
+    const event = makeEvent();
+
+    renderWithProviders(
+      <EventMessage
+        event={event}
+        messages={[]}
+        isLastMessage={false}
+        isInLast10Actions={false}
+      />,
+    );
+
+    await user.tab();
+    expect(screen.getByRole("button", { name: "BUTTON$EXPAND" })).toHaveFocus();
+    expect(
+      (await screen.findByRole("tooltip")).querySelector("time"),
+    ).toHaveAttribute("datetime", event.timestamp);
+  });
+
   it("does not show a success icon for completed tool calls", () => {
     renderWithProviders(
       <EventMessage
@@ -104,5 +147,27 @@ describe("EventMessage - ACPToolCallEvent dispatch", () => {
     // Markdown renderer wraps code blocks but the plain text survives.
     expect(screen.getByText(/gh pr diff 490/)).toBeInTheDocument();
     expect(screen.getByText(/diff output here/)).toBeInTheDocument();
+  });
+
+  it("dismisses the timestamp when details are expanded with a pointer", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <EventMessage
+        event={makeEvent()}
+        messages={[]}
+        isLastMessage={false}
+        isInLast10Actions={false}
+      />,
+    );
+
+    const title = screen.getByTestId("generic-event-message-title");
+    await user.hover(title);
+    expect(await screen.findByRole("tooltip")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "BUTTON$EXPAND" }));
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+
+    await user.hover(screen.getByText(/diff output here/));
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   });
 });

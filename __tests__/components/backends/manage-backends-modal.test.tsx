@@ -688,6 +688,77 @@ describe("ManageBackendsModal", () => {
     ).toHaveTextContent("Authorization request was denied.");
     expect(screen.getByTestId("manage-backends-modal")).toBeInTheDocument();
   });
+
+  it("hides the Cloud reconnect controls when the locked backend uses cookie auth", async () => {
+    // Arrange: an OHE-hosted Canvas — locked to Cloud, but the backend is
+    // authenticated by the main-app session cookie, not a device-flow key.
+    vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://app.all-hands.dev");
+
+    // Act
+    renderWithProviders(
+      <TestSeed
+        onMount={(ctx) => {
+          ctx.addBackend({
+            name: "OpenHands Cloud",
+            host: "https://app.all-hands.dev",
+            apiKey: "",
+            kind: "cloud",
+            authMode: "cookie",
+          });
+        }}
+      >
+        <ManageBackendsModal onClose={vi.fn()} recoveryMode />
+      </TestSeed>,
+    );
+
+    // Assert
+    expect(
+      await screen.findByRole("heading", { name: "BACKEND$MANAGE_TITLE" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("manage-backends-reconnect-cloud-login-button"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("manage-backends-add")).not.toBeInTheDocument();
+  });
+
+  it("does not offer the device-flow login for a logged-out cookie-auth backend", async () => {
+    // Arrange: the main-app session cookie has expired, so the Cloud probe
+    // reports the backend as logged out.
+    vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://app.all-hands.dev");
+    vi.mocked(getCloudOrganizations).mockRejectedValue(
+      Object.assign(new Error("Unauthorized"), {
+        isAxiosError: true,
+        response: { status: 401 },
+      }),
+    );
+
+    // Act
+    renderWithProviders(
+      <TestSeed
+        onMount={(ctx) => {
+          ctx.addBackend({
+            name: "OpenHands Cloud",
+            host: "https://app.all-hands.dev",
+            apiKey: "",
+            kind: "cloud",
+            authMode: "cookie",
+          });
+        }}
+      >
+        <ManageBackendsModal onClose={vi.fn()} recoveryMode />
+      </TestSeed>,
+    );
+
+    // Assert
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("manage-backends-status-OpenHands Cloud"),
+      ).toHaveTextContent("BACKEND$LOGGED_OUT"),
+    );
+    expect(
+      screen.queryByTestId(/^manage-backends-login-.*-login-button$/),
+    ).not.toBeInTheDocument();
+  });
 });
 
 function renderInQueryClient(ui: React.ReactElement) {
