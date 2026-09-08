@@ -20,6 +20,13 @@ export interface CanvasExtensionManifest {
   display_name?: string | null;
   version: string;
   description?: string | null;
+  /**
+   * Optional custom SVG icon, declared as a path relative to the installed
+   * extension root (e.g. `assets/pulse.svg`). Rendered wherever the extension
+   * is identified in the UI (sidebar, extension card). Absent/invalid paths
+   * fall back to the default extension icon.
+   */
+  icon?: string | null;
   entrypoint: string;
   contributes?: CanvasExtensionContributions | null;
 }

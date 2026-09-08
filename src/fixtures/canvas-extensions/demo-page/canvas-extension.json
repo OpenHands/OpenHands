@@ -4,6 +4,7 @@
   "display_name": "Demo page",
   "version": "0.1.0",
   "description": "A dependency-free fixture for the Canvas Extension page ABI.",
+  "icon": "assets/pulse.svg",
   "entrypoint": "extension.js",
   "contributes": {
     "pages": [

@@ -11,8 +11,9 @@ import type {
   InstallCanvasExtensionRequest,
   InstalledCanvasExtensionInfo,
 } from "#/types/canvas-extension";
+import { isValidCanvasExtensionIconPath } from "#/utils/canvas-extension-icon";
 
-const CANVAS_EXTENSIONS_BASE_PATH = "/api/canvas-extensions";
+export const CANVAS_EXTENSIONS_BASE_PATH = "/api/canvas-extensions";
 
 export type CanvasExtensionsUnsupportedReason =
   | "no-backend"
@@ -132,6 +133,23 @@ class CanvasExtensionsService {
     return mapUnsupported(() =>
       client.delete<{ message: string }>(installedExtensionPath(name)),
     );
+  }
+
+  /**
+   * Build the URL that serves a manifest-declared SVG icon from the installed
+   * extension's root. Returns `null` for a missing or unsafe path so callers
+   * degrade to the default icon instead of issuing a bogus request.
+   *
+   * The icon is loaded as an `<img>` source rather than injected as markup,
+   * so the SVG is rendered under the image sandbox and cannot execute
+   * scripts. The agent-server additionally re-validates the path and serves
+   * the file with an `image/svg+xml` content type.
+   */
+  static buildIconUrl(name: string, iconPath: string): string | null {
+    if (!isValidCanvasExtensionIconPath(iconPath)) return null;
+    return `${installedExtensionPath(name)}/file?path=${encodeURIComponent(
+      iconPath.trim(),
+    )}`;
   }
 
   static async fetchBundle(name: string, backend?: Backend): Promise<string> {

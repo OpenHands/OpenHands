@@ -170,4 +170,27 @@ describe("CanvasExtensionsService", () => {
     ).rejects.toThrow("root-relative path");
     expect(AgentServerClient).not.toHaveBeenCalled();
   });
+
+  it("builds an icon URL scoped to the installed extension and its declared path", () => {
+    expect(
+      CanvasExtensionsService.buildIconUrl(
+        "demo-extension",
+        "assets/pulse.svg",
+      ),
+    ).toBe(
+      "/api/canvas-extensions/installed/demo-extension/file?path=assets%2Fpulse.svg",
+    );
+  });
+
+  it("returns null instead of building a URL for an unsafe icon path", () => {
+    expect(
+      CanvasExtensionsService.buildIconUrl("demo-extension", "../../pulse.svg"),
+    ).toBeNull();
+    expect(
+      CanvasExtensionsService.buildIconUrl(
+        "demo-extension",
+        "https://example.com/pulse.svg",
+      ),
+    ).toBeNull();
+  });
 });

@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { ToggleSwitch } from "#/ui/toggle-switch";
 import { I18nKey } from "#/i18n/declaration";
+import { CanvasExtensionIcon } from "./canvas-extension-icon";
 import type { InstalledCanvasExtensionInfo } from "#/types/canvas-extension";
 import {
   extensionModuleCardPillClassName,
@@ -31,13 +32,20 @@ export function CanvasExtensionCard({
       className={`flex min-w-0 flex-col gap-4 p-4 ${extensionModuleCardSurfaceClassName}`}
     >
       <header className="flex items-start justify-between gap-4">
-        <div className="min-w-0 flex-1">
-          <h3 className="truncate text-sm font-semibold text-white">
-            {displayName}
-          </h3>
-          <p className="mt-0.5 truncate text-xs text-tertiary-alt">
-            {extension.source}
-          </p>
+        <div className="flex min-w-0 flex-1 items-start gap-2">
+          <CanvasExtensionIcon
+            extension={extension}
+            size={18}
+            className="mt-0.5 shrink-0"
+          />
+          <div className="min-w-0">
+            <h3 className="truncate text-sm font-semibold text-white">
+              {displayName}
+            </h3>
+            <p className="mt-0.5 truncate text-xs text-tertiary-alt">
+              {extension.source}
+            </p>
+          </div>
         </div>
         <ToggleSwitch
           enabled={extension.enabled}
