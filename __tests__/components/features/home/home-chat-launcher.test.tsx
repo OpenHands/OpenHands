@@ -20,6 +20,7 @@ const mockClearAllFiles = vi.fn();
 const enqueueHomeTaskPendingMessage = vi.fn();
 const mockDisplayErrorToast = vi.fn();
 const mockUseLlmConfigured = vi.fn();
+const mockSetAutomationSetupDraft = vi.fn();
 
 let mockImages: File[] = [];
 let mockFiles: File[] = [];
@@ -32,6 +33,11 @@ vi.mock("#/utils/send-message-with-attachments", () => ({
 vi.mock("#/utils/enqueue-home-task-pending-message", () => ({
   enqueueHomeTaskPendingMessage: (...args: unknown[]) =>
     enqueueHomeTaskPendingMessage(...args),
+}));
+
+vi.mock("#/api/automation-setup-draft-store", () => ({
+  setAutomationSetupDraft: (...args: unknown[]) =>
+    mockSetAutomationSetupDraft(...args),
 }));
 
 vi.mock("#/stores/conversation-store", () => ({
@@ -396,6 +402,12 @@ describe("HomeChatLauncher", () => {
     await user.click(screen.getByTestId("stub-chat-submit"));
 
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
+    expect(mockSetAutomationSetupDraft).toHaveBeenCalledWith("conv-abc", {
+      prompt: "hello world",
+      kind: "prompt",
+      plugins: [],
+    });
+
     expect(createSpy).toHaveBeenCalledWith({
       initialUserMsg: "hello world",
       metadata: null,
@@ -403,6 +415,26 @@ describe("HomeChatLauncher", () => {
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith("/conversations/conv-abc"),
     );
+  });
+
+  it("does not seed an automation setup draft in Code mode", async () => {
+    vi.spyOn(
+      AgentServerConversationService,
+      "createConversation",
+    ).mockResolvedValue(
+      makeConversationResponse({ app_conversation_id: "conv-code" }),
+    );
+
+    renderLauncher();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId("home-launcher-mode-code"));
+    await user.click(screen.getByTestId("stub-chat-submit"));
+
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith("/conversations/conv-code"),
+    );
+    expect(mockSetAutomationSetupDraft).not.toHaveBeenCalled();
   });
 
   it("disables the chat input and won't create a conversation when no LLM is configured", async () => {
@@ -688,6 +720,11 @@ describe("HomeChatLauncher", () => {
       initialUserMsg: "hello world",
       plugins: [{ source: "github:o/a", ref: null, repo_path: null }],
       metadata: null,
+    });
+    expect(mockSetAutomationSetupDraft).toHaveBeenCalledWith("conv-abc", {
+      prompt: "hello world",
+      kind: "plugin",
+      plugins: ["github:o/a"],
     });
   });
 
