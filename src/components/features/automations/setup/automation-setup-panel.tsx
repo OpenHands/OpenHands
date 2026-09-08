@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import {
@@ -42,8 +42,12 @@ const DEFAULT_TIME = "09:00";
 const DEFAULT_CUSTOM_SCHEDULE = "0 9 * * *";
 const DEFAULT_EVENT_SOURCE = "github";
 const DEFAULT_EVENT_KEY = "issue_comment.created";
-const CUSTOM_ENTRYPOINT = "python3 main.py";
+const DEFAULT_CUSTOM_ENTRYPOINT = "python3 main.py";
 const MAIN_PY_FILENAME = "main.py";
+const DEFAULT_CUSTOM_SETUP_SCRIPT_PATH = "setup.sh";
+const DEFAULT_CUSTOM_SETUP_SCRIPT = `#!/usr/bin/env bash
+:
+`;
 const DEFAULT_TIMEOUT_SECONDS = "600";
 const PREFLIGHT_TARBALL_PATH =
   "oh-internal://uploads/00000000-0000-0000-0000-000000000000";
@@ -152,6 +156,11 @@ export function AutomationSetupPanel({
   const [customCode, setCustomCode] = useState(() =>
     buildStarterPython(draft.prompt),
   );
+  const [entrypoint, setEntrypoint] = useState(DEFAULT_CUSTOM_ENTRYPOINT);
+  const [setupScriptPath, setSetupScriptPath] = useState(
+    DEFAULT_CUSTOM_SETUP_SCRIPT_PATH,
+  );
+  const [setupScript, setSetupScript] = useState(DEFAULT_CUSTOM_SETUP_SCRIPT);
   const [triggerKind, setTriggerKind] = useState<TriggerKind>("cron");
   const [frequency, setFrequency] = useState<Frequency>("daily");
   const [time, setTime] = useState(DEFAULT_TIME);
@@ -165,10 +174,6 @@ export function AutomationSetupPanel({
   const [statusMessage, setStatusMessage] = useState<StatusMessage>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const codePreview = useMemo(
-    () => (kind === "custom" ? customCode : buildStarterPython(prompt)),
-    [customCode, kind, prompt],
-  );
   const normalizedName = () => name.trim() || deriveName(prompt);
   const buildTrigger = () =>
     triggerKind === "event"
@@ -210,7 +215,8 @@ export function AutomationSetupPanel({
       name: normalizedName(),
       trigger: buildTrigger(),
       tarball_path: tarballPath,
-      entrypoint: CUSTOM_ENTRYPOINT,
+      entrypoint: entrypoint.trim(),
+      setup_script_path: setupScriptPath.trim(),
       ...(showTimeout && timeoutSeconds.trim()
         ? { timeout: Number(timeoutSeconds) }
         : {}),
@@ -234,6 +240,27 @@ export function AutomationSetupPanel({
       setStatusMessage({
         kind: "error",
         text: t(I18nKey.AUTOMATION_SETUP$CODE_REQUIRED),
+      });
+      return false;
+    }
+    if (kind === "custom" && !entrypoint.trim()) {
+      setStatusMessage({
+        kind: "error",
+        text: t(I18nKey.AUTOMATION_SETUP$ENTRYPOINT_REQUIRED),
+      });
+      return false;
+    }
+    if (kind === "custom" && !setupScriptPath.trim()) {
+      setStatusMessage({
+        kind: "error",
+        text: t(I18nKey.AUTOMATION_SETUP$SETUP_SCRIPT_PATH_REQUIRED),
+      });
+      return false;
+    }
+    if (kind === "custom" && !setupScript.trim()) {
+      setStatusMessage({
+        kind: "error",
+        text: t(I18nKey.AUTOMATION_SETUP$SETUP_SCRIPT_REQUIRED),
       });
       return false;
     }
@@ -276,6 +303,11 @@ export function AutomationSetupPanel({
       if (kind === "custom") {
         const archive = await packTarGzip([
           { name: MAIN_PY_FILENAME, content: customCode, mode: 0o644 },
+          {
+            name: setupScriptPath.trim(),
+            content: setupScript,
+            mode: 0o755,
+          },
         ]);
         const tarballPath = await AutomationService.uploadAutomationTarball(
           normalizedName(),
@@ -401,8 +433,13 @@ export function AutomationSetupPanel({
           ) : (
             <CustomCodeFields
               code={customCode}
-              codePreview={codePreview}
+              entrypoint={entrypoint}
+              setupScriptPath={setupScriptPath}
+              setupScript={setupScript}
               onCodeChange={setCustomCode}
+              onEntrypointChange={setEntrypoint}
+              onSetupScriptPathChange={setSetupScriptPath}
+              onSetupScriptChange={setSetupScript}
             />
           )}
 
@@ -577,35 +614,71 @@ function PromptFields({
 
 function CustomCodeFields({
   code,
-  codePreview,
+  entrypoint,
+  setupScriptPath,
+  setupScript,
   onCodeChange,
+  onEntrypointChange,
+  onSetupScriptPathChange,
+  onSetupScriptChange,
 }: {
   code: string;
-  codePreview: string;
+  entrypoint: string;
+  setupScriptPath: string;
+  setupScript: string;
   onCodeChange: (value: string) => void;
+  onEntrypointChange: (value: string) => void;
+  onSetupScriptPathChange: (value: string) => void;
+  onSetupScriptChange: (value: string) => void;
 }) {
   const { t } = useTranslation("openhands");
   return (
-    <Field label={t(I18nKey.AUTOMATION_SETUP$PYTHON_CODE)}>
-      <textarea
-        data-testid="automation-setup-custom-code"
-        rows={12}
-        value={code}
-        onChange={(event) => onCodeChange(event.target.value)}
-        className={cn(formControlMultilineFieldClassName, "font-mono text-xs")}
-      />
-      <div className="rounded-xl border border-[var(--oh-border)] bg-[#0f0f10] p-4">
-        <div className="mb-3 text-xs text-[var(--oh-muted)]">
-          {t(I18nKey.AUTOMATION_SETUP$RENDERED_CODE)}
-        </div>
-        <pre
-          data-testid="automation-setup-rendered-code"
-          className="max-h-80 overflow-auto whitespace-pre-wrap font-mono text-xs leading-5 text-tertiary-light"
-        >
-          {codePreview}
-        </pre>
+    <div className="flex flex-col gap-4">
+      <div className="grid gap-3 md:grid-cols-[2fr_1fr]">
+        <Field label={t(I18nKey.AUTOMATION_SETUP$ENTRYPOINT)}>
+          <input
+            data-testid="automation-setup-entrypoint"
+            value={entrypoint}
+            onChange={(event) => onEntrypointChange(event.target.value)}
+            className={formControlFieldClassName}
+          />
+        </Field>
+        <Field label={t(I18nKey.AUTOMATION_SETUP$SETUP_SCRIPT_PATH)}>
+          <input
+            data-testid="automation-setup-setup-script-path"
+            value={setupScriptPath}
+            onChange={(event) => onSetupScriptPathChange(event.target.value)}
+            className={formControlFieldClassName}
+          />
+        </Field>
       </div>
-    </Field>
+      <Field label={t(I18nKey.AUTOMATION_SETUP$PYTHON_CODE)}>
+        <textarea
+          data-testid="automation-setup-custom-code"
+          rows={12}
+          value={code}
+          onChange={(event) => onCodeChange(event.target.value)}
+          spellCheck={false}
+          className={cn(
+            formControlMultilineFieldClassName,
+            "font-mono text-xs",
+          )}
+        />
+      </Field>
+      <Field label={t(I18nKey.AUTOMATION_SETUP$SETUP_SCRIPT)}>
+        <textarea
+          data-testid="automation-setup-setup-script"
+          rows={4}
+          value={setupScript}
+          onChange={(event) => onSetupScriptChange(event.target.value)}
+          spellCheck={false}
+          className={cn(
+            formControlMultilineFieldClassName,
+            "font-mono text-xs",
+          )}
+        />
+      </Field>
+    </div>
   );
 }
 

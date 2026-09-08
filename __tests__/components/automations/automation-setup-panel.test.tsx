@@ -8,6 +8,7 @@ import {
 import { AutomationSetupPanel } from "#/components/features/automations/setup/automation-setup-panel";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import type { AutomationSetupDraft } from "#/api/automation-setup-draft-store";
+import { packTarGzip } from "#/utils/tar-gzip";
 
 const mockNavigate = vi.fn();
 const mockToastSuccess = vi.fn();
@@ -30,6 +31,10 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
     createAutomationDraft: vi.fn(),
     uploadAutomationTarball: vi.fn(),
   },
+}));
+
+vi.mock("#/utils/tar-gzip", () => ({
+  packTarGzip: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3])),
 }));
 
 vi.mock("#/manifests/automation-interface", () => ({
@@ -81,9 +86,22 @@ describe("AutomationSetupPanel", () => {
     ).toBeInTheDocument();
 
     await user.click(screen.getByTestId("automation-setup-kind-custom"));
+    expect(screen.getByTestId("automation-setup-entrypoint")).toHaveValue(
+      "python3 main.py",
+    );
     expect(
-      screen.getByTestId("automation-setup-rendered-code"),
-    ).toHaveTextContent("Review every pull request");
+      screen.getByTestId("automation-setup-setup-script-path"),
+    ).toHaveValue("setup.sh");
+    expect(
+      (
+        screen.getByTestId(
+          "automation-setup-custom-code",
+        ) as HTMLTextAreaElement
+      ).value,
+    ).toContain("Review every pull request");
+    expect(
+      screen.queryByTestId("automation-setup-rendered-code"),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByTestId("automation-setup-prompt"),
     ).not.toBeInTheDocument();
@@ -144,5 +162,47 @@ describe("AutomationSetupPanel", () => {
       ),
     );
     expect(mockNavigate).toHaveBeenCalledWith("/automations/automation-1");
+  });
+
+  it("creates custom bundle drafts with entrypoint and setup script path", async () => {
+    vi.mocked(AutomationService.uploadAutomationTarball).mockResolvedValue(
+      "oh-internal://uploads/custom-archive",
+    );
+    vi.mocked(AutomationService.createAutomationDraft).mockResolvedValue({
+      id: "automation-custom",
+    });
+
+    const user = userEvent.setup();
+    renderPanel({
+      prompt: "Run a custom security check",
+      kind: "custom",
+    });
+
+    await user.clear(screen.getByTestId("automation-setup-entrypoint"));
+    await user.type(
+      screen.getByTestId("automation-setup-entrypoint"),
+      "python3 main.py --once",
+    );
+    await user.click(screen.getByTestId("automation-setup-create"));
+
+    await waitFor(() =>
+      expect(AutomationService.uploadAutomationTarball).toHaveBeenCalledWith(
+        "Run A Custom Security",
+        new Uint8Array([1, 2, 3]),
+      ),
+    );
+    expect(packTarGzip).toHaveBeenCalledWith([
+      expect.objectContaining({ name: "main.py", mode: 0o644 }),
+      expect.objectContaining({ name: "setup.sh", mode: 0o755 }),
+    ]);
+    expect(AutomationService.createAutomationDraft).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tarball_path: "oh-internal://uploads/custom-archive",
+        entrypoint: "python3 main.py --once",
+        setup_script_path: "setup.sh",
+      }),
+      "custom",
+    );
+    expect(mockNavigate).toHaveBeenCalledWith("/automations/automation-custom");
   });
 });
