@@ -336,6 +336,7 @@ test.describe("files tab, conversation overview git, and browser tab", () => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await dismissAnalyticsModal(page);
     await waitForTestId(page, "home-chat-launcher");
+    await page.getByTestId("home-launcher-mode-code").click();
 
     // Start a brand-new conversation WITHOUT seeding any workspace metadata
     await page.evaluate(
