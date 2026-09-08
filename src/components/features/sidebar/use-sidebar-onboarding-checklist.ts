@@ -91,6 +91,7 @@ export function useSidebarOnboardingChecklist() {
         profilesData,
         isProfilesLoading,
       ),
+      "configure-subscription-agent": hasExploredCustomize,
       "connect-mcp": hasConfiguredMcpServers(
         settings?.agent_settings?.mcp_config,
       ),

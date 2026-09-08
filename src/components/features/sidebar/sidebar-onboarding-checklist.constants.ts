@@ -27,6 +27,7 @@ export const SIDEBAR_ONBOARDING_CHECKLIST_SLACK_JOINED_STORAGE_KEY =
 
 export const SIDEBAR_ONBOARDING_CHECKLIST_ITEM_IDS = [
   "configure-llm",
+  "configure-subscription-agent",
   "start-conversation",
   "schedule-task",
   "customize-agent",
@@ -47,6 +48,7 @@ export const SIDEBAR_ONBOARDING_CHECKLIST_ROUTES: Record<
   string
 > = {
   "configure-llm": "/settings/llm",
+  "configure-subscription-agent": "/settings/agents",
   "connect-mcp": "/mcp",
   "start-conversation": "/conversations",
   "schedule-task": "/automations",
@@ -59,6 +61,7 @@ export const SIDEBAR_ONBOARDING_CHECKLIST_LINK_IDS: Record<
   Exclude<OnboardingLinkId, "open_docs">
 > = {
   "configure-llm": "configure_llm",
+  "configure-subscription-agent": "configure_subscription_agent",
   "start-conversation": "start_conversation",
   "schedule-task": "schedule_task",
   "customize-agent": "customize_agent",
@@ -71,6 +74,7 @@ export const SIDEBAR_ONBOARDING_CHECKLIST_DESTINATION_TYPES: Record<
   OnboardingLinkDestinationType
 > = {
   "configure-llm": "settings",
+  "configure-subscription-agent": "settings",
   "start-conversation": "conversation",
   "schedule-task": "automation",
   "customize-agent": "settings",
@@ -99,6 +103,8 @@ export const SIDEBAR_ONBOARDING_CHECKLIST_I18N_KEYS: Record<
   I18nKey
 > = {
   "configure-llm": I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_CONFIGURE_LLM,
+  "configure-subscription-agent":
+    I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_CONFIGURE_SUBSCRIPTION_AGENT,
   "connect-mcp": I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_CONNECT_MCP,
   "start-conversation": I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_START_CHAT,
   "schedule-task": I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_SCHEDULE_TASK,
@@ -111,6 +117,8 @@ export const SIDEBAR_ONBOARDING_CHECKLIST_DESCRIPTION_I18N_KEYS: Record<
   I18nKey
 > = {
   "configure-llm": I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_CONFIGURE_LLM_DESC,
+  "configure-subscription-agent":
+    I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_CONFIGURE_SUBSCRIPTION_AGENT_DESC,
   "connect-mcp": I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_CONNECT_MCP_DESC,
   "start-conversation": I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_START_CHAT_DESC,
   "schedule-task": I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_SCHEDULE_TASK_DESC,
@@ -123,6 +131,8 @@ export const SIDEBAR_ONBOARDING_CHECKLIST_ACTION_I18N_KEYS: Record<
   I18nKey
 > = {
   "configure-llm": I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_ACTION_CONFIGURE_LLM,
+  "configure-subscription-agent":
+    I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_ACTION_CONFIGURE_SUBSCRIPTION_AGENT,
   "connect-mcp": I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_ACTION_CONNECT_MCP,
   "start-conversation": I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_ACTION_START_CHAT,
   "schedule-task": I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_ACTION_SCHEDULE_TASK,
@@ -136,6 +146,8 @@ export const SIDEBAR_ONBOARDING_CHECKLIST_DOCS_URLS: Record<
 > = {
   "configure-llm":
     "https://docs.openhands.dev/openhands/usage/settings/llm-settings#llm-profiles",
+  "configure-subscription-agent":
+    "https://docs.openhands.dev/openhands/usage/agent-canvas/acp-agents",
   "start-conversation":
     "https://docs.openhands.dev/openhands/usage/agent-canvas/backends",
   "schedule-task": SCHEDULED_TASKS_DOCS_URL,
