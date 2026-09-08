@@ -42430,5 +42430,39 @@
     "uk": "Додайте сценарій налаштування, перш ніж продовжити.",
     "zh-CN": "继续之前，请添加设置脚本。",
     "zh-TW": "繼續之前，請新增設定指令碼。"
+  },
+  "AUTOMATION_SETUP$HIDE_AGENT": {
+    "en": "Hide Agent",
+    "ja": "エージェントを非表示",
+    "zh-CN": "隐藏代理",
+    "zh-TW": "隱藏代理",
+    "ko-KR": "에이전트 숨기기",
+    "no": "Skjul agent",
+    "it": "Nascondi l'agente",
+    "pt": "Ocultar agente",
+    "es": "Ocultar agente",
+    "ar": "إخفاء الوكيل",
+    "fr": "Masquer l’agent",
+    "tr": "Ajanı gizle",
+    "de": "Agent ausblenden",
+    "uk": "Приховати агента",
+    "ca": "Amaga l'agent"
+  },
+  "AUTOMATION_SETUP$SHOW_AGENT": {
+    "en": "Show Agent",
+    "ja": "エージェントを表示",
+    "zh-CN": "显示代理",
+    "zh-TW": "顯示代理",
+    "ko-KR": "에이전트 표시",
+    "no": "Vis agent",
+    "it": "Mostra l'agente",
+    "pt": "Mostrar agente",
+    "es": "Mostrar agente",
+    "ar": "إظهار الوكيل",
+    "fr": "Afficher l’agent",
+    "tr": "Ajanı göster",
+    "de": "Agent anzeigen",
+    "uk": "Показати агента",
+    "ca": "Mostra l'agent"
   }
 }

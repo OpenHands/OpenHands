@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import {
@@ -72,6 +73,8 @@ type StatusMessage = { kind: "success" | "error"; text: string } | null;
 
 interface AutomationSetupPanelProps {
   draft: AutomationSetupDraft;
+  toolbarPortal?: HTMLElement | null;
+  showInlineHeader?: boolean;
   onClose: () => void;
 }
 
@@ -143,6 +146,8 @@ function frequencyLabelKey(frequency: Frequency): I18nKey {
 
 export function AutomationSetupPanel({
   draft,
+  toolbarPortal,
+  showInlineHeader = true,
   onClose,
 }: AutomationSetupPanelProps) {
   const { t } = useTranslation("openhands");
@@ -333,252 +338,267 @@ export function AutomationSetupPanel({
     }
   };
 
+  const renderToolbarActions = () => (
+    <div className="flex shrink-0 items-center gap-2">
+      <BrandButton
+        type="button"
+        variant="secondary"
+        testId="automation-setup-save-draft"
+        isDisabled={isSubmitting}
+        onClick={handleSaveDraft}
+      >
+        {t(I18nKey.AUTOMATION_SETUP$SAVE_DRAFT)}
+      </BrandButton>
+      <BrandButton
+        type="button"
+        variant="secondary"
+        testId="automation-setup-test"
+        isDisabled={isSubmitting}
+        onClick={handleTest}
+      >
+        {t(I18nKey.AUTOMATION_SETUP$TEST)}
+      </BrandButton>
+      <BrandButton
+        type="button"
+        variant="primary"
+        testId="automation-setup-create"
+        isDisabled={isSubmitting}
+        onClick={handleCreate}
+      >
+        {t(I18nKey.AUTOMATIONS$CREATE_AUTOMATION_BUTTON)}
+      </BrandButton>
+    </div>
+  );
+
   return (
-    <div
-      data-testid="automation-setup-panel"
-      className="flex h-full min-h-0 flex-col bg-base"
-    >
-      <header className="flex h-10 min-h-10 items-center justify-between border-b border-[var(--oh-border)] px-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <button
-            type="button"
-            aria-label={t(I18nKey.AUTOMATION_SETUP$BACK_LABEL)}
-            onClick={onClose}
-            className={cn(
-              "flex size-7 items-center justify-center rounded-lg text-[var(--oh-muted)] hover:bg-white/10 hover:text-white",
-              formControlTransitionClassName,
-            )}
-          >
-            <ArrowLeft className="size-4" aria-hidden />
-          </button>
-          <h2 className="truncate text-sm font-semibold text-white">
-            {t(I18nKey.AUTOMATION_SETUP$TITLE)}
-          </h2>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <BrandButton
-            type="button"
-            variant="secondary"
-            testId="automation-setup-save-draft"
-            isDisabled={isSubmitting}
-            onClick={handleSaveDraft}
-          >
-            {t(I18nKey.AUTOMATION_SETUP$SAVE_DRAFT)}
-          </BrandButton>
-          <BrandButton
-            type="button"
-            variant="secondary"
-            testId="automation-setup-test"
-            isDisabled={isSubmitting}
-            onClick={handleTest}
-          >
-            {t(I18nKey.AUTOMATION_SETUP$TEST)}
-          </BrandButton>
-          <BrandButton
-            type="button"
-            variant="primary"
-            testId="automation-setup-create"
-            isDisabled={isSubmitting}
-            onClick={handleCreate}
-          >
-            {t(I18nKey.AUTOMATIONS$CREATE_AUTOMATION_BUTTON)}
-          </BrandButton>
-        </div>
-      </header>
-
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6">
-        <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
-          <div
-            role="group"
-            aria-label={t(I18nKey.AUTOMATION_SETUP$TYPE_LABEL)}
-            className="grid grid-cols-3 gap-2 rounded-xl border border-[var(--oh-border)] bg-base-secondary p-1"
-          >
-            {AUTOMATION_SETUP_KINDS.map((item) => (
+    <>
+      {toolbarPortal
+        ? createPortal(renderToolbarActions(), toolbarPortal)
+        : null}
+      <div
+        data-testid="automation-setup-panel"
+        className="flex h-full min-h-0 flex-col bg-base"
+      >
+        {showInlineHeader ? (
+          <header className="flex h-10 min-h-10 items-center justify-between border-b border-[var(--oh-border)] px-3">
+            <div className="flex min-w-0 items-center gap-2">
               <button
-                key={item}
                 type="button"
-                aria-pressed={kind === item}
-                data-testid={`automation-setup-kind-${item}`}
-                onClick={() => setKind(item)}
+                aria-label={t(I18nKey.AUTOMATION_SETUP$BACK_LABEL)}
+                onClick={onClose}
                 className={cn(
-                  "flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm",
+                  "flex size-7 items-center justify-center rounded-lg text-[var(--oh-muted)] hover:bg-white/10 hover:text-white",
                   formControlTransitionClassName,
-                  kind === item
-                    ? "bg-white/10 text-white"
-                    : "text-[var(--oh-muted)] hover:bg-white/5 hover:text-white",
                 )}
               >
-                {item === "prompt" && (
-                  <FileText className="size-4" aria-hidden />
-                )}
-                {item === "plugin" && <Puzzle className="size-4" aria-hidden />}
-                {item === "custom" && <Code2 className="size-4" aria-hidden />}
-                <span>{t(kindLabelKey(item))}</span>
+                <ArrowLeft className="size-4" aria-hidden />
               </button>
-            ))}
-          </div>
-
-          <Field label={t(I18nKey.AUTOMATIONS$NAME)}>
-            <input
-              data-testid="automation-setup-name"
-              value={name}
-              placeholder={t(I18nKey.AUTOMATION_SETUP$NAME_PLACEHOLDER)}
-              onChange={(event) => setName(event.target.value)}
-              className={formControlFieldClassName}
-            />
-          </Field>
-
-          {kind !== "custom" ? (
-            <PromptFields prompt={prompt} onPromptChange={setPrompt} />
-          ) : (
-            <CustomCodeFields
-              code={customCode}
-              entrypoint={entrypoint}
-              setupScriptPath={setupScriptPath}
-              setupScript={setupScript}
-              onCodeChange={setCustomCode}
-              onEntrypointChange={setEntrypoint}
-              onSetupScriptPathChange={setSetupScriptPath}
-              onSetupScriptChange={setSetupScript}
-            />
-          )}
-
-          {kind === "plugin" && (
-            <div className="grid gap-3 rounded-xl border border-[var(--oh-border)] bg-base-secondary p-4 md:grid-cols-[2fr_1fr]">
-              <Field label={t(I18nKey.AUTOMATION_SETUP$PLUGIN_SOURCE)}>
-                <input
-                  data-testid="automation-setup-plugin-source"
-                  value={pluginSource}
-                  placeholder={t(
-                    I18nKey.AUTOMATION_SETUP$PLUGIN_SOURCE_PLACEHOLDER,
-                  )}
-                  onChange={(event) => setPluginSource(event.target.value)}
-                  className={formControlFieldClassName}
-                />
-              </Field>
-              <Field label={t(I18nKey.AUTOMATION_SETUP$PLUGIN_REF)}>
-                <input
-                  data-testid="automation-setup-plugin-ref"
-                  value={pluginRef}
-                  placeholder={t(
-                    I18nKey.AUTOMATION_SETUP$PLUGIN_REF_PLACEHOLDER,
-                  )}
-                  onChange={(event) => setPluginRef(event.target.value)}
-                  className={formControlFieldClassName}
-                />
-              </Field>
+              <h2 className="truncate text-sm font-semibold text-white">
+                {t(I18nKey.AUTOMATION_SETUP$TITLE)}
+              </h2>
             </div>
-          )}
+            {renderToolbarActions()}
+          </header>
+        ) : null}
 
-          {kind !== "custom" && (
-            <Field
-              label={t(I18nKey.COMMON$REPOSITORIES)}
-              suffix={t(I18nKey.COMMON$OPTIONAL)}
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6">
+          <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
+            <div
+              role="group"
+              aria-label={t(I18nKey.AUTOMATION_SETUP$TYPE_LABEL)}
+              className="grid grid-cols-3 gap-2 rounded-xl border border-[var(--oh-border)] bg-base-secondary p-1"
             >
-              <div className="flex items-center gap-2 rounded-xl border border-[var(--oh-border)] bg-base-secondary p-3">
-                <input
-                  data-testid="automation-setup-repository"
-                  value={repository}
-                  placeholder={t(I18nKey.SETUP$REPOSITORY_PLACEHOLDER)}
-                  onChange={(event) => setRepository(event.target.value)}
-                  className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-tertiary-alt"
-                />
-                <Plus className="size-4 text-[var(--oh-muted)]" aria-hidden />
-              </div>
+              {AUTOMATION_SETUP_KINDS.map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  aria-pressed={kind === item}
+                  data-testid={`automation-setup-kind-${item}`}
+                  onClick={() => setKind(item)}
+                  className={cn(
+                    "flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm",
+                    formControlTransitionClassName,
+                    kind === item
+                      ? "bg-white/10 text-white"
+                      : "text-[var(--oh-muted)] hover:bg-white/5 hover:text-white",
+                  )}
+                >
+                  {item === "prompt" && (
+                    <FileText className="size-4" aria-hidden />
+                  )}
+                  {item === "plugin" && (
+                    <Puzzle className="size-4" aria-hidden />
+                  )}
+                  {item === "custom" && (
+                    <Code2 className="size-4" aria-hidden />
+                  )}
+                  <span>{t(kindLabelKey(item))}</span>
+                </button>
+              ))}
+            </div>
+
+            <Field label={t(I18nKey.AUTOMATIONS$NAME)}>
+              <input
+                data-testid="automation-setup-name"
+                value={name}
+                placeholder={t(I18nKey.AUTOMATION_SETUP$NAME_PLACEHOLDER)}
+                onChange={(event) => setName(event.target.value)}
+                className={formControlFieldClassName}
+              />
             </Field>
-          )}
 
-          <section className="flex flex-col gap-3">
-            <h3 className="text-sm font-semibold text-white">
-              {t(I18nKey.AUTOMATIONS$DETAIL$TRIGGER)}
-            </h3>
-            <div className="grid gap-3 md:grid-cols-2">
-              <TriggerCard
-                icon={<CalendarDays className="size-4" aria-hidden />}
-                title={t(I18nKey.AUTOMATION_SETUP$SCHEDULE)}
-                description={t(I18nKey.AUTOMATION_SETUP$SCHEDULE_DESCRIPTION)}
-                selected={triggerKind === "cron"}
-                onClick={() => setTriggerKind("cron")}
-              />
-              <TriggerCard
-                icon={<Zap className="size-4" aria-hidden />}
-                title={t(I18nKey.AUTOMATIONS$DETAIL$TRIGGER_EVENT)}
-                description={t(I18nKey.AUTOMATION_SETUP$EVENT_DESCRIPTION)}
-                selected={triggerKind === "event"}
-                onClick={() => setTriggerKind("event")}
-              />
-            </div>
-          </section>
-
-          {triggerKind === "cron" ? (
-            <ScheduleFields
-              frequency={frequency}
-              time={time}
-              timezone={timezone}
-              customSchedule={customSchedule}
-              setFrequency={setFrequency}
-              setTime={setTime}
-              setTimezone={setTimezone}
-              setCustomSchedule={setCustomSchedule}
-            />
-          ) : (
-            <EventFields
-              eventSource={eventSource}
-              eventKey={eventKey}
-              eventFilter={eventFilter}
-              setEventSource={setEventSource}
-              setEventKey={setEventKey}
-              setEventFilter={setEventFilter}
-            />
-          )}
-
-          <section className="flex flex-col gap-3">
-            <h3 className="text-sm font-semibold text-white">
-              {t(I18nKey.AUTOMATION_SETUP$ADDITIONAL_OPTIONS)}
-            </h3>
-            {showTimeout ? (
-              <Field label={t(I18nKey.AUTOMATION_SETUP$TIMEOUT_SECONDS)}>
-                <input
-                  data-testid="automation-setup-timeout"
-                  type="number"
-                  min="1"
-                  value={timeoutSeconds}
-                  onChange={(event) => setTimeoutSeconds(event.target.value)}
-                  className={formControlFieldClassName}
-                />
-              </Field>
+            {kind !== "custom" ? (
+              <PromptFields prompt={prompt} onPromptChange={setPrompt} />
             ) : (
-              <button
-                type="button"
-                data-testid="automation-setup-add-timeout"
-                onClick={() => setShowTimeout(true)}
+              <CustomCodeFields
+                code={customCode}
+                entrypoint={entrypoint}
+                setupScriptPath={setupScriptPath}
+                setupScript={setupScript}
+                onCodeChange={setCustomCode}
+                onEntrypointChange={setEntrypoint}
+                onSetupScriptPathChange={setSetupScriptPath}
+                onSetupScriptChange={setSetupScript}
+              />
+            )}
+
+            {kind === "plugin" && (
+              <div className="grid gap-3 rounded-xl border border-[var(--oh-border)] bg-base-secondary p-4 md:grid-cols-[2fr_1fr]">
+                <Field label={t(I18nKey.AUTOMATION_SETUP$PLUGIN_SOURCE)}>
+                  <input
+                    data-testid="automation-setup-plugin-source"
+                    value={pluginSource}
+                    placeholder={t(
+                      I18nKey.AUTOMATION_SETUP$PLUGIN_SOURCE_PLACEHOLDER,
+                    )}
+                    onChange={(event) => setPluginSource(event.target.value)}
+                    className={formControlFieldClassName}
+                  />
+                </Field>
+                <Field label={t(I18nKey.AUTOMATION_SETUP$PLUGIN_REF)}>
+                  <input
+                    data-testid="automation-setup-plugin-ref"
+                    value={pluginRef}
+                    placeholder={t(
+                      I18nKey.AUTOMATION_SETUP$PLUGIN_REF_PLACEHOLDER,
+                    )}
+                    onChange={(event) => setPluginRef(event.target.value)}
+                    className={formControlFieldClassName}
+                  />
+                </Field>
+              </div>
+            )}
+
+            {kind !== "custom" && (
+              <Field
+                label={t(I18nKey.COMMON$REPOSITORIES)}
+                suffix={t(I18nKey.COMMON$OPTIONAL)}
+              >
+                <div className="flex items-center gap-2 rounded-xl border border-[var(--oh-border)] bg-base-secondary p-3">
+                  <input
+                    data-testid="automation-setup-repository"
+                    value={repository}
+                    placeholder={t(I18nKey.SETUP$REPOSITORY_PLACEHOLDER)}
+                    onChange={(event) => setRepository(event.target.value)}
+                    className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-tertiary-alt"
+                  />
+                  <Plus className="size-4 text-[var(--oh-muted)]" aria-hidden />
+                </div>
+              </Field>
+            )}
+
+            <section className="flex flex-col gap-3">
+              <h3 className="text-sm font-semibold text-white">
+                {t(I18nKey.AUTOMATIONS$DETAIL$TRIGGER)}
+              </h3>
+              <div className="grid gap-3 md:grid-cols-2">
+                <TriggerCard
+                  icon={<CalendarDays className="size-4" aria-hidden />}
+                  title={t(I18nKey.AUTOMATION_SETUP$SCHEDULE)}
+                  description={t(I18nKey.AUTOMATION_SETUP$SCHEDULE_DESCRIPTION)}
+                  selected={triggerKind === "cron"}
+                  onClick={() => setTriggerKind("cron")}
+                />
+                <TriggerCard
+                  icon={<Zap className="size-4" aria-hidden />}
+                  title={t(I18nKey.AUTOMATIONS$DETAIL$TRIGGER_EVENT)}
+                  description={t(I18nKey.AUTOMATION_SETUP$EVENT_DESCRIPTION)}
+                  selected={triggerKind === "event"}
+                  onClick={() => setTriggerKind("event")}
+                />
+              </div>
+            </section>
+
+            {triggerKind === "cron" ? (
+              <ScheduleFields
+                frequency={frequency}
+                time={time}
+                timezone={timezone}
+                customSchedule={customSchedule}
+                setFrequency={setFrequency}
+                setTime={setTime}
+                setTimezone={setTimezone}
+                setCustomSchedule={setCustomSchedule}
+              />
+            ) : (
+              <EventFields
+                eventSource={eventSource}
+                eventKey={eventKey}
+                eventFilter={eventFilter}
+                setEventSource={setEventSource}
+                setEventKey={setEventKey}
+                setEventFilter={setEventFilter}
+              />
+            )}
+
+            <section className="flex flex-col gap-3">
+              <h3 className="text-sm font-semibold text-white">
+                {t(I18nKey.AUTOMATION_SETUP$ADDITIONAL_OPTIONS)}
+              </h3>
+              {showTimeout ? (
+                <Field label={t(I18nKey.AUTOMATION_SETUP$TIMEOUT_SECONDS)}>
+                  <input
+                    data-testid="automation-setup-timeout"
+                    type="number"
+                    min="1"
+                    value={timeoutSeconds}
+                    onChange={(event) => setTimeoutSeconds(event.target.value)}
+                    className={formControlFieldClassName}
+                  />
+                </Field>
+              ) : (
+                <button
+                  type="button"
+                  data-testid="automation-setup-add-timeout"
+                  onClick={() => setShowTimeout(true)}
+                  className={cn(
+                    "w-fit rounded-full border border-[var(--oh-border)] px-4 py-2 text-sm text-[var(--oh-muted)] hover:bg-white/5 hover:text-white",
+                    formControlTransitionClassName,
+                  )}
+                >
+                  {t(I18nKey.AUTOMATION_SETUP$ADD_TIMEOUT)}
+                </button>
+              )}
+            </section>
+
+            {statusMessage && (
+              <p
+                role="status"
+                data-testid="automation-setup-status"
                 className={cn(
-                  "w-fit rounded-full border border-[var(--oh-border)] px-4 py-2 text-sm text-[var(--oh-muted)] hover:bg-white/5 hover:text-white",
-                  formControlTransitionClassName,
+                  "text-sm",
+                  statusMessage.kind === "success"
+                    ? "text-green-400"
+                    : "text-red-400",
                 )}
               >
-                {t(I18nKey.AUTOMATION_SETUP$ADD_TIMEOUT)}
-              </button>
+                {statusMessage.text}
+              </p>
             )}
-          </section>
-
-          {statusMessage && (
-            <p
-              role="status"
-              data-testid="automation-setup-status"
-              className={cn(
-                "text-sm",
-                statusMessage.kind === "success"
-                  ? "text-green-400"
-                  : "text-red-400",
-              )}
-            >
-              {statusMessage.text}
-            </p>
-          )}
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
 
