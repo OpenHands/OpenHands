@@ -55,6 +55,7 @@ RUN node -e " \
   const lines = [ \
     'CONFIG_AGENT_SERVER_PORT=' + c.ports.agentServer, \
     'CONFIG_AUTOMATION_PORT=' + c.ports.automation, \
+    'CONFIG_KANBAN_PORT=' + c.ports.kanban, \
     'CONFIG_PROXY_PORT=' + c.ports.proxy, \
     'CONFIG_VSCODE_PORT=' + c.ports.vscode, \
     'CONFIG_STATE_SUBDIR=' + c.paths.stateSubdir, \

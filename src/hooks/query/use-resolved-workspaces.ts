@@ -4,7 +4,11 @@ import { isAgentServerVersionError } from "@openhands/typescript-client/clients"
 
 import { useLocalWorkspaces } from "#/hooks/query/use-local-workspaces";
 import { searchAllSubdirectories } from "#/hooks/query/use-search-subdirs";
-import { LocalWorkspace, LocalWorkspaceParent } from "#/types/workspace";
+import {
+  IMPLICIT_WORKSPACE_PARENT_PATH,
+  LocalWorkspace,
+  LocalWorkspaceParent,
+} from "#/types/workspace";
 
 interface UseResolvedWorkspacesResult {
   workspaces: LocalWorkspace[];
@@ -35,7 +39,11 @@ interface UseResolvedWorkspacesResult {
 const INCLUDE_IMPLICIT_WORKSPACE_PARENTS = import.meta.env.DEV;
 
 const IMPLICIT_WORKSPACE_PARENTS: LocalWorkspaceParent[] = [
-  { id: "implicit:/projects", name: "/projects", path: "/projects" },
+  {
+    id: `implicit:${IMPLICIT_WORKSPACE_PARENT_PATH}`,
+    name: IMPLICIT_WORKSPACE_PARENT_PATH,
+    path: IMPLICIT_WORKSPACE_PARENT_PATH,
+  },
 ];
 
 /**

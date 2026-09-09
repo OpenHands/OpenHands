@@ -8,6 +8,16 @@ const ALLOWED_AD_HOC_HTTP_FILES = new Set([
   "api/automation-service/automation-service.api.ts",
   "api/cloud/proxy.ts",
   "api/main-app-auth.ts",
+  // Kanban routes live in tools/ until typescript-client grows a typed client.
+  "api/kanban-service/kanban-service.api.ts",
+  "api/projects-service/projects-service.api.ts",
+  "api/feature-developer-service/feature-developer-service.api.ts",
+  "api/loop-service/loop-service.api.ts",
+  "api/routing-service/routing-service.api.ts",
+  "api/graph-service/graph-service.api.ts",
+  "api/standards-service/standards-service.api.ts",
+  "api/channel-service/channel-service.api.ts",
+  "api/meetily-service/meetily-service.api.ts",
 ]);
 
 function collectSourceFiles(dir: string): string[] {

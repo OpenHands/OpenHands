@@ -43,3 +43,7 @@ build-fresh/
 /resources/bin/
 # Downloaded Node.js distribution (populated by `npm run download-node` before packaging)
 /resources/node/
+
+# Planning files — never commit these
+/specs/
+CURSOR_PROMPT*.md

@@ -48,6 +48,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 
 import { isExternalBrowsableUrl, isLoopbackAppUrl } from "./lib/window-url-policy.mjs";
+import { getMainWindowChrome } from "./lib/window-chrome.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -363,7 +364,7 @@ function createMainWindow() {
     // App-shell background (--oh-background in src/index.css) — avoids white
     // flashes during the show → maximize repaint after the splash closes.
     backgroundColor: "#0b0e14",
-    titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
+    ...getMainWindowChrome(),
     icon: appIconPath,
     webPreferences: {
       nodeIntegration: false,

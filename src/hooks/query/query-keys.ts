@@ -41,6 +41,11 @@ export const LLM_SUBSCRIPTION_QUERY_KEYS = {
   openaiModels: ["llm-subscription", "openai", "models"] as const,
 } as const;
 
+export const SUBSCRIPTION_MODELS_QUERY_KEYS = {
+  all: ["subscription-models"] as const,
+  bySource: (source: string) => ["subscription-models", source] as const,
+} as const;
+
 export const LOCAL_WORKSPACES_QUERY_KEYS = {
   all: ["local-workspaces"] as const,
 } as const;
@@ -82,6 +87,70 @@ export const APP_UPDATE_QUERY_KEYS = {
 
 export const CONVERSATION_QUERY_KEYS = {
   subConversations: ["v1", "sub-conversations"] as const,
+} as const;
+
+export const KANBAN_QUERY_KEYS = {
+  all: ["kanban"] as const,
+  boards: () => ["kanban", "boards"] as const,
+  board: (boardId: string) => ["kanban", "board", boardId] as const,
+  costs: (boardId: string) => ["kanban", "costs", boardId] as const,
+} as const;
+
+export const PROJECTS_QUERY_KEYS = {
+  all: ["projects"] as const,
+  list: () => ["projects", "list"] as const,
+  detail: (projectId: string) => ["projects", "detail", projectId] as const,
+} as const;
+
+export const FEATURE_DEV_QUERY_KEYS = {
+  all: ["feature-developer"] as const,
+  list: () => ["feature-developer", "list"] as const,
+  detail: (runId: string) => ["feature-developer", "detail", runId] as const,
+  report: (runId: string) => ["feature-developer", "report", runId] as const,
+} as const;
+
+export const LOOPS_QUERY_KEYS = {
+  all: ["loops"] as const,
+  definitions: () => ["loops", "definitions"] as const,
+  runs: (definitionId: string) => ["loops", "runs", definitionId] as const,
+  run: (runId: string) => ["loops", "run", runId] as const,
+  triggers: () => ["loops", "triggers"] as const,
+  events: () => ["loops", "events"] as const,
+} as const;
+
+export const ROUTING_QUERY_KEYS = {
+  all: ["routing"] as const,
+  config: () => ["routing", "config"] as const,
+  taxonomy: () => ["routing", "taxonomy"] as const,
+  registry: () => ["routing", "registry"] as const,
+  sources: () => ["routing", "sources"] as const,
+  routerModel: () => ["routing", "router-model"] as const,
+  localRuntimes: () => ["routing", "local-runtimes"] as const,
+  audit: () => ["routing", "audit"] as const,
+} as const;
+
+export const GRAPH_QUERY_KEYS = {
+  all: ["graph"] as const,
+  status: () => ["graph", "status"] as const,
+  config: () => ["graph", "config"] as const,
+} as const;
+
+export const STANDARDS_QUERY_KEYS = {
+  all: ["standards"] as const,
+  plugins: () => ["standards", "plugins"] as const,
+  config: () => ["standards", "config"] as const,
+  audit: () => ["standards", "audit"] as const,
+} as const;
+
+export const CHANNELS_QUERY_KEYS = {
+  all: ["channels"] as const,
+  list: () => ["channels", "list"] as const,
+  messages: () => ["channels", "messages"] as const,
+} as const;
+
+export const MEETILY_QUERY_KEYS = {
+  all: ["meetily"] as const,
+  preview: () => ["meetily", "preview"] as const,
 } as const;
 
 export const LOCAL_PLANNER_MUTATION_KEYS = {

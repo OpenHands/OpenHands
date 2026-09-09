@@ -7,8 +7,12 @@ import {
   Server,
   Settings,
   PanelsTopLeft,
+  Radio,
+  Shield,
 } from "lucide-react";
 import { OpenHandsLogoButton } from "#/components/shared/buttons/openhands-logo-button";
+import { CHANNELS_PATH } from "#/api/channel-service/channel-constants";
+import { STANDARDS_PATH } from "#/api/standards-service/standards-constants";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import {
   automationListPath,
@@ -252,6 +256,30 @@ export function SidebarRailBody({
             )}
           />
         )}
+        <SidebarNavLink
+          to={CHANNELS_PATH}
+          label={t(I18nKey.CHANNELS$NAV)}
+          testId="sidebar-channels-link"
+          collapsed={collapsed}
+          forceActive={currentPath.startsWith(CHANNELS_PATH)}
+          pinAction={buildPinAction(
+            CHANNELS_PATH,
+            "sidebar-pin-home-toggle-channels",
+          )}
+          icon={<Radio width={ICON_SIZE} height={ICON_SIZE} />}
+        />
+        <SidebarNavLink
+          to={STANDARDS_PATH}
+          label={t(I18nKey.STANDARDS$NAV)}
+          testId="sidebar-standards-link"
+          collapsed={collapsed}
+          forceActive={currentPath.startsWith(STANDARDS_PATH)}
+          pinAction={buildPinAction(
+            STANDARDS_PATH,
+            "sidebar-pin-home-toggle-standards",
+          )}
+          icon={<Shield width={ICON_SIZE} height={ICON_SIZE} />}
+        />
         {canvasExtensionPages.map((page) => (
           <SidebarNavLink
             key={`${page.extension.name}:${page.contribution.id}`}

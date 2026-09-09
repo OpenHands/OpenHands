@@ -2,12 +2,13 @@
 # ═══════════════════════════════════════════════════════════════════════════════
 # agent-canvas all-in-one entrypoint
 #
-# Starts three services (plus an optional fourth):
+# Starts four services (plus an optional fifth):
 #   1. Agent Server   on port $AGENT_SERVER_PORT  (default 18000)
 #   2. Automation     on port $AUTOMATION_PORT     (default 18001)
-#   3. Static server  on port $PORT               (default 8000)
-#      Routes /api/automation/* → automation, /api/* → agent-server,
-#      and serves the frontend static build for everything else.
+#   3. Kanban API     on port $KANBAN_PORT         (default 18004)
+#   4. Static server  on port $PORT               (default 8000)
+#      Routes /api/automation/* → automation, /api/boards|columns|cards|project|channels|meetings
+#      → kanban, /api/* → agent-server, and serves the frontend otherwise.
 #   4. (Optional) Public-mode static server on $PUBLIC_MODE_PORT
 #      Same frontend, but with --auth-required (no baked session key).
 #      Used by auth-mode E2E tests. Only started when PUBLIC_MODE_PORT is set.
@@ -69,6 +70,7 @@ fi
 PORT="${PORT:-${CONFIG_PROXY_PORT:-8000}}"
 AGENT_SERVER_PORT="${AGENT_SERVER_PORT:-${CONFIG_AGENT_SERVER_PORT:-18000}}"
 AUTOMATION_PORT="${AUTOMATION_PORT:-${CONFIG_AUTOMATION_PORT:-18001}}"
+KANBAN_PORT="${KANBAN_PORT:-${CONFIG_KANBAN_PORT:-18004}}"
 
 # The bundled editor is reached through a path prefix on the proxy port rather
 # than a published port of its own. The same prefix has to reach agent-server
@@ -272,7 +274,7 @@ export AUTOMATION_AGENT_SERVER_URL="${AUTOMATION_AGENT_SERVER_URL:-http://127.0.
 # FinishTool registration lets automation runs resolve the tool on their
 # remote conversations (see the note at the bottom of tools/canvas_ui_tool.py).
 export OH_EXTRA_PYTHON_PATH="${OH_EXTRA_PYTHON_PATH:-/opt/agent-canvas/tools}"
-AGENT_SERVER_IMPORT_MODULES="canvas_ui_tool"
+AGENT_SERVER_IMPORT_MODULES="canvas_ui_tool,cursor_tool,opencode_tool,loop_triggers,graph_indexer,standards_api"
 
 # Track child PIDs so we can clean up on exit.
 PIDS=()
@@ -349,6 +351,14 @@ else
   log "WARNING: Automation server not found, skipping."
 fi
 
+# ── 2b. Start kanban sidecar (space boards) ─────────────────────────────────
+log "Starting kanban API on port $KANBAN_PORT..."
+(
+  cd /opt/agent-canvas/tools
+  python kanban_api.py --host 127.0.0.1 --port "$KANBAN_PORT"
+) &
+PIDS+=($!)
+
 # ── 3. Wait for backends to be ready ─────────────────────────────────────────
 wait_for_port() {
   local port=$1 name=$2 max_wait=${3:-30}
@@ -395,6 +405,13 @@ node /opt/agent-canvas/static-server.mjs \
   --session-api-key "$EFFECTIVE_SESSION_KEY" \
   --runtime-services-info "$RUNTIME_SERVICES_INFO" \
   --route "/api/automation=http://127.0.0.1:${AUTOMATION_PORT}" \
+  --route "/api/boards=http://127.0.0.1:${KANBAN_PORT}" \
+  --route "/api/columns=http://127.0.0.1:${KANBAN_PORT}" \
+  --route "/api/cards=http://127.0.0.1:${KANBAN_PORT}" \
+  --route "/api/project=http://127.0.0.1:${KANBAN_PORT}" \
+  --route "/api/channels=http://127.0.0.1:${KANBAN_PORT}" \
+  --route "/api/meetings=http://127.0.0.1:${KANBAN_PORT}" \
+  --route "/api/standards=http://127.0.0.1:${KANBAN_PORT}" \
   --route "/api=http://127.0.0.1:${AGENT_SERVER_PORT}" \
   --route "/server_info=http://127.0.0.1:${AGENT_SERVER_PORT}" \
   --route "/sockets=http://127.0.0.1:${AGENT_SERVER_PORT}" \
@@ -447,6 +464,13 @@ if [ -n "${PUBLIC_MODE_PORT:-}" ]; then
     --auth-required \
     --runtime-services-info "$RUNTIME_SERVICES_INFO" \
     --route "/api/automation=http://127.0.0.1:${AUTOMATION_PORT}" \
+    --route "/api/boards=http://127.0.0.1:${KANBAN_PORT}" \
+    --route "/api/columns=http://127.0.0.1:${KANBAN_PORT}" \
+    --route "/api/cards=http://127.0.0.1:${KANBAN_PORT}" \
+    --route "/api/project=http://127.0.0.1:${KANBAN_PORT}" \
+    --route "/api/channels=http://127.0.0.1:${KANBAN_PORT}" \
+    --route "/api/meetings=http://127.0.0.1:${KANBAN_PORT}" \
+    --route "/api/standards=http://127.0.0.1:${KANBAN_PORT}" \
     --route "/api=http://127.0.0.1:${AGENT_SERVER_PORT}" \
     --route "/server_info=http://127.0.0.1:${AGENT_SERVER_PORT}" \
     --route "/sockets=http://127.0.0.1:${AGENT_SERVER_PORT}" \

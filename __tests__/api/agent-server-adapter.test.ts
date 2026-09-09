@@ -1485,6 +1485,54 @@ describe("agent_settings runtime services suffix", () => {
       payload.agent_settings.agent_context.system_message_suffix as string,
     ).toContain("<RUNTIME_SERVICES>");
   });
+
+  it("does not add a space-kanban suffix when no working dir is attached", () => {
+    const payload = buildStartConversationRequest({
+      settings: DEFAULT_SETTINGS,
+      query: "hello",
+    }) as {
+      agent_settings: { agent_context: Record<string, unknown> };
+    };
+    const suffix = payload.agent_settings.agent_context.system_message_suffix;
+    expect(suffix).toBeUndefined();
+  });
+
+  it("instructs the agent to refine a multi-item spec before creating kanban cards", () => {
+    const payload = buildStartConversationRequest({
+      settings: DEFAULT_SETTINGS,
+      query: "build login, billing, and search",
+      workingDir: "/workspace/demo-app",
+    }) as {
+      agent_settings: { agent_context: Record<string, unknown> };
+    };
+    const suffix = payload.agent_settings.agent_context
+      .system_message_suffix as string;
+    expect(suffix).toContain("<SPACE_KANBAN>");
+    expect(suffix).toContain("/workspace/demo-app");
+    expect(suffix).toMatch(/clarif/i);
+    expect(suffix).toMatch(/kanban/i);
+    expect(suffix).not.toMatch(/feature developer/i);
+  });
+
+  it("keeps the runtime-services suffix when a space is attached", () => {
+    const payload = buildStartConversationRequest({
+      settings: DEFAULT_SETTINGS,
+      query: "hello",
+      workingDir: "/workspace/demo-app",
+      runtimeServicesInfo: {
+        mode: "dev:automation",
+        services: {
+          agent_server: { url_from_agent: "http://localhost:18000" },
+        },
+      },
+    }) as {
+      agent_settings: { agent_context: Record<string, unknown> };
+    };
+    const suffix = payload.agent_settings.agent_context
+      .system_message_suffix as string;
+    expect(suffix).toContain("<RUNTIME_SERVICES>");
+    expect(suffix).toContain("<SPACE_KANBAN>");
+  });
 });
 
 describe("buildStartConversationRequest — ACP discriminator", () => {

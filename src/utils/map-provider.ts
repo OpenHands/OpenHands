@@ -27,6 +27,14 @@ export const MAP_PROVIDER = {
   lemonade: "Lemonade",
   clarifai: "Clarifai",
   moonshot: "Moonshot",
+  custom: "Custom",
+  deepseek: "DeepSeek",
+  minimax: "MiniMax",
+  glm: "GLM",
+  qwen: "Qwen",
+  nvidia: "NVIDIA",
+  "cursor-cli": "Cursor CLI",
+  opencode: "OpenCode",
 };
 
 export const mapProvider = (provider: string) =>

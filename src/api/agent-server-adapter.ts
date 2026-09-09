@@ -329,6 +329,42 @@ export function buildRuntimeServicesSystemSuffix(
   return lines.join("\n");
 }
 
+/**
+ * When a chat is started against a space, tell the agent to refine a
+ * multi-feature spec against project docs before creating kanban cards.
+ * Single-item requests stay a normal conversation.
+ */
+export function buildSpaceKanbanSystemSuffix(workingDir: string): string {
+  const space = workingDir.trim();
+  return [
+    "<SPACE_KANBAN>",
+    `This conversation is attached to the space at ${space}.`,
+    "If the user is asking for a single feature or bug, just work that in this chat. Do not dump a board of tickets.",
+    "If the request contains multiple features or bugs:",
+    "1. Read project docs first (README, .openhands/, existing TODOs/issues) and ask clarifying questions. Do not create tickets until the spec is refined.",
+    "2. Then create one kanban card per feature or bug on this space's board (Backlog). Use GET /api/boards and POST /api/columns/<backlog_id>/cards on the Agent Server.",
+    "Do not start a parallel fleet or a dedicated orchestrator run from this chat.",
+    "</SPACE_KANBAN>",
+  ].join("\n");
+}
+
+function withSystemMessageSuffix(
+  agentSettings: AgentSettingsPayload,
+  suffix: string,
+): AgentSettingsPayload {
+  const existing = agentSettings.agent_context.system_message_suffix;
+  return {
+    ...agentSettings,
+    agent_context: {
+      ...agentSettings.agent_context,
+      system_message_suffix:
+        typeof existing === "string" && existing.length > 0
+          ? `${existing}\n\n${suffix}`
+          : suffix,
+    },
+  };
+}
+
 export function toConversationUrl(conversationId: string): string {
   // Local-format conversation URL — points at whichever local agent-server
   // is actually serving the conversation (the bundled one when the active
@@ -1184,11 +1220,18 @@ export function buildStartConversationRequest(
     : acpMode
       ? "acp"
       : "openhands";
-  const agentSettings = buildConfiguredAgentSettings(
+  let agentSettings = buildConfiguredAgentSettings(
     sourceAgentSettings,
     options.runtimeServicesInfo,
     options.query,
   );
+  const spaceDir = options.workingDir?.trim();
+  if (spaceDir && !options.agentProfileId) {
+    agentSettings = withSystemMessageSuffix(
+      agentSettings,
+      buildSpaceKanbanSystemSuffix(spaceDir),
+    );
+  }
   const acpServerTag = acpMode
     ? getAcpServerTag(sourceAgentSettings)
     : undefined;

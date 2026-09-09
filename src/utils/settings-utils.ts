@@ -53,7 +53,12 @@ export function isSettingsPageHidden(
   path: string,
   featureFlags: WebClientFeatureFlags | undefined,
 ): boolean {
-  if (featureFlags?.hide_llm_settings && path === "/settings/llm") return true;
+  if (
+    featureFlags?.hide_llm_settings &&
+    (path === "/settings/llm" || path === "/settings/routing")
+  ) {
+    return true;
+  }
   return false;
 }
 

@@ -409,7 +409,8 @@ export function validateFrontendDependencies(
  * resolve it on the remote conversations they dispatch — see the note at the
  * bottom of tools/canvas_ui_tool.py.
  */
-export const AGENT_SERVER_IMPORT_MODULES = "canvas_ui_tool";
+export const AGENT_SERVER_IMPORT_MODULES =
+  "canvas_ui_tool,cursor_tool,opencode_tool,loop_triggers,graph_indexer,standards_api";
 
 /**
  * Build the uvx command and arguments for running agent-server.

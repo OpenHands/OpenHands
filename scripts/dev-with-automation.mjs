@@ -86,6 +86,7 @@ const DEFAULT_AUTOMATION_VERSION = SHARED_DEFAULTS.versions.automation;
 const DEFAULT_AUTOMATION_SDK_VERSION = SHARED_DEFAULTS.versions.agentServer;
 const DEFAULT_BACKEND_PORT = SHARED_DEFAULTS.ports.agentServer;
 const DEFAULT_AUTOMATION_PORT = SHARED_DEFAULTS.ports.automation;
+const DEFAULT_KANBAN_PORT = SHARED_DEFAULTS.ports.kanban;
 const DEFAULT_POSTHOG_API_KEY = SHARED_DEFAULTS.telemetry.posthogApiKey;
 const DEFAULT_POSTHOG_HOST = SHARED_DEFAULTS.telemetry.posthogHost;
 
@@ -428,12 +429,15 @@ async function buildConfig(args, env = process.env) {
     parseInt(env.OH_CANVAS_SAFE_BACKEND_PORT, 10) || DEFAULT_BACKEND_PORT;
   const preferredAutomationPort =
     parseInt(env.OH_CANVAS_SAFE_AUTOMATION_PORT, 10) || DEFAULT_AUTOMATION_PORT;
+  const preferredKanbanPort =
+    parseInt(env.OH_CANVAS_SAFE_KANBAN_PORT, 10) || DEFAULT_KANBAN_PORT;
   const preferredVitePort = parseInt(env.OH_CANVAS_SAFE_VITE_PORT, 10) || 3001;
 
   // Fail fast if any preferred port for a service in this mode is already in use.
   const requiredPorts = [{ name: "ingress", port: preferredIngressPort }];
   if (launchAgentServer) {
     requiredPorts.push({ name: "agent-server", port: preferredBackendPort });
+    requiredPorts.push({ name: "kanban", port: preferredKanbanPort });
   }
   if (launchAutomation) {
     requiredPorts.push({ name: "automation", port: preferredAutomationPort });
@@ -483,6 +487,7 @@ async function buildConfig(args, env = process.env) {
     // Service ports (internal)
     agentServerPort: preferredBackendPort,
     autoBackendPort: preferredAutomationPort,
+    kanbanPort: preferredKanbanPort,
     vitePort: preferredVitePort,
     vscodePort,
     // Prefix the editor is served under on the ingress origin. Carried on the
@@ -727,6 +732,15 @@ async function waitForService(name, url, timeoutMs = 30000) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 const AUTOMATION_ROUTE_PREFIX = "/api/automation";
+const KANBAN_ROUTE_PREFIXES = [
+  "/api/boards",
+  "/api/columns",
+  "/api/cards",
+  "/api/project",
+  "/api/channels",
+  "/api/meetings",
+  "/api/standards",
+];
 const AGENT_SERVER_ROUTE_PREFIXES = [
   "/api",
   "/sockets",
@@ -746,6 +760,10 @@ function getAgentServerBaseUrl(config) {
   return `http://127.0.0.1:${config.agentServerPort}`;
 }
 
+function getKanbanBaseUrl(config) {
+  return `http://127.0.0.1:${config.kanbanPort}`;
+}
+
 function getLocalServiceRoutes(config) {
   const routes = [];
 
@@ -758,6 +776,11 @@ function getLocalServiceRoutes(config) {
   }
 
   if (config.launchAgentServer) {
+    // Longer prefixes than /api so the board UI does not 404 on the agent-server.
+    for (const prefix of KANBAN_ROUTE_PREFIXES) {
+      routes.push([prefix, getKanbanBaseUrl(config)]);
+    }
+
     for (const prefix of AGENT_SERVER_ROUTE_PREFIXES) {
       routes.push([prefix, getAgentServerBaseUrl(config)]);
     }
@@ -1057,6 +1080,43 @@ function startAutomationBackend(config) {
         OPENHANDS_SUPPRESS_BANNER: "1",
       },
       color: c.green,
+    },
+  );
+}
+
+function resolvePythonCommand() {
+  if (commandExists("python3")) return "python3";
+  if (commandExists("python")) return "python";
+  return null;
+}
+
+function startKanbanApi(config) {
+  const python = resolvePythonCommand();
+  if (!python) {
+    logError(
+      "python3 is required to serve space boards (/api/boards). Board opens will 404.",
+    );
+    return;
+  }
+
+  logService("kanban", `Starting on port ${config.kanbanPort}...`, c.cyan);
+  spawnService(
+    "kanban",
+    python,
+    [
+      "kanban_api.py",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      String(config.kanbanPort),
+    ],
+    {
+      cwd: join(projectRoot, "tools"),
+      env: {
+        PYTHONUTF8: "1",
+        OH_SESSION_API_KEYS_0: config.sessionApiKey,
+      },
+      color: c.cyan,
     },
   );
 }
@@ -1579,6 +1639,11 @@ async function main(options = {}) {
     startAutomationBackend(config);
   }
 
+  // 3b. Space boards live in tools/kanban_api.py until the agent-server mounts them.
+  if (config.launchAgentServer) {
+    startKanbanApi(config);
+  }
+
   // 4. Start frontend server (Vite dev server OR static server)
   if (config.launchFrontend) {
     if (useStaticMode) {
@@ -1693,6 +1758,8 @@ export {
   DEFAULT_AUTOMATION_SDK_VERSION,
   DEFAULT_BACKEND_PORT,
   DEFAULT_AUTOMATION_PORT,
+  DEFAULT_KANBAN_PORT,
+  KANBAN_ROUTE_PREFIXES,
 };
 
 // ═══════════════════════════════════════════════════════════════════════════

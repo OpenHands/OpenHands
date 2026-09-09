@@ -56,6 +56,7 @@
  * a Finder-launched .app a minimal PATH (/usr/bin:/bin) that has none of those.
  */
 
+import { chmodSync, cpSync } from "node:fs";
 import { cp, rm } from "node:fs/promises";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
@@ -97,6 +98,29 @@ function packagedResourcesDir(context) {
     : join(context.appOutDir, "resources");
 }
 
+// Bundled tool binaries that must survive ad-hoc re-signing after the build.
+// Go/Rust binaries like uv, uvx, and node are corrupted by
+// `codesign --remove-signature` — an afterSign hook restores fresh unsigned
+// copies from resources/ so the final .app can be re-signed ad-hoc without
+// breaking these tools.
+const BUNDLED_TOOLS = {
+  darwin: [
+    { src: "bin/uv", dest: "bin/uv", chmod: 0o755 },
+    { src: "bin/uvx", dest: "bin/uvx", chmod: 0o755 },
+    { src: "node/bin/node", dest: "node/bin/node", chmod: 0o755 },
+  ],
+  linux: [
+    { src: "bin/uv", dest: "bin/uv", chmod: 0o755 },
+    { src: "bin/uvx", dest: "bin/uvx", chmod: 0o755 },
+    { src: "node/bin/node", dest: "node/bin/node", chmod: 0o755 },
+  ],
+  win32: [
+    { src: "bin/uv.exe", dest: "bin/uv.exe" },
+    { src: "bin/uvx.exe", dest: "bin/uvx.exe" },
+    { src: "node/node.exe", dest: "node/node.exe" },
+  ],
+};
+
 /**
  * afterPack entry point. Invoked by electron-builder once per platform target
  * after the unpacked directory has been populated but before installer-format
@@ -105,6 +129,43 @@ function packagedResourcesDir(context) {
 async function afterPack(context) {
   await stripBundledNodeModules(context);
   await restoreBundledNodeNpm(context);
+}
+
+/**
+ * afterSign entry point. Invoked by electron-builder after code signing.
+ *
+ * Restores fresh copies of bundled tool binaries (uv, uvx, node) from the
+ * repo's resources/ directory. Go/Rust binaries are corrupted by
+ * `codesign --remove-signature` — a step needed when users re-sign the app
+ * ad-hoc after copying it to /Applications/. By restoring unsigned originals
+ * here, the built .app can be safely re-signed without breaking the tools.
+ */
+async function afterSign(context) {
+  const platform = context.electronPlatformName;
+  const tools = BUNDLED_TOOLS[platform];
+  if (!tools) return;
+
+  const resDir = join(packagedResourcesDir(context));
+  let restored = 0;
+
+  for (const tool of tools) {
+    const src = join(repoRoot, "resources", tool.src);
+    const dest = join(resDir, tool.dest);
+    if (!existsSync(src)) continue;
+    cpSync(src, dest, { recursive: true });
+    if (tool.chmod !== undefined) {
+      chmodSync(dest, tool.chmod);
+    }
+    restored++;
+  }
+
+  if (restored > 0) {
+    // eslint-disable-next-line no-console -- electron-builder build log
+    console.log(
+      `[electron-builder] restored ${restored} bundled tool binary(ies) ` +
+        `after signing: ${tools.map((t) => t.dest).join(", ")}`,
+    );
+  }
 }
 
 /**
@@ -316,6 +377,11 @@ const config = {
   // then restore the bundled Node distribution's own npm (see
   // restoreBundledNodeNpm).
   afterPack,
+
+  // Restore fresh copies of bundled tool binaries (uv, uvx, node) after
+  // code signing. Go/Rust binaries are corrupted by codesign --remove-signature,
+  // so the built .app needs clean copies for safe ad-hoc re-signing.
+  afterSign,
 
   // Files included in the packaged app.
   // Paths with `from` are relative to directories.app (electron/).

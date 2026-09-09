@@ -15,6 +15,11 @@ import {
   resolveEffectiveAcpModel,
   type ACPModelOption,
 } from "#/constants/acp-providers";
+import {
+  isSubscriptionModelEnabled,
+  useSubscriptionModelPreferencesStore,
+} from "#/stores/subscription-model-preferences-store";
+import { subscriptionModelToggleKey } from "#/utils/subscription-model-catalog";
 
 export interface ChatInputModelState {
   isAcpContext: boolean;
@@ -33,6 +38,9 @@ export function useChatInputModelState(): ChatInputModelState {
   const { conversationId } = useOptionalConversationId();
   const { backend } = useActiveBackend();
   const canManageOrgProfiles = useCanManageOrgProfiles();
+  const disabledSubscriptionKeys = useSubscriptionModelPreferencesStore(
+    (state) => state.disabledKeys,
+  );
   // The active ACP AgentProfile's own fields are the conversation launch
   // source (activation never writes agent_settings, so the global settings
   // may describe a different provider). Null in a conversation, while
@@ -96,7 +104,15 @@ export function useChatInputModelState(): ChatInputModelState {
     currentModelId && isAcpContext
       ? (labelForAcpModel(acpServerKey, currentModelId) ?? currentModelId)
       : currentModelId;
-  const availableAcpModels = acpProvider?.available_models ?? [];
+  const availableAcpModels = (acpProvider?.available_models ?? []).filter(
+    (model) => {
+      if (acpServerKey !== "claude-code") return true;
+      return isSubscriptionModelEnabled(
+        disabledSubscriptionKeys,
+        subscriptionModelToggleKey("claude", model.id),
+      );
+    },
+  );
   // A home-page pick persists into the active ACP profile, which on cloud is
   // org-owned — hide the selectable rows from members who'd only get a 403.
   // Conversation-scoped switches (blank or started) stay member-allowed.
