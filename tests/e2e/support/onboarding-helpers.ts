@@ -63,6 +63,19 @@ export async function showOnboarding(
   page: Page,
   { apiKey, beforeGoto }: ShowOnboardingOptions,
 ) {
+  const consentResponse = await page.request.patch("/api/settings", {
+    headers: { "X-Session-API-Key": apiKey },
+    data: {
+      misc_settings_diff: {
+        app_preferences: { user_consents_to_analytics: false },
+      },
+    },
+  });
+  expect(
+    consentResponse.ok(),
+    `failed to seed backend analytics consent: ${consentResponse.status()}`,
+  ).toBe(true);
+
   await page.addInitScript(
     ({ apiKey: initApiKey }) => {
       window.localStorage.removeItem("openhands-onboarded");
