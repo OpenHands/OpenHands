@@ -35,12 +35,32 @@ import { BackendNotConfigured } from "#/components/features/automations/backend-
 import { DeleteConfirmationModal } from "#/components/features/automations/delete-confirmation-modal";
 import { EditAutomationModal } from "#/components/features/automations/detail/edit-automation-modal";
 import { useTracking } from "#/hooks/use-tracking";
+import {
+  useAutomationPermissions,
+  useIsAutomationOwner,
+} from "#/hooks/use-automation-permissions";
 import AutomationService from "#/api/automation-service/automation-service.api";
+import type { Automation } from "#/types/automation";
 import {
   getAutomationExportFilename,
   serializeAutomation,
 } from "#/utils/automation-export";
 import { downloadBlob } from "#/utils/utils";
+
+/**
+ * Placeholder automation used to keep `useIsAutomationOwner` hooked before
+ * the real automation has loaded (rules-of-hooks). Its `user_id` won't match
+ * any real user, so the owner check safely returns `false` while loading.
+ */
+const nullAutomation: Automation = {
+  id: "",
+  name: "",
+  prompt: null,
+  trigger: { type: "cron" },
+  enabled: false,
+  created_at: "",
+  updated_at: "",
+};
 
 /**
  * The page renders the interface manifest's copy, so without an admitted
@@ -97,6 +117,10 @@ export default function AutomationDetail() {
   const toggleMutation = useToggleAutomation();
   const deleteMutation = useDeleteAutomation();
   const dispatchMutation = useDispatchAutomation();
+  // Permission hooks must run before any early return (rules-of-hooks). The
+  // owner check is a no-op while the automation hasn't loaded yet.
+  const { canManage: hasManagePermission } = useAutomationPermissions();
+  const isOwner = useIsAutomationOwner(automation ?? nullAutomation);
 
   const is404 = isError && getErrorStatus(error) === 404;
 
@@ -196,6 +220,8 @@ export default function AutomationDetail() {
   // Edit is a local-backend-only feature in MVP — cloud automations
   // are managed elsewhere and we don't yet surface them here.
   const canEdit = active.backend.kind === "local";
+  // Write actions on a specific automation: manage OR creator (escape hatch).
+  const canManage = hasManagePermission || isOwner;
 
   return (
     <div className="min-h-full">
@@ -213,6 +239,7 @@ export default function AutomationDetail() {
             }
             onRunNow={handleRunNow}
             isRunningNow={dispatchMutation.isPending}
+            canManage={canManage}
           />
           {automation.prompt && <PromptSection prompt={automation.prompt} />}
           <ConfigurationSection automation={automation} />
