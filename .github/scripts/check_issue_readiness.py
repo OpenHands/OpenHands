@@ -1,16 +1,18 @@
 """Determine whether an issue meets the `ready-for-dev` readiness criteria.
 
-The criteria are type-specific:
+The criteria are type-specific, and the type is inferred from the body
+structure rather than the `bug`/`enhancement` label:
 
-- Bug reports (labeled `bug`): the Steps to Reproduce section must reference at
-  least one supported run method (`agent-canvas`, `npm run`, or
-  `app.all-hands.dev/canvas`), the Actual Behavior section must embed a
-  screenshot or video, and there must be a non-empty Acceptance Criteria
-  section with at least one checklist item.
+- Bug reports (a `##`/`### Steps to Reproduce` or `##`/`### Actual Behavior`
+  section):
+  the Steps to Reproduce section must reference at least one supported run
+  method (`agent-canvas`, `npm run`, or `app.all-hands.dev/canvas`), the
+  Actual Behavior section must embed a screenshot or video, and there must be
+  a non-empty Acceptance Criteria section with at least one checklist item.
 
-- Enhancements (labeled `enhancement`): the body must contain non-empty
-  Desired Behavior and Acceptance Criteria sections, the latter with at least
-  one checklist item.
+- Enhancements (a `##`/`### Desired Behavior` section): the body must contain
+  non-empty Desired Behavior and Acceptance Criteria sections, the latter
+  with at least one checklist item.
 
 GitHub issue forms render each field as an `### <Label>` (h3) heading followed
 by the field text, with empty optional fields rendered as `_No response_`. The
@@ -19,8 +21,7 @@ issues, and checks each criterion against the corresponding section.
 
 Local usage:
 
-    python .github/scripts/check_issue_readiness.py --body-file /tmp/issue.md \
-        --labels bug
+    python .github/scripts/check_issue_readiness.py --body-file /tmp/issue.md
     python .github/scripts/check_issue_readiness.py --event-path "$GITHUB_EVENT_PATH"
 """
 
@@ -39,18 +40,26 @@ from markdown_sections import find_headings
 BUG_LABEL = "bug"
 ENHANCEMENT_LABEL = "enhancement"
 
+# Issue-form field headings that identify an issue's type. The `bug` and
+# `enhancement` labels are deliberately not consulted: the type is inferred from
+# which of these sections is present, so issues can qualify for `ready-for-dev`
+# without carrying a label.
+BUG_SECTION_LABELS = (
+    "actual behavior",
+    "actual",
+    "steps to reproduce",
+    "reproduction",
+)
+ENHANCEMENT_SECTION_LABELS = ("desired behavior", "desired")
+
 # Issue-form fields render as h3 headings, while hand-edited and free-form
 # issues commonly use h2. Capture the level so nested h3 headings can remain
 # part of an h2 section.
 HEADING_RE = re.compile(r"(?m)^(?P<level>#{2,3})\s+(?P<title>.+?)\s*$")
 
 READINESS_SECTION_LABELS = {
-    "steps to reproduce",
-    "reproduction",
-    "actual behavior",
-    "actual",
-    "desired behavior",
-    "desired",
+    *BUG_SECTION_LABELS,
+    *ENHANCEMENT_SECTION_LABELS,
     "acceptance criteria",
     "acceptance",
 }
@@ -248,25 +257,28 @@ def check_enhancement(sections: dict[str, str]) -> ReadinessResult:
 
 
 def evaluate_readiness(body: str, labels: list[str]) -> ReadinessResult:
-    """Return the readiness result for an issue body + label set.
+    """Return the readiness result for an issue body.
 
-    An issue is only a candidate when it carries the `bug` or `enhancement`
-    label. If it has neither, it is treated as not-ready-for-dev (the gate does
-    not apply a label it cannot validate).
+    The type is inferred from the body structure, not the `bug`/`enhancement`
+    label: a body with a `##`/`### Steps to Reproduce` or `##`/`### Actual
+    Behavior` section is treated as a bug report, and a body with a
+    `##`/`### Desired Behavior` section is treated as an enhancement. `labels`
+    is accepted for backwards compatibility but is not consulted.
     """
-    label_set = {label.lower() for label in labels}
     sections = extract_sections(body or "")
 
-    if BUG_LABEL in label_set:
+    if any(label in sections for label in BUG_SECTION_LABELS):
         return check_bug(sections)
-    if ENHANCEMENT_LABEL in label_set:
+    if any(label in sections for label in ENHANCEMENT_SECTION_LABELS):
         return check_enhancement(sections)
 
     return ReadinessResult(
         ready=False,
         reasons=[
-            "The issue has neither the `bug` nor `enhancement` label, so its "
-            "readiness criteria cannot be evaluated. Add the appropriate label."
+            "The issue has neither a `### Steps to Reproduce`/`### Actual "
+            "Behavior` nor a `### Desired Behavior` section, so its readiness "
+            "criteria cannot be evaluated. Use the bug report or feature "
+            "request template."
         ],
     )
 
@@ -289,7 +301,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--body-file", type=Path, help="Read the issue body from a file.")
     parser.add_argument(
         "--labels",
-        help="Comma-separated issue labels (e.g. 'bug,frontend').",
+        help="Comma-separated issue labels. Accepted for backwards compatibility "
+        "but no longer consulted (the type is inferred from the body).",
         default="",
     )
     parser.add_argument(
