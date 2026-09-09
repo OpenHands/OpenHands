@@ -3,20 +3,21 @@
 The criteria are type-specific, and the type is inferred from the body
 structure rather than the `bug`/`enhancement` label:
 
-- Bug reports (a `### Steps to Reproduce` or `### Actual Behavior` section):
+- Bug reports (a `##`/`### Steps to Reproduce` or `##`/`### Actual Behavior`
+  section):
   the Steps to Reproduce section must reference at least one supported run
   method (`agent-canvas`, `npm run`, or `app.all-hands.dev/canvas`), the
   Actual Behavior section must embed a screenshot or video, and there must be
   a non-empty Acceptance Criteria section with at least one checklist item.
 
-- Enhancements (a `### Desired Behavior` section): the body must contain
+- Enhancements (a `##`/`### Desired Behavior` section): the body must contain
   non-empty Desired Behavior and Acceptance Criteria sections, the latter
   with at least one checklist item.
 
 GitHub issue forms render each field as an `### <Label>` (h3) heading followed
-by the field text, with empty optional fields rendered as `_No response_`. This
-parser splits the body on those headings so each criterion is checked against
-the right field rather than the whole body.
+by the field text, with empty optional fields rendered as `_No response_`. The
+parser also accepts `## <Label>` headings used by hand-edited and free-form
+issues, and checks each criterion against the corresponding section.
 
 Local usage:
 
@@ -43,13 +44,25 @@ ENHANCEMENT_LABEL = "enhancement"
 # `enhancement` labels are deliberately not consulted: the type is inferred from
 # which of these sections is present, so issues can qualify for `ready-for-dev`
 # without carrying a label.
-BUG_SECTION_LABELS = ("actual behavior", "actual", "steps to reproduce", "reproduction")
+BUG_SECTION_LABELS = (
+    "actual behavior",
+    "actual",
+    "steps to reproduce",
+    "reproduction",
+)
 ENHANCEMENT_SECTION_LABELS = ("desired behavior", "desired")
 
-# Issue-form fields render as `### Label` h3 headings. Match case-insensitively
-# and tolerate trailing whitespace/colons. `^###\s+` is specific enough because
-# h1/h2 are not produced by issue forms.
-HEADING_RE = re.compile(r"(?m)^###\s+(.+?)\s*$")
+# Issue-form fields render as h3 headings, while hand-edited and free-form
+# issues commonly use h2. Capture the level so nested h3 headings can remain
+# part of an h2 section.
+HEADING_RE = re.compile(r"(?m)^(?P<level>#{2,3})\s+(?P<title>.+?)\s*$")
+
+READINESS_SECTION_LABELS = {
+    *BUG_SECTION_LABELS,
+    *ENHANCEMENT_SECTION_LABELS,
+    "acceptance criteria",
+    "acceptance",
+}
 
 # `_No response_` is what GitHub writes for an empty optional form field.
 NO_RESPONSE = "_No response_"
@@ -111,18 +124,30 @@ def visible_text(text: str) -> str:
 
 
 def extract_sections(body: str) -> dict[str, str]:
-    """Split the body into a {heading: text} map using `### <heading>` boundaries.
+    """Split the body into a {heading: text} map using h2 or h3 boundaries.
 
-    Issue forms render every field this way. Free-form issues (not created via a
-    form) may still use `###` headings; if they don't, the map is empty and the
-    caller falls back to whole-body checks.
+    Issue forms render fields as h3 headings. Free-form and hand-edited issues
+    may use h2 headings instead, including a mix of both levels.
     """
     matches = find_headings(body, HEADING_RE)
+    has_h2 = any(match.group("level") == "##" for match in matches)
+    boundaries = [
+        match
+        for match in matches
+        if match.group("level") == "##"
+        or not has_h2
+        or match.group("title").strip().lower() in READINESS_SECTION_LABELS
+    ]
+
     sections: dict[str, str] = {}
-    for index, match in enumerate(matches):
+    for index, match in enumerate(boundaries):
         start = match.end()
-        end = matches[index + 1].start() if index + 1 < len(matches) else len(body)
-        sections[match.group(1).strip().lower()] = body[start:end]
+        end = (
+            boundaries[index + 1].start()
+            if index + 1 < len(boundaries)
+            else len(body)
+        )
+        sections[match.group("title").strip().lower()] = body[start:end]
     return sections
 
 
@@ -219,16 +244,16 @@ def evaluate_readiness(body: str, labels: list[str]) -> ReadinessResult:
     """Return the readiness result for an issue body.
 
     The type is inferred from the body structure, not the `bug`/`enhancement`
-    label: a body with a `### Steps to Reproduce` or `### Actual Behavior`
-    section is treated as a bug report, and a body with a `### Desired
-    Behavior` section is treated as an enhancement. `labels` is accepted for
-    backwards compatibility but is not consulted.
+    label: a body with a `##`/`### Steps to Reproduce` or `##`/`### Actual
+    Behavior` section is treated as a bug report, and a body with a
+    `##`/`### Desired Behavior` section is treated as an enhancement. `labels`
+    is accepted for backwards compatibility but is not consulted.
     """
     sections = extract_sections(body or "")
 
-    if find_section(sections, *BUG_SECTION_LABELS):
+    if any(label in sections for label in BUG_SECTION_LABELS):
         return check_bug(sections)
-    if find_section(sections, *ENHANCEMENT_SECTION_LABELS):
+    if any(label in sections for label in ENHANCEMENT_SECTION_LABELS):
         return check_enhancement(sections)
 
     return ReadinessResult(

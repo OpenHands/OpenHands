@@ -27,7 +27,12 @@ vi.mock(
   }),
 );
 
-vi.mock("#/hooks/chat/record-model-switch-message", () => ({
+vi.mock("#/hooks/chat/record-model-switch-message", async (importOriginal) => ({
+  // Keep the real stampActiveLlmProfile so the metadata-stamp assertions
+  // below exercise the actual write; only the inline-message recorder is spied.
+  ...(await importOriginal<
+    typeof import("#/hooks/chat/record-model-switch-message")
+  >()),
   recordModelSwitchMessage: vi.fn(),
 }));
 
@@ -221,14 +226,40 @@ describe("useSwitchLlmProfile", () => {
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    // The switch carries the previous record forward wholesale rather than
+    // re-listing known fields, so optional keys the record never had stay
+    // absent instead of being materialized as null.
     expect(getStoredConversationMetadata("conv-1")).toEqual({
       selected_repository: "octocat/hello-world",
       selected_branch: "main",
       git_provider: "github",
-      selected_workspace: null,
       active_profile: "claude-sonnet-4.6",
-      plugins: null,
+      // Client-clock ISO timestamp; the mutation path has no event timestamp.
+      stamped_at: expect.any(String),
     });
+  });
+
+  it("preserves metadata fields the switch does not know about, such as the local planner id", async () => {
+    vi.mocked(AgentServerConversationService.switchProfile).mockResolvedValue(
+      undefined as never,
+    );
+    setStoredConversationMetadata("conv-1", {
+      selected_repository: null,
+      selected_branch: null,
+      git_provider: null,
+      local_planning_conversation_id: "plan-conv-1",
+    });
+
+    const { result } = renderSwitchHook();
+    result.current.mutate({
+      conversationId: "conv-1",
+      profileName: "claude-sonnet-4.6",
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(
+      getStoredConversationMetadata("conv-1")?.local_planning_conversation_id,
+    ).toBe("plan-conv-1");
   });
 
   it("preserves the conversation's attached plugins across a profile switch", async () => {

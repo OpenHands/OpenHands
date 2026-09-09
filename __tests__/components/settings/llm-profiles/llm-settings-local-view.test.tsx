@@ -63,6 +63,9 @@ vi.mock("#/routes/llm-settings", async () => {
         String(initialValuesRef.current["llm.base_url"] ?? ""),
       );
       const [temperature, setTemperature] = React.useState("0.2");
+      const isDirty =
+        model !== String(initialValuesRef.current["llm.model"] ?? "") ||
+        temperature !== "0.2";
       React.useEffect(() => {
         const values = {
           ...(initialValueOverridesRef.current ?? {}),
@@ -73,7 +76,7 @@ vi.mock("#/routes/llm-settings", async () => {
         onSaveControlChange?.({
           save: vi.fn(),
           isSaving: false,
-          isDirty: true,
+          isDirty,
           view,
           values,
           getDirtyPayload: () => {
@@ -89,7 +92,15 @@ vi.mock("#/routes/llm-settings", async () => {
             };
           },
         });
-      }, [apiKey, baseUrl, model, onSaveControlChange, temperature, view]);
+      }, [
+        apiKey,
+        baseUrl,
+        isDirty,
+        model,
+        onSaveControlChange,
+        temperature,
+        view,
+      ]);
 
       return (
         <div data-testid="mock-llm-settings-screen">
@@ -344,12 +355,12 @@ describe("LlmSettingsLocalView", () => {
       // Should be in create view
       expect(screen.getByTestId("profile-name-input")).toBeInTheDocument();
 
-      // The profile name is auto-derived from the prefilled free default model.
+      // The profile name is auto-derived from the prefilled default model.
       const nameInput = screen.getByTestId("profile-name-input");
-      expect(nameInput).toHaveValue("kimi-k3");
+      expect(nameInput).toHaveValue("gpt-5.6-sol");
 
       expect(screen.getByTestId("mock-basic-model-input")).toHaveValue(
-        "openhands/kimi-k3",
+        "openai/gpt-5.6-sol",
       );
     });
 
@@ -363,7 +374,7 @@ describe("LlmSettingsLocalView", () => {
 
       // The profile name starts from the free-model derived default.
       const nameInput = screen.getByTestId("profile-name-input");
-      expect(nameInput).toHaveValue("kimi-k3");
+      expect(nameInput).toHaveValue("gpt-5.6-sol");
 
       // Go back to list
       await user.click(screen.getByTestId("back-to-profiles"));
@@ -375,7 +386,7 @@ describe("LlmSettingsLocalView", () => {
       // The profile name should return to the free-model derived default
       // again (fresh form).
       const freshNameInput = screen.getByTestId("profile-name-input");
-      expect(freshNameInput).toHaveValue("kimi-k3");
+      expect(freshNameInput).toHaveValue("gpt-5.6-sol");
     });
 
     it("does not carry over values from edit mode to create mode", async () => {
@@ -390,7 +401,7 @@ describe("LlmSettingsLocalView", () => {
 
       // Should be in create view with the free-model derived profile name.
       const nameInput = screen.getByTestId("profile-name-input");
-      expect(nameInput).toHaveValue("kimi-k3");
+      expect(nameInput).toHaveValue("gpt-5.6-sol");
 
       // The key "new-profile" should be used, ensuring a fresh form mount
       // that doesn't inherit any existing profile data
@@ -486,6 +497,39 @@ describe("LlmSettingsLocalView", () => {
       // Verify we're in edit mode (back button and save button visible)
       expect(screen.getByTestId("back-to-profiles")).toBeInTheDocument();
       expect(screen.getByTestId("save-profile-btn")).toBeInTheDocument();
+      // Seeded profile values must not count as dirty — Save stays off.
+      expect(screen.getByTestId("save-profile-btn")).toBeDisabled();
+    });
+
+    it("enables Save after an edit-mode form field changes", async () => {
+      const user = userEvent.setup();
+      vi.mocked(ProfilesService.getProfile).mockResolvedValue({
+        name: "gpt-4-profile",
+        api_key_set: true,
+        config: {
+          model: "openai/gpt-4",
+          api_key: "encrypted-key-123",
+          base_url: "https://api.openai.com/v1",
+        },
+      });
+
+      renderWithProviders(<LlmSettingsLocalView />);
+
+      await user.click(screen.getAllByTestId("profile-menu-trigger")[0]);
+      await user.click(screen.getByTestId("profile-edit"));
+      await waitFor(() => {
+        expect(screen.getByTestId("profile-name-input")).toHaveValue(
+          "gpt-4-profile",
+        );
+      });
+      expect(screen.getByTestId("save-profile-btn")).toBeDisabled();
+
+      const modelInput = await screen.findByTestId("mock-basic-model-input");
+      await user.clear(modelInput);
+      await user.type(modelInput, "openai/gpt-4o");
+      await waitFor(() => {
+        expect(screen.getByTestId("save-profile-btn")).not.toBeDisabled();
+      });
     });
   });
 
@@ -640,6 +684,15 @@ describe("LlmSettingsLocalView", () => {
       );
     }
 
+    async function makeEditDirty(user: ReturnType<typeof userEvent.setup>) {
+      const modelInput = await screen.findByTestId("mock-basic-model-input");
+      await user.clear(modelInput);
+      await user.type(modelInput, "openai/gpt-4o");
+      await waitFor(() => {
+        expect(screen.getByTestId("save-profile-btn")).not.toBeDisabled();
+      });
+    }
+
     it("blocks saving when validation returns an invalid verdict", async () => {
       const user = userEvent.setup();
       vi.mocked(ProfilesService.validateProfile).mockResolvedValue({
@@ -648,6 +701,7 @@ describe("LlmSettingsLocalView", () => {
       });
       renderWithProviders(<LlmSettingsLocalView />);
       await openEditView(user);
+      await makeEditDirty(user);
       await user.click(screen.getByTestId("save-profile-btn"));
 
       await waitFor(() =>
@@ -664,6 +718,7 @@ describe("LlmSettingsLocalView", () => {
         mockSaveMutateAsync.mockResolvedValue({ success: true });
         renderWithProviders(<LlmSettingsLocalView />);
         await openEditView(user);
+        await makeEditDirty(user);
         await user.click(screen.getByTestId("save-profile-btn"));
 
         await waitFor(() => expect(mockSaveMutateAsync).toHaveBeenCalled());
@@ -685,9 +740,7 @@ describe("LlmSettingsLocalView", () => {
       mockSaveMutateAsync.mockResolvedValue({ success: true });
       renderWithProviders(<LlmSettingsLocalView />);
       await openEditView(user);
-      await waitFor(() => {
-        expect(screen.getByTestId("save-profile-btn")).not.toBeDisabled();
-      });
+      await makeEditDirty(user);
       await user.click(screen.getByTestId("save-profile-btn"));
 
       await waitFor(() => expect(mockSaveMutateAsync).toHaveBeenCalled());
@@ -721,6 +774,14 @@ describe("LlmSettingsLocalView", () => {
           "gpt-4-profile",
         );
       });
+      await user.click(await screen.findByTestId("sdk-section-basic-toggle"));
+      // Touch a non-model field so Save enables without changing the model.
+      await user.click(await screen.findByTestId("sdk-section-all-toggle"));
+      const temperatureInput = await screen.findByTestId(
+        "sdk-settings-llm.temperature",
+      );
+      await user.clear(temperatureInput);
+      await user.type(temperatureInput, "0.3");
       await user.click(await screen.findByTestId("sdk-section-basic-toggle"));
       await waitFor(() => {
         expect(screen.getByTestId("save-profile-btn")).not.toBeDisabled();
@@ -760,6 +821,13 @@ describe("LlmSettingsLocalView", () => {
           "gpt-4-profile",
         );
       });
+      await user.click(await screen.findByTestId("sdk-section-basic-toggle"));
+      await user.click(await screen.findByTestId("sdk-section-all-toggle"));
+      const temperatureInput = await screen.findByTestId(
+        "sdk-settings-llm.temperature",
+      );
+      await user.clear(temperatureInput);
+      await user.type(temperatureInput, "0.3");
       await user.click(await screen.findByTestId("sdk-section-basic-toggle"));
       await waitFor(() => {
         expect(screen.getByTestId("save-profile-btn")).not.toBeDisabled();
