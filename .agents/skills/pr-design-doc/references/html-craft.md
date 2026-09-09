@@ -222,10 +222,12 @@ fix it:
 
 A picture the human can't verify is a liability. Make claims droppable to source:
 
-- Resolve the repo's web base once with `gh repo view --json url`. Build links as
-  `https://github.com/<o>/<r>/blob/<sha>/<path>#L<n>`. Use the merge-base SHA for before-state
-  evidence and the verified PR head SHA for after-state evidence. A deleted file must link to
-  the merge-base SHA; a newly added file has no before-state link.
+- Resolve both repository web bases explicitly. For a fork PR, before-state evidence belongs
+  to the base repository and merge-base SHA; after-state evidence belongs to the head
+  repository and verified head SHA. Query each with
+  `gh repo view <owner>/<repo> --json url`, then build links as
+  `https://github.com/<o>/<r>/blob/<sha>/<path>#L<n>`. A deleted file must link to the base
+  repository at the merge-base SHA; a newly added file has no before-state link.
 - Render locations as `<a class="src" href="{{blobURL}}">path:line</a>` in node detail lines, section text, and a per-component "source" link.
 - Rule: if a box can't be tied to a symbol+location, it's a *concept* box - style it differently and say so; don't fake a link.
 - Put evidence beside the claim it supports. The reader should not have to scroll to a
@@ -255,22 +257,28 @@ DeepWiki-style wikis enforce grounding hard - worth copying:
 
 Keep them short and hand-highlight with spans (no JS highlighter): wrap keywords
 `<span class="kw">`, strings `<span class="str">`, comments `<span class="com">`.
-**HTML-escape first** (`&`→`&amp;` `<`→`&lt;` `>`→`&gt;`), then wrap - source text is
-untrusted; unescaped `<...>` injects. Put long diffs/code inside `<details>` (collapsed).
-Escape every source-derived value inserted into HTML or SVG, including titles, symbol names,
-paths, labels, link text, and attribute values.
+**Escape for the insertion context before wrapping** - source text is untrusted. In text
+nodes, escape `&`, `<`, and `>`. In quoted HTML or SVG attributes, additionally escape `"`
+as `&quot;` and `'` as `&#39;`; always quote attributes. For source URLs, percent-encode the
+dynamic owner, repository, and ref as URL path segments; encode each source-path segment
+separately and rejoin with `/`. Then attribute-escape the completed URL. Put long diffs/code
+inside `<details>` (collapsed). Escape every source-derived value
+inserted into HTML or SVG, including titles, symbol names, paths, labels, link text, and
+attribute values. Never treat source-derived text as markup.
 
 ## Self-contained
 
 - One `.html` file. Inline all CSS and SVG. No build, no framework.
-- CDN only if truly needed (e.g. Mermaid fallback `https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js`); the page must still be useful if a diagram fails to load.
+- No external scripts, styles, fonts, images, or other assets. Besides breaking offline use,
+  third-party active content can read and disclose a private design document opened locally.
 
 ## Mermaid (quick / auxiliary only)
 
-For throwaway or simple graphs where layout doesn't need to be exact, Mermaid is faster
-than hand-SVG. `mermaid.initialize({startOnLoad:true, theme:'neutral'})`. Node text in
-`["..."]`; escape `"` as `&quot;`. But for the **carrying** before/after diagram, hand-SVG
-wins - auto-layout drifts and breaks the side-by-side alignment that makes the delta readable.
+For drafting a throwaway or simple auxiliary graph, locally installed Mermaid can be faster
+than hand-SVG. Render it locally to static SVG, inspect and sanitize the output, then inline
+that SVG. Never ship a Mermaid runtime or CDN script in the page. For the **carrying**
+before/after diagram, hand-SVG wins - auto-layout drifts and breaks the side-by-side alignment
+that makes the delta readable.
 
 ### Public repositories: commit under `.pr/` and use an htmlpreview link
 
@@ -294,13 +302,13 @@ of merge state, so the doc renders while the PR is still open. Point the URL at 
 and branch the PR is opened from**, not `main`.
 
 For public repositories, anyone can open the rendered page without a download or local server.
-This works best for self-contained pages with inline CSS and SVG. CDN scripts still require
-network access.
+This works with self-contained pages containing only inline CSS and SVG.
 
 ### Private repositories: keep the preview private
 
 `htmlpreview` cannot fetch private repository content. Do not work around that by publishing
-the design doc to GitHub Pages or another public host.
+the design doc to GitHub Pages or another public host. Keep the document free of external
+scripts and assets: opening a local file does not make third-party active content private.
 
 - Link authorized reviewers to the committed GitHub blob and ask them to download and open the
   self-contained HTML file locally; or use an existing access-controlled artifact service.

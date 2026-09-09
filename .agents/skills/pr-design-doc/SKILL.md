@@ -2,11 +2,12 @@
 name: pr-design-doc
 description: >
   For a non-trivial pull request, write a self-contained HTML design doc under the
-  temporary `.pr/` directory and link it in the PR description via htmlpreview, so
-  maintainers grasp the proposal at a glance - code/API design, and the before/after of
-  the change, grounded to real code. Use when opening or updating a non-trivial PR, or
-  when the user says "add a design doc", "document this PR for reviewers", "show the
-  before/after", "make the design reviewable", or "write the .pr/ page".
+  temporary `.pr/` directory and link a visibility-appropriate preview in the PR
+  description, so maintainers grasp the proposal at a glance - code/API design, and the
+  before/after of the change, grounded to real code. Use when opening or updating a
+  non-trivial PR, or when the user says "add a design doc", "document this PR for
+  reviewers", "show the before/after", "make the design reviewable", or "write the .pr/
+  page".
 triggers:
 - /pr-design-doc
 - /design-doc
@@ -56,7 +57,7 @@ ship in the merged tree.
    branch or an unrelated checkout. Start with a clean worktree, then inspect and check out
    the PR:
    ```bash
-   gh pr view <n> --json title,body,baseRefName,baseRefOid,headRefName,headRefOid,headRepository,headRepositoryOwner,isCrossRepository,files,additions,deletions
+   gh pr view <n> --json title,body,url,baseRefName,baseRefOid,headRefName,headRefOid,headRepository,headRepositoryOwner,isCrossRepository,files,additions,deletions
    gh pr checkout <n>
    git rev-parse HEAD
    gh pr view <n> --json headRefOid --jq .headRefOid
@@ -86,7 +87,13 @@ ship in the merged tree.
 
 6. **Build the page** per [`references/html-craft.md`](references/html-craft.md) - one
    self-contained, offline, editorial HTML file with hand-drawn SVG figures. Save it to
-   the repo's `.pr/` directory, e.g. `.pr/design.html` (or `.pr/<topic>.html`).
+   the repo's `.pr/` directory, e.g. `.pr/design.html` (or `.pr/<topic>.html`). Before
+   writing, reject a symlink at `.pr` or at the exact output path; never follow a
+   branch-controlled symlink outside the worktree.
+   ```bash
+   test ! -L .pr && test ! -L .pr/design.html
+   mkdir -p .pr
+   ```
 
 7. **Commit under `.pr/`, push to the verified PR head, and link it.** Confirm that the push
    remote resolves to `headRepository.nameWithOwner`; never push the artifact to the base
@@ -96,11 +103,18 @@ ship in the merged tree.
    git commit -m "docs(.pr): design doc for <PR topic>"
    git push <head-repo-remote> HEAD:<headRefName>
    ```
-   Then add the htmlpreview link near the top of the PR description, pointing at the **fork
-   and branch the PR is opened from** (it renders before merge):
+   Query the base repository's visibility before choosing the link:
+   ```bash
+   gh repo view <base-owner>/<base-repo> --json visibility,url
    ```
-   📄 Design doc: https://htmlpreview.github.io/?https://github.com/<fork-owner>/<repo>/blob/<pr-branch>/.pr/design.html
-   ```
+   - **Public repository:** add an htmlpreview link near the top of the PR description,
+     pointing at the **fork and branch the PR is opened from** (it renders before merge):
+     ```
+     📄 Design doc: https://htmlpreview.github.io/?https://github.com/<fork-owner>/<repo>/blob/<pr-branch>/.pr/design.html
+     ```
+   - **Private or internal repository:** link the access-controlled GitHub blob and include
+     local download/open instructions, or use an existing access-controlled artifact
+     service. Never send the document through htmlpreview or another public host.
 
 ## What the page contains
 
@@ -133,8 +147,8 @@ ship in the merged tree.
    evidence. One click from "this changed" to the exact code.
 4. **Hand-draw the carrying diagrams.** Prefer bespoke inline SVG for the before/after that
    makes the argument; Mermaid is fine only for quick auxiliary graphs.
-5. **Self-contained & offline.** One HTML file, inline CSS/SVG, opens by double-click,
-   survives being copied to another machine (htmlpreview needs this).
+5. **Self-contained & offline.** One HTML file, inline CSS/SVG, no external scripts or
+   assets, opens by double-click, and survives being copied to another machine.
 6. **`.pr/` only, and temporary.** The doc is a review aid, not project docs. Keep it in
    `.pr/` and ensure it is removed before merge. Rely on automatic cleanup only when the
    repository's workflow has been verified; otherwise remove it manually. Do not move design
