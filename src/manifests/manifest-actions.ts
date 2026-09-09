@@ -100,12 +100,15 @@ export function useSetupAction() {
         const body = buildCreatePayload(entry, values, tarballPath);
         if (!body) throw new Error(`'${entry.id}' produced no create request.`);
         return {
-          response: await AutomationService.createAutomationDraft(body, entry),
+          response: await AutomationService.createAutomationDraft(
+            { ...body, enabled: false },
+            entry,
+          ),
         };
       }
 
       const response = await AutomationService.createAutomationDraft(
-        payload,
+        { ...payload, enabled: false },
         entry,
       );
       return { response };

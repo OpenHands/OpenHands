@@ -75,6 +75,7 @@ describe("useSetupAction for a bundle entry", () => {
     const [body, entry] = vi.mocked(AutomationService.createAutomationDraft)
       .mock.calls[0];
     expect(body.tarball_path).toBe("oh-internal://uploads/abc");
+    expect(body.enabled).toBe(false);
     expect(entry).toBe(ENTRY);
   });
 
@@ -110,5 +111,25 @@ describe("useSetupAction for a bundle entry", () => {
     // Assert — the archive carries the answers, so a different answer is a
     // different archive.
     expect(AutomationService.uploadAutomationTarball).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("useSetupAction for a prompt entry", () => {
+  it("creates the automation disabled until its test run passes", async () => {
+    // Arrange
+    const entry = createSetupEntry();
+    vi.mocked(AutomationService.createAutomationDraft).mockResolvedValue({
+      id: "automation-1",
+    });
+    const { result } = renderHook(() => useSetupAction());
+
+    // Act
+    await result.current(entry, VALUES, PAYLOAD);
+
+    // Assert
+    expect(AutomationService.createAutomationDraft).toHaveBeenCalledWith(
+      { ...PAYLOAD, enabled: false },
+      entry,
+    );
   });
 });

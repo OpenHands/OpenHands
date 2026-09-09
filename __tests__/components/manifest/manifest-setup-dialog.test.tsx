@@ -6,6 +6,7 @@ import AutomationService from "#/api/automation-service/automation-service.api";
 import { SetupDialog } from "#/components/features/manifest/manifest-setup-dialog";
 import type { SetupPrerequisitesResult } from "#/hooks/query/use-manifest-prerequisites";
 import type { SetupEntry } from "#/manifests/types";
+import { AutomationRunStatus } from "#/types/automation";
 import {
   createSetup,
   createSetupEntry,
@@ -71,7 +72,12 @@ vi.mock("#/hooks/use-tracking", () => ({
 }));
 
 vi.mock("#/api/automation-service/automation-service.api", () => ({
-  default: { validateDraft: vi.fn() },
+  default: {
+    validateDraft: vi.fn(),
+    dispatchAutomation: vi.fn(),
+    getAutomationRuns: vi.fn(),
+    updateAutomation: vi.fn(),
+  },
 }));
 
 const NOTHING_TO_CONNECT: SetupPrerequisitesResult = {
@@ -201,9 +207,43 @@ describe("SetupDialog", () => {
     expect(screen.queryByTestId("setup-review")).toBeNull();
   });
 
-  it("creates from the derived payload and opens what was created", async () => {
+  it("creates disabled, runs a controlled test, then enables on success", async () => {
     // Arrange
-    mocks.runAction.mockResolvedValue({ response: { id: "automation-1" } });
+    mocks.runAction.mockResolvedValue({
+      response: { id: "automation-1", enabled: false },
+    });
+    vi.mocked(AutomationService.dispatchAutomation).mockResolvedValue({
+      id: "run-1",
+      status: AutomationRunStatus.PENDING,
+      conversation_id: null,
+      bash_command_id: null,
+      error_detail: null,
+      started_at: "2026-08-26T00:00:00Z",
+      completed_at: null,
+    });
+    vi.mocked(AutomationService.getAutomationRuns).mockResolvedValue({
+      runs: [
+        {
+          id: "run-1",
+          status: AutomationRunStatus.COMPLETED,
+          conversation_id: "conversation-1",
+          bash_command_id: "command-1",
+          error_detail: null,
+          started_at: "2026-08-26T00:00:00Z",
+          completed_at: "2026-08-26T00:01:00Z",
+        },
+      ],
+      total: 1,
+    });
+    vi.mocked(AutomationService.updateAutomation).mockResolvedValue({
+      id: "automation-1",
+      name: "Widget monitor",
+      trigger: { type: "cron" },
+      enabled: true,
+      created_at: "2026-08-26T00:00:00Z",
+      updated_at: "2026-08-26T00:01:00Z",
+      prompt: "Report on widgets",
+    });
     const { user } = renderDialog();
     await fillForm(user);
 
@@ -214,19 +254,91 @@ describe("SetupDialog", () => {
     );
     await user.click(screen.getByTestId("setup-continue-button"));
 
-    // Assert — the action is handed the derived request body, not the raw
-    // answers, and the new automation is where setup lands.
+    // Assert — creation stops at a dedicated test step instead of presenting
+    // the automation as ready or navigating away.
     await waitFor(() =>
-      expect(mocks.navigate).toHaveBeenCalledWith("/automations/automation-1", {
-        replace: true,
-      }),
+      expect(screen.getByTestId("setup-test-run")).toBeInTheDocument(),
     );
+    expect(mocks.navigate).not.toHaveBeenCalled();
     expect(mocks.runAction.mock.calls[0][2]).toEqual({
       name: "Widget monitor - OpenHands/agent-server-gui",
       prompt: "Report on Widgets in OpenHands/agent-server-gui.",
       repos: [{ url: "OpenHands/agent-server-gui", provider: "github" }],
       trigger: { type: "cron", schedule: "*/15 * * * *" },
     });
+
+    await user.click(screen.getByTestId("setup-run-test-button"));
+    await waitFor(() =>
+      expect(screen.getByTestId("setup-test-success")).toBeInTheDocument(),
+    );
+    expect(screen.getByRole("link")).toHaveAttribute(
+      "href",
+      "/conversations/conversation-1",
+    );
+
+    await user.click(screen.getByTestId("setup-enable-button"));
+    await waitFor(() =>
+      expect(AutomationService.updateAutomation).toHaveBeenCalledWith(
+        "automation-1",
+        { enabled: true },
+      ),
+    );
+    expect(mocks.navigate).toHaveBeenCalledWith("/automations/automation-1", {
+      replace: true,
+    });
+  });
+
+  it("keeps a failed test disabled and surfaces actionable output", async () => {
+    // Arrange
+    mocks.runAction.mockResolvedValue({
+      response: { id: "automation-1", enabled: false },
+    });
+    vi.mocked(AutomationService.dispatchAutomation).mockResolvedValue({
+      id: "run-1",
+      status: AutomationRunStatus.PENDING,
+      conversation_id: null,
+      bash_command_id: null,
+      error_detail: null,
+      started_at: "2026-08-26T00:00:00Z",
+      completed_at: null,
+    });
+    vi.mocked(AutomationService.getAutomationRuns).mockResolvedValue({
+      runs: [
+        {
+          id: "run-1",
+          status: AutomationRunStatus.FAILED,
+          conversation_id: null,
+          bash_command_id: null,
+          error_detail: "Missing GITHUB_TOKEN secret",
+          started_at: "2026-08-26T00:00:00Z",
+          completed_at: "2026-08-26T00:00:05Z",
+        },
+      ],
+      total: 1,
+    });
+    const { user } = renderDialog();
+    await fillForm(user);
+    await user.click(screen.getByTestId("setup-continue-button"));
+    await waitFor(() =>
+      expect(screen.getByTestId("setup-review")).toBeInTheDocument(),
+    );
+    await user.click(screen.getByTestId("setup-continue-button"));
+    await waitFor(() =>
+      expect(screen.getByTestId("setup-test-run")).toBeInTheDocument(),
+    );
+
+    // Act
+    await user.click(screen.getByTestId("setup-run-test-button"));
+
+    // Assert
+    await waitFor(() =>
+      expect(screen.getByTestId("setup-test-error")).toHaveTextContent(
+        "Missing GITHUB_TOKEN secret",
+      ),
+    );
+    expect(screen.queryByTestId("setup-enable-button")).toBeNull();
+    expect(AutomationService.updateAutomation).not.toHaveBeenCalled();
+    expect(mocks.navigate).not.toHaveBeenCalled();
   });
 
   it("offers the conversation fallback when the deployment cannot run a direct entry", async () => {

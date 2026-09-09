@@ -72,6 +72,47 @@ describe("Automation MSW Handlers", () => {
     });
   });
 
+  describe("POST /api/automation/v1", () => {
+    it("creates a disabled bundle automation draft", async () => {
+      const res = await fetch("/api/automation/v1", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Daily news digest",
+          trigger: { type: "cron", schedule: "0 9 * * *" },
+          tarball_path: "oh-internal://uploads/daily-news.tar.gz",
+          enabled: false,
+        }),
+      });
+      const data = await res.json();
+
+      expect(res.status).toBe(201);
+      expect(data).toMatchObject({
+        name: "Daily news digest",
+        enabled: false,
+      });
+    });
+  });
+
+  describe("POST /api/automation/v1/preset/:kind", () => {
+    it("honors the disabled state of a prompt automation draft", async () => {
+      const res = await fetch("/api/automation/v1/preset/prompt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Draft digest",
+          prompt: "Summarize the latest news.",
+          trigger: { type: "cron", schedule: "0 9 * * *" },
+          enabled: false,
+        }),
+      });
+      const data = await res.json();
+
+      expect(res.status).toBe(201);
+      expect(data.enabled).toBe(false);
+    });
+  });
+
   describe("GET /api/automation/v1/capabilities", () => {
     it("answers with the contract fixtures' supported deployment", async () => {
       // Act
@@ -237,6 +278,26 @@ describe("Automation MSW Handlers", () => {
 
       expect(res.status).toBe(201);
       expect(data.status).toBe("PENDING");
+    });
+
+    it("makes the dispatched run available to polling", async () => {
+      const id = MOCK_AUTOMATIONS_RESPONSE.automations[0].id;
+      const dispatchRes = await fetch(`/api/automation/v1/${id}/dispatch`, {
+        method: "POST",
+      });
+      const dispatched = await dispatchRes.json();
+
+      const runsRes = await fetch(`/api/automation/v1/${id}/runs`);
+      const data = await runsRes.json();
+      const polledRun = data.runs.find(
+        (run: { id: string }) => run.id === dispatched.id,
+      );
+
+      expect(polledRun).toMatchObject({
+        id: dispatched.id,
+        status: "COMPLETED",
+      });
+      expect(polledRun.conversation_id).toBeTruthy();
     });
 
     it("returns 404 for non-existent automation", async () => {
