@@ -65,4 +65,20 @@ describe("useAvailablePopoverSpace", () => {
     );
     expect(result.current).toBe(480);
   });
+
+  it("clamps upward height to 0 when the trigger sits above the viewport", () => {
+    // Trigger scrolled above the top of the viewport: there is no visible
+    // space above it. Consumers must treat 0 as a valid, distinguishable
+    // measurement (not as "unmeasured"), so the truthiness guard
+    // `maxHeight ? { maxHeight } : undefined` regresses here — the inline
+    // style would be dropped, leaving the popover unconstrained.
+    const { result } = renderHook(() =>
+      useAvailablePopoverSpace(makeRef(-20, 20), {
+        open: true,
+        direction: "up",
+        gap: 8,
+      }),
+    );
+    expect(result.current).toBe(0);
+  });
 });

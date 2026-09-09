@@ -192,7 +192,7 @@ export function ChatInputModel() {
           alignment="left"
           spacing="none"
           className="z-[60] mb-2 min-w-[200px] max-w-[320px] overflow-y-auto"
-          style={maxHeight ? { maxHeight } : undefined}
+          style={maxHeight !== undefined ? { maxHeight } : undefined}
         >
           <ChatInputModelMenuContent
             model={model}
