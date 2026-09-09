@@ -41,9 +41,13 @@ type ViewMode = "list" | "create" | "edit";
 function toAgentSettingsOverride(
   profile: AgentProfile,
 ): Record<string, SettingsValue> {
+  const secretRefs =
+    ((profile as { secret_refs?: unknown }).secret_refs as SettingsValue) ??
+    null;
   if (profile.agent_kind === "acp") {
     return {
       agent_kind: "acp",
+      secret_refs: secretRefs,
       acp_server: profile.acp_server,
       acp_command: profile.acp_command ? parseCommand(profile.acp_command) : [],
       acp_args: profile.acp_args ?? [],
@@ -57,8 +61,8 @@ function toAgentSettingsOverride(
   const switchLlmToolEnabled =
     (profile as { enable_switch_llm_tool?: boolean }).enable_switch_llm_tool ??
     true;
-  // `tools` rides untyped for the same reason as `enable_switch_llm_tool`: the
-  // pinned ts-client's profile model predates it.
+  // `tools` / `secret_refs` ride untyped for the same reason as
+  // `enable_switch_llm_tool`: the pinned ts-client's profile model predates them.
   const storedTools = (profile as { tools?: unknown }).tools ?? null;
   return {
     agent_kind: "openhands",
@@ -67,6 +71,7 @@ function toAgentSettingsOverride(
     tool_concurrency_limit: profile.tool_concurrency_limit,
     system_message_suffix: profile.system_message_suffix ?? "",
     tools: storedTools as SettingsValue,
+    secret_refs: secretRefs,
   };
 }
 

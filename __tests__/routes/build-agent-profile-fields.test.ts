@@ -20,6 +20,9 @@ const baseAcp = {
   storedToolParams: {} as Record<string, Record<string, unknown>>,
   usableTools: null,
   toolsSupportedOnProfile: true,
+  secretsMode: "standard" as const,
+  selectedSecrets: [] as string[],
+  secretRefsSupportedOnProfile: true,
 };
 
 const switchLlmToolField: SettingsFieldSchema = {
@@ -58,6 +61,7 @@ describe("buildAgentProfileFields — ACP", () => {
       acp_model: "claude-opus-4-8",
       acp_command: null,
       acp_args: null,
+      secret_refs: null,
     });
   });
 
@@ -116,6 +120,9 @@ describe("buildAgentProfileFields — OpenHands", () => {
     storedToolParams: {} as Record<string, Record<string, unknown>>,
     usableTools: null as string[] | null,
     toolsSupportedOnProfile: true,
+    secretsMode: "standard" as const,
+    selectedSecrets: [] as string[],
+    secretRefsSupportedOnProfile: true,
   };
 
   it("passes through enable_sub_agents and omits concurrency when the field is absent", () => {
@@ -124,6 +131,7 @@ describe("buildAgentProfileFields — OpenHands", () => {
       enable_sub_agents: true,
       system_message_suffix: null,
       tools: null,
+      secret_refs: null,
     });
   });
 
@@ -231,6 +239,9 @@ describe("buildAgentProfileFields — custom instructions", () => {
     storedToolParams: {} as Record<string, Record<string, unknown>>,
     usableTools: null as string[] | null,
     toolsSupportedOnProfile: true,
+    secretsMode: "standard" as const,
+    selectedSecrets: [] as string[],
+    secretRefsSupportedOnProfile: true,
   };
 
   it("persists the trimmed suffix", () => {
@@ -282,6 +293,9 @@ describe("buildAgentProfileFields — tools", () => {
     storedToolParams: {} as Record<string, Record<string, unknown>>,
     usableTools: null as string[] | null,
     toolsSupportedOnProfile: true,
+    secretsMode: "standard" as const,
+    selectedSecrets: [] as string[],
+    secretRefsSupportedOnProfile: true,
   };
 
   it("emits null for the standard set", () => {
@@ -328,5 +342,74 @@ describe("buildAgentProfileFields — tools", () => {
       toolsSupportedOnProfile: false,
     });
     expect(fields).not.toHaveProperty("tools");
+  });
+});
+
+describe("buildAgentProfileFields — secret scope", () => {
+  const base = {
+    isAcp: false,
+    selectedPreset: "custom",
+    isDefaultProviderCommand: false,
+    commandTokens: [] as string[],
+    acpModel: "",
+    subAgentsEnabled: false,
+    switchLlmToolField: undefined,
+    switchLlmToolEnabled: false,
+    switchLlmToolSupportedOnProfile: true,
+    toolConcurrencyField: undefined,
+    toolConcurrency: "",
+    instructions: "",
+    toolsMode: "standard" as const,
+    selectedTools: [] as string[],
+    storedToolParams: {} as Record<string, Record<string, unknown>>,
+    usableTools: null as string[] | null,
+    toolsSupportedOnProfile: true,
+    secretsMode: "standard" as const,
+    selectedSecrets: [] as string[],
+    secretRefsSupportedOnProfile: true,
+  };
+
+  it("persists null when every secret is allowed", () => {
+    expect(buildAgentProfileFields(base)).toMatchObject({ secret_refs: null });
+  });
+
+  it("persists the selection when secrets are scoped", () => {
+    const fields = buildAgentProfileFields({
+      ...base,
+      secretsMode: "custom",
+      selectedSecrets: ["DATADOG_API_KEY"],
+    });
+    expect(fields).toMatchObject({ secret_refs: ["DATADOG_API_KEY"] });
+  });
+
+  it("persists an empty list when no secret is selected", () => {
+    expect(
+      buildAgentProfileFields({ ...base, secretsMode: "custom" }),
+    ).toMatchObject({ secret_refs: [] });
+  });
+
+  it("rides the ACP variant too — it is a base-model field", () => {
+    const fields = buildAgentProfileFields({
+      ...base,
+      isAcp: true,
+      selectedPreset: "claude-code",
+      commandTokens: ["npx", "claude-code-acp"],
+      secretsMode: "custom",
+      selectedSecrets: ["DATADOG_API_KEY"],
+    });
+    expect(fields).toMatchObject({
+      agent_kind: "acp",
+      secret_refs: ["DATADOG_API_KEY"],
+    });
+  });
+
+  it("omits the key on a backend whose profile model predates it", () => {
+    const fields = buildAgentProfileFields({
+      ...base,
+      secretsMode: "custom",
+      selectedSecrets: ["DATADOG_API_KEY"],
+      secretRefsSupportedOnProfile: false,
+    });
+    expect(fields).not.toHaveProperty("secret_refs");
   });
 });

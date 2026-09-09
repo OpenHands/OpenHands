@@ -242,6 +242,7 @@ describe("AgentProfilesLocalView save mapping", () => {
       tool_concurrency_limit: 4,
       system_message_suffix: "Be terse.",
       tools: null,
+      secret_refs: null,
     });
 
     await user.click(screen.getByTestId("save-agent-profile-btn"));
@@ -346,6 +347,81 @@ describe("AgentProfilesLocalView save mapping", () => {
     const { profile } = saveMutate.mock.calls[0][0];
     expect(profile.tools).toEqual([{ name: "glob", params: {} }]);
     expect(profile.system_message_suffix).toBe("Read-only explorer.");
+  });
+
+  it("seeds the editor with a stored secret scope", async () => {
+    vi.mocked(AgentProfilesService.getProfile).mockResolvedValue({
+      name: "default",
+      profile: {
+        schema_version: 2,
+        id: "p-1",
+        name: "default",
+        revision: 3,
+        agent_kind: "openhands",
+        llm_profile_ref: "default",
+        enable_sub_agents: false,
+        secret_refs: ["DATADOG_API_KEY"],
+      },
+    } as never);
+    emitControl = {
+      agentType: "openhands",
+      isValid: true,
+      isDirty: true,
+      buildAgentProfileFields: () => ({
+        agent_kind: "openhands",
+        enable_sub_agents: false,
+      }),
+      credentials: { isDirty: false, save: vi.fn(), reset: vi.fn() },
+    };
+
+    render(<AgentProfilesLocalView />);
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("edit-agent-profile"));
+    await screen.findByTestId("mock-agent-settings");
+
+    const seededOverride = JSON.parse(
+      screen
+        .getByTestId("mock-agent-settings")
+        .getAttribute("data-override") as string,
+    );
+    expect(seededOverride.secret_refs).toEqual(["DATADOG_API_KEY"]);
+  });
+
+  it("edit-save persists an edited secret scope over the stored value", async () => {
+    vi.mocked(AgentProfilesService.getProfile).mockResolvedValue({
+      name: "default",
+      profile: {
+        schema_version: 2,
+        id: "p-1",
+        name: "default",
+        revision: 3,
+        agent_kind: "openhands",
+        llm_profile_ref: "default",
+        enable_sub_agents: false,
+        secret_refs: null,
+      },
+    } as never);
+    emitControl = {
+      agentType: "openhands",
+      isValid: true,
+      isDirty: true,
+      buildAgentProfileFields: () => ({
+        agent_kind: "openhands",
+        enable_sub_agents: false,
+        secret_refs: ["DATADOG_API_KEY"],
+      }),
+      credentials: { isDirty: false, save: vi.fn(), reset: vi.fn() },
+    };
+
+    render(<AgentProfilesLocalView />);
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("edit-agent-profile"));
+    await screen.findByTestId("mock-agent-settings");
+    await user.click(screen.getByTestId("save-agent-profile-btn"));
+
+    await waitFor(() => expect(saveMutate).toHaveBeenCalledTimes(1));
+    const { profile } = saveMutate.mock.calls[0][0];
+    expect(profile.secret_refs).toEqual(["DATADOG_API_KEY"]);
   });
 
   it("edit-save persists an edited enable_switch_llm_tool over the stored value", async () => {

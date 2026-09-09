@@ -11,7 +11,7 @@ import { SettingsSwitch } from "#/components/features/settings/settings-switch";
 import { SchemaField } from "#/components/features/settings/sdk-settings/schema-field";
 import { AcpCredentialsSection } from "#/components/features/settings/acp-credentials-section";
 import { OptionalTag } from "#/components/features/settings/optional-tag";
-import { ProfileToolList } from "#/components/features/settings/agent-profiles/profile-tool-list";
+import { ProfileScopeList } from "#/components/features/settings/agent-profiles/profile-scope-list";
 import { useAcpCredentialForm } from "#/hooks/use-acp-credential-form";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { Typography } from "#/ui/typography";
@@ -45,6 +45,7 @@ import {
 } from "#/constants/acp-providers";
 import { parseCommand, formatCommand } from "#/utils/acp-command";
 import {
+  agentProfileSupportsSecretRefs,
   agentProfileSupportsSwitchLlmTool,
   agentProfileSupportsTools,
 } from "#/api/agent-profiles-service/profile-field-support";
@@ -52,11 +53,14 @@ import { getAgentServerUsableTools } from "#/api/agent-server-compatibility";
 import {
   buildProfileToolCatalog,
   buildProfileToolsValue,
+  KNOWN_PROFILE_TOOL_DESCRIPTIONS,
+  readProfileSecretRefs,
   readProfileTools,
   standardProfileToolNames,
   type ProfileToolSpec,
   type ProfileToolsMode,
 } from "#/constants/profile-tools";
+import { useSearchSecrets } from "#/hooks/query/use-get-secrets";
 
 export const handle = { hideTitle: true };
 
@@ -74,6 +78,7 @@ const ENABLE_SWITCH_LLM_TOOL_FIELD_KEY = "enable_switch_llm_tool";
 const TOOL_CONCURRENCY_FIELD_KEY = "tool_concurrency_limit";
 const SYSTEM_MESSAGE_SUFFIX_KEY = "system_message_suffix";
 const TOOLS_KEY = "tools";
+const SECRET_REFS_KEY = "secret_refs";
 const COMMAND_PLACEHOLDER_FALLBACK = "npx -y <package-name>";
 const ACP_CUSTOM_MODEL_KEY = "__custom_model__";
 const EMPTY_AGENT_SETTINGS_SNAPSHOT: AgentSettingsSnapshot = {
@@ -145,9 +150,11 @@ export type AgentProfileFieldsDraft =
       tool_concurrency_limit?: number;
       system_message_suffix?: string | null;
       tools?: ProfileToolSpec[] | null;
+      secret_refs?: string[] | null;
     }
   | {
       agent_kind: "acp";
+      secret_refs?: string[] | null;
       acp_server: string;
       acp_model: string | null;
       acp_command: string | null;
@@ -183,6 +190,10 @@ export interface AgentProfileFieldsInput {
   usableTools: string[] | null;
   /** Whether the backend's *profile* model accepts `tools`. */
   toolsSupportedOnProfile: boolean;
+  secretsMode: ProfileToolsMode;
+  selectedSecrets: string[];
+  /** Whether the backend's *profile* model accepts `secret_refs`. */
+  secretRefsSupportedOnProfile: boolean;
 }
 
 /**
@@ -224,12 +235,20 @@ export function buildAgentProfileFields(
     storedToolParams,
     usableTools,
     toolsSupportedOnProfile,
+    secretsMode,
+    selectedSecrets,
+    secretRefsSupportedOnProfile,
   } = input;
+  // A base-model field, so it rides both variants.
+  const secretRefs = secretRefsSupportedOnProfile
+    ? { secret_refs: secretsMode === "custom" ? selectedSecrets : null }
+    : {};
   if (isAcp) {
     const isBuiltinDefault =
       isDefaultProviderCommand && selectedPreset !== ACP_CUSTOM_PRESET_KEY;
     return {
       agent_kind: "acp",
+      ...secretRefs,
       acp_server: selectedPreset,
       acp_model: acpModel.trim() || null,
       acp_command: isBuiltinDefault
@@ -243,6 +262,7 @@ export function buildAgentProfileFields(
     {
       agent_kind: "openhands",
       enable_sub_agents: subAgentsEnabled,
+      ...secretRefs,
       // Empty clears the field: `""` would append a blank line to every system
       // prompt, and the merge under this draft would otherwise keep the old text.
       system_message_suffix: trimmedInstructions || null,
@@ -443,6 +463,45 @@ export function AgentSettingsScreen({
     subAgentsEnabled,
   });
 
+  // --- Secret scope (both variants; a base-model field) ---
+  const secretRefsSupportedOnProfile = agentProfileSupportsSecretRefs();
+  const { data: savedSecrets } = useSearchSecrets({
+    enabled: embedded && secretRefsSupportedOnProfile,
+  });
+  const initialSecretRefs = React.useMemo(
+    () => readProfileSecretRefs(agentSettingsSource?.[SECRET_REFS_KEY]),
+    [agentSettingsSource],
+  );
+  const [secretsMode, setSecretsMode] = useState<ProfileToolsMode>(
+    initialSecretRefs.mode,
+  );
+  const [selectedSecrets, setSelectedSecrets] = useState<string[]>(
+    initialSecretRefs.selected,
+  );
+  // Stored names ride along even when the secret is gone, so an edit-save can't
+  // quietly drop a ref the user still means to keep (an unmatched name is a
+  // harmless no-op server-side).
+  const secretCatalog = React.useMemo(() => {
+    const saved = (savedSecrets ?? []).map((secret) => ({
+      name: secret.name,
+      description: secret.description ?? null,
+    }));
+    const known = new Set(saved.map((secret) => secret.name));
+    return [
+      ...saved,
+      ...initialSecretRefs.selected
+        .filter((name) => !known.has(name))
+        .map((name) => ({ name, description: null })),
+    ];
+  }, [savedSecrets, initialSecretRefs]);
+  const orderedSelectedSecrets = React.useMemo(
+    () =>
+      secretCatalog
+        .map(({ name }) => name)
+        .filter((name) => selectedSecrets.includes(name)),
+    [secretCatalog, selectedSecrets],
+  );
+
   // --- ACP path ---
   const [agentType, setAgentType] = useState<AgentType>("openhands");
   const [commandText, setCommandText] = useState("");
@@ -554,6 +613,12 @@ export function AgentSettingsScreen({
     setSelectedTools(initialTools.selected);
   }, [initialTools]);
 
+  // Sync the secret scope when settings reload
+  useEffect(() => {
+    setSecretsMode(initialSecretRefs.mode);
+    setSelectedSecrets(initialSecretRefs.selected);
+  }, [initialSecretRefs]);
+
   // --- Embedded (Agent-profile editor) save control ---
   // Ref-backed so the exposed builder/credential fns read the freshest state at
   // call time without re-emitting the control on every keystroke (mirrors
@@ -575,8 +640,14 @@ export function AgentSettingsScreen({
   // the emit effect can depend on them; the full ACP derivation lives after it.
   const acpCommandEmpty =
     agentType === "acp" && parseCommand(commandText).length === 0;
+  // `secret_refs` lives on the profile base, so it is dirty-tracked for both
+  // variants rather than inside the kind-specific branch below.
+  const secretScopeDirty =
+    secretsMode !== initialSecretRefs.mode ||
+    orderedSelectedSecrets.join(",") !== initialSecretRefs.selected.join(",");
   const settingsDirty =
     agentType !== loadedSnapshot.agentType ||
+    secretScopeDirty ||
     (agentType === "acp"
       ? commandText !== loadedSnapshot.commandText ||
         acpModel !== loadedSnapshot.acpModel ||
@@ -658,6 +729,9 @@ export function AgentSettingsScreen({
       storedToolParams: initialTools.params,
       usableTools,
       toolsSupportedOnProfile,
+      secretsMode,
+      selectedSecrets: orderedSelectedSecrets,
+      secretRefsSupportedOnProfile,
     });
 
   const isSavingAny = isSaving || acpCredentialForm.isSaving;
@@ -971,8 +1045,17 @@ export function AgentSettingsScreen({
               }
             }}
           />
-          <ProfileToolList
-            catalog={toolsMode === "custom" ? toolCatalog : standardToolNames}
+          <ProfileScopeList
+            testId="agent-settings-tool"
+            items={(toolsMode === "custom"
+              ? toolCatalog
+              : standardToolNames
+            ).map((name) => ({
+              name,
+              description: KNOWN_PROFILE_TOOL_DESCRIPTIONS[name]
+                ? t(KNOWN_PROFILE_TOOL_DESCRIPTIONS[name])
+                : null,
+            }))}
             selected={
               toolsMode === "custom" ? orderedSelectedTools : standardToolNames
             }
@@ -990,6 +1073,65 @@ export function AgentSettingsScreen({
               toolsMode === "custom"
                 ? I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_CUSTOM_HINT
                 : I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_STANDARD_HINT,
+            )}
+          </Typography.Text>
+        </div>
+      ) : null}
+
+      {showProfileScopeFields && secretRefsSupportedOnProfile ? (
+        <div className="flex flex-col gap-2.5">
+          <Typography.Text className="text-sm">
+            {t(I18nKey.SETTINGS$AGENT_PROFILE_SECRETS)}
+          </Typography.Text>
+          <SettingsDropdownInput
+            testId="agent-settings-secrets-mode"
+            name="agent-secrets-mode"
+            label=""
+            items={[
+              {
+                key: "standard",
+                label: t(I18nKey.SETTINGS$AGENT_PROFILE_SECRETS_ALL),
+              },
+              {
+                key: "custom",
+                label: t(I18nKey.SETTINGS$AGENT_PROFILE_SECRETS_CHOOSE),
+              },
+            ]}
+            selectedKey={secretsMode}
+            isDisabled={isSavingAny}
+            onSelectionChange={(key) => {
+              if (!key) return;
+              setSecretsMode(key as ProfileToolsMode);
+            }}
+          />
+          {secretCatalog.length > 0 ? (
+            <ProfileScopeList
+              testId="agent-settings-secret"
+              items={secretCatalog}
+              selected={
+                secretsMode === "custom"
+                  ? orderedSelectedSecrets
+                  : secretCatalog.map(({ name }) => name)
+              }
+              isDisabled={isSavingAny || secretsMode === "standard"}
+              onToggle={(name, checked) =>
+                setSelectedSecrets((prev) =>
+                  checked
+                    ? [...prev, name]
+                    : prev.filter((entry) => entry !== name),
+                )
+              }
+            />
+          ) : (
+            <Typography.Text className="text-xs text-tertiary-alt">
+              {t(I18nKey.SETTINGS$AGENT_PROFILE_SECRETS_NONE)}
+            </Typography.Text>
+          )}
+          <Typography.Text className="text-xs text-tertiary-alt">
+            {t(
+              secretsMode === "custom"
+                ? I18nKey.SETTINGS$AGENT_PROFILE_SECRETS_CHOOSE_HINT
+                : I18nKey.SETTINGS$AGENT_PROFILE_SECRETS_ALL_HINT,
             )}
           </Typography.Text>
         </div>

@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   MIN_AGENT_SERVER_VERSION_FOR_PROFILE_SWITCH_LLM_TOOL,
+  MIN_AGENT_SERVER_VERSION_FOR_PROFILE_SECRET_REFS,
   MIN_AGENT_SERVER_VERSION_FOR_PROFILE_TOOLS,
+  agentProfileSupportsSecretRefs,
   agentProfileSupportsSwitchLlmTool,
   agentProfileSupportsTools,
 } from "#/api/agent-profiles-service/profile-field-support";
@@ -85,5 +87,36 @@ describe("agentProfileSupportsTools", () => {
   it("assumes support when no version is cached (cloud backends)", () => {
     mockGetCachedAgentServerVersion.mockReturnValue(null);
     expect(agentProfileSupportsTools()).toBe(true);
+  });
+});
+
+describe("agentProfileSupportsSecretRefs", () => {
+  beforeEach(() => {
+    mockGetCachedAgentServerVersion.mockReset();
+  });
+
+  it("pins the gate to the release that adds the profile field", () => {
+    expect(MIN_AGENT_SERVER_VERSION_FOR_PROFILE_SECRET_REFS).toBe("1.47.0");
+  });
+
+  it.each(["1.29.0", "1.42.1", "1.46.0"])(
+    "reports no support on %s, where a posted `secret_refs` key would 422 the save",
+    (version) => {
+      mockGetCachedAgentServerVersion.mockReturnValue(version);
+      expect(agentProfileSupportsSecretRefs()).toBe(false);
+    },
+  );
+
+  it.each(["1.47.0", "1.48.2", "2.0.0"])(
+    "reports support on %s",
+    (version) => {
+      mockGetCachedAgentServerVersion.mockReturnValue(version);
+      expect(agentProfileSupportsSecretRefs()).toBe(true);
+    },
+  );
+
+  it("assumes support when no version is cached (cloud backends)", () => {
+    mockGetCachedAgentServerVersion.mockReturnValue(null);
+    expect(agentProfileSupportsSecretRefs()).toBe(true);
   });
 });

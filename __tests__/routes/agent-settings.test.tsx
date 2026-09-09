@@ -24,9 +24,20 @@ vi.mock("#/hooks/query/use-acp-auth-status", () => ({
 // probe so both sides of that gate are reachable without a live server.
 const profileSupportsSwitchLlmToolMock = vi.hoisted(() => vi.fn(() => true));
 const profileSupportsToolsMock = vi.hoisted(() => vi.fn(() => true));
+const profileSupportsSecretRefsMock = vi.hoisted(() => vi.fn(() => true));
 vi.mock("#/api/agent-profiles-service/profile-field-support", () => ({
   agentProfileSupportsSwitchLlmTool: () => profileSupportsSwitchLlmToolMock(),
   agentProfileSupportsTools: () => profileSupportsToolsMock(),
+  agentProfileSupportsSecretRefs: () => profileSupportsSecretRefsMock(),
+}));
+
+// The secret picker lists the user's saved secrets; stub the query so these
+// tests don't need a live secrets store.
+const savedSecretsMock = vi.hoisted(() =>
+  vi.fn<() => { name: string; description?: string }[]>(),
+);
+vi.mock("#/hooks/query/use-get-secrets", () => ({
+  useSearchSecrets: () => ({ data: savedSecretsMock() }),
 }));
 
 // The tool picker's catalog comes from the backend's advertised `usable_tools`;
@@ -98,6 +109,12 @@ describe("AgentSettingsScreen", () => {
     profileSupportsSwitchLlmToolMock.mockReturnValue(true);
     profileSupportsToolsMock.mockReturnValue(true);
     usableToolsMock.mockReturnValue(null);
+    profileSupportsSecretRefsMock.mockReturnValue(true);
+    savedSecretsMock.mockReturnValue([
+      { name: "GITHUB_TOKEN", description: "repo access" },
+      { name: "DATADOG_API_KEY" },
+      { name: "PROD_DB_URL" },
+    ]);
   });
 
   it("renders the agent type selector defaulting to OpenHands with sub-agents toggle", async () => {
@@ -1244,6 +1261,156 @@ describe("AgentSettingsScreen", () => {
       expect(
         screen.getByTestId("agent-settings-tool-retired_tool"),
       ).toBeChecked();
+    });
+  });
+
+  describe("secret scope", () => {
+    function seedOpenHandsSettings() {
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+        buildSettings({
+          agent_settings: {
+            ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+            agent_kind: "openhands",
+          },
+        }),
+      );
+    }
+
+    it("hides the control outside the profile editor", async () => {
+      seedOpenHandsSettings();
+      renderAgentSettingsScreen();
+      await screen.findByTestId("agent-settings-screen");
+      expect(
+        screen.queryByTestId("agent-settings-secrets-mode"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("lists every saved secret read-only and persists null by default", async () => {
+      seedOpenHandsSettings();
+      let control: AgentSettingsSaveControl | null = null;
+      renderAgentSettingsScreen({
+        embedded: true,
+        agentSettingsOverride: {
+          agent_kind: "openhands",
+          enable_sub_agents: false,
+          secret_refs: null,
+        },
+        onSaveControlChange: (next) => {
+          control = next;
+        },
+      });
+      await screen.findByTestId("agent-settings-screen");
+
+      expect(screen.getByTestId("agent-settings-secret-list")).toBeInTheDocument();
+      const github = screen.getByTestId("agent-settings-secret-GITHUB_TOKEN");
+      expect(github).toBeChecked();
+      expect(github).toBeDisabled();
+      expect(
+        screen.getByTestId("agent-settings-secret-PROD_DB_URL"),
+      ).toBeChecked();
+      expect(control!.buildAgentProfileFields()).toMatchObject({
+        secret_refs: null,
+      });
+    });
+
+    it("seeds from a stored scope and persists the selection", async () => {
+      seedOpenHandsSettings();
+      let control: AgentSettingsSaveControl | null = null;
+      renderAgentSettingsScreen({
+        embedded: true,
+        agentSettingsOverride: {
+          agent_kind: "openhands",
+          enable_sub_agents: false,
+          secret_refs: ["DATADOG_API_KEY"],
+        },
+        onSaveControlChange: (next) => {
+          control = next;
+        },
+      });
+      await screen.findByTestId("agent-settings-screen");
+
+      expect(
+        screen.getByTestId("agent-settings-secret-DATADOG_API_KEY"),
+      ).toBeChecked();
+      expect(
+        screen.getByTestId("agent-settings-secret-PROD_DB_URL"),
+      ).not.toBeChecked();
+      expect(control!.buildAgentProfileFields()).toMatchObject({
+        secret_refs: ["DATADOG_API_KEY"],
+      });
+    });
+
+    it("keeps a stored ref whose secret no longer exists", async () => {
+      // The save is a whole-profile overwrite, so dropping it here would
+      // silently rewrite the user's scope.
+      seedOpenHandsSettings();
+      let control: AgentSettingsSaveControl | null = null;
+      renderAgentSettingsScreen({
+        embedded: true,
+        agentSettingsOverride: {
+          agent_kind: "openhands",
+          enable_sub_agents: false,
+          secret_refs: ["DELETED_SECRET"],
+        },
+        onSaveControlChange: (next) => {
+          control = next;
+        },
+      });
+      await screen.findByTestId("agent-settings-screen");
+
+      expect(
+        screen.getByTestId("agent-settings-secret-DELETED_SECRET"),
+      ).toBeChecked();
+      expect(control!.buildAgentProfileFields()).toMatchObject({
+        secret_refs: ["DELETED_SECRET"],
+      });
+    });
+
+    it("omits the key on a backend whose profile model predates it", async () => {
+      profileSupportsSecretRefsMock.mockReturnValue(false);
+      seedOpenHandsSettings();
+      let control: AgentSettingsSaveControl | null = null;
+      renderAgentSettingsScreen({
+        embedded: true,
+        agentSettingsOverride: {
+          agent_kind: "openhands",
+          enable_sub_agents: false,
+        },
+        onSaveControlChange: (next) => {
+          control = next;
+        },
+      });
+      await screen.findByTestId("agent-settings-screen");
+
+      expect(
+        screen.queryByTestId("agent-settings-secrets-mode"),
+      ).not.toBeInTheDocument();
+      expect(control!.buildAgentProfileFields()).not.toHaveProperty(
+        "secret_refs",
+      );
+    });
+
+    it("explains the empty state when nothing is saved", async () => {
+      savedSecretsMock.mockReturnValue([]);
+      seedOpenHandsSettings();
+      renderAgentSettingsScreen({
+        embedded: true,
+        agentSettingsOverride: {
+          agent_kind: "openhands",
+          enable_sub_agents: false,
+        },
+      });
+      await screen.findByTestId("agent-settings-screen");
+      expect(
+        screen.queryByTestId("agent-settings-secret-list"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByText("SETTINGS$AGENT_PROFILE_SECRETS_NONE"),
+      ).toBeInTheDocument();
+      // The control itself stays, so the user can still see the scope mode.
+      expect(
+        screen.getByTestId("agent-settings-secrets-mode"),
+      ).toBeInTheDocument();
     });
   });
 });

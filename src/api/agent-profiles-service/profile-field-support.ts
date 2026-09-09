@@ -60,3 +60,22 @@ export function agentProfileSupportsTools(): boolean {
   if (comparison === null) return true;
   return comparison >= 0;
 }
+
+/**
+ * `secret_refs` reaches `AgentProfileBase` in software-agent-sdk#4931. Pinned to
+ * the next minor after v1.46.0; confirm against the release that actually ships
+ * it. Older servers are `extra="forbid"`, so posting the key 422s the save.
+ */
+export const MIN_AGENT_SERVER_VERSION_FOR_PROFILE_SECRET_REFS = "1.47.0";
+
+/** Whether the active backend's agent-profile model accepts `secret_refs`. */
+export function agentProfileSupportsSecretRefs(): boolean {
+  const version = getCachedAgentServerVersion();
+  if (!version) return true;
+  const comparison = compareAgentServerVersions(
+    version,
+    MIN_AGENT_SERVER_VERSION_FOR_PROFILE_SECRET_REFS,
+  );
+  if (comparison === null) return true;
+  return comparison >= 0;
+}

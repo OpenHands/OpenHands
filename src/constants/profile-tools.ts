@@ -158,6 +158,25 @@ export function readProfileTools(value: unknown): {
 }
 
 /**
+ * Read a stored profile's `secret_refs` into picker state.
+ *
+ * Same tri-state as `tools`, minus the params: `null`/absent = every secret,
+ * an array = only those names. The ACP provider credentials the server unions
+ * back in are deliberately not modelled here — they are not the user's to
+ * deselect.
+ */
+export function readProfileSecretRefs(value: unknown): {
+  mode: ProfileToolsMode;
+  selected: string[];
+} {
+  if (!Array.isArray(value)) return { mode: "standard", selected: [] };
+  return {
+    mode: "custom",
+    selected: value.filter((name): name is string => typeof name === "string"),
+  };
+}
+
+/**
  * Build the `tools` value to persist: `null` for standard, otherwise the
  * selection plus the sub-agent tool when that toggle is on and the backend can
  * run it.
