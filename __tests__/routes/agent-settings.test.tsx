@@ -18,7 +18,6 @@ const acpAuthStatusMock = vi.hoisted(() => vi.fn());
 vi.mock("#/hooks/query/use-acp-auth-status", () => ({
   useAcpAuthStatus: (...args: unknown[]) => acpAuthStatusMock(...args),
 }));
-
 // The profile editor gates the LLM-switching toggle on the backend's *profile*
 // model, which gained the field later than the settings schema did. Stub the
 // probe so both sides of that gate are reachable without a live server.
@@ -105,6 +104,57 @@ describe("AgentSettingsScreen", () => {
     ).toBeInTheDocument();
     // ACP-only fields stay hidden on the OpenHands branch.
     expect(screen.queryByTestId("agent-command-input")).not.toBeInTheDocument();
+  });
+  it("hides verification settings on the standalone Agent Settings page", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          agent_kind: "openhands",
+          verification: {
+            critic_enabled: true,
+            enable_iterative_refinement: true,
+          },
+        },
+      }),
+    );
+
+    renderAgentSettingsScreen();
+    await screen.findByTestId("agent-settings-screen");
+
+    expect(screen.getByTestId("agent-type-selector")).toBeInTheDocument();
+    expect(screen.queryByText("Enable Critic")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Enable Iterative Refinement"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders verification settings in the embedded Agent Profile editor", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          agent_kind: "openhands",
+          verification: {
+            critic_enabled: true,
+            enable_iterative_refinement: true,
+          },
+        },
+      }),
+    );
+
+    renderAgentSettingsScreen({ embedded: true });
+    await screen.findByTestId("agent-settings-screen");
+
+    expect(
+      screen.getByTestId("sdk-settings-verification.critic_enabled"),
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getByTestId(
+        "sdk-settings-verification.enable_iterative_refinement",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("labels the save button 'Save Changes' for consistency with other settings pages", async () => {

@@ -969,7 +969,7 @@ export function AgentSettingsScreen({
           onChange={setToolConcurrency}
         />
       ) : null}
-      {!isAcp && criticField ? (
+      {embedded && !isAcp && criticField ? (
         <SchemaField
           field={criticField}
           value={criticEnabled}
@@ -985,7 +985,7 @@ export function AgentSettingsScreen({
         />
       ) : null}
 
-      {!isAcp && iterativeRefinementField ? (
+      {embedded && !isAcp && iterativeRefinementField ? (
         <SchemaField
           field={iterativeRefinementField}
           value={iterativeRefinementEnabled}
