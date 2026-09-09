@@ -6,6 +6,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 // Import the named export LlmSettingsScreen directly for testing the form component.
@@ -412,6 +413,42 @@ describe("LlmSettingsScreen - provider connection selector", () => {
     await screen.findByTestId("llm-provider-connection-input");
     expect(screen.queryByTestId("llm-api-key-input")).not.toBeInTheDocument();
     expect(screen.queryByTestId("base-url-input")).not.toBeInTheDocument();
+  });
+
+  it("updates form state when a linked provider connection is changed to None", async () => {
+    const user = userEvent.setup();
+    let latestValues: Record<string, string | boolean> = {};
+
+    vi.spyOn(activeBackendContext, "useActiveBackend").mockReturnValue({
+      backend: mockLocalBackend,
+    } as ReturnType<typeof activeBackendContext.useActiveBackend>);
+    vi.spyOn(ProviderConnectionsService, "list").mockResolvedValue([
+      connection,
+    ]);
+
+    renderLlmSettingsScreen({
+      embedded: true,
+      hideSaveButton: true,
+      showProviderConnection: true,
+      initialValueOverrides: {
+        "llm.model": "openai/gpt-4o",
+        "llm.provider_connection_id": "conn-1",
+      },
+      onSaveControlChange: (control) => {
+        latestValues = control.values;
+      },
+    });
+
+    await screen.findByTestId("llm-settings-screen");
+    const selector = await screen.findByTestId("llm-provider-connection-input");
+    expect(selector).toHaveValue("My OpenAI");
+
+    await user.click(selector);
+    await user.click(await screen.findByText("SETTINGS$MCP_AUTH_MODE_NONE"));
+
+    await waitFor(() => {
+      expect(latestValues["llm.provider_connection_id"]).toBe("");
+    });
   });
 
   it("still renders the selector for an orphaned link when no connections load", async () => {

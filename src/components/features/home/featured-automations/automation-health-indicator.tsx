@@ -35,6 +35,7 @@ export function AutomationHealthIndicator({
       className={cn(
         "h-1.5 w-1.5 shrink-0 rounded-full",
         health === "failed" && "bg-[var(--oh-status-error)]",
+        health === "warning" && "bg-[var(--oh-warning)]",
         health === "in_progress" &&
           "animate-pulse bg-[var(--oh-status-success)] motion-reduce:animate-none",
         (health === "none" || health === "unknown") && "bg-[var(--oh-border)]",

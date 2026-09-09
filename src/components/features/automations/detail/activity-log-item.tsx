@@ -8,6 +8,7 @@ import {
   type AutomationRun,
 } from "#/types/automation";
 import { isInvalidTimestamp } from "#/utils/format-relative-time";
+import { getAutomationRunDisplay } from "#/utils/automation-run-display";
 import { RunStatusBadge } from "./run-status-badge";
 import { RunPhase, shouldShowRunPhase } from "./run-phase";
 import { RunLogsModal } from "./run-logs-modal";
@@ -59,7 +60,9 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
   // state.
   const isTerminal =
     run.status === AutomationRunStatus.COMPLETED ||
-    run.status === AutomationRunStatus.FAILED;
+    run.status === AutomationRunStatus.FAILED ||
+    run.status === AutomationRunStatus.CANCELLED ||
+    run.status === AutomationRunStatus.SKIPPED;
   const showNoConversationLabel = !hasConversation && isTerminal;
   const showPhase = shouldShowRunPhase(run.status);
   const [logsOpen, setLogsOpen] = useState(false);
@@ -76,6 +79,7 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
     i18n.language,
   );
   const formattedCost = formatRunCost(run.cost);
+  const display = getAutomationRunDisplay(run);
 
   const handleLogsClick = (
     e:
@@ -105,13 +109,18 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
 
   const content = (
     <>
-      <div className="flex items-center gap-3">
-        <span className="text-sm text-content">{formattedTimestamp}</span>
-        {showNoConversationLabel && (
-          <span className="text-xs text-muted">
-            {t(I18nKey.AUTOMATIONS$DETAIL$NO_CONVERSATION)}
-          </span>
-        )}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-content">{formattedTimestamp}</span>
+          {showNoConversationLabel && (
+            <span className="text-xs text-muted">
+              {t(I18nKey.AUTOMATIONS$DETAIL$NO_CONVERSATION)}
+            </span>
+          )}
+        </div>
+        {display.summary ? (
+          <p className="mt-1 truncate text-xs text-muted">{display.summary}</p>
+        ) : null}
       </div>
       <div className="flex min-w-0 items-center gap-2">
         {formattedCost && (
@@ -133,7 +142,7 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
             wide
           />
         )}
-        <RunStatusBadge status={run.status} />
+        <RunStatusBadge status={display.badgeStatus} />
       </div>
     </>
   );
@@ -144,7 +153,9 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
         <a
           href={getConversationUrl(run.conversation_id)}
           className="flex items-center justify-between px-5 py-3 transition-colors cursor-pointer hover:bg-surface-raised focus:bg-surface-raised focus:outline-none"
-          aria-label={`View conversation for run at ${formattedTimestamp}`}
+          aria-label={t(I18nKey.AUTOMATIONS$DETAIL$VIEW_CONVERSATION_FOR_RUN, {
+            timestamp: formattedTimestamp,
+          })}
         >
           {content}
         </a>
