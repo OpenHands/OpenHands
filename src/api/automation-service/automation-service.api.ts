@@ -49,6 +49,25 @@ import {
 
 const AUTOMATION_BASE_PATH = "/api/automation";
 
+type AutomationDraftCreateTarget = SetupEntry | "prompt" | "plugin" | "custom";
+
+function automationCreateEndpointForTarget(
+  target?: AutomationDraftCreateTarget,
+): string {
+  if (target === "plugin") return getAutomationEndpoint("createPlugin");
+  if (target === "custom") {
+    const endpoint = getAutomationEndpoint("createBundle");
+    if (!endpoint) {
+      throw new Error(
+        "This deployment does not support creating custom automation bundles.",
+      );
+    }
+    return endpoint;
+  }
+  if (!target || target === "prompt") return automationCreateEndpoint();
+  return automationCreateEndpoint(target);
+}
+
 export interface AutomationHealthResponse {
   status: "ok" | "error";
   message?: string;
@@ -589,11 +608,13 @@ class AutomationService {
    */
   static async createAutomationDraft(
     body: SetupRequestBody,
-    /** The entry the draft came from, which decides the create endpoint. */
-    entry?: SetupEntry,
+    /** The entry or generic draft kind decides the create endpoint. */
+    target?: AutomationDraftCreateTarget,
   ): Promise<Record<string, unknown>> {
     const active = getActiveBackend().backend;
-    const path = `${AUTOMATION_BASE_PATH}${automationCreateEndpoint(entry)}`;
+    const path = `${AUTOMATION_BASE_PATH}${automationCreateEndpointForTarget(
+      target,
+    )}`;
 
     if (active.kind === "cloud") {
       return callCloudProxy<Record<string, unknown>>({
