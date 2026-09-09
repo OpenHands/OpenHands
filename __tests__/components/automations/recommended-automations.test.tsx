@@ -166,7 +166,7 @@ function continueGithubResponderLocally() {
 describe("recommended automations", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    localStorage.clear();
+    localStorage?.clear?.();
     __resetActiveStoreForTests();
     setRegisteredBackends([localBackend]);
     setActiveSelection({ backendId: localBackend.id });
@@ -183,7 +183,7 @@ describe("recommended automations", () => {
   });
 
   afterEach(() => {
-    localStorage.clear();
+    localStorage?.clear?.();
     __resetActiveStoreForTests();
   });
 

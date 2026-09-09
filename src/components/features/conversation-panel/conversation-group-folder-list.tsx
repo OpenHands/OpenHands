@@ -36,6 +36,8 @@ interface ConversationGroupFolderListProps {
   isCreatingConversationFlow: boolean;
   activeConversationId?: string | null;
   onLaunchFromGroup: (launch: ConversationGroupLaunch) => void;
+  onOpenSpace?: (launch: ConversationGroupLaunch) => void;
+  onCreateIssue?: (launch: ConversationGroupLaunch) => void;
   renderConversationCard: (conversation: AppConversation) => ReactNode;
 }
 
@@ -52,6 +54,8 @@ export function ConversationGroupFolderList({
   isCreatingConversationFlow,
   activeConversationId,
   onLaunchFromGroup,
+  onOpenSpace,
+  onCreateIssue,
   renderConversationCard,
 }: ConversationGroupFolderListProps) {
   const { t } = useTranslation("openhands");
@@ -183,6 +187,16 @@ export function ConversationGroupFolderList({
           }}
           onTogglePreviewExpanded={() => onToggleGroupPreviewExpanded(group.id)}
           onLaunchFromGroup={() => onLaunchFromGroup(group.launch)}
+          onOpenSpace={
+            group.launch.workingDir && onOpenSpace
+              ? () => onOpenSpace(group.launch)
+              : undefined
+          }
+          onCreateIssue={
+            group.launch.workingDir && onCreateIssue
+              ? () => onCreateIssue(group.launch)
+              : undefined
+          }
           renderConversationCard={renderConversationCard}
         />
       ))}
