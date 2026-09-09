@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
@@ -12,6 +13,12 @@ import { getApiErrorBody } from "#/utils/api-error-message";
 import { useTracking } from "#/hooks/use-tracking";
 import { useSetupCapabilities } from "#/hooks/query/use-manifest-capabilities";
 import { useSetupPrerequisites } from "#/hooks/query/use-manifest-prerequisites";
+import {
+  LLM_PROFILES_QUERY_KEYS,
+  useLlmProfiles,
+} from "#/hooks/query/use-llm-profiles";
+import ProfilesService from "#/api/profiles-service/profiles-service.api";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useSetupPreflight } from "#/hooks/use-manifest-preflight";
 import { useSetupAction } from "#/manifests/manifest-actions";
 import {
@@ -88,6 +95,8 @@ export interface SetupDialogProps {
 export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   const { t } = useTranslation("openhands");
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { backend, orgId } = useActiveBackend();
 
   const capabilities = useSetupCapabilities(entry);
   const prerequisites = useSetupPrerequisites(entry);
@@ -99,6 +108,15 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     trackAutomationSetupCreated,
     trackAutomationSetupFailed,
   } = useTracking();
+  const { data: llmProfiles } = useLlmProfiles();
+  const selectedLlmProfile = llmProfiles?.active_profile ?? null;
+  const resolveSelectedLlmProfile = async () => {
+    const profiles = await queryClient.ensureQueryData({
+      queryKey: [...LLM_PROFILES_QUERY_KEYS.all, backend.id, orgId],
+      queryFn: ProfilesService.listProfiles,
+    });
+    return profiles.active_profile ?? null;
+  };
 
   const [step, setStep] = useState<SetupStep>("prerequisites");
   const [values, setValues] = useState<SetupFormValues>(() =>
@@ -129,8 +147,8 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     [entry, capabilities.capabilities],
   );
   const payload = useMemo(
-    () => buildCreatePayload(entry, values),
-    [entry, values],
+    () => buildCreatePayload(entry, values, undefined, selectedLlmProfile),
+    [entry, selectedLlmProfile, values],
   );
   const errorMap = useMemo(() => deriveErrorMap(entry), [entry]);
 
@@ -175,9 +193,11 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   const handleFieldBlur = () => {
     if (blurTimerRef.current) window.clearTimeout(blurTimerRef.current);
     blurTimerRef.current = window.setTimeout(() => {
-      void runPreflight(valuesRef.current).then((result) => {
-        if (result) setServiceErrors(result);
-      });
+      void runPreflight(valuesRef.current, selectedLlmProfile).then(
+        (result) => {
+          if (result) setServiceErrors(result);
+        },
+      );
     }, PREFLIGHT_DEBOUNCE_MS);
   };
 
@@ -194,7 +214,8 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     }
     setLocalErrors({});
 
-    const result = await runPreflight(values);
+    const model = await resolveSelectedLlmProfile();
+    const result = await runPreflight(values, model);
     if (result && hasAnyError(result)) {
       setServiceErrors(result);
       return;
@@ -211,7 +232,8 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   ) => {
     setIsSubmitting(true);
     try {
-      const { response } = await runAction(entry, values, actionPayload);
+      const model = await resolveSelectedLlmProfile();
+      const { response } = await runAction(entry, values, actionPayload, model);
       trackAutomationSetupCreated({
         automationId: entry.id,
         setupMode,
