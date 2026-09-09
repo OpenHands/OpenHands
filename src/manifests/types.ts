@@ -218,6 +218,62 @@ export interface ValidateDraftResponse {
 }
 
 /**
+ * The creation endpoint a server-backed draft is validated and materialized
+ * against. Mirrors the service's `DraftEndpoint` literal. `"/v1"` is the raw
+ * path an entry shipping its own tarball uses; the other two are presets.
+ */
+export type AutomationDraftEndpoint =
+  | "/v1"
+  | "/v1/preset/prompt"
+  | "/v1/preset/plugin";
+
+/** `POST /v1/drafts` — create a server-backed automation setup draft. */
+export interface CreateAutomationDraftApiRequest {
+  endpoint: AutomationDraftEndpoint;
+  /** The request body that would be sent to that endpoint. */
+  draft: SetupRequestBody;
+  name?: string;
+  /** Catalog entry or automation the draft was derived from (logged only). */
+  sourceAutomationId?: string;
+}
+
+/** `PATCH /v1/drafts/{id}` — partially update a server-backed draft. */
+export interface UpdateAutomationDraftApiRequest {
+  endpoint?: AutomationDraftEndpoint;
+  draft?: SetupRequestBody;
+  name?: string;
+}
+
+/**
+ * `GET/PATCH/POST /v1/drafts[/{id}]` — a persisted draft record.
+ *
+ * The draft row is the source of truth while editing. `dispatchable` and
+ * `validationErrors` are refreshed by the service on every create/update, so
+ * the form can show live validity without a separate validate call.
+ */
+export interface AutomationDraftApiResponse {
+  id: string;
+  endpoint: AutomationDraftEndpoint;
+  name: string | null;
+  /** The request body that would be sent to the draft's endpoint. */
+  draft: SetupRequestBody;
+  validationErrors: DraftValidationError[] | null;
+  dispatchable: boolean;
+  sourceAutomationId: string | null;
+  /** Materialized automation row used for test dispatch, if any. */
+  materializedAutomationId: string | null;
+  lastTestRunId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** `GET /v1/drafts` — paginated list of persisted drafts. */
+export interface AutomationDraftListResponse {
+  drafts: AutomationDraftApiResponse[];
+  total: number;
+}
+
+/**
  * Host-owned shape of the production Automation interface manifest, published
  * by `@openhands/extensions/automations` as `AUTOMATION_INTERFACE`.
  *

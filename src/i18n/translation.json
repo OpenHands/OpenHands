@@ -42481,5 +42481,22 @@
     "de": "✦ Von OpenHands ausgefüllt",
     "uk": "✦ Заповнено OpenHands",
     "ca": "✦ Emplenat per OpenHands"
+  },
+  "AUTOMATION_SETUP$TEST_DISPATCHED": {
+    "ar": "Test run started.",
+    "ca": "Test run started.",
+    "de": "Test run started.",
+    "en": "Test run started.",
+    "es": "Test run started.",
+    "fr": "Test run started.",
+    "it": "Test run started.",
+    "ja": "Test run started.",
+    "ko-KR": "Test run started.",
+    "no": "Test run started.",
+    "pt": "Test run started.",
+    "tr": "Test run started.",
+    "uk": "Test run started.",
+    "zh-CN": "Test run started.",
+    "zh-TW": "Test run started."
   }
 }

@@ -580,4 +580,190 @@ describe("AutomationService", () => {
       expect(config.baseURL).toBe("http://already-set:8000");
     });
   });
+
+  describe("supportsAutomationDrafts", () => {
+    it("returns true when the features list advertises automation_drafts", () => {
+      expect(
+        AutomationService.supportsAutomationDrafts({
+          ready: true,
+          features: ["automationDrafts"],
+          triggerKinds: [],
+          eventSources: [],
+          eventTypes: [],
+          triggers: {},
+        }),
+      ).toBe(true);
+    });
+
+    it("returns false when the feature is missing", () => {
+      expect(
+        AutomationService.supportsAutomationDrafts({
+          ready: true,
+          features: ["presetPrompt"],
+          triggerKinds: [],
+          eventSources: [],
+          eventTypes: [],
+          triggers: {},
+        }),
+      ).toBe(false);
+    });
+
+    it("returns false for null/undefined capabilities", () => {
+      expect(AutomationService.supportsAutomationDrafts(null)).toBe(false);
+      expect(AutomationService.supportsAutomationDrafts(undefined)).toBe(false);
+    });
+  });
+
+  describe("createServerDraft", () => {
+    it("posts the snake_case body to /v1/drafts and normalizes the response", async () => {
+      const raw = {
+        id: "draft-1",
+        endpoint: "/v1/preset/prompt",
+        name: "PR Reviewer",
+        draft: { prompt: "review prs" },
+        validation_errors: null,
+        dispatchable: true,
+        source_automation_id: null,
+        materialized_automation_id: null,
+        last_test_run_id: null,
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+      };
+      mockPost.mockResolvedValue({ data: raw });
+
+      const result = await AutomationService.createServerDraft({
+        endpoint: "/v1/preset/prompt",
+        draft: { prompt: "review prs" } as never,
+        name: "PR Reviewer",
+      });
+
+      expect(mockPost).toHaveBeenCalledWith("/api/automation/v1/drafts", {
+        endpoint: "/v1/preset/prompt",
+        draft: { prompt: "review prs" },
+        name: "PR Reviewer",
+      });
+      expect(result.id).toBe("draft-1");
+      expect(result.sourceAutomationId).toBeNull();
+      expect(result.createdAt).toBe("2026-01-01T00:00:00Z");
+      expect(result.dispatchable).toBe(true);
+    });
+
+    it("omits name and source_automation_id when not provided", async () => {
+      mockPost.mockResolvedValue({
+        data: { id: "draft-2", endpoint: "/v1/preset/prompt" },
+      });
+
+      await AutomationService.createServerDraft({
+        endpoint: "/v1/preset/prompt",
+        draft: {} as never,
+      });
+
+      const [, body] = mockPost.mock.calls[0];
+      expect(body).not.toHaveProperty("name");
+      expect(body).not.toHaveProperty("source_automation_id");
+    });
+
+    it("routes to callCloudProxy for cloud backends", async () => {
+      mockGetActive.mockReturnValue({ backend: cloudBackend, orgId: "org-1" });
+      mockCallCloudProxy.mockResolvedValue({ id: "cloud-draft" });
+
+      const result = await AutomationService.createServerDraft({
+        endpoint: "/v1/preset/prompt",
+        draft: {} as never,
+      });
+
+      expect(mockCallCloudProxy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          backend: cloudBackend,
+          method: "POST",
+          path: "/api/automation/v1/drafts",
+        }),
+      );
+      expect(result.id).toBe("cloud-draft");
+    });
+  });
+
+  describe("updateServerDraft", () => {
+    it("patches only the provided fields", async () => {
+      mockPatch.mockResolvedValue({
+        data: { id: "draft-1", endpoint: "/v1/preset/prompt" },
+      });
+
+      await AutomationService.updateServerDraft("draft-1", {
+        name: "New name",
+      });
+
+      expect(mockPatch).toHaveBeenCalledWith(
+        "/api/automation/v1/drafts/draft-1",
+        { name: "New name" },
+      );
+    });
+  });
+
+  describe("getServerDraft", () => {
+    it("fetches and normalizes a single draft", async () => {
+      mockGet.mockResolvedValue({
+        data: {
+          id: "draft-9",
+          endpoint: "/v1",
+          validation_errors: [
+            { field: "name", code: "value_error", message: "required" },
+          ],
+        },
+      });
+
+      const result = await AutomationService.getServerDraft("draft-9");
+
+      expect(mockGet).toHaveBeenCalledWith("/api/automation/v1/drafts/draft-9");
+      expect(result.id).toBe("draft-9");
+      expect(result.validationErrors?.[0].message).toBe("required");
+    });
+  });
+
+  describe("deleteServerDraft", () => {
+    it("deletes a draft by id", async () => {
+      mockDelete.mockResolvedValue({});
+
+      await AutomationService.deleteServerDraft("draft-1");
+
+      expect(mockDelete).toHaveBeenCalledWith(
+        "/api/automation/v1/drafts/draft-1",
+      );
+    });
+  });
+
+  describe("listServerDrafts", () => {
+    it("lists drafts with pagination and normalizes the response", async () => {
+      mockGet.mockResolvedValue({
+        data: {
+          drafts: [{ id: "d1", endpoint: "/v1/preset/prompt" }],
+          total: 1,
+        },
+      });
+
+      const result = await AutomationService.listServerDrafts({
+        limit: 10,
+        offset: 5,
+      });
+
+      expect(mockGet).toHaveBeenCalledWith(
+        "/api/automation/v1/drafts?limit=10&offset=5",
+      );
+      expect(result.total).toBe(1);
+      expect(result.drafts[0].id).toBe("d1");
+    });
+  });
+
+  describe("dispatchServerDraft", () => {
+    it("posts to the dispatch endpoint and returns the run", async () => {
+      mockPost.mockResolvedValue({ data: mockRun });
+
+      const result = await AutomationService.dispatchServerDraft("draft-1");
+
+      expect(mockPost).toHaveBeenCalledWith(
+        "/api/automation/v1/drafts/draft-1/dispatch",
+      );
+      expect(result).toEqual(mockRun);
+    });
+  });
 });

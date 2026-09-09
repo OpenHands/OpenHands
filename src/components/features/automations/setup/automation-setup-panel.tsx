@@ -44,7 +44,10 @@ import {
 import { cn } from "#/utils/utils";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { useNavigation } from "#/context/navigation-context";
+import { useDeploymentCapabilities } from "#/hooks/query/use-manifest-capabilities";
 import type {
+  AutomationDraftApiResponse,
+  AutomationDraftEndpoint,
   InterfaceEndpointName,
   SetupRequestBody,
 } from "#/manifests/types";
@@ -216,6 +219,50 @@ function endpointName(kind: AutomationSetupKind): InterfaceEndpointName {
   return "createPrompt";
 }
 
+/**
+ * The server-backed draft endpoint the current kind posts to. Mirrors the
+ * service's `DraftEndpoint` literal: the raw `"/v1"` path for custom bundles
+ * (which ship their own tarball), and the preset paths otherwise.
+ */
+function draftEndpoint(kind: AutomationSetupKind): AutomationDraftEndpoint {
+  const path = getAutomationEndpoint(endpointName(kind));
+  if (
+    path === "/v1" ||
+    path === "/v1/preset/prompt" ||
+    path === "/v1/preset/plugin"
+  ) {
+    return path;
+  }
+  // A manifest that remaps the endpoint is not expected for the assisted
+  // flow; fall back to the preset prompt path so a draft can still be saved.
+  return kind === "plugin" ? "/v1/preset/plugin" : "/v1/preset/prompt";
+}
+
+/**
+ * Pull field-addressed validation errors out of a 422 dispatch response. The
+ * service answers an undispatchable draft with `{ message, errors }`; older
+ * transport errors surface as a thrown Error instead.
+ */
+function extractDraftDispatchErrors(error: unknown): string | null {
+  if (error && typeof error === "object") {
+    const record = error as Record<string, unknown>;
+    const response = record.response;
+    if (response && typeof response === "object") {
+      const data = (response as Record<string, unknown>).data;
+      if (data && typeof data === "object") {
+        const errors = (data as Record<string, unknown>).errors;
+        if (Array.isArray(errors) && errors.length > 0) {
+          const first = errors[0] as Record<string, unknown> | undefined;
+          if (first && typeof first.message === "string") return first.message;
+        }
+        const message = (data as Record<string, unknown>).message;
+        if (typeof message === "string") return message;
+      }
+    }
+  }
+  return null;
+}
+
 function kindLabelKey(kind: AutomationSetupKind): I18nKey {
   if (kind === "plugin") return I18nKey.AUTOMATION_SETUP$TYPE_PLUGIN;
   if (kind === "custom") return I18nKey.AUTOMATION_SETUP$TYPE_CUSTOM;
@@ -256,6 +303,14 @@ export function AutomationSetupPanel({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [streamingField, setStreamingField] =
     useState<AutomationSetupField | null>(null);
+  // Server-backed draft id from OpenHands/automation PR #417. Null until the
+  // first save creates the draft row; the local store stays the reactive layer
+  // the agent streams into, and the server row is the persisted source of truth.
+  const [serverDraftId, setServerDraftId] = useState<string | null>(null);
+  const deploymentCapabilities = useDeploymentCapabilities();
+  const serverDraftsSupported = AutomationService.supportsAutomationDrafts(
+    deploymentCapabilities.data,
+  );
   const streamQueueRef = useRef<
     {
       field: AutomationSetupField;
@@ -521,6 +576,16 @@ export function AutomationSetupPanel({
         ? { timeout: Number(timeoutSeconds) }
         : {}),
     }) as SetupRequestBody;
+  /**
+   * The request body sent to a server-backed draft. Custom drafts reference a
+   * tarball path, but a draft is saved before the upload happens, so the
+   * preflight stand-in path stands in until dispatch. Preset drafts carry the
+   * same body the final create call would, minus the upload-only fields.
+   */
+  const draftRequestBody = (): SetupRequestBody =>
+    kind === "custom"
+      ? buildCustomBody(PREFLIGHT_TARBALL_PATH)
+      : buildPresetBody();
   const validateRequiredFields = (): boolean => {
     if (!prompt.trim() && kind !== "custom") {
       setStatusMessage({
@@ -566,16 +631,95 @@ export function AutomationSetupPanel({
     }
     return true;
   };
-  const handleSaveDraft = () => {
-    setStatusMessage({
-      kind: "success",
-      text: t(I18nKey.AUTOMATION_SETUP$DRAFT_SAVED),
-    });
+  const handleSaveDraft = async () => {
+    if (!serverDraftsSupported) {
+      // Older deployments without the drafts endpoints keep the client-only
+      // draft store; there is nothing to persist server-side.
+      setStatusMessage({
+        kind: "success",
+        text: t(I18nKey.AUTOMATION_SETUP$DRAFT_SAVED),
+      });
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const body = draftRequestBody();
+      let saved: AutomationDraftApiResponse;
+      if (serverDraftId) {
+        saved = await AutomationService.updateServerDraft(serverDraftId, {
+          endpoint: draftEndpoint(kind),
+          draft: body,
+          name: normalizedName(),
+        });
+      } else {
+        saved = await AutomationService.createServerDraft({
+          endpoint: draftEndpoint(kind),
+          draft: body,
+          name: normalizedName(),
+        });
+        setServerDraftId(saved.id);
+      }
+      setStatusMessage({
+        kind: "success",
+        text:
+          saved.validationErrors?.[0]?.message ??
+          t(I18nKey.AUTOMATION_SETUP$DRAFT_SAVED),
+      });
+    } catch (error) {
+      displayErrorToast(error instanceof Error ? error.message : null);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
   const handleTest = async () => {
     if (!validateRequiredFields()) return;
     setIsSubmitting(true);
     try {
+      if (serverDraftsSupported) {
+        // Persist the current form state as a draft first, then dispatch it.
+        // The service materializes the validated draft body into a disabled
+        // automation and starts a manual run; the draft row stays as source
+        // of truth for further edits.
+        const body = draftRequestBody();
+        let saved: AutomationDraftApiResponse;
+        if (serverDraftId) {
+          saved = await AutomationService.updateServerDraft(serverDraftId, {
+            endpoint: draftEndpoint(kind),
+            draft: body,
+            name: normalizedName(),
+          });
+        } else {
+          saved = await AutomationService.createServerDraft({
+            endpoint: draftEndpoint(kind),
+            draft: body,
+            name: normalizedName(),
+          });
+          setServerDraftId(saved.id);
+        }
+
+        if (!saved.dispatchable) {
+          setStatusMessage({
+            kind: "error",
+            text:
+              saved.validationErrors?.[0]?.message ??
+              t(I18nKey.SETUP$SUBMIT_FAILED),
+          });
+          return;
+        }
+
+        const run = await AutomationService.dispatchServerDraft(saved.id);
+        setStatusMessage({
+          kind: "success",
+          text: t(I18nKey.AUTOMATION_SETUP$TEST_DISPATCHED),
+        });
+        if (run.conversation_id) {
+          // A dispatched test run starts a conversation the user can watch.
+          navigate(`/conversations/${run.conversation_id}`);
+        }
+        return;
+      }
+
+      // Fallback for deployments without drafts: preflight only.
       const result = await AutomationService.validateDraft({
         endpoint: getAutomationEndpoint(endpointName(kind)),
         draft:
@@ -590,7 +734,15 @@ export function AutomationSetupPanel({
           : result.errors[0]?.message || t(I18nKey.SETUP$SUBMIT_FAILED),
       });
     } catch (error) {
-      displayErrorToast(error instanceof Error ? error.message : null);
+      const dispatchError = extractDraftDispatchErrors(error);
+      if (dispatchError) {
+        setStatusMessage({
+          kind: "error",
+          text: dispatchError,
+        });
+      } else {
+        displayErrorToast(error instanceof Error ? error.message : null);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -624,6 +776,15 @@ export function AutomationSetupPanel({
         );
       }
       toast.success(t(I18nKey.AUTOMATION_SETUP$CREATED));
+      // The draft has been finalized into a real automation; drop the
+      // persisted draft row so it does not linger as an incomplete setup.
+      if (serverDraftId) {
+        try {
+          await AutomationService.deleteServerDraft(serverDraftId);
+        } catch {
+          // Cleanup is best-effort; the automation was created either way.
+        }
+      }
       if (typeof created.id === "string")
         navigate(automationDetailPath(created.id));
     } catch (error) {
