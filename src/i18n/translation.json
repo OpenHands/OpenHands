@@ -1,4 +1,11 @@
 {
+  "HOME$ISOLATED_WORKSPACE_NEW": {
+    "en": "New isolated Docker workspace (/workspace)"
+  },
+  "HOME$CLEAR_HOST_WORKSPACE": { "en": "Clear host project selection" },
+  "MCP$HOST_PROBE_ONLY": {
+    "en": "Host connection checked; not verified in a conversation runtime."
+  },
   "COMMON$PATTERN": {
     "ar": "النمط:",
     "ca": "Patró:",

@@ -78,7 +78,11 @@ export function CustomServerEditor({
     if (result.ok) {
       return {
         ok: true,
-        text: t(I18nKey.MCP$TEST_SUCCESS, { count: result.tools.length }),
+        text:
+          ("scope" in result && result.scope === "host") ||
+          ("runtime_verified" in result && result.runtime_verified === false)
+            ? t(I18nKey.MCP$HOST_PROBE_ONLY)
+            : t(I18nKey.MCP$TEST_SUCCESS, { count: result.tools.length }),
       };
     }
     return {

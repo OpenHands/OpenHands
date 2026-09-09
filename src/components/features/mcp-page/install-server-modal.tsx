@@ -257,7 +257,14 @@ export function InstallServerModal({
               if (!isCloudBackend) {
                 seedMcpServerHealth(serverToSave, result, existingServers);
               }
-              displaySuccessToast(t(I18nKey.MCP$INSTALL_SUCCESS));
+              displaySuccessToast(
+                t(I18nKey.MCP$INSTALL_SUCCESS) +
+                  (("scope" in result && result.scope === "host") ||
+                  ("runtime_verified" in result &&
+                    result.runtime_verified === false)
+                    ? ` ${t(I18nKey.MCP$HOST_PROBE_ONLY)}`
+                    : ""),
+              );
               setIsFinalizingInstall(true);
               void (async () => {
                 try {
@@ -302,7 +309,14 @@ export function InstallServerModal({
             if (!isCloudBackend) {
               seedMcpServerHealth(serverToSave, result, existingServers);
             }
-            displaySuccessToast(t(I18nKey.MCP$INSTALL_SUCCESS));
+            displaySuccessToast(
+              t(I18nKey.MCP$INSTALL_SUCCESS) +
+                (("scope" in result && result.scope === "host") ||
+                ("runtime_verified" in result &&
+                  result.runtime_verified === false)
+                  ? ` ${t(I18nKey.MCP$HOST_PROBE_ONLY)}`
+                  : ""),
+            );
             setIsFinalizingInstall(true);
             void (async () => {
               try {

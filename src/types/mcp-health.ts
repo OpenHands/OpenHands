@@ -14,6 +14,7 @@ export type McpServerHealth =
       status: "healthy";
       verification: McpHealthVerification;
       toolCount: number;
+      runtimeVerified?: boolean;
       checkedAt: number;
     }
   | {

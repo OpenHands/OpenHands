@@ -10,7 +10,10 @@ import {
   seedMcpServerHealth,
 } from "#/api/mcp-health/probe-mcp-server-health";
 import McpService from "#/api/mcp-service/mcp-service.api";
-import type { ExtendedMCPTestResponse, MCPServerConfig } from "#/types/mcp-server";
+import type {
+  ExtendedMCPTestResponse,
+  MCPServerConfig,
+} from "#/types/mcp-server";
 import { getMcpServerHealthKey } from "#/utils/mcp-server-health-key";
 
 /** Matches the catalog `github` entry, so the `get_me` probe spec applies. */
@@ -31,6 +34,26 @@ const CUSTOM: MCPServerConfig = {
 };
 
 describe("interpretMcpTestResponse", () => {
+  it.each([
+    { scope: "host" as const, runtime_verified: false, expected: false },
+    { scope: "runtime" as const, runtime_verified: true, expected: true },
+  ])(
+    "preserves $scope probe runtime verification",
+    ({ scope, runtime_verified, expected }) => {
+      const response = {
+        ok: true as const,
+        tools: ["get_me"],
+        tool_result: { is_error: false, text: "ok" },
+        scope,
+        runtime_verified,
+      };
+      expect(interpretMcpTestResponse(GITHUB, response)).toMatchObject({
+        status: "healthy",
+        runtimeVerified: expected,
+      });
+    },
+  );
+
   it("passes a non-auth connection failure through with its kind", () => {
     const health = interpretMcpTestResponse(CUSTOM, {
       ok: false,

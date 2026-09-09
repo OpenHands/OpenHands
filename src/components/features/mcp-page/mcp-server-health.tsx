@@ -48,6 +48,8 @@ function getStatusLabel(
     case "checking":
       return t(I18nKey.MCP$HEALTH_STATUS_CHECKING);
     case "healthy":
+      if (health.runtimeVerified === false)
+        return t(I18nKey.MCP$HOST_PROBE_ONLY);
       return health.verification === "verified"
         ? t(I18nKey.MCP$HEALTH_STATUS_VERIFIED, { count: health.toolCount })
         : t(I18nKey.MCP$HEALTH_STATUS_CONNECTIVITY_ONLY);

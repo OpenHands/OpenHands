@@ -1,3 +1,4 @@
+import { supportsConversationRuntimeRoutes } from "#/api/agent-server-client-options";
 import {
   ConversationClient,
   FileClient,
@@ -128,7 +129,26 @@ describe("AgentServerConversationService", () => {
     mockSwitchProfile.mockReset();
     mockSwitchLLM.mockReset();
     fetchMock.mockReset();
-    global.fetch = originalFetch;
+    fetchMock.mockImplementation(
+      (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input).endsWith("/server_info")) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                version: "1.45.0",
+                uptime: 0,
+                idle_time: 0,
+                conversation_runtime: "local",
+                workspace_mode: "host",
+              }),
+              { headers: { "Content-Type": "application/json" } },
+            ),
+          );
+        }
+        return originalFetch(input, init);
+      },
+    );
+    global.fetch = fetchMock;
     vi.mocked(ConversationClient).mockClear();
     vi.mocked(FileClient).mockClear();
     vi.mocked(ProfilesClient).mockClear();
@@ -213,9 +233,10 @@ describe("AgentServerConversationService", () => {
         workingDir: "/workspace/project/agent-canvas",
       });
       expect(FileClient).toHaveBeenCalledWith({
+        conversationId: "conv-123",
         host: "http://localhost:54928",
         apiKey: "test-api-key",
-        workingDir: "/workspace/project/agent-canvas",
+        workingDir: "/workspace/project/agent-canvas/conv-123",
       });
       expect(mockHttpGet).toHaveBeenCalledWith(
         "/api/file/download",
@@ -263,6 +284,46 @@ describe("AgentServerConversationService", () => {
   });
 
   describe("createConversation", () => {
+    it.skipIf(!supportsConversationRuntimeRoutes())(
+      "creates an isolated Docker workspace without host hooks or worktrees",
+      async () => {
+        mockGetSettings.mockResolvedValue({ llm_model: "gpt-4o" });
+        mockGetSettingsForConversation.mockResolvedValue({
+          agentSettings: { llm: { model: "gpt-4o" } },
+          conversationSettings: {},
+          secretsEncrypted: true,
+        });
+        fetchMock.mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              version: "1.45.0",
+              uptime: 0,
+              idle_time: 0,
+              conversation_runtime: "docker",
+              workspace_mode: "isolated",
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+        );
+        mockHttpPost.mockResolvedValue({
+          data: {
+            id: "docker-conv",
+            created_at: "2024-01-01",
+            updated_at: "2024-01-01",
+          },
+        });
+        await AgentServerConversationService.createConversation();
+        expect(mockHttpPost).toHaveBeenCalledWith(
+          "/api/conversations",
+          expect.objectContaining({
+            workspace: { kind: "LocalWorkspace", working_dir: "/workspace" },
+            worktree: false,
+          }),
+        );
+        expect(mockLoadHooks).not.toHaveBeenCalled();
+      },
+    );
+
     it("forwards the Canvas telemetry identity to the local agent server", async () => {
       mockGetTelemetryDistinctId.mockResolvedValue("ph-canvas-user");
       mockGetSettings.mockResolvedValue({
@@ -837,10 +898,9 @@ describe("AgentServerConversationService", () => {
         "conv-abc",
       );
 
-      expect(mockGetProfile).not.toHaveBeenCalledWith(
-        "stale-acp-snapshot",
-        { exposeSecrets: "encrypted" },
-      );
+      expect(mockGetProfile).not.toHaveBeenCalledWith("stale-acp-snapshot", {
+        exposeSecrets: "encrypted",
+      });
       const [, payload] = mockHttpPost.mock.calls[0] as [
         string,
         { agent: { llm: { model: string } } },

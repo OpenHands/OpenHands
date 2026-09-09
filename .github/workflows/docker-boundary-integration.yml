@@ -1,0 +1,66 @@
+name: Docker boundary integration
+
+on:
+  workflow_dispatch:
+    inputs:
+      sdk_sha:
+        description: Reviewed software-agent-sdk commit SHA containing the scoped TypeScript client
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-boundaries:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out frontend
+        uses: actions/checkout@v7
+      - name: Validate SDK commit input
+        env:
+          SDK_SHA: ${{ inputs.sdk_sha }}
+        run: '[[ "$SDK_SHA" =~ ^[0-9a-f]{40}$ ]]'
+      - name: Check out reviewed SDK
+        uses: actions/checkout@v7
+        with:
+          repository: OpenHands/software-agent-sdk
+          ref: ${{ inputs.sdk_sha }}
+          path: .boundary-sdk
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24.15"
+          cache: npm
+      - name: Install declared frontend dependencies
+        run: npm ci
+      - name: Build reviewed TypeScript client
+        working-directory: .boundary-sdk/clients/typescript
+        run: npm ci && npm run build
+      - name: Use reviewed client without rewriting dependency declarations
+        run: |
+          mv .boundary-sdk "$RUNNER_TEMP/boundary-sdk"
+          rm -rf node_modules/@openhands/typescript-client
+          ln -s "$RUNNER_TEMP/boundary-sdk/clients/typescript" node_modules/@openhands/typescript-client
+          node --input-type=module -e 'import { ServerClient } from "@openhands/typescript-client/clients"; if (!ServerClient.supportsConversationRuntimeRoutes) throw new Error("SDK lacks conversation runtime routes")'
+      - name: Lint
+        run: npm run lint
+      - name: Test frontend boundaries
+        run: >-
+          npm test -- --maxWorkers=2
+          __tests__/api/docker-conversation-boundaries.test.ts
+          __tests__/api/agent-server-client-options.test.ts
+          __tests__/api/agent-server-conversation-service.test.ts
+          __tests__/api/agent-server-git-service.test.ts
+          __tests__/api/conversation-file-upload.test.ts
+          __tests__/api/conversation-service.test.ts
+          __tests__/api/mcp-health
+          __tests__/components/features/mcp-page
+          __tests__/components/features/conversation-panel/local-new-conversation-menu.test.tsx
+          __tests__/components/features/home/workspace-selection-form.test.tsx
+          __tests__/components/features/home/home-chat-launcher.test.tsx
+          src/api/no-direct-agent-server-calls.test.ts
+      - name: Build frontend
+        run: npm run build

@@ -67,6 +67,12 @@ export function interpretMcpTestResponse(
     status: "healthy",
     verification: verified ? "verified" : "connectivity-only",
     toolCount: response.tools.length,
+    ...(("scope" in response && response.scope === "host") ||
+    ("runtime_verified" in response && response.runtime_verified === false)
+      ? { runtimeVerified: false }
+      : "runtime_verified" in response && response.runtime_verified === true
+        ? { runtimeVerified: true }
+        : {}),
     checkedAt,
   };
 }
