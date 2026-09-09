@@ -1,12 +1,18 @@
 name: Docker boundary integration
 
 on:
+  push:
+    branches:
+      - fix/docker-canvas-api-boundaries
   workflow_dispatch:
     inputs:
       sdk_sha:
         description: Reviewed software-agent-sdk commit SHA containing the scoped TypeScript client
         required: true
         type: string
+
+env:
+  SDK_SHA: ${{ inputs.sdk_sha || '858b0a12058a18fdbcf098f721d847dcc70b913c' }}
 
 permissions:
   contents: read
@@ -19,14 +25,12 @@ jobs:
       - name: Check out frontend
         uses: actions/checkout@v7
       - name: Validate SDK commit input
-        env:
-          SDK_SHA: ${{ inputs.sdk_sha }}
         run: '[[ "$SDK_SHA" =~ ^[0-9a-f]{40}$ ]]'
       - name: Check out reviewed SDK
         uses: actions/checkout@v7
         with:
           repository: OpenHands/software-agent-sdk
-          ref: ${{ inputs.sdk_sha }}
+          ref: ${{ env.SDK_SHA }}
           path: .boundary-sdk
           persist-credentials: false
       - name: Set up Node.js
