@@ -11,7 +11,6 @@ import {
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
 import { getApiErrorMessage } from "#/utils/api-error-message";
-import { getErrorStatus } from "#/hooks/query/use-settings";
 import {
   useCheckGitSyncConfig,
   useUpdateGitSyncConfig,
@@ -146,14 +145,10 @@ export function GitSyncConfigForm({
         if (thenSync) onSyncNow();
       },
       onError: (error) => {
-        displayErrorToast(
-          // 409 is the backend refusing to enable sync in a deployment that
-          // booted with it off -- a restart with the env var set, not a
-          // transient failure the operator should retry.
-          getErrorStatus(error) === 409
-            ? t(I18nKey.AUTOMATIONS$GIT_SYNC$ENABLE_BLOCKED_ERROR)
-            : getApiErrorMessage(error, t(I18nKey.ERROR$GENERIC)),
-        );
+        // The backend's detail is the message: a 409 means another
+        // organization already syncs this repository, branch and path, and
+        // it says so in words the operator can act on.
+        displayErrorToast(getApiErrorMessage(error, t(I18nKey.ERROR$GENERIC)));
       },
     });
   };

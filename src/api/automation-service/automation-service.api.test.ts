@@ -410,6 +410,9 @@ describe("AutomationService git sync", () => {
         backend: cloudBackend,
         method: "GET",
         path: "/api/automation/v1/git-sync/status",
+        headers: expect.objectContaining({
+          "X-OpenHands-Client": "agent_canvas",
+        }),
       }),
     );
   });
@@ -440,6 +443,32 @@ describe("AutomationService git sync", () => {
         method: "PUT",
         path: "/api/automation/v1/git-sync/config",
         body: { token: null },
+        headers: expect.objectContaining({
+          "X-OpenHands-Client": "agent_canvas",
+        }),
+      }),
+    );
+  });
+
+  it("checks a candidate configuration through the cloud proxy", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
+    const check = { ok: true, branch_exists: true, detail: null };
+    callCloudProxy.mockResolvedValueOnce(check);
+
+    await expect(
+      AutomationService.checkGitSyncConfig({ branch: "develop" }),
+    ).resolves.toEqual(check);
+
+    expect(callCloudProxy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backend: cloudBackend,
+        method: "POST",
+        path: "/api/automation/v1/git-sync/check",
+        body: { branch: "develop" },
+        headers: expect.objectContaining({
+          "X-OpenHands-Client": "agent_canvas",
+        }),
       }),
     );
   });
