@@ -484,36 +484,49 @@ function fieldsContainType(fields: unknown, type: string): boolean {
   );
 }
 
-function formContainsFieldType(form: unknown, type: string): boolean {
-  if (!isRecord(form)) return false;
-  const triggerGroups = isRecord(form.triggers)
-    ? Object.values(form.triggers)
-    : [];
-  return (
-    fieldsContainType(form.args, type) ||
-    triggerGroups.some((fields) => fieldsContainType(fields, type))
-  );
+function actionHasRepoPicker(action: unknown): boolean {
+  return isRecord(action) && fieldsContainType(action.args, "repo-picker");
 }
 
-function actionsContainRepoPicker(actions: unknown): boolean {
-  if (!isRecord(actions)) return false;
-  return Object.values(actions).some(
-    (action) =>
-      isRecord(action) && fieldsContainType(action.args, "repo-picker"),
-  );
-}
-
+/**
+ * Whether an event trigger's `source` is derivable for every selectable action.
+ *
+ * `buildTrigger` fills `source` from a field named `source` in the event
+ * trigger, or failing that from the selected action's repo-picker provider. A
+ * picker in another trigger group (such as `cron`) is never collected for the
+ * event trigger, and a picker in only some actions is invisible when one of the
+ * others is selected — so neither may satisfy this check, or the user can end
+ * up with an empty `source` no form field can fix.
+ */
 function setupSuppliesEventSource(setup: Rec): boolean {
-  const eventFields = isRecord(setup.form)
-    ? isRecord(setup.form.triggers)
-      ? setup.form.triggers.event
-      : undefined
-    : undefined;
-  return (
-    fieldsContainType(eventFields, "event-source") ||
-    formContainsFieldType(setup.form, "repo-picker") ||
-    actionsContainRepoPicker(setup.actions)
-  );
+  const form = isRecord(setup.form) ? setup.form : {};
+  const triggers = isRecord(form.triggers) ? form.triggers : {};
+  const eventFields = triggers.event;
+
+  // An explicit event-source field fills `source` directly, regardless of which
+  // action is selected.
+  if (fieldsContainType(eventFields, "event-source")) return true;
+
+  // A repo-picker in the event trigger is only collected when `event` is the
+  // sole trigger kind; with a sibling trigger the derivation reads no trigger
+  // fields for the picker. `form.args` is shared across every selection, so a
+  // picker there is always available.
+  const singleEventTrigger =
+    "event" in triggers && Object.keys(triggers).length === 1;
+  if (
+    (singleEventTrigger && fieldsContainType(eventFields, "repo-picker")) ||
+    fieldsContainType(form.args, "repo-picker")
+  ) {
+    return true;
+  }
+
+  // Without a shared or event-trigger picker, every selectable action must
+  // carry its own repo-picker; otherwise selecting an action without one
+  // derives `source: ""`.
+  if (!isRecord(setup.actions) || Object.keys(setup.actions).length === 0) {
+    return false;
+  }
+  return Object.values(setup.actions).every(actionHasRepoPicker);
 }
 
 function checkMessage(check: SetupChecker, message: unknown): void {

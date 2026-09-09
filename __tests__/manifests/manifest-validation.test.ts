@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { validateSetupEntry } from "#/manifests/manifest-validation";
-import type { SetupForm } from "#/manifests/types";
+import type {
+  SetupForm,
+  SetupFormField,
+  SetupFormFields,
+} from "#/manifests/types";
 import {
   createSetup,
   createSetupEntry,
@@ -420,5 +424,197 @@ describe("validateSetupEntry", () => {
 
     // Assert
     expect(errors).toHaveLength(2);
+  });
+
+  // An event trigger's `source` is derived either from a field named `source`
+  // in the event trigger, or from the selected action's repo-picker provider.
+  // A repo-picker that the derivation cannot reach for the event trigger — in
+  // another trigger group, or in only some actions — must not satisfy the
+  // check, or the user is left with an empty source no field can fix.
+  describe("event trigger source", () => {
+    const repoPicker: SetupFormField = {
+      type: "repo-picker",
+      label: "Repository",
+      help: "Which repository to watch.",
+      provider: "github",
+      required: true,
+    };
+    // `event-type` cannot carry options, and `args` must be non-empty, so the
+    // event trigger carries a select for its `on` field and a placeholder arg.
+    const eventFields: SetupFormFields = {
+      on: {
+        type: "select",
+        label: "Respond to",
+        help: "Which event.",
+        required: true,
+        options: [{ value: "push", label: "Push" }],
+      },
+    };
+    const args: SetupFormFields = {
+      widgetName: {
+        type: "text",
+        label: "Widget name",
+        help: "What to call it.",
+        required: true,
+      },
+    };
+
+    it("admits an event trigger whose repo-picker lives in the shared args", () => {
+      // Arrange — `form.args` is collected for every trigger and action, so a
+      // picker here is reachable no matter which action is selected.
+      const entry = createSetupEntry({
+        setup: createSetup({
+          form: {
+            triggers: { event: eventFields },
+            args: { ...args, repository: repoPicker },
+          },
+          prompt: "Report on {{form.repository}}.",
+        }),
+      });
+
+      // Act
+      const result = validateSetupEntry(entry);
+
+      // Assert
+      expect(result).toEqual({ valid: true, errors: [] });
+    });
+
+    it("admits an event trigger with a repo-picker in its own fields when it is the only trigger", () => {
+      // Arrange
+      const entry = createSetupEntry({
+        setup: createSetup({
+          form: {
+            triggers: { event: { ...eventFields, repository: repoPicker } },
+            args,
+          },
+          prompt: "Report on {{form.repository}}.",
+        }),
+      });
+
+      // Act
+      const result = validateSetupEntry(entry);
+
+      // Assert
+      expect(result).toEqual({ valid: true, errors: [] });
+    });
+
+    it("admits selectable actions where every action carries its own repo-picker", () => {
+      // Arrange — no shared picker, but each action supplies one.
+      const entry = createSetupEntry({
+        setup: createSetup({
+          prompt: undefined,
+          form: { triggers: { event: eventFields }, args },
+          actions: {
+            prompt: {
+              label: "Prompt",
+              help: "Run a prompt.",
+              features: ["presetPrompt"],
+              args: { repository: repoPicker },
+              prompt: "{{form.repository}}",
+            },
+            plugin: {
+              label: "Plugin",
+              help: "Run a plugin.",
+              features: ["presetPlugin"],
+              args: { repository: repoPicker },
+              prompt: "{{form.repository}}",
+              plugins: "{{form.repository}}",
+            },
+          },
+        }),
+      });
+
+      // Act
+      const result = validateSetupEntry(entry);
+
+      // Assert
+      expect(result).toEqual({ valid: true, errors: [] });
+    });
+
+    it("refuses a repo-picker in the cron trigger group as the event source (cross-trigger leakage)", () => {
+      // Arrange — `buildTrigger` reads the picker only from the event trigger
+      // (or shared args), so a picker that lives under `cron` is invisible to
+      // the event trigger and leaves `source` empty.
+      const entry = createSetupEntry({
+        setup: createSetup({
+          form: {
+            triggers: {
+              cron: {
+                schedule: {
+                  type: "cron",
+                  label: "Frequency",
+                  help: "How often.",
+                  required: true,
+                },
+                repository: repoPicker,
+              },
+              event: eventFields,
+            },
+            args,
+          },
+          prompt: "Report on {{form.repository}}.",
+        }),
+      });
+
+      // Act
+      const result = validateSetupEntry(entry);
+
+      // Assert
+      expect(result.valid).toBe(false);
+      expect(result.errors).toEqual([
+        "setup.form.triggers.event: must declare an event source field or repository picker",
+      ]);
+    });
+
+    it("refuses a repo-picker on only one of several selectable actions (cross-action leakage)", () => {
+      // Arrange — the `prompt` action has a repo-picker, but `upload` does not;
+      // selecting `upload` derives `source: ""`, and no field can fix it.
+      const entry = createSetupEntry({
+        setup: createSetup({
+          prompt: undefined,
+          form: { triggers: { event: eventFields }, args },
+          actions: {
+            prompt: {
+              label: "Prompt",
+              help: "Run a prompt.",
+              features: ["presetPrompt"],
+              args: { repository: repoPicker },
+              prompt: "{{form.repository}}",
+            },
+            upload: {
+              label: "Upload tarball",
+              help: "Upload a tarball.",
+              features: ["customTarball"],
+              args: {
+                tarball: {
+                  type: "tarball-upload",
+                  label: "Tarball",
+                  help: "Archive to upload.",
+                  required: true,
+                },
+                entrypoint: {
+                  type: "text",
+                  label: "Entrypoint",
+                  help: "Command to run.",
+                  default: "python3 main.py",
+                  required: true,
+                },
+              },
+              tarballPath: "tarball.tar",
+              entrypoint: "python3 main.py",
+            },
+          },
+        }),
+      });
+
+      // Act
+      const result = validateSetupEntry(entry);
+
+      // Assert
+      expect(result.valid).toBe(false);
+      expect(result.errors).toEqual([
+        "setup.form.triggers.event: must declare an event source field or repository picker",
+      ]);
+    });
   });
 });
