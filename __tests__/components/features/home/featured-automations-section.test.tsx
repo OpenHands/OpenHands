@@ -46,6 +46,17 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
   displayErrorToast: vi.fn(),
 }));
 
+// Mock permission hooks so home automation components don't need a real
+// ActiveBackendProvider or /me endpoint.
+vi.mock("#/hooks/use-automation-permissions", () => ({
+  useAutomationPermissions: () => ({
+    canView: true,
+    canManage: true,
+    isLoading: false,
+  }),
+  useIsAutomationOwner: () => true,
+}));
+
 vi.mock(
   "#/api/conversation-service/agent-server-conversation-service.api",
   () => ({
