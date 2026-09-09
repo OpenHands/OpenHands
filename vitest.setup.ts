@@ -101,28 +101,41 @@ class MockProgressEvent extends Event {
   }
 }
 
+// MSW's XMLHttpRequest interceptor also evaluates the bare
+// `XMLHttpRequestUpload` identifier — `XMLHttpRequestController.trigger` does
+// `target instanceof XMLHttpRequestUpload` — from inside the same async
+// `respondWith` callbacks. It therefore hits the same post-teardown
+// `ReferenceError` as `ProgressEvent` does. The fallback only needs to be a
+// constructor so `instanceof` resolves; it is never constructed.
+class MockXMLHttpRequestUpload {}
+
 // Setup files run once per test file, and a worker process is reused across
 // files. Without this marker each file would splice another holder into the
 // prototype chain, so the chain would grow with every file in the run.
-const PROGRESS_EVENT_FALLBACK = Symbol.for(
-  "agent-canvas.progress-event-fallback",
-);
+const GLOBAL_FALLBACK = Symbol.for("agent-canvas.global-identifier-fallback");
 
-function installProgressEventFallback(fallback: unknown) {
+function installGlobalIdentifierFallbacks(
+  fallbacks: Record<PropertyKey, unknown>,
+) {
   const currentProto = Object.getPrototypeOf(globalThis) as object | null;
-  if (currentProto && PROGRESS_EVENT_FALLBACK in currentProto) return;
+  if (currentProto && GLOBAL_FALLBACK in currentProto) return;
 
   const holder = Object.create(currentProto) as Record<PropertyKey, unknown>;
-  Object.defineProperty(holder, PROGRESS_EVENT_FALLBACK, { value: true });
-  Object.defineProperty(holder, "ProgressEvent", {
-    value: fallback,
-    configurable: true,
-    writable: true,
-  });
+  Object.defineProperty(holder, GLOBAL_FALLBACK, { value: true });
+  for (const [identifier, fallback] of Object.entries(fallbacks)) {
+    Object.defineProperty(holder, identifier, {
+      value: fallback,
+      configurable: true,
+      writable: true,
+    });
+  }
   Object.setPrototypeOf(globalThis, holder);
 }
 
-installProgressEventFallback(MockProgressEvent);
+installGlobalIdentifierFallbacks({
+  ProgressEvent: MockProgressEvent,
+  XMLHttpRequestUpload: MockXMLHttpRequestUpload,
+});
 
 // Mock ResizeObserver for test environment
 class MockResizeObserver {
