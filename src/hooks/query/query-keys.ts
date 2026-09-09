@@ -84,6 +84,13 @@ export const CONVERSATION_QUERY_KEYS = {
   subConversations: ["v1", "sub-conversations"] as const,
 } as const;
 
+export const KANBAN_QUERY_KEYS = {
+  all: ["kanban"] as const,
+  boards: () => ["kanban", "boards"] as const,
+  board: (boardId: string) => ["kanban", "board", boardId] as const,
+  costs: (boardId: string) => ["kanban", "costs", boardId] as const,
+} as const;
+
 export const LOCAL_PLANNER_MUTATION_KEYS = {
   create: ["create-local-planning-conversation"] as const,
 } as const;
