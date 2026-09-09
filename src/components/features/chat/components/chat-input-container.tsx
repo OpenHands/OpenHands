@@ -92,6 +92,7 @@ export function ChatInputContainer({
 
         <ChatInputRow
           chatInputRef={chatInputRef}
+          disabled={disabled}
           isNewConversationPending={isNewConversationPending}
           onInput={onInput}
           onPaste={onPaste}
