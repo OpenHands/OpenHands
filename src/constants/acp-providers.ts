@@ -124,10 +124,8 @@ export interface ACPModelOption {
 // key. Everything else — display name, launch command, model picker list and
 // default — comes from the typescript-client registry below. Adding a model
 // or a provider happens upstream in the SDK; Canvas only owns the brand icon
-// and the onboarding-tile description here. A provider with no entry here is
-// not surfaced in the UI, and must be listed in
-// {@link ACP_PROVIDER_NOT_SURFACED} so the omission is a decision rather
-// than an oversight.
+// and the onboarding-tile description here. Its keys are the harnesses Canvas
+// offers — see {@link SURFACED_ACP_PROVIDERS}.
 const ACP_PROVIDER_UI: Record<
   string,
   { icon: ACPProviderIcon; description_key: I18nKey }
@@ -147,20 +145,18 @@ const ACP_PROVIDER_UI: Record<
 };
 
 /**
- * Registry keys Canvas does not surface, and why. Every key the pinned client
- * publishes must appear either here or in {@link ACP_PROVIDER_UI} — asserted
- * by ``acp-providers.test.ts``, so a client bump that adds a harness fails
- * until someone decides which side it belongs on.
+ * The ACP harnesses Canvas surfaces — its own declaration of what it offers,
+ * independent of what the SDK registry happens to contain. Registering a
+ * harness upstream is a no-op here: nothing in Canvas enumerates the registry,
+ * so there is no list to keep in step with it.
+ *
+ * The same constant name carries the same meaning in
+ * ``OpenHands/enterprise`` (``openhands/app_server/acp_providers.py``), where
+ * it also fails conversation start closed. The two are declared independently
+ * and hold the same three keys today.
  */
-export const ACP_PROVIDER_NOT_SURFACED: Record<string, string> = {
-  "kimi-code":
-    "Authenticates only from a config.toml blob, and its model list follows " +
-    "the credential rather than a fixed set.",
-  pi: "Two independently pinned npm packages and an auth.json credential.",
-  opencode:
-    "Per-platform ~185 MB binary absent from the agent-server image, so " +
-    "selecting it would npm-install the harness inside the sandbox.",
-};
+export const SURFACED_ACP_PROVIDERS: readonly string[] =
+  Object.keys(ACP_PROVIDER_UI);
 
 // Built-in ACP providers Canvas surfaces, built by enriching each upstream
 // registry record (``@openhands/typescript-client`` → Python SDK) with the
