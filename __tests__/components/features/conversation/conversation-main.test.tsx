@@ -51,6 +51,7 @@ vi.mock("#/stores/conversation-store", () => ({
 
 vi.mock("#/api/automation-setup-draft-store", () => ({
   getAutomationSetupDraft: () => mockAutomationSetupDraft,
+  subscribeAutomationSetupDraft: () => vi.fn(),
   clearAutomationSetupDraft: (...args: unknown[]) =>
     mockClearAutomationSetupDraft(...args),
 }));

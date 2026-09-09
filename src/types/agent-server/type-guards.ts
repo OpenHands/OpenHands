@@ -1,3 +1,4 @@
+import { AUTOMATION_FORM_UPDATE_TOOL_NAME } from "#/constants/automation-form";
 import {
   CANVAS_UI_CLIENT_TOOL_NAME,
   LEGACY_CANVAS_UI_TOOL_NAME,
@@ -16,6 +17,7 @@ import {
   BrowserObservation,
   BrowserNavigateAction,
   SwitchLLMObservation,
+  AutomationFormUpdateAction,
   CanvasUIAction,
   LaunchChildConversationAction,
 } from "./core";
@@ -186,6 +188,11 @@ export const isCanvasUIActionEvent = (
   isActionEvent(event) &&
   (event.tool_name === LEGACY_CANVAS_UI_TOOL_NAME ||
     event.tool_name === CANVAS_UI_CLIENT_TOOL_NAME);
+
+export const isAutomationFormUpdateActionEvent = (
+  event: OpenHandsEvent,
+): event is ActionEvent<AutomationFormUpdateAction> =>
+  isActionEvent(event) && event.tool_name === AUTOMATION_FORM_UPDATE_TOOL_NAME;
 
 /**
  * Type guard for launch-child-conversation tool ActionEvents.

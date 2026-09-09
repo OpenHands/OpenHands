@@ -42464,5 +42464,22 @@
     "de": "Agent anzeigen",
     "uk": "Показати агента",
     "ca": "Mostra l'agent"
+  },
+  "AUTOMATION_SETUP$FILLED_BY_OPENHANDS": {
+    "en": "✦ Filled by OpenHands",
+    "ja": "✦ OpenHands が入力",
+    "zh-CN": "✦ 由 OpenHands 填写",
+    "zh-TW": "✦ 由 OpenHands 填寫",
+    "ko-KR": "✦ OpenHands가 채움",
+    "no": "✦ Fylt ut av OpenHands",
+    "it": "✦ Compilato da OpenHands",
+    "pt": "✦ Preenchido pelo OpenHands",
+    "es": "✦ Rellenado por OpenHands",
+    "ar": "✦ تم ملؤه بواسطة OpenHands",
+    "fr": "✦ Rempli par OpenHands",
+    "tr": "✦ OpenHands tarafından dolduruldu",
+    "de": "✦ Von OpenHands ausgefüllt",
+    "uk": "✦ Заповнено OpenHands",
+    "ca": "✦ Emplenat per OpenHands"
   }
 }

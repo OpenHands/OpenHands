@@ -1,4 +1,10 @@
-import { useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
@@ -14,9 +20,14 @@ import {
   Zap,
 } from "lucide-react";
 import AutomationService from "#/api/automation-service/automation-service.api";
-import type {
-  AutomationSetupDraft,
-  AutomationSetupKind,
+import {
+  patchAutomationSetupDraft,
+  subscribeAutomationSetupDraft,
+  type AutomationSetupDraft,
+  type AutomationSetupField,
+  type AutomationSetupFormPatch,
+  type AutomationSetupFormValues,
+  type AutomationSetupKind,
 } from "#/api/automation-setup-draft-store";
 import {
   automationDetailPath,
@@ -52,6 +63,8 @@ const DEFAULT_CUSTOM_SETUP_SCRIPT = `#!/usr/bin/env bash
 const DEFAULT_TIMEOUT_SECONDS = "600";
 const PREFLIGHT_TARBALL_PATH =
   "oh-internal://uploads/00000000-0000-0000-0000-000000000000";
+export const AGENT_FIELD_STREAM_CHARACTER_DELAY_MS = 12;
+export const AGENT_FIELD_STREAM_SETTLE_DELAY_MS = 160;
 
 const AUTOMATION_SETUP_KINDS: AutomationSetupKind[] = [
   "prompt",
@@ -66,13 +79,44 @@ const FREQUENCIES = [
   "weekly",
   "custom",
 ] as const;
+const AUTOMATION_SETUP_FIELD_RENDER_ORDER: AutomationSetupField[] = [
+  "kind",
+  "name",
+  "prompt",
+  "pluginSource",
+  "pluginRef",
+  "repository",
+  "customCode",
+  "entrypoint",
+  "setupScriptPath",
+  "setupScript",
+  "triggerKind",
+  "frequency",
+  "time",
+  "timezone",
+  "customSchedule",
+  "eventSource",
+  "eventKey",
+  "eventFilter",
+  "showTimeout",
+  "timeoutSeconds",
+];
+const NON_CHARACTER_STREAM_FIELDS = new Set<AutomationSetupField>([
+  "kind",
+  "triggerKind",
+  "frequency",
+  "showTimeout",
+  "time",
+]);
+const streamingFieldHighlightClassName =
+  "rounded-xl ring-2 ring-[#D5C76B]/80 ring-offset-2 ring-offset-base shadow-[0_0_24px_rgba(213,199,107,0.24)]";
 
 type Frequency = (typeof FREQUENCIES)[number];
-type TriggerKind = "cron" | "event";
 type StatusMessage = { kind: "success" | "error"; text: string } | null;
 
 interface AutomationSetupPanelProps {
   draft: AutomationSetupDraft;
+  conversationId?: string | null;
   toolbarPortal?: HTMLElement | null;
   showInlineHeader?: boolean;
   onClose: () => void;
@@ -115,6 +159,57 @@ function buildStarterPython(prompt: string): string {
   return `import json\nimport os\nimport urllib.request\n\n\ndef fire_callback(status="COMPLETED", error=None):\n    url = os.environ.get("AUTOMATION_CALLBACK_URL", "")\n    if not url:\n        return\n    body = {"status": status, "run_id": os.environ.get("AUTOMATION_RUN_ID", "")}\n    if error:\n        body["error"] = error\n    request = urllib.request.Request(\n        url,\n        data=json.dumps(body).encode(),\n        headers={\n            "Content-Type": "application/json",\n            "Authorization": f"Bearer {os.environ.get('AUTOMATION_CALLBACK_API_KEY', '')}",\n        },\n    )\n    urllib.request.urlopen(request, timeout=10)\n\n\ndef main():\n    prompt = ${JSON.stringify(prompt)}\n    print(f"Automation prompt: {prompt}")\n\n\nif __name__ == "__main__":\n    try:\n        main()\n        fire_callback("COMPLETED")\n    except Exception as exc:\n        fire_callback("FAILED", str(exc))\n        raise\n`;
 }
 
+function sortFieldsByRenderOrder(
+  fields: AutomationSetupField[],
+): AutomationSetupField[] {
+  return [...fields].sort(
+    (first, second) =>
+      AUTOMATION_SETUP_FIELD_RENDER_ORDER.indexOf(first) -
+      AUTOMATION_SETUP_FIELD_RENDER_ORDER.indexOf(second),
+  );
+}
+
+function shouldCharacterStreamField(
+  field: AutomationSetupField,
+  value: AutomationSetupFormValues[AutomationSetupField],
+): value is string {
+  return typeof value === "string" && !NON_CHARACTER_STREAM_FIELDS.has(field);
+}
+
+function streamingHighlightClassName(isStreaming: boolean) {
+  return isStreaming ? streamingFieldHighlightClassName : undefined;
+}
+
+function buildInitialForm(
+  draft: AutomationSetupDraft,
+): AutomationSetupFormValues {
+  const form = draft.form ?? {};
+  const prompt = form.prompt ?? draft.prompt;
+  const kind = form.kind ?? draft.kind;
+  return {
+    kind,
+    name: form.name ?? deriveName(prompt),
+    prompt,
+    repository: form.repository ?? "",
+    pluginSource: form.pluginSource ?? draft.plugins?.[0] ?? "",
+    pluginRef: form.pluginRef ?? "",
+    customCode: form.customCode ?? buildStarterPython(prompt),
+    entrypoint: form.entrypoint ?? DEFAULT_CUSTOM_ENTRYPOINT,
+    setupScriptPath: form.setupScriptPath ?? DEFAULT_CUSTOM_SETUP_SCRIPT_PATH,
+    setupScript: form.setupScript ?? DEFAULT_CUSTOM_SETUP_SCRIPT,
+    triggerKind: form.triggerKind ?? "cron",
+    frequency: form.frequency ?? "daily",
+    time: form.time ?? DEFAULT_TIME,
+    timezone: form.timezone ?? DEFAULT_TIMEZONE,
+    customSchedule: form.customSchedule ?? DEFAULT_CUSTOM_SCHEDULE,
+    eventSource: form.eventSource ?? DEFAULT_EVENT_SOURCE,
+    eventKey: form.eventKey ?? DEFAULT_EVENT_KEY,
+    eventFilter: form.eventFilter ?? "",
+    showTimeout: form.showTimeout ?? false,
+    timeoutSeconds: form.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS,
+  };
+}
+
 function endpointName(kind: AutomationSetupKind): InterfaceEndpointName {
   if (kind === "plugin") return "createPlugin";
   if (kind === "custom") return "createBundle";
@@ -146,38 +241,238 @@ function frequencyLabelKey(frequency: Frequency): I18nKey {
 
 export function AutomationSetupPanel({
   draft,
+  conversationId,
   toolbarPortal,
   showInlineHeader = true,
   onClose,
 }: AutomationSetupPanelProps) {
   const { t } = useTranslation("openhands");
   const { navigate } = useNavigation();
-  const [kind, setKind] = useState<AutomationSetupKind>(draft.kind);
-  const [name, setName] = useState(() => deriveName(draft.prompt));
-  const [prompt, setPrompt] = useState(draft.prompt);
-  const [repository, setRepository] = useState("");
-  const [pluginSource, setPluginSource] = useState(draft.plugins?.[0] ?? "");
-  const [pluginRef, setPluginRef] = useState("");
-  const [customCode, setCustomCode] = useState(() =>
-    buildStarterPython(draft.prompt),
+  const [form, setForm] = useState(() => buildInitialForm(draft));
+  const [fieldMetadata, setFieldMetadata] = useState(
+    () => draft.fieldMetadata ?? {},
   );
-  const [entrypoint, setEntrypoint] = useState(DEFAULT_CUSTOM_ENTRYPOINT);
-  const [setupScriptPath, setSetupScriptPath] = useState(
-    DEFAULT_CUSTOM_SETUP_SCRIPT_PATH,
-  );
-  const [setupScript, setSetupScript] = useState(DEFAULT_CUSTOM_SETUP_SCRIPT);
-  const [triggerKind, setTriggerKind] = useState<TriggerKind>("cron");
-  const [frequency, setFrequency] = useState<Frequency>("daily");
-  const [time, setTime] = useState(DEFAULT_TIME);
-  const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE);
-  const [customSchedule, setCustomSchedule] = useState(DEFAULT_CUSTOM_SCHEDULE);
-  const [eventSource, setEventSource] = useState(DEFAULT_EVENT_SOURCE);
-  const [eventKey, setEventKey] = useState(DEFAULT_EVENT_KEY);
-  const [eventFilter, setEventFilter] = useState("");
-  const [showTimeout, setShowTimeout] = useState(false);
-  const [timeoutSeconds, setTimeoutSeconds] = useState(DEFAULT_TIMEOUT_SECONDS);
   const [statusMessage, setStatusMessage] = useState<StatusMessage>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [streamingField, setStreamingField] =
+    useState<AutomationSetupField | null>(null);
+  const streamQueueRef = useRef<
+    {
+      field: AutomationSetupField;
+      value: AutomationSetupFormValues[AutomationSetupField];
+      metadata?: NonNullable<
+        AutomationSetupDraft["fieldMetadata"]
+      >[AutomationSetupField];
+    }[]
+  >([]);
+  const isStreamProcessingRef = useRef(false);
+  const streamGenerationRef = useRef(0);
+  const streamTimeoutsRef = useRef<number[]>([]);
+  const processQueuedStreamsRef = useRef<() => void>(() => {});
+
+  const {
+    kind,
+    name,
+    prompt,
+    repository,
+    pluginSource,
+    pluginRef,
+    customCode,
+    entrypoint,
+    setupScriptPath,
+    setupScript,
+    triggerKind,
+    frequency,
+    time,
+    timezone,
+    customSchedule,
+    eventSource,
+    eventKey,
+    eventFilter,
+    showTimeout,
+    timeoutSeconds,
+  } = form;
+
+  const clearQueuedStreams = useCallback(() => {
+    streamGenerationRef.current += 1;
+    for (const timeoutId of streamTimeoutsRef.current) {
+      window.clearTimeout(timeoutId);
+    }
+    streamTimeoutsRef.current = [];
+    streamQueueRef.current = [];
+    isStreamProcessingRef.current = false;
+    setStreamingField(null);
+  }, []);
+
+  const scheduleStreamStep = useCallback(
+    (callback: () => void, delay: number, generation: number) => {
+      const timeoutId = window.setTimeout(() => {
+        streamTimeoutsRef.current = streamTimeoutsRef.current.filter(
+          (queuedTimeoutId) => queuedTimeoutId !== timeoutId,
+        );
+        if (generation !== streamGenerationRef.current) return;
+        callback();
+      }, delay);
+      streamTimeoutsRef.current.push(timeoutId);
+    },
+    [],
+  );
+
+  const finishCurrentStream = useCallback(
+    (
+      field: AutomationSetupField,
+      metadata:
+        | NonNullable<
+            AutomationSetupDraft["fieldMetadata"]
+          >[AutomationSetupField]
+        | undefined,
+      generation: number,
+    ) => {
+      if (metadata) {
+        setFieldMetadata((previous) => ({ ...previous, [field]: metadata }));
+      }
+      isStreamProcessingRef.current = false;
+      scheduleStreamStep(
+        () => processQueuedStreamsRef.current(),
+        AGENT_FIELD_STREAM_SETTLE_DELAY_MS,
+        generation,
+      );
+    },
+    [scheduleStreamStep],
+  );
+
+  const processQueuedStreams = useCallback(() => {
+    if (isStreamProcessingRef.current) return;
+    const nextStream = streamQueueRef.current.shift();
+    if (!nextStream) {
+      setStreamingField(null);
+      return;
+    }
+
+    const generation = streamGenerationRef.current;
+    isStreamProcessingRef.current = true;
+    setStreamingField(nextStream.field);
+
+    if (!shouldCharacterStreamField(nextStream.field, nextStream.value)) {
+      setForm((previous) => ({
+        ...previous,
+        [nextStream.field]: nextStream.value,
+      }));
+      finishCurrentStream(nextStream.field, nextStream.metadata, generation);
+      return;
+    }
+
+    const streamValue = nextStream.value;
+    setForm((previous) => ({ ...previous, [nextStream.field]: "" }));
+    let nextCharacterIndex = 0;
+    const streamNextCharacter = () => {
+      nextCharacterIndex += 1;
+      setForm((previous) => ({
+        ...previous,
+        [nextStream.field]: streamValue.slice(0, nextCharacterIndex),
+      }));
+      if (nextCharacterIndex < streamValue.length) {
+        scheduleStreamStep(
+          streamNextCharacter,
+          AGENT_FIELD_STREAM_CHARACTER_DELAY_MS,
+          generation,
+        );
+        return;
+      }
+      finishCurrentStream(nextStream.field, nextStream.metadata, generation);
+    };
+
+    scheduleStreamStep(
+      streamNextCharacter,
+      AGENT_FIELD_STREAM_CHARACTER_DELAY_MS,
+      generation,
+    );
+  }, [finishCurrentStream, scheduleStreamStep]);
+
+  processQueuedStreamsRef.current = processQueuedStreams;
+
+  useEffect(
+    () => () => {
+      clearQueuedStreams();
+    },
+    [clearQueuedStreams],
+  );
+
+  useEffect(() => {
+    if (!conversationId) return undefined;
+    return subscribeAutomationSetupDraft(
+      conversationId,
+      (nextDraft, result) => {
+        if (!nextDraft) return;
+        const nextForm = buildInitialForm(nextDraft);
+        const nextMetadata = nextDraft.fieldMetadata ?? {};
+        const agentFields = sortFieldsByRenderOrder(
+          (result?.applied ?? []).filter(
+            (field) => nextMetadata[field]?.updatedBy === "agent",
+          ),
+        );
+
+        if (agentFields.length === 0) {
+          clearQueuedStreams();
+          setForm(nextForm);
+          setFieldMetadata(nextMetadata);
+          return;
+        }
+
+        const protectedFields = new Set<AutomationSetupField>([
+          ...agentFields,
+          ...streamQueueRef.current.map((queuedStream) => queuedStream.field),
+          ...(streamingField ? [streamingField] : []),
+        ]);
+        setForm((previous) => {
+          const syncedForm = { ...nextForm };
+          for (const field of protectedFields) {
+            (syncedForm as Record<string, unknown>)[field] = previous[field];
+          }
+          return syncedForm;
+        });
+        setFieldMetadata((previous) => {
+          const syncedMetadata = { ...nextMetadata };
+          for (const field of agentFields) {
+            if (previous[field]) {
+              syncedMetadata[field] = previous[field];
+            } else {
+              delete syncedMetadata[field];
+            }
+          }
+          return syncedMetadata;
+        });
+        streamQueueRef.current.push(
+          ...agentFields.map((field) => ({
+            field,
+            value: nextForm[field],
+            metadata: nextMetadata[field],
+          })),
+        );
+        processQueuedStreamsRef.current();
+      },
+    );
+  }, [clearQueuedStreams, conversationId, streamingField]);
+
+  const updateField = <FieldName extends AutomationSetupField>(
+    field: FieldName,
+    value: AutomationSetupFormValues[FieldName],
+  ) => {
+    clearQueuedStreams();
+    setStatusMessage(null);
+    setForm((previous) => ({ ...previous, [field]: value }));
+    if (!conversationId) return;
+    patchAutomationSetupDraft(
+      conversationId,
+      { [field]: value } as AutomationSetupFormPatch,
+      { source: "user" },
+    );
+  };
+
+  const agentUpdatedSuffix = (field: AutomationSetupField) =>
+    fieldMetadata[field]?.updatedBy === "agent"
+      ? t(I18nKey.AUTOMATION_SETUP$FILLED_BY_OPENHANDS)
+      : undefined;
 
   const normalizedName = () => name.trim() || deriveName(prompt);
   const buildTrigger = () =>
@@ -406,7 +701,10 @@ export function AutomationSetupPanel({
             <div
               role="group"
               aria-label={t(I18nKey.AUTOMATION_SETUP$TYPE_LABEL)}
-              className="grid grid-cols-3 gap-2 rounded-xl border border-[var(--oh-border)] bg-base-secondary p-1"
+              className={cn(
+                "grid grid-cols-3 gap-2 rounded-xl border border-[var(--oh-border)] bg-base-secondary p-1",
+                streamingHighlightClassName(streamingField === "kind"),
+              )}
             >
               {AUTOMATION_SETUP_KINDS.map((item) => (
                 <button
@@ -414,7 +712,7 @@ export function AutomationSetupPanel({
                   type="button"
                   aria-pressed={kind === item}
                   data-testid={`automation-setup-kind-${item}`}
-                  onClick={() => setKind(item)}
+                  onClick={() => updateField("kind", item)}
                   className={cn(
                     "flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm",
                     formControlTransitionClassName,
@@ -437,52 +735,84 @@ export function AutomationSetupPanel({
               ))}
             </div>
 
-            <Field label={t(I18nKey.AUTOMATIONS$NAME)}>
+            <Field
+              label={t(I18nKey.AUTOMATIONS$NAME)}
+              suffix={agentUpdatedSuffix("name")}
+              isStreaming={streamingField === "name"}
+            >
               <input
                 data-testid="automation-setup-name"
                 value={name}
                 placeholder={t(I18nKey.AUTOMATION_SETUP$NAME_PLACEHOLDER)}
-                onChange={(event) => setName(event.target.value)}
+                onChange={(event) => updateField("name", event.target.value)}
                 className={formControlFieldClassName}
               />
             </Field>
 
             {kind !== "custom" ? (
-              <PromptFields prompt={prompt} onPromptChange={setPrompt} />
+              <PromptFields
+                prompt={prompt}
+                updatedSuffix={agentUpdatedSuffix("prompt")}
+                isStreaming={streamingField === "prompt"}
+                onPromptChange={(value) => updateField("prompt", value)}
+              />
             ) : (
               <CustomCodeFields
                 code={customCode}
                 entrypoint={entrypoint}
                 setupScriptPath={setupScriptPath}
                 setupScript={setupScript}
-                onCodeChange={setCustomCode}
-                onEntrypointChange={setEntrypoint}
-                onSetupScriptPathChange={setSetupScriptPath}
-                onSetupScriptChange={setSetupScript}
+                updatedSuffixes={{
+                  customCode: agentUpdatedSuffix("customCode"),
+                  entrypoint: agentUpdatedSuffix("entrypoint"),
+                  setupScriptPath: agentUpdatedSuffix("setupScriptPath"),
+                  setupScript: agentUpdatedSuffix("setupScript"),
+                }}
+                streamingField={streamingField}
+                onCodeChange={(value) => updateField("customCode", value)}
+                onEntrypointChange={(value) => updateField("entrypoint", value)}
+                onSetupScriptPathChange={(value) =>
+                  updateField("setupScriptPath", value)
+                }
+                onSetupScriptChange={(value) =>
+                  updateField("setupScript", value)
+                }
               />
             )}
 
             {kind === "plugin" && (
               <div className="grid gap-3 rounded-xl border border-[var(--oh-border)] bg-base-secondary p-4 md:grid-cols-[2fr_1fr]">
-                <Field label={t(I18nKey.AUTOMATION_SETUP$PLUGIN_SOURCE)}>
+                <Field
+                  label={t(I18nKey.AUTOMATION_SETUP$PLUGIN_SOURCE)}
+                  suffix={agentUpdatedSuffix("pluginSource")}
+                  isStreaming={streamingField === "pluginSource"}
+                >
                   <input
                     data-testid="automation-setup-plugin-source"
                     value={pluginSource}
                     placeholder={t(
                       I18nKey.AUTOMATION_SETUP$PLUGIN_SOURCE_PLACEHOLDER,
                     )}
-                    onChange={(event) => setPluginSource(event.target.value)}
+                    onChange={(event) =>
+                      updateField("pluginSource", event.target.value)
+                    }
                     className={formControlFieldClassName}
                   />
                 </Field>
-                <Field label={t(I18nKey.AUTOMATION_SETUP$PLUGIN_REF)}>
+                <Field
+                  label={t(I18nKey.AUTOMATION_SETUP$PLUGIN_REF)}
+                  suffix={agentUpdatedSuffix("pluginRef")}
+                  isStreaming={streamingField === "pluginRef"}
+                >
                   <input
                     data-testid="automation-setup-plugin-ref"
                     value={pluginRef}
                     placeholder={t(
                       I18nKey.AUTOMATION_SETUP$PLUGIN_REF_PLACEHOLDER,
                     )}
-                    onChange={(event) => setPluginRef(event.target.value)}
+                    onChange={(event) =>
+                      updateField("pluginRef", event.target.value)
+                    }
                     className={formControlFieldClassName}
                   />
                 </Field>
@@ -492,14 +822,19 @@ export function AutomationSetupPanel({
             {kind !== "custom" && (
               <Field
                 label={t(I18nKey.COMMON$REPOSITORIES)}
-                suffix={t(I18nKey.COMMON$OPTIONAL)}
+                suffix={
+                  agentUpdatedSuffix("repository") ?? t(I18nKey.COMMON$OPTIONAL)
+                }
+                isStreaming={streamingField === "repository"}
               >
                 <div className="flex items-center gap-2 rounded-xl border border-[var(--oh-border)] bg-base-secondary p-3">
                   <input
                     data-testid="automation-setup-repository"
                     value={repository}
                     placeholder={t(I18nKey.SETUP$REPOSITORY_PLACEHOLDER)}
-                    onChange={(event) => setRepository(event.target.value)}
+                    onChange={(event) =>
+                      updateField("repository", event.target.value)
+                    }
                     className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-tertiary-alt"
                   />
                   <Plus className="size-4 text-[var(--oh-muted)]" aria-hidden />
@@ -511,20 +846,25 @@ export function AutomationSetupPanel({
               <h3 className="text-sm font-semibold text-white">
                 {t(I18nKey.AUTOMATIONS$DETAIL$TRIGGER)}
               </h3>
-              <div className="grid gap-3 md:grid-cols-2">
+              <div
+                className={cn(
+                  "grid gap-3 md:grid-cols-2",
+                  streamingHighlightClassName(streamingField === "triggerKind"),
+                )}
+              >
                 <TriggerCard
                   icon={<CalendarDays className="size-4" aria-hidden />}
                   title={t(I18nKey.AUTOMATION_SETUP$SCHEDULE)}
                   description={t(I18nKey.AUTOMATION_SETUP$SCHEDULE_DESCRIPTION)}
                   selected={triggerKind === "cron"}
-                  onClick={() => setTriggerKind("cron")}
+                  onClick={() => updateField("triggerKind", "cron")}
                 />
                 <TriggerCard
                   icon={<Zap className="size-4" aria-hidden />}
                   title={t(I18nKey.AUTOMATIONS$DETAIL$TRIGGER_EVENT)}
                   description={t(I18nKey.AUTOMATION_SETUP$EVENT_DESCRIPTION)}
                   selected={triggerKind === "event"}
-                  onClick={() => setTriggerKind("event")}
+                  onClick={() => updateField("triggerKind", "event")}
                 />
               </div>
             </section>
@@ -535,19 +875,34 @@ export function AutomationSetupPanel({
                 time={time}
                 timezone={timezone}
                 customSchedule={customSchedule}
-                setFrequency={setFrequency}
-                setTime={setTime}
-                setTimezone={setTimezone}
-                setCustomSchedule={setCustomSchedule}
+                updatedSuffixes={{
+                  frequency: agentUpdatedSuffix("frequency"),
+                  time: agentUpdatedSuffix("time"),
+                  timezone: agentUpdatedSuffix("timezone"),
+                  customSchedule: agentUpdatedSuffix("customSchedule"),
+                }}
+                streamingField={streamingField}
+                setFrequency={(value) => updateField("frequency", value)}
+                setTime={(value) => updateField("time", value)}
+                setTimezone={(value) => updateField("timezone", value)}
+                setCustomSchedule={(value) =>
+                  updateField("customSchedule", value)
+                }
               />
             ) : (
               <EventFields
                 eventSource={eventSource}
                 eventKey={eventKey}
                 eventFilter={eventFilter}
-                setEventSource={setEventSource}
-                setEventKey={setEventKey}
-                setEventFilter={setEventFilter}
+                updatedSuffixes={{
+                  eventSource: agentUpdatedSuffix("eventSource"),
+                  eventKey: agentUpdatedSuffix("eventKey"),
+                  eventFilter: agentUpdatedSuffix("eventFilter"),
+                }}
+                streamingField={streamingField}
+                setEventSource={(value) => updateField("eventSource", value)}
+                setEventKey={(value) => updateField("eventKey", value)}
+                setEventFilter={(value) => updateField("eventFilter", value)}
               />
             )}
 
@@ -556,13 +911,19 @@ export function AutomationSetupPanel({
                 {t(I18nKey.AUTOMATION_SETUP$ADDITIONAL_OPTIONS)}
               </h3>
               {showTimeout ? (
-                <Field label={t(I18nKey.AUTOMATION_SETUP$TIMEOUT_SECONDS)}>
+                <Field
+                  label={t(I18nKey.AUTOMATION_SETUP$TIMEOUT_SECONDS)}
+                  suffix={agentUpdatedSuffix("timeoutSeconds")}
+                  isStreaming={streamingField === "timeoutSeconds"}
+                >
                   <input
                     data-testid="automation-setup-timeout"
                     type="number"
                     min="1"
                     value={timeoutSeconds}
-                    onChange={(event) => setTimeoutSeconds(event.target.value)}
+                    onChange={(event) =>
+                      updateField("timeoutSeconds", event.target.value)
+                    }
                     className={formControlFieldClassName}
                   />
                 </Field>
@@ -570,10 +931,13 @@ export function AutomationSetupPanel({
                 <button
                   type="button"
                   data-testid="automation-setup-add-timeout"
-                  onClick={() => setShowTimeout(true)}
+                  onClick={() => updateField("showTimeout", true)}
                   className={cn(
                     "w-fit rounded-full border border-[var(--oh-border)] px-4 py-2 text-sm text-[var(--oh-muted)] hover:bg-white/5 hover:text-white",
                     formControlTransitionClassName,
+                    streamingHighlightClassName(
+                      streamingField === "showTimeout",
+                    ),
                   )}
                 >
                   {t(I18nKey.AUTOMATION_SETUP$ADD_TIMEOUT)}
@@ -604,14 +968,22 @@ export function AutomationSetupPanel({
 
 function PromptFields({
   prompt,
+  updatedSuffix,
+  isStreaming,
   onPromptChange,
 }: {
   prompt: string;
+  updatedSuffix?: string;
+  isStreaming: boolean;
   onPromptChange: (value: string) => void;
 }) {
   const { t } = useTranslation("openhands");
   return (
-    <Field label={t(I18nKey.AUTOMATIONS$PROMPT)}>
+    <Field
+      label={t(I18nKey.AUTOMATIONS$PROMPT)}
+      suffix={updatedSuffix}
+      isStreaming={isStreaming}
+    >
       <div className="rounded-xl border border-[var(--oh-border)] bg-base-secondary">
         <textarea
           data-testid="automation-setup-prompt"
@@ -637,6 +1009,8 @@ function CustomCodeFields({
   entrypoint,
   setupScriptPath,
   setupScript,
+  updatedSuffixes,
+  streamingField,
   onCodeChange,
   onEntrypointChange,
   onSetupScriptPathChange,
@@ -646,6 +1020,13 @@ function CustomCodeFields({
   entrypoint: string;
   setupScriptPath: string;
   setupScript: string;
+  updatedSuffixes: Partial<
+    Record<
+      "customCode" | "entrypoint" | "setupScriptPath" | "setupScript",
+      string | undefined
+    >
+  >;
+  streamingField: AutomationSetupField | null;
   onCodeChange: (value: string) => void;
   onEntrypointChange: (value: string) => void;
   onSetupScriptPathChange: (value: string) => void;
@@ -655,7 +1036,11 @@ function CustomCodeFields({
   return (
     <div className="flex flex-col gap-4">
       <div className="grid gap-3 md:grid-cols-[2fr_1fr]">
-        <Field label={t(I18nKey.AUTOMATION_SETUP$ENTRYPOINT)}>
+        <Field
+          label={t(I18nKey.AUTOMATION_SETUP$ENTRYPOINT)}
+          suffix={updatedSuffixes.entrypoint}
+          isStreaming={streamingField === "entrypoint"}
+        >
           <input
             data-testid="automation-setup-entrypoint"
             value={entrypoint}
@@ -663,7 +1048,11 @@ function CustomCodeFields({
             className={formControlFieldClassName}
           />
         </Field>
-        <Field label={t(I18nKey.AUTOMATION_SETUP$SETUP_SCRIPT_PATH)}>
+        <Field
+          label={t(I18nKey.AUTOMATION_SETUP$SETUP_SCRIPT_PATH)}
+          suffix={updatedSuffixes.setupScriptPath}
+          isStreaming={streamingField === "setupScriptPath"}
+        >
           <input
             data-testid="automation-setup-setup-script-path"
             value={setupScriptPath}
@@ -672,7 +1061,11 @@ function CustomCodeFields({
           />
         </Field>
       </div>
-      <Field label={t(I18nKey.AUTOMATION_SETUP$PYTHON_CODE)}>
+      <Field
+        label={t(I18nKey.AUTOMATION_SETUP$PYTHON_CODE)}
+        suffix={updatedSuffixes.customCode}
+        isStreaming={streamingField === "customCode"}
+      >
         <textarea
           data-testid="automation-setup-custom-code"
           rows={12}
@@ -685,7 +1078,11 @@ function CustomCodeFields({
           )}
         />
       </Field>
-      <Field label={t(I18nKey.AUTOMATION_SETUP$SETUP_SCRIPT)}>
+      <Field
+        label={t(I18nKey.AUTOMATION_SETUP$SETUP_SCRIPT)}
+        suffix={updatedSuffixes.setupScript}
+        isStreaming={streamingField === "setupScript"}
+      >
         <textarea
           data-testid="automation-setup-setup-script"
           rows={4}
@@ -707,6 +1104,8 @@ function ScheduleFields({
   time,
   timezone,
   customSchedule,
+  updatedSuffixes,
+  streamingField,
   setFrequency,
   setTime,
   setTimezone,
@@ -716,18 +1115,36 @@ function ScheduleFields({
   time: string;
   timezone: string;
   customSchedule: string;
+  updatedSuffixes: Partial<
+    Record<
+      "frequency" | "time" | "timezone" | "customSchedule",
+      string | undefined
+    >
+  >;
+  streamingField: AutomationSetupField | null;
   setFrequency: (value: Frequency) => void;
   setTime: (value: string) => void;
   setTimezone: (value: string) => void;
   setCustomSchedule: (value: string) => void;
 }) {
   const { t } = useTranslation("openhands");
+  const atUpdatedSuffix = updatedSuffixes.time ?? updatedSuffixes.timezone;
   return (
     <section className="flex flex-col gap-3">
-      <h3 className="text-sm font-semibold text-white">
-        {t(I18nKey.AUTOMATION_SETUP$FREQUENCY)}
+      <h3 className="flex items-center gap-2 text-sm font-semibold text-white">
+        <span>{t(I18nKey.AUTOMATION_SETUP$FREQUENCY)}</span>
+        {updatedSuffixes.frequency && (
+          <span className="text-xs font-normal text-[var(--oh-muted)]">
+            {updatedSuffixes.frequency}
+          </span>
+        )}
       </h3>
-      <div className="grid grid-cols-2 gap-1 rounded-xl bg-base-secondary p-1 md:grid-cols-6">
+      <div
+        className={cn(
+          "grid grid-cols-2 gap-1 rounded-xl bg-base-secondary p-1 md:grid-cols-6",
+          streamingHighlightClassName(streamingField === "frequency"),
+        )}
+      >
         {FREQUENCIES.map((item) => (
           <button
             key={item}
@@ -748,31 +1165,59 @@ function ScheduleFields({
         ))}
       </div>
       {frequency === "custom" ? (
-        <input
-          data-testid="automation-setup-custom-schedule"
-          value={customSchedule}
-          onChange={(event) => setCustomSchedule(event.target.value)}
-          className={formControlFieldClassName}
-        />
+        <Field
+          label={t(I18nKey.AUTOMATION_SETUP$TYPE_CUSTOM)}
+          suffix={updatedSuffixes.customSchedule}
+          isStreaming={streamingField === "customSchedule"}
+        >
+          <input
+            data-testid="automation-setup-custom-schedule"
+            value={customSchedule}
+            onChange={(event) => setCustomSchedule(event.target.value)}
+            className={formControlFieldClassName}
+          />
+        </Field>
       ) : (
-        <div className="grid gap-3 md:grid-cols-[16rem_1fr]">
-          <Field label={t(I18nKey.AUTOMATION_SETUP$AT)} horizontal>
-            <div className="relative">
-              <input
-                data-testid="automation-setup-time"
-                type="time"
-                value={time}
-                onChange={(event) => setTime(event.target.value)}
-                className={formControlFieldClassName}
-              />
-              <Clock3
-                className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-[var(--oh-muted)]"
-                aria-hidden
-              />
-            </div>
-          </Field>
-          <div className="relative">
+        <div
+          data-testid="automation-setup-at-row"
+          className="flex flex-col gap-2 md:flex-row md:items-center"
+        >
+          <span className="shrink-0 text-sm font-semibold text-white">
+            {t(I18nKey.AUTOMATION_SETUP$AT)}
+          </span>
+          <div
+            data-streaming-active={
+              streamingField === "time" ? "true" : undefined
+            }
+            className={cn(
+              "relative md:w-36",
+              streamingHighlightClassName(streamingField === "time"),
+            )}
+          >
             <input
+              aria-label={t(I18nKey.AUTOMATION_SETUP$AT)}
+              data-testid="automation-setup-time"
+              type="time"
+              value={time}
+              onChange={(event) => setTime(event.target.value)}
+              className={formControlFieldClassName}
+            />
+            <Clock3
+              className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-[var(--oh-muted)]"
+              aria-hidden
+            />
+          </div>
+          <div
+            data-streaming-active={
+              streamingField === "timezone" ? "true" : undefined
+            }
+            className={cn(
+              "relative min-w-0 flex-1 md:max-w-96",
+              streamingHighlightClassName(streamingField === "timezone"),
+            )}
+          >
+            <input
+              aria-label={t(I18nKey.AUTOMATIONS$TIMEZONE)}
               data-testid="automation-setup-timezone"
               value={timezone}
               onChange={(event) => setTimezone(event.target.value)}
@@ -783,6 +1228,11 @@ function ScheduleFields({
               aria-hidden
             />
           </div>
+          {atUpdatedSuffix && (
+            <span className="shrink-0 text-xs font-normal text-[var(--oh-muted)]">
+              {atUpdatedSuffix}
+            </span>
+          )}
         </div>
       )}
     </section>
@@ -793,6 +1243,8 @@ function EventFields({
   eventSource,
   eventKey,
   eventFilter,
+  updatedSuffixes,
+  streamingField,
   setEventSource,
   setEventKey,
   setEventFilter,
@@ -800,6 +1252,10 @@ function EventFields({
   eventSource: string;
   eventKey: string;
   eventFilter: string;
+  updatedSuffixes: Partial<
+    Record<"eventSource" | "eventKey" | "eventFilter", string | undefined>
+  >;
+  streamingField: AutomationSetupField | null;
   setEventSource: (value: string) => void;
   setEventKey: (value: string) => void;
   setEventFilter: (value: string) => void;
@@ -807,7 +1263,11 @@ function EventFields({
   const { t } = useTranslation("openhands");
   return (
     <section className="grid gap-3 md:grid-cols-2">
-      <Field label={t(I18nKey.AUTOMATION_SETUP$EVENT_SOURCE)}>
+      <Field
+        label={t(I18nKey.AUTOMATION_SETUP$EVENT_SOURCE)}
+        suffix={updatedSuffixes.eventSource}
+        isStreaming={streamingField === "eventSource"}
+      >
         <input
           data-testid="automation-setup-event-source"
           value={eventSource}
@@ -815,7 +1275,11 @@ function EventFields({
           className={formControlFieldClassName}
         />
       </Field>
-      <Field label={t(I18nKey.AUTOMATION_SETUP$EVENT_KEY)}>
+      <Field
+        label={t(I18nKey.AUTOMATION_SETUP$EVENT_KEY)}
+        suffix={updatedSuffixes.eventKey}
+        isStreaming={streamingField === "eventKey"}
+      >
         <input
           data-testid="automation-setup-event-key"
           value={eventKey}
@@ -826,7 +1290,8 @@ function EventFields({
       <div className="md:col-span-2">
         <Field
           label={t(I18nKey.AUTOMATION_SETUP$EVENT_FILTER)}
-          suffix={t(I18nKey.COMMON$OPTIONAL)}
+          suffix={updatedSuffixes.eventFilter ?? t(I18nKey.COMMON$OPTIONAL)}
+          isStreaming={streamingField === "eventFilter"}
         >
           <input
             data-testid="automation-setup-event-filter"
@@ -844,16 +1309,23 @@ function Field({
   label,
   suffix,
   horizontal = false,
+  isStreaming = false,
   children,
 }: {
   label: string;
   suffix?: string;
   horizontal?: boolean;
+  isStreaming?: boolean;
   children: ReactNode;
 }) {
   return (
     <label
-      className={cn("flex gap-2", horizontal ? "items-center" : "flex-col")}
+      data-streaming-active={isStreaming ? "true" : undefined}
+      className={cn(
+        "flex gap-2",
+        horizontal ? "items-center" : "flex-col",
+        streamingHighlightClassName(isStreaming),
+      )}
     >
       <span className="flex items-center gap-2 text-sm font-semibold text-white">
         {label}

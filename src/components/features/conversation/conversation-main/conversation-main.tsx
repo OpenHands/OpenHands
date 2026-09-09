@@ -13,6 +13,7 @@ import { AutomationSetupPanel } from "#/components/features/automations/setup/au
 import {
   clearAutomationSetupDraft,
   getAutomationSetupDraft,
+  subscribeAutomationSetupDraft,
   type AutomationSetupDraft,
 } from "#/api/automation-setup-draft-store";
 import { useConversationId } from "#/hooks/use-conversation-id";
@@ -66,6 +67,11 @@ export function ConversationMain() {
 
   useEffect(() => {
     setAutomationSetupDraftState(getAutomationSetupDraft(conversationId));
+    if (!conversationId) return undefined;
+    return subscribeAutomationSetupDraft(
+      conversationId,
+      setAutomationSetupDraftState,
+    );
   }, [conversationId]);
 
   useEffect(() => {
@@ -263,6 +269,7 @@ export function ConversationMain() {
                 {automationSetupDraft ? (
                   <AutomationSetupPanel
                     draft={automationSetupDraft}
+                    conversationId={conversationId}
                     toolbarPortal={automationToolbarElement}
                     showInlineHeader={false}
                     onClose={closeAutomationSetup}
