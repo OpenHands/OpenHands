@@ -1,9 +1,9 @@
 # Using ACP agents
 
 Agent Canvas can drive your conversations with the built-in **OpenHands** agent or
-with an external **ACP agent** — Claude Code, Codex, or Gemini CLI. This guide
-explains what ACP agents are, how to onboard one, and how to switch agents or
-models later.
+with an external **ACP agent** — Claude Code, Codex, Gemini CLI, or OpenCode.
+This guide explains what ACP agents are, how to onboard one, and how to switch
+agents or models later.
 
 ## What is an ACP agent?
 
@@ -43,6 +43,7 @@ changing a provider happens upstream in the SDK, not here.
 | **Claude Code** | `npx -y @agentclientprotocol/claude-agent-acp` |
 | **Codex** | `npx -y @agentclientprotocol/codex-acp` |
 | **Gemini CLI** | `npx -y @google/gemini-cli --acp` |
+| **OpenCode** | `npx -y --prefer-offline opencode-ai acp` |
 
 See [Authentication](#authentication) for how each one authenticates.
 
@@ -69,11 +70,12 @@ needed instead.
 | **Claude Code** | A Claude Code login (Pro/Max), from Claude Code's own credential store: the **macOS Keychain**, or `~/.claude/.credentials.json` on Linux | `ANTHROPIC_API_KEY` *(onboarding)* |
 | **Codex** | A ChatGPT login (`codex login`) cached at `~/.codex/auth.json` | `OPENAI_API_KEY` *(onboarding)* |
 | **Gemini CLI** | Your Google login (`gemini`/`gemini --acp`) cached at `~/.gemini/oauth_creds.json` | `GEMINI_API_KEY` *(onboarding)* |
+| **OpenCode** | An OpenCode login (`opencode auth login`) cached at `~/.local/share/opencode/auth.json` | `OPENCODE_API_KEY` *(onboarding)* |
 
-All three collect an *optional* API key (+ base URL) in onboarding. As noted
-above, **a subscription / OAuth login takes priority over an API key** — when the
-provider's CLI is signed in, a key set in the environment is not used. Verified
-per provider:
+Each provider collects an *optional* API key (+ base URL where one exists) in
+onboarding. As noted above, **a subscription / OAuth login takes priority over
+an API key** — when the provider's CLI is signed in, a key set in the
+environment is not used. Verified per provider:
 
 - **Codex** — `codex login status` keeps reporting the ChatGPT login even with
   `OPENAI_API_KEY` set.
@@ -97,8 +99,8 @@ override, not needed for normal use.
 
 First-time users get a four-step onboarding modal. To onboard an ACP agent:
 
-1. **Choose agent** — pick Claude Code, Codex, or Gemini CLI instead of
-   OpenHands. The choice is saved immediately to your backend's settings.
+1. **Choose agent** — pick Claude Code, Codex, Gemini CLI, or OpenCode instead
+   of OpenHands. The choice is saved immediately to your backend's settings.
 2. **Check backend** — confirms Agent Canvas can reach the Agent Server.
 3. **Set up credentials** — enter the provider's credentials. Beyond the API
    key (+ optional base URL), this step also collects the credentials a
@@ -217,8 +219,8 @@ grouping isolation is separate (agent-canvas#1016).
 Open **Settings → Agent** at any time:
 
 - **Agent** — switch between **OpenHands** and **ACP**.
-- **Preset** — pick a built-in provider (Claude Code, Codex, Gemini CLI) or
-  **Custom** to point at any other ACP server.
+- **Preset** — pick a built-in provider (Claude Code, Codex, Gemini CLI,
+  OpenCode) or **Custom** to point at any other ACP server.
 - **Command** — the command line used to spawn the subprocess. Selecting a preset
   fills this in; editing it to match another preset re-detects that provider.
   API keys are *not* entered here — they live in the Secrets panel.
