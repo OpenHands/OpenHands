@@ -193,7 +193,8 @@ describe("extraResources mode switch", () => {
       { from: "resources/node-arm64/", to: "node-arm64/", filter: ["**/*"] },
       { from: "resources/node-x64/", to: "node-x64/", filter: ["**/*"] },
     ]);
-    expect(cfg.mac.x64ArchFiles).toBe("**/{bin,node}-{arm64,x64}/**");
+    expect(cfg.mac).toBeDefined();
+    expect(cfg.mac!.x64ArchFiles).toBe("**/{bin,node}-{arm64,x64}/**");
   });
 });
 
