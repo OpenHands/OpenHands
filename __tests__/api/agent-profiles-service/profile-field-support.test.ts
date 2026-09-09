@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   MIN_AGENT_SERVER_VERSION_FOR_PROFILE_SWITCH_LLM_TOOL,
+  MIN_AGENT_SERVER_VERSION_FOR_PROFILE_TOOLS,
   agentProfileSupportsSwitchLlmTool,
+  agentProfileSupportsTools,
 } from "#/api/agent-profiles-service/profile-field-support";
 
 const mockGetCachedAgentServerVersion = vi.fn<() => string | null>();
@@ -55,5 +57,33 @@ describe("agentProfileSupportsSwitchLlmTool", () => {
   it("assumes support when the reported version does not parse", () => {
     mockGetCachedAgentServerVersion.mockReturnValue("main");
     expect(agentProfileSupportsSwitchLlmTool()).toBe(true);
+  });
+});
+
+describe("agentProfileSupportsTools", () => {
+  beforeEach(() => {
+    mockGetCachedAgentServerVersion.mockReset();
+  });
+
+  it("pins the gate to the release that added the profile field", () => {
+    expect(MIN_AGENT_SERVER_VERSION_FOR_PROFILE_TOOLS).toBe("1.31.2");
+  });
+
+  it.each(["1.29.0", "1.31.0", "1.31.1"])(
+    "reports no support on %s, where a posted `tools` key would 422 the save",
+    (version) => {
+      mockGetCachedAgentServerVersion.mockReturnValue(version);
+      expect(agentProfileSupportsTools()).toBe(false);
+    },
+  );
+
+  it.each(["1.31.2", "1.36.1", "2.0.0"])("reports support on %s", (version) => {
+    mockGetCachedAgentServerVersion.mockReturnValue(version);
+    expect(agentProfileSupportsTools()).toBe(true);
+  });
+
+  it("assumes support when no version is cached (cloud backends)", () => {
+    mockGetCachedAgentServerVersion.mockReturnValue(null);
+    expect(agentProfileSupportsTools()).toBe(true);
   });
 });

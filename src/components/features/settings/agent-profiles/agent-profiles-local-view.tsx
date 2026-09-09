@@ -57,11 +57,16 @@ function toAgentSettingsOverride(
   const switchLlmToolEnabled =
     (profile as { enable_switch_llm_tool?: boolean }).enable_switch_llm_tool ??
     true;
+  // `tools` rides untyped for the same reason as `enable_switch_llm_tool`: the
+  // pinned ts-client's profile model predates it.
+  const storedTools = (profile as { tools?: unknown }).tools ?? null;
   return {
     agent_kind: "openhands",
     enable_sub_agents: profile.enable_sub_agents,
     enable_switch_llm_tool: switchLlmToolEnabled,
     tool_concurrency_limit: profile.tool_concurrency_limit,
+    system_message_suffix: profile.system_message_suffix ?? "",
+    tools: storedTools as SettingsValue,
   };
 }
 

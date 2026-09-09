@@ -3,7 +3,10 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { AgentSettingsScreen } from "#/routes/agent-settings";
+import {
+  AgentSettingsScreen,
+  type AgentSettingsSaveControl,
+} from "#/routes/agent-settings";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { SecretsService } from "#/api/secrets-service";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
@@ -20,9 +23,21 @@ vi.mock("#/hooks/query/use-acp-auth-status", () => ({
 // model, which gained the field later than the settings schema did. Stub the
 // probe so both sides of that gate are reachable without a live server.
 const profileSupportsSwitchLlmToolMock = vi.hoisted(() => vi.fn(() => true));
+const profileSupportsToolsMock = vi.hoisted(() => vi.fn(() => true));
 vi.mock("#/api/agent-profiles-service/profile-field-support", () => ({
   agentProfileSupportsSwitchLlmTool: () => profileSupportsSwitchLlmToolMock(),
+  agentProfileSupportsTools: () => profileSupportsToolsMock(),
 }));
+
+// The tool picker's catalog comes from the backend's advertised `usable_tools`;
+// stub the probe so these tests don't need a live `/server_info`. `null` means
+// "advertises none", which falls back to the described tool set.
+const usableToolsMock = vi.hoisted(() => vi.fn<() => string[] | null>());
+vi.mock("#/api/agent-server-compatibility", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("#/api/agent-server-compatibility")>();
+  return { ...actual, getAgentServerUsableTools: () => usableToolsMock() };
+});
 
 // Observe save toasts so we can assert the single Save shows one confirmation,
 // not one per persisted thing (agent spec + credentials).
@@ -81,6 +96,8 @@ describe("AgentSettingsScreen", () => {
     toastMocks.error.mockClear();
     toastMocks.warning.mockClear();
     profileSupportsSwitchLlmToolMock.mockReturnValue(true);
+    profileSupportsToolsMock.mockReturnValue(true);
+    usableToolsMock.mockReturnValue(null);
   });
 
   it("renders the agent type selector defaulting to OpenHands with sub-agents toggle", async () => {
@@ -1058,5 +1075,175 @@ describe("AgentSettingsScreen", () => {
     expect(
       await screen.findByTestId("settings-acp-auth-detected"),
     ).toBeInTheDocument();
+  });
+
+  describe("profile scope fields (embedded editor only)", () => {
+    function seedOpenHandsSettings() {
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+        buildSettings({
+          agent_settings: {
+            ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+            agent_kind: "openhands",
+          },
+        }),
+      );
+    }
+
+    it("hides both controls outside the profile editor", async () => {
+      seedOpenHandsSettings();
+      renderAgentSettingsScreen();
+      await screen.findByTestId("agent-settings-screen");
+
+      expect(
+        screen.queryByTestId("agent-settings-instructions"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("agent-settings-tools-mode"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("seeds both controls from the profile and reports them to the save control", async () => {
+      seedOpenHandsSettings();
+      let control: AgentSettingsSaveControl | null = null;
+      renderAgentSettingsScreen({
+        embedded: true,
+        agentSettingsOverride: {
+          agent_kind: "openhands",
+          enable_sub_agents: false,
+          system_message_suffix: "You never edit files.",
+          tools: [{ name: "glob", params: {} }],
+        },
+        onSaveControlChange: (next) => {
+          control = next;
+        },
+      });
+      await screen.findByTestId("agent-settings-screen");
+
+      expect(screen.getByTestId("agent-settings-instructions")).toHaveValue(
+        "You never edit files.",
+      );
+      // Only the stored tool is on; the rest of the catalog is offered but off.
+      expect(screen.getByTestId("agent-settings-tool-glob")).toBeChecked();
+      expect(
+        screen.getByTestId("agent-settings-tool-terminal"),
+      ).not.toBeChecked();
+
+      const fields = control!.buildAgentProfileFields();
+      expect(fields).toMatchObject({
+        agent_kind: "openhands",
+        system_message_suffix: "You never edit files.",
+        tools: [{ name: "glob", params: {} }],
+      });
+    });
+
+    it("shows the standard set read-only and persists it as null", async () => {
+      seedOpenHandsSettings();
+      let control: AgentSettingsSaveControl | null = null;
+      renderAgentSettingsScreen({
+        embedded: true,
+        agentSettingsOverride: {
+          agent_kind: "openhands",
+          enable_sub_agents: false,
+          tools: null,
+        },
+        onSaveControlChange: (next) => {
+          control = next;
+        },
+      });
+      await screen.findByTestId("agent-settings-screen");
+
+      const terminal = screen.getByTestId("agent-settings-tool-terminal");
+      expect(terminal).toBeChecked();
+      expect(terminal).toBeDisabled();
+      // Browser is absent from the SDK default but injected by the server on a
+      // `tools: null` launch, so the preview has to show it.
+      expect(
+        screen.getByTestId("agent-settings-tool-browser_tool_set"),
+      ).toBeChecked();
+      expect(control!.buildAgentProfileFields()).toMatchObject({ tools: null });
+    });
+
+    it("seeds a switch to custom from the standard set instead of an empty agent", async () => {
+      seedOpenHandsSettings();
+      let control: AgentSettingsSaveControl | null = null;
+      renderAgentSettingsScreen({
+        embedded: true,
+        agentSettingsOverride: {
+          agent_kind: "openhands",
+          enable_sub_agents: false,
+          tools: null,
+        },
+        onSaveControlChange: (next) => {
+          control = next;
+        },
+      });
+      await screen.findByTestId("agent-settings-screen");
+
+      const user = userEvent.setup();
+      await user.click(screen.getByTestId("agent-settings-tools-mode"));
+      await user.click(
+        await screen.findByRole("option", {
+          name: "SETTINGS$AGENT_PROFILE_TOOLS_CUSTOM",
+        }),
+      );
+
+      await waitFor(() => {
+        const fields = control!.buildAgentProfileFields();
+        expect(
+          (fields as { tools?: { name: string }[] }).tools?.map((t) => t.name),
+        ).toEqual([
+          "terminal",
+          "file_editor",
+          "task_tracker",
+          "browser_tool_set",
+        ]);
+      });
+    });
+
+    it("omits the tools key on a backend whose profile model predates it", async () => {
+      profileSupportsToolsMock.mockReturnValue(false);
+      seedOpenHandsSettings();
+      let control: AgentSettingsSaveControl | null = null;
+      renderAgentSettingsScreen({
+        embedded: true,
+        agentSettingsOverride: {
+          agent_kind: "openhands",
+          enable_sub_agents: false,
+        },
+        onSaveControlChange: (next) => {
+          control = next;
+        },
+      });
+      await screen.findByTestId("agent-settings-screen");
+
+      expect(
+        screen.queryByTestId("agent-settings-tools-mode"),
+      ).not.toBeInTheDocument();
+      expect(control!.buildAgentProfileFields()).not.toHaveProperty("tools");
+    });
+
+    it("restricts the catalog to what the backend advertises, keeping stored extras", async () => {
+      usableToolsMock.mockReturnValue(["terminal", "grep"]);
+      seedOpenHandsSettings();
+      renderAgentSettingsScreen({
+        embedded: true,
+        agentSettingsOverride: {
+          agent_kind: "openhands",
+          enable_sub_agents: false,
+          tools: [{ name: "retired_tool", params: {} }],
+        },
+      });
+      await screen.findByTestId("agent-settings-screen");
+
+      expect(
+        screen.getByTestId("agent-settings-tool-terminal"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("agent-settings-tool-file_editor"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByTestId("agent-settings-tool-retired_tool"),
+      ).toBeChecked();
+    });
   });
 });

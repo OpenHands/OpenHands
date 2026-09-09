@@ -163,6 +163,15 @@ export function isAgentServerToolAvailable(toolName: string) {
   return availableTools.includes(toolName);
 }
 
+/**
+ * Tool names the active backend advertises as runnable, or `null` when it
+ * advertises none — cloud serves no `/server_info`, so callers must treat
+ * `null` as "unknown", not "none".
+ */
+export function getAgentServerUsableTools(): string[] | null {
+  return getAdvertisedTools(cachedAgentServerInfo);
+}
+
 export function isSdkHttpError(error: unknown) {
   return (
     error instanceof Error &&

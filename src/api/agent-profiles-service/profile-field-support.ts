@@ -39,3 +39,24 @@ export function agentProfileSupportsSwitchLlmTool(): boolean {
   if (comparison === null) return true;
   return comparison >= 0;
 }
+
+/**
+ * `tools` reached `OpenHandsAgentProfile` in software-agent-sdk#3968, first
+ * released in agent-server 1.31.2 — the same release that taught
+ * `_resolve_agent_from_profile` to skip its browser injection for a profile
+ * that sets the field. Older servers in the supported range are `extra="forbid"`
+ * on `AgentProfileBase`, so posting the key 422s and loses the whole save.
+ */
+export const MIN_AGENT_SERVER_VERSION_FOR_PROFILE_TOOLS = "1.31.2";
+
+/** Whether the active backend's agent-profile model accepts `tools`. */
+export function agentProfileSupportsTools(): boolean {
+  const version = getCachedAgentServerVersion();
+  if (!version) return true;
+  const comparison = compareAgentServerVersions(
+    version,
+    MIN_AGENT_SERVER_VERSION_FOR_PROFILE_TOOLS,
+  );
+  if (comparison === null) return true;
+  return comparison >= 0;
+}

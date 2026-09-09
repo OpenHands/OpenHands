@@ -1,0 +1,184 @@
+import { I18nKey } from "#/i18n/declaration";
+import {
+  CANVAS_UI_CLIENT_TOOL_NAME,
+  LEGACY_CANVAS_UI_TOOL_NAME,
+} from "#/constants/canvas-ui";
+
+/** Tool spec as it is stored on an agent profile and sent on the wire. */
+export interface ProfileToolSpec {
+  name: string;
+  params: Record<string, unknown>;
+}
+
+/** Picker state for a profile's `tools` field. */
+export type ProfileToolsMode = "standard" | "custom";
+
+/**
+ * The SDK's deterministic default tool set (`DEFAULT_EXEC_TOOL_NAMES`), used
+ * whenever a profile carries no explicit `tools`.
+ */
+export const DEFAULT_TOOL_NAMES = [
+  "terminal",
+  "file_editor",
+  "task_tracker",
+] as const;
+
+export const BROWSER_TOOL_NAME = "browser_tool_set";
+
+/**
+ * Sub-agent delegation. Kept out of the picker: `enable_sub_agents` is the
+ * single control for it, and `create_agent` honours that flag only while
+ * `tools` is unset, so the save re-adds this name for an explicit list.
+ */
+export const SUB_AGENT_TOOL_NAME = "task_tool_set";
+
+/**
+ * Names a backend advertises that a profile must not select, because something
+ * else already decides whether the agent gets them:
+ *
+ * - built-in SDK tools ride `include_default_tools` on every agent, and
+ *   `SwitchLLMTool` is what the LLM-switching toggle governs;
+ * - `task` / `task_tool_set` are delegation, owned by `enable_sub_agents`;
+ * - the Canvas UI tools are client-defined and injected at launch.
+ */
+const NON_SELECTABLE_TOOL_NAMES = new Set([
+  "FinishTool",
+  "ThinkTool",
+  "InvokeSkillTool",
+  "SwitchLLMTool",
+  "VisionInspectTool",
+  "task",
+  SUB_AGENT_TOOL_NAME,
+  LEGACY_CANVAS_UI_TOOL_NAME,
+  CANVAS_UI_CLIENT_TOOL_NAME,
+]);
+
+/** Tools shown first in the picker, with a description; others follow by name. */
+export const KNOWN_PROFILE_TOOL_DESCRIPTIONS: Record<string, I18nKey> = {
+  terminal: I18nKey.SETTINGS$TOOL_DESC_TERMINAL,
+  file_editor: I18nKey.SETTINGS$TOOL_DESC_FILE_EDITOR,
+  task_tracker: I18nKey.SETTINGS$TOOL_DESC_TASK_TRACKER,
+  glob: I18nKey.SETTINGS$TOOL_DESC_GLOB,
+  grep: I18nKey.SETTINGS$TOOL_DESC_GREP,
+  [BROWSER_TOOL_NAME]: I18nKey.SETTINGS$TOOL_DESC_BROWSER,
+};
+
+const KNOWN_PROFILE_TOOL_NAMES = Object.keys(KNOWN_PROFILE_TOOL_DESCRIPTIONS);
+
+function isUsable(name: string, usableTools: string[] | null): boolean {
+  return usableTools === null || usableTools.includes(name);
+}
+
+/**
+ * Ordered tool names the picker offers: the described tools this backend can
+ * run, then anything else it advertises, then names the stored profile already
+ * carries.
+ *
+ * A backend that advertises no `usable_tools` (cloud serves no `/server_info`)
+ * falls back to the described set. Stored names are appended even when the
+ * backend does not advertise them, so an edit-save can't silently drop tools a
+ * profile was given through the API. Names in
+ * {@link NON_SELECTABLE_TOOL_NAMES} never appear.
+ */
+export function buildProfileToolCatalog({
+  usableTools,
+  storedToolNames = [],
+}: {
+  usableTools: string[] | null;
+  storedToolNames?: string[];
+}): string[] {
+  const catalog: string[] = [];
+  const push = (name: string) => {
+    if (!NON_SELECTABLE_TOOL_NAMES.has(name) && !catalog.includes(name)) {
+      catalog.push(name);
+    }
+  };
+  KNOWN_PROFILE_TOOL_NAMES.filter((name) =>
+    isUsable(name, usableTools),
+  ).forEach(push);
+  [...(usableTools ?? [])].sort().forEach(push);
+  storedToolNames.forEach(push);
+  return catalog;
+}
+
+/**
+ * What a `tools: null` profile actually launches with — shown as the read-only
+ * preview of "standard".
+ *
+ * Browser is absent from the SDK default because it is environment-dependent;
+ * the agent-server appends it on a profile launch when it is usable and the
+ * profile sets no explicit `tools`. Mirrored here so the preview matches.
+ */
+export function standardProfileToolNames({
+  usableTools,
+  subAgentsEnabled,
+}: {
+  usableTools: string[] | null;
+  subAgentsEnabled: boolean;
+}): string[] {
+  const names: string[] = [...DEFAULT_TOOL_NAMES];
+  if (isUsable(BROWSER_TOOL_NAME, usableTools)) names.push(BROWSER_TOOL_NAME);
+  if (subAgentsEnabled && isUsable(SUB_AGENT_TOOL_NAME, usableTools)) {
+    names.push(SUB_AGENT_TOOL_NAME);
+  }
+  return names;
+}
+
+function toRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+/**
+ * Read a stored profile's `tools` into picker state.
+ *
+ * `params` keeps every stored spec's params — including the sub-agent tool's,
+ * which the picker hides — so a round-trip through the editor preserves them.
+ * Anything that is not an array of named specs reads as "standard", the value
+ * the field defaults to.
+ */
+export function readProfileTools(value: unknown): {
+  mode: ProfileToolsMode;
+  selected: string[];
+  params: Record<string, Record<string, unknown>>;
+} {
+  if (!Array.isArray(value)) {
+    return { mode: "standard", selected: [], params: {} };
+  }
+  const selected: string[] = [];
+  const params: Record<string, Record<string, unknown>> = {};
+  value.forEach((entry) => {
+    const name = (entry as { name?: unknown })?.name;
+    if (typeof name !== "string" || name in params) return;
+    params[name] = toRecord((entry as { params?: unknown }).params);
+    if (name !== SUB_AGENT_TOOL_NAME) selected.push(name);
+  });
+  return { mode: "custom", selected, params };
+}
+
+/**
+ * Build the `tools` value to persist: `null` for standard, otherwise the
+ * selection plus the sub-agent tool when that toggle is on and the backend can
+ * run it.
+ */
+export function buildProfileToolsValue({
+  mode,
+  selected,
+  params = {},
+  subAgentsEnabled,
+  usableTools,
+}: {
+  mode: ProfileToolsMode;
+  selected: string[];
+  params?: Record<string, Record<string, unknown>>;
+  subAgentsEnabled: boolean;
+  usableTools: string[] | null;
+}): ProfileToolSpec[] | null {
+  if (mode === "standard") return null;
+  const names = selected.filter((name) => name !== SUB_AGENT_TOOL_NAME);
+  if (subAgentsEnabled && isUsable(SUB_AGENT_TOOL_NAME, usableTools)) {
+    names.push(SUB_AGENT_TOOL_NAME);
+  }
+  return names.map((name) => ({ name, params: params[name] ?? {} }));
+}

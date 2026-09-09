@@ -14,6 +14,12 @@ const baseAcp = {
   switchLlmToolSupportedOnProfile: true,
   toolConcurrencyField: undefined,
   toolConcurrency: "",
+  instructions: "",
+  toolsMode: "standard" as const,
+  selectedTools: [] as string[],
+  storedToolParams: {} as Record<string, Record<string, unknown>>,
+  usableTools: null,
+  toolsSupportedOnProfile: true,
 };
 
 const switchLlmToolField: SettingsFieldSchema = {
@@ -104,12 +110,20 @@ describe("buildAgentProfileFields — OpenHands", () => {
     switchLlmToolSupportedOnProfile: true,
     toolConcurrencyField: undefined,
     toolConcurrency: "",
+    instructions: "",
+    toolsMode: "standard" as const,
+    selectedTools: [] as string[],
+    storedToolParams: {} as Record<string, Record<string, unknown>>,
+    usableTools: null as string[] | null,
+    toolsSupportedOnProfile: true,
   };
 
   it("passes through enable_sub_agents and omits concurrency when the field is absent", () => {
     expect(buildAgentProfileFields(baseOh)).toEqual({
       agent_kind: "openhands",
       enable_sub_agents: true,
+      system_message_suffix: null,
+      tools: null,
     });
   });
 
@@ -195,5 +209,124 @@ describe("buildAgentProfileFields — OpenHands", () => {
         toolConcurrency: "abc",
       }),
     ).toThrow();
+  });
+});
+
+describe("buildAgentProfileFields — custom instructions", () => {
+  const baseOh = {
+    isAcp: false,
+    selectedPreset: "custom",
+    isDefaultProviderCommand: false,
+    commandTokens: [],
+    acpModel: "",
+    subAgentsEnabled: false,
+    switchLlmToolField: undefined,
+    switchLlmToolEnabled: false,
+    switchLlmToolSupportedOnProfile: true,
+    toolConcurrencyField: undefined,
+    toolConcurrency: "",
+    instructions: "",
+    toolsMode: "standard" as const,
+    selectedTools: [] as string[],
+    storedToolParams: {} as Record<string, Record<string, unknown>>,
+    usableTools: null as string[] | null,
+    toolsSupportedOnProfile: true,
+  };
+
+  it("persists the trimmed suffix", () => {
+    const fields = buildAgentProfileFields({
+      ...baseOh,
+      instructions: "  You never edit files.  ",
+    });
+    if (fields.agent_kind === "openhands") {
+      expect(fields.system_message_suffix).toBe("You never edit files.");
+    }
+  });
+
+  it("clears the suffix with null rather than an empty string", () => {
+    const fields = buildAgentProfileFields({ ...baseOh, instructions: "   " });
+    if (fields.agent_kind === "openhands") {
+      expect(fields.system_message_suffix).toBeNull();
+    }
+  });
+
+  it("never emits either field on the ACP branch", () => {
+    const fields = buildAgentProfileFields({
+      ...baseOh,
+      isAcp: true,
+      instructions: "ignored",
+      toolsMode: "custom",
+      selectedTools: ["terminal"],
+    });
+    expect(fields).not.toHaveProperty("system_message_suffix");
+    expect(fields).not.toHaveProperty("tools");
+  });
+});
+
+describe("buildAgentProfileFields — tools", () => {
+  const baseOh = {
+    isAcp: false,
+    selectedPreset: "custom",
+    isDefaultProviderCommand: false,
+    commandTokens: [],
+    acpModel: "",
+    subAgentsEnabled: false,
+    switchLlmToolField: undefined,
+    switchLlmToolEnabled: false,
+    switchLlmToolSupportedOnProfile: true,
+    toolConcurrencyField: undefined,
+    toolConcurrency: "",
+    instructions: "",
+    toolsMode: "standard" as const,
+    selectedTools: [] as string[],
+    storedToolParams: {} as Record<string, Record<string, unknown>>,
+    usableTools: null as string[] | null,
+    toolsSupportedOnProfile: true,
+  };
+
+  it("emits null for the standard set", () => {
+    const fields = buildAgentProfileFields(baseOh);
+    if (fields.agent_kind === "openhands") {
+      expect(fields.tools).toBeNull();
+    }
+  });
+
+  it("emits the selection for a custom set", () => {
+    const fields = buildAgentProfileFields({
+      ...baseOh,
+      toolsMode: "custom",
+      selectedTools: ["glob", "grep"],
+    });
+    if (fields.agent_kind === "openhands") {
+      expect(fields.tools).toEqual([
+        { name: "glob", params: {} },
+        { name: "grep", params: {} },
+      ]);
+    }
+  });
+
+  it("keeps sub-agent delegation working alongside a custom set", () => {
+    const fields = buildAgentProfileFields({
+      ...baseOh,
+      subAgentsEnabled: true,
+      toolsMode: "custom",
+      selectedTools: ["terminal"],
+    });
+    if (fields.agent_kind === "openhands") {
+      expect(fields.tools).toEqual([
+        { name: "terminal", params: {} },
+        { name: "task_tool_set", params: {} },
+      ]);
+    }
+  });
+
+  it("omits the key entirely on a backend whose profile model predates it", () => {
+    const fields = buildAgentProfileFields({
+      ...baseOh,
+      toolsMode: "custom",
+      selectedTools: ["terminal"],
+      toolsSupportedOnProfile: false,
+    });
+    expect(fields).not.toHaveProperty("tools");
   });
 });
