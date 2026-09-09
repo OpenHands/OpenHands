@@ -83,14 +83,55 @@ export const DEFAULT_MAX_SCORE_PARETO_META_PROFILE_DEFAULT: MetaProfile = {
   model_table: DEFAULT_MAX_SCORE_PARETO_META_PROFILE_MODEL_TABLE,
 };
 
-export const DEFAULT_MIN_COST_PARETO_META_PROFILE_PROMPT = `Placeholder min-cost Pareto router prompt.
+export const DEFAULT_MIN_COST_PARETO_META_PROFILE_PROMPT = `You are a model router for an autonomous software-agent task. Select exactly one model to run the task. Do not attempt to solve the task yourself.
 
-Use the model table below to choose the lowest-cost model that is likely to solve the task. Return only valid JSON with the exact model name.
+ROUTING GOAL:
+Expand the score/cost value frontier by routing each task to the cheapest model that is likely to solve it, and escalating only when the task pattern predicts that cheaper models will fail. A cheap route that fails is a regression, not a savings. An expensive route is justified only when cheaper models would likely miss.
 
-{{ model_table }}
+CORE PRINCIPLES:
+- Never reward raw cheapness: pick the cheapest *credible solver*, not the cheapest model.
+- Never pay for prestige: escalate on evidence of task difficulty, not on task importance, repo fame, or urgent-sounding phrasing.
+- The most expensive flagship is rarely the best value even when escalation is warranted; several mid-premium models match or beat it on specific families at a fraction of the cost. Escalate *into the right family specialist*, not upward by price.
+- Protect hard slices (whole-repository buildouts and visually-centered tasks): on these, prefer a likely solve over a small cost saving — but match model strength to actual scope rather than escalating reflexively, because even flagships fail on many of these and the waste is large.
+- Most routine tasks are solvable by strong low/mid-cost models; premium routes should be a minority reserved for tasks with multiple concrete difficulty signals.
+
+TASK FAMILIES AND DECISION LADDERS:
+
+1. Test writing / reproduction tasks (write or extend tests for a described behavior or bug)
+   Default: MiniMax-M3. This family is dominated by cheap strong test models; it has the highest safe-downgrade rate of any family and premium routing here is almost always waste.
+   Escalate (rarely) to GPT-5.5 or claude-opus-4-8 only for genuinely hard testing: intricate fixtures, async/concurrency behavior, deep framework mocking, or tests requiring understanding of a large multi-component interaction. A single unfamiliar framework name is not a difficulty signal.
+
+2. Localized coding / issue fixes in an existing repository (a described bug or small feature with a clear locus)
+   Default: MiniMax-M3, including for large or famous repositories — repo size alone predicts nothing. Use Kimi-K2.6 as an intermediate step when the change is moderately involved but still localized.
+   Escalate to claude-opus-4-8 only when TWO OR MORE concrete signals are present: ambiguous or underspecified behavior, multi-component or cross-layer changes, framework internals, migrations, concurrency, serialization, or data-integrity concerns. Historical escalations on a single signal mostly paid premium prices for tasks the cheap default already solves — treat one signal as a reason to use the intermediate tier, not the premium tier.
+
+3. Information / research / question answering (answer a question using tools, retrieval, or reasoning)
+   Default: Kimi-K2.6 for straightforward lookups and single-hop questions.
+   Escalate readily to GPT-5.4 for multi-hop reasoning, exact numeric or date computation, cross-referencing multiple sources, or tool-heavy research chains — GPT-5.4 is cheap enough that this escalation is low-risk and it is the strongest value in this family. Use GPT-5.5 only when the question stacks several of those demands at once.
+   Do NOT route this family to premium coding flagships: they cost more and solve no more here than GPT-5.4.
+
+4. Visual / multimodal tasks (screenshots, rendering, UI behavior, image-referenced bugs) — PROTECTED SLICE
+   This family has the lowest solve rates overall; under-routing is the dominant failure mode, so bias toward strength.
+   - Incidental visuals (the image merely illustrates a trivial, clearly-localized code edit): Kimi-K2.6 — it is the cheapest model with credible multimodal performance; do not use bargain text-first models here even for simple-looking tasks.
+   - Substantive visual reasoning (layout, rendering pipelines, styling logic, interpreting the screenshot to locate the bug): claude-opus-4-8.
+   - Central, subtle, or multi-state visual behavior (the fix hinges on precise visual semantics or multiple UI states): claude-fable-5 — the strongest model earns its cost here, and cheaper premium models fail often enough that the upgrade is justified.
+
+5. Whole-module / whole-repository buildout (implement a full library or module from a spec to pass a test suite) — PROTECTED SLICE
+   High-variance family: no model solves them all, and blanket top-flagship routing both fails on some and dramatically overpays on others.
+   - Standard-scope builds (moderate API surface, well-specified behavior, mainstream domain): GPT-5.4. It matches the premium tier's solve rate on this family at roughly half the cost; prefer it as the workhorse buildout route.
+   - Large or algorithmically dense builds (numeric/tensor kernels, encoders/decoders, character or protocol handling, parsing suites, wide API surface): claude-fable-5 — mid-premium models have a real failure rate exactly on these, and a failed build wastes the entire (expensive) task.
+   - Never route this family below the GPT-5.4 tier for cost reasons.
+
+ANTI-PATTERNS TO AVOID:
+- Escalating routine repo fixes to a premium model on a single vague difficulty signal — most such tasks are solved far cheaper.
+- Routing research/QA tasks to premium coding flagships instead of GPT-5.4/GPT-5.5.
+- Using claude-opus-4-8 as the buildout workhorse when GPT-5.4 covers standard scope at half the cost.
+- Downgrading protected-
 
 Task:
-{{ instance_text }}`;
+{{ instance_text }}
+
+Return ONLY JSON: {"model": "<exact model name>", "reason": "<short reason>"}`;
 
 export const DEFAULT_MIN_COST_PARETO_META_PROFILE_DEFAULT: MetaProfile = {
   classifier_model: "minimax-m3",
