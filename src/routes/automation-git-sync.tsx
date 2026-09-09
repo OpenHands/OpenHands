@@ -10,7 +10,7 @@ import {
 } from "#/hooks/query/use-git-sync";
 import { useAutomationHealth } from "#/hooks/query/use-automation-health";
 import { useActiveBackend } from "#/contexts/active-backend-context";
-import { useHasPermission } from "#/hooks/use-has-permission";
+import { useAutomationPermissions } from "#/hooks/use-automation-permissions";
 import { BackLink } from "#/components/features/automations/detail/back-link";
 import { ErrorState } from "#/components/features/automations/error-state";
 import { BackendNotConfigured } from "#/components/features/automations/backend-not-configured";
@@ -53,7 +53,12 @@ const runningSince = (status: GitSyncStatus): SyncActivity => ({
 export default function AutomationGitSync() {
   const { t } = useTranslation("openhands");
   const active = useActiveBackend();
-  const canManage = useHasPermission("manage_automations");
+  // Git sync is an org-level operation (not per-automation), so there is no
+  // creator escape hatch — only users with manage_automations may configure,
+  // check, or trigger a sync. The status read requires view_automations, but
+  // since the page is local-only and local users always have manage, the
+  // distinction only matters for cloud deployments that don't reach this page.
+  const { canManage } = useAutomationPermissions();
   const [activity, setActivity] = useState<SyncActivity>({ state: "idle" });
   const isRunning = activity.state === "running";
 

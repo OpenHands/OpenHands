@@ -131,6 +131,7 @@ describe("AgentProfilesLocalView save mapping", () => {
     emitControl = {
       agentType: "openhands",
       isValid: true,
+      isDirty: true,
       buildAgentProfileFields: () => ({
         agent_kind: "openhands",
         enable_sub_agents: true,
@@ -157,6 +158,7 @@ describe("AgentProfilesLocalView save mapping", () => {
     emitControl = {
       agentType: "acp",
       isValid: true,
+      isDirty: true,
       buildAgentProfileFields: () => ({
         agent_kind: "acp",
         acp_server: "claude-code",
@@ -212,6 +214,7 @@ describe("AgentProfilesLocalView save mapping", () => {
     emitControl = {
       agentType: "openhands",
       isValid: true,
+      isDirty: true,
       buildAgentProfileFields: () => ({
         agent_kind: "openhands",
         enable_sub_agents: true,
@@ -286,6 +289,7 @@ describe("AgentProfilesLocalView save mapping", () => {
     emitControl = {
       agentType: "openhands",
       isValid: true,
+      isDirty: true,
       buildAgentProfileFields: () => ({
         agent_kind: "openhands",
         enable_sub_agents: false,
@@ -322,6 +326,7 @@ describe("AgentProfilesLocalView save mapping", () => {
     emitControl = {
       agentType: "acp",
       isValid: true,
+      isDirty: true,
       buildAgentProfileFields: () => ({
         agent_kind: "acp",
         acp_server: "claude-code",
@@ -372,6 +377,7 @@ describe("AgentProfilesLocalView save mapping", () => {
     emitControl = {
       agentType: "openhands",
       isValid: true,
+      isDirty: false,
       buildAgentProfileFields: () => ({
         agent_kind: "openhands",
         enable_sub_agents: false,
@@ -383,6 +389,9 @@ describe("AgentProfilesLocalView save mapping", () => {
     const user = userEvent.setup();
     await user.click(screen.getByTestId("edit-agent-profile"));
     await screen.findByTestId("mock-agent-settings");
+    await waitFor(() => {
+      expect(screen.getByTestId("save-agent-profile-btn")).not.toBeDisabled();
+    });
     await user.click(screen.getByTestId("save-agent-profile-btn"));
 
     await waitFor(() => expect(saveMutate).toHaveBeenCalledTimes(1));
@@ -406,6 +415,7 @@ describe("AgentProfilesLocalView save mapping", () => {
     emitControl = {
       agentType: "openhands",
       isValid: true,
+      isDirty: false,
       buildAgentProfileFields: () => ({
         agent_kind: "openhands",
         enable_sub_agents: false,
@@ -417,11 +427,7 @@ describe("AgentProfilesLocalView save mapping", () => {
     const user = userEvent.setup();
     await user.click(screen.getByTestId("edit-agent-profile"));
     await screen.findByTestId("mock-agent-settings");
-    await user.click(screen.getByTestId("save-agent-profile-btn"));
-
-    await waitFor(() => expect(saveMutate).toHaveBeenCalledTimes(1));
-    const { profile } = saveMutate.mock.calls[0][0];
-    expect(profile.llm_profile_ref).toBe("default");
+    expect(screen.getByTestId("save-agent-profile-btn")).toBeDisabled();
   });
 
   it("blocks an OpenHands save when no LLM profile is available", async () => {
@@ -429,6 +435,7 @@ describe("AgentProfilesLocalView save mapping", () => {
     emitControl = {
       agentType: "openhands",
       isValid: true,
+      isDirty: true,
       buildAgentProfileFields: () => ({
         agent_kind: "openhands",
         enable_sub_agents: false,

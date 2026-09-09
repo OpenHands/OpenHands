@@ -67,15 +67,14 @@ describe("ConversationTabsContextMenu", () => {
       "DIFF_VIEWER$COMMITS",
       "COMMON$TERMINAL",
       "COMMON$BROWSER",
+      // Local planning is now supported, so the Planner tab is a default tab.
+      "COMMON$PLANNER",
     ];
     for (const tab of expectedTabs) {
       expect(screen.getByText(tab)).toBeInTheDocument();
     }
 
     expect(screen.queryByText("FILES$DIFF_VIEW")).not.toBeInTheDocument();
-
-    // Planner is cloud-only; on the default (local) backend it is hidden.
-    expect(screen.queryByText("COMMON$PLANNER")).not.toBeInTheDocument();
   });
 
   it("should show the Planner entry when the active backend is cloud", () => {
@@ -139,14 +138,14 @@ describe("ConversationTabsContextMenu", () => {
 
     const storeState = useConversationStore.getState();
     expect(storeState.hasRightPanelToggled).toBe(true);
-    // Next pinned tab after Files is Commits.
-    expect(storeState.selectedTab).toBe("commits");
+    // Planner is first in the tab order, so it becomes active when files unpins.
+    expect(storeState.selectedTab).toBe("planner");
 
     const storedState = JSON.parse(
       localStorage.getItem(`conversation-state-${CONVERSATION_ID}`)!,
     );
     expect(storedState.unpinnedTabs).toContain("files");
-    expect(storedState.selectedTab).toBe("commits");
+    expect(storedState.selectedTab).toBe("planner");
   });
 
   it("should not close the right panel when unpinning a non-active tab", async () => {

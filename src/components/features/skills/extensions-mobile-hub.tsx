@@ -18,7 +18,7 @@ import { EXTENSIONS_NAV_ITEMS } from "./extensions-navigation";
 /** Only the Skills item points to a cloud-hosted page today. */
 const CLOUD_LINKED_EXTENSION_PATH = "/skills";
 /** Backend-installed artifacts are not available on Cloud backends yet. */
-const CLOUD_HIDDEN_EXTENSION_PATHS = new Set(["/plugins", "/extensions"]);
+const CLOUD_HIDDEN_EXTENSION_PATHS = new Set(["/plugins", "/apps"]);
 
 export function ExtensionsMobileHub() {
   const { t } = useTranslation("openhands");
