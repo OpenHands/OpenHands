@@ -12,6 +12,7 @@ export interface SubPageNavItem {
   label: string;
   Icon: LucideIcon;
   testId: string;
+  forceActive?: boolean;
 }
 
 interface ManifestSubpageLayoutProps {
@@ -33,7 +34,7 @@ function SubPageNavLink({ item }: { item: SubPageNavItem }) {
         cn(
           sidebarNavRowClassName(),
           "truncate whitespace-nowrap",
-          isActive
+          isActive || item.forceActive
             ? SIDEBAR_ROW_INTERACTIVE_CLASS.active
             : SIDEBAR_ROW_INTERACTIVE_CLASS.idle,
         )

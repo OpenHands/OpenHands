@@ -59,6 +59,26 @@ describe("useEnsureActiveProfile", () => {
     expect(mockActivate).toHaveBeenCalledWith("withkey");
   });
 
+  it("promotes a connection-linked profile over an unusable active default", () => {
+    mockUseLlmProfiles.mockReturnValue({
+      data: {
+        profiles: [
+          profile("default", false),
+          {
+            name: "local-ollama",
+            model: "ollama/llama3.2",
+            base_url: null,
+            api_key_set: false,
+            provider_connection_id: "conn-ollama",
+          },
+        ],
+        active_profile: "default",
+      },
+    });
+    renderHook(() => useEnsureActiveProfile());
+    expect(mockActivate).toHaveBeenCalledWith("local-ollama");
+  });
+
   it("does nothing when the active profile is valid", () => {
     mockUseLlmProfiles.mockReturnValue({
       data: { profiles: [profile("a")], active_profile: "a" },

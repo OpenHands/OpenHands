@@ -45,6 +45,7 @@ Default ports:
   ingress:         ${defaults.ports.proxy}
   agent-server:    ${defaults.ports.agentServer}
   automation:      ${defaults.ports.automation}
+  kanban:          ${defaults.ports.kanban}
 
 Override versions via environment variables:
   OH_AGENT_SERVER_VERSION, OH_AGENT_SERVER_GIT_REF, OH_AGENT_SERVER_LOCAL_PATH

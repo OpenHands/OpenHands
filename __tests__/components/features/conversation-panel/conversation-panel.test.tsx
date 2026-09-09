@@ -156,6 +156,7 @@ describe("ConversationPanel", () => {
       selectedAutomationNames: [],
       selectedTagFacets: [],
       showTagsMetadata: false,
+      organizeMode: "chronological",
     });
     // Setup default mock for searchConversations
     vi.spyOn(
@@ -2528,6 +2529,58 @@ describe("ConversationPanel", () => {
         ).getAllByTestId("conversation-card"),
       ).toHaveLength(5);
     });
+  });
+
+  it("labels the session list Workspaces when grouped on a local backend", async () => {
+    useConversationPanelPreferencesStore.setState({ organizeMode: "grouped" });
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
+      items: [
+        createMockConversation({
+          id: "alpha-chat",
+          title: "Alpha Chat",
+          selected_workspace: "/workspace/alpha",
+        }),
+      ],
+      next_page_id: null,
+    });
+
+    renderConversationPanel();
+
+    const summary = await screen.findByTestId("older-conversations-summary");
+    expect(summary).toHaveTextContent("HOME$WORKSPACES_TAB");
+    expect(
+      await screen.findByTestId("thread-folder-ws--workspace-alpha"),
+    ).toBeInTheDocument();
+  });
+
+  it("opens the combined workspaces kanban from the Workspaces header", async () => {
+    const navigate = vi.fn();
+    useConversationPanelPreferencesStore.setState({ organizeMode: "grouped" });
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
+      items: [
+        createMockConversation({
+          id: "alpha-chat",
+          title: "Alpha Chat",
+          selected_workspace: "/workspace/alpha",
+        }),
+      ],
+      next_page_id: null,
+    });
+
+    renderConversationPanel({ navigation: { navigate } });
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByTestId("workspaces-kanban-link"));
+    expect(navigate).toHaveBeenCalledWith("/kanban");
+    expect(window.sessionStorage.getItem("oh:kanban-selected-workspace-path")).toBe(
+      "__all__",
+    );
   });
 
   it("reorders grouped folders via drag and drop", async () => {

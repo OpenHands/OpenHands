@@ -2,6 +2,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import GraphService from "#/api/graph-service/graph-service.api";
+import type {
+  GraphConfig,
+  GraphIndexStatus,
+} from "#/api/graph-service/graph-types";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import AgentContextSettingsScreen from "#/routes/agent-context-settings";
@@ -129,5 +134,37 @@ describe("AgentContextSettingsScreen", () => {
     expect(
       screen.queryByTestId("sdk-settings-agent_context.load_memory"),
     ).not.toBeInTheDocument();
+  });
+
+  it("shows the agent code-index controls next to persistent memory", async () => {
+    const status: GraphIndexStatus = {
+      running: false,
+      files_indexed: 4,
+      symbols: 6,
+      edges: 8,
+      languages_used: ["python"],
+      coverage: 1,
+      last_full_index_at: "2026-01-01T00:00:00+00:00",
+      last_error: null,
+    };
+    const config: GraphConfig = {
+      enabled: true,
+      languages: ["python"],
+      graph_budget_lines: 400,
+      max_context_files: 12,
+      strict: false,
+      stale_after_minutes: 60,
+      imported_project_path: null,
+    };
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
+    vi.spyOn(GraphService, "getStatus").mockResolvedValue(status);
+    vi.spyOn(GraphService, "getConfig").mockResolvedValue(config);
+
+    renderAgentContextSettingsScreen();
+
+    expect(
+      await screen.findByTestId("graph-indexer-controls"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("graph-query-submit")).not.toBeInTheDocument();
   });
 });

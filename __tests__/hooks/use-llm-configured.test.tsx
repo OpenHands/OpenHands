@@ -9,6 +9,7 @@ const useConfigMock = vi.fn();
 const useLlmProfilesMock = vi.fn();
 const useActiveBackendMock = vi.fn();
 const useActiveAgentProfileMock = vi.fn();
+const useHostDetectedConnectionsMock = vi.fn();
 
 vi.mock("#/hooks/query/use-settings", () => ({
   useSettings: () => useSettingsMock(),
@@ -24,6 +25,9 @@ vi.mock("#/contexts/active-backend-context", () => ({
 }));
 vi.mock("#/hooks/use-active-agent-profile", () => ({
   useActiveAgentProfile: () => useActiveAgentProfileMock(),
+}));
+vi.mock("#/hooks/query/use-host-detected-connections", () => ({
+  useHostDetectedConnections: () => useHostDetectedConnectionsMock(),
 }));
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -46,6 +50,10 @@ describe("useLlmConfigured (local, agent-profile-driven)", () => {
         agent_settings: { agent_kind: "openhands" },
         llm_api_key_set: false,
       },
+    });
+    useHostDetectedConnectionsMock.mockReturnValue({
+      connections: [],
+      isChecking: false,
     });
   });
 
@@ -177,6 +185,63 @@ describe("useLlmConfigured (local, agent-profile-driven)", () => {
         llm_profile_ref: null,
         name: "MyClaude",
       },
+    });
+
+    const { result } = renderHook(() => useLlmConfigured(), { wrapper });
+    expect(result.current.isConfigured).toBe(true);
+  });
+
+  it("is configured when the active profile is linked to a provider connection", () => {
+    useLlmProfilesMock.mockReturnValue({
+      data: {
+        active_profile: "local-ollama",
+        profiles: [
+          {
+            name: "local-ollama",
+            model: "ollama/llama3.2",
+            api_key_set: false,
+            provider_connection_id: "conn-ollama",
+          },
+        ],
+      },
+    });
+    useActiveAgentProfileMock.mockReturnValue({
+      activeProfile: {
+        agent_kind: "openhands",
+        llm_profile_ref: "local-ollama",
+        name: "default",
+      },
+    });
+
+    const { result } = renderHook(() => useLlmConfigured(), { wrapper });
+    expect(result.current.isConfigured).toBe(true);
+  });
+
+  it("is configured when a host Claude or Cursor subscription is signed in", () => {
+    useLlmProfilesMock.mockReturnValue(
+      llmProfiles("default", [{ name: "default", api_key_set: false }]),
+    );
+    useActiveAgentProfileMock.mockReturnValue({
+      activeProfile: {
+        agent_kind: "openhands",
+        llm_profile_ref: "default",
+        name: "default",
+      },
+    });
+    useHostDetectedConnectionsMock.mockReturnValue({
+      connections: [
+        {
+          id: "host:anthropic",
+          provider: "anthropic",
+          display_name: "Claude",
+        },
+        {
+          id: "host:cursor-cli",
+          provider: "cursor-cli",
+          display_name: "Cursor CLI",
+        },
+      ],
+      isChecking: false,
     });
 
     const { result } = renderHook(() => useLlmConfigured(), { wrapper });

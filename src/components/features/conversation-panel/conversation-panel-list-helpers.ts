@@ -1,6 +1,9 @@
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import type { BackendKind } from "#/api/backend-registry/types";
-import type { LocalWorkspace } from "#/types/workspace";
+import {
+  IMPLICIT_WORKSPACE_PARENT_PATH,
+  type LocalWorkspace,
+} from "#/types/workspace";
 import type { Provider } from "#/types/settings";
 import {
   AUTOMATION_NAME_TAG_KEY,
@@ -351,6 +354,17 @@ export type ConversationGroupLaunch = {
   };
 };
 
+const WORKSPACE_GROUP_ID_PREFIX = "ws:";
+
+/** Local workspace path encoded in a grouped-list id, or null for other groups. */
+export function workspacePathFromGroupId(id: string): string | null {
+  if (!id.startsWith(WORKSPACE_GROUP_ID_PREFIX)) {
+    return null;
+  }
+  const path = id.slice(WORKSPACE_GROUP_ID_PREFIX.length);
+  return path.length > 0 ? path : null;
+}
+
 function buildGroupLaunch(
   id: string,
   backendKind: BackendKind,
@@ -537,12 +551,19 @@ export function groupConversations(
     string,
     { label: string; conversations: AppConversation[] }
   >();
+  const labelByGroupId = new Map<string, string>();
 
   if (backendKind === "local" && knownWorkspaces) {
     for (const ws of knownWorkspaces) {
       const normalized = ws.path.trim().replace(/\/+$/, "");
-      if (normalized) {
-        byId.set(`ws:${normalized}`, { label: ws.name, conversations: [] });
+      if (!normalized) continue;
+      const groupId = `ws:${normalized}`;
+      labelByGroupId.set(groupId, ws.name);
+      // Implicit `/projects` children (dev mock examples) only appear once
+      // they have conversations. Explicit workspaces and user-added parents
+      // still get an empty space header.
+      if (ws.parentPath !== IMPLICIT_WORKSPACE_PARENT_PATH) {
+        byId.set(groupId, { label: ws.name, conversations: [] });
       }
     }
   }
@@ -557,7 +578,7 @@ export function groupConversations(
         ? labels.emptyWorkspace
         : id === "__none_repo"
           ? labels.emptyRepository
-          : rawLabel;
+          : (labelByGroupId.get(id) ?? rawLabel);
     const bucket = byId.get(id);
     if (bucket) {
       bucket.conversations.push(c);

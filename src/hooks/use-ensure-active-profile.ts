@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useActivateLlmProfile } from "#/hooks/mutation/use-activate-llm-profile";
+import { isUsableLlmProfile } from "#/utils/usable-llm-profile";
 
 /**
  * Local-mode UX policy: keep an LLM profile active whenever at least one
@@ -11,9 +12,9 @@ import { useActivateLlmProfile } from "#/hooks/mutation/use-activate-llm-profile
  * profile); other consumers (e.g. SaaS) own the LLM differently.
  *
  * When profiles exist but none is the active one — never activated, or the
- * active profile was deleted — it activates the first profile that has an API
- * key (falling back to the first profile). With zero profiles it does nothing:
- * that genuine "no LLM" state is surfaced by the gate/banner.
+ * active profile was deleted — it activates the first usable profile (API key,
+ * provider connection, or Ollama URL), falling back to the first profile.
+ * If the active profile exists but is not usable, it promotes a usable one.
  */
 export function useEnsureActiveProfile(): void {
   const { backend } = useActiveBackend();
@@ -34,16 +35,25 @@ export function useEnsureActiveProfile(): void {
     if (!isLocal || isPending || !profilesData) return;
 
     const { profiles, active_profile: activeProfile } = profilesData;
-    const activeValid =
-      activeProfile != null && profiles.some((p) => p.name === activeProfile);
+    const active = profiles.find((profile) => profile.name === activeProfile);
 
-    if (profiles.length === 0 || activeValid) {
+    if (isUsableLlmProfile(active)) {
       attemptedRef.current = null;
       return;
     }
 
-    // Prefer a profile with a key so the result is immediately usable.
-    const target = profiles.find((p) => p.api_key_set) ?? profiles[0];
+    if (profiles.length === 0) {
+      attemptedRef.current = null;
+      return;
+    }
+
+    const target =
+      profiles.find((profile) => isUsableLlmProfile(profile)) ??
+      (active ? null : profiles[0]);
+    if (!target || target.name === active?.name) {
+      attemptedRef.current = null;
+      return;
+    }
     if (attemptedRef.current === target.name) return;
     attemptedRef.current = target.name;
     activate(target.name);

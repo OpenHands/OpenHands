@@ -102,6 +102,27 @@
       "tests": ["mcp"]
     },
     {
+      "comment": "Local kanban board and list views",
+      "sources": [
+        "src/components/features/kanban/**",
+        "src/routes/kanban.tsx",
+        "src/routes/project-init.tsx",
+        "src/api/kanban-service/**",
+        "src/mocks/kanban-handlers.ts"
+      ],
+      "tests": ["home"]
+    },
+    {
+      "comment": "Spaces project list, detail, and worktrees",
+      "sources": [
+        "src/components/features/projects/**",
+        "src/routes/projects.tsx",
+        "src/api/projects-service/**",
+        "src/mocks/projects-handlers.ts"
+      ],
+      "tests": ["home"]
+    },
+    {
       "comment": "Canvas Extensions install, enable, page render, disable, uninstall",
       "sources": [
         "src/components/features/canvas-extensions/**",
@@ -114,6 +135,16 @@
         "src/mocks/canvas-extensions-handlers.ts"
       ],
       "tests": ["canvas-extensions"]
+    },
+    {
+      "comment": "Standards plugin gallery, enforcement, console, and audit log",
+      "sources": [
+        "src/components/features/standards/**",
+        "src/routes/standards.tsx",
+        "src/api/standards-service/**",
+        "src/mocks/standards-handlers.ts"
+      ],
+      "tests": ["regressions"]
     }
   ],
 

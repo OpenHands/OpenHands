@@ -28,6 +28,21 @@ import {
   CANVAS_EXTENSIONS_HANDLERS,
   resetCanvasExtensionsMockData,
 } from "./canvas-extensions-handlers";
+import { KANBAN_HANDLERS, resetKanbanMockData } from "./kanban-handlers";
+import { PROJECTS_HANDLERS, resetProjectsMockData } from "./projects-handlers";
+import {
+  FEATURE_DEV_HANDLERS,
+  resetFeatureDevMockData,
+} from "./feature-developer-handlers";
+import { LOOP_HANDLERS, resetLoopMockData } from "./loop-handlers";
+import { ROUTING_HANDLERS, resetRoutingMockData } from "./routing-handlers";
+import { GRAPH_HANDLERS, resetGraphMockData } from "./graph-handlers";
+import {
+  STANDARDS_HANDLERS,
+  resetStandardsMockData,
+} from "./standards-handlers";
+import { CHANNEL_HANDLERS, resetChannelMockData } from "./channel-handlers";
+import { MEETILY_HANDLERS } from "./meetily-handlers";
 
 export const handlers = [
   ...FILE_SERVICE_HANDLERS,
@@ -43,6 +58,15 @@ export const handlers = [
   ...MCP_HANDLERS,
   ...WORKSPACES_HANDLERS,
   ...CANVAS_EXTENSIONS_HANDLERS,
+  ...KANBAN_HANDLERS,
+  ...PROJECTS_HANDLERS,
+  ...FEATURE_DEV_HANDLERS,
+  ...LOOP_HANDLERS,
+  ...ROUTING_HANDLERS,
+  ...GRAPH_HANDLERS,
+  ...STANDARDS_HANDLERS,
+  ...CHANNEL_HANDLERS,
+  ...MEETILY_HANDLERS,
 ];
 
 export {
@@ -51,6 +75,14 @@ export {
   resetAutomationMockData,
   resetMockWorkspaces,
   resetCanvasExtensionsMockData,
+  resetKanbanMockData,
+  resetProjectsMockData,
+  resetFeatureDevMockData,
+  resetLoopMockData,
+  resetRoutingMockData,
+  resetGraphMockData,
+  resetStandardsMockData,
+  resetChannelMockData,
 };
 
 export {

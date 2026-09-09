@@ -1,0 +1,228 @@
+{
+  "version": "v1",
+  "last_updated": "2026-09-06T00:00:00Z",
+  "notes": "Researched seed. Scores and prices are approximate public figures, not verified facts. Ingestion stamps provenance and sets verified true.",
+  "models": [
+    {
+      "id": "openhands/glm-5.2",
+      "provider_key": "openhands",
+      "benchmarks": {
+        "coding": {"score": 0.78, "provenance": null},
+        "reasoning": {"score": 0.75, "provenance": null},
+        "ux": {"score": 0.62, "provenance": null},
+        "copy": {"score": 0.60, "provenance": null}
+      },
+      "cost_per_1k": 0.0012,
+      "latency_s_p90": 18,
+      "local": false,
+      "runtime": null,
+      "source_url": "https://artificialanalysis.ai/models",
+      "verified": false,
+      "notes": "Default OpenHands Cloud model. Seed economics from Artificial Analysis catalog pages; not an ingested snapshot."
+    },
+    {
+      "id": "openai/gpt-4o",
+      "provider_key": "openai",
+      "benchmarks": {
+        "coding": {"score": 0.65, "provenance": null},
+        "reasoning": {"score": 0.70, "provenance": null},
+        "ux": {"score": 0.68, "provenance": null},
+        "copy": {"score": 0.74, "provenance": null}
+      },
+      "cost_per_1k": 0.00375,
+      "latency_s_p90": 12,
+      "local": false,
+      "runtime": null,
+      "source_url": "https://artificialanalysis.ai/models/gpt-4o",
+      "verified": false,
+      "notes": "Blended ~$3.75/1M tokens ballpark from public AA pricing; coding proxy from SWE-bench Verified mini-SWE-agent tables."
+    },
+    {
+      "id": "openai/gpt-5.4",
+      "provider_key": "openai",
+      "benchmarks": {
+        "coding": {"score": 0.82, "provenance": null},
+        "reasoning": {"score": 0.88, "provenance": null},
+        "ux": {"score": 0.76, "provenance": null},
+        "copy": {"score": 0.80, "provenance": null}
+      },
+      "cost_per_1k": 0.008,
+      "latency_s_p90": 22,
+      "local": false,
+      "runtime": null,
+      "source_url": "https://openai.com/index/introducing-gpt-5-4/",
+      "verified": false,
+      "notes": "Frontier OpenAI family used in the canvas. Scores are researched placeholders pending AA/SWE-bench ingest."
+    },
+    {
+      "id": "anthropic/claude-sonnet-4-5",
+      "provider_key": "anthropic",
+      "benchmarks": {
+        "coding": {"score": 0.80, "provenance": null},
+        "reasoning": {"score": 0.84, "provenance": null},
+        "ux": {"score": 0.78, "provenance": null},
+        "copy": {"score": 0.81, "provenance": null}
+      },
+      "cost_per_1k": 0.006,
+      "latency_s_p90": 16,
+      "local": false,
+      "runtime": null,
+      "source_url": "https://www.swebench.com/verified",
+      "verified": false,
+      "notes": "Claude Sonnet 4.5 family via API or Claude Code. SWE-bench Verified leaderboard is the coding source of record after ingest."
+    },
+    {
+      "id": "anthropic/claude-opus-4-6",
+      "provider_key": "anthropic",
+      "benchmarks": {
+        "coding": {"score": 0.86, "provenance": null},
+        "reasoning": {"score": 0.90, "provenance": null},
+        "ux": {"score": 0.82, "provenance": null},
+        "copy": {"score": 0.85, "provenance": null}
+      },
+      "cost_per_1k": 0.03,
+      "latency_s_p90": 28,
+      "local": false,
+      "runtime": null,
+      "source_url": "https://www.anthropic.com/news/claude-4-6",
+      "verified": false,
+      "notes": "Highest-quality Anthropic work model in the seed. Cost is a public list-price blend, unverified."
+    },
+    {
+      "id": "google/gemini-2.5-pro",
+      "provider_key": "gemini",
+      "benchmarks": {
+        "coding": {"score": 0.76, "provenance": null},
+        "reasoning": {"score": 0.83, "provenance": null},
+        "ux": {"score": 0.80, "provenance": null},
+        "copy": {"score": 0.77, "provenance": null}
+      },
+      "cost_per_1k": 0.0025,
+      "latency_s_p90": 14,
+      "local": false,
+      "runtime": null,
+      "source_url": "https://artificialanalysis.ai/models/gemini-2-5-pro",
+      "verified": false,
+      "notes": "Gemini API / Google AI Studio family used by the gemini provider connection."
+    },
+    {
+      "id": "cursor-cli/composer",
+      "provider_key": "cursor-cli",
+      "benchmarks": {
+        "coding": {"score": 0.77, "provenance": null},
+        "reasoning": {"score": 0.72, "provenance": null},
+        "ux": {"score": 0.70, "provenance": null},
+        "copy": {"score": 0.66, "provenance": null}
+      },
+      "cost_per_1k": 0.0,
+      "latency_s_p90": 25,
+      "local": false,
+      "runtime": null,
+      "source_url": "https://cursor.com/docs/cli/overview",
+      "verified": false,
+      "notes": "Keyless Cursor CLI (`agent -p`). Subscription-billed; per-token cost is not published as a public list price."
+    },
+    {
+      "id": "opencode/anthropic/claude-sonnet-4-6",
+      "provider_key": "opencode",
+      "benchmarks": {
+        "coding": {"score": 0.80, "provenance": null},
+        "reasoning": {"score": 0.84, "provenance": null},
+        "ux": {"score": 0.78, "provenance": null},
+        "copy": {"score": 0.81, "provenance": null}
+      },
+      "cost_per_1k": 0.0,
+      "latency_s_p90": 20,
+      "local": false,
+      "runtime": null,
+      "source_url": "https://opencode.ai/docs",
+      "verified": false,
+      "notes": "OpenCode CLI (`opencode run`) wrapping Anthropic models under a user login."
+    },
+    {
+      "id": "ollama/qwen3-coder:16b",
+      "provider_key": "ollama",
+      "benchmarks": {
+        "coding": {"score": 0.55, "provenance": null},
+        "reasoning": {"score": 0.48, "provenance": null},
+        "ux": {"score": 0.40, "provenance": null},
+        "copy": {"score": 0.42, "provenance": null}
+      },
+      "cost_per_1k": 0.0,
+      "latency_s_p90": 80,
+      "local": true,
+      "runtime": "ollama",
+      "source_url": "https://ollama.com/library/qwen3-coder",
+      "verified": false,
+      "notes": "Local coding specialist for the Local router-model preset."
+    },
+    {
+      "id": "ollama/llama3.1:8b",
+      "provider_key": "ollama",
+      "benchmarks": {
+        "coding": {"score": 0.42, "provenance": null},
+        "reasoning": {"score": 0.50, "provenance": null},
+        "ux": {"score": 0.38, "provenance": null},
+        "copy": {"score": 0.52, "provenance": null}
+      },
+      "cost_per_1k": 0.0,
+      "latency_s_p90": 45,
+      "local": true,
+      "runtime": "ollama",
+      "source_url": "https://ollama.com/library/llama3.1",
+      "verified": false,
+      "notes": "General local Llama 3.1 8B."
+    },
+    {
+      "id": "ollama/llama3.2:3b",
+      "provider_key": "ollama",
+      "benchmarks": {
+        "coding": {"score": 0.28, "provenance": null},
+        "reasoning": {"score": 0.32, "provenance": null},
+        "ux": {"score": 0.25, "provenance": null},
+        "copy": {"score": 0.36, "provenance": null}
+      },
+      "cost_per_1k": 0.0,
+      "latency_s_p90": 18,
+      "local": true,
+      "runtime": "ollama",
+      "source_url": "https://ollama.com/library/llama3.2",
+      "verified": false,
+      "notes": "Smallest local Llama 3.2 for cheap/offline classification."
+    },
+    {
+      "id": "ollama/deepseek-r1:14b",
+      "provider_key": "ollama",
+      "benchmarks": {
+        "coding": {"score": 0.50, "provenance": null},
+        "reasoning": {"score": 0.72, "provenance": null},
+        "ux": {"score": 0.35, "provenance": null},
+        "copy": {"score": 0.40, "provenance": null}
+      },
+      "cost_per_1k": 0.0,
+      "latency_s_p90": 95,
+      "local": true,
+      "runtime": "ollama",
+      "source_url": "https://ollama.com/library/deepseek-r1",
+      "verified": false,
+      "notes": "DeepSeek-R1 distill for local reasoning-heavy classification."
+    },
+    {
+      "id": "ollama/qwen2.5-coder:7b",
+      "provider_key": "ollama",
+      "benchmarks": {
+        "coding": {"score": 0.48, "provenance": null},
+        "reasoning": {"score": 0.40, "provenance": null},
+        "ux": {"score": 0.32, "provenance": null},
+        "copy": {"score": 0.34, "provenance": null}
+      },
+      "cost_per_1k": 0.0,
+      "latency_s_p90": 40,
+      "local": true,
+      "runtime": "ollama",
+      "source_url": "https://ollama.com/library/qwen2.5-coder",
+      "verified": false,
+      "notes": "Smaller Qwen coder for machines that cannot load 16B."
+    }
+  ]
+}

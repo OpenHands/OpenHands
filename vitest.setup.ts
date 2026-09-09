@@ -25,30 +25,48 @@ vi.stubGlobal("window", windowStub);
 windowStub.scrollTo = vi.fn();
 
 // Node.js 25+ ships a built-in localStorage that requires --localstorage-file
-// and is not functional without it. Stub it with a plain in-memory
-// implementation so zustand's persist middleware works in tests.
-if (
-  typeof localStorage === "undefined" ||
-  typeof localStorage.setItem !== "function"
-) {
-  const store: Record<string, string> = {};
-  vi.stubGlobal("localStorage", {
-    getItem: (key: string) => store[key] ?? null,
-    setItem: (key: string, value: string) => {
-      store[key] = String(value);
-    },
-    removeItem: (key: string) => {
-      delete store[key];
-    },
-    clear: () => {
-      Object.keys(store).forEach((k) => delete store[k]);
-    },
-    get length() {
-      return Object.keys(store).length;
-    },
-    key: (index: number) => Object.keys(store)[index] ?? null,
-  });
+// and is not functional without it. Always replace it with an in-memory
+// Storage so zustand persist and tests that call localStorage.clear() work,
+// including after a test file calls `vi.unstubAllGlobals()`.
+const memoryLocalStorageStore: Record<string, string> = {};
+const memoryLocalStorageTarget = {
+  getItem: (key: string) => memoryLocalStorageStore[key] ?? null,
+  setItem: (key: string, value: string) => {
+    memoryLocalStorageStore[key] = String(value);
+  },
+  removeItem: (key: string) => {
+    delete memoryLocalStorageStore[key];
+  },
+  clear: () => {
+    Object.keys(memoryLocalStorageStore).forEach((k) => {
+      delete memoryLocalStorageStore[k];
+    });
+  },
+  get length() {
+    return Object.keys(memoryLocalStorageStore).length;
+  },
+  key: (index: number) => Object.keys(memoryLocalStorageStore)[index] ?? null,
+};
+const memoryLocalStorage = new Proxy(memoryLocalStorageTarget, {
+  ownKeys: () => Object.keys(memoryLocalStorageStore),
+  getOwnPropertyDescriptor: (_target, prop) => {
+    if (typeof prop === "string" && prop in memoryLocalStorageStore) {
+      return {
+        configurable: true,
+        enumerable: true,
+        value: memoryLocalStorageStore[prop],
+      };
+    }
+    return Reflect.getOwnPropertyDescriptor(memoryLocalStorageTarget, prop);
+  },
+});
+
+function installMemoryLocalStorage() {
+  vi.stubGlobal("localStorage", memoryLocalStorage);
+  windowStub.localStorage = memoryLocalStorage as unknown as Storage;
 }
+
+installMemoryLocalStorage();
 
 if (typeof requestAnimationFrame === "undefined") {
   vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) =>
@@ -172,9 +190,11 @@ beforeAll(() => {
 
 beforeEach(() => {
   vi.stubEnv("VITE_SESSION_API_KEY", "test-session-key");
+  installMemoryLocalStorage();
 });
 
 afterEach(async () => {
+  installMemoryLocalStorage();
   server.resetHandlers();
   window.sessionStorage?.removeItem("openhands-active-backend");
   // Cleanup the document body after each test

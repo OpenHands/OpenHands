@@ -64,6 +64,7 @@ import type {
 } from "#/manifests/types";
 import { useAutomationRunSummaries } from "#/hooks/query/use-automation-run-summaries";
 import { useAutomationSubPageNav } from "#/components/features/automations/dashboard/use-automation-sub-page-nav";
+import { LoopsDashboardSection } from "#/components/features/loops/loops-dashboard-section";
 import { AutomationsDashboardControls } from "#/components/features/automations/dashboard/automations-dashboard-controls";
 import { AutomationsFilteredEmptyState } from "#/components/features/automations/dashboard/automations-filtered-empty-state";
 import { MANIFEST_ICON_BY_SLUG } from "#/components/features/manifest/manifest-icons";
@@ -500,6 +501,7 @@ export default function AutomationsList() {
               )}
             </>
           ))}
+        <LoopsDashboardSection searchQuery={searchQuery} />
       </div>
 
       {/* The launcher lives on the templates sub-page in dashboard mode */}

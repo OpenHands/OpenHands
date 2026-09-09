@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useConfig } from "#/hooks/query/use-config";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
+import { useHostDetectedConnections } from "#/hooks/query/use-host-detected-connections";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useActiveAgentProfile } from "#/hooks/use-active-agent-profile";
 import { isSettingsPageHidden } from "#/utils/settings-utils";
@@ -11,13 +12,15 @@ import {
   CONFIG_CACHE_OPTIONS,
   LLM_PROFILES_QUERY_KEYS,
 } from "#/hooks/query/query-keys";
-import { isSubscriptionLlmConfig } from "#/constants/llm-subscription";
+import { isUsableLlmProfile } from "#/utils/usable-llm-profile";
 
 interface LlmConfiguredResult {
   /**
    * True when the active backend's agent has a usable LLM:
    * - ACP agents own their LLM via a subprocess, so they never need a key.
-   * - OpenHands agents are ready only once an LLM API key has been saved.
+   * - OpenHands agents are ready once an LLM API key, provider connection,
+   *   Ollama base URL, or ChatGPT subscription profile is active, or a host
+   *   Claude / Cursor / ChatGPT / OpenCode login is present.
    * - When the LLM settings page is hidden by a feature flag there is no
    *   place to finish setup, so we treat the LLM as configured to avoid
    *   surfacing an actionless warning.
@@ -99,9 +102,8 @@ export function useLlmConfigured(): LlmConfiguredResult {
     profilesData?.profiles.find(
       (profile) => profile.name === profilesData?.active_profile,
     );
-  const hasActiveProfileApiKey = activeProfile?.api_key_set === true;
   const shouldLoadActiveProfileDetail =
-    isLocal && !!activeProfile && !hasActiveProfileApiKey;
+    isLocal && !!activeProfile && !isUsableLlmProfile(activeProfile);
   const {
     data: activeProfileDetail,
     isLoading: activeProfileDetailLoading,
@@ -119,15 +121,16 @@ export function useLlmConfigured(): LlmConfiguredResult {
     enabled: shouldLoadActiveProfileDetail,
     meta: { disableToast: true },
   });
-  const hasActiveProfileSubscription =
-    shouldLoadActiveProfileDetail &&
-    isSubscriptionLlmConfig(
-      activeProfileDetail?.config as Record<string, unknown> | undefined,
-    );
   const llmSettingsHidden = isSettingsPageHidden(
     "/settings/llm",
     config?.feature_flags,
   );
+
+  const {
+    connections: hostSubscriptions,
+    isChecking: hostSubscriptionsChecking,
+  } = useHostDetectedConnections();
+  const hasHostSubscription = isLocal && hostSubscriptions.length > 0;
 
   // In local mode, profiles are the source of truth: a usable LLM must be
   // backed by an active profile that still exists and is authenticated. API-key
@@ -136,9 +139,17 @@ export function useLlmConfigured(): LlmConfiguredResult {
   // The raw settings key can be a stale copy left behind by a deleted profile
   // (settings are not cleared on delete), so we don't count it here. Cloud
   // backends don't use profiles and keep the settings-key signal.
-  const hasUsableActiveProfile =
-    hasActiveProfileApiKey || hasActiveProfileSubscription;
+  const hasUsableActiveProfile = isUsableLlmProfile(
+    activeProfile,
+    activeProfileDetail,
+  );
   const hasUsableLlm = isLocal ? hasUsableActiveProfile : hasApiKey;
+  const hostSubscriptionsIndeterminate =
+    isLocal &&
+    !isAcpAgent &&
+    !llmSettingsHidden &&
+    !hasUsableLlm &&
+    hostSubscriptionsChecking;
 
   // Treat a fetch failure as indeterminate (same as loading) only when it
   // leaves us with no data to decide from — otherwise a transient network
@@ -162,12 +173,14 @@ export function useLlmConfigured(): LlmConfiguredResult {
       (activeProfileDetailError && !activeProfileDetail));
 
   return {
-    isConfigured: isAcpAgent || llmSettingsHidden || hasUsableLlm,
+    isConfigured:
+      isAcpAgent || llmSettingsHidden || hasUsableLlm || hasHostSubscription,
     isLoading:
       settingsIndeterminate ||
       configIndeterminate ||
       profilesIndeterminate ||
       agentProfileIndeterminate ||
-      activeProfileDetailIndeterminate,
+      activeProfileDetailIndeterminate ||
+      hostSubscriptionsIndeterminate,
   };
 }

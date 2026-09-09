@@ -1,6 +1,7 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
+import { useFormatCost } from "#/stores/cost-currency-store";
 
 interface BudgetUsageTextProps {
   currentCost: number;
@@ -12,14 +13,15 @@ export function BudgetUsageText({
   maxBudget,
 }: BudgetUsageTextProps) {
   const { t } = useTranslation("openhands");
+  const formatCost = useFormatCost();
   const usagePercentage = (currentCost / maxBudget) * 100;
 
   return (
     <div className="flex justify-end">
       <span className="text-xs text-[var(--oh-muted)]">
         {t(I18nKey.CONVERSATION$BUDGET_USAGE_FORMAT, {
-          currentCost: `$${currentCost.toFixed(4)}`,
-          maxBudget: `$${maxBudget.toFixed(4)}`,
+          currentCost: formatCost(currentCost, undefined, { detailed: true }),
+          maxBudget: formatCost(maxBudget, undefined, { detailed: true }),
           usagePercentage: usagePercentage.toFixed(2),
           used: t(I18nKey.CONVERSATION$USED),
         })}
