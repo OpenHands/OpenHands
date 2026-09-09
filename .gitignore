@@ -43,3 +43,6 @@ build-fresh/
 /resources/bin/
 # Downloaded Node.js distribution (populated by `npm run download-node` before packaging)
 /resources/node/
+# Per-arch runtime downloads for macOS universal builds (ELECTRON_ARCH=universal)
+/resources/bin-*/
+/resources/node-*/
