@@ -146,14 +146,16 @@ class EventService {
           items: data?.items ?? [],
           next_page_id: data?.next_page_id ?? null,
         };
-      } catch (err) {
+      } catch (err: unknown) {
+        if (
+          err instanceof Error &&
+          err.message.includes("Missing event file")
+        ) {
+          return { items: [], next_page_id: null };
+        }
         if (!hasFilterParams) throw err;
         if (options.strictPagination) throw err;
 
-        // Server doesn't support timestamp filters yet — stop pagination
-        // by returning an empty page so the UI doesn't retry indefinitely.
-        // A limit-only fallback would return the same most-recent events
-        // already in the store, which get deduped but keep hasMore=true.
         console.warn(
           "[EventService] Cloud backend doesn't support pagination filters. " +
             "Falling back to initial load only. " +
@@ -163,21 +165,30 @@ class EventService {
       }
     }
 
-    const page = await new RemoteEventsList(
-      getAgentServerHttpClientOptions({ conversationUrl, sessionApiKey }),
-      conversationId,
-    ).search({
-      limit,
-      ...(options.pageId ? { page_id: options.pageId } : {}),
-      ...(options.sortOrder ? { sort_order: options.sortOrder } : {}),
-      ...(options.timestampGte ? { timestamp__gte: options.timestampGte } : {}),
-      ...(options.timestampLt ? { timestamp__lt: options.timestampLt } : {}),
-    });
+    try {
+      const page = await new RemoteEventsList(
+        getAgentServerHttpClientOptions({ conversationUrl, sessionApiKey }),
+        conversationId,
+      ).search({
+        limit,
+        ...(options.pageId ? { page_id: options.pageId } : {}),
+        ...(options.sortOrder ? { sort_order: options.sortOrder } : {}),
+        ...(options.timestampGte
+          ? { timestamp__gte: options.timestampGte }
+          : {}),
+        ...(options.timestampLt ? { timestamp__lt: options.timestampLt } : {}),
+      });
 
-    return {
-      items: (page?.items ?? []) as OpenHandsEvent[],
-      next_page_id: page?.next_page_id ?? null,
-    };
+      return {
+        items: (page?.items ?? []) as OpenHandsEvent[],
+        next_page_id: page?.next_page_id ?? null,
+      };
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message.includes("Missing event file")) {
+        return { items: [], next_page_id: null };
+      }
+      throw err;
+    }
   }
 }
 
