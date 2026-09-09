@@ -14,8 +14,14 @@
  *       scripts/                  ← copied from repo scripts/
  *       config/                   ← copied from repo config/
  *       build/                    ← static frontend
- *     Contents/Resources/bin/     ← process.resourcesPath/bin
- *       uv  uvx                   ← bundled via extraResources
+ *     Contents/Resources/bin-<arch>/  ← process.resourcesPath/bin-<arch>
+ *       uv  uvx                        ← bundled via extraResources
+ *     Contents/Resources/bin/          ← legacy flat dir (single-arch builds)
+ *
+ *   Bundled runtimes (uv `bin`, Node `node`) prefer the arch-tagged dir
+ *   matching process.arch — under a universal binary that's the executing
+ *   slice (arm64 on Apple Silicon, x64 on Intel/Rosetta) — and fall back
+ *   to the legacy flat dir (see lib/bundled-runtime-dir.mjs).
  *
  *   Dev (npm run desktop  →  electron electron):
  *     electron/main.mjs           ← __dirname = <repo>/electron/
@@ -48,6 +54,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 
 import { isExternalBrowsableUrl, isLoopbackAppUrl } from "./lib/window-url-policy.mjs";
+import { resolveBundledRuntimeDir } from "./lib/bundled-runtime-dir.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -99,7 +106,16 @@ function injectBundledUv() {
   const isWin = process.platform === "win32";
   const uvName = isWin ? "uv.exe" : "uv";
   const uvxName = isWin ? "uvx.exe" : "uvx";
-  const binDir = join(process.resourcesPath, "bin");
+  const binDir = resolveBundledRuntimeDir(process.resourcesPath, "bin");
+  if (!binDir) {
+    console.warn(
+      "[desktop] Bundled uv not found — looked in",
+      join(process.resourcesPath, `bin-${process.arch}`),
+      "and",
+      join(process.resourcesPath, "bin"),
+    );
+    return;
+  }
   const uvPath = join(binDir, uvName);
 
   // We only probe for `uv` here — `uv` and `uvx` ship together in the
@@ -173,7 +189,16 @@ function injectBundledNode() {
   if (!app.isPackaged) return;
 
   const isWin = process.platform === "win32";
-  const nodeRoot = join(process.resourcesPath, "node");
+  const nodeRoot = resolveBundledRuntimeDir(process.resourcesPath, "node");
+  if (!nodeRoot) {
+    console.warn(
+      "[desktop] Bundled Node.js not found — looked in " +
+        `${join(process.resourcesPath, `node-${process.arch}`)} and ` +
+        `${join(process.resourcesPath, "node")} — backend scripts and stdio ` +
+        "MCP servers will fail. Run `npm run download-node` and rebuild.",
+    );
+    return;
+  }
   // POSIX Node distributions put binaries in bin/; Windows zips put node.exe
   // and the npm.cmd / npx.cmd wrappers at the distribution root.
   const binDir = isWin ? nodeRoot : join(nodeRoot, "bin");
