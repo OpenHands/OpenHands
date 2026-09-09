@@ -71,6 +71,7 @@ if (typeof requestAnimationFrame === "undefined") {
 // against a torn-down global and throws
 // `ReferenceError: ProgressEvent is not defined`. Vitest reports that as an
 // unhandled rejection and fails the whole run even though every test passed.
+// MSW also evaluates `XMLHttpRequestUpload` in the same late callback path.
 //
 // Two earlier attempts at this (an own-property getter, then the `afterAll`
 // drain below) both put the fallback where teardown can reach it, or bounded
@@ -79,13 +80,12 @@ if (typeof requestAnimationFrame === "undefined") {
 // can settle long after 30 macrotask ticks.
 //
 // `delete` only removes *own* properties, while identifier resolution walks
-// the prototype chain. So the fallback goes on an object inserted into
-// `globalThis`'s prototype chain, where teardown cannot delete it: while the
-// environment is alive jsdom's own property shadows it, and once teardown
-// removes that own property, the bare `ProgressEvent` identifier resolves
-// through the prototype to the class below. Node's `globalThis` does not have
-// `Object.prototype` as its direct prototype, so this adds nothing to plain
-// objects.
+// the prototype chain. So the fallbacks go on an object inserted into
+// `globalThis`'s prototype chain, where teardown cannot delete them: while the
+// environment is alive jsdom's own properties shadow them, and once teardown
+// removes those own properties, the bare identifiers resolve through the
+// prototype. Node's `globalThis` does not have `Object.prototype` as its direct
+// prototype, so this adds nothing to plain objects.
 class MockProgressEvent extends Event {
   readonly lengthComputable: boolean;
 
@@ -108,21 +108,34 @@ const PROGRESS_EVENT_FALLBACK = Symbol.for(
   "agent-canvas.progress-event-fallback",
 );
 
-function installProgressEventFallback(fallback: unknown) {
+function installProgressEventFallback(
+  progressEventFallback: unknown,
+  uploadFallback: unknown,
+) {
   const currentProto = Object.getPrototypeOf(globalThis) as object | null;
   if (currentProto && PROGRESS_EVENT_FALLBACK in currentProto) return;
 
   const holder = Object.create(currentProto) as Record<PropertyKey, unknown>;
   Object.defineProperty(holder, PROGRESS_EVENT_FALLBACK, { value: true });
   Object.defineProperty(holder, "ProgressEvent", {
-    value: fallback,
+    value: progressEventFallback,
+    configurable: true,
+    writable: true,
+  });
+  Object.defineProperty(holder, "XMLHttpRequestUpload", {
+    value: uploadFallback,
     configurable: true,
     writable: true,
   });
   Object.setPrototypeOf(globalThis, holder);
 }
 
-installProgressEventFallback(MockProgressEvent);
+installProgressEventFallback(
+  MockProgressEvent,
+  typeof XMLHttpRequestUpload === "undefined"
+    ? class MockXMLHttpRequestUpload {}
+    : XMLHttpRequestUpload,
+);
 
 // Mock ResizeObserver for test environment
 class MockResizeObserver {
