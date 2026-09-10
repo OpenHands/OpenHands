@@ -47,6 +47,19 @@ Agent Canvas runs the open source OpenHands agent out-of-the-box, but can use an
 
 If you have questions or feedback, please open a GitHub issue or join the [#proj-agent-canvas channel in Slack](https://openhands.dev/joinslack).
 
+## Prerequisites
+
+Complete the requirements for your preferred installation method before continuing:
+
+| Installation method | Requirements |
+| --- | --- |
+| All methods | A terminal or command prompt and network access. |
+| Without a sandbox | [Node.js 22.12.x or later](https://nodejs.org/en/download), including `npm`, [uv](https://docs.astral.sh/uv/getting-started/installation/), and at least 1 GB of free disk space. |
+| With a Docker sandbox | [Docker](https://docs.docker.com/get-docker/) running on Linux, macOS, or Windows, and at least 2 GB of free disk space. |
+| From source | [Git](https://git-scm.com/downloads), [Node.js 22.12.x or later](https://nodejs.org/en/download), including `npm`, [uv](https://docs.astral.sh/uv/getting-started/installation/), and at least 1 GB of free disk space. |
+
+See the corresponding installation option below for any additional environment-specific setup.
+
 ## Quickstart
 
 You can install OpenHands to run agents on any machine: on your laptop, on a dedicated computer like a Mac Mini,
