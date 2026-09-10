@@ -611,7 +611,7 @@ const MOCK_MODELS = [
   "openhands/claude-haiku-4-5-20251001",
   "openhands/claude-opus-4-5-20251101",
   "openai/gpt-5.6-sol",
-  "openhands/deepseek-v4-flash",
+  "openhands/deepseek-v4.1-flash",
   "openhands/glm-5.2",
   "sambanova/Meta-Llama-3.1-8B-Instruct",
 ];
@@ -626,7 +626,7 @@ const MOCK_VERIFIED_MODELS = new Set([
   "openhands/claude-opus-4-5-20251101",
   "openhands/claude-sonnet-4-5-20250929",
   "openai/gpt-5.6-sol",
-  "openhands/deepseek-v4-flash",
+  "openhands/deepseek-v4.1-flash",
   "openhands/glm-5.2",
 ]);
 
