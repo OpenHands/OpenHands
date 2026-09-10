@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { OpenHandsLogoButton } from "#/components/shared/buttons/openhands-logo-button";
 import { NavigationLink } from "#/components/shared/navigation-link";
+import { getLockedCloudHost } from "#/api/agent-server-config";
 import {
   automationListPath,
   getInterfaceCopy,
@@ -112,6 +113,10 @@ export function SidebarRailBody({
   const cloudSettingsUrl = isCloudBackend
     ? `${activeBackend.host.replace(/\/+$/, "")}/settings`
     : null;
+  // Locked-to-Cloud (SaaS / self-hosted OHE) serves the canvas at /canvas on
+  // the cloud host itself, so cloud settings open in this tab and Back
+  // returns here (OHE-3242). Standalone / Electron keep the new tab.
+  const isLockedToCloud = getLockedCloudHost() !== null;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -280,8 +285,8 @@ export function SidebarRailBody({
             {isCloudBackend && cloudSettingsUrl ? (
               <a
                 href={cloudSettingsUrl}
-                target="_blank"
-                rel="noopener noreferrer"
+                target={isLockedToCloud ? undefined : "_blank"}
+                rel={isLockedToCloud ? undefined : "noopener noreferrer"}
                 data-testid="collapsed-settings-link"
                 aria-label={t(I18nKey.SIDEBAR$SETTINGS)}
                 className={sidebarNavRowClassName({ collapsed: true })}
