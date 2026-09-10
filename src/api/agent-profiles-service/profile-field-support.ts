@@ -2,6 +2,7 @@ import {
   compareAgentServerVersions,
   getCachedAgentServerVersion,
 } from "#/api/agent-server-compatibility";
+import { getActiveBackend } from "#/api/backend-registry/active-store";
 
 /**
  * `enable_switch_llm_tool` reached `OpenHandsAgentProfile` in
@@ -68,8 +69,23 @@ export function agentProfileSupportsTools(): boolean {
  */
 export const MIN_AGENT_SERVER_VERSION_FOR_PROFILE_SECRET_REFS = "1.47.0";
 
-/** Whether the active backend's agent-profile model accepts `secret_refs`. */
+/**
+ * Whether the active backend enforces `secret_refs`.
+ *
+ * Unlike the other gates here, this one answers "will the restriction actually
+ * hold?", not just "will the save be accepted?" — so it is deliberately
+ * conservative where they are permissive.
+ *
+ * Cloud is excluded. It resolves the agent profile itself and sends a *resolved
+ * agent* to the agent-server, never `agent_profile_id`, so the agent-server's
+ * profile branch — where the filtering lives — never runs; the conversation's
+ * secrets are assembled separately and `secret_refs` is not consulted. A
+ * scoping control there would promise a restriction nothing applies, which is
+ * worse than not offering one. Re-enable once the cloud app-server filters on
+ * `secret_refs` (OpenHands/enterprise#344).
+ */
 export function agentProfileSupportsSecretRefs(): boolean {
+  if (getActiveBackend().backend.kind === "cloud") return false;
   const version = getCachedAgentServerVersion();
   if (!version) return true;
   const comparison = compareAgentServerVersions(

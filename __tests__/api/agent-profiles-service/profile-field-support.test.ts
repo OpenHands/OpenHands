@@ -9,6 +9,11 @@ import {
 } from "#/api/agent-profiles-service/profile-field-support";
 
 const mockGetCachedAgentServerVersion = vi.fn<() => string | null>();
+const mockBackendKind = vi.fn<() => string>(() => "local");
+
+vi.mock("#/api/backend-registry/active-store", () => ({
+  getActiveBackend: () => ({ backend: { kind: mockBackendKind() } }),
+}));
 
 // Only the version *lookup* is mocked — the comparison stays the real one so
 // these cases exercise the same parser the boot-time compatibility check uses.
@@ -93,6 +98,7 @@ describe("agentProfileSupportsTools", () => {
 describe("agentProfileSupportsSecretRefs", () => {
   beforeEach(() => {
     mockGetCachedAgentServerVersion.mockReset();
+    mockBackendKind.mockReturnValue("local");
   });
 
   it("pins the gate to the release that adds the profile field", () => {
@@ -115,8 +121,17 @@ describe("agentProfileSupportsSecretRefs", () => {
     },
   );
 
-  it("assumes support when no version is cached (cloud backends)", () => {
+  it("assumes support when no version is cached on a local backend", () => {
     mockGetCachedAgentServerVersion.mockReturnValue(null);
     expect(agentProfileSupportsSecretRefs()).toBe(true);
+  });
+
+  it("reports no support on cloud, which does not enforce the scope", () => {
+    // Cloud resolves the profile itself and sends a resolved agent, so the
+    // agent-server's profile branch — where the filtering lives — never runs.
+    // Offering the control there would promise a restriction nothing applies.
+    mockBackendKind.mockReturnValue("cloud");
+    mockGetCachedAgentServerVersion.mockReturnValue("9.9.9");
+    expect(agentProfileSupportsSecretRefs()).toBe(false);
   });
 });
