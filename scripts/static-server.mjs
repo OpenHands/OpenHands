@@ -662,9 +662,18 @@ function startSdkCloudProxyAgentServer(config) {
     {
       env: {
         ...process.env,
+        HOME: "/tmp",
         OH_SESSION_API_KEYS_0: sessionApiKey,
         OH_SECRET_KEY:
           process.env.OH_SECRET_KEY || randomBytes(32).toString("hex"),
+        OH_PERSISTENCE_DIR:
+          process.env.OH_PERSISTENCE_DIR || "/tmp/agent-canvas-cloud-proxy",
+        OH_CONVERSATIONS_PATH:
+          process.env.OH_CONVERSATIONS_PATH ||
+          "/tmp/agent-canvas-cloud-proxy/conversations",
+        OH_BASH_EVENTS_DIR:
+          process.env.OH_BASH_EVENTS_DIR ||
+          "/tmp/agent-canvas-cloud-proxy/bash_events",
         OPENHANDS_SUPPRESS_BANNER: "1",
       },
       stdio: ["ignore", "inherit", "inherit"],
