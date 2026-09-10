@@ -24,8 +24,17 @@ export function combineUsageMetrics(
   let maxBudgetPerTask: number | null = null;
   let combinedTokenUsage: TokenUsage | null = null;
 
+  // `per_turn_token` is the agent's current context fill: a property of the
+  // primary ("default") usage's last turn, not a total across services. A
+  // secondary usage such as the condenser keeps its own (typically larger)
+  // last-turn size after the agent compacts, so a max across entries would
+  // pin the context meter to that stale value and the compaction hook would
+  // never observe the drop. Prefer the primary entry; fall back to the max
+  // only when no "default" usage is present.
+  let primaryPerTurnToken: number | null = null;
+
   // Iterate through all metrics and combine them
-  for (const metrics of Object.values(stats.usage_to_metrics)) {
+  for (const [usageId, metrics] of Object.entries(stats.usage_to_metrics)) {
     // Add up costs
     totalCost += metrics.accumulated_cost;
 
@@ -36,6 +45,9 @@ export function combineUsageMetrics(
 
     // Combine token usage
     if (metrics.accumulated_token_usage) {
+      if (usageId === "default") {
+        primaryPerTurnToken = metrics.accumulated_token_usage.per_turn_token;
+      }
       if (combinedTokenUsage === null) {
         combinedTokenUsage = { ...metrics.accumulated_token_usage };
       } else {
@@ -63,6 +75,10 @@ export function combineUsageMetrics(
         };
       }
     }
+  }
+
+  if (combinedTokenUsage !== null && primaryPerTurnToken !== null) {
+    combinedTokenUsage.per_turn_token = primaryPerTurnToken;
   }
 
   return {
