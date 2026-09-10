@@ -512,7 +512,12 @@ class AgentServerConversationService {
           getWorkspaceRootForBackend(backendHost),
         );
     const resolvedWorkspaceMode =
-      workspaceMode ?? (workingDirOverride ? "local_repo" : "new_worktree");
+      workspaceMode ??
+      (workingDirOverride
+        ? settings.use_worktree_by_default
+          ? "new_worktree"
+          : "local_repo"
+        : "new_worktree");
 
     // Use encrypted settings to avoid exposing secrets in the browser
     const payload = await buildStartConversationRequestWithEncryptedSettings({

@@ -6,7 +6,9 @@ import toast from "react-hot-toast";
 
 import { HomeChatLauncher } from "#/components/features/home/home-chat-launcher";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import SettingsService from "#/api/settings-service/settings-service.api";
 import WorkspacesService from "#/api/workspaces-service/workspaces-service.api";
+import { DEFAULT_SETTINGS } from "#/services/settings";
 import {
   LAST_LOCAL_WORKSPACE_MODE_STORAGE_KEY,
   writeStoredLocalWorkspaceMode,
@@ -450,7 +452,6 @@ describe("HomeChatLauncher", () => {
     expect(screen.getByTestId("stub-workspace-mode")).toHaveTextContent(
       "local:new_worktree",
     );
-
     await user.click(screen.getByTestId("stub-workspace-mode-local-repo"));
     expect(screen.getByTestId("stub-workspace-mode")).toHaveTextContent(
       "local:local_repo",
@@ -466,6 +467,93 @@ describe("HomeChatLauncher", () => {
 
     expect(screen.getByTestId("stub-workspace-mode")).toHaveTextContent(
       "local:local_repo",
+    );
+  });
+
+  it("uses the saved worktree preference for a selected workspace", async () => {
+    const getSettingsSpy = vi
+      .spyOn(SettingsService, "getSettings")
+      .mockResolvedValue({
+        ...DEFAULT_SETTINGS,
+        use_worktree_by_default: true,
+      });
+    const createSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue(
+        makeConversationResponse({ app_conversation_id: "conv-default-wt" }),
+      );
+
+    writeStoredLocalWorkspaceMode("local_repo");
+    renderLauncher();
+    await waitFor(() => expect(getSettingsSpy).toHaveBeenCalled());
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId("open-workspace-button"));
+    await user.click(
+      await screen.findByTestId("stub-workspace-dialog-confirm"),
+    );
+    expect(screen.getByTestId("stub-workspace-mode")).toHaveTextContent(
+      "local:new_worktree",
+    );
+    expect(
+      window.localStorage.getItem(LAST_LOCAL_WORKSPACE_MODE_STORAGE_KEY),
+    ).toBe("local_repo");
+    await user.click(screen.getByTestId("stub-chat-submit"));
+
+    await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
+    expect(createSpy).toHaveBeenCalledWith({
+      initialUserMsg: "hello world",
+      metadata: null,
+      workingDirOverride: "/p/app",
+      workspaceMode: "new_worktree",
+    });
+  });
+
+  it("allows a one-conversation override of the saved worktree preference", async () => {
+    const getSettingsSpy = vi
+      .spyOn(SettingsService, "getSettings")
+      .mockResolvedValue({
+        ...DEFAULT_SETTINGS,
+        use_worktree_by_default: true,
+      });
+    const createSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue(
+        makeConversationResponse({ app_conversation_id: "conv-shared" }),
+      );
+
+    const { unmount } = renderLauncher();
+    await waitFor(() => expect(getSettingsSpy).toHaveBeenCalled());
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId("open-workspace-button"));
+    await user.click(
+      await screen.findByTestId("stub-workspace-dialog-confirm"),
+    );
+    await user.click(screen.getByTestId("stub-workspace-mode-local-repo"));
+    expect(screen.getByTestId("stub-workspace-mode")).toHaveTextContent(
+      "local:local_repo",
+    );
+    await user.click(screen.getByTestId("stub-chat-submit"));
+
+    await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
+    expect(createSpy).toHaveBeenCalledWith({
+      initialUserMsg: "hello world",
+      metadata: null,
+      workingDirOverride: "/p/app",
+      workspaceMode: "local_repo",
+    });
+
+    unmount();
+    renderLauncher();
+    await waitFor(() => expect(getSettingsSpy).toHaveBeenCalledTimes(2));
+
+    await user.click(screen.getByTestId("open-workspace-button"));
+    await user.click(
+      await screen.findByTestId("stub-workspace-dialog-confirm"),
+    );
+    expect(screen.getByTestId("stub-workspace-mode")).toHaveTextContent(
+      "local:new_worktree",
     );
   });
 

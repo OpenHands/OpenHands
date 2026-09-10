@@ -274,7 +274,10 @@ test.describe("files tab, conversation overview git, and browser tab", () => {
       if (await commitsTab.isVisible().catch(() => false)) {
         await commitsTab.click();
       } else {
-        await page.getByTestId("ellipsis-button").click();
+        await page
+          .getByTestId("tabs-pane-header")
+          .getByTestId("ellipsis-button")
+          .click();
         await page.getByTestId("conversation-tabs-menu-open-commits").click();
       }
       await expect(page.getByTestId("conversation-tab-commits")).toBeVisible({

@@ -133,6 +133,7 @@ export type Settings = {
   enable_default_condenser: boolean;
   condenser_max_size: number | null;
   enable_sound_notifications: boolean;
+  use_worktree_by_default: boolean;
   enable_proactive_conversation_starters: boolean;
   enable_solvability_analysis: boolean;
   user_consents_to_analytics: boolean | null;

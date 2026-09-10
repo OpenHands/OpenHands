@@ -100,6 +100,9 @@ describe("AppSettingsScreen", () => {
 
     expect(analyticsSwitch).toBeChecked();
     expect(analyticsSwitch).toBeDisabled();
+    expect(
+      screen.queryByTestId("use-worktree-by-default-switch"),
+    ).not.toBeInTheDocument();
 
     await userEvent.click(analyticsSwitch);
     expect(submitButton).toBeDisabled();
@@ -158,6 +161,29 @@ describe("AppSettingsScreen", () => {
           git_user_name: "monalisa",
           git_user_email: "octocat@example.com",
         }),
+      );
+    });
+  });
+
+  it("saves the default-worktree preference in OSS mode", async () => {
+    const saveSettingsSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({ use_worktree_by_default: false }),
+    );
+
+    renderAppSettingsScreen();
+
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByTestId("use-worktree-by-default-switch"),
+    );
+    await user.click(screen.getByTestId("submit-button"));
+
+    await waitFor(() => {
+      expect(saveSettingsSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ use_worktree_by_default: true }),
       );
     });
   });

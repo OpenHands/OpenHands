@@ -6850,6 +6850,23 @@
     "uk": "Звукові сповіщення",
     "ca": "Notificacions de so"
   },
+  "SETTINGS$USE_WORKTREE_BY_DEFAULT": {
+    "en": "Use worktrees by default",
+    "ja": "デフォルトでワークツリーを使用する",
+    "zh-CN": "默认使用工作树",
+    "zh-TW": "預設使用工作樹",
+    "ko-KR": "기본적으로 워크트리 사용",
+    "de": "Worktrees standardmäßig verwenden",
+    "no": "Bruk worktrees som standard",
+    "it": "Usa i worktree per impostazione predefinita",
+    "pt": "Usar worktrees por padrão",
+    "es": "Usar worktrees de forma predeterminada",
+    "ar": "استخدم أشجار العمل افتراضيًا",
+    "fr": "Utiliser les worktrees par défaut",
+    "tr": "Varsayılan olarak çalışma ağaçlarını kullan",
+    "uk": "Використовувати робочі дерева за замовчуванням",
+    "ca": "Utilitza worktrees per defecte"
+  },
   "SETTINGS$MAX_BUDGET_PER_TASK": {
     "en": "Maximum Budget Per Task",
     "ja": "タスクごとの最大予算",

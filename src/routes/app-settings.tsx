@@ -46,6 +46,8 @@ export function AppSettingsScreen() {
     soundNotificationsSwitchHasChanged,
     setSoundNotificationsSwitchHasChanged,
   ] = React.useState(false);
+  const [worktreeDefaultSwitchHasChanged, setWorktreeDefaultSwitchHasChanged] =
+    React.useState(false);
   const [gitUserNameHasChanged, setGitUserNameHasChanged] =
     React.useState(false);
   const [gitUserEmailHasChanged, setGitUserEmailHasChanged] =
@@ -98,6 +100,8 @@ export function AppSettingsScreen() {
       : formData.get("enable-analytics-switch")?.toString() === "on";
     const enableSoundNotifications =
       formData.get("enable-sound-notifications-switch")?.toString() === "on";
+    const useWorktreeByDefault =
+      formData.get("use-worktree-by-default-switch")?.toString() === "on";
 
     const gitUserName =
       formData.get("git-user-name-input")?.toString() ||
@@ -109,7 +113,10 @@ export function AppSettingsScreen() {
     saveSettings(
       {
         language,
-        ...(!isCloudBackend && { user_consents_to_analytics: enableAnalytics }),
+        ...(!isCloudBackend && {
+          user_consents_to_analytics: enableAnalytics,
+          use_worktree_by_default: useWorktreeByDefault,
+        }),
         enable_sound_notifications: enableSoundNotifications,
         git_user_name: gitUserName,
         git_user_email: gitUserEmail,
@@ -128,6 +135,7 @@ export function AppSettingsScreen() {
           setLanguageInputHasChanged(false);
           setAnalyticsSwitchHasChanged(false);
           setSoundNotificationsSwitchHasChanged(false);
+          setWorktreeDefaultSwitchHasChanged(false);
           setGitUserNameHasChanged(false);
           setGitUserEmailHasChanged(false);
           setTitleLlmProfileInput(undefined);
@@ -160,6 +168,12 @@ export function AppSettingsScreen() {
     );
   };
 
+  const checkIfWorktreeDefaultSwitchHasChanged = (checked: boolean) => {
+    setWorktreeDefaultSwitchHasChanged(
+      checked !== !!settings?.use_worktree_by_default,
+    );
+  };
+
   const checkIfGitUserNameHasChanged = (value: string) => {
     const currentValue = settings?.git_user_name;
     setGitUserNameHasChanged(value !== currentValue);
@@ -174,6 +188,7 @@ export function AppSettingsScreen() {
     !languageInputHasChanged &&
     !analyticsSwitchHasChanged &&
     !soundNotificationsSwitchHasChanged &&
+    !worktreeDefaultSwitchHasChanged &&
     selectedTitleLlmProfile === storedTitleLlmProfile &&
     !gitUserNameHasChanged &&
     !gitUserEmailHasChanged;
@@ -223,6 +238,17 @@ export function AppSettingsScreen() {
           >
             {t(I18nKey.SETTINGS$SOUND_NOTIFICATIONS)}
           </SettingsSwitch>
+
+          {!isCloudBackend && (
+            <SettingsSwitch
+              testId="use-worktree-by-default-switch"
+              name="use-worktree-by-default-switch"
+              defaultIsToggled={!!settings.use_worktree_by_default}
+              onToggle={checkIfWorktreeDefaultSwitchHasChanged}
+            >
+              {t(I18nKey.SETTINGS$USE_WORKTREE_BY_DEFAULT)}
+            </SettingsSwitch>
+          )}
 
           <GettingStartedChecklistSwitch />
 

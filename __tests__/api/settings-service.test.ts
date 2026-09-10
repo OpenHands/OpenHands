@@ -31,6 +31,22 @@ const cloudBackend: Backend = {
   kind: "cloud",
 };
 
+const localBackendA: Backend = {
+  id: "local-a",
+  name: "Local A",
+  host: "http://local-a.test",
+  apiKey: "local-a-key",
+  kind: "local",
+};
+
+const localBackendB: Backend = {
+  id: "local-b",
+  name: "Local B",
+  host: "http://local-b.test",
+  apiKey: "local-b-key",
+  kind: "local",
+};
+
 describe("SettingsService", () => {
   beforeEach(() => {
     // Clear localStorage and reset mock settings state
@@ -124,6 +140,152 @@ describe("SettingsService", () => {
     expect(fetchSpy).toHaveBeenCalledTimes(2);
 
     fetchSpy.mockRestore();
+  });
+
+  it("isolates display and encrypted settings caches by active backend", async () => {
+    const requestCounts = { a: 0, b: 0 };
+    const responseFor = (model: string) => ({
+      agent_settings: { llm: { model, api_key: `${model}-key` } },
+      conversation_settings: {},
+      llm_api_key_is_set: true,
+      misc_settings: {
+        app_preferences: { use_worktree_by_default: model === "model-a" },
+      },
+    });
+    server.use(
+      http.get("http://local-a.test/api/settings", () => {
+        requestCounts.a += 1;
+        return HttpResponse.json(responseFor("model-a"));
+      }),
+      http.get("http://local-b.test/api/settings", () => {
+        requestCounts.b += 1;
+        return HttpResponse.json(responseFor("model-b"));
+      }),
+    );
+    setRegisteredBackends([localBackendA, localBackendB]);
+
+    setActiveSelection({ backendId: localBackendA.id });
+    const displayA = await SettingsService.getSettings();
+    const encryptedA = await SettingsService.getSettingsForConversation();
+    expect(displayA.use_worktree_by_default).toBe(true);
+    expect(encryptedA.agentSettings.llm).toMatchObject({ model: "model-a" });
+
+    setActiveSelection({ backendId: localBackendB.id });
+    const displayB = await SettingsService.getSettings();
+    const encryptedB = await SettingsService.getSettingsForConversation();
+    expect(displayB.use_worktree_by_default).toBe(false);
+    expect(encryptedB.agentSettings.llm).toMatchObject({ model: "model-b" });
+    expect(requestCounts).toEqual({ a: 2, b: 2 });
+  });
+
+  it("does not let a late response poison the next backend cache", async () => {
+    let releaseBackendA: () => void = () => {};
+    const backendAGate = new Promise<void>((resolve) => {
+      releaseBackendA = resolve;
+    });
+    let markBackendAStarted: () => void = () => {};
+    const backendAStarted = new Promise<void>((resolve) => {
+      markBackendAStarted = resolve;
+    });
+    let backendBRequests = 0;
+    server.use(
+      http.get("http://local-a.test/api/settings", async () => {
+        markBackendAStarted();
+        await backendAGate;
+        return HttpResponse.json({
+          agent_settings: { llm: { model: "model-a" } },
+          conversation_settings: {},
+          llm_api_key_is_set: true,
+          misc_settings: {
+            app_preferences: { use_worktree_by_default: true },
+          },
+        });
+      }),
+      http.get("http://local-b.test/api/settings", () => {
+        backendBRequests += 1;
+        return HttpResponse.json({
+          agent_settings: { llm: { model: "model-b" } },
+          conversation_settings: {},
+          llm_api_key_is_set: true,
+          misc_settings: {
+            app_preferences: { use_worktree_by_default: false },
+          },
+        });
+      }),
+    );
+    setRegisteredBackends([localBackendA, localBackendB]);
+
+    setActiveSelection({ backendId: localBackendA.id });
+    const backendARequest = SettingsService.getSettings();
+    await backendAStarted;
+
+    setActiveSelection({ backendId: localBackendB.id });
+    const backendBSettings = await SettingsService.getSettings();
+    expect(backendBSettings.use_worktree_by_default).toBe(false);
+
+    releaseBackendA();
+    expect((await backendARequest).use_worktree_by_default).toBe(true);
+    expect((await SettingsService.getSettings()).use_worktree_by_default).toBe(
+      false,
+    );
+    expect(backendBRequests).toBe(1);
+  });
+
+  it("keeps retries on the backend that started the settings request", async () => {
+    const requestCounts = { a: 0, b: 0 };
+    server.use(
+      http.get("http://local-a.test/api/settings", () => {
+        requestCounts.a += 1;
+        if (requestCounts.a === 1) {
+          setActiveSelection({ backendId: localBackendB.id });
+          return HttpResponse.json({ detail: "retry" }, { status: 503 });
+        }
+        return HttpResponse.json({
+          agent_settings: { llm: { model: "model-a" } },
+          conversation_settings: {},
+          llm_api_key_is_set: true,
+        });
+      }),
+      http.get("http://local-b.test/api/settings", () => {
+        requestCounts.b += 1;
+        return HttpResponse.json({
+          agent_settings: { llm: { model: "model-b" } },
+          conversation_settings: {},
+          llm_api_key_is_set: true,
+        });
+      }),
+    );
+    setRegisteredBackends([localBackendA, localBackendB]);
+    setActiveSelection({ backendId: localBackendA.id });
+
+    const response = await SettingsService.fetchSettingsFromApi("encrypted");
+
+    expect(response.agent_settings.llm).toMatchObject({ model: "model-a" });
+    expect(requestCounts).toEqual({ a: 2, b: 0 });
+  });
+
+  it("keeps save retries on the backend that started the request", async () => {
+    const requestCounts = { a: 0, b: 0 };
+    server.use(
+      http.patch("http://local-a.test/api/settings", () => {
+        requestCounts.a += 1;
+        if (requestCounts.a === 1) {
+          setActiveSelection({ backendId: localBackendB.id });
+          return HttpResponse.json({ detail: "retry" }, { status: 503 });
+        }
+        return HttpResponse.json({});
+      }),
+      http.patch("http://local-b.test/api/settings", () => {
+        requestCounts.b += 1;
+        return HttpResponse.json({});
+      }),
+    );
+    setRegisteredBackends([localBackendA, localBackendB]);
+    setActiveSelection({ backendId: localBackendA.id });
+
+    await SettingsService.saveSettings({ use_worktree_by_default: true });
+
+    expect(requestCounts).toEqual({ a: 2, b: 0 });
   });
 
   it("skips API call when no diffs are provided to saveSettings", async () => {
@@ -228,6 +390,7 @@ describe("SettingsService", () => {
       git_user_name: "Alice",
       git_user_email: "alice@example.com",
       enable_sound_notifications: true,
+      use_worktree_by_default: true,
       user_consents_to_analytics: true,
       title_llm_profile: "Titles",
       disabled_skills: ["SSH Microagent"],
@@ -242,6 +405,7 @@ describe("SettingsService", () => {
       git_user_name: settings.git_user_name,
       git_user_email: settings.git_user_email,
       enable_sound_notifications: settings.enable_sound_notifications,
+      use_worktree_by_default: settings.use_worktree_by_default,
       user_consents_to_analytics: settings.user_consents_to_analytics,
       title_llm_profile: settings.title_llm_profile,
       disabled_skills: settings.disabled_skills,
@@ -296,6 +460,30 @@ describe("SettingsService", () => {
         git_user_name: "Alice",
         title_llm_profile: null,
       },
+    });
+  });
+
+  it("does not send the local-only worktree preference to cloud", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+
+    await SettingsService.saveSettings({ use_worktree_by_default: true });
+
+    expect(mockSaveCloudSettings).not.toHaveBeenCalled();
+  });
+
+  it("strips the worktree preference while forwarding other cloud preferences", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+
+    await SettingsService.saveSettings({
+      language: "fr",
+      use_worktree_by_default: true,
+    });
+
+    expect(mockSaveCloudSettings).toHaveBeenCalledTimes(1);
+    expect(mockSaveCloudSettings).toHaveBeenCalledWith({
+      app_preferences: { language: "fr" },
     });
   });
 
