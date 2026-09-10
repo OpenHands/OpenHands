@@ -10,6 +10,7 @@ import { I18nKey } from "#/i18n/declaration";
 
 import AutomationService from "#/api/automation-service/automation-service.api";
 import { getCloudOrganizationMember } from "#/api/cloud/organization-service.api";
+import ProfilesService from "#/api/profiles-service/profiles-service.api";
 import {
   __resetActiveStoreForTests,
   setActiveSelection,
@@ -29,6 +30,12 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
     deleteAutomation: vi.fn(),
     dispatchAutomation: vi.fn(),
     checkHealth: vi.fn(),
+  },
+}));
+
+vi.mock("#/api/profiles-service/profiles-service.api", () => ({
+  default: {
+    listProfiles: vi.fn(),
   },
 }));
 
@@ -121,6 +128,11 @@ beforeEach(() => {
   vi.mocked(AutomationService.getAutomation).mockResolvedValue(automation);
   vi.mocked(AutomationService.getAutomationRuns).mockReset();
   vi.mocked(AutomationService.getAutomationRuns).mockResolvedValue(emptyRuns);
+  vi.mocked(ProfilesService.listProfiles).mockReset();
+  vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
+    profiles: [],
+    active_profile: null,
+  });
   setRegisteredBackends([localBackend, cloudBackend]);
   setActiveSelection({ backendId: localBackend.id });
 });
@@ -130,7 +142,7 @@ afterEach(() => {
   __resetActiveStoreForTests();
 });
 
-describe("AutomationDetail — Edit is local-only", () => {
+describe("AutomationDetail — Edit in the kebab menu", () => {
   it("shows Edit in the kebab menu when the active backend is local", async () => {
     // Arrange — default beforeEach selects the local backend.
     const user = userEvent.setup();
@@ -149,7 +161,7 @@ describe("AutomationDetail — Edit is local-only", () => {
     ).toBeInTheDocument();
   });
 
-  it("hides Edit in the kebab menu when the active backend is cloud", async () => {
+  it("opens the Edit modal pre-filled from the kebab menu when the active backend is cloud", async () => {
     // Arrange — switch to the cloud backend BEFORE rendering so the
     // detail page mounts under cloud (the backend-change guard would
     // otherwise stop the fetch).
@@ -160,17 +172,19 @@ describe("AutomationDetail — Edit is local-only", () => {
       expect(AutomationService.getAutomation).toHaveBeenCalledTimes(1);
     });
 
-    // Act
+    // Act — open the kebab menu and pick Edit.
     await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
+    );
 
-    // Assert — Edit must not appear on cloud; Delete still does, proving
-    // we opened the menu and didn't merely fail to render.
-    expect(
-      screen.queryByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$DELETE }),
-    ).toBeInTheDocument();
+    // Assert — the Edit modal mounts on cloud, pre-filled for this
+    // automation; the permission model (mocked to canManage above) decides,
+    // not the backend kind.
+    const nameInput = (await screen.findByTestId(
+      "edit-automation-name",
+    )) as HTMLInputElement;
+    expect(nameInput.value).toBe(automation.name);
   });
 });
 

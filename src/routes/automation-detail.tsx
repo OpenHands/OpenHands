@@ -221,9 +221,6 @@ export default function AutomationDetail() {
     trackAutomationExported({ backendKind: active.backend.kind });
   };
 
-  // Edit is a local-backend-only feature in MVP — cloud automations
-  // are managed elsewhere and we don't yet surface them here.
-  const canEdit = active.backend.kind === "local";
   // Write actions on a specific automation: manage OR creator (escape hatch).
   const canManage = hasManagePermission || isOwner;
   // Automations run as their creator (the service mints run credentials for
@@ -236,6 +233,8 @@ export default function AutomationDetail() {
       creatorQuery.data?.email ??
       (creatorQuery.isError ? automation.user_id : null);
   }
+  // Non-creators may turn an automation off but not back on.
+  const canToggle = automation.enabled ? canManage : isOwner;
 
   return (
     <div className="min-h-full">
@@ -245,7 +244,7 @@ export default function AutomationDetail() {
           <DetailHeader
             automation={automation}
             onToggle={handleToggle}
-            onEdit={canEdit ? () => setShowEditModal(true) : undefined}
+            onEdit={() => setShowEditModal(true)}
             onDelete={() => setShowDeleteModal(true)}
             onExport={handleExport}
             onDownloadTarball={() =>
@@ -254,6 +253,7 @@ export default function AutomationDetail() {
             onRunNow={handleRunNow}
             isRunningNow={dispatchMutation.isPending}
             canManage={canManage}
+            canToggle={canToggle}
           />
           {automation.prompt && <PromptSection prompt={automation.prompt} />}
           <ConfigurationSection automation={automation} runsAs={runsAs} />
@@ -274,7 +274,7 @@ export default function AutomationDetail() {
             onConfirm={handleDelete}
             onCancel={() => setShowDeleteModal(false)}
           />
-          {canEdit && (
+          {showEditModal && (
             <EditAutomationModal
               automation={automation}
               isOpen={showEditModal}
