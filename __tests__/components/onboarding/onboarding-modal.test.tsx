@@ -24,6 +24,11 @@ import * as telemetry from "#/services/telemetry";
 const llmSettingsScreenMock = vi.hoisted(() => vi.fn());
 const getServerInfoMock = vi.hoisted(() => vi.fn());
 const getSettingsMock = vi.hoisted(() => vi.fn().mockResolvedValue({}));
+const saveAgentProfileMock = vi.hoisted(() => vi.fn().mockResolvedValue({}));
+const getAgentProfileMock = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({ profile: { id: "default-profile-id" } }),
+);
+const activateAgentProfileMock = vi.hoisted(() => vi.fn().mockResolvedValue({}));
 let captureMock: MockInstance<typeof telemetry.trackEvent>;
 
 // Both the backend status badge in the embedded edit form and the
@@ -40,6 +45,13 @@ vi.mock("@openhands/typescript-client/clients", () => ({
   SettingsClient: vi.fn(function SettingsClientMock() {
     return {
       getSettings: vi.fn(() => getSettingsMock()),
+    };
+  }),
+  AgentProfilesClient: vi.fn(function AgentProfilesClientMock() {
+    return {
+      saveAgentProfile: vi.fn((...args) => saveAgentProfileMock(...args)),
+      getAgentProfile: vi.fn((...args) => getAgentProfileMock(...args)),
+      activateAgentProfile: vi.fn((...args) => activateAgentProfileMock(...args)),
     };
   }),
 }));

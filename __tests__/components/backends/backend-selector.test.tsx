@@ -830,6 +830,27 @@ describe("BackendSelector", () => {
       expect(link).toHaveAttribute("target", "_blank");
       expect(link).toHaveAttribute("rel", "noopener noreferrer");
     });
+
+    it("passes the active org to the cloud settings link", () => {
+      let cloudId = "";
+      renderWithProviders(
+        <TestSeed
+          onMount={(ctx) => {
+            cloudId = ctx.addBackend(SEED_CLOUD_PRODUCTION).id;
+            ctx.setActive(cloudId, "org-2");
+          }}
+        >
+          <BackendSelector />
+        </TestSeed>,
+      );
+
+      expect(
+        screen.getByTestId("backend-selector-settings-link"),
+      ).toHaveAttribute(
+        "href",
+        `${SEED_CLOUD_PRODUCTION.host}/settings?org=org-2`,
+      );
+    });
   });
 
   describe("connection indicator", () => {
