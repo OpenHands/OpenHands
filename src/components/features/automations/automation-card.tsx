@@ -70,6 +70,8 @@ export function AutomationCard({
   const isOwner = useIsAutomationOwner(automation);
   // Write actions on a specific automation: manage OR creator (escape hatch).
   const canManage = hasManagePermission || isOwner;
+  // Non-creators may turn an automation off but not back on.
+  const canToggle = automation.enabled ? canManage : isOwner;
 
   const scheduleLabel =
     automation.trigger.schedule_human || automation.trigger.type;
@@ -86,6 +88,7 @@ export function AutomationCard({
     automation,
     t,
     canManage,
+    canToggle,
     onRunNow,
     isRunPending,
     onView: handleView,
