@@ -183,7 +183,9 @@ minutes, for example:
 - a new or changed public API, wire/event contract, or persisted-state owner;
 - a new module or subsystem, or a cross-cutting refactor or migration;
 - a behavior change in core logic (agent loop, conversation, event flow, backend
-  selection).
+  selection); or
+- a large diff (roughly 500+ lines changed) whose intent a reviewer cannot hold
+  in their head at once, even if no single hunk is complex.
 
 Skip it for trivial PRs—a typo, a one-line guard, a config or dependency bump, a
 docs tweak, a small localized bug fix. If the diff is its own explanation, do not
