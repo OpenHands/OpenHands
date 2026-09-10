@@ -153,6 +153,18 @@ describe("automation-schedule", () => {
     });
   });
 
+    it("accepts single-start stepped fields, matching croniter's n/m expansion", () => {
+      // Arrange — croniter expands `2/2` in the month field to 2,4,6,8,10,12,
+      // so the 31st fires in August/October/December: reachable.
+      const stepped = "0 0 31 2/2 *";
+
+      // Act
+      const result = validateCronSchedule(stepped);
+
+      // Assert
+      expect(result).toEqual({ schedule: stepped });
+    });
+
   describe("parseTimeOfDay", () => {
     it("parses HH:MM and rejects out-of-range or malformed values", () => {
       // Act
