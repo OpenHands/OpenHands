@@ -11,6 +11,11 @@ import SettingsService from "#/api/settings-service/settings-service.api";
 import { SecretsService } from "#/api/secrets-service";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import { Settings } from "#/types/settings";
+import { ACP_PROVIDERS } from "#/constants/acp-providers";
+
+const CLAUDE_CODE_DEFAULT_COMMAND =
+  ACP_PROVIDERS.find((provider) => provider.key === "claude-code")
+    ?.default_command ?? [];
 
 // Stub the login-detection probe so the ACP credentials section doesn't spin a
 // subprocess; default to no detected session so existing tests are unaffected.
@@ -1363,6 +1368,91 @@ describe("AgentSettingsScreen", () => {
       ).toBeChecked();
       expect(control!.buildAgentProfileFields()).toMatchObject({
         secret_refs: ["DELETED_SECRET"],
+      });
+    });
+
+    it("selects an ACP profile's provider credentials when scoping starts", async () => {
+      // Scoping is strict server-side, so an ACP profile that omits its
+      // credential cannot authenticate. Seed it visibly rather than re-adding
+      // it behind the user's back.
+      savedSecretsMock.mockReturnValue([
+        { name: "ANTHROPIC_API_KEY" },
+        { name: "ANTHROPIC_BASE_URL" },
+        { name: "PROD_DB_URL" },
+      ]);
+      seedOpenHandsSettings();
+      let control: AgentSettingsSaveControl | null = null;
+      renderAgentSettingsScreen({
+        embedded: true,
+        agentSettingsOverride: {
+          agent_kind: "acp",
+          acp_server: "claude-code",
+          // From the registry, not a literal: the pinned command carries a
+          // version that moves, and a stale one detects as `custom` (no
+          // provider credentials) instead of failing loudly.
+          acp_command: [...CLAUDE_CODE_DEFAULT_COMMAND],
+          acp_args: [],
+          acp_model: "",
+        },
+        onSaveControlChange: (next) => {
+          control = next;
+        },
+      });
+      await screen.findByTestId("agent-settings-screen");
+
+      const user = userEvent.setup();
+      await user.click(screen.getByTestId("agent-settings-secrets-mode"));
+      await user.click(
+        await screen.findByRole("option", {
+          name: "SETTINGS$AGENT_PROFILE_SECRETS_CHOOSE",
+        }),
+      );
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("agent-settings-secret-ANTHROPIC_API_KEY"),
+        ).toBeChecked();
+      });
+      // Seeded, not forced: an unrelated secret stays off.
+      expect(
+        screen.getByTestId("agent-settings-secret-PROD_DB_URL"),
+      ).not.toBeChecked();
+
+      const refs = (
+        control!.buildAgentProfileFields() as { secret_refs?: string[] }
+      ).secret_refs;
+      expect(refs).toContain("ANTHROPIC_API_KEY");
+    });
+
+    it("leaves an OpenHands profile's scope empty when scoping starts", async () => {
+      // Nothing an OpenHands agent needs rides this channel, so there is
+      // nothing to seed.
+      seedOpenHandsSettings();
+      let control: AgentSettingsSaveControl | null = null;
+      renderAgentSettingsScreen({
+        embedded: true,
+        agentSettingsOverride: {
+          agent_kind: "openhands",
+          enable_sub_agents: false,
+        },
+        onSaveControlChange: (next) => {
+          control = next;
+        },
+      });
+      await screen.findByTestId("agent-settings-screen");
+
+      const user = userEvent.setup();
+      await user.click(screen.getByTestId("agent-settings-secrets-mode"));
+      await user.click(
+        await screen.findByRole("option", {
+          name: "SETTINGS$AGENT_PROFILE_SECRETS_CHOOSE",
+        }),
+      );
+
+      await waitFor(() => {
+        expect(control!.buildAgentProfileFields()).toMatchObject({
+          secret_refs: [],
+        });
       });
     });
 

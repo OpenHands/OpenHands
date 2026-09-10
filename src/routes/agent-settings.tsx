@@ -41,6 +41,7 @@ import {
   buildAcpAgentSettingsDiff,
   getAcpPreferredDefaultModel,
   getAcpProvider,
+  getAcpProviderSecrets,
   type ACPProviderConfig,
 } from "#/constants/acp-providers";
 import { parseCommand, formatCommand } from "#/utils/acp-command";
@@ -502,6 +503,22 @@ export function AgentSettingsScreen({
     [secretCatalog, selectedSecrets],
   );
 
+  // Scoping is strict server-side — nothing is added back — so an ACP profile
+  // that omits its provider credential simply fails to authenticate. Keep the
+  // names selected by default rather than re-adding them behind the user's
+  // back: a visible checkbox they can still clear, not a hidden rule.
+  const addProviderSecrets = useCallback(
+    (providerKey: string) =>
+      setSelectedSecrets((prev) => {
+        const names = getAcpProviderSecrets(providerKey).map(
+          ({ name }) => name,
+        );
+        const missing = names.filter((name) => !prev.includes(name));
+        return missing.length ? [...prev, ...missing] : prev;
+      }),
+    [],
+  );
+
   // --- ACP path ---
   const [agentType, setAgentType] = useState<AgentType>("openhands");
   const [commandText, setCommandText] = useState("");
@@ -521,6 +538,9 @@ export function AgentSettingsScreen({
       : null,
   );
 
+  // Which ACP provider's credentials the secret picker has already selected, so
+  // the effect below fires on a provider change rather than on every render.
+  const lastSeededPresetRef = useRef<string | null>(null);
   const lastInitializedSettingsRef = useRef<unknown>(null);
   const loadedAcpServerRef = useRef<string | null>(null);
   const loadedCommandTextRef = useRef<string>("");
@@ -617,7 +637,19 @@ export function AgentSettingsScreen({
   useEffect(() => {
     setSecretsMode(initialSecretRefs.mode);
     setSelectedSecrets(initialSecretRefs.selected);
+    lastSeededPresetRef.current = null;
   }, [initialSecretRefs]);
+
+  // Switching an ACP profile to a different provider changes which credential
+  // it needs (ANTHROPIC_API_KEY -> OPENAI_API_KEY), which a stored list can't
+  // follow on its own. Select the new provider's credentials on the *change*
+  // only, so clearing one afterwards sticks.
+  useEffect(() => {
+    if (secretsMode !== "custom" || !acpPresetForCreds) return;
+    if (lastSeededPresetRef.current === acpPresetForCreds) return;
+    lastSeededPresetRef.current = acpPresetForCreds;
+    addProviderSecrets(acpPresetForCreds);
+  }, [secretsMode, acpPresetForCreds, addProviderSecrets]);
 
   // --- Embedded (Agent-profile editor) save control ---
   // Ref-backed so the exposed builder/credential fns read the freshest state at
@@ -1101,7 +1133,10 @@ export function AgentSettingsScreen({
             isDisabled={isSavingAny}
             onSelectionChange={(key) => {
               if (!key) return;
-              setSecretsMode(key as ProfileToolsMode);
+              const mode = key as ProfileToolsMode;
+              setSecretsMode(mode);
+              if (mode === "custom" && isAcp)
+                addProviderSecrets(selectedPreset);
             }}
           />
           {secretCatalog.length > 0 ? (
