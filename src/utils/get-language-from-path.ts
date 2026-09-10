@@ -1,5 +1,6 @@
 export const getLanguageFromPath = (path: string): string => {
-  const extension = path.split(".").pop()?.toLowerCase();
+  const filename = path.split(/[\\/]/).pop();
+  const extension = filename?.split(".").pop()?.toLowerCase();
   switch (extension) {
     case "js":
     case "jsx":
