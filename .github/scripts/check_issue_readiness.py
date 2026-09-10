@@ -158,12 +158,18 @@ def extract_sections(body: str) -> dict[str, str]:
             else len(body)
         )
         key = normalize_heading(match.group("title"))
-        # A repeated heading appends rather than replaces. Authors paste a section twice, and
-        # dropping the earlier copy can discard the evidence the later one lacks.
+        section = body[start:end]
+        # Keep all semantically non-empty copies. Authors paste a section twice, and dropping
+        # the earlier copy can discard evidence the later one lacks.
         if key in sections:
-            sections[key] = f"{sections[key]}\n{body[start:end]}"
+            if not visible_text(section):
+                continue
+            if visible_text(sections[key]):
+                sections[key] = f"{sections[key]}\n{section}"
+            else:
+                sections[key] = section
         else:
-            sections[key] = body[start:end]
+            sections[key] = section
     return sections
 
 

@@ -575,3 +575,45 @@ def test_repeated_heading_keeps_the_first_section():
 def test_bug_ready_when_a_heading_is_repeated():
     result = evaluate_readiness(BUG_BODY_REPEATED_HEADING, [BUG_LABEL])
     assert result.ready, result.reasons
+
+
+def test_repeated_empty_desired_behavior_is_not_ready():
+    body = """### Desired Behavior
+_No response_
+
+### Desired Behavior
+_No response_
+
+### Acceptance Criteria
+- [ ] The button lines up with the field above it.
+"""
+    result = evaluate_readiness(body, [])
+    assert not result.ready
+    assert any("Desired Behavior" in reason for reason in result.reasons)
+
+
+def test_repeated_desired_behavior_uses_real_second_copy():
+    body = """### Desired Behavior
+_No response_
+
+### Desired Behavior
+The button should line up with the field above it.
+
+### Acceptance Criteria
+- [ ] The button lines up with the field above it.
+"""
+    result = evaluate_readiness(body, [])
+    assert result.ready, result.reasons
+    assert "_No response_" not in extract_sections(body)["desired behavior"]
+
+
+def test_repeated_desired_behavior_keeps_two_real_copies():
+    body = """### Desired Behavior
+The button should line up with the field above it.
+
+### Desired Behavior
+The button should use the same spacing as the field above it.
+"""
+    desired = extract_sections(body)["desired behavior"]
+    assert "line up with the field" in desired
+    assert "use the same spacing" in desired
