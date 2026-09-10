@@ -22,6 +22,12 @@ interface DetailHeaderProps {
   isRunningNow?: boolean;
   /** Whether the caller may mutate this automation (manage perm or owner). */
   canManage?: boolean;
+  /**
+   * Whether the caller may flip the enabled switch. Defaults to `canManage`;
+   * pass `false` for a disabled automation the caller did not create, since
+   * non-creators may only turn automations off.
+   */
+  canToggle?: boolean;
 }
 
 export function DetailHeader({
@@ -34,6 +40,7 @@ export function DetailHeader({
   onRunNow,
   isRunningNow = false,
   canManage = true,
+  canToggle = canManage,
 }: DetailHeaderProps) {
   const { t } = useTranslation("openhands");
 
@@ -59,7 +66,7 @@ export function DetailHeader({
           },
         ]
       : []),
-    ...(canManage
+    ...(canToggle
       ? [
           {
             label: automation.enabled
@@ -68,6 +75,10 @@ export function DetailHeader({
             icon: <PowerIcon className="size-4" />,
             onClick: onToggle,
           },
+        ]
+      : []),
+    ...(canManage
+      ? [
           {
             label: t(I18nKey.AUTOMATIONS$DELETE),
             icon: <TrashIcon className="size-4" />,
@@ -100,7 +111,7 @@ export function DetailHeader({
                 : t(I18nKey.AUTOMATIONS$RUN_NOW)}
             </button>
           )}
-          {canManage && (
+          {canToggle && (
             <ToggleSwitch
               enabled={automation.enabled}
               label={

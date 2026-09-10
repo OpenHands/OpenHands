@@ -219,6 +219,8 @@ export default function AutomationDetail() {
 
   // Write actions on a specific automation: manage OR creator (escape hatch).
   const canManage = hasManagePermission || isOwner;
+  // Non-creators may turn an automation off but not back on.
+  const canToggle = automation.enabled ? canManage : isOwner;
 
   return (
     <div className="min-h-full">
@@ -237,6 +239,7 @@ export default function AutomationDetail() {
             onRunNow={handleRunNow}
             isRunningNow={dispatchMutation.isPending}
             canManage={canManage}
+            canToggle={canToggle}
           />
           {automation.prompt && <PromptSection prompt={automation.prompt} />}
           <ConfigurationSection automation={automation} />
