@@ -126,7 +126,7 @@
     "src/api/option-service.*",
     "src/api/settings-service.*",
     "src/api/event-service.*",
-    "src/context/**",
+    "src/contexts/**",
     "src/hooks/query/**",
     "src/hooks/use-websocket.*",
     "src/routes/root.tsx",

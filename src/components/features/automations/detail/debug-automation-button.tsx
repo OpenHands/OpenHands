@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 import { buildAutomationDebugPrompt } from "#/utils/automation-debug-prompt";
 import type { Automation, AutomationRun } from "#/types/automation";
 

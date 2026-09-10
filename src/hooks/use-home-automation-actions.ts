@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useActiveBackend } from "#/contexts/active-backend-context";
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 import {
   useCancelAutomationRun,
   useDispatchAutomation,
