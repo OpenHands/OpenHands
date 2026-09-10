@@ -361,6 +361,32 @@ export interface SwitchLLMObservation extends ObservationBase<"SwitchLLMObservat
   active_model: string | null;
 }
 
+export interface ClassifyAndSwitchLLMObservation
+  extends ObservationBase<"ClassifyAndSwitchLLMObservation"> {
+  /**
+   * Content returned from the classify-and-switch router tool.
+   */
+  content: Array<TextContent | ImageContent>;
+  /**
+   * Whether the router switch resulted in an error.
+   */
+  is_error: boolean;
+  /**
+   * Classifier category that won, if the classifier surfaced one.
+   */
+  chosen_class: string | null;
+  /**
+   * Model the classifier asked for (case-insensitively matched against saved
+   * LLM profile names on the agent-server side).
+   */
+  model: string | null;
+  /**
+   * Model actually activated after the router match. Drives the combobox
+   * update — same role as SwitchLLMObservation.active_model.
+   */
+  active_model: string | null;
+}
+
 export type Observation =
   | MCPToolObservation
   | FinishObservation
@@ -377,4 +403,5 @@ export type Observation =
   | InvokeSkillObservation
   | TaskObservation
   | CanvasUIObservation
-  | SwitchLLMObservation;
+  | SwitchLLMObservation
+  | ClassifyAndSwitchLLMObservation;

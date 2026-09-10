@@ -16,6 +16,7 @@ import {
   isObservationEvent,
   isStreamingDeltaEvent,
   isSwitchLLMObservationEvent,
+  isClassifyAndSwitchLLMObservationEvent,
 } from "#/types/agent-server/type-guards";
 import { handleEventForUI } from "#/utils/handle-event-for-ui";
 import { shouldRenderEvent } from "#/components/conversation-events/chat/event-content-helpers/should-render-event";
@@ -104,6 +105,7 @@ const SAFE_OBSERVATION_DETAIL_KINDS = new Set([
   "MCPToolObservation",
   "StrReplaceEditorObservation",
   "SwitchLLMObservation",
+  "ClassifyAndSwitchLLMObservation",
   "TaskTrackerObservation",
   "TaskObservation",
   "TerminalObservation",
@@ -280,6 +282,8 @@ const buildTranscriptEntries = (
   const renderableEvents = uiEvents.filter(
     (event) =>
       (isSwitchLLMObservationEvent(event) && !event.observation.is_error) ||
+      (isClassifyAndSwitchLLMObservationEvent(event) &&
+        !event.observation.is_error) ||
       shouldRenderEvent(event),
   );
   const renderedItems = groupEvents(
@@ -335,6 +339,33 @@ const buildTranscriptEntries = (
               : "",
             event.observation.reason
               ? `${i18n.t(I18nKey.TRANSCRIPT_EXPORT$REASON)}: ${event.observation.reason}`
+              : "",
+          ]
+            .filter(Boolean)
+            .join("\n"),
+          timestamp: event.timestamp ?? "",
+        });
+        continue;
+      }
+
+      if (
+        isClassifyAndSwitchLLMObservationEvent(event) &&
+        !event.observation.is_error &&
+        event.observation.active_model
+      ) {
+        // Router-driven switch: surface the activated profile the same way
+        // as a manual `/model` switch, and tag the chosen classifier
+        // category as the reason so transcript readers can see *why* the
+        // router picked this model.
+        entries.push({
+          kind: "note",
+          summary: translatePlain(I18nKey.MODEL$SWITCHED_TO_PROFILE, {
+            name: event.observation.active_model,
+          }),
+          content: [
+            `${i18n.t(I18nKey.TRANSCRIPT_EXPORT$MODEL)}: ${event.observation.active_model}`,
+            event.observation.chosen_class
+              ? `${i18n.t(I18nKey.TRANSCRIPT_EXPORT$REASON)}: ${event.observation.chosen_class}`
               : "",
           ]
             .filter(Boolean)
