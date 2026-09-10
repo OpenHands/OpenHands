@@ -1,11 +1,10 @@
 import { renderHook, waitFor } from "@testing-library/react";
+import { QueryClient } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import type { ResolvedActiveBackend } from "#/api/backend-registry/types";
-import {
-  __resetAutomationSdkVersionCacheForTests,
-  useAutomationSdkVersion,
-} from "#/hooks/query/use-automation-sdk-version";
+import { useAutomationSdkVersion } from "#/hooks/query/use-automation-sdk-version";
+import { setQueryClient } from "#/query-client-config";
 
 vi.mock("#/api/automation-service/automation-service.api", () => ({
   default: {
@@ -33,7 +32,11 @@ vi.mock("#/contexts/active-backend-context", () => ({
 describe("useAutomationSdkVersion", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    __resetAutomationSdkVersionCacheForTests();
+    setQueryClient(
+      new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      }),
+    );
     activeBackendMock.active = {
       backend: {
         id: "local-1",
@@ -46,7 +49,7 @@ describe("useAutomationSdkVersion", () => {
     };
   });
 
-  it("shares one SDK version request across multiple hook consumers", async () => {
+  it("shares one request across consumers without a QueryClientProvider", async () => {
     vi.mocked(AutomationService.getSdkVersion).mockResolvedValue("1.36.3");
 
     const { result } = renderHook(() => ({
