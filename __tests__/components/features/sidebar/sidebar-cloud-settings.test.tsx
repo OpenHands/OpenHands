@@ -39,7 +39,7 @@ const cloudBackendMock = {
     host: "https://cloud.example.com",
     apiKey: "test-key",
   },
-  orgId: "org-1",
+  orgId: "org-1" as string | null,
 };
 
 vi.mock("#/hooks/query/use-config", () => ({
@@ -226,6 +226,7 @@ describe("Sidebar with Cloud Backend", () => {
   afterEach(() => {
     window.localStorage.clear();
     useSidebarStore.setState({ collapsed: false });
+    cloudBackendMock.orgId = "org-1";
     vi.unstubAllEnvs();
   });
 
@@ -237,6 +238,17 @@ describe("Sidebar with Cloud Backend", () => {
     expect(settingsLink).toBeInTheDocument();
     expect(settingsLink).toHaveAttribute("target", "_blank");
     expect(settingsLink).toHaveAttribute(
+      "href",
+      "https://cloud.example.com/settings?org=org-1",
+    );
+  });
+
+  it("omits the org param from the cloud settings link when no org is active", () => {
+    cloudBackendMock.orgId = null;
+    useSidebarStore.setState({ collapsed: true });
+    renderSidebar("/conversations");
+
+    expect(screen.getByTestId("collapsed-settings-link")).toHaveAttribute(
       "href",
       "https://cloud.example.com/settings",
     );
@@ -262,7 +274,7 @@ describe("Sidebar with Cloud Backend", () => {
     const settingsLink = screen.getByTestId("collapsed-settings-link");
     expect(settingsLink).toHaveAttribute(
       "href",
-      "https://cloud.example.com/settings",
+      "https://cloud.example.com/settings?org=org-1",
     );
     expect(settingsLink).not.toHaveAttribute("target");
     expect(settingsLink).not.toHaveAttribute("rel");

@@ -61,6 +61,7 @@ export interface SidebarRailBodyProps {
   isExtensionsActive: boolean;
   currentPath: string;
   activeBackend: Backend;
+  activeOrgId: string | null;
   activeBackendHealth: { isConnected: boolean | null } | undefined;
   collapsedBackendPopoverOpen: boolean;
   setCollapsedBackendPopoverOpen: (open: boolean) => void;
@@ -84,6 +85,7 @@ export function SidebarRailBody({
   isExtensionsActive,
   currentPath,
   activeBackend,
+  activeOrgId,
   activeBackendHealth,
   collapsedBackendPopoverOpen,
   setCollapsedBackendPopoverOpen,
@@ -110,8 +112,13 @@ export function SidebarRailBody({
   };
 
   const isCloudBackend = activeBackend.kind === "cloud";
+  // `org` is consumed by the cloud settings loader so the page opens on the
+  // org that is active here instead of the cloud's last-used org.
+  const cloudSettingsOrgQuery = activeOrgId
+    ? `?org=${encodeURIComponent(activeOrgId)}`
+    : "";
   const cloudSettingsUrl = isCloudBackend
-    ? `${activeBackend.host.replace(/\/+$/, "")}/settings`
+    ? `${activeBackend.host.replace(/\/+$/, "")}/settings${cloudSettingsOrgQuery}`
     : null;
   // Locked-to-Cloud (SaaS / self-hosted OHE) serves the canvas at /canvas on
   // the cloud host itself, so cloud settings open in this tab and Back
