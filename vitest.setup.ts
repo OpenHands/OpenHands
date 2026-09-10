@@ -101,6 +101,22 @@ class MockProgressEvent extends Event {
   }
 }
 
+class MockXMLHttpRequestUpload extends EventTarget {
+  onabort = null;
+
+  onerror = null;
+
+  onload = null;
+
+  onloadend = null;
+
+  onloadstart = null;
+
+  onprogress = null;
+
+  ontimeout = null;
+}
+
 // Setup files run once per test file, and a worker process is reused across
 // files. Without this marker each file would splice another holder into the
 // prototype chain, so the chain would grow with every file in the run.
@@ -108,7 +124,7 @@ const PROGRESS_EVENT_FALLBACK = Symbol.for(
   "agent-canvas.progress-event-fallback",
 );
 
-function installProgressEventFallback(fallback: unknown) {
+function installProgressEventFallback(fallback: unknown, xhrUploadFallback: unknown) {
   const currentProto = Object.getPrototypeOf(globalThis) as object | null;
   if (currentProto && PROGRESS_EVENT_FALLBACK in currentProto) return;
 
@@ -119,10 +135,15 @@ function installProgressEventFallback(fallback: unknown) {
     configurable: true,
     writable: true,
   });
+  Object.defineProperty(holder, "XMLHttpRequestUpload", {
+    value: xhrUploadFallback,
+    configurable: true,
+    writable: true,
+  });
   Object.setPrototypeOf(globalThis, holder);
 }
 
-installProgressEventFallback(MockProgressEvent);
+installProgressEventFallback(MockProgressEvent, MockXMLHttpRequestUpload);
 
 // Mock ResizeObserver for test environment
 class MockResizeObserver {
