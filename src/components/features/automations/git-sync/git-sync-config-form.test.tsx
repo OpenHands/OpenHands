@@ -334,11 +334,17 @@ describe("GitSyncConfigForm", () => {
     expect(mutate.mock.calls[0][0]).toEqual({ branch: "develop" });
   });
 
-  it("explains the restart requirement when the backend refuses to enable sync", async () => {
-    // The backend answers 409 when it booted without git sync turned on --
-    // the raw detail is a wall of text, and the generic error message would
-    // read as a transient failure worth retrying.
-    respondWith({ error: { status: 409 } });
+  it("shows the backend's reason when it refuses the configuration", async () => {
+    // A 409 means another organization already syncs this repository, branch
+    // and path. The detail says so in words the operator can act on; the
+    // generic message would read as a transient failure worth retrying.
+    const detail = "Another organization already syncs this repository.";
+    respondWith({
+      error: Object.assign(new Error("Conflict"), {
+        status: 409,
+        response: { detail },
+      }),
+    });
     render(
       <GitSyncConfigForm
         status={{ ...baseStatus, enabled: false }}
@@ -350,9 +356,7 @@ describe("GitSyncConfigForm", () => {
     fireEvent.click(screen.getByTestId("git-sync-enabled-switch"));
     await clickSave();
 
-    expect(displayErrorToast).toHaveBeenCalledWith(
-      I18nKey.AUTOMATIONS$GIT_SYNC$ENABLE_BLOCKED_ERROR,
-    );
+    expect(displayErrorToast).toHaveBeenCalledWith(detail);
   });
 
   describe("reachability check", () => {

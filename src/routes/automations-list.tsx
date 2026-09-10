@@ -377,7 +377,10 @@ export default function AutomationsList() {
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap justify-end gap-2">
-          {canEdit && (
+          {/* Git sync is org-level config, so it follows manage_automations
+              (admins/owners) on every backend kind, not the local-only edit
+              gate. */}
+          {canManage && (
             <BrandButton
               type="button"
               variant="secondary"
