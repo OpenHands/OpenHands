@@ -126,8 +126,16 @@ export interface ACPModelOption {
 // or a provider happens upstream in the SDK; Canvas only owns the brand icon
 // and the onboarding-tile description here. A provider with no entry here is
 // intentionally not surfaced in the UI.
+export const SURFACED_ACP_PROVIDERS = [
+  "claude-code",
+  "codex",
+  "gemini-cli",
+] as const;
+
+export type SurfacedACPProvider = (typeof SURFACED_ACP_PROVIDERS)[number];
+
 const ACP_PROVIDER_UI: Record<
-  string,
+  SurfacedACPProvider,
   { icon: ACPProviderIcon; description_key: I18nKey }
 > = {
   "claude-code": {
@@ -360,6 +368,7 @@ export function getAcpProviderSecrets(
   key: string | null | undefined,
 ): ACPProviderSecretField[] {
   if (!key) return [];
+  if (!getAcpProvider(key)) return [];
   const info = getClientAcpProvider(key);
   if (!info) return [];
   // Subscription / Vertex credentials first — they're the primary auth path for
