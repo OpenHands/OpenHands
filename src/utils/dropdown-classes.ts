@@ -48,6 +48,12 @@ export const dropdownMenuRowIconClassName = cn(
   dropdownInstantColorClassName,
 );
 
+/** Wrapper for pin toggle icons — no fixed size so filled/outline variants can match visually. */
+export const dropdownMenuPinIconWrapperClassName = cn(
+  "flex shrink-0 items-center justify-center [&_svg]:text-current",
+  dropdownMenuRowIconClassName,
+);
+
 /** Wrapper for SVG/React icon nodes inside a menu row. */
 export const dropdownMenuRowIconWrapperClassName = cn(
   "flex size-4 shrink-0 items-center justify-center [&_svg]:text-current",

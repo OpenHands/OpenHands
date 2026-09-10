@@ -499,11 +499,7 @@ export async function ensureMockLLMProfile(
   // may have left a same-named profile configured for a *different* model
   // (e.g. image-upload's vision-capable override), so skipping the write
   // whenever the profile already exists silently keeps the wrong config.
-  const exists =
-    (await page
-      .getByTestId("profile-row")
-      .filter({ has: page.locator(`span[title="${profileName}"]`) })
-      .count()) > 0;
+  const exists = (await profileRowByName(page, profileName).count()) > 0;
   if (exists) {
     await editProfileViaUI(page, { profileName, model, apiKey, baseUrl });
   } else {
@@ -592,6 +588,40 @@ export async function ensureMockLLMAgentProfile(
  * profile — call `activateProfileViaUI` separately if needed.
  */
 /**
+ * Locate an LLM profile row by the name span's `title` (exact match).
+ * Do not match on `textContent().includes(name)` — leftover menus and
+ * similarly prefixed names make that flaky.
+ */
+export function profileRowByName(page: Page, profileName: string) {
+  return page
+    .getByTestId("profile-row")
+    .filter({ has: page.locator(`span[title="${profileName}"]`) })
+    .first();
+}
+
+/**
+ * Dismiss any open profile-actions menu. The menu is portaled to
+ * `document.body`, so Escape from a prior row can leave it mounted.
+ * An unscoped `getByTestId("profile-delete")` then deletes the wrong
+ * profile.
+ */
+export async function closeProfileActionsMenu(page: Page) {
+  const menu = page.getByTestId("profile-actions-menu");
+  if ((await menu.count()) === 0) return;
+  await page.keyboard.press("Escape");
+  if ((await menu.count()) > 0) {
+    // ProfileActionsMenu closes on mousedown outside the portal. Don't
+    // click the viewport corner — that can hit the sidebar and navigate.
+    await page.evaluate(() => {
+      document.body.dispatchEvent(
+        new MouseEvent("mousedown", { bubbles: true }),
+      );
+    });
+  }
+  await expect(menu).toHaveCount(0, { timeout: 5_000 });
+}
+
+/**
  * Fill the LLM profile editor's fields and save. Shared by the create flow
  * ("Add LLM Profile") and the edit flow ("Edit" on an existing row) — both
  * land on the same editor form/testids.
@@ -639,6 +669,9 @@ async function fillLlmProfileEditorAndSave(
     await page.getByTestId("back-to-profiles").click();
   }
   await waitForTestId(page, "add-llm-profile");
+  await expect(profileRowByName(page, profileName)).toBeVisible({
+    timeout: 15_000,
+  });
 }
 
 /**
@@ -672,13 +705,14 @@ export async function editProfileViaUI(
     baseUrl?: string;
   },
 ) {
-  const row = page
-    .getByTestId("profile-row")
-    .filter({ has: page.locator(`span[title="${options.profileName}"]`) })
-    .first();
+  await closeProfileActionsMenu(page);
+  const row = profileRowByName(page, options.profileName);
   await row.getByTestId("profile-menu-trigger").click();
   await waitForTestId(page, "profile-actions-menu");
-  await page.getByTestId("profile-edit").click();
+  await page
+    .getByTestId("profile-actions-menu")
+    .getByTestId("profile-edit")
+    .click();
   await fillLlmProfileEditorAndSave(page, options);
 }
 
@@ -687,17 +721,15 @@ export async function editProfileViaUI(
  * Assumes the page is already on /settings/llm with profiles loaded.
  */
 export async function deleteProfileIfExists(page: Page, profileName: string) {
-  // Use the profile name span's `title` attribute for exact matching
-  // to avoid substring collisions (e.g. "mock-llm" vs "mock-llm-e2e").
-  const row = page
-    .getByTestId("profile-row")
-    .filter({ has: page.locator(`span[title="${profileName}"]`) })
-    .first();
+  await closeProfileActionsMenu(page);
+  const row = profileRowByName(page, profileName);
   if ((await row.count()) === 0) return;
 
   await row.getByTestId("profile-menu-trigger").click();
   await waitForTestId(page, "profile-actions-menu");
-  const deleteBtn = page.getByTestId("profile-delete");
+  const deleteBtn = page
+    .getByTestId("profile-actions-menu")
+    .getByTestId("profile-delete");
   if (await deleteBtn.isVisible()) {
     await deleteBtn.click();
     // Confirm the deletion dialog (test ID: delete-profile-confirm)
@@ -712,7 +744,7 @@ export async function deleteProfileIfExists(page: Page, profileName: string) {
     await expect(row).toHaveCount(0, { timeout: 30_000 });
     await waitForTestId(page, "add-llm-profile");
   } else {
-    await page.keyboard.press("Escape");
+    await closeProfileActionsMenu(page);
   }
 }
 
@@ -722,15 +754,10 @@ export async function deleteProfileIfExists(page: Page, profileName: string) {
  * Retries the "Set active" gesture until the "Active" badge appears on the row.
  */
 export async function activateProfileViaUI(page: Page, profileName: string) {
-  const row = page
-    .getByTestId("profile-row")
-    .filter({ has: page.locator(`span[title="${profileName}"]`) })
-    .first();
+  const row = profileRowByName(page, profileName);
 
-  // `createProfileViaUI` only waits for the editor to close, not for the new
-  // row to render in the list, so wait for the row explicitly before acting
-  // on it. Skipping this is what let the old poll dead-end: if the row was not
-  // yet in the DOM, the activation gesture below was never attempted.
+  // Wait for the row explicitly before acting on it. createProfileViaUI now
+  // also waits, but callers that skip that helper still need this guard.
   await expect(row).toBeVisible({ timeout: 15_000 });
 
   const activeBadge = row.getByTestId("profile-active-badge");
@@ -750,10 +777,12 @@ export async function activateProfileViaUI(page: Page, profileName: string) {
 
     // The menu trigger toggles, so reset any menu left open by a prior attempt
     // before re-opening — otherwise a retry would close the menu it just opened.
-    await page.keyboard.press("Escape");
+    await closeProfileActionsMenu(page);
     await row.getByTestId("profile-menu-trigger").click({ timeout: 5_000 });
     await waitForTestId(page, "profile-actions-menu", 5_000);
-    const setActive = page.getByTestId("profile-set-active");
+    const setActive = page
+      .getByTestId("profile-actions-menu")
+      .getByTestId("profile-set-active");
     if (await setActive.isEnabled()) {
       await setActive.click({ timeout: 5_000 });
     }

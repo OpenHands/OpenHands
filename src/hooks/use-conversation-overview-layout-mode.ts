@@ -1,18 +1,22 @@
 import { useEffect, useLayoutEffect, useState, type RefObject } from "react";
-import { hasEnoughOverviewLayoutSpace } from "#/components/features/conversation/conversation-overview-panel.constants";
+import {
+  getConversationOverviewLayoutMode,
+  type ConversationOverviewLayoutMode,
+} from "#/components/features/conversation/conversation-overview-panel.constants";
 
 const useIsomorphicLayoutEffect =
   typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
-export function useConversationOverviewColumnSpace(
+export function useConversationOverviewLayoutMode(
   containerRef: RefObject<HTMLElement | null>,
   enabled: boolean,
-): boolean {
-  const [hasSpace, setHasSpace] = useState(false);
+): ConversationOverviewLayoutMode {
+  const [layoutMode, setLayoutMode] =
+    useState<ConversationOverviewLayoutMode>("hidden");
 
   useIsomorphicLayoutEffect(() => {
     if (!enabled) {
-      setHasSpace(false);
+      setLayoutMode("hidden");
       return undefined;
     }
 
@@ -22,7 +26,7 @@ export function useConversationOverviewColumnSpace(
     }
 
     const update = () => {
-      setHasSpace(hasEnoughOverviewLayoutSpace(container.clientWidth));
+      setLayoutMode(getConversationOverviewLayoutMode(container.clientWidth));
     };
 
     update();
@@ -36,5 +40,5 @@ export function useConversationOverviewColumnSpace(
     return () => observer.disconnect();
   }, [containerRef, enabled]);
 
-  return hasSpace;
+  return layoutMode;
 }

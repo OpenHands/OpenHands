@@ -2,6 +2,8 @@ import { render, screen } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ChatInterfaceWrapper } from "#/components/features/conversation/conversation-main/chat-interface-wrapper";
 import { useConversationStore } from "#/stores/conversation-store";
+import type { ConversationOverviewLayoutMode } from "#/components/features/conversation/conversation-overview-panel.constants";
+import { CONVERSATION_OVERVIEW_COLUMN_WIDTH_PX } from "#/components/features/conversation/conversation-overview-panel.constants";
 
 vi.mock("#/components/features/chat/chat-interface", () => ({
   ChatInterface: () => <div data-testid="chat-interface" />,
@@ -17,16 +19,18 @@ vi.mock("#/hooks/use-breakpoint", () => ({
   useBreakpoint: () => false,
 }));
 
-const mockUseConversationOverviewColumnSpace = vi.fn(() => true);
+const mockUseConversationOverviewLayoutMode = vi.fn(
+  (): ConversationOverviewLayoutMode => "inline",
+);
 
-vi.mock("#/hooks/use-conversation-overview-column-space", () => ({
-  useConversationOverviewColumnSpace: () =>
-    mockUseConversationOverviewColumnSpace(),
+vi.mock("#/hooks/use-conversation-overview-layout-mode", () => ({
+  useConversationOverviewLayoutMode: () =>
+    mockUseConversationOverviewLayoutMode(),
 }));
 
 describe("ChatInterfaceWrapper", () => {
   beforeEach(() => {
-    mockUseConversationOverviewColumnSpace.mockReturnValue(true);
+    mockUseConversationOverviewLayoutMode.mockReturnValue("inline");
     useConversationStore.setState({
       isOverviewPanelShown: false,
       isOverviewPanelPeeked: false,
@@ -46,12 +50,31 @@ describe("ChatInterfaceWrapper", () => {
     expect(screen.getByTestId("chat-interface")).toBeInTheDocument();
   });
 
-  it("uses the overview grid layout when space is available", () => {
+  it("uses the inline overview layout when space is available", () => {
     useConversationStore.setState({ isOverviewPanelShown: true });
     render(<ChatInterfaceWrapper isRightPanelShown={false} />);
 
-    expect(screen.getByTestId("conversation-overview-column")).toBeInTheDocument();
+    const column = screen.getByTestId("conversation-overview-column");
+    expect(column).toHaveAttribute("data-layout-mode", "inline");
+    expect(column).toHaveClass("absolute");
+    expect(screen.getByTestId("conversation-thread-column")).toHaveStyle({
+      paddingRight: `${CONVERSATION_OVERVIEW_COLUMN_WIDTH_PX}px`,
+    });
     expect(screen.getByTestId("conversation-overview-panel")).toBeInTheDocument();
+  });
+
+  it("overlays overview in the right margin on wide layouts", () => {
+    mockUseConversationOverviewLayoutMode.mockReturnValue("overlay");
+    useConversationStore.setState({ isOverviewPanelShown: true });
+
+    render(<ChatInterfaceWrapper isRightPanelShown={false} />);
+
+    const column = screen.getByTestId("conversation-overview-column");
+    expect(column).toHaveAttribute("data-layout-mode", "overlay");
+    expect(column).toHaveClass("absolute");
+    expect(screen.getByTestId("conversation-thread-column")).toHaveStyle({
+      paddingRight: "0px",
+    });
   });
 
   it("keeps the thread in a height-constrained flex column when overview is shown", () => {
@@ -66,7 +89,7 @@ describe("ChatInterfaceWrapper", () => {
   });
 
   it("falls back to the centered thread layout when the right column is too narrow", () => {
-    mockUseConversationOverviewColumnSpace.mockReturnValue(false);
+    mockUseConversationOverviewLayoutMode.mockReturnValue("hidden");
     useConversationStore.setState({ isOverviewPanelShown: true });
 
     render(<ChatInterfaceWrapper isRightPanelShown={false} />);
