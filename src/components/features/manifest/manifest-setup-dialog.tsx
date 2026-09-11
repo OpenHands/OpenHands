@@ -4,6 +4,7 @@ import { useNavigate } from "react-router";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import { ModalCloseButton } from "#/components/shared/modals/modal-close-button";
 import { BrandButton } from "#/components/features/settings/brand-button";
+import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
@@ -12,18 +13,27 @@ import { getApiErrorBody } from "#/utils/api-error-message";
 import { useTracking } from "#/hooks/use-tracking";
 import { useSetupCapabilities } from "#/hooks/query/use-manifest-capabilities";
 import { useSetupPrerequisites } from "#/hooks/query/use-manifest-prerequisites";
+import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useSetupPreflight } from "#/hooks/use-manifest-preflight";
 import { useSetupAction } from "#/manifests/manifest-actions";
+import {
+  supportedActionKinds,
+  supportedTriggerKinds,
+} from "#/manifests/manifest-capabilities";
 import {
   buildCreatePayload,
   deriveErrorMap,
   missingCreateEndpoints,
 } from "#/manifests/automation-setup";
 import {
+  actionKinds,
   collectFields,
   getFieldOptions,
   getInitialFormValues,
+  initialActionKind,
+  initialTriggerKind,
   resolveFieldOverrides,
+  triggerKinds,
   validateFormValues,
   type SetupFieldError,
   type SetupFieldErrors,
@@ -101,8 +111,26 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   } = useTracking();
 
   const [step, setStep] = useState<SetupStep>("prerequisites");
+  const allTriggerOptions = useMemo(() => triggerKinds(entry.setup), [entry]);
+  const triggerOptions = useMemo(() => {
+    if (allTriggerOptions.length === 0) return [];
+    return capabilities.capabilities
+      ? supportedTriggerKinds(entry, capabilities.capabilities)
+      : allTriggerOptions;
+  }, [allTriggerOptions, capabilities.capabilities, entry]);
+  const allActionOptions = useMemo(() => actionKinds(entry.setup), [entry]);
+  const [selectedTrigger, setSelectedTrigger] = useState<string | null>(() =>
+    initialTriggerKind(entry.setup),
+  );
+  const [selectedAction, setSelectedAction] = useState<string | null>(() =>
+    initialActionKind(entry.setup),
+  );
   const [values, setValues] = useState<SetupFormValues>(() =>
-    getInitialFormValues(entry.setup),
+    getInitialFormValues(
+      entry.setup,
+      initialTriggerKind(entry.setup),
+      initialActionKind(entry.setup),
+    ),
   );
   const [repositories, setRepositories] = useState<
     Record<string, GitRepository | null>
@@ -123,16 +151,76 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     [],
   );
 
-  const fields = useMemo(() => collectFields(entry.setup), [entry]);
-  const overrides = useMemo(
-    () => resolveFieldOverrides(entry.setup, capabilities.capabilities),
-    [entry, capabilities.capabilities],
+  const actionOptions = useMemo(() => {
+    if (allActionOptions.length === 0) return [];
+    const supported = capabilities.capabilities
+      ? supportedActionKinds(entry, capabilities.capabilities)
+      : allActionOptions;
+    return supported.filter(
+      (kind) => missingCreateEndpoints(entry, kind).length === 0,
+    );
+  }, [allActionOptions, capabilities.capabilities, entry]);
+
+  const fields = useMemo(
+    () => collectFields(entry.setup, selectedTrigger, selectedAction),
+    [entry, selectedTrigger, selectedAction],
   );
+  const hasLlmProfileField = useMemo(
+    () => Object.values(fields).some((field) => field.type === "llm-profile"),
+    [fields],
+  );
+  const { data: profilesData, isLoading: isLoadingProfiles } = useLlmProfiles({
+    enabled: hasLlmProfileField,
+  });
+  const llmProfileOptions = useMemo(
+    () =>
+      (profilesData?.profiles ?? []).map((profile) => ({
+        value: profile.name,
+        label: profile.name,
+      })),
+    [profilesData?.profiles],
+  );
+  const overrides = useMemo(() => {
+    const base = resolveFieldOverrides(
+      entry.setup,
+      capabilities.capabilities,
+      selectedTrigger,
+      selectedAction,
+    );
+    if (!hasLlmProfileField || isLoadingProfiles) return base;
+
+    return Object.entries(fields).reduce(
+      (next, [fieldName, field]) =>
+        field.type === "llm-profile"
+          ? { ...next, [fieldName]: { options: llmProfileOptions } }
+          : next,
+      base,
+    );
+  }, [
+    entry.setup,
+    capabilities.capabilities,
+    selectedTrigger,
+    selectedAction,
+    hasLlmProfileField,
+    isLoadingProfiles,
+    fields,
+    llmProfileOptions,
+  ]);
   const payload = useMemo(
-    () => buildCreatePayload(entry, values),
-    [entry, values],
+    () =>
+      buildCreatePayload(
+        entry,
+        values,
+        undefined,
+        selectedTrigger,
+        selectedAction,
+      ),
+    [entry, values, selectedTrigger, selectedAction],
   );
-  const errorMap = useMemo(() => deriveErrorMap(entry), [entry]);
+  const errorMap = useMemo(
+    () => deriveErrorMap(entry, selectedTrigger, selectedAction),
+    [entry, selectedTrigger, selectedAction],
+  );
 
   const emittedOpenRef = useRef(false);
   useEffect(() => {
@@ -147,8 +235,8 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   // them. Named alongside the deployment's own unmet requirements, because
   // "which one" is the only thing that makes either diagnosable.
   const missingEndpoints = useMemo(
-    () => missingCreateEndpoints(entry),
-    [entry],
+    () => missingCreateEndpoints(entry, selectedAction),
+    [entry, selectedAction],
   );
   const isUnsupported =
     capabilities.supported === false || missingEndpoints.length > 0;
@@ -160,6 +248,51 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   // nothing to check from flashing an empty first screen.
   const currentStep: SetupStep =
     step === "prerequisites" && !showPrerequisites ? "form" : step;
+
+  const setTriggerValue = (kind: string) => {
+    setSelectedTrigger(kind);
+    const defaults = getInitialFormValues(entry.setup, kind, selectedAction);
+    valuesRef.current = { ...defaults, ...valuesRef.current };
+    setValues(valuesRef.current);
+    setLocalErrors({});
+    setServiceErrors(NO_SERVICE_ERRORS);
+  };
+
+  const setActionValue = (kind: string) => {
+    setSelectedAction(kind);
+    const defaults = getInitialFormValues(entry.setup, selectedTrigger, kind);
+    valuesRef.current = { ...defaults, ...valuesRef.current };
+    setValues(valuesRef.current);
+    setLocalErrors({});
+    setServiceErrors(NO_SERVICE_ERRORS);
+  };
+
+  useEffect(() => {
+    if (allTriggerOptions.length === 0 || capabilities.isLoading) return;
+    if (selectedTrigger && triggerOptions.includes(selectedTrigger)) return;
+    if (triggerOptions.length > 0) setTriggerValue(triggerOptions[0]);
+  }, [
+    triggerOptions,
+    allTriggerOptions.length,
+    capabilities.isLoading,
+    selectedTrigger,
+  ]);
+
+  useEffect(() => {
+    if (allActionOptions.length === 0 || capabilities.isLoading) return;
+    if (
+      selectedAction &&
+      actionOptions.includes(selectedAction as (typeof actionOptions)[number])
+    ) {
+      return;
+    }
+    if (actionOptions.length > 0) setActionValue(actionOptions[0]);
+  }, [
+    actionOptions,
+    allActionOptions.length,
+    capabilities.isLoading,
+    selectedAction,
+  ]);
 
   const setFieldValue = (name: string, value: SetupFormValue) => {
     valuesRef.current = { ...valuesRef.current, [name]: value };
@@ -175,7 +308,11 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   const handleFieldBlur = () => {
     if (blurTimerRef.current) window.clearTimeout(blurTimerRef.current);
     blurTimerRef.current = window.setTimeout(() => {
-      void runPreflight(valuesRef.current).then((result) => {
+      void runPreflight(
+        valuesRef.current,
+        selectedTrigger,
+        selectedAction,
+      ).then((result) => {
         if (result) setServiceErrors(result);
       });
     }, PREFLIGHT_DEBOUNCE_MS);
@@ -187,14 +324,20 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
       return;
     }
 
-    const failures = validateFormValues(entry.setup, values, overrides);
+    const failures = validateFormValues(
+      entry.setup,
+      values,
+      overrides,
+      selectedTrigger,
+      selectedAction,
+    );
     if (Object.keys(failures).length > 0) {
       setLocalErrors(failures);
       return;
     }
     setLocalErrors({});
 
-    const result = await runPreflight(values);
+    const result = await runPreflight(values, selectedTrigger, selectedAction);
     if (result && hasAnyError(result)) {
       setServiceErrors(result);
       return;
@@ -211,7 +354,13 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   ) => {
     setIsSubmitting(true);
     try {
-      const { response } = await runAction(entry, values, actionPayload);
+      const { response } = await runAction(
+        entry,
+        values,
+        actionPayload,
+        selectedTrigger,
+        selectedAction,
+      );
       trackAutomationSetupCreated({
         automationId: entry.id,
         setupMode,
@@ -259,6 +408,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   };
 
   const isLoading = capabilities.isLoading || prerequisites.isLoading;
+  const isLoadingLlmProfileOptions = hasLlmProfileField && isLoadingProfiles;
 
   const title = (() => {
     if (isUnsupported) return t(I18nKey.SETUP$UNAVAILABLE_TITLE);
@@ -325,6 +475,62 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
                   {entry.setup.form.note}
                 </p>
               )}
+              {allActionOptions.length > 1 && actionOptions.length > 1 && (
+                <div className="flex w-full flex-col gap-2.5">
+                  <SettingsDropdownInput
+                    testId="setup-action-kind"
+                    name="actionKind"
+                    label={t(I18nKey.SETUP$ACTION_LABEL)}
+                    items={actionOptions.map((kind) => {
+                      const action = entry.setup.actions?.[kind];
+                      return {
+                        key: kind,
+                        label: action?.label ?? kind,
+                      };
+                    })}
+                    selectedKey={selectedAction ?? undefined}
+                    isDisabled={isSubmitting}
+                    required
+                    onSelectionChange={(key) => {
+                      if (key !== null) setActionValue(String(key));
+                    }}
+                  />
+                  {selectedAction &&
+                    entry.setup.actions?.[
+                      selectedAction as keyof typeof entry.setup.actions
+                    ] && (
+                      <p className="text-xs text-[var(--oh-muted)]">
+                        {
+                          entry.setup.actions[
+                            selectedAction as keyof typeof entry.setup.actions
+                          ]?.help
+                        }
+                      </p>
+                    )}
+                </div>
+              )}
+              {triggerOptions.length > 1 && (
+                <div className="flex w-full flex-col gap-2.5">
+                  <SettingsDropdownInput
+                    testId="setup-trigger-kind"
+                    name="triggerKind"
+                    label={t(I18nKey.SETUP$TRIGGER_LABEL)}
+                    items={triggerOptions.map((kind) => ({
+                      key: kind,
+                      label: kind === "cron" ? "Scheduled" : "Event",
+                    }))}
+                    selectedKey={selectedTrigger ?? undefined}
+                    isDisabled={isSubmitting}
+                    required
+                    onSelectionChange={(key) => {
+                      if (key !== null) setTriggerValue(String(key));
+                    }}
+                  />
+                  <p className="text-xs text-[var(--oh-muted)]">
+                    {t(I18nKey.SETUP$TRIGGER_HELP)}
+                  </p>
+                </div>
+              )}
               {Object.entries(fields).map(([name, field]) => (
                 <SetupFormField
                   key={name}
@@ -335,6 +541,9 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
                   options={getFieldOptions(name, field, overrides)}
                   repository={repositories[name] ?? null}
                   disabled={isSubmitting}
+                  isOptionsLoading={
+                    field.type === "llm-profile" && isLoadingLlmProfileOptions
+                  }
                   onChange={(value) => setFieldValue(name, value)}
                   onRepositoryChange={(repository) =>
                     setRepositories((current) => ({
@@ -349,7 +558,12 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
           )}
 
           {!isLoading && !isUnsupported && currentStep === "review" && (
-            <SetupReviewStep setup={entry.setup} values={values} />
+            <SetupReviewStep
+              setup={entry.setup}
+              values={values}
+              selectedTrigger={selectedTrigger}
+              selectedAction={selectedAction}
+            />
           )}
 
           {serviceErrors.formErrors.map((message) => (
@@ -406,6 +620,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
               variant="primary"
               isDisabled={
                 isLoading ||
+                isLoadingLlmProfileOptions ||
                 isSubmitting ||
                 (currentStep === "prerequisites" && prerequisites.isBlocked)
               }
@@ -435,6 +650,10 @@ function formatFieldError(
       return t(I18nKey.SETUP$VALIDATION_MIN_LENGTH, { length: error.length });
     case "maxLength":
       return t(I18nKey.SETUP$VALIDATION_MAX_LENGTH, { length: error.length });
+    case "min":
+      return `Must be at least ${error.value}.`;
+    case "max":
+      return `Must be at most ${error.value}.`;
     case "invalidOption":
       return t(I18nKey.SETUP$VALIDATION_INVALID_OPTION);
     case "unsafeExpressionLiteral":
