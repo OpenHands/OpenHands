@@ -124,6 +124,23 @@ export function standardProfileToolNames({
   return names;
 }
 
+/**
+ * Read a stored profile's `mcp_server_refs` into picker state.
+ *
+ * Same tri-state as `tools`: `null`/absent = every configured server, an array
+ * = only those keys.
+ */
+export function readProfileMcpRefs(value: unknown): {
+  mode: ProfileToolsMode;
+  selected: string[];
+} {
+  if (!Array.isArray(value)) return { mode: "standard", selected: [] };
+  return {
+    mode: "custom",
+    selected: value.filter((name): name is string => typeof name === "string"),
+  };
+}
+
 function toRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
