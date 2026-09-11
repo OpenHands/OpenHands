@@ -141,19 +141,25 @@ export const useCreateConversation = () => {
       ) {
         // The seeded OpenHands `default` profile is the enriched baseline, not a
         // deliberate profile pick — it mirrors global agent_settings. Launch it
-        // via agent_settings so the canvas-only enrichments the profile-resolution
-        // path drops survive for the common home-launch: the <RUNTIME_SERVICES>
-        // system-message suffix and project-skill loading (buildAgentContext).
+        // via agent_settings so the canvas-only enrichment the profile path
+        // still drops survives the common home-launch: the ~60 bundled public
+        // skills this adapter injects (buildAgentContext). Server-side
+        // discovery is the profile path's own skill pipeline and finds none of
+        // them, so a profile launch here resolves zero skills — the
+        // two-pipeline drift tracked in software-agent-sdk#3979. Reconcile that
+        // and this branch can go, leaving one launch path for every profile.
+        //
+        // <RUNTIME_SERVICES> is no longer a reason: it now rides
+        // `agent_launch_additions` on the profile path (#16205).
         // Named profiles are deliberate custom configs and still use the profile
-        // path (accepting that enrichment boundary).
+        // path (accepting that skills boundary).
         // Trade-off: per-profile fields set on `default` itself don't apply on
         // home-launch — custom per-profile config belongs in a named profile.
         //
         // Scoped to OpenHands: an ACP `default` must keep the profile path.
         // Activation is pointer-only, so global agent_settings is stale (often
         // still OpenHands) when an ACP profile is active — launching it via
-        // agent_settings would start the wrong agent. ACP carries no
-        // <RUNTIME_SERVICES> enrichment, so there's nothing to preserve.
+        // agent_settings would start the wrong agent.
         //
         // Scoped to local: cloud never writes agent_settings, so it always
         // resolves `default` server-side via agent_profile_id (validated below).
