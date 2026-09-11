@@ -76,13 +76,16 @@ export const MIN_AGENT_SERVER_VERSION_FOR_PROFILE_SECRET_REFS = "1.47.0";
  * hold?", not just "will the save be accepted?" — so it is deliberately
  * conservative where they are permissive.
  *
- * Cloud is excluded. It resolves the agent profile itself and sends a *resolved
- * agent* to the agent-server, never `agent_profile_id`, so the agent-server's
- * profile branch — where the filtering lives — never runs; the conversation's
- * secrets are assembled separately and `secret_refs` is not consulted. A
- * scoping control there would promise a restriction nothing applies, which is
- * worse than not offering one. Re-enable once the cloud app-server filters on
- * `secret_refs` (OpenHands/enterprise#344).
+ * Cloud is excluded *for now*. It resolves the agent profile itself and sends a
+ * *resolved agent* to the agent-server, never `agent_profile_id`, so the
+ * agent-server's profile branch — where the filtering lives — never runs; the
+ * conversation's secrets are assembled separately and `secret_refs` is not
+ * consulted. A scoping control there would promise a restriction nothing
+ * applies, which is worse than not offering one.
+ *
+ * Cloud-side enforcement is implemented in OpenHands/enterprise#364 (closing
+ * OpenHands/enterprise#344); drop this short-circuit once it ships, which makes
+ * the version gate below the only condition again.
  */
 export function agentProfileSupportsSecretRefs(): boolean {
   if (getActiveBackend().backend.kind === "cloud") return false;
