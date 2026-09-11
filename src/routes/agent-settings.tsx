@@ -10,11 +10,16 @@ import { SettingsInput } from "#/components/features/settings/settings-input";
 import { SettingsSwitch } from "#/components/features/settings/settings-switch";
 import { SchemaField } from "#/components/features/settings/sdk-settings/schema-field";
 import { AcpCredentialsSection } from "#/components/features/settings/acp-credentials-section";
+import { OptionalTag } from "#/components/features/settings/optional-tag";
+import { ProfileScopeList } from "#/components/features/settings/agent-profiles/profile-scope-list";
 import { useAcpCredentialForm } from "#/hooks/use-acp-credential-form";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
-import { formControlSwitchDescriptionClassName } from "#/utils/form-control-classes";
+import {
+  formControlMultilineFieldClassName,
+  formControlSwitchDescriptionClassName,
+} from "#/utils/form-control-classes";
 import { cn } from "#/utils/utils";
 import { SettingsFieldSchema, SettingsValue } from "#/types/settings";
 import {
@@ -39,7 +44,23 @@ import {
   type ACPProviderConfig,
 } from "#/constants/acp-providers";
 import { parseCommand, formatCommand } from "#/utils/acp-command";
-import { agentProfileSupportsSwitchLlmTool } from "#/api/agent-profiles-service/profile-field-support";
+import {
+  agentProfileSupportsSwitchLlmTool,
+  agentProfileSupportsTools,
+} from "#/api/agent-profiles-service/profile-field-support";
+import { getAgentServerUsableTools } from "#/api/agent-server-compatibility";
+import {
+  buildProfileToolCatalog,
+  buildProfileToolsValue,
+  KNOWN_PROFILE_TOOL_DESCRIPTIONS,
+  readProfileMcpRefs,
+  readProfileTools,
+  standardProfileToolNames,
+  type ProfileToolSpec,
+  type ProfileToolsMode,
+} from "#/constants/profile-tools";
+import { flattenMcpConfig } from "#/utils/mcp-installed-servers";
+import { parseMcpConfig } from "#/utils/mcp-config";
 
 export const handle = { hideTitle: true };
 
@@ -55,6 +76,9 @@ type AgentSettingsSnapshot = {
 const ENABLE_SUB_AGENTS_FIELD_KEY = "enable_sub_agents";
 const ENABLE_SWITCH_LLM_TOOL_FIELD_KEY = "enable_switch_llm_tool";
 const TOOL_CONCURRENCY_FIELD_KEY = "tool_concurrency_limit";
+const SYSTEM_MESSAGE_SUFFIX_KEY = "system_message_suffix";
+const TOOLS_KEY = "tools";
+const MCP_SERVER_REFS_KEY = "mcp_server_refs";
 const COMMAND_PLACEHOLDER_FALLBACK = "npx -y <package-name>";
 const ACP_CUSTOM_MODEL_KEY = "__custom_model__";
 const EMPTY_AGENT_SETTINGS_SNAPSHOT: AgentSettingsSnapshot = {
@@ -124,9 +148,13 @@ export type AgentProfileFieldsDraft =
       enable_sub_agents: boolean;
       enable_switch_llm_tool?: boolean;
       tool_concurrency_limit?: number;
+      system_message_suffix?: string | null;
+      tools?: ProfileToolSpec[] | null;
+      mcp_server_refs?: string[] | null;
     }
   | {
       agent_kind: "acp";
+      mcp_server_refs?: string[] | null;
       acp_server: string;
       acp_model: string | null;
       acp_command: string | null;
@@ -154,6 +182,16 @@ export interface AgentProfileFieldsInput {
   switchLlmToolSupportedOnProfile: boolean;
   toolConcurrencyField?: SettingsFieldSchema;
   toolConcurrency: string | boolean;
+  instructions: string;
+  toolsMode: ProfileToolsMode;
+  selectedTools: string[];
+  storedToolParams: Record<string, Record<string, unknown>>;
+  /** Names the backend advertises as runnable, or null when it advertises none. */
+  usableTools: string[] | null;
+  /** Whether the backend's *profile* model accepts `tools`. */
+  toolsSupportedOnProfile: boolean;
+  mcpMode: ProfileToolsMode;
+  selectedMcpServers: string[];
 }
 
 /**
@@ -189,12 +227,26 @@ export function buildAgentProfileFields(
     switchLlmToolSupportedOnProfile,
     toolConcurrencyField,
     toolConcurrency,
+    instructions,
+    toolsMode,
+    selectedTools,
+    storedToolParams,
+    usableTools,
+    toolsSupportedOnProfile,
+    mcpMode,
+    selectedMcpServers,
   } = input;
+  // A base-model field, so it rides both variants. No version gate: it has
+  // existed since agent profiles shipped, below the supported floor.
+  const mcpRefs = {
+    mcp_server_refs: mcpMode === "custom" ? selectedMcpServers : null,
+  };
   if (isAcp) {
     const isBuiltinDefault =
       isDefaultProviderCommand && selectedPreset !== ACP_CUSTOM_PRESET_KEY;
     return {
       agent_kind: "acp",
+      ...mcpRefs,
       acp_server: selectedPreset,
       acp_model: acpModel.trim() || null,
       acp_command: isBuiltinDefault
@@ -203,11 +255,25 @@ export function buildAgentProfileFields(
       acp_args: null,
     };
   }
+  const trimmedInstructions = instructions.trim();
   const fields: Extract<AgentProfileFieldsDraft, { agent_kind: "openhands" }> =
     {
       agent_kind: "openhands",
       enable_sub_agents: subAgentsEnabled,
+      ...mcpRefs,
+      // Empty clears the field: `""` would append a blank line to every system
+      // prompt, and the merge under this draft would otherwise keep the old text.
+      system_message_suffix: trimmedInstructions || null,
     };
+  if (toolsSupportedOnProfile) {
+    fields.tools = buildProfileToolsValue({
+      mode: toolsMode,
+      selected: selectedTools,
+      params: storedToolParams,
+      subAgentsEnabled,
+      usableTools,
+    });
+  }
   if (switchLlmToolField && switchLlmToolSupportedOnProfile) {
     // Two conditions, two different questions. The schema tells us the field
     // is a real setting on this server; the version gate tells us its
@@ -348,6 +414,114 @@ export function AgentSettingsScreen({
     initialToolConcurrency,
   );
 
+  // --- Custom instructions + tool selection (OpenHands profiles only) ---
+  // Both are AgentProfile fields with no counterpart in the global agent
+  // settings shape (the suffix lives under `agent_context` there), so they are
+  // rendered only in embedded mode. `tools` also needs a server-version gate:
+  // the profile model is `extra="forbid"` and gained the field in 1.31.2.
+  const toolsSupportedOnProfile = agentProfileSupportsTools();
+  const showProfileScopeFields = embedded;
+  const initialInstructions = React.useMemo(() => {
+    const raw = agentSettingsSource?.[SYSTEM_MESSAGE_SUFFIX_KEY];
+    return typeof raw === "string" ? raw : "";
+  }, [agentSettingsSource]);
+  const [instructions, setInstructions] = useState(initialInstructions);
+
+  const initialTools = React.useMemo(
+    () => readProfileTools(agentSettingsSource?.[TOOLS_KEY]),
+    [agentSettingsSource],
+  );
+  const [toolsMode, setToolsMode] = useState<ProfileToolsMode>(
+    initialTools.mode,
+  );
+  const [selectedTools, setSelectedTools] = useState<string[]>(
+    initialTools.selected,
+  );
+  // Advertised once per backend, so read it at render rather than holding a
+  // second copy in state that a backend switch would leave stale.
+  const usableTools = getAgentServerUsableTools();
+  // Stored names are folded into the catalog so an edit-save can't drop a tool
+  // the profile was given outside this editor, and the selection is re-derived
+  // in catalog order so the persisted list is stable across saves.
+  const toolCatalog = React.useMemo(
+    () =>
+      buildProfileToolCatalog({
+        usableTools,
+        storedToolNames: initialTools.selected,
+      }),
+    [usableTools, initialTools],
+  );
+  const orderedSelectedTools = React.useMemo(
+    () => toolCatalog.filter((name) => selectedTools.includes(name)),
+    [toolCatalog, selectedTools],
+  );
+  // What `tools: null` actually launches with, shown read-only under Standard.
+  const standardToolNames = standardProfileToolNames({
+    usableTools,
+    subAgentsEnabled,
+  });
+
+  // --- MCP servers (both variants; a base-model field) ---
+  // MCP tools ride `mcp_config`, not the `tools` allow-list above, so a profile
+  // restricted to read-only tools still reaches every configured server unless
+  // this narrows it too.
+  const initialMcpRefs = React.useMemo(
+    () => readProfileMcpRefs(agentSettingsSource?.[MCP_SERVER_REFS_KEY]),
+    [agentSettingsSource],
+  );
+  const [mcpMode, setMcpMode] = useState<ProfileToolsMode>(initialMcpRefs.mode);
+  const [selectedMcpServers, setSelectedMcpServers] = useState<string[]>(
+    initialMcpRefs.selected,
+  );
+  const configuredMcpNames = React.useMemo(
+    () =>
+      flattenMcpConfig(
+        settings?.mcp_config ??
+          parseMcpConfig(settings?.agent_settings?.mcp_config),
+      )
+        // `name` is optional on the shared type; flattenMcpConfig always sets
+        // it from the config key, so narrow rather than assert.
+        .filter(
+          (server): server is typeof server & { name: string } =>
+            typeof server.name === "string",
+        )
+        .map((server) => ({ name: server.name, description: server.type })),
+    [settings],
+  );
+  const mcpCatalog = React.useMemo(() => {
+    const configured = configuredMcpNames;
+    // A stored ref whose server is gone rides along: unlike `tools`, a dangling
+    // MCP ref fails the launch (422 locally; on cloud the never-brick handler
+    // swallows it and silently falls back to unscoped settings), so the user
+    // has to be able to see and clear it.
+    const known = new Set(configured.map(({ name }) => name));
+    return [
+      ...configured,
+      ...initialMcpRefs.selected
+        .filter((name) => !known.has(name))
+        .map((name) => ({ name, description: null as string | null })),
+    ];
+  }, [configuredMcpNames, initialMcpRefs]);
+  const orderedSelectedMcpServers = React.useMemo(
+    () =>
+      mcpCatalog
+        .map(({ name }) => name)
+        .filter((name) => selectedMcpServers.includes(name)),
+    [mcpCatalog, selectedMcpServers],
+  );
+  // A ref to a server that no longer exists 422s the launch, so surface it
+  // while the user can still fix it.
+  const danglingMcpRefs = React.useMemo(
+    () =>
+      mcpMode === "custom"
+        ? orderedSelectedMcpServers.filter(
+            (name) =>
+              !configuredMcpNames.some((server) => server.name === name),
+          )
+        : [],
+    [mcpMode, orderedSelectedMcpServers, configuredMcpNames],
+  );
+
   // --- ACP path ---
   const [agentType, setAgentType] = useState<AgentType>("openhands");
   const [commandText, setCommandText] = useState("");
@@ -448,6 +622,23 @@ export function AgentSettingsScreen({
     setToolConcurrency(initialToolConcurrency);
   }, [initialToolConcurrency]);
 
+  // Sync the custom instructions when settings reload
+  useEffect(() => {
+    setInstructions(initialInstructions);
+  }, [initialInstructions]);
+
+  // Sync the tool selection when settings reload
+  useEffect(() => {
+    setToolsMode(initialTools.mode);
+    setSelectedTools(initialTools.selected);
+  }, [initialTools]);
+
+  // Sync the MCP selection when settings reload
+  useEffect(() => {
+    setMcpMode(initialMcpRefs.mode);
+    setSelectedMcpServers(initialMcpRefs.selected);
+  }, [initialMcpRefs]);
+
   // --- Embedded (Agent-profile editor) save control ---
   // Ref-backed so the exposed builder/credential fns read the freshest state at
   // call time without re-emitting the control on every keystroke (mirrors
@@ -469,15 +660,24 @@ export function AgentSettingsScreen({
   // the emit effect can depend on them; the full ACP derivation lives after it.
   const acpCommandEmpty =
     agentType === "acp" && parseCommand(commandText).length === 0;
+  // `mcp_server_refs` lives on the profile base, so it is dirty-tracked for both
+  // variants rather than inside the kind-specific branch below.
+  const mcpScopeDirty =
+    mcpMode !== initialMcpRefs.mode ||
+    orderedSelectedMcpServers.join(",") !== initialMcpRefs.selected.join(",");
   const settingsDirty =
     agentType !== loadedSnapshot.agentType ||
+    mcpScopeDirty ||
     (agentType === "acp"
       ? commandText !== loadedSnapshot.commandText ||
         acpModel !== loadedSnapshot.acpModel ||
         isCustomAcpModel !== loadedSnapshot.isCustomAcpModel
       : subAgentsEnabled !== initialSubAgentsEnabled ||
         switchLlmToolEnabled !== initialSwitchLlmToolEnabled ||
-        toolConcurrency !== initialToolConcurrency);
+        toolConcurrency !== initialToolConcurrency ||
+        instructions !== initialInstructions ||
+        toolsMode !== initialTools.mode ||
+        orderedSelectedTools.join(",") !== initialTools.selected.join(","));
   const credentialsDirty = acpCredentialForm.isDirty;
   const isAnyDirty = settingsDirty || credentialsDirty;
   useEffect(() => {
@@ -543,6 +743,14 @@ export function AgentSettingsScreen({
       switchLlmToolSupportedOnProfile,
       toolConcurrencyField,
       toolConcurrency,
+      instructions,
+      toolsMode,
+      selectedTools: orderedSelectedTools,
+      storedToolParams: initialTools.params,
+      usableTools,
+      toolsSupportedOnProfile,
+      mcpMode,
+      selectedMcpServers: orderedSelectedMcpServers,
     });
 
   const isSavingAny = isSaving || acpCredentialForm.isSaving;
@@ -793,6 +1001,179 @@ export function AgentSettingsScreen({
           isDisabled={isSavingAny}
           onChange={setToolConcurrency}
         />
+      ) : null}
+
+      {!isAcp && showProfileScopeFields ? (
+        <label className="flex flex-col gap-2.5 w-full">
+          <div className="flex items-center gap-2">
+            <span className="text-sm">
+              {t(I18nKey.SETTINGS$AGENT_PROFILE_INSTRUCTIONS)}
+            </span>
+            <OptionalTag />
+          </div>
+          <textarea
+            data-testid="agent-settings-instructions"
+            name={SYSTEM_MESSAGE_SUFFIX_KEY}
+            value={instructions}
+            disabled={isSavingAny}
+            onChange={(event) => setInstructions(event.target.value)}
+            className={cn(formControlMultilineFieldClassName, "min-h-24")}
+          />
+          <Typography.Text className="text-xs text-tertiary-alt">
+            {t(I18nKey.SETTINGS$AGENT_PROFILE_INSTRUCTIONS_HINT)}
+          </Typography.Text>
+        </label>
+      ) : null}
+
+      {!isAcp && showProfileScopeFields && toolsSupportedOnProfile ? (
+        <div className="flex flex-col gap-2.5">
+          <Typography.Text className="text-sm">
+            {t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS)}
+          </Typography.Text>
+          <SettingsDropdownInput
+            testId="agent-settings-tools-mode"
+            name="agent-tools-mode"
+            label=""
+            items={[
+              {
+                key: "standard",
+                label: t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_STANDARD),
+              },
+              {
+                key: "custom",
+                label: t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_CUSTOM),
+              },
+            ]}
+            selectedKey={toolsMode}
+            isDisabled={isSavingAny}
+            onSelectionChange={(key) => {
+              if (!key) return;
+              const mode = key as ProfileToolsMode;
+              setToolsMode(mode);
+              // Seed a first switch to custom from what standard would have
+              // launched, so turning the control on never silently narrows the
+              // agent to nothing. The sub-agent tool is excluded: the toggle
+              // above owns it and the save re-adds it.
+              if (mode === "custom" && selectedTools.length === 0) {
+                setSelectedTools(
+                  standardProfileToolNames({
+                    usableTools,
+                    subAgentsEnabled: false,
+                  }),
+                );
+              }
+            }}
+          />
+          <ProfileScopeList
+            testId="agent-settings-tool"
+            items={(toolsMode === "custom"
+              ? toolCatalog
+              : standardToolNames
+            ).map((name) => ({
+              name,
+              description: KNOWN_PROFILE_TOOL_DESCRIPTIONS[name]
+                ? t(KNOWN_PROFILE_TOOL_DESCRIPTIONS[name])
+                : null,
+            }))}
+            selected={
+              toolsMode === "custom" ? orderedSelectedTools : standardToolNames
+            }
+            isDisabled={isSavingAny || toolsMode === "standard"}
+            onToggle={(name, checked) =>
+              setSelectedTools((prev) =>
+                checked
+                  ? [...prev, name]
+                  : prev.filter((entry) => entry !== name),
+              )
+            }
+          />
+          <Typography.Text className="text-xs text-tertiary-alt">
+            {t(
+              toolsMode === "custom"
+                ? I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_CUSTOM_HINT
+                : I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_STANDARD_HINT,
+            )}
+          </Typography.Text>
+        </div>
+      ) : null}
+
+      {showProfileScopeFields ? (
+        <div className="flex flex-col gap-2.5">
+          <Typography.Text className="text-sm">
+            {t(I18nKey.SETTINGS$AGENT_PROFILE_MCP)}
+          </Typography.Text>
+          <SettingsDropdownInput
+            testId="agent-settings-mcp-mode"
+            name="agent-mcp-mode"
+            label=""
+            items={[
+              {
+                key: "standard",
+                label: t(I18nKey.SETTINGS$AGENT_PROFILE_MCP_ALL),
+              },
+              {
+                key: "custom",
+                label: t(I18nKey.SETTINGS$AGENT_PROFILE_MCP_CHOOSE),
+              },
+            ]}
+            selectedKey={mcpMode}
+            isDisabled={isSavingAny}
+            onSelectionChange={(key) => {
+              if (!key) return;
+              const mode = key as ProfileToolsMode;
+              setMcpMode(mode);
+              // Seed a first switch to custom from the default — every
+              // configured server — so turning the control on narrows from
+              // what the agent had rather than cutting it off from all of
+              // them. Mirrors the tools picker.
+              if (mode === "custom" && selectedMcpServers.length === 0) {
+                setSelectedMcpServers(
+                  configuredMcpNames.map(({ name }) => name),
+                );
+              }
+            }}
+          />
+          {mcpCatalog.length > 0 ? (
+            <ProfileScopeList
+              testId="agent-settings-mcp"
+              items={mcpCatalog}
+              selected={
+                mcpMode === "custom"
+                  ? orderedSelectedMcpServers
+                  : mcpCatalog.map(({ name }) => name)
+              }
+              isDisabled={isSavingAny || mcpMode === "standard"}
+              onToggle={(name, checked) =>
+                setSelectedMcpServers((prev) =>
+                  checked
+                    ? [...prev, name]
+                    : prev.filter((entry) => entry !== name),
+                )
+              }
+            />
+          ) : (
+            <Typography.Text className="text-xs text-tertiary-alt">
+              {t(I18nKey.SETTINGS$AGENT_PROFILE_MCP_NONE)}
+            </Typography.Text>
+          )}
+          {danglingMcpRefs.length > 0 ? (
+            <Typography.Text
+              testId="agent-settings-mcp-dangling"
+              className="text-xs text-danger"
+            >
+              {t(I18nKey.SETTINGS$AGENT_PROFILE_MCP_DANGLING, {
+                names: danglingMcpRefs.join(", "),
+              })}
+            </Typography.Text>
+          ) : null}
+          <Typography.Text className="text-xs text-tertiary-alt">
+            {t(
+              mcpMode === "custom"
+                ? I18nKey.SETTINGS$AGENT_PROFILE_MCP_CHOOSE_HINT
+                : I18nKey.SETTINGS$AGENT_PROFILE_MCP_ALL_HINT,
+            )}
+          </Typography.Text>
+        </div>
       ) : null}
 
       {isAcp && (

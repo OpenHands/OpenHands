@@ -10,6 +10,11 @@ import {
   getAcpProvider,
   resolveEffectiveAcpModel,
 } from "#/constants/acp-providers";
+import {
+  BROWSER_TOOL_NAME,
+  DEFAULT_TOOL_NAMES,
+  SUB_AGENT_TOOL_NAME,
+} from "#/constants/profile-tools";
 import { getAgentServerClientOptions } from "./agent-server-client-options";
 import {
   getCachedAgentServerInfo,
@@ -133,9 +138,6 @@ export interface DirectConversationInfo {
   sub_conversation_ids?: string[] | null;
 }
 
-const DEFAULT_TOOL_NAMES = ["terminal", "file_editor", "task_tracker"];
-const BROWSER_TOOL_SET_NAME = "browser_tool_set";
-const TASK_TOOL_SET_NAME = "task_tool_set";
 // Falls back to the same default the code agent uses when the user has not
 // configured `conversation_settings.max_iterations` (see buildConfiguredConversationSettings).
 const DEFAULT_MAX_ITERATIONS = 500;
@@ -704,11 +706,11 @@ function isToolRecord(
 }
 
 function shouldIncludeTool(name: string, agentSettings: SettingsRecord) {
-  if (name === BROWSER_TOOL_SET_NAME) {
+  if (name === BROWSER_TOOL_NAME) {
     return browserToolsEnabled() && isAgentServerToolAvailable(name);
   }
 
-  if (name === TASK_TOOL_SET_NAME) {
+  if (name === SUB_AGENT_TOOL_NAME) {
     return (
       agentSettings.enable_sub_agents === true &&
       isAgentServerToolAvailable(name)
@@ -727,7 +729,7 @@ function getAgentTools(agentSettings: SettingsRecord): AgentToolSpec[] {
     }
   }
 
-  for (const name of [BROWSER_TOOL_SET_NAME, TASK_TOOL_SET_NAME]) {
+  for (const name of [BROWSER_TOOL_NAME, SUB_AGENT_TOOL_NAME]) {
     if (shouldIncludeTool(name, agentSettings)) {
       tools.set(name, { name, params: {} });
     }
