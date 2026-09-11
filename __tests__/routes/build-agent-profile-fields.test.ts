@@ -20,6 +20,8 @@ const baseAcp = {
   storedToolParams: {} as Record<string, Record<string, unknown>>,
   usableTools: null,
   toolsSupportedOnProfile: true,
+  mcpMode: "standard" as const,
+  selectedMcpServers: [] as string[],
 };
 
 const switchLlmToolField: SettingsFieldSchema = {
@@ -54,6 +56,7 @@ describe("buildAgentProfileFields — ACP", () => {
     const fields = buildAgentProfileFields(baseAcp);
     expect(fields).toEqual({
       agent_kind: "acp",
+      mcp_server_refs: null,
       acp_server: "claude-code",
       acp_model: "claude-opus-4-8",
       acp_command: null,
@@ -116,12 +119,15 @@ describe("buildAgentProfileFields — OpenHands", () => {
     storedToolParams: {} as Record<string, Record<string, unknown>>,
     usableTools: null as string[] | null,
     toolsSupportedOnProfile: true,
+    mcpMode: "standard" as const,
+    selectedMcpServers: [] as string[],
   };
 
   it("passes through enable_sub_agents and omits concurrency when the field is absent", () => {
     expect(buildAgentProfileFields(baseOh)).toEqual({
       agent_kind: "openhands",
       enable_sub_agents: true,
+      mcp_server_refs: null,
       system_message_suffix: null,
       tools: null,
     });
@@ -231,6 +237,8 @@ describe("buildAgentProfileFields — custom instructions", () => {
     storedToolParams: {} as Record<string, Record<string, unknown>>,
     usableTools: null as string[] | null,
     toolsSupportedOnProfile: true,
+    mcpMode: "standard" as const,
+    selectedMcpServers: [] as string[],
   };
 
   it("persists the trimmed suffix", () => {
@@ -282,6 +290,8 @@ describe("buildAgentProfileFields — tools", () => {
     storedToolParams: {} as Record<string, Record<string, unknown>>,
     usableTools: null as string[] | null,
     toolsSupportedOnProfile: true,
+    mcpMode: "standard" as const,
+    selectedMcpServers: [] as string[],
   };
 
   it("emits null for the standard set", () => {
@@ -328,5 +338,64 @@ describe("buildAgentProfileFields — tools", () => {
       toolsSupportedOnProfile: false,
     });
     expect(fields).not.toHaveProperty("tools");
+  });
+});
+
+describe("buildAgentProfileFields — MCP servers", () => {
+  const base = {
+    isAcp: false,
+    selectedPreset: "custom",
+    isDefaultProviderCommand: false,
+    commandTokens: [] as string[],
+    acpModel: "",
+    subAgentsEnabled: false,
+    switchLlmToolField: undefined,
+    switchLlmToolEnabled: false,
+    switchLlmToolSupportedOnProfile: true,
+    toolConcurrencyField: undefined,
+    toolConcurrency: "",
+    instructions: "",
+    toolsMode: "standard" as const,
+    selectedTools: [] as string[],
+    storedToolParams: {} as Record<string, Record<string, unknown>>,
+    usableTools: null as string[] | null,
+    toolsSupportedOnProfile: true,
+    mcpMode: "standard" as const,
+    selectedMcpServers: [] as string[],
+  };
+
+  it("persists null when every server is allowed", () => {
+    expect(buildAgentProfileFields(base)).toMatchObject({
+      mcp_server_refs: null,
+    });
+  });
+
+  it("persists the selection when servers are scoped", () => {
+    expect(
+      buildAgentProfileFields({
+        ...base,
+        mcpMode: "custom",
+        selectedMcpServers: ["github"],
+      }),
+    ).toMatchObject({ mcp_server_refs: ["github"] });
+  });
+
+  it("persists an empty list for an agent with no MCP access", () => {
+    expect(
+      buildAgentProfileFields({ ...base, mcpMode: "custom" }),
+    ).toMatchObject({ mcp_server_refs: [] });
+  });
+
+  it("rides the ACP variant too — it is a base-model field", () => {
+    expect(
+      buildAgentProfileFields({
+        ...base,
+        isAcp: true,
+        selectedPreset: "claude-code",
+        commandTokens: ["npx", "claude-code-acp"],
+        mcpMode: "custom",
+        selectedMcpServers: ["github"],
+      }),
+    ).toMatchObject({ agent_kind: "acp", mcp_server_refs: ["github"] });
   });
 });

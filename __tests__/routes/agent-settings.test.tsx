@@ -1246,4 +1246,114 @@ describe("AgentSettingsScreen", () => {
       ).toBeChecked();
     });
   });
+
+  describe("MCP server scope", () => {
+    function seedWithMcp(mcpConfig: Record<string, unknown>) {
+      // `useSettings` prefers `agent_settings.mcp_config` over the top-level
+      // field, so seed it where the hook actually reads.
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+        buildSettings({
+          agent_settings: {
+            ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+            agent_kind: "openhands",
+            mcp_config: mcpConfig,
+          },
+        } as never),
+      );
+    }
+
+    const TWO_SERVERS = {
+      github: { url: "https://mcp.example/github", transport: "shttp" },
+      postgres: { url: "https://mcp.example/pg", transport: "shttp" },
+    };
+
+    it("lists configured servers read-only and persists null by default", async () => {
+      seedWithMcp(TWO_SERVERS);
+      let control: AgentSettingsSaveControl | null = null;
+      renderAgentSettingsScreen({
+        embedded: true,
+        agentSettingsOverride: {
+          agent_kind: "openhands",
+          enable_sub_agents: false,
+          mcp_server_refs: null,
+        },
+        onSaveControlChange: (next) => {
+          control = next;
+        },
+      });
+      await screen.findByTestId("agent-settings-screen");
+
+      const github = screen.getByTestId("agent-settings-mcp-github");
+      expect(github).toBeChecked();
+      expect(github).toBeDisabled();
+      expect(control!.buildAgentProfileFields()).toMatchObject({
+        mcp_server_refs: null,
+      });
+    });
+
+    it("seeds from a stored scope and persists the selection", async () => {
+      seedWithMcp(TWO_SERVERS);
+      let control: AgentSettingsSaveControl | null = null;
+      renderAgentSettingsScreen({
+        embedded: true,
+        agentSettingsOverride: {
+          agent_kind: "openhands",
+          enable_sub_agents: false,
+          mcp_server_refs: ["github"],
+        },
+        onSaveControlChange: (next) => {
+          control = next;
+        },
+      });
+      await screen.findByTestId("agent-settings-screen");
+
+      expect(screen.getByTestId("agent-settings-mcp-github")).toBeChecked();
+      expect(
+        screen.getByTestId("agent-settings-mcp-postgres"),
+      ).not.toBeChecked();
+      expect(control!.buildAgentProfileFields()).toMatchObject({
+        mcp_server_refs: ["github"],
+      });
+    });
+
+    it("warns about a ref whose server is gone, which would 422 the launch", async () => {
+      // Unlike tools and secrets, a dangling MCP ref fails the launch, so it
+      // has to be visible and clearable rather than silently carried.
+      seedWithMcp(TWO_SERVERS);
+      renderAgentSettingsScreen({
+        embedded: true,
+        agentSettingsOverride: {
+          agent_kind: "openhands",
+          enable_sub_agents: false,
+          mcp_server_refs: ["github", "deleted-server"],
+        },
+      });
+      await screen.findByTestId("agent-settings-screen");
+
+      expect(
+        screen.getByTestId("agent-settings-mcp-deleted-server"),
+      ).toBeChecked();
+      expect(
+        screen.getByTestId("agent-settings-mcp-dangling"),
+      ).toBeInTheDocument();
+    });
+
+    it("explains the empty state when no server is configured", async () => {
+      seedWithMcp({});
+      renderAgentSettingsScreen({
+        embedded: true,
+        agentSettingsOverride: {
+          agent_kind: "openhands",
+          enable_sub_agents: false,
+        },
+      });
+      await screen.findByTestId("agent-settings-screen");
+      expect(
+        screen.queryByTestId("agent-settings-mcp-list"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByText("SETTINGS$AGENT_PROFILE_MCP_NONE"),
+      ).toBeInTheDocument();
+    });
+  });
 });

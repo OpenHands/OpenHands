@@ -60,3 +60,15 @@ export function agentProfileSupportsTools(): boolean {
   if (comparison === null) return true;
   return comparison >= 0;
 }
+
+/**
+ * `mcp_server_refs` has been on `AgentProfileBase` since agent profiles shipped
+ * in agent-server 1.29.0 — below `config/defaults.json`'s
+ * `compatibility.minimumAgentServer`, so every supported backend accepts it and
+ * no version gate is needed. Cloud enforces it too: it resolves profiles through
+ * the SDK's `resolve_agent_profile`, which applies the same filter.
+ *
+ * Exported as a named constant rather than inlined so the "why no gate here?"
+ * answer lives next to the gates that do exist.
+ */
+export const AGENT_PROFILE_MCP_REFS_NEEDS_NO_GATE = true;

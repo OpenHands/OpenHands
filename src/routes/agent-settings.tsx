@@ -11,7 +11,7 @@ import { SettingsSwitch } from "#/components/features/settings/settings-switch";
 import { SchemaField } from "#/components/features/settings/sdk-settings/schema-field";
 import { AcpCredentialsSection } from "#/components/features/settings/acp-credentials-section";
 import { OptionalTag } from "#/components/features/settings/optional-tag";
-import { ProfileToolList } from "#/components/features/settings/agent-profiles/profile-tool-list";
+import { ProfileScopeList } from "#/components/features/settings/agent-profiles/profile-scope-list";
 import { useAcpCredentialForm } from "#/hooks/use-acp-credential-form";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { Typography } from "#/ui/typography";
@@ -52,11 +52,15 @@ import { getAgentServerUsableTools } from "#/api/agent-server-compatibility";
 import {
   buildProfileToolCatalog,
   buildProfileToolsValue,
+  KNOWN_PROFILE_TOOL_DESCRIPTIONS,
+  readProfileMcpRefs,
   readProfileTools,
   standardProfileToolNames,
   type ProfileToolSpec,
   type ProfileToolsMode,
 } from "#/constants/profile-tools";
+import { flattenMcpConfig } from "#/utils/mcp-installed-servers";
+import { parseMcpConfig } from "#/utils/mcp-config";
 
 export const handle = { hideTitle: true };
 
@@ -74,6 +78,7 @@ const ENABLE_SWITCH_LLM_TOOL_FIELD_KEY = "enable_switch_llm_tool";
 const TOOL_CONCURRENCY_FIELD_KEY = "tool_concurrency_limit";
 const SYSTEM_MESSAGE_SUFFIX_KEY = "system_message_suffix";
 const TOOLS_KEY = "tools";
+const MCP_SERVER_REFS_KEY = "mcp_server_refs";
 const COMMAND_PLACEHOLDER_FALLBACK = "npx -y <package-name>";
 const ACP_CUSTOM_MODEL_KEY = "__custom_model__";
 const EMPTY_AGENT_SETTINGS_SNAPSHOT: AgentSettingsSnapshot = {
@@ -145,9 +150,11 @@ export type AgentProfileFieldsDraft =
       tool_concurrency_limit?: number;
       system_message_suffix?: string | null;
       tools?: ProfileToolSpec[] | null;
+      mcp_server_refs?: string[] | null;
     }
   | {
       agent_kind: "acp";
+      mcp_server_refs?: string[] | null;
       acp_server: string;
       acp_model: string | null;
       acp_command: string | null;
@@ -183,6 +190,8 @@ export interface AgentProfileFieldsInput {
   usableTools: string[] | null;
   /** Whether the backend's *profile* model accepts `tools`. */
   toolsSupportedOnProfile: boolean;
+  mcpMode: ProfileToolsMode;
+  selectedMcpServers: string[];
 }
 
 /**
@@ -224,12 +233,20 @@ export function buildAgentProfileFields(
     storedToolParams,
     usableTools,
     toolsSupportedOnProfile,
+    mcpMode,
+    selectedMcpServers,
   } = input;
+  // A base-model field, so it rides both variants. No version gate: it has
+  // existed since agent profiles shipped, below the supported floor.
+  const mcpRefs = {
+    mcp_server_refs: mcpMode === "custom" ? selectedMcpServers : null,
+  };
   if (isAcp) {
     const isBuiltinDefault =
       isDefaultProviderCommand && selectedPreset !== ACP_CUSTOM_PRESET_KEY;
     return {
       agent_kind: "acp",
+      ...mcpRefs,
       acp_server: selectedPreset,
       acp_model: acpModel.trim() || null,
       acp_command: isBuiltinDefault
@@ -243,6 +260,7 @@ export function buildAgentProfileFields(
     {
       agent_kind: "openhands",
       enable_sub_agents: subAgentsEnabled,
+      ...mcpRefs,
       // Empty clears the field: `""` would append a blank line to every system
       // prompt, and the merge under this draft would otherwise keep the old text.
       system_message_suffix: trimmedInstructions || null,
@@ -443,6 +461,67 @@ export function AgentSettingsScreen({
     subAgentsEnabled,
   });
 
+  // --- MCP servers (both variants; a base-model field) ---
+  // MCP tools ride `mcp_config`, not the `tools` allow-list above, so a profile
+  // restricted to read-only tools still reaches every configured server unless
+  // this narrows it too.
+  const initialMcpRefs = React.useMemo(
+    () => readProfileMcpRefs(agentSettingsSource?.[MCP_SERVER_REFS_KEY]),
+    [agentSettingsSource],
+  );
+  const [mcpMode, setMcpMode] = useState<ProfileToolsMode>(initialMcpRefs.mode);
+  const [selectedMcpServers, setSelectedMcpServers] = useState<string[]>(
+    initialMcpRefs.selected,
+  );
+  const configuredMcpNames = React.useMemo(
+    () =>
+      flattenMcpConfig(
+        settings?.mcp_config ??
+          parseMcpConfig(settings?.agent_settings?.mcp_config),
+      )
+        // `name` is optional on the shared type; flattenMcpConfig always sets
+        // it from the config key, so narrow rather than assert.
+        .filter(
+          (server): server is typeof server & { name: string } =>
+            typeof server.name === "string",
+        )
+        .map((server) => ({ name: server.name, description: server.type })),
+    [settings],
+  );
+  const mcpCatalog = React.useMemo(() => {
+    const configured = configuredMcpNames;
+    // A stored ref whose server is gone rides along: unlike `tools`, a dangling
+    // MCP ref fails the launch (422 locally; on cloud the never-brick handler
+    // swallows it and silently falls back to unscoped settings), so the user
+    // has to be able to see and clear it.
+    const known = new Set(configured.map(({ name }) => name));
+    return [
+      ...configured,
+      ...initialMcpRefs.selected
+        .filter((name) => !known.has(name))
+        .map((name) => ({ name, description: null as string | null })),
+    ];
+  }, [configuredMcpNames, initialMcpRefs]);
+  const orderedSelectedMcpServers = React.useMemo(
+    () =>
+      mcpCatalog
+        .map(({ name }) => name)
+        .filter((name) => selectedMcpServers.includes(name)),
+    [mcpCatalog, selectedMcpServers],
+  );
+  // A ref to a server that no longer exists 422s the launch, so surface it
+  // while the user can still fix it.
+  const danglingMcpRefs = React.useMemo(
+    () =>
+      mcpMode === "custom"
+        ? orderedSelectedMcpServers.filter(
+            (name) =>
+              !configuredMcpNames.some((server) => server.name === name),
+          )
+        : [],
+    [mcpMode, orderedSelectedMcpServers, configuredMcpNames],
+  );
+
   // --- ACP path ---
   const [agentType, setAgentType] = useState<AgentType>("openhands");
   const [commandText, setCommandText] = useState("");
@@ -554,6 +633,12 @@ export function AgentSettingsScreen({
     setSelectedTools(initialTools.selected);
   }, [initialTools]);
 
+  // Sync the MCP selection when settings reload
+  useEffect(() => {
+    setMcpMode(initialMcpRefs.mode);
+    setSelectedMcpServers(initialMcpRefs.selected);
+  }, [initialMcpRefs]);
+
   // --- Embedded (Agent-profile editor) save control ---
   // Ref-backed so the exposed builder/credential fns read the freshest state at
   // call time without re-emitting the control on every keystroke (mirrors
@@ -575,8 +660,14 @@ export function AgentSettingsScreen({
   // the emit effect can depend on them; the full ACP derivation lives after it.
   const acpCommandEmpty =
     agentType === "acp" && parseCommand(commandText).length === 0;
+  // `mcp_server_refs` lives on the profile base, so it is dirty-tracked for both
+  // variants rather than inside the kind-specific branch below.
+  const mcpScopeDirty =
+    mcpMode !== initialMcpRefs.mode ||
+    orderedSelectedMcpServers.join(",") !== initialMcpRefs.selected.join(",");
   const settingsDirty =
     agentType !== loadedSnapshot.agentType ||
+    mcpScopeDirty ||
     (agentType === "acp"
       ? commandText !== loadedSnapshot.commandText ||
         acpModel !== loadedSnapshot.acpModel ||
@@ -658,6 +749,8 @@ export function AgentSettingsScreen({
       storedToolParams: initialTools.params,
       usableTools,
       toolsSupportedOnProfile,
+      mcpMode,
+      selectedMcpServers: orderedSelectedMcpServers,
     });
 
   const isSavingAny = isSaving || acpCredentialForm.isSaving;
@@ -971,8 +1064,17 @@ export function AgentSettingsScreen({
               }
             }}
           />
-          <ProfileToolList
-            catalog={toolsMode === "custom" ? toolCatalog : standardToolNames}
+          <ProfileScopeList
+            testId="agent-settings-tool"
+            items={(toolsMode === "custom"
+              ? toolCatalog
+              : standardToolNames
+            ).map((name) => ({
+              name,
+              description: KNOWN_PROFILE_TOOL_DESCRIPTIONS[name]
+                ? t(KNOWN_PROFILE_TOOL_DESCRIPTIONS[name])
+                : null,
+            }))}
             selected={
               toolsMode === "custom" ? orderedSelectedTools : standardToolNames
             }
@@ -990,6 +1092,75 @@ export function AgentSettingsScreen({
               toolsMode === "custom"
                 ? I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_CUSTOM_HINT
                 : I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_STANDARD_HINT,
+            )}
+          </Typography.Text>
+        </div>
+      ) : null}
+
+      {showProfileScopeFields ? (
+        <div className="flex flex-col gap-2.5">
+          <Typography.Text className="text-sm">
+            {t(I18nKey.SETTINGS$AGENT_PROFILE_MCP)}
+          </Typography.Text>
+          <SettingsDropdownInput
+            testId="agent-settings-mcp-mode"
+            name="agent-mcp-mode"
+            label=""
+            items={[
+              {
+                key: "standard",
+                label: t(I18nKey.SETTINGS$AGENT_PROFILE_MCP_ALL),
+              },
+              {
+                key: "custom",
+                label: t(I18nKey.SETTINGS$AGENT_PROFILE_MCP_CHOOSE),
+              },
+            ]}
+            selectedKey={mcpMode}
+            isDisabled={isSavingAny}
+            onSelectionChange={(key) => {
+              if (!key) return;
+              setMcpMode(key as ProfileToolsMode);
+            }}
+          />
+          {mcpCatalog.length > 0 ? (
+            <ProfileScopeList
+              testId="agent-settings-mcp"
+              items={mcpCatalog}
+              selected={
+                mcpMode === "custom"
+                  ? orderedSelectedMcpServers
+                  : mcpCatalog.map(({ name }) => name)
+              }
+              isDisabled={isSavingAny || mcpMode === "standard"}
+              onToggle={(name, checked) =>
+                setSelectedMcpServers((prev) =>
+                  checked
+                    ? [...prev, name]
+                    : prev.filter((entry) => entry !== name),
+                )
+              }
+            />
+          ) : (
+            <Typography.Text className="text-xs text-tertiary-alt">
+              {t(I18nKey.SETTINGS$AGENT_PROFILE_MCP_NONE)}
+            </Typography.Text>
+          )}
+          {danglingMcpRefs.length > 0 ? (
+            <Typography.Text
+              testId="agent-settings-mcp-dangling"
+              className="text-xs text-danger"
+            >
+              {t(I18nKey.SETTINGS$AGENT_PROFILE_MCP_DANGLING, {
+                names: danglingMcpRefs.join(", "),
+              })}
+            </Typography.Text>
+          ) : null}
+          <Typography.Text className="text-xs text-tertiary-alt">
+            {t(
+              mcpMode === "custom"
+                ? I18nKey.SETTINGS$AGENT_PROFILE_MCP_CHOOSE_HINT
+                : I18nKey.SETTINGS$AGENT_PROFILE_MCP_ALL_HINT,
             )}
           </Typography.Text>
         </div>
