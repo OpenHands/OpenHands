@@ -197,4 +197,35 @@ describe("useWorkspaceFiles — cloud backend", () => {
       "/workspace/project",
     );
   });
+
+  it("shares the workspace-files key family so refresh/invalidation refetches the cloud list", async () => {
+    // The manual Files-tab refresh and file-edit observations both call
+    // `invalidateQueries({ queryKey: ["workspace-files"] })`. The cloud query
+    // must live under that family (with a "cloud" transport segment), so the
+    // invalidation reaches it — this was previously keyed "workspace-files-cloud"
+    // and was never invalidated on cloud (#16949).
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    listCloudFilesMock.mockResolvedValue(["hello.txt", "src/index.ts"]);
+
+    const { result } = renderHook(() => useWorkspaceFiles(), { wrapper });
+    await waitFor(() =>
+      expect(result.current.data).toEqual(["hello.txt", "src/index.ts"]),
+    );
+    expect(listCloudFilesMock).toHaveBeenCalledTimes(1);
+
+    // Invalidating the family must refetch the active (cloud) listing.
+    client.invalidateQueries({ queryKey: ["workspace-files"] });
+
+    await waitFor(() => expect(listCloudFilesMock).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(result.current.data).toEqual(["hello.txt", "src/index.ts"]),
+    );
+    // Cloud listing never drives the local bash path.
+    expect(executeCommandSpy).not.toHaveBeenCalled();
+  });
 });

@@ -60,3 +60,32 @@ describe("ProgressEvent fallback in vitest.setup.ts", () => {
     expect("ProgressEvent" in {}).toBe(false);
   });
 });
+
+describe("XMLHttpRequestUpload fallback in vitest.setup.ts", () => {
+  it("resolves the bare identifier after teardown deletes the own property", () => {
+    // jsdom may or may not expose `XMLHttpRequestUpload` as an own global; the
+    // fallback must resolve the bare identifier either way.
+    const live = Object.getOwnPropertyDescriptor(
+      globalThis,
+      "XMLHttpRequestUpload",
+    );
+
+    delete (globalThis as { XMLHttpRequestUpload?: unknown })
+      .XMLHttpRequestUpload;
+
+    try {
+      // MSW's `trigger` does `target instanceof XMLHttpRequestUpload`, which
+      // throws unless the identifier resolves to a callable constructor.
+      expect(typeof XMLHttpRequestUpload).toBe("function");
+      expect({} instanceof XMLHttpRequestUpload).toBe(false);
+    } finally {
+      if (live) {
+        Object.defineProperty(globalThis, "XMLHttpRequestUpload", live);
+      }
+    }
+  });
+
+  it("does not add XMLHttpRequestUpload to plain objects", () => {
+    expect("XMLHttpRequestUpload" in {}).toBe(false);
+  });
+});
