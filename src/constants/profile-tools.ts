@@ -1,8 +1,4 @@
 import { I18nKey } from "#/i18n/declaration";
-import {
-  CANVAS_UI_CLIENT_TOOL_NAME,
-  LEGACY_CANVAS_UI_TOOL_NAME,
-} from "#/constants/canvas-ui";
 
 /** Tool spec as it is stored on an agent profile and sent on the wire. */
 export interface ProfileToolSpec {
@@ -33,35 +29,23 @@ export const BROWSER_TOOL_NAME = "browser_tool_set";
 export const SUB_AGENT_TOOL_NAME = "task_tool_set";
 
 /**
- * Names a backend advertises that a profile must not select, because something
- * else already decides whether the agent gets them — or because selecting one
- * cannot work:
+ * The tools a profile may scope, in picker order, each with a description.
  *
- * - built-in SDK tools ride `include_default_tools` on every agent, and
- *   `SwitchLLMTool` is what the LLM-switching toggle governs;
- * - `task` / `task_tool_set` are delegation, owned by `enable_sub_agents`;
- * - the Canvas UI tools are client-defined and injected at launch;
- * - `workflow` is the low-level half of a pair whose own docstring says to
- *   prefer `workflow_tool_set` (the same set/member shape as `task`);
- * - `planning_file_editor` needs a `plan_path` param computed per launch from
- *   the workspace and git provider, which a stored profile cannot supply, so
- *   picking it yields a silently degraded tool (software-agent-sdk#4956).
+ * Deliberately an allow-list. The backend's `usable_tools` is a dump of whatever
+ * the server process imported — `tool_router.py` registers the default,
+ * builtin-agent, Gemini and planning presets unconditionally at import time — so
+ * it answers "can this server run X?", not "should a user pick X?". Treating it
+ * as a menu surfaced the Gemini file family (a parallel set to `file_editor`
+ * that no product path builds an agent from), the planning agent's internal
+ * PLAN.md editor (which needs a per-launch `plan_path` a stored profile cannot
+ * supply), and the low-level half of the workflow pair whose own docstring says
+ * to prefer the set.
+ *
+ * A new SDK tool therefore needs a line here before it appears. That is the
+ * intended trade: an undescribed entry in a picker that decides what an agent
+ * can do is worse than a missing one, and canvas already pins an agent-server
+ * version.
  */
-const NON_SELECTABLE_TOOL_NAMES = new Set([
-  "FinishTool",
-  "ThinkTool",
-  "InvokeSkillTool",
-  "SwitchLLMTool",
-  "VisionInspectTool",
-  "task",
-  SUB_AGENT_TOOL_NAME,
-  LEGACY_CANVAS_UI_TOOL_NAME,
-  CANVAS_UI_CLIENT_TOOL_NAME,
-  "workflow",
-  "planning_file_editor",
-]);
-
-/** Tools shown first in the picker, with a description; others follow by name. */
 export const KNOWN_PROFILE_TOOL_DESCRIPTIONS: Record<string, I18nKey> = {
   terminal: I18nKey.SETTINGS$TOOL_DESC_TERMINAL,
   file_editor: I18nKey.SETTINGS$TOOL_DESC_FILE_EDITOR,
@@ -69,15 +53,6 @@ export const KNOWN_PROFILE_TOOL_DESCRIPTIONS: Record<string, I18nKey> = {
   glob: I18nKey.SETTINGS$TOOL_DESC_GLOB,
   grep: I18nKey.SETTINGS$TOOL_DESC_GREP,
   [BROWSER_TOOL_NAME]: I18nKey.SETTINGS$TOOL_DESC_BROWSER,
-  ask_oracle: I18nKey.SETTINGS$TOOL_DESC_ASK_ORACLE,
-  workflow_tool_set: I18nKey.SETTINGS$TOOL_DESC_WORKFLOW,
-  // The Gemini-style file tools: a parallel family to `file_editor`, registered
-  // by the server's gemini preset. Described so the picker says which is which
-  // rather than listing four bare names next to `file_editor`.
-  read_file: I18nKey.SETTINGS$TOOL_DESC_READ_FILE,
-  write_file: I18nKey.SETTINGS$TOOL_DESC_WRITE_FILE,
-  edit: I18nKey.SETTINGS$TOOL_DESC_EDIT,
-  list_directory: I18nKey.SETTINGS$TOOL_DESC_LIST_DIRECTORY,
 };
 
 const KNOWN_PROFILE_TOOL_NAMES = Object.keys(KNOWN_PROFILE_TOOL_DESCRIPTIONS);
@@ -87,15 +62,11 @@ function isUsable(name: string, usableTools: string[] | null): boolean {
 }
 
 /**
- * Ordered tool names the picker offers: the described tools this backend can
- * run, then anything else it advertises, then names the stored profile already
- * carries.
+ * Ordered tool names the picker offers: the allow-listed tools this backend can
+ * run, plus any the stored profile already carries.
  *
  * A backend that advertises no `usable_tools` (cloud serves no `/server_info`)
- * falls back to the described set. Stored names are appended even when the
- * backend does not advertise them, so an edit-save can't silently drop tools a
- * profile was given through the API. Names in
- * {@link NON_SELECTABLE_TOOL_NAMES} never appear.
+ * gets the whole allow-list.
  */
 export function buildProfileToolCatalog({
   usableTools,
@@ -106,15 +77,17 @@ export function buildProfileToolCatalog({
 }): string[] {
   const catalog: string[] = [];
   const push = (name: string) => {
-    if (!NON_SELECTABLE_TOOL_NAMES.has(name) && !catalog.includes(name)) {
-      catalog.push(name);
-    }
+    if (!catalog.includes(name)) catalog.push(name);
   };
   KNOWN_PROFILE_TOOL_NAMES.filter((name) =>
     isUsable(name, usableTools),
   ).forEach(push);
-  [...(usableTools ?? [])].sort().forEach(push);
-  storedToolNames.forEach(push);
+  // Stored names ride along even when they fall outside the allow-list or the
+  // backend no longer advertises them: the save is a whole-profile overwrite,
+  // so hiding a tool the profile was given through the API would silently strip
+  // it. Visible means clearable. The sub-agent tool is the one exception — the
+  // `enable_sub_agents` toggle owns it and the save re-adds it.
+  storedToolNames.filter((name) => name !== SUB_AGENT_TOOL_NAME).forEach(push);
   return catalog;
 }
 
@@ -141,6 +114,12 @@ export function standardProfileToolNames({
   return names;
 }
 
+function toRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
 /**
  * Read a stored profile's `mcp_server_refs` into picker state.
  *
@@ -156,12 +135,6 @@ export function readProfileMcpRefs(value: unknown): {
     mode: "custom",
     selected: value.filter((name): name is string => typeof name === "string"),
   };
-}
-
-function toRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
 }
 
 /**
