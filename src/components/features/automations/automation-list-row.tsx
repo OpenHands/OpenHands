@@ -3,8 +3,12 @@ import { useTranslation } from "react-i18next";
 import { Zap } from "lucide-react";
 import { I18nKey } from "#/i18n/declaration";
 import type { Automation } from "#/types/automation";
+import { getAutomationRunDisplay } from "#/utils/automation-run-display";
 import { KebabMenu } from "./kebab-menu";
-import { useHasPermission } from "#/hooks/use-has-permission";
+import {
+  useAutomationPermissions,
+  useIsAutomationOwner,
+} from "#/hooks/use-automation-permissions";
 import { useNavigation } from "#/context/navigation-context";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import PlayIcon from "#/icons/play.svg?react";
@@ -58,7 +62,12 @@ export function AutomationListRow({
 }: AutomationListRowProps) {
   const { navigate } = useNavigation();
   const { t, i18n } = useTranslation("openhands");
-  const canManage = useHasPermission("manage_automations");
+  const { canManage: hasManagePermission } = useAutomationPermissions();
+  const isOwner = useIsAutomationOwner(automation);
+  // Write actions on a specific automation: manage OR creator (escape hatch).
+  const canManage = hasManagePermission || isOwner;
+  // Non-creators may turn an automation off but not back on.
+  const canToggle = automation.enabled ? canManage : isOwner;
 
   const handleView = () => {
     navigate?.(`/automations/${automation.id}`);
@@ -68,6 +77,7 @@ export function AutomationListRow({
     automation,
     t,
     canManage,
+    canToggle,
     onRunNow,
     isRunPending,
     onView: handleView,
@@ -93,6 +103,7 @@ export function AutomationListRow({
     insights?.state?.summary?.completedTotal ?? null,
   );
   const latestRun = runState.latestRun;
+  const display = latestRun ? getAutomationRunDisplay(latestRun) : null;
   const lastRunAt = latestRun
     ? getLastRunTimestamp(latestRun)
     : automation.last_triggered_at;
@@ -178,7 +189,10 @@ export function AutomationListRow({
                         ·
                       </span>
                     ) : null}
-                    <RunStatusBadge status={latestRun.status} compact />
+                    <RunStatusBadge
+                      status={display?.badgeStatus ?? latestRun.status}
+                      compact
+                    />
                   </>
                 ) : null}
                 {impactStatement ? (

@@ -6,13 +6,16 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 // Import the named export LlmSettingsScreen directly for testing the form component.
 // The default export now renders LlmSettingsLocalView (the profiles manager view).
 import LlmSettingsRoute, { LlmSettingsScreen } from "#/routes/llm-settings";
+import ConfigService from "#/api/config-service/config-service.api";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
+import { useFreeModelsStore } from "#/stores/free-models-store";
 import { Settings } from "#/types/settings";
 import * as activeBackendContext from "#/contexts/active-backend-context";
 import type { Backend } from "#/api/backend-registry/types";
@@ -116,6 +119,10 @@ function createMockLlmProfilesReturn(
 describe("LlmSettingsScreen", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    useFreeModelsStore.getState().setFlags({
+      freeModels: new Set(["openhands/kimi-k3"]),
+      defaultModel: "openhands/kimi-k3",
+    });
   });
 
   it("renders the OSS LLM settings form from the SDK schema fallback", async () => {
@@ -414,6 +421,42 @@ describe("LlmSettingsScreen - provider connection selector", () => {
     expect(screen.queryByTestId("base-url-input")).not.toBeInTheDocument();
   });
 
+  it("updates form state when a linked provider connection is changed to None", async () => {
+    const user = userEvent.setup();
+    let latestValues: Record<string, string | boolean> = {};
+
+    vi.spyOn(activeBackendContext, "useActiveBackend").mockReturnValue({
+      backend: mockLocalBackend,
+    } as ReturnType<typeof activeBackendContext.useActiveBackend>);
+    vi.spyOn(ProviderConnectionsService, "list").mockResolvedValue([
+      connection,
+    ]);
+
+    renderLlmSettingsScreen({
+      embedded: true,
+      hideSaveButton: true,
+      showProviderConnection: true,
+      initialValueOverrides: {
+        "llm.model": "openai/gpt-4o",
+        "llm.provider_connection_id": "conn-1",
+      },
+      onSaveControlChange: (control) => {
+        latestValues = control.values;
+      },
+    });
+
+    await screen.findByTestId("llm-settings-screen");
+    const selector = await screen.findByTestId("llm-provider-connection-input");
+    expect(selector).toHaveValue("My OpenAI");
+
+    await user.click(selector);
+    await user.click(await screen.findByText("SETTINGS$MCP_AUTH_MODE_NONE"));
+
+    await waitFor(() => {
+      expect(latestValues["llm.provider_connection_id"]).toBe("");
+    });
+  });
+
   it("still renders the selector for an orphaned link when no connections load", async () => {
     // Regression: a profile linked to a since-deleted connection would hide the
     // API key / base URL inputs while also hiding the selector, leaving no way
@@ -443,12 +486,32 @@ describe("LlmSettingsScreen - provider connection selector", () => {
 describe("LlmSettingsScreen - OpenHands provider on cloud", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    useFreeModelsStore.getState().setFlags({
+      freeModels: new Set(["openhands/kimi-k3"]),
+      defaultModel: "openhands/kimi-k3",
+    });
     vi.spyOn(activeBackendContext, "useActiveBackend").mockReturnValue({
       backend: mockCloudBackend,
     } as ReturnType<typeof activeBackendContext.useActiveBackend>);
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
       buildSettings({ llm_model: "openhands/kimi-k3", llm_api_key_set: true }),
     );
+    vi.spyOn(ConfigService, "searchProviders").mockResolvedValue({
+      items: [{ name: "openhands", verified: true }],
+      next_page_id: null,
+    });
+    vi.spyOn(ConfigService, "searchModels").mockResolvedValue({
+      items: [
+        {
+          provider: "openhands",
+          name: "kimi-k3",
+          verified: true,
+          free: true,
+          default: true,
+        },
+      ],
+      next_page_id: null,
+    });
   });
 
   it("hides the inline API key and base URL inputs for an OpenHands provider model", async () => {
@@ -468,7 +531,7 @@ describe("LlmSettingsScreen - OpenHands provider on cloud", () => {
     expect(screen.queryByTestId("base-url-input")).not.toBeInTheDocument();
     // The free-models note is still surfaced so the user understands the model.
     expect(
-      screen.getByTestId("openhands-free-models-note"),
+      await screen.findByTestId("openhands-free-models-note"),
     ).toBeInTheDocument();
   });
 
