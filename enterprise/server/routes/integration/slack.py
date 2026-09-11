@@ -39,6 +39,7 @@ from storage.slack_team_store import SlackTeamStore
 from storage.slack_user import SlackUser
 from storage.user_store import UserStore
 
+from openhands.analytics import get_analytics_service, resolve_analytics_context
 from openhands.app_server.config import depends_jwt_service
 from openhands.app_server.integrations.service_types import (
     ProviderTimeoutError,
@@ -266,6 +267,15 @@ async def keycloak_callback(
         # Store the token
         session.add(slack_user)
         await session.commit()
+
+    # Analytics: slack integration enabled (best-effort, never blocks the response)
+    try:
+        analytics = get_analytics_service()
+        if analytics:
+            ctx = await resolve_analytics_context(keycloak_user_id)
+            analytics.track_slack_integration_enabled(ctx=ctx)
+    except Exception:
+        logger.exception('analytics:slack_integration_enabled:failed')
 
     message = Message(source=SourceType.SLACK, message=payload)
 

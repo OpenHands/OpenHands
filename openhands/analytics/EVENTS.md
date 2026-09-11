@@ -1,6 +1,6 @@
 # PostHog Analytics — Event Catalog
 
-*Last updated: 2026-05-01*
+*Last updated: 2026-09-11*
 
 ## Architecture Overview
 
@@ -31,6 +31,13 @@ Every event respects user consent.
 | 11 | **settings saved** | User saves their settings | `settings_changed`\*\* |
 | 12 | **trajectory downloaded** | User downloads a conversation trajectory | `conversation_id` |
 | 13 | **team members invited** | User invites team members to their organization | `invited_count`, `successful_count`, `failed_count`, `role` |
+| 14 | **api key created** | User creates a new API key (settings -> API keys) | `key_name`, `has_expiration` |
+| 15 | **cli device linked** | User completes the OAuth device-code flow (CLI login) | � |
+| 16 | **pull request created** | OpenHands creates a PR from within a conversation | `conversation_id`, `pr_number`, `git_provider` |
+| 17 | **pull request merged** | An OpenHands-authored PR is merged (GitHub webhook) | `provider`, `repo_name`, `pr_number`, `is_private`, `num_commits`, `num_changed_files` |
+| 18 | **pull request closed** | An OpenHands-authored PR is closed without merging (GitHub webhook) | `provider`, `repo_name`, `pr_number`, `is_private`, `num_commits`, `num_changed_files` |
+| 19 | **slack integration enabled** | User links their Slack account | � |
+| 20 | **jira integration enabled** | User links their Jira workspace | `workspace_name` |
 
 \*Error types: `budget_exceeded`, `model_error`, `runtime_error`, `timeout`, `user_cancelled`, `unknown`
 
@@ -46,7 +53,7 @@ Every event also carries: `app_mode` (saas/oss), `is_feature_env`, and `org_id` 
 
 | Action | When | What's Set |
 |---|---|---|
-| **Identify user** | Login (Keycloak or device auth) | Person: `email`, `org_id`, `org_name`, `idp`, `last_login_at`. Group (org): `org_name`, `member_count`. |
+| **Identify user** | Login (Keycloak or device auth) | Person: `email`, `org_id`, `org_name`, `idp`, `last_login_at`, `first_name`, `last_name`. Group (org): `org_name`, `member_count`. |
 | **Update person** | Signup, org switch | `signed_up_at` on signup; `org_id`, `org_name` on org switch |
 | **Update org group** | Login, onboarding | `member_count`, `onboarding_completed_at` |
 
@@ -98,6 +105,14 @@ Credit purchase     →  credit purchased
 Team invite         →  team members invited
 Trajectory export   →  trajectory downloaded
 Org switch          →  person properties updated (no event)
+
+API key created     →  api key created
+CLI login           →  cli device linked
+PR created          →  pull request created
+  ├─ Merged         →  pull request merged
+  └─ Closed         →  pull request closed
+Slack linked        →  slack integration enabled
+Jira linked         →  jira integration enabled
 ```
 
 ---

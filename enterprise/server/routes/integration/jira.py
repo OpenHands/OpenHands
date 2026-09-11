@@ -20,6 +20,7 @@ from server.auth.token_manager import TokenManager
 from storage.jira_workspace import JiraWorkspace
 from storage.redis import get_redis_client
 
+from openhands.analytics import get_analytics_service, resolve_analytics_context
 from openhands.app_server.user_auth.user_auth import get_user_auth
 from openhands.app_server.utils.logger import openhands_logger as logger
 
@@ -246,6 +247,18 @@ async def _handle_workspace_link_creation(
             jira_user_id=jira_user_id,
             jira_workspace_id=workspace.id,
         )
+
+    # Analytics: jira integration enabled (best-effort, never blocks the flow)
+    try:
+        analytics = get_analytics_service()
+        if analytics:
+            ctx = await resolve_analytics_context(user_id)
+            analytics.track_jira_integration_enabled(
+                ctx=ctx,
+                workspace_name=target_workspace,
+            )
+    except Exception:
+        logger.exception('analytics:jira_integration_enabled:failed')
 
 
 async def _validate_workspace_update_permissions(user_id: str, target_workspace: str):

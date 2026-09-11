@@ -98,6 +98,7 @@ async def get_conversation_link(
 async def save_pr_metadata(
     user_id: str | None, conversation_id: str, tool_result: str
 ) -> None:
+    """Appends a followup link, in the PR body, to the OpenHands conversation that opened the PR"""
     # Manually construct state for background operation (no request context available)
     state = InjectorState()
     setattr(state, USER_CONTEXT_ATTR, SpecifyUserContext(user_id))
@@ -134,6 +135,32 @@ async def save_pr_metadata(
                 f'Saving PR number: {pr_number} for conversation {conversation_id}'
             )
             app_conversation_info.pr_number.append(pr_number)
+
+            # Analytics: pull request created (best-effort, never blocks the flow)
+            if user_id:
+                try:
+                    from openhands.analytics import (
+                        get_analytics_service,
+                        resolve_analytics_context,
+                    )
+                    from openhands.analytics.analytics_constants import (
+                        PULL_REQUEST_CREATED,
+                    )
+
+                    analytics = get_analytics_service()
+                    if analytics:
+                        ctx = await resolve_analytics_context(user_id)
+                        analytics.capture(
+                            ctx=ctx,
+                            event=PULL_REQUEST_CREATED,
+                            properties={
+                                'conversation_id': conversation_id,
+                                'pr_number': pr_number,
+                                'git_provider': app_conversation_info.git_provider,
+                            },
+                        )
+                except Exception:
+                    logger.exception('analytics:pull_request_created:failed')
         else:
             logger.warning(
                 f'Failed to extract PR number for conversation {conversation_id}'

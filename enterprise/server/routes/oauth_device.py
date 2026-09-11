@@ -350,6 +350,8 @@ async def device_verification_authenticated(
                     ctx=ctx,
                     idp='device_auth',
                 )
+
+                analytics.track_cli_device_linked(ctx=ctx)
             except Exception:
                 logger.exception(
                     'oauth_device:analytics:failed',

@@ -189,6 +189,8 @@ async def _track_login_analytics_background(
     current_org_id: parse_uuid | None,
     org_member_ids: list,
     consented: bool,
+    first_name: str | None = None,
+    last_name: str | None = None,
 ) -> None:
     """Track login analytics in background to avoid blocking auth response."""
     try:
@@ -238,6 +240,8 @@ async def _track_login_analytics_background(
             org_name=current_org.name if current_org else None,
             idp=idp,
             orgs=orgs_data,
+            first_name=first_name,
+            last_name=last_name,
         )
 
         analytics.track_user_logged_in(
@@ -481,6 +485,8 @@ async def keycloak_callback(
         current_org_id=user.current_org_id,
         org_member_ids=org_member_ids,
         consented=consented,
+        first_name=user_info.given_name,
+        last_name=user_info.family_name,
     )
 
     logger.info(
