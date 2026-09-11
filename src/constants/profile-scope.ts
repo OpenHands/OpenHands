@@ -17,3 +17,17 @@ export function readProfileMcpRefs(value: unknown): {
     selected: value.filter((name): name is string => typeof name === "string"),
   };
 }
+
+/**
+ * Whether two scope selections name the same servers.
+ *
+ * Compared as a set: the resolver de-duplicates refs and uses them as an
+ * allow-list, so neither order nor a repeat changes what the agent gets. The
+ * editor emits catalog order while a stored profile keeps whatever order it was
+ * written in, so an order-sensitive check reports a profile dirty on open.
+ */
+export function sameScopeSelection(a: string[], b: string[]): boolean {
+  const normalize = (names: string[]) =>
+    [...new Set(names)].sort().join("\u0000");
+  return normalize(a) === normalize(b);
+}

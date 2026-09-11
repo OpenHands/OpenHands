@@ -1245,3 +1245,50 @@ describe("AgentSettingsScreen — MCP server scope", () => {
     ).not.toBeInTheDocument();
   });
 });
+
+describe("AgentSettingsScreen — MCP scope dirty tracking", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.spyOn(SettingsService, "saveSettings").mockResolvedValue(true);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          agent_kind: "openhands",
+          mcp_config: {
+            github: { url: "https://mcp.example/github", transport: "shttp" },
+            postgres: { url: "https://mcp.example/pg", transport: "shttp" },
+          },
+        },
+      } as never),
+    );
+  });
+
+  async function dirtyForStoredRefs(refs: string[]) {
+    let control: AgentSettingsSaveControl | null = null;
+    renderAgentSettingsScreen({
+      embedded: true,
+      agentSettingsOverride: {
+        agent_kind: "openhands",
+        enable_sub_agents: false,
+        mcp_server_refs: refs,
+      },
+      onSaveControlChange: (next) => {
+        control = next;
+      },
+    });
+    await screen.findByTestId("agent-settings-screen");
+    await screen.findByTestId("agent-settings-mcp-list");
+    return () => control!.isDirty;
+  }
+
+  it("is clean on load when the stored order matches the config order", async () => {
+    const isDirty = await dirtyForStoredRefs(["github", "postgres"]);
+    await waitFor(() => expect(isDirty()).toBe(false));
+  });
+
+  it("is clean on load when the stored order differs from the config order", async () => {
+    const isDirty = await dirtyForStoredRefs(["postgres", "github"]);
+    await waitFor(() => expect(isDirty()).toBe(false));
+  });
+});

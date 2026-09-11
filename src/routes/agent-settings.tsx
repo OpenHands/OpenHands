@@ -42,6 +42,7 @@ import {
 import { parseCommand, formatCommand } from "#/utils/acp-command";
 import {
   readProfileMcpRefs,
+  sameScopeSelection,
   type ProfileScopeMode,
 } from "#/constants/profile-scope";
 import { flattenMcpConfig } from "#/utils/mcp-installed-servers";
@@ -560,7 +561,7 @@ export function AgentSettingsScreen({
   // variants rather than inside the kind-specific branch below.
   const mcpScopeDirty =
     mcpMode !== initialMcpRefs.mode ||
-    orderedSelectedMcpServers.join(",") !== initialMcpRefs.selected.join(",");
+    !sameScopeSelection(orderedSelectedMcpServers, initialMcpRefs.selected);
   const settingsDirty =
     agentType !== loadedSnapshot.agentType ||
     mcpScopeDirty ||
