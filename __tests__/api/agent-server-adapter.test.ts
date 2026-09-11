@@ -1521,6 +1521,7 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     expect(payload.agent_settings.acp_command).toEqual([
       "npx",
       "-y",
+      "--prefer-offline",
       "@agentclientprotocol/claude-agent-acp@0.63.0",
     ]);
     expect(payload.agent_settings.acp_model).toBe("claude-opus-4-5");
@@ -1673,6 +1674,7 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     expect(payload.agent_settings.acp_command).toEqual([
       "npx",
       "-y",
+      "--prefer-offline",
       "@agentclientprotocol/claude-agent-acp@0.63.0",
     ]);
   });
@@ -1695,7 +1697,8 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     expect(payload.agent_settings.acp_command).toEqual([
       "npx",
       "-y",
-      "@agentclientprotocol/codex-acp@1.1.7",
+      "--prefer-offline",
+      "@agentclientprotocol/codex-acp@1.10.0",
     ]);
   });
 
@@ -1842,6 +1845,7 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     expect(acpPayload.agent_settings.acp_command).toEqual([
       "npx",
       "-y",
+      "--prefer-offline",
       "@agentclientprotocol/claude-agent-acp@0.63.0",
     ]);
     expect(acpPayload.agent_settings.acp_model).toBe("claude-opus-4-5");

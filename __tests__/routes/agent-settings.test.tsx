@@ -549,7 +549,7 @@ describe("AgentSettingsScreen", () => {
     await user.clear(commandInput);
     await user.type(
       commandInput,
-      "npx -y @agentclientprotocol/codex-acp@1.1.7",
+      "npx -y --prefer-offline @agentclientprotocol/codex-acp@1.10.0",
     );
 
     // The model field now reflects the Codex default, not the stale Claude one.
@@ -595,7 +595,7 @@ describe("AgentSettingsScreen", () => {
       "agent-command-input",
     )) as HTMLTextAreaElement;
     expect(commandInput.value).toBe(
-      "npx -y @agentclientprotocol/claude-agent-acp@0.63.0",
+      "npx -y --prefer-offline @agentclientprotocol/claude-agent-acp@0.63.0",
     );
     expect(screen.getByLabelText("SETTINGS$AGENT_MODEL")).toHaveValue(
       "Claude Opus (1M)",
@@ -789,7 +789,7 @@ describe("AgentSettingsScreen", () => {
       "agent-command-input",
     )) as HTMLTextAreaElement;
     expect(cmd.value).toBe(
-      "npx -y @agentclientprotocol/claude-agent-acp@0.63.0 --extra-arg",
+      "npx -y --prefer-offline @agentclientprotocol/claude-agent-acp@0.63.0 --extra-arg",
     );
 
     // Make a real edit so Save enables, then submit. The payload must
@@ -809,6 +809,7 @@ describe("AgentSettingsScreen", () => {
     expect(call.agent_settings_diff?.acp_command).toEqual([
       "npx",
       "-y",
+      "--prefer-offline",
       "@agentclientprotocol/claude-agent-acp@0.63.0",
       "--extra-arg",
       "--saved",

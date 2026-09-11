@@ -30958,6 +30958,23 @@
     "tr": "Google'ın Gemini CLI aracısı.",
     "uk": "Агент Gemini CLI від Google."
   },
+  "ONBOARDING$AGENT_OPENCODE_DESCRIPTION": {
+    "en": "The open-source OpenCode coding agent.",
+    "ja": "オープンソースの OpenCode コーディングエージェント。",
+    "zh-CN": "开源的 OpenCode 编码智能体。",
+    "zh-TW": "開源的 OpenCode 編碼代理。",
+    "ko-KR": "오픈 소스 OpenCode 코딩 에이전트입니다.",
+    "no": "OpenCode, en åpen kildekode-kodeagent.",
+    "ar": "وكيل البرمجة مفتوح المصدر OpenCode.",
+    "de": "Der Open-Source-Coding-Agent OpenCode.",
+    "fr": "L'agent de codage open source OpenCode.",
+    "it": "L'agente di codifica open source OpenCode.",
+    "pt": "O agente de programação open source OpenCode.",
+    "es": "El agente de programación de código abierto OpenCode.",
+    "ca": "L'agent de programació de codi obert OpenCode.",
+    "tr": "Açık kaynaklı OpenCode kodlama aracı.",
+    "uk": "Відкритий агент для програмування OpenCode."
+  },
   "ONBOARDING$BACKEND_TITLE": {
     "en": "Check your backend",
     "ja": "バックエンドを確認",
