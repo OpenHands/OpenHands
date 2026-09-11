@@ -25,7 +25,6 @@ import React from "react";
 import { renderWithProviders } from "test-utils";
 import { ConversationPanel } from "#/components/features/conversation-panel/conversation-panel";
 import { useConversationPanelPreferencesStore } from "#/stores/conversation-panel-preferences-store";
-import { useArchivedConversationsStore } from "#/stores/archived-conversations-store";
 import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
@@ -147,7 +146,6 @@ describe("ConversationPanel", () => {
     mockStopConversationMutate.mockClear();
     _mockConversationCounter = 0;
     usePinnedConversationsStore.setState({ pinsByBackendId: {} });
-    useArchivedConversationsStore.setState({ archivesByBackendId: {} });
     useConversationPanelPreferencesStore.setState({
       showOlderConversations: true,
       olderConversationCutoff: "7d",
@@ -338,8 +336,16 @@ describe("ConversationPanel", () => {
     // fetching the next page must surface the unarchived conversation.
     const user = userEvent.setup();
     const page1 = [
-      createMockConversation({ id: "archived-1", title: "Archived 1" }),
-      createMockConversation({ id: "archived-2", title: "Archived 2" }),
+      createMockConversation({
+        id: "archived-1",
+        title: "Archived 1",
+        tags: { archived: "true" },
+      }),
+      createMockConversation({
+        id: "archived-2",
+        title: "Archived 2",
+        tags: { archived: "true" },
+      }),
     ];
     const page2 = [
       createMockConversation({
@@ -357,11 +363,6 @@ describe("ConversationPanel", () => {
       return { items: page1, next_page_id: "page-2" };
     });
 
-    useArchivedConversationsStore.setState({
-      archivesByBackendId: {
-        "default-local": ["archived-1", "archived-2"],
-      },
-    });
     useConversationPanelPreferencesStore.setState({
       showArchivedConversations: false,
     });
@@ -919,6 +920,10 @@ describe("ConversationPanel", () => {
 
   it("should archive a conversation and remove it from the list", async () => {
     const user = userEvent.setup();
+    vi.spyOn(
+      AgentServerConversationService,
+      "replaceConversationTags",
+    ).mockResolvedValue();
     renderConversationPanel();
 
     let cards = await screen.findAllByTestId("conversation-card");
@@ -952,9 +957,25 @@ describe("ConversationPanel", () => {
     // Archiving must stay reversible — that is the whole distinction from
     // deleting, which removes the conversation from the agent server.
     const user = userEvent.setup();
-    useArchivedConversationsStore
-      .getState()
-      .archiveConversation("default-local", "1");
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
+      items: [
+        createMockConversation({
+          id: "1",
+          title: "Conversation 1",
+          tags: { archived: "true" },
+        }),
+        createMockConversation({ id: "2", title: "Conversation 2" }),
+        createMockConversation({ id: "3", title: "Conversation 3" }),
+      ],
+      next_page_id: null,
+    });
+    vi.spyOn(
+      AgentServerConversationService,
+      "replaceConversationTags",
+    ).mockResolvedValue();
     useConversationPanelPreferencesStore.setState({
       showArchivedConversations: true,
     });
@@ -975,14 +996,9 @@ describe("ConversationPanel", () => {
 
     await waitFor(() => {
       expect(
-        useArchivedConversationsStore
-          .getState()
-          .isArchived("default-local", "1"),
-      ).toBe(false);
+        screen.queryByTestId("conversation-card-archived-chip"),
+      ).not.toBeInTheDocument();
     });
-    expect(
-      screen.queryByTestId("conversation-card-archived-chip"),
-    ).not.toBeInTheDocument();
   });
 
   it("should call onClose after clicking a card", async () => {
@@ -2028,21 +2044,18 @@ describe("ConversationPanel", () => {
             id: "archived-1",
             title: "Archived 1",
             updated_at: recentIso(),
+            tags: { archived: "true" },
           }),
           createMockConversation({
             id: "archived-2",
             title: "Archived 2",
             updated_at: recentIso(),
+            tags: { archived: "true" },
           }),
         ],
         next_page_id: null,
       });
 
-      useArchivedConversationsStore.setState({
-        archivesByBackendId: {
-          "default-local": ["archived-1", "archived-2"],
-        },
-      });
       useConversationPanelPreferencesStore.setState({
         showArchivedConversations: false,
       });
