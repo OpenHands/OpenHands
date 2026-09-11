@@ -45,6 +45,11 @@ export const SUB_AGENT_TOOL_NAME = "task_tool_set";
  * intended trade: an undescribed entry in a picker that decides what an agent
  * can do is worse than a missing one, and canvas already pins an agent-server
  * version.
+ *
+ * This list, and {@link DEFAULT_TOOL_NAMES} below, are both workarounds for the
+ * SDK not answering "which tools are pickable?" and "what will this profile
+ * actually resolve to?". Delete both once
+ * OpenHands/software-agent-sdk#4958 lands and render what the server reports.
  */
 export const KNOWN_PROFILE_TOOL_DESCRIPTIONS: Record<string, I18nKey> = {
   terminal: I18nKey.SETTINGS$TOOL_DESC_TERMINAL,
