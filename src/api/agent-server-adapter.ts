@@ -821,6 +821,25 @@ function buildBundledSkills(): BundledSkill[] {
   });
 }
 
+/**
+ * The public skills a launch should carry: the bundled catalog filtered by the
+ * user's enablement, exactly as {@link buildAgentContext} injects them inline.
+ *
+ * Split out so the ``agent_profile_id`` path can send the same set through
+ * ``agent_launch_additions``. It has no other way to: that launch carries no
+ * ``agent_settings``, and the server resolves public skills from a git clone
+ * this client deliberately does not rely on (software-agent-sdk#3979).
+ */
+function buildEnabledBundledSkills(
+  enablement: SkillEnablement = {},
+  invokedCatalogSkill?: string,
+): BundledSkill[] {
+  const isSkillEnabled = buildSkillEnablementFilter(enablement);
+  return buildBundledSkills().filter(
+    (skill) => skill.name === invokedCatalogSkill || isSkillEnabled(skill.name),
+  );
+}
+
 function buildAgentContext(
   agentSettings: SettingsRecord,
   runtimeServicesInfo?: RuntimeServicesInfo | null,
@@ -838,7 +857,6 @@ function buildAgentContext(
     : [];
   const disabledSkills = enablement.disabledSkills ?? [];
   const disabledSkillNames = new Set(disabledSkills);
-  const isSkillEnabled = buildSkillEnablementFilter(enablement);
 
   // The bundled catalog is allow-listed, not deny-listed: it is a build-time
   // snapshot of ~60 skills, so a deny-list puts every future addition into
@@ -850,10 +868,7 @@ function buildAgentContext(
       (skill) =>
         typeof skill.name !== "string" || !disabledSkillNames.has(skill.name),
     ),
-    ...buildBundledSkills().filter(
-      (skill) =>
-        skill.name === invokedCatalogSkill || isSkillEnabled(skill.name),
-    ),
+    ...buildEnabledBundledSkills(enablement, invokedCatalogSkill),
   ];
 
   return {
@@ -1104,7 +1119,10 @@ type AgentSettingsStartConversationPayload = StartConversationPayloadBase & {
   // Deployment context appended to the *resolved* agent's system-message
   // suffix, so it survives the profile path where ``agent_settings`` cannot be
   // sent (``AgentLaunchAdditions``, software-agent-sdk#4030).
-  agent_launch_additions?: { system_message_suffix_append?: string };
+  agent_launch_additions?: {
+    system_message_suffix_append?: string;
+    skills?: BundledSkill[];
+  };
   agent?: never;
 };
 
@@ -1193,10 +1211,16 @@ export function buildStartConversationRequest(
     options.runtimeServicesInfo,
     options.query,
   );
-  // Folded into ``agent_settings`` on the inline path; on the profile path it
-  // has to ride ``agent_launch_additions`` instead (see below).
+  // Folded into ``agent_settings`` on the inline path; on the profile path they
+  // have to ride ``agent_launch_additions`` instead (see below).
   const runtimeServicesSuffix = buildRuntimeServicesSystemSuffix(
     options.runtimeServicesInfo,
+  );
+  // Same inputs the inline path feeds buildAgentContext, so the two paths
+  // resolve an identical set.
+  const launchSkills = buildEnabledBundledSkills(
+    toSkillEnablement(options.settings),
+    findInvokedCatalogSkill(options.query),
   );
   const acpServerTag = acpMode
     ? getAcpServerTag(sourceAgentSettings)
@@ -1247,10 +1271,13 @@ export function buildStartConversationRequest(
     ...(options.agentProfileId
       ? {
           agent_profile_id: options.agentProfileId,
-          ...(runtimeServicesSuffix
+          ...(runtimeServicesSuffix || launchSkills.length
             ? {
                 agent_launch_additions: {
-                  system_message_suffix_append: runtimeServicesSuffix,
+                  ...(runtimeServicesSuffix
+                    ? { system_message_suffix_append: runtimeServicesSuffix }
+                    : {}),
+                  ...(launchSkills.length ? { skills: launchSkills } : {}),
                 },
               }
             : {}),
