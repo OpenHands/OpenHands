@@ -1120,7 +1120,17 @@ export function AgentSettingsScreen({
             isDisabled={isSavingAny}
             onSelectionChange={(key) => {
               if (!key) return;
-              setMcpMode(key as ProfileToolsMode);
+              const mode = key as ProfileToolsMode;
+              setMcpMode(mode);
+              // Seed a first switch to custom from the default — every
+              // configured server — so turning the control on narrows from
+              // what the agent had rather than cutting it off from all of
+              // them. Mirrors the tools picker.
+              if (mode === "custom" && selectedMcpServers.length === 0) {
+                setSelectedMcpServers(
+                  configuredMcpNames.map(({ name }) => name),
+                );
+              }
             }}
           />
           {mcpCatalog.length > 0 ? (

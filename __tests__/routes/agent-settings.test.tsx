@@ -1316,6 +1316,43 @@ describe("AgentSettingsScreen", () => {
       });
     });
 
+    it("seeds a switch to custom with every configured server", async () => {
+      // Same mechanism as the tools picker: switching the control on narrows
+      // from the default rather than cutting the agent off from all servers.
+      seedWithMcp(TWO_SERVERS);
+      let control: AgentSettingsSaveControl | null = null;
+      renderAgentSettingsScreen({
+        embedded: true,
+        agentSettingsOverride: {
+          agent_kind: "openhands",
+          enable_sub_agents: false,
+          mcp_server_refs: null,
+        },
+        onSaveControlChange: (next) => {
+          control = next;
+        },
+      });
+      await screen.findByTestId("agent-settings-screen");
+
+      const user = userEvent.setup();
+      const combo = screen.getByTestId("agent-settings-mcp-mode");
+      combo.focus();
+      await user.keyboard("{ArrowDown}");
+      await user.click(
+        await screen.findByRole("option", {
+          name: "SETTINGS$AGENT_PROFILE_MCP_CHOOSE",
+        }),
+      );
+
+      await waitFor(() => {
+        expect(control!.buildAgentProfileFields()).toMatchObject({
+          mcp_server_refs: ["github", "postgres"],
+        });
+      });
+      expect(screen.getByTestId("agent-settings-mcp-github")).toBeChecked();
+      expect(screen.getByTestId("agent-settings-mcp-postgres")).toBeChecked();
+    });
+
     it("warns about a ref whose server is gone, which would 422 the launch", async () => {
       // Unlike tools and secrets, a dangling MCP ref fails the launch, so it
       // has to be visible and clearable rather than silently carried.
