@@ -89,11 +89,12 @@ jobs:
           # Single source of truth for version pins — no hardcoded values in this workflow.
           AGENT_SERVER_VERSION=$(node -p "require('./config/defaults.json').versions.agentServer")
           AGENT_SERVER_IMAGE_BASE=$(node -p "require('./config/defaults.json').images.agentServer")
+          AGENT_SERVER_VARIANT=$(node -p "require('./config/defaults.json').variants.agentServer")
           AUTOMATION_VERSION=$(node -p "require('./config/defaults.json').versions.automation")
           AGENT_CANVAS_VERSION=$(node -p "require('./package.json').version")
           CANVAS_BASE_PATH=$(node -p "require('./config/defaults.json').paths.canvasBasePath")
           echo "agent_server_version=$AGENT_SERVER_VERSION" >> "$GITHUB_OUTPUT"
-          echo "default_agent_server_image=${AGENT_SERVER_IMAGE_BASE}:${AGENT_SERVER_VERSION}-python" >> "$GITHUB_OUTPUT"
+          echo "default_agent_server_image=${AGENT_SERVER_IMAGE_BASE}:${AGENT_SERVER_VERSION}-${AGENT_SERVER_VARIANT}" >> "$GITHUB_OUTPUT"
           echo "default_automation_version=$AUTOMATION_VERSION" >> "$GITHUB_OUTPUT"
           echo "agent_canvas_version=$AGENT_CANVAS_VERSION" >> "$GITHUB_OUTPUT"
           echo "canvas_base_path=$CANVAS_BASE_PATH" >> "$GITHUB_OUTPUT"
