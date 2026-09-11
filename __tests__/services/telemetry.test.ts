@@ -51,6 +51,7 @@ import {
   setTelemetryBackendContext,
   setTelemetryCloudContext,
   setTelemetryConsent,
+  setTelemetryWebsiteAttribution,
   setTelemetryIdentity,
   subscribeTelemetryConsent,
   trackEvent,
@@ -86,6 +87,7 @@ describe("Telemetry Service", () => {
     );
     await setTelemetryIdentity(null);
     setTelemetryBackendContext({});
+    setTelemetryWebsiteAttribution(undefined);
   });
 
   afterEach(() => {
@@ -155,6 +157,15 @@ describe("Telemetry Service", () => {
         agentServerVersion: "1.36.2",
         automationSdkVersion: "1.36.3",
       });
+      setTelemetryWebsiteAttribution({
+        utm_source: "newsletter",
+        utm_medium: "email",
+        utm_campaign: "launch",
+        landing_page_category: "home",
+        cta_id: "hero-cloud",
+        cta_surface: "homepage_hero",
+        referring_domain_category: "search",
+      });
       expect(
         config.before_send({
           event: "backend_context_event",
@@ -167,6 +178,13 @@ describe("Telemetry Service", () => {
           agent_server_version: "1.36.2",
           automation_sdk_version: "1.36.3",
           backend_version: "1.36.2",
+          utm_source: "newsletter",
+          utm_medium: "email",
+          utm_campaign: "launch",
+          landing_page_category: "home",
+          cta_id: "hero-cloud",
+          cta_surface: "homepage_hero",
+          referring_domain_category: "search",
           custom: "value",
         }),
       });
