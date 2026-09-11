@@ -232,7 +232,7 @@ you are running inside of — NOT the automation backend.
 - Keep live E2E secrets out of job-level `env`. The workflow should check whether credentials exist before checkout, but inject the LLM key only into the trusted step that actually runs the live test.
 - The live job uploads the Playwright HTML report plus screenshot/video output as a GitHub Actions artifact, and also extracts the primary screenshot/video attachments. It converts the WebM recording to a GIF preview with `ffmpeg` so GitHub PR comments can inline the preview. Keep Playwright trace capture disabled for live tests because the setup flow sends LLM credentials to the Agent Server settings API, and traces can record request bodies. Failure messages around live Agent Server settings must not print response bodies from credential-bearing requests.
 - Inline PR-comment media is stored as PR-only files under `.pr/live-e2e/<github_run_id>/` on the PR branch, not on a long-lived orphan media branch. The comment uses `raw.githubusercontent.com/<repo>/<artifact_commit>/.pr/live-e2e/...` URLs for the GIF and PNG so GitHub can render them inline. The WebM is linked as the full recording because GitHub comments do not reliably inline WebM.
-- `.github/workflows/pr-artifacts.yml` owns cleanup for `.pr/live-e2e/`: it comments when `.pr/` artifacts exist and removes them after PR approval for same-repo PRs (fork PRs require manual cleanup).
+- `.github/workflows/pr-artifacts.yml` owns cleanup for `.pr/live-e2e/`: it comments when `.pr/` artifacts exist, removes them after PR approval for same-repo PRs, and opens or updates a cleanup PR against `main` if artifacts reach `main` through a fork PR or a missed approval cleanup.
 - The live reporting scripts live beside the live tests under `tests/e2e/live/scripts/`: `run-live-e2e.mjs`, `extract-live-e2e-media.mjs`, `render-live-e2e-report.mjs`, and `upsert-pr-comment.mjs`. Keep report/comment/local-runner logic there rather than in top-level `scripts/`, because these scripts are part of the live E2E framework.
 - When changing any part of this framework — live workflow triggers, artifact publishing, `.pr` cleanup, live Playwright config, live test file layout, helper locations, local runner behavior, or report/comment scripts — update this `AGENTS.md` section in the same PR so future agents have the current operating model.
 
@@ -581,10 +581,10 @@ When adding code that needs a new string, decide up front which rule it falls un
 - `scripts/dev-safe.mjs` uses `uvx` for temporary agent-server installation — no permanent `uv tool install` needed. Environment variables (highest precedence first):
   - `OH_AGENT_SERVER_LOCAL_PATH` — absolute path to a local `software-agent-sdk` checkout. Runs the local checkout via `uvx` with `--with-editable` for `openhands-sdk`/`openhands-tools`/`openhands-workspace` and `--reinstall` for `openhands-agent-server`, so SDK edits are picked up on restart. Highest precedence.
   - `OH_AGENT_SERVER_GIT_REF` — git commit SHA or branch name (takes precedence over version)
-  - `OH_AGENT_SERVER_VERSION` — specific PyPI version (e.g., "1.45.0")
+  - `OH_AGENT_SERVER_VERSION` — specific PyPI version (e.g., "1.46.0")
   - `OH_SECRET_KEY` — secret key for settings encryption; auto-generated and persisted to `~/.openhands/agent-canvas/secret-key.txt` on first run (same file Docker uses), ensuring dev mode and Docker share the same key when both mount the same `~/.openhands` directory. Override with the env var to pin a specific key.
   - `SESSION_API_KEY` / `OH_SESSION_API_KEYS_0` / `VITE_SESSION_API_KEY` — session API key for agent-server authentication; auto-generated using `crypto.randomBytes(32)` if not set, passed to both agent-server (`OH_SESSION_API_KEYS_0`) and frontend (`VITE_SESSION_API_KEY`)
-  - Default: released PyPI version `1.45.0` for agent-server SDK libraries
+  - Default: released PyPI version `1.46.0` for agent-server SDK libraries
 
 - Security: launchers generate and persist a 64-character session API key at `~/.openhands/agent-canvas/session-api-key.txt` unless overridden. The agent-server and automation backend share that session key. `OH_SECRET_KEY` protects settings encryption and is persisted separately at `~/.openhands/agent-canvas/secret-key.txt`.
 - `scripts/dev-safe.mjs` should fail fast if `uvx` cannot be spawned (for example missing PATH entries).
