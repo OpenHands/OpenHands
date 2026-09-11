@@ -63,9 +63,10 @@ function getStatusLabel(
  * a Test connection / Retry action, and — on failure — the relevant
  * recovery actions (fix credentials, re-run OAuth, open the docs).
  *
- * Renders nothing for cloud backends: the test endpoint only exists on the
- * local agent-server (`McpService.testServer` short-circuits cloud with a
- * synthetic success that must not be presented as a health verdict).
+ * Renders nothing for stdio servers on cloud backends: those spawn inside
+ * the cloud sandbox, so `McpService.testServer` short-circuits them with a
+ * synthetic success that must not be presented as a health verdict. Remote
+ * servers on cloud backends are probed through the app server.
  */
 export function McpServerHealthSection({
   server,
@@ -77,7 +78,7 @@ export function McpServerHealthSection({
   const { health, probe, reauthorize } = useMcpServerHealth(server);
   const { mutate: updateMcpServer } = useUpdateMcpServer();
 
-  if (backend.kind === "cloud") return null;
+  if (backend.kind === "cloud" && server.type === "stdio") return null;
 
   const isChecking = health.status === "checking";
   const isFailed = health.status === "failed";

@@ -9,8 +9,9 @@ import { REDACTED_MCP_SECRET_VALUE } from "#/utils/mcp-config";
 
 // vi.mock factories are hoisted before imports, so spy functions must be
 // created with vi.hoisted() to be in scope inside the factory.
-const { mockTestServer } = vi.hoisted(() => ({
+const { mockTestServer, mockTestCloudServer } = vi.hoisted(() => ({
   mockTestServer: vi.fn(),
+  mockTestCloudServer: vi.fn(),
 }));
 
 vi.mock("@openhands/typescript-client/clients", () => ({
@@ -34,6 +35,10 @@ vi.mock("#/api/agent-server-client-options", () => ({
 
 vi.mock("#/api/backend-registry/active-store", () => ({
   getActiveBackend: vi.fn(),
+}));
+
+vi.mock("#/api/cloud/mcp-service.api", () => ({
+  testCloudMcpServer: mockTestCloudServer,
 }));
 
 const mockGetActiveBackend = vi.mocked(activeStore.getActiveBackend);
@@ -379,17 +384,48 @@ describe("McpService.testServer", () => {
     );
   });
 
-  it("short-circuits with a synthetic ok response on cloud backends", async () => {
-    // Regression: when the active backend is cloud, the local agent-server's
-    // /api/mcp/test endpoint is not reachable. Previously, the helper threw
+  it("short-circuits stdio servers with a synthetic ok response on cloud backends", async () => {
+    // Regression: stdio servers spawn inside the cloud sandbox, which the
+    // browser cannot reach. Previously, the helper threw
     // `NoBackendAvailableError("No backend is configured.")` which surfaced
     // in the install modal and blocked users from creating any MCP server
     // (e.g. Slack) on a cloud session.
     cloudActive();
 
-    const result = await McpService.testServer(SERVER);
+    const result = await McpService.testServer(SLACK_SERVER);
 
     expect(result).toEqual({ ok: true, tools: [] });
     expect(mockTestServer).not.toHaveBeenCalled();
+    expect(mockTestCloudServer).not.toHaveBeenCalled();
+  });
+
+  it("probes remote servers on cloud backends through the app server", async () => {
+    cloudActive();
+    mockTestCloudServer.mockResolvedValue({ ok: true, tools: ["get_me"] });
+    const fetchSettings = vi.spyOn(SettingsService, "fetchSettingsFromApi");
+
+    const result = await McpService.testServer({
+      ...SERVER,
+      headers: { "X-Team": "team-1" },
+      auth: { strategy: "bearer", value: REDACTED_MCP_SECRET_VALUE },
+    });
+
+    expect(result).toEqual({ ok: true, tools: ["get_me"] });
+    expect(mockTestServer).not.toHaveBeenCalled();
+    // Unchanged secrets are restored by the app server from the stored
+    // server (sent as `name`), not fetched from a local agent-server; `auth`
+    // is flattened to headers the way cloud saves persist it.
+    expect(fetchSettings).not.toHaveBeenCalled();
+    expect(mockTestCloudServer).toHaveBeenCalledWith({
+      name: SERVER.id,
+      server: {
+        type: "http",
+        url: SERVER.url,
+        headers: {
+          "X-Team": "team-1",
+          Authorization: `Bearer ${REDACTED_MCP_SECRET_VALUE}`,
+        },
+      },
+    });
   });
 });

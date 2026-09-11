@@ -53,6 +53,7 @@ export function CustomServerEditor({
     mutate: testServer,
     isPending: isTesting,
     data: testResult,
+    variables: testedServer,
     reset: resetTest,
   } = useTestMcpServer();
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
@@ -60,12 +61,15 @@ export function CustomServerEditor({
     React.useState<ExtendedMCPTestResponse | null>(null);
   const [isOauthTesting, setIsOauthTesting] = React.useState(false);
 
-  // The MCP connectivity-test endpoint only exists on the local agent-server.
-  // For cloud backends `McpService.testServer` short-circuits with a synthetic
-  // success so the save still completes; we hide the manual "Test connection"
-  // button here so cloud users aren't shown a misleading "0 tools" result.
+  // stdio servers cannot be probed from a cloud backend (they spawn inside the
+  // sandbox): `McpService.testServer` short-circuits them with a synthetic
+  // success so the save still completes. Hide the manual "Test connection"
+  // button and the resulting message for them so cloud users aren't shown a
+  // misleading "0 tools" result. Remote servers are probed via the app server.
   const { backend } = useActiveBackend();
   const isCloudBackend = backend.kind === "cloud";
+  const isSyntheticTestResult =
+    isCloudBackend && !oauthTestResult && testedServer?.type === "stdio";
 
   const isEditing = !!server.id;
   const isPending = isAdding || isUpdating || isDeleting;
@@ -88,13 +92,14 @@ export function CustomServerEditor({
   }, [oauthTestResult, testResult, t]);
 
   // A save always follows a fresh successful probe of the exact config being
-  // saved, so publish that result to the card's health entry. On cloud
-  // backends the probe is synthetic — never present it as a health verdict.
+  // saved, so publish that result to the card's health entry. For stdio
+  // servers on cloud backends the probe is synthetic — never present it as a
+  // health verdict.
   const seedSavedServerHealth = (
     serverToSave: MCPServerConfig,
     result: ExtendedMCPTestResponse,
   ) => {
-    if (isCloudBackend) return;
+    if (isCloudBackend && serverToSave.type === "stdio") return;
     // When editing, the server's own entry must be overwritten, so only the
     // OTHER servers guard against a same-key collision.
     const otherServers = isEditing
@@ -247,9 +252,10 @@ export function CustomServerEditor({
             onCancel={onClose}
             onDelete={isEditing ? () => setShowDeleteConfirm(true) : undefined}
             isActionDisabled={isPending}
-            onTest={isCloudBackend ? undefined : handleTestClick}
+            onTest={handleTestClick}
             isTestPending={isTesting || isOauthTesting}
-            testMessage={isCloudBackend ? null : testMessage}
+            testMessage={isSyntheticTestResult ? null : testMessage}
+            isStdioTestUnavailable={isCloudBackend}
           />
         </div>
       </ModalBackdrop>
