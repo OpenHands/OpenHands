@@ -11,8 +11,8 @@ import {
   type CreateConversationVariables,
 } from "#/hooks/mutation/use-create-conversation";
 import {
-  useActivateAgentProfile,
   ACTIVATE_AGENT_PROFILE_MUTATION_KEY,
+  useActivateAgentProfile,
 } from "#/hooks/mutation/use-activate-agent-profile";
 
 export interface ChatInputProfileState {
@@ -57,11 +57,21 @@ export function useChatInputProfileState(): ChatInputProfileState {
   const selectProfile = useCallback(
     (profile: AgentProfileSummary) => {
       if (isTaskRoute || !profile.id || profile.id === currentProfileId) return;
+
+      // Outside a conversation (home screen) there is no conversation to
+      // stamp with a one-off profile pick, so picking here just activates
+      // the profile as the account-wide default for future conversations,
+      // without creating anything.
       if (!isInConversation) {
         activateProfile.mutate(profile.id);
         return;
       }
 
+      // Picking a profile mid-conversation always starts a fresh conversation
+      // stamped with that profile id — it does NOT call activateProfile/mutate
+      // the account-wide default. That keeps this a one-off "start this chat
+      // with X" pick; changing the default for future conversations stays a
+      // deliberate action in Settings -> Agent ("Set as active").
       const metadata = conversationId
         ? getStoredConversationMetadata(conversationId)
         : null;
