@@ -22,8 +22,6 @@ from openhands.analytics.analytics_constants import (
     GIT_PROVIDER_CONNECTED,
     JIRA_INTEGRATION_ENABLED,
     ONBOARDING_COMPLETED,
-    PULL_REQUEST_CLOSED,
-    PULL_REQUEST_MERGED,
     SETTINGS_SAVED,
     SLACK_INTEGRATION_ENABLED,
     TEAM_MEMBERS_INVITED,
@@ -880,51 +878,6 @@ class TestTypedEventMethods:
         mock_client.capture.assert_called_once()
         _, kwargs = mock_client.capture.call_args
         assert kwargs['event'] == CLI_DEVICE_LINKED
-
-    def test_track_pull_request_merged(self, saas_service):
-        """track_pull_request_merged calls capture with PULL_REQUEST_MERGED and correct properties."""
-        service, mock_client = saas_service
-        ctx = make_ctx(user_id='user-1')
-        service.track_pull_request_merged(
-            ctx=ctx,
-            provider='github',
-            repo_name='OpenHands/test',
-            pr_number=42,
-            is_private=False,
-            num_commits=5,
-            num_changed_files=3,
-        )
-        mock_client.capture.assert_called_once()
-        _, kwargs = mock_client.capture.call_args
-        assert kwargs['event'] == PULL_REQUEST_MERGED
-        props = kwargs['properties']
-        assert props['provider'] == 'github'
-        assert props['repo_name'] == 'OpenHands/test'
-        assert props['pr_number'] == 42
-        assert props['is_private'] is False
-        assert props['num_commits'] == 5
-        assert props['num_changed_files'] == 3
-
-    def test_track_pull_request_closed(self, saas_service):
-        """track_pull_request_closed calls capture with PULL_REQUEST_CLOSED and correct properties."""
-        service, mock_client = saas_service
-        ctx = make_ctx(user_id='user-1')
-        service.track_pull_request_closed(
-            ctx=ctx,
-            provider='github',
-            repo_name='OpenHands/test',
-            pr_number=7,
-        )
-        mock_client.capture.assert_called_once()
-        _, kwargs = mock_client.capture.call_args
-        assert kwargs['event'] == PULL_REQUEST_CLOSED
-        props = kwargs['properties']
-        assert props['provider'] == 'github'
-        assert props['repo_name'] == 'OpenHands/test'
-        assert props['pr_number'] == 7
-        assert props['is_private'] is None
-        assert props['num_commits'] is None
-        assert props['num_changed_files'] is None
 
     def test_track_slack_integration_enabled(self, saas_service):
         """track_slack_integration_enabled calls capture with SLACK_INTEGRATION_ENABLED."""

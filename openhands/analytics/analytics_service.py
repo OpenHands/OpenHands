@@ -29,8 +29,6 @@ from openhands.analytics.analytics_constants import (
     GIT_PROVIDER_CONNECTED,
     JIRA_INTEGRATION_ENABLED,
     ONBOARDING_COMPLETED,
-    PULL_REQUEST_CLOSED,
-    PULL_REQUEST_MERGED,
     SETTINGS_SAVED,
     SLACK_INTEGRATION_ENABLED,
     TEAM_MEMBERS_INVITED,
@@ -504,68 +502,6 @@ class AnalyticsService:
         self.capture(
             ctx=ctx,
             event=CLI_DEVICE_LINKED,
-            session_id=session_id,
-        )
-
-    def track_pull_request_closed(
-        self,
-        ctx: AnalyticsContext,
-        *,
-        provider: str,
-        repo_name: str,
-        pr_number: int,
-        is_private: bool | None = None,
-        num_commits: int | None = None,
-        num_changed_files: int | None = None,
-        session_id: str | None = None,
-    ) -> None:
-        """Track 'pull request closed' event.
-
-        Fired when an OpenHands-authored PR is closed without merging.
-        Feeds the HubSpot ``number_of_prs_created`` aggregation.
-        """
-        self.capture(
-            ctx=ctx,
-            event=PULL_REQUEST_CLOSED,
-            properties={
-                'provider': provider,
-                'repo_name': repo_name,
-                'pr_number': pr_number,
-                'is_private': is_private,
-                'num_commits': num_commits,
-                'num_changed_files': num_changed_files,
-            },
-            session_id=session_id,
-        )
-
-    def track_pull_request_merged(
-        self,
-        ctx: AnalyticsContext,
-        *,
-        provider: str,
-        repo_name: str,
-        pr_number: int,
-        is_private: bool | None = None,
-        num_commits: int | None = None,
-        num_changed_files: int | None = None,
-        session_id: str | None = None,
-    ) -> None:
-        """Track 'pull request merged' event.
-
-        Fired when an OpenHands-authored PR is merged. Maps to the HubSpot
-        ``number_of_prs_merged`` property.
-        """
-        self.capture(
-            ctx=ctx,
-            event=PULL_REQUEST_MERGED,
-            properties={
-                'provider': provider,
-                'repo_name': repo_name,
-                'pr_number': pr_number,
-                'is_private': is_private,
-                'num_commits': num_commits,
-                'num_changed_files': num_changed_files,
-            },
             session_id=session_id,
         )
 

@@ -28,8 +28,6 @@ TEAM_MEMBERS_INVITED = 'team members invited'
 # PostHog HubSpot destination can keep contacts in sync without the cron job.
 API_KEY_CREATED = 'api key created'
 CLI_DEVICE_LINKED = 'cli device linked'
-PULL_REQUEST_CLOSED = 'pull request closed'
 PULL_REQUEST_CREATED = 'pull request created'
-PULL_REQUEST_MERGED = 'pull request merged'
 SLACK_INTEGRATION_ENABLED = 'slack integration enabled'
 JIRA_INTEGRATION_ENABLED = 'jira integration enabled'
