@@ -212,7 +212,7 @@ jobs:
 
             const isFork = headRepository.full_name !== context.payload.repository.full_name;
             const cleanup = isFork
-              ? 'Because this is a fork PR, the directory will be **automatically removed from `main` immediately after merge**.'
+              ? 'Because this is a fork PR, the workflow will **open or update a cleanup PR against `main` after merge**.'
               : 'The directory will be **automatically removed when the PR is approved**.';
             const body = [
               marker,
@@ -239,8 +239,8 @@ jobs:
               });
             }
 
-  # Fork branches cannot be modified reliably, so clean the trusted base branch
-  # after merge. This also covers same-repository PRs if approval cleanup was missed.
+  # Fork branches cannot be modified reliably. If artifacts reach the trusted base,
+  # remove them through a pull request so branch protections remain enforced.
   cleanup-after-merge:
     concurrency:
       group: pr-artifacts-live-e2e-${{ github.event.pull_request.base.ref }}
@@ -260,45 +260,86 @@ jobs:
           ref: ${{ github.event.pull_request.base.ref }}
           token: ${{ secrets.OPENHANDS_BOT_GITHUB_PAT_PUBLIC }}
 
-      - name: Remove .pr directory
-        id: remove
+      - name: Create or update cleanup PR
+        id: cleanup
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
+          CLEANUP_BRANCH: automation/remove-pr-artifacts
+          GH_TOKEN: ${{ secrets.OPENHANDS_BOT_GITHUB_PAT_PUBLIC }}
         run: |
           set -euo pipefail
           if [ ! -d ".pr" ]; then
-            echo "removed=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::No .pr directory to remove from $BASE_REF."
+            echo "created=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No .pr/ directory to remove from $BASE_REF"
             exit 0
           fi
 
           git config user.name "allhands-bot"
           git config user.email "allhands-bot@users.noreply.github.com"
+          git fetch origin \
+            "+refs/heads/$CLEANUP_BRANCH:refs/remotes/origin/$CLEANUP_BRANCH" || true
+          git checkout -B "$CLEANUP_BRANCH"
           git rm -rf --ignore-unmatch .pr/
           if git diff --cached --quiet; then
-            echo "removed=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::No tracked .pr files to remove from $BASE_REF."
+            echo "created=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No tracked .pr/ files to remove from $BASE_REF"
             exit 0
           fi
-          git commit -m "chore: Remove merged PR artifacts"
-          git push origin "HEAD:$BASE_REF" || {
-            echo "::error::Failed to remove .pr/ from $BASE_REF. Check branch protection rules."
-            exit 1
-          }
-          echo "removed=true" >> "$GITHUB_OUTPUT"
-          echo "::notice::Removed .pr/ directory from $BASE_REF"
+          git commit \
+            -m "chore: remove merged PR artifacts" \
+            -m "Co-authored-by: openhands <openhands@all-hands.dev>"
+          git push --force-with-lease origin "HEAD:$CLEANUP_BRANCH"
 
-      - name: Update PR artifacts comment
-        if: steps.remove.outputs.removed == 'true'
+          cleanup_pr_url=$(gh pr list \
+            --base "$BASE_REF" \
+            --head "$CLEANUP_BRANCH" \
+            --state open \
+            --json url \
+            --jq '.[0].url')
+
+          if [ -z "$cleanup_pr_url" ]; then
+            cleanup_pr_url=$(gh pr create \
+              --base "$BASE_REF" \
+              --head "$CLEANUP_BRANCH" \
+              --title "chore: remove merged PR artifacts" \
+              --body-file - <<EOF
+          ## Why
+
+          Temporary \`.pr/\` artifacts reached \`$BASE_REF\` through one or more merged PRs.
+
+          ## Summary
+
+          - Remove the temporary \`.pr/\` directory from \`$BASE_REF\`.
+
+          ## How to Test
+
+          - Confirm this PR only deletes files under \`.pr/\`.
+          - Let the required checks validate the cleanup commit.
+
+          ---
+
+          _This PR was automatically created by the PR Artifacts workflow._
+          EOF
+            )
+          fi
+
+          echo "created=true" >> "$GITHUB_OUTPUT"
+          echo "pr_url=$cleanup_pr_url" >> "$GITHUB_OUTPUT"
+          echo "::notice::Cleanup PR ready: $cleanup_pr_url"
+
+      - name: Update source PR comment
+        if: steps.cleanup.outputs.created == 'true'
         uses: actions/github-script@v9
+        env:
+          CLEANUP_PR_URL: ${{ steps.cleanup.outputs.pr_url }}
         with:
           script: |
             const marker = '<!-- pr-artifacts-notice -->';
             const body = [
               marker,
-              '**PR Artifacts Cleaned Up**',
+              '**PR Artifact Cleanup Queued**',
               '',
-              'The `.pr/` directory has been automatically removed from `' + context.payload.pull_request.base.ref + '` after merge.',
+              'The `.pr/` directory reached `' + context.payload.pull_request.base.ref + '` after merge. A cleanup PR has been opened or updated: ' + process.env.CLEANUP_PR_URL,
               '',
             ].join('\n');
 
@@ -318,6 +359,13 @@ jobs:
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
                 body,
               });
             }
