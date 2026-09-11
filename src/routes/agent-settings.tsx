@@ -41,10 +41,12 @@ import {
   buildAcpAgentSettingsDiff,
   getAcpPreferredDefaultModel,
   getAcpProvider,
+  getAcpProviderSecrets,
   type ACPProviderConfig,
 } from "#/constants/acp-providers";
 import { parseCommand, formatCommand } from "#/utils/acp-command";
 import {
+  agentProfileSupportsSecretRefs,
   agentProfileSupportsSwitchLlmTool,
   agentProfileSupportsTools,
 } from "#/api/agent-profiles-service/profile-field-support";
@@ -54,6 +56,7 @@ import {
   buildProfileToolsValue,
   KNOWN_PROFILE_TOOL_DESCRIPTIONS,
   readProfileMcpRefs,
+  readProfileSecretRefs,
   readProfileTools,
   standardProfileToolNames,
   type ProfileToolSpec,
@@ -61,6 +64,7 @@ import {
 } from "#/constants/profile-tools";
 import { flattenMcpConfig } from "#/utils/mcp-installed-servers";
 import { parseMcpConfig } from "#/utils/mcp-config";
+import { useSearchSecrets } from "#/hooks/query/use-get-secrets";
 
 export const handle = { hideTitle: true };
 
@@ -79,6 +83,7 @@ const TOOL_CONCURRENCY_FIELD_KEY = "tool_concurrency_limit";
 const SYSTEM_MESSAGE_SUFFIX_KEY = "system_message_suffix";
 const TOOLS_KEY = "tools";
 const MCP_SERVER_REFS_KEY = "mcp_server_refs";
+const SECRET_REFS_KEY = "secret_refs";
 const COMMAND_PLACEHOLDER_FALLBACK = "npx -y <package-name>";
 const ACP_CUSTOM_MODEL_KEY = "__custom_model__";
 const EMPTY_AGENT_SETTINGS_SNAPSHOT: AgentSettingsSnapshot = {
@@ -151,10 +156,12 @@ export type AgentProfileFieldsDraft =
       system_message_suffix?: string | null;
       tools?: ProfileToolSpec[] | null;
       mcp_server_refs?: string[] | null;
+      secret_refs?: string[] | null;
     }
   | {
       agent_kind: "acp";
       mcp_server_refs?: string[] | null;
+      secret_refs?: string[] | null;
       acp_server: string;
       acp_model: string | null;
       acp_command: string | null;
@@ -192,6 +199,10 @@ export interface AgentProfileFieldsInput {
   toolsSupportedOnProfile: boolean;
   mcpMode: ProfileToolsMode;
   selectedMcpServers: string[];
+  secretsMode: ProfileToolsMode;
+  selectedSecrets: string[];
+  /** Whether the backend's *profile* model accepts `secret_refs`. */
+  secretRefsSupportedOnProfile: boolean;
 }
 
 /**
@@ -235,18 +246,26 @@ export function buildAgentProfileFields(
     toolsSupportedOnProfile,
     mcpMode,
     selectedMcpServers,
+    secretsMode,
+    selectedSecrets,
+    secretRefsSupportedOnProfile,
   } = input;
-  // A base-model field, so it rides both variants. No version gate: it has
-  // existed since agent profiles shipped, below the supported floor.
+  // Both are base-model fields, so they ride both variants. `mcp_server_refs`
+  // needs no version gate — it has existed since agent profiles shipped, below
+  // the supported floor — while `secret_refs` does.
   const mcpRefs = {
     mcp_server_refs: mcpMode === "custom" ? selectedMcpServers : null,
   };
+  const secretRefs = secretRefsSupportedOnProfile
+    ? { secret_refs: secretsMode === "custom" ? selectedSecrets : null }
+    : {};
   if (isAcp) {
     const isBuiltinDefault =
       isDefaultProviderCommand && selectedPreset !== ACP_CUSTOM_PRESET_KEY;
     return {
       agent_kind: "acp",
       ...mcpRefs,
+      ...secretRefs,
       acp_server: selectedPreset,
       acp_model: acpModel.trim() || null,
       acp_command: isBuiltinDefault
@@ -261,6 +280,7 @@ export function buildAgentProfileFields(
       agent_kind: "openhands",
       enable_sub_agents: subAgentsEnabled,
       ...mcpRefs,
+      ...secretRefs,
       // Empty clears the field: `""` would append a blank line to every system
       // prompt, and the merge under this draft would otherwise keep the old text.
       system_message_suffix: trimmedInstructions || null,
@@ -509,6 +529,60 @@ export function AgentSettingsScreen({
         .filter((name) => selectedMcpServers.includes(name)),
     [mcpCatalog, selectedMcpServers],
   );
+  // --- Secret scope (both variants; a base-model field) ---
+  const secretRefsSupportedOnProfile = agentProfileSupportsSecretRefs();
+  const { data: savedSecrets } = useSearchSecrets({
+    enabled: embedded && secretRefsSupportedOnProfile,
+  });
+  const initialSecretRefs = React.useMemo(
+    () => readProfileSecretRefs(agentSettingsSource?.[SECRET_REFS_KEY]),
+    [agentSettingsSource],
+  );
+  const [secretsMode, setSecretsMode] = useState<ProfileToolsMode>(
+    initialSecretRefs.mode,
+  );
+  const [selectedSecrets, setSelectedSecrets] = useState<string[]>(
+    initialSecretRefs.selected,
+  );
+  // Stored names ride along even when the secret is gone, so an edit-save can't
+  // quietly drop a ref the user still means to keep (an unmatched name is a
+  // harmless no-op server-side).
+  const secretCatalog = React.useMemo(() => {
+    const saved = (savedSecrets ?? []).map((secret) => ({
+      name: secret.name,
+      description: secret.description ?? null,
+    }));
+    const known = new Set(saved.map((secret) => secret.name));
+    return [
+      ...saved,
+      ...initialSecretRefs.selected
+        .filter((name) => !known.has(name))
+        .map((name) => ({ name, description: null as string | null })),
+    ];
+  }, [savedSecrets, initialSecretRefs]);
+  const orderedSelectedSecrets = React.useMemo(
+    () =>
+      secretCatalog
+        .map(({ name }) => name)
+        .filter((name) => selectedSecrets.includes(name)),
+    [secretCatalog, selectedSecrets],
+  );
+  // Scoping is strict server-side — nothing is added back — so an ACP profile
+  // that omits its provider credential simply fails to authenticate. Keep the
+  // names selected by default rather than re-adding them behind the user's
+  // back: a visible checkbox they can still clear, not a hidden rule.
+  const addProviderSecrets = useCallback(
+    (providerKey: string) =>
+      setSelectedSecrets((prev) => {
+        const names = getAcpProviderSecrets(providerKey).map(
+          ({ name }) => name,
+        );
+        const missing = names.filter((name) => !prev.includes(name));
+        return missing.length ? [...prev, ...missing] : prev;
+      }),
+    [],
+  );
+
   // A ref to a server that no longer exists 422s the launch, so surface it
   // while the user can still fix it.
   const danglingMcpRefs = React.useMemo(
@@ -541,6 +615,9 @@ export function AgentSettingsScreen({
       : null,
   );
 
+  // Which ACP provider's credentials the secret picker has already selected, so
+  // the effect below fires on a provider change rather than on every render.
+  const lastSeededPresetRef = useRef<string | null>(null);
   const lastInitializedSettingsRef = useRef<unknown>(null);
   const loadedAcpServerRef = useRef<string | null>(null);
   const loadedCommandTextRef = useRef<string>("");
@@ -639,6 +716,24 @@ export function AgentSettingsScreen({
     setSelectedMcpServers(initialMcpRefs.selected);
   }, [initialMcpRefs]);
 
+  // Sync the secret scope when settings reload
+  useEffect(() => {
+    setSecretsMode(initialSecretRefs.mode);
+    setSelectedSecrets(initialSecretRefs.selected);
+    lastSeededPresetRef.current = null;
+  }, [initialSecretRefs]);
+
+  // Switching an ACP profile to a different provider changes which credential
+  // it needs (ANTHROPIC_API_KEY -> OPENAI_API_KEY), which a stored list can't
+  // follow on its own. Select the new provider's credentials on the *change*
+  // only, so clearing one afterwards sticks.
+  useEffect(() => {
+    if (secretsMode !== "custom" || !acpPresetForCreds) return;
+    if (lastSeededPresetRef.current === acpPresetForCreds) return;
+    lastSeededPresetRef.current = acpPresetForCreds;
+    addProviderSecrets(acpPresetForCreds);
+  }, [secretsMode, acpPresetForCreds, addProviderSecrets]);
+
   // --- Embedded (Agent-profile editor) save control ---
   // Ref-backed so the exposed builder/credential fns read the freshest state at
   // call time without re-emitting the control on every keystroke (mirrors
@@ -665,9 +760,14 @@ export function AgentSettingsScreen({
   const mcpScopeDirty =
     mcpMode !== initialMcpRefs.mode ||
     orderedSelectedMcpServers.join(",") !== initialMcpRefs.selected.join(",");
+  // `secret_refs` is a base-model field too, so it is tracked for both variants.
+  const secretScopeDirty =
+    secretsMode !== initialSecretRefs.mode ||
+    orderedSelectedSecrets.join(",") !== initialSecretRefs.selected.join(",");
   const settingsDirty =
     agentType !== loadedSnapshot.agentType ||
     mcpScopeDirty ||
+    secretScopeDirty ||
     (agentType === "acp"
       ? commandText !== loadedSnapshot.commandText ||
         acpModel !== loadedSnapshot.acpModel ||
@@ -751,6 +851,9 @@ export function AgentSettingsScreen({
       toolsSupportedOnProfile,
       mcpMode,
       selectedMcpServers: orderedSelectedMcpServers,
+      secretsMode,
+      selectedSecrets: orderedSelectedSecrets,
+      secretRefsSupportedOnProfile,
     });
 
   const isSavingAny = isSaving || acpCredentialForm.isSaving;
@@ -1161,6 +1264,68 @@ export function AgentSettingsScreen({
               mcpMode === "custom"
                 ? I18nKey.SETTINGS$AGENT_PROFILE_MCP_CHOOSE_HINT
                 : I18nKey.SETTINGS$AGENT_PROFILE_MCP_ALL_HINT,
+            )}
+          </Typography.Text>
+        </div>
+      ) : null}
+
+      {showProfileScopeFields && secretRefsSupportedOnProfile ? (
+        <div className="flex flex-col gap-2.5">
+          <Typography.Text className="text-sm">
+            {t(I18nKey.SETTINGS$AGENT_PROFILE_SECRETS)}
+          </Typography.Text>
+          <SettingsDropdownInput
+            testId="agent-settings-secrets-mode"
+            name="agent-secrets-mode"
+            label=""
+            items={[
+              {
+                key: "standard",
+                label: t(I18nKey.SETTINGS$AGENT_PROFILE_SECRETS_ALL),
+              },
+              {
+                key: "custom",
+                label: t(I18nKey.SETTINGS$AGENT_PROFILE_SECRETS_CHOOSE),
+              },
+            ]}
+            selectedKey={secretsMode}
+            isDisabled={isSavingAny}
+            onSelectionChange={(key) => {
+              if (!key) return;
+              const mode = key as ProfileToolsMode;
+              setSecretsMode(mode);
+              if (mode === "custom" && isAcp)
+                addProviderSecrets(selectedPreset);
+            }}
+          />
+          {secretCatalog.length > 0 ? (
+            <ProfileScopeList
+              testId="agent-settings-secret"
+              items={secretCatalog}
+              selected={
+                secretsMode === "custom"
+                  ? orderedSelectedSecrets
+                  : secretCatalog.map(({ name }) => name)
+              }
+              isDisabled={isSavingAny || secretsMode === "standard"}
+              onToggle={(name, checked) =>
+                setSelectedSecrets((prev) =>
+                  checked
+                    ? [...prev, name]
+                    : prev.filter((entry) => entry !== name),
+                )
+              }
+            />
+          ) : (
+            <Typography.Text className="text-xs text-tertiary-alt">
+              {t(I18nKey.SETTINGS$AGENT_PROFILE_SECRETS_NONE)}
+            </Typography.Text>
+          )}
+          <Typography.Text className="text-xs text-tertiary-alt">
+            {t(
+              secretsMode === "custom"
+                ? I18nKey.SETTINGS$AGENT_PROFILE_SECRETS_CHOOSE_HINT
+                : I18nKey.SETTINGS$AGENT_PROFILE_SECRETS_ALL_HINT,
             )}
           </Typography.Text>
         </div>

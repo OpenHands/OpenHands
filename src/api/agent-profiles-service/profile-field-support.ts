@@ -2,6 +2,7 @@ import {
   compareAgentServerVersions,
   getCachedAgentServerVersion,
 } from "#/api/agent-server-compatibility";
+import { getActiveBackend } from "#/api/backend-registry/active-store";
 
 /**
  * `enable_switch_llm_tool` reached `OpenHandsAgentProfile` in
@@ -56,6 +57,43 @@ export function agentProfileSupportsTools(): boolean {
   const comparison = compareAgentServerVersions(
     version,
     MIN_AGENT_SERVER_VERSION_FOR_PROFILE_TOOLS,
+  );
+  if (comparison === null) return true;
+  return comparison >= 0;
+}
+
+/**
+ * `secret_refs` reaches `AgentProfileBase` in software-agent-sdk#4931. Pinned to
+ * the next minor after v1.46.0; confirm against the release that actually ships
+ * it. Older servers are `extra="forbid"`, so posting the key 422s the save.
+ */
+export const MIN_AGENT_SERVER_VERSION_FOR_PROFILE_SECRET_REFS = "1.47.0";
+
+/**
+ * Whether the active backend enforces `secret_refs`.
+ *
+ * Unlike the other gates here, this one answers "will the restriction actually
+ * hold?", not just "will the save be accepted?" — so it is deliberately
+ * conservative where they are permissive.
+ *
+ * Cloud is excluded *for now*. It resolves the agent profile itself and sends a
+ * *resolved agent* to the agent-server, never `agent_profile_id`, so the
+ * agent-server's profile branch — where the filtering lives — never runs; the
+ * conversation's secrets are assembled separately and `secret_refs` is not
+ * consulted. A scoping control there would promise a restriction nothing
+ * applies, which is worse than not offering one.
+ *
+ * Cloud-side enforcement is implemented in OpenHands/enterprise#364 (closing
+ * OpenHands/enterprise#344); drop this short-circuit once it ships, which makes
+ * the version gate below the only condition again.
+ */
+export function agentProfileSupportsSecretRefs(): boolean {
+  if (getActiveBackend().backend.kind === "cloud") return false;
+  const version = getCachedAgentServerVersion();
+  if (!version) return true;
+  const comparison = compareAgentServerVersions(
+    version,
+    MIN_AGENT_SERVER_VERSION_FOR_PROFILE_SECRET_REFS,
   );
   if (comparison === null) return true;
   return comparison >= 0;

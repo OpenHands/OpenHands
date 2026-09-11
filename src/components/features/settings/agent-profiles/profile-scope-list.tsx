@@ -16,7 +16,8 @@ interface ProfileScopeListProps {
 }
 
 /**
- * Per-item toggles for a profile's scope fields (`tools`, `mcp_server_refs`).
+ * Per-item toggles for a profile's scope fields (`tools`, `mcp_server_refs`,
+ * `secret_refs`).
  *
  * Rows are keyed by the wire name — the same identifier the API takes — so an
  * entry this build has no description for is still legible and selectable.
