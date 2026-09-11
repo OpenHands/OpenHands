@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { OpenHandsLogoButton } from "#/components/shared/buttons/openhands-logo-button";
 import { NavigationLink } from "#/components/shared/navigation-link";
+import { getLockedCloudHost } from "#/api/agent-server-config";
 import {
   automationListPath,
   getInterfaceCopy,
@@ -60,6 +61,7 @@ export interface SidebarRailBodyProps {
   isExtensionsActive: boolean;
   currentPath: string;
   activeBackend: Backend;
+  activeOrgId: string | null;
   activeBackendHealth: { isConnected: boolean | null } | undefined;
   collapsedBackendPopoverOpen: boolean;
   setCollapsedBackendPopoverOpen: (open: boolean) => void;
@@ -83,6 +85,7 @@ export function SidebarRailBody({
   isExtensionsActive,
   currentPath,
   activeBackend,
+  activeOrgId,
   activeBackendHealth,
   collapsedBackendPopoverOpen,
   setCollapsedBackendPopoverOpen,
@@ -109,9 +112,18 @@ export function SidebarRailBody({
   };
 
   const isCloudBackend = activeBackend.kind === "cloud";
+  // `org` is consumed by the cloud settings loader so the page opens on the
+  // org that is active here instead of the cloud's last-used org.
+  const cloudSettingsOrgQuery = activeOrgId
+    ? `?org=${encodeURIComponent(activeOrgId)}`
+    : "";
   const cloudSettingsUrl = isCloudBackend
-    ? `${activeBackend.host.replace(/\/+$/, "")}/settings`
+    ? `${activeBackend.host.replace(/\/+$/, "")}/settings${cloudSettingsOrgQuery}`
     : null;
+  // Locked-to-Cloud (SaaS / self-hosted OHE) serves the canvas at /canvas on
+  // the cloud host itself, so cloud settings open in this tab and Back
+  // returns here (OHE-3242). Standalone / Electron keep the new tab.
+  const isLockedToCloud = getLockedCloudHost() !== null;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -280,8 +292,8 @@ export function SidebarRailBody({
             {isCloudBackend && cloudSettingsUrl ? (
               <a
                 href={cloudSettingsUrl}
-                target="_blank"
-                rel="noopener noreferrer"
+                target={isLockedToCloud ? undefined : "_blank"}
+                rel={isLockedToCloud ? undefined : "noopener noreferrer"}
                 data-testid="collapsed-settings-link"
                 aria-label={t(I18nKey.SIDEBAR$SETTINGS)}
                 className={sidebarNavRowClassName({ collapsed: true })}

@@ -1,6 +1,5 @@
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useNavigation } from "#/context/navigation-context";
 import {
   useCancelAutomationRun,
@@ -35,7 +34,7 @@ export function isInFlightAutomationRun(
 
 /**
  * Shared home-surface actions for pinned cards and activity rows:
- * run now, view, edit (local), turn off (with confirm), cancel in-flight.
+ * run now, view, edit, turn off (with confirm), cancel in-flight.
  */
 export function useHomeAutomationActions(
   automation: Automation,
@@ -43,13 +42,11 @@ export function useHomeAutomationActions(
 ) {
   const { t } = useTranslation("openhands");
   const { navigate } = useNavigation();
-  const active = useActiveBackend();
   const { canManage: hasManagePermission } = useAutomationPermissions();
   const isOwner = useIsAutomationOwner(automation);
   // Write actions on a specific automation are allowed when the user has
   // manage permission OR is the automation's creator (creator escape hatch).
   const canManage = hasManagePermission || isOwner;
-  const canEdit = active.backend.kind === "local";
   const isDemo = isHomeAutomationsDemoEnabled();
 
   const dispatchMutation = useDispatchAutomation();
@@ -88,12 +85,8 @@ export function useHomeAutomationActions(
   }, [automation.id, navigate]);
 
   const openEdit = useCallback(() => {
-    if (!canEdit) {
-      viewDetails();
-      return;
-    }
     setEditOpen(true);
-  }, [canEdit, viewDetails]);
+  }, []);
 
   const requestTurnOff = useCallback(() => {
     setTurnOffConfirmOpen(true);
@@ -141,7 +134,6 @@ export function useHomeAutomationActions(
 
   return {
     canManage,
-    canEdit,
     isRunPending,
     isCancelPending,
     canCancel,

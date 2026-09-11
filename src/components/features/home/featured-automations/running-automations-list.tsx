@@ -79,7 +79,6 @@ function RunningAutomationRow({
     automation,
     t,
     canManage: actions.canManage,
-    canEdit: actions.canEdit,
     isRunPending: actions.isRunPending,
     isCancelPending: actions.isCancelPending,
     canCancel: actions.canCancel,
@@ -89,7 +88,7 @@ function RunningAutomationRow({
     onRunNow: actions.runNow,
     onCancelRun: actions.cancelRun,
     onView: actions.viewDetails,
-    onEdit: actions.canEdit ? actions.openEdit : undefined,
+    onEdit: actions.openEdit,
     onTurnOff: actions.requestTurnOff,
     onTogglePin: () => togglePin(item.id),
   });
