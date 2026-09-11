@@ -1,6 +1,9 @@
+import { ACP_PROVIDERS as CLIENT_ACP_PROVIDERS } from "@openhands/typescript-client";
 import { describe, expect, it } from "vitest";
 import {
   ACP_MANAGED_SENTINEL,
+  SURFACED_ACP_PROVIDERS,
+  getAcpProviderSecrets,
   resolveEffectiveAcpModel,
 } from "./acp-providers";
 
@@ -52,5 +55,36 @@ describe("resolveEffectiveAcpModel", () => {
         providerDefault: "opus[1m]",
       }),
     ).toBe("default");
+  });
+});
+
+describe("surfaced ACP providers", () => {
+  // Everything the pinned client registry publishes that Canvas does not
+  // offer. Derived, so a harness added upstream is covered here without an
+  // edit — the point of declaring what we surface rather than what we hide.
+  const unsurfaced = Object.keys(CLIENT_ACP_PROVIDERS).filter(
+    (key) => !SURFACED_ACP_PROVIDERS.includes(key),
+  );
+
+  it("surfaces only Claude Code, Codex and Gemini CLI", () => {
+    expect([...SURFACED_ACP_PROVIDERS]).toEqual([
+      "claude-code",
+      "codex",
+      "gemini-cli",
+    ]);
+  });
+
+  it("surfaces nothing the pinned client registry has dropped", () => {
+    // A rename or removal upstream must break loudly rather than leave a tile
+    // whose command and models resolve to nothing. An addition stays a no-op.
+    expect(
+      SURFACED_ACP_PROVIDERS.filter((key) => !(key in CLIENT_ACP_PROVIDERS)),
+    ).toEqual([]);
+  });
+
+  it("offers no credential fields for a harness it does not surface", () => {
+    unsurfaced.forEach((key) => {
+      expect(getAcpProviderSecrets(key)).toEqual([]);
+    });
   });
 });

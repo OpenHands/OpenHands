@@ -61,17 +61,18 @@ if (typeof requestAnimationFrame === "undefined") {
 }
 
 // MSW's XMLHttpRequest interceptor references the bare `ProgressEvent`
-// global from inside async `respondWith` callbacks (via `createEvent`).
-// Vitest's jsdom environment installs `ProgressEvent` as an own property on
-// `globalThis` and removes it during per-file teardown with
+// global from inside async `respondWith` callbacks (via `createEvent`), and
+// the bare `XMLHttpRequestUpload` global in `trigger` (`target instanceof
+// XMLHttpRequestUpload`). Vitest's jsdom environment installs these as own
+// properties on `globalThis` and removes them during per-file teardown with
 // `keys.forEach((key) => delete global[key])`. If an in-flight intercepted
 // XHR (e.g. PostHog analytics, or any request that escaped to the real
 // network under `onUnhandledRequest: "bypass"` and is still waiting on a
 // socket) settles after teardown, its callback evaluates `ProgressEvent`
 // against a torn-down global and throws
-// `ReferenceError: ProgressEvent is not defined`. Vitest reports that as an
+// `ReferenceError: ProgressEvent is not defined` (or the
+// `XMLHttpRequestUpload` equivalent). Vitest reports that as an
 // unhandled rejection and fails the whole run even though every test passed.
-// MSW also evaluates `XMLHttpRequestUpload` in the same late callback path.
 //
 // Two earlier attempts at this (an own-property getter, then the `afterAll`
 // drain below) both put the fallback where teardown can reach it, or bounded
@@ -81,11 +82,12 @@ if (typeof requestAnimationFrame === "undefined") {
 //
 // `delete` only removes *own* properties, while identifier resolution walks
 // the prototype chain. So the fallbacks go on an object inserted into
-// `globalThis`'s prototype chain, where teardown cannot delete them: while the
-// environment is alive jsdom's own properties shadow them, and once teardown
-// removes those own properties, the bare identifiers resolve through the
-// prototype. Node's `globalThis` does not have `Object.prototype` as its direct
-// prototype, so this adds nothing to plain objects.
+// `globalThis`'s prototype chain, where teardown cannot delete them: while
+// the environment is alive jsdom's own properties shadow them, and once
+// teardown removes those own properties, the bare identifiers resolve
+// through the prototype to the classes below. Node's `globalThis` does not
+// have `Object.prototype` as its direct prototype, so this adds nothing to
+// plain objects.
 class MockProgressEvent extends Event {
   readonly lengthComputable: boolean;
 
@@ -101,41 +103,38 @@ class MockProgressEvent extends Event {
   }
 }
 
+// The interceptor only needs `XMLHttpRequestUpload` as an `instanceof`
+// operand. While jsdom is alive its own property shadows this fallback, so
+// behavior is unchanged; after teardown the check just takes the non-upload
+// branch, quietly skipping listener dispatch for callbacks that have already
+// outlived their environment instead of crashing the run.
+class MockXMLHttpRequestUpload extends EventTarget {}
+
 // Setup files run once per test file, and a worker process is reused across
 // files. Without this marker each file would splice another holder into the
 // prototype chain, so the chain would grow with every file in the run.
-const PROGRESS_EVENT_FALLBACK = Symbol.for(
-  "agent-canvas.progress-event-fallback",
-);
+const XHR_GLOBALS_FALLBACK = Symbol.for("agent-canvas.xhr-globals-fallback");
 
-function installProgressEventFallback(
-  progressEventFallback: unknown,
-  uploadFallback: unknown,
-) {
+function installXhrGlobalsFallback(fallbacks: Record<string, unknown>) {
   const currentProto = Object.getPrototypeOf(globalThis) as object | null;
-  if (currentProto && PROGRESS_EVENT_FALLBACK in currentProto) return;
+  if (currentProto && XHR_GLOBALS_FALLBACK in currentProto) return;
 
   const holder = Object.create(currentProto) as Record<PropertyKey, unknown>;
-  Object.defineProperty(holder, PROGRESS_EVENT_FALLBACK, { value: true });
-  Object.defineProperty(holder, "ProgressEvent", {
-    value: progressEventFallback,
-    configurable: true,
-    writable: true,
-  });
-  Object.defineProperty(holder, "XMLHttpRequestUpload", {
-    value: uploadFallback,
-    configurable: true,
-    writable: true,
-  });
+  Object.defineProperty(holder, XHR_GLOBALS_FALLBACK, { value: true });
+  for (const [name, fallback] of Object.entries(fallbacks)) {
+    Object.defineProperty(holder, name, {
+      value: fallback,
+      configurable: true,
+      writable: true,
+    });
+  }
   Object.setPrototypeOf(globalThis, holder);
 }
 
-installProgressEventFallback(
-  MockProgressEvent,
-  typeof XMLHttpRequestUpload === "undefined"
-    ? class MockXMLHttpRequestUpload {}
-    : XMLHttpRequestUpload,
-);
+installXhrGlobalsFallback({
+  ProgressEvent: MockProgressEvent,
+  XMLHttpRequestUpload: MockXMLHttpRequestUpload,
+});
 
 // Mock ResizeObserver for test environment
 class MockResizeObserver {
@@ -208,7 +207,7 @@ afterAll(async () => {
   // against a live jsdom rather than a torn-down one. This is a best-effort
   // tidy-up, not the guarantee: a callback can always outlast the drain
   // window (a bypassed request stuck on a real socket, for instance), which
-  // is what the prototype-chain `ProgressEvent` fallback above is for. We
+  // is what the prototype-chain XHR-globals fallback above is for. We
   // restore real timers first so a test that left fake timers active can't
   // stall the drain.
   vi.useRealTimers();
