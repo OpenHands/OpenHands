@@ -858,17 +858,22 @@ function buildAgentContext(
 
   return {
     ...existingContext,
-    // Public skills are bundled at build time from the @openhands/extensions
-    // npm package and passed directly in agent_context.skills. Setting
-    // load_public_skills to false tells the agent-server SDK to skip its own
-    // extensions-repo clone — the frontend is the sole source of public
-    // skills now.
-    //
-    // Migration: the former VITE_LOAD_PUBLIC_SKILLS env var was removed
-    // because bundled skills have no clone latency. Users who previously set
-    // VITE_LOAD_PUBLIC_SKILLS=false to avoid clone delays no longer need it.
+    // Public skills bundled from the @openhands/extensions npm package are
+    // passed directly above, in agent_context.skills, so the agent-server
+    // doesn't need to load its own copy of those. But load_public_skills
+    // also gates the agent-server's registered marketplace skills (see
+    // openhands.agent_server.skills_service.load_all_skills:
+    // marketplace auto-load skills only load when load_public is true) —
+    // so it must stay true, or any marketplace registered in the
+    // agent-server's own settings.json (e.g. a custom internal skill
+    // catalog) never reaches the agent, even when Settings shows it as
+    // enabled (SkillsService.getSkills queries with load_public: true for
+    // the same reason). The bundled catalog skills sent explicitly above
+    // may be loaded a second time by the agent-server's own clone; that
+    // redundant clone is the accepted cost of getting marketplace skills
+    // through, same as skills-service.ts already accepts for the listing.
     skills: mergedSkills,
-    load_public_skills: false,
+    load_public_skills: true,
     load_user_skills: true,
     load_project_skills: true,
     // The backend also auto-loads user/project skills; the deny-list must
