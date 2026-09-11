@@ -173,7 +173,7 @@ identity.
 
 A diff shows what changed line by line, not the design: the shape of the change,
 the API before and after, and why this approach. For a *deep* PR, expect a short
-design doc. The `pr-design-doc` skill in `.agents/skills/pr-design-doc/` produces
+design doc. If needed, you can tell about `pr-design-doc` skill which makes
 a self-contained `.pr/` HTML page (big picture plus before/after, grounded to real
 code) linked from the PR description.
 
