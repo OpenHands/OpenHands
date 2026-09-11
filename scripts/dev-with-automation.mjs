@@ -71,6 +71,11 @@ import {
   signalProcessTree,
 } from "./dev-process-utils.mjs";
 import { fileLog, stripAnsi } from "./logger.mjs";
+import {
+  parseSkillsSourcesEnv,
+  resolveExternalSkillsSources,
+  writeExternalSkillsManifest,
+} from "./skills-sources.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, "..");
@@ -176,9 +181,20 @@ function parseArgs() {
     public: false,
     frontendOnly: false,
     backendOnly: false,
+    skillsSources: [],
   };
 
   for (let i = 0; i < args.length; i++) {
+    // Repeatable --skills <source> / --skills=<source>. The value may look
+    // like a flag (e.g. a URL); take the next token verbatim.
+    if (args[i] === "--skills") {
+      config.skillsSources.push(args[++i]);
+      continue;
+    }
+    if (args[i].startsWith("--skills=")) {
+      config.skillsSources.push(args[i].slice("--skills=".length));
+      continue;
+    }
     switch (args[i]) {
       case "-p":
       case "--port":
@@ -245,11 +261,19 @@ OPTIONS:
   --dynamic                   Force Vite dev server when a wrapper defaults static
   --frontend-only             Start only the frontend behind ingress
   --backend-only              Start only agent-server + automation behind ingress
+  --skills <source>           Extra skills source; repeatable. A local
+                              directory, a git URL, or host/path shorthand
+                              such as github.com/acmecorp/skills. Sources are
+                              cloned (git) or read (local) without executing
+                              repository code, listed in Customize → Skills,
+                              and disabled by default until toggled on.
   -v, --verbose               Show detailed output
   -h, --help                  Show this help
 
 ENVIRONMENT VARIABLES:
   PORT                        Alternative to --port
+  OH_SKILLS_SOURCES           Comma/newline-separated extra skills sources
+                              (same values as --skills)
   OH_AUTOMATION_GIT_REF       Git ref for automation (overrides default version)
   OH_AUTOMATION_VERSION       Specific PyPI version for automation (default: ${DEFAULT_AUTOMATION_VERSION})
   OH_AUTOMATION_LOCAL_PATH    Absolute path to a local automation checkout (overridden only by --automation-git-ref)
@@ -476,6 +500,48 @@ async function buildConfig(args, env = process.env) {
     );
   }
 
+  // External skills sources (--skills / OH_SKILLS_SOURCES). Each source is a
+  // local directory, a git URL, or host/path shorthand; resolution is
+  // best-effort — a broken source warns on stderr and the rest still load.
+  // The manifest reaches the frontend as a window global (static-server
+  // --external-skills-file index.html injection, or VITE_EXTERNAL_SKILLS_FILE
+  // for the Vite dev server's entry-module transform), so it needs no extra
+  // endpoint.
+  const skillsSources = [
+    ...(args.skillsSources ?? []),
+    ...parseSkillsSourcesEnv(env.OH_SKILLS_SOURCES),
+  ].filter((source) => typeof source === "string" && source.trim());
+  let externalSkillsFile = null;
+  let externalSkillCount = 0;
+  if (skillsSources.length > 0 && launchFrontend) {
+    const externalSkillsDir = join(stateDir, "external-skills");
+    const manifest = resolveExternalSkillsSources(skillsSources, {
+      cacheDir: join(externalSkillsDir, "cache"),
+      warn: (message) => {
+        console.error(`${c.yellow}Warning:${c.reset} ${message}`);
+        fileLog("warn", message);
+      },
+      info: (message) => logService("skills", message, c.dim),
+    });
+    externalSkillsFile = writeExternalSkillsManifest(
+      join(externalSkillsDir, "manifest.json"),
+      manifest,
+    );
+    externalSkillCount = manifest.skills.length;
+    logService(
+      "skills",
+      `${externalSkillCount} external skill(s) from ${manifest.sources.length} ` +
+        `source(s) → ${externalSkillsFile} (disabled until enabled in Customize → Skills)`,
+      c.dim,
+    );
+  } else if (skillsSources.length > 0) {
+    logService(
+      "skills",
+      "--skills ignored in --backend-only mode (no frontend is launched)",
+      c.dim,
+    );
+  }
+
   return {
     // Ingress port (main entry point)
     ingressPort: preferredIngressPort,
@@ -514,6 +580,11 @@ async function buildConfig(args, env = process.env) {
     launchFrontend,
     launchAgentServer,
     launchAutomation,
+
+    // External skills: manifest the frontend serves via window global.
+    externalSkillsFile,
+    externalSkillCount,
+    skillsSources,
 
     verbose: args.verbose,
   };
@@ -1164,6 +1235,13 @@ function startVite(config) {
     viteEnv.VITE_WORKING_DIR = config.viteWorkingDir;
   }
 
+  // Vite's entry-module transform reads this path and appends the manifest
+  // as a window global — the dev-server counterpart to static-server's
+  // --external-skills-file injection.
+  if (config.externalSkillsFile) {
+    viteEnv.VITE_EXTERNAL_SKILLS_FILE = config.externalSkillsFile;
+  }
+
   // Vite serves the HTML for this mode's browser origin, so this is where the
   // editor-capability advertisement has to be baked. The ingress in front of it
   // routes the prefix but is a pure proxy — it injects nothing into the
@@ -1425,6 +1503,9 @@ async function main(options = {}) {
     // download / install progress to the user. `level` is one of
     // "stdout" | "stderr" | "info" | "warn" | "error".
     onServiceLog,
+    // Extra skills sources for embedded launchers that cannot reach the
+    // process argv (e.g. Electron). Same values as --skills.
+    skillsSources: skillsSourcesOption,
   } = options;
 
   // Install the listener early so log lines emitted before the first
@@ -1436,6 +1517,12 @@ async function main(options = {}) {
   // Allow options to override CLI args for public mode
   if (isPublicOverride != null) {
     args.public = isPublicOverride;
+  }
+
+  // Embedded launchers may pass skills sources programmatically; they append
+  // to any --skills flags rather than replacing them.
+  if (Array.isArray(skillsSourcesOption)) {
+    args.skillsSources.push(...skillsSourcesOption);
   }
 
   // Allow options to override CLI args (for bin/agent-canvas.mjs)
@@ -1641,6 +1728,11 @@ function startStaticFrontend(config, staticDir) {
       // Inject runtime-services info so the agent knows what's reachable.
       ...(runtimeServicesInfo
         ? ["--runtime-services-info", runtimeServicesInfo]
+        : []),
+      // Inject the resolved external-skills manifest so the pre-built
+      // frontend lists --skills sources in Customize → Skills.
+      ...(config.externalSkillsFile
+        ? ["--external-skills-file", config.externalSkillsFile]
         : []),
       // Proxy routes only to services that this launch mode started.
       ...buildRouteArgs(getLocalServiceRoutes(config)),

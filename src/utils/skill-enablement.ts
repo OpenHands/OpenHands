@@ -19,11 +19,50 @@ export function isRecommendedSkill(name: string): boolean {
   return RECOMMENDED_SKILL_NAME_SET.has(name);
 }
 
+// ── External skills (launcher `--skills` sources) ──────────────────────────
+//
+// External skills are allow-listed like the bundled catalog — a shared
+// checkout must not inject instructions into a conversation the user never
+// opted into — but a bare name is not a safe identity for them: two sources
+// may ship the same skill name. The persisted `enabled_skills` entries for
+// external skills are therefore source-qualified keys, not bare names.
+
+export const EXTERNAL_SKILL_KEY_PREFIX = "external:";
+
+/** True when a persisted `enabled_skills` entry is a source-qualified key. */
+export function isExternalSkillKey(key: string): boolean {
+  return key.startsWith(EXTERNAL_SKILL_KEY_PREFIX);
+}
+
+/** The enablement-list entry for one skill from one `--skills` source. */
+export function externalSkillEnablementKey(
+  sourceId: string,
+  skillName: string,
+): string {
+  return `${EXTERNAL_SKILL_KEY_PREFIX}${sourceId}:${skillName}`;
+}
+
 /**
- * The two persisted lists. They cover different populations: `enabledSkills`
- * allow-lists the bundled catalog, whose every future addition would otherwise
- * be on for everyone (#16302), while `disabledSkills` keeps denying user- and
- * project-authored skills, which should be on the moment they appear.
+ * The identity a skill toggles under. External skills (marked by `source_id`)
+ * get a source-qualified key; everything else keeps toggling by bare name.
+ */
+export function skillEnablementKey(skill: {
+  name: string;
+  source_id?: string | null;
+}): string {
+  return skill.source_id
+    ? externalSkillEnablementKey(skill.source_id, skill.name)
+    : skill.name;
+}
+
+/**
+ * The two persisted lists. `enabledSkills` allow-lists everything that must
+ * not switch itself on: the bundled catalog (whose every future addition
+ * would otherwise be on for everyone, #16302) and launcher `--skills`
+ * sources (recorded as `external:<source-id>:<name>` keys so same-named
+ * skills from different sources toggle independently). `disabledSkills`
+ * keeps denying user- and project-authored skills, which should be on the
+ * moment they appear.
  *
  * `undefined` means "never migrated" and must survive settings hydration.
  */
@@ -44,7 +83,10 @@ export function resolveEnabledCatalogSkills(
  *
  * The deny-list still wins over the allow-list, which only matters before the
  * migration runs: until then a pre-existing "I turned this off" lives in the
- * deny-list alone.
+ * deny-list alone. For external skills the checked key is source-qualified,
+ * so a bare-name deny entry cannot veto them here; `buildAgentContext`
+ * additionally applies the bare-name deny check because the server-side
+ * deny-list is name-based.
  */
 export function buildSkillEnablementFilter(
   enablement: SkillEnablement,
@@ -54,6 +96,7 @@ export function buildSkillEnablementFilter(
 
   return (skillName) => {
     if (disabled.has(skillName)) return false;
+    if (isExternalSkillKey(skillName)) return enabled.has(skillName);
     return !isCatalogSkill(skillName) || enabled.has(skillName);
   };
 }

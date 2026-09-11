@@ -75,6 +75,14 @@ export type SkillInfo = {
   name: string;
   type: SkillType;
   source: string | null;
+  /**
+   * Present only on skills supplied via the launcher's `--skills` option: a
+   * stable per-source id that `skillEnablementKey()` combines with the name
+   * into a source-qualified toggle identity, so same-named skills from
+   * different external sources do not share enablement state. Absent on
+   * bundled, user, and project skills.
+   */
+  source_id?: string | null;
   description?: string | null;
   triggers?: string[];
   /**

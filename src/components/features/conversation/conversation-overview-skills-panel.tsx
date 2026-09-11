@@ -32,6 +32,7 @@ import {
   sortSkillsByProjectRelevance,
   type ConversationOverviewProjectScope,
 } from "#/utils/conversation-overview-project-scope";
+import { skillEnablementKey } from "#/utils/skill-enablement";
 import { useConversationOverviewDrawerOptional } from "./conversation-overview-drawer-context";
 import { ConversationOverviewProjectScopeToggle } from "./conversation-overview-project-scope-toggle";
 
@@ -174,11 +175,13 @@ export function ConversationOverviewSkillsPanel({
           <div className={cn(extensionModuleCardGridClassName, "grid-cols-1")}>
             {filteredSkills.map((skill) => (
               <SkillCard
-                key={skill.name}
+                key={skillEnablementKey(skill)}
                 skill={skill}
                 enabled={isEnabled(skill)}
                 onOpen={() => setSelectedSkill(skill)}
-                onToggle={(enabled) => setEnabled(skill.name, enabled)}
+                onToggle={(enabled) =>
+                  setEnabled(skillEnablementKey(skill), enabled)
+                }
               />
             ))}
           </div>
@@ -189,7 +192,9 @@ export function ConversationOverviewSkillsPanel({
         <SkillDetailModal
           skill={selectedSkill}
           enabled={isEnabled(selectedSkill)}
-          onToggle={(enabled) => setEnabled(selectedSkill.name, enabled)}
+          onToggle={(enabled) =>
+            setEnabled(skillEnablementKey(selectedSkill), enabled)
+          }
           onClose={() => setSelectedSkill(null)}
         />
       ) : null}

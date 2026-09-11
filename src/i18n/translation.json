@@ -14143,7 +14143,6 @@
     "uk": "Повідомлено користувацькі метадані завдання.",
     "ca": "S'han informat metadades personalitzades de la tasca."
   },
-
   "AUTOMATIONS$DETAIL$VIEW_CONVERSATION_FOR_RUN": {
     "en": "View conversation for run at {{timestamp}}",
     "ja": "{{timestamp}} の実行の会話を表示",
@@ -14161,7 +14160,6 @@
     "uk": "Переглянути розмову для запуску о {{timestamp}}",
     "ca": "Mostra la conversa de l'execució a {{timestamp}}"
   },
-
   "AUTOMATIONS$DETAIL$PHASE": {
     "ar": "المرحلة",
     "ca": "Fase",
@@ -26674,6 +26672,23 @@
     "uk": "Навички користувача",
     "ca": "Habilitats de l'usuari"
   },
+  "SKILLS_MODAL$SECTION_EXTERNAL": {
+    "en": "External skills",
+    "ja": "外部スキル",
+    "zh-CN": "外部技能",
+    "zh-TW": "外部技能",
+    "ko-KR": "외부 스킬",
+    "no": "Eksterne ferdigheter",
+    "ar": "مهارات خارجية",
+    "de": "Externe Fähigkeiten",
+    "fr": "Compétences externes",
+    "it": "Abilità esterne",
+    "pt": "Habilidades externas",
+    "es": "Habilidades externas",
+    "ca": "Habilitats externes",
+    "tr": "Harici yetenekler",
+    "uk": "Зовнішні навички"
+  },
   "SKILLS_MODAL$SECTION_PUBLIC": {
     "en": "Public skills",
     "ja": "パブリックスキル",
@@ -33966,6 +33981,23 @@
     "tr": "Kişisel",
     "uk": "Особисті",
     "ca": "Personal"
+  },
+  "SETTINGS$SKILLS_SOURCE_EXTERNAL": {
+    "en": "External",
+    "ja": "外部",
+    "zh-CN": "外部",
+    "zh-TW": "外部",
+    "ko-KR": "외부",
+    "no": "Ekstern",
+    "ar": "خارجي",
+    "de": "Extern",
+    "fr": "Externe",
+    "it": "Esterno",
+    "pt": "Externo",
+    "es": "Externo",
+    "ca": "Extern",
+    "tr": "Harici",
+    "uk": "Зовнішній"
   },
   "SETTINGS$SKILLS_SOURCE_PUBLIC": {
     "en": "Built in",

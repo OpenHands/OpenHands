@@ -3,11 +3,13 @@ import { Typography } from "#/ui/typography";
 import { SkillTriggers } from "./skill-triggers";
 import { SkillContent } from "./skill-content";
 import { SkillInfo } from "#/types/settings";
+import { skillEnablementKey } from "#/utils/skill-enablement";
 
 interface SkillItemProps {
   skill: SkillInfo & { content?: string };
   isExpanded: boolean;
-  onToggle: (agentName: string) => void;
+  /** Receives the skill's enablement key (source-qualified for --skills). */
+  onToggle: (skillKey: string) => void;
 }
 
 const SKILL_TYPE_LABEL: Record<SkillInfo["type"], string> = {
@@ -24,7 +26,7 @@ export function SkillItem({ skill, isExpanded, onToggle }: SkillItemProps) {
     <div>
       <button
         type="button"
-        onClick={() => onToggle(skill.name)}
+        onClick={() => onToggle(skillEnablementKey(skill))}
         className="w-full py-3 px-3 text-left flex items-center justify-between hover:bg-tertiary transition-colors"
       >
         <div className="flex items-center">

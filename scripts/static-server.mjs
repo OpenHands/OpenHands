@@ -28,6 +28,7 @@
  */
 
 import { createServer } from "node:http";
+import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { extname, resolve } from "node:path";
 import process from "node:process";
@@ -94,6 +95,7 @@ export function parseArgs(argv = process.argv.slice(2), env = process.env) {
     sessionApiKey: null,
     authRequired: false,
     runtimeServicesInfo: null,
+    externalSkillsFile: null,
     lockToCloud: null,
     basePath: "/",
     vscodeBasePath: null,
@@ -136,6 +138,9 @@ export function parseArgs(argv = process.argv.slice(2), env = process.env) {
         break;
       case "--runtime-services-info":
         config.runtimeServicesInfo = argv[++i] || null;
+        break;
+      case "--external-skills-file":
+        config.externalSkillsFile = argv[++i] || null;
         break;
       case "--lock-to-cloud":
         config.lockToCloud = argv[++i] || null;
@@ -252,6 +257,14 @@ OPTIONS:
                                frontend can populate the agent's
                                <RUNTIME_SERVICES> system-prompt block without
                                VITE_RUNTIME_SERVICES_INFO baked in.
+  --external-skills-file <path>
+                               Inject the resolved external-skills manifest
+                               (produced by the launcher's --skills option)
+                               into index.html as
+                               window.__AGENT_CANVAS_EXTERNAL_SKILLS__ so the
+                               frontend can list and toggle external skills.
+                               An unreadable file warns and serves the page
+                               without injection.
   --lock-to-cloud <cloud-url>  Lock backend setup to a single OpenHands Cloud
                                URL. Hides manual/local backend setup and the
                                custom Cloud URL field in the pre-built frontend.
@@ -344,6 +357,12 @@ ROUTING:
  *   event) at runtime without VITE_DO_NOT_TRACK baked in. Read by
  *   `isDoNotTrackEnabled()` in `#/services/telemetry`. Enabled by
  *   AGENT_CANVAS_DISABLE_TELEMETRY=1 or the --disable-telemetry flag.
+ *
+ * - `externalSkillsJson`: the launcher-resolved external skills manifest (from
+ *   `--skills` sources), exposed as `window.__AGENT_CANVAS_EXTERNAL_SKILLS__`
+ *   — a JSON string the frontend parses, same contract as
+ *   `runtimeServicesInfo`. `<` is escaped so skill markdown containing
+ *   "</script>" cannot terminate the inline tag.
  */
 function makeConfigInjectionScript(
   sessionApiKey,
@@ -353,6 +372,7 @@ function makeConfigInjectionScript(
   basePath,
   vscodeBasePath,
   disableTelemetry,
+  externalSkillsJson,
 ) {
   const parts = [];
 
@@ -412,6 +432,12 @@ function makeConfigInjectionScript(
     parts.push(`window.__AGENT_CANVAS_DO_NOT_TRACK__=true;`);
   }
 
+  if (externalSkillsJson) {
+    parts.push(
+      `window.__AGENT_CANVAS_EXTERNAL_SKILLS__=${JSON.stringify(externalSkillsJson).replace(/</g, "\\u003c")};`,
+    );
+  }
+
   if (parts.length === 0) return "";
 
   return `<script>(function(){${parts.join("")}}());</script>`;
@@ -433,6 +459,7 @@ async function serveInjectedIndexHtml(
     basePath,
     vscodeBasePath,
     disableTelemetry,
+    externalSkillsJson,
   } = {},
 ) {
   let content;
@@ -450,6 +477,7 @@ async function serveInjectedIndexHtml(
     basePath,
     vscodeBasePath,
     disableTelemetry,
+    externalSkillsJson,
   );
   // Inject right before </head> so the key is available before any app code runs.
   // replace() targets the first (and only) </head> in well-formed HTML.
@@ -497,6 +525,7 @@ function needsRuntimeInjection(injectionOpts) {
     injectionOpts.sessionApiKey ||
     injectionOpts.authRequired ||
     injectionOpts.runtimeServicesInfo ||
+    injectionOpts.externalSkillsJson ||
     injectionOpts.lockToCloud ||
     injectionOpts.vscodeBasePath ||
     injectionOpts.disableTelemetry ||
@@ -638,10 +667,29 @@ export function startStaticServer(config) {
   const route = createRouter(config.routes);
   const proxy = createProxyHandlers({ label: `static:${config.port}` });
   const dirAbs = resolve(config.dir);
+
+  // The launcher writes the resolved --skills manifest before starting this
+  // server. Read it once here; a missing or malformed file downgrades to "no
+  // external skills" with a warning rather than breaking page loads.
+  let externalSkillsJson = null;
+  if (config.externalSkillsFile) {
+    try {
+      const raw = readFileSync(resolve(config.externalSkillsFile), "utf8");
+      JSON.parse(raw);
+      externalSkillsJson = raw;
+    } catch (error) {
+      console.error(
+        `Warning: could not load external skills manifest ` +
+          `${config.externalSkillsFile}: ${error.message}`,
+      );
+    }
+  }
+
   const injectionOpts = {
     sessionApiKey: config.sessionApiKey || null,
     authRequired: config.authRequired || false,
     runtimeServicesInfo: config.runtimeServicesInfo || null,
+    externalSkillsJson,
     lockToCloud: config.lockToCloud || null,
     basePath: normalizeBasePath(config.basePath),
     vscodeBasePath: config.vscodeBasePath || null,

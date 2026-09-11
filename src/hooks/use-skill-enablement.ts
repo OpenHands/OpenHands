@@ -11,7 +11,9 @@ import {
   buildSkillEnablementFilter,
   CATALOG_SKILL_NAMES,
   isCatalogSkill,
+  isExternalSkillKey,
   resolveEnabledCatalogSkills,
+  skillEnablementKey,
   type SkillEnablement,
 } from "#/utils/skill-enablement";
 
@@ -42,7 +44,7 @@ export function useSkillEnabledFilter(): (skill: SkillInfo) => boolean {
     const isEnabled = buildSkillEnablementFilter(
       readSkillEnablement(settings, usesCatalogAllowList),
     );
-    return (skill: SkillInfo) => isEnabled(skill.name);
+    return (skill: SkillInfo) => isEnabled(skillEnablementKey(skill));
   }, [
     settings?.enabled_skills,
     settings?.disabled_skills,
@@ -52,7 +54,12 @@ export function useSkillEnabledFilter(): (skill: SkillInfo) => boolean {
 
 export interface SkillEnablementController {
   isEnabled: (skill: SkillInfo) => boolean;
-  setEnabled: (skillName: string, enabled: boolean) => void;
+  /**
+   * Toggle by enablement key — the bare name for catalog/user/project
+   * skills, `external:<source-id>:<name>` for `--skills` sources; callers
+   * build it with `skillEnablementKey(skill)`.
+   */
+  setEnabled: (skillKey: string, enabled: boolean) => void;
 }
 
 /** Stable form of both lists, so an unchanged set can skip the save. */
@@ -128,26 +135,30 @@ export function useSkillEnablement(): SkillEnablementController {
 
   const isEnabled = React.useMemo(() => {
     const enabled = buildSkillEnablementFilter(enablement);
-    return (skill: SkillInfo) => enabled(skill.name);
+    return (skill: SkillInfo) => enabled(skillEnablementKey(skill));
   }, [enablement]);
 
   const setEnabled = React.useCallback(
-    (skillName: string, enabled: boolean) => {
+    (skillKey: string, enabled: boolean) => {
       setEnablement((previous) => {
-        const allowListed = usesCatalogAllowList && isCatalogSkill(skillName);
+        // Allow-listed populations toggle by their own key: bare name for
+        // catalog skills, source-qualified key for `--skills` sources.
+        const allowListed =
+          usesCatalogAllowList &&
+          (isCatalogSkill(skillKey) || isExternalSkillKey(skillKey));
         return {
           enabledSkills: allowListed
             ? withMembership(
                 resolveEnabledCatalogSkills(previous),
-                skillName,
+                skillKey,
                 enabled,
               )
             : previous.enabledSkills,
-          // A catalog skill switched back on also leaves the deny-list, where
-          // an unmigrated workspace may still hold it.
+          // An allow-listed skill switched back on also leaves the deny-list,
+          // where an unmigrated workspace may still hold it.
           disabledSkills: withMembership(
             previous.disabledSkills ?? [],
-            skillName,
+            skillKey,
             !enabled && !allowListed,
           ),
         };

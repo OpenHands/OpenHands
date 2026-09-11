@@ -261,6 +261,98 @@ describe("buildStartConversationRequest", () => {
     expect(payload.initial_message.content[0]?.text).toBe("hello");
   });
 
+  describe("external --skills entries", () => {
+    const EXTERNAL_SKILL = {
+      name: "acme-deploy",
+      description: "Deploy the Acme way.",
+      triggers: ["/deploy"],
+      content: "# Deploy\n\nShip it.",
+      path: "/home/u/.cache/acme-1234abcd/acme-deploy/SKILL.md",
+      source: "github.com/acmecorp/skills",
+      source_id: "acme-1234abcd",
+    };
+    const WINDOW_KEY = "__AGENT_CANVAS_EXTERNAL_SKILLS__";
+
+    function skillsOf(payload: unknown): Record<string, unknown>[] {
+      const context = (
+        payload as {
+          agent_settings: { agent_context: { skills: unknown[] } };
+        }
+      ).agent_settings.agent_context;
+      return context.skills as Record<string, unknown>[];
+    }
+
+    afterEach(() => {
+      delete (window as unknown as Record<string, unknown>)[WINDOW_KEY];
+    });
+
+    it("keeps external skills out of agent_context until allow-listed", () => {
+      (window as unknown as Record<string, unknown>)[WINDOW_KEY] =
+        JSON.stringify({ version: 1, skills: [EXTERNAL_SKILL] });
+
+      const payload = buildStartConversationRequest({
+        settings: { ...DEFAULT_SETTINGS, enabled_skills: [] },
+      });
+      expect(skillsOf(payload).map((skill) => skill.name)).not.toContain(
+        "acme-deploy",
+      );
+    });
+
+    it("adds an allow-listed external skill under its qualified key", () => {
+      (window as unknown as Record<string, unknown>)[WINDOW_KEY] =
+        JSON.stringify({ version: 1, skills: [EXTERNAL_SKILL] });
+
+      const payload = buildStartConversationRequest({
+        settings: {
+          ...DEFAULT_SETTINGS,
+          enabled_skills: ["external:acme-1234abcd:acme-deploy"],
+        },
+      });
+      const external = skillsOf(payload).find(
+        (skill) => skill.name === "acme-deploy",
+      );
+      // Same Skill shape the bundled catalog emits; `source` is the
+      // absolute SKILL.md path so the server resolves relative resources.
+      expect(external).toMatchObject({
+        content: EXTERNAL_SKILL.content,
+        source: EXTERNAL_SKILL.path,
+        description: "Deploy the Acme way.",
+        trigger: { type: "keyword", keywords: ["/deploy"] },
+        is_agentskills_format: true,
+      });
+    });
+
+    it("lets a bare-name deny entry veto a same-named external skill", () => {
+      (window as unknown as Record<string, unknown>)[WINDOW_KEY] =
+        JSON.stringify({ version: 1, skills: [EXTERNAL_SKILL] });
+
+      const payload = buildStartConversationRequest({
+        settings: {
+          ...DEFAULT_SETTINGS,
+          enabled_skills: ["external:acme-1234abcd:acme-deploy"],
+          // The server's deny-list is name-based, so the frontend mirrors it.
+          disabled_skills: ["acme-deploy"],
+        },
+      });
+      expect(skillsOf(payload).map((skill) => skill.name)).not.toContain(
+        "acme-deploy",
+      );
+    });
+
+    it("includes an external skill invoked by slash command in the message", () => {
+      (window as unknown as Record<string, unknown>)[WINDOW_KEY] =
+        JSON.stringify({ version: 1, skills: [EXTERNAL_SKILL] });
+
+      const payload = buildStartConversationRequest({
+        settings: { ...DEFAULT_SETTINGS, enabled_skills: [] },
+        query: "/deploy please",
+      });
+      expect(skillsOf(payload).map((skill) => skill.name)).toContain(
+        "acme-deploy",
+      );
+    });
+  });
+
   it("preserves base_url for subscription auth while stripping api_key", () => {
     const payload = buildStartConversationRequest({
       settings: {
