@@ -11,7 +11,7 @@ import {
 // previously-hardcoded free-model map.
 const FREE_MODELS = new Set([
   "openhands/glm-5.2",
-  "openhands/deepseek-v4-flash",
+  "openhands/deepseek-v4.1-flash",
   "openhands/minimax-m2.7",
 ]);
 
@@ -56,8 +56,8 @@ describe("formatNativeModelName", () => {
       `glm-5.2${FREE_MODEL_SUFFIX}`,
     );
     expect(
-      formatNativeModelName("openhands/deepseek-v4-flash", FREE_MODELS),
-    ).toBe(`deepseek-v4-flash${FREE_MODEL_SUFFIX}`);
+      formatNativeModelName("openhands/deepseek-v4.1-flash", FREE_MODELS),
+    ).toBe(`deepseek-v4.1-flash${FREE_MODEL_SUFFIX}`);
   });
 
   it("strips nested routing prefixes to the last segment", () => {

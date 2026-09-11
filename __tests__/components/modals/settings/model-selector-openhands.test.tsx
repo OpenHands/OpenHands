@@ -37,7 +37,7 @@ const OPENHANDS_MODELS: LLMModel[] = [
   },
   {
     provider: "openhands",
-    name: "deepseek-v4-flash",
+    name: "deepseek-v4.1-flash",
     verified: true,
     free: true,
     default: false,
@@ -75,7 +75,7 @@ describe("ModelSelector — OpenHands provider display", () => {
             openhands: [
               "claude-opus-4-7",
               "glm-5.2",
-              "deepseek-v4-flash",
+              "deepseek-v4.1-flash",
               "minimax-m2.7",
             ],
             anthropic: ["claude-opus-4-5-20251101"],
@@ -106,12 +106,12 @@ describe("ModelSelector — OpenHands provider display", () => {
   it("makes clear which OpenHands models are free", async () => {
     const user = userEvent.setup();
     renderWithQuery(
-      <ModelSelector currentModel="openhands/deepseek-v4-flash" />,
+      <ModelSelector currentModel="openhands/deepseek-v4.1-flash" />,
     );
 
     await waitFor(() => {});
     expect(screen.getByTestId("openhands-free-models-note")).toHaveTextContent(
-      "openhands/deepseek-v4-flash",
+      "openhands/deepseek-v4.1-flash",
     );
     expect(screen.getByTestId("selected-free-model-badge")).toHaveTextContent(
       "Free",
@@ -122,11 +122,17 @@ describe("ModelSelector — OpenHands provider display", () => {
     // Three DB-flagged free models render a "Free" badge in the dropdown; the
     // selected-model badge adds a fourth occurrence.
     expect(screen.getAllByText("Free")).toHaveLength(4);
-    expect(screen.getByLabelText("LLM$MODEL")).toHaveValue("deepseek-v4-flash");
+    expect(screen.getByLabelText("LLM$MODEL")).toHaveValue(
+      "deepseek-v4.1-flash",
+    );
 
-    await user.click(screen.getByRole("option", { name: /deepseek-v4-flash/ }));
+    await user.click(
+      screen.getByRole("option", { name: /deepseek-v4.1-flash/ }),
+    );
 
-    expect(screen.getByLabelText("LLM$MODEL")).toHaveValue("deepseek-v4-flash");
+    expect(screen.getByLabelText("LLM$MODEL")).toHaveValue(
+      "deepseek-v4.1-flash",
+    );
     expect(screen.getByTestId("selected-free-model-badge")).toHaveTextContent(
       "Free",
     );
