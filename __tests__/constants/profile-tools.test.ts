@@ -13,6 +13,12 @@ const KNOWN = [
   "glob",
   "grep",
   "browser_tool_set",
+  "ask_oracle",
+  "workflow_tool_set",
+  "read_file",
+  "write_file",
+  "edit",
+  "list_directory",
 ];
 
 describe("buildProfileToolCatalog", () => {
@@ -28,10 +34,12 @@ describe("buildProfileToolCatalog", () => {
   });
 
   it("appends advertised tools it has no description for, after the known ones", () => {
+    // Forward-compat: a tool this build predates is still offered, just
+    // unlabelled, rather than being invisible until canvas ships a string.
     const catalog = buildProfileToolCatalog({
-      usableTools: ["workflow", "terminal", "ask_oracle"],
+      usableTools: ["some_future_tool", "terminal", "ask_oracle"],
     });
-    expect(catalog).toEqual(["terminal", "ask_oracle", "workflow"]);
+    expect(catalog).toEqual(["terminal", "ask_oracle", "some_future_tool"]);
   });
 
   it("keeps stored names the backend does not advertise, so a save can't drop them", () => {
@@ -46,6 +54,24 @@ describe("buildProfileToolCatalog", () => {
     const catalog = buildProfileToolCatalog({
       usableTools: ["terminal", "task", "task_tool_set"],
       storedToolNames: ["task_tool_set"],
+    });
+    expect(catalog).toEqual(["terminal"]);
+  });
+
+  it("never offers a tool whose set wrapper is the intended entry point", () => {
+    // `workflow`'s own docstring says to prefer `workflow_tool_set`, the same
+    // set/member shape as task / task_tool_set.
+    const catalog = buildProfileToolCatalog({
+      usableTools: ["workflow", "workflow_tool_set"],
+    });
+    expect(catalog).toEqual(["workflow_tool_set"]);
+  });
+
+  it("never offers a tool that needs a runtime param a profile can't supply", () => {
+    // planning_file_editor takes a plan_path computed per launch; selecting it
+    // from a stored profile yields a silently degraded tool.
+    const catalog = buildProfileToolCatalog({
+      usableTools: ["terminal", "planning_file_editor"],
     });
     expect(catalog).toEqual(["terminal"]);
   });

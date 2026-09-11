@@ -34,12 +34,18 @@ export const SUB_AGENT_TOOL_NAME = "task_tool_set";
 
 /**
  * Names a backend advertises that a profile must not select, because something
- * else already decides whether the agent gets them:
+ * else already decides whether the agent gets them — or because selecting one
+ * cannot work:
  *
  * - built-in SDK tools ride `include_default_tools` on every agent, and
  *   `SwitchLLMTool` is what the LLM-switching toggle governs;
  * - `task` / `task_tool_set` are delegation, owned by `enable_sub_agents`;
- * - the Canvas UI tools are client-defined and injected at launch.
+ * - the Canvas UI tools are client-defined and injected at launch;
+ * - `workflow` is the low-level half of a pair whose own docstring says to
+ *   prefer `workflow_tool_set` (the same set/member shape as `task`);
+ * - `planning_file_editor` needs a `plan_path` param computed per launch from
+ *   the workspace and git provider, which a stored profile cannot supply, so
+ *   picking it yields a silently degraded tool (software-agent-sdk#4956).
  */
 const NON_SELECTABLE_TOOL_NAMES = new Set([
   "FinishTool",
@@ -51,6 +57,8 @@ const NON_SELECTABLE_TOOL_NAMES = new Set([
   SUB_AGENT_TOOL_NAME,
   LEGACY_CANVAS_UI_TOOL_NAME,
   CANVAS_UI_CLIENT_TOOL_NAME,
+  "workflow",
+  "planning_file_editor",
 ]);
 
 /** Tools shown first in the picker, with a description; others follow by name. */
@@ -61,6 +69,15 @@ export const KNOWN_PROFILE_TOOL_DESCRIPTIONS: Record<string, I18nKey> = {
   glob: I18nKey.SETTINGS$TOOL_DESC_GLOB,
   grep: I18nKey.SETTINGS$TOOL_DESC_GREP,
   [BROWSER_TOOL_NAME]: I18nKey.SETTINGS$TOOL_DESC_BROWSER,
+  ask_oracle: I18nKey.SETTINGS$TOOL_DESC_ASK_ORACLE,
+  workflow_tool_set: I18nKey.SETTINGS$TOOL_DESC_WORKFLOW,
+  // The Gemini-style file tools: a parallel family to `file_editor`, registered
+  // by the server's gemini preset. Described so the picker says which is which
+  // rather than listing four bare names next to `file_editor`.
+  read_file: I18nKey.SETTINGS$TOOL_DESC_READ_FILE,
+  write_file: I18nKey.SETTINGS$TOOL_DESC_WRITE_FILE,
+  edit: I18nKey.SETTINGS$TOOL_DESC_EDIT,
+  list_directory: I18nKey.SETTINGS$TOOL_DESC_LIST_DIRECTORY,
 };
 
 const KNOWN_PROFILE_TOOL_NAMES = Object.keys(KNOWN_PROFILE_TOOL_DESCRIPTIONS);
