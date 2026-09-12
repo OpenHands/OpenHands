@@ -30,6 +30,16 @@ interface LlmConfiguredResult {
    * warning doesn't flash before data loads or on a transient network error.
    */
   isLoading: boolean;
+  /**
+   * True when an active local LLM profile is configured but its API key is
+   * missing or unreadable (`api_key_set: false`). Distinct from the broader
+   * "not configured" case where there is no profile at all — the user has
+   * already set up a profile, just lost (or never saved) its key. Consumers
+   * surface a more specific recovery message and CTA in this case (#15609).
+   * False for ACP / subscription profiles (which never need a key) and for
+   * cloud backends (which don't use the local-profile api_key_set signal).
+   */
+  apiKeyMissing: boolean;
 }
 
 /**
@@ -139,6 +149,14 @@ export function useLlmConfigured(): LlmConfiguredResult {
   const hasUsableActiveProfile =
     hasActiveProfileApiKey || hasActiveProfileSubscription;
   const hasUsableLlm = isLocal ? hasUsableActiveProfile : hasApiKey;
+  // #15609: distinguish "no profile at all" from "profile exists but its key
+  // is missing". Only meaningful for local profiles — cloud backends rely on
+  // the raw settings flag, and subscription profiles never have a key.
+  const apiKeyMissing =
+    isLocal &&
+    !!activeProfile &&
+    !hasActiveProfileApiKey &&
+    !hasActiveProfileSubscription;
 
   // Treat a fetch failure as indeterminate (same as loading) only when it
   // leaves us with no data to decide from — otherwise a transient network
@@ -169,5 +187,6 @@ export function useLlmConfigured(): LlmConfiguredResult {
       profilesIndeterminate ||
       agentProfileIndeterminate ||
       activeProfileDetailIndeterminate,
+    apiKeyMissing,
   };
 }
