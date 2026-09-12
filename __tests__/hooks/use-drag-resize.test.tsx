@@ -1,184 +1,478 @@
+import type {
+  MouseEvent as ReactMouseEvent,
+  TouchEvent as ReactTouchEvent,
+} from "react";
 import { act, renderHook } from "@testing-library/react";
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useDragResize } from "#/hooks/use-drag-resize";
+import { isMobileDevice } from "#/utils/utils";
 
-// Mock isMobileDevice to always return false so the hook uses the desktop
-// event-listener path (document.addEventListener), which our test simulates.
 vi.mock("#/utils/utils", async (importOriginal) => ({
   ...(await importOriginal<typeof import("#/utils/utils")>()),
-  isMobileDevice: () => false,
+  isMobileDevice: vi.fn(),
 }));
 
-/**
- * Coverage for the top-grip resize direction fix (OHE-3062).
- *
- * The same chat-input component is used on the conversation page (where the
- * input is bottom-anchored) and the home page (where the input is centred).
- * On the conversation page, dragging the top grip makes the box grow upward —
- * correct. On the home page, the same drag would grow the box downward, which
- * is confusing, so the hook disables manual resizing entirely when the input
- * is not bottom-anchored.
- */
-describe("useDragResize — disabled when not bottom-anchored", () => {
-  let inputEl: HTMLDivElement;
-  let wrapperEl: HTMLDivElement;
-  let gripEl: HTMLDivElement;
+interface ResizeElementOptions {
+  offsetHeight?: number;
+  scrollHeight?: number;
+}
 
-  // Helper to simulate a drag from startY upward by `distance` px.
-  const dragUp = (startY: number, distance: number) => {
-    document.dispatchEvent(
-      new MouseEvent("mousemove", { clientY: startY - distance }),
-    );
-    document.dispatchEvent(new MouseEvent("mouseup", { clientY: startY }));
+const createResizeElement = ({
+  offsetHeight = 200,
+  scrollHeight = 100,
+}: ResizeElementOptions = {}) => {
+  const element = document.createElement("div");
+  Object.defineProperties(element, {
+    offsetHeight: { configurable: true, value: offsetHeight },
+    scrollHeight: { configurable: true, value: scrollHeight },
+  });
+  document.body.appendChild(element);
+  return element;
+};
+
+const createResizeGrip = () => {
+  const grip = document.createElement("div");
+  grip.id = "resize-grip";
+  document.body.appendChild(grip);
+  return grip;
+};
+
+const createTouchEvent = (type: string, clientYs: number[]) => {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "touches", {
+    value: clientYs.map((clientY) => ({ clientY })),
+  });
+  return event as TouchEvent;
+};
+
+const beginMouseDrag = (
+  handleGripMouseDown: (event: ReactMouseEvent) => void,
+  clientY = 100,
+) => {
+  const preventDefault = vi.fn();
+  act(() => {
+    handleGripMouseDown({
+      clientY,
+      preventDefault,
+    } as unknown as ReactMouseEvent);
+  });
+  expect(preventDefault).toHaveBeenCalledOnce();
+};
+
+const beginTouchDrag = (
+  handleGripTouchStart: (event: ReactTouchEvent) => void,
+  clientY = 100,
+) => {
+  const preventDefault = vi.fn();
+  act(() => {
+    handleGripTouchStart({
+      touches: [{ clientY }],
+      preventDefault,
+    } as unknown as ReactTouchEvent);
+  });
+  expect(preventDefault).toHaveBeenCalledOnce();
+};
+
+const dispatchDocumentMouseMove = (clientY: number) => {
+  const event = new MouseEvent("mousemove", {
+    bubbles: true,
+    cancelable: true,
+    clientY,
+  });
+  act(() => document.dispatchEvent(event));
+  return event;
+};
+
+const captureWindowErrors = (action: () => void) => {
+  const errors: unknown[] = [];
+  const handleError = (event: ErrorEvent) => {
+    event.preventDefault();
+    errors.push(event.error);
   };
+  window.addEventListener("error", handleError);
+  try {
+    action();
+  } catch (error) {
+    errors.push(error);
+  } finally {
+    window.removeEventListener("error", handleError);
+  }
+  return errors;
+};
 
-  beforeEach(() => {
-    // Build the DOM structure that matches CustomChatInput:
-    //   <div class="relative w-full" id="wrapper">   ← wrapper
-    //     <div id="resize-grip">                      ← grip
-    //     <div class="chat-input-container">           ← container
-    //       <div id="inputEl">                         ← contentEditable (height target)
-    wrapperEl = document.createElement("div");
-    wrapperEl.id = "wrapper";
-
-    gripEl = document.createElement("div");
-    gripEl.id = "resize-grip";
-
-    const containerEl = document.createElement("div");
-    containerEl.className = "chat-input-container";
-
-    inputEl = document.createElement("div");
-    inputEl.style.height = "20px";
-
-    containerEl.appendChild(inputEl);
-    wrapperEl.appendChild(gripEl);
-    wrapperEl.appendChild(containerEl);
-    document.body.appendChild(wrapperEl);
-
-    // jsdom doesn't implement offsetHeight; mock it to return the style height.
-    Object.defineProperty(inputEl, "offsetHeight", {
-      get() {
-        return parseFloat(inputEl.style.height || "20");
-      },
-      configurable: true,
-    });
+beforeEach(() => {
+  // The hook only enables manual resizing when the chat input is
+  // "bottom-anchored" (its wrapper's bottom edge sits within
+  // BOTTOM_ANCHORED_THRESHOLD px of the viewport bottom). jsdom reports a
+  // zeroed getBoundingClientRect, so shrink the viewport to satisfy that
+  // check and simulate the conversation-page layout where dragging is active.
+  Object.defineProperty(window, "innerHeight", {
+    configurable: true,
+    value: 100,
   });
+});
 
-  afterEach(() => {
-    wrapperEl.remove();
-    vi.restoreAllMocks();
-  });
+afterEach(() => {
+  document.body.replaceChildren();
+  vi.clearAllMocks();
+});
 
-  it("allows resizing when the input is bottom-anchored", () => {
-    // Simulate a bottom-anchored layout: the wrapper's bottom is at the
-    // viewport bottom.
-    vi.spyOn(wrapperEl, "getBoundingClientRect").mockReturnValue({
-      top: 668,
-      bottom: 768, // == window.innerHeight
-      left: 0,
-      right: 0,
-      width: 800,
-      height: 100,
-      x: 0,
-      y: 668,
-      toJSON: () => ({}),
+describe("manual drag resizing", () => {
+  it("commits a desktop drag at the movement threshold and removes its listeners on release", () => {
+    vi.mocked(isMobileDevice).mockReturnValue(false);
+    const element = createResizeElement({
+      offsetHeight: 200,
+      scrollHeight: 220,
     });
-    vi.spyOn(window, "innerHeight", "get").mockReturnValue(768);
-
+    const onGripDragStart = vi.fn();
+    const onGripDragEnd = vi.fn();
+    const onHeightChange = vi.fn();
+    const onReachedMinHeight = vi.fn();
     const { result } = renderHook(() =>
       useDragResize({
-        elementRef: { current: inputEl },
-        minHeight: 20,
-        maxHeight: 400,
+        elementRef: { current: element },
+        minHeight: 100,
+        maxHeight: 300,
+        onGripDragStart,
+        onGripDragEnd,
+        onHeightChange,
+        onReachedMinHeight,
       }),
     );
 
-    act(() => {
-      result.current.handleGripMouseDown(
-        new MouseEvent("mousedown", {
-          clientY: 100,
-        }) as unknown as React.MouseEvent,
-      );
-    });
+    beginMouseDrag(result.current.handleGripMouseDown);
 
-    // Drag up 30px → height should increase by 30
-    act(() => dragUp(100, 30));
+    const subThresholdMove = dispatchDocumentMouseMove(99);
+    expect(subThresholdMove.defaultPrevented).toBe(true);
+    expect(onGripDragStart).not.toHaveBeenCalled();
+    expect(onHeightChange).not.toHaveBeenCalled();
+    expect(element.style.height).toBe("");
 
-    expect(parseFloat(inputEl.style.height)).toBe(50);
+    dispatchDocumentMouseMove(98);
+    expect(onGripDragStart).toHaveBeenCalledOnce();
+    expect(onHeightChange).toHaveBeenLastCalledWith(202);
+    expect(onReachedMinHeight).not.toHaveBeenCalled();
+    expect(element.style.height).toBe("202px");
+    expect(element.style.overflowY).toBe("auto");
+
+    dispatchDocumentMouseMove(80);
+    expect(onGripDragStart).toHaveBeenCalledOnce();
+    expect(onHeightChange).toHaveBeenLastCalledWith(220);
+    expect(element.style.height).toBe("220px");
+    expect(element.style.overflowY).toBe("hidden");
+
+    act(() => document.dispatchEvent(new MouseEvent("mouseup")));
+    expect(onGripDragEnd).toHaveBeenCalledOnce();
+
+    dispatchDocumentMouseMove(70);
+    act(() => document.dispatchEvent(new MouseEvent("mouseup")));
+    expect(onHeightChange).toHaveBeenCalledTimes(2);
+    expect(onGripDragEnd).toHaveBeenCalledOnce();
   });
 
-  it("does NOT resize when the input is not bottom-anchored (home page)", () => {
-    // Simulate a centred layout: the wrapper's bottom is well above the
-    // viewport bottom.
-    vi.spyOn(wrapperEl, "getBoundingClientRect").mockReturnValue({
-      top: 100,
-      bottom: 200, // 200 << 768, not bottom-anchored
-      left: 0,
-      right: 0,
-      width: 800,
-      height: 100,
-      x: 0,
-      y: 100,
-      toJSON: () => ({}),
+  it("clamps a desktop drag to the minimum and reports the minimum without optional height callbacks", () => {
+    vi.mocked(isMobileDevice).mockReturnValue(false);
+    const element = createResizeElement({
+      offsetHeight: 200,
+      scrollHeight: 150,
     });
-    vi.spyOn(window, "innerHeight", "get").mockReturnValue(768);
-
+    const onReachedMinHeight = vi.fn();
     const { result } = renderHook(() =>
       useDragResize({
-        elementRef: { current: inputEl },
-        minHeight: 20,
-        maxHeight: 400,
+        elementRef: { current: element },
+        minHeight: 100,
+        maxHeight: 300,
+        onReachedMinHeight,
       }),
     );
 
-    act(() => {
-      result.current.handleGripMouseDown(
-        new MouseEvent("mousedown", {
-          clientY: 100,
-        }) as unknown as React.MouseEvent,
-      );
+    beginMouseDrag(result.current.handleGripMouseDown);
+    dispatchDocumentMouseMove(400);
+
+    expect(element.style.height).toBe("100px");
+    expect(element.style.overflowY).toBe("auto");
+    expect(onReachedMinHeight).toHaveBeenCalledOnce();
+
+    const errors = captureWindowErrors(() => {
+      act(() => document.dispatchEvent(new MouseEvent("mouseup")));
     });
-
-    // Attempt to drag up 30px — should be a no-op
-    act(() => dragUp(100, 30));
-
-    // Height should NOT have changed
-    expect(parseFloat(inputEl.style.height)).toBe(20);
+    expect(errors).toEqual([]);
   });
 
-  it("does NOT resize via touch when not bottom-anchored", () => {
-    vi.spyOn(wrapperEl, "getBoundingClientRect").mockReturnValue({
-      top: 100,
-      bottom: 200,
-      left: 0,
-      right: 0,
-      width: 800,
-      height: 100,
-      x: 0,
-      y: 100,
-      toJSON: () => ({}),
+  it("reports a height exactly within the minimum tolerance", () => {
+    vi.mocked(isMobileDevice).mockReturnValue(false);
+    const element = createResizeElement({
+      offsetHeight: 200,
+      scrollHeight: 0,
     });
-    vi.spyOn(window, "innerHeight", "get").mockReturnValue(768);
-
+    const onReachedMinHeight = vi.fn();
     const { result } = renderHook(() =>
       useDragResize({
-        elementRef: { current: inputEl },
-        minHeight: 20,
-        maxHeight: 400,
+        elementRef: { current: element },
+        minHeight: 100,
+        maxHeight: 300,
+        onReachedMinHeight,
       }),
     );
 
-    act(() => {
-      result.current.handleGripTouchStart(
-        new TouchEvent("touchstart", {
-          touches: [{ clientY: 100 } as unknown as Touch],
-        }) as unknown as React.TouchEvent,
-      );
+    beginMouseDrag(result.current.handleGripMouseDown);
+    dispatchDocumentMouseMove(198.5);
+
+    expect(element.style.height).toBe("101.5px");
+    expect(onReachedMinHeight).toHaveBeenCalledOnce();
+
+    act(() => document.dispatchEvent(new MouseEvent("mouseup")));
+  });
+
+  it("clamps a desktop drag to the maximum and shows a scrollbar even when content fits", () => {
+    vi.mocked(isMobileDevice).mockReturnValue(false);
+    const element = createResizeElement({
+      offsetHeight: 200,
+      scrollHeight: 50,
+    });
+    const onHeightChange = vi.fn();
+    const { result } = renderHook(() =>
+      useDragResize({
+        elementRef: { current: element },
+        minHeight: 100,
+        maxHeight: 300,
+        onHeightChange,
+      }),
+    );
+
+    beginMouseDrag(result.current.handleGripMouseDown);
+    dispatchDocumentMouseMove(-200);
+
+    expect(element.style.height).toBe("300px");
+    expect(element.style.overflowY).toBe("auto");
+    expect(onHeightChange).toHaveBeenCalledOnce();
+    expect(onHeightChange).toHaveBeenCalledWith(300);
+
+    act(() => document.dispatchEvent(new MouseEvent("mouseup")));
+  });
+
+  it("uses the minimum as the starting height when the element has no rendered height", () => {
+    vi.mocked(isMobileDevice).mockReturnValue(false);
+    const element = createResizeElement({ offsetHeight: 0, scrollHeight: 0 });
+    const onHeightChange = vi.fn();
+    const { result } = renderHook(() =>
+      useDragResize({
+        elementRef: { current: element },
+        minHeight: 100,
+        maxHeight: 300,
+        onHeightChange,
+      }),
+    );
+
+    beginMouseDrag(result.current.handleGripMouseDown);
+    dispatchDocumentMouseMove(98);
+
+    expect(element.style.height).toBe("102px");
+    expect(element.style.overflowY).toBe("hidden");
+    expect(onHeightChange).toHaveBeenCalledWith(102);
+
+    act(() => document.dispatchEvent(new MouseEvent("mouseup")));
+  });
+
+  it("ends a committed desktop gesture safely if its resize element disappears", () => {
+    vi.mocked(isMobileDevice).mockReturnValue(false);
+    const elementRef: { current: HTMLElement | null } = { current: null };
+    const onGripDragStart = vi.fn();
+    const onGripDragEnd = vi.fn();
+    const onHeightChange = vi.fn();
+    const { result } = renderHook(() =>
+      useDragResize({
+        elementRef,
+        minHeight: 100,
+        maxHeight: 300,
+        onGripDragStart,
+        onGripDragEnd,
+        onHeightChange,
+      }),
+    );
+
+    beginMouseDrag(result.current.handleGripMouseDown);
+    const errors = captureWindowErrors(() => dispatchDocumentMouseMove(98));
+    act(() => document.dispatchEvent(new MouseEvent("mouseup")));
+
+    expect(errors).toEqual([]);
+    expect(onGripDragStart).toHaveBeenCalledOnce();
+    expect(onGripDragEnd).toHaveBeenCalledOnce();
+    expect(onHeightChange).not.toHaveBeenCalled();
+  });
+
+  it("does not report an uncommitted desktop press as a drag", () => {
+    vi.mocked(isMobileDevice).mockReturnValue(false);
+    const element = createResizeElement();
+    const onGripDragStart = vi.fn();
+    const onGripDragEnd = vi.fn();
+    const { result } = renderHook(() =>
+      useDragResize({
+        elementRef: { current: element },
+        minHeight: 100,
+        maxHeight: 300,
+        onGripDragStart,
+        onGripDragEnd,
+      }),
+    );
+
+    beginMouseDrag(result.current.handleGripMouseDown);
+    act(() => document.dispatchEvent(new MouseEvent("mouseup")));
+
+    expect(onGripDragStart).not.toHaveBeenCalled();
+    expect(onGripDragEnd).not.toHaveBeenCalled();
+  });
+
+  it("uses the mouse coordinate when a mouse move has an empty touches collection", () => {
+    vi.mocked(isMobileDevice).mockReturnValue(false);
+    const element = createResizeElement();
+    const onGripDragStart = vi.fn();
+    const onHeightChange = vi.fn();
+    const { result } = renderHook(() =>
+      useDragResize({
+        elementRef: { current: element },
+        minHeight: 100,
+        maxHeight: 300,
+        onGripDragStart,
+        onHeightChange,
+      }),
+    );
+
+    beginMouseDrag(result.current.handleGripMouseDown);
+    const moveEvent = new MouseEvent("mousemove", {
+      bubbles: true,
+      cancelable: true,
+      clientY: 99,
+    });
+    Object.defineProperty(moveEvent, "touches", { value: [] });
+    const errors = captureWindowErrors(() => {
+      act(() => document.dispatchEvent(moveEvent));
     });
 
-    // Attempt to drag — should be a no-op
-    act(() => dragUp(100, 30));
+    expect(errors).toEqual([]);
+    expect(moveEvent.defaultPrevented).toBe(true);
+    expect(onGripDragStart).not.toHaveBeenCalled();
+    expect(onHeightChange).not.toHaveBeenCalled();
+    expect(element.style.height).toBe("");
 
-    expect(parseFloat(inputEl.style.height)).toBe(20);
+    act(() => document.dispatchEvent(new MouseEvent("mouseup")));
+  });
+
+  it("does not start a mobile drag when the resize grip is absent", () => {
+    vi.mocked(isMobileDevice).mockReturnValue(true);
+    const element = createResizeElement();
+    const onGripDragStart = vi.fn();
+    const { result } = renderHook(() =>
+      useDragResize({
+        elementRef: { current: element },
+        minHeight: 100,
+        maxHeight: 300,
+        onGripDragStart,
+      }),
+    );
+
+    beginTouchDrag(result.current.handleGripTouchStart);
+    act(() => document.dispatchEvent(createTouchEvent("touchmove", [80])));
+
+    expect(onGripDragStart).not.toHaveBeenCalled();
+    expect(element.style.height).toBe("");
+  });
+
+  it("resizes from touch input and reports the end of a mobile gesture", () => {
+    vi.mocked(isMobileDevice).mockReturnValue(true);
+    const element = createResizeElement({
+      offsetHeight: 200,
+      scrollHeight: 100,
+    });
+    const grip = createResizeGrip();
+    const target = document.createElement("span");
+    grip.appendChild(target);
+    target.addEventListener("touchmove", (event) => event.stopPropagation());
+    target.addEventListener("touchend", (event) => event.stopPropagation());
+    const onGripDragStart = vi.fn();
+    const onGripDragEnd = vi.fn();
+    const onHeightChange = vi.fn();
+    const { result } = renderHook(() =>
+      useDragResize({
+        elementRef: { current: element },
+        minHeight: 100,
+        maxHeight: 300,
+        onGripDragStart,
+        onGripDragEnd,
+        onHeightChange,
+      }),
+    );
+
+    beginTouchDrag(result.current.handleGripTouchStart);
+    const moveEvent = createTouchEvent("touchmove", [80]);
+    act(() => target.dispatchEvent(moveEvent));
+
+    expect(moveEvent.defaultPrevented).toBe(true);
+    expect(onGripDragStart).toHaveBeenCalledOnce();
+    expect(onHeightChange).toHaveBeenCalledWith(220);
+    expect(element.style.height).toBe("220px");
+    expect(element.style.overflowY).toBe("hidden");
+
+    act(() => target.dispatchEvent(createTouchEvent("touchend", [])));
+    expect(onGripDragEnd).toHaveBeenCalledOnce();
+    expect(onHeightChange).toHaveBeenCalledOnce();
+  });
+
+  it("keeps handling mobile capture events after touchend because they are not detached", () => {
+    // Current behaviour: mobile touch listeners are attached to the grip with
+    // `capture: true`, but handleDragEnd calls removeEventListener without the
+    // matching capture flag, so removal is a no-op and the listeners survive.
+    // A second touchmove/touchend therefore keeps resizing and re-fires the
+    // callbacks. (The archived cleanup fix would make each fire exactly once.)
+    vi.mocked(isMobileDevice).mockReturnValue(true);
+    const element = createResizeElement();
+    const grip = createResizeGrip();
+    const onHeightChange = vi.fn();
+    const onGripDragEnd = vi.fn();
+    const { result } = renderHook(() =>
+      useDragResize({
+        elementRef: { current: element },
+        minHeight: 100,
+        maxHeight: 300,
+        onHeightChange,
+        onGripDragEnd,
+      }),
+    );
+
+    beginTouchDrag(result.current.handleGripTouchStart);
+    act(() => grip.dispatchEvent(createTouchEvent("touchmove", [80])));
+    act(() => grip.dispatchEvent(createTouchEvent("touchend", [])));
+    act(() => grip.dispatchEvent(createTouchEvent("touchmove", [70])));
+    act(() => grip.dispatchEvent(createTouchEvent("touchend", [])));
+
+    expect(onHeightChange).toHaveBeenCalledTimes(2);
+    expect(onHeightChange).toHaveBeenNthCalledWith(1, 220);
+    expect(onHeightChange).toHaveBeenNthCalledWith(2, 230);
+    expect(onGripDragEnd).toHaveBeenCalledTimes(2);
+  });
+
+  it("finishes a mobile drag safely when the grip is detached before touchend", () => {
+    vi.mocked(isMobileDevice).mockReturnValue(true);
+    const element = createResizeElement();
+    const grip = createResizeGrip();
+    const onGripDragEnd = vi.fn();
+    const { result } = renderHook(() =>
+      useDragResize({
+        elementRef: { current: element },
+        minHeight: 100,
+        maxHeight: 300,
+        onGripDragEnd,
+      }),
+    );
+
+    beginTouchDrag(result.current.handleGripTouchStart);
+    act(() => grip.dispatchEvent(createTouchEvent("touchmove", [80])));
+    grip.remove();
+    const errors = captureWindowErrors(() => {
+      act(() => grip.dispatchEvent(createTouchEvent("touchend", [])));
+    });
+
+    expect(errors).toEqual([]);
+    expect(onGripDragEnd).toHaveBeenCalledOnce();
   });
 });
