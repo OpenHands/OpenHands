@@ -23,6 +23,7 @@ import { NavigationLink } from "#/components/shared/navigation-link";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { formatModelNameForDisplay } from "#/utils/format-model-name";
+import { ClerkAccountSection } from "#/components/features/auth/clerk-account-section";
 
 const AUTOMATIC_TITLE_LLM_PROFILE_KEY = "__automatic__";
 
@@ -183,6 +184,8 @@ export function AppSettingsScreen() {
       action={formAction}
       className="flex flex-col gap-6"
     >
+      <ClerkAccountSection />
+
       {shouldBeLoading && <AppSettingsInputsSkeleton />}
       {!shouldBeLoading && (
         <div className="flex flex-col gap-6">

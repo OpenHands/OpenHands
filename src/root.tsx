@@ -48,6 +48,7 @@ import { TelemetryConsentBanner } from "#/components/features/analytics/telemetr
 import { buildAgentCanvasPath } from "#/utils/base-path";
 import { useOnboardingCompletion } from "#/components/features/onboarding/use-onboarding-completion";
 import { NavigationProvider } from "#/context/navigation-context";
+import { ClerkGate } from "#/components/features/auth/clerk-gate";
 import {
   applyColorTheme,
   readPersistedColorTheme,
@@ -227,7 +228,7 @@ export const meta: MetaFunction = () => [
   { name: "description", content: "Let's do this shit!" },
 ];
 
-export default function App() {
+function CanvasApp() {
   // Flag-based gate: in public mode (VITE_AUTH_REQUIRED=true) with no
   // session key yet, show the auth screen immediately — no network
   // round-trip needed.
@@ -395,5 +396,22 @@ export default function App() {
       <Outlet />
       <TelemetryConsentBanner />
     </>
+  );
+}
+
+/**
+ * Team-access gate, then the canvas.
+ *
+ * `ClerkGate` wraps *everything* — including first-run onboarding and the
+ * API-key entry screen — so an unauthenticated visitor never reaches a
+ * screen that can register a backend. With no Clerk publishable key
+ * configured the gate is transparent and `CanvasApp` renders exactly as
+ * it did before.
+ */
+export default function App() {
+  return (
+    <ClerkGate>
+      <CanvasApp />
+    </ClerkGate>
   );
 }
