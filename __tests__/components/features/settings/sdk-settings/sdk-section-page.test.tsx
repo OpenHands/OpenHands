@@ -664,6 +664,28 @@ describe("SdkSectionPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("hides the basic toggle when hideBasicView is set, even for a critical schema", async () => {
+    // A section whose Basic-tier controls can't represent the current value
+    // at all (e.g. an LLM profile linked to a provider connection) needs
+    // Basic unreachable, not just skipped on initial load — its schema still
+    // has critical fields, so showBasic alone would keep the tab clickable.
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSavableSettings(),
+    );
+
+    renderSdkSectionPage({
+      settingsSources: [
+        { settingsSource: "agent_settings", sectionKeys: ["llm"] },
+      ],
+      hideBasicView: true,
+    });
+
+    await screen.findByTestId("sdk-settings-llm.endpoint");
+    expect(
+      screen.queryByTestId("sdk-section-basic-toggle"),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows the all toggle instead of an empty advanced tier for minor-only schemas", async () => {
     const schema: NonNullable<Settings["agent_settings_schema"]> = {
       model_name: "AgentSettings",
