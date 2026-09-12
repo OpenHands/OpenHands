@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useActiveBackend } from "#/contexts/active-backend-context";
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useIsCreatingConversation } from "#/hooks/use-is-creating-conversation";

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   NavigationProvider,
   type NavigationContextValue,
-} from "#/context/navigation-context";
+} from "#/contexts/navigation-context";
 import { NavigationLink } from "#/components/shared/navigation-link";
 
 function renderNavigationLink(

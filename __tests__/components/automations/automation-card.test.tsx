@@ -28,7 +28,7 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
-vi.mock("#/context/navigation-context", () => ({
+vi.mock("#/contexts/navigation-context", () => ({
   useNavigation: () => ({ navigate: vi.fn(), currentPath: "/" }),
 }));
 

@@ -5,7 +5,7 @@ import { getErrorStatus, useSettings } from "#/hooks/query/use-settings";
 import { useConfig } from "#/hooks/query/use-config";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 import { useActiveBackendContext } from "#/contexts/active-backend-context";
 import { cn } from "#/utils/utils";
 import { useSidebarMobileNav } from "./sidebar-mobile-nav-context";

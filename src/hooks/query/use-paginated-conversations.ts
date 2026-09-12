@@ -2,7 +2,7 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { useIsAuthed } from "./use-is-authed";
 import { isNoBackend } from "#/api/backend-registry/active-store";
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { isAutomationsRoute } from "#/manifests/automation-interface";
 import { AppConversationPage } from "#/api/conversation-service/agent-server-conversation-service.types";

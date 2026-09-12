@@ -1,5 +1,5 @@
 import { useIsMutating } from "@tanstack/react-query";
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 
 export const useIsCreatingConversation = () => {
   const navigation = useNavigation();
