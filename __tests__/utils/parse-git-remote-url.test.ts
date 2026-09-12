@@ -135,6 +135,13 @@ describe("parseGitRemoteUrl", () => {
     expect(result?.repository).toBe("org/project/repo");
   });
 
+  it("keeps an Azure DevOps organization actually named v3", () => {
+    const result = parseGitRemoteUrl(
+      "https://dev.azure.com/v3/project/_git/repo",
+    );
+    expect(result?.repository).toBe("v3/project/repo");
+  });
+
   it("preserves nested paths for unknown self-hosted hosts", () => {
     const result = parseGitRemoteUrl(
       "https://git.example.com/group/subgroup/repo.git",
@@ -153,5 +160,11 @@ describe("parseGitRemoteUrl", () => {
 
   it("returns null for unparseable strings", () => {
     expect(parseGitRemoteUrl("not a url")).toBeNull();
+  });
+
+  it("treats a host named after an Object.prototype member as a plain host", () => {
+    const result = parseGitRemoteUrl("http://constructor/owner/repo.git");
+    expect(result?.host).toBe("constructor");
+    expect(result?.repository).toBe("owner/repo");
   });
 });

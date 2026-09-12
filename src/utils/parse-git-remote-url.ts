@@ -32,7 +32,10 @@ const SSH_WEB_HOSTS: Record<string, string> = {
 };
 
 function toWebHost(host: string): string {
-  return SSH_WEB_HOSTS[host.toLowerCase()] ?? host;
+  const lower = host.toLowerCase();
+  // hasOwn, so a host named after an Object.prototype member (`constructor`)
+  // resolves to itself rather than to an inherited value.
+  return Object.hasOwn(SSH_WEB_HOSTS, lower) ? SSH_WEB_HOSTS[lower] : host;
 }
 
 function stripGitSuffix(path: string): string {
@@ -49,9 +52,13 @@ function normalizeAzureDevOpsPath(path: string): string {
   // HTTPS, and `v3/org/project/repo` over SSH. Normalize to `org/project/repo`
   // (or `org/repo`) so it lines up with constructBranchUrl's expectations.
   const segments = path.split("/").filter(Boolean);
-  if (segments[0] === "v3") segments.shift();
   const gitIndex = segments.indexOf("_git");
-  if (gitIndex === -1) return segments.join("/");
+  if (gitIndex === -1) {
+    // Only the SSH form carries the `v3` prefix, and it never carries `_git`.
+    // Checking that first leaves an organization actually named `v3` alone.
+    if (segments[0] === "v3") segments.shift();
+    return segments.join("/");
+  }
   return [...segments.slice(0, gitIndex), ...segments.slice(gitIndex + 1)].join(
     "/",
   );
