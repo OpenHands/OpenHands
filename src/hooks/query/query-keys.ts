@@ -88,6 +88,11 @@ export const LOCAL_PLANNER_MUTATION_KEYS = {
   create: ["create-local-planning-conversation"] as const,
 } as const;
 
+export const HOME_PINNED_AUTOMATIONS_QUERY_KEYS = {
+  byBackend: (backendId: string, orgId: string | null) =>
+    ["home-pinned-automations", backendId, orgId ?? "-"] as const,
+} as const;
+
 /** Cache configuration shared across all config-related queries */
 export const CONFIG_CACHE_OPTIONS = {
   staleTime: 1000 * 60 * 5, // 5 minutes
