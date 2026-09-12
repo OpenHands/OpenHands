@@ -110,6 +110,31 @@ describe("parseGitRemoteUrl", () => {
     expect(result?.repository).toBe("org/project/repo");
   });
 
+  it("parses Azure DevOps SSH URLs, dropping the v3 prefix", () => {
+    const result = parseGitRemoteUrl(
+      "git@ssh.dev.azure.com:v3/org/project/repo",
+    );
+    expect(result?.provider).toBe("azure_devops");
+    expect(result?.repository).toBe("org/project/repo");
+  });
+
+  it("parses Azure DevOps ssh:// URLs", () => {
+    const result = parseGitRemoteUrl(
+      "ssh://git@ssh.dev.azure.com/v3/org/project/repo",
+    );
+    expect(result?.host).toBe("dev.azure.com");
+    expect(result?.provider).toBe("azure_devops");
+    expect(result?.repository).toBe("org/project/repo");
+  });
+
+  it("parses legacy visualstudio.com SSH URLs", () => {
+    const result = parseGitRemoteUrl(
+      "git@vs-ssh.visualstudio.com:v3/org/project/repo",
+    );
+    expect(result?.provider).toBe("azure_devops");
+    expect(result?.repository).toBe("org/project/repo");
+  });
+
   it("preserves nested paths for unknown self-hosted hosts", () => {
     const result = parseGitRemoteUrl(
       "https://git.example.com/group/subgroup/repo.git",
