@@ -10,6 +10,7 @@ import {
   labelForAcpModel,
   resolveAcpProviderIcon,
 } from "#/constants/acp-providers";
+import { useFreeModels } from "#/hooks/query/use-free-models";
 import { formatNativeModelName } from "#/utils/format-model-name";
 import {
   AgentBrandIcon,
@@ -87,6 +88,7 @@ export function ConversationCardFooter({
   isArchived = false,
 }: ConversationCardFooterProps) {
   const { t } = useTranslation("openhands");
+  const freeModels = useFreeModels();
 
   const isPaused = isExecutionPaused(executionStatus);
 
@@ -121,7 +123,7 @@ export function ConversationCardFooter({
       // the chip text; keep the full routing string in the tooltip.
       chip = {
         kind: "openhands",
-        text: formatNativeModelName(llmModel) ?? llmModel,
+        text: formatNativeModelName(llmModel, freeModels) ?? llmModel,
         tooltip: llmModel,
       };
     }
