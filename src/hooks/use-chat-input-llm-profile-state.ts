@@ -66,9 +66,17 @@ export function useChatInputLlmProfileState(): ChatInputLlmProfileState {
   //   3. Profile whose model matches the running llm_model.
   //   4. User-level active_profile (fallback before the first message).
   const stampedProfile = conversation?.active_profile ?? null;
+  const stampedProfileInfo = stampedProfile
+    ? profiles.find((profile) => profile.name === stampedProfile)
+    : undefined;
+  // The persisted stamp disambiguates profiles that share a model, but it can
+  // be stale for older conversations or after an out-of-band model change.
+  // Once the server reports a concrete running model, do not let a conflicting
+  // local stamp override that authoritative conversation state (#16851).
   const conversationProfile =
-    stampedProfile && profiles.some((p) => p.name === stampedProfile)
-      ? stampedProfile
+    stampedProfileInfo &&
+    (!conversationModel || stampedProfileInfo.model === conversationModel)
+      ? stampedProfileInfo.name
       : null;
   const currentProfileName =
     optimisticActiveProfile ??
