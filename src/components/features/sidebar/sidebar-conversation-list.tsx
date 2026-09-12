@@ -23,10 +23,6 @@ interface SidebarConversationListProps {
 export function SidebarConversationList({
   collapsed,
 }: SidebarConversationListProps) {
-  if (collapsed) {
-    return null;
-  }
-
   return (
     <div className="flex flex-col flex-1 min-h-0">
       {/* Avoid overflow-hidden here: ConversationPanel's header uses `-ml-2.5` +
@@ -34,7 +30,7 @@ export function SidebarConversationList({
           the aside; clipping would inset the border. Scroll stays on the inner
           list. */}
       <div className="flex min-h-0 w-full flex-1 flex-col">
-        <ConversationPanel />
+        <ConversationPanel compact={collapsed} />
       </div>
     </div>
   );

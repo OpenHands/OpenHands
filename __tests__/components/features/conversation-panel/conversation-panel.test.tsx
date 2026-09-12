@@ -778,7 +778,7 @@ describe("ConversationPanel", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("hides closed conversations in compact mode", async () => {
+  it("shows closed conversations in compact mode", async () => {
     vi.spyOn(
       AgentServerConversationService,
       "searchConversations",
@@ -814,9 +814,7 @@ describe("ConversationPanel", () => {
     expect(
       await screen.findByLabelText("Running Conversation"),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByLabelText("Closed Conversation"),
-    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Closed Conversation")).toBeInTheDocument();
   });
 
   it("should not render fetch errors in the conversation panel", async () => {

@@ -419,12 +419,24 @@ test.describe("mock-LLM agent-server conversation", () => {
     const sidebarCards = page.locator('[data-testid="conversation-card"]');
     await expect(sidebarCards.first()).toBeVisible({ timeout: 15_000 });
 
-    // Find the sidebar link to our conversation and click it
+    // Confirm the conversation is present in the expanded sidebar before
+    // switching to the compact icon rail.
     const conversationLink = page.locator(
       `a[href*="/conversations/${step3ConversationId}"]`,
     );
     await expect(conversationLink.first()).toBeVisible({ timeout: 10_000 });
-    await conversationLink.first().click();
+
+    const collapseToggle = page.getByTestId("sidebar-collapse-toggle").first();
+    await expect(collapseToggle).toBeVisible({ timeout: 5_000 });
+    if ((await collapseToggle.getAttribute("aria-pressed")) !== "true") {
+      await collapseToggle.click();
+    }
+
+    const compactConversationRow = page.locator(
+      `[data-testid="compact-conversation-row"][data-conversation-id="${step3ConversationId}"]`,
+    );
+    await expect(compactConversationRow).toBeVisible({ timeout: 10_000 });
+    await compactConversationRow.click();
 
     // Wait for navigation back to the conversation page
     await waitForPath(page, /\/conversations\/.+/, 15_000);
