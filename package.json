@@ -36,7 +36,7 @@
     "axios": "1.18.0",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
-    "downshift": "9.3.2",
+    "downshift": "9.4.0",
     "framer-motion": "12.38.0",
     "httpxy": "0.5.3",
     "i18next": "26.3.6",
