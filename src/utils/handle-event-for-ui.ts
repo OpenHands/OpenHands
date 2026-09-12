@@ -13,6 +13,7 @@ import {
 } from "#/types/agent-server/type-guards";
 import { StreamingDeltaEvent } from "#/types/agent-server/core/events/streaming-delta-event";
 import {
+  getMessageReasoningContent,
   getReasoningContent,
   splitInlineThink,
 } from "#/components/conversation-events/chat/event-thought-helpers";
@@ -214,6 +215,7 @@ const eventRendersReasoning = (event: OpenHandsEvent): boolean => {
 
   if (isMessageEvent(event) && event.source === "agent") {
     return (
+      getMessageReasoningContent(event).trim().length > 0 ||
       splitInlineThink(joinTextBlocks(event.llm_message.content)).reasoning
         .length > 0
     );

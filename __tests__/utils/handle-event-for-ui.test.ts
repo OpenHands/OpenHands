@@ -502,6 +502,30 @@ describe("handleEventForUI", () => {
       expect(result).toEqual([mockMessageEvent, finalMessage]);
     });
 
+    it("drops streamed reasoning when the final message carries reasoning_content", () => {
+      const streamedDelta: StreamingDeltaEvent = {
+        ...makeStreamingDelta("delta-1", "Canonical final text"),
+        reasoning_content: "Streamed reasoning",
+      };
+      const finalMessage: MessageEvent = {
+        ...mockAgentMessageEvent,
+        llm_message: {
+          role: "assistant",
+          content: [{ type: "text", text: "Canonical final text" }],
+          reasoning_content: "Reasoning from llm_message",
+        },
+      };
+
+      const result = handleEventForUI(finalMessage, [
+        mockMessageEvent,
+        streamedDelta,
+      ]);
+
+      // The final message renders its own structured reasoning, so the
+      // reasoning-only delta is not kept as a duplicate.
+      expect(result).toEqual([mockMessageEvent, finalMessage]);
+    });
+
     it("keeps deltas from older turns when a later turn finishes", () => {
       const oldUserMessage: MessageEvent = {
         ...mockMessageEvent,
