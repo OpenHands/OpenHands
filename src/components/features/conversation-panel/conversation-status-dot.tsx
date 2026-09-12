@@ -21,7 +21,7 @@ interface ConversationStatusDotProps {
   showTooltip?: boolean;
 }
 
-type Visual = "check" | "working" | "active" | "paused" | "error" | "unknown";
+type Visual = "check" | "working" | "paused" | "error";
 
 const visualFor = (status: ExecutionStatus | null | undefined): Visual => {
   switch (status) {
@@ -31,14 +31,13 @@ const visualFor = (status: ExecutionStatus | null | undefined): Visual => {
       return "working";
     case ExecutionStatus.IDLE:
     case ExecutionStatus.WAITING_FOR_CONFIRMATION:
-      return "active";
     case ExecutionStatus.PAUSED:
       return "paused";
     case ExecutionStatus.ERROR:
     case ExecutionStatus.STUCK:
       return "error";
     default:
-      return "unknown";
+      return "paused";
   }
 };
 
@@ -48,7 +47,6 @@ const labelKeyFor = (visual: Visual, isArchived?: boolean): string => {
     case "check":
       return "COMMON$FINISHED";
     case "working":
-    case "active":
       return "COMMON$WORKING";
     case "paused":
       return "COMMON$PAUSED";
@@ -83,13 +81,6 @@ function renderIndicator(visual: Visual) {
           className="w-1.5 h-1.5 rounded-full animate-pulse bg-[var(--oh-status-success)]"
         />
       );
-    case "active":
-      return (
-        <span
-          data-testid="conversation-status-active"
-          className="w-1.5 h-1.5 rounded-full bg-[var(--oh-status-success)]"
-        />
-      );
     case "paused":
       return (
         <span
@@ -107,8 +98,8 @@ function renderIndicator(visual: Visual) {
     default:
       return (
         <span
-          data-testid="conversation-status-unknown"
-          className="w-1.5 h-1.5 rounded-full bg-[var(--oh-color-tertiary)]"
+          data-testid="conversation-status-paused"
+          className="w-1.5 h-1.5 rounded-full bg-[var(--oh-muted)]"
         />
       );
   }
