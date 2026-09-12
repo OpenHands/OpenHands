@@ -39,7 +39,9 @@ describe("PluginLaunchModal", () => {
 
   describe("Plugin Display Name Extraction", () => {
     it("should extract plugin name from repo_path when provided", () => {
-      renderModal([{ source: "github:owner/repo", repo_path: "plugins/my-plugin" }]);
+      renderModal([
+        { source: "github:owner/repo", repo_path: "plugins/my-plugin" },
+      ]);
 
       // Plugin name should be "my-plugin" from the path
       expect(screen.getByText("my-plugin")).toBeInTheDocument();
@@ -54,9 +56,7 @@ describe("PluginLaunchModal", () => {
     });
 
     it("should extract name from git URL", () => {
-      renderModal([
-        { source: "https://github.com/owner/repo-name.git" },
-      ]);
+      renderModal([{ source: "https://github.com/owner/repo-name.git" }]);
 
       const elements = screen.getAllByText("repo-name");
       expect(elements.length).toBeGreaterThan(0);
@@ -67,6 +67,25 @@ describe("PluginLaunchModal", () => {
 
       const elements = screen.getAllByText("local-plugin");
       expect(elements.length).toBeGreaterThan(0);
+    });
+
+    it("does not extract a repo coordinate from a spoofed URL (#17162)", () => {
+      // An attacker embeds "github.com/" in the path of a host they control.
+      // The source display must show the full URL, not "owner/repo".
+      const attackerUrl = "https://evil.example/github.com/owner/repo";
+      renderModal([{ source: attackerUrl }]);
+
+      // The source info text must contain the full attacker URL
+      expect(screen.getByText(attackerUrl)).toBeInTheDocument();
+      // It must NOT show the misleading "owner/repo" extracted from the path
+      expect(screen.queryByText("owner/repo")).not.toBeInTheDocument();
+    });
+
+    it("extracts repo coordinate from a genuine github.com URL", () => {
+      renderModal([{ source: "https://github.com/owner/repo.git" }]);
+
+      // The source info should show "owner/repo" (without .git)
+      expect(screen.getByText("owner/repo")).toBeInTheDocument();
     });
   });
 
@@ -295,13 +314,13 @@ describe("PluginLaunchModal", () => {
 
       expect(screen.getByText("LAUNCH$ADDITIONAL_PLUGINS")).toBeInTheDocument();
       // When no repo_path, the full repo path is shown
-      expect(screen.getAllByText("owner/without-params").length).toBeGreaterThan(0);
+      expect(
+        screen.getAllByText("owner/without-params").length,
+      ).toBeGreaterThan(0);
     });
 
     it("should show ref in simple plugin list", () => {
-      renderModal([
-        { source: "github:owner/plugin", ref: "main" },
-      ]);
+      renderModal([{ source: "github:owner/plugin", ref: "main" }]);
 
       expect(screen.getByText("@ main")).toBeInTheDocument();
     });
@@ -362,10 +381,9 @@ describe("PluginLaunchModal", () => {
 
     it("should call onStartConversation with message when provided", async () => {
       const user = userEvent.setup();
-      renderModal(
-        [{ source: "github:owner/repo" }],
-        { message: "/city-weather:now Tokyo" },
-      );
+      renderModal([{ source: "github:owner/repo" }], {
+        message: "/city-weather:now Tokyo",
+      });
 
       // Check the trust checkbox first
       await user.click(screen.getByTestId("trust-checkbox"));
