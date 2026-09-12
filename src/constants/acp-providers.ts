@@ -124,8 +124,8 @@ export interface ACPModelOption {
 // key. Everything else — display name, launch command, model picker list and
 // default — comes from the typescript-client registry below. Adding a model
 // or a provider happens upstream in the SDK; Canvas only owns the brand icon
-// and the onboarding-tile description here. A provider with no entry here is
-// intentionally not surfaced in the UI.
+// and the onboarding-tile description here. Its keys are the harnesses Canvas
+// offers — see {@link SURFACED_ACP_PROVIDERS}.
 const ACP_PROVIDER_UI: Record<
   string,
   { icon: ACPProviderIcon; description_key: I18nKey }
@@ -144,10 +144,58 @@ const ACP_PROVIDER_UI: Record<
   },
 };
 
+const CODEX_ASTRA_MODEL: ACPModelOption = {
+  id: "gpt-6-astra",
+  label: "GPT-6 Astra",
+};
+// The pinned ``@openhands/typescript-client`` (1.39.0) still mirrors the
+// pre-Astra codex ``default_command`` (1.1.7), which the Codex ACP wrapper
+// rejects for ``gpt-6-astra``. Until that client release ships the upstream
+// fix, Canvas launches codex with the first tested Astra-compatible version.
+const CODEX_LEGACY_ACP_COMMAND = "npx -y @agentclientprotocol/codex-acp@1.1.7";
+const CODEX_ASTRA_ACP_VERSION = "@agentclientprotocol/codex-acp@1.10.0";
+const CODEX_ASTRA_COMMAND = ["npx", "-y", CODEX_ASTRA_ACP_VERSION];
+
+/**
+ * Resolve codex's launch command from the SDK registry, applying the temporary
+ * Astra shim only to the exact stale pin the pinned client reports. Any other
+ * registry value (including a future ``1.10.0``-or-newer release)is
+ * authoritative — so once upstream catches up, this shim stops firing and can
+ * be deleted without a separate cleanup pass.
+ */
+export function resolveCodexDefaultCommand(
+  registryCommand: readonly string[],
+): string[] {
+  if (registryCommand.join(" ") === CODEX_LEGACY_ACP_COMMAND) {
+    return [...CODEX_ASTRA_COMMAND];
+  }
+  return [...registryCommand];
+}
+
+function getAvailableModels(key: string): ACPModelOption[] | undefined {
+  const models = getClientAcpProvider(key)?.available_models?.map((model) => ({
+    id: model.id,
+    label: model.label,
+  }));
+  if (key !== "codex") return models;
+  return [
+    CODEX_ASTRA_MODEL,
+    ...(models ?? []).filter(({ id }) => id !== CODEX_ASTRA_MODEL.id),
+  ];
+}
+
+/**
+ * The ACP harnesses Canvas surfaces — its own declaration of what it offers,
+ * independent of what the SDK registry happens to contain. Registering a
+ * harness upstream is a no-op here: nothing in Canvas enumerates the registry,
+ * so there is no list to keep in step with it.
+ */
+export const SURFACED_ACP_PROVIDERS: readonly string[] =
+  Object.keys(ACP_PROVIDER_UI);
+
 // Built-in ACP providers Canvas surfaces, built by enriching each upstream
 // registry record (``@openhands/typescript-client`` → Python SDK) with the
-// Canvas UI metadata above. Model lists + defaults are no longer hand-kept
-// here (closes agent-canvas#740) — they track the SDK via the pinned client.
+// Canvas UI metadata above.
 export const ACP_PROVIDERS: ACPProviderConfig[] = Object.entries(
   ACP_PROVIDER_UI,
 ).map(([key, ui]) => {
@@ -155,11 +203,13 @@ export const ACP_PROVIDERS: ACPProviderConfig[] = Object.entries(
   return {
     key,
     display_name: info?.display_name ?? key,
-    default_command: info ? [...info.default_command] : [],
-    available_models: info?.available_models?.map((model) => ({
-      id: model.id,
-      label: model.label,
-    })),
+    default_command:
+      key === "codex"
+        ? resolveCodexDefaultCommand(info?.default_command ?? [])
+        : info
+          ? [...info.default_command]
+          : [],
+    available_models: getAvailableModels(key),
     default_model: info?.default_model ?? undefined,
     description_key: ui.description_key,
     icon: ui.icon,
@@ -360,6 +410,10 @@ export function getAcpProviderSecrets(
   key: string | null | undefined,
 ): ACPProviderSecretField[] {
   if (!key) return [];
+  // Surfaced providers only. The client registry grows with every harness the
+  // SDK adds, so reading it directly would offer credential fields for one
+  // Canvas never lists.
+  if (!getAcpProvider(key)) return [];
   const info = getClientAcpProvider(key);
   if (!info) return [];
   // Subscription / Vertex credentials first — they're the primary auth path for
