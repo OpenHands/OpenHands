@@ -35,7 +35,10 @@ export function ConfirmArchiveModal({
     );
 
   return (
-    <ModalBackdrop onClose={onCancel}>
+    <ModalBackdrop
+      onClose={onCancel}
+      aria-label={t(I18nKey.CONVERSATION$CONFIRM_ARCHIVE)}
+    >
       <ModalBody className="items-start border border-[var(--oh-border)]">
         <div className="flex flex-col gap-2">
           <BaseModalTitle title={t(I18nKey.CONVERSATION$CONFIRM_ARCHIVE)} />

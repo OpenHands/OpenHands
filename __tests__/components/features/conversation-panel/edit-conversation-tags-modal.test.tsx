@@ -5,6 +5,20 @@ import { renderWithProviders } from "test-utils";
 import { EditConversationTagsModal } from "#/components/features/conversation-panel/edit-conversation-tags-modal";
 
 describe("EditConversationTagsModal", () => {
+  it("gives the dialog an accessible name matching its title", () => {
+    renderWithProviders(
+      <EditConversationTagsModal
+        tags={{}}
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("dialog", { name: "CONVERSATION$EDIT_TAGS" }),
+    ).toBeInTheDocument();
+  });
+
   it("renders the current user-facing tags as rows and hides reserved keys", () => {
     renderWithProviders(
       <EditConversationTagsModal
