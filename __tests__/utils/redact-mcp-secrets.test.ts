@@ -64,3 +64,22 @@ describe("redactMcpSecrets", () => {
     expect(redactMcpSecrets(text, server)).toBe(text);
   });
 });
+
+it("still redacts query-string secrets when the URL userinfo contains a lone percent", () => {
+  // issue #16978: a lone '%' in the password makes decodeURIComponent throw
+  // URIError, which the whole addUrlSecrets block catches and aborts —
+  // leaving the query-string secrets unredacted.
+  const server: MCPServerConfig = {
+    id: "shttp-0",
+    type: "shttp",
+    url: "https://user:pa%ssword@mcp.example.com/mcp?api_key=querysecret789",
+  };
+
+  const redacted = redactMcpSecrets(
+    "401 for url https://user:pa%ssword@mcp.example.com/mcp?api_key=querysecret789",
+    server,
+  );
+
+  expect(redacted).not.toContain("pa%ssword");
+  expect(redacted).not.toContain("querysecret789");
+});
