@@ -111,6 +111,7 @@ export function PendingUserMessages() {
           type="user"
           message={message.text}
           pendingStatus={message.status}
+          uploadProgress={message.uploadProgress}
           onRetry={
             message.status === "error"
               ? () => handleRetry(message.id)
@@ -122,7 +123,7 @@ export function PendingUserMessages() {
               : undefined
           }
           onStop={
-            message.status === "sending"
+            message.status === "sending" || message.status === "uploading"
               ? () => handleStop(message.id, message.text)
               : undefined
           }

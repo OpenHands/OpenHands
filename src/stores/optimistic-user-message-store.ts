@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type PendingUserMessageStatus = "sending" | "error";
+export type PendingUserMessageStatus = "uploading" | "sending" | "error";
 
 /**
  * How long a pending message is allowed to stay in "sending" state before we
@@ -30,6 +30,11 @@ export interface PendingUserMessage {
    */
   content: string;
   status: PendingUserMessageStatus;
+  /**
+   * Upload progress percentage (0–100). Only defined while `status === "uploading"`.
+   * Undefined for messages that never required a file upload.
+   */
+  uploadProgress?: number;
   imageUrls: string[];
   fileUrls: string[];
   timestamp: string;
@@ -49,6 +54,14 @@ export interface EnqueuePendingMessagePayload {
    * that don't transform the content (e.g. git-control-bar, task-card).
    */
   content?: string;
+  /**
+   * Initial status for the message. Defaults to `"sending"`. Pass
+   * `"uploading"` when files need to be transferred before the WebSocket
+   * message is dispatched.
+   */
+  status?: PendingUserMessageStatus;
+  /** Initial upload progress (0–100). Only meaningful when `status === "uploading"`. */
+  uploadProgress?: number;
   imageUrls?: string[];
   fileUrls?: string[];
   timestamp?: string;
@@ -56,18 +69,35 @@ export interface EnqueuePendingMessagePayload {
 
 interface OptimisticUserMessageActions {
   /**
-   * Append a new user message to the queue with status "sending".
-   * Returns the locally-generated id for later updates. Schedules a
-   * `PENDING_MESSAGE_TIMEOUT_MS` watchdog that flips the entry to "error" if
-   * it's still in "sending" state when the timer fires.
+   * Append a new user message to the queue. Returns the locally-generated id
+   * for later updates. When `payload.status` is `"uploading"`, the watchdog
+   * timer is deferred until the message transitions to `"sending"`. When
+   * `payload.status` is `"sending"` (default), a `PENDING_MESSAGE_TIMEOUT_MS`
+   * watchdog is armed immediately.
    */
   enqueuePendingMessage: (payload: EnqueuePendingMessagePayload) => string;
-  /** Mark a pending message as failed (the API rejected it). */
+  /** Mark a pending message as failed (the API rejected it or upload failed). */
   markPendingMessageError: (id: string, errorMessage?: string) => void;
   /** Mark a pending message as sending again (used when retrying). */
   markPendingMessageSending: (id: string) => void;
   /** Drop a pending message from the queue (e.g., after success/cancellation). */
   removePendingMessage: (id: string) => void;
+  /**
+   * Apply a partial update to a pending message (e.g., to transition from
+   * `"uploading"` to `"sending"` after upload completes, or to set `fileUrls`
+   * and `content` once upload paths are known). Rearms the send watchdog when
+   * the new status is `"sending"`.
+   */
+  updatePendingMessage: (
+    id: string,
+    updates: Partial<PendingUserMessage>,
+  ) => void;
+  /**
+   * Convenience updater that sets `uploadProgress` on an `"uploading"` message
+   * without requiring a full `Partial<PendingUserMessage>` spread at each call
+   * site.
+   */
+  updatePendingMessageProgress: (id: string, progress: number) => void;
   /**
    * Remove the pending message that matches the given echoed `content` in
    * the given conversation. Matching is done by exact content equality on
@@ -114,12 +144,14 @@ export const useOptimisticUserMessageStore = create<OptimisticUserMessageStore>(
 
     enqueuePendingMessage: (payload) => {
       const id = generatePendingId();
+      const initialStatus = payload.status ?? "sending";
       const message: PendingUserMessage = {
         id,
         conversationId: payload.conversationId,
         text: payload.text,
         content: payload.content ?? payload.text,
-        status: "sending",
+        status: initialStatus,
+        uploadProgress: payload.uploadProgress,
         imageUrls: payload.imageUrls ?? [],
         fileUrls: payload.fileUrls ?? [],
         timestamp: payload.timestamp ?? new Date().toISOString(),
@@ -131,12 +163,16 @@ export const useOptimisticUserMessageStore = create<OptimisticUserMessageStore>(
       // Watchdog: if the server echo never lands (WS dropped, server crashed,
       // network partition), flip this entry to "error" so the user gets a
       // retry link instead of a permanently-pinned "Sending…" bubble.
-      setTimeout(() => {
-        const current = get().pendingMessages.find((m) => m.id === id);
-        if (current?.status === "sending") {
-          get().markPendingMessageError(id, "Send timed out");
-        }
-      }, PENDING_MESSAGE_TIMEOUT_MS);
+      // For "uploading" messages the watchdog is deferred — we arm it once
+      // `updatePendingMessage` transitions the entry to "sending".
+      if (initialStatus === "sending") {
+        setTimeout(() => {
+          const current = get().pendingMessages.find((m) => m.id === id);
+          if (current?.status === "sending") {
+            get().markPendingMessageError(id, "Send timed out");
+          }
+        }, PENDING_MESSAGE_TIMEOUT_MS);
+      }
 
       return id;
     },
@@ -155,6 +191,33 @@ export const useOptimisticUserMessageStore = create<OptimisticUserMessageStore>(
         pendingMessages: state.pendingMessages.map((message) =>
           message.id === id
             ? { ...message, status: "sending", errorMessage: undefined }
+            : message,
+        ),
+      })),
+
+    updatePendingMessage: (id, updates) => {
+      set((state) => ({
+        pendingMessages: state.pendingMessages.map((message) =>
+          message.id === id ? { ...message, ...updates } : message,
+        ),
+      }));
+      // Arm the send watchdog when transitioning to "sending" so the
+      // uploading → sending transition is covered.
+      if (updates.status === "sending") {
+        setTimeout(() => {
+          const current = get().pendingMessages.find((m) => m.id === id);
+          if (current?.status === "sending") {
+            get().markPendingMessageError(id, "Send timed out");
+          }
+        }, PENDING_MESSAGE_TIMEOUT_MS);
+      }
+    },
+
+    updatePendingMessageProgress: (id, progress) =>
+      set((state) => ({
+        pendingMessages: state.pendingMessages.map((message) =>
+          message.id === id
+            ? { ...message, uploadProgress: progress }
             : message,
         ),
       })),
