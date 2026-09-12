@@ -222,4 +222,36 @@ describe("InstalledServerCard connection health", () => {
       "fresh-access-token",
     );
   });
+
+  it("offers the callback URL relay while a reauthorization is pending", async () => {
+    // Arrange: a failed OAuth server whose reauthorization reports its job id
+    // and never resolves — the Docker case in issue #15430, reached through
+    // the recurring token-expiry path rather than a one-off install.
+    vi.spyOn(McpService, "testServer").mockResolvedValue({
+      ok: false,
+      error: "token expired",
+      error_kind: "unknown",
+    });
+    vi.spyOn(McpService, "authorizeOAuth").mockImplementation(
+      (_server, options) => {
+        options?.onJobStarted?.("job-1");
+        return new Promise(() => {});
+      },
+    );
+    renderCard(OAUTH_SERVER);
+
+    // Act
+    fireEvent.click(probeButton(OAUTH_SERVER.id));
+    await waitFor(() =>
+      expect(healthDot()).toHaveAttribute("data-status", "failed"),
+    );
+    fireEvent.click(
+      screen.getByTestId(`mcp-health-reauthorize-${OAUTH_SERVER.id}`),
+    );
+
+    // Assert
+    expect(
+      await screen.findByTestId("mcp-oauth-callback-fallback-toggle"),
+    ).toBeInTheDocument();
+  });
 });

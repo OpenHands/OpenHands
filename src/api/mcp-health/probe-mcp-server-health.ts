@@ -1,4 +1,6 @@
-import McpService from "#/api/mcp-service/mcp-service.api";
+import McpService, {
+  type AuthorizeOAuthOptions,
+} from "#/api/mcp-service/mcp-service.api";
 import type { McpServerHealth } from "#/types/mcp-health";
 import type {
   ExtendedMCPTestResponse,
@@ -91,14 +93,19 @@ export async function probeMcpServerHealth(
  * Run the interactive OAuth authorization probe and publish the result.
  * Returns the raw response (null on transport error) so the caller can
  * persist a refreshed `oauth_state`.
+ *
+ * `options` is forwarded to `McpService.authorizeOAuth` so the caller can
+ * observe the probe's job id and offer the manual callback-URL relay while
+ * the authorization is pending (issue #15430).
  */
 export async function reauthorizeMcpServerHealth(
   server: MCPServerConfig,
+  options: AuthorizeOAuthOptions = {},
 ): Promise<ExtendedMCPTestResponse | null> {
   const key = getMcpServerHealthKey(server);
   const checkId = beginMcpHealthCheck(key);
   try {
-    const response = await McpService.authorizeOAuth(server);
+    const response = await McpService.authorizeOAuth(server, options);
     resolveMcpHealthCheck(
       key,
       checkId,

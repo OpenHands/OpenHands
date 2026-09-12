@@ -20,6 +20,26 @@ import { substituteRedactedMcpCredentials } from "./mcp-redacted-credentials";
 
 const OAUTH_MCP_TEST_TIMEOUT_SECONDS = 120;
 
+// The interactive wait is deliberately longer than the request timeout above.
+// When the browser cannot reach the agent-server's loopback callback port
+// (the Docker case, issue #15430) the user relays the URL by hand, which takes
+// longer than two minutes. 300s matches the agent-server's own
+// `callback_timeout`, so the frontend no longer gives up while the backend job
+// is still alive.
+const OAUTH_MCP_CALLBACK_WAIT_SECONDS = 300;
+
+export interface AuthorizeOAuthOptions {
+  /**
+   * Called with the OAuth probe job id as soon as the job exists, whether or
+   * not the agent-server's callback listener was observed to come up. The UI
+   * uses it to offer a manual callback-URL relay for deployments where the
+   * browser cannot reach that listener. Offering the relay early is safe: the
+   * relay endpoint answers 409 `OAuth callback is not ready` while the
+   * listener is still starting, and the component renders that inline.
+   */
+  onJobStarted?: (jobId: string) => void;
+}
+
 function toMcpServer(
   server: MCPServerConfig,
 ): AgentServerMCPTestRequest["server"] {
@@ -247,6 +267,7 @@ class McpService {
 
   static async authorizeOAuth(
     server: MCPServerConfig,
+    options: AuthorizeOAuthOptions = {},
   ): Promise<ExtendedMCPTestResponse> {
     const validation = getCredentialValidationForServer(server);
     const finalize = (result: ExtendedMCPTestResponse) =>
@@ -281,13 +302,19 @@ class McpService {
         );
       }
 
+      // Announce the job even when the readiness loop above exhausted without
+      // ever seeing `callback_ready`: that is precisely the case where the
+      // browser is least likely to reach the listener, and withholding the
+      // relay there would leave the user staring at a silent 300s wait.
+      options.onJobStarted?.(start.job_id);
+
       if (popup) {
         popup.location.href = start.authorization_url;
       }
 
       for (
         let attempt = 0;
-        attempt < OAUTH_MCP_TEST_TIMEOUT_SECONDS;
+        attempt < OAUTH_MCP_CALLBACK_WAIT_SECONDS;
         attempt += 1
       ) {
         await sleep(1000);
