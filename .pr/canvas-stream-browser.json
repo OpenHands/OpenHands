@@ -1,0 +1,32 @@
+[
+  {
+    "name": "before",
+    "port": 9101,
+    "sockets": [
+      {
+        "path": "/sockets/events/81b5400b-259b-4076-9986-a23c6e3afdea",
+        "credentialInURL": false,
+        "sent": [
+          "auth"
+        ],
+        "received": 1
+      }
+    ],
+    "pageErrors": []
+  },
+  {
+    "name": "after",
+    "port": 9103,
+    "sockets": [
+      {
+        "path": "/sockets/events/81b5400b-259b-4076-9986-a23c6e3afdea",
+        "credentialInURL": false,
+        "sent": [
+          "auth"
+        ],
+        "received": 1
+      }
+    ],
+    "pageErrors": []
+  }
+]
