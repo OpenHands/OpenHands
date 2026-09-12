@@ -146,10 +146,11 @@ export function ChatMessage({
     <article
       data-testid={`${type}-message`}
       data-pending-status={pendingStatus}
+      dir="auto"
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
       className={cn(
-        "rounded-xl relative w-fit max-w-full flex flex-col",
+        "rounded-xl relative w-fit max-w-full flex flex-col text-start",
         hasBubbleChildren && "gap-2",
         type === "user" && "mt-6 bg-tertiary self-end px-4 py-2.5",
         type === "agent" && "mt-6 w-full max-w-full bg-transparent",
