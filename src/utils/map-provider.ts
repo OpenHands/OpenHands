@@ -23,6 +23,7 @@ export const MAP_PROVIDER = {
   replicate: "Replicate",
   voyage: "Voyage AI",
   openrouter: "OpenRouter",
+  orcarouter: "OrcaRouter",
   openhands: "OpenHands",
   lemonade: "Lemonade",
   clarifai: "Clarifai",
