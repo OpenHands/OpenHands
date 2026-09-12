@@ -33,6 +33,14 @@ export function ModalBackdrop({
     return () => window.removeEventListener("keydown", handleEscape);
   }, [closeOnEscape, onClose]);
 
+  React.useEffect(() => {
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, []);
+
   const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!closeOnBackdropClick) return;
     if (e.target === e.currentTarget) onClose?.(); // only close if the click was on the backdrop
