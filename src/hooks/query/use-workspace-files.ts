@@ -86,6 +86,7 @@ function useLocalWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
         buildListCommand(),
         workingDir,
         30,
+        conversationId,
       );
 
       if (result.exit_code !== 0) {

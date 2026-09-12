@@ -28,6 +28,7 @@ class AgentServerRuntimeService {
     command: string,
     cwd?: string,
     timeout = 30,
+    conversationId?: string,
   ): Promise<CommandResult> {
     const active = getActiveBackend().backend;
 
@@ -58,7 +59,11 @@ class AgentServerRuntimeService {
     }
 
     const result = await new RemoteWorkspace(
-      getAgentServerClientOptions({ conversationUrl, sessionApiKey }),
+      getAgentServerClientOptions({
+        conversationUrl,
+        sessionApiKey,
+        conversationId,
+      }),
     ).executeCommand(command, cwd, timeout);
     return {
       exit_code: result.exit_code,
