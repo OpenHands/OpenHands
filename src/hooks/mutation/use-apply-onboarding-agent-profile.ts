@@ -1,10 +1,13 @@
 import { useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import AgentProfilesService, {
   WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME,
   type AgentProfileSaveInput,
 } from "#/api/agent-profiles-service/agent-profiles-service.api";
 import { useSaveAgentProfile } from "#/hooks/mutation/use-save-agent-profile";
 import { useActivateAgentProfile } from "#/hooks/mutation/use-activate-agent-profile";
+import { displayWarningToast } from "#/utils/custom-toast-handlers";
+import { I18nKey } from "#/i18n/declaration";
 
 /**
  * The well-known agent profile onboarding configures. Conversations launch from
@@ -27,6 +30,7 @@ export const ONBOARDING_AGENT_PROFILE_NAME =
  * setup steps already wrote remain the fallback.
  */
 export function useApplyOnboardingAgentProfile() {
+  const { t } = useTranslation("openhands");
   const saveProfile = useSaveAgentProfile();
   const activateProfile = useActivateAgentProfile();
 
@@ -50,9 +54,15 @@ export function useApplyOnboardingAgentProfile() {
         const id = detail.profile.id;
         if (id) await activateProfile.mutateAsync(id);
       } catch (error) {
+        // Best-effort by design (see doc comment), but silently swallowing
+        // this left the failure invisible: the active agent profile keeps
+        // pointing at its old/seeded config with no visible sign anything
+        // went wrong. A non-blocking warning preserves "never block" while
+        // giving the user somewhere to look.
         console.error("Failed to configure onboarding agent profile:", error);
+        displayWarningToast(t(I18nKey.ONBOARDING$LLM_FINALIZE_FAILED));
       }
     },
-    [saveProfile, activateProfile],
+    [saveProfile, activateProfile, t],
   );
 }

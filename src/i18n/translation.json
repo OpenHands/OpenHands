@@ -14262,7 +14262,6 @@
     "uk": "Повідомлено користувацькі метадані завдання.",
     "ca": "S'han informat metadades personalitzades de la tasca."
   },
-
   "AUTOMATIONS$DETAIL$VIEW_CONVERSATION_FOR_RUN": {
     "en": "View conversation for run at {{timestamp}}",
     "ja": "{{timestamp}} の実行の会話を表示",
@@ -14280,7 +14279,6 @@
     "uk": "Переглянути розмову для запуску о {{timestamp}}",
     "ca": "Mostra la conversa de l'execució a {{timestamp}}"
   },
-
   "AUTOMATIONS$DETAIL$PHASE": {
     "ar": "المرحلة",
     "ca": "Fase",
@@ -41888,5 +41886,41 @@
     "uk": "Попередній перегляд зображення в повному розмірі",
     "zh-CN": "原始尺寸图片预览",
     "zh-TW": "原始尺寸圖片預覽"
+  },
+  "SETTINGS$PROVIDER_CONNECTION_BULK_ADD_ACTION": {
+    "en": "Bulk add models"
+  },
+  "SETTINGS$PROVIDER_CONNECTION_BULK_ADD_TITLE": {
+    "en": "Bulk add models"
+  },
+  "SETTINGS$PROVIDER_CONNECTION_BULK_ADD_TEXTAREA_LABEL": {
+    "en": "Model IDs"
+  },
+  "SETTINGS$PROVIDER_CONNECTION_BULK_ADD_HINT": {
+    "en": "Paste model IDs, one per line (or comma-separated). Each becomes its own profile linked to this connection."
+  },
+  "SETTINGS$PROVIDER_CONNECTION_BULK_ADD_PREVIEW": {
+    "en": "{{create}} new, {{skip}} already exist"
+  },
+  "SETTINGS$PROVIDER_CONNECTION_BULK_ADD_SUBMIT": {
+    "en": "Create {{count}} profile(s)"
+  },
+  "SETTINGS$PROVIDER_CONNECTION_BULK_ADD_RESULT_CREATED": {
+    "en": "Created {{count}} profile(s)"
+  },
+  "SETTINGS$PROVIDER_CONNECTION_BULK_ADD_RESULT_SKIPPED": {
+    "en": "Skipped {{count}} (already exist)"
+  },
+  "SETTINGS$PROVIDER_CONNECTION_BULK_ADD_RESULT_FAILED": {
+    "en": "Failed: {{names}}"
+  },
+  "SETTINGS$PROVIDER_CONNECTION_KEY_SET_LABEL": {
+    "en": "API key stored (not verified against the provider)"
+  },
+  "SETTINGS$PROVIDER_CONNECTION_KEY_UNSET_LABEL": {
+    "en": "No API key stored"
+  },
+  "ONBOARDING$LLM_FINALIZE_FAILED": {
+    "en": "Your settings were saved, but couldn't be fully applied. Check Settings → LLM to confirm your model is set up correctly."
   }
 }

@@ -26,6 +26,27 @@ import { heroUiAutocompleteSelectorButtonClassName } from "#/ui/combobox-caret";
 
 const DEFAULT_PROVIDER = "custom";
 
+/**
+ * OpenAI-API-compatible cloud services that aren't their own litellm
+ * provider (so they're reached via `provider: "openai"` + a custom
+ * `base_url`, not picked from the main Provider dropdown). Kept short and
+ * limited to base URLs actually verified against the live service — a wrong
+ * or stale preset silently misconfigures a credential, which is worse than
+ * no preset at all. Extend this list only from a source that's been tested,
+ * not copied from docs.
+ */
+const OPENAI_COMPATIBLE_PRESETS: {
+  id: string;
+  label: string;
+  baseUrl: string;
+}[] = [
+  {
+    id: "ollama-cloud",
+    label: "Ollama Cloud",
+    baseUrl: "https://ollama.com/v1",
+  },
+];
+
 interface ProviderConnectionModalProps {
   /** When `null` the modal is closed; otherwise it edits that connection. */
   connection?: ProviderConnection | null;
@@ -96,6 +117,14 @@ export function ProviderConnectionModal({
 
   const handleClose = () => {
     if (!isPending) onClose();
+  };
+
+  const handleApplyPreset = (
+    preset: (typeof OPENAI_COMPATIBLE_PRESETS)[number],
+  ) => {
+    setProvider("openai");
+    setBaseUrl(preset.baseUrl);
+    if (!displayName.trim()) setDisplayName(preset.label);
   };
 
   const handleSubmit = async () => {
@@ -263,17 +292,35 @@ export function ProviderConnectionModal({
               : undefined
           }
         />
-        <SettingsInput
-          testId="provider-connection-base-url-input"
-          label={t(I18nKey.SETTINGS$BASE_URL)}
-          type="text"
-          className="w-full"
-          value={baseUrl}
-          // eslint-disable-next-line i18next/no-literal-string -- example value, not translatable
-          placeholder="https://api.openai.com"
-          onChange={setBaseUrl}
-          showOptionalTag
-        />
+        <div className="flex flex-col gap-2">
+          <SettingsInput
+            testId="provider-connection-base-url-input"
+            label={t(I18nKey.SETTINGS$BASE_URL)}
+            type="text"
+            className="w-full"
+            value={baseUrl}
+            // eslint-disable-next-line i18next/no-literal-string -- example value, not translatable
+            placeholder="https://api.openai.com"
+            onChange={setBaseUrl}
+            showOptionalTag
+          />
+          <div
+            className="flex flex-wrap gap-2"
+            data-testid="provider-connection-presets"
+          >
+            {OPENAI_COMPATIBLE_PRESETS.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                data-testid={`provider-connection-preset-${preset.id}`}
+                onClick={() => handleApplyPreset(preset)}
+                className="rounded-full border border-[var(--oh-border)] px-3 py-1 text-xs text-[var(--oh-muted)] hover:text-white hover:border-white/40"
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
     </ApiKeyModalBase>
   );
