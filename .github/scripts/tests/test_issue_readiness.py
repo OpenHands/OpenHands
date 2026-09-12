@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from check_issue_readiness import (
     evaluate_readiness,
     extract_sections,
+    normalize_heading,
     has_screenshot_or_video,
     references_run_method,
     has_checklist_item,
@@ -502,3 +503,117 @@ def test_main_event_path_json_ready(tmp_path, capsys, monkeypatch):
     assert data["ready"] is True
     assert len(data["reasons"]) == 0
 
+
+# ---------------------------------------------------------------------------
+# Heading normalization
+# ---------------------------------------------------------------------------
+
+BUG_BODY_COLON_HEADINGS = """### Steps to Reproduce:
+Start the app with `npm run dev` and open the settings page.
+
+### Actual Behavior:
+I ran `npm run dev` and saw this:
+
+![screenshot](https://github.com/user-attachments/assets/abc123)
+
+### Acceptance Criteria:
+- [ ] The button lines up with the field above it.
+"""
+
+BUG_BODY_REPEATED_HEADING = """### Steps to Reproduce
+Start the app with `npm run dev` and open the settings page.
+
+### Actual Behavior
+I ran `npm run dev` and saw this:
+
+![screenshot](https://github.com/user-attachments/assets/abc123)
+
+### Acceptance Criteria
+- [ ] The button lines up with the field above it.
+
+### Actual Behavior
+(pasted twice by mistake)
+"""
+
+
+def test_normalize_heading_strips_trailing_colon():
+    assert normalize_heading("Actual Behavior:") == "actual behavior"
+    assert normalize_heading("  Acceptance Criteria :  ") == "acceptance criteria"
+    assert normalize_heading("Desired Behavior") == "desired behavior"
+
+def test_bug_ready_with_colon_headings():
+    result = evaluate_readiness(BUG_BODY_COLON_HEADINGS, [BUG_LABEL])
+    assert result.ready, result.reasons
+
+
+def test_h3_readiness_heading_with_a_colon_stays_a_boundary_under_h2():
+    """An h3 readiness section keeps its own body when the issue also uses h2.
+
+    h2 bodies promote only h3 headings named in READINESS_SECTION_LABELS to section
+    boundaries, so that lookup has to normalize the same way `extract_sections` does.
+    Otherwise `### Actual Behavior:` is not promoted and its text is swallowed by the
+    preceding h2 section.
+    """
+    body = """## Summary
+An overview paragraph.
+
+### Actual Behavior:
+The button overlaps the field.
+
+## Steps to Reproduce
+Run `npm run dev`.
+"""
+    sections = extract_sections(body)
+    assert "actual behavior" in sections
+    assert "overlaps the field" in sections["actual behavior"]
+    assert "overlaps the field" not in sections["summary"]
+
+def test_repeated_heading_keeps_the_first_section():
+    sections = extract_sections(BUG_BODY_REPEATED_HEADING)
+    assert "npm run dev" in sections["actual behavior"]
+
+def test_bug_ready_when_a_heading_is_repeated():
+    result = evaluate_readiness(BUG_BODY_REPEATED_HEADING, [BUG_LABEL])
+    assert result.ready, result.reasons
+
+
+def test_repeated_empty_desired_behavior_is_not_ready():
+    body = """### Desired Behavior
+_No response_
+
+### Desired Behavior
+_No response_
+
+### Acceptance Criteria
+- [ ] The button lines up with the field above it.
+"""
+    result = evaluate_readiness(body, [])
+    assert not result.ready
+    assert any("Desired Behavior" in reason for reason in result.reasons)
+
+
+def test_repeated_desired_behavior_uses_real_second_copy():
+    body = """### Desired Behavior
+_No response_
+
+### Desired Behavior
+The button should line up with the field above it.
+
+### Acceptance Criteria
+- [ ] The button lines up with the field above it.
+"""
+    result = evaluate_readiness(body, [])
+    assert result.ready, result.reasons
+    assert "_No response_" not in extract_sections(body)["desired behavior"]
+
+
+def test_repeated_desired_behavior_keeps_two_real_copies():
+    body = """### Desired Behavior
+The button should line up with the field above it.
+
+### Desired Behavior
+The button should use the same spacing as the field above it.
+"""
+    desired = extract_sections(body)["desired behavior"]
+    assert "line up with the field" in desired
+    assert "use the same spacing" in desired
