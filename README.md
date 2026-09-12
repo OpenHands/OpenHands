@@ -65,7 +65,7 @@ code review and dependency updates, then have your personal agents running on yo
 > [!WARNING]
 > This runs the agent-server directly on the machine you're installing on — the agent will have full access to your filesystem!
 
-**Prerequisites**: Node.js 22.12.x or later, `uv`
+**Prerequisites**: Node.js 24 or later, `uv`
 
 ```sh
 npm install -g @openhands/agent-canvas
@@ -108,7 +108,7 @@ The agent will be able to access any project under `PROJECTS_PATH`.
 > [!WARNING]
 > This runs the agent-server directly on the machine you're installing on — the agent will have full access to your filesystem!
 
-**Prerequisites**: Node.js 22.12.x or later, `npm`, `uv` (for running the agent server via `uvx`)
+**Prerequisites**: Node.js 24 or later, `npm`, `uv` (for running the agent server via `uvx`)
 
 ```sh
 git clone https://github.com/OpenHands/OpenHands.git
