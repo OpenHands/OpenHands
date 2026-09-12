@@ -852,6 +852,54 @@ describe("setServiceLogListener", () => {
   });
 });
 
+describe("spawnService fatal child exit", () => {
+  it.skipIf(process.platform === "win32")(
+    "exits the launcher non-zero when a fatal child dies",
+    async () => {
+      const moduleUrl = pathToFileURL(
+        path.join(repoRoot, "scripts", "dev-with-automation.mjs"),
+      ).href;
+      const supervisorSource = [
+        `import { spawnService } from ${JSON.stringify(moduleUrl)};`,
+        "setTimeout(() => { console.log('PARENT_STILL_ALIVE'); process.exit(0); }, 1500);",
+        "spawnService('static', process.execPath, ['-e', 'process.exit(7)'], { fatal: true });",
+      ].join("\n");
+
+      const supervisor = spawn(
+        process.execPath,
+        ["--input-type=module", "--eval", supervisorSource],
+        {
+          cwd: repoRoot,
+          stdio: ["ignore", "pipe", "pipe"],
+        },
+      );
+      let output = "";
+      supervisor.stdout.on("data", (chunk: Buffer) => {
+        output += chunk.toString();
+      });
+      supervisor.stderr.on("data", (chunk: Buffer) => {
+        output += chunk.toString();
+      });
+
+      const [code] = await once(supervisor, "exit");
+      expect(code, output).toBe(7);
+      expect(output).not.toContain("PARENT_STILL_ALIVE");
+      expect(output).toMatch(/static exited unexpectedly with code 7/i);
+    },
+  );
+
+  it("does not exit the current process when fatal is unset", async () => {
+    const proc = spawnService(
+      "non-fatal-exit-test",
+      process.execPath,
+      ["-e", "process.exit(3);"],
+      {},
+    );
+    const [code] = await once(proc, "exit");
+    expect(code).toBe(3);
+  });
+});
+
 describe("dev-with-automation CLI", () => {
   it.skipIf(process.platform === "win32")(
     "cleans up detached services when the launcher receives SIGHUP",

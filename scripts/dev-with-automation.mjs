@@ -631,6 +631,18 @@ function registerShutdownHook(hook) {
   return shutdownHooks.add(hook);
 }
 
+/**
+ * Spawn a stacked service.
+ *
+ * @param {string} name
+ * @param {string} command
+ * @param {string[]} args
+ * @param {object} [options]
+ * @param {boolean} [options.fatal] If true, a non-zero child exit tears down
+ *   the rest of the stack and exits the launcher with that status. Required
+ *   services (frontend, ingress, agent-server) must set this so a bind
+ *   failure such as EADDRINUSE cannot leave a "healthy" banner on :8000.
+ */
 function spawnService(name, command, args, options = {}) {
   const proc = spawn(
     resolveWindowsCommand(command),
@@ -688,6 +700,13 @@ function spawnService(name, command, args, options = {}) {
     if (code !== 0 && code !== null && !shuttingDown) {
       logService(name, `Exited with code ${code}`, c.red);
       emitServiceLog(name, `exited with code ${code}`, "error");
+      if (options.fatal) {
+        failStack(
+          `${name} exited unexpectedly with code ${code}. ` +
+            "The Agent Canvas stack cannot continue.",
+          code,
+        );
+      }
     }
     processes.delete(name);
   });
@@ -956,6 +975,7 @@ function startAgentServer(config) {
       env: agentServerEnv,
       color: c.blue,
       parseLogLine: parseAgentServerLogLine,
+      fatal: true,
     },
   );
 }
@@ -1067,6 +1087,17 @@ function startAutomationBackend(config) {
 
 let shuttingDown = false;
 
+function failStack(message, exitCode = 1) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  logError(message);
+  for (const [, proc] of processes) {
+    signalProcessTree(proc, "SIGTERM");
+  }
+  shutdownHooks.run();
+  process.exit(exitCode || 1);
+}
+
 function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
@@ -1122,6 +1153,7 @@ function startIngress(config) {
     {
       cwd: projectRoot,
       color: c.yellow,
+      fatal: true,
     },
   );
 }
@@ -1195,6 +1227,7 @@ function startVite(config) {
     cwd: config.canvasPath,
     env: viteEnv,
     color: c.magenta,
+    fatal: true,
   });
 }
 
@@ -1656,6 +1689,7 @@ function startStaticFrontend(config, staticDir) {
     {
       cwd: config.canvasPath,
       color: c.magenta,
+      fatal: true,
     },
   );
 }
