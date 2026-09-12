@@ -121,7 +121,7 @@ export function AddSkillModal({ onClose }: AddSkillModalProps) {
     >
       <div
         data-testid="add-skill-modal"
-        className="relative flex w-[520px] max-w-[90vw] max-h-[85vh] flex-col rounded-xl border border-[var(--oh-border)] bg-base-secondary"
+        className="relative mx-4 flex w-full max-w-[520px] max-h-[85vh] flex-col rounded-xl border border-[var(--oh-border)] bg-base-secondary"
       >
         <ModalCloseButton onClose={onClose} testId="add-skill-modal-close" />
         <header className="flex-shrink-0 px-6 pb-4 pt-6">
