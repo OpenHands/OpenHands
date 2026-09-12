@@ -41919,5 +41919,8 @@
   },
   "SETTINGS$PROVIDER_CONNECTION_KEY_UNSET_LABEL": {
     "en": "No API key stored"
+  },
+  "ONBOARDING$LLM_FINALIZE_FAILED": {
+    "en": "Your settings were saved, but couldn't be fully applied. Check Settings → LLM to confirm your model is set up correctly."
   }
 }

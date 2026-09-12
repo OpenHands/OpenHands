@@ -14,6 +14,7 @@ import {
 } from "#/hooks/query/use-free-models";
 import { LlmSettingsInputsSkeleton } from "#/components/features/settings/llm-settings/llm-settings-inputs-skeleton";
 import { deriveProfileNameFromModel } from "#/utils/derive-profile-name";
+import { displayWarningToast } from "#/utils/custom-toast-handlers";
 
 interface SetupLlmStepProps {
   onBack: () => void;
@@ -92,12 +93,18 @@ export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
       await activateProfile.mutateAsync(name);
       return name;
     } catch (error) {
-      // Best-effort: the agent_settings save already succeeded, so the
-      // user is not blocked from completing onboarding.
+      // Best-effort: the agent_settings save already succeeded, so the user
+      // is not blocked from completing onboarding — but silently swallowing
+      // this left a real failure mode invisible: the active agent profile
+      // keeps its seeded, keyless llm_profile_ref, and the user's first
+      // conversation fails with no way to trace it back to this step. A
+      // non-blocking warning preserves "never block" while not stranding
+      // them with zero diagnosis path.
       console.error("Failed to persist onboarding LLM as profile:", error);
+      displayWarningToast(t(I18nKey.ONBOARDING$LLM_FINALIZE_FAILED));
       return null;
     }
-  }, [isLocalBackend, saveControl, saveProfile, activateProfile]);
+  }, [isLocalBackend, saveControl, saveProfile, activateProfile, t]);
 
   const handleSaveSuccess = React.useCallback(async () => {
     setIsFinalizing(true);
