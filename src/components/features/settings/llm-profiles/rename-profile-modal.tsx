@@ -12,6 +12,7 @@ import {
 } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
 import { isProfileNameValid } from "#/utils/derive-profile-name";
+import { isOracleProfileName } from "#/utils/oracle-profile";
 
 interface RenameProfileModalProps {
   profile: ProfileInfo | null;
@@ -33,12 +34,19 @@ export function RenameProfileModal({
 
   if (!profile) return null;
 
-  const isValid = isProfileNameValid(newName, { isRequired: true });
+  const isOracleProfile = isOracleProfileName(profile.name);
+  const isReservedName = isOracleProfileName(newName) && !isOracleProfile;
+  const isValid =
+    isProfileNameValid(newName, { isRequired: true }) && !isReservedName;
   const isUnchanged = newName === profile.name;
 
   const handleSubmit = async () => {
-    if (!isValid) {
-      displayErrorToast(t(I18nKey.SETTINGS$PROFILE_NAME_RULE));
+    if (!isValid || isOracleProfile) {
+      displayErrorToast(
+        isReservedName
+          ? t(I18nKey.SETTINGS$PROFILE_RESERVED_NAME)
+          : t(I18nKey.SETTINGS$PROFILE_NAME_RULE),
+      );
       return;
     }
     if (isUnchanged) {
@@ -81,7 +89,7 @@ export function RenameProfileModal({
         type="button"
         variant="primary"
         onClick={handleSubmit}
-        isDisabled={renameProfile.isPending || !isValid}
+        isDisabled={renameProfile.isPending || !isValid || isOracleProfile}
       >
         {renameProfile.isPending ? (
           <LoadingSpinner size="small" />
@@ -108,6 +116,8 @@ export function RenameProfileModal({
           value={newName}
           onChange={setNewName}
           isRequired
+          isDisabled={isOracleProfile}
+          isReservedName={isReservedName}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !renameProfile.isPending && isValid) {
               handleSubmit();
