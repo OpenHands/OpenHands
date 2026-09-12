@@ -15,6 +15,19 @@ import { useRuntimeIsReady } from "#/hooks/use-runtime-is-ready";
 import type { ResolvedActiveBackend } from "#/api/backend-registry/types";
 import type { V1SandboxInfo } from "#/api/cloud/sandbox-service.types";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
+import { I18nKey } from "#/i18n/declaration";
+
+const { mockUseConversationId } = vi.hoisted(() => ({
+  mockUseConversationId: vi.fn(),
+}));
+
+vi.mock("react-i18next", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-i18next")>()),
+  useTranslation: (namespace?: string) => ({
+    t: (key: string) =>
+      namespace === "openhands" ? key : `missing-namespace:${key}`,
+  }),
+}));
 
 vi.mock("#/api/cloud/sandbox-service.api");
 vi.mock("#/api/conversation-service/agent-server-conversation-service.api");
@@ -23,8 +36,8 @@ vi.mock("#/contexts/active-backend-context");
 vi.mock("#/hooks/query/use-active-conversation");
 vi.mock("#/hooks/use-runtime-is-ready");
 vi.mock("#/hooks/use-conversation-id", () => ({
-  useOptionalConversationId: () => ({ conversationId: "test-conversation-id" }),
-  useConversationId: () => ({ conversationId: "conv-123" }),
+  useOptionalConversationId: () => mockUseConversationId(),
+  useConversationId: () => mockUseConversationId(),
 }));
 
 if (!i18n.isInitialized) {
@@ -104,50 +117,44 @@ function makeSandbox(overrides: Partial<V1SandboxInfo> = {}): V1SandboxInfo {
   };
 }
 
-function createWrapper() {
+function createQueryHarness() {
   const queryClient = new QueryClient({
-    // `retry` is overridden per-query by the hook's own `retry: 3`, so error
-    // paths do retry here; `retryDelay: 0` keeps them from spending the
-    // default exponential backoff before the query settles.
     defaultOptions: { queries: { retry: false, retryDelay: 0 } },
   });
-  return ({ children }: { children: React.ReactNode }) => (
+  const wrapper = ({ children }: { children: React.ReactNode }) => (
     <QueryClientProvider client={queryClient}>
       <I18nextProvider i18n={i18n}>{children}</I18nextProvider>
     </QueryClientProvider>
   );
+
+  return { queryClient, wrapper };
 }
 
-/** The prefix this origin serves the editor under, as static-server injects it. */
-function advertiseEditorOnOrigin(basePath: string | null) {
-  if (basePath === null) {
-    delete (window as unknown as Record<string, unknown>)
-      .__AGENT_CANVAS_VSCODE_BASE_PATH__;
-    return;
-  }
-  (
-    window as unknown as Record<string, unknown>
-  ).__AGENT_CANVAS_VSCODE_BASE_PATH__ = basePath;
+function createWrapper() {
+  return createQueryHarness().wrapper;
 }
 
-/** An editor URL of the shape agent-server builds: this origin + its prefix. */
-function editorUrlOnThisOrigin(basePath = "/vscode") {
-  return `${window.location.origin}${basePath}/?tkn=local-key&folder=workspace`;
-}
+// The local path now gates the URL request on two capability checks the
+// archived test predates:
+//   1. `getOriginVSCodeBasePath()` — this browser origin must advertise an
+//      editor route. In jsdom that comes from
+//      `window.__AGENT_CANVAS_VSCODE_BASE_PATH__`, so we inject it here to
+//      model a self-hosted deployment that serves the editor.
+//   2. `AgentServerConversationService.getVSCodeStatus()` — a 200 probe that
+//      must report `{ enabled: true, running: true }` before the URL query is
+//      enabled. Default it to the available state so the existing local-mode
+//      expectations still exercise the URL resolver.
+const VSCODE_BASE_PATH = "/vscode";
 
 beforeEach(() => {
-  vi.clearAllMocks();
-  // Default to an origin that routes the editor. Availability is server
-  // capability ∩ this origin's route table, and every pre-existing case here
-  // is about the server half; the origin half has its own cases below.
-  advertiseEditorOnOrigin("/vscode");
+  vi.resetAllMocks();
+  (window as unknown as Record<string, unknown>).__AGENT_CANVAS_VSCODE_BASE_PATH__ =
+    VSCODE_BASE_PATH;
+  mockUseConversationId.mockReturnValue({ conversationId: "conv-123" });
   vi.mocked(useRuntimeIsReady).mockReturnValue(true);
   vi.mocked(useActiveConversation).mockReturnValue({
     data: makeConversation(),
   } as unknown as ReturnType<typeof useActiveConversation>);
-  // Default the capability probe to "editor present and running". Local-mode
-  // tests that care about the capability state override this; the rest would
-  // otherwise never reach the URL request, which is gated on it.
   vi.mocked(AgentServerConversationService.getVSCodeStatus).mockResolvedValue({
     enabled: true,
     running: true,
@@ -156,7 +163,8 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.clearAllMocks();
-  advertiseEditorOnOrigin(null);
+  delete (window as unknown as Record<string, unknown>)
+    .__AGENT_CANVAS_VSCODE_BASE_PATH__;
 });
 
 describe("useUnifiedVSCodeUrl", () => {
@@ -167,7 +175,17 @@ describe("useUnifiedVSCodeUrl", () => {
     // instead of asking the runtime for /api/vscode/url (which only
     // knows its own localhost:8001).
     vi.mocked(useActiveBackend).mockReturnValue(cloudBackend);
-    vi.mocked(batchGetCloudSandboxes).mockResolvedValue([makeSandbox()]);
+    vi.mocked(batchGetCloudSandboxes).mockResolvedValue([
+      makeSandbox({
+        exposed_urls: [
+          { name: "APP", url: "https://app.example.dev" },
+          {
+            name: "VSCODE",
+            url: "https://vscode-abc.staging-runtime.all-hands.dev/?tkn=sek&folder=%2Fworkspace%2Fproject",
+          },
+        ],
+      }),
+    ]);
 
     // Act
     const { result } = renderHook(() => useUnifiedVSCodeUrl(), {
@@ -180,6 +198,12 @@ describe("useUnifiedVSCodeUrl", () => {
       "https://vscode-abc.staging-runtime.all-hands.dev/?tkn=sek&folder=%2Fworkspace%2Fproject",
     );
     expect(AgentServerConversationService.getVSCodeUrl).not.toHaveBeenCalled();
+    // Cloud never runs the local capability probe, and the cloud path keeps
+    // the control visible regardless of exposed_urls.
+    expect(
+      AgentServerConversationService.getVSCodeStatus,
+    ).not.toHaveBeenCalled();
+    expect(result.current.isUnavailable).toBe(false);
   });
 
   it("returns null url in cloud mode when the sandbox has no VSCODE exposed_url", async () => {
@@ -189,7 +213,10 @@ describe("useUnifiedVSCodeUrl", () => {
     // copy instead of crashing or serving a localhost fallback.
     vi.mocked(useActiveBackend).mockReturnValue(cloudBackend);
     vi.mocked(batchGetCloudSandboxes).mockResolvedValue([
-      makeSandbox({ status: "STARTING", exposed_urls: null }),
+      makeSandbox({
+        status: "STARTING",
+        exposed_urls: null,
+      }),
     ]);
 
     // Act
@@ -200,10 +227,28 @@ describe("useUnifiedVSCodeUrl", () => {
     // Assert
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.url).toBeNull();
-    // Cloud is deliberately excluded from `isUnavailable`: a sandbox that is
-    // still STARTING will populate exposed_urls shortly, so the control stays
-    // visible. Only self-hosted backends can report a final "no editor".
-    expect(result.current.isUnavailable).toBe(false);
+    expect(result.current.data?.error).toBe(
+      i18n.t(I18nKey.VSCODE$URL_NOT_AVAILABLE),
+    );
+  });
+
+  it("ignores unrelated cloud exposed URLs", async () => {
+    vi.mocked(useActiveBackend).mockReturnValue(cloudBackend);
+    vi.mocked(batchGetCloudSandboxes).mockResolvedValue([
+      makeSandbox({
+        exposed_urls: [{ name: "APP", url: "https://app.example.dev" }],
+      }),
+    ]);
+
+    const { result } = renderHook(() => useUnifiedVSCodeUrl(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual({
+      url: null,
+      error: i18n.t(I18nKey.VSCODE$URL_NOT_AVAILABLE),
+    });
   });
 
   it("falls through to AgentServerConversationService.getVSCodeUrl in local mode", async () => {
@@ -212,7 +257,7 @@ describe("useUnifiedVSCodeUrl", () => {
     // for the cloud/local branch that was added to the hook.
     vi.mocked(useActiveBackend).mockReturnValue(localBackend);
     vi.mocked(AgentServerConversationService.getVSCodeUrl).mockResolvedValue({
-      vscode_url: editorUrlOnThisOrigin(),
+      vscode_url: "http://localhost:8001/?tkn=local-key&folder=workspace",
     });
 
     // Act
@@ -229,169 +274,429 @@ describe("useUnifiedVSCodeUrl", () => {
     );
     expect(batchGetCloudSandboxes).not.toHaveBeenCalled();
     expect(ConversationService.getVSCodeUrl).not.toHaveBeenCalled();
-    // A backend that hands back a usable URL is available, so consumers
-    // render the control.
-    expect(result.current.isUnavailable).toBe(false);
   });
 
-  it("reports isUnavailable in local mode when the backend has VSCode disabled", async () => {
-    // Arrange — `enable_vscode: false`. The capability probe answers 200 with
-    // `enabled: false`, so this is a value rather than an error: the control
-    // is dropped without the URL request ever running, which is what keeps
-    // the 503 from `/vscode/url` (and its toast) off the screen entirely.
+  it("allows the VSCode query while the runtime reports an agent error", async () => {
     vi.mocked(useActiveBackend).mockReturnValue(localBackend);
-    vi.mocked(AgentServerConversationService.getVSCodeStatus).mockResolvedValue(
-      {
-        enabled: false,
-        running: false,
-        message: "VSCode is disabled in configuration",
-      },
+    vi.mocked(useRuntimeIsReady).mockImplementation(
+      (options) => options?.allowAgentError === true,
     );
+    vi.mocked(AgentServerConversationService.getVSCodeUrl).mockResolvedValue({
+      vscode_url: "https://vscode.example.dev/?folder=workspace",
+    });
 
-    // Act
     const { result } = renderHook(() => useUnifiedVSCodeUrl(), {
       wrapper: createWrapper(),
     });
 
-    // Assert
-    await waitFor(() => expect(result.current.isUnavailable).toBe(true));
-    expect(result.current.isError).toBe(false);
-    expect(AgentServerConversationService.getVSCodeUrl).not.toHaveBeenCalled();
-    expect(ConversationService.getVSCodeUrl).not.toHaveBeenCalled();
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(useRuntimeIsReady).toHaveBeenCalledWith({ allowAgentError: true });
+    expect(AgentServerConversationService.getVSCodeUrl).toHaveBeenCalledOnce();
   });
 
-  it("reports isUnavailable in local mode when the editor is enabled but not running", async () => {
-    // Arrange — configured, but the process failed to start (or has died).
-    // agent-server awaits VSCodeService.start() in its lifespan before it
-    // serves any request, so `running: false` here is terminal rather than a
-    // startup window. `/vscode/url` would still hand back a URL, so this
-    // state is only visible through the probe.
+  it("stores local results under the conversation-specific cache key", async () => {
     vi.mocked(useActiveBackend).mockReturnValue(localBackend);
-    vi.mocked(AgentServerConversationService.getVSCodeStatus).mockResolvedValue(
-      {
-        enabled: true,
-        running: false,
-      },
-    );
+    vi.mocked(AgentServerConversationService.getVSCodeUrl).mockResolvedValue({
+      vscode_url: "https://vscode.example.dev/?folder=workspace",
+    });
+    const { queryClient, wrapper } = createQueryHarness();
 
-    // Act
+    const { result } = renderHook(() => useUnifiedVSCodeUrl(), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const cachedQuery = queryClient.getQueryCache().find({
+      exact: true,
+      queryKey: [
+        "unified",
+        "vscode_url",
+        "local",
+        "conv-123",
+        "http://abc.staging-runtime.all-hands.dev/api/conv/1",
+        "sek",
+      ],
+    });
+    expect(cachedQuery?.state.data).toEqual({
+      url: "https://vscode.example.dev/?folder=workspace",
+    });
+
+    // The capability probe is cached under its own conversation-scoped key so a
+    // different conversation can't reuse a stale enabled/running answer.
+    const cachedStatusQuery = queryClient.getQueryCache().find({
+      exact: true,
+      queryKey: [
+        "unified",
+        "vscode_status",
+        "local",
+        "conv-123",
+        "http://abc.staging-runtime.all-hands.dev/api/conv/1",
+        "sek",
+      ],
+    });
+    expect(cachedStatusQuery?.state.data).toEqual({
+      enabled: true,
+      running: true,
+    });
+  });
+
+  it("refreshes stale local URL data when the hook remounts", async () => {
+    vi.mocked(useActiveBackend).mockReturnValue(localBackend);
+    vi.mocked(AgentServerConversationService.getVSCodeUrl)
+      .mockResolvedValueOnce({
+        vscode_url: "https://initial.example.dev/?folder=workspace",
+      })
+      .mockResolvedValueOnce({
+        vscode_url: "https://remounted.example.dev/?folder=workspace",
+      });
+    const { wrapper } = createQueryHarness();
+
+    const initial = renderHook(() => useUnifiedVSCodeUrl(), { wrapper });
+    await waitFor(() => expect(initial.result.current.isSuccess).toBe(true));
+    initial.unmount();
+
+    const remounted = renderHook(() => useUnifiedVSCodeUrl(), { wrapper });
+    await waitFor(() =>
+      expect(remounted.result.current.data?.url).toBe(
+        "https://remounted.example.dev/?folder=workspace",
+      ),
+    );
+    expect(AgentServerConversationService.getVSCodeUrl).toHaveBeenCalledTimes(
+      2,
+    );
+    // The probe is `refetchOnMount` too, so the remount re-verifies capability
+    // rather than trusting the previous mount's cached answer.
+    expect(
+      AgentServerConversationService.getVSCodeStatus,
+    ).toHaveBeenCalledTimes(2);
+  });
+
+  it("falls back to the legacy conversation service when the agent-server request fails", async () => {
+    const agentServerFailure = new Error("runtime endpoint unavailable");
+    vi.mocked(useActiveBackend).mockReturnValue(localBackend);
+    vi.mocked(AgentServerConversationService.getVSCodeUrl).mockRejectedValue(
+      agentServerFailure,
+    );
+    vi.mocked(ConversationService.getVSCodeUrl).mockResolvedValue({
+      vscode_url: "https://fallback.example.dev/?folder=workspace",
+    });
+
     const { result } = renderHook(() => useUnifiedVSCodeUrl(), {
       wrapper: createWrapper(),
     });
 
-    // Assert
-    await waitFor(() => expect(result.current.isUnavailable).toBe(true));
-    expect(result.current.isError).toBe(false);
-    expect(AgentServerConversationService.getVSCodeUrl).not.toHaveBeenCalled();
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(ConversationService.getVSCodeUrl).toHaveBeenCalledWith("conv-123");
+    expect(result.current.data).toEqual({
+      url: "https://fallback.example.dev/?folder=workspace",
+      error: null,
+    });
   });
 
-  it("keeps a failing capability probe observable as an error rather than hiding the control", async () => {
-    // Arrange — a transport, auth or server fault on the probe itself. This
-    // is the case the previous `isError`-derived `isUnavailable` conflated
-    // with a disabled editor: it must stay an error (so retry and the global
-    // toast still apply) and must NOT silently remove the control, because
-    // nothing here says the deployment has no editor.
+  it("returns local query failures after both URL services reject", async () => {
+    const fallbackFailure = new Error("no VS Code endpoint");
     vi.mocked(useActiveBackend).mockReturnValue(localBackend);
-    vi.mocked(AgentServerConversationService.getVSCodeStatus).mockRejectedValue(
-      new Error("Request failed with status code 401"),
+    vi.mocked(AgentServerConversationService.getVSCodeUrl).mockRejectedValue(
+      new Error("runtime unavailable"),
+    );
+    vi.mocked(ConversationService.getVSCodeUrl).mockRejectedValue(
+      fallbackFailure,
     );
 
-    // Act
     const { result } = renderHook(() => useUnifiedVSCodeUrl(), {
       wrapper: createWrapper(),
     });
 
-    // Assert
     await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.status).toBe("error");
+    expect(result.current.error).toBe(fallbackFailure);
+    expect(result.current.data).toBeUndefined();
+  });
+
+  it("passes null runtime metadata when active conversation details are unavailable", async () => {
+    vi.mocked(useActiveBackend).mockReturnValue(localBackend);
+    vi.mocked(useActiveConversation).mockReturnValue({
+      data: undefined,
+    } as unknown as ReturnType<typeof useActiveConversation>);
+    vi.mocked(AgentServerConversationService.getVSCodeUrl).mockResolvedValue({
+      vscode_url: null,
+    });
+
+    const { result } = renderHook(() => useUnifiedVSCodeUrl(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(AgentServerConversationService.getVSCodeUrl).toHaveBeenCalledWith(
+      "conv-123",
+      null,
+      null,
+    );
+    expect(result.current.data).toEqual({
+      url: null,
+      error: i18n.t(I18nKey.VSCODE$URL_NOT_AVAILABLE),
+    });
+  });
+
+  it("returns the refreshed local URL", async () => {
+    vi.mocked(useActiveBackend).mockReturnValue(localBackend);
+    vi.mocked(AgentServerConversationService.getVSCodeUrl)
+      .mockResolvedValueOnce({
+        vscode_url: "https://initial.example.dev/?folder=workspace",
+      })
+      .mockResolvedValueOnce({
+        vscode_url: "https://refreshed.example.dev/?folder=workspace",
+      });
+
+    const { result } = renderHook(() => useUnifiedVSCodeUrl(), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const refreshed = await result.current.refetch();
+
+    expect(refreshed.data).toEqual({
+      url: "https://refreshed.example.dev/?folder=workspace",
+    });
+    await waitFor(() =>
+      expect(result.current.data?.url).toBe(
+        "https://refreshed.example.dev/?folder=workspace",
+      ),
+    );
+  });
+
+  it("maps cloud refetches to refreshed, unavailable, and missing sandbox results", async () => {
+    vi.mocked(useActiveBackend).mockReturnValue(cloudBackend);
+    vi.mocked(batchGetCloudSandboxes)
+      .mockResolvedValueOnce([makeSandbox()])
+      .mockResolvedValueOnce([
+        makeSandbox({
+          exposed_urls: [
+            { name: "APP", url: "https://app.example.dev" },
+            { name: "VSCODE", url: "https://refreshed.example.dev" },
+          ],
+        }),
+      ])
+      .mockResolvedValueOnce([
+        makeSandbox({
+          exposed_urls: [{ name: "APP", url: "https://app.example.dev" }],
+        }),
+      ])
+      .mockResolvedValueOnce([
+        makeSandbox({
+          exposed_urls: null,
+        }),
+      ])
+      .mockResolvedValueOnce([]);
+
+    const { result } = renderHook(() => useUnifiedVSCodeUrl(), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const refreshed = await result.current.refetch();
+    expect(refreshed.data).toEqual({ url: "https://refreshed.example.dev" });
+
+    const unrelated = await result.current.refetch();
+    expect(unrelated.data).toEqual({ url: null });
+
+    const unavailable = await result.current.refetch();
+    expect(unavailable.data).toEqual({ url: null });
+
+    const missing = await result.current.refetch();
+    expect(missing.data).toBeUndefined();
+    await waitFor(() => expect(result.current.data?.url).toBeNull());
+  });
+
+  it("surfaces cloud sandbox lookup failures", async () => {
+    const failure = new Error("sandbox lookup failed");
+    vi.mocked(useActiveBackend).mockReturnValue(cloudBackend);
+    vi.mocked(batchGetCloudSandboxes).mockRejectedValue(failure);
+
+    const { result } = renderHook(() => useUnifiedVSCodeUrl(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.status).toBe("error");
+    expect(result.current.error).toBe(failure);
+    expect(result.current.data).toBeUndefined();
+  });
+
+  it("does not request a cloud sandbox until the conversation has a sandbox id", () => {
+    vi.mocked(useActiveBackend).mockReturnValue(cloudBackend);
+    vi.mocked(useActiveConversation).mockReturnValue({
+      data: makeConversation({ sandbox_id: null }),
+    } as unknown as ReturnType<typeof useActiveConversation>);
+
+    const { result } = renderHook(() => useUnifiedVSCodeUrl(), {
+      wrapper: createWrapper(),
+    });
+
+    expect(batchGetCloudSandboxes).not.toHaveBeenCalled();
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.data).toBeUndefined();
+  });
+
+  it("does not request a local URL before the runtime is ready", () => {
+    vi.mocked(useActiveBackend).mockReturnValue(localBackend);
+    vi.mocked(useRuntimeIsReady).mockReturnValue(false);
+
+    const { result } = renderHook(() => useUnifiedVSCodeUrl(), {
+      wrapper: createWrapper(),
+    });
+
+    expect(AgentServerConversationService.getVSCodeUrl).not.toHaveBeenCalled();
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.data).toBeUndefined();
+  });
+
+  it("reports the missing conversation id when a disabled query is manually refreshed", async () => {
+    vi.mocked(useActiveBackend).mockReturnValue(localBackend);
+    mockUseConversationId.mockReturnValue({ conversationId: "" });
+
+    const { result } = renderHook(() => useUnifiedVSCodeUrl(), {
+      wrapper: createWrapper(),
+    });
+
+    expect(AgentServerConversationService.getVSCodeUrl).not.toHaveBeenCalled();
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.data).toBeUndefined();
+
+    const refreshed = await result.current.refetch();
+
+    expect(refreshed.data).toBeUndefined();
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error).toEqual(new Error("No conversation ID"));
+    expect(AgentServerConversationService.getVSCodeUrl).not.toHaveBeenCalled();
+  });
+
+  it("hides the control and skips both requests when this origin serves no editor", async () => {
+    // A public-mode / extra-backend origin advertises no editor route. The
+    // agent-server might still report one, but this page couldn't reach it, so
+    // neither the capability probe nor the URL request should fire and the
+    // control must report itself unavailable rather than loading.
+    vi.mocked(useActiveBackend).mockReturnValue(localBackend);
+    delete (window as unknown as Record<string, unknown>)
+      .__AGENT_CANVAS_VSCODE_BASE_PATH__;
+
+    const { result } = renderHook(() => useUnifiedVSCodeUrl(), {
+      wrapper: createWrapper(),
+    });
+
+    expect(
+      AgentServerConversationService.getVSCodeStatus,
+    ).not.toHaveBeenCalled();
+    expect(AgentServerConversationService.getVSCodeUrl).not.toHaveBeenCalled();
+    expect(result.current.isUnavailable).toBe(true);
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.data).toBeUndefined();
+  });
+
+  it("hides the control when the capability probe reports the editor disabled", async () => {
+    // `enabled: false` is the deployment switch. The URL request must never
+    // fire — that is the whole point of gating on the probe — and the control
+    // reports itself unavailable instead of erroring.
+    vi.mocked(useActiveBackend).mockReturnValue(localBackend);
+    vi.mocked(AgentServerConversationService.getVSCodeStatus).mockResolvedValue({
+      enabled: false,
+      running: true,
+    });
+
+    const { result } = renderHook(() => useUnifiedVSCodeUrl(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isUnavailable).toBe(true));
+    expect(AgentServerConversationService.getVSCodeUrl).not.toHaveBeenCalled();
+    expect(result.current.isSuccess).toBe(false);
+  });
+
+  it("hides the control when the editor is enabled but not running", async () => {
+    // `running: false` alongside `enabled: true` is a terminal failed-start,
+    // not a startup race, so the URL request is still withheld.
+    vi.mocked(useActiveBackend).mockReturnValue(localBackend);
+    vi.mocked(AgentServerConversationService.getVSCodeStatus).mockResolvedValue({
+      enabled: true,
+      running: false,
+    });
+
+    const { result } = renderHook(() => useUnifiedVSCodeUrl(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isUnavailable).toBe(true));
+    expect(AgentServerConversationService.getVSCodeUrl).not.toHaveBeenCalled();
+  });
+
+  it("keeps the control available when the resolved URL is routed by this origin", async () => {
+    // The probe cleared the editor and the resolved URL sits under the prefix
+    // this origin actually serves, so the control is usable.
+    const routedUrl = `${window.location.origin}/vscode/?tkn=abc&folder=workspace`;
+    vi.mocked(useActiveBackend).mockReturnValue(localBackend);
+    vi.mocked(AgentServerConversationService.getVSCodeUrl).mockResolvedValue({
+      vscode_url: routedUrl,
+    });
+
+    const { result } = renderHook(() => useUnifiedVSCodeUrl(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual({ url: routedUrl, error: null });
     expect(result.current.isUnavailable).toBe(false);
   });
 
-  it("reports isUnavailable in local mode when the backend reports no URL", async () => {
-    // Arrange — the probe reports a running editor, but the URL request
-    // carries no URL to point at (e.g. no connection token). Distinct from
-    // both cases above: the capability state is fine and the query settles in
-    // `success`, so neither the probe nor `isError` would catch it.
+  it("hides the control when the resolved URL is not routed by this origin", async () => {
+    // Same-origin but wrong prefix: an extra backend with no prefix of its own
+    // hands back a URL that would reopen this app instead of an editor. The URL
+    // resolves successfully yet the control must still hide.
+    const unroutableUrl = `${window.location.origin}/not-vscode/?tkn=abc`;
+    vi.mocked(useActiveBackend).mockReturnValue(localBackend);
+    vi.mocked(AgentServerConversationService.getVSCodeUrl).mockResolvedValue({
+      vscode_url: unroutableUrl,
+    });
+
+    const { result } = renderHook(() => useUnifiedVSCodeUrl(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.url).toBe(unroutableUrl);
+    expect(result.current.isUnavailable).toBe(true);
+  });
+
+  it("marks the control unavailable when the editor reports no URL", async () => {
+    // The probe says the editor is up, but the resolver returns no URL: there
+    // is nothing to open, so the control hides rather than offering a no-op.
     vi.mocked(useActiveBackend).mockReturnValue(localBackend);
     vi.mocked(AgentServerConversationService.getVSCodeUrl).mockResolvedValue({
       vscode_url: null,
     });
 
-    // Act
     const { result } = renderHook(() => useUnifiedVSCodeUrl(), {
       wrapper: createWrapper(),
     });
 
-    // Assert
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data?.url).toBeNull();
+    expect(result.current.data).toEqual({
+      url: null,
+      error: i18n.t(I18nKey.VSCODE$URL_NOT_AVAILABLE),
+    });
     expect(result.current.isUnavailable).toBe(true);
   });
 
-  it("reports isUnavailable when this origin serves no editor (public mode)", async () => {
-    // Arrange — docker's public-mode static server shares one agent-server
-    // with the main instance but deliberately omits the editor route, because
-    // the editor's connection token is the session API key and that origin
-    // exists to test the unauthenticated case. The shared agent-server still
-    // answers `enabled: true, running: true`, so a control gated on the probe
-    // alone renders here and then falls through to the SPA.
-    vi.mocked(useActiveBackend).mockReturnValue(localBackend);
-    advertiseEditorOnOrigin(null);
-
-    // Act
-    const { result } = renderHook(() => useUnifiedVSCodeUrl(), {
-      wrapper: createWrapper(),
-    });
-
-    // Assert — hidden, and cheaply: neither request is worth making.
-    await waitFor(() => expect(result.current.isUnavailable).toBe(true));
-    expect(result.current.isError).toBe(false);
-    expect(
-      AgentServerConversationService.getVSCodeStatus,
-    ).not.toHaveBeenCalled();
-    expect(AgentServerConversationService.getVSCodeUrl).not.toHaveBeenCalled();
-  });
-
-  it("reports isUnavailable when the URL resolves outside this origin's editor route", async () => {
-    // Arrange — a conversation on an extra backend (dev-extra-backend.mjs),
-    // registered from a browser whose origin belongs to the bundled stack.
-    // That backend configures no prefix of its own, so agent-server appends
-    // nothing to the origin we send it and hands back the canvas root. Same
-    // origin, and the probe is truthful about *that* server — but clicking
-    // would reopen this app, or reach the bundled stack's editor and hence a
-    // different container's workspace.
+  it("reports loading while the capability probe is in flight", () => {
+    // The URL request only starts once the probe clears it, so the control is
+    // "loading" for the probe as well — otherwise it would look ready while
+    // there is still nothing to open.
     vi.mocked(useActiveBackend).mockReturnValue(localBackend);
     vi.mocked(AgentServerConversationService.getVSCodeUrl).mockResolvedValue({
-      vscode_url: `${window.location.origin}/?tkn=extra-backend-key&folder=workspace`,
+      vscode_url: "https://vscode.example.dev/?folder=workspace",
     });
 
-    // Act
     const { result } = renderHook(() => useUnifiedVSCodeUrl(), {
       wrapper: createWrapper(),
     });
 
-    // Assert
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.isUnavailable).toBe(true);
-  });
-
-  it("renders the control when the URL lands under this origin's editor route", async () => {
-    // Arrange — the bundled stack: the origin advertises `/vscode` because it
-    // routes `/vscode`, and the conversation's own agent-server is configured
-    // with the matching prefix. This is the case the whole feature exists for,
-    // pinned here so the guards above cannot be tightened into hiding it.
-    vi.mocked(useActiveBackend).mockReturnValue(localBackend);
-    vi.mocked(AgentServerConversationService.getVSCodeUrl).mockResolvedValue({
-      vscode_url: editorUrlOnThisOrigin("/vscode"),
-    });
-
-    // Act
-    const { result } = renderHook(() => useUnifiedVSCodeUrl(), {
-      wrapper: createWrapper(),
-    });
-
-    // Assert
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.isUnavailable).toBe(false);
-    expect(result.current.data?.url).toBe(editorUrlOnThisOrigin("/vscode"));
+    expect(result.current.isLoading).toBe(true);
   });
 });
