@@ -7,6 +7,7 @@ import {
 
 export type ConversationTab =
   | "files"
+  | "preview"
   | "commits"
   | "browser"
   | "terminal"
