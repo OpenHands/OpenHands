@@ -218,15 +218,47 @@ export function LlmSettingsScreen({
         return schemaView;
       }
 
-      const currentModel = currentSettings.llm_model ?? "";
-      const trimmedBaseUrl = currentSettings.llm_base_url?.trim() ?? "";
+      // Embedded profile forms (create/edit) seed values via
+      // `initialValueOverrides`, which this callback previously ignored —
+      // it read only the globally active settings. That let editing a
+      // profile with a custom model/base URL (or one linked to a provider
+      // connection) silently land on the Basic tab regardless of what the
+      // profile being edited actually contains. Once there, ModelSelector
+      // binds its Model dropdown to a key absent from the resolved
+      // provider's real catalog, and HeroUI's Autocomplete silently
+      // reconciles that to an unrelated model once its list loads —
+      // corrupting `llm.model`. Prefer the overrides here so the tab is
+      // inferred from the profile actually being edited.
+      const overrideConnectionId =
+        initialValueOverrides?.[LLM_PROVIDER_CONNECTION_KEY];
+      const isLinkedToConnection =
+        typeof overrideConnectionId === "string" &&
+        overrideConnectionId.length > 0;
+      // A connection-linked profile carries no inline base_url of its own
+      // (see llm-settings-local-view.tsx's save logic), so there is nothing
+      // here to compare against a provider default. The Basic tab has no
+      // concept of provider connections at all, so always defer to "all".
+      if (isLinkedToConnection) {
+        return "all";
+      }
+
+      const overrideModel = initialValueOverrides?.["llm.model"];
+      const overrideBaseUrl = initialValueOverrides?.["llm.base_url"];
+      const currentModel =
+        typeof overrideModel === "string"
+          ? overrideModel
+          : (currentSettings.llm_model ?? "");
+      const trimmedBaseUrl =
+        typeof overrideBaseUrl === "string"
+          ? overrideBaseUrl.trim()
+          : (currentSettings.llm_base_url?.trim() ?? "");
       const hasCustomBaseUrl =
         trimmedBaseUrl.length > 0 &&
         !isProviderDefaultBaseUrl(currentModel, trimmedBaseUrl);
 
       return hasCustomBaseUrl ? "all" : "basic";
     },
-    [],
+    [initialValueOverrides],
   );
 
   const buildHeader = React.useCallback(

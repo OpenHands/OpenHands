@@ -481,6 +481,42 @@ describe("LlmSettingsScreen - provider connection selector", () => {
       await screen.findByTestId("llm-provider-connection-input"),
     ).toBeInTheDocument();
   });
+
+  it("opens on a non-Basic tab when linked to a provider connection, even if the active settings look like Basic defaults (bug repro)", async () => {
+    // Regression: getInitialView used to infer the tab from the globally
+    // active settings only, ignoring initialValueOverrides entirely. A
+    // profile linked to a connection (whose credential/base_url live off
+    // the profile, not inline) would then silently open on the Basic tab
+    // whenever the *active* settings happened to look like a plain default
+    // model — regardless of what the profile being edited actually
+    // contains. On the Basic tab, ModelSelector binds its Model dropdown to
+    // a key absent from the resolved provider's real catalog for any model
+    // string not in that catalog, and HeroUI's Autocomplete silently
+    // rewrites it to an unrelated model once the list loads — corrupting
+    // `llm.model`.
+    vi.spyOn(activeBackendContext, "useActiveBackend").mockReturnValue({
+      backend: mockLocalBackend,
+    } as ReturnType<typeof activeBackendContext.useActiveBackend>);
+    vi.spyOn(ProviderConnectionsService, "list").mockResolvedValue([
+      connection,
+    ]);
+
+    renderLlmSettingsScreen({
+      embedded: true,
+      hideSaveButton: true,
+      showProviderConnection: true,
+      initialValueOverrides: {
+        "llm.model": "openai/glm-5.3-flash:cloud",
+        "llm.provider_connection_id": "conn-1",
+      },
+    });
+
+    await screen.findByTestId("llm-settings-screen");
+    expect(screen.queryByTestId("llm-provider-input")).not.toBeInTheDocument();
+    expect(await screen.findByTestId("llm-custom-model-input")).toHaveValue(
+      "openai/glm-5.3-flash:cloud",
+    );
+  });
 });
 
 describe("LlmSettingsScreen - OpenHands provider on cloud", () => {
