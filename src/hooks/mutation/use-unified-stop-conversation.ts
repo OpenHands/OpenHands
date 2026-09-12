@@ -5,7 +5,6 @@ import {
   TOAST_OPTIONS,
   displayErrorToast,
 } from "#/utils/custom-toast-handlers";
-import { useNavigation } from "#/context/navigation-context";
 import { I18nKey } from "#/i18n/declaration";
 import { ExecutionStatus } from "#/types/agent-server/core";
 import {
@@ -16,7 +15,6 @@ import {
 export const useUnifiedPauseConversation = () => {
   const { t } = useTranslation("openhands");
   const queryClient = useQueryClient();
-  const { conversationId: currentConversationId, navigate } = useNavigation();
 
   return useMutation({
     mutationKey: ["stop-conversation"],
@@ -64,10 +62,6 @@ export const useUnifiedPauseConversation = () => {
         execution_status: ExecutionStatus.PAUSED,
         sandbox_status: "PAUSED",
       });
-
-      if (currentConversationId === variables.conversationId) {
-        navigate("/conversations");
-      }
     },
   });
 };
