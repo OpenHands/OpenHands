@@ -21,6 +21,7 @@ import {
   createWriteStream,
   existsSync,
   mkdirSync,
+  readFileSync,
   rmSync,
 } from "node:fs";
 import { get } from "node:https";
@@ -28,6 +29,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
+
+import { checksumForFile, verifyFileSha256 } from "./download-integrity.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, "..");
@@ -160,6 +163,7 @@ async function main() {
   const filename = `${spec.target}.${spec.ext}`;
   const url = `https://github.com/astral-sh/uv/releases/download/${version}/${filename}`;
   const tmpFile = join(tmpdir(), `uv-download-${Date.now()}.${spec.ext}`);
+  const tmpChecksumFile = `${tmpFile}.sha256`;
   const extractDir = join(tmpdir(), `uv-extract-${Date.now()}`);
 
   try {
@@ -168,6 +172,13 @@ async function main() {
 
     console.log(`[download-uv] URL: ${url}`);
     await downloadFile(url, tmpFile);
+    await downloadFile(`${url}.sha256`, tmpChecksumFile);
+    const expectedSha256 = checksumForFile(
+      readFileSync(tmpChecksumFile, "utf8"),
+      filename,
+    );
+    await verifyFileSha256(tmpFile, expectedSha256);
+    console.log("[download-uv] SHA-256 checksum verified.");
     console.log(`[download-uv] Extracting to ${outDir}...`);
     extract(tmpFile, extractDir, spec.ext);
 
@@ -194,6 +205,7 @@ async function main() {
   } finally {
     // Clean up temp files (best-effort)
     try { rmSync(tmpFile, { force: true }); } catch {}
+    try { rmSync(tmpChecksumFile, { force: true }); } catch {}
     try { rmSync(extractDir, { recursive: true, force: true }); } catch {}
   }
 }

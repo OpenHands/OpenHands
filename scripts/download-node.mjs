@@ -41,6 +41,7 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
+  readFileSync,
   readdirSync,
   readlinkSync,
   rmSync,
@@ -52,6 +53,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
+
+import { checksumForFile, verifyFileSha256 } from "./download-integrity.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, "..");
@@ -345,6 +348,8 @@ async function main() {
   const archiveName = `${spec.name}.${spec.ext}`;
   const url = `https://nodejs.org/dist/v${version}/${archiveName}`;
   const tmpFile = join(tmpdir(), `node-download-${Date.now()}.${spec.ext}`);
+  const tmpChecksumFile = `${tmpFile}.sha256`;
+  const checksumsUrl = `https://nodejs.org/dist/v${version}/SHASUMS256.txt`;
 
   console.log(
     `[download-node] Downloading Node v${version} for ${PLATFORM}/${ARCH}`,
@@ -360,6 +365,13 @@ async function main() {
 
     console.log(`[download-node] Downloading to ${tmpFile}`);
     await downloadFile(url, tmpFile);
+    await downloadFile(checksumsUrl, tmpChecksumFile);
+    const expectedSha256 = checksumForFile(
+      readFileSync(tmpChecksumFile, "utf8"),
+      archiveName,
+    );
+    await verifyFileSha256(tmpFile, expectedSha256);
+    console.log("[download-node] SHA-256 checksum verified.");
     console.log(`[download-node] Extracting to ${outDir}`);
     extract(tmpFile, outDir, spec.ext);
 
@@ -372,6 +384,9 @@ async function main() {
   } finally {
     try {
       rmSync(tmpFile, { force: true });
+    } catch {}
+    try {
+      rmSync(tmpChecksumFile, { force: true });
     } catch {}
   }
 }
