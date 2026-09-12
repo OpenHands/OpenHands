@@ -91,13 +91,16 @@ vi.mock("#/components/features/chat/custom-chat-input", () => ({
   CustomChatInput: ({
     onSubmit,
     disabled,
+    placeholder,
   }: {
     onSubmit: (msg: string) => void;
     disabled?: boolean;
+    placeholder?: string;
   }) => (
     <button
       type="button"
       data-testid="stub-chat-submit"
+      data-placeholder={placeholder}
       disabled={disabled}
       onClick={() => onSubmit("hello world")}
     >
@@ -349,6 +352,15 @@ describe("HomeChatLauncher", () => {
   afterEach(() => {
     toast.remove();
     window.localStorage.removeItem(LAST_LOCAL_WORKSPACE_MODE_STORAGE_KEY);
+  });
+
+  it("asks for an engineering task in the launcher input placeholder", async () => {
+    renderLauncher();
+
+    expect(screen.getByTestId("stub-chat-submit")).toHaveAttribute(
+      "data-placeholder",
+      "HOME$DESCRIBE_ENGINEERING_TASK",
+    );
   });
 
   it("creates a conversation with just the typed query and navigates when no workspace is selected", async () => {
