@@ -41919,5 +41919,14 @@
   },
   "SETTINGS$PROVIDER_CONNECTION_KEY_UNSET_LABEL": {
     "en": "No API key stored"
+  },
+  "SECRETS$LOAD_ERROR": {
+    "en": "Failed to load secrets"
+  },
+  "SECRETS$EDIT_SECRET_ARIA": {
+    "en": "Edit {{name}}"
+  },
+  "SECRETS$DELETE_SECRET_ARIA": {
+    "en": "Delete {{name}}"
   }
 }

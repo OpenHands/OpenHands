@@ -9,9 +9,11 @@ function renderSecretsSettingsScreen() {
   return render(<SecretsSettingsScreen />, {
     wrapper: ({ children }) => (
       <QueryClientProvider
-        client={new QueryClient({
-          defaultOptions: { queries: { retry: false } },
-        })}
+        client={
+          new QueryClient({
+            defaultOptions: { queries: { retry: false } },
+          })
+        }
       >
         {children}
       </QueryClientProvider>
@@ -25,8 +27,8 @@ describe("SecretsSettingsScreen", () => {
   });
 
   it("renders the OSS secrets list for local secrets management", async () => {
-    // Mock getSecrets (used by useSearchSecrets internally)
-    vi.spyOn(SecretsService, "getSecrets").mockResolvedValue([
+    // Mock getSecretsOrThrow (used by useSearchSecrets internally)
+    vi.spyOn(SecretsService, "getSecretsOrThrow").mockResolvedValue([
       {
         name: "MY_SECRET",
         description: "Demo secret",
@@ -41,7 +43,7 @@ describe("SecretsSettingsScreen", () => {
   });
 
   it("disables Add Secret submit until required fields are filled", async () => {
-    vi.spyOn(SecretsService, "getSecrets").mockResolvedValue([]);
+    vi.spyOn(SecretsService, "getSecretsOrThrow").mockResolvedValue([]);
     const user = userEvent.setup();
 
     renderSecretsSettingsScreen();
@@ -63,7 +65,7 @@ describe("SecretsSettingsScreen", () => {
   });
 
   it("disables Edit Secret submit until a field changes", async () => {
-    vi.spyOn(SecretsService, "getSecrets").mockResolvedValue([
+    vi.spyOn(SecretsService, "getSecretsOrThrow").mockResolvedValue([
       {
         name: "MY_SECRET",
         description: "Demo secret",
@@ -84,5 +86,21 @@ describe("SecretsSettingsScreen", () => {
 
     await user.type(descriptionInput, " updated");
     expect(submitButton).not.toBeDisabled();
+  });
+
+  it("shows a load-error state instead of the empty state when fetching secrets fails", async () => {
+    // Regression: the hook used to swallow a fetch failure into an empty
+    // array, so a real error (network, backend down) rendered as the plain
+    // "you have no secrets yet" empty state with no indication anything
+    // went wrong.
+    vi.spyOn(SecretsService, "getSecretsOrThrow").mockRejectedValue(
+      new Error("network down"),
+    );
+
+    renderSecretsSettingsScreen();
+
+    await screen.findByTestId("secrets-settings-screen");
+    expect(await screen.findByTestId("secrets-load-error")).toBeInTheDocument();
+    expect(screen.queryByTestId("secrets-empty")).not.toBeInTheDocument();
   });
 });
