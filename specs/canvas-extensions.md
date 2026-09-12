@@ -13,7 +13,7 @@ panels, renderers, slots, and themes. Skills and plugins change the agent;
 Canvas Extensions change the app.
 
 The Customize area remains the single inventory for Skills, Plugins, MCP, and
-Canvas Extensions. The inventory item is named **Extensions**; "addon" is an
+Canvas Extensions. The inventory item is named **Apps**; "addon" is an
 informal alias only.
 
 ## Decisions
@@ -29,7 +29,7 @@ informal alias only.
    as optional style isolation, but never as a security boundary.
 3. **Install and enable are separate.** Installation always produces a disabled
    extension. An agent may install or update an extension, but the user returns
-   to Customize -> Extensions and explicitly enables it. In v1 this is a product
+   to Customize -> Apps and explicitly enables it. In v1 this is a product
    consent invariant, not proof of human presence against an agent that can call
    the same authenticated APIs. A future backend policy may allow agent-driven
    enablement.
@@ -208,7 +208,7 @@ For each enabled installation:
    invoke the extension disposer, and remove its registry entries.
 
 The initial route shape is
-`/extensions/{extension-name}/{declared-page-path}`. `/extensions` itself is the
+`/extensions/{extension-name}/{declared-page-path}`. `/apps` itself is the
 Customize inventory. All routing goes through React Router so `VITE_BASE_PATH`
 continues to work.
 
@@ -219,7 +219,7 @@ continues to work.
 - Land this spec and shared TypeScript manifest/installation types.
 - Add a backend-keyed service and query hooks for list, install, enable/disable,
   uninstall, and authenticated bundle fetch.
-- Add Customize -> Extensions with an unsupported-backend state, source install
+- Add Customize -> Apps with an unsupported-backend state, source install
   form, source/revision/contribution review, and explicit enable control.
 - Keep the global runtime silent when the active backend returns 404.
 
