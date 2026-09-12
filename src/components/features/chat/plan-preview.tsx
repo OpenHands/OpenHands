@@ -31,7 +31,6 @@ interface PlanPreviewProps {
   isBuildDisabled?: boolean;
 }
 
-/* eslint-disable i18next/no-literal-string */
 export function PlanPreview({
   planContent,
   isStreaming,
@@ -130,10 +129,7 @@ export function PlanPreview({
           data-testid="plan-preview-build-button"
         >
           <Typography.Text className="font-normal text-[14px] text-black leading-5">
-            {t(I18nKey.COMMON$BUILD)}{" "}
-            <Typography.Text className="font-normal text-black">
-              ⌘↩
-            </Typography.Text>
+            {t(I18nKey.COMMON$BUILD)}
           </Typography.Text>
         </button>
       </div>

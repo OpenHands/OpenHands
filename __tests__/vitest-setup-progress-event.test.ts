@@ -60,3 +60,28 @@ describe("ProgressEvent fallback in vitest.setup.ts", () => {
     expect("ProgressEvent" in {}).toBe(false);
   });
 });
+
+describe("XMLHttpRequestUpload fallback in vitest.setup.ts", () => {
+  it("resolves the bare identifier after teardown deletes the own property", () => {
+    const live = Object.getOwnPropertyDescriptor(
+      globalThis,
+      "XMLHttpRequestUpload",
+    );
+    expect(live).toBeDefined();
+
+    delete (globalThis as { XMLHttpRequestUpload?: unknown })
+      .XMLHttpRequestUpload;
+
+    try {
+      expect(typeof XMLHttpRequestUpload).toBe("function");
+    } finally {
+      if (live) {
+        Object.defineProperty(globalThis, "XMLHttpRequestUpload", live);
+      }
+    }
+  });
+
+  it("does not add XMLHttpRequestUpload to plain objects", () => {
+    expect("XMLHttpRequestUpload" in {}).toBe(false);
+  });
+});
