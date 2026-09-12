@@ -167,4 +167,22 @@ describe("CanvasExtensionsRuntimeProvider", () => {
     );
     expect(screen.getByTestId("page-count")).toHaveTextContent("0");
   });
+
+  it("clears stale pinned home routes for extensions that are disabled or missing", async () => {
+    const pinKey = `oh:pinned-home-route:${backend.id}:-`;
+    window.localStorage.setItem(
+      pinKey,
+      JSON.stringify("/extensions/disabled-extension/dashboard"),
+    );
+
+    const moduleLoader = vi.fn().mockResolvedValue({
+      activate: (host: CanvasExtensionHost) => {
+        host.registerPage("dashboard", () => undefined);
+      },
+    });
+
+    renderRuntime(moduleLoader);
+
+    await waitFor(() => expect(window.localStorage.getItem(pinKey)).toBeNull());
+  });
 });
