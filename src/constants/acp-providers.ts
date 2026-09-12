@@ -271,7 +271,7 @@ const ACP_RESERVED_CREDENTIALS: Record<string, ACPProviderSecretField[]> = {
       name: "CODEX_AUTH_JSON",
       secret: true,
       multiline: true,
-      hint_key: I18nKey.ONBOARDING$ACP_SECRET_FILE_BLOB_HINT,
+      hint_key: I18nKey.ONBOARDING$ACP_SECRET_CODEX_AUTH_JSON_HINT,
       hint_values: { file: "~/.codex/auth.json" },
     },
   ],

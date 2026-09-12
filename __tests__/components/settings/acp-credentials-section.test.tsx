@@ -9,6 +9,7 @@ import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { AcpCredentialsSection } from "#/components/features/settings/acp-credentials-section";
 import { useAcpCredentialForm } from "#/hooks/use-acp-credential-form";
 import { SecretsService } from "#/api/secrets-service";
+import { I18nKey } from "#/i18n/declaration";
 
 // The login-detection probe is exercised in its own hook test; here we stub it
 // so rendering the section doesn't spin a subprocess and we can drive the auth
@@ -68,6 +69,9 @@ describe("AcpCredentialsSection", () => {
     expect(
       screen.getByTestId("settings-acp-secret-OPENAI_API_KEY"),
     ).toHaveAttribute("type", "password");
+    expect(
+      screen.getByText(I18nKey.ONBOARDING$ACP_SECRET_CODEX_AUTH_JSON_HINT),
+    ).toBeInTheDocument();
   });
 
   it("renders nothing for a provider without credential fields", () => {
