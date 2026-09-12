@@ -39,7 +39,9 @@ describe("PluginLaunchModal", () => {
 
   describe("Plugin Display Name Extraction", () => {
     it("should extract plugin name from repo_path when provided", () => {
-      renderModal([{ source: "github:owner/repo", repo_path: "plugins/my-plugin" }]);
+      renderModal([
+        { source: "github:owner/repo", repo_path: "plugins/my-plugin" },
+      ]);
 
       // Plugin name should be "my-plugin" from the path
       expect(screen.getByText("my-plugin")).toBeInTheDocument();
@@ -54,9 +56,7 @@ describe("PluginLaunchModal", () => {
     });
 
     it("should extract name from git URL", () => {
-      renderModal([
-        { source: "https://github.com/owner/repo-name.git" },
-      ]);
+      renderModal([{ source: "https://github.com/owner/repo-name.git" }]);
 
       const elements = screen.getAllByText("repo-name");
       expect(elements.length).toBeGreaterThan(0);
@@ -295,13 +295,13 @@ describe("PluginLaunchModal", () => {
 
       expect(screen.getByText("LAUNCH$ADDITIONAL_PLUGINS")).toBeInTheDocument();
       // When no repo_path, the full repo path is shown
-      expect(screen.getAllByText("owner/without-params").length).toBeGreaterThan(0);
+      expect(
+        screen.getAllByText("owner/without-params").length,
+      ).toBeGreaterThan(0);
     });
 
     it("should show ref in simple plugin list", () => {
-      renderModal([
-        { source: "github:owner/plugin", ref: "main" },
-      ]);
+      renderModal([{ source: "github:owner/plugin", ref: "main" }]);
 
       expect(screen.getByText("@ main")).toBeInTheDocument();
     });
@@ -362,10 +362,9 @@ describe("PluginLaunchModal", () => {
 
     it("should call onStartConversation with message when provided", async () => {
       const user = userEvent.setup();
-      renderModal(
-        [{ source: "github:owner/repo" }],
-        { message: "/city-weather:now Tokyo" },
-      );
+      renderModal([{ source: "github:owner/repo" }], {
+        message: "/city-weather:now Tokyo",
+      });
 
       // Check the trust checkbox first
       await user.click(screen.getByTestId("trust-checkbox"));
@@ -421,6 +420,62 @@ describe("PluginLaunchModal", () => {
 
       // First plugin should have new value
       expect(input1).toHaveValue("new-val1");
+    });
+  });
+
+  // The modal's source line is what the trust checkbox names: "I trust this
+  // skill from {sources} with the agent secrets defined in my account." If a
+  // source can be displayed as a repo coordinate it does not own, that
+  // sentence is asking the user to trust the wrong party.
+  describe("Source Display", () => {
+    it("shows the whole URL when the host only looks like GitHub", () => {
+      const spoofed =
+        "https://evil.example/github.com/All-Hands-AI/openhands-plugin";
+      renderModal([{ source: spoofed }]);
+
+      expect(screen.getByText(spoofed)).toBeInTheDocument();
+      expect(
+        screen.queryByText("All-Hands-AI/openhands-plugin"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("shows the whole URL for a host that merely starts with github.com", () => {
+      const spoofed = "https://github.com.evil.example/All-Hands-AI/plugin";
+      renderModal([{ source: spoofed }]);
+
+      expect(screen.getByText(spoofed)).toBeInTheDocument();
+      expect(screen.queryByText("All-Hands-AI/plugin")).not.toBeInTheDocument();
+    });
+
+    it("shortens a real github.com URL to its repo coordinate", () => {
+      renderModal([
+        { source: "https://github.com/All-Hands-AI/openhands-plugin.git" },
+      ]);
+
+      expect(
+        screen.getByText("All-Hands-AI/openhands-plugin"),
+      ).toBeInTheDocument();
+    });
+
+    it("shortens a github: coordinate", () => {
+      renderModal([{ source: "github:All-Hands-AI/openhands-plugin" }]);
+
+      // The display name and the source line both read as the coordinate
+      // here, so match all of them rather than expecting exactly one.
+      expect(
+        screen.getAllByText("All-Hands-AI/openhands-plugin").length,
+      ).toBeGreaterThan(0);
+      expect(
+        screen.queryByText("github:All-Hands-AI/openhands-plugin"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("shows a source that is not a URL unchanged", () => {
+      renderModal([{ source: "git@github.com:All-Hands-AI/plugin.git" }]);
+
+      expect(
+        screen.getByText("git@github.com:All-Hands-AI/plugin.git"),
+      ).toBeInTheDocument();
     });
   });
 });
