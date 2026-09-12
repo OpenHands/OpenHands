@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { isAgentServerVersionError } from "@openhands/typescript-client/clients";
 
+import { getDeploymentMode } from "#/api/agent-server-adapter";
 import { useLocalWorkspaces } from "#/hooks/query/use-local-workspaces";
 import { searchAllSubdirectories } from "#/hooks/query/use-search-subdirs";
 import { LocalWorkspace, LocalWorkspaceParent } from "#/types/workspace";
@@ -11,9 +12,10 @@ interface UseResolvedWorkspacesResult {
   /**
    * The merged workspace parents that produced the dynamic children above:
    * the user's stored parents plus any implicit built-in parents (currently
-   * `/projects` in dev). Consumers use this to label a child's group by its
-   * parent's `name` — `parentPath` alone only yields a path. Includes the
-   * implicit parents that `useLocalWorkspaces` does not expose on its own.
+   * `/projects` in development and Docker deployments). Consumers use this to
+   * label a child's group by its `name` — `parentPath` alone only yields a path.
+   * Includes the implicit parents that `useLocalWorkspaces` does not expose on
+   * its own.
    */
   parents: LocalWorkspaceParent[];
   isLoading: boolean;
@@ -25,14 +27,25 @@ interface UseResolvedWorkspacesResult {
  * Implicit workspace parents that are always considered when resolving
  * workspaces. `/projects` is a well-known directory that some agent-server
  * setups use as the projects root. We surface its immediate subdirectories
- * as workspaces automatically in dev mode.
+ * as workspaces automatically in development and Docker deployments.
  *
- * This is a development convenience only. Production previews may point at
- * arbitrary remote agent servers that do not expose the file-browser endpoint;
- * probing `/projects` there creates noisy 404s before the user has added any
- * workspace parent explicitly.
+ * Other production deployments may point at arbitrary remote agent servers
+ * that do not expose the file-browser endpoint; probing `/projects` there
+ * creates noisy 404s before the user has added any workspace parent explicitly.
  */
-const INCLUDE_IMPLICIT_WORKSPACE_PARENTS = import.meta.env.DEV;
+
+export function shouldIncludeImplicitWorkspaceParents(
+  isDevelopment: boolean,
+  deploymentMode: string | null,
+): boolean {
+  return isDevelopment || deploymentMode === "docker";
+}
+
+const INCLUDE_IMPLICIT_WORKSPACE_PARENTS =
+  shouldIncludeImplicitWorkspaceParents(
+    import.meta.env.DEV,
+    getDeploymentMode(),
+  );
 
 const IMPLICIT_WORKSPACE_PARENTS: LocalWorkspaceParent[] = [
   { id: "implicit:/projects", name: "/projects", path: "/projects" },
