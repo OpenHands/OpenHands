@@ -155,8 +155,12 @@ export const useDragResize = ({
         // Remove both mouse and touch event listeners
         resizeGrip.removeEventListener("mousemove", handleDragMove);
         resizeGrip.removeEventListener("mouseup", handleDragEnd);
-        resizeGrip.removeEventListener("touchmove", handleDragMove);
-        resizeGrip.removeEventListener("touchend", handleDragEnd);
+        resizeGrip.removeEventListener("touchmove", handleDragMove, {
+          capture: true,
+        });
+        resizeGrip.removeEventListener("touchend", handleDragEnd, {
+          capture: true,
+        });
       } else {
         document.removeEventListener("mousemove", handleDragMove);
         document.removeEventListener("mouseup", handleDragEnd);
