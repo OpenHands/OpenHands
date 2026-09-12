@@ -132,4 +132,29 @@ describe("SecretsService", () => {
     });
     expect(mockDeleteSecret).toHaveBeenCalledWith("Old_Key");
   });
+
+  it("surfaces a distinct, actionable error when the rename's cleanup delete fails", async () => {
+    // Regression: the new entry saves successfully, but if removing the old
+    // one then fails, this must not look like the whole rename failed (it
+    // didn't — the new secret exists) or succeed silently (the old, now
+    // possibly-stale entry keeps existing indefinitely with no visible
+    // sign). The caller needs to know exactly what happened.
+    mockGetSecret.mockResolvedValue("original-value");
+    mockUpsertSecret.mockResolvedValue({
+      name: "New_Key",
+      description: "Renamed",
+    });
+    mockDeleteSecret.mockRejectedValue(new Error("500 Internal Server Error"));
+
+    await expect(
+      SecretsService.updateSecret("Old_Key", "New_Key", "Renamed"),
+    ).rejects.toThrow(/New_Key.*Old_Key.*500 Internal Server Error/s);
+
+    // The new entry was still created — this isn't a total failure.
+    expect(mockUpsertSecret).toHaveBeenCalledWith({
+      name: "New_Key",
+      value: "original-value",
+      description: "Renamed",
+    });
+  });
 });
