@@ -200,6 +200,64 @@ describe("useUrlSearch", () => {
         expect(result.current.isUrlSearchLoading).toBe(false);
       });
     });
+
+    it("should ignore results from a search after the input changes", async () => {
+      let resolveSearch: (value: unknown) => void;
+      const searchPromise = new Promise((resolve) => {
+        resolveSearch = resolve;
+      });
+
+      mockSearchGitRepositories.mockReturnValue(searchPromise as Promise<{
+        items: Array<{
+          id: string;
+          full_name: string;
+          git_provider: string;
+          is_public: boolean;
+        }>;
+        next_page_id: null;
+      }>);
+
+      const { result, rerender } = renderHook(
+        ({ inputValue, provider }) => useUrlSearch(inputValue, provider),
+        {
+          initialProps: {
+            inputValue: "https://github.com/owner/repo",
+            provider: "github" as const,
+          },
+        },
+      );
+
+      await waitFor(() => {
+        expect(result.current.isUrlSearchLoading).toBe(true);
+      });
+
+      rerender({
+        inputValue: "",
+        provider: "github" as const,
+      });
+
+      await waitFor(() => {
+        expect(result.current.urlSearchResults).toEqual([]);
+        expect(result.current.isUrlSearchLoading).toBe(false);
+      });
+
+      await act(async () => {
+        resolveSearch!({
+          items: [
+            {
+              id: "1",
+              full_name: "owner/repo",
+              git_provider: "github",
+              is_public: true,
+            },
+          ],
+          next_page_id: null,
+        });
+      });
+
+      expect(result.current.urlSearchResults).toEqual([]);
+      expect(result.current.isUrlSearchLoading).toBe(false);
+    });
   });
 
   describe("clear results on non-URL input", () => {
