@@ -25,6 +25,21 @@ const GOAL_REPROMPT_PREFIXES = [
   "Resuming a goal that was paused or interrupted.",
 ];
 
+// The SDK's empty-response corrective nudge text. When the agent's LLM response
+// contains neither a tool call nor any visible message content, the framework
+// injects this as a user-role message with source="environment" to remind the
+// agent to proceed. Match it here so the frontend can render it as a distinct
+// informational note rather than an ordinary user bubble.
+export const CORRECTIVE_NUDGE_TEXT =
+  "Your last response did not include a function call or a message. Please use a tool to proceed with the task.";
+
+export const isCorrectiveNudge = (event: OpenHandsEvent): boolean => {
+  if (!isMessageEvent(event)) return false;
+  if (event.source !== "environment") return false;
+  const text = userMessageText(event);
+  return text?.startsWith(CORRECTIVE_NUDGE_TEXT) ?? false;
+};
+
 const userMessageText = (event: MessageEvent): string | null => {
   if (event.llm_message?.role !== "user") return null;
   const content = event.llm_message.content;
