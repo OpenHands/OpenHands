@@ -41,7 +41,12 @@ export function SayHelloStep({
     isSuccess,
   } = useCreateConversation();
   const isCreatingElsewhere = useIsCreatingConversation();
-  const isLaunching = isPending || isSuccess || isCreatingElsewhere;
+  const [launchStatus, setLaunchStatus] = React.useState<
+    "idle" | "pending" | "error"
+  >("idle");
+  const isPendingLaunch =
+    launchStatus === "pending" || isPending || isCreatingElsewhere;
+  const isLaunching = isPendingLaunch || isSuccess;
   const launchInFlightRef = React.useRef(false);
 
   const canSubmit =
@@ -50,6 +55,7 @@ export function SayHelloStep({
   const launchConversation = () => {
     if (!canSubmit || launchInFlightRef.current) return;
     launchInFlightRef.current = true;
+    setLaunchStatus("pending");
 
     // Explicitly omit `repository` and `workingDir` so the
     // conversation starts with no workspace, per the spec.
@@ -62,6 +68,7 @@ export function SayHelloStep({
         },
         onError: () => {
           launchInFlightRef.current = false;
+          setLaunchStatus("error");
         },
       },
     );
@@ -116,9 +123,35 @@ export function SayHelloStep({
             buttonClassName=""
             handleSubmit={launchConversation}
             disabled={!canSubmit}
+            isPending={isPendingLaunch}
           />
         </div>
       </form>
+
+      {isPendingLaunch ? (
+        <p
+          role="status"
+          aria-live="polite"
+          className="mt-3 text-sm text-[var(--oh-muted)]"
+        >
+          {t(I18nKey.ONBOARDING$HELLO_LAUNCHING)}
+        </p>
+      ) : null}
+      {launchStatus === "error" ? (
+        <div
+          role="alert"
+          className="mt-3 flex items-center gap-2 text-sm text-danger"
+        >
+          <span>{t(I18nKey.ERROR$GENERIC)}</span>
+          <button
+            type="button"
+            className="underline underline-offset-2"
+            onClick={launchConversation}
+          >
+            {t(I18nKey.LAUNCH$TRY_AGAIN)}
+          </button>
+        </div>
+      ) : null}
 
       {showRecommendedAutomations ? (
         <>
