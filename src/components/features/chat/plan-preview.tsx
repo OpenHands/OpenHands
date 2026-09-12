@@ -12,7 +12,7 @@ import {
   planComponents,
   createPlanComponents,
 } from "#/components/features/markdown/plan-components";
-import { useScrollContext } from "#/context/scroll-context";
+import { useScrollContext } from "#/contexts/scroll-context";
 
 const MAX_CONTENT_LENGTH = 300;
 

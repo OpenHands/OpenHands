@@ -6,7 +6,7 @@ import { MemoryRouter } from "react-router";
 
 import FilesTab from "#/routes/files-tab";
 import { useFilesTabStore } from "#/stores/files-tab-store";
-import { NavigationProvider } from "#/context/navigation-context";
+import { NavigationProvider } from "#/contexts/navigation-context";
 import {
   LOCAL_STORAGE_KEYS,
   setConversationState,

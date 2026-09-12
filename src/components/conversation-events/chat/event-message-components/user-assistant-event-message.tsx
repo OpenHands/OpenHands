@@ -1,6 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 import { MessageEvent } from "#/types/agent-server/core";
 import { ChatMessage } from "../../../features/chat/chat-message";
 import { ImageCarousel } from "../../../features/images/image-carousel";

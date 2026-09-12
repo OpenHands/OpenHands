@@ -11,7 +11,7 @@ import type { SkillInfo } from "#/types/settings";
 
 const navigateMock = vi.fn();
 
-vi.mock("#/context/navigation-context", () => ({
+vi.mock("#/contexts/navigation-context", () => ({
   useNavigation: () => ({
     navigate: navigateMock,
     currentPath: "/skills",

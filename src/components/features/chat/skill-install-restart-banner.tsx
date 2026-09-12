@@ -4,7 +4,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { useSkillInstalls } from "#/hooks/use-skill-installs";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { useIsCreatingConversation } from "#/hooks/use-is-creating-conversation";
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
