@@ -24,6 +24,8 @@ const isTypedErrorEvent = (
 
 export const useHandleWSEvents = () => {
   const { send } = useSendMessage();
+  const sendRef = React.useRef(send);
+  sendRef.current = send;
   const events = useEventStore((state) => state.events);
 
   React.useEffect(() => {
@@ -56,7 +58,7 @@ export const useHandleWSEvents = () => {
       const message: string = `${event.message ?? ""}`;
       if (message.startsWith("Agent reached maximum")) {
         // We set the agent state to paused here - if the user clicks resume, it auto updates the max iterations
-        send(generateAgentStateChangeEvent(AgentState.PAUSED));
+        sendRef.current(generateAgentStateChangeEvent(AgentState.PAUSED));
       }
     }
   }, [events.length]);
