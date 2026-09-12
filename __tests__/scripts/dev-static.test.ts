@@ -3,9 +3,24 @@ import { describe, expect, it } from "vitest";
 import {
   buildAutomationBackendEnv,
   buildLocalServiceRouteArgs,
+  parseArgs,
 } from "../../scripts/dev-static.mjs";
 
 describe("dev-static", () => {
+  it("collects repeatable --skills sources in both spellings", () => {
+    const config = parseArgs([
+      "--skills",
+      "github.com/acmecorp/skills",
+      "--skip-build",
+      "--skills=/opt/acme-skills",
+    ]);
+    expect(config.skillsSources).toEqual([
+      "github.com/acmecorp/skills",
+      "/opt/acme-skills",
+    ]);
+    expect(config.skipBuild).toBe(true);
+  });
+
   it("uses the same session key for both agent-server and automation backend auth", () => {
     const env = buildAutomationBackendEnv(
       {

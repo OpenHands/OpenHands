@@ -195,6 +195,18 @@ describe("static-server.mjs", () => {
       const config = parseArgs(["--runtime-services-info", ""]);
       expect(config.runtimeServicesInfo).toBeNull();
     });
+
+    it("defaults externalSkillsFile to null", () => {
+      expect(parseArgs([]).externalSkillsFile).toBeNull();
+    });
+
+    it("parses --external-skills-file", () => {
+      const config = parseArgs([
+        "--external-skills-file",
+        "/tmp/manifest.json",
+      ]);
+      expect(config.externalSkillsFile).toBe("/tmp/manifest.json");
+    });
   });
 
   describe("--vscode-base-path", () => {
@@ -368,6 +380,69 @@ describe("static-server.mjs", () => {
 
       const body = await (await fetch(`${origin}/`)).text();
       expect(body).not.toContain("__AGENT_CANVAS_RUNTIME_SERVICES_INFO__");
+    });
+
+    it("exposes a --skills manifest on window.__AGENT_CANVAS_EXTERNAL_SKILLS__", async () => {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      writeFileSync(
+        path.join(buildDir, "index.html"),
+        "<html><head></head><body>app</body></html>",
+      );
+      const manifestFile = path.join(buildDir, "external-skills.json");
+      writeFileSync(
+        manifestFile,
+        JSON.stringify({
+          version: 1,
+          sources: [{ id: "acme-1234abcd", source: "github.com/acme/skills" }],
+          skills: [
+            {
+              name: "acme-deploy",
+              content: "# Deploy\n\nShip it.",
+              source: "github.com/acme/skills",
+              source_id: "acme-1234abcd",
+            },
+          ],
+        }),
+      );
+
+      const origin = await startServer(buildDir, {
+        externalSkillsFile: manifestFile,
+      });
+      const body = await (await fetch(`${origin}/`)).text();
+
+      // Same contract as the runtime-services global: a JSON *string* the
+      // frontend JSON.parses, with `<` escaped so skill markdown cannot
+      // terminate the inline <script> tag.
+      expect(body).toContain("window.__AGENT_CANVAS_EXTERNAL_SKILLS__=");
+      expect(body).toContain('\\"acme-deploy\\"');
+    });
+
+    it("serves normally when the external skills file is unreadable", async () => {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      writeFileSync(
+        path.join(buildDir, "index.html"),
+        "<html><head></head><body>app</body></html>",
+      );
+      const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      try {
+        const origin = await startServer(buildDir, {
+          externalSkillsFile: path.join(buildDir, "missing.json"),
+        });
+        const body = await (await fetch(`${origin}/`)).text();
+
+        expect(body).toContain("app");
+        expect(body).not.toContain("__AGENT_CANVAS_EXTERNAL_SKILLS__");
+        expect(
+          error.mock.calls.some((call) =>
+            String(call[0]).includes("external skills manifest"),
+          ),
+        ).toBe(true);
+      } finally {
+        error.mockRestore();
+      }
     });
 
     it("adds runtime_services to proxied /server_info", async () => {

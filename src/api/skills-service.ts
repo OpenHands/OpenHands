@@ -11,6 +11,10 @@ import {
   fetchCloudSkills,
 } from "./cloud/skills-service.api";
 import { getAgentServerClientOptions } from "./agent-server-client-options";
+import {
+  externalSkillToSkillInfo,
+  getExternalSkillEntries,
+} from "#/utils/external-skills";
 
 function catalogEntryToSkillInfo(entry: SkillCatalogEntry): SkillInfo {
   return {
@@ -63,7 +67,14 @@ class SkillsService {
       // unreachable; fall back to the bundled public catalog alone.
     }
 
-    return [...localSkills, ...PUBLIC_SKILLS];
+    // Launcher `--skills` sources: resolved at startup and injected as a
+    // window global, so they list even when the agent-server call failed.
+    // They are disabled by default — see skill-enablement.ts.
+    const externalSkills = getExternalSkillEntries().map(
+      externalSkillToSkillInfo,
+    );
+
+    return [...localSkills, ...externalSkills, ...PUBLIC_SKILLS];
   }
 
   /**

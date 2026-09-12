@@ -117,6 +117,7 @@ function narrowSet<TValue extends string>(
 const SOURCE_LABEL_KEYS: Record<SkillScope, I18nKey> = {
   project: I18nKey.SETTINGS$SKILLS_SOURCE_PROJECT,
   personal: I18nKey.SETTINGS$SKILLS_SOURCE_PERSONAL,
+  external: I18nKey.SETTINGS$SKILLS_SOURCE_EXTERNAL,
   public: I18nKey.SETTINGS$SKILLS_SOURCE_PUBLIC,
 };
 

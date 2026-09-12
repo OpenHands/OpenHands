@@ -29,10 +29,17 @@ import {
 import { combineUsageMetrics } from "#/utils/conversation-metrics";
 import {
   buildSkillEnablementFilter,
+  externalSkillEnablementKey,
   findInvokedCatalogSkill,
   toSkillEnablement,
   type SkillEnablement,
 } from "#/utils/skill-enablement";
+import {
+  externalSkillToAgentSkill,
+  findInvokedExternalSkill,
+  getExternalSkillEntries,
+  type ExternalSkillEntry,
+} from "#/utils/external-skills";
 import SettingsService from "./settings-service/settings-service.api";
 import { getStoredConversationMetadata } from "./conversation-metadata-store";
 import LLMSubscriptionService from "./llm-subscription-service";
@@ -826,6 +833,7 @@ function buildAgentContext(
   runtimeServicesInfo?: RuntimeServicesInfo | null,
   enablement: SkillEnablement = {},
   invokedCatalogSkill?: string,
+  invokedExternalSkill?: ExternalSkillEntry,
 ): SettingsRecord {
   const runtimeServicesSuffix =
     buildRuntimeServicesSystemSuffix(runtimeServicesInfo);
@@ -854,6 +862,23 @@ function buildAgentContext(
       (skill) =>
         skill.name === invokedCatalogSkill || isSkillEnabled(skill.name),
     ),
+    // Launcher `--skills` sources: allow-listed under source-qualified keys
+    // (`external:<source-id>:<name>`), off by default. The bare-name
+    // disabled_skills check mirrors what the server applies to every loaded
+    // skill, so a deny entry for a same-named local skill keeps vetoing the
+    // external one exactly as it will server-side. A skill the opening
+    // message invokes by name overrides both, like the catalog path above.
+    ...getExternalSkillEntries()
+      .filter(
+        (entry) =>
+          (entry.source_id === invokedExternalSkill?.source_id &&
+            entry.name === invokedExternalSkill.name) ||
+          (isSkillEnabled(
+            externalSkillEnablementKey(entry.source_id, entry.name),
+          ) &&
+            !disabledSkillNames.has(entry.name)),
+      )
+      .map(externalSkillToAgentSkill),
   ];
 
   return {
@@ -922,6 +947,7 @@ function buildConfiguredAcpAgentSettings(
       runtimeServicesInfo,
       toSkillEnablement(settings),
       findInvokedCatalogSkill(query),
+      findInvokedExternalSkill(query),
     ),
   };
 
@@ -1011,6 +1037,7 @@ function buildConfiguredOpenHandsAgentSettings(
       runtimeServicesInfo,
       toSkillEnablement(settings),
       findInvokedCatalogSkill(query),
+      findInvokedExternalSkill(query),
     ),
     tools: getAgentTools(agentSettings),
   };

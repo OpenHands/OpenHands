@@ -117,9 +117,20 @@ export function parseArgs(argv = process.argv.slice(2)) {
     automationRepo: null,
     skipBuild: false,
     verbose: false,
+    skillsSources: [],
   };
 
   for (let i = 0; i < argv.length; i++) {
+    // Repeatable --skills <source> / --skills=<source> — resolved by
+    // buildConfig (shared with dev-with-automation).
+    if (argv[i] === "--skills") {
+      config.skillsSources.push(argv[++i]);
+      continue;
+    }
+    if (argv[i].startsWith("--skills=")) {
+      config.skillsSources.push(argv[i].slice("--skills=".length));
+      continue;
+    }
     switch (argv[i]) {
       case "-p":
       case "--port":
@@ -164,11 +175,16 @@ OPTIONS:
   --automation-ref <ref>      Git ref for automation backend (default: main)
   --automation-repo <url>     Git repo URL for automation
   --skip-build                Reuse existing build/ directory (faster restart)
+  --skills <source>           Extra skills source; repeatable. A local
+                              directory, a git URL, or host/path shorthand
+                              such as github.com/acmecorp/skills.
   -v, --verbose               Show detailed output
   -h, --help                  Show this help
 
 ENVIRONMENT VARIABLES:
   PORT                        Alternative to --port
+  OH_SKILLS_SOURCES           Comma/newline-separated extra skills sources
+                              (same values as --skills)
   OH_AUTOMATION_GIT_REF       Alternative to --automation-ref
   OH_AGENT_SERVER_GIT_REF     Git ref for agent-server SDK
   OH_SECRET_KEY               Secret key for sessions
@@ -436,6 +452,11 @@ function startStaticServer(config) {
         : []),
       "--runtime-services-info",
       runtimeServicesInfo,
+      // Inject the resolved external-skills manifest (--skills sources) into
+      // index.html so the pre-built frontend can list them.
+      ...(config.externalSkillsFile
+        ? ["--external-skills-file", config.externalSkillsFile]
+        : []),
       ...buildLocalServiceRouteArgs(config),
       // Only the static server injects into the document, so only it can tell
       // the frontend this origin serves the editor. The ingress below routes
