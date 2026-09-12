@@ -1,13 +1,34 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { http, HttpResponse } from "msw";
+import { server } from "#/mocks/node";
 import {
   startDeviceFlow,
   pollForToken,
   isOpenHandsCloudHost,
   DeviceFlowError,
 } from "../../src/api/device-flow-client";
-import { AGENT_CANVAS_CLIENT_HEADERS } from "../../src/api/client-source";
+import {
+  AGENT_CANVAS_CLIENT_HEADERS,
+  OPENHANDS_CLIENT_HEADER,
+  OPENHANDS_CLIENT_VERSION_HEADER,
+} from "../../src/api/client-source";
 
 const TEST_HOST_URL = "https://app.all-hands.dev";
+const AUTHORIZE_URL = `${TEST_HOST_URL}/oauth/device/authorize`;
+const TOKEN_URL = `${TEST_HOST_URL}/oauth/device/token`;
+
+// The agent-canvas wrapper's only job is to forward requests to the SDK while
+// attaching the coarse observability headers. Every fetch-backed assertion goes
+// through MSW so we can inspect the actual outgoing request (URL, body, and the
+// forwarded headers) rather than mocking `global.fetch`.
+function expectClientHeaders(headers: Headers) {
+  expect(headers.get(OPENHANDS_CLIENT_HEADER)).toBe(
+    AGENT_CANVAS_CLIENT_HEADERS[OPENHANDS_CLIENT_HEADER],
+  );
+  expect(headers.get(OPENHANDS_CLIENT_VERSION_HEADER)).toBe(
+    AGENT_CANVAS_CLIENT_HEADERS[OPENHANDS_CLIENT_VERSION_HEADER],
+  );
+}
 
 describe("device-flow-client", () => {
   beforeEach(() => {
@@ -26,6 +47,10 @@ describe("device-flow-client", () => {
       expect(isOpenHandsCloudHost("app.all-hands.dev")).toBe(true);
       expect(isOpenHandsCloudHost("ALL-HANDS.DEV")).toBe(true);
       expect(isOpenHandsCloudHost("all-hands.dev")).toBe(true);
+    });
+
+    it("accepts HTTP cloud URLs surrounded by whitespace", () => {
+      expect(isOpenHandsCloudHost("  http://app.all-hands.dev  ")).toBe(true);
     });
 
     it("returns true for openhands.dev domains", () => {
@@ -53,6 +78,9 @@ describe("device-flow-client", () => {
       expect(isOpenHandsCloudHost("https://evil.com/all-hands.dev")).toBe(
         false,
       );
+      expect(isOpenHandsCloudHost("prefixhttps://app.all-hands.dev")).toBe(
+        false,
+      );
     });
 
     it("returns false for invalid URLs", () => {
@@ -62,7 +90,7 @@ describe("device-flow-client", () => {
   });
 
   describe("startDeviceFlow", () => {
-    it("returns device authorization response on success", async () => {
+    it("returns device authorization response and forwards client headers", async () => {
       const mockResponse = {
         device_code: "device123",
         user_code: "USER-1234",
@@ -72,439 +100,566 @@ describe("device-flow-client", () => {
         interval: 5,
       };
 
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
-      });
+      let requestUrl: string | undefined;
+      let requestBody: string | undefined;
+      let requestHeaders: Headers | undefined;
+      server.use(
+        http.post(AUTHORIZE_URL, async ({ request }) => {
+          requestUrl = request.url;
+          requestBody = await request.text();
+          requestHeaders = request.headers;
+          return HttpResponse.json(mockResponse);
+        }),
+      );
 
       const result = await startDeviceFlow(TEST_HOST_URL);
 
       expect(result).toEqual(mockResponse);
-      // Should call the cloud endpoint directly.
-      const fetchCall = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
-      expect(fetchCall[0]).toBe(`${TEST_HOST_URL}/oauth/device/authorize`);
-      expect(fetchCall[1]).toEqual(expect.objectContaining({ method: "POST" }));
+      expect(requestUrl).toBe(AUTHORIZE_URL);
+      expect(requestBody).toBe("{}");
+      expect(requestHeaders?.get("content-type")).toBe("application/json");
+      // The wrapper must attach the agent-canvas observability headers.
+      expectClientHeaders(requestHeaders as Headers);
+    });
 
-      const headers = new Headers(fetchCall[1].headers);
-      expect(headers.get("Content-Type")).toBe("application/json");
-      for (const [name, value] of Object.entries(AGENT_CANVAS_CLIENT_HEADERS)) {
-        expect(headers.get(name)).toBe(value);
-      }
+    it("builds optional authorization values from the required response fields", async () => {
+      server.use(
+        http.post(AUTHORIZE_URL, () =>
+          HttpResponse.json({
+            device_code: "device123",
+            user_code: "USER 12/+",
+            verification_uri: `${TEST_HOST_URL}/device`,
+          }),
+        ),
+      );
+
+      await expect(startDeviceFlow(TEST_HOST_URL)).resolves.toEqual({
+        device_code: "device123",
+        user_code: "USER 12/+",
+        verification_uri: `${TEST_HOST_URL}/device`,
+        verification_uri_complete: `${TEST_HOST_URL}/device?user_code=USER%2012%2F%2B`,
+        expires_in: 600,
+        interval: 5,
+      });
     });
 
     it("normalizes host URL by removing trailing slashes", async () => {
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: () =>
-          Promise.resolve({
+      let requestUrl: string | undefined;
+      server.use(
+        http.post(AUTHORIZE_URL, ({ request }) => {
+          requestUrl = request.url;
+          return HttpResponse.json({
             device_code: "dc",
             user_code: "uc",
             verification_uri: "v",
             verification_uri_complete: "vc",
             expires_in: 600,
             interval: 5,
-          }),
-      });
+          });
+        }),
+      );
 
       await startDeviceFlow(`${TEST_HOST_URL}///`);
 
       // Verify the direct request targets the normalized host.
-      const fetchCall = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
-      expect(fetchCall[0]).toBe(`${TEST_HOST_URL}/oauth/device/authorize`);
+      expect(requestUrl).toBe(AUTHORIZE_URL);
     });
 
     it("throws DeviceFlowError on HTTP error", async () => {
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: false,
-        status: 500,
-        text: () => Promise.resolve("Internal Server Error"),
-      });
+      server.use(
+        http.post(
+          AUTHORIZE_URL,
+          () => new HttpResponse("Internal Server Error", { status: 500 }),
+        ),
+      );
 
-      await expect(startDeviceFlow(TEST_HOST_URL)).rejects.toThrow(
-        DeviceFlowError,
-      );
-      await expect(startDeviceFlow(TEST_HOST_URL)).rejects.toThrow(
-        /Failed to start device flow.*500/,
-      );
+      await expect(startDeviceFlow(TEST_HOST_URL)).rejects.toMatchObject({
+        name: "DeviceFlowError",
+        message: "Failed to start device flow: Server returned 500",
+      });
     });
 
-    it("throws DeviceFlowError on missing required fields", async () => {
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            device_code: "dc",
-            // Missing other required fields
-          }),
+    it.each([
+      {
+        field: "device_code",
+        response: { user_code: "uc", verification_uri: "v" },
+      },
+      {
+        field: "user_code",
+        response: { device_code: "dc", verification_uri: "v" },
+      },
+      {
+        field: "verification_uri",
+        response: { device_code: "dc", user_code: "uc" },
+      },
+    ])(
+      "throws DeviceFlowError when $field is missing",
+      async ({ response }) => {
+        server.use(http.post(AUTHORIZE_URL, () => HttpResponse.json(response)));
+
+        await expect(startDeviceFlow(TEST_HOST_URL)).rejects.toMatchObject({
+          name: "DeviceFlowError",
+          message:
+            "Invalid response from device authorization endpoint: missing required fields",
+        });
+      },
+    );
+
+    it("wraps a failed authorization request in a DeviceFlowError", async () => {
+      server.use(http.post(AUTHORIZE_URL, () => HttpResponse.error()));
+
+      await expect(startDeviceFlow(TEST_HOST_URL)).rejects.toThrow(
+        DeviceFlowError,
+      );
+      await expect(startDeviceFlow(TEST_HOST_URL)).rejects.toMatchObject({
+        name: "DeviceFlowError",
+        message: expect.stringContaining("Failed to start device flow:"),
       });
-
-      await expect(startDeviceFlow(TEST_HOST_URL)).rejects.toThrow(
-        DeviceFlowError,
-      );
-      await expect(startDeviceFlow(TEST_HOST_URL)).rejects.toThrow(
-        /missing required fields/,
-      );
-    });
-
-    it("throws DeviceFlowError on network error", async () => {
-      global.fetch = vi.fn().mockRejectedValue(new Error("Network failed"));
-
-      await expect(startDeviceFlow(TEST_HOST_URL)).rejects.toThrow(
-        DeviceFlowError,
-      );
-      await expect(startDeviceFlow(TEST_HOST_URL)).rejects.toThrow(
-        /Network failed/,
-      );
     });
   });
 
   describe("pollForToken", () => {
-    it("returns token response on immediate success", async () => {
+    it("returns token response on immediate success and forwards client headers", async () => {
       const mockTokenResponse = {
         access_token: "api-key-123",
         token_type: "Bearer",
       };
 
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: () => Promise.resolve(mockTokenResponse),
-      });
+      let requestUrl: string | undefined;
+      let requestBody: string | undefined;
+      let requestHeaders: Headers | undefined;
+      server.use(
+        http.post(TOKEN_URL, async ({ request }) => {
+          requestUrl = request.url;
+          requestBody = await request.text();
+          requestHeaders = request.headers;
+          return HttpResponse.json(mockTokenResponse);
+        }),
+      );
 
-      const result = await pollForToken(TEST_HOST_URL, "device123", {
+      const result = await pollForToken(`${TEST_HOST_URL}///`, "device123", {
         interval: 5,
       });
 
-      expect(result).toEqual(mockTokenResponse);
-      // Should call the cloud endpoint directly.
-      const fetchCall = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
-      expect(fetchCall[0]).toBe(`${TEST_HOST_URL}/oauth/device/token`);
-      expect(fetchCall[1]).toEqual(expect.objectContaining({ method: "POST" }));
-
-      const headers = new Headers(fetchCall[1].headers);
-      expect(headers.get("Content-Type")).toBe(
+      expect(result).toEqual({
+        access_token: "api-key-123",
+        token_type: "Bearer",
+        expires_in: undefined,
+      });
+      expect(requestUrl).toBe(TOKEN_URL);
+      expect(requestBody).toBe(
+        "grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Adevice_code&device_code=device123",
+      );
+      expect(requestHeaders?.get("content-type")).toBe(
         "application/x-www-form-urlencoded",
       );
-      for (const [name, value] of Object.entries(AGENT_CANVAS_CLIENT_HEADERS)) {
-        expect(headers.get(name)).toBe(value);
-      }
+      // The wrapper must attach the agent-canvas observability headers.
+      expectClientHeaders(requestHeaders as Headers);
     });
 
-    it("polls until authorization is complete", async () => {
-      const pendingResponse = {
-        ok: false,
-        status: 400,
-        json: () =>
-          Promise.resolve({
-            error: "authorization_pending",
-            error_description: "User hasn't authorized yet",
-          }),
-      };
-      const successResponse = {
-        ok: true,
-        status: 200,
-        json: () =>
-          Promise.resolve({
+    it("defaults the token type when the successful response omits it", async () => {
+      server.use(
+        http.post(TOKEN_URL, () =>
+          HttpResponse.json({ access_token: "api-key-123" }),
+        ),
+      );
+
+      await expect(
+        pollForToken(TEST_HOST_URL, "device123", { interval: 5 }),
+      ).resolves.toEqual({
+        access_token: "api-key-123",
+        token_type: "Bearer",
+        expires_in: undefined,
+      });
+    });
+
+    it("rejects a successful token response without an access token", async () => {
+      server.use(
+        http.post(TOKEN_URL, () => HttpResponse.json({ token_type: "Bearer" })),
+      );
+
+      await expect(
+        pollForToken(TEST_HOST_URL, "device123", { interval: 5 }),
+      ).rejects.toMatchObject({
+        name: "DeviceFlowError",
+        message: "Invalid token response: missing access_token",
+      });
+    });
+
+    it("waits for the configured interval before polling again", async () => {
+      let calls = 0;
+      server.use(
+        http.post(TOKEN_URL, () => {
+          calls += 1;
+          if (calls === 1) {
+            return HttpResponse.json(
+              {
+                error: "authorization_pending",
+                error_description: "User hasn't authorized yet",
+              },
+              { status: 400 },
+            );
+          }
+          return HttpResponse.json({
             access_token: "api-key-123",
             token_type: "Bearer",
-          }),
-      };
-
-      global.fetch = vi
-        .fn()
-        .mockResolvedValueOnce(pendingResponse)
-        .mockResolvedValueOnce(successResponse);
+          });
+        }),
+      );
 
       const pollPromise = pollForToken(TEST_HOST_URL, "device123", {
-        interval: 1,
+        interval: 5,
       });
 
-      // Advance past the first poll interval
-      await vi.advanceTimersByTimeAsync(1000);
+      await vi.advanceTimersByTimeAsync(4999);
+      expect(calls).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(calls).toBe(2);
 
       const result = await pollPromise;
       expect(result.access_token).toBe("api-key-123");
-      expect(fetch).toHaveBeenCalledTimes(2);
     });
 
     it("increases interval on slow_down error", async () => {
-      const slowDownResponse = {
-        ok: false,
-        status: 400,
-        json: () =>
-          Promise.resolve({
-            error: "slow_down",
-            interval: 10,
-          }),
-      };
-      const successResponse = {
-        ok: true,
-        status: 200,
-        json: () =>
-          Promise.resolve({
+      let calls = 0;
+      server.use(
+        http.post(TOKEN_URL, () => {
+          calls += 1;
+          if (calls === 1) {
+            return HttpResponse.json(
+              { error: "slow_down", interval: 7 },
+              { status: 400 },
+            );
+          }
+          return HttpResponse.json({
             access_token: "api-key-123",
             token_type: "Bearer",
-          }),
-      };
-
-      global.fetch = vi
-        .fn()
-        .mockResolvedValueOnce(slowDownResponse)
-        .mockResolvedValueOnce(successResponse);
+          });
+        }),
+      );
 
       const pollPromise = pollForToken(TEST_HOST_URL, "device123", {
         interval: 5,
       });
 
-      // Advance by new interval (10 seconds)
-      await vi.advanceTimersByTimeAsync(10000);
+      await vi.advanceTimersByTimeAsync(6999);
+      expect(calls).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(calls).toBe(2);
 
       const result = await pollPromise;
       expect(result.access_token).toBe("api-key-123");
     });
 
     it("throws on expired_token error", async () => {
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: false,
-        status: 400,
-        json: () =>
-          Promise.resolve({
-            error: "expired_token",
-          }),
-      });
+      server.use(
+        http.post(TOKEN_URL, () =>
+          HttpResponse.json({ error: "expired_token" }, { status: 400 }),
+        ),
+      );
 
       await expect(
         pollForToken(TEST_HOST_URL, "device123", { interval: 1 }),
-      ).rejects.toThrow(DeviceFlowError);
-      await expect(
-        pollForToken(TEST_HOST_URL, "device123", { interval: 1 }),
-      ).rejects.toThrow(/expired/i);
+      ).rejects.toMatchObject({
+        name: "DeviceFlowError",
+        message: "Device code has expired. Please try again.",
+        code: "expired_token",
+      });
     });
 
     it("throws on access_denied error", async () => {
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: false,
-        status: 400,
-        json: () =>
-          Promise.resolve({
-            error: "access_denied",
-          }),
-      });
+      server.use(
+        http.post(TOKEN_URL, () =>
+          HttpResponse.json({ error: "access_denied" }, { status: 400 }),
+        ),
+      );
 
       await expect(
         pollForToken(TEST_HOST_URL, "device123", { interval: 1 }),
-      ).rejects.toThrow(DeviceFlowError);
-      await expect(
-        pollForToken(TEST_HOST_URL, "device123", { interval: 1 }),
-      ).rejects.toThrow(/denied/i);
+      ).rejects.toMatchObject({
+        name: "DeviceFlowError",
+        message: "Authorization request was denied.",
+        code: "access_denied",
+      });
     });
 
-    it("reports a non-JSON error response instead of retrying it as a network error", async () => {
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: false,
-        status: 502,
-        json: () => Promise.reject(new SyntaxError("invalid JSON")),
-      });
+    it("rejects a non-JSON token error response with its HTTP status", async () => {
+      server.use(
+        http.post(
+          TOKEN_URL,
+          () => new HttpResponse("<html>bad gateway</html>", { status: 502 }),
+        ),
+      );
 
       await expect(
         pollForToken(TEST_HOST_URL, "device123", { interval: 1 }),
-      ).rejects.toThrow(/Unexpected response from server: 502/);
+      ).rejects.toMatchObject({
+        name: "DeviceFlowError",
+        message: "Unexpected response from server: 502",
+      });
     });
+
+    it.each([
+      {
+        description: "with its server description",
+        error: "invalid_scope",
+        errorDescription: "Requested scope is unavailable",
+        expectedMessage:
+          "Authorization error: invalid_scope - Requested scope is unavailable",
+      },
+      {
+        description: "without a server description",
+        error: "server_error",
+        errorDescription: undefined,
+        expectedMessage: "Authorization error: server_error",
+      },
+    ])(
+      "preserves an unknown token error $description",
+      async ({ error, errorDescription, expectedMessage }) => {
+        server.use(
+          http.post(TOKEN_URL, () =>
+            HttpResponse.json(
+              { error, error_description: errorDescription },
+              { status: 400 },
+            ),
+          ),
+        );
+
+        await expect(
+          pollForToken(TEST_HOST_URL, "device123", { interval: 1 }),
+        ).rejects.toMatchObject({
+          name: "DeviceFlowError",
+          message: expectedMessage,
+          code: error,
+        });
+      },
+    );
 
     it("respects abort signal", async () => {
-      vi.useRealTimers(); // Use real timers for this test
       const controller = new AbortController();
 
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: false,
-        status: 400,
-        json: () =>
-          Promise.resolve({
-            error: "authorization_pending",
-          }),
-      });
+      let calls = 0;
+      server.use(
+        http.post(TOKEN_URL, () => {
+          calls += 1;
+          return HttpResponse.json(
+            { error: "authorization_pending" },
+            { status: 400 },
+          );
+        }),
+      );
 
-      // Pre-abort the controller
       controller.abort();
 
-      // Now the promise should reject immediately with cancelled
       await expect(
         pollForToken(TEST_HOST_URL, "device123", {
           interval: 1,
           signal: controller.signal,
         }),
-      ).rejects.toThrow(/cancelled/i);
+      ).rejects.toMatchObject({
+        name: "DeviceFlowError",
+        message: "Authorization cancelled",
+        code: "cancelled",
+      });
+      expect(calls).toBe(0);
     });
 
-    it("reports cancellation when aborted between polling attempts", async () => {
+    it("cancels while waiting for the next poll", async () => {
       const controller = new AbortController();
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: false,
-        status: 400,
-        json: () => Promise.resolve({ error: "authorization_pending" }),
-      });
+      let calls = 0;
+      server.use(
+        http.post(TOKEN_URL, () => {
+          calls += 1;
+          return HttpResponse.json(
+            { error: "authorization_pending" },
+            { status: 400 },
+          );
+        }),
+      );
 
       const pollPromise = pollForToken(TEST_HOST_URL, "device123", {
         interval: 5,
         signal: controller.signal,
       });
-      const rejection = expect(pollPromise).rejects.toMatchObject({
-        code: "cancelled",
-      });
-
       await vi.advanceTimersByTimeAsync(0);
       controller.abort();
 
-      await rejection;
+      await expect(pollPromise).rejects.toMatchObject({
+        name: "DeviceFlowError",
+        message: "Authorization cancelled",
+        code: "cancelled",
+      });
+      expect(calls).toBe(1);
     });
 
-    it("times out after specified duration", async () => {
-      vi.useRealTimers(); // Use real timers for this test
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: false,
-        status: 400,
-        json: () =>
-          Promise.resolve({
-            error: "authorization_pending",
-          }),
-      });
+    it("cancels when the signal aborts while a pending response is handled", async () => {
+      const controller = new AbortController();
+      // Aborting mid-request makes the SDK forward the cancellation to the
+      // in-flight fetch, which logs a retry warning before the wait rejects.
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      server.use(
+        http.post(TOKEN_URL, () => {
+          controller.abort();
+          return HttpResponse.json(
+            { error: "authorization_pending" },
+            { status: 400 },
+          );
+        }),
+      );
 
-      // Use very short timeout
       await expect(
         pollForToken(TEST_HOST_URL, "device123", {
-          interval: 0.01, // 10ms interval
-          timeout: 50, // 50ms timeout
+          interval: 5,
+          signal: controller.signal,
         }),
-      ).rejects.toThrow(/timeout/i);
-    }, 10000);
+      ).rejects.toMatchObject({
+        name: "DeviceFlowError",
+        message: "Authorization cancelled",
+        code: "cancelled",
+      });
+    });
+
+    it("does not request a token when the timeout is already exhausted", async () => {
+      let calls = 0;
+      server.use(
+        http.post(TOKEN_URL, () => {
+          calls += 1;
+          return HttpResponse.json({ access_token: "api-key-123" });
+        }),
+      );
+
+      await expect(
+        pollForToken(TEST_HOST_URL, "device123", {
+          interval: 1,
+          timeout: 0,
+        }),
+      ).rejects.toMatchObject({
+        name: "DeviceFlowError",
+        message: "Timeout waiting for authorization. Please try again.",
+        code: "timeout",
+      });
+      expect(calls).toBe(0);
+    });
 
     it("caps slow_down interval at 30 seconds (DoS protection)", async () => {
-      const slowDownResponse = {
-        ok: false,
-        status: 400,
-        json: () =>
-          Promise.resolve({
-            error: "slow_down",
-            interval: 999999, // Malicious server tries to DoS
-          }),
-      };
-      const successResponse = {
-        ok: true,
-        status: 200,
-        json: () =>
-          Promise.resolve({
+      let calls = 0;
+      server.use(
+        http.post(TOKEN_URL, () => {
+          calls += 1;
+          if (calls === 1) {
+            return HttpResponse.json(
+              { error: "slow_down", interval: 999999 },
+              { status: 400 },
+            );
+          }
+          return HttpResponse.json({
             access_token: "api-key-123",
             token_type: "Bearer",
-          }),
-      };
-
-      global.fetch = vi
-        .fn()
-        .mockResolvedValueOnce(slowDownResponse)
-        .mockResolvedValueOnce(successResponse);
+          });
+        }),
+      );
 
       const pollPromise = pollForToken(TEST_HOST_URL, "device123", {
         interval: 5,
       });
 
-      // Should use 30s max, not 999999s
-      await vi.advanceTimersByTimeAsync(30000);
+      await vi.advanceTimersByTimeAsync(29999);
+      expect(calls).toBe(1);
 
-      const result = await pollPromise;
-      expect(result.access_token).toBe("api-key-123");
-      expect(fetch).toHaveBeenCalledTimes(2);
-    });
-
-    it("rejects non-numeric slow_down interval (type confusion protection)", async () => {
-      const slowDownResponse = {
-        ok: false,
-        status: 400,
-        json: () =>
-          Promise.resolve({
-            error: "slow_down",
-            interval: "pwned", // Non-numeric value
-          }),
-      };
-      const successResponse = {
-        ok: true,
-        status: 200,
-        json: () =>
-          Promise.resolve({
-            access_token: "api-key-123",
-            token_type: "Bearer",
-          }),
-      };
-
-      global.fetch = vi
-        .fn()
-        .mockResolvedValueOnce(slowDownResponse)
-        .mockResolvedValueOnce(successResponse);
-
-      const pollPromise = pollForToken(TEST_HOST_URL, "device123", {
-        interval: 5,
-      });
-
-      // With invalid interval, should use RFC 8628 default: current + 5s
-      // Starting interval is 5s, so next should be 10s (5000 + 5000 = 10000ms)
-      await vi.advanceTimersByTimeAsync(10000);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(calls).toBe(2);
 
       const result = await pollPromise;
       expect(result.access_token).toBe("api-key-123");
     });
+
+    it.each([
+      { description: "a numeric string", interval: "7" },
+      { description: "zero", interval: 0 },
+      { description: "an infinite number", interval: Number.POSITIVE_INFINITY },
+    ])(
+      "uses the RFC fallback for $description slow_down interval",
+      async ({ interval }) => {
+        let calls = 0;
+        server.use(
+          http.post(TOKEN_URL, () => {
+            calls += 1;
+            if (calls === 1) {
+              return HttpResponse.json(
+                { error: "slow_down", interval },
+                { status: 400 },
+              );
+            }
+            return HttpResponse.json({
+              access_token: "api-key-123",
+              token_type: "Bearer",
+            });
+          }),
+        );
+
+        const pollPromise = pollForToken(TEST_HOST_URL, "device123", {
+          interval: 5,
+        });
+
+        await vi.advanceTimersByTimeAsync(9999);
+        expect(calls).toBe(1);
+
+        await vi.advanceTimersByTimeAsync(1);
+        expect(calls).toBe(2);
+
+        await expect(pollPromise).resolves.toMatchObject({
+          access_token: "api-key-123",
+        });
+      },
+    );
 
     it("increments interval by 5 seconds per RFC 8628 when slow_down has no interval", async () => {
-      const slowDownResponse = {
-        ok: false,
-        status: 400,
-        json: () =>
-          Promise.resolve({
-            error: "slow_down",
+      let calls = 0;
+      server.use(
+        http.post(TOKEN_URL, () => {
+          calls += 1;
+          if (calls === 1) {
             // No interval field - RFC 8628 mandates +5s increment
-          }),
-      };
-      const successResponse = {
-        ok: true,
-        status: 200,
-        json: () =>
-          Promise.resolve({
+            return HttpResponse.json({ error: "slow_down" }, { status: 400 });
+          }
+          return HttpResponse.json({
             access_token: "api-key-123",
             token_type: "Bearer",
-          }),
-      };
-
-      global.fetch = vi
-        .fn()
-        .mockResolvedValueOnce(slowDownResponse)
-        .mockResolvedValueOnce(successResponse);
+          });
+        }),
+      );
 
       const pollPromise = pollForToken(TEST_HOST_URL, "device123", {
         interval: 5, // 5 seconds initial
       });
 
-      // RFC 8628: must increment by 5 seconds, so 5s -> 10s
-      await vi.advanceTimersByTimeAsync(10000);
+      await vi.advanceTimersByTimeAsync(9999);
+      expect(calls).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(calls).toBe(2);
 
       const result = await pollPromise;
       expect(result.access_token).toBe("api-key-123");
     });
 
     it("continues polling on network errors instead of failing immediately", async () => {
-      const networkError = new Error("Network failed");
-      const successResponse = {
-        ok: true,
-        status: 200,
-        json: () =>
-          Promise.resolve({
+      let calls = 0;
+      server.use(
+        http.post(TOKEN_URL, () => {
+          calls += 1;
+          // First call fails with a network error, second succeeds.
+          if (calls === 1) {
+            return HttpResponse.error();
+          }
+          return HttpResponse.json({
             access_token: "api-key-123",
             token_type: "Bearer",
-          }),
-      };
-
-      // First call fails with network error, second succeeds
-      global.fetch = vi
-        .fn()
-        .mockRejectedValueOnce(networkError)
-        .mockResolvedValueOnce(successResponse);
+          });
+        }),
+      );
 
       const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
@@ -517,9 +672,10 @@ describe("device-flow-client", () => {
 
       const result = await pollPromise;
       expect(result.access_token).toBe("api-key-123");
+      expect(calls).toBe(2);
       expect(consoleSpy).toHaveBeenCalledWith(
         "Network error during polling, retrying:",
-        networkError,
+        expect.any(Error),
       );
 
       consoleSpy.mockRestore();
