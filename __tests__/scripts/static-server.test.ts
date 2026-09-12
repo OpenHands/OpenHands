@@ -5,6 +5,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { parseArgs, startStaticServer } from "../../scripts/static-server.mjs";
+import { stripSecureFromSetCookie } from "../../scripts/proxy-utils.mjs";
 
 describe("static-server.mjs", () => {
   const servers: Server[] = [];
@@ -845,6 +846,76 @@ describe("static-server.mjs", () => {
 
     expect(response.status).not.toBe(200);
     await expect(response.text()).resolves.not.toContain("secret");
+  });
+
+  describe("disable-secure cookie stripping", () => {
+    it("keeps Secure on the header by default (no rewrite)", () => {
+      const proxyRes = {
+        headers: {
+          "set-cookie":
+            "oh_workspace_session_key=abc123; Path=/api/conversations; HttpOnly; Secure; SameSite=Lax",
+        },
+      };
+      // With stripSecureCookie disabled we never call the helper; the raw
+      // header is forwarded intact.
+      expect(proxyRes.headers["set-cookie"]).toContain("Secure");
+    });
+
+    it("strips Secure from a single Set-Cookie header", () => {
+      const proxyRes = {
+        headers: {
+          "set-cookie":
+            "oh_workspace_session_key=abc123; Path=/api/conversations; HttpOnly; Secure; SameSite=Lax",
+        },
+      };
+      stripSecureFromSetCookie(proxyRes);
+      const setCookie = proxyRes.headers["set-cookie"] as string;
+      expect(setCookie).toContain("oh_workspace_session_key=abc123");
+      expect(setCookie.toLowerCase()).not.toContain("secure");
+      // Attributes other than Secure are preserved.
+      expect(setCookie).toContain("HttpOnly");
+      expect(setCookie).toContain("SameSite=Lax");
+      expect(setCookie).toContain("Path=/api/conversations");
+    });
+
+    it("strips Secure from an array of Set-Cookie headers", () => {
+      const proxyRes = {
+        headers: {
+          "set-cookie": [
+            "a=1; Secure",
+            "b=2; HttpOnly; Secure",
+            "c=3; SameSite=Lax; Secure",
+          ],
+        },
+      };
+      stripSecureFromSetCookie(proxyRes);
+      for (const cookie of proxyRes.headers["set-cookie"] as string[]) {
+        expect(cookie.toLowerCase()).not.toContain("secure");
+      }
+      // Non-Secure parts survive.
+      expect(proxyRes.headers["set-cookie"]).toContain("a=1");
+      expect(proxyRes.headers["set-cookie"]).toContain("b=2; HttpOnly");
+      expect(proxyRes.headers["set-cookie"]).toContain("c=3; SameSite=Lax");
+    });
+
+    it("is a no-op when a header has no Secure flag", () => {
+      const proxyRes = {
+        headers: { "set-cookie": "plain=value; HttpOnly" },
+      };
+      stripSecureFromSetCookie(proxyRes);
+      expect(proxyRes.headers["set-cookie"]).toBe("plain=value; HttpOnly");
+    });
+
+    it("is a no-op when no Set-Cookie header is present", () => {
+      const proxyRes = { headers: {} };
+      stripSecureFromSetCookie(proxyRes);
+      expect(proxyRes.headers).toEqual({});
+    });
+
+    it("parses --disable-secure flag into disableSecure", () => {
+      expect(parseArgs(["--disable-secure"]).disableSecure).toBe(true);
+      expect(parseArgs([]).disableSecure).toBe(false);
+    });
   });
 
   it("returns 502 when backend target URL is invalid", async () => {

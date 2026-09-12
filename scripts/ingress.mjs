@@ -46,6 +46,7 @@ function parseArgs() {
     defaultBackend: null,
     noReferrerPrefixes: [],
     runtimeServicesInfo: null,
+    disableSecure: false,
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -77,6 +78,9 @@ function parseArgs() {
       case "--runtime-services-info":
         config.runtimeServicesInfo = args[++i] || null;
         break;
+      case "--disable-secure":
+        config.disableSecure = true;
+        break;
       case "-h":
       case "--help":
         showHelp();
@@ -104,6 +108,11 @@ OPTIONS:
                               responses under <p>. For upstreams whose URL
                               carries a credential in the query string.
   --runtime-services-info     Runtime services JSON for /server_info
+  --disable-secure            Strip the Secure attribute from Set-Cookie
+                              headers forwarded from backends. Use when
+                              serving over plain http:// to a non-loopback
+                              host (e.g. a LAN/VM IP) so browsers will send
+                              session cookies back.
   -h, --help                  Show this help
 
 ENVIRONMENT VARIABLES:
@@ -154,6 +163,7 @@ function buildConfig(args, env = process.env) {
     noReferrerPrefixes: args.noReferrerPrefixes ?? [],
     runtimeServicesInfo:
       args.runtimeServicesInfo || env.INGRESS_RUNTIME_SERVICES_INFO || null,
+    disableSecure: args.disableSecure || false,
   };
 }
 
@@ -163,7 +173,10 @@ function buildConfig(args, env = process.env) {
 
 export function startIngress(config) {
   const route = createRouter(config.routes, config.defaultBackend);
-  const proxy = createProxyHandlers({ label: `ingress:${config.port}` });
+  const proxy = createProxyHandlers({
+    label: `ingress:${config.port}`,
+    stripSecureCookie: config.disableSecure === true,
+  });
   const uninstallDiagnostics = proxy.installDiagnostics();
 
   const noReferrerPrefixes = config.noReferrerPrefixes ?? [];
