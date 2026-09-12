@@ -2,11 +2,11 @@ apiVersion: v2
 name: agent-canvas
 description: |
   Helm chart for running the OpenHands agent-canvas all-in-one image
-  (frontend + agent-server + automation) as a StatefulSet with persistent
+  (frontend + agent-server + automation) as a Deployment with persistent
   storage, ingress, and optional cluster RBAC.
 type: application
 # Chart-level version. Bump on chart changes.
-version: 0.1.0
+version: 0.2.0
 # Default appVersion pins the published agent-canvas image tag from
 # config/defaults.json (`versions.agentCanvas`). Override via
 # `--set image.tag=...` to pull a different build (e.g. `main`, `latest`,

@@ -2,7 +2,7 @@
 
 Helm chart for running the [OpenHands agent-canvas](https://github.com/OpenHands/OpenHands)
 all-in-one image (frontend + agent-server + automation) on Kubernetes as a
-`StatefulSet` with persistent storage, an `Ingress`, and optional in-cluster
+`Deployment` with persistent storage, an `Ingress`, and optional in-cluster
 RBAC.
 
 > [!WARNING]
@@ -60,10 +60,9 @@ helm install agent-canvas ./helm/agent-canvas
 
 | Resource                            | Purpose                                                                            |
 | ----------------------------------- | ---------------------------------------------------------------------------------- |
-| `StatefulSet`                       | Single-replica pod running the all-in-one image (frontend + agent-server + automation). |
-| `PersistentVolumeClaim` (per pod)   | Backs `~/.openhands` and `~/workspace` (both mounted from the same PVC via `subPath`): settings, encrypted secrets, conversation history, automation SQLite DB, cloned repos, generated files. |
+| `Deployment`                        | Single-replica pod running the all-in-one image (frontend + agent-server + automation). |
+| `PersistentVolumeClaim`             | Backs `~/.openhands` and `~/workspace` (both mounted from the same PVC via `subPath`): settings, encrypted secrets, conversation history, automation SQLite DB, cloned repos, generated files. |
 | `Service` (`ClusterIP` by default)  | Cluster-internal endpoint on port 8000.                                            |
-| `Service` (headless)                | Required by the `StatefulSet` for stable pod DNS.                                  |
 | `ServiceAccount`                    | Stable identity the pod runs under. Bindings depend on `rbac.*`.                   |
 | `Ingress` (optional)                | External HTTP(S) entry point with the usual class/annotations/TLS knobs.           |
 | `RoleBinding` (per namespace)       | When `rbac.enabled=true`, one per entry in `rbac.namespaces`, bound to the built-in `admin` ClusterRole. |
@@ -94,9 +93,58 @@ The pod runs as `openhands` (UID 10001) from the upstream image;
 so that user can write to it.
 
 Point at an existing PVC with `persistence.existingClaim=<name>` if you
-manage the volume out of band; otherwise the chart uses the
-`StatefulSet`'s `volumeClaimTemplates` (recommended — data survives pod
-rescheduling and image upgrades).
+manage the volume out of band. Otherwise, the chart creates one named
+`<fullname>-data` (for example, `canvas-agent-canvas-data` for a release named
+`canvas`). The generated PVC carries Helm's
+`helm.sh/resource-policy: keep` annotation, so it survives pod replacement,
+image upgrades, and `helm uninstall`.
+
+The Deployment defaults to a `Recreate` strategy. This avoids a replacement
+pod racing the old pod for a single `ReadWriteOnce` volume. Storage backends
+that support concurrent attachment can opt into `RollingUpdate`:
+
+```yaml
+deployment:
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 0
+```
+
+## Upgrading from chart 0.1.x
+
+Chart 0.2.0 replaces the StatefulSet and its `volumeClaimTemplates` with a
+Deployment and a standalone PVC. This is a breaking workload change and causes
+a brief outage while Kubernetes replaces the pod.
+
+If the 0.1.x release already uses `persistence.existingClaim`, keep that value
+when upgrading; the Deployment will mount the same claim.
+
+For a 0.1.x release that used the chart-created claim, explicitly point the new
+Deployment at that retained PVC. A default 0.1.x claim is named
+`data-<fullname>-0`, but verify the exact name before upgrading:
+
+```bash
+RELEASE=agent-canvas
+NAMESPACE=default
+
+kubectl -n "$NAMESPACE" get pvc \
+  -l app.kubernetes.io/instance="$RELEASE"
+
+helm get values "$RELEASE" -n "$NAMESPACE" -o yaml > agent-canvas-values.yaml
+# Edit agent-canvas-values.yaml and set:
+# persistence:
+#   existingClaim: <name reported by kubectl above>
+
+helm upgrade "$RELEASE" ./helm/agent-canvas \
+  -n "$NAMESPACE" -f agent-canvas-values.yaml
+```
+
+Do not upgrade a chart-created 0.1.x release with an empty
+`persistence.existingClaim`: chart 0.2.0 would create a new empty PVC, making
+the retained data appear to be missing. The old PVC is not deleted, but it must
+then be selected explicitly and the upgrade repeated.
 
 ## RBAC
 
@@ -208,7 +256,6 @@ agent sandboxes, see [OpenHands Enterprise](#relationship-to-openhands-enterpris
 helm uninstall agent-canvas
 ```
 
-By default the PVC created by `volumeClaimTemplates` is **retained**
-after uninstall — delete it manually if you want the data gone. Set
-`statefulSet.persistentVolumeClaimRetentionPolicy` (Kubernetes 1.27+) if
-you want the PVC lifecycle tied to the StatefulSet.
+The chart-created PVC is **retained** after uninstall — delete it manually if
+you want the data gone. A PVC named by `persistence.existingClaim` is never
+owned or deleted by this chart.
