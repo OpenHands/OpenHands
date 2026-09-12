@@ -1,17 +1,23 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { callCloudProxyMock } = vi.hoisted(() => ({
-  callCloudProxyMock: vi.fn(),
-}));
+const { callCloudProxyMock, activeBackendMock, remoteSearchMock } = vi.hoisted(
+  () => ({
+    callCloudProxyMock: vi.fn(),
+    activeBackendMock: vi.fn(() => ({ backend: { kind: "cloud" } })),
+    remoteSearchMock: vi.fn(),
+  }),
+);
 
 vi.mock("@openhands/typescript-client/clients", () => ({
   ConversationClient: class {},
 }));
 vi.mock("@openhands/typescript-client/events/remote-events-list", () => ({
-  RemoteEventsList: class {},
+  RemoteEventsList: class {
+    search = remoteSearchMock;
+  },
 }));
 vi.mock("../backend-registry/active-store", () => ({
-  getActiveBackend: () => ({ backend: { kind: "cloud" } }),
+  getActiveBackend: () => activeBackendMock(),
 }));
 vi.mock("../cloud/proxy", () => ({ callCloudProxy: callCloudProxyMock }));
 vi.mock("../agent-server-client-options", () => ({
@@ -52,5 +58,45 @@ describe("EventService.searchEvents strict pagination", () => {
 
     expect(warn).toHaveBeenCalledOnce();
     warn.mockRestore();
+  });
+});
+
+describe("EventService.searchEvents local path", () => {
+  beforeEach(() => {
+    activeBackendMock.mockReturnValue({ backend: { kind: "local" } });
+    remoteSearchMock.mockReset();
+  });
+
+  afterEach(() => {
+    activeBackendMock.mockReturnValue({ backend: { kind: "cloud" } });
+  });
+
+  it("narrows the canonical typed-client page via isAgentServerEvent", async () => {
+    const wellFormed = {
+      id: "evt-1",
+      timestamp: "2026-07-10T12:00:00.000Z",
+      source: "user",
+      kind: "MessageEvent",
+      llm_message: {
+        role: "user",
+        content: [{ type: "text", text: "hello" }],
+      },
+    };
+    const malformed = { nope: true };
+    remoteSearchMock.mockResolvedValue({
+      items: [wellFormed, malformed],
+      next_page_id: "p2",
+    });
+
+    await expect(
+      EventService.searchEvents(
+        "conversation-1",
+        "http://localhost:3000",
+        null,
+      ),
+    ).resolves.toEqual({ items: [wellFormed], next_page_id: "p2" });
+
+    // A valid wire envelope keeps its next-page cursor for pagination.
+    expect(remoteSearchMock).toHaveBeenCalledWith({ limit: 100 });
   });
 });

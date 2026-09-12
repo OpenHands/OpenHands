@@ -1,6 +1,7 @@
 import { ConversationClient } from "@openhands/typescript-client/clients";
 import { RemoteEventsList } from "@openhands/typescript-client/events/remote-events-list";
 import { OpenHandsEvent } from "#/types/agent-server/core";
+import { isAgentServerEvent } from "#/types/agent-server/type-guards";
 import { buildHttpBaseUrl } from "#/utils/websocket-url";
 import { getActiveBackend } from "../backend-registry/active-store";
 import { callCloudProxy } from "../cloud/proxy";
@@ -174,8 +175,19 @@ class EventService {
       ...(options.timestampLt ? { timestamp__lt: options.timestampLt } : {}),
     });
 
+    // The typed client returns its canonical `Event` union. Canvas refines it
+    // to `OpenHandsEvent` through the validated `isAgentServerEvent` guard
+    // rather than an unchecked `as` cast, so a malformed page never flows
+    // into the event store as a trusted event (#16952).
+    const items: OpenHandsEvent[] = [];
+    for (const item of page?.items ?? []) {
+      if (isAgentServerEvent(item)) {
+        items.push(item);
+      }
+    }
+
     return {
-      items: (page?.items ?? []) as OpenHandsEvent[],
+      items,
       next_page_id: page?.next_page_id ?? null,
     };
   }
