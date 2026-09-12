@@ -54,6 +54,12 @@ export function SettingsDropdownInput({
 }: SettingsDropdownInputProps) {
   const { t } = useTranslation("openhands");
 
+  // Select-only dropdowns must not raise the mobile on-screen keyboard when
+  // opened; filtering and custom values keep text entry available.
+  const supportsTextInput = Boolean(
+    allowsCustomValue || onInputChange || defaultFilter,
+  );
+
   return (
     <label
       className={cn("flex flex-col gap-2.5 w-full min-w-0", wrapperClassName)}
@@ -86,6 +92,7 @@ export function SettingsDropdownInput({
         }}
         selectorButtonProps={{ disableRipple: true }}
         inputProps={{
+          inputMode: supportsTextInput ? undefined : "none",
           classNames: {
             inputWrapper: cn(
               formControlSettingsFieldClassName,
