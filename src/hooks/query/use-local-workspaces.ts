@@ -5,6 +5,7 @@ import WorkspacesService, {
   WorkspacesListResponse,
 } from "#/api/workspaces-service/workspaces-service.api";
 import { LOCAL_WORKSPACES_QUERY_KEYS } from "#/hooks/query/query-keys";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 
 interface UseLocalWorkspacesOptions {
   enabled?: boolean;
@@ -13,8 +14,10 @@ interface UseLocalWorkspacesOptions {
 export function useLocalWorkspaces({
   enabled = true,
 }: UseLocalWorkspacesOptions = {}) {
+  const { backend, orgId } = useActiveBackend();
+
   return useQuery<WorkspacesListResponse>({
-    queryKey: LOCAL_WORKSPACES_QUERY_KEYS.all,
+    queryKey: [...LOCAL_WORKSPACES_QUERY_KEYS.all, backend.id, orgId],
     queryFn: () => WorkspacesService.listWorkspaces(),
     enabled,
     retry: (failureCount, error) =>
