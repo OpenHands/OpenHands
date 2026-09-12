@@ -98,9 +98,12 @@ describe("useCloudCurrentUserId", () => {
       userId: "user-X",
     });
 
-    const { result } = renderHook(() => useCloudCurrentUserId(), {
-      wrapper: makeWrapper(),
-    });
+    const { result } = renderHook(
+      () => useCloudCurrentUserId({ includeInactive: true }),
+      {
+        wrapper: makeWrapper(),
+      },
+    );
 
     await waitFor(() => {
       expect(result.current[cloudBackend.id]?.userId).toBe("user-X");

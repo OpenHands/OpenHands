@@ -46,8 +46,8 @@ export function Sidebar() {
     isError: settingsIsError,
     isFetching: isFetchingSettings,
   } = useSettings();
-  const { backends, active } = useActiveBackendContext();
-  const healthByBackendId = useBackendsHealth(backends);
+  const { active } = useActiveBackendContext();
+  const healthByBackendId = useBackendsHealth([active.backend]);
   const activeBackendHealth = healthByBackendId[active.backend.id];
   const collapsed = useSidebarStore((state) => state.collapsed);
   const setCollapsed = useSidebarStore((state) => state.setCollapsed);
