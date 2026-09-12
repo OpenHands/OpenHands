@@ -71,6 +71,12 @@ import {
   signalProcessTree,
 } from "./dev-process-utils.mjs";
 import { fileLog, stripAnsi } from "./logger.mjs";
+import {
+  applySessionKeyPolicy,
+  bindHostArgs,
+  isLoopbackBind,
+  resolveBindHost,
+} from "./bind-host.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, "..");
@@ -176,6 +182,7 @@ function parseArgs() {
     public: false,
     frontendOnly: false,
     backendOnly: false,
+    host: null,
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -215,6 +222,10 @@ function parseArgs() {
       case "--backend-only":
         config.backendOnly = true;
         break;
+      case "-H":
+      case "--host":
+        config.host = args[++i];
+        break;
       case "-h":
       case "--help":
         showHelp();
@@ -237,6 +248,9 @@ USAGE:
 
 OPTIONS:
   -p, --port <port>           Ingress port (default: 8000)
+  -H, --host <host>           Bind address for ingress/static (default: 127.0.0.1).
+                              Use 0.0.0.0 or :: to listen on all interfaces; the
+                              session key will not be injected into HTML.
   --automation-ref <ref>      Git ref for automation (branch/tag/SHA)
   --automation-repo <url>     Git repo URL (default: ${DEFAULT_AUTOMATION_REPO})
   --static                    Serve an existing production build instead of Vite
@@ -250,6 +264,7 @@ OPTIONS:
 
 ENVIRONMENT VARIABLES:
   PORT                        Alternative to --port
+  OH_BIND_HOST                Alternative to --host (default: 127.0.0.1)
   OH_AUTOMATION_GIT_REF       Git ref for automation (overrides default version)
   OH_AUTOMATION_VERSION       Specific PyPI version for automation (default: ${DEFAULT_AUTOMATION_VERSION})
   OH_AUTOMATION_LOCAL_PATH    Absolute path to a local automation checkout (overridden only by --automation-git-ref)
@@ -476,6 +491,18 @@ async function buildConfig(args, env = process.env) {
     );
   }
 
+  const bindHost = resolveBindHost({
+    flag: args.host,
+    env: env.OH_BIND_HOST,
+  });
+  if (!isLoopbackBind(bindHost) && !isPublic) {
+    logService(
+      "auth",
+      `Bind host ${bindHost} is not loopback — session key will not be injected into HTML`,
+      c.yellow,
+    );
+  }
+
   return {
     // Ingress port (main entry point)
     ingressPort: preferredIngressPort,
@@ -516,6 +543,7 @@ async function buildConfig(args, env = process.env) {
     launchAutomation,
 
     verbose: args.verbose,
+    bindHost,
   };
 }
 
@@ -1112,6 +1140,7 @@ function startIngress(config) {
       ingressScript,
       "--port",
       config.ingressPort.toString(),
+      ...bindHostArgs(config.bindHost),
       ...(runtimeServicesInfo
         ? ["--runtime-services-info", runtimeServicesInfo]
         : []),
@@ -1149,16 +1178,14 @@ export function buildAutomationRuntimeServicesInfo(config) {
   });
 }
 
-function startVite(config) {
-  logService("vite", `Starting on port ${config.vitePort}...`, c.magenta);
-
-  const frontendCommand = buildNpmScriptCommand("dev:frontend");
-
+function buildViteFrontendEnv(config) {
+  /** @type {Record<string, string>} */
   const viteEnv = {
     // Full-stack mode points Vite at this launcher's ingress. Frontend-only
     // mode uses the separately running backend ingress instead.
     ...buildViteBackendEnv(config),
     VITE_FRONTEND_PORT: config.vitePort.toString(),
+    VITE_BIND_HOST: config.bindHost,
   };
   if (config.viteWorkingDir) {
     viteEnv.VITE_WORKING_DIR = config.viteWorkingDir;
@@ -1181,15 +1208,34 @@ function startVite(config) {
     viteEnv.VITE_VSCODE_TARGET = `http://127.0.0.1:${config.vscodePort}`;
   }
 
-  // In local mode, bake the session key into the frontend so the user
-  // never has to paste it. In public mode, omit the key and set
-  // VITE_AUTH_REQUIRED so the frontend shows the API key entry screen
-  // immediately (no network round-trip needed).
-  if (config.launchAgentServer && config.isPublic) {
+  // The Vite origin is directly reachable on its own port, so it must use the
+  // same bind/key policy as ingress and the static server. Local loopback mode
+  // keeps transparent auth; public or off-loopback mode serves no credential
+  // and shows the API-key entry screen.
+  const policy = applySessionKeyPolicy({
+    host: config.bindHost,
+    sessionApiKey:
+      config.launchAgentServer && !config.isPublic
+        ? config.sessionApiKey
+        : null,
+    authRequired: Boolean(config.launchAgentServer && config.isPublic),
+    warn: (msg) => logService("vite", msg, c.yellow),
+  });
+  if (policy.authRequired) {
     viteEnv.VITE_AUTH_REQUIRED = "true";
-  } else if (config.launchAgentServer) {
-    viteEnv.VITE_SESSION_API_KEY = config.sessionApiKey;
   }
+  if (policy.sessionApiKey) {
+    viteEnv.VITE_SESSION_API_KEY = policy.sessionApiKey;
+  }
+
+  return viteEnv;
+}
+
+function startVite(config) {
+  logService("vite", `Starting on port ${config.vitePort}...`, c.magenta);
+
+  const frontendCommand = buildNpmScriptCommand("dev:frontend");
+  const viteEnv = buildViteFrontendEnv(config);
 
   spawnService("vite", frontendCommand.command, frontendCommand.args, {
     cwd: config.canvasPath,
@@ -1626,18 +1672,34 @@ function startStaticFrontend(config, staticDir) {
       staticDir,
       "--port",
       String(config.vitePort),
+      ...bindHostArgs(config.bindHost),
       ...(process.env.VITE_BASE_PATH
         ? ["--base-path", process.env.VITE_BASE_PATH]
         : []),
-      // In local mode, inject the API key so the pre-built frontend can
-      // authenticate transparently. In public mode, pass --auth-required
-      // so the frontend shows the API key entry screen instead.
-      ...(config.launchAgentServer && !config.isPublic && config.sessionApiKey
-        ? ["--session-api-key", config.sessionApiKey]
-        : []),
-      ...(config.launchAgentServer && config.isPublic
-        ? ["--auth-required"]
-        : []),
+      // In local mode on loopback, inject the API key so the pre-built
+      // frontend can authenticate transparently. Off-loopback binds (and
+      // public mode) use the API key entry screen instead.
+      ...(() => {
+        const policy = applySessionKeyPolicy({
+          host: config.bindHost,
+          sessionApiKey:
+            config.launchAgentServer && !config.isPublic
+              ? config.sessionApiKey
+              : null,
+          authRequired: Boolean(
+            config.launchAgentServer && config.isPublic,
+          ),
+          warn: (msg) => logService("static", msg, c.yellow),
+        });
+        const flags = [];
+        if (policy.sessionApiKey) {
+          flags.push("--session-api-key", policy.sessionApiKey);
+        }
+        if (policy.authRequired) {
+          flags.push("--auth-required");
+        }
+        return flags;
+      })(),
       // Inject runtime-services info so the agent knows what's reachable.
       ...(runtimeServicesInfo
         ? ["--runtime-services-info", runtimeServicesInfo]
@@ -1671,6 +1733,7 @@ export {
   buildConfig,
   buildRouteArgs,
   buildViteBackendEnv,
+  buildViteFrontendEnv,
   getAgentServerBaseUrl,
   getFrontendBackend,
   getLocalServiceRoutes,

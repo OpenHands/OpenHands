@@ -93,6 +93,7 @@ export default defineConfig(({ mode }) => {
     VITE_BACKEND_HOST = "127.0.0.1:8000",
     VITE_USE_TLS = "false",
     VITE_FRONTEND_PORT = "3001",
+    VITE_BIND_HOST = "127.0.0.1",
     VITE_INSECURE_SKIP_VERIFY = "false",
     VITE_BASE_PATH,
     VITE_VSCODE_BASE_PATH,
@@ -390,7 +391,7 @@ export default defineConfig(({ mode }) => {
     server: {
       port: FE_PORT,
       strictPort: true, // Fail if port is busy (dynamic allocation handles fallback)
-      host: true,
+      host: VITE_BIND_HOST,
       allowedHosts: true,
       proxy: {
         "/api": {

@@ -26,6 +26,7 @@ import {
   formatMissingUvxGuidance,
   formatMissingFrontendDependenciesGuidance,
   getMissingFrontendDependencyBins,
+  getViteSessionApiKey,
   validateFrontendDependencies,
   validateLocalAgentServerPath,
   findFreePort,
@@ -686,6 +687,20 @@ describe("validateLocalAgentServerPath", () => {
   it("throws when given a relative path", () => {
     expect(() => validateLocalAgentServerPath("./sdk")).toThrow(
       /must be an absolute path/,
+    );
+  });
+});
+
+describe("getViteSessionApiKey", () => {
+  it("only injects the key on loopback listeners", () => {
+    const config = { sessionApiKey: "local-secret" };
+
+    expect(getViteSessionApiKey(config, {})).toBe("local-secret");
+    expect(getViteSessionApiKey(config, { VITE_BIND_HOST: "127.0.0.1" })).toBe(
+      "local-secret",
+    );
+    expect(getViteSessionApiKey(config, { VITE_BIND_HOST: "0.0.0.0" })).toBe(
+      "",
     );
   });
 });
