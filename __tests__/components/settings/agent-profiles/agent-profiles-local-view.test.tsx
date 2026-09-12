@@ -343,6 +343,7 @@ describe("AgentProfilesLocalView save mapping", () => {
       isDirty: true,
       buildAgentProfileFields: () => ({
         agent_kind: "openhands",
+        mcp_server_refs: null,
         enable_sub_agents: false,
         verification: {
           critic_enabled: true,

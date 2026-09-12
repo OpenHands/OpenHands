@@ -265,6 +265,9 @@ describe("buildAgentProfileFields — mcp_server_refs", () => {
     toolConcurrency: "",
     mcpMode: "standard" as const,
     selectedMcpServers: [],
+    criticEnabled: false,
+    iterativeRefinementEnabled: false,
+    verificationDirty: false,
   };
 
   it("emits null in standard mode, so the profile inherits every server", () => {
