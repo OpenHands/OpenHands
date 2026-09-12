@@ -13,6 +13,13 @@ import type { MCPServerConfig } from "#/types/mcp-server";
 import { REDACTED_MCP_SECRET_VALUE } from "#/utils/mcp-config";
 import { getMcpServerHealthKey } from "#/utils/mcp-server-health-key";
 
+// The hook calls `useActiveBackend()`, which in this hook-level test (no
+// `<ActiveBackendProvider>`) returns `makeDefaultLocalBackend()`. In jsdom
+// that resolves to `{ id: "default-local", connectionRevision: undefined }`.
+// This MUST match the production fallback exactly; if a future change
+// reshapes `makeDefaultLocalBackend`, update this constant accordingly.
+const DEFAULT_LOCAL_SCOPE = { backendId: "default-local" };
+
 const useSettingsMock = vi.fn();
 vi.mock("#/hooks/query/use-settings", () => ({
   useSettings: () => useSettingsMock(),
@@ -224,7 +231,7 @@ describe("useUpdateMcpServer", () => {
       name: "docs",
       url: "https://docs.example/mcp",
     };
-    const key = getMcpServerHealthKey(server);
+    const key = getMcpServerHealthKey(DEFAULT_LOCAL_SCOPE, server);
     setMcpServerHealth(key, {
       status: "healthy",
       verification: "verified",
@@ -249,8 +256,8 @@ describe("useUpdateMcpServer", () => {
       url: "https://docs.example/mcp",
     };
     const newServer: MCPServerConfig = { ...oldServer, name: "reference" };
-    const oldKey = getMcpServerHealthKey(oldServer);
-    const newKey = getMcpServerHealthKey(newServer);
+    const oldKey = getMcpServerHealthKey(DEFAULT_LOCAL_SCOPE, oldServer);
+    const newKey = getMcpServerHealthKey(DEFAULT_LOCAL_SCOPE, newServer);
     setMcpServerHealth(oldKey, {
       status: "healthy",
       verification: "verified",

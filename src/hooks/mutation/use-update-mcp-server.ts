@@ -1,6 +1,8 @@
+import React from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSettings } from "#/hooks/query/use-settings";
 import SettingsService from "#/api/settings-service/settings-service.api";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 import { MCPServerConfig } from "#/types/mcp-server";
 import {
   buildMcpServerPatch,
@@ -16,6 +18,15 @@ import { toMcpServerName } from "#/utils/mcp-server-name";
 export function useUpdateMcpServer() {
   const queryClient = useQueryClient();
   const { data: settings } = useSettings();
+  const active = useActiveBackend();
+  const scopeRef = React.useRef({
+    backendId: active.backend.id,
+    connectionRevision: active.backend.connectionRevision,
+  });
+  scopeRef.current = {
+    backendId: active.backend.id,
+    connectionRevision: active.backend.connectionRevision,
+  };
 
   return useMutation({
     mutationFn: async ({
@@ -32,7 +43,10 @@ export function useUpdateMcpServer() {
       if (!previous) {
         throw new Error(`MCP server "${serverId}" no longer exists.`);
       }
-      const previousHealthKey = getMcpServerHealthKey({
+      // Build a minimal MCPServerConfig-shaped record so the key helper
+      // can reuse the same structure the live config uses, without
+      // touching the wire-format `transport` field name.
+      const previousServer: MCPServerConfig = {
         id: serverId,
         type:
           previous.transport === "stdio"
@@ -52,7 +66,11 @@ export function useUpdateMcpServer() {
               headers: previous.headers ?? undefined,
               auth: previous.auth ?? undefined,
             }),
-      });
+      };
+      const previousHealthKey = getMcpServerHealthKey(
+        scopeRef.current,
+        previousServer,
+      );
 
       const nextKey = toMcpServerName(server.name || serverId);
       if (nextKey !== serverId) {
@@ -76,7 +94,9 @@ export function useUpdateMcpServer() {
       // stale. This hook-level reset runs before the caller's onSuccess,
       // letting save flows re-seed from their fresh pre-save test result.
       clearMcpServerHealth(previousHealthKey);
-      clearMcpServerHealth(getMcpServerHealthKey(variables.server));
+      clearMcpServerHealth(
+        getMcpServerHealthKey(scopeRef.current, variables.server),
+      );
       queryClient.invalidateQueries({
         queryKey: SETTINGS_QUERY_KEYS.personal(),
       });

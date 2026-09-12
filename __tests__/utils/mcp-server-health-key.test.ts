@@ -11,6 +11,9 @@ const GITHUB: MCPServerConfig = {
   auth: { strategy: "api_key", value: "github_pat_real" },
 };
 
+const SCOPE_A = { backendId: "backend-a", connectionRevision: 0 };
+const SCOPE_B = { backendId: "backend-b", connectionRevision: 0 };
+
 describe("getMcpServerHealthKey", () => {
   it("is stable across positional ids and secret-value forms of the same server", () => {
     // The same stored server appears with plaintext at install time, the
@@ -22,8 +25,8 @@ describe("getMcpServerHealthKey", () => {
       auth: { strategy: "api_key", value: REDACTED_MCP_SECRET_VALUE },
     };
 
-    expect(getMcpServerHealthKey(redactedLater)).toBe(
-      getMcpServerHealthKey(GITHUB),
+    expect(getMcpServerHealthKey(SCOPE_A, redactedLater)).toBe(
+      getMcpServerHealthKey(SCOPE_A, GITHUB),
     );
   });
 
@@ -32,8 +35,8 @@ describe("getMcpServerHealthKey", () => {
     // `github_1`; their credentials (and health) are independent.
     const second: MCPServerConfig = { ...GITHUB, name: "github_1" };
 
-    expect(getMcpServerHealthKey(second)).not.toBe(
-      getMcpServerHealthKey(GITHUB),
+    expect(getMcpServerHealthKey(SCOPE_A, second)).not.toBe(
+      getMcpServerHealthKey(SCOPE_A, GITHUB),
     );
   });
 
@@ -43,8 +46,8 @@ describe("getMcpServerHealthKey", () => {
       url: "https://other.example.com/mcp",
     };
 
-    expect(getMcpServerHealthKey(movedUrl)).not.toBe(
-      getMcpServerHealthKey(GITHUB),
+    expect(getMcpServerHealthKey(SCOPE_A, movedUrl)).not.toBe(
+      getMcpServerHealthKey(SCOPE_A, GITHUB),
     );
   });
 
@@ -66,11 +69,35 @@ describe("getMcpServerHealthKey", () => {
       env: { SLACK_BOT_TOKEN: "xoxb-one", SLACK_TEAM_ID: "T01" },
     };
 
-    expect(getMcpServerHealthKey(rotatedToken)).toBe(
-      getMcpServerHealthKey(stdio),
+    expect(getMcpServerHealthKey(SCOPE_A, rotatedToken)).toBe(
+      getMcpServerHealthKey(SCOPE_A, stdio),
     );
-    expect(getMcpServerHealthKey(extraEnvVar)).not.toBe(
-      getMcpServerHealthKey(stdio),
+    expect(getMcpServerHealthKey(SCOPE_A, extraEnvVar)).not.toBe(
+      getMcpServerHealthKey(SCOPE_A, stdio),
     );
+  });
+
+  it("keys the same server independently under two backend scopes", () => {
+    // The same catalog entry installed against backend A and backend B
+    // carries two independent credentials and reachability verdicts; the
+    // health map must not bleed one backend's state into the other.
+    expect(getMcpServerHealthKey(SCOPE_A, GITHUB)).not.toBe(
+      getMcpServerHealthKey(SCOPE_B, GITHUB),
+    );
+  });
+
+  it("rotates the key when the backend's connection revision advances", () => {
+    // A backend that re-handshakes with new credentials (host/api-key
+    // rotation) must restart its MCP health from "unchecked" without an
+    // explicit clearMcpServerHealth call.
+    const before = getMcpServerHealthKey(
+      { backendId: "backend-a", connectionRevision: 1 },
+      GITHUB,
+    );
+    const after = getMcpServerHealthKey(
+      { backendId: "backend-a", connectionRevision: 2 },
+      GITHUB,
+    );
+    expect(before).not.toBe(after);
   });
 });

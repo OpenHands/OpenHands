@@ -280,7 +280,10 @@ describe("CustomServerEditor", () => {
       buildSettingsWithMcp(),
     );
     vi.spyOn(SettingsService, "saveSettings").mockResolvedValue(true);
-    const key = getMcpServerHealthKey(EDIT_STDIO_SERVER);
+    const key = getMcpServerHealthKey(
+      { backendId: "default-local" },
+      EDIT_STDIO_SERVER,
+    );
     setMcpServerHealth(key, {
       status: "failed",
       kind: "credentials",
