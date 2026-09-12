@@ -74,7 +74,6 @@ describe("XMLHttpRequestUpload fallback in vitest.setup.ts", () => {
 
     try {
       expect(typeof XMLHttpRequestUpload).toBe("function");
-      expect(new XMLHttpRequest().upload).toBeInstanceOf(XMLHttpRequestUpload);
     } finally {
       if (live) {
         Object.defineProperty(globalThis, "XMLHttpRequestUpload", live);

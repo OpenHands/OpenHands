@@ -44,6 +44,7 @@ function toAgentSettingsOverride(
   if (profile.agent_kind === "acp") {
     return {
       agent_kind: "acp",
+      mcp_server_refs: profile.mcp_server_refs ?? null,
       acp_server: profile.acp_server,
       acp_command: profile.acp_command ? parseCommand(profile.acp_command) : [],
       acp_args: profile.acp_args ?? [],
@@ -59,6 +60,7 @@ function toAgentSettingsOverride(
     true;
   return {
     agent_kind: "openhands",
+    mcp_server_refs: profile.mcp_server_refs ?? null,
     enable_sub_agents: profile.enable_sub_agents,
     enable_switch_llm_tool: switchLlmToolEnabled,
     tool_concurrency_limit: profile.tool_concurrency_limit,

@@ -131,4 +131,28 @@ describe("ConfigurationSection", () => {
       screen.queryByText("AUTOMATIONS$DETAIL$EVENT_FILTER"),
     ).not.toBeInTheDocument();
   });
+
+  it("renders the Automation Runs As field with the resolved identity", () => {
+    // Arrange / Act — the route resolves the creator and passes it down.
+    render(
+      <ConfigurationSection
+        automation={cronAutomation}
+        runsAs="jdoe@acme.com"
+      />,
+    );
+
+    // Assert
+    expect(screen.getByText("AUTOMATIONS$DETAIL$RUNS_AS")).toBeInTheDocument();
+    expect(screen.getByText("jdoe@acme.com")).toBeInTheDocument();
+  });
+
+  it("does not render the Automation Runs As field when no identity is provided", () => {
+    // Arrange / Act — local backends and in-flight lookups pass nothing.
+    render(<ConfigurationSection automation={cronAutomation} />);
+
+    // Assert
+    expect(
+      screen.queryByText("AUTOMATIONS$DETAIL$RUNS_AS"),
+    ).not.toBeInTheDocument();
+  });
 });

@@ -27,6 +27,11 @@ vi.mock("#/hooks/mutation/use-apply-onboarding-agent-profile", () => ({
   useApplyOnboardingAgentProfile: () => applyAgentProfile,
 }));
 
+vi.mock("#/hooks/query/use-free-models", () => ({
+  useDefaultModel: () => null,
+  useDefaultModelReady: () => true,
+}));
+
 vi.mock("#/utils/custom-toast-handlers", () => ({
   displayErrorToast,
 }));
