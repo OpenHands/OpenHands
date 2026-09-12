@@ -133,15 +133,7 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
           </span>
         )}
         {logsButton}
-        {showPhase && (
-          <RunPhase
-            status={run.status}
-            code={run.phase_code}
-            label={run.phase_label}
-            updatedAt={run.phase_updated_at}
-            wide
-          />
-        )}
+        {showPhase && <RunPhase currentPhase={run.current_phase} wide />}
         <RunStatusBadge status={display.badgeStatus} />
       </div>
     </>
