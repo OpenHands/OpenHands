@@ -441,6 +441,22 @@ Full skill body.`,
     expect(screen.queryByTestId("skill-detail-modal")).not.toBeInTheDocument();
   });
 
+  it("shows a load-error message instead of the empty state when fetching skills fails", async () => {
+    // Regression: a failed fetch (e.g. a cloud-proxy error) left `skills`
+    // undefined, which rendered identically to "you have no skills
+    // configured" — indistinguishable from a genuinely empty catalog.
+    vi.spyOn(SkillsService, "getSkills").mockRejectedValue(
+      new Error("network down"),
+    );
+
+    renderSkillsSettingsScreen();
+
+    expect(await screen.findByTestId("skills-load-error")).toHaveTextContent(
+      "SETTINGS$SKILLS_LOAD_ERROR",
+    );
+    expect(screen.queryByTestId("skills-empty")).not.toBeInTheDocument();
+  });
+
   it("shows an empty-state message when no skills match the current filters", async () => {
     const skill = buildSkill();
     vi.spyOn(SkillsService, "getSkills").mockResolvedValue([skill]);

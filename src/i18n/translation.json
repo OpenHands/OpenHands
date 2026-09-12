@@ -27539,6 +27539,9 @@
     "uk": "Навички не знайдено.",
     "ca": "No s'han trobat habilitats."
   },
+  "SETTINGS$SKILLS_LOAD_ERROR": {
+    "en": "Failed to load skills. Check your connection and try again."
+  },
   "SETTINGS$SKILLS_TRIGGERS": {
     "en": "Triggers: {{triggers}}",
     "ja": "トリガー: {{triggers}}",
