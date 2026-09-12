@@ -204,7 +204,7 @@ describe("useWebSocket", () => {
     expect(result.current.isConnected).toBe(true);
     expect(result.current.socket).toBeTruthy();
 
-    const closeSpy = vi.spyOn(result.current.socket!, "close");
+    const closeSpy = vi.spyOn(result.current.socket!, "stop");
 
     // Unmount the component (this should trigger the useEffect cleanup)
     unmount();
@@ -224,6 +224,7 @@ describe("useWebSocket", () => {
       static readonly CLOSING = 2;
       static readonly CLOSED = 3;
 
+      static instance: MockWebSocket;
       readonly url: string;
       readyState = MockWebSocket.CONNECTING;
       onopen: ((event: Event) => void) | null = null;
@@ -233,6 +234,7 @@ describe("useWebSocket", () => {
 
       constructor(url: string) {
         this.url = url;
+        MockWebSocket.instance = this;
         queueMicrotask(() => {
           this.readyState = MockWebSocket.OPEN;
           this.onopen?.(new Event("open"));
@@ -272,7 +274,7 @@ describe("useWebSocket", () => {
 
       // Verify that the WebSocket was created with query parameters
       expect(result.current.socket).toBeTruthy();
-      expect(result.current.socket!.url).toBe(
+      expect(MockWebSocket.instance.url).toBe(
         "ws://acme.com/ws?token=abc123&userId=user456&version=v1",
       );
 
