@@ -40,7 +40,11 @@ function SkillsSettingsScreen() {
   const { t } = useTranslation("openhands");
 
   const { data: settings, isLoading: settingsLoading } = useSettings();
-  const { data: skills, isLoading: skillsLoading } = useSkills();
+  const {
+    data: skills,
+    isLoading: skillsLoading,
+    isError: isSkillsLoadError,
+  } = useSkills();
   const { isEnabled, setEnabled } = useSkillEnablement();
 
   const [searchParams, setSearchParams] = useSearchParams();
@@ -175,7 +179,18 @@ function SkillsSettingsScreen() {
             </div>
           ) : null}
 
-          {!isLoading && allSkills.length === 0 ? (
+          {!isLoading && isSkillsLoadError ? (
+            <div
+              data-testid="skills-load-error"
+              className={extensionModuleEmptyStateClassName}
+            >
+              <p className="text-sm text-tertiary-light">
+                {t(I18nKey.SETTINGS$SKILLS_LOAD_ERROR)}
+              </p>
+            </div>
+          ) : null}
+
+          {!isLoading && !isSkillsLoadError && allSkills.length === 0 ? (
             <div
               data-testid="skills-empty"
               className={extensionModuleEmptyStateClassName}
@@ -186,7 +201,7 @@ function SkillsSettingsScreen() {
             </div>
           ) : null}
 
-          {!isLoading && allSkills.length > 0 ? (
+          {!isLoading && !isSkillsLoadError && allSkills.length > 0 ? (
             <>
               <SkillsToolbar
                 search={filter.query}
