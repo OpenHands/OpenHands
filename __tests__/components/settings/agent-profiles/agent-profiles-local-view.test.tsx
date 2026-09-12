@@ -134,6 +134,7 @@ describe("AgentProfilesLocalView save mapping", () => {
       isDirty: true,
       buildAgentProfileFields: () => ({
         agent_kind: "openhands",
+        mcp_server_refs: null,
         enable_sub_agents: true,
       }),
       credentials: { isDirty: false, save: vi.fn(), reset: vi.fn() },
@@ -148,6 +149,7 @@ describe("AgentProfilesLocalView save mapping", () => {
       name: "my-oh",
       profile: {
         agent_kind: "openhands",
+        mcp_server_refs: null,
         enable_sub_agents: true,
         llm_profile_ref: "default",
       },
@@ -161,6 +163,7 @@ describe("AgentProfilesLocalView save mapping", () => {
       isDirty: true,
       buildAgentProfileFields: () => ({
         agent_kind: "acp",
+        mcp_server_refs: null,
         acp_server: "claude-code",
         acp_model: "claude-opus-4-8",
         acp_command: null,
@@ -178,6 +181,7 @@ describe("AgentProfilesLocalView save mapping", () => {
       name: "my-claude",
       profile: {
         agent_kind: "acp",
+        mcp_server_refs: null,
         acp_server: "claude-code",
         acp_model: "claude-opus-4-8",
         acp_command: null,
@@ -215,8 +219,11 @@ describe("AgentProfilesLocalView save mapping", () => {
       agentType: "openhands",
       isValid: true,
       isDirty: true,
+      // The editor models `mcp_server_refs`, so it re-emits what it was seeded
+      // with; `disabled_skills` it does not, and survives via the merge.
       buildAgentProfileFields: () => ({
         agent_kind: "openhands",
+        mcp_server_refs: ["github"],
         enable_sub_agents: true,
       }),
       credentials: { isDirty: false, save: vi.fn(), reset: vi.fn() },
@@ -240,6 +247,9 @@ describe("AgentProfilesLocalView save mapping", () => {
       enable_sub_agents: false,
       enable_switch_llm_tool: false,
       tool_concurrency_limit: 4,
+      // Without this the picker opens on "all servers" and the save widens the
+      // profile's scope back to every configured server.
+      mcp_server_refs: ["github"],
     });
 
     await user.click(screen.getByTestId("save-agent-profile-btn"));
@@ -292,6 +302,7 @@ describe("AgentProfilesLocalView save mapping", () => {
       isDirty: true,
       buildAgentProfileFields: () => ({
         agent_kind: "openhands",
+        mcp_server_refs: null,
         enable_sub_agents: false,
         enable_switch_llm_tool: true,
       }),
@@ -329,6 +340,7 @@ describe("AgentProfilesLocalView save mapping", () => {
       isDirty: true,
       buildAgentProfileFields: () => ({
         agent_kind: "acp",
+        mcp_server_refs: null,
         acp_server: "claude-code",
         acp_model: "claude-opus-4-8",
         acp_command: null,
@@ -350,6 +362,7 @@ describe("AgentProfilesLocalView save mapping", () => {
       name: "default",
       profile: {
         agent_kind: "acp",
+        mcp_server_refs: null,
         acp_server: "claude-code",
         acp_model: "claude-opus-4-8",
         acp_command: null,
@@ -380,6 +393,7 @@ describe("AgentProfilesLocalView save mapping", () => {
       isDirty: false,
       buildAgentProfileFields: () => ({
         agent_kind: "openhands",
+        mcp_server_refs: null,
         enable_sub_agents: false,
       }),
       credentials: { isDirty: false, save: vi.fn(), reset: vi.fn() },
@@ -418,6 +432,7 @@ describe("AgentProfilesLocalView save mapping", () => {
       isDirty: false,
       buildAgentProfileFields: () => ({
         agent_kind: "openhands",
+        mcp_server_refs: null,
         enable_sub_agents: false,
       }),
       credentials: { isDirty: false, save: vi.fn(), reset: vi.fn() },
@@ -438,6 +453,7 @@ describe("AgentProfilesLocalView save mapping", () => {
       isDirty: true,
       buildAgentProfileFields: () => ({
         agent_kind: "openhands",
+        mcp_server_refs: null,
         enable_sub_agents: false,
       }),
       credentials: { isDirty: false, save: vi.fn(), reset: vi.fn() },
