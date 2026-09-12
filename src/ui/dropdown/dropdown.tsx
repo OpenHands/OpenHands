@@ -132,6 +132,9 @@ export function Dropdown({
   });
 
   const isDisabled = loading || disabled;
+  // Downshift creates an aria-labelledby reference when no accessible name is provided.
+  // This primitive does not render a label element, so provide a stable fallback instead.
+  const dropdownAriaLabel = placeholder ?? "Filter options";
 
   // `selectedItem` is downshift's internal state, frozen to whatever
   // initialized it. Resolve the currently selected option against the
@@ -148,11 +151,18 @@ export function Dropdown({
   // the browser's native cursor position intact.
   const getInputPropsWithCursorFix = (props?: object) =>
     getInputProps({
+      "aria-label": dropdownAriaLabel,
       ...props,
       onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
         setInputValue(e.target.value);
         setSearchTerm(e.target.value);
       },
+    });
+
+  const getMenuPropsWithAriaLabel = (props?: object) =>
+    getMenuProps({
+      "aria-label": dropdownAriaLabel,
+      ...props,
     });
 
   return (
@@ -240,7 +250,7 @@ export function Dropdown({
         filteredOptions={filteredOptions}
         selectedItem={selectedItem}
         emptyMessage={emptyMessage}
-        getMenuProps={getMenuProps}
+        getMenuProps={getMenuPropsWithAriaLabel}
         getItemProps={getItemProps}
         footer={footer}
         openUpward={openUpward}
