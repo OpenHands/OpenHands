@@ -16,6 +16,16 @@ vi.mock("react-i18next", async (importOriginal) => ({
 }));
 
 describe("ConfirmArchiveModal", () => {
+  it("gives the dialog an accessible name matching its title", () => {
+    renderWithProviders(
+      <ConfirmArchiveModal onConfirm={vi.fn()} onCancel={vi.fn()} />,
+    );
+
+    expect(
+      screen.getByRole("dialog", { name: "CONVERSATION$CONFIRM_ARCHIVE" }),
+    ).toBeInTheDocument();
+  });
+
   it("should display the conversation title in the warning", () => {
     renderWithProviders(
       <ConfirmArchiveModal

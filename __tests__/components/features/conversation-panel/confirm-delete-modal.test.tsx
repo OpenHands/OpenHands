@@ -16,6 +16,21 @@ vi.mock("react-i18next", async (importOriginal) => ({
 }));
 
 describe("ConfirmDeleteModal", () => {
+  it("gives the dialog an accessible name matching its title, on the app's most destructive confirmation", () => {
+    // Regression: ModalBackdrop supports aria-label for exactly this, but
+    // this modal (and 4 siblings in this feature area) never passed it — a
+    // screen reader announced a bare, unnamed "dialog" on delete/archive/
+    // stop/exit confirmations, the flows where knowing what's being
+    // confirmed matters most.
+    renderWithProviders(
+      <ConfirmDeleteModal onConfirm={vi.fn()} onCancel={vi.fn()} />,
+    );
+
+    expect(
+      screen.getByRole("dialog", { name: "CONVERSATION$CONFIRM_DELETE" }),
+    ).toBeInTheDocument();
+  });
+
   it("should display the conversation title", () => {
     renderWithProviders(
       <ConfirmDeleteModal
@@ -37,9 +52,7 @@ describe("ConfirmDeleteModal", () => {
       />,
     );
 
-    expect(
-      screen.getByText("CONVERSATION$DELETE_WARNING"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("CONVERSATION$DELETE_WARNING")).toBeInTheDocument();
   });
 
   it("places Cancel before Confirm in the footer so the dominant action is the last focusable button", () => {
@@ -53,7 +66,7 @@ describe("ConfirmDeleteModal", () => {
     const confirm = screen.getByText("ACTION$CONFIRM_DELETE");
 
     // Assert: Cancel precedes the dominant Confirm action in DOM order.
-    // eslint-disable-next-line no-bitwise
+
     expect(
       cancel.compareDocumentPosition(confirm) &
         Node.DOCUMENT_POSITION_FOLLOWING,

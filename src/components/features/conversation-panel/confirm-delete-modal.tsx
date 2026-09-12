@@ -42,13 +42,13 @@ export function ConfirmDeleteModal({
     confirmationMessage = t(I18nKey.CONVERSATION$DELETE_WARNING);
   }
 
+  const resolvedTitle = title ?? t(I18nKey.CONVERSATION$CONFIRM_DELETE);
+
   return (
-    <ModalBackdrop onClose={onCancel}>
+    <ModalBackdrop onClose={onCancel} aria-label={resolvedTitle}>
       <ModalBody className="items-start border border-[var(--oh-border)]">
         <div className="flex flex-col gap-2">
-          <BaseModalTitle
-            title={title ?? t(I18nKey.CONVERSATION$CONFIRM_DELETE)}
-          />
+          <BaseModalTitle title={resolvedTitle} />
           <BaseModalDescription>{confirmationMessage}</BaseModalDescription>
         </div>
         <div
