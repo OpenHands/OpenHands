@@ -124,8 +124,8 @@ export interface ACPModelOption {
 // key. Everything else — display name, launch command, model picker list and
 // default — comes from the typescript-client registry below. Adding a model
 // or a provider happens upstream in the SDK; Canvas only owns the brand icon
-// and the onboarding-tile description here. A provider with no entry here is
-// intentionally not surfaced in the UI.
+// and the onboarding-tile description here. Its keys are the harnesses Canvas
+// offers — see {@link SURFACED_ACP_PROVIDERS}.
 const ACP_PROVIDER_UI: Record<
   string,
   { icon: ACPProviderIcon; description_key: I18nKey }
@@ -183,6 +183,15 @@ function getAvailableModels(key: string): ACPModelOption[] | undefined {
     ...(models ?? []).filter(({ id }) => id !== CODEX_ASTRA_MODEL.id),
   ];
 }
+
+/**
+ * The ACP harnesses Canvas surfaces — its own declaration of what it offers,
+ * independent of what the SDK registry happens to contain. Registering a
+ * harness upstream is a no-op here: nothing in Canvas enumerates the registry,
+ * so there is no list to keep in step with it.
+ */
+export const SURFACED_ACP_PROVIDERS: readonly string[] =
+  Object.keys(ACP_PROVIDER_UI);
 
 // Built-in ACP providers Canvas surfaces, built by enriching each upstream
 // registry record (``@openhands/typescript-client`` → Python SDK) with the
@@ -401,6 +410,10 @@ export function getAcpProviderSecrets(
   key: string | null | undefined,
 ): ACPProviderSecretField[] {
   if (!key) return [];
+  // Surfaced providers only. The client registry grows with every harness the
+  // SDK adds, so reading it directly would offer credential fields for one
+  // Canvas never lists.
+  if (!getAcpProvider(key)) return [];
   const info = getClientAcpProvider(key);
   if (!info) return [];
   // Subscription / Vertex credentials first — they're the primary auth path for
