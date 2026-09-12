@@ -46,14 +46,30 @@ function addRecordValues(
   }
 }
 
+/**
+ * Safely decode a URL component, returning the raw value if the encoding
+ * is malformed. A lone `%` in a userinfo value (e.g. `https://u:p%ss@h`)
+ * passes `new URL()` but throws inside `decodeURIComponent`. Without
+ * the guard, that throw would skip the `searchParams` pass below and
+ * silently leak every `?api_key=` / `?token=` / `?secret=` / `?auth=`
+ * query parameter to the displayed error text.
+ */
+function safeDecodeURIComponent(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 function addUrlSecrets(values: Set<string>, rawUrl: string | undefined): void {
   if (!rawUrl) return;
   try {
     const url = new URL(rawUrl);
     addValue(values, url.username);
     addValue(values, url.password);
-    addValue(values, decodeURIComponent(url.username));
-    addValue(values, decodeURIComponent(url.password));
+    addValue(values, safeDecodeURIComponent(url.username));
+    addValue(values, safeDecodeURIComponent(url.password));
     url.searchParams.forEach((value, name) => {
       if (SECRETLIKE_PARAM_NAME.test(name)) addValue(values, value);
     });
