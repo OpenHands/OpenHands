@@ -79,6 +79,8 @@ agent-canvas --frontend-only  # static frontend + ingress only
 agent-canvas --backend-only   # agent server + automation backend + ingress only
 ```
 
+When the startup summary shows `Main UI: http://localhost:8000/`, open [http://localhost:8000](http://localhost:8000).
+
 ### Option 2: With a Docker Sandbox
 
 **Prerequisites**:
@@ -103,6 +105,8 @@ docker run -it --rm \
 
 The agent will be able to access any project under `PROJECTS_PATH`.
 
+When the container logs report `All services started`, OpenHands is ready. Open [http://localhost:8000/canvas](http://localhost:8000/canvas).
+
 ### Option 3: From Source
 
 > [!WARNING]
@@ -117,9 +121,15 @@ npm install
 npm run dev
 ```
 
+When the startup summary shows `Main UI: http://localhost:8000/`, open [http://localhost:8000](http://localhost:8000).
+
 ---
 
-Access the UI at [http://localhost:8000](http://localhost:8000) for the npm/source launchers, or [http://localhost:8000/canvas](http://localhost:8000/canvas) for the Docker image. You can add additional backends directly from the UI.
+### Next steps
+
+1. [Configure an LLM profile](https://docs.openhands.dev/openhands/usage/settings/llm-settings#llm-profiles) for your backend.
+2. Choose a workspace in the UI and start a conversation.
+3. Optionally [add another backend](https://docs.openhands.dev/openhands/usage/agent-canvas/backends), such as a remote Agent Server or OpenHands Cloud.
 
 # Architecture
 
