@@ -654,6 +654,35 @@ export function LlmSettingsScreen({
     [schema, subscriptionModels, isCloud],
   );
 
+  // Mirrors getInitialView's own "does Basic even represent this?" check
+  // (only meaningful in embedded profile-editor mode; initialValueOverrides
+  // is empty on the standalone Settings page, so this is a no-op there).
+  // ModelSelector's Model dropdown renders blank whenever the current model
+  // isn't in the resolved provider's fetched catalog — true for any
+  // connection-linked profile (whose credential/base_url aren't on the
+  // profile itself) and for any custom model paired with a non-default base
+  // URL. Rather than let a user tab into a Basic view that can't represent
+  // their config and silently discard it, the tab isn't reachable at all.
+  const overrideConnectionId =
+    initialValueOverrides?.[LLM_PROVIDER_CONNECTION_KEY];
+  const isLinkedToConnectionOverride =
+    typeof overrideConnectionId === "string" && overrideConnectionId.length > 0;
+  const overrideModelForBasicGate = initialValueOverrides?.["llm.model"];
+  const overrideBaseUrlForBasicGate = initialValueOverrides?.["llm.base_url"];
+  const trimmedOverrideBaseUrl =
+    typeof overrideBaseUrlForBasicGate === "string"
+      ? overrideBaseUrlForBasicGate.trim()
+      : "";
+  const hasCustomBaseUrlOverride =
+    typeof overrideModelForBasicGate === "string" &&
+    trimmedOverrideBaseUrl.length > 0 &&
+    !isProviderDefaultBaseUrl(
+      overrideModelForBasicGate,
+      trimmedOverrideBaseUrl,
+    );
+  const hideBasicViewForEmbeddedProfile =
+    isLinkedToConnectionOverride || hasCustomBaseUrlOverride;
+
   return (
     <SdkSectionPage
       scope={scope}
@@ -669,6 +698,7 @@ export function LlmSettingsScreen({
       getInitialView={getInitialView}
       forceShowAdvancedView
       allowAllView
+      hideBasicView={hideBasicViewForEmbeddedProfile}
       onSaveSuccess={onSaveSuccess}
       initialValueOverrides={initialValueOverrides}
       markInitialOverridesDirty={markInitialOverridesDirty}

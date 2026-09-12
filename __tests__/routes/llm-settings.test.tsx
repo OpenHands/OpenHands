@@ -517,6 +517,35 @@ describe("LlmSettingsScreen - provider connection selector", () => {
       "openai/glm-5.3-flash:cloud",
     );
   });
+
+  it("makes the Basic tab unreachable for a profile linked to a provider connection", async () => {
+    // Companion to the initial-view fix above: even if something else were to
+    // land the form on Basic, the tab itself shouldn't be reachable for a
+    // connection-linked profile — that tier has no way to represent the
+    // connection at all, and its Model dropdown renders blank for any model
+    // absent from the resolved provider's catalog.
+    vi.spyOn(activeBackendContext, "useActiveBackend").mockReturnValue({
+      backend: mockLocalBackend,
+    } as ReturnType<typeof activeBackendContext.useActiveBackend>);
+    vi.spyOn(ProviderConnectionsService, "list").mockResolvedValue([
+      connection,
+    ]);
+
+    renderLlmSettingsScreen({
+      embedded: true,
+      hideSaveButton: true,
+      showProviderConnection: true,
+      initialValueOverrides: {
+        "llm.model": "openai/glm-5.3-flash:cloud",
+        "llm.provider_connection_id": "conn-1",
+      },
+    });
+
+    await screen.findByTestId("llm-settings-screen");
+    expect(
+      screen.queryByTestId("sdk-section-basic-toggle"),
+    ).not.toBeInTheDocument();
+  });
 });
 
 describe("LlmSettingsScreen - OpenHands provider on cloud", () => {

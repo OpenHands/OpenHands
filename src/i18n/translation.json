@@ -41913,5 +41913,11 @@
   },
   "SETTINGS$PROVIDER_CONNECTION_BULK_ADD_RESULT_FAILED": {
     "en": "Failed: {{names}}"
+  },
+  "SETTINGS$PROVIDER_CONNECTION_KEY_SET_LABEL": {
+    "en": "API key stored (not verified against the provider)"
+  },
+  "SETTINGS$PROVIDER_CONNECTION_KEY_UNSET_LABEL": {
+    "en": "No API key stored"
   }
 }

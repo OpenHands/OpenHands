@@ -49,7 +49,14 @@ export function ProviderConnectionRow({
             count: linkedProfileCount,
           })}
         </span>
-        <KeyStatusIcon isSet={connection.api_key_set} />
+        <KeyStatusIcon
+          isSet={connection.api_key_set}
+          label={t(
+            connection.api_key_set
+              ? I18nKey.SETTINGS$PROVIDER_CONNECTION_KEY_SET_LABEL
+              : I18nKey.SETTINGS$PROVIDER_CONNECTION_KEY_UNSET_LABEL,
+          )}
+        />
       </div>
       <div className="flex shrink-0 items-center gap-1">
         <button
