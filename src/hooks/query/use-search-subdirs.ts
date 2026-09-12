@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { FileClient } from "@openhands/typescript-client/clients";
-import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
+import { HttpClient } from "@openhands/typescript-client";
+import { getAgentServerClientOptions, getAgentServerHttpClientOptions } from "#/api/agent-server-client-options";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 
 type FileSubdirectoryPage = Awaited<
@@ -60,6 +61,14 @@ export const useSearchSubdirs = (path: string | null) => {
     meta: { disableToast: true },
   });
 };
+
+export async function createDirectory(path: string): Promise<void> {
+  const opts = getAgentServerHttpClientOptions();
+  const client = new HttpClient(opts);
+  await client.post("/api/file/create_directory", null, {
+    params: { path },
+  });
+}
 
 export const useHomeDirectory = () => {
   const active = useActiveBackend();
