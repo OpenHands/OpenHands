@@ -36,6 +36,10 @@ import { RecommendedAutomationsLauncher } from "#/components/features/automation
 import { PinnedAutomationsDashboard } from "./featured-automations/pinned-automations-dashboard";
 import { RunningAutomationsList } from "./featured-automations/running-automations-list";
 import { HomeHeaderTitle } from "./home-header/home-header-title";
+import {
+  HomeLauncherModeToggle,
+  type HomeLauncherMode,
+} from "./home-launcher-mode-toggle";
 import { OpenLauncherButton } from "./open-launcher-button";
 import { OpenWorkspaceDialog } from "./open-workspace-dialog";
 import { OpenRepositoryDialog } from "./open-repository-dialog";
@@ -59,6 +63,9 @@ export function HomeChatLauncher() {
   );
   const [selectedPlugins, setSelectedPlugins] = useState<PluginSpec[]>([]);
   const [isPluginPickerOpen, setIsPluginPickerOpen] = useState(false);
+  const [launcherMode, setLauncherMode] =
+    useState<HomeLauncherMode>("automate");
+  const isAutomateMode = launcherMode === "automate";
 
   const { mutateAsync: createConversation, isPending } =
     useCreateConversation();
@@ -237,11 +244,23 @@ export function HomeChatLauncher() {
           <HomeHeaderTitle />
         </div>
 
+        <div className="flex w-full justify-center">
+          <HomeLauncherModeToggle
+            mode={launcherMode}
+            onChange={setLauncherMode}
+          />
+        </div>
+
         <div className="w-full">
           <CustomChatInput
             onSubmit={handleSubmitWithModelGuard}
             onFilesPaste={handleUpload}
             disabled={isCreating || llmBlocked}
+            placeholder={
+              isAutomateMode
+                ? t(I18nKey.HOME$AUTOMATE_PROMPT_PLACEHOLDER)
+                : t(I18nKey.SUGGESTIONS$WHAT_TO_BUILD)
+            }
           />
         </div>
 
@@ -272,11 +291,13 @@ export function HomeChatLauncher() {
           />
         </div>
 
-        <div className="mt-8 flex w-full flex-col gap-8">
-          <RecommendedAutomationsLauncher variant="rail" />
-          <PinnedAutomationsDashboard />
-          <RunningAutomationsList />
-        </div>
+        {isAutomateMode && (
+          <div className="mt-8 flex w-full flex-col gap-8">
+            <RecommendedAutomationsLauncher variant="rail" />
+            <PinnedAutomationsDashboard />
+            <RunningAutomationsList />
+          </div>
+        )}
       </div>
 
       {isLocal ? (
