@@ -4,24 +4,25 @@ import userEvent from "@testing-library/user-event";
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RenameProfileModal } from "#/components/features/settings/llm-profiles/rename-profile-modal";
-import { ProfileInfo } from "#/api/profiles-service/profiles-service.api";
-import ProfilesService from "#/api/profiles-service/profiles-service.api";
+import ProfilesService, {
+  ProfileInfo,
+} from "#/api/profiles-service/profiles-service.api";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, params?: Record<string, string>) => {
       const translations: Record<string, string> = {
-        "SETTINGS$PROFILE_RENAME_TITLE": "Rename Profile",
-        "SETTINGS$PROFILE_NAME_LABEL": "Profile Name",
-        "SETTINGS$PROFILE_NAME_PLACEHOLDER": "Enter profile name",
-        "SETTINGS$PROFILE_NAME_RULE":
+        SETTINGS$PROFILE_RENAME_TITLE: "Rename Profile",
+        SETTINGS$PROFILE_NAME_LABEL: "Profile Name",
+        SETTINGS$PROFILE_NAME_PLACEHOLDER: "Enter profile name",
+        SETTINGS$PROFILE_NAME_RULE:
           "1-64 chars, start with alphanumeric, then alphanumerics or . _ -",
-        "SETTINGS$PROFILE_RENAMED": params?.name
+        SETTINGS$PROFILE_RENAMED: params?.name
           ? `Profile renamed to ${params.name}`
           : "Profile renamed",
-        "BUTTON$RENAME": "Rename",
-        "BUTTON$CANCEL": "Cancel",
-        "ERROR$GENERIC": "An error occurred",
+        BUTTON$RENAME: "Rename",
+        BUTTON$CANCEL: "Cancel",
+        ERROR$GENERIC: "An error occurred",
       };
       return translations[key] || key;
     },
@@ -101,10 +102,9 @@ describe("RenameProfileModal", () => {
     const submit = screen.getByTestId("rename-profile-submit");
 
     // Assert: Cancel precedes the dominant Rename action in DOM order.
-    // eslint-disable-next-line no-bitwise
+
     expect(
-      cancel.compareDocumentPosition(submit) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
+      cancel.compareDocumentPosition(submit) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
 
@@ -209,9 +209,7 @@ describe("RenameProfileModal", () => {
 
   it("shows error toast and keeps modal open on rename failure", async () => {
     const user = userEvent.setup();
-    const { displayErrorToast } = await import(
-      "#/utils/custom-toast-handlers"
-    );
+    const { displayErrorToast } = await import("#/utils/custom-toast-handlers");
     vi.mocked(ProfilesService.renameProfile).mockRejectedValue(
       new Error("Name already exists"),
     );
@@ -231,6 +229,94 @@ describe("RenameProfileModal", () => {
     // Modal should stay open after error (onClose not called)
     expect(onClose).not.toHaveBeenCalled();
     expect(screen.getByTestId("rename-profile-modal")).toBeInTheDocument();
+  });
+
+  it("reapplies the renamed profile when it was the active one", async () => {
+    const user = userEvent.setup();
+    vi.mocked(ProfilesService.renameProfile).mockResolvedValue({
+      name: "new-name",
+      message: "Profile renamed",
+    });
+    vi.mocked(ProfilesService.activateProfile).mockResolvedValue({
+      name: "new-name",
+      message: "activated",
+      llm_applied: true,
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RenameProfileModal
+          profile={mockProfile}
+          activeProfileName="old-profile-name"
+          onClose={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+
+    const input = screen.getByTestId("rename-profile-input");
+    await user.clear(input);
+    await user.type(input, "new-name");
+    await user.click(screen.getByTestId("rename-profile-submit"));
+
+    await waitFor(() => {
+      expect(ProfilesService.activateProfile).toHaveBeenCalledWith("new-name");
+    });
+  });
+
+  it("does not reapply a profile that was not active", async () => {
+    const user = userEvent.setup();
+    vi.mocked(ProfilesService.renameProfile).mockResolvedValue({
+      name: "new-name",
+      message: "Profile renamed",
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RenameProfileModal
+          profile={mockProfile}
+          activeProfileName="some-other-profile"
+          onClose={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+
+    const input = screen.getByTestId("rename-profile-input");
+    await user.clear(input);
+    await user.type(input, "new-name");
+    await user.click(screen.getByTestId("rename-profile-submit"));
+
+    await waitFor(() => {
+      expect(ProfilesService.renameProfile).toHaveBeenCalled();
+    });
+    expect(ProfilesService.activateProfile).not.toHaveBeenCalled();
+  });
+
+  it("surfaces the server's actual error message, not a generic one", async () => {
+    const user = userEvent.setup();
+    const { displayErrorToast } = await import("#/utils/custom-toast-handlers");
+    vi.mocked(ProfilesService.renameProfile).mockRejectedValue({
+      isAxiosError: true,
+      response: {
+        data: { message: "A profile named 'new-name' already exists" },
+      },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RenameProfileModal profile={mockProfile} onClose={vi.fn()} />
+      </QueryClientProvider>,
+    );
+
+    const input = screen.getByTestId("rename-profile-input");
+    await user.clear(input);
+    await user.type(input, "new-name");
+    await user.click(screen.getByTestId("rename-profile-submit"));
+
+    await waitFor(() => {
+      expect(displayErrorToast).toHaveBeenCalledWith(
+        "A profile named 'new-name' already exists",
+      );
+    });
   });
 
   it("submits form when Enter key is pressed with valid name", async () => {

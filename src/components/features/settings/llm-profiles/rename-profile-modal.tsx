@@ -6,25 +6,33 @@ import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { ApiKeyModalBase } from "#/components/features/settings/api-key-modal-base";
 import { ProfileInfo } from "#/api/profiles-service/profiles-service.api";
 import { useRenameLlmProfile } from "#/hooks/mutation/use-rename-llm-profile";
+import { useActivateLlmProfile } from "#/hooks/mutation/use-activate-llm-profile";
+import { shouldReapplyProfileAfterSave } from "./llm-settings-local-view";
 import {
   displayErrorToast,
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
+import { getApiErrorMessage } from "#/utils/api-error-message";
 import { I18nKey } from "#/i18n/declaration";
 import { isProfileNameValid } from "#/utils/derive-profile-name";
 
 interface RenameProfileModalProps {
   profile: ProfileInfo | null;
+  /** Name of the currently active profile, if any — used to decide whether
+   * renaming this profile also needs to reapply it (see handleSubmit). */
+  activeProfileName?: string | null;
   onClose: () => void;
 }
 
 export function RenameProfileModal({
   profile,
+  activeProfileName = null,
   onClose,
 }: RenameProfileModalProps) {
   const { t } = useTranslation("openhands");
   const [newName, setNewName] = useState("");
   const renameProfile = useRenameLlmProfile();
+  const activateProfile = useActivateLlmProfile();
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -33,6 +41,7 @@ export function RenameProfileModal({
 
   if (!profile) return null;
 
+  const isPending = renameProfile.isPending || activateProfile.isPending;
   const isValid = isProfileNameValid(newName, { isRequired: true });
   const isUnchanged = newName === profile.name;
 
@@ -48,20 +57,33 @@ export function RenameProfileModal({
 
     try {
       await renameProfile.mutateAsync({ name: profile.name, newName });
+
+      // Conversation start uses agent_settings.llm, not the profile row
+      // directly — renaming the active profile leaves that pointer stale
+      // (still the old name) until it's reapplied under the new one. Mirrors
+      // the same guard the Edit flow already applies after a rename there.
+      if (
+        shouldReapplyProfileAfterSave({
+          activeProfileName,
+          originalName: profile.name,
+          savedName: newName,
+        })
+      ) {
+        await activateProfile.mutateAsync(newName);
+      }
+
       displaySuccessToast(
         t(I18nKey.SETTINGS$PROFILE_RENAMED, { name: newName }),
       );
       onClose();
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : t(I18nKey.ERROR$GENERIC);
-      displayErrorToast(message);
+      displayErrorToast(getApiErrorMessage(error, t(I18nKey.ERROR$GENERIC)));
     }
   };
 
   // Handle close only if not pending to prevent inconsistent state
   const handleClose = () => {
-    if (!renameProfile.isPending) {
+    if (!isPending) {
       onClose();
     }
   };
@@ -72,7 +94,7 @@ export function RenameProfileModal({
         type="button"
         variant="tertiary"
         onClick={handleClose}
-        isDisabled={renameProfile.isPending}
+        isDisabled={isPending}
       >
         {t(I18nKey.BUTTON$CANCEL)}
       </BrandButton>
@@ -81,13 +103,9 @@ export function RenameProfileModal({
         type="button"
         variant="primary"
         onClick={handleSubmit}
-        isDisabled={renameProfile.isPending || !isValid}
+        isDisabled={isPending || !isValid}
       >
-        {renameProfile.isPending ? (
-          <LoadingSpinner size="small" />
-        ) : (
-          t(I18nKey.BUTTON$RENAME)
-        )}
+        {isPending ? <LoadingSpinner size="small" /> : t(I18nKey.BUTTON$RENAME)}
       </BrandButton>
     </>
   );
@@ -109,7 +127,7 @@ export function RenameProfileModal({
           onChange={setNewName}
           isRequired
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !renameProfile.isPending && isValid) {
+            if (e.key === "Enter" && !isPending && isValid) {
               handleSubmit();
             }
           }}

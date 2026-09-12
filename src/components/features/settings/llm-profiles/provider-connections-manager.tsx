@@ -4,6 +4,7 @@ import { BrandButton } from "#/components/features/settings/brand-button";
 import { ProviderConnectionRow } from "./provider-connection-row";
 import { ProviderConnectionModal } from "./provider-connection-modal";
 import { DeleteProviderConnectionModal } from "./delete-provider-connection-modal";
+import { BulkAddModelsModal } from "./bulk-add-models-modal";
 import type { ProviderConnection } from "#/api/provider-connections-service/provider-connections-service.api";
 import { cn } from "#/utils/utils";
 import {
@@ -17,6 +18,8 @@ interface ProviderConnectionsManagerProps {
   connections: ProviderConnection[];
   /** Number of LLM profiles linked to each connection id. */
   linkedCountById: Record<string, number>;
+  /** Existing profile names, so bulk-add can skip ones that already exist. */
+  existingProfileNames?: Set<string>;
   isLoading: boolean;
   loadError: Error | null;
 }
@@ -29,6 +32,7 @@ interface ProviderConnectionsManagerProps {
 export function ProviderConnectionsManager({
   connections,
   linkedCountById,
+  existingProfileNames = new Set(),
   isLoading,
   loadError,
 }: ProviderConnectionsManagerProps) {
@@ -37,6 +41,8 @@ export function ProviderConnectionsManager({
   const [connectionToEdit, setConnectionToEdit] =
     useState<ProviderConnection | null>(null);
   const [connectionToDelete, setConnectionToDelete] =
+    useState<ProviderConnection | null>(null);
+  const [connectionToBulkAdd, setConnectionToBulkAdd] =
     useState<ProviderConnection | null>(null);
 
   const renderBody = () => {
@@ -82,6 +88,7 @@ export function ProviderConnectionsManager({
             linkedProfileCount={linkedCountById[connection.id] ?? 0}
             onEdit={setConnectionToEdit}
             onDelete={setConnectionToDelete}
+            onBulkAddModels={setConnectionToBulkAdd}
           />
         ))}
       </div>
@@ -127,7 +134,15 @@ export function ProviderConnectionsManager({
       />
       <DeleteProviderConnectionModal
         connection={connectionToDelete}
+        linkedProfileCount={
+          connectionToDelete ? (linkedCountById[connectionToDelete.id] ?? 0) : 0
+        }
         onClose={() => setConnectionToDelete(null)}
+      />
+      <BulkAddModelsModal
+        connection={connectionToBulkAdd}
+        existingProfileNames={existingProfileNames}
+        onClose={() => setConnectionToBulkAdd(null)}
       />
     </>
   );

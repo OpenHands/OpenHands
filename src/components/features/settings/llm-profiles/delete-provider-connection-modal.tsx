@@ -14,11 +14,18 @@ import { I18nKey } from "#/i18n/declaration";
 
 interface DeleteProviderConnectionModalProps {
   connection: ProviderConnection | null;
+  /** Number of LLM profiles currently linked to this connection. The
+   * agent-server rejects deletion outright while this is nonzero (409,
+   * naming the profiles) — surfacing the count here lets the confirmation
+   * block a guaranteed-to-fail delete instead of the user discovering it
+   * only after confirming. */
+  linkedProfileCount?: number;
   onClose: () => void;
 }
 
 export function DeleteProviderConnectionModal({
   connection,
+  linkedProfileCount = 0,
   onClose,
 }: DeleteProviderConnectionModalProps) {
   const { t } = useTranslation("openhands");
@@ -27,7 +34,10 @@ export function DeleteProviderConnectionModal({
 
   if (!connection) return null;
 
+  const isBlocked = linkedProfileCount > 0;
+
   const handleDelete = async () => {
+    if (isBlocked) return;
     try {
       await deleteConnection.mutateAsync(connection.id);
       displaySuccessToast(
@@ -63,7 +73,7 @@ export function DeleteProviderConnectionModal({
         type="button"
         variant="danger"
         onClick={handleDelete}
-        isDisabled={deleteConnection.isPending}
+        isDisabled={deleteConnection.isPending || isBlocked}
         aria-busy={deleteConnection.isPending}
       >
         {deleteConnection.isPending ? (
@@ -91,6 +101,16 @@ export function DeleteProviderConnectionModal({
           name: connection.display_name,
         })}
       </p>
+      {isBlocked ? (
+        <p
+          data-testid="delete-provider-connection-blocked"
+          className="text-sm text-danger"
+        >
+          {t(I18nKey.SETTINGS$PROVIDER_CONNECTION_DELETE_BLOCKED, {
+            count: linkedProfileCount,
+          })}
+        </p>
+      ) : null}
     </ApiKeyModalBase>
   );
 }
