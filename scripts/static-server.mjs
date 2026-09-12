@@ -297,6 +297,24 @@ ROUTING:
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
+ * A JS string literal that is also safe inside an inline `<script>`.
+ *
+ * `JSON.stringify` alone is not: it leaves `<` and `>` untouched, so a value
+ * containing `</script>` closes the block early and everything after it is
+ * parsed as HTML by the browser. It also leaves U+2028/U+2029 raw, which are
+ * line terminators to a JS parser. Escaping those five characters keeps the
+ * literal valid in both grammars.
+ */
+function jsStringLiteral(value) {
+  return JSON.stringify(String(value))
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
+}
+
+/**
  * Build a tiny inline script that seeds runtime config into the page.
  *
  * - `sessionApiKey`: exposed to the app two ways so a fresh-localStorage
@@ -357,7 +375,7 @@ function makeConfigInjectionScript(
   const parts = [];
 
   if (sessionApiKey) {
-    const keyLiteral = JSON.stringify(sessionApiKey);
+    const keyLiteral = jsStringLiteral(sessionApiKey);
     // Window global — read at module init by getBakedSessionApiKey().
     // Set first so it's available even if the localStorage write throws.
     parts.push(`window.__AGENT_CANVAS_SESSION_API_KEY__=${keyLiteral};`);
@@ -383,28 +401,28 @@ function makeConfigInjectionScript(
   if (runtimeServicesInfo) {
     // Stored as the raw JSON string so the browser-side parser
     // (parseRuntimeServicesInfo) can JSON.parse it exactly like the
-    // VITE_RUNTIME_SERVICES_INFO env var. JSON.stringify produces a safe JS
-    // string literal for the inline <script>.
+    // VITE_RUNTIME_SERVICES_INFO env var. jsStringLiteral() produces a
+    // script-safe JS string literal for the inline <script>.
     parts.push(
-      `window.__AGENT_CANVAS_RUNTIME_SERVICES_INFO__=${JSON.stringify(runtimeServicesInfo)};`,
+      `window.__AGENT_CANVAS_RUNTIME_SERVICES_INFO__=${jsStringLiteral(runtimeServicesInfo)};`,
     );
   }
 
   if (lockToCloud) {
     parts.push(
-      `window.__AGENT_CANVAS_LOCK_TO_CLOUD__=${JSON.stringify(lockToCloud)};`,
+      `window.__AGENT_CANVAS_LOCK_TO_CLOUD__=${jsStringLiteral(lockToCloud)};`,
     );
   }
 
   if (basePath && basePath !== "/") {
     parts.push(
-      `window.__AGENT_CANVAS_BASE_PATH__=${JSON.stringify(basePath)};`,
+      `window.__AGENT_CANVAS_BASE_PATH__=${jsStringLiteral(basePath)};`,
     );
   }
 
   if (vscodeBasePath) {
     parts.push(
-      `window.__AGENT_CANVAS_VSCODE_BASE_PATH__=${JSON.stringify(vscodeBasePath)};`,
+      `window.__AGENT_CANVAS_VSCODE_BASE_PATH__=${jsStringLiteral(vscodeBasePath)};`,
     );
   }
 
@@ -463,7 +481,11 @@ async function serveInjectedIndexHtml(
   res.writeHead(200, {
     "Content-Type": "text/html; charset=utf-8",
     "Content-Length": buf.length,
-    "Cache-Control": "no-cache",
+    // `no-cache` still allows the response to be written to disk (and to a
+    // shared cache) as long as it is revalidated. When the page carries the
+    // session API key that is a credential at rest, so opt out of storage
+    // entirely.
+    "Cache-Control": sessionApiKey ? "no-store" : "no-cache",
   });
   if (req.method === "HEAD") {
     res.end();

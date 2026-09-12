@@ -655,7 +655,10 @@ describe("static-server.mjs", () => {
       expect(body).not.toContain("should-not-inject");
     });
 
-    it("sets Cache-Control: no-cache for injected index.html", async () => {
+    // `no-cache` only forces revalidation — the response may still be written
+    // to disk. The injected index.html carries the session API key, so it must
+    // not be stored at all. See "caching of credential-bearing index.html".
+    it("sets Cache-Control: no-store for injected index.html", async () => {
       const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
       tempDirs.push(buildDir);
       writeFileSync(
@@ -666,7 +669,7 @@ describe("static-server.mjs", () => {
       const origin = await startServerWithKey(buildDir, "cache-test-key");
       const response = await fetch(`${origin}/`);
 
-      expect(response.headers.get("cache-control")).toBe("no-cache");
+      expect(response.headers.get("cache-control")).toBe("no-store");
     });
 
     it("does not inject when sessionApiKey is null", async () => {
@@ -734,6 +737,84 @@ describe("static-server.mjs", () => {
       "application/javascript",
     );
     await expect(response.text()).resolves.toContain("loaded = true");
+  });
+
+  describe("inline config script escaping", () => {
+    function writeIndex(dir: string) {
+      writeFileSync(
+        path.join(dir, "index.html"),
+        "<html><head></head><body>app</body></html>",
+      );
+    }
+
+    // `JSON.stringify` produces a valid JS string literal but not a valid
+    // *HTML* one: a value containing `</script>` ends the inline block early
+    // and the rest is parsed as markup, so anything that reaches an injected
+    // flag can inject an element into the served page.
+    it("escapes </script> in the injected lock-to-cloud value", async () => {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      writeIndex(buildDir);
+
+      const origin = await startServer(buildDir, {
+        lockToCloud: "</script><script>window.pwned=1</script>",
+      });
+      const response = await fetch(`${origin}/`);
+      const body = await response.text();
+
+      expect(body).not.toContain("</script><script>");
+      expect(body).toContain("\\u003c/script\\u003e");
+    });
+
+    it("escapes </script> in the injected session key", async () => {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      writeIndex(buildDir);
+
+      const origin = await startServer(buildDir, {
+        sessionApiKey: "key</script><script>window.pwned=1</script>",
+      });
+      const response = await fetch(`${origin}/`);
+      const body = await response.text();
+
+      expect(body).not.toContain("<script>window.pwned=1");
+      expect(body).toContain("\\u003c/script\\u003e");
+    });
+  });
+
+  describe("caching of credential-bearing index.html", () => {
+    // `no-cache` permits storing the response (it only forces revalidation),
+    // so the page carrying the session API key would still be written to the
+    // browser's on-disk cache.
+    it("sends no-store when the session key is injected", async () => {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      writeFileSync(
+        path.join(buildDir, "index.html"),
+        "<html><head></head><body>app</body></html>",
+      );
+
+      const origin = await startServer(buildDir, {
+        sessionApiKey: "cache-test-key",
+      });
+      const response = await fetch(`${origin}/`);
+
+      expect(response.headers.get("cache-control")).toBe("no-store");
+    });
+
+    it("keeps no-cache when no credential is injected", async () => {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      writeFileSync(
+        path.join(buildDir, "index.html"),
+        "<html><head></head><body>app</body></html>",
+      );
+
+      const origin = await startServer(buildDir, { lockToCloud: "https://x" });
+      const response = await fetch(`${origin}/`);
+
+      expect(response.headers.get("cache-control")).toBe("no-cache");
+    });
   });
 
   describe("base path mounting", () => {
