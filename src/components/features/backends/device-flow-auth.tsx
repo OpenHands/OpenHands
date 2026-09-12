@@ -7,6 +7,7 @@ import { useDeviceFlow, type DeviceFlowStatus } from "#/hooks/use-device-flow";
 import type { CloudConnectionSource } from "#/services/cloud-funnel-analytics";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
+import { isValidVerificationUrl } from "#/utils/is-valid-verification-url";
 
 type DeviceFlowButtonVariant =
   | "primary"
@@ -55,18 +56,7 @@ interface DeviceFlowAuthProps {
  * authentication. Displays status during the auth process and auto-opens
  * the browser for user authorization.
  */
-/**
- * Validate that a URL is safe to open in a popup.
- * Prevents XSS via javascript: URLs or other malicious schemes.
- */
-function isValidVerificationUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
+
 
 export function DeviceFlowAuth({
   host,
