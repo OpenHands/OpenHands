@@ -1,4 +1,38 @@
 {
+  "HOME$ISOLATED_WORKSPACE_NEW": {
+    "en": "New isolated workspace",
+    "ja": "新しい分離ワークスペース",
+    "zh-CN": "新建隔离工作区",
+    "zh-TW": "建立隔離工作區",
+    "ko-KR": "새 격리 작업 공간",
+    "no": "Nytt isolert arbeidsområde",
+    "ar": "مساحة عمل معزولة جديدة",
+    "de": "Neuer isolierter Arbeitsbereich",
+    "fr": "Nouvel espace de travail isolé",
+    "it": "Nuovo spazio di lavoro isolato",
+    "pt": "Novo espaço de trabalho isolado",
+    "es": "Nuevo espacio de trabajo aislado",
+    "ca": "Nou espai de treball aïllat",
+    "tr": "Yeni yalıtılmış çalışma alanı",
+    "uk": "Новий ізольований робочий простір"
+  },
+  "HOME$CLEAR_HOST_WORKSPACE": {
+    "en": "Clear host project selection",
+    "ja": "ホストプロジェクトの選択を解除",
+    "zh-CN": "清除主机项目选择",
+    "zh-TW": "清除主機專案選擇",
+    "ko-KR": "호스트 프로젝트 선택 지우기",
+    "no": "Fjern valgt vertsprosjekt",
+    "ar": "مسح اختيار مشروع المضيف",
+    "de": "Host-Projektauswahl aufheben",
+    "fr": "Effacer la sélection du projet hôte",
+    "it": "Cancella la selezione del progetto host",
+    "pt": "Limpar seleção do projeto do host",
+    "es": "Borrar la selección del proyecto del host",
+    "ca": "Esborra la selecció del projecte de l’amfitrió",
+    "tr": "Ana makine proje seçimini temizle",
+    "uk": "Скасувати вибір проєкту хоста"
+  },
   "COMMON$PATTERN": {
     "ar": "النمط:",
     "ca": "Patró:",
@@ -14262,7 +14296,6 @@
     "uk": "Повідомлено користувацькі метадані завдання.",
     "ca": "S'han informat metadades personalitzades de la tasca."
   },
-
   "AUTOMATIONS$DETAIL$VIEW_CONVERSATION_FOR_RUN": {
     "en": "View conversation for run at {{timestamp}}",
     "ja": "{{timestamp}} の実行の会話を表示",
@@ -14280,7 +14313,6 @@
     "uk": "Переглянути розмову для запуску о {{timestamp}}",
     "ca": "Mostra la conversa de l'execució a {{timestamp}}"
   },
-
   "AUTOMATIONS$DETAIL$PHASE": {
     "ar": "المرحلة",
     "ca": "Fase",
@@ -41888,5 +41920,39 @@
     "uk": "Попередній перегляд зображення в повному розмірі",
     "zh-CN": "原始尺寸图片预览",
     "zh-TW": "原始尺寸圖片預覽"
+  },
+  "HOME$ISOLATED_WORKSPACE_NOTICE": {
+    "en": "This backend uses isolated workspaces. Host folders and projects cannot be attached.",
+    "ja": "このバックエンドは分離ワークスペースを使用します。ホストのフォルダーやプロジェクトは接続できません。",
+    "zh-CN": "此后端使用隔离工作区，无法附加主机文件夹或项目。",
+    "zh-TW": "此後端使用隔離工作區，無法附加主機資料夾或專案。",
+    "ko-KR": "이 백엔드는 격리된 작업 공간을 사용합니다. 호스트 폴더와 프로젝트를 연결할 수 없습니다.",
+    "no": "Denne backend-en bruker isolerte arbeidsområder. Mapper og prosjekter på verten kan ikke kobles til.",
+    "ar": "تستخدم هذه الخلفية مساحات عمل معزولة. لا يمكن إرفاق مجلدات المضيف ومشاريعه.",
+    "de": "Dieses Backend verwendet isolierte Arbeitsbereiche. Host-Ordner und -Projekte können nicht angehängt werden.",
+    "fr": "Ce backend utilise des espaces de travail isolés. Les dossiers et projets de l’hôte ne peuvent pas être joints.",
+    "it": "Questo backend usa spazi di lavoro isolati. Non è possibile collegare cartelle e progetti dell’host.",
+    "pt": "Este backend usa espaços de trabalho isolados. Não é possível anexar pastas e projetos do host.",
+    "es": "Este backend usa espacios de trabajo aislados. No se pueden adjuntar carpetas ni proyectos del host.",
+    "ca": "Aquest backend utilitza espais de treball aïllats. No s’hi poden adjuntar carpetes ni projectes de l’amfitrió.",
+    "tr": "Bu arka uç yalıtılmış çalışma alanları kullanır. Ana makine klasörleri ve projeleri eklenemez.",
+    "uk": "Цей сервер використовує ізольовані робочі простори. Папки та проєкти хоста підключити неможливо."
+  },
+  "HOME$ISOLATED_WORKSPACE_UPGRADE": {
+    "en": "Upgrade Canvas to access isolated conversations.",
+    "ja": "分離された会話にアクセスするには Canvas を更新してください。",
+    "zh-CN": "请升级 Canvas 以访问隔离的对话。",
+    "zh-TW": "請升級 Canvas 以存取隔離的對話。",
+    "ko-KR": "격리된 대화에 액세스하려면 Canvas를 업그레이드하세요.",
+    "no": "Oppgrader Canvas for å få tilgang til isolerte samtaler.",
+    "ar": "حدّث Canvas للوصول إلى المحادثات المعزولة.",
+    "de": "Aktualisieren Sie Canvas, um auf isolierte Unterhaltungen zuzugreifen.",
+    "fr": "Mettez Canvas à jour pour accéder aux conversations isolées.",
+    "it": "Aggiorna Canvas per accedere alle conversazioni isolate.",
+    "pt": "Atualize o Canvas para acessar conversas isoladas.",
+    "es": "Actualiza Canvas para acceder a las conversaciones aisladas.",
+    "ca": "Actualitza Canvas per accedir a les converses aïllades.",
+    "tr": "Yalıtılmış konuşmalara erişmek için Canvas’ı yükseltin.",
+    "uk": "Оновіть Canvas для доступу до ізольованих розмов."
   }
 }

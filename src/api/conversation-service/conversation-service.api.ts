@@ -26,9 +26,15 @@ class ConversationService {
     return this.currentConversation;
   }
 
-  private static getClientOverrides() {
+  private static getClientOverrides(conversationId: string) {
     return {
-      sessionApiKey: this.currentConversation?.session_api_key,
+      conversationId,
+      ...(this.currentConversation?.id === conversationId
+        ? {
+            conversationUrl: this.currentConversation.conversation_url,
+            sessionApiKey: this.currentConversation.session_api_key,
+          }
+        : {}),
     };
   }
 
@@ -41,7 +47,7 @@ class ConversationService {
           getAgentServerWorkingDir())
         : getAgentServerWorkingDir();
     const vscodeUrl = await new VSCodeClient(
-      getAgentServerClientOptions(this.getClientOverrides()),
+      getAgentServerClientOptions(this.getClientOverrides(conversationId)),
     ).getUrl({
       baseUrl:
         typeof window !== "undefined" ? window.location.origin : undefined,
@@ -55,7 +61,7 @@ class ConversationService {
     conversationId: string,
   ): Promise<GetTrajectoryResponse> {
     const page = await new RemoteEventsList(
-      getAgentServerHttpClientOptions(this.getClientOverrides()),
+      getAgentServerHttpClientOptions(this.getClientOverrides(conversationId)),
       conversationId,
     ).search({ limit: 10000 });
 

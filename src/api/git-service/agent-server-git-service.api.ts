@@ -145,7 +145,11 @@ class AgentServerGitService {
     // up. `ref: "HEAD"` would go blank after every `git commit` — and the
     // cloud-proxy branch above already omits `ref`.
     const changes = await new RemoteWorkspace(
-      getAgentServerClientOptions({ conversationUrl, sessionApiKey }),
+      getAgentServerClientOptions({
+        conversationId,
+        conversationUrl,
+        sessionApiKey,
+      }),
     ).gitChanges(path);
 
     if (!Array.isArray(changes)) {
@@ -268,7 +272,11 @@ class AgentServerGitService {
     // No `ref` for the same reason as getGitChanges: the base must match
     // the one the change list was computed against.
     const diff = (await new RemoteWorkspace(
-      getAgentServerClientOptions({ conversationUrl, sessionApiKey }),
+      getAgentServerClientOptions({
+        conversationId,
+        conversationUrl,
+        sessionApiKey,
+      }),
     ).gitDiff(path)) as GitChangeDiff & { diff?: string };
 
     return {

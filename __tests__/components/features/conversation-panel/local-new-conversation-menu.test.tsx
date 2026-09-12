@@ -1,3 +1,7 @@
+import { supportsConversationRuntimeRoutes } from "#/api/agent-server-client-options";
+import { http, HttpResponse } from "msw";
+import { server } from "#/mocks/node";
+import { clearCachedAgentServerInfo } from "#/api/agent-server-compatibility";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -98,6 +102,50 @@ const renderMenu = ({
 };
 
 describe("LocalNewConversationMenu", () => {
+  it("disables saved host workspaces and explains isolated Docker creation", async () => {
+    clearCachedAgentServerInfo();
+    server.use(
+      http.get("*/server_info", () =>
+        HttpResponse.json({
+          version: "1.45.0",
+          uptime: 0,
+          idle_time: 0,
+          conversation_runtime: "docker",
+          workspace_mode: "isolated",
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderMenu({
+      workspaces: [
+        {
+          id: "host-project",
+          name: "Host project",
+          path: "/home/user/project",
+        },
+      ],
+    });
+    await user.click(screen.getByTestId("new-conversation-button"));
+    await waitFor(() =>
+      expect(screen.getByTestId("launch-workspace")).toBeDisabled(),
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      supportsConversationRuntimeRoutes()
+        ? "HOME$ISOLATED_WORKSPACE_NOTICE"
+        : "HOME$ISOLATED_WORKSPACE_UPGRADE",
+    );
+    expect(screen.getByTestId("add-workspaces-button")).toBeDisabled();
+    if (supportsConversationRuntimeRoutes()) {
+      expect(screen.getByTestId("launch-no-workspace")).toBeEnabled();
+    } else {
+      expect(screen.getByTestId("launch-no-workspace")).toBeDisabled();
+    }
+    expect(screen.getByTestId("launch-workspace")).toHaveAttribute(
+      "data-workspace-path",
+      "/home/user/project",
+    );
+  });
+
   beforeEach(() => {
     mockSearchSubdirectories.mockReset();
     mockSearchSubdirectories.mockResolvedValue({

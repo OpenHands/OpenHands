@@ -1,3 +1,4 @@
+import { useConversationWorkspace } from "#/hooks/query/use-conversation-workspace";
 import React from "react";
 import { useTranslation } from "react-i18next";
 
@@ -82,10 +83,15 @@ export function LocalNewConversationMenu({
   const { mutate: addWorkspaceParents } = useAddWorkspaceParents();
   const { mutate: removeWorkspaceParent } = useRemoveWorkspaceParent();
   const { workspaces } = useResolvedWorkspaces();
-  const workspacesUnsupportedMessage = getWorkspacesUnsupportedMessage(
-    workspacesError,
-    t,
-  );
+  const {
+    isolated,
+    clientUnsupported,
+    clientUnsupportedMessage,
+    unsupportedMessage: runtimeWorkspaceMessage,
+  } = useConversationWorkspace();
+  const workspacesUnsupportedMessage =
+    runtimeWorkspaceMessage ??
+    getWorkspacesUnsupportedMessage(workspacesError, t);
   const [browserOpen, setBrowserOpen] = React.useState(false);
   const [manageOpen, setManageOpen] = React.useState(false);
 
@@ -119,7 +125,12 @@ export function LocalNewConversationMenu({
   }, [open, browserOpen, manageOpen]);
 
   const launch = (workingDir?: string) => {
-    if (isCreating) return;
+    if (
+      isCreating ||
+      clientUnsupported ||
+      (workingDir && workspaceActionsDisabled)
+    )
+      return;
     createConversation(
       { workingDir, entryPoint: "sidebar_local_menu" },
       {
@@ -208,6 +219,14 @@ export function LocalNewConversationMenu({
           )}
           style={fixedStyle}
         >
+          {workspacesUnsupportedMessage && (
+            <p
+              role="status"
+              className="px-3 py-2 text-xs text-[var(--oh-text-secondary)]"
+            >
+              {clientUnsupportedMessage ?? workspacesUnsupportedMessage}
+            </p>
+          )}
           <ul
             className={cn(
               "max-h-[40vh] overflow-y-auto sm:max-h-[280px]",
@@ -217,13 +236,17 @@ export function LocalNewConversationMenu({
             <li>
               <button
                 type="button"
-                disabled={isCreating}
+                disabled={isCreating || clientUnsupported}
                 data-testid="launch-no-workspace"
                 onClick={() => launch()}
                 className={itemClass}
               >
                 <span className="text-[var(--oh-muted)]">
-                  {t(I18nKey.HOME$NO_WORKSPACE_OPTION)}
+                  {t(
+                    isolated
+                      ? I18nKey.HOME$ISOLATED_WORKSPACE_NEW
+                      : I18nKey.HOME$NO_WORKSPACE_OPTION,
+                  )}
                 </span>
               </button>
             </li>
@@ -231,7 +254,8 @@ export function LocalNewConversationMenu({
               <li key={w.id}>
                 <button
                   type="button"
-                  disabled={isCreating}
+                  disabled={isCreating || workspaceActionsDisabled}
+                  title={workspacesUnsupportedMessage ?? undefined}
                   data-testid="launch-workspace"
                   data-workspace-path={w.path}
                   onClick={() => launch(w.path)}
