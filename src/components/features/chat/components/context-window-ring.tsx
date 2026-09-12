@@ -5,7 +5,7 @@ const CONTEXT_WINDOW_RING_SIZE = 16;
 const CONTEXT_WINDOW_RING_STROKE = 2;
 
 /**
- * Opacity of the ring's unfilled track, as a fraction of `--oh-foreground`.
+ * Default opacity of the ring's unfilled track on dark themes.
  *
  * The track is derived from the foreground rather than pinned to a scale stop.
  * It carries information (the arc's proportion is only readable against it), so
@@ -16,18 +16,19 @@ const CONTEXT_WINDOW_RING_STROKE = 2;
  * fixes it, and no fixed stop holds across the three palettes in
  * `color-themes.ts`, whose scales differ.
  *
- * Compositing the foreground over whatever the active theme paints keeps the
- * track between surface and arc by construction rather than by coincidence.
- * 42% is the value that maximises the worst case across the shipped palettes;
- * `context-window-ring.test.tsx` asserts it per theme.
+ * Light palettes override the foreground and weight tokens because a single
+ * translucent mix cannot preserve 3:1 contrast on both dark and light
+ * surfaces. `context-window-ring.test.tsx` asserts the effective values for
+ * every shipped theme.
  */
 export const CONTEXT_WINDOW_RING_TRACK_ALPHA = 0.42;
 
 /** Shared by the ring's track and the popover's usage bar, which had the same defect. */
-export const CONTEXT_WINDOW_TRACK_COLOR = `color-mix(in srgb, var(--oh-foreground) ${CONTEXT_WINDOW_RING_TRACK_ALPHA * 100}%, transparent)`;
+export const CONTEXT_WINDOW_TRACK_COLOR =
+  "color-mix(in srgb, var(--oh-context-window-foreground) var(--oh-context-window-track-weight), transparent)";
 
 const TONE_STROKE = {
-  neutral: "var(--oh-foreground)",
+  neutral: "var(--oh-context-window-foreground)",
   warning: "#f59e0b", // amber-500
   danger: "#ef4444", // red-500
 } as const;

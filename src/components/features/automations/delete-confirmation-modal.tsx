@@ -60,7 +60,7 @@ export function DeleteConfirmationModal({
           <button
             type="button"
             onClick={onConfirm}
-            className="rounded-lg bg-danger px-4 py-2 text-sm text-white hover:bg-danger/80"
+            className="rounded-lg bg-danger px-4 py-2 text-sm text-white text-on-solid hover:bg-danger/80"
           >
             {t(I18nKey.AUTOMATIONS$DELETE)}
           </button>

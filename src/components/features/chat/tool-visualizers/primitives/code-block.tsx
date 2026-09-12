@@ -1,10 +1,11 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { SyntaxHighlighter } from "../../../markdown/syntax-highlighter";
 import { CopyableContentWrapper } from "#/components/shared/buttons/copyable-content-wrapper";
 import { MAX_CONTENT_LENGTH } from "#/components/conversation-events/chat/event-content-helpers/shared";
+import { useColorTheme } from "#/hooks/use-color-theme";
 import { I18nKey } from "#/i18n/declaration";
+import { getSyntaxHighlighterTheme } from "#/themes/syntax-highlighter-themes";
 
 interface CodeBlockProps {
   code: string;
@@ -35,6 +36,7 @@ export function CodeBlock({
   wrapLongLines = false,
 }: CodeBlockProps) {
   const { t } = useTranslation("openhands");
+  const colorTheme = useColorTheme();
   const [isExpanded, setIsExpanded] = React.useState(false);
   const isTruncated = code.length > MAX_CONTENT_LENGTH;
   const display =
@@ -50,7 +52,7 @@ export function CodeBlock({
   const block = (
     <SyntaxHighlighter
       className="rounded-lg text-xs"
-      style={vscDarkPlus}
+      style={getSyntaxHighlighterTheme(colorTheme)}
       language={language}
       PreTag="div"
       wrapLongLines={wrapLongLines}
