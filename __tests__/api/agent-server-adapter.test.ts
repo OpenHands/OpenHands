@@ -212,7 +212,7 @@ describe("buildStartConversationRequest", () => {
       { name: "task_tool_set", params: {} },
     ]);
     expect(payload.agent_settings.agent_context).toMatchObject({
-      load_public_skills: false,
+      load_public_skills: true,
       load_user_skills: true,
       load_project_skills: true,
     });
@@ -1452,13 +1452,33 @@ describe("agent_settings runtime services suffix", () => {
       agent_settings: { agent_context: Record<string, unknown> };
     };
     expect(payload.agent_settings.agent_context).toMatchObject({
-      load_public_skills: false,
+      load_public_skills: true,
       load_user_skills: true,
       load_project_skills: true,
     });
     expect(Array.isArray(payload.agent_settings.agent_context.skills)).toBe(
       true,
     );
+  });
+
+  it("keeps load_public_skills true so agent-server marketplace skills reach the agent", () => {
+    // The Settings page lists marketplace-registered skills (e.g. a custom
+    // internal catalog configured in the agent-server's own settings.json)
+    // by querying with load_public: true — see skills-service.ts. Those
+    // skills are NOT part of the bundled @openhands/extensions npm catalog,
+    // so they never appear in agent_context.skills built from
+    // buildBundledSkills(). The only way for the agent-server to actually
+    // load and forward them to the agent is load_public_skills: true on the
+    // launch payload; false here would make Settings lie about what's
+    // enabled (#regression for the "skill shown enabled, agent never sees
+    // it" bug).
+    const payload = buildStartConversationRequest({
+      settings: DEFAULT_SETTINGS,
+      query: "hello",
+    }) as {
+      agent_settings: { agent_context: Record<string, unknown> };
+    };
+    expect(payload.agent_settings.agent_context.load_public_skills).toBe(true);
   });
 
   it("sets system_message_suffix when backend runtime info is provided", () => {
@@ -1478,7 +1498,7 @@ describe("agent_settings runtime services suffix", () => {
       agent_settings: { agent_context: Record<string, unknown> };
     };
     expect(payload.agent_settings.agent_context).toMatchObject({
-      load_public_skills: false,
+      load_public_skills: true,
       load_user_skills: true,
     });
     expect(
@@ -1533,7 +1553,7 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
       unknown
     >;
     expect(acpAgentContext).toMatchObject({
-      load_public_skills: false,
+      load_public_skills: true,
       load_user_skills: true,
       load_project_skills: true,
     });
