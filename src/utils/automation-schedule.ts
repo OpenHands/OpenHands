@@ -199,7 +199,13 @@ function parseCronField(
     const start = parseSingleInt(startPart, min, max);
     if (start === null) return { kind: "invalid" };
     if (endPart === undefined) {
-      values.add(start);
+      if (stepPart === undefined) {
+        values.add(start);
+        continue;
+      }
+      // croniter reads `n/m` as `n-max/m`: step from the start value up to the
+      // field maximum, not a single hit at the start.
+      for (let value = start; value <= max; value += step) values.add(value);
       continue;
     }
     const end = parseSingleInt(endPart, min, max);
