@@ -320,6 +320,16 @@ export function ConversationWebSocketProvider({
     useMetricsStore.getState().resetMetrics();
   }, [conversationId, clearEventsForConversation, resetBrowserStore]);
 
+  // The switch-reset above only runs while this provider is mounted. Leaving
+  // the conversation route entirely — New Chat → /conversations (whose home
+  // screen still renders the context-window meter), Settings, a backend
+  // switch — unmounts the provider without re-firing it, so the last
+  // conversation's usage kept displaying outside any conversation. Clear on
+  // unmount; `useConversationMetrics`'s REST snapshot repopulates the meter
+  // when a conversation is opened again. This is a layout effect so the store
+  // is empty before the incoming route paints.
+  useLayoutEffect(() => () => useMetricsStore.getState().resetMetrics(), []);
+
   useLayoutEffect(() => {
     if (!preloadedHistory || preloadedHistory.events.length === 0) {
       return;
