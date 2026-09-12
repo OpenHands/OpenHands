@@ -5,6 +5,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { useNavigation } from "#/context/navigation-context";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { usePaginatedConversations } from "#/hooks/query/use-paginated-conversations";
+import { useLocalWorkspaces } from "#/hooks/query/use-local-workspaces";
 import { useStartTasks } from "#/hooks/query/use-start-tasks";
 import { useDeleteConversation } from "#/hooks/mutation/use-delete-conversation";
 import { useUnifiedPauseConversation } from "#/hooks/mutation/use-unified-stop-conversation";
@@ -88,6 +89,14 @@ export function ConversationPanel({
   const { t } = useTranslation("openhands");
   const { conversationId: currentConversationId, navigate } = useNavigation();
   const { backend: activeBackend } = useActiveBackend();
+  const { data: localWorkspacesData } = useLocalWorkspaces({
+    enabled: activeBackend.kind === "local",
+  });
+  const registeredWorkspacePaths = React.useMemo(
+    () =>
+      localWorkspacesData?.workspaces.map((workspace) => workspace.path) ?? [],
+    [localWorkspacesData?.workspaces],
+  );
   // Click-outside is only relevant in the legacy drawer mode where an
   // onClose handler is provided. When the panel is rendered inline (e.g.
   // as the always-visible conversation list pane), clicking outside should
@@ -336,6 +345,7 @@ export function ConversationPanel({
       activeBackend.kind,
       conversationSort,
       groupLabels,
+      activeBackend.kind === "local" ? registeredWorkspacePaths : undefined,
     );
   }, [
     activeBackend.kind,
@@ -345,6 +355,7 @@ export function ConversationPanel({
     olderScoped,
     organizeMode,
     recentScoped,
+    registeredWorkspacePaths,
     showOlderConversations,
   ]);
 

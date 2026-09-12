@@ -11,6 +11,10 @@ export const ProviderOptions = {
 
 export type Provider = keyof typeof ProviderOptions;
 
+/** Narrow untrusted wire data (e.g. conversation tags) to a {@link Provider}. */
+export const isProvider = (value: unknown): value is Provider =>
+  typeof value === "string" && Object.hasOwn(ProviderOptions, value);
+
 export type ProviderToken = {
   token: string;
   host: string | null;

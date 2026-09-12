@@ -428,6 +428,47 @@ describe("AgentServerConversationService", () => {
       expect(payload.worktree).toBe(false);
     });
 
+
+    it("stamps workspace and repo metadata as server-side tags", async () => {
+      mockGetSettings.mockResolvedValue({
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "ignored-server-id",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      await AgentServerConversationService.createConversation(
+        undefined,
+        undefined,
+        undefined,
+        {
+          selected_repository: "OpenHands/OpenHands",
+          selected_branch: "main",
+          git_provider: "github",
+        },
+        "/Users/jane/projects/foo",
+      );
+
+      const [payloadCall] = mockHttpPost.mock.calls;
+      const payload = payloadCall[1] as { tags: Record<string, string> };
+      expect(payload.tags).toMatchObject({
+        repository: "OpenHands/OpenHands",
+        selected_branch: "main",
+        git_provider: "github",
+        workspace: "/Users/jane/projects/foo",
+      });
+    });
+
     it("honors an explicit new-worktree mode for a selected workspace", async () => {
       mockGetSettings.mockResolvedValue({
         agent_settings: { llm: { model: "gpt-4o" } },

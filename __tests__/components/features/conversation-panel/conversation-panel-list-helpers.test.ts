@@ -31,6 +31,32 @@ const base: Omit<AppConversation, "id" | "title" | "workspace"> = {
 };
 
 describe("conversation-panel-list-helpers", () => {
+  it("groups legacy local conversations by matching working_dir to registered workspaces", () => {
+    const legacy: AppConversation = {
+      ...base,
+      id: "legacy-local",
+      title: "legacy-local",
+      selected_workspace: null,
+      workspace: { working_dir: "/home/user/projects/demo" },
+      updated_at: "2024-01-05T00:00:00.000Z",
+    };
+    const groups = groupConversations(
+      [legacy],
+      "local",
+      "updated",
+      { emptyWorkspace: "No workspace", emptyRepository: "No repository" },
+      ["/home/user/projects/demo"],
+    );
+    expect(groups).toEqual([
+      expect.objectContaining({
+        id: "ws:/home/user/projects/demo",
+        label: "demo",
+        conversations: [legacy],
+      }),
+    ]);
+  });
+
+
   it("parseConversationTimeMs returns 0 for missing or unparseable timestamps and ms for ISO strings", () => {
     // Three branches in one assertion: missing input (undefined), malformed
     // string (NaN from Date.parse), and a real ISO timestamp.

@@ -43,6 +43,7 @@ import {
   toAppConversation,
   toConversationPage,
 } from "../agent-server-adapter";
+import { buildConversationMetadataTags } from "../conversation-workspace-grouping";
 import { GetVSCodeUrlResponse } from "../open-hands.types";
 import {
   getAgentServerClientOptions,
@@ -445,6 +446,20 @@ class AgentServerConversationService {
       agentProfileKind,
       titleLlmProfile,
     });
+
+    const metadataTags = buildConversationMetadataTags({
+      selectedRepository: metadata?.selected_repository,
+      selectedBranch: metadata?.selected_branch,
+      gitProvider: metadata?.git_provider,
+      selectedWorkspace: workingDirOverride,
+    });
+    if (Object.keys(metadataTags).length > 0) {
+      const existingTags =
+        payload.tags && typeof payload.tags === "object"
+          ? (payload.tags as Record<string, string>)
+          : {};
+      payload.tags = { ...existingTags, ...metadataTags };
+    }
 
     const data = await new ConversationClient(
       getAgentServerClientOptions({ timeout: CREATE_CONVERSATION_TIMEOUT_MS }),

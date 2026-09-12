@@ -1069,6 +1069,55 @@ describe("toAppConversation", () => {
     expect(result.acp_server).toBeNull();
   });
 
+
+  describe("server-side tag fallback", () => {
+    const taggedInfo: DirectConversationInfo = {
+      ...baseInfo,
+      tags: {
+        repository: "OpenHands/OpenHands",
+        selected_branch: "main",
+        git_provider: "github",
+        workspace: "/Users/jane/projects/openhands",
+      },
+    };
+
+    afterEach(() => {
+      removeStoredConversationMetadata(baseInfo.id);
+    });
+
+    it("hydrates workspace/repo metadata from tags when localStorage has none", () => {
+      const result = toAppConversation(taggedInfo);
+
+      expect(result.selected_workspace).toBe("/Users/jane/projects/openhands");
+      expect(result.selected_repository).toBe("OpenHands/OpenHands");
+      expect(result.selected_branch).toBe("main");
+      expect(result.git_provider).toBe("github");
+    });
+
+    it("prefers stored metadata over tags so the creating client keeps its warm cache", () => {
+      setStoredConversationMetadata(baseInfo.id, {
+        selected_repository: "jane/local-fork",
+        selected_branch: "feature",
+        git_provider: "gitlab",
+        selected_workspace: "/Users/jane/projects/local-fork",
+      });
+
+      const result = toAppConversation(taggedInfo);
+
+      expect(result.selected_workspace).toBe("/Users/jane/projects/local-fork");
+      expect(result.selected_repository).toBe("jane/local-fork");
+    });
+
+    it("drops an unrecognized git_provider tag instead of casting it through", () => {
+      const result = toAppConversation({
+        ...baseInfo,
+        tags: { git_provider: "not-a-real-provider" },
+      });
+
+      expect(result.git_provider).toBeNull();
+    });
+  });
+
   it("ignores tags.acpserver on OpenHands conversations to prevent stray-tag bleed", () => {
     // The agent-server's pydantic model doesn't enforce that ``acpserver``
     // is only stamped on ACP conversations. Defensively gating on

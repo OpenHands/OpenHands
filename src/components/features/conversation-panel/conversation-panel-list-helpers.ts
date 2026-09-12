@@ -1,6 +1,7 @@
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import type { BackendKind } from "#/api/backend-registry/types";
 import type { Provider } from "#/types/settings";
+import { resolveSelectedWorkspaceForGrouping } from "#/api/conversation-workspace-grouping";
 
 export type ConversationSortField = "created" | "updated";
 export type ThreadScope = "all" | "relevant";
@@ -146,22 +147,21 @@ export function sortConversationsByField(
   );
 }
 
-function workspaceGroup(conversation: AppConversation): {
+function workspaceGroup(
+  conversation: AppConversation,
+  registeredWorkspacePaths?: readonly string[],
+): {
   id: string;
   label: string;
 } {
   // Group by the user-selected workspace (a stable identifier shared by
   // every conversation launched from the same picker selection), not
-  // `workspace.working_dir` — that field holds the per-conversation
-  // worktree path the agent-server creates, which is unique per
-  // conversation and would fragment the grouping.
-  //
-  // Normalize first, then check emptiness: inputs like "/", "///", or
-  // "   ///" trim+strip to "" and must fall back to the "no workspace"
-  // bucket rather than producing a stray `ws:` group with no label.
-  const normalized = conversation.selected_workspace
-    ?.trim()
-    .replace(/\/+$/, "");
+  // per-conversation worktree paths. Server-side tags and registered
+  // workspace paths recover grouping when localStorage is missing.
+  const normalized = resolveSelectedWorkspaceForGrouping(
+    conversation,
+    registeredWorkspacePaths,
+  );
   if (!normalized) {
     return { id: "__none_workspace", label: "" };
   }
@@ -194,6 +194,7 @@ export function groupConversations(
   backendKind: BackendKind,
   sortField: ConversationSortField,
   labels: { emptyWorkspace: string; emptyRepository: string },
+  registeredWorkspacePaths?: readonly string[],
 ): {
   id: string;
   label: string;
@@ -207,7 +208,9 @@ export function groupConversations(
 
   for (const c of items) {
     const { id, label: rawLabel } =
-      backendKind === "local" ? workspaceGroup(c) : repositoryGroup(c);
+      backendKind === "local"
+        ? workspaceGroup(c, registeredWorkspacePaths)
+        : repositoryGroup(c);
     const label =
       id === "__none_workspace"
         ? labels.emptyWorkspace

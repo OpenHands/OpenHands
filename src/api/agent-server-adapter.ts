@@ -22,6 +22,13 @@ import {
 } from "./conversation-service/agent-server-conversation-service.types";
 import SettingsService from "./settings-service/settings-service.api";
 import { getStoredConversationMetadata } from "./conversation-metadata-store";
+import {
+  gitProviderFromTag,
+  GIT_PROVIDER_TAG_KEY,
+  REPOSITORY_TAG_KEY,
+  SELECTED_BRANCH_TAG_KEY,
+  WORKSPACE_TAG_KEY,
+} from "./conversation-workspace-grouping";
 import LLMSubscriptionService from "./llm-subscription-service";
 import {
   LLM_AUTH_TYPE_SUBSCRIPTION,
@@ -316,10 +323,16 @@ export function toAppConversation(
   return {
     id: info.id,
     created_by_user_id: null,
-    selected_repository: metadata?.selected_repository ?? null,
-    selected_branch: metadata?.selected_branch ?? null,
-    git_provider: metadata?.git_provider ?? null,
-    selected_workspace: metadata?.selected_workspace ?? null,
+    selected_repository:
+      metadata?.selected_repository ?? info.tags?.[REPOSITORY_TAG_KEY] ?? null,
+    selected_branch:
+      metadata?.selected_branch ?? info.tags?.[SELECTED_BRANCH_TAG_KEY] ?? null,
+    git_provider:
+      metadata?.git_provider ??
+      gitProviderFromTag(info.tags?.[GIT_PROVIDER_TAG_KEY]) ??
+      null,
+    selected_workspace:
+      metadata?.selected_workspace ?? info.tags?.[WORKSPACE_TAG_KEY] ?? null,
     active_profile: metadata?.active_profile ?? null,
     title: info.title?.trim()
       ? info.title
@@ -422,6 +435,13 @@ type ConversationSettingsPayload = SettingsRecord & {
 
 export const ACP_SERVER_TAG_KEY = "acpserver";
 
+export {
+  GIT_PROVIDER_TAG_KEY,
+  REPOSITORY_TAG_KEY,
+  SELECTED_BRANCH_TAG_KEY,
+  WORKSPACE_TAG_KEY,
+} from "./conversation-workspace-grouping";
+
 /**
  * Conversation tag keys Canvas itself stamps/consumes for internal routing.
  * They are already surfaced through dedicated UI (the ACP provider chip), so
@@ -429,6 +449,10 @@ export const ACP_SERVER_TAG_KEY = "acpserver";
  */
 export const RESERVED_CONVERSATION_TAG_KEYS: ReadonlySet<string> = new Set([
   ACP_SERVER_TAG_KEY,
+  REPOSITORY_TAG_KEY,
+  SELECTED_BRANCH_TAG_KEY,
+  GIT_PROVIDER_TAG_KEY,
+  WORKSPACE_TAG_KEY,
 ]);
 
 /**
