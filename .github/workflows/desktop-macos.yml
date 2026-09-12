@@ -1,17 +1,19 @@
 name: Desktop (macOS)
 
-# Builds the Agent Canvas macOS DMG (Apple Silicon).
+# Builds the Agent Canvas macOS DMG.
 #   pull_request:      paths-filtered smoke build — the uploaded artifact is
-#                      what a tester downloads to verify a PR on macOS.
-#   release published: rebuilds from the release tag and attaches the .dmg
-#                      to the GitHub Release created by release-please.
+#                      what a tester downloads to verify a PR on macOS. Stays
+#                      single-arch (native runner arch) for speed.
+#   release published: rebuilds from the release tag as a UNIVERSAL build
+#                      (arm64 + x64, with per-arch bundled uv/node runtimes
+#                      selected at runtime by process.arch) and attaches the
+#                      .dmg to the GitHub Release created by release-please.
+#                      Intel Macs are supported by the release DMG.
 #   workflow_dispatch: manual escape hatch for any ref.
 # The app is only ad-hoc signed (no signing certs exist for any platform);
 # a downloaded DMG is quarantined by Gatekeeper, which reports the app as
 # "damaged" until the attribute is cleared:
 #   xattr -d com.apple.quarantine "/Applications/OpenHands Agent Canvas.app"
-# Intel DMGs are not produced — the bundled uv/node runtimes are host-arch
-# only, so Intel users build from source.
 on:
   workflow_dispatch:
   pull_request:
@@ -19,6 +21,7 @@ on:
       - .github/workflows/desktop-macos.yml
       - electron/**
       - electron-builder.config.mjs
+      - scripts/download-arch-utils.mjs
       - scripts/download-uv.mjs
       - scripts/download-node.mjs
   release:
@@ -37,7 +40,9 @@ jobs:
   build-dmg:
     name: Build macOS DMG
     runs-on: macos-latest
-    timeout-minutes: 30
+    # Universal release builds download two Electron zips + two Node dists and
+    # lipo-merge them; 40 min leaves headroom over the observed ~25 min.
+    timeout-minutes: 40
 
     steps:
       - name: Check out repository
@@ -62,7 +67,10 @@ jobs:
           # Authenticates download-uv.mjs's GitHub API version lookup so it
           # doesn't hit the unauthenticated per-IP rate limit on shared runners.
           GITHUB_TOKEN: ${{ github.token }}
-        run: npm run build:desktop
+        # Release builds are universal (arm64 + x64 with per-arch bundled
+        # runtimes); PR smoke builds stay single-arch (native runner arch)
+        # for speed.
+        run: ${{ github.event_name == 'release' && 'npm run build:desktop:universal' || 'npm run build:desktop' }}
 
       - name: Verify DMG output
         run: |
