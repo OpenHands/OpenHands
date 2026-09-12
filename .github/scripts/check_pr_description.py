@@ -41,9 +41,12 @@ MIN_HUMAN_NOTE_CHARS = 20
 REQUIRED_TEMPLATE_FIELDS: tuple[str, ...] = ("Why", "Summary", "How to Test")
 
 HTML_COMMENT_RE = re.compile(r"<!--[\s\S]*?-->")
-HEADING_RE = re.compile(r"(?m)^##\s+(.+?)\s*$")
-HUMAN_HEADING_RE = re.compile(r"(?im)^\s*HUMAN:\s*$")
-AGENT_HEADING_RE = re.compile(r"(?im)^\s*AGENT:\s*$")
+HEADING_RE = re.compile(r"(?m)^##[ \t]+(.+?)[ \t]*$")
+# `\r?$` rather than `\s*$` for the same reason as HEADING_RE above: these run
+# against masked text too, and there is no capture group here to absorb the `\r`
+# of a CRLF body, so it has to be matched explicitly.
+HUMAN_HEADING_RE = re.compile(r"(?im)^[ \t]*HUMAN:[ \t]*\r?$")
+AGENT_HEADING_RE = re.compile(r"(?im)^[ \t]*AGENT:[ \t]*\r?$")
 
 # A file counts as frontend code if its path is under one of these prefixes or
 # has one of these extensions. This mirrors the paths the E2E workflows treat as
