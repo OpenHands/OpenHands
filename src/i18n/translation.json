@@ -41919,5 +41919,8 @@
   },
   "SETTINGS$PROVIDER_CONNECTION_KEY_UNSET_LABEL": {
     "en": "No API key stored"
+  },
+  "SETTINGS$PROVIDER_CONNECTION_DELETE_BLOCKED": {
+    "en": "Can't delete — {{count}} profile(s) still use this connection. Unlink or delete them first."
   }
 }

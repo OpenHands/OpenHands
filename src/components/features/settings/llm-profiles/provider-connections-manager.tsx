@@ -134,6 +134,9 @@ export function ProviderConnectionsManager({
       />
       <DeleteProviderConnectionModal
         connection={connectionToDelete}
+        linkedProfileCount={
+          connectionToDelete ? (linkedCountById[connectionToDelete.id] ?? 0) : 0
+        }
         onClose={() => setConnectionToDelete(null)}
       />
       <BulkAddModelsModal

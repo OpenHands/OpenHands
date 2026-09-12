@@ -175,6 +175,7 @@ export function LlmProfilesManager({
 
       <RenameProfileModal
         profile={profileToRename}
+        activeProfileName={active}
         onClose={() => setProfileToRename(null)}
       />
       <DeleteProfileModal
