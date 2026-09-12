@@ -1,0 +1,41 @@
+{
+  "conversation_id": "1b146ab6-fa9b-4f74-af40-7b9df7752092",
+  "requests": [
+    {
+      "path": "/api/conversations/1b146ab6-fa9b-4f74-af40-7b9df7752092",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/1b146ab6-fa9b-4f74-af40-7b9df7752092/bash/execute_bash_command",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/1b146ab6-fa9b-4f74-af40-7b9df7752092/events/search",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/1b146ab6-fa9b-4f74-af40-7b9df7752092/bash/execute_bash_command",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/search",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/search",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/1b146ab6-fa9b-4f74-af40-7b9df7752092/bash/execute_bash_command",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/1b146ab6-fa9b-4f74-af40-7b9df7752092/workspace/canvas-probe.txt",
+      "status": 200
+    }
+  ],
+  "page_errors": [],
+  "file_content_verified": "CANVAS_ISOLATED_WORKSPACE_PASS",
+  "git_branch_visible": "master",
+  "unscoped_bash_socket_observed": false
+}
