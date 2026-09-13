@@ -37,7 +37,10 @@ export function registerDockerBackend(): void {
       id: "acp-docker",
       name: "ACP Docker",
       host: BASE,
-      apiKey: "",
+      // Canvas-built images generate a LOCAL_BACKEND_API_KEY and reject
+      // unauthenticated calls with 401; a bare agent-server does not. Allow the
+      // key to be supplied so the same e2e can run against either.
+      apiKey: process.env.ACP_E2E_API_KEY ?? "",
       kind: "local",
     },
   ]);
@@ -160,9 +163,14 @@ export function getProviderPlan(id: string): ProviderPlan | undefined {
 }
 
 export async function postJson(url: string, body: unknown): Promise<any> {
+  const apiKey = process.env.ACP_E2E_API_KEY;
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      // Canvas-built images require the session key; a bare agent-server ignores it.
+      ...(apiKey ? { "X-Session-API-Key": apiKey } : {}),
+    },
     body: JSON.stringify(body),
   });
   const text = await res.text();
@@ -173,7 +181,10 @@ export async function postJson(url: string, body: unknown): Promise<any> {
 }
 
 export async function getJson(url: string): Promise<any> {
-  const res = await fetch(url);
+  const apiKey = process.env.ACP_E2E_API_KEY;
+  const res = await fetch(url, {
+    headers: apiKey ? { "X-Session-API-Key": apiKey } : {},
+  });
   const text = await res.text();
   if (!res.ok) {
     throw new Error(`GET ${url} -> ${res.status}: ${text.slice(0, 400)}`);

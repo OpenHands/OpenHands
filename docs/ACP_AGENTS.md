@@ -158,6 +158,48 @@ docker run -d --name oh-acp -p 8010:8000 -v acp-data:/workspace \
 VITE_BACKEND_BASE_URL=http://localhost:8010 npm run dev:frontend
 ```
 
+### Slim vs. full images
+
+The published **Agent Canvas** image is built on `agent-server:<version>-python-slim`,
+which omits the preinstalled ACP provider CLIs (~324 MB compressed). Nothing changes
+for you: the first time you pick an ACP agent, the SDK installs that provider at its
+pinned version via `npx` — typically a few seconds — and caches it under
+`~/.openhands`, so it happens once per machine rather than once per container.
+
+You want the **full** image (`agent-server:<version>-python`, providers baked in) if:
+
+- the machine has no npm registry access — air-gapped, or behind a proxy that blocks it
+- you need a byte-identical, reproducible image with no install step at run time
+- you cannot accept a few seconds of first-use latency on a cold cache
+
+The `examples/acp-docker/` setup above already uses the full image, so it works
+offline as-is.
+
+To build Canvas itself on the full image, set the variant in
+[`config/defaults.json`](../config/defaults.json) and rebuild:
+
+```jsonc
+{
+  "variants": {
+    "agentServer": "python"      // instead of "python-slim"
+  }
+}
+```
+
+```bash
+npm run docker:build
+```
+
+Or override it for a one-off build without editing config:
+
+```bash
+docker build -f docker/Dockerfile \
+  --build-arg AGENT_SERVER_IMAGE=ghcr.io/openhands/agent-server:<version>-python \
+  --build-arg AUTOMATION_VERSION=$(node -p "require('./config/defaults.json').versions.automation") \
+  --build-arg VITE_BASE_PATH=$(node -p "require('./config/defaults.json').paths.canvasBasePath") \
+  -t agent-canvas:full .
+```
+
 ### How credentials reach a containerized agent
 
 In onboarding's **Set up credentials** step, the credentials you enter are saved
