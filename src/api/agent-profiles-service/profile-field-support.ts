@@ -1,7 +1,9 @@
 import {
   compareAgentServerVersions,
   getCachedAgentServerVersion,
+  getCachedAgentServerInfo,
 } from "#/api/agent-server-compatibility";
+import { getActiveBackend } from "#/api/backend-registry/active-store";
 
 /**
  * `enable_switch_llm_tool` reached `OpenHandsAgentProfile` in
@@ -38,4 +40,14 @@ export function agentProfileSupportsSwitchLlmTool(): boolean {
   );
   if (comparison === null) return true;
   return comparison >= 0;
+}
+
+/** Only offer a scope when the serving backend advertises enforcement. */
+export function agentProfileSupportsSecretRefs(): boolean {
+  if (getActiveBackend().backend.kind === "cloud") return false;
+  return (
+    getCachedAgentServerInfo()?.capabilities?.includes(
+      "profile_secret_scope_v1",
+    ) ?? false
+  );
 }
