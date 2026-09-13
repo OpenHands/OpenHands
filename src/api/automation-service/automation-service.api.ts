@@ -196,7 +196,9 @@ function buildCreateAutomationRequest(spec: AutomationSpec) {
         source: importDefaults.placeholderEventSource,
         on: generatePendingImportEvent(),
       },
-      ...(spec.model && { model: spec.model }),
+      ...(spec.agent_profile_id
+        ? { agent_profile_id: spec.agent_profile_id }
+        : spec.model && { model: spec.model }),
       ...(repos && { repos }),
       ...(spec.plugins?.length && {
         plugins: spec.plugins.map((source) => ({ source })),
