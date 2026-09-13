@@ -1,195 +1,106 @@
 import { renderHook } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+import { http, HttpResponse, delay } from "msw";
+import { server } from "#/mocks/node";
 import { useBashCommandRunner } from "#/hooks/use-bash-command-runner";
+import { supportsConversationRuntimeRoutes } from "#/api/agent-server-client-options";
+import {
+  setRegisteredBackends,
+  setActiveSelection,
+} from "#/api/backend-registry/active-store";
 
-class MockWebSocket {
-  static readonly CONNECTING = 0;
-  static readonly OPEN = 1;
-  static readonly CLOSING = 2;
-  static readonly CLOSED = 3;
-  static instance: MockWebSocket | null = null;
+const host = "http://localhost:9876";
+const cid = "11111111-1111-4111-8111-111111111111";
 
-  readonly url: string;
-  readonly sent: string[] = [];
-  readyState = MockWebSocket.CONNECTING;
-  onopen: (() => void) | null = null;
-  onmessage: ((event: MessageEvent) => void) | null = null;
-  onclose: (() => void) | null = null;
-  onerror: (() => void) | null = null;
-
-  constructor(url: string) {
-    this.url = url;
-    MockWebSocket.instance = this;
-  }
-
-  send(data: string) {
-    if (this.readyState !== MockWebSocket.OPEN) {
-      throw new DOMException("WebSocket is not open", "InvalidStateError");
-    }
-    this.sent.push(data);
-  }
-
-  open() {
-    this.readyState = MockWebSocket.OPEN;
-    this.onopen?.();
-  }
-
-  receive(data: unknown) {
-    this.onmessage?.(
-      new MessageEvent("message", { data: JSON.stringify(data) }),
-    );
-  }
-
-  close() {
-    this.readyState = MockWebSocket.CLOSED;
-  }
-}
+beforeEach(() => {
+  setRegisteredBackends([
+    {
+      id: "bash-probe",
+      name: "Probe",
+      kind: "local",
+      host,
+      apiKey: "backend-key",
+    },
+  ]);
+  setActiveSelection({ backendId: "bash-probe" });
+  server.use(
+    http.get(`${host}/server_info`, () =>
+      HttpResponse.json({
+        version: "1.47.0",
+        capabilities: ["conversation_runtime_routes_v1"],
+        conversation_runtime: "docker",
+      }),
+    ),
+  );
+});
 
 describe("useBashCommandRunner", () => {
-  afterEach(() => {
-    MockWebSocket.instance = null;
-    vi.unstubAllGlobals();
-  });
-
-  it("sends auth before queued commands without putting the key in the URL", async () => {
-    vi.stubGlobal("WebSocket", MockWebSocket);
-    const sessionApiKey = `sk-oh-${"b".repeat(64)}`;
-    const { result, unmount } = renderHook(() =>
-      useBashCommandRunner(
-        "https://runtime.example.com/api/conversations/conv-1",
-        sessionApiKey,
-        true,
-      ),
-    );
-    const socket = MockWebSocket.instance!;
-    socket.readyState = MockWebSocket.OPEN;
-
-    const command = result.current("pwd", "/workspace", 30);
-
-    expect(socket.sent).toEqual([]);
-    socket.open();
-
-    expect(socket.url).not.toContain(sessionApiKey);
-    expect(socket.url).not.toContain("session_api_key");
-    expect(socket.sent).toEqual([
-      JSON.stringify({ type: "auth", session_api_key: sessionApiKey }),
-      JSON.stringify({ command: "pwd", cwd: "/workspace", timeout: 30 }),
-    ]);
-
-    socket.receive({ kind: "BashCommand", id: "command-1" });
-    socket.receive({
-      kind: "BashOutput",
-      command_id: "command-1",
-      stdout: "/workspace\n",
-      stderr: "",
-      exit_code: 0,
-    });
-    await expect(command).resolves.toEqual({
-      exit_code: 0,
-      stdout: "/workspace\n",
-      stderr: "",
-    });
-
-    unmount();
-  });
-
-  it("sends queued commands without an auth frame when no key is configured", async () => {
-    vi.stubGlobal("WebSocket", MockWebSocket);
-    const { result, unmount } = renderHook(() =>
-      useBashCommandRunner(
-        "http://runtime.example.com/api/conversations/conv-1",
-        null,
-        true,
-      ),
-    );
-    const socket = MockWebSocket.instance!;
-    const command = result.current("git status", "/workspace", 10);
-
-    expect(socket.sent).toEqual([]);
-    socket.open();
-    expect(socket.sent).toEqual([
-      JSON.stringify({
-        command: "git status",
-        cwd: "/workspace",
-        timeout: 10,
-      }),
-    ]);
-
-    socket.receive({ kind: "BashCommand", id: "command-1" });
-    socket.receive({
-      kind: "BashOutput",
-      command_id: "command-1",
-      stdout: "",
-      stderr: "",
-      exit_code: 0,
-    });
-    await expect(command).resolves.toEqual({
-      exit_code: 0,
-      stdout: "",
-      stderr: "",
-    });
-
-    unmount();
-  });
-
-  it("closes a handshake stuck in CONNECTING at the timeout", () => {
-    // Arrange: the server never completes the 101 upgrade. Left alone, this
-    // socket would hold the browser's per-host handshake lock and block the
-    // conversation's events socket indefinitely.
-    vi.stubGlobal("WebSocket", MockWebSocket);
-    vi.useFakeTimers();
-
-    try {
-      const { unmount } = renderHook(() =>
-        useBashCommandRunner(
-          "http://runtime.example.com/api/conversations/conv-1",
-          null,
-          true,
+  it.skipIf(!supportsConversationRuntimeRoutes())(
+    "scopes commands before URL hydration and correlates concurrent results",
+    async () => {
+      const seen: string[] = [];
+      server.use(
+        http.post(
+          `${host}/api/conversations/${cid}/bash/execute_bash_command`,
+          async ({ request }) => {
+            expect(request.headers.get("X-Session-API-Key")).toBe(
+              "conversation-key",
+            );
+            const body = (await request.json()) as {
+              command: string;
+              cwd: string;
+              timeout: number;
+            };
+            expect(body.cwd).toBe("/workspace");
+            expect(body.timeout).toBe(30);
+            seen.push(body.command);
+            if (body.command === "first") await delay(20);
+            return HttpResponse.json({
+              exit_code: 0,
+              stdout: body.command,
+              stderr: "",
+            });
+          },
         ),
       );
-      const socket = MockWebSocket.instance!;
-      const closeSpy = vi.spyOn(socket, "close");
+      const { result } = renderHook(() =>
+        useBashCommandRunner(undefined, "conversation-key", true, cid),
+      );
+      const output = await Promise.all([
+        result.current("first", "/workspace", 30),
+        result.current("second", "/workspace", 30),
+      ]);
+      expect(output.map((x) => x.stdout)).toEqual(["first", "second"]);
+      expect(seen).toEqual(["first", "second"]);
+    },
+  );
 
-      // Act/Assert: untouched just before the timeout, closed right at it.
-      vi.advanceTimersByTime(9_999);
-      expect(closeSpy).not.toHaveBeenCalled();
-
-      vi.advanceTimersByTime(1);
-      expect(closeSpy).toHaveBeenCalledOnce();
-      expect(socket.readyState).toBe(MockWebSocket.CLOSED);
-
-      unmount();
-    } finally {
-      vi.useRealTimers();
-    }
+  it("rejects a disabled probe without sending a request", async () => {
+    const { result } = renderHook(() =>
+      useBashCommandRunner(undefined, null, false, cid),
+    );
+    await expect(result.current("pwd", "/workspace", 30)).rejects.toThrow(
+      "disabled",
+    );
   });
 
-  it("does not close a socket that finished its handshake in time", () => {
-    vi.stubGlobal("WebSocket", MockWebSocket);
-    vi.useFakeTimers();
-
-    try {
-      const { unmount } = renderHook(() =>
-        useBashCommandRunner(
-          "http://runtime.example.com/api/conversations/conv-1",
-          null,
-          true,
+  it.skipIf(!supportsConversationRuntimeRoutes())(
+    "propagates runtime failures without claiming command success",
+    async () => {
+      server.use(
+        http.post(
+          `${host}/api/conversations/${cid}/bash/execute_bash_command`,
+          () =>
+            HttpResponse.json(
+              { detail: "Runtime unavailable" },
+              { status: 503 },
+            ),
         ),
       );
-      const socket = MockWebSocket.instance!;
-      const closeSpy = vi.spyOn(socket, "close");
-
-      // Act: the handshake completes, then the watchdog window elapses.
-      socket.open();
-      vi.advanceTimersByTime(60_000);
-
-      // Assert: the cleared watchdog never touched the healthy socket.
-      expect(closeSpy).not.toHaveBeenCalled();
-      expect(socket.readyState).toBe(MockWebSocket.OPEN);
-
-      unmount();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
+      const { result } = renderHook(() =>
+        useBashCommandRunner(`${host}/api/conversations/${cid}`, null, true),
+      );
+      await expect(result.current("pwd", "/workspace", 30)).rejects.toThrow();
+    },
+  );
 });

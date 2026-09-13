@@ -147,7 +147,7 @@ class GitService {
         conversationId,
       );
     const changes = await new RemoteWorkspace(
-      getAgentServerClientOptions({ workingDir }),
+      getAgentServerClientOptions({ workingDir, conversationId }),
     ).gitChanges(workingDir);
 
     return changes.map((change) => ({
@@ -161,11 +161,11 @@ class GitService {
   }
 
   static async getGitChangeDiff(
-    _conversationId: string,
+    conversationId: string,
     path: string,
   ): Promise<GitChangeDiff> {
     const diff = await new RemoteWorkspace(
-      getAgentServerClientOptions(),
+      getAgentServerClientOptions({ conversationId }),
     ).gitDiff(path);
 
     return {

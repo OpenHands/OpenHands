@@ -1,4 +1,3 @@
-import { FileClient } from "@openhands/typescript-client/clients";
 import { RemoteWorkspace } from "@openhands/typescript-client/workspace/remote-workspace";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -12,20 +11,13 @@ import type { Backend } from "#/api/backend-registry/types";
 
 // ─── SDK client mocks ───────────────────────────────────────────────────────
 
-const { executeCommandMock, downloadFileMock } = vi.hoisted(() => ({
+const { executeCommandMock } = vi.hoisted(() => ({
   executeCommandMock: vi.fn(),
-  downloadFileMock: vi.fn(),
 }));
 
 vi.mock("@openhands/typescript-client/workspace/remote-workspace", () => ({
   RemoteWorkspace: vi.fn(function RemoteWorkspaceMock() {
     return { executeCommand: executeCommandMock };
-  }),
-}));
-
-vi.mock("@openhands/typescript-client/clients", () => ({
-  FileClient: vi.fn(function FileClientMock() {
-    return { downloadFile: downloadFileMock };
   }),
 }));
 
@@ -68,9 +60,7 @@ beforeEach(() => {
   window.localStorage.clear();
   __resetActiveStoreForTests();
   vi.mocked(RemoteWorkspace).mockClear();
-  vi.mocked(FileClient).mockClear();
   executeCommandMock.mockReset();
-  downloadFileMock.mockReset();
   vi.mocked(callCloudProxy).mockReset();
 });
 
@@ -168,7 +158,8 @@ describe("AgentServerRuntimeService.executeCommand", () => {
         10,
       );
 
-      const proxyBody = vi.mocked(callCloudProxy).mock.calls[0][0].body as Record<string, unknown>;
+      const proxyBody = vi.mocked(callCloudProxy).mock.calls[0][0]
+        .body as Record<string, unknown>;
       expect(proxyBody).not.toHaveProperty("cwd");
       expect(proxyBody.command).toBe("echo hi");
     });
@@ -214,94 +205,6 @@ describe("AgentServerRuntimeService.executeCommand", () => {
 
       expect(callCloudProxy).not.toHaveBeenCalled();
       expect(RemoteWorkspace).toHaveBeenCalledTimes(1);
-    });
-  });
-});
-
-// ─── downloadFile ─────────────────────────────────────────────────────────────
-
-describe("AgentServerRuntimeService.downloadFile", () => {
-  describe("local backend", () => {
-    it("creates FileClient with resolved options and returns the ArrayBuffer", async () => {
-      const fileBytes = new TextEncoder().encode("# README");
-      downloadFileMock.mockResolvedValue(fileBytes.buffer);
-
-      const result = await AgentServerRuntimeService.downloadFile(
-        "http://local-agent.example.com/api/conversations/conv-1",
-        SESSION_KEY,
-        "/workspace/project/README.md",
-      );
-
-      expect(FileClient).toHaveBeenCalledTimes(1);
-      expect(downloadFileMock).toHaveBeenCalledWith(
-        "/workspace/project/README.md",
-      );
-      expect(result).toBe(fileBytes.buffer);
-    });
-
-    it("does not call callCloudProxy for local backends", async () => {
-      downloadFileMock.mockResolvedValue(new ArrayBuffer(0));
-
-      await AgentServerRuntimeService.downloadFile(
-        null,
-        null,
-        "/workspace/file.txt",
-      );
-
-      expect(callCloudProxy).not.toHaveBeenCalled();
-    });
-  });
-
-  describe("cloud backend", () => {
-    beforeEach(activateCloud);
-
-    it("routes through callCloudProxy with GET and URL-encoded path", async () => {
-      const blob = new Blob([new TextEncoder().encode("file content")]);
-      vi.mocked(callCloudProxy).mockResolvedValue(blob);
-
-      const result = await AgentServerRuntimeService.downloadFile(
-        CLOUD_CONVERSATION_URL,
-        SESSION_KEY,
-        "/workspace/project/src/main.ts",
-      );
-
-      const proxyCall = vi.mocked(callCloudProxy).mock.calls[0][0];
-      expect(proxyCall.method).toBe("GET");
-      expect(proxyCall.path).toBe(
-        "/api/file/download?path=%2Fworkspace%2Fproject%2Fsrc%2Fmain.ts",
-      );
-      expect(proxyCall.hostOverride).toBe("https://runtime.example.com");
-      expect(proxyCall.authMode).toBe("session-api-key");
-      expect(proxyCall.sessionApiKey).toBe(SESSION_KEY);
-      expect(proxyCall.responseType).toBe("blob");
-
-      // Blob.arrayBuffer() round-trip: decoded text should match the original.
-      expect(new TextDecoder().decode(result)).toBe("file content");
-    });
-
-    it("does not create a FileClient for cloud calls", async () => {
-      vi.mocked(callCloudProxy).mockResolvedValue(new Blob());
-
-      await AgentServerRuntimeService.downloadFile(
-        CLOUD_CONVERSATION_URL,
-        SESSION_KEY,
-        "/workspace/file.txt",
-      );
-
-      expect(FileClient).not.toHaveBeenCalled();
-    });
-
-    it("falls back to local path when conversationUrl is null", async () => {
-      downloadFileMock.mockResolvedValue(new ArrayBuffer(0));
-
-      await AgentServerRuntimeService.downloadFile(
-        null,
-        SESSION_KEY,
-        "/workspace/file.txt",
-      );
-
-      expect(callCloudProxy).not.toHaveBeenCalled();
-      expect(FileClient).toHaveBeenCalledTimes(1);
     });
   });
 });

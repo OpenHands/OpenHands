@@ -1,4 +1,3 @@
-import { FileClient } from "@openhands/typescript-client/clients";
 import { RemoteWorkspace } from "@openhands/typescript-client/workspace/remote-workspace";
 import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
 import { getActiveBackend } from "#/api/backend-registry/active-store";
@@ -28,6 +27,7 @@ class AgentServerRuntimeService {
     command: string,
     cwd?: string,
     timeout = 30,
+    conversationId?: string,
   ): Promise<CommandResult> {
     const active = getActiveBackend().backend;
 
@@ -58,38 +58,17 @@ class AgentServerRuntimeService {
     }
 
     const result = await new RemoteWorkspace(
-      getAgentServerClientOptions({ conversationUrl, sessionApiKey }),
+      getAgentServerClientOptions({
+        conversationUrl,
+        sessionApiKey,
+        conversationId,
+      }),
     ).executeCommand(command, cwd, timeout);
     return {
       exit_code: result.exit_code,
       stdout: result.stdout,
       stderr: result.stderr,
     };
-  }
-
-  static async downloadFile(
-    conversationUrl: string | null | undefined,
-    sessionApiKey: string | null | undefined,
-    path: string,
-  ): Promise<ArrayBuffer> {
-    const active = getActiveBackend().backend;
-
-    if (active.kind === "cloud" && conversationUrl) {
-      const blob = await callCloudProxy<Blob>({
-        backend: active,
-        method: "GET",
-        hostOverride: buildHttpBaseUrl(conversationUrl),
-        path: `/api/file/download?path=${encodeURIComponent(path)}`,
-        authMode: "session-api-key",
-        sessionApiKey,
-        responseType: "blob",
-      });
-      return blob.arrayBuffer();
-    }
-
-    return new FileClient(
-      getAgentServerClientOptions({ conversationUrl, sessionApiKey }),
-    ).downloadFile(path);
   }
 }
 

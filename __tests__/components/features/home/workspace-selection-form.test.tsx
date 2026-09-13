@@ -1,3 +1,6 @@
+import { http, HttpResponse } from "msw";
+import { server } from "#/mocks/node";
+import { clearCachedAgentServerInfo } from "#/api/agent-server-compatibility";
 import {
   fireEvent,
   render,
@@ -650,5 +653,45 @@ describe("WorkspaceSelectionForm (server-backed workspaces)", () => {
     expect(addParentsSpy).toHaveBeenCalledWith([
       { id: "/Users/me/dev", name: "dev", path: "/Users/me/dev" },
     ]);
+  });
+});
+
+describe("isolated workspace selection", () => {
+  it("preserves saved selection but disables confirmation of host folders", async () => {
+    clearCachedAgentServerInfo();
+    sessionStorage.setItem(
+      HOME_SELECTED_WORKSPACE_PATH_KEY,
+      "/home/user/project",
+    );
+    server.use(
+      http.get("*/server_info", () =>
+        HttpResponse.json({
+          version: "1.45.0",
+          uptime: 0,
+          idle_time: 0,
+          conversation_runtime: "docker",
+          workspace_mode: "isolated",
+        }),
+      ),
+    );
+    renderForm({
+      workspaces: [
+        {
+          id: "host-project",
+          name: "Host project",
+          path: "/home/user/project",
+        },
+      ],
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("workspace-status-message")).toHaveTextContent(
+        "HOME$ISOLATED_WORKSPACE_NOTICE",
+      ),
+    );
+    expect(screen.getByTestId("workspace-dropdown")).toBeDisabled();
+    expect(screen.getByTestId("workspace-launch-button")).toBeDisabled();
+    expect(sessionStorage.getItem(HOME_SELECTED_WORKSPACE_PATH_KEY)).toBe(
+      "/home/user/project",
+    );
   });
 });
