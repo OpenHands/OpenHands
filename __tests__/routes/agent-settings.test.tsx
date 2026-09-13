@@ -1313,6 +1313,11 @@ describe("AgentSettingsScreen — MCP scope dirty tracking", () => {
   });
   describe("secret scope", () => {
     beforeEach(() => {
+      acpAuthStatusMock.mockReturnValue({
+        status: "unknown",
+        isChecking: false,
+        isSupported: true,
+      });
       profileSupportsSecretRefsMock.mockReturnValue(true);
       savedSecretsMock.mockReturnValue([
         { name: "GITHUB_TOKEN", description: "repo access" },
@@ -1423,6 +1428,94 @@ describe("AgentSettingsScreen — MCP scope dirty tracking", () => {
       });
     });
 
+    it.each([{ secretRefs: [] }, { secretRefs: ["PROD_DB_URL"] }])(
+      "preserves an existing ACP secret scope $secretRefs through an unrelated edit",
+      async ({ secretRefs }) => {
+        savedSecretsMock.mockReturnValue([
+          { name: "ANTHROPIC_API_KEY" },
+          { name: "PROD_DB_URL" },
+        ]);
+        seedOpenHandsSettings();
+        let control: AgentSettingsSaveControl | null = null;
+        renderAgentSettingsScreen({
+          embedded: true,
+          agentSettingsOverride: {
+            agent_kind: "acp",
+            acp_server: "claude-code",
+            acp_command: [...CLAUDE_CODE_DEFAULT_COMMAND],
+            acp_args: [],
+            acp_model: "haiku",
+            secret_refs: secretRefs,
+          },
+          onSaveControlChange: (next) => {
+            control = next;
+          },
+        });
+        await screen.findByTestId("agent-command-input");
+        expect(control!.isDirty).toBe(false);
+        expect(
+          screen.getByTestId("agent-settings-secret-ANTHROPIC_API_KEY"),
+        ).not.toBeChecked();
+
+        const user = userEvent.setup();
+        await user.click(screen.getByTestId("agent-settings-mcp-mode"));
+        await user.click(
+          await screen.findByRole("option", {
+            name: "SETTINGS$AGENT_PROFILE_MCP_CHOOSE",
+          }),
+        );
+        expect(control!.buildAgentProfileFields()).toMatchObject({
+          mcp_server_refs: [],
+          secret_refs: secretRefs,
+        });
+      },
+    );
+
+    it("keeps a provider credential deselected when the saved ACP profile is reopened", async () => {
+      savedSecretsMock.mockReturnValue([
+        { name: "ANTHROPIC_API_KEY" },
+        { name: "PROD_DB_URL" },
+      ]);
+      seedOpenHandsSettings();
+      let control: AgentSettingsSaveControl | null = null;
+      const onSaveControlChange = (next: AgentSettingsSaveControl | null) => {
+        control = next;
+      };
+      const view = renderAgentSettingsScreen({
+        embedded: true,
+        agentSettingsOverride: {
+          agent_kind: "acp",
+          acp_server: "claude-code",
+          acp_command: [...CLAUDE_CODE_DEFAULT_COMMAND],
+          acp_args: [],
+          acp_model: "haiku",
+          secret_refs: ["ANTHROPIC_API_KEY", "PROD_DB_URL"],
+        },
+        onSaveControlChange,
+      });
+      await screen.findByTestId("agent-command-input");
+      const user = userEvent.setup();
+      await user.click(
+        screen.getByTestId("agent-settings-secret-ANTHROPIC_API_KEY"),
+      );
+      const saved = control!.buildAgentProfileFields();
+      expect(saved).toMatchObject({ secret_refs: ["PROD_DB_URL"] });
+      view.unmount();
+      renderAgentSettingsScreen({
+        embedded: true,
+        agentSettingsOverride: saved,
+        onSaveControlChange,
+      });
+      await screen.findByTestId("agent-command-input");
+      expect(
+        screen.getByTestId("agent-settings-secret-ANTHROPIC_API_KEY"),
+      ).not.toBeChecked();
+      expect(control!.isDirty).toBe(false);
+      expect(control!.buildAgentProfileFields()).toMatchObject({
+        secret_refs: ["PROD_DB_URL"],
+      });
+    });
+
     it("selects an ACP profile's provider credentials when scoping starts", async () => {
       // Scoping is strict server-side, so an ACP profile that omits its
       // credential cannot authenticate. Seed it visibly rather than re-adding
@@ -1475,6 +1568,49 @@ describe("AgentSettingsScreen — MCP scope dirty tracking", () => {
       ).secret_refs;
       expect(refs).toContain("ANTHROPIC_API_KEY");
     });
+
+    it.each(["preset", "command"])(
+      "selects the new provider credential after an explicit %s change",
+      async (input) => {
+        savedSecretsMock.mockReturnValue([
+          { name: "ANTHROPIC_API_KEY" },
+          { name: "OPENAI_API_KEY" },
+        ]);
+        seedOpenHandsSettings();
+        renderAgentSettingsScreen({
+          embedded: true,
+          agentSettingsOverride: {
+            agent_kind: "acp",
+            acp_server: "claude-code",
+            acp_command: [...CLAUDE_CODE_DEFAULT_COMMAND],
+            acp_args: [],
+            acp_model: "haiku",
+            secret_refs: [],
+          },
+        });
+        await screen.findByTestId("agent-command-input");
+        const user = userEvent.setup();
+        const codex = ACP_PROVIDERS.find(
+          (provider) => provider.key === "codex",
+        )!;
+        if (input === "preset") {
+          await user.click(screen.getByTestId("agent-preset-selector"));
+          await user.click(
+            await screen.findByRole("option", { name: codex.display_name }),
+          );
+        } else {
+          const command = screen.getByTestId("agent-command-input");
+          await user.clear(command);
+          await user.type(command, codex.default_command.join(" "));
+        }
+        expect(
+          screen.getByTestId("agent-settings-secret-OPENAI_API_KEY"),
+        ).toBeChecked();
+        expect(
+          screen.getByTestId("agent-settings-secret-ANTHROPIC_API_KEY"),
+        ).not.toBeChecked();
+      },
+    );
 
     it("leaves an OpenHands profile's scope empty when scoping starts", async () => {
       // Nothing an OpenHands agent needs rides this channel, so there is
