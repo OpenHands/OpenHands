@@ -41,6 +41,7 @@ import {
   matchesPathPrefix,
   proxyServerInfoRequest,
 } from "./proxy-utils.mjs";
+import { createPortalAuthHandler, PortalAuthStore } from "./portal-auth.mjs";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SPA fallback helpers
@@ -93,6 +94,7 @@ export function parseArgs(argv = process.argv.slice(2), env = process.env) {
     noReferrerPrefixes: [],
     sessionApiKey: null,
     authRequired: false,
+    portalAuth: null,
     runtimeServicesInfo: null,
     lockToCloud: null,
     basePath: "/",
@@ -157,6 +159,9 @@ export function parseArgs(argv = process.argv.slice(2), env = process.env) {
       case "--auth-required":
         config.authRequired = true;
         break;
+      case "--portal-auth":
+        config.portalAuth = argv[++i] || null;
+        break;
       case "--disable-telemetry":
         config.disableTelemetry = true;
         break;
@@ -198,6 +203,18 @@ export function parseArgs(argv = process.argv.slice(2), env = process.env) {
       "ERROR: --session-api-key and --auth-required are mutually exclusive.\n" +
         "  Use --session-api-key for local mode (key auto-injected).\n" +
         "  Use --auth-required for public mode (user pastes key).",
+    );
+    process.exit(1);
+  }
+
+  // Portal auth is a separate, all-request gate. It is incompatible with the
+  // auto-injected session key path (the key would be served to unauthenticated
+  // requests via index.html injection and leak the agent-server session key).
+  if (config.sessionApiKey && config.portalAuth) {
+    console.error(
+      "ERROR: --session-api-key and --portal-auth are mutually exclusive.\n" +
+        "  Portal auth gates every request behind a login; using it with a\n" +
+        "  baked-in session API key would hand that key to public visitors.",
     );
     process.exit(1);
   }
@@ -246,6 +263,11 @@ OPTIONS:
   --auth-required              Inject authRequired flag into index.html so the
                                pre-built frontend shows the API key entry screen
                                (public mode) without VITE_AUTH_REQUIRED baked in.
+  --portal-auth <store>        Enable the portal login/setup portal. All routes
+                               (static + proxied) require a valid session cookie;
+                               the first admin is created via /setup. <store> is
+                               a JSON file path where hashed credentials and
+                               sessions are persisted. See scripts/portal-auth.mjs.
   --runtime-services-info <json>
                                Inject a JSON description of the local runtime
                                services into index.html so the pre-built
@@ -655,6 +677,13 @@ export function startStaticServer(config) {
   const route = createRouter(config.routes);
   const proxy = createProxyHandlers({ label: `static:${config.port}` });
   const dirAbs = resolve(config.dir);
+  const portalAuth =
+    config.portalAuth != null && config.portalAuth !== ""
+      ? (() => {
+          const store = new PortalAuthStore(config.portalAuth);
+          return { store, handler: createPortalAuthHandler(store) };
+        })()
+      : null;
   const injectionOpts = {
     sessionApiKey: config.sessionApiKey || null,
     authRequired: config.authRequired || false,
@@ -672,6 +701,10 @@ export function startStaticServer(config) {
   const uninstallDiagnostics = proxy.installDiagnostics();
 
   const server = createServer((req, res) => {
+    if (portalAuth) {
+      const handled = portalAuth.handler(req, res);
+      if (handled) return;
+    }
     const url = req.url ?? "/";
     const backend = route(url);
     if (backend) {
@@ -742,6 +775,13 @@ export function startStaticServer(config) {
       }
       if (config.lockToCloud) {
         console.log(`  Backend setup locked to Cloud: ${config.lockToCloud}`);
+      }
+      if (portalAuth) {
+        console.log(
+          `  Portal auth: ENABLED (store: ${portalAuth.store.filePath})${
+            portalAuth.store.hasAdmin ? "" : " — set up first admin at /setup"
+          }`,
+        );
       }
       console.log("  * (default) -> static files + SPA fallback");
       console.log("");
