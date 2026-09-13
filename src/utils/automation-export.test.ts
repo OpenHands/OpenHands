@@ -35,9 +35,9 @@ describe("automation export files", () => {
         ...cronAutomation,
         agent_profile_id,
       });
-      expect(
-        parseAutomationFile(exported).agent_profile_id,
-      ).toBe(agent_profile_id);
+      expect(parseAutomationFile(exported).agent_profile_id).toBe(
+        agent_profile_id,
+      );
     },
   );
   it("round-trips a cron automation without server-assigned fields", () => {
