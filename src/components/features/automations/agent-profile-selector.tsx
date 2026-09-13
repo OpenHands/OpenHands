@@ -16,7 +16,7 @@ export function AutomationAgentProfileSelector({ value, onChange }: Props) {
   const selected = value
     ? profiles.find((profile) => profile.id === value)
     : undefined;
-  const defaultLabel = t(I18nKey.AUTOMATIONS$DEFAULT_AGENT_PROFILE);
+  const defaultLabel = t(I18nKey.SETTINGS$PROFILE_DEFAULT);
   const label =
     selected?.name ??
     (value
