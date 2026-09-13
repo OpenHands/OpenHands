@@ -64,7 +64,7 @@ function normalizePath(path: string): string {
  */
 function useLocalWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
   const { data: conversation } = useActiveConversation();
-  const runtimeIsReady = useRuntimeIsReady();
+  const runtimeIsReady = useRuntimeIsReady({ allowAgentError: true });
 
   const conversationId = conversation?.id;
   const conversationUrl = conversation?.conversation_url;
@@ -134,7 +134,7 @@ function useCloudWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
   // disabled — and never fire — whenever that data is null or still loading.
   const { conversationId } = useOptionalConversationId();
   const { data: conversation } = useActiveConversation();
-  const runtimeIsReady = useRuntimeIsReady();
+  const runtimeIsReady = useRuntimeIsReady({ allowAgentError: true });
 
   const selectedRepository = conversation?.selected_repository;
   const workingDir = conversation?.workspace?.working_dir?.trim();

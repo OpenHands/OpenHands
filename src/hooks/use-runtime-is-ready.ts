@@ -4,7 +4,7 @@ import {
   RUNTIME_STARTING_STATES,
 } from "#/types/agent-state";
 import { useActiveConversation } from "./query/use-active-conversation";
-import { isExecutionActive } from "#/utils/status";
+import { isExecutionActive, isExecutionErrored } from "#/utils/status";
 
 interface UseRuntimeIsReadyOptions {
   allowAgentError?: boolean;
@@ -20,7 +20,8 @@ export const useRuntimeIsReady = ({
     : RUNTIME_INACTIVE_STATES;
 
   return (
-    isExecutionActive(conversation?.execution_status) &&
+    (isExecutionActive(conversation?.execution_status) ||
+      (allowAgentError && isExecutionErrored(conversation?.execution_status))) &&
     !inactiveStates.includes(curAgentState)
   );
 };

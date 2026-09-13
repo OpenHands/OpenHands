@@ -141,7 +141,7 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
  */
 export function useWorkspaceFileContent(relativePath: string | null) {
   const { data: conversation } = useActiveConversation();
-  const runtimeIsReady = useRuntimeIsReady();
+  const runtimeIsReady = useRuntimeIsReady({ allowAgentError: true });
   const { data: workspaceSession } = useWorkspaceSession();
   // Bump on every agent-side file mutation so the query refetches the
   // currently-selected file's body even when the *path* hasn't changed.
