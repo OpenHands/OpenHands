@@ -31,6 +31,30 @@ const cloudBackend: Backend = {
   kind: "cloud",
 };
 
+const localBackendA: Backend = {
+  id: "local-a",
+  name: "Local A",
+  host: "http://local-a.example",
+  apiKey: "local-a-key",
+  kind: "local",
+  connectionRevision: 0,
+};
+
+const localBackendB: Backend = {
+  id: "local-b",
+  name: "Local B",
+  host: "http://local-b.example",
+  apiKey: "local-b-key",
+  kind: "local",
+  connectionRevision: 0,
+};
+
+const settingsResponse = (model: string) => ({
+  agent_settings: { llm: { model } },
+  conversation_settings: {},
+  llm_api_key_is_set: true,
+});
+
 describe("SettingsService", () => {
   beforeEach(() => {
     // Clear localStorage and reset mock settings state
@@ -124,6 +148,134 @@ describe("SettingsService", () => {
     expect(fetchSpy).toHaveBeenCalledTimes(2);
 
     fetchSpy.mockRestore();
+  });
+
+  it("scopes cached settings by local backend", async () => {
+    const requestCounts = { a: 0, b: 0 };
+    server.use(
+      http.get("http://local-a.example/api/settings", () => {
+        requestCounts.a += 1;
+        return HttpResponse.json(settingsResponse("model-a"));
+      }),
+      http.get("http://local-b.example/api/settings", () => {
+        requestCounts.b += 1;
+        return HttpResponse.json(settingsResponse("model-b"));
+      }),
+    );
+    setRegisteredBackends([localBackendA, localBackendB]);
+
+    setActiveSelection({ backendId: localBackendA.id });
+    expect((await SettingsService.getSettings()).llm_model).toBe("model-a");
+
+    setActiveSelection({ backendId: localBackendB.id });
+    expect((await SettingsService.getSettings()).llm_model).toBe("model-b");
+
+    setActiveSelection({ backendId: localBackendA.id });
+    expect((await SettingsService.getSettings()).llm_model).toBe("model-a");
+    expect(requestCounts).toEqual({ a: 1, b: 1 });
+  });
+
+  it("does not reuse encrypted conversation settings across backends", async () => {
+    server.use(
+      http.get("http://local-a.example/api/settings", () =>
+        HttpResponse.json(settingsResponse("encrypted-model-a")),
+      ),
+      http.get("http://local-b.example/api/settings", () =>
+        HttpResponse.json(settingsResponse("encrypted-model-b")),
+      ),
+    );
+    setRegisteredBackends([localBackendA, localBackendB]);
+
+    setActiveSelection({ backendId: localBackendA.id });
+    const settingsA = await SettingsService.getSettingsForConversation();
+
+    setActiveSelection({ backendId: localBackendB.id });
+    const settingsB = await SettingsService.getSettingsForConversation();
+
+    expect(settingsA.agentSettings.llm).toMatchObject({
+      model: "encrypted-model-a",
+    });
+    expect(settingsB.agentSettings.llm).toMatchObject({
+      model: "encrypted-model-b",
+    });
+  });
+
+  it("invalidates cached settings when the connection revision changes", async () => {
+    let requestCount = 0;
+    server.use(
+      http.get("http://local-a.example/api/settings", () => {
+        requestCount += 1;
+        return HttpResponse.json(settingsResponse(`model-${requestCount}`));
+      }),
+    );
+    setRegisteredBackends([localBackendA]);
+    setActiveSelection({ backendId: localBackendA.id });
+
+    expect((await SettingsService.getSettings()).llm_model).toBe("model-1");
+
+    setRegisteredBackends([
+      { ...localBackendA, connectionRevision: 1, apiKey: "rotated-key" },
+    ]);
+    setActiveSelection({ backendId: localBackendA.id });
+
+    expect((await SettingsService.getSettings()).llm_model).toBe("model-2");
+    expect(requestCount).toBe(2);
+  });
+
+  it("expires redacted and encrypted settings independently", async () => {
+    const requests: Array<string | null> = [];
+    server.use(
+      http.get("http://local-a.example/api/settings", ({ request }) => {
+        const exposure = request.headers.get("X-Expose-Secrets");
+        requests.push(exposure);
+        return HttpResponse.json(
+          settingsResponse(
+            exposure === "encrypted" ? "encrypted-model" : "redacted-model",
+          ),
+        );
+      }),
+    );
+    setRegisteredBackends([localBackendA]);
+    setActiveSelection({ backendId: localBackendA.id });
+    const now = vi.spyOn(Date, "now");
+
+    now.mockReturnValue(1);
+    await SettingsService.getSettingsForConversation();
+
+    now.mockReturnValue(2);
+    await SettingsService.getSettings();
+
+    now.mockReturnValue(5 * 60 * 1000 + 2);
+    await SettingsService.getSettingsForConversation();
+
+    expect(requests).toEqual(["encrypted", null, "encrypted"]);
+    now.mockRestore();
+  });
+
+  it("pins retries to the backend that started the settings request", async () => {
+    const requestedBackends: string[] = [];
+    server.use(
+      http.get("http://local-a.example/api/settings", () => {
+        requestedBackends.push("a");
+        if (requestedBackends.length === 1) {
+          setActiveSelection({ backendId: localBackendB.id });
+          return new HttpResponse(null, { status: 503 });
+        }
+        return HttpResponse.json(settingsResponse("model-a"));
+      }),
+      http.get("http://local-b.example/api/settings", () => {
+        requestedBackends.push("b");
+        return HttpResponse.json(settingsResponse("model-b"));
+      }),
+    );
+    setRegisteredBackends([localBackendA, localBackendB]);
+    setActiveSelection({ backendId: localBackendA.id });
+
+    expect((await SettingsService.getSettings()).llm_model).toBe("model-a");
+    expect(requestedBackends).toEqual(["a", "a"]);
+
+    expect((await SettingsService.getSettings()).llm_model).toBe("model-b");
+    expect(requestedBackends).toEqual(["a", "a", "b"]);
   });
 
   it("skips API call when no diffs are provided to saveSettings", async () => {
