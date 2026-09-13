@@ -30,7 +30,7 @@ function isBashOutput(event: BashEvent): event is BashOutput {
  * conversation. In **local** mode we talk to the active backend's
  * agent-server directly with the SDK's `BashClient` (a per-conversation
  * URL is honoured when known, otherwise we fall back to the backend
- * host — a single local agent-server hosts all conversations). In
+ * host). The conversation ID scopes every SDK request to its owning runtime. In
  * **cloud** mode we tunnel through `callCloudProxy` with the runtime URL
  * as `hostOverride`: direct browser calls to `*.prod-runtime.all-hands.dev`
  * are blocked by CORS, and runtime endpoints authenticate with the
@@ -48,6 +48,7 @@ class BashService {
    * callers can concatenate `stdout` / `stderr` values directly.
    */
   static async listOutputs(
+    conversationId: string,
     conversationUrl: string | null,
     sessionApiKey: string | null | undefined,
     bashCommandId: string,
@@ -56,6 +57,7 @@ class BashService {
     let pageId: string | undefined;
     for (let i = 0; i < MAX_OUTPUT_PAGES; i += 1) {
       const page = await BashService.searchEvents(
+        conversationId,
         conversationUrl,
         sessionApiKey,
         {
@@ -75,6 +77,7 @@ class BashService {
   }
 
   private static async searchEvents(
+    conversationId: string,
     conversationUrl: string | null,
     sessionApiKey: string | null | undefined,
     options: SearchOptions,
@@ -105,12 +108,11 @@ class BashService {
       });
     }
 
-    // Local mode: the active backend's agent-server hosts the bash
-    // events. The optional `conversationUrl` is used when present (lets
-    // us target a per-conversation sub-host), otherwise we fall through
-    // to `backend.host` via `getAgentServerClientOptions`.
+    // The shared SDK selects the owning conversation runtime, including
+    // Docker mode. A runtime URL may additionally override the host.
     return new BashClient(
       getAgentServerClientOptions({
+        conversationId,
         ...(conversationUrl ? { conversationUrl } : {}),
         sessionApiKey,
       }),

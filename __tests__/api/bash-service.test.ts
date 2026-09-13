@@ -1,3 +1,4 @@
+import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
 import { BashClient } from "@openhands/typescript-client/clients";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -101,12 +102,16 @@ describe("BashService.listOutputs — local backend", () => {
       .mockResolvedValueOnce({ items: [OUTPUT_2] });
 
     const outputs = await BashService.listOutputs(
+      "conv-1",
       CONVERSATION_URL,
       SESSION_KEY,
       BASH_CMD_ID,
     );
 
     expect(BashClient).toHaveBeenCalled();
+    expect(getAgentServerClientOptions).toHaveBeenCalledWith(
+      expect.objectContaining({ conversationId: "conv-1" }),
+    );
     expect(searchEventsMock).toHaveBeenCalledTimes(2);
     expect(searchEventsMock.mock.calls[0][0]).toMatchObject({
       kind__eq: "BashOutput",
@@ -123,7 +128,12 @@ describe("BashService.listOutputs — local backend", () => {
   it("works without a conversation URL (falls back to backend host)", async () => {
     searchEventsMock.mockResolvedValueOnce({ items: [OUTPUT_1] });
 
-    const outputs = await BashService.listOutputs(null, null, BASH_CMD_ID);
+    const outputs = await BashService.listOutputs(
+      "conv-1",
+      null,
+      null,
+      BASH_CMD_ID,
+    );
 
     expect(BashClient).toHaveBeenCalled();
     expect(callCloudProxy).not.toHaveBeenCalled();
@@ -143,6 +153,7 @@ describe("BashService.listOutputs — cloud backend", () => {
     });
 
     const outputs = await BashService.listOutputs(
+      "conv-1",
       CONVERSATION_URL,
       SESSION_KEY,
       BASH_CMD_ID,
@@ -168,7 +179,7 @@ describe("BashService.listOutputs — cloud backend", () => {
 
   it("throws when no conversation URL is provided on cloud backends", async () => {
     await expect(
-      BashService.listOutputs(null, SESSION_KEY, BASH_CMD_ID),
+      BashService.listOutputs("conv-1", null, SESSION_KEY, BASH_CMD_ID),
     ).rejects.toThrow(/requires a conversation URL/);
     expect(callCloudProxy).not.toHaveBeenCalled();
   });
