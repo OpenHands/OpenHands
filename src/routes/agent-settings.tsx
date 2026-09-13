@@ -525,9 +525,6 @@ export function AgentSettingsScreen({
       : null,
   );
 
-  // Which ACP provider's credentials the secret picker has already selected, so
-  // the effect below fires on a provider change rather than on every render.
-  const lastSeededPresetRef = useRef<string | null>(null);
   const lastInitializedSettingsRef = useRef<unknown>(null);
   const loadedAcpServerRef = useRef<string | null>(null);
   const loadedCommandTextRef = useRef<string>("");
@@ -619,19 +616,7 @@ export function AgentSettingsScreen({
   useEffect(() => {
     setSecretsMode(initialSecretRefs.mode);
     setSelectedSecrets(initialSecretRefs.selected);
-    lastSeededPresetRef.current = null;
   }, [initialSecretRefs]);
-
-  // Switching an ACP profile to a different provider changes which credential
-  // it needs (ANTHROPIC_API_KEY -> OPENAI_API_KEY), which a stored list can't
-  // follow on its own. Select the new provider's credentials on the *change*
-  // only, so clearing one afterwards sticks.
-  useEffect(() => {
-    if (secretsMode !== "custom" || !acpPresetForCreds) return;
-    if (lastSeededPresetRef.current === acpPresetForCreds) return;
-    lastSeededPresetRef.current = acpPresetForCreds;
-    addProviderSecrets(acpPresetForCreds);
-  }, [secretsMode, acpPresetForCreds, addProviderSecrets]);
 
   // --- Embedded (Agent-profile editor) save control ---
   // Ref-backed so the exposed builder/credential fns read the freshest state at
@@ -933,7 +918,14 @@ export function AgentSettingsScreen({
               setCommandText(formatCommand(preferred.default_command));
               setAcpModel(getAcpPreferredDefaultModel(preferred.key) ?? "");
               setIsCustomAcpModel(false);
+              if (secretsMode === "custom") addProviderSecrets(preferred.key);
             }
+          } else if (
+            newType === "acp" &&
+            agentType !== "acp" &&
+            secretsMode === "custom"
+          ) {
+            addProviderSecrets(selectedPreset);
           } else if (newType === "openhands") {
             setIsCustomAcpModel(false);
           }
@@ -1162,6 +1154,9 @@ export function AgentSettingsScreen({
                 setCommandText(formatCommand(provider.default_command));
                 setAcpModel(getAcpPreferredDefaultModel(preset) ?? "");
                 setIsCustomAcpModel(false);
+                if (secretsMode === "custom" && preset !== selectedPreset) {
+                  addProviderSecrets(preset);
+                }
               } else if (preset === ACP_CUSTOM_PRESET_KEY) {
                 // Clear command + model: the previous provider's default
                 // command would otherwise make detectPreset(commandText)
@@ -1202,6 +1197,7 @@ export function AgentSettingsScreen({
                 if (nextPreset !== prevPreset) {
                   setAcpModel(getAcpPreferredDefaultModel(nextPreset) ?? "");
                   setIsCustomAcpModel(false);
+                  if (secretsMode === "custom") addProviderSecrets(nextPreset);
                 }
                 setCommandText(nextCommandText);
               }}
