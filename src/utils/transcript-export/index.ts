@@ -18,6 +18,7 @@ import {
   isSwitchLLMObservationEvent,
 } from "#/types/agent-server/type-guards";
 import { handleEventForUI } from "#/utils/handle-event-for-ui";
+import { markdownFence } from "#/utils/markdown-fence";
 import { shouldRenderEvent } from "#/components/conversation-events/chat/event-content-helpers/should-render-event";
 import { parseMessageFromEvent } from "#/components/conversation-events/chat/event-content-helpers/parse-message-from-event";
 import { getActionContent } from "#/components/conversation-events/chat/event-content-helpers/get-action-content";
@@ -502,15 +503,6 @@ const markdownTimestamp = (
     ? `<sub>${escapeHtml(formatTimestamp(entry.timestamp))}</sub>\n\n`
     : "";
 
-const markdownFence = (content: string): string => {
-  const longestRun = Math.max(
-    0,
-    ...Array.from(content.matchAll(/`+/g), (match) => match[0].length),
-  );
-  const fence = "`".repeat(Math.max(3, longestRun + 1));
-  return `${fence}text\n${content}\n${fence}`;
-};
-
 export const eventsToMarkdown = (
   events: OpenHandsEvent[],
   options: TranscriptExportOptions,
@@ -563,7 +555,7 @@ export const eventsToMarkdown = (
         "<details>",
         `<summary><strong>${escapeHtml(i18n.t(I18nKey.TRANSCRIPT_EXPORT$TOOL))}:</strong> ${escapeHtml(entry.summary)}</summary>`,
         "",
-        timestamp + markdownFence(entry.details),
+        timestamp + markdownFence(entry.details, "text"),
         "",
         "</details>",
         "",
