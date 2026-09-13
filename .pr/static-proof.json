@@ -1,0 +1,23 @@
+[
+  {
+    "variant": "before",
+    "old": "/assets/root-sEWn3ha1.css",
+    "fresh": "/assets/root-sEWn3ha1-replaced.css",
+    "result": {
+      "error": "TypeError: Failed to fetch",
+      "reloadError": "Error: page.reload: net::ERR_CONNECTION_REFUSED"
+    },
+    "assetSha256": "8797da2411ab50c89e42f5f4b3133bf5e95ad7407d10cd5d176ca3633f5a3409",
+    "url": "chrome-error://chromewebdata/"
+  },
+  {
+    "variant": "after",
+    "old": "/assets/root-sEWn3ha1.css",
+    "fresh": "/assets/root-sEWn3ha1-replaced.css",
+    "result": {
+      "status": 404
+    },
+    "assetSha256": "8797da2411ab50c89e42f5f4b3133bf5e95ad7407d10cd5d176ca3633f5a3409",
+    "url": "http://127.0.0.1:9107/automations"
+  }
+]
