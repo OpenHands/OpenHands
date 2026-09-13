@@ -1,0 +1,8 @@
+ffconcat version 1.0
+file 'screenshots/002-17237-before-provider-key-no-grant.png'
+duration 3
+file 'screenshots/008-17237-after-provider-key-selected.png'
+duration 3
+file 'screenshots/010-17237-after-grant-persists-on-reopen.png'
+duration 3
+file 'screenshots/010-17237-after-grant-persists-on-reopen.png'

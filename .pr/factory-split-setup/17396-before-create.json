@@ -1,0 +1,11 @@
+{
+  "agent_profile_id": null,
+  "body_keys": [
+    "name",
+    "trigger",
+    "tarball_path",
+    "entrypoint",
+    "timeout",
+    "template"
+  ]
+}

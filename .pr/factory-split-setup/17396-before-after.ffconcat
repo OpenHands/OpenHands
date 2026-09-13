@@ -1,0 +1,14 @@
+ffconcat version 1.0
+file 'screenshots/006-17396-before-null-profile-review.png'
+duration 3
+file 'screenshots/007-17396-before-saved-without-profile.png'
+duration 3
+file 'screenshots/011-17396-after-direct-form-no-mcp.png'
+duration 3
+file 'screenshots/012-17396-after-missing-profile-blocked.png'
+duration 3
+file 'screenshots/013-17396-after-explicit-profile.png'
+duration 3
+file 'screenshots/016-17396-after-persisted-on-reload.png'
+duration 3
+file 'screenshots/016-17396-after-persisted-on-reload.png'

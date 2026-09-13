@@ -1,0 +1,7 @@
+{
+  "options": [
+    "default",
+    "scope-after"
+  ],
+  "no_unselected_default": true
+}

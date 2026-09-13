@@ -1,0 +1,12 @@
+{
+  "agent_profile_id": "4984a4eb-7233-437c-9202-98bfad85e277",
+  "body_keys": [
+    "name",
+    "agent_profile_id",
+    "trigger",
+    "tarball_path",
+    "entrypoint",
+    "timeout",
+    "template"
+  ]
+}

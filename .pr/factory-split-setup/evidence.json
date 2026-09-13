@@ -1,0 +1,67 @@
+{
+  "before": {
+    "runtime": "local",
+    "canvas_url": "http://127.0.0.1:9109",
+    "started_at": 1789341310.0948768,
+    "available_kib": 8234788,
+    "commits": {
+      "sdk": "bd2c3789d8415106f962f0a0b8ca1157d70bca6b",
+      "automation": "87df8d818e0605d2b76ccf86864eb348f3fe22b8",
+      "canvas": "9874c820a23e4026483ad9540ec9cb56194ce3ec"
+    },
+    "case": "before",
+    "max_concurrent": 1,
+    "synthetic_automation_secrets_only": true,
+    "real_model_turn": false,
+    "worker_image": "openhands-factory:evidence-explicit-parity"
+  },
+  "after": {
+    "runtime": "local",
+    "canvas_url": "http://127.0.0.1:9109",
+    "started_at": 1789341479.4585104,
+    "available_kib": 8740244,
+    "commits": {
+      "sdk": "bd2c3789d8415106f962f0a0b8ca1157d70bca6b",
+      "automation": "87df8d818e0605d2b76ccf86864eb348f3fe22b8",
+      "canvas": "d5e91243247a9a4e20ce10bfbd9229953654d7b6"
+    },
+    "case": "after",
+    "max_concurrent": 1,
+    "synthetic_automation_secrets_only": true,
+    "real_model_turn": false,
+    "worker_image": "openhands-factory:evidence-explicit-parity"
+  },
+  "extensions_after": "b375c16fa142a13c30a5597f926646bccd19ab2c",
+  "canvas_fixes": {
+    "17237": "1ebbfbf53",
+    "17396": "e4203a9d8 (production identical to final81aece18e)"
+  },
+  "synthetic_only": true,
+  "model_calls": 0,
+  "application_repository_writes": 0,
+  "scopes": {
+    "17237": "fresh ACP credentials remain in explicit selected-secret scope",
+    "17396": "requires explicit agent profile for setup, persisted selection",
+    "extensions": "triage catalog opens setup without GitHub MCP; allfour manifests validated"
+  },
+  "limitations": [
+    "Configuration/persistence proof only; no new model or GitHub worker run.",
+    "Baseline used integrated9874, afteronlythetwoCanvasfixesplusupdatedextensioncatalog.",
+    "Before17396fixture added an inert synthetic GitHub MCP definition through SettingsClient to reach the form. Afterfreshsettings have zero MCP definitions.",
+    "Initial harness maxduration300 rejected3000s bundle preflight. Corrected fixturelimit3600 before measured save.",
+    "An early after navigation preceded SDK readiness and returned502; reloaded after readiness.",
+    "Telemetry consent modal appeared asynchronously; dismissed normally before proof.",
+    "Schedules set to Jan1 and deactivated immediately; no runs launched.",
+    "ACP preset detects existing hostlogin; no subprocess/authentication/modelcall performed. Provider credential entered is synthetic."
+  ],
+  "cleanup": {
+    "services_stopped": true,
+    "ports": [
+      9109,
+      19109,
+      19110
+    ],
+    "browser_page_closed": true,
+    "workers_launched": 0
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "url": "http://127.0.0.1:9109/api/agent-profiles/scope-before",
+  "secret_refs": [],
+  "keys": [
+    "agent_kind",
+    "mcp_server_refs",
+    "secret_refs",
+    "acp_server",
+    "acp_model",
+    "acp_command",
+    "acp_args"
+  ]
+}

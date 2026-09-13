@@ -1,0 +1,16 @@
+{
+  "secret_refs": [
+    "CLAUDE_CODE_OAUTH_TOKEN",
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_BASE_URL"
+  ],
+  "keys": [
+    "agent_kind",
+    "mcp_server_refs",
+    "secret_refs",
+    "acp_server",
+    "acp_model",
+    "acp_command",
+    "acp_args"
+  ]
+}

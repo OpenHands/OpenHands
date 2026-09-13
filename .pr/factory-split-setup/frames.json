@@ -1,0 +1,62 @@
+[
+  {
+    "file": "002-17237-before-provider-key-no-grant.png",
+    "label": "17237-before-provider-key-no-grant",
+    "url": "http://127.0.0.1:9109/settings/agents",
+    "at": "2026-09-13T23:10:30.169Z"
+  },
+  {
+    "file": "006-17396-before-null-profile-review.png",
+    "label": "17396-before-null-profile-review",
+    "url": "http://127.0.0.1:9109/automations/new/github-issue-triage",
+    "at": "2026-09-13T23:15:31.359Z"
+  },
+  {
+    "file": "007-17396-before-saved-without-profile.png",
+    "label": "17396-before-saved-without-profile",
+    "url": "http://127.0.0.1:9109/automations/2072beef-ddce-4ffa-84e1-0aabe7a996bc",
+    "at": "2026-09-13T23:15:32.822Z"
+  },
+  {
+    "file": "008-17237-after-provider-key-selected.png",
+    "label": "17237-after-provider-key-selected",
+    "url": "http://127.0.0.1:9109/settings/agents",
+    "at": "2026-09-13T23:19:23.686Z"
+  },
+  {
+    "file": "010-17237-after-grant-persists-on-reopen.png",
+    "label": "17237-after-grant-persists-on-reopen",
+    "url": "http://127.0.0.1:9109/settings/agents",
+    "at": "2026-09-13T23:19:49.563Z"
+  },
+  {
+    "file": "011-17396-after-direct-form-no-mcp.png",
+    "label": "17396-after-direct-form-no-mcp",
+    "url": "http://127.0.0.1:9109/automations/new/github-issue-triage",
+    "at": "2026-09-13T23:20:40.201Z"
+  },
+  {
+    "file": "012-17396-after-missing-profile-blocked.png",
+    "label": "17396-after-missing-profile-blocked",
+    "url": "http://127.0.0.1:9109/automations/new/github-issue-triage",
+    "at": "2026-09-13T23:20:41.208Z"
+  },
+  {
+    "file": "013-17396-after-explicit-profile.png",
+    "label": "17396-after-explicit-profile",
+    "url": "http://127.0.0.1:9109/automations/new/github-issue-triage",
+    "at": "2026-09-13T23:20:42.338Z"
+  },
+  {
+    "file": "016-17396-after-persisted-on-reload.png",
+    "label": "17396-after-persisted-on-reload",
+    "url": "http://127.0.0.1:9109/automations/f142a4f6-38e4-4606-9517-b65227b459a4",
+    "at": "2026-09-13T23:21:03.481Z"
+  },
+  {
+    "file": "017-17396-after-edit-retains-profile.png",
+    "label": "17396-after-edit-retains-profile",
+    "url": "http://127.0.0.1:9109/automations/f142a4f6-38e4-4606-9517-b65227b459a4",
+    "at": "2026-09-13T23:22:33.388Z"
+  }
+]
