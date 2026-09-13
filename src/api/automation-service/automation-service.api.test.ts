@@ -185,6 +185,16 @@ describe("AutomationService.syncTelemetryConsent", () => {
     );
   });
 
+  it("keeps a pending local revocation when consent sync fails", async () => {
+    localAxios.post.mockRejectedValueOnce(new Error("automation unavailable"));
+
+    await expect(
+      AutomationService.syncTelemetryConsent("denied"),
+    ).rejects.toThrow("automation unavailable");
+
+    expect(clearPendingLocalTelemetryRevocation).not.toHaveBeenCalled();
+  });
+
   it("skips cloud backends because cloud consent is handled by auth", async () => {
     setRegisteredBackends([cloudBackend]);
     setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
