@@ -17,6 +17,7 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useSaveLlmProfile } from "#/hooks/mutation/use-save-llm-profile";
 import { useActivateLlmProfile } from "#/hooks/mutation/use-activate-llm-profile";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
+import { useProviderConnections } from "#/hooks/query/use-provider-connections";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useAgentSettingsSchema } from "#/hooks/query/use-agent-settings-schema";
 import {
@@ -94,12 +95,18 @@ export function shouldReapplyProfileAfterSave({
  * See PR review feedback for details.
  */
 
+function qualifyModel(model: unknown, provider?: string): unknown {
+  if (typeof model !== "string" || !model || model.includes("/")) return model;
+  return provider ? `${provider}/${model}` : model;
+}
+
 export function LlmSettingsLocalView() {
   const { t } = useTranslation("openhands");
   const { setHideSectionHeader } = useSettingsSectionHeader();
   const saveProfile = useSaveLlmProfile();
   const activateProfile = useActivateLlmProfile();
   const { data: profilesData } = useLlmProfiles();
+  const { data: providerConnections } = useProviderConnections();
   const { data: settings } = useSettings();
   const { data: agentSchema } = useAgentSettingsSchema(
     settings?.agent_settings_schema,
@@ -310,6 +317,13 @@ export function LlmSettingsLocalView() {
     const connectionId = supportsConnections
       ? String(saveControl.values[LLM_PROVIDER_CONNECTION_KEY] ?? "").trim()
       : "";
+    const connectionProvider = providerConnections?.find(
+      (connection) => connection.id === connectionId,
+    )?.provider;
+    llmConfig.model = qualifyModel(
+      llmConfig.model,
+      connectionProvider ?? (connectionId ? undefined : "openai"),
+    );
 
     if (authType === LLM_AUTH_TYPE_SUBSCRIPTION) {
       llmConfig.auth_type = LLM_AUTH_TYPE_SUBSCRIPTION;
@@ -442,6 +456,7 @@ export function LlmSettingsLocalView() {
     saveControl,
     isNameValid,
     supportsConnections,
+    providerConnections,
     profileName,
     viewMode,
     editingProfile,
