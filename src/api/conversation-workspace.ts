@@ -12,6 +12,8 @@ import {
 } from "./agent-server-config";
 import { resolveAbsoluteAgentServerPath } from "./agent-server-home";
 
+const ISOLATED_WORKSPACE_DIR = "/workspace";
+
 export const ISOLATED_WORKSPACE_MESSAGE =
   "This backend runs conversations in isolated Docker workspaces at /workspace. Host folders and projects cannot be attached. Clear the host project selection to start in a new isolated workspace.";
 
@@ -46,12 +48,19 @@ export async function resolveNewConversationWorkspace(options: {
     if (
       options.selectedRepository ||
       (options.workingDir !== undefined &&
-        !(options.parentConversationId && options.workingDir === "/workspace"))
+        !(
+          options.parentConversationId &&
+          options.workingDir === ISOLATED_WORKSPACE_DIR
+        ))
     ) {
       throw new Error(ISOLATED_WORKSPACE_MESSAGE);
     }
     assertConversationRuntimeClientSupport();
-    return { workingDir: "/workspace", hooksProjectDir: null, isolated: true };
+    return {
+      workingDir: ISOLATED_WORKSPACE_DIR,
+      hooksProjectDir: null,
+      isolated: true,
+    };
   }
   // @spec WUP-001 — Resolve relative local defaults against the backend home.
   const base =
