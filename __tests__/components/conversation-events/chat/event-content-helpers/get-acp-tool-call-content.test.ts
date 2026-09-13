@@ -285,6 +285,24 @@ describe("getACPToolCallContent — ACP content blocks", () => {
     expect(content).toMatch(/```\nx{1000}\.\.\.\n```$/);
   });
 
+  it("keeps a diff path containing backticks inside its inline code span", () => {
+    const content = getACPToolCallContent(
+      makeEvent({
+        tool_kind: "edit",
+        content: [
+          {
+            type: "diff",
+            path: "/workspace/we`ird [x](y).py",
+            old_text: null,
+            new_text: "a",
+          },
+        ],
+      }),
+    );
+
+    expect(content).toBe("``/workspace/we`ird [x](y).py``\n```diff\n+ a\n```");
+  });
+
   it("keeps the raw_output error next to the diff of a failed edit", () => {
     const content = getACPToolCallContent(
       makeEvent({

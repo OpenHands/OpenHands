@@ -2,7 +2,7 @@ import { ACPToolCallEvent } from "#/types/agent-server/core/events/acp-tool-call
 import i18n from "#/i18n";
 import { MAX_CONTENT_LENGTH } from "./shared";
 import { I18nKey } from "#/i18n/declaration";
-import { markdownFence } from "#/utils/markdown-fence";
+import { markdownFence, markdownInlineCode } from "#/utils/markdown-fence";
 
 /**
  * Pick the translation key used for the ACP tool call title row. Mirrors
@@ -162,7 +162,7 @@ const formatDiffBlock = (
     ...diffLines(block.oldText, "- "),
     ...diffLines(block.newText, "+ "),
   ].join("\n");
-  return `\`${block.path}\`\n${markdownFence(truncate(body), "diff")}`;
+  return `${markdownInlineCode(block.path)}\n${markdownFence(truncate(body), "diff")}`;
 };
 
 /**
