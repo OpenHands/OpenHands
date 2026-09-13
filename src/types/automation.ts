@@ -34,7 +34,9 @@ export interface Automation {
    */
   user_id?: string;
   repository?: string;
-  /** LLM/model profile name used for automation runs. */
+  /** Saved agent profile controlling model, tools, and selected secrets. */
+  agent_profile_id?: string | null;
+  /** LLM/model profile name used when no agent profile is selected. */
   model?: string | null;
   /**
    * Maximum run time in seconds. `null`/omitted uses the server default
@@ -118,6 +120,8 @@ export interface AutomationRunStatusDetail {
 }
 
 export interface AutomationRun {
+  /** Profile selected when this run was queued. */
+  agent_profile_id?: string | null;
   id: string;
   status: AutomationRunStatus;
   conversation_id: string | null;

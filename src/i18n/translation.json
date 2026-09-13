@@ -41954,5 +41954,11 @@
     "ca": "Actualitza Canvas per accedir a les converses aïllades.",
     "tr": "Yalıtılmış konuşmalara erişmek için Canvas’ı yükseltin.",
     "uk": "Оновіть Canvas для доступу до ізольованих розмов."
+  },
+  "AUTOMATIONS$DEFAULT_AGENT_PROFILE": {
+    "en": "Deployment default"
+  },
+  "AUTOMATIONS$UNAVAILABLE_AGENT_PROFILE": {
+    "en": "Unavailable profile ({{id}})"
   }
 }
