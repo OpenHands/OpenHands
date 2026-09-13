@@ -6,6 +6,7 @@ import toast from "react-hot-toast";
 
 import { HomeChatLauncher } from "#/components/features/home/home-chat-launcher";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import AutomationService from "#/api/automation-service/automation-service.api";
 import WorkspacesService from "#/api/workspaces-service/workspaces-service.api";
 import {
   LAST_LOCAL_WORKSPACE_MODE_STORAGE_KEY,
@@ -329,6 +330,19 @@ describe("HomeChatLauncher", () => {
     vi.spyOn(WorkspacesService, "listWorkspaces").mockResolvedValue({
       workspaces: [],
       workspaceParents: [],
+    });
+    // The launcher mounts the pinned/running automation dashboards, whose
+    // queries would otherwise fire real axios XHRs into MSW. If such a
+    // request is still in flight when the file's jsdom environment is torn
+    // down, MSW's XHR interceptor throws `ReferenceError:
+    // XMLHttpRequestUpload is not defined` as an unhandled rejection.
+    // Mocking the underlying service keeps all automation traffic in-process.
+    vi.spyOn(AutomationService, "checkHealth").mockResolvedValue({
+      status: "ok",
+    });
+    vi.spyOn(AutomationService, "getAutomations").mockResolvedValue({
+      automations: [],
+      total: 0,
     });
   });
 
