@@ -38,3 +38,7 @@ After rebuilding and restarting the production static server, real Chromium open
 This deployment does not expose an editor, so Canvas correctly omits the VS Code control; an actual editor launch is not claimed. The terminal is an agent-output viewer and the probe had no agent terminal events; command execution was verified through the Git probe instead.
 
 Additional regression verification: 18 SDK command-hook, local Git-info, and scoped API tests passed. Type checking, targeted lint, and production build passed again.
+
+The Git HEAD probe now explicitly passes the selected conversation ID even when
+runtime URL metadata is incomplete. Its two hook regression tests pass, including
+the assertion that the command receives that conversation ID.

@@ -111,6 +111,7 @@ describe("useHasGitCommits", () => {
       "git rev-parse --verify HEAD",
       "/workspace/project",
       10,
+      conversation.id,
     );
     expect(result.current.hasCommits).toBe(true);
   });

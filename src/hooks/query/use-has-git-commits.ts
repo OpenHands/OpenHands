@@ -69,6 +69,7 @@ export function useHasGitCommits(options?: { enabled?: boolean }): {
         "git rev-parse --verify HEAD",
         workingDir,
         10,
+        conversationId,
       );
       return result.exit_code === 0;
     },
