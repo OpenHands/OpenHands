@@ -133,7 +133,7 @@ export function useBashCommandLogs(options: UseBashCommandLogsOptions) {
   // Resolve a single "sandbox issue" only for cloud backends. Local
   // backends do not carry the Cloud sandbox_status model.
   let preflightIssue: SandboxIssue | null = null;
-  let conversationMissing = false;
+  let conversationMissing = !conversationId;
   if (isCloud && conversationFetched) {
     if (!conversation) {
       conversationMissing = true;
@@ -198,7 +198,7 @@ export function useBashCommandLogs(options: UseBashCommandLogsOptions) {
     isPending: query.isPending,
     /** True while we're still resolving the conversation runtime URL. */
     isResolvingConversation: isCloud && conversationQuery.isPending,
-    /** Cloud-only: conversation lookup failed (deleted or no access). */
+    /** No owner ID, or the Cloud conversation is deleted or inaccessible. */
     conversationMissing,
     /**
      * Reason the bash query couldn't / didn't usefully complete. Always

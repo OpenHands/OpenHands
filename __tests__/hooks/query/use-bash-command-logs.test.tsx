@@ -391,11 +391,12 @@ describe("useBashCommandLogs — local backend", () => {
 
   it("does not issue an unscoped request without a conversation", () => {
     setConversation(null);
-    renderHook(
+    const { result } = renderHook(
       () =>
         useBashCommandLogs({ conversationId: null, bashCommandId: "cmd-1" }),
       { wrapper },
     );
     expect(listOutputsMock).not.toHaveBeenCalled();
+    expect(result.current.conversationMissing).toBe(true);
   });
 });
