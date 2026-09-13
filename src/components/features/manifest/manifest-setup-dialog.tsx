@@ -319,6 +319,9 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     }, PREFLIGHT_DEBOUNCE_MS);
   };
 
+  const requiresAgentProfile =
+    entry.requires.features?.includes("agentProfiles") ?? false;
+
   const handleContinue = async () => {
     if (currentStep === "prerequisites") {
       setStep("form");
@@ -332,6 +335,9 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
       selectedTrigger,
       selectedAction,
     );
+    if (requiresAgentProfile && !values.agent_profile_id) {
+      failures.agent_profile_id = { code: "required" };
+    }
     if (Object.keys(failures).length > 0) {
       setLocalErrors(failures);
       return;
@@ -536,6 +542,8 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
                 "agentProfiles",
               ) && (
                 <AutomationAgentProfileSelector
+                  required={requiresAgentProfile}
+                  error={resolveFieldError("agent_profile_id")}
                   value={
                     typeof values.agent_profile_id === "string"
                       ? values.agent_profile_id

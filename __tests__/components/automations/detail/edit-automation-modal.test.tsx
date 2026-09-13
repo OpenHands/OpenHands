@@ -694,3 +694,21 @@ describe("EditAutomationModal", () => {
     expect(body).not.toHaveProperty("timeout");
   });
 });
+
+it("does not clear a catalog automation's required agent profile", async () => {
+  vi.mocked(AutomationService.getCapabilities).mockResolvedValue({
+    ready: true,
+    features: ["agentProfiles"],
+  });
+  const user = userEvent.setup();
+  renderModal({
+    ...dailyAutomation,
+    agent_profile_id: null,
+    preset_metadata: {
+      template: { id: "github-issue-triage", version: "1.0.0", config: {} },
+    },
+  });
+  await user.click(screen.getByTestId("edit-automation-save"));
+  expect(AutomationService.updateAutomation).not.toHaveBeenCalled();
+  expect(screen.getByRole("alert")).toHaveTextContent("SETUP$VALIDATION_REQUIRED");
+});

@@ -150,7 +150,7 @@ function readImpactCopy(
  * Null for automations without provenance: imports, agent-built ones, and
  * entries whose setup publishes no version.
  */
-function getAutomationTemplateEntry(
+export function getAutomationTemplateEntry(
   automation: Automation,
 ): RecommendedAutomation | null {
   const metadata = automation.preset_metadata;

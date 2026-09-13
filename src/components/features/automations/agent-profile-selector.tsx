@@ -5,11 +5,18 @@ import { SettingsDropdownInput } from "#/components/features/settings/settings-d
 
 interface Props {
   value: string | null;
+  required?: boolean;
+  error?: string;
   onChange?: (value: string | null) => void;
 }
 
 /** One selector for automation setup and editing, backed by the profile library. */
-export function AutomationAgentProfileSelector({ value, onChange }: Props) {
+export function AutomationAgentProfileSelector({
+  value,
+  onChange,
+  required = false,
+  error,
+}: Props) {
   const { t } = useTranslation("openhands");
   const { data, isLoading, isError } = useAgentProfiles();
   const profiles = data?.profiles ?? [];
@@ -26,24 +33,33 @@ export function AutomationAgentProfileSelector({ value, onChange }: Props) {
     return <span>{label}</span>;
   }
   const items = [
-    { key: "__default__", label: defaultLabel },
+    ...(!required ? [{ key: "__default__", label: defaultLabel }] : []),
     ...profiles.flatMap((profile) =>
       profile.id ? [{ key: profile.id, label: profile.name }] : [],
     ),
     ...(value && !selected ? [{ key: value, label }] : []),
   ];
   return (
-    <SettingsDropdownInput
-      testId="automation-agent-profile"
-      name="agent_profile_id"
-      label={t(I18nKey.CHAT$AGENT_PROFILE_PLACEHOLDER)}
-      items={items}
-      selectedKey={value ?? "__default__"}
-      isLoading={isLoading}
-      isDisabled={isError}
-      onSelectionChange={(key) =>
-        onChange(key && key !== "__default__" ? String(key) : null)
-      }
-    />
+    <div>
+      <SettingsDropdownInput
+        testId="automation-agent-profile"
+        name="agent_profile_id"
+        label={t(I18nKey.CHAT$AGENT_PROFILE_PLACEHOLDER)}
+        items={items}
+        selectedKey={value ?? (required ? "" : "__default__")}
+        required={required}
+        isClearable={!required}
+        isLoading={isLoading}
+        isDisabled={isError}
+        onSelectionChange={(key) =>
+          onChange(key && key !== "__default__" ? String(key) : null)
+        }
+      />
+      {error && (
+        <p role="alert" className="text-sm text-danger">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }

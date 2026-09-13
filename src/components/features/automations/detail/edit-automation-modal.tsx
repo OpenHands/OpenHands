@@ -34,6 +34,7 @@ import {
   getInterfaceCopy,
 } from "#/manifests/automation-interface";
 import { cn } from "#/utils/utils";
+import { getAutomationTemplateEntry } from "#/utils/automation-catalog";
 import {
   formControlMultilineFieldClassName,
   formControlSettingsFieldClassName,
@@ -155,6 +156,14 @@ export function EditAutomationModal({
     ...profiles.map((p) => ({ key: p.name, label: p.name })),
   ];
 
+  const requiresAgentProfile =
+    getAutomationTemplateEntry(automation)?.requires.features?.includes(
+      "agentProfiles",
+    ) ?? false;
+  const [agentProfileError, setAgentProfileError] = useState<string | null>(
+    null,
+  );
+
   const initial = useMemo(() => buildInitialState(automation), [automation]);
   const [form, setForm] = useState<FormState>(initial);
   const [nameError, setNameError] = useState<string | null>(null);
@@ -165,6 +174,7 @@ export function EditAutomationModal({
     if (isOpen) {
       setForm(initial);
       setNameError(null);
+      setAgentProfileError(null);
       setTimeoutError(null);
       setScheduleError(null);
     }
@@ -202,6 +212,11 @@ export function EditAutomationModal({
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+
+    if (requiresAgentProfile && !form.agentProfileId) {
+      setAgentProfileError(t(I18nKey.SETUP$VALIDATION_REQUIRED));
+      return;
+    }
 
     const trimmedName = form.name.trim();
     if (!trimmedName) {
@@ -361,10 +376,13 @@ export function EditAutomationModal({
 
           {capabilities?.features.includes("agentProfiles") && (
             <AutomationAgentProfileSelector
+              required={requiresAgentProfile}
+              error={agentProfileError ?? undefined}
               value={form.agentProfileId}
-              onChange={(agentProfileId) =>
-                setForm((current) => ({ ...current, agentProfileId }))
-              }
+              onChange={(agentProfileId) => {
+                setAgentProfileError(null);
+                setForm((current) => ({ ...current, agentProfileId }));
+              }}
             />
           )}
           {!form.agentProfileId &&

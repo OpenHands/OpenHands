@@ -63,3 +63,17 @@ describe("automation agent profile selection", () => {
     ).toBeInTheDocument();
   });
 });
+
+it("does not offer the deployment default when a profile is required", () => {
+  render(
+    <AutomationAgentProfileSelector
+      required
+      value="review-profile"
+      onChange={vi.fn()}
+    />,
+  );
+  expect(
+    screen.queryByRole("option", { name: "SETTINGS$PROFILE_DEFAULT" }),
+  ).toBeNull();
+  expect(screen.getByRole("combobox")).toHaveValue("review-profile");
+});
