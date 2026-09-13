@@ -1,0 +1,19 @@
+{
+  "source": "5de861ff850521d3d6252bfdae53617099ee935f",
+  "production": "05c03f0a620503b55ad7bd6a1f7d59e3c9feeeb6",
+  "unsaved_secret": "CLAUDE_CODE_OAUTH_TOKEN",
+  "off": {
+    "visible": 1,
+    "checked": false
+  },
+  "on": {
+    "visible": 1,
+    "checked": true
+  },
+  "posted_secret_refs": [
+    "CLAUDE_CODE_OAUTH_TOKEN"
+  ],
+  "persisted_secret_refs": [
+    "CLAUDE_CODE_OAUTH_TOKEN"
+  ]
+}

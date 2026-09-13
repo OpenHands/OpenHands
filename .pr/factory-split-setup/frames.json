@@ -58,5 +58,35 @@
     "label": "17396-after-edit-retains-profile",
     "url": "http://127.0.0.1:9109/automations/f142a4f6-38e4-4606-9517-b65227b459a4",
     "at": "2026-09-13T23:22:33.388Z"
+  },
+  {
+    "file": "018-17237-toggle-before-selected.png",
+    "label": "17237-toggle-before-selected",
+    "url": "http://127.0.0.1:9109/settings/agents",
+    "at": "2026-09-13T23:40:55.206Z"
+  },
+  {
+    "file": "019-17237-toggle-before-disappeared.png",
+    "label": "17237-toggle-before-disappeared",
+    "url": "http://127.0.0.1:9109/settings/agents",
+    "at": "2026-09-13T23:40:56.051Z"
+  },
+  {
+    "file": "020-17237-toggle-after-stays-available.png",
+    "label": "17237-toggle-after-stays-available",
+    "url": "http://127.0.0.1:9109/settings/agents",
+    "at": "2026-09-13T23:43:13.858Z"
+  },
+  {
+    "file": "021-17237-toggle-after-reselected.png",
+    "label": "17237-toggle-after-reselected",
+    "url": "http://127.0.0.1:9109/settings/agents",
+    "at": "2026-09-13T23:43:14.523Z"
+  },
+  {
+    "file": "022-17237-toggle-after-single-grant-persisted.png",
+    "label": "17237-toggle-after-single-grant-persisted",
+    "url": "http://127.0.0.1:9109/settings/agents",
+    "at": "2026-09-13T23:43:16.179Z"
   }
 ]

@@ -10,6 +10,14 @@ Before, creating an ACP profile in **Choose secrets** mode and entering a previo
 
 The outgoing requests and subsequent SDK profile reads are recorded in `17237-before-create.json`, `17237-before-persisted.json`, `17237-after-create.json`, and `17237-after-persisted.json`. The profile was reopened in the UI to verify persistence.
 
+## Credential deselection — Canvas #17237 follow-up
+
+The first fix still removed a previously unsaved credential from the choices when unchecked. This follow-up derives available credentials from the existing ACP credential form independently of the selected grants. Before (`f8b9407c3`), the OAuth row disappears. After (`5de861ff8`, containing PR head `05c03f0a6`), it remains available, can be reselected, and its grant survives saving and reopening the profile.
+
+![Credential deselection before/after](17237-toggle-before-after.gif)
+
+The synthetic OAuth credential had not previously been saved. Only `CLAUDE_CODE_OAUTH_TOKEN` was selected for this profile; both the outgoing request and SDK read contain exactly that one grant. `17237-toggle-before.json` and `17237-toggle-after.json` record the observations. The backend revisions and private settings stayed fixed for this comparison; no model or automation ran.
+
 ## Required automation profile — Canvas #17396
 
 Before, triage could reach confirmation and be saved without `agent_profile_id`. After, Continue reports **This field is required** and makes no preflight request until a profile is selected. Selecting `scope-after` allows the save; reloading the detail page retains that profile. The automation is inactive and has never run.

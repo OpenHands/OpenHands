@@ -34,7 +34,7 @@
   "extensions_after": "b375c16fa142a13c30a5597f926646bccd19ab2c",
   "canvas_fixes": {
     "17237": "1ebbfbf53",
-    "17396": "e4203a9d8 (production identical to final81aece18e)"
+    "17396": "e4203a9d8 (production identical to final 491960676)"
   },
   "synthetic_only": true,
   "model_calls": 0,
@@ -63,5 +63,17 @@
     ],
     "browser_page_closed": true,
     "workers_launched": 0
+  },
+  "toggle_followup": {
+    "before_canvas": "f8b9407c37f108716eaac16dc810ad0b1f95c4b1",
+    "after_canvas": "5de861ff850521d3d6252bfdae53617099ee935f",
+    "production_change": "05c03f0a620503b55ad7bd6a1f7d59e3c9feeeb6",
+    "backend_unchanged": true,
+    "settings": "same private after settings; fresh unsaved OAuth credential chosen because the initial synthetic API key was already saved",
+    "before": "unchecking a previously unsaved provider credential removes its row",
+    "after": "row remains available after unchecking, can be reselected, and only the selected OAuth grant is posted and persisted",
+    "model_calls": 0,
+    "application_repository_writes": 0,
+    "services_stopped": true
   }
 }

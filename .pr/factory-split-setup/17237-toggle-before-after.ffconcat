@@ -1,0 +1,12 @@
+ffconcat version 1.0
+file 'screenshots/018-17237-toggle-before-selected.png'
+duration 3
+file 'screenshots/019-17237-toggle-before-disappeared.png'
+duration 3
+file 'screenshots/020-17237-toggle-after-stays-available.png'
+duration 3
+file 'screenshots/021-17237-toggle-after-reselected.png'
+duration 3
+file 'screenshots/022-17237-toggle-after-single-grant-persisted.png'
+duration 3
+file 'screenshots/022-17237-toggle-after-single-grant-persisted.png'
