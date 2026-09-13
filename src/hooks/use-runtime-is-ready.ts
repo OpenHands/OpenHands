@@ -21,7 +21,8 @@ export const useRuntimeIsReady = ({
 
   return (
     (isExecutionActive(conversation?.execution_status) ||
-      (allowAgentError && isExecutionErrored(conversation?.execution_status))) &&
+      (allowAgentError &&
+        isExecutionErrored(conversation?.execution_status))) &&
     !inactiveStates.includes(curAgentState)
   );
 };

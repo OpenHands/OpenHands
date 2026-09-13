@@ -79,7 +79,10 @@ describe("useRuntimeIsReady", () => {
   it("keeps a paused runtime unavailable even for diagnostics", () => {
     vi.mocked(useActiveConversation).mockReturnValue(
       asMockReturnValue<ReturnType<typeof useActiveConversation>>({
-        data: { ...makeConversation(), execution_status: ExecutionStatus.PAUSED },
+        data: {
+          ...makeConversation(),
+          execution_status: ExecutionStatus.PAUSED,
+        },
       }),
     );
     vi.mocked(useAgentState).mockReturnValue({
