@@ -1566,6 +1566,18 @@ describe("AgentSettingsScreen — MCP scope dirty tracking", () => {
           screen.getByTestId("agent-settings-secret-PROD_DB_URL"),
         ).not.toBeChecked();
 
+        await user.click(
+          screen.getByTestId("agent-settings-secret-ANTHROPIC_API_KEY"),
+        );
+        expect(
+          screen.getByTestId("agent-settings-secret-ANTHROPIC_API_KEY"),
+        ).not.toBeChecked();
+        expect(control!.buildAgentProfileFields()).toMatchObject({
+          secret_refs: expect.not.arrayContaining(["ANTHROPIC_API_KEY"]),
+        });
+        await user.click(
+          screen.getByTestId("agent-settings-secret-ANTHROPIC_API_KEY"),
+        );
         const refs = (
           control!.buildAgentProfileFields() as { secret_refs?: string[] }
         ).secret_refs;

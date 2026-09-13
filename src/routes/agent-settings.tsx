@@ -454,28 +454,6 @@ export function AgentSettingsScreen({
   const [selectedSecrets, setSelectedSecrets] = useState<string[]>(
     initialSecretRefs.selected,
   );
-  // Keep stored references and newly selected provider credentials visible.
-  // Provider credentials are saved after this form builds the profile payload.
-  const secretCatalog = React.useMemo(() => {
-    const saved = (savedSecrets ?? []).map((secret) => ({
-      name: secret.name,
-      description: secret.description ?? null,
-    }));
-    const known = new Set(saved.map((secret) => secret.name));
-    return [
-      ...saved,
-      ...[...new Set([...initialSecretRefs.selected, ...selectedSecrets])]
-        .filter((name) => !known.has(name))
-        .map((name) => ({ name, description: null as string | null })),
-    ];
-  }, [savedSecrets, initialSecretRefs, selectedSecrets]);
-  const orderedSelectedSecrets = React.useMemo(
-    () =>
-      secretCatalog
-        .map(({ name }) => name)
-        .filter((name) => selectedSecrets.includes(name)),
-    [secretCatalog, selectedSecrets],
-  );
   // Scoping is strict server-side — nothing is added back — so an ACP profile
   // that omits its provider credential simply fails to authenticate. Keep the
   // names selected by default rather than re-adding them behind the user's
@@ -522,6 +500,34 @@ export function AgentSettingsScreen({
     acpPresetForCreds && acpPresetForCreds !== ACP_CUSTOM_PRESET_KEY
       ? acpPresetForCreds
       : null,
+  );
+
+  // Available provider credentials must remain visible when deselected, even
+  // before their values are saved. Stored references also survive deletion.
+  const secretCatalog = React.useMemo(() => {
+    const saved = (savedSecrets ?? []).map((secret) => ({
+      name: secret.name,
+      description: secret.description ?? null,
+    }));
+    const known = new Set(saved.map((secret) => secret.name));
+    return [
+      ...saved,
+      ...[
+        ...new Set([
+          ...initialSecretRefs.selected,
+          ...acpCredentialForm.fields.map(({ name }) => name),
+        ]),
+      ]
+        .filter((name) => !known.has(name))
+        .map((name) => ({ name, description: null as string | null })),
+    ];
+  }, [savedSecrets, initialSecretRefs, acpCredentialForm.fields]);
+  const orderedSelectedSecrets = React.useMemo(
+    () =>
+      secretCatalog
+        .map(({ name }) => name)
+        .filter((name) => selectedSecrets.includes(name)),
+    [secretCatalog, selectedSecrets],
   );
 
   const lastInitializedSettingsRef = useRef<unknown>(null);
