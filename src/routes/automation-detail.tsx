@@ -15,6 +15,7 @@ import {
   useDispatchAutomation,
 } from "#/hooks/query/use-automations";
 import { useAutomationHealth } from "#/hooks/query/use-automation-health";
+import { useCloudOrgMember } from "#/hooks/query/use-cloud-org-member";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useNavigation } from "#/context/navigation-context";
 import {
@@ -121,6 +122,9 @@ export default function AutomationDetail() {
   // owner check is a no-op while the automation hasn't loaded yet.
   const { canManage: hasManagePermission } = useAutomationPermissions();
   const isOwner = useIsAutomationOwner(automation ?? nullAutomation);
+  // Creator lookup for "Automation Runs As"; disabled until the automation
+  // (and its user_id) has loaded, and on non-cloud backends.
+  const creatorQuery = useCloudOrgMember(automation?.user_id);
 
   const is404 = isError && getErrorStatus(error) === 404;
 
@@ -217,11 +221,20 @@ export default function AutomationDetail() {
     trackAutomationExported({ backendKind: active.backend.kind });
   };
 
-  // Edit is a local-backend-only feature in MVP — cloud automations
-  // are managed elsewhere and we don't yet surface them here.
-  const canEdit = active.backend.kind === "local";
   // Write actions on a specific automation: manage OR creator (escape hatch).
   const canManage = hasManagePermission || isOwner;
+  // Automations run as their creator (the service mints run credentials for
+  // `automation.user_id`). Cloud only: show the creator's email once resolved,
+  // fall back to the raw user id when the lookup fails (creator left the org,
+  // or an app-server without GET /members/{user_id}), nothing while loading.
+  let runsAs: string | null = null;
+  if (active.backend.kind === "cloud" && automation.user_id) {
+    runsAs =
+      creatorQuery.data?.email ??
+      (creatorQuery.isError ? automation.user_id : null);
+  }
+  // Non-creators may turn an automation off but not back on.
+  const canToggle = automation.enabled ? canManage : isOwner;
 
   return (
     <div className="min-h-full">
@@ -231,7 +244,7 @@ export default function AutomationDetail() {
           <DetailHeader
             automation={automation}
             onToggle={handleToggle}
-            onEdit={canEdit ? () => setShowEditModal(true) : undefined}
+            onEdit={() => setShowEditModal(true)}
             onDelete={() => setShowDeleteModal(true)}
             onExport={handleExport}
             onDownloadTarball={() =>
@@ -240,9 +253,10 @@ export default function AutomationDetail() {
             onRunNow={handleRunNow}
             isRunningNow={dispatchMutation.isPending}
             canManage={canManage}
+            canToggle={canToggle}
           />
           {automation.prompt && <PromptSection prompt={automation.prompt} />}
-          <ConfigurationSection automation={automation} />
+          <ConfigurationSection automation={automation} runsAs={runsAs} />
           {automation.plugins && automation.plugins.length > 0 && (
             <PluginsSection plugins={automation.plugins} />
           )}
@@ -260,7 +274,7 @@ export default function AutomationDetail() {
             onConfirm={handleDelete}
             onCancel={() => setShowDeleteModal(false)}
           />
-          {canEdit && (
+          {showEditModal && (
             <EditAutomationModal
               automation={automation}
               isOpen={showEditModal}

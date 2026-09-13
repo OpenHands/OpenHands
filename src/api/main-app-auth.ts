@@ -1,7 +1,9 @@
 import axios from "axios";
+import { AGENT_CANVAS_CLIENT_VERSION } from "./client-source";
 import { getLockedCloudAuthMode } from "./agent-server-config";
 
 export const MAIN_APP_AUTHENTICATE_PATH = "/api/authenticate";
+export const MAIN_APP_ANALYTICS_EVENTS_PATH = "/api/analytics/events";
 export const MAIN_APP_LOGIN_PATH = "/login";
 export const MAIN_APP_LOGIN_REDIRECT_PARAM = "returnTo";
 
@@ -21,11 +23,35 @@ export function shouldUseMainAppCookieAuth(): boolean {
   return getLockedCloudAuthMode() === "cookie" && !isLocalBrowserHost();
 }
 
+let canvasAuthenticatedReported = false;
+
+export function _resetCanvasAuthReported(): void {
+  canvasAuthenticatedReported = false;
+}
+
+export async function reportCanvasAuthenticated(): Promise<void> {
+  if (canvasAuthenticatedReported) return;
+  canvasAuthenticatedReported = true;
+  try {
+    await axios.post(
+      MAIN_APP_ANALYTICS_EVENTS_PATH,
+      {
+        event_type: "canvas_authenticated",
+        client_version: AGENT_CANVAS_CLIENT_VERSION,
+      },
+      { withCredentials: true },
+    );
+  } catch {
+    // Analytics must never affect authentication or application startup.
+  }
+}
+
 export async function authenticateWithMainAppCookie(): Promise<boolean> {
   try {
     await axios.post(MAIN_APP_AUTHENTICATE_PATH, null, {
       withCredentials: true,
     });
+    void reportCanvasAuthenticated();
     return true;
   } catch (error) {
     if (axios.isAxiosError(error) && error.response?.status === 401) {

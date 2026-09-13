@@ -181,7 +181,7 @@ export function Sidebar() {
     currentPath === "/customize" ||
     currentPath.startsWith("/skills") ||
     currentPath === "/plugins" ||
-    currentPath === "/extensions" ||
+    currentPath === "/apps" ||
     currentPath === "/mcp";
 
   const railBodyProps = {
@@ -192,6 +192,7 @@ export function Sidebar() {
     isExtensionsActive,
     currentPath,
     activeBackend: active.backend,
+    activeOrgId: active.orgId,
     activeBackendHealth,
     collapsedBackendPopoverOpen,
     setCollapsedBackendPopoverOpen,
