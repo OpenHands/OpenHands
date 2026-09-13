@@ -13,7 +13,9 @@ export function AutomationAgentProfileSelector({ value, onChange }: Props) {
   const { t } = useTranslation("openhands");
   const { data, isLoading, isError } = useAgentProfiles();
   const profiles = data?.profiles ?? [];
-  const selected = profiles.find((profile) => profile.id === value);
+  const selected = value
+    ? profiles.find((profile) => profile.id === value)
+    : undefined;
   const defaultLabel = t(I18nKey.AUTOMATIONS$DEFAULT_AGENT_PROFILE);
   const label =
     selected?.name ??
@@ -25,7 +27,9 @@ export function AutomationAgentProfileSelector({ value, onChange }: Props) {
   }
   const items = [
     { key: "__default__", label: defaultLabel },
-    ...profiles.map((profile) => ({ key: profile.id, label: profile.name })),
+    ...profiles.flatMap((profile) =>
+      profile.id ? [{ key: profile.id, label: profile.name }] : [],
+    ),
     ...(value && !selected ? [{ key: value, label }] : []),
   ];
   return (

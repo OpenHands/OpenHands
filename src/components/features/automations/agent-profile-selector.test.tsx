@@ -25,7 +25,6 @@ vi.mock("#/components/features/settings/settings-dropdown-input", () => ({
     onSelectionChange: (key: string) => void;
   }) => (
     <select
-      aria-label="Agent profile"
       value={selectedKey}
       onChange={(event) => onSelectionChange(event.target.value)}
     >
