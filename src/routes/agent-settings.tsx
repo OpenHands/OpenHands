@@ -454,9 +454,8 @@ export function AgentSettingsScreen({
   const [selectedSecrets, setSelectedSecrets] = useState<string[]>(
     initialSecretRefs.selected,
   );
-  // Stored names ride along even when the secret is gone, so an edit-save can't
-  // quietly drop a ref the user still means to keep (an unmatched name is a
-  // harmless no-op server-side).
+  // Keep stored references and newly selected provider credentials visible.
+  // Provider credentials are saved after this form builds the profile payload.
   const secretCatalog = React.useMemo(() => {
     const saved = (savedSecrets ?? []).map((secret) => ({
       name: secret.name,
@@ -465,11 +464,11 @@ export function AgentSettingsScreen({
     const known = new Set(saved.map((secret) => secret.name));
     return [
       ...saved,
-      ...initialSecretRefs.selected
+      ...[...new Set([...initialSecretRefs.selected, ...selectedSecrets])]
         .filter((name) => !known.has(name))
         .map((name) => ({ name, description: null as string | null })),
     ];
-  }, [savedSecrets, initialSecretRefs]);
+  }, [savedSecrets, initialSecretRefs, selectedSecrets]);
   const orderedSelectedSecrets = React.useMemo(
     () =>
       secretCatalog

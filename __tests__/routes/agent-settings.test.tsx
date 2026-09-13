@@ -1516,58 +1516,62 @@ describe("AgentSettingsScreen — MCP scope dirty tracking", () => {
       });
     });
 
-    it("selects an ACP profile's provider credentials when scoping starts", async () => {
-      // Scoping is strict server-side, so an ACP profile that omits its
-      // credential cannot authenticate. Seed it visibly rather than re-adding
-      // it behind the user's back.
-      savedSecretsMock.mockReturnValue([
-        { name: "ANTHROPIC_API_KEY" },
-        { name: "ANTHROPIC_BASE_URL" },
-        { name: "PROD_DB_URL" },
-      ]);
-      seedOpenHandsSettings();
-      let control: AgentSettingsSaveControl | null = null;
-      renderAgentSettingsScreen({
-        embedded: true,
-        agentSettingsOverride: {
-          agent_kind: "acp",
-          acp_server: "claude-code",
-          // From the registry, not a literal: the pinned command carries a
-          // version that moves, and a stale one detects as `custom` (no
-          // provider credentials) instead of failing loudly.
-          acp_command: [...CLAUDE_CODE_DEFAULT_COMMAND],
-          acp_args: [],
-          acp_model: "",
-        },
-        onSaveControlChange: (next) => {
-          control = next;
-        },
-      });
-      await screen.findByTestId("agent-settings-screen");
+    it.each([true, false])(
+      "selects provider credentials before saving (already stored: %s)",
+      async (alreadyStored) => {
+        // Scoping is strict server-side, so an ACP profile that omits its
+        // credential cannot authenticate. Seed it visibly rather than re-adding
+        // it behind the user's back.
+        savedSecretsMock.mockReturnValue([
+          ...(alreadyStored
+            ? [{ name: "ANTHROPIC_API_KEY" }, { name: "ANTHROPIC_BASE_URL" }]
+            : []),
+          { name: "PROD_DB_URL" },
+        ]);
+        seedOpenHandsSettings();
+        let control: AgentSettingsSaveControl | null = null;
+        renderAgentSettingsScreen({
+          embedded: true,
+          agentSettingsOverride: {
+            agent_kind: "acp",
+            acp_server: "claude-code",
+            // From the registry, not a literal: the pinned command carries a
+            // version that moves, and a stale one detects as `custom` (no
+            // provider credentials) instead of failing loudly.
+            acp_command: [...CLAUDE_CODE_DEFAULT_COMMAND],
+            acp_args: [],
+            acp_model: "",
+          },
+          onSaveControlChange: (next) => {
+            control = next;
+          },
+        });
+        await screen.findByTestId("agent-settings-screen");
 
-      const user = userEvent.setup();
-      await user.click(screen.getByTestId("agent-settings-secrets-mode"));
-      await user.click(
-        await screen.findByRole("option", {
-          name: "SETTINGS$AGENT_PROFILE_SECRETS_CHOOSE",
-        }),
-      );
+        const user = userEvent.setup();
+        await user.click(screen.getByTestId("agent-settings-secrets-mode"));
+        await user.click(
+          await screen.findByRole("option", {
+            name: "SETTINGS$AGENT_PROFILE_SECRETS_CHOOSE",
+          }),
+        );
 
-      await waitFor(() => {
+        await waitFor(() => {
+          expect(
+            screen.getByTestId("agent-settings-secret-ANTHROPIC_API_KEY"),
+          ).toBeChecked();
+        });
+        // Seeded, not forced: an unrelated secret stays off.
         expect(
-          screen.getByTestId("agent-settings-secret-ANTHROPIC_API_KEY"),
-        ).toBeChecked();
-      });
-      // Seeded, not forced: an unrelated secret stays off.
-      expect(
-        screen.getByTestId("agent-settings-secret-PROD_DB_URL"),
-      ).not.toBeChecked();
+          screen.getByTestId("agent-settings-secret-PROD_DB_URL"),
+        ).not.toBeChecked();
 
-      const refs = (
-        control!.buildAgentProfileFields() as { secret_refs?: string[] }
-      ).secret_refs;
-      expect(refs).toContain("ANTHROPIC_API_KEY");
-    });
+        const refs = (
+          control!.buildAgentProfileFields() as { secret_refs?: string[] }
+        ).secret_refs;
+        expect(refs).toContain("ANTHROPIC_API_KEY");
+      },
+    );
 
     it.each(["preset", "command"])(
       "selects the new provider credential after an explicit %s change",
