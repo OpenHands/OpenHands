@@ -10,6 +10,9 @@ const activateProfile = vi.hoisted(() => vi.fn());
 const applyAgentProfile = vi.hoisted(() => vi.fn());
 const displayErrorToast = vi.hoisted(() => vi.fn());
 let finishSettingsSave: (() => void) | undefined;
+const formState = vi.hoisted(() => ({
+  llm: {} as Record<string, unknown>,
+}));
 
 vi.mock("#/contexts/active-backend-context", () => ({
   useActiveBackend: () => ({ backend: { kind: "local" } }),
@@ -38,13 +41,6 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
 
 vi.mock("#/routes/llm-settings", async () => {
   const React = await import("react");
-  const canonicalLlm = {
-    model: "gpt-5.6-luna",
-    auth_type: "subscription",
-    subscription_vendor: "openai",
-    temperature: 0.2,
-  };
-
   return {
     LlmSettingsScreen: ({
       onSaveControlChange,
@@ -53,6 +49,7 @@ vi.mock("#/routes/llm-settings", async () => {
       onSaveControlChange: (control: SdkSectionSaveControl) => void;
       onSaveSuccess: () => void;
     }) => {
+      const canonicalLlm = formState.llm;
       finishSettingsSave = onSaveSuccess;
       React.useEffect(() => {
         const buildControl = (isDirty: boolean): SdkSectionSaveControl => ({
@@ -62,12 +59,12 @@ vi.mock("#/routes/llm-settings", async () => {
           },
           isSaving: false,
           isDirty,
-          values: {
-            "llm.model": canonicalLlm.model,
-            "llm.auth_type": canonicalLlm.auth_type,
-            "llm.subscription_vendor": canonicalLlm.subscription_vendor,
-            "llm.temperature": String(canonicalLlm.temperature),
-          },
+          values: Object.fromEntries(
+            Object.entries(canonicalLlm).map(([key, value]) => [
+              `llm.${key}`,
+              String(value),
+            ]),
+          ),
           view: "basic",
           getDirtyPayload: () => ({ llm: canonicalLlm }),
           getSavePayload: () => ({
@@ -84,6 +81,12 @@ vi.mock("#/routes/llm-settings", async () => {
 describe("SetupLlmStep", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    formState.llm = {
+      model: "gpt-5.6-luna",
+      auth_type: "subscription",
+      subscription_vendor: "openai",
+      temperature: 0.2,
+    };
     finishSettingsSave = undefined;
     saveProfile.mockResolvedValue(undefined);
     activateProfile.mockResolvedValue(undefined);
@@ -114,6 +117,36 @@ describe("SetupLlmStep", () => {
     expect(applyAgentProfile).toHaveBeenCalledWith({
       agent_kind: "openhands",
       llm_profile_ref: "gpt-5.6-luna",
+    });
+    expect(onNext).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves typed advanced options when creating the activated profile", async () => {
+    formState.llm = {
+      model: "openai/gpt-4o-mini",
+      api_key: "test-key",
+      base_url: "http://localhost:19118/v1",
+      timeout: 3,
+      num_retries: 1,
+      retry_min_wait: 0,
+      retry_max_wait: 0,
+      stream: true,
+    };
+    const onNext = vi.fn();
+    renderWithProviders(<SetupLlmStep onBack={vi.fn()} onNext={onNext} />);
+
+    await userEvent.click(await screen.findByTestId("onboarding-llm-next"));
+
+    await waitFor(() => {
+      expect(saveProfile).toHaveBeenCalledWith({
+        name: "gpt-4o-mini",
+        request: { llm: formState.llm, include_secrets: true },
+      });
+    });
+    expect(activateProfile).toHaveBeenCalledWith("gpt-4o-mini");
+    expect(applyAgentProfile).toHaveBeenCalledWith({
+      agent_kind: "openhands",
+      llm_profile_ref: "gpt-4o-mini",
     });
     expect(onNext).toHaveBeenCalledTimes(1);
   });
