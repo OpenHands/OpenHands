@@ -540,6 +540,7 @@ function buildBundlePayload(
 
   const payload: SetupRequestBody = {
     name: deriveName(entry, values),
+    ...optionalCreateProperties(entry.setup, values),
   };
 
   const trigger = buildTrigger(entry, values, selectedTrigger);
