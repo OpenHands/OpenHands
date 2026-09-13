@@ -1,4 +1,8 @@
 {
+  "AUTOMATIONS$DEFAULT_AGENT_PROFILE": { "en": "Deployment default" },
+  "AUTOMATIONS$UNAVAILABLE_AGENT_PROFILE": {
+    "en": "Unavailable profile ({{id}})"
+  },
   "COMMON$PATTERN": {
     "ar": "النمط:",
     "ca": "Patró:",

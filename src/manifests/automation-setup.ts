@@ -163,7 +163,11 @@ const TRIGGER_PROPERTIES: Record<SetupTriggerKind, readonly string[]> = {
   event: ["source", "on"],
 };
 
-const OPTIONAL_CREATE_PROPERTIES = ["model", "timeout"] as const;
+const OPTIONAL_CREATE_PROPERTIES = [
+  "model",
+  "timeout",
+  "agent_profile_id",
+] as const;
 
 /**
  * Repository properties a form field may fill, read the same way
@@ -271,6 +275,7 @@ function optionalCreateProperties(
 ): SetupRequestBody {
   return Object.fromEntries(
     OPTIONAL_CREATE_PROPERTIES.flatMap((name) => {
+      if (name === "model" && values.agent_profile_id) return [];
       const field = collectFields(setup, null, selectedAction)[name];
       const value = fieldPayloadValue(field?.type, values[name]);
       return hasPayloadValue(value) ? [[name, value]] : [];
