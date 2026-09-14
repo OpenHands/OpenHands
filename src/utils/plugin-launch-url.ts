@@ -1,17 +1,26 @@
 import type { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
 
-/**
- * Build the in-app path to the `/launch` screen for the given plugins, so the
- * Plugins UI can start a conversation with a plugin by reusing the existing
- * launch flow. Inverse of `parsePluginsFromUrl` in `src/routes/launch.tsx` —
- * keep the base64-encoded JSON `plugins` format in sync with that decoder.
- *
- * The base64 payload can contain `+`, `/`, and `=`; encoding it through
- * `URLSearchParams` percent-escapes those so `/launch` reads back the exact
- * string (a raw `+` would otherwise be decoded as a space and break `atob`).
- */
 export function buildPluginLaunchPath(plugins: PluginSpec[]): string {
-  const encoded = btoa(JSON.stringify(plugins));
+  const jsonString = JSON.stringify(plugins);
+  const utf8Bytes = new TextEncoder().encode(jsonString);
+  const binary = String.fromCharCode.apply(String, utf8Bytes);
+  const encoded = btoa(binary);
   const params = new URLSearchParams({ plugins: encoded });
-  return `/launch?${params.toString()}`;
+  return "/launch?${params.toString()}";
+}
+
+function parsePluginsFromUrl(searchParams: URLSearchParams): ParseResult {
+  const pluginsParam = searchParams.get("plugins");
+  if (pluginsParam) {
+    try {
+      const decoded = atob(pluginsParam);
+      const utf8Bytes = new Uint8Array(decoded.split("").map((ch) => ch.charCodeAt(0)));
+      const jsonString = new TextDecoder("utf-8").decode(utf8Bytes);
+      const parsed = JSON.parse(jsonString);
+      return { plugins: parsed as PluginSpec[] || [], error: "invalid_format" };
+    } catch {
+      return { plugins: [], error: "invalid_format" };
+    }
+  }
+  return { plugins: [], error: "no_plugins" };
 }
