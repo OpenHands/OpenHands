@@ -45,7 +45,11 @@ describe("SecretForm in edit mode", () => {
     // Arrange
     const { updateSecret } = await renderEditForm();
 
-    // Act
+    // Act — submit is dirty-gated, so change description while leaving value blank
+    await userEvent.type(
+      screen.getByTestId("description-input"),
+      " (unchanged value)",
+    );
     await userEvent.click(screen.getByTestId("submit-button"));
 
     // Assert
@@ -53,7 +57,7 @@ describe("SecretForm in edit mode", () => {
       expect(updateSecret).toHaveBeenCalledWith(
         "API_KEY",
         "API_KEY",
-        "Demo secret",
+        "Demo secret (unchanged value)",
         undefined,
       ),
     );

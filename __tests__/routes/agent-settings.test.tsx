@@ -3,7 +3,10 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { AgentSettingsScreen } from "#/routes/agent-settings";
+import {
+  AgentSettingsScreen,
+  type AgentSettingsSaveControl,
+} from "#/routes/agent-settings";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { SecretsService } from "#/api/secrets-service";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
@@ -549,7 +552,7 @@ describe("AgentSettingsScreen", () => {
     await user.clear(commandInput);
     await user.type(
       commandInput,
-      "npx -y @agentclientprotocol/codex-acp@1.1.7",
+      "npx -y @agentclientprotocol/codex-acp@1.10.0",
     );
 
     // The model field now reflects the Codex default, not the stale Claude one.
@@ -792,13 +795,11 @@ describe("AgentSettingsScreen", () => {
       "npx -y @agentclientprotocol/claude-agent-acp@0.63.0 --extra-arg",
     );
 
-    // Touch the form to mark it dirty (Save is disabled until isDirty),
-    // then submit. The data the form sends has to carry the registry-
-    // default prefix the user can now SEE in the textarea, not the bare
-    // ``--extra-arg`` that was stored.
+    // Make a real edit so Save enables, then submit. The payload must
+    // carry the registry-default prefix the user can SEE in the textarea,
+    // not the bare ``--extra-arg`` that was stored.
     await user.click(cmd);
-    await user.keyboard("{End} ");
-    await user.keyboard("{Backspace}");
+    await user.keyboard("{End} --saved");
 
     await user.click(screen.getByTestId("agent-save-button"));
     await waitFor(() => {
@@ -813,10 +814,42 @@ describe("AgentSettingsScreen", () => {
       "-y",
       "@agentclientprotocol/claude-agent-acp@0.63.0",
       "--extra-arg",
+      "--saved",
     ]);
     // ``acp_args: []`` resets the API-set args so they don't double up
     // at spawn time.
     expect(call.agent_settings_diff?.acp_args).toEqual([]);
+  });
+
+  it("disables Save after reverting an agent-type dropdown change", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          agent_kind: "openhands",
+        },
+      }),
+    );
+
+    renderAgentSettingsScreen();
+    await screen.findByTestId("agent-type-selector");
+    const save = screen.getByTestId("agent-save-button") as HTMLButtonElement;
+    expect(save).toBeDisabled();
+
+    await user.click(screen.getByTestId("agent-type-selector"));
+    await user.click(
+      await screen.findByRole("option", { name: "SETTINGS$AGENT_TYPE_ACP" }),
+    );
+    expect(save).not.toBeDisabled();
+
+    await user.click(screen.getByTestId("agent-type-selector"));
+    await user.click(
+      await screen.findByRole("option", {
+        name: "SETTINGS$AGENT_TYPE_OPENHANDS",
+      }),
+    );
+    expect(save).toBeDisabled();
   });
 
   it("preserves an unknown loaded acp_server when the user saves without editing", async () => {
@@ -852,12 +885,10 @@ describe("AgentSettingsScreen", () => {
     )) as HTMLTextAreaElement;
     expect(cmd.value).toBe("npx -y @some-future/amp-acp");
 
-    // Touch + revert the textarea to flip isDirty without changing
-    // the persisted command text — matches "user opens settings and
-    // hits Save without intending to change anything."
-    await user.click(cmd);
-    await user.keyboard("{End} ");
-    await user.keyboard("{Backspace}");
+    // Change only the model so Save enables while the command stays
+    // identical to what was loaded — preserves the unknown acp_server path.
+    const modelInput = await screen.findByTestId("agent-model-input");
+    await user.type(modelInput, "future-model");
 
     await user.click(screen.getByTestId("agent-save-button"));
     await waitFor(() => {
@@ -1030,5 +1061,234 @@ describe("AgentSettingsScreen", () => {
     expect(
       await screen.findByTestId("settings-acp-auth-detected"),
     ).toBeInTheDocument();
+  });
+});
+
+describe("AgentSettingsScreen — MCP server scope", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.spyOn(SettingsService, "saveSettings").mockResolvedValue(true);
+  });
+
+  function seedWithMcp(mcpConfig: Record<string, unknown>) {
+    // `useSettings` prefers `agent_settings.mcp_config` over the top-level
+    // field, so seed it where the hook actually reads.
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          agent_kind: "openhands",
+          mcp_config: mcpConfig,
+        },
+      } as never),
+    );
+  }
+
+  const TWO_SERVERS = {
+    github: { url: "https://mcp.example/github", transport: "shttp" },
+    postgres: { url: "https://mcp.example/pg", transport: "shttp" },
+  };
+
+  it("lists configured servers read-only and persists null by default", async () => {
+    seedWithMcp(TWO_SERVERS);
+    let control: AgentSettingsSaveControl | null = null;
+    renderAgentSettingsScreen({
+      embedded: true,
+      agentSettingsOverride: {
+        agent_kind: "openhands",
+        enable_sub_agents: false,
+        mcp_server_refs: null,
+      },
+      onSaveControlChange: (next) => {
+        control = next;
+      },
+    });
+    await screen.findByTestId("agent-settings-screen");
+
+    const github = screen.getByTestId("agent-settings-mcp-github");
+    expect(github).toBeChecked();
+    expect(github).toBeDisabled();
+    expect(control!.buildAgentProfileFields()).toMatchObject({
+      mcp_server_refs: null,
+    });
+  });
+
+  it("seeds from a stored scope and persists the selection", async () => {
+    seedWithMcp(TWO_SERVERS);
+    let control: AgentSettingsSaveControl | null = null;
+    renderAgentSettingsScreen({
+      embedded: true,
+      agentSettingsOverride: {
+        agent_kind: "openhands",
+        enable_sub_agents: false,
+        mcp_server_refs: ["github"],
+      },
+      onSaveControlChange: (next) => {
+        control = next;
+      },
+    });
+    await screen.findByTestId("agent-settings-screen");
+
+    expect(screen.getByTestId("agent-settings-mcp-github")).toBeChecked();
+    expect(screen.getByTestId("agent-settings-mcp-postgres")).not.toBeChecked();
+    expect(control!.buildAgentProfileFields()).toMatchObject({
+      mcp_server_refs: ["github"],
+    });
+  });
+
+  it("seeds a switch to custom with every configured server", async () => {
+    // Turning the control on should narrow from the default rather than cut
+    // the agent off from every server at once.
+    seedWithMcp(TWO_SERVERS);
+    let control: AgentSettingsSaveControl | null = null;
+    renderAgentSettingsScreen({
+      embedded: true,
+      agentSettingsOverride: {
+        agent_kind: "openhands",
+        enable_sub_agents: false,
+        mcp_server_refs: null,
+      },
+      onSaveControlChange: (next) => {
+        control = next;
+      },
+    });
+    await screen.findByTestId("agent-settings-screen");
+
+    const user = userEvent.setup();
+    const combo = screen.getByTestId("agent-settings-mcp-mode");
+    combo.focus();
+    await user.keyboard("{ArrowDown}");
+    await user.click(
+      await screen.findByRole("option", {
+        name: "SETTINGS$AGENT_PROFILE_MCP_CHOOSE",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(control!.buildAgentProfileFields()).toMatchObject({
+        mcp_server_refs: ["github", "postgres"],
+      });
+    });
+    expect(screen.getByTestId("agent-settings-mcp-github")).toBeChecked();
+    expect(screen.getByTestId("agent-settings-mcp-postgres")).toBeChecked();
+  });
+
+  it("warns about a ref whose server is gone, which would fail the launch", async () => {
+    seedWithMcp(TWO_SERVERS);
+    renderAgentSettingsScreen({
+      embedded: true,
+      agentSettingsOverride: {
+        agent_kind: "openhands",
+        enable_sub_agents: false,
+        mcp_server_refs: ["github", "deleted-server"],
+      },
+    });
+    await screen.findByTestId("agent-settings-screen");
+
+    expect(
+      screen.getByTestId("agent-settings-mcp-deleted-server"),
+    ).toBeChecked();
+    expect(
+      screen.getByTestId("agent-settings-mcp-dangling"),
+    ).toBeInTheDocument();
+  });
+
+  it("scopes an ACP profile too, since the field lives on the profile base", async () => {
+    seedWithMcp(TWO_SERVERS);
+    let control: AgentSettingsSaveControl | null = null;
+    renderAgentSettingsScreen({
+      embedded: true,
+      agentSettingsOverride: {
+        agent_kind: "acp",
+        acp_server: "claude-code",
+        mcp_server_refs: ["github"],
+      },
+      onSaveControlChange: (next) => {
+        control = next;
+      },
+    });
+    await screen.findByTestId("agent-settings-screen");
+
+    expect(screen.getByTestId("agent-settings-mcp-github")).toBeChecked();
+    expect(control!.buildAgentProfileFields()).toMatchObject({
+      agent_kind: "acp",
+      mcp_server_refs: ["github"],
+    });
+  });
+
+  it("explains the empty state when no server is configured", async () => {
+    seedWithMcp({});
+    renderAgentSettingsScreen({
+      embedded: true,
+      agentSettingsOverride: {
+        agent_kind: "openhands",
+        enable_sub_agents: false,
+      },
+    });
+    await screen.findByTestId("agent-settings-screen");
+    expect(
+      screen.queryByTestId("agent-settings-mcp-list"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText("SETTINGS$AGENT_PROFILE_MCP_NONE"),
+    ).toBeInTheDocument();
+  });
+
+  it("is hidden outside the profile editor", async () => {
+    // The global page saves `agent_settings`, which carries the resolved
+    // `mcp_config`, not refs.
+    seedWithMcp(TWO_SERVERS);
+    renderAgentSettingsScreen({});
+    await screen.findByTestId("agent-settings-screen");
+    expect(
+      screen.queryByTestId("agent-settings-mcp-mode"),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("AgentSettingsScreen — MCP scope dirty tracking", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.spyOn(SettingsService, "saveSettings").mockResolvedValue(true);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          agent_kind: "openhands",
+          mcp_config: {
+            github: { url: "https://mcp.example/github", transport: "shttp" },
+            postgres: { url: "https://mcp.example/pg", transport: "shttp" },
+          },
+        },
+      } as never),
+    );
+  });
+
+  async function dirtyForStoredRefs(refs: string[]) {
+    let control: AgentSettingsSaveControl | null = null;
+    renderAgentSettingsScreen({
+      embedded: true,
+      agentSettingsOverride: {
+        agent_kind: "openhands",
+        enable_sub_agents: false,
+        mcp_server_refs: refs,
+      },
+      onSaveControlChange: (next) => {
+        control = next;
+      },
+    });
+    await screen.findByTestId("agent-settings-screen");
+    await screen.findByTestId("agent-settings-mcp-list");
+    return () => control!.isDirty;
+  }
+
+  it("is clean on load when the stored order matches the config order", async () => {
+    const isDirty = await dirtyForStoredRefs(["github", "postgres"]);
+    await waitFor(() => expect(isDirty()).toBe(false));
+  });
+
+  it("is clean on load when the stored order differs from the config order", async () => {
+    const isDirty = await dirtyForStoredRefs(["postgres", "github"]);
+    await waitFor(() => expect(isDirty()).toBe(false));
   });
 });

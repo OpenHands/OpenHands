@@ -610,7 +610,9 @@ const MOCK_MODELS = [
   "openhands/claude-sonnet-4-5-20250929",
   "openhands/claude-haiku-4-5-20251001",
   "openhands/claude-opus-4-5-20251101",
-  "openhands/kimi-k3",
+  "openai/gpt-5.6-sol",
+  "openai/gpt-6-astra",
+  "openhands/deepseek-v4-flash",
   "openhands/glm-5.2",
   "sambanova/Meta-Llama-3.1-8B-Instruct",
 ];
@@ -624,9 +626,17 @@ const MOCK_VERIFIED_MODELS = new Set([
   "openai/gpt-5.5",
   "openhands/claude-opus-4-5-20251101",
   "openhands/claude-sonnet-4-5-20250929",
-  "openhands/kimi-k3",
+  "openai/gpt-5.6-sol",
+  "openai/gpt-6-astra",
+  "openhands/deepseek-v4-flash",
   "openhands/glm-5.2",
 ]);
+
+// DB-driven free / default flags for the OpenHands provider. Mirrors the
+// enterprise verified-models seed used to render the "Free" badge and preselect
+// the default model.
+const MOCK_FREE_MODELS = new Set(["openhands/glm-5.2"]);
+const MOCK_DEFAULT_MODEL = "openhands/glm-5.2";
 
 const MOCK_VERIFIED_PROVIDERS = [
   "openhands",
@@ -755,7 +765,7 @@ export const SETTINGS_HANDLERS = [
         "claude-sonnet-4-5-20250929",
       ],
       verified_providers: MOCK_VERIFIED_PROVIDERS,
-      default_model: "openhands/kimi-k3",
+      default_model: "openai/gpt-5.6-sol",
     }),
   ),
 
@@ -804,6 +814,8 @@ export const SETTINGS_HANDLERS = [
         provider: provider || null,
         name,
         verified: MOCK_VERIFIED_MODELS.has(m),
+        free: MOCK_FREE_MODELS.has(m),
+        default: m === MOCK_DEFAULT_MODEL,
       };
     });
 

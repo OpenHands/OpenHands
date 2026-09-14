@@ -44,6 +44,7 @@ function toAgentSettingsOverride(
   if (profile.agent_kind === "acp") {
     return {
       agent_kind: "acp",
+      mcp_server_refs: profile.mcp_server_refs ?? null,
       acp_server: profile.acp_server,
       acp_command: profile.acp_command ? parseCommand(profile.acp_command) : [],
       acp_args: profile.acp_args ?? [],
@@ -59,6 +60,7 @@ function toAgentSettingsOverride(
     true;
   return {
     agent_kind: "openhands",
+    mcp_server_refs: profile.mcp_server_refs ?? null,
     enable_sub_agents: profile.enable_sub_agents,
     enable_switch_llm_tool: switchLlmToolEnabled,
     tool_concurrency_limit: profile.tool_concurrency_limit,
@@ -280,6 +282,18 @@ export function AgentProfilesLocalView() {
       ? t(I18nKey.SETTINGS$PROFILE_LOADED, { name: editingProfile.name })
       : t(I18nKey.SETTINGS$PROFILE_SAVE_HINT);
   const isOpenHands = saveControl?.agentType !== "acp";
+  const nameDirty = viewMode === "edit" && profileName !== editingProfile?.name;
+  const loadedLlmRef =
+    editingProfile?.agent_kind === "openhands"
+      ? editingProfile.llm_profile_ref
+      : "";
+  const llmRefDirty =
+    viewMode === "edit" && isOpenHands && llmProfileRef !== loadedLlmRef;
+  const hasUnsavedChanges =
+    viewMode === "create" ||
+    Boolean(saveControl?.isDirty) ||
+    nameDirty ||
+    llmRefDirty;
 
   return (
     <div className="flex flex-col gap-6">
@@ -353,7 +367,12 @@ export function AgentProfilesLocalView() {
           type="button"
           variant="primary"
           onClick={handleSave}
-          isDisabled={!isNameValid || isSaving || !saveControl?.isValid}
+          isDisabled={
+            !isNameValid ||
+            isSaving ||
+            !saveControl?.isValid ||
+            !hasUnsavedChanges
+          }
           aria-busy={isSaving}
         >
           {isSaving ? t(I18nKey.SETTINGS$SAVING) : t(I18nKey.BUTTON$SAVE)}

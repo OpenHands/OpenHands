@@ -5,6 +5,7 @@ import type { Provider } from "#/types/settings";
 import {
   AUTOMATION_NAME_TAG_KEY,
   AUTOMATION_TAG_KEYS,
+  getDisplayConversationTags,
 } from "#/api/agent-server-adapter";
 
 export type ConversationSortField = "created" | "updated";
@@ -14,6 +15,59 @@ export type AutomationFilterMode =
   | "all"
   | "hide-automations"
   | "only-automations";
+export type OlderConversationCutoff = "1h" | "1d" | "7d" | "30d";
+
+export const OLDER_CONVERSATION_CUTOFFS = [
+  "1h",
+  "1d",
+  "7d",
+  "30d",
+] as const satisfies readonly OlderConversationCutoff[];
+
+export const DEFAULT_OLDER_CONVERSATION_CUTOFF: OlderConversationCutoff = "7d";
+
+export const OLDER_CONVERSATION_CUTOFF_MS: Record<
+  OlderConversationCutoff,
+  number
+> = {
+  "1h": 60 * 60 * 1000,
+  "1d": 24 * 60 * 60 * 1000,
+  "7d": 7 * 24 * 60 * 60 * 1000,
+  "30d": 30 * 24 * 60 * 60 * 1000,
+};
+
+export function isOlderConversationCutoff(
+  value: unknown,
+): value is OlderConversationCutoff {
+  return (
+    typeof value === "string" &&
+    (OLDER_CONVERSATION_CUTOFFS as readonly string[]).includes(value)
+  );
+}
+
+/**
+ * Splits conversations by last update relative to `nowMs`. Missing or
+ * unparseable timestamps stay in `recent` so they are never hidden by the
+ * hide-older toggle.
+ */
+export function partitionByCutoff<T extends { updated_at: string }>(
+  items: readonly T[],
+  cutoffMs: number,
+  nowMs: number = Date.now(),
+): { recent: T[]; older: T[] } {
+  const cutoff = nowMs - cutoffMs;
+  const recent: T[] = [];
+  const older: T[] = [];
+  for (const item of items) {
+    const updatedAt = item.updated_at ? Date.parse(item.updated_at) : NaN;
+    if (Number.isFinite(updatedAt) && updatedAt < cutoff) {
+      older.push(item);
+    } else {
+      recent.push(item);
+    }
+  }
+  return { recent, older };
+}
 
 /** Max conversations shown under a workspace/repo folder before "View more". */
 export const GROUP_CONVERSATIONS_PREVIEW_LIMIT = 5;
@@ -233,6 +287,58 @@ export function applyAutomationConversationFilter(
       narrowing === null || narrowing.has(getAutomationNameFacet(conversation))
     );
   });
+}
+
+/**
+ * Distinct user-facing `key=value` facets among the given conversations,
+ * sorted A–Z for stable menu order. Reserved/internal tag keys are excluded
+ * via `getDisplayConversationTags`; unlike the automation filter there is no
+ * unnamed bucket — a conversation with no user tags simply yields no facet.
+ */
+export function collectTagFacets(
+  conversations: readonly AppConversation[],
+): string[] {
+  const facets = new Set<string>();
+  for (const conversation of conversations) {
+    for (const [key, value] of getDisplayConversationTags(conversation.tags)) {
+      facets.add(`${key}=${value}`);
+    }
+  }
+  return [...facets].sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Display form of a stored facet: a bare tag (empty value, stored as `key=`)
+ * renders as just the key. Matching keeps the raw `key=value` form — this is
+ * label-only.
+ */
+export function formatTagFacetLabel(facet: string): string {
+  return facet.endsWith("=") ? facet.slice(0, -1) : facet;
+}
+
+/**
+ * Union semantics: a conversation matches when it carries ANY selected
+ * facet, mirroring the automation multi-select. An empty selection — or one
+ * that no longer intersects the available facets (tags edited away, stale
+ * selections persisted from another backend) — leaves the list unfiltered
+ * instead of yielding an unfillable empty list.
+ */
+export function applyTagConversationFilter(
+  conversations: readonly AppConversation[],
+  selectedFacets: readonly string[],
+  availableFacets: readonly string[],
+): AppConversation[] {
+  const facetSet = new Set(availableFacets);
+  const effectiveFacets = selectedFacets.filter((facet) => facetSet.has(facet));
+  if (effectiveFacets.length === 0) {
+    return [...conversations];
+  }
+  const narrowing = new Set(effectiveFacets);
+  return conversations.filter((conversation) =>
+    getDisplayConversationTags(conversation.tags).some(([key, value]) =>
+      narrowing.has(`${key}=${value}`),
+    ),
+  );
 }
 
 /** Subset of `useCreateConversation` variables for launching from a group row */

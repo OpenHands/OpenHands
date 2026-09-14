@@ -1,11 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { HttpError } from "@openhands/typescript-client";
@@ -128,7 +122,7 @@ describe("AutomationGitSync — failed background refetch", () => {
     vi.useFakeTimers();
     renderGitSync();
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(1);
     });
     expect(screen.getByTestId("git-sync-repo-url-input")).toBeInTheDocument();
 
@@ -155,7 +149,7 @@ describe("AutomationGitSync — sync progress", () => {
     vi.useFakeTimers();
     renderGitSync();
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(1);
     });
     return screen.getByTestId("git-sync-now-button");
   }

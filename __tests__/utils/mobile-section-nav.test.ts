@@ -29,6 +29,17 @@ describe("getMobileTopBarState", () => {
     });
   });
 
+  it("backs from the apps management page but not extension pages", () => {
+    expect(getMobileTopBarState("/apps")).toEqual({
+      mode: "back",
+      backTo: "/customize",
+      backLabelKey: I18nKey.NAV$CUSTOMIZE,
+    });
+    expect(getMobileTopBarState("/extensions/demo-page/hello")).toEqual({
+      mode: "menu",
+    });
+  });
+
   it("shows menu on main app routes", () => {
     expect(getMobileTopBarState("/conversations")).toEqual({ mode: "menu" });
   });

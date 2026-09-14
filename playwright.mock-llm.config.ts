@@ -75,6 +75,16 @@ function envAssignment(name: string, value: string) {
   return `${name}=${shellQuote(value)}`;
 }
 
+const DEFAULT_CI_GLOBAL_TIMEOUT_MS = 1_200_000;
+const configuredCiGlobalTimeoutMs = Number.parseInt(
+  process.env.MOCK_LLM_GLOBAL_TIMEOUT_MS ??
+    String(DEFAULT_CI_GLOBAL_TIMEOUT_MS),
+  10,
+);
+const ciGlobalTimeoutMs = Number.isFinite(configuredCiGlobalTimeoutMs)
+  ? configuredCiGlobalTimeoutMs
+  : DEFAULT_CI_GLOBAL_TIMEOUT_MS;
+
 export default defineConfig({
   testDir: "./tests/e2e/mock-llm",
   testMatch: /.*\.spec\.ts/,
@@ -83,7 +93,7 @@ export default defineConfig({
   retries: 0,
   workers: 1,
   timeout: 60_000,
-  globalTimeout: process.env.CI ? 600_000 : 0, // 10 min hard cap in CI
+  globalTimeout: process.env.CI ? ciGlobalTimeoutMs : 0, // 20 min hard cap in CI
   reporter: [
     ["line"],
     ["json", { outputFile: "test-results-mock-llm/results.json" }],

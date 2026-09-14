@@ -8,11 +8,11 @@ import {
   shouldShowRunPhase,
   useRunPhase,
 } from "#/components/features/automations/detail/run-phase";
+import type { Automation, AutomationRun } from "#/types/automation";
 import {
-  AutomationRunStatus,
-  type Automation,
-  type AutomationRun,
-} from "#/types/automation";
+  getAutomationRunBadgeLabelKey,
+  getAutomationRunDisplay,
+} from "#/utils/automation-run-display";
 import { formatRelativeTime } from "#/utils/format-relative-time";
 import { AutomationHealthIndicator } from "./automation-health-indicator";
 import {
@@ -26,6 +26,11 @@ export function getRunStatusLabelKey(
   runState: LatestAutomationRunState,
 ): I18nKey {
   if (runState.isError) return I18nKey.FEATURED_AUTOMATIONS$STATUS_UNAVAILABLE;
+  if (runState.latestRun) {
+    return getAutomationRunBadgeLabelKey(
+      getAutomationRunDisplay(runState.latestRun).badgeStatus,
+    );
+  }
   return getRunHealthLabelKey(deriveRunHealth(runState));
 }
 
@@ -93,6 +98,7 @@ export function HomeAutomationRunTooltip({
   const timestamp = latestRun ? getLastRunTimestamp(latestRun) : null;
   const TriggerIcon = automation.trigger.type === "event" ? Zap : ClockIcon;
   const health = deriveRunHealth(runState);
+  const display = latestRun ? getAutomationRunDisplay(latestRun) : null;
 
   return (
     <div className="flex w-[280px] flex-col gap-3 p-3">
@@ -126,11 +132,10 @@ export function HomeAutomationRunTooltip({
           </PreviewRow>
         ) : null}
 
-        {latestRun?.status === AutomationRunStatus.FAILED &&
-        latestRun.error_detail ? (
-          <PreviewRow label={t(I18nKey.STATUS$ERROR)}>
-            <span className="line-clamp-3 text-[var(--oh-status-error)]">
-              {latestRun.error_detail}
+        {display?.summary ? (
+          <PreviewRow label={t(I18nKey.AUTOMATIONS$DETAIL$TASK_LABEL)}>
+            <span className="line-clamp-3 text-[var(--oh-text-secondary)]">
+              {display.summary}
             </span>
           </PreviewRow>
         ) : null}
