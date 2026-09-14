@@ -16,6 +16,7 @@ import {
 import { WorkspaceDropdown } from "../../../../src/components/features/home/workspace-dropdown/workspace-dropdown";
 import WorkspacesService from "#/api/workspaces-service/workspaces-service.api";
 import { LocalWorkspace, LocalWorkspaceParent } from "#/types/workspace";
+import { shouldIncludeImplicitWorkspaceParents } from "#/hooks/query/use-resolved-workspaces";
 
 const mockNavigate = vi.fn();
 const mockUseIsCreatingConversation = vi.fn();
@@ -153,6 +154,14 @@ describe("WorkspaceDropdown", () => {
       );
     },
   );
+});
+
+describe("shouldIncludeImplicitWorkspaceParents", () => {
+  it("handles development and deployment modes", () => {
+    expect(shouldIncludeImplicitWorkspaceParents(true, null)).toBe(true);
+    expect(shouldIncludeImplicitWorkspaceParents(false, "docker")).toBe(true);
+    expect(shouldIncludeImplicitWorkspaceParents(false, null)).toBe(false);
+  });
 });
 
 describe("WorkspaceSelectionForm (server-backed workspaces)", () => {
