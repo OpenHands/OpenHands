@@ -226,6 +226,44 @@ describe("telemetry consent banner", () => {
     expect(mocks.useTranslation).toHaveBeenCalledWith("openhands");
   });
 
+  it("starts a fresh reveal delay after reconnecting", () => {
+    const { rerender } = renderBanner();
+    advanceBy(20);
+    mocks.health = { local: { isConnected: false } };
+    rerender(<TelemetryConsentBanner />);
+    advanceBy(30);
+    mocks.health = { local: { isConnected: true } };
+    rerender(<TelemetryConsentBanner />);
+    expect(
+      screen.queryByTestId("telemetry-consent-form"),
+    ).not.toBeInTheDocument();
+    advanceBy(49);
+    expect(
+      screen.queryByTestId("telemetry-consent-form"),
+    ).not.toBeInTheDocument();
+    advanceBy(1);
+    expect(screen.getByTestId("telemetry-consent-form")).toBeInTheDocument();
+  });
+
+  it("hides while translations reload and waits before revealing them again", () => {
+    const { rerender } = renderBanner();
+    advanceBy(50);
+    expect(screen.getByTestId("telemetry-consent-form")).toBeInTheDocument();
+    mocks.ready = false;
+    rerender(<TelemetryConsentBanner />);
+    expect(
+      screen.queryByTestId("telemetry-consent-form"),
+    ).not.toBeInTheDocument();
+    mocks.ready = true;
+    rerender(<TelemetryConsentBanner />);
+    advanceBy(49);
+    expect(
+      screen.queryByTestId("telemetry-consent-form"),
+    ).not.toBeInTheDocument();
+    advanceBy(1);
+    expect(screen.getByTestId("telemetry-consent-form")).toBeInTheDocument();
+  });
+
   it("re-prompts after the active backend changes", async () => {
     const onChoice = vi.fn();
     prime();
