@@ -86,8 +86,7 @@ function setInputText(
   text: string,
   cursorOffset = text.length,
 ) {
-  element.textContent = text;
-  element.innerText = text;
+  Object.assign(element, { textContent: text, innerText: text });
   if (!element.isConnected) document.body.appendChild(element);
 
   const textNode = element.firstChild;
