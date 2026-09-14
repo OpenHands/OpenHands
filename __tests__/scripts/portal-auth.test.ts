@@ -96,12 +96,12 @@ describe("static-server portal auth", () => {
 
   function extractCookie(
     headers: Record<string, string | string[] | undefined>,
-  ) {
+  ): string | undefined {
     const setCookie = headers["set-cookie"];
-    if (!setCookie) return null;
+    if (!setCookie) return undefined;
     const raw = Array.isArray(setCookie) ? setCookie[0] : setCookie;
     const match = raw.match(/openhands_portal_session=([^;]+)/);
-    return match ? match[1] : null;
+    return match ? match[1] : undefined;
   }
 
   it("redirects unauthenticated static requests to /setup before any admin exists", async () => {
