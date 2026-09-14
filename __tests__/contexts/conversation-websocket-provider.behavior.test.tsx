@@ -8,6 +8,7 @@ import {
 } from "#/contexts/conversation-websocket-context";
 import type { WebSocketHookOptions } from "#/hooks/use-websocket";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
+import type { MessageEvent as AgentMessageEvent } from "#/types/agent-server/core/events/message-event";
 import type { OpenHandsEvent } from "#/types/agent-server/core";
 import { useEventStore } from "#/stores/use-event-store";
 import { useErrorMessageStore } from "#/stores/error-message-store";
@@ -22,10 +23,7 @@ import useMetricsStore from "#/stores/metrics-store";
 import { useFilesTabStore } from "#/stores/files-tab-store";
 import EventService from "#/api/event-service/event-service.api";
 import { SERVER_CONNECTION_ERROR_MESSAGE } from "#/constants/server-connection-error";
-import {
-  getStoredConversationMetadata,
-  setStoredConversationMetadata,
-} from "#/api/conversation-metadata-store";
+import { getStoredConversationMetadata } from "#/api/conversation-metadata-store";
 import {
   getConversationState,
   setConversationState,
@@ -210,7 +208,9 @@ function makeMessageEvent(
     ...baseEvent(id, role === "user" ? "user" : "agent"),
     llm_message: {
       role,
-      content: textParts.flatMap((text, index) =>
+      content: textParts.flatMap<
+        AgentMessageEvent["llm_message"]["content"][number]
+      >((text, index) =>
         index === 0
           ? [
               { type: "image" as const, image_url: "data:image/png;base64,AA" },
@@ -219,7 +219,7 @@ function makeMessageEvent(
           : [{ type: "text" as const, text }],
       ),
     },
-    activated_microagents: [],
+    activated_skills: [],
     extended_content: [],
   } as OpenHandsEvent;
 }

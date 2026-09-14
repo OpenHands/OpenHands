@@ -61,12 +61,9 @@ class BrowserWebSocketDouble {
   }
 }
 
-const renderWebSocket = <T = string>(
-  url: string,
-  options?: WebSocketHookOptions,
-) => {
+const renderWebSocket = (url: string, options?: WebSocketHookOptions) => {
   vi.stubGlobal("WebSocket", BrowserWebSocketDouble);
-  return renderHook(() => useWebSocket<T>(url, options));
+  return renderHook(() => useWebSocket(url, options));
 };
 
 const getSocket = (index = BrowserWebSocketDouble.instances.length - 1) => {
@@ -135,7 +132,7 @@ describe("useWebSocket connection lifecycle", () => {
     const latestOnMessage = vi.fn();
     const { result, rerender } = renderHook(
       ({ onMessage }: { onMessage: (event: MessageEvent) => void }) =>
-        useWebSocket<{ sequence: number }>("ws://acme.test/events", {
+        useWebSocket("ws://acme.test/events", {
           onMessage,
         }),
       { initialProps: { onMessage: originalOnMessage } },
@@ -158,7 +155,7 @@ describe("useWebSocket connection lifecycle", () => {
   });
 
   it("handles messages and native errors without optional callbacks", () => {
-    const { result } = renderWebSocket<{ sequence: number }>(
+    const { result } = renderWebSocket(
       "ws://acme.test/events",
     );
     const socket = getSocket();
@@ -175,7 +172,7 @@ describe("useWebSocket connection lifecycle", () => {
   });
 
   it("handles messages and native errors when options omit callbacks", () => {
-    const { result } = renderWebSocket<{ sequence: number }>(
+    const { result } = renderWebSocket(
       "ws://acme.test/events",
       {},
     );
