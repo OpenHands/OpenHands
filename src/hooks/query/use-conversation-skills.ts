@@ -20,7 +20,8 @@ import { useActiveConversation } from "./use-active-conversation";
  * "No workspace" conversations (`selected_workspace` is null).
  */
 export const useConversationSkills = () => {
-  const isCloud = useActiveBackend().backend.kind === "cloud";
+  const active = useActiveBackend();
+  const isCloud = active.backend.kind === "cloud";
   const { conversationId } = useOptionalConversationId();
   const { data: conversation } = useActiveConversation();
   const projectDir = conversation?.selected_workspace ?? undefined;
@@ -30,8 +31,14 @@ export const useConversationSkills = () => {
 
   return useQuery<SkillInfo[]>({
     queryKey: cloudConversationId
-      ? ["conversation", cloudConversationId, "skills"]
-      : ["skills", projectDir ?? null],
+      ? [
+          "conversation",
+          cloudConversationId,
+          "skills",
+          active.backend.id,
+          active.orgId,
+        ]
+      : ["skills", active.backend.id, active.orgId, projectDir ?? null],
     queryFn: () =>
       cloudConversationId
         ? SkillsService.getConversationSkills(cloudConversationId)
