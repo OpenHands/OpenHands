@@ -12,6 +12,7 @@ import AgentProfilesService, {
   WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME,
   type AgentProfileListResponse,
 } from "#/api/agent-profiles-service/agent-profiles-service.api";
+import { agentProfileDetailQueryKey } from "#/hooks/query/use-active-acp-profile-detail";
 import PluginsManagementService, {
   type InstalledPluginInfo,
 } from "#/api/plugins-management-service";
@@ -214,6 +215,41 @@ export const useCreateConversation = () => {
         }
       }
 
+      // Profile summaries omit ``acp_server``. Fetch the ACP profile detail
+      // so the Claude skill overlay can tell Claude Code from Codex/custom
+      // without launching the wrong overlay (#16905). Failures are ignored:
+      // conversation start must not block on a detail lookup.
+      let agentProfileAcpServer: string | null | undefined;
+      let agentProfileAcpCommand: string | readonly string[] | null | undefined;
+      if (
+        !isCloud &&
+        effectiveAgentProfileId &&
+        resolvedAgentProfile?.agent_kind === "acp"
+      ) {
+        try {
+          const detail = await queryClient.ensureQueryData({
+            queryKey: agentProfileDetailQueryKey(
+              backend.id,
+              orgId,
+              resolvedAgentProfile.name,
+            ),
+            queryFn: () =>
+              AgentProfilesService.getProfile(resolvedAgentProfile.name),
+            ...AGENT_PROFILES_RETRY_OPTIONS,
+          });
+          const profile = detail?.profile;
+          if (profile?.agent_kind === "acp") {
+            agentProfileAcpServer = profile.acp_server ?? null;
+            agentProfileAcpCommand = profile.acp_command ?? null;
+          }
+        } catch {
+          console.warn(
+            `Could not load ACP profile "${resolvedAgentProfile.name}" ` +
+              "for Canvas skill projection; launching without the overlay.",
+          );
+        }
+      }
+
       // Only extend the call with the profile fields when launching from a
       // profile, so a plain create stays byte-identical to the legacy
       // agent_settings path (#3727). sandboxId is unused here.
@@ -237,6 +273,8 @@ export const useCreateConversation = () => {
             ? {
                 agentProfileId: effectiveAgentProfileId,
                 agentProfileKind: resolvedAgentProfile?.agent_kind,
+                agentProfileAcpServer,
+                agentProfileAcpCommand,
               }
             : {}),
         });
