@@ -1,4 +1,4 @@
-import { AppWindow, Brain, Shield } from "lucide-react";
+import { AppWindow, Brain, Route as RouteIcon, Shield } from "lucide-react";
 import KeyIcon from "#/icons/key.svg?react";
 import MemoryIcon from "#/icons/memory_icon.svg?react";
 import CircuitIcon from "#/icons/u-circuit.svg?react";
@@ -28,6 +28,12 @@ export const OSS_NAV_ITEMS: SettingsNavItem[] = [
     to: "/settings/llm",
     text: "SETTINGS$NAV_LLM",
     subtitle: "SETTINGS$PAGE_LLM_SUBLINE",
+  },
+  {
+    icon: <RouteIcon className="size-4" strokeWidth={2} aria-hidden />,
+    to: "/settings/meta-llm",
+    text: "SETTINGS$NAV_META_LLM",
+    subtitle: "SETTINGS$PAGE_META_LLM_SUBLINE",
   },
   {
     icon: <MemoryIcon width={16} height={16} />,
@@ -68,10 +74,11 @@ export const OSS_NAV_ITEMS: SettingsNavItem[] = [
 ];
 
 /**
- * The only OSS nav entry listed when the canvas is locked to a Cloud host —
- * i.e. deployed into SaaS / self-hosted OHE next to the OHE web app, whose own
- * settings shell (reached via "All Cloud Settings") owns everything else. The
- * other pages stay routable for in-app deep links; they are just unlisted
- * (OHE-3168).
+ * Default page for locked-to-Cloud deployments. The full Canvas settings nav
+ * remains available; "All Cloud Settings" links out to the Cloud settings shell
+ * for pages Canvas does not own directly.
  */
 export const LOCKED_CLOUD_SETTINGS_NAV_PATH = "/settings/app";
+export const LOCKED_CLOUD_SETTINGS_NAV_PATHS = new Set(
+  OSS_NAV_ITEMS.map((item) => item.to),
+);

@@ -22,6 +22,10 @@ export const LLM_PROFILES_QUERY_KEYS = {
   all: ["llm-profiles"] as const,
 } as const;
 
+export const META_PROFILES_QUERY_KEYS = {
+  all: ["meta-profiles"] as const,
+} as const;
+
 export const AGENT_PROFILES_QUERY_KEYS = {
   all: ["agent-profiles"] as const,
 } as const;

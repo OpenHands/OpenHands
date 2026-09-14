@@ -16,6 +16,7 @@ import {
   BrowserObservation,
   BrowserNavigateAction,
   SwitchLLMObservation,
+  ClassifyAndSwitchLLMObservation,
   CanvasUIAction,
   LaunchChildConversationAction,
 } from "./core";
@@ -165,6 +166,16 @@ export const isSwitchLLMObservationEvent = (
 ): event is ObservationEvent<SwitchLLMObservation> =>
   isObservationEvent(event) &&
   event.observation.kind === "SwitchLLMObservation";
+
+/**
+ * Type guard for router-driven model switches (Pareto/meta-profile classifier).
+ * Mirrors isSwitchLLMObservationEvent — same UI semantics, different tool.
+ */
+export const isClassifyAndSwitchLLMObservationEvent = (
+  event: OpenHandsEvent,
+): event is ObservationEvent<ClassifyAndSwitchLLMObservation> =>
+  isObservationEvent(event) &&
+  event.observation.kind === "ClassifyAndSwitchLLMObservation";
 
 /**
  * Type guard function to check if an action event is a BrowserNavigateAction

@@ -28,6 +28,7 @@ class ConversationService {
 
   private static getClientOverrides() {
     return {
+      conversationUrl: this.currentConversation?.conversation_url,
       sessionApiKey: this.currentConversation?.session_api_key,
     };
   }

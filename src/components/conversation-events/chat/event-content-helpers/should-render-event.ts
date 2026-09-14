@@ -92,8 +92,12 @@ export const shouldRenderEvent = (event: OpenHandsEvent) => {
     // Successful model switches are rendered through ModelMessages so they
     // look identical to `/model <profile>` confirmations. Failed switches
     // still render as observations so the error remains visible in chat.
+    // Same treatment for the router-driven classifier switch — its success
+    // path produces the same inline "Switched to" message via the
+    // model-store seam, so it must not render as a raw observation card.
     if (
-      event.observation.kind === "SwitchLLMObservation" &&
+      (event.observation.kind === "SwitchLLMObservation" ||
+        event.observation.kind === "ClassifyAndSwitchLLMObservation") &&
       !event.observation.is_error
     ) {
       return false;

@@ -291,7 +291,9 @@ describe("useLoadOlderEvents", () => {
     expect(result.current.isLoading).toBe(true);
 
     await act(async () => {
-      resolvePage(makePage([makeEvent("evt-older", "2024-05-01T00:00:00Z")], null));
+      resolvePage(
+        makePage([makeEvent("evt-older", "2024-05-01T00:00:00Z")], null),
+      );
       await Promise.all([firstLoad, secondLoad]);
     });
 

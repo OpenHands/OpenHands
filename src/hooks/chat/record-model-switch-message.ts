@@ -5,7 +5,10 @@ import {
   mergeStoredConversationMetadata,
 } from "#/api/conversation-metadata-store";
 import { OpenHandsEvent } from "#/types/agent-server/core";
-import { isSwitchLLMObservationEvent } from "#/types/agent-server/type-guards";
+import {
+  isClassifyAndSwitchLLMObservationEvent,
+  isSwitchLLMObservationEvent,
+} from "#/types/agent-server/type-guards";
 import { shouldRenderEvent } from "#/components/conversation-events/chat/event-content-helpers/should-render-event";
 
 export function recordModelSwitchMessage(
@@ -105,6 +108,24 @@ export function seedModelSwitchesFromHistory(
       });
       latestSwitch = {
         profileName: event.observation.profile_name,
+        timestamp: event.timestamp,
+      };
+    } else if (
+      isClassifyAndSwitchLLMObservationEvent(event) &&
+      !event.observation.is_error &&
+      event.observation.active_model
+    ) {
+      // Router-driven switch: the matched LLM profile name is the
+      // observation's `active_model` (the SDK matched classifier output
+      // against saved profile names case-insensitively).
+      const profileName = event.observation.active_model;
+      switches.push({
+        id: `history-classify-switch:${event.id}`,
+        anchorEventId: lastRenderableId,
+        profileName,
+      });
+      latestSwitch = {
+        profileName,
         timestamp: event.timestamp,
       };
     }
