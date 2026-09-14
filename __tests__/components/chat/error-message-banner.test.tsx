@@ -54,6 +54,57 @@ describe("ErrorMessageBanner", () => {
     expect(icon).toHaveStyle({ color: "var(--oh-status-error)" });
   });
 
+  it("uses a warning icon for non-internal outcomes", () => {
+    render(
+      <ErrorMessageBanner
+        message="Incorrect API key"
+        classification={{
+          kind: "auth",
+          retryable: false,
+          user_action: "settings",
+        }}
+      />,
+    );
+
+    expect(screen.getByTestId("warning-message-banner-icon")).toHaveClass(
+      "text-[var(--oh-warning)]",
+    );
+  });
+
+  it("uses the error icon for internal outcomes", () => {
+    render(
+      <ErrorMessageBanner
+        message="Something went wrong"
+        classification={{
+          kind: "internal",
+          retryable: false,
+          user_action: "none",
+        }}
+      />,
+    );
+
+    expect(screen.getByTestId("error-message-banner-icon")).toHaveStyle({
+      color: "var(--oh-status-error)",
+    });
+  });
+
+  it("uses the error icon for unknown (diagnostic) outcomes", () => {
+    render(
+      <ErrorMessageBanner
+        message="Something went wrong"
+        classification={{
+          kind: "unknown",
+          retryable: false,
+          user_action: "none",
+        }}
+      />,
+    );
+
+    expect(screen.getByTestId("error-message-banner-icon")).toHaveStyle({
+      color: "var(--oh-status-error)",
+    });
+  });
+
   it("uses greyscale theme tokens instead of red error styling", () => {
     render(<ErrorMessageBanner message="Something went wrong" />);
 

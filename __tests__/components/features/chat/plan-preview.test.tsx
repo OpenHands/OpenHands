@@ -208,8 +208,7 @@ describe("PlanPreview", () => {
     await user.click(buildButton);
 
     // Assert
-    const pending =
-      useOptimisticUserMessageStore.getState().pendingMessages;
+    const pending = useOptimisticUserMessageStore.getState().pendingMessages;
     expect(pending).toHaveLength(1);
     expect(pending[0].text).toBe(expectedPrompt);
     expect(pending[0].status).toBe("sending");
@@ -381,9 +380,9 @@ describe("PlanPreview", () => {
     const viewButton = screen.getByTestId("plan-preview-view-button");
     await user.click(viewButton);
 
-    // Assert: selectTab was called with 'planner' and the drawer opened
-    // (in-memory). The drawer-open state is session-only and must not
-    // touch localStorage; only the selected tab persists.
+    // Assert: selectTab was called with 'planner' and the drawer opened.
+    // Opening the drawer also mirrors `rightPanelShown` into the
+    // conversation's localStorage blob, alongside the selected tab.
     expect(useConversationStore.getState().selectedTab).toBe("planner");
     expect(useConversationStore.getState().hasRightPanelToggled).toBe(true);
 
@@ -391,7 +390,7 @@ describe("PlanPreview", () => {
       localStorage.getItem(`conversation-state-${conversationId}`)!,
     );
     expect(storedState.selectedTab).toBe("planner");
-    expect(storedState).not.toHaveProperty("rightPanelShown");
+    expect(storedState.rightPanelShown).toBe(true);
   });
 
   it("should call selectTab with 'planner' when Read more button is clicked", async () => {
@@ -412,9 +411,9 @@ describe("PlanPreview", () => {
     const readMoreButton = screen.getByTestId("plan-preview-read-more-button");
     await user.click(readMoreButton);
 
-    // Assert: selectTab was called with 'planner' and the drawer opened
-    // (in-memory). The drawer-open state is session-only and must not
-    // touch localStorage; only the selected tab persists.
+    // Assert: selectTab was called with 'planner' and the drawer opened.
+    // Opening the drawer also mirrors `rightPanelShown` into the
+    // conversation's localStorage blob, alongside the selected tab.
     expect(useConversationStore.getState().selectedTab).toBe("planner");
     expect(useConversationStore.getState().hasRightPanelToggled).toBe(true);
 
@@ -422,6 +421,6 @@ describe("PlanPreview", () => {
       localStorage.getItem(`conversation-state-${conversationId}`)!,
     );
     expect(storedState.selectedTab).toBe("planner");
-    expect(storedState).not.toHaveProperty("rightPanelShown");
+    expect(storedState.rightPanelShown).toBe(true);
   });
 });

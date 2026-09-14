@@ -12,6 +12,7 @@ import {
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import {
   useAutomations,
+  useCancelAutomationRun,
   useDispatchAutomation,
   useDeleteAutomation,
   useToggleAutomation,
@@ -37,6 +38,7 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
     getAutomation: vi.fn(),
     getAutomationRuns: vi.fn(),
     dispatchAutomation: vi.fn(),
+    cancelAutomationRun: vi.fn(),
     deleteAutomation: vi.fn(),
     updateAutomation: vi.fn(),
     toggleAutomation: vi.fn(),
@@ -114,6 +116,10 @@ beforeEach(() => {
   vi.mocked(AutomationService.getAutomationRuns).mockReset();
   vi.mocked(AutomationService.dispatchAutomation).mockReset();
   vi.mocked(AutomationService.dispatchAutomation).mockResolvedValue(
+    automationRun,
+  );
+  vi.mocked(AutomationService.cancelAutomationRun).mockReset();
+  vi.mocked(AutomationService.cancelAutomationRun).mockResolvedValue(
     automationRun,
   );
   vi.mocked(AutomationService.deleteAutomation).mockReset();
@@ -250,6 +256,74 @@ describe("useAutomationRuns — polling", () => {
     },
     15000,
   );
+});
+
+describe("run mutations — sidebar conversation refresh", () => {
+  // The sidebar's conversation poll is paused on automation routes, so these
+  // mutations are what keep the sidebar list current for a run's conversation.
+  function makeClientWrapper() {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    function Wrapper({ children }: { children: React.ReactNode }) {
+      return (
+        <QueryClientProvider client={queryClient}>
+          <ActiveBackendProvider>{children}</ActiveBackendProvider>
+        </QueryClientProvider>
+      );
+    }
+    return { queryClient, Wrapper };
+  }
+
+  const conversationsKey = [
+    "user",
+    "conversations",
+    "paginated",
+    20,
+    "local-1",
+    null,
+  ];
+
+  it("invalidates the cached conversation list after a successful dispatch", async () => {
+    // Arrange — a sidebar list already sits in the cache.
+    const { queryClient, Wrapper } = makeClientWrapper();
+    queryClient.setQueryData(conversationsKey, { pages: [], pageParams: [] });
+    const { result } = renderHook(() => useDispatchAutomation(), {
+      wrapper: Wrapper,
+    });
+
+    // Act
+    await act(async () => {
+      await result.current.mutateAsync("auto-1");
+    });
+
+    // Assert
+    expect(queryClient.getQueryState(conversationsKey)?.isInvalidated).toBe(
+      true,
+    );
+  });
+
+  it("invalidates the cached conversation list after a successful cancel", async () => {
+    // Arrange
+    const { queryClient, Wrapper } = makeClientWrapper();
+    queryClient.setQueryData(conversationsKey, { pages: [], pageParams: [] });
+    const { result } = renderHook(() => useCancelAutomationRun(), {
+      wrapper: Wrapper,
+    });
+
+    // Act
+    await act(async () => {
+      await result.current.mutateAsync({
+        automationId: "auto-1",
+        runId: "run-1",
+      });
+    });
+
+    // Assert
+    expect(queryClient.getQueryState(conversationsKey)?.isInvalidated).toBe(
+      true,
+    );
+  });
 });
 
 describe("automation mutation hooks — analytics tracking", () => {

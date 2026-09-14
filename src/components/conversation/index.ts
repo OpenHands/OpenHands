@@ -6,4 +6,3 @@ export { ChatInterfaceWrapper } from "../features/conversation/conversation-main
 export { ConversationName } from "../features/conversation/conversation-name";
 export { ConversationNameWithStatus } from "../features/conversation/conversation-name-with-status";
 export { ConversationTabs } from "../features/conversation/conversation-tabs/conversation-tabs";
-export { MetricsModal } from "../features/conversation/metrics-modal/metrics-modal";

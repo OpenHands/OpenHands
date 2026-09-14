@@ -10,8 +10,6 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useTracking } from "#/hooks/use-tracking";
 import { getAutomationsDocsUrl } from "#/manifests/automation-interface";
 
-const DOCS_URL = getAutomationsDocsUrl();
-
 function InlineExampleWrap({ children }: { children?: ReactNode }) {
   return <span className="whitespace-nowrap">{children}</span>;
 }
@@ -70,18 +68,18 @@ export function CreateInstructionsContent({
           i18nKey={I18nKey.AUTOMATIONS$EMPTY_OPTION_CONVERSATION_DESC}
           components={CREATE_INSTRUCTIONS_INLINE_COMPONENTS}
         />{" "}
-        {t(I18nKey.AUTOMATIONS$CREATE_INSTRUCTIONS_GUIDANCE)}
-      </p>
-
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        {t(I18nKey.AUTOMATIONS$CREATE_INSTRUCTIONS_GUIDANCE)}{" "}
         <a
-          href={DOCS_URL}
+          href={getAutomationsDocsUrl()}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-sm text-muted underline transition-colors hover:text-foreground"
+          className="text-muted underline transition-colors hover:text-foreground"
         >
           {t(I18nKey.AUTOMATIONS$EMPTY_LEARN_MORE)}
         </a>
+      </p>
+
+      <div className="flex justify-center">
         <BrandButton
           type="button"
           variant="primary"
@@ -134,12 +132,7 @@ export function CreateInstructions({
 
   return (
     <div className="w-full max-w-2xl">
-      <h3 className="text-center text-sm font-medium text-content">
-        {t(I18nKey.AUTOMATIONS$EMPTY_HOW_TO_CREATE_TITLE)}
-      </h3>
-      <div className="mt-4">
-        <CreateInstructionsContent />
-      </div>
+      <CreateInstructionsContent />
     </div>
   );
 }

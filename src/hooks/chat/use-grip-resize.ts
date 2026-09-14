@@ -1,6 +1,7 @@
 import type { RefObject, MouseEvent } from "react";
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 import { useAutoResize } from "#/hooks/use-auto-resize";
+import { isBottomAnchored } from "#/hooks/use-drag-resize";
 import { CHAT_INPUT } from "#/utils/constants";
 import {
   IMessageToSend,
@@ -16,6 +17,10 @@ export const useGripResize = (
 ) => {
   const [isGripVisible, setIsGripVisible] = useState(false);
   const [isGripDragging, setIsGripDragging] = useState(false);
+  // Manual resizing only makes sense when the input is bottom-anchored (e.g.
+  // the conversation page). On the home page the input is centred and dragging
+  // the top grip would grow the box downward, so we hide the grip entirely.
+  const [canResize, setCanResize] = useState(true);
 
   const { setShouldHideSuggestions, clearMessageToSend } =
     useConversationStore();
@@ -23,6 +28,13 @@ export const useGripResize = (
   const gripRef = useRef<HTMLDivElement | null>(null);
   /** After a real resize drag, swallow the synthetic click so it doesn't toggle `isGripVisible`. */
   const suppressNextTopEdgeClickRef = useRef(false);
+
+  useEffect(() => {
+    const check = () => setCanResize(isBottomAnchored());
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
 
   const handleGripDragStart = useCallback(() => {
     setIsGripDragging(true);
@@ -34,16 +46,20 @@ export const useGripResize = (
   }, []);
 
   // Handle click on top edge area to toggle grip visibility
-  const handleTopEdgeClick = useCallback((e: MouseEvent) => {
-    if (suppressNextTopEdgeClickRef.current) {
-      suppressNextTopEdgeClickRef.current = false;
-      e.preventDefault();
+  const handleTopEdgeClick = useCallback(
+    (e: MouseEvent) => {
+      if (!canResize) return;
+      if (suppressNextTopEdgeClickRef.current) {
+        suppressNextTopEdgeClickRef.current = false;
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
       e.stopPropagation();
-      return;
-    }
-    e.stopPropagation();
-    setIsGripVisible((prev) => !prev);
-  }, []);
+      setIsGripVisible((prev) => !prev);
+    },
+    [canResize],
+  );
 
   // Callback to handle height changes and manage suggestions visibility
   const handleHeightChange = useCallback(
@@ -77,6 +93,7 @@ export const useGripResize = (
     gripRef,
     isGripVisible,
     isGripDragging,
+    canResize,
     handleTopEdgeClick,
     smartResize,
     handleGripMouseDown,

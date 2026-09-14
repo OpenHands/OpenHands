@@ -26,7 +26,7 @@ export interface LLMMetrics {
   model_name: string;
   accumulated_cost: number;
   max_budget_per_task: number | null;
-  accumulated_token_usage: TokenUsage;
+  accumulated_token_usage: TokenUsage | null;
   costs: Array<{
     model: string;
     cost: number;
@@ -41,12 +41,10 @@ export interface LLMMetrics {
 }
 
 /**
- * Usage metrics mapping for different components
+ * Usage metrics keyed by LLM usage id. The server uses arbitrary ids
+ * ("default", "condenser", "profile:<name>:<uuid>", …), not a fixed set.
  */
-export interface UsageToMetrics {
-  agent: LLMMetrics;
-  condenser: LLMMetrics;
-}
+export type UsageToMetrics = Record<string, LLMMetrics>;
 
 /**
  * Stats containing usage metrics

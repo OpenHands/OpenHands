@@ -124,16 +124,18 @@ describe("DebugAutomationButton", () => {
     // Act
     fireEvent.click(screen.getByTestId("debug-automation-button"));
 
-    // Assert — the first arg is the initial user message (the debug prompt).
+    // Assert — the options object carries the debug prompt as the initial
+    // user message.
     await waitFor(() =>
       expect(
         AgentServerConversationService.createConversation,
       ).toHaveBeenCalledTimes(1),
     );
-    const query = vi.mocked(AgentServerConversationService.createConversation)
-      .mock.calls[0][0];
-    expect(query).toContain("HTTP Error 410: Gone");
-    expect(query).toContain("Daily Jira digest");
+    const { initialUserMsg } =
+      vi.mocked(AgentServerConversationService.createConversation).mock
+        .calls[0][0] ?? {};
+    expect(initialUserMsg).toContain("HTTP Error 410: Gone");
+    expect(initialUserMsg).toContain("Daily Jira digest");
 
     await waitFor(() =>
       expect(navigate).toHaveBeenCalledWith("/conversations/task-abc123"),

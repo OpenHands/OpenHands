@@ -27,6 +27,7 @@ interface ConversationGroupFolderRowProps {
   animateLayout: boolean;
   isCreatingConversationFlow: boolean;
   activeConversationId?: string | null;
+  discoveryConversationIds?: ReadonlySet<string> | null;
   onToggleExpanded: () => void;
   onDragStart: () => void;
   onDragEnd: () => void;
@@ -47,6 +48,7 @@ export function ConversationGroupFolderRow({
   animateLayout,
   isCreatingConversationFlow,
   activeConversationId,
+  discoveryConversationIds,
   onToggleExpanded,
   onDragStart,
   onDragEnd,
@@ -65,6 +67,7 @@ export function ConversationGroupFolderRow({
     getGroupConversationPreview(group.conversations, {
       expanded: previewExpanded,
       activeConversationId,
+      discoveryConversationIds: discoveryConversationIds ?? undefined,
     });
 
   return (

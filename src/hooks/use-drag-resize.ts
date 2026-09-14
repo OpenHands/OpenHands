@@ -9,6 +9,32 @@ import { isMobileDevice } from "#/utils/utils";
 /** Movement required before a pointer gesture is treated as a resize drag. */
 const DRAG_COMMIT_PX = 2;
 
+/**
+ * Distance (px) from the viewport bottom within which we consider the chat
+ * input to be "bottom-anchored" by its parent's flexbox. When the input is
+ * bottom-anchored (e.g. the conversation page), dragging the top grip makes
+ * the box grow upward — the expected behaviour. When it is NOT
+ * bottom-anchored (e.g. the home page where the input sits in the centre of
+ * the screen), the same drag would make the box grow downward, which is
+ * confusing, so we disable manual resizing entirely in that case.
+ */
+const BOTTOM_ANCHORED_THRESHOLD = 120;
+
+/**
+ * Determine whether the chat input is anchored to the bottom of the viewport
+ * by its parent layout (e.g. the conversation page uses a flex column with a
+ * growing scroll area above the input). When true, dragging the top grip
+ * makes the box grow upward, which is the expected behaviour. When false,
+ * the drag would grow the box downward, so we disable it.
+ */
+export const isBottomAnchored = (): boolean => {
+  const grip = document.getElementById("resize-grip");
+  const wrapper = grip?.parentElement ?? null;
+  if (!wrapper) return true; // fall back to allowing the drag
+  const rect = wrapper.getBoundingClientRect();
+  return rect.bottom >= window.innerHeight - BOTTOM_ANCHORED_THRESHOLD;
+};
+
 // Drag handling hook
 interface UseDragResizeOptions {
   elementRef: RefObject<HTMLElement | null>;
@@ -150,12 +176,17 @@ export const useDragResize = ({
   // Handle mouse down on grip for manual resizing
   const handleGripMouseDown = (e: ReactMouseEvent) => {
     e.preventDefault();
+    // Only allow manual resizing when the input is bottom-anchored (e.g. the
+    // conversation page). On the home page the input is centred and dragging
+    // the top grip would grow the box downward, which is confusing.
+    if (!isBottomAnchored()) return;
     startDrag(e.clientY);
   };
 
   // Handle touch start on grip for manual resizing
   const handleGripTouchStart = (e: ReactTouchEvent) => {
     e.preventDefault();
+    if (!isBottomAnchored()) return;
     startDrag(e.touches[0].clientY);
   };
 

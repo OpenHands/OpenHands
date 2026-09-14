@@ -6,21 +6,26 @@ name: PR Description Check
 
 on:
     pull_request_target:
-        types: [opened, edited, reopened, ready_for_review]
+        types: [opened, edited, reopened, ready_for_review, synchronize]
 
 permissions:
     contents: read
     pull-requests: read
+    issues: read
 
 jobs:
     validate-pr-description:
         name: Validate PR description
-        # Draft PRs may still have incomplete descriptions; validate when review starts.
-        # Bots (dependabot, release-please) write their own bodies and can't follow
-        # the HUMAN/AGENT template, so exempt them rather than failing every such PR.
+        # Run on drafts too so contributors can iterate on a passing description
+        # before requesting review. Bots (dependabot, release-please) write their
+        # own bodies and can't follow the HUMAN/AGENT template, so exempt them
+        # rather than failing every such PR. The artifact-cleanup PR is generated
+        # by a trusted workflow without the human-authored template, so exempt it too.
         if: >-
-            github.event.pull_request.draft == false
-            && github.event.pull_request.user.type != 'Bot'
+            github.event.pull_request.user.type != 'Bot' &&
+            !(github.event.pull_request.head.repo.full_name == github.repository &&
+            github.event.pull_request.base.ref == 'main' &&
+            github.event.pull_request.head.ref == 'automation/remove-pr-artifacts')
         runs-on: ubuntu-24.04
         steps:
             - name: Checkout trusted workflow scripts
@@ -38,7 +43,7 @@ jobs:
                       --paginate --jq '.[].filename' > pr-files.txt
                   echo "count=$(wc -l < pr-files.txt)" >> "$GITHUB_OUTPUT"
 
-            - name: Validate HUMAN note, PR template, and frontend evidence
+            - name: Validate HUMAN note, PR template, frontend evidence, and linked-issue readiness
               env:
                   GITHUB_TOKEN: ${{ github.token }}
               run: python .github/scripts/check_pr_description.py --files-file pr-files.txt

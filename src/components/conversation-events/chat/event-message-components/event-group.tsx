@@ -11,6 +11,7 @@ import {
 import { I18nKey } from "#/i18n/declaration";
 import { getEventContent } from "../event-content-helpers/get-event-content";
 import { IsInEventGroupContext } from "../../../features/chat/is-in-event-group-context";
+import { PathInteractiveContext } from "../../../features/chat/path-component";
 
 interface EventGroupProps {
   /** The events represented by this group. Used to compute the summary. */
@@ -131,7 +132,11 @@ export function EventGroup({
           <>
             <span className="flex items-center gap-2 min-w-0 font-normal text-[var(--oh-muted)]">
               <Chevron className="h-4 w-4 fill-[var(--oh-muted)] flex-shrink-0" />
-              <span className="truncate">{latestTitle ?? countSummary}</span>
+              <span className="truncate">
+                <PathInteractiveContext.Provider value={false}>
+                  {latestTitle ?? countSummary}
+                </PathInteractiveContext.Provider>
+              </span>
             </span>
             <span className="flex items-center flex-shrink-0 font-normal text-[var(--oh-muted)]">
               <span className="truncate">{countSummary}</span>

@@ -35,12 +35,7 @@ export const isSkillReadyEvent = (event: unknown): event is SkillReadyEvent =>
 export const createSkillReadyEvent = (
   userEvent: MessageEvent,
 ): SkillReadyEvent => {
-  // Support both activated_skills and activated_microagents field names
-  const activatedSkills =
-    (userEvent as unknown as { activated_skills?: string[] })
-      .activated_skills ||
-    userEvent.activated_microagents ||
-    [];
+  const activatedSkills = userEvent.activated_skills || [];
 
   const extendedContent = userEvent.extended_content || [];
 

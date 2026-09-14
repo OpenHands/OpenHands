@@ -13,10 +13,10 @@ export function BudgetProgressBar({
   const isNearLimit = usagePercentage > 80;
 
   return (
-    <div className="w-full h-1.5 bg-tertiary rounded-full overflow-hidden mt-1">
+    <div className="relative mt-1 h-1.5 w-full rounded-full bg-tertiary">
       <div
         className={cn(
-          "h-full transition-all duration-300",
+          "absolute inset-y-0 left-0 rounded-full transition-all duration-300",
           isNearLimit ? "bg-red-500" : "bg-blue-500",
         )}
         // runtime usage-percentage width

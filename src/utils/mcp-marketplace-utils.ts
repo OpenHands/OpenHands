@@ -110,7 +110,17 @@ export function getMcpOAuthAuthenticationConfig(
 export function getMcpMarketplaceCatalog(
   catalog: MarketplaceEntry[],
 ): MarketplaceEntry[] {
-  return catalog.filter((entry) => !!getDefaultMcpConnectionOption(entry));
+  return catalog.filter(isMcpInstallableEntry);
+}
+
+/**
+ * Whether this backend can install/configure the entry as an MCP server.
+ * Entries whose only connection options use another provider or transport
+ * (e.g. Jira's HTTP/OpenAPI option) exist in the catalog but cannot go
+ * through the local MCP install flow.
+ */
+export function isMcpInstallableEntry(entry: MarketplaceEntry): boolean {
+  return !!getDefaultMcpConnectionOption(entry);
 }
 
 const tryUrl = (raw: string): URL | null => {

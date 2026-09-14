@@ -98,7 +98,7 @@ describe("ChatInputModel", () => {
     const model = screen.getByTestId("chat-input-llm-model");
     // ACP surfaces show the provider's human label (matching the conversation
     // list chip), resolved from ``acp_server`` + the raw ``acp_model`` id.
-    expect(model).toHaveAttribute("title", "Claude Sonnet 4.6");
+    expect(model).toHaveAttribute("title", "Claude Sonnet");
     fireEvent.click(model);
     expect(screen.getByRole("link")).toHaveAttribute(
       "href",
@@ -225,7 +225,7 @@ describe("ChatInputModel", () => {
     // Claude Code's registered default (``opus[1m]``), shown as its
     // human label to match the conversation list chip. See CLAUDE_MODELS in
     // acp-providers.ts.
-    expect(model).toHaveAttribute("title", "Claude Opus 4.8 (1M)");
+    expect(model).toHaveAttribute("title", "Claude Opus (1M)");
     fireEvent.click(model);
     expect(screen.getByRole("link")).toHaveAttribute(
       "href",
@@ -253,7 +253,7 @@ describe("ChatInputModel", () => {
       "chat-input-acp-model-option-sonnet",
     );
     expect(selectedRow).toBeInTheDocument();
-    expect(selectedRow).toHaveTextContent("Claude Sonnet 4.6");
+    expect(selectedRow).toHaveTextContent("Claude Sonnet");
     expect(
       screen.getByTestId("chat-input-acp-model-option-opus[1m]"),
     ).toBeInTheDocument();
@@ -329,12 +329,12 @@ describe("ChatInputModel", () => {
       "chat-input-acp-model-option-sonnet",
     );
     expect(selectedRow).toBeInTheDocument();
-    expect(selectedRow).toHaveTextContent("Claude Sonnet 4.6");
+    expect(selectedRow).toHaveTextContent("Claude Sonnet");
     expect(
       screen.getByTestId("chat-input-acp-model-option-opus[1m]"),
     ).toBeInTheDocument();
     const popover = screen.getByTestId("chat-input-llm-model-popover");
-    expect(popover).toHaveTextContent("Claude Sonnet 4.6");
+    expect(popover).toHaveTextContent("Claude Sonnet");
     expect(screen.getByRole("link")).toHaveAttribute(
       "href",
       "/settings/agents",

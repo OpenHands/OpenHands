@@ -2,12 +2,19 @@ import { describe, expect, it } from "vitest";
 import {
   applyAutomationConversationFilter,
   applyGroupFolderOrder,
+  applyTagConversationFilter,
   collectAutomationNameFacets,
+  collectTagFacets,
+  formatTagFacetLabel,
   getGroupConversationPreview,
+  getGroupDiscoveryConversationIds,
   groupConversations,
   GROUP_CONVERSATIONS_PREVIEW_LIMIT,
   isAutomationConversation,
+  isOlderConversationCutoff,
   parseConversationTimeMs,
+  partitionByCutoff,
+  OLDER_CONVERSATION_CUTOFF_MS,
   moveGroupFolderOrder,
   resolvePinnedConversations,
   sortConversationsByField,
@@ -257,6 +264,83 @@ describe("conversation-panel-list-helpers", () => {
       withActiveBeyondPreview.visibleConversations.map((c) => c.id),
     ).toEqual(["c-0", "c-1", "c-2", "c-3", "c-5"]);
     expect(GROUP_CONVERSATIONS_PREVIEW_LIMIT).toBe(5);
+  });
+
+  it("freezes discovery preview ids per folder and force-includes the active conversation", () => {
+    // Later pages may still contain rows for already-visible folders; those
+    // stay out of the collapsed discovery set so global Load more does not
+    // mutate an exposed folder's preview. The active conversation is still
+    // force-included even when it lands on a non-discovery page.
+    const items = [
+      {
+        ...base,
+        id: "none-1",
+        title: "None 1",
+        selected_workspace: null,
+      },
+      {
+        ...base,
+        id: "none-2",
+        title: "None 2",
+        selected_workspace: null,
+      },
+      {
+        ...base,
+        id: "alpha-1",
+        title: "Alpha 1",
+        selected_workspace: "/workspace/alpha",
+      },
+    ] as AppConversation[];
+    const pageByConversationId = new Map([
+      ["none-1", 0],
+      ["none-2", 1],
+      ["alpha-1", 1],
+    ]);
+
+    expect([
+      ...getGroupDiscoveryConversationIds(
+        items,
+        pageByConversationId,
+        "local",
+      ),
+    ]).toEqual(["none-1", "alpha-1"]);
+
+    expect([
+      ...getGroupDiscoveryConversationIds(items, pageByConversationId, "local", {
+        forceIncludeConversationId: "none-2",
+      }),
+    ]).toEqual(["none-1", "alpha-1", "none-2"]);
+
+    const grouped = groupConversations(items, "local", "updated", {
+      emptyWorkspace: "No workspace",
+      emptyRepository: "No repository",
+    });
+    const noneGroup = grouped.find((group) => group.id === "__none_workspace");
+    expect(noneGroup?.conversations.map((c) => c.id)).toEqual([
+      "none-1",
+      "none-2",
+    ]);
+
+    const discoveryIds = getGroupDiscoveryConversationIds(
+      items,
+      pageByConversationId,
+      "local",
+    );
+    const collapsed = getGroupConversationPreview(noneGroup!.conversations, {
+      expanded: false,
+      discoveryConversationIds: discoveryIds,
+    });
+    expect(collapsed.visibleConversations.map((c) => c.id)).toEqual(["none-1"]);
+    expect(collapsed.isPreviewTruncated).toBe(true);
+
+    const expanded = getGroupConversationPreview(noneGroup!.conversations, {
+      expanded: true,
+      discoveryConversationIds: discoveryIds,
+    });
+    expect(expanded.visibleConversations.map((c) => c.id)).toEqual([
+      "none-1",
+      "none-2",
+    ]);
   });
 
   it("resolvePinnedConversations preserves pin order and drops missing ids", () => {
@@ -549,5 +633,247 @@ describe("conversation-panel-list-helpers", () => {
         automationFilterFacets,
       ).map((c) => c.id),
     ).toEqual(["audit", "unnamed"]);
+  });
+
+  it("pre-seeds workspace groups from knownWorkspaces even when no conversations are loaded for them", () => {
+    const knownWorkspaces = [
+      { id: "/workspace/alpha", name: "alpha", path: "/workspace/alpha" },
+      { id: "/workspace/beta", name: "beta", path: "/workspace/beta" },
+    ];
+    const groups = groupConversations(
+      [],
+      "local",
+      "updated",
+      { emptyWorkspace: "No workspace", emptyRepository: "No repository" },
+      knownWorkspaces,
+    );
+    expect(groups.map((g) => ({ id: g.id, label: g.label }))).toEqual([
+      { id: "ws:/workspace/alpha", label: "alpha" },
+      { id: "ws:/workspace/beta", label: "beta" },
+    ]);
+    expect(groups.every((g) => g.conversations.length === 0)).toBe(true);
+  });
+
+  it("merges known workspaces with conversations from paginated pages into one unified group list", () => {
+    const knownWorkspaces = [
+      { id: "/workspace/alpha", name: "alpha", path: "/workspace/alpha" },
+    ];
+    const pageTwoConversation: AppConversation = {
+      ...base,
+      id: "deep",
+      title: "deep",
+      selected_workspace: "/workspace/beta",
+      updated_at: "2024-01-05T00:00:00.000Z",
+    };
+    const groups = groupConversations(
+      [pageTwoConversation],
+      "local",
+      "updated",
+      { emptyWorkspace: "No workspace", emptyRepository: "No repository" },
+      knownWorkspaces,
+    );
+    const ids = groups.map((g) => g.id);
+    expect(ids).toContain("ws:/workspace/alpha");
+    expect(ids).toContain("ws:/workspace/beta");
+    const alpha = groups.find((g) => g.id === "ws:/workspace/alpha");
+    expect(alpha?.conversations).toHaveLength(0);
+    const beta = groups.find((g) => g.id === "ws:/workspace/beta");
+    expect(beta?.conversations.map((c) => c.id)).toEqual(["deep"]);
+  });
+
+  it("uses the known workspace name for a group whose path is in knownWorkspaces", () => {
+    const knownWorkspaces = [
+      {
+        id: "/workspace/my-project",
+        name: "My Project",
+        path: "/workspace/my-project",
+      },
+    ];
+    const convo: AppConversation = {
+      ...base,
+      id: "c1",
+      title: "c1",
+      selected_workspace: "/workspace/my-project",
+      updated_at: "2024-01-02T00:00:00.000Z",
+    };
+    const groups = groupConversations(
+      [convo],
+      "local",
+      "updated",
+      { emptyWorkspace: "No workspace", emptyRepository: "No repository" },
+      knownWorkspaces,
+    );
+    const group = groups.find((g) => g.id === "ws:/workspace/my-project");
+    expect(group?.label).toBe("My Project");
+  });
+
+  it("ignores knownWorkspaces for cloud backend grouping", () => {
+    const knownWorkspaces = [
+      { id: "/workspace/alpha", name: "alpha", path: "/workspace/alpha" },
+    ];
+    const groups = groupConversations(
+      [],
+      "cloud",
+      "updated",
+      { emptyWorkspace: "No workspace", emptyRepository: "No repository" },
+      knownWorkspaces,
+    );
+    expect(groups).toHaveLength(0);
+  });
+
+  it("collects distinct user-facing key=value tag facets, sorted A–Z, excluding reserved keys", () => {
+    const conversations: AppConversation[] = [
+      {
+        ...base,
+        id: "t1",
+        title: "t1",
+        tags: {
+          origin: "slack",
+          owner: "alice",
+          // Reserved/internal keys must not surface as facets — including
+          // the automation provenance family, which the automation filter
+          // owns exclusively.
+          acpserver: "claude-code",
+          title: "internal title stamp",
+          automationname: "Nightly Audit",
+          automationtrigger: "cron",
+        },
+      },
+      {
+        ...base,
+        id: "t2",
+        title: "t2",
+        // Duplicate facet (origin=slack again) collapses into one entry.
+        tags: { origin: "slack", project: "fracture" },
+      },
+      // No user tags at all: contributes nothing (no unnamed bucket).
+      { ...base, id: "t3", title: "t3" },
+      { ...base, id: "t4", title: "t4", tags: null },
+    ];
+    expect(collectTagFacets(conversations)).toEqual([
+      "origin=slack",
+      "owner=alice",
+      "project=fracture",
+    ]);
+  });
+
+  it("formats bare-tag facets (empty value) as just the key", () => {
+    expect(formatTagFacetLabel("work=")).toBe("work");
+    expect(formatTagFacetLabel("project=fracture")).toBe("project=fracture");
+  });
+
+  const tagFilterFixtures: AppConversation[] = [
+    { ...base, id: "untagged", title: "untagged" },
+    {
+      ...base,
+      id: "slack",
+      title: "slack",
+      tags: { origin: "slack" },
+    },
+    {
+      ...base,
+      id: "alice",
+      title: "alice",
+      tags: { owner: "alice" },
+    },
+    {
+      ...base,
+      id: "both",
+      title: "both",
+      tags: { origin: "slack", owner: "alice" },
+    },
+  ];
+  const tagFilterFacets = ["origin=slack", "owner=alice"];
+
+  it("applies the tag filter with union semantics: any selected facet matches", () => {
+    expect(
+      applyTagConversationFilter(
+        tagFilterFixtures,
+        ["origin=slack", "owner=alice"],
+        tagFilterFacets,
+      ).map((c) => c.id),
+    ).toEqual(["slack", "alice", "both"]);
+
+    expect(
+      applyTagConversationFilter(
+        tagFilterFixtures,
+        ["origin=slack"],
+        tagFilterFacets,
+      ).map((c) => c.id),
+    ).toEqual(["slack", "both"]);
+  });
+
+  it("leaves the list unfiltered for empty or stale tag selections", () => {
+    // An empty selection is "no tag filter", and a selection that no longer
+    // intersects the available facets (tags edited away, selections persisted
+    // from another backend) self-heals the same way instead of yielding an
+    // unfillable empty list — mirroring the automation filter.
+    expect(
+      applyTagConversationFilter(tagFilterFixtures, [], tagFilterFacets).map(
+        (c) => c.id,
+      ),
+    ).toEqual(["untagged", "slack", "alice", "both"]);
+
+    expect(
+      applyTagConversationFilter(
+        tagFilterFixtures,
+        ["origin=irc"],
+        tagFilterFacets,
+      ).map((c) => c.id),
+    ).toEqual(["untagged", "slack", "alice", "both"]);
+  });
+});
+
+describe("partitionByCutoff", () => {
+  const now = Date.parse("2026-08-25T12:00:00.000Z");
+
+  it("puts conversations older than the cutoff in the older bucket", () => {
+    const items = [
+      { updated_at: "2026-08-25T11:30:00.000Z" },
+      { updated_at: "2026-08-25T10:00:00.000Z" },
+    ];
+
+    const { recent, older } = partitionByCutoff(
+      items,
+      OLDER_CONVERSATION_CUTOFF_MS["1h"],
+      now,
+    );
+
+    expect(recent.map((item) => item.updated_at)).toEqual([
+      "2026-08-25T11:30:00.000Z",
+    ]);
+    expect(older.map((item) => item.updated_at)).toEqual([
+      "2026-08-25T10:00:00.000Z",
+    ]);
+  });
+
+  it("keeps a 2-hour-old conversation recent when the cutoff is 1 day", () => {
+    const items = [{ updated_at: "2026-08-25T10:00:00.000Z" }];
+
+    const { recent, older } = partitionByCutoff(
+      items,
+      OLDER_CONVERSATION_CUTOFF_MS["1d"],
+      now,
+    );
+
+    expect(recent).toHaveLength(1);
+    expect(older).toHaveLength(0);
+  });
+
+  it("leaves missing timestamps in recent so they are not hidden", () => {
+    const { recent, older } = partitionByCutoff(
+      [{ updated_at: "" }],
+      OLDER_CONVERSATION_CUTOFF_MS["1h"],
+      now,
+    );
+
+    expect(recent).toHaveLength(1);
+    expect(older).toHaveLength(0);
+  });
+
+  it("accepts only the known cutoff ids", () => {
+    expect(isOlderConversationCutoff("1h")).toBe(true);
+    expect(isOlderConversationCutoff("1d")).toBe(true);
+    expect(isOlderConversationCutoff("2h")).toBe(false);
   });
 });

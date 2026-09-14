@@ -35,7 +35,7 @@ const userMessage: MessageEvent = {
     role: "user",
     content: [{ type: "text", text: "Create a basic webpage." }],
   },
-  activated_microagents: [],
+  activated_skills: [],
   extended_content: [],
 };
 
@@ -164,7 +164,7 @@ describe("issue #1534 — streamed intermediate message duplication", () => {
         role: "assistant",
         content: [{ type: "text", text: THOUGHT }],
       },
-      activated_microagents: [],
+      activated_skills: [],
       extended_content: [],
       critic_result: {
         score: 0.72,
@@ -202,7 +202,7 @@ describe("issue #1534 — streamed intermediate message duplication", () => {
         role: "assistant",
         content: [{ type: "text", text: THOUGHT }],
       },
-      activated_microagents: [],
+      activated_skills: [],
       extended_content: [],
     };
     const allEvents = [userMessage, leadingWhitespaceDelta, finalMessage];

@@ -493,4 +493,137 @@ Full skill body.`,
 
     expect(writeText).toHaveBeenCalledWith(ADD_SKILL_EXAMPLE_COMMAND);
   });
+  // A skill from the bundled `@openhands/extensions` catalog: those are
+  // governed by the `enabled_skills` allow-list, not the deny-list.
+  const CATALOG_RECOMMENDED = "add-skill";
+  const CATALOG_OPTIONAL = "add-javadoc";
+
+  it("shows the notice that skill changes only reach new conversations", async () => {
+    vi.spyOn(SkillsService, "getSkills").mockResolvedValue([]);
+
+    renderSkillsSettingsScreen();
+
+    expect(
+      await screen.findByTestId("skills-new-conversation-notice"),
+    ).toHaveTextContent("SETTINGS$SKILLS_NEW_CONVERSATION_NOTICE");
+  });
+
+  it("badges a catalog skill the catalog recommends", async () => {
+    vi.spyOn(SkillsService, "getSkills").mockResolvedValue([
+      buildSkill({ name: CATALOG_RECOMMENDED }),
+      buildSkill({ name: CATALOG_OPTIONAL }),
+    ]);
+
+    renderSkillsSettingsScreen();
+    await screen.findByTestId(`skill-card-${CATALOG_RECOMMENDED}`);
+
+    expect(
+      screen.getByTestId(`skill-recommended-${CATALOG_RECOMMENDED}`),
+    ).toHaveTextContent("SETTINGS$SKILLS_RECOMMENDED");
+    expect(
+      screen.queryByTestId(`skill-recommended-${CATALOG_OPTIONAL}`),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders an unlisted catalog skill as off without it being denied", async () => {
+    // The reported bug: everything in the catalog arrived switched on.
+    vi.spyOn(SkillsService, "getSkills").mockResolvedValue([
+      buildSkill({ name: CATALOG_OPTIONAL }),
+    ]);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({ enabled_skills: undefined, disabled_skills: [] }),
+    );
+
+    renderSkillsSettingsScreen();
+    const card = await screen.findByTestId(`skill-card-${CATALOG_OPTIONAL}`);
+
+    expect(
+      within(card).getByTestId(`skill-toggle-${CATALOG_OPTIONAL}`),
+    ).toHaveAttribute("aria-checked", "false");
+  });
+
+  it("writes nothing back when the user toggles nothing", async () => {
+    // Persisting the hydrated state on mount would race the one-shot migration
+    // and could narrow a workspace it had just preserved.
+    vi.spyOn(SkillsService, "getSkills").mockResolvedValue([
+      buildSkill({ name: CATALOG_OPTIONAL }),
+    ]);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({ enabled_skills: undefined, disabled_skills: [] }),
+    );
+    const saveSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+
+    renderSkillsSettingsScreen();
+    await screen.findByTestId(`skill-card-${CATALOG_OPTIONAL}`);
+    await waitFor(() =>
+      expect(screen.getByTestId("skills-result-summary")).toBeInTheDocument(),
+    );
+
+    expect(saveSpy).not.toHaveBeenCalled();
+  });
+
+  it("saves a catalog toggle to enabled_skills rather than the deny-list", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(SkillsService, "getSkills").mockResolvedValue([
+      buildSkill({ name: CATALOG_RECOMMENDED }),
+    ]);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({ enabled_skills: [CATALOG_RECOMMENDED] }),
+    );
+    const saveSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+
+    renderSkillsSettingsScreen();
+    const card = await screen.findByTestId(`skill-card-${CATALOG_RECOMMENDED}`);
+
+    await user.click(
+      within(card).getByTestId(`skill-toggle-${CATALOG_RECOMMENDED}`),
+    );
+
+    await waitFor(() =>
+      expect(saveSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          enabled_skills: [],
+          disabled_skills: [],
+        }),
+      ),
+    );
+  });
+
+  it("drops a re-enabled catalog skill from an unmigrated deny-list", async () => {
+    // A stale deny entry would otherwise veto the allow-list entry we just
+    // wrote, leaving the toggle on and the skill still absent.
+    const user = userEvent.setup();
+    vi.spyOn(SkillsService, "getSkills").mockResolvedValue([
+      buildSkill({ name: CATALOG_RECOMMENDED }),
+    ]);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        enabled_skills: undefined,
+        disabled_skills: [CATALOG_RECOMMENDED],
+      }),
+    );
+    const saveSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+
+    renderSkillsSettingsScreen();
+    const card = await screen.findByTestId(`skill-card-${CATALOG_RECOMMENDED}`);
+
+    await user.click(
+      within(card).getByTestId(`skill-toggle-${CATALOG_RECOMMENDED}`),
+    );
+
+    await waitFor(() =>
+      expect(saveSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          enabled_skills: expect.arrayContaining([CATALOG_RECOMMENDED]),
+          disabled_skills: [],
+        }),
+      ),
+    );
+  });
 });

@@ -11,6 +11,8 @@ import {
   SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH,
 } from "#/hooks/use-breakpoint";
 import { SidebarMobileMenuToggle } from "#/components/features/sidebar/sidebar-mobile-menu-toggle";
+import { ConversationOverviewDrawer } from "../conversation-overview-drawer";
+import { useConversationOverviewDrawerOptional } from "../conversation-overview-drawer-context";
 
 function getDesktopTabPanelClass(isRightPanelShown: boolean) {
   return isRightPanelShown
@@ -22,6 +24,8 @@ export function ConversationMain() {
   const isMobile = useBreakpoint();
   const isSidebarRailHidden = useBreakpoint(SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH);
   const { isRightPanelShown } = useConversationStore();
+  const overviewDrawer = useConversationOverviewDrawerOptional();
+  const isSecondaryDrawerOpen = Boolean(overviewDrawer?.section);
 
   const { leftWidth, rightWidth, isDragging, containerRef, handleMouseDown } =
     useResizablePanels({
@@ -58,14 +62,21 @@ export function ConversationMain() {
         <div
           className={cn(
             "flex flex-col bg-base overflow-hidden",
-            isMobile ? "flex-1" : "transition-all duration-300 ease-in-out",
+            isMobile
+              ? "flex-1"
+              : cn(
+                  "min-w-0",
+                  !isSecondaryDrawerOpen &&
+                    "transition-[width] duration-300 ease-in-out",
+                ),
           )}
           // panel width computed at runtime by resize hook; transition toggled by drag state
           style={
             !isMobile
               ? {
                   width: isRightPanelShown ? `${leftWidth}%` : "100%",
-                  transitionProperty: isDragging ? "none" : "all",
+                  transitionProperty:
+                    isDragging || isSecondaryDrawerOpen ? "none" : "width",
                 }
               : undefined
           }
@@ -121,6 +132,10 @@ export function ConversationMain() {
             </div>
           </div>
         )}
+        <ConversationOverviewDrawer
+          isMobile={isMobile}
+          resizeContainerRef={containerRef}
+        />
       </div>
     </div>
   );

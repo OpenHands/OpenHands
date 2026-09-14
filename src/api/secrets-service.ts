@@ -10,6 +10,19 @@ import { getAgentServerClientOptions } from "./agent-server-client-options";
 import { CustomSecretWithoutValue } from "./secrets-service.types";
 import { withRetry } from "./with-retry";
 
+async function fetchSecrets(): Promise<CustomSecretWithoutValue[]> {
+  if (getActiveBackend().backend.kind === "cloud") {
+    return withRetry(() => fetchCloudSecrets());
+  }
+  const response = await withRetry(() =>
+    new SettingsClient(getAgentServerClientOptions()).listSecrets(),
+  );
+  return response.secrets.map((s) => ({
+    name: s.name,
+    description: s.description,
+  }));
+}
+
 export class SecretsService {
   /**
    * List all custom secrets (names and descriptions only, no values).
@@ -20,20 +33,19 @@ export class SecretsService {
    */
   static async getSecrets(): Promise<CustomSecretWithoutValue[]> {
     try {
-      if (getActiveBackend().backend.kind === "cloud") {
-        return await withRetry(() => fetchCloudSecrets());
-      }
-      const response = await withRetry(() =>
-        new SettingsClient(getAgentServerClientOptions()).listSecrets(),
-      );
-      return response.secrets.map((s) => ({
-        name: s.name,
-        description: s.description,
-      }));
+      return await fetchSecrets();
     } catch (error) {
       console.error("Failed to fetch secrets after retries:", error);
       return [];
     }
+  }
+
+  /**
+   * List all custom secrets, surfacing failures to callers that must
+   * distinguish an unavailable list from an empty one.
+   */
+  static async getSecretsOrThrow(): Promise<CustomSecretWithoutValue[]> {
+    return fetchSecrets();
   }
 
   /**

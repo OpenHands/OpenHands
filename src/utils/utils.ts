@@ -309,75 +309,6 @@ export const constructPullRequestUrl = (
 };
 
 /**
- * Construct the microagent URL for different providers
- * @param gitProvider The git provider
- * @param repositoryName The repository name in format "owner/repo"
- * @param microagentPath The path to the microagent in the repository
- * @returns The URL to the microagent file in the Git provider
- *
- * @example
- * constructMicroagentUrl("github", "owner/repo", ".openhands/microagents/tell-me-a-joke.md")
- * // "https://github.com/owner/repo/blob/main/.openhands/microagents/tell-me-a-joke.md"
- * constructMicroagentUrl("gitlab", "owner/repo", "microagents/git-helper.md")
- * // "https://gitlab.com/owner/repo/-/blob/main/microagents/git-helper.md"
- * constructMicroagentUrl("bitbucket", "owner/repo", ".openhands/microagents/docker-helper.md")
- * // "https://bitbucket.org/owner/repo/src/main/.openhands/microagents/docker-helper.md"
- */
-export const constructMicroagentUrl = (
-  gitProvider: Provider,
-  repositoryName: string,
-  microagentPath: string,
-  host?: string | null,
-): string => {
-  const baseUrl = getGitProviderBaseUrl(gitProvider, host);
-
-  switch (gitProvider) {
-    case "github":
-      return `${baseUrl}/${repositoryName}/blob/main/${microagentPath}`;
-    case "forgejo":
-      return `${baseUrl}/${repositoryName}/src/branch/main/${microagentPath}`;
-    case "gitlab":
-      return `${baseUrl}/${repositoryName}/-/blob/main/${microagentPath}`;
-    case "bitbucket":
-      return `${baseUrl}/${repositoryName}/src/main/${microagentPath}`;
-    case "bitbucket_data_center": {
-      const [project, repo] = repositoryName.split("/");
-      return `${baseUrl}/projects/${project}/repos/${repo}/browse/${microagentPath}?at=refs/heads/main`;
-    }
-    case "azure_devops": {
-      // Azure DevOps format: org/project/repo
-      const parts = repositoryName.split("/");
-      if (parts.length === 3) {
-        const [org, project, repo] = parts;
-        return `${baseUrl}/${org}/${project}/_git/${repo}?path=/${microagentPath}&version=GBmain`;
-      }
-      return "";
-    }
-    default:
-      return "";
-  }
-};
-
-/**
- * Extract repository owner, repo name, and file path from repository and microagent data
- * @param selectedRepository The selected repository object with full_name property
- * @param microagent The microagent object with path property
- * @returns Object containing owner, repo, and filePath
- *
- * @example
- * const { owner, repo, filePath } = extractRepositoryInfo(selectedRepository, microagent);
- */
-export const extractRepositoryInfo = (
-  selectedRepository: { full_name?: string } | null | undefined,
-  microagent: { path?: string } | null | undefined,
-) => {
-  const [owner, repo] = selectedRepository?.full_name?.split("/") || [];
-  const filePath = microagent?.path || "";
-
-  return { owner, repo, filePath };
-};
-
-/**
  * Construct the repository URL for different providers
  * @param provider The git provider
  * @param repositoryName The repository name in format "owner/repo"
@@ -400,6 +331,14 @@ export const constructRepositoryUrl = (
   }
   return `${baseUrl}/${repositoryName}`;
 };
+
+/**
+ * Percent-encode a branch name for use as a URL path component. Each
+ * `/`-separated segment is encoded on its own so nested branch names such as
+ * `release/1.0` keep their slashes while `#`, `%` and `&` are escaped.
+ */
+const encodeBranchPath = (branchName: string): string =>
+  branchName.split("/").map(encodeURIComponent).join("/");
 
 /**
  * Construct the branch URL for different providers
@@ -425,19 +364,21 @@ export const constructBranchUrl = (
 
   switch (provider) {
     case "github":
-      return `${baseUrl}/${repositoryName}/tree/${branchName}`;
+      return `${baseUrl}/${repositoryName}/tree/${encodeBranchPath(branchName)}`;
     case "forgejo":
-      return `${baseUrl}/${repositoryName}/src/branch/${branchName}`;
+      return `${baseUrl}/${repositoryName}/src/branch/${encodeBranchPath(branchName)}`;
     case "gitlab":
-      return `${baseUrl}/${repositoryName}/-/tree/${branchName}`;
+      return `${baseUrl}/${repositoryName}/-/tree/${encodeBranchPath(branchName)}`;
     case "bitbucket":
-      return `${baseUrl}/${repositoryName}/src/${branchName}`;
+      return `${baseUrl}/${repositoryName}/src/${encodeBranchPath(branchName)}`;
     case "bitbucket_data_center": {
       // Bitbucket Server format: /projects/{PROJECT}/repos/{repo}/browse?at=refs/heads/{branch}
       const parts = repositoryName.split("/");
       if (parts.length >= 2) {
         const [project, repo] = parts;
-        return `${baseUrl}/projects/${project}/repos/${repo}/browse?at=refs/heads/${branchName}`;
+        // The branch is one query value here, so encode it whole: an
+        // unencoded `&` would start a new query parameter.
+        return `${baseUrl}/projects/${project}/repos/${repo}/browse?at=refs/heads/${encodeURIComponent(branchName)}`;
       }
       return "";
     }
@@ -446,7 +387,9 @@ export const constructBranchUrl = (
       const parts = repositoryName.split("/");
       if (parts.length === 3) {
         const [org, project, repo] = parts;
-        return `${baseUrl}/${org}/${project}/_git/${repo}?version=GB${branchName}`;
+        // The branch is one query value here, so encode it whole: an
+        // unencoded `&` would start a new query parameter.
+        return `${baseUrl}/${org}/${project}/_git/${repo}?version=GB${encodeURIComponent(branchName)}`;
       }
       return "";
     }
@@ -456,6 +399,11 @@ export const constructBranchUrl = (
 };
 
 // Git Action Prompts
+
+const GIT_COMMIT_PROMPT =
+  "Please review the current changes and create a git commit with a concise, descriptive message.";
+
+export const getGitCommitPrompt = (): string => GIT_COMMIT_PROMPT;
 
 /**
  * Generate a git pull prompt
@@ -554,34 +502,6 @@ export function getDisplayedTaskGroups(
 
   return getLimitedTaskGroups(suggestedTasks, 3);
 }
-
-/**
- * Get the repository markdown creation prompt with additional PR creation instructions
- * @param gitProvider The git provider to use for generating provider-specific text
- * @param query Optional custom query to use instead of the default prompt
- * @returns The complete prompt for creating repository markdown and PR instructions
- */
-export const getRepoMdCreatePrompt = (
-  gitProvider: Provider,
-  query?: string,
-): string => {
-  const providerName = getProviderName(gitProvider);
-  const pr = getPR(gitProvider === "gitlab");
-  const prShort = getPRShort(gitProvider === "gitlab");
-
-  return `Please explore this repository. Create the file .openhands/microagents/repo.md with:
-            ${
-              query
-                ? `- ${query}`
-                : `- A description of the project
-            - An overview of the file structure
-            - Any information on how to run tests or other relevant commands
-            - Any other information that would be helpful to a brand new developer
-        Keep it short--just a few paragraphs will do.`
-            }
-
-Please push the changes to your branch on ${providerName} and create a ${pr}. Please create a meaningful branch name that describes the changes. If a ${pr} template exists in the repository, please follow it when creating the ${prShort} description.`;
-};
 
 /**
  * Get the label for a conversation status

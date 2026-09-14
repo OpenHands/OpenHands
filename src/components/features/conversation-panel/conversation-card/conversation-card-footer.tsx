@@ -10,6 +10,7 @@ import {
   labelForAcpModel,
   resolveAcpProviderIcon,
 } from "#/constants/acp-providers";
+import { useFreeModels } from "#/hooks/query/use-free-models";
 import { formatNativeModelName } from "#/utils/format-model-name";
 import {
   AgentBrandIcon,
@@ -62,6 +63,12 @@ interface ConversationCardFooterProps {
    * "Tags" toggle.
    */
   showTags?: boolean;
+  /**
+   * Marks the conversation as archived. Archived rows are hidden from the list
+   * unless the panel's "Show archived" toggle is on, so the chip is what tells
+   * the user why an otherwise ordinary row is visible.
+   */
+  isArchived?: boolean;
 }
 
 export function ConversationCardFooter({
@@ -78,8 +85,10 @@ export function ConversationCardFooter({
   acpServer = null,
   tags = null,
   showTags = false,
+  isArchived = false,
 }: ConversationCardFooterProps) {
   const { t } = useTranslation("openhands");
+  const freeModels = useFreeModels();
 
   const isPaused = isExecutionPaused(executionStatus);
 
@@ -114,7 +123,7 @@ export function ConversationCardFooter({
       // the chip text; keep the full routing string in the tooltip.
       chip = {
         kind: "openhands",
-        text: formatNativeModelName(llmModel) ?? llmModel,
+        text: formatNativeModelName(llmModel, freeModels) ?? llmModel,
         tooltip: llmModel,
       };
     }
@@ -170,6 +179,16 @@ export function ConversationCardFooter({
               <AgentBrandIcon kind={chip.kind} size={12} />
             </span>
             <span className="truncate leading-4">{chip.text}</span>
+          </span>
+        </div>
+      ) : null}
+      {isArchived ? (
+        <div className={metadataIndentClass}>
+          <span
+            data-testid="conversation-card-archived-chip"
+            className={CONVERSATION_CARD_META_CHIP_CLASSNAME}
+          >
+            {t(I18nKey.COMMON$ARCHIVED)}
           </span>
         </div>
       ) : null}

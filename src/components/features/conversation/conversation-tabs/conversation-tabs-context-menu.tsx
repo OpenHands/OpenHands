@@ -10,13 +10,13 @@ import {
   type ConversationTab,
 } from "#/stores/conversation-store";
 import { I18nKey } from "#/i18n/declaration";
-import { Globe, ListTodo, SquareChevronRight } from "lucide-react";
+import { Gauge, Globe, ListTodo, SquareChevronRight } from "lucide-react";
+import { LuFileDiff } from "react-icons/lu";
 import DocumentIcon from "#/icons/document.svg?react";
 import PillIcon from "#/icons/pill.svg?react";
 import PillFillIcon from "#/icons/pill-fill.svg?react";
 import DoubleCheckIcon from "#/icons/double-check.svg?react";
 import { useTaskList } from "#/hooks/use-task-list";
-import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useSelectConversationTab } from "#/hooks/use-select-conversation-tab";
 import { useIsArchivedConversation } from "#/hooks/use-is-archived-conversation";
 import { ArchivedDisabledTooltip } from "../../context-menu/archived-disabled-tooltip";
@@ -86,7 +86,6 @@ export function ConversationTabsContextMenu({
   const { navigateToTab } = useSelectConversationTab();
 
   const { hasTaskList } = useTaskList();
-  const { backend } = useActiveBackend();
   const isArchivedConversation = useIsArchivedConversation();
 
   const tabConfig = [
@@ -97,11 +96,17 @@ export function ConversationTabsContextMenu({
     },
     { tab: "files", icon: DocumentIcon, i18nKey: I18nKey.COMMON$FILES },
     {
+      tab: "commits",
+      icon: LuFileDiff,
+      i18nKey: I18nKey.DIFF_VIEWER$COMMITS,
+    },
+    {
       tab: "terminal",
       icon: SquareChevronRight,
       i18nKey: I18nKey.COMMON$TERMINAL,
     },
     { tab: "browser", icon: Globe, i18nKey: I18nKey.COMMON$BROWSER },
+    { tab: "usage", icon: Gauge, i18nKey: I18nKey.COMMON$USAGE },
   ];
 
   if (hasTaskList) {
@@ -111,10 +116,6 @@ export function ConversationTabsContextMenu({
       i18nKey: I18nKey.COMMON$TASK_LIST,
     });
   }
-
-  const visibleTabConfig = tabConfig.filter(
-    ({ tab }) => tab !== "planner" || backend.kind === "cloud",
-  );
 
   const handleOpenTab = (tab: string) => {
     if (isArchivedConversation) {
@@ -139,7 +140,7 @@ export function ConversationTabsContextMenu({
       setUnpinnedTabs(newUnpinnedTabs);
 
       if (selectedTab === tab && isRightPanelShown) {
-        const nextPinnedTab = visibleTabConfig.find(
+        const nextPinnedTab = tabConfig.find(
           ({ tab: tabKey }) =>
             tabKey !== tab && !newUnpinnedTabs.includes(tabKey),
         );
@@ -165,7 +166,7 @@ export function ConversationTabsContextMenu({
       spacing={isPortaled ? "none" : "default"}
       className={cn("z-[9999] w-fit", isPortaled ? "mt-0" : "mt-2")}
     >
-      {visibleTabConfig.map(({ tab, icon: Icon, i18nKey }) => {
+      {tabConfig.map(({ tab, icon: Icon, i18nKey }) => {
         const pinned = !state.unpinnedTabs.includes(tab);
         return (
           <li key={tab} className="list-none">

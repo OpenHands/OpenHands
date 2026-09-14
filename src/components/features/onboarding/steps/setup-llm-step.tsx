@@ -8,6 +8,11 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useSaveLlmProfile } from "#/hooks/mutation/use-save-llm-profile";
 import { useActivateLlmProfile } from "#/hooks/mutation/use-activate-llm-profile";
 import { useApplyOnboardingAgentProfile } from "#/hooks/mutation/use-apply-onboarding-agent-profile";
+import {
+  useDefaultModel,
+  useDefaultModelReady,
+} from "#/hooks/query/use-free-models";
+import { LlmSettingsInputsSkeleton } from "#/components/features/settings/llm-settings/llm-settings-inputs-skeleton";
 import { deriveProfileNameFromModel } from "#/utils/derive-profile-name";
 
 interface SetupLlmStepProps {
@@ -16,13 +21,11 @@ interface SetupLlmStepProps {
 }
 
 /**
- * Pre-fills the LLM form with the OpenAI GPT-5.5 model. The SDK's
- * bare default model is `gpt-5.5`; Canvas stores provider-qualified
- * LiteLLM model ids, so the onboarding override uses this OpenAI-prefixed
- * model id. Keeping this as an explicit override marks the model dirty so
- * the Next button persists the suggested default immediately.
+ * Fallback when the backend has not exposed a DB-selected OpenHands default.
+ * The onboarding override still marks the model dirty so Next persists the
+ * suggested model immediately.
  */
-export const ONBOARDING_DEFAULT_LLM_MODEL = "openai/gpt-5.5";
+export const ONBOARDING_DEFAULT_LLM_MODEL = "openai/gpt-5.6-sol";
 
 /**
  * Step 2: embed the LLM settings form. The screen runs in `embedded`
@@ -39,7 +42,7 @@ export const ONBOARDING_DEFAULT_LLM_MODEL = "openai/gpt-5.5";
  * Note: returning Cloud users who already have an LLM configured are
  * intercepted upstream by `OnboardingHost`, so they never reach this
  * step. Users who do reach it are first-time installs (Cloud or Local)
- * who want the OpenAI/GPT-5.5 default pre-filled.
+ * who want the OpenHands default pre-filled.
  */
 export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
   const { t } = useTranslation("openhands");
@@ -48,6 +51,9 @@ export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
   const saveProfile = useSaveLlmProfile();
   const activateProfile = useActivateLlmProfile();
   const applyAgentProfile = useApplyOnboardingAgentProfile();
+  const dbDefaultLlmModel = useDefaultModel();
+  const isDefaultModelReady = useDefaultModelReady();
+  const defaultLlmModel = dbDefaultLlmModel ?? ONBOARDING_DEFAULT_LLM_MODEL;
   const [saveControl, setSaveControl] =
     React.useState<SdkSectionSaveControl | null>(null);
   const [isFinalizing, setIsFinalizing] = React.useState(false);
@@ -149,16 +155,20 @@ export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
         data-testid="onboarding-llm-settings"
         className="flex min-h-0 flex-1 flex-col overflow-y-auto custom-scrollbar-always"
       >
-        <LlmSettingsScreen
-          embedded
-          hideSaveButton
-          suppressSuccessToast
-          initialValueOverrides={{
-            "llm.model": ONBOARDING_DEFAULT_LLM_MODEL,
-          }}
-          onSaveSuccess={handleSaveSuccess}
-          onSaveControlChange={setSaveControl}
-        />
+        {isDefaultModelReady ? (
+          <LlmSettingsScreen
+            embedded
+            hideSaveButton
+            suppressSuccessToast
+            initialValueOverrides={{
+              "llm.model": defaultLlmModel,
+            }}
+            onSaveSuccess={handleSaveSuccess}
+            onSaveControlChange={setSaveControl}
+          />
+        ) : (
+          <LlmSettingsInputsSkeleton />
+        )}
       </div>
 
       <div className="sticky bottom-0 flex items-center justify-between gap-2 bg-base-secondary pt-4 pb-7">
@@ -174,7 +184,11 @@ export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
           testId="onboarding-llm-next"
           type="button"
           variant="primary"
-          isDisabled={(saveControl?.isSaving ?? false) || isFinalizing}
+          isDisabled={
+            !isDefaultModelReady ||
+            (saveControl?.isSaving ?? false) ||
+            isFinalizing
+          }
           onClick={handleNext}
         >
           {t(I18nKey.ONBOARDING$NEXT)}

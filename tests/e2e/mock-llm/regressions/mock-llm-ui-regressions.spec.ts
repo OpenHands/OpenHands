@@ -158,7 +158,7 @@ function createCriticEvents(): CriticEvent[] {
         role: "user",
         content: [{ type: "text", text: "Please do the task." }],
       },
-      activated_microagents: [],
+      activated_skills: [],
       extended_content: [],
     },
     {
@@ -174,7 +174,7 @@ function createCriticEvents(): CriticEvent[] {
           },
         ],
       },
-      activated_microagents: [],
+      activated_skills: [],
       extended_content: [],
       critic_result: buildCriticResult(0.82, "critic-agent-message"),
     },

@@ -11,6 +11,12 @@ import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { RepositorySelection } from "#/api/open-hands.types";
 import { formatTimeDelta } from "#/utils/format-time-delta";
+import {
+  hoverRevealActionClassName,
+  hoverRevealPinnedTimestampClassName,
+  hoverRevealReserveClassName,
+  hoverRevealYieldClassName,
+} from "#/utils/hover-reveal-classes";
 import { ConversationCardHeader } from "./conversation-card-header";
 import { ConversationCardActions } from "./conversation-card-actions";
 import { ConversationCardFooter } from "./conversation-card-footer";
@@ -20,8 +26,21 @@ import { useDownloadConversation } from "#/hooks/use-download-conversation";
 interface ConversationCardProps {
   onClick?: () => void;
   onDelete?: () => void;
+  onArchive?: () => void;
+  /**
+   * Restores an archived conversation. The panel passes this instead of
+   * `onArchive` for rows that are already archived, so the menu offers exactly
+   * one of the two directions.
+   */
+  onUnarchive?: () => void;
   onStop?: () => void;
   onChangeTitle?: (title: string) => void;
+  /**
+   * Opens the tag editor for this conversation. Local agent-server backends
+   * only — Cloud conversations don't carry server-side tags, so the panel
+   * leaves this undefined there and the menu item disappears.
+   */
+  onEditTags?: () => void;
   showOptions?: boolean;
   title: string;
   selectedRepository: RepositorySelection | null;
@@ -42,6 +61,7 @@ interface ConversationCardProps {
   tags?: Record<string, string> | null;
   /** Gates the tag-chip row; wired to the panel's "Tags" metadata toggle. */
   showTags?: boolean;
+  isArchived?: boolean;
   isPinned?: boolean;
   onTogglePin?: () => void;
   /** When true and pinned, keep the pin icon visible without hovering. */
@@ -51,8 +71,11 @@ interface ConversationCardProps {
 export function ConversationCard({
   onClick,
   onDelete,
+  onArchive,
+  onUnarchive,
   onStop,
   onChangeTitle,
+  onEditTags,
   showOptions,
   title,
   selectedRepository,
@@ -72,6 +95,7 @@ export function ConversationCard({
   acpServer = null,
   tags = null,
   showTags = false,
+  isArchived = false,
   isPinned = false,
   onTogglePin,
   alwaysShowPinIcon = false,
@@ -80,6 +104,10 @@ export function ConversationCard({
   const { trackDownloadVsCodeButtonClicked } = useTracking();
   const [titleMode, setTitleMode] = React.useState<"view" | "edit">("view");
   const { mutateAsync: downloadConversation } = useDownloadConversation();
+
+  const displayTags = getDisplayConversationTags(tags);
+  const hasDisplayTags = displayTags.length > 0;
+  const showTagChipRow = showTags && hasDisplayTags;
 
   const onTitleSave = (newTitle: string) => {
     if (newTitle !== "" && newTitle !== title) {
@@ -95,6 +123,20 @@ export function ConversationCard({
     onContextMenuToggle?.(false);
   };
 
+  const handleArchive = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onArchive?.();
+    onContextMenuToggle?.(false);
+  };
+
+  const handleUnarchive = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onUnarchive?.();
+    onContextMenuToggle?.(false);
+  };
+
   const handleStop = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
@@ -106,6 +148,13 @@ export function ConversationCard({
     event.preventDefault();
     event.stopPropagation();
     setTitleMode("edit");
+    onContextMenuToggle?.(false);
+  };
+
+  const handleEditTags = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onEditTags?.();
     onContextMenuToggle?.(false);
   };
 
@@ -180,13 +229,21 @@ export function ConversationCard({
     </button>
   );
 
-  const hasContextMenu = !!(onDelete || onChangeTitle || showOptions);
+  const hasContextMenu = !!(
+    onDelete ||
+    onArchive ||
+    onUnarchive ||
+    onChangeTitle ||
+    onEditTags ||
+    showOptions
+  );
   const hasHoverActions = hasContextMenu || !!onTogglePin;
   const showPersistentPinIcon = alwaysShowPinIcon && isPinned && !!onTogglePin;
   const shouldRenderFooter =
     showRepositoryMetadata ||
+    isArchived ||
     (showLlmProfiles && (agentKind === "acp" || !!llmModel)) ||
-    (showTags && getDisplayConversationTags(tags).length > 0);
+    (showTagChipRow && displayTags.length > 0);
 
   return (
     <div
@@ -213,26 +270,25 @@ export function ConversationCard({
         </div>
 
         <div
+          data-testid="conversation-card-trailing-slot"
           className={cn(
             "relative ml-auto pl-2 flex items-center justify-end shrink-0",
             // The hover action overlay (pin + ellipsis) is absolutely
             // positioned, so reserve its width so the flex-1 title truncates
             // instead of colliding with the buttons. Pinned cards keep the pin
-            // visible at rest, so reserve the width always for those.
+            // visible at rest, so reserve the width always for those. Touch /
+            // coarse-pointer devices also keep the reserve so the ellipsis stays
+            // clickable without a hover pass.
             showPersistentPinIcon
               ? "min-w-[3.75rem]"
-              : hasHoverActions &&
-                  "group-hover:min-w-[3.75rem] group-focus-within:min-w-[3.75rem]",
-            contextMenuOpen && "min-w-[3.75rem]",
+              : hasHoverActions && hoverRevealReserveClassName(contextMenuOpen),
           )}
         >
           {!showPersistentPinIcon && (createdAt ?? lastUpdatedAt) && (
             <p
               className={cn(
                 "text-xs text-[var(--oh-muted)] text-right whitespace-nowrap transition-opacity -translate-x-1.5",
-                hasHoverActions &&
-                  "group-hover:opacity-0 group-focus-within:opacity-0",
-                contextMenuOpen && "opacity-0",
+                hasHoverActions && hoverRevealYieldClassName(contextMenuOpen),
               )}
             >
               <time>{formatTimeDelta(lastUpdatedAt ?? createdAt)}</time>
@@ -241,16 +297,12 @@ export function ConversationCard({
 
           {hasHoverActions ? (
             <div
+              data-testid="conversation-card-hover-actions"
               className={cn(
                 "absolute right-0 top-1/2 flex -translate-y-1/2 items-center gap-0.5 transition-opacity",
                 showPersistentPinIcon
                   ? "pointer-events-auto visible opacity-100"
-                  : cn(
-                      "pointer-events-none opacity-0 invisible",
-                      "group-hover:pointer-events-auto group-hover:opacity-100 group-hover:visible",
-                      "group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-focus-within:visible",
-                    ),
-                contextMenuOpen && "pointer-events-auto visible opacity-100",
+                  : hoverRevealActionClassName(contextMenuOpen),
               )}
             >
               {onTogglePin ? renderPinButton() : null}
@@ -258,18 +310,16 @@ export function ConversationCard({
               (createdAt ?? lastUpdatedAt) &&
               hasContextMenu ? (
                 <div className="relative shrink-0">
-                  <div
-                    className={cn(
-                      !contextMenuOpen &&
-                        "invisible pointer-events-none group-hover:visible group-hover:pointer-events-auto group-focus-within:visible group-focus-within:pointer-events-auto",
-                    )}
-                  >
+                  <div className={hoverRevealActionClassName(contextMenuOpen)}>
                     <ConversationCardActions
                       contextMenuOpen={contextMenuOpen}
                       onContextMenuToggle={onContextMenuToggle || (() => {})}
                       onDelete={onDelete && handleDelete}
+                      onArchive={onArchive && handleArchive}
+                      onUnarchive={onUnarchive && handleUnarchive}
                       onStop={onStop && handleStop}
                       onEdit={onChangeTitle && handleEdit}
+                      onEditTags={onEditTags && handleEditTags}
                       onDownloadViaVSCode={handleDownloadViaVSCode}
                       onDownloadConversation={handleDownloadConversation}
                       executionStatus={executionStatus}
@@ -279,10 +329,9 @@ export function ConversationCard({
                   </div>
                   <p
                     className={cn(
-                      "pointer-events-none absolute inset-0 flex items-center justify-end",
+                      "pointer-events-none absolute inset-0 items-center justify-end",
                       "text-xs text-[var(--oh-muted)] whitespace-nowrap -translate-x-1.5",
-                      "group-hover:hidden group-focus-within:hidden",
-                      contextMenuOpen && "hidden",
+                      hoverRevealPinnedTimestampClassName(contextMenuOpen),
                     )}
                   >
                     <time>{formatTimeDelta(lastUpdatedAt ?? createdAt)}</time>
@@ -294,8 +343,11 @@ export function ConversationCard({
                   contextMenuOpen={contextMenuOpen}
                   onContextMenuToggle={onContextMenuToggle || (() => {})}
                   onDelete={onDelete && handleDelete}
+                  onArchive={onArchive && handleArchive}
+                  onUnarchive={onUnarchive && handleUnarchive}
                   onStop={onStop && handleStop}
                   onEdit={onChangeTitle && handleEdit}
+                  onEditTags={onEditTags && handleEditTags}
                   onDownloadViaVSCode={handleDownloadViaVSCode}
                   onDownloadConversation={handleDownloadConversation}
                   executionStatus={executionStatus}
@@ -322,7 +374,8 @@ export function ConversationCard({
           agentKind={agentKind}
           acpServer={acpServer}
           tags={tags}
-          showTags={showTags}
+          showTags={showTagChipRow}
+          isArchived={isArchived}
         />
       )}
     </div>

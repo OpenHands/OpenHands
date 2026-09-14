@@ -7,6 +7,7 @@ import {
   withWorkspaceCacheBuster,
 } from "#/stores/use-workspace-mutation-counter";
 import { MarkdownRenderer } from "#/components/features/markdown/markdown-renderer";
+import { isMarkdownFilePath } from "#/utils/is-markdown-file-path";
 import { HighlightedSourceView } from "./highlighted-source-view";
 import type { ViewMode } from "./view-mode";
 
@@ -16,7 +17,6 @@ interface FileContentViewerProps {
 }
 
 const HTML_LIKE_EXTS = new Set(["html", "htm", "svg"]);
-const MARKDOWN_EXTS = new Set(["md", "markdown", "mdx"]);
 
 // Office/document formats we can't preview inline. The label doubles as the
 // allow-list (a present entry => Office doc) and feeds a clear, format-named
@@ -138,19 +138,19 @@ export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
   }
 
   if (kind === "pdf") {
-    // PDFs can carry embedded JavaScript (AcroForm, OpenAction…). Even
-    // though `staticUrl` lives on the agent server origin, the PDF
-    // viewer's scripting capability isn't worth the risk for a file
-    // preview, so we sandbox the iframe. `allow-same-origin` lets the
-    // browser's built-in PDF viewer load the underlying bytes without
-    // tripping cross-origin restrictions; we omit `allow-scripts`
-    // because no PDF preview we care about needs to run JS in the
-    // parent's origin.
+    // Deliberately NOT sandboxed: Chromium refuses to instantiate its
+    // built-in PDF viewer inside any sandboxed frame (the `sandbox`
+    // attribute disables plugins unconditionally — no token re-enables
+    // them), rendering "This page has been blocked by Chrome" instead of
+    // the document. Unsandboxed is safe here: the fileserver declares
+    // `Content-Type: application/pdf`, which browsers never sniff into
+    // HTML, so the frame can only host the PDF viewer — and PDF-embedded
+    // JS (AcroForm, OpenAction…) runs in the viewer's own sandboxed
+    // engine with no access to this page's DOM.
     return (
       <iframe
         title={path}
         src={bustedStaticUrl}
-        sandbox="allow-same-origin"
         data-testid="file-content-viewer-iframe"
         className="h-full w-full bg-white"
       />
@@ -181,19 +181,21 @@ export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
     );
   }
 
-  if (kind === "text" && MARKDOWN_EXTS.has(getExtension(path))) {
+  if (kind === "text" && isMarkdownFilePath(path)) {
     // Match the right-pane chrome color so the rich-rendered markdown
     // blends with the surrounding files tab instead of painting a stark
-    // white card. We use `prose-invert` (typography plugin's dark-theme
-    // variant) and then layer arbitrary CSS-variable overrides on top to
-    // pin body / bold / quote text to pure white — the user specifically
-    // asked for every text element (not just headings) to read as white.
-    // The custom heading components in `markdown/headings.tsx` already
-    // hard-code `text-white`, so headers stay white through this change.
+    // white card. `--oh-scroll-fade-from` keeps wide-table edge fades on
+    // the same surface (otherwise they default to `--oh-color-base`).
+    // We use `prose-invert` (typography plugin's dark-theme variant) and
+    // then layer arbitrary CSS-variable overrides on top to pin body /
+    // bold / quote text to pure white — the user specifically asked for
+    // every text element (not just headings) to read as white. The custom
+    // heading components in `markdown/headings.tsx` already hard-code
+    // `text-white`, so headers stay white through this change.
     return (
       <div
         data-testid="file-content-viewer-markdown"
-        className="h-full w-full overflow-auto bg-[var(--oh-surface)] text-white custom-scrollbar-always"
+        className="h-full w-full overflow-auto bg-[var(--oh-surface)] text-white custom-scrollbar-always [--oh-scroll-fade-from:var(--oh-surface)]"
       >
         <div className="prose prose-sm prose-invert max-w-none p-6 [--tw-prose-body:#fff] [--tw-prose-bold:#fff] [--tw-prose-headings:#fff] [--tw-prose-lead:#fff] [--tw-prose-counters:#fff] [--tw-prose-quotes:#fff] [--tw-prose-quote-borders:var(--oh-border-subtle)] [--tw-prose-bullets:var(--oh-muted)] [--tw-prose-hr:var(--oh-border-subtle)] [--tw-prose-captions:var(--oh-muted)] [--tw-prose-kbd:#fff]">
           <MarkdownRenderer

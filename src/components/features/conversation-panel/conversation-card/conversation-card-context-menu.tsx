@@ -7,11 +7,11 @@ import { ContextMenuListItem } from "../../context-menu/context-menu-list-item";
 import { I18nKey } from "#/i18n/declaration";
 import { ConversationNameContextMenuIconText } from "../../conversation/conversation-name-context-menu-icon-text";
 
+import { Archive, ArchiveRestore, Gauge, Tags } from "lucide-react";
 import EditIcon from "#/icons/u-edit.svg?react";
 import SkillsIcon from "#/icons/skills.svg?react";
 import ToolsIcon from "#/icons/u-tools.svg?react";
 import DownloadIcon from "#/icons/u-download.svg?react";
-import CreditCardIcon from "#/icons/u-credit-card.svg?react";
 import CloseIcon from "#/icons/u-close.svg?react";
 import DeleteIcon from "#/icons/u-delete.svg?react";
 import { Divider } from "#/ui/divider";
@@ -19,8 +19,11 @@ import { Divider } from "#/ui/divider";
 interface ConversationCardContextMenuProps {
   onClose: () => void;
   onDelete?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onArchive?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onUnarchive?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onStop?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onEdit?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onEditTags?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDisplayCost?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onShowAgentTools?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onShowSkills?: (event: React.MouseEvent<HTMLButtonElement>) => void;
@@ -38,8 +41,11 @@ interface ConversationCardContextMenuProps {
 export function ConversationCardContextMenu({
   onClose,
   onDelete,
+  onArchive,
+  onUnarchive,
   onStop,
   onEdit,
+  onEditTags,
   onDisplayCost,
   onShowAgentTools,
   onShowSkills,
@@ -107,6 +113,18 @@ export function ConversationCardContextMenu({
               <ConversationNameContextMenuIconText
                 icon={<EditIcon width={16} height={16} />}
                 text={t(I18nKey.BUTTON$RENAME)}
+              />
+            </ContextMenuListItem>
+          ),
+          onEditTags && (
+            <ContextMenuListItem
+              key="edit-tags-button"
+              testId="edit-tags-button"
+              onClick={onEditTags}
+            >
+              <ConversationNameContextMenuIconText
+                icon={<Tags className="h-4 w-4" aria-hidden />}
+                text={t(I18nKey.CONVERSATION$EDIT_TAGS)}
               />
             </ContextMenuListItem>
           ),
@@ -202,8 +220,32 @@ export function ConversationCardContextMenu({
               onClick={onDisplayCost}
             >
               <ConversationNameContextMenuIconText
-                icon={<CreditCardIcon width={16} height={16} />}
+                icon={<Gauge size={16} />}
                 text={t(I18nKey.BUTTON$DISPLAY_COST)}
+              />
+            </ContextMenuListItem>
+          ),
+          onArchive && (
+            <ContextMenuListItem
+              key="archive-button"
+              testId="archive-button"
+              onClick={onArchive}
+            >
+              <ConversationNameContextMenuIconText
+                icon={<Archive className="h-4 w-4" aria-hidden />}
+                text={t(I18nKey.COMMON$ARCHIVE_CONVERSATION)}
+              />
+            </ContextMenuListItem>
+          ),
+          onUnarchive && (
+            <ContextMenuListItem
+              key="unarchive-button"
+              testId="unarchive-button"
+              onClick={onUnarchive}
+            >
+              <ConversationNameContextMenuIconText
+                icon={<ArchiveRestore className="h-4 w-4" aria-hidden />}
+                text={t(I18nKey.COMMON$UNARCHIVE_CONVERSATION)}
               />
             </ContextMenuListItem>
           ),

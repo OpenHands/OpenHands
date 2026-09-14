@@ -142,7 +142,7 @@ describe("useChatInputModelState", () => {
     expect(result.current.isAcpContext).toBe(true);
     expect(result.current.currentModelId).toBe("sonnet");
     // Human label resolved from the registry (matches the conversation chip).
-    expect(result.current.displayModel).toBe("Claude Sonnet 4.6");
+    expect(result.current.displayModel).toBe("Claude Sonnet");
     expect(result.current.availableAcpModels).toEqual(
       provider?.available_models,
     );

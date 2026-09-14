@@ -25,6 +25,12 @@ interface SettingsInputProps {
   /** Validation message shown when pattern doesn't match */
   title?: string;
   labelClassName?: string;
+  /**
+   * The input's accessible name, for the caller that renders the visible label
+   * itself. Only for those: a field labelled by this component reads its label,
+   * and two names would disagree.
+   */
+  ariaLabel?: string;
   /** ARIA describedby attribute for accessibility */
   ariaDescribedBy?: string;
   /** ARIA invalid attribute for accessibility */
@@ -70,6 +76,7 @@ export const SettingsInput = forwardRef<HTMLInputElement, SettingsInputProps>(
       pattern,
       title,
       labelClassName,
+      ariaLabel,
       ariaDescribedBy,
       ariaInvalid,
       error,
@@ -119,6 +126,7 @@ export const SettingsInput = forwardRef<HTMLInputElement, SettingsInputProps>(
           required={required}
           pattern={pattern}
           title={title}
+          aria-label={ariaLabel}
           aria-describedby={errorId ?? ariaDescribedBy}
           aria-invalid={!!error || ariaInvalid}
           className={cn(

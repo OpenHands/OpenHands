@@ -10,7 +10,7 @@ import { cn } from "#/utils/utils";
 export function DrawerVSCodeLink() {
   const { t } = useTranslation("openhands");
   const { curAgentState } = useAgentState();
-  const { data, refetch, isLoading } = useUnifiedVSCodeUrl();
+  const { data, refetch, isLoading, isUnavailable } = useUnifiedVSCodeUrl();
   const isRuntimeStarting = RUNTIME_STARTING_STATES.includes(curAgentState);
 
   const handleClick = async () => {
@@ -25,6 +25,13 @@ export function DrawerVSCodeLink() {
       window.open(vscodeUrl, "_blank", "noopener,noreferrer");
     }
   };
+
+  // Backends that report no editor to open — `enable_vscode: false`, a
+  // configured editor whose process is not running, or no URL reported — get
+  // no button rather than one that does nothing when clicked.
+  if (isUnavailable) {
+    return null;
+  }
 
   return (
     <button

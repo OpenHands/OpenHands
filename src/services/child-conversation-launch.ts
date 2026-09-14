@@ -283,21 +283,19 @@ async function launchLocalChild(
   const parentMetadata = getStoredConversationMetadata(parentConversationId);
 
   const createChild = (isolation: ChildConversationIsolation) =>
-    AgentServerConversationService.createConversation(
-      params.task,
-      undefined,
-      undefined,
-      parentMetadata
+    AgentServerConversationService.createConversation({
+      initialUserMsg: params.task,
+      metadata: parentMetadata
         ? {
             selected_repository: parentMetadata.selected_repository,
             selected_branch: parentMetadata.selected_branch,
             git_provider: parentMetadata.git_provider,
           }
         : null,
-      workspace,
-      isolation === "shared" ? "local_repo" : "new_worktree",
+      workingDirOverride: workspace,
+      workspaceMode: isolation === "shared" ? "local_repo" : "new_worktree",
       parentConversationId,
-    );
+    });
 
   let isolation = params.isolation;
   let isolationNote: string | null = null;

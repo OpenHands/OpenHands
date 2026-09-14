@@ -27,7 +27,7 @@ afterEach(() => {
     configurable: true,
     value: ORIGINAL_LOCATION,
   });
-
+  window.history.pushState({}, "", "/");
   vi.unstubAllEnvs();
 });
 

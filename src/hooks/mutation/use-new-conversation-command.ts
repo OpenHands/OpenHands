@@ -29,15 +29,9 @@ export const useNewConversationCommand = () => {
       // cloud behavior); it is NOT a sub-conversation, so parent_conversation_id
       // and agent_type stay undefined.
       const startTask = await AgentServerConversationService.createConversation(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        conversation.sandbox_id ?? undefined,
+        {
+          sandboxId: conversation.sandbox_id ?? undefined,
+        },
       );
 
       if (startTask.status === "ERROR") {

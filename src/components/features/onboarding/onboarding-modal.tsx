@@ -2,6 +2,10 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { isNoBackend } from "#/api/backend-registry/active-store";
 import { getLockedCloudHost, isSameCloudHost } from "#/api/agent-server-config";
+import {
+  readSidebarOnboardingChecklistDismissed,
+  writeSidebarOnboardingChecklistDismissed,
+} from "#/components/features/sidebar/sidebar-onboarding-checklist-storage";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import {
   MODAL_MAX_WIDTH_VIEWPORT,
@@ -177,6 +181,8 @@ export function OnboardingModal({
   );
   const [selectedAgentId, setSelectedAgentId] =
     React.useState<OnboardingAgentId>("openhands");
+  const [skipGettingStartedChecklist, setSkipGettingStartedChecklist] =
+    React.useState(() => readSidebarOnboardingChecklistDismissed());
 
   // When the backend slide drops out of the flow (skipBackendStep flips
   // true), a user still parked on "backend" must be moved forward to the
@@ -190,6 +196,14 @@ export function OnboardingModal({
   const totalSteps = slideOrder.length;
   const currentPhase = slideOrder.includes(phase) ? phase : slideOrder[0];
   const currentStep = slideOrder.indexOf(currentPhase);
+
+  const handleSkipGettingStartedChange = (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const skip = event.target.checked;
+    setSkipGettingStartedChecklist(skip);
+    writeSidebarOnboardingChecklistDismissed(skip);
+  };
 
   // Backend connectivity is "settled" once we know whether the active backend
   // is reachable (or no backend is selected). Until then `skipBackendStep` may
@@ -314,7 +328,7 @@ export function OnboardingModal({
 
           <div
             data-testid="onboarding-scroll-area"
-            className="flex-1 min-h-0 overflow-y-auto custom-scrollbar-always px-7"
+            className="min-h-0 overflow-y-auto custom-scrollbar-always px-7 pb-7"
           >
             <div
               data-testid="onboarding-slide-rail"
@@ -378,6 +392,19 @@ export function OnboardingModal({
           >
             {t(I18nKey.ONBOARDING$SKIP)}
           </button>
+        ) : null}
+
+        {currentPhase === "hello" ? (
+          <label className="flex cursor-pointer items-center justify-center gap-2 text-sm text-[var(--oh-muted)]">
+            <input
+              data-testid="onboarding-skip-getting-started-checklist"
+              type="checkbox"
+              checked={skipGettingStartedChecklist}
+              onChange={handleSkipGettingStartedChange}
+              className="size-4 cursor-pointer"
+            />
+            {t(I18nKey.ONBOARDING$SKIP_GETTING_STARTED_CHECKLIST)}
+          </label>
         ) : null}
       </div>
     </ModalBackdrop>

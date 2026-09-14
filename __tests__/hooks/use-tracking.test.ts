@@ -420,6 +420,28 @@ describe("useTracking", () => {
     });
   });
 
+  describe("trackOnboardingLinkClicked", () => {
+    it("captures onboarding_link_clicked with the typed link contract and commonProperties", () => {
+      getTracking().trackOnboardingLinkClicked({
+        linkId: "join_slack",
+        destinationType: "community",
+        surface: "landing_checklist",
+        checklistItem: "join_slack",
+        isExternal: true,
+      });
+
+      expect(captureMock).toHaveBeenCalledWith("onboarding_link_clicked", {
+        link_id: "join_slack",
+        destination_type: "community",
+        surface: "landing_checklist",
+        checklist_item: "join_slack",
+        step_id: undefined,
+        is_external: true,
+        ...COMMON,
+      });
+    });
+  });
+
   describe("shared telemetry boundary", () => {
     it("delegates consent enforcement when backend settings report false", () => {
       useSettingsMock.mockReturnValue({

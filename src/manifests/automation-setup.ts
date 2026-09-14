@@ -13,20 +13,145 @@
  * so any divergence is a hard 422 rather than a dropped field.
  */
 
+import i18n from "#/i18n";
+import { I18nKey } from "#/i18n/declaration";
 import { findAutomationCommand } from "#/utils/automation-catalog";
 import { getAutomationEndpoint } from "./automation-interface";
-import { collectFields } from "./manifest-local-validation";
-import { interpolateText } from "./manifest-template";
+import {
+  actionKinds,
+  collectFields,
+  fieldText,
+  fieldValues,
+} from "./manifest-local-validation";
+import { interpolateText, interpolateValue } from "./manifest-template";
 import type {
+  SetupActionKind,
   SetupBlock,
+  SetupBundleConfigValue,
   SetupEntry,
   SetupFormValues,
   SetupRequestBody,
   SetupTriggerKind,
 } from "./types";
 
-/** The creation endpoint a derived draft would be posted to. */
-export const AUTOMATION_CREATE_ENDPOINT = getAutomationEndpoint("createPrompt");
+/**
+ * The creation endpoint a derived draft would be posted to. Resolved on call
+ * rather than at import, because the endpoint is the interface manifest's and
+ * this module loads whether or not one was admitted.
+ *
+ * A bundle entry is created through the raw endpoint, because what it sends is
+ * a tarball it uploaded rather than arguments to a preset. Called without an
+ * entry - as the import path does - it answers for a prompt.
+ */
+export function automationCreateEndpoint(
+  entry?: SetupEntry,
+  selectedAction?: string | null,
+): string {
+  const kind = selectedActionKind(entry, selectedAction);
+  if (kind === "plugin") return getAutomationEndpoint("createPlugin");
+  if (kind === "upload" || kind === "bundle") {
+    return requireBundleEndpoint("createBundle");
+  }
+  return getAutomationEndpoint("createPrompt");
+}
+
+/** Where a bundle's tarball is uploaded, before the create call. */
+export function automationUploadEndpoint(): string {
+  return requireBundleEndpoint("uploads");
+}
+
+/** The endpoints a bundle entry cannot be created without. */
+const BUNDLE_ENDPOINTS = ["createBundle", "uploads"] as const;
+
+/**
+ * An endpoint only a bundle needs. The interface manifest may predate bundles,
+ * and the host holds no path of its own to fall back to, so this is where that
+ * runs out rather than somewhere deep in a request.
+ */
+function requireBundleEndpoint(
+  name: (typeof BUNDLE_ENDPOINTS)[number],
+): string {
+  const path = getAutomationEndpoint(name);
+  if (!path) {
+    throw new Error(
+      `The published automation interface declares no '${name}' endpoint, ` +
+        "so this deployment cannot create an automation from a script bundle.",
+    );
+  }
+  return path;
+}
+
+/**
+ * The endpoints this entry needs that the published interface does not declare.
+ *
+ * Asked before the form renders rather than discovered at the moment of
+ * creating: a pinned package that predates bundles can never answer, and the
+ * dialog can say so while nothing has been filled in yet. Empty for every
+ * entry that is not a bundle, which needs nothing beyond what the block has
+ * always declared.
+ */
+function missingEndpointsForAction(kind: SetupActionKind | "bundle"): string[] {
+  return kind === "upload" || kind === "bundle"
+    ? BUNDLE_ENDPOINTS.filter((name) => !getAutomationEndpoint(name))
+    : [];
+}
+
+export function missingCreateEndpoints(
+  entry: SetupEntry,
+  selectedAction?: string | null,
+): string[] {
+  if (isBundleEntry(entry)) return missingEndpointsForAction("bundle");
+  if (!entry.setup.actions) return [];
+
+  if (selectedAction && selectedAction in entry.setup.actions) {
+    return missingEndpointsForAction(selectedAction as SetupActionKind);
+  }
+
+  const missingByAction = actionKinds(entry.setup).map(
+    missingEndpointsForAction,
+  );
+  if (missingByAction.some((missing) => missing.length === 0)) return [];
+  return Array.from(new Set(missingByAction.flat()));
+}
+
+/** Whether this entry ships a script tarball instead of a prompt. */
+export function isBundleEntry(entry: SetupEntry): boolean {
+  return entry.setup.mode === "direct" && entry.setup.bundle !== undefined;
+}
+
+export function isUploadAction(
+  entry: SetupEntry,
+  selectedAction?: string | null,
+): boolean {
+  return selectedActionKind(entry, selectedAction) === "upload";
+}
+
+export function selectedActionKind(
+  entry: SetupEntry | undefined,
+  selectedAction?: string | null,
+): SetupActionKind | "bundle" | "prompt" {
+  if (!entry) return "prompt";
+  if (isBundleEntry(entry)) return "bundle";
+  const actions = entry.setup.actions ?? {};
+  if (selectedAction && selectedAction in actions) {
+    return selectedAction as SetupActionKind;
+  }
+  const keys = actionKinds(entry.setup);
+  if (keys.length === 1) return keys[0];
+  return "prompt";
+}
+
+/**
+ * The `tarball_path` a preflight draft carries.
+ *
+ * Preflight runs on every field blur and the upload happens once, at submit,
+ * so there is no real path to send yet. The service checks this field's scheme
+ * at preflight and its ownership only at creation, so a well-formed stand-in
+ * validates exactly what preflight is for - the rest of the body - without
+ * uploading an archive per keystroke.
+ */
+export const PREFLIGHT_TARBALL_PATH =
+  "oh-internal://uploads/00000000-0000-0000-0000-000000000000";
 
 /**
  * Trigger properties a form field may fill, per trigger kind. A field under a
@@ -35,8 +160,10 @@ export const AUTOMATION_CREATE_ENDPOINT = getAutomationEndpoint("createPrompt");
  */
 const TRIGGER_PROPERTIES: Record<SetupTriggerKind, readonly string[]> = {
   cron: ["schedule", "timezone"],
-  event: ["on"],
+  event: ["source", "on"],
 };
+
+const OPTIONAL_CREATE_PROPERTIES = ["model", "timeout"] as const;
 
 /**
  * Repository properties a form field may fill, read the same way
@@ -54,19 +181,155 @@ const REPO_PROPERTIES: readonly string[] = ["ref"];
 const FORM_PLACEHOLDER_PATTERN = /\{\{form\.([A-Za-z0-9_.]+)\}\}/g;
 
 /** The repository input, which supplies `repos` and an event trigger's source. */
-function findRepoPickerField(setup: SetupBlock) {
-  const match = Object.entries(collectFields(setup)).find(
+function findRepoPickerField(
+  setup: SetupBlock,
+  selectedAction?: string | null,
+) {
+  const match = Object.entries(collectFields(setup, null, selectedAction)).find(
     ([, field]) => field.type === "repo-picker",
   );
   return match ? { name: match[0], field: match[1] } : null;
 }
 
-/** The single trigger kind a direct entry declares, with its fields. */
-function getTrigger(setup: SetupBlock) {
-  const entries = Object.entries(setup.form.triggers ?? {});
+/** Every repository the form collected, whether the picker takes one or many. */
+function repositories(
+  setup: SetupBlock,
+  values: SetupFormValues,
+  selectedAction?: string | null,
+): string[] {
+  const picker = findRepoPickerField(setup, selectedAction);
+  return picker ? fieldValues(values[picker.name]) : [];
+}
+
+/**
+ * The created automation's name.
+ *
+ * One repository is worth naming; several are not, so the count stands in
+ * rather than a list of names that would not fit.
+ */
+function deriveName(
+  entry: SetupEntry,
+  values: SetupFormValues,
+  selectedAction?: string | null,
+): string {
+  if (
+    "name" in collectFields(entry.setup, null, selectedAction) &&
+    "name" in values
+  ) {
+    return fieldText(values.name);
+  }
+
+  const repos = repositories(entry.setup, values, selectedAction);
+  if (repos.length === 0) return entry.name;
+  if (repos.length === 1) return `${entry.name} - ${repos[0]}`;
+  // The count is the one word here the host writes rather than reads off the
+  // entry, so it is translated. There is no translator to pass in: the
+  // derivation runs from a memo, an upload and a test alike.
+  const count = i18n.t(I18nKey.SETUP$REPOSITORY_COUNT, {
+    total: repos.length,
+  });
+  return `${entry.name} - ${count}`;
+}
+
+/** The active trigger kind for a direct entry, with its fields. */
+function getTrigger(setup: SetupBlock, selectedTrigger?: string | null) {
+  const triggers = setup.form.triggers ?? {};
+  const entries = Object.entries(triggers);
   if (entries.length === 0) return null;
-  const [kind, fields] = entries[0];
+  const match =
+    selectedTrigger && selectedTrigger in triggers
+      ? [selectedTrigger, triggers[selectedTrigger as SetupTriggerKind]]
+      : entries.length === 1
+        ? entries[0]
+        : null;
+  if (!match) return null;
+  const [kind, fields] = match;
   return { kind: kind as SetupTriggerKind, fields: fields ?? {} };
+}
+
+function hasPayloadValue(
+  value: SetupRequestBody[string] | undefined,
+): value is SetupRequestBody[string] {
+  return value !== undefined && value !== null && value !== "";
+}
+
+function fieldPayloadValue(
+  fieldType: string | undefined,
+  value: SetupFormValues[string],
+) {
+  if (fieldType === "number") {
+    const text = fieldText(value);
+    return text === "" ? undefined : Number(text);
+  }
+  return fieldText(value);
+}
+
+function optionalCreateProperties(
+  setup: SetupBlock,
+  values: SetupFormValues,
+  selectedAction?: string | null,
+): SetupRequestBody {
+  return Object.fromEntries(
+    OPTIONAL_CREATE_PROPERTIES.flatMap((name) => {
+      const field = collectFields(setup, null, selectedAction)[name];
+      const value = fieldPayloadValue(field?.type, values[name]);
+      return hasPayloadValue(value) ? [[name, value]] : [];
+    }),
+  ) as SetupRequestBody;
+}
+
+function repositoryProperty(
+  setup: SetupBlock,
+  values: SetupFormValues,
+  selectedAction?: string | null,
+): SetupRequestBody {
+  const repoPicker = findRepoPickerField(setup, selectedAction);
+  const repos = repositories(setup, values, selectedAction);
+  if (repos.length === 0 || !repoPicker?.field.provider) return {};
+
+  const declared = REPO_PROPERTIES.filter((name) =>
+    hasPayloadValue(fieldText(values[name])),
+  );
+  return {
+    repos: repos.map((url) => ({
+      url,
+      ...Object.fromEntries(
+        declared.map((name) => [name, fieldText(values[name])]),
+      ),
+      provider: repoPicker.field.provider as string,
+    })),
+  };
+}
+
+function parsePluginSources(
+  value: SetupRequestBody[string],
+): SetupRequestBody[string] {
+  if (!hasPayloadValue(value) || typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed) return [];
+  if (trimmed.startsWith("[")) {
+    try {
+      return JSON.parse(trimmed) as SetupRequestBody[string];
+    } catch {
+      return [{ source: trimmed }];
+    }
+  }
+  return trimmed
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [source, ...parts] = line.split(/\s+/);
+      const plugin: Record<string, string> = { source };
+      parts.forEach((part) => {
+        const [key, ...raw] = part.split("=");
+        const valuePart = raw.join("=");
+        if ((key === "ref" || key === "repo_path") && valuePart) {
+          plugin[key] = valuePart;
+        }
+      });
+      return plugin;
+    });
 }
 
 /**
@@ -83,50 +346,237 @@ function getTrigger(setup: SetupBlock) {
 export function buildCreatePayload(
   entry: SetupEntry,
   values: SetupFormValues,
+  /** Bundle/upload entries only: what the upload returned. */
+  tarballPath: string = PREFLIGHT_TARBALL_PATH,
+  selectedTrigger?: string | null,
+  selectedActionKey?: string | null,
 ): SetupRequestBody | null {
   const { setup } = entry;
-  if (setup.mode !== "direct" || !setup.prompt) return null;
+  if (setup.mode !== "direct") return null;
+  if (setup.bundle) {
+    return buildBundlePayload(entry, values, tarballPath, selectedTrigger);
+  }
+  if (setup.actions) {
+    return buildActionPayload(
+      entry,
+      values,
+      tarballPath,
+      selectedTrigger,
+      selectedActionKey,
+    );
+  }
+  if (!setup.prompt) return null;
 
   const scope = { form: values, automation: entry };
-  const repoPicker = findRepoPickerField(setup);
-  const repository = repoPicker ? values[repoPicker.name] : undefined;
 
   const payload: SetupRequestBody = {
-    name: repository ? `${entry.name} - ${repository}` : entry.name,
+    name: deriveName(entry, values),
     prompt: interpolateText(setup.prompt, scope),
+    ...optionalCreateProperties(setup, values),
+    ...repositoryProperty(setup, values),
   };
 
-  if (repository && repoPicker?.field.provider) {
-    const declared = REPO_PROPERTIES.filter((name) => name in values);
-    payload.repos = [
-      {
-        url: repository,
-        ...Object.fromEntries(declared.map((name) => [name, values[name]])),
-        provider: repoPicker.field.provider,
-      },
-    ];
-  }
+  const trigger = buildTrigger(entry, values, selectedTrigger);
+  if (trigger) payload.trigger = trigger;
 
-  const trigger = getTrigger(setup);
-  if (trigger) {
-    const properties = TRIGGER_PROPERTIES[trigger.kind];
-    const declared = Object.keys(trigger.fields).filter((name) =>
-      properties.includes(name),
-    );
-
-    payload.trigger = {
-      type: trigger.kind,
-      ...Object.fromEntries(declared.map((name) => [name, values[name] ?? ""])),
-      ...(trigger.kind === "event" && {
-        source: repoPicker?.field.provider ?? "",
-        // A filter is optional: an entry that declares none accepts every
-        // delivered event, so the key is left off rather than sent empty.
-        ...(setup.filter && { filter: interpolateText(setup.filter, scope) }),
-      }),
-    };
-  }
+  const template = buildTemplate(entry, values);
+  if (template) payload.template = template;
 
   return payload;
+}
+
+function buildActionPayload(
+  entry: SetupEntry,
+  values: SetupFormValues,
+  tarballPath: string,
+  selectedTrigger?: string | null,
+  selectedActionKey?: string | null,
+): SetupRequestBody | null {
+  const kind = selectedActionKind(entry, selectedActionKey);
+  if (kind === "bundle") return null;
+
+  const setup = entry.setup;
+  const scope = { form: values, automation: entry };
+  const payload: SetupRequestBody = {
+    name: deriveName(entry, values, selectedActionKey),
+  };
+
+  const trigger = buildTrigger(
+    entry,
+    values,
+    selectedTrigger,
+    selectedActionKey,
+  );
+  if (trigger) payload.trigger = trigger;
+
+  Object.assign(
+    payload,
+    optionalCreateProperties(setup, values, selectedActionKey),
+  );
+
+  if (kind === "upload") {
+    const action = setup.actions?.upload;
+    if (!action) return null;
+    payload.tarball_path =
+      tarballPath || interpolateText(action.tarballPath, scope);
+    payload.entrypoint = interpolateText(action.entrypoint, scope);
+    if (action.setupScript) {
+      const setupScript = interpolateText(action.setupScript, scope);
+      if (hasPayloadValue(setupScript)) payload.setup_script_path = setupScript;
+    }
+    return payload;
+  }
+
+  const action =
+    kind === "plugin" ? setup.actions?.plugin : setup.actions?.prompt;
+  if (!action) return null;
+  payload.prompt = interpolateText(action.prompt, scope);
+  Object.assign(payload, repositoryProperty(setup, values, selectedActionKey));
+
+  if (kind === "plugin") {
+    const pluginAction = setup.actions?.plugin;
+    if (!pluginAction) return null;
+    payload.plugins = parsePluginSources(
+      interpolateValue(pluginAction.plugins, scope),
+    );
+  }
+
+  const template = buildTemplate(entry, values);
+  if (template) payload.template = template;
+
+  return payload;
+}
+
+/**
+ * The `template` provenance a prompt entry sends, or undefined for one that
+ * publishes no version.
+ *
+ * It is what lets the service recognise a second setup of the same entry as
+ * the automation it already holds. The bundle path derives the same block from
+ * the config the bundle declares; a prompt entry declares none, so the answer
+ * to "what was this created from" is the form as submitted.
+ */
+function buildTemplate(
+  entry: SetupEntry,
+  values: SetupFormValues,
+): SetupRequestBody | undefined {
+  if (!entry.version) return undefined;
+  return {
+    id: entry.id,
+    version: entry.version,
+    config: { ...values } as SetupRequestBody,
+  };
+}
+
+/**
+ * The `trigger` object, read off the key and fields under `form.triggers`.
+ *
+ * Identical for both kinds of direct entry: only the create endpoint and what
+ * the automation is told to do differ between a prompt and a bundle.
+ */
+function buildTrigger(
+  entry: SetupEntry,
+  values: SetupFormValues,
+  selectedTrigger?: string | null,
+  selectedAction?: string | null,
+): SetupRequestBody | undefined {
+  const trigger = getTrigger(entry.setup, selectedTrigger);
+  if (!trigger) return undefined;
+
+  const properties = TRIGGER_PROPERTIES[trigger.kind];
+  const declared = Object.keys(trigger.fields).filter((name) =>
+    properties.includes(name),
+  );
+  const repoPicker = findRepoPickerField(entry.setup, selectedAction);
+  const derived = Object.fromEntries(
+    declared
+      .map((name) => [name, fieldText(values[name])])
+      .filter(([, value]) => hasPayloadValue(value)),
+  );
+
+  const filter = entry.setup.filter
+    ? interpolateText(entry.setup.filter, {
+        form: values,
+        automation: entry,
+      })
+    : undefined;
+
+  return {
+    type: trigger.kind,
+    ...derived,
+    ...(trigger.kind === "event" && {
+      ...(!("source" in derived) && {
+        source: repoPicker?.field.provider ?? "",
+      }),
+      ...(hasPayloadValue(filter) && { filter }),
+    }),
+  };
+}
+
+/**
+ * The raw create body a bundle entry produces.
+ *
+ * `tarball_path` is the one value neither declared nor derived: the host packs
+ * and uploads the bundle first, and creates from what came back. `template` is
+ * the provenance that makes enabling the same entry twice return the
+ * automation that already exists rather than a second one.
+ *
+ * There is no `repos`: the raw endpoint has no such field, and a bundle's
+ * script fetches what it needs itself.
+ */
+function buildBundlePayload(
+  entry: SetupEntry,
+  values: SetupFormValues,
+  tarballPath: string,
+  selectedTrigger?: string | null,
+): SetupRequestBody {
+  const bundle = entry.setup.bundle!;
+  const scope = { form: values, automation: entry };
+
+  const payload: SetupRequestBody = {
+    name: deriveName(entry, values),
+  };
+
+  const trigger = buildTrigger(entry, values, selectedTrigger);
+  if (trigger) payload.trigger = trigger;
+
+  payload.tarball_path = tarballPath;
+  payload.entrypoint = bundle.entrypoint;
+  if (bundle.setupScript) payload.setup_script_path = bundle.setupScript;
+  if (bundle.timeout !== undefined) payload.timeout = bundle.timeout;
+  payload.template = {
+    id: entry.id,
+    version: bundle.version,
+    config: interpolateConfig(bundle.config, scope) as SetupRequestBody,
+  };
+
+  return payload;
+}
+
+/**
+ * Placeholder substitution over the config tree. Only string leaves are
+ * templated; a number, a boolean or a null is written through as itself, so an
+ * entry can state a value the script reads as the type it expects.
+ */
+function interpolateConfig(
+  node: SetupBundleConfigValue,
+  scope: Parameters<typeof interpolateText>[1],
+): SetupBundleConfigValue {
+  if (typeof node === "string") {
+    return interpolateValue(node, scope);
+  }
+  if (Array.isArray(node)) {
+    return node.map((item) => interpolateConfig(item, scope));
+  }
+  if (typeof node === "object" && node !== null) {
+    return Object.fromEntries(
+      Object.entries(node).map(([key, value]) => [
+        key,
+        interpolateConfig(value, scope),
+      ]),
+    );
+  }
+  return node;
 }
 
 /**
@@ -136,13 +586,21 @@ export function buildCreatePayload(
 export function buildPreflightBody(
   entry: SetupEntry,
   values: SetupFormValues,
+  selectedTrigger?: string | null,
+  selectedAction?: string | null,
 ): SetupRequestBody | null {
-  const draft = buildCreatePayload(entry, values);
+  const draft = buildCreatePayload(
+    entry,
+    values,
+    PREFLIGHT_TARBALL_PATH,
+    selectedTrigger,
+    selectedAction,
+  );
   if (!draft) return null;
 
   return {
     automationId: entry.id,
-    endpoint: AUTOMATION_CREATE_ENDPOINT,
+    endpoint: automationCreateEndpoint(entry, selectedAction),
     draft,
   };
 }
@@ -183,17 +641,26 @@ function collectPlaceholderFields(value: string): string[] {
  * each field standing in for its own value recovers the mapping exactly, so an
  * entry does not declare it.
  */
-export function deriveErrorMap(entry: SetupEntry): Record<string, string[]> {
+export function deriveErrorMap(
+  entry: SetupEntry,
+  selectedTrigger?: string | null,
+  selectedAction?: string | null,
+): Record<string, string[]> {
   const mapping: Record<string, string[]> = {};
 
-  const standIns = Object.fromEntries(
-    Object.keys(collectFields(entry.setup)).map((name) => [
-      name,
-      `{{form.${name}}}`,
-    ]),
-  );
-  const template = buildCreatePayload(entry, standIns);
-  if (!template) return mapping;
+  const triggerEntries = Object.keys(entry.setup.form.triggers ?? {});
+  const triggerVariants = selectedTrigger
+    ? [selectedTrigger]
+    : triggerEntries.length > 1
+      ? triggerEntries
+      : [null];
+
+  const actionEntries = actionKinds(entry.setup);
+  const actionVariants = selectedAction
+    ? [selectedAction]
+    : actionEntries.length > 1
+      ? actionEntries
+      : [null];
 
   const walk = (node: unknown, path: string): void => {
     if (Array.isArray(node)) {
@@ -208,10 +675,31 @@ export function deriveErrorMap(entry: SetupEntry): Record<string, string[]> {
     }
     if (typeof node === "string") {
       const names = collectPlaceholderFields(node);
-      if (names.length > 0) mapping[path] = names;
+      if (names.length > 0) {
+        mapping[path] = Array.from(
+          new Set([...(mapping[path] ?? []), ...names]),
+        );
+      }
     }
   };
 
-  walk(template, "");
+  actionVariants.forEach((actionVariant) => {
+    triggerVariants.forEach((triggerVariant) => {
+      const names = Object.keys(
+        collectFields(entry.setup, triggerVariant, actionVariant),
+      );
+      const variantStandIns = Object.fromEntries(
+        names.map((name) => [name, `{{form.${name}}}`]),
+      );
+      const template = buildCreatePayload(
+        entry,
+        variantStandIns,
+        actionVariant === "upload" ? "" : PREFLIGHT_TARBALL_PATH,
+        triggerVariant,
+        actionVariant,
+      );
+      if (template) walk(template, "");
+    });
+  });
   return mapping;
 }

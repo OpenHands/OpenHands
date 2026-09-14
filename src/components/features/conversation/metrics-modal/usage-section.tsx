@@ -46,6 +46,7 @@ export function UsageSection({ usage }: UsageSectionProps) {
         value={(usage.prompt_tokens + usage.completion_tokens).toLocaleString()}
         labelClassName="font-semibold"
         valueClassName="font-bold"
+        showBorder={false}
       />
     </>
   );

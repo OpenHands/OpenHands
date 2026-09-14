@@ -13,7 +13,7 @@ const makeMessageEvent = (
     timestamp: "2024-01-01T00:00:00Z",
     source: "user",
     message: { role: "user", content: [{ type: "text", text: "test" }] },
-    activated_microagents: [],
+    activated_skills: [],
     extended_content: [],
     ...overrides,
   }) as MessageEvent;
@@ -21,7 +21,7 @@ const makeMessageEvent = (
 describe("createSkillReadyEvent", () => {
   it("includes _skillReadyItems with structured skill data", () => {
     const event = makeMessageEvent({
-      activated_microagents: ["docker"],
+      activated_skills: ["docker"],
       extended_content: [
         { type: "text", text: "<EXTRA_INFO>Docker guide</EXTRA_INFO>" },
       ],
@@ -37,7 +37,7 @@ describe("createSkillReadyEvent", () => {
   it("sets correct id and source", () => {
     const event = makeMessageEvent({
       id: "msg-42",
-      activated_microagents: ["skill1"],
+      activated_skills: ["skill1"],
       extended_content: [
         { type: "text", text: "<EXTRA_INFO>content</EXTRA_INFO>" },
       ],
@@ -62,7 +62,7 @@ describe("createSkillReadyEvent", () => {
 describe("isSkillReadyEvent", () => {
   it("returns true for valid SkillReadyEvent", () => {
     const event = makeMessageEvent({
-      activated_microagents: ["skill1"],
+      activated_skills: ["skill1"],
       extended_content: [
         { type: "text", text: "<EXTRA_INFO>content</EXTRA_INFO>" },
       ],

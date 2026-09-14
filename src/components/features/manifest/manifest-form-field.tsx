@@ -4,27 +4,36 @@ import { SettingsDropdownInput } from "#/components/features/settings/settings-d
 import { GitRepoDropdown } from "#/components/features/home/git-repo-dropdown";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { I18nKey } from "#/i18n/declaration";
-import { formControlMultilineFieldClassName } from "#/utils/form-control-classes";
+import {
+  formControlMultilineFieldClassName,
+  formControlSettingsFieldClassName,
+} from "#/utils/form-control-classes";
 import { cn } from "#/utils/utils";
 import type { GitRepository } from "#/types/git";
+import { fieldText, fieldValues } from "#/manifests/manifest-local-validation";
+import { SetupRepositoryList } from "./manifest-repository-list";
 import type {
   SetupFieldOption,
   SetupFormField as SetupFormFieldDefinition,
+  SetupFormValue,
 } from "#/manifests/types";
 
 export interface SetupFormFieldProps {
   /** The record key the field is declared under, and what `{{form.x}}` reads. */
   name: string;
   field: SetupFormFieldDefinition;
-  value: string;
+  /** A list for a field collecting several values, a string for the rest. */
+  value: SetupFormValue;
   /** Already-resolved copy: local checks and service errors look the same here. */
   error?: string;
   /** Declared options, or the ones the deployment supplied. */
   options: SetupFieldOption[];
+  /** Whether dynamic options for this field are still loading. */
+  isOptionsLoading?: boolean;
   /** The picked repository, kept so the picker can show what is selected. */
   repository: GitRepository | null;
   disabled: boolean;
-  onChange: (value: string) => void;
+  onChange: (value: SetupFormValue) => void;
   onRepositoryChange: (repository: GitRepository | null) => void;
   onBlur: () => void;
 }
@@ -43,6 +52,7 @@ export function SetupFormField({
   value,
   error,
   options,
+  isOptionsLoading = false,
   repository,
   disabled,
   onChange,
@@ -60,6 +70,31 @@ export function SetupFormField({
   // local-only, which makes that the common case rather than the edge one.
   const canListRepositories = backend.kind === "cloud";
 
+  // The format hint is host copy: a manifest states the format of everything it
+  // declares except a repository, whose shape the host derives.
+  const repositoryPlaceholder =
+    field.placeholder ?? t(I18nKey.SETUP$REPOSITORY_PLACEHOLDER);
+
+  if (field.type === "repo-picker" && field.multiple) {
+    return (
+      <div className="flex w-full flex-col gap-2.5">
+        <FieldLabel field={field} />
+        <SetupRepositoryList
+          name={name}
+          field={field}
+          values={fieldValues(value)}
+          canListRepositories={canListRepositories}
+          placeholder={repositoryPlaceholder}
+          disabled={disabled}
+          onChange={onChange}
+          onBlur={onBlur}
+        />
+        <FieldError testId={testId} error={error} />
+        {help}
+      </div>
+    );
+  }
+
   if (field.type === "repo-picker" && canListRepositories) {
     return (
       <div className="flex w-full flex-col gap-2.5">
@@ -67,7 +102,7 @@ export function SetupFormField({
         <GitRepoDropdown
           provider={field.provider ?? "github"}
           value={repository?.id ?? null}
-          repositoryName={repository?.full_name ?? value ?? null}
+          repositoryName={repository?.full_name ?? fieldText(value) ?? null}
           placeholder={field.placeholder}
           disabled={disabled}
           onChange={(selected) => {
@@ -82,13 +117,20 @@ export function SetupFormField({
     );
   }
 
-  // A timezone field declares no options of its own: the accepted zones are the
-  // deployment's, so it renders as a list once they are known and as a plain
-  // input when they are not.
-  if (
+  // A timezone or event field declares no options of its own: the accepted
+  // values are the deployment's, so it renders as a list once they are known and
+  // as a plain input when they are not. LLM profiles are different: they are a
+  // semantic closed set owned by the current backend, so an unavailable list is
+  // still shown as a disabled dropdown rather than an unrestricted text input.
+  const shouldRenderDropdown =
     field.type === "select" ||
-    (field.type === "timezone" && options.length > 0)
-  ) {
+    field.type === "llm-profile" ||
+    (["timezone", "event-source", "event-type"].includes(field.type) &&
+      options.length > 0);
+  if (shouldRenderDropdown) {
+    const hasOptions = options.length > 0;
+    const profileOptionsUnavailable =
+      field.type === "llm-profile" && !isOptionsLoading && !hasOptions;
     return (
       <div className="flex w-full flex-col gap-2.5">
         <SettingsDropdownInput
@@ -99,15 +141,75 @@ export function SetupFormField({
             key: option.value,
             label: option.label,
           }))}
-          selectedKey={value || undefined}
-          placeholder={field.placeholder}
-          isDisabled={disabled}
+          selectedKey={fieldText(value) || undefined}
+          placeholder={
+            profileOptionsUnavailable
+              ? t(I18nKey.MODEL$NO_SAVED_PROFILES)
+              : field.placeholder
+          }
+          isDisabled={disabled || profileOptionsUnavailable}
+          isLoading={isOptionsLoading}
           required={field.required}
           onSelectionChange={(key) => {
             onChange(key === null ? "" : String(key));
             onBlur();
           }}
         />
+        <FieldError testId={testId} error={error} />
+        {help}
+      </div>
+    );
+  }
+
+  if (field.type === "plugin-sources") {
+    return (
+      <label className="flex w-full flex-col gap-2.5">
+        <FieldLabelText field={field} />
+        <textarea
+          data-testid={testId}
+          name={name}
+          rows={4}
+          value={fieldText(value)}
+          placeholder={field.placeholder}
+          disabled={disabled}
+          aria-invalid={!!error}
+          onChange={(event) => onChange(event.target.value)}
+          onBlur={onBlur}
+          className={cn(
+            formControlMultilineFieldClassName,
+            error && "border-red-500",
+          )}
+        />
+        <FieldError testId={testId} error={error} />
+        {help}
+      </label>
+    );
+  }
+
+  if (field.type === "tarball-upload") {
+    return (
+      <div className="flex w-full flex-col gap-2.5">
+        <FieldLabel field={field} />
+        <input
+          data-testid={testId}
+          name={name}
+          type="file"
+          accept=".tar,.tar.gz,.tgz,application/gzip,application/x-tar"
+          disabled={disabled}
+          aria-invalid={!!error}
+          onChange={(event) => {
+            onChange(event.target.files?.[0] ?? "");
+            onBlur();
+          }}
+          className={cn(
+            formControlSettingsFieldClassName,
+            "file:mr-3 file:rounded-md file:border-0 file:bg-neutral-700 file:px-3 file:py-1.5 file:text-sm file:text-white",
+            error && "border-red-500",
+          )}
+        />
+        {fieldText(value) && (
+          <p className="text-xs text-[var(--oh-muted)]">{fieldText(value)}</p>
+        )}
         <FieldError testId={testId} error={error} />
         {help}
       </div>
@@ -122,7 +224,7 @@ export function SetupFormField({
           data-testid={testId}
           name={name}
           rows={4}
-          value={value}
+          value={fieldText(value)}
           placeholder={field.placeholder}
           disabled={disabled}
           aria-invalid={!!error}
@@ -145,21 +247,20 @@ export function SetupFormField({
   // states the format of everything it declares except the repository, whose
   // shape the host derives, so that one hint is host copy.
   const placeholder =
-    field.placeholder ??
-    (field.type === "repo-picker"
-      ? t(I18nKey.SETUP$REPOSITORY_PLACEHOLDER)
-      : undefined);
+    field.type === "repo-picker" ? repositoryPlaceholder : field.placeholder;
 
   return (
     <div className="flex w-full flex-col gap-2.5">
       <SettingsInput
         testId={testId}
         name={name}
-        type="text"
+        type={field.type === "number" ? "number" : "text"}
         label={field.label}
-        value={value}
+        value={fieldText(value)}
         placeholder={placeholder}
         isDisabled={disabled}
+        min={field.constraints?.min}
+        max={field.constraints?.max}
         showRequiredTag={field.required}
         error={error}
         onChange={onChange}

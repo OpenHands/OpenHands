@@ -1,0 +1,60 @@
+name: Feature Request
+description: Suggest an enhancement or new capability for Agent Canvas.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to suggest a feature! Please fill out the
+        sections below so we can understand and scope the request.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or Motivation
+      description: What problem does this feature solve, or what is it hard to do today?
+      placeholder: Today it is hard to …
+    validations:
+      required: true
+
+  - type: textarea
+    id: desired
+    attributes:
+      label: Desired Behavior
+      description: |
+        Required for the `ready-for-dev` label. Describe the behavior you want as
+        if it already worked, in concrete terms a reviewer can understand.
+      placeholder: |
+        As a user, I can … so that …
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: |
+        Required for the `ready-for-dev` label. Testable, checkable bullets a
+        reviewer can verify to confirm the feature is done.
+      placeholder: |
+        - [ ] A screenshot/video demonstrating the feature behavior is attached to the PR.
+        - [ ] …
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: What other approaches did you consider, and why did they fall short?
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Screenshots, mockups, links, or anything else that helps.
+    validations:
+      required: false

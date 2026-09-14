@@ -22,9 +22,9 @@ import {
   isSkillReadyEvent,
 } from "../event-content-helpers/create-skill-ready-event";
 import { getInvokeSkillItems } from "../event-content-helpers/get-invoke-skill-items";
-import { ConversationConfirmationButtons } from "#/components/shared/buttons/conversation-confirmation-buttons";
 import { SkillReadyContentList } from "./skill-ready-content-list";
 import SkillsIcon from "#/icons/skills.svg?react";
+import { isMarkdownFileEditorEvent } from "#/components/features/chat/tool-visualizers/primitives/markdown-file-preview";
 
 interface GenericEventMessageWrapperProps {
   event: OpenHandsEvent | SkillReadyEvent;
@@ -66,7 +66,6 @@ function getSkillKnowledge(
 
 export function GenericEventMessageWrapper({
   event,
-  isLastMessage,
   correspondingAction,
 }: GenericEventMessageWrapperProps) {
   const { title, details } = getEventContent(event, correspondingAction);
@@ -103,20 +102,26 @@ export function GenericEventMessageWrapper({
     details
   );
 
+  // Markdown file-editor cards carry a clipped preview; expand them by
+  // default so the artifact is visible without an extra chevron click.
+  const initiallyExpanded =
+    !isSkillReadyEvent(event) &&
+    isMarkdownFileEditorEvent(event, correspondingAction);
+
   return (
     <div>
       <GenericEventMessage
         title={title}
         details={bodyDetails}
         success={success}
-        initiallyExpanded={false}
+        initiallyExpanded={initiallyExpanded}
+        timestamp={event.timestamp}
         titleIcon={
           skillKnowledge ? (
             <SkillsIcon className="h-4 w-4 stroke-[var(--oh-muted)] flex-shrink-0 mr-2" />
           ) : undefined
         }
       />
-      {isLastMessage && <ConversationConfirmationButtons />}
     </div>
   );
 }

@@ -128,32 +128,9 @@ export interface InputMetadata {
   description: string;
 }
 
-export interface Microagent {
-  name: string;
-  type: "repo" | "knowledge" | "agentskills";
-  content: string;
-  triggers: string[];
-}
-
-export interface GetMicroagentsResponse {
-  microagents: Microagent[];
-}
-
-export interface GetMicroagentPromptResponse {
-  status: string;
-  prompt: string;
-}
-
 export interface IOption<T> {
   label: string;
   value: T;
-}
-
-export interface MicroagentContentResponse {
-  content: string;
-  path: string;
-  git_provider: Provider;
-  triggers: string[];
 }
 
 export type GetFilesResponse = string[];

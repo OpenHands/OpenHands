@@ -13,7 +13,7 @@ export type { McpLogoEntry };
 
 interface McpLogoBadgeProps {
   entry?: McpLogoEntry | null;
-  size?: "xs" | "sm" | "md";
+  size?: "xs" | "sm" | "base" | "md";
   className?: string;
   fallback?: ReactNode;
   testId?: string;
@@ -22,6 +22,7 @@ interface McpLogoBadgeProps {
 const sizeClassNames = {
   xs: "h-4 w-4 rounded [&>svg]:h-2.5 [&>svg]:w-2.5",
   sm: "h-5 w-5 rounded-md [&>svg]:h-3 [&>svg]:w-3",
+  base: "h-7 w-7 rounded-lg [&>svg]:h-3.5 [&>svg]:w-3.5",
   md: "h-10 w-10 rounded-lg [&>svg]:h-5 [&>svg]:w-5",
 };
 

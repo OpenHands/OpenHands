@@ -5,6 +5,7 @@ import {
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
 import type { Automation, AutomationSpec } from "#/types/automation";
+import type { GitSyncStatus } from "#/types/git-sync";
 import AutomationService from "./automation-service.api";
 
 const {
@@ -19,6 +20,7 @@ const {
     interceptors: { request: { use: vi.fn() } },
     get: vi.fn(),
     post: vi.fn(),
+    put: vi.fn(),
     patch: vi.fn(),
     delete: vi.fn(),
   },
@@ -352,6 +354,105 @@ describe("AutomationService.createAutomation", () => {
       "/api/automation/v1/preset/plugin",
       expect.objectContaining({ timeout: 1200 }),
       expect.any(Object),
+    );
+  });
+});
+
+const gitSyncStatus: GitSyncStatus = {
+  enabled: true,
+  repo_url: "https://example.com/org/repo.git",
+  branch: "main",
+  path: "automations",
+  encryption_enabled: false,
+  interval_seconds: 0,
+  last_synced_commit: "abc123",
+  last_synced_at: "2026-07-10T00:00:00Z",
+  last_error: null,
+  last_error_at: null,
+  dirty_count: 0,
+};
+
+describe("AutomationService git sync", () => {
+  beforeEach(() => {
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+  });
+
+  afterEach(() => {
+    setActiveSelection(null);
+    setRegisteredBackends([]);
+    vi.clearAllMocks();
+  });
+
+  it("fetches status from the local automation backend", async () => {
+    localAxios.get.mockResolvedValueOnce({ data: gitSyncStatus });
+
+    await expect(AutomationService.getGitSyncStatus()).resolves.toEqual(
+      gitSyncStatus,
+    );
+
+    expect(localAxios.get).toHaveBeenCalledWith(
+      "/api/automation/v1/git-sync/status",
+    );
+  });
+
+  it("fetches status through the cloud proxy", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
+    callCloudProxy.mockResolvedValueOnce(gitSyncStatus);
+
+    await expect(AutomationService.getGitSyncStatus()).resolves.toEqual(
+      gitSyncStatus,
+    );
+
+    expect(callCloudProxy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backend: cloudBackend,
+        method: "GET",
+        path: "/api/automation/v1/git-sync/status",
+      }),
+    );
+  });
+
+  it("sends a partial config update", async () => {
+    localAxios.put.mockResolvedValueOnce({ data: gitSyncStatus });
+
+    await expect(
+      AutomationService.updateGitSyncConfig({ branch: "develop" }),
+    ).resolves.toEqual(gitSyncStatus);
+
+    expect(localAxios.put).toHaveBeenCalledWith(
+      "/api/automation/v1/git-sync/config",
+      { branch: "develop" },
+    );
+  });
+
+  it("sends a null override through the cloud proxy", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
+    callCloudProxy.mockResolvedValueOnce(gitSyncStatus);
+
+    await AutomationService.updateGitSyncConfig({ token: null });
+
+    expect(callCloudProxy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backend: cloudBackend,
+        method: "PUT",
+        path: "/api/automation/v1/git-sync/config",
+        body: { token: null },
+      }),
+    );
+  });
+
+  it("triggers a sync cycle", async () => {
+    localAxios.post.mockResolvedValueOnce({ data: { triggered: true } });
+
+    await expect(AutomationService.triggerGitSync()).resolves.toEqual({
+      triggered: true,
+    });
+
+    expect(localAxios.post).toHaveBeenCalledWith(
+      "/api/automation/v1/git-sync/sync",
     );
   });
 });

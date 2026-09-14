@@ -201,15 +201,13 @@ describe("handleLaunchChildConversationAction", () => {
         nextToolCallId(),
       );
 
-      expect(mockCreateConversation).toHaveBeenCalledWith(
-        "Add a regression test for the parser",
-        undefined,
-        undefined,
-        PARENT_REPO_METADATA,
-        "/Users/jane/projects/foo",
-        "new_worktree",
-        PARENT_ID,
-      );
+      expect(mockCreateConversation).toHaveBeenCalledWith({
+        initialUserMsg: "Add a regression test for the parser",
+        metadata: PARENT_REPO_METADATA,
+        workingDirOverride: "/Users/jane/projects/foo",
+        workspaceMode: "new_worktree",
+        parentConversationId: PARENT_ID,
+      });
     });
 
     it("reports the child's id, url and status back to the agent", async () => {
@@ -252,15 +250,13 @@ describe("handleLaunchChildConversationAction", () => {
         nextToolCallId(),
       );
 
-      expect(mockCreateConversation).toHaveBeenCalledWith(
-        expect.anything(),
-        undefined,
-        undefined,
-        null,
-        "/Users/jane/projects/foo",
-        "local_repo",
-        PARENT_ID,
-      );
+      expect(mockCreateConversation).toHaveBeenCalledWith({
+        initialUserMsg: expect.anything(),
+        metadata: null,
+        workingDirOverride: "/Users/jane/projects/foo",
+        workspaceMode: "local_repo",
+        parentConversationId: PARENT_ID,
+      });
     });
 
     // `parent_conversation_id` landed in agent-server 1.37.1; older servers
@@ -308,15 +304,13 @@ describe("handleLaunchChildConversationAction", () => {
       );
 
       expect(mockCreateConversation).toHaveBeenCalledTimes(1);
-      expect(mockCreateConversation).toHaveBeenCalledWith(
-        expect.anything(),
-        undefined,
-        undefined,
-        null,
-        "/Users/jane/projects/foo",
-        "local_repo",
-        PARENT_ID,
-      );
+      expect(mockCreateConversation).toHaveBeenCalledWith({
+        initialUserMsg: expect.anything(),
+        metadata: null,
+        workingDirOverride: "/Users/jane/projects/foo",
+        workspaceMode: "local_repo",
+        parentConversationId: PARENT_ID,
+      });
 
       const result = reportedResult();
       expect(result).toMatchObject({ status: "launched", isolation: "shared" });
@@ -340,15 +334,13 @@ describe("handleLaunchChildConversationAction", () => {
       );
 
       expect(mockCreateConversation).toHaveBeenCalledTimes(2);
-      expect(mockCreateConversation).toHaveBeenLastCalledWith(
-        expect.anything(),
-        undefined,
-        undefined,
-        PARENT_REPO_METADATA,
-        "/Users/jane/projects/foo",
-        "local_repo",
-        PARENT_ID,
-      );
+      expect(mockCreateConversation).toHaveBeenLastCalledWith({
+        initialUserMsg: expect.anything(),
+        metadata: PARENT_REPO_METADATA,
+        workingDirOverride: "/Users/jane/projects/foo",
+        workspaceMode: "local_repo",
+        parentConversationId: PARENT_ID,
+      });
 
       const result = reportedResult();
       expect(result).toMatchObject({
