@@ -42,6 +42,7 @@ const {
   mockGetEvent,
   mockSwitchAcpModel,
   mockVSCodeGetUrl,
+  mockVSCodeGetStatus,
   mockGetSettings,
   mockGetSettingsForConversation,
   mockGetProfile,
@@ -63,6 +64,7 @@ const {
   mockGetEvent: vi.fn(),
   mockSwitchAcpModel: vi.fn(),
   mockVSCodeGetUrl: vi.fn(),
+  mockVSCodeGetStatus: vi.fn(),
   mockGetSettings: vi.fn(),
   mockGetSettingsForConversation: vi.fn(),
   mockGetProfile: vi.fn(),
@@ -91,7 +93,7 @@ vi.mock("@openhands/typescript-client/clients", async () => {
       return mockSettingsClient();
     }),
     VSCodeClient: vi.fn(function VSCodeClientMock() {
-      return { getUrl: mockVSCodeGetUrl };
+      return { getUrl: mockVSCodeGetUrl, getStatus: mockVSCodeGetStatus };
     }),
   };
 });
@@ -224,6 +226,7 @@ describe("AgentServerConversationService", () => {
     mockGetEvent.mockReset();
     mockSwitchAcpModel.mockReset();
     mockVSCodeGetUrl.mockReset();
+    mockVSCodeGetStatus.mockReset();
     vi.mocked(ConversationClient).mockClear();
     vi.mocked(FileClient).mockClear();
     vi.mocked(ProfilesClient).mockClear();
@@ -279,6 +282,137 @@ describe("AgentServerConversationService", () => {
     mockSettingsClient.mockReturnValue({
       listSecrets: vi.fn().mockResolvedValue({ secrets: [] }),
     });
+  });
+
+  describe("remaining public conversation contracts", () => {
+    beforeEach(() => {
+      setRegisteredBackends([localBackend]);
+      setActiveSelection({ backendId: localBackend.id });
+    });
+
+    it("replaces the complete tag map and returns refreshed tags", async () => {
+      const tags = { owner: "alice", acpserver: "codex" };
+      mockUpdateConversation.mockResolvedValue(undefined);
+      mockHttpGet.mockResolvedValue({
+        data: [makeDirectConversation({ tags })],
+      });
+      const result =
+        await AgentServerConversationService.updateConversationTags(
+          "conv-1",
+          tags,
+        );
+      expect(mockUpdateConversation).toHaveBeenCalledWith("conv-1", { tags });
+      expect(result.tags).toEqual(tags);
+    });
+
+    it("rejects tag updates when the refreshed conversation is missing", async () => {
+      mockUpdateConversation.mockResolvedValue(undefined);
+      mockHttpGet.mockResolvedValue({ data: [] });
+      await expect(
+        AgentServerConversationService.updateConversationTags("gone", {}),
+      ).rejects.toThrow("gone");
+    });
+
+    it("preserves disabled editor capability and explicit runtime credentials", async () => {
+      const status = { enabled: false, running: false };
+      mockVSCodeGetStatus.mockResolvedValue(status);
+      await expect(
+        AgentServerConversationService.getVSCodeStatus(
+          "https://runtime.example.test/api/conversations/conv-1",
+          "session-key",
+        ),
+      ).resolves.toEqual(status);
+      expect(VSCodeClient).toHaveBeenCalledWith(
+        expect.objectContaining({
+          host: "https://runtime.example.test",
+          apiKey: "session-key",
+        }),
+      );
+    });
+
+    it("renames Cloud conversations through the Cloud resource", async () => {
+      setRegisteredBackends([cloudBackend]);
+      setActiveSelection({ backendId: cloudBackend.id });
+      const renamed = makeDirectConversation({ title: "Cloud title" });
+      const requests = captureRequests(["patch"], renamed);
+      await expect(
+        AgentServerConversationService.updateConversationTitle(
+          "conv-1",
+          "Cloud title",
+        ),
+      ).resolves.toEqual(renamed);
+      expect(requests).toEqual([
+        expect.objectContaining({
+          method: "PATCH",
+          url: `${cloudBackend.host}/api/v1/app-conversations/conv-1`,
+          body: { title: "Cloud title" },
+        }),
+      ]);
+      expect(mockUpdateConversation).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      { agent_profile_id: 42, revision: 1 },
+      { agent_profile_id: "profile", revision: "one" },
+    ])(
+      "rejects malformed launched profile metadata: %j",
+      async (launched_agent_profile) => {
+        mockHttpGet.mockResolvedValue({
+          data: [makeDirectConversation({ launched_agent_profile })],
+        });
+        const [result] =
+          await AgentServerConversationService.batchGetAppConversations([
+            "conv-1",
+          ]);
+        expect(result?.launched_agent_profile).toBeNull();
+      },
+    );
+
+    it("does not create or discover local planners on Cloud", async () => {
+      setRegisteredBackends([cloudBackend]);
+      setActiveSelection({ backendId: cloudBackend.id });
+      await expect(
+        AgentServerConversationService.createLocalPlanningConversation(
+          "parent",
+        ),
+      ).rejects.toThrow("require a local backend");
+      await expect(
+        AgentServerConversationService.getLocalPlanningConversationIds(
+          "parent",
+        ),
+      ).resolves.toEqual([]);
+      expect(mockHttpPost).not.toHaveBeenCalled();
+      expect(mockHttpGet).not.toHaveBeenCalled();
+    });
+
+    it.each([false, true])(
+      "uses stored planner metadata when server children are unavailable, fails=%s",
+      async (fails) => {
+        setStoredConversationMetadata("parent", {
+          local_planning_conversation_id: "stored-planner",
+        });
+        if (fails) mockHttpGet.mockRejectedValue(new Error("old server"));
+        else
+          mockHttpGet.mockResolvedValue({
+            data: [
+              makeDirectConversation({
+                id: "parent",
+                sub_conversation_ids: [],
+              }),
+            ],
+          });
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        try {
+          await expect(
+            AgentServerConversationService.getLocalPlanningConversationIds(
+              "parent",
+            ),
+          ).resolves.toEqual(["stored-planner"]);
+        } finally {
+          warn.mockRestore();
+        }
+      },
+    );
   });
 
   describe("readConversationFile", () => {

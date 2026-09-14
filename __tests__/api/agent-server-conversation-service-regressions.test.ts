@@ -512,6 +512,21 @@ describe("AgentServerConversationService", () => {
       __resetActiveStoreForTests();
     });
 
+    it("uses the configured working directory when the parent cannot be found", async () => {
+      mockHttpGet.mockResolvedValue({ data: [] });
+      await AgentServerConversationService.createLocalPlanningConversation(
+        "missing-parent",
+      );
+      expect(mockHttpPost).toHaveBeenCalledWith(
+        "/api/conversations",
+        expect.objectContaining({
+          workspace: expect.objectContaining({
+            working_dir: "/workspace/project/agent-canvas",
+          }),
+        }),
+      );
+    });
+
     it("ignores active_profile for an ACP parent and falls back to global settings", async () => {
       // ACP parents get active_profile stamped with whatever LLM profile was
       // globally active at *their* creation time — not meaningfully tied to
