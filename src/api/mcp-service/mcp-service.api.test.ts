@@ -313,6 +313,66 @@ describe("McpService.testServer", () => {
     });
   });
 
+  it("forwards nonempty stdio arguments and environment", async () => {
+    await McpService.testServer({
+      id: "stdio-custom",
+      type: "stdio",
+      command: "node",
+      args: ["server.js"],
+      env: { API_KEY: "fresh-value" },
+    });
+    expect(testServer.mock.calls[0][0].server).toEqual({
+      type: "stdio",
+      command: "node",
+      args: ["server.js"],
+      env: { API_KEY: "fresh-value" },
+    });
+  });
+
+  it.each([true, false])(
+    "interprets an advertised Linear credential probe, error=%s",
+    async (isError) => {
+      const response = {
+        ok: true as const,
+        tools: ["list_teams"],
+        tool_result: { is_error: isError, text: "credential probe result" },
+      };
+      testServer.mockResolvedValue(response);
+      const result = await McpService.testServer({
+        id: "shttp-linear",
+        type: "shttp",
+        name: "linear",
+        url: "https://mcp.linear.app/mcp",
+      });
+      expect(result).toEqual(
+        isError
+          ? {
+              ok: false,
+              error: "credential probe result",
+              error_kind: "credentials",
+            }
+          : response,
+      );
+    },
+  );
+
+  it("keeps connectivity success when Linear does not advertise its credential probe", async () => {
+    const response = {
+      ok: true as const,
+      tools: ["search"],
+      tool_result: { is_error: true, text: "unsupported probe" },
+    };
+    testServer.mockResolvedValue(response);
+    await expect(
+      McpService.testServer({
+        id: "shttp-linear",
+        type: "shttp",
+        name: "linear",
+        url: "https://mcp.linear.app/mcp",
+      }),
+    ).resolves.toEqual(response);
+  });
+
   it("passes through a tool result when the server has no credential validator", async () => {
     const response = {
       ok: true as const,
