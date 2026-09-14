@@ -59,9 +59,8 @@ vi.mock("react-i18next", () => ({
 vi.mock("#/manifests/manifest-sources", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("#/manifests/manifest-sources")>();
-  const { createInterfaceManifest } = await import(
-    "../manifests/manifest-test-data"
-  );
+  const { createInterfaceManifest } =
+    await import("../manifests/manifest-test-data");
   return {
     ...actual,
     AUTOMATION_INTERFACE_CANDIDATE: createInterfaceManifest(),
@@ -483,6 +482,7 @@ function readBlobText(blob: Blob): Promise<string> {
 }
 
 beforeEach(() => {
+  mocks.canManage = true;
   vi.clearAllMocks();
   window.localStorage.clear();
   mocks.healthState.data = { status: "ok" };
@@ -890,6 +890,19 @@ describe("automations list interactions", () => {
       `${JSON.stringify(mocks.serializeAutomation.mock.results[0].value, null, 2)}\n`,
     );
     expect(mocks.trackExported).toHaveBeenCalledWith({ backendKind: "local" });
+  });
+
+  it("hides create and import actions without management permission", () => {
+    mocks.canManage = false;
+    render(<AutomationsList />);
+    expect(
+      screen.queryByTestId("automations-add-automation"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automations-import-automation"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("add-modal")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("import-modal")).not.toBeInTheDocument();
   });
 
   it("opens and closes the add-automation form", async () => {
