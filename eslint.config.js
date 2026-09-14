@@ -36,6 +36,7 @@ import prettierPlugin from "eslint-plugin-prettier";
 import prettierConfig from "eslint-config-prettier";
 import unusedImportsPlugin from "eslint-plugin-unused-imports";
 import tanstackQueryPlugin from "@tanstack/eslint-plugin-query";
+import { plugin as shadcnPlugin } from "@shadcn/lint";
 import globals from "globals";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -387,6 +388,26 @@ export default [
       "react/no-array-index-key": "off",
       "react-hooks/exhaustive-deps": "off",
       "react/react-in-jsx-scope": "off",
+    },
+  },
+
+  // @shadcn/lint — agent-first linter for the Tailwind v4 design system.
+  //
+  // TRIAL: registers the plugin and enables a single low-risk rule as a
+  // starting point. `no-arbitrary-values` forbids one-off Tailwind values
+  // like `p-[13px]` or `text-[#abc123]` in favor of the theme scale, which
+  // keeps agent-written UI on the design system. Warn (not error) for now so
+  // the trial surfaces findings without breaking `npm run lint`.
+  //
+  // The real value of @shadcn/lint is in per-component `no-restyle` contracts
+  // (e.g. "Button owns its spacing"); those are intentionally left for the
+  // team to author against `src/ui`. See:
+  // https://github.com/shadcn-ui/lint#rules
+  {
+    files: ["src/**/*.{ts,tsx}"],
+    plugins: { shadcn: shadcnPlugin },
+    rules: {
+      "shadcn/no-arbitrary-values": "warn",
     },
   },
 ];
