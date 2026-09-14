@@ -94,4 +94,32 @@ describe("SettingsDropdownInput", () => {
     expect(onSelectionChange).toHaveBeenCalledWith(null);
     expect(onInputChange).toHaveBeenCalledWith("");
   });
+
+  it("suppresses the mobile keyboard when typing is not enabled", () => {
+    render(
+      <SettingsDropdownInput
+        items={items}
+        label="Language"
+        name="language"
+        testId="language-input"
+      />,
+    );
+    expect(screen.getByLabelText("Language")).toHaveAttribute(
+      "inputmode",
+      "none",
+    );
+  });
+
+  it("keeps the keyboard available when custom values are allowed", () => {
+    render(
+      <SettingsDropdownInput
+        allowsCustomValue
+        items={items}
+        label="Language"
+        name="language"
+        testId="language-input"
+      />,
+    );
+    expect(screen.getByLabelText("Language")).not.toHaveAttribute("inputmode");
+  });
 });
