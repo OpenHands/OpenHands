@@ -37,6 +37,14 @@ describe("substituteRedactedMcpCredentials", () => {
     vi.restoreAllMocks();
   });
 
+  it("rejects a nonempty array config even when the server ID indexes an entry", async () => {
+    mockEncryptedMcpConfig([{ env: { API_KEY: "encrypted-decoy" } }]);
+    const server = getStdioServer({ id: "0" });
+    await expect(substituteRedactedMcpCredentials(server)).resolves.toEqual(
+      server,
+    );
+  });
+
   it("preserves a missing stored OAuth subtree while restoring a sibling secret", async () => {
     mockEncryptedMcpConfig({
       "shttp-0": {
