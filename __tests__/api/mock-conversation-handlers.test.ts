@@ -1,3 +1,4 @@
+import { createServer } from "node:http";
 import { http, HttpResponse } from "msw";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
@@ -276,6 +277,48 @@ describe("mock conversation handlers", () => {
     } finally {
       random.mockRestore();
     }
+  });
+
+  it("passes unrelated workspace files through to the backing server", async () => {
+    const backingServer = createServer((_request, response) => {
+      response.writeHead(200, { "Content-Type": "text/plain" });
+      response.end("unrelated workspace file");
+    });
+    await new Promise<void>((resolve) =>
+      backingServer.listen(0, "127.0.0.1", resolve),
+    );
+    try {
+      const address = backingServer.address();
+      if (!address || typeof address === "string")
+        throw new Error("Expected TCP address");
+      // Exercise the mock HTTP passthrough contract against a controlled local server.
+      // eslint-disable-next-line local/no-direct-agent-server-fetch
+      const response = await fetch(
+        `http://127.0.0.1:${address.port}/api/conversations/1/workspace/unrelated.txt`,
+      );
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe("unrelated workspace file");
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        backingServer.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
+  });
+
+  it("replaces tags without changing the existing title", async () => {
+    const before = await requestJson<{ title: string }>("/api/conversations/1");
+    const updated = await requestJson<null>("/api/conversations/1", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tags: { owner: "alice" } }),
+    });
+    expect(updated.status).toBe(200);
+    const after = await requestJson<{
+      title: string;
+      tags: Record<string, string>;
+    }>("/api/conversations/1");
+    expect(after.body.title).toBe(before.body.title);
+    expect(after.body.tags).toEqual({ owner: "alice" });
   });
 
   it("rejects empty rename payloads without changing the conversation", async () => {
