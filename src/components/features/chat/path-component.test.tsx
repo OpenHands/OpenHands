@@ -1,10 +1,19 @@
 /* eslint-disable i18next/no-literal-string -- test fixtures use literal path strings */
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import EventLogger from "#/utils/event-logger";
-import { PathComponent, isLikelyDirectory } from "./path-component";
+import {
+  PathComponent,
+  PathInteractiveContext,
+  isLikelyDirectory,
+} from "./path-component";
+import { NavigationProvider } from "#/context/navigation-context";
+import { openWorkspaceFile } from "#/services/canvas-ui";
+
+vi.mock("#/services/canvas-ui", () => ({ openWorkspaceFile: vi.fn() }));
 
 afterEach(() => {
+  vi.clearAllMocks();
   vi.restoreAllMocks();
 });
 
@@ -23,6 +32,51 @@ describe("isLikelyDirectory", () => {
 });
 
 describe("PathComponent", () => {
+  it("opens the decoded path in the current conversation without toggling its parent", () => {
+    const onParentClick = vi.fn();
+    const subject = (conversationId: string) => (
+      <NavigationProvider
+        value={{
+          conversationId,
+          currentPath: "/",
+          isNavigating: false,
+          navigate: vi.fn(),
+        }}
+      >
+        <div onClick={onParentClick}>
+          <PathComponent>/workspace/a&amp;b/readme.md</PathComponent>
+        </div>
+      </NavigationProvider>
+    );
+    const { rerender } = render(subject("first"));
+    fireEvent.click(screen.getByRole("button", { name: "readme.md" }));
+    expect(openWorkspaceFile).toHaveBeenLastCalledWith(
+      "/workspace/a&b/readme.md",
+      "first",
+    );
+    rerender(subject("second"));
+    fireEvent.click(screen.getByRole("button", { name: "readme.md" }));
+    expect(openWorkspaceFile).toHaveBeenLastCalledWith(
+      "/workspace/a&b/readme.md",
+      "second",
+    );
+    expect(onParentClick).not.toHaveBeenCalled();
+  });
+
+  it("keeps paths noninteractive inside a parent toggle", () => {
+    const toggle = vi.fn();
+    render(
+      <button type="button" onClick={toggle}>
+        <PathInteractiveContext.Provider value={false}>
+          <PathComponent>/workspace/readme.md</PathComponent>
+        </PathInteractiveContext.Provider>
+      </button>,
+    );
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+    fireEvent.click(screen.getByText("readme.md"));
+    expect(toggle).toHaveBeenCalledOnce();
+    expect(openWorkspaceFile).not.toHaveBeenCalled();
+  });
   it("shows a decoded Unix filename and preserves the decoded path as its title", () => {
     render(<PathComponent>/workspace/a&amp;b/readme.md</PathComponent>);
 
