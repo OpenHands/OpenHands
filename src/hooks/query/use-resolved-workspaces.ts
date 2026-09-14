@@ -5,6 +5,7 @@ import { isAgentServerVersionError } from "@openhands/typescript-client/clients"
 import { useLocalWorkspaces } from "#/hooks/query/use-local-workspaces";
 import { searchAllSubdirectories } from "#/hooks/query/use-search-subdirs";
 import { LocalWorkspace, LocalWorkspaceParent } from "#/types/workspace";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 
 interface UseResolvedWorkspacesResult {
   workspaces: LocalWorkspace[];
@@ -50,6 +51,7 @@ const IMPLICIT_WORKSPACE_PARENTS: LocalWorkspaceParent[] = [
  * same path so that user-selected names/ids are preserved.
  */
 export function useResolvedWorkspaces(): UseResolvedWorkspacesResult {
+  const { backend, orgId } = useActiveBackend();
   const {
     data,
     isLoading: isLoadingList,
@@ -78,7 +80,9 @@ export function useResolvedWorkspaces(): UseResolvedWorkspacesResult {
     queries: workspacesUnsupported
       ? []
       : workspaceParents.map((parent) => ({
-          queryKey: ["file", "search_subdirs", parent.path],
+          // Same slot `useSearchSubdirs` writes, which is already scoped;
+          // without the scope this one reads another backend's entry.
+          queryKey: ["file", "search_subdirs", parent.path, backend.id, orgId],
           queryFn: () => searchAllSubdirectories(parent.path),
           retry: false,
           meta: { disableToast: true },
