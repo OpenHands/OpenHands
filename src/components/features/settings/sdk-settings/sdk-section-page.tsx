@@ -159,6 +159,11 @@ export interface SdkSectionSaveControl {
   /** The active view tier (basic/advanced/all) the form is rendering. */
   view: SettingsView;
   /**
+   * Returns the exact payload the built-in save action sends, including any
+   * feature-specific canonicalization supplied through `buildPayload`.
+   */
+  getSavePayload: () => Record<string, unknown>;
+  /**
    * Returns the coerced, dirty-only payload as a nested object
    * (e.g. `{ llm: { temperature: 0.7 } }`). Lets a custom save flow persist
    * exactly the fields the user changed, with proper types, without
@@ -579,9 +584,15 @@ export function SdkSectionPage({
     handleSaveRef.current();
   }, []);
 
-  // Stable accessor for the coerced, dirty-only payload. Mirrors the
-  // `handleSaveRef` pattern so the exposed function reference stays stable
-  // across renders while always reading the latest closure at call time.
+  // Stable payload accessors mirror `handleSaveRef`: consumers keep stable
+  // function identities while each call reads the latest form closure.
+  const buildSavePayloadRef = React.useRef<() => Record<string, unknown>>(
+    () => ({}),
+  );
+  const stableGetSavePayload = React.useCallback(
+    () => buildSavePayloadRef.current(),
+    [],
+  );
   const buildDirtyPayloadRef = React.useRef<() => Record<string, unknown>>(
     () => ({}),
   );
@@ -590,41 +601,45 @@ export function SdkSectionPage({
     [],
   );
 
+  buildSavePayloadRef.current = () => {
+    const defaultPayload: Record<string, unknown> = {};
+    for (const src of resolvedSources) {
+      if (!src.filteredSchema) continue;
+      const sourceValues = valuesBySource[src.settingsSource] ?? {};
+      const sourceDirty = dirtyBySource[src.settingsSource] ?? {};
+      const diff = buildSdkSettingsPayloadForView(
+        src.filteredSchema,
+        sourceValues,
+        sourceDirty,
+        view,
+      );
+      if (Object.keys(diff).length > 0) {
+        const diffKey = PAYLOAD_DIFF_KEY[src.settingsSource];
+        defaultPayload[diffKey] = {
+          ...((defaultPayload[diffKey] as
+            | Record<string, unknown>
+            | undefined) ?? {}),
+          ...diff,
+        };
+      }
+    }
+
+    return buildPayload
+      ? buildPayload(defaultPayload, {
+          values: flatValues,
+          dirty: flatDirty,
+          view,
+        })
+      : defaultPayload;
+  };
+
   const handleSave = () => {
     if (isReadOnly) return;
     if (resolvedSources.some((src) => !src.filteredSchema)) return;
 
     let payload: Record<string, unknown>;
     try {
-      const defaultPayload: Record<string, unknown> = {};
-      for (const src of resolvedSources) {
-        const schema = src.filteredSchema!;
-        const sourceValues = valuesBySource[src.settingsSource] ?? {};
-        const sourceDirty = dirtyBySource[src.settingsSource] ?? {};
-        const diff = buildSdkSettingsPayloadForView(
-          schema,
-          sourceValues,
-          sourceDirty,
-          view,
-        );
-        if (Object.keys(diff).length > 0) {
-          const diffKey = PAYLOAD_DIFF_KEY[src.settingsSource];
-          defaultPayload[diffKey] = {
-            ...((defaultPayload[diffKey] as
-              | Record<string, unknown>
-              | undefined) ?? {}),
-            ...diff,
-          };
-        }
-      }
-
-      payload = buildPayload
-        ? buildPayload(defaultPayload, {
-            values: flatValues,
-            dirty: flatDirty,
-            view,
-          })
-        : defaultPayload;
+      payload = stableGetSavePayload();
     } catch (error) {
       displayErrorToast(
         error instanceof Error ? error.message : t(I18nKey.ERROR$GENERIC),
@@ -677,6 +692,7 @@ export function SdkSectionPage({
       isDirty: saveControlIsDirty,
       values: flatValues,
       view,
+      getSavePayload: stableGetSavePayload,
       getDirtyPayload: stableGetDirtyPayload,
     });
   }, [isPending, saveControlIsDirty, flatValues, view]);
