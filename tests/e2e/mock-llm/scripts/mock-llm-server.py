@@ -33,6 +33,11 @@ from openhands.sdk.testing import TestLLM, TestLLMExhaustedError
 BASH_TOKEN = "MOCK_LLM_E2E_BASH_OK"
 REPLY_TOKEN = "MOCK_LLM_E2E_REPLY_OK"
 
+# The user turn the agent-server sends when it pre-flights a saved LLM profile
+# (POST /api/profiles/{name}/validate, agent-server >= 1.43). Matched by
+# _is_preflight_ping() so the check never touches the scripted trajectory.
+PREFLIGHT_PING_TEXT = "ping"
+
 # SDK exception → (HTTP status, OpenAI error type)
 ERROR_MAP: dict[type, tuple[int, str]] = {
     LLMAuthenticationError: (401, "invalid_api_key"),
@@ -161,6 +166,23 @@ class MockLLMHandler(BaseHTTPRequestHandler):
         # ── Normal chat completion ──
         length = int(self.headers.get("Content-Length", 0))
         body = json.loads(self.rfile.read(length)) if length else {}
+
+        # ── Profile pre-flight ping ──
+        # Saving a profile against agent-server >= 1.43 fires a 1-token "ping"
+        # completion through the submitted config, and the canvas waits at
+        # most 30 s for the verdict. Answer it here instead of feeding it to
+        # TestLLM: it would otherwise consume a scripted turn, and once the
+        # trajectory is exhausted the 500 below makes the SDK retry with
+        # backoff until the canvas gives up — leaving the profile editor stuck
+        # on "Validating...". It stays out of the request history, which tests
+        # read for the conversation's own completions.
+        if _is_preflight_ping(body):
+            raw = _preflight_pong(body.get("model"))
+            if body.get("stream"):
+                self._send_streaming(raw)
+            else:
+                self._send_json(200, raw)
+            return
 
         # Append to request history for test verification.
         # Tests can GET /admin/requests to confirm image content was included.
@@ -336,6 +358,53 @@ class MockLLMHandler(BaseHTTPRequestHandler):
 
     def log_message(self, format, *args):
         print(f"[mock-llm] {args[0]}", file=sys.stderr, flush=True)
+
+
+def _is_preflight_ping(body: dict) -> bool:
+    """Match the agent-server's profile pre-flight check.
+
+    It is a single user message saying "ping" with ``max_tokens=1`` (see
+    ``profiles_router.validate_profile`` in openhands-agent-server). The text
+    arrives either as a plain string or as OpenAI content parts.
+    """
+    if body.get("max_tokens") != 1:
+        return False
+    messages = body.get("messages")
+    if not isinstance(messages, list) or len(messages) != 1:
+        return False
+    message = messages[0]
+    if not isinstance(message, dict) or message.get("role") != "user":
+        return False
+    content = message.get("content")
+    if isinstance(content, list):
+        content = "".join(
+            part.get("text", "")
+            for part in content
+            if isinstance(part, dict) and part.get("type") == "text"
+        )
+    return isinstance(content, str) and content.strip() == PREFLIGHT_PING_TEXT
+
+
+def _preflight_pong(model: str | None) -> dict:
+    """Minimal OpenAI-style completion for the pre-flight ping.
+
+    Uses the raw shape ``_send_streaming`` also understands, so the reply works
+    whether or not the caller asked for streaming.
+    """
+    return {
+        "id": "chatcmpl-mock-preflight",
+        "object": "chat.completion",
+        "created": int(time.time()),
+        "model": model or "mock-preflight",
+        "choices": [
+            {
+                "index": 0,
+                "message": {"role": "assistant", "content": "pong"},
+                "finish_reason": "stop",
+            }
+        ],
+        "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+    }
 
 
 def _parse_trajectory_turns(raw_turns: list[dict]) -> list[Message | Exception]:

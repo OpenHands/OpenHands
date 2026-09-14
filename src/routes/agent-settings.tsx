@@ -12,6 +12,7 @@ import { SchemaField } from "#/components/features/settings/sdk-settings/schema-
 import { AcpCredentialsSection } from "#/components/features/settings/acp-credentials-section";
 import { useAcpCredentialForm } from "#/hooks/use-acp-credential-form";
 import { BrandButton } from "#/components/features/settings/brand-button";
+import { ProfileScopeList } from "#/components/features/settings/agent-profiles/profile-scope-list";
 import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
 import { formControlSwitchDescriptionClassName } from "#/utils/form-control-classes";
@@ -39,15 +40,38 @@ import {
   type ACPProviderConfig,
 } from "#/constants/acp-providers";
 import { parseCommand, formatCommand } from "#/utils/acp-command";
+import {
+  readProfileMcpRefs,
+  sameScopeSelection,
+  type ProfileScopeMode,
+} from "#/constants/profile-scope";
+import { flattenMcpConfig } from "#/utils/mcp-installed-servers";
+import { parseMcpConfig } from "#/utils/mcp-config";
+import { agentProfileSupportsSwitchLlmTool } from "#/api/agent-profiles-service/profile-field-support";
 
 export const handle = { hideTitle: true };
 
 type AgentType = "openhands" | "acp";
 
+type AgentSettingsSnapshot = {
+  agentType: AgentType;
+  commandText: string;
+  acpModel: string;
+  isCustomAcpModel: boolean;
+};
+
 const ENABLE_SUB_AGENTS_FIELD_KEY = "enable_sub_agents";
+const ENABLE_SWITCH_LLM_TOOL_FIELD_KEY = "enable_switch_llm_tool";
 const TOOL_CONCURRENCY_FIELD_KEY = "tool_concurrency_limit";
+const MCP_SERVER_REFS_KEY = "mcp_server_refs";
 const COMMAND_PLACEHOLDER_FALLBACK = "npx -y <package-name>";
 const ACP_CUSTOM_MODEL_KEY = "__custom_model__";
+const EMPTY_AGENT_SETTINGS_SNAPSHOT: AgentSettingsSnapshot = {
+  agentType: "openhands",
+  commandText: "",
+  acpModel: "",
+  isCustomAcpModel: false,
+};
 
 function toStringArray(value: unknown): string[] {
   return Array.isArray(value)
@@ -82,6 +106,14 @@ function getEnableSubAgentsValue(
   return field?.default === true;
 }
 
+function getEnableSwitchLlmToolValue(
+  settingsValue: unknown,
+  field: SettingsFieldSchema | undefined,
+) {
+  if (typeof settingsValue === "boolean") return settingsValue;
+  return field?.default === true;
+}
+
 function isKnownAcpModel(
   provider: ACPProviderConfig | undefined,
   model: string,
@@ -98,11 +130,14 @@ function isKnownAcpModel(
 export type AgentProfileFieldsDraft =
   | {
       agent_kind: "openhands";
+      mcp_server_refs: string[] | null;
       enable_sub_agents: boolean;
+      enable_switch_llm_tool?: boolean;
       tool_concurrency_limit?: number;
     }
   | {
       agent_kind: "acp";
+      mcp_server_refs: string[] | null;
       acp_server: string;
       acp_model: string | null;
       acp_command: string | null;
@@ -119,8 +154,19 @@ export interface AgentProfileFieldsInput {
   commandTokens: string[];
   acpModel: string;
   subAgentsEnabled: boolean;
+  switchLlmToolField?: SettingsFieldSchema;
+  switchLlmToolEnabled: boolean;
+  /**
+   * Whether the backend's *profile* model accepts `enable_switch_llm_tool`.
+   * Tracked apart from {@link switchLlmToolField} because the settings schema
+   * and the profile model gained the field in different releases — see
+   * {@link agentProfileSupportsSwitchLlmTool}.
+   */
+  switchLlmToolSupportedOnProfile: boolean;
   toolConcurrencyField?: SettingsFieldSchema;
   toolConcurrency: string | boolean;
+  mcpMode: ProfileScopeMode;
+  selectedMcpServers: string[];
 }
 
 /**
@@ -151,14 +197,25 @@ export function buildAgentProfileFields(
     commandTokens,
     acpModel,
     subAgentsEnabled,
+    switchLlmToolField,
+    switchLlmToolEnabled,
+    switchLlmToolSupportedOnProfile,
     toolConcurrencyField,
     toolConcurrency,
+    mcpMode,
+    selectedMcpServers,
   } = input;
+  // A base-model field, so it rides both variants. No version gate: it has
+  // existed since agent profiles shipped, below the supported floor.
+  const mcpRefs = {
+    mcp_server_refs: mcpMode === "custom" ? selectedMcpServers : null,
+  };
   if (isAcp) {
     const isBuiltinDefault =
       isDefaultProviderCommand && selectedPreset !== ACP_CUSTOM_PRESET_KEY;
     return {
       agent_kind: "acp",
+      ...mcpRefs,
       acp_server: selectedPreset,
       acp_model: acpModel.trim() || null,
       acp_command: isBuiltinDefault
@@ -170,8 +227,17 @@ export function buildAgentProfileFields(
   const fields: Extract<AgentProfileFieldsDraft, { agent_kind: "openhands" }> =
     {
       agent_kind: "openhands",
+      ...mcpRefs,
       enable_sub_agents: subAgentsEnabled,
     };
+  if (switchLlmToolField && switchLlmToolSupportedOnProfile) {
+    // Two conditions, two different questions. The schema tells us the field
+    // is a real setting on this server; the version gate tells us its
+    // *profile* model will accept it. Between agent-server 1.29.0 and 1.30.x
+    // the first is true and the second is not, and the whole-profile
+    // overwrite is ``extra="forbid"`` — an unknown key 422s the entire save.
+    fields.enable_switch_llm_tool = switchLlmToolEnabled;
+  }
   if (toolConcurrencyField) {
     // Reuse the schema-driven coercion/validation; throws on bad input.
     const coerced = coerceFieldValue(toolConcurrencyField, toolConcurrency);
@@ -197,6 +263,8 @@ export interface AgentSettingsSaveControl {
   agentType: AgentType;
   /** False when the current form can't be saved (e.g. an empty ACP command). */
   isValid: boolean;
+  /** True when the form differs from the hydrated snapshot. */
+  isDirty: boolean;
   /**
    * Build the variant-specific AgentProfile fields from the live form state.
    * Throws a user-facing Error on invalid input (e.g. a bad concurrency value).
@@ -261,6 +329,32 @@ export function AgentSettingsScreen({
     initialSubAgentsEnabled,
   );
 
+  // --- LLM switching tool (OpenHands path) ---
+  // Surfaced only when the backend schema exposes the field, so older
+  // agent-servers that predate ``enable_switch_llm_tool`` hide it cleanly.
+  const switchLlmToolField = fields?.find(
+    (field) => field.key === ENABLE_SWITCH_LLM_TOOL_FIELD_KEY,
+  );
+  const initialSwitchLlmToolEnabled = React.useMemo(
+    () =>
+      getEnableSwitchLlmToolValue(
+        agentSettingsSource?.[ENABLE_SWITCH_LLM_TOOL_FIELD_KEY],
+        switchLlmToolField,
+      ),
+    [switchLlmToolField, agentSettingsSource],
+  );
+  const [switchLlmToolEnabled, setSwitchLlmToolEnabled] = useState(
+    initialSwitchLlmToolEnabled,
+  );
+  // Embedded mode saves an AgentProfile, not global settings, and the profile
+  // model gained this field four releases after the settings schema did. The
+  // global page is unaffected — that endpoint has accepted the key since
+  // 1.22.0 — so the extra gate applies to the profile editor alone.
+  const switchLlmToolSupportedOnProfile = agentProfileSupportsSwitchLlmTool();
+  const showSwitchLlmTool =
+    Boolean(switchLlmToolField) &&
+    (!embedded || switchLlmToolSupportedOnProfile);
+
   // --- Parallel tool calls (OpenHands path) ---
   // Surfaced only when the backend schema exposes the field, so older
   // agent-servers that predate ``tool_concurrency_limit`` hide it cleanly.
@@ -276,12 +370,70 @@ export function AgentSettingsScreen({
     initialToolConcurrency,
   );
 
+  // --- MCP servers (both variants; a base-model field) ---
+  // Only the profile editor shows this: the global agent-settings page saves
+  // ``agent_settings``, which has no refs — it carries the resolved
+  // ``mcp_config`` itself.
+  const showProfileScopeFields = embedded;
+  const initialMcpRefs = React.useMemo(
+    () => readProfileMcpRefs(agentSettingsSource?.[MCP_SERVER_REFS_KEY]),
+    [agentSettingsSource],
+  );
+  const [mcpMode, setMcpMode] = useState<ProfileScopeMode>(initialMcpRefs.mode);
+  const [selectedMcpServers, setSelectedMcpServers] = useState<string[]>(
+    initialMcpRefs.selected,
+  );
+  const configuredMcpNames = React.useMemo(
+    () =>
+      flattenMcpConfig(
+        settings?.mcp_config ??
+          parseMcpConfig(settings?.agent_settings?.mcp_config),
+      )
+        // `name` is optional on the shared type; flattenMcpConfig always sets
+        // it from the config key, so narrow rather than assert.
+        .filter(
+          (server): server is typeof server & { name: string } =>
+            typeof server.name === "string",
+        )
+        .map((server) => ({ name: server.name, description: server.type })),
+    [settings],
+  );
+  const mcpCatalog = React.useMemo(() => {
+    const configured = configuredMcpNames;
+    // A stored ref whose server is gone rides along so the user can clear it:
+    // a dangling ref fails the launch (422 locally; on cloud the never-brick
+    // handler swallows it and silently falls back to unscoped settings).
+    const known = new Set(configured.map(({ name }) => name));
+    return [
+      ...configured,
+      ...initialMcpRefs.selected
+        .filter((name) => !known.has(name))
+        .map((name) => ({ name, description: null as string | null })),
+    ];
+  }, [configuredMcpNames, initialMcpRefs]);
+  const orderedSelectedMcpServers = React.useMemo(
+    () =>
+      mcpCatalog
+        .map(({ name }) => name)
+        .filter((name) => selectedMcpServers.includes(name)),
+    [mcpCatalog, selectedMcpServers],
+  );
+  const danglingMcpRefs = React.useMemo(
+    () =>
+      mcpMode === "custom"
+        ? orderedSelectedMcpServers.filter(
+            (name) =>
+              !configuredMcpNames.some((server) => server.name === name),
+          )
+        : [],
+    [mcpMode, orderedSelectedMcpServers, configuredMcpNames],
+  );
+
   // --- ACP path ---
   const [agentType, setAgentType] = useState<AgentType>("openhands");
   const [commandText, setCommandText] = useState("");
   const [acpModel, setAcpModel] = useState("");
   const [isCustomAcpModel, setIsCustomAcpModel] = useState(false);
-  const [isDirty, setIsDirty] = useState(false);
 
   // ACP credentials live alongside the agent spec, so the page owns the
   // credential form and a single Save persists both. Called unconditionally
@@ -299,6 +451,9 @@ export function AgentSettingsScreen({
   const lastInitializedSettingsRef = useRef<unknown>(null);
   const loadedAcpServerRef = useRef<string | null>(null);
   const loadedCommandTextRef = useRef<string>("");
+  const [loadedSnapshot, setLoadedSnapshot] = useState<AgentSettingsSnapshot>(
+    EMPTY_AGENT_SETTINGS_SNAPSHOT,
+  );
 
   useEffect(() => {
     // Seed from the profile override (embedded) or the live global settings.
@@ -335,13 +490,19 @@ export function AgentSettingsScreen({
       const savedModel = source?.acp_model;
       const normalizedSavedModel =
         typeof savedModel === "string" ? savedModel.trim() : "";
-      setAcpModel(
-        normalizedSavedModel || getAcpPreferredDefaultModel(acpServer) || "",
-      );
-      setIsCustomAcpModel(
+      const nextAcpModel =
+        normalizedSavedModel || getAcpPreferredDefaultModel(acpServer) || "";
+      const nextIsCustomAcpModel =
         !!normalizedSavedModel &&
-          (!provider || !isKnownAcpModel(provider, normalizedSavedModel)),
-      );
+        (!provider || !isKnownAcpModel(provider, normalizedSavedModel));
+      setAcpModel(nextAcpModel);
+      setIsCustomAcpModel(nextIsCustomAcpModel);
+      setLoadedSnapshot({
+        agentType: "acp",
+        commandText: renderedCommandText,
+        acpModel: nextAcpModel,
+        isCustomAcpModel: nextIsCustomAcpModel,
+      });
     } else {
       setAgentType("openhands");
       setCommandText("");
@@ -349,8 +510,8 @@ export function AgentSettingsScreen({
       loadedAcpServerRef.current = null;
       loadedCommandTextRef.current = "";
       setIsCustomAcpModel(false);
+      setLoadedSnapshot(EMPTY_AGENT_SETTINGS_SNAPSHOT);
     }
-    setIsDirty(false);
   }, [settings, agentSettingsOverride]);
 
   // Sync the sub-agents toggle when settings reload
@@ -358,10 +519,21 @@ export function AgentSettingsScreen({
     setSubAgentsEnabled(initialSubAgentsEnabled);
   }, [initialSubAgentsEnabled]);
 
+  // Sync the LLM-switching toggle when settings reload
+  useEffect(() => {
+    setSwitchLlmToolEnabled(initialSwitchLlmToolEnabled);
+  }, [initialSwitchLlmToolEnabled]);
+
   // Sync the parallel-tool-calls input when settings reload
   useEffect(() => {
     setToolConcurrency(initialToolConcurrency);
   }, [initialToolConcurrency]);
+
+  // Sync the MCP scope when settings reload
+  useEffect(() => {
+    setMcpMode(initialMcpRefs.mode);
+    setSelectedMcpServers(initialMcpRefs.selected);
+  }, [initialMcpRefs]);
 
   // --- Embedded (Agent-profile editor) save control ---
   // Ref-backed so the exposed builder/credential fns read the freshest state at
@@ -369,6 +541,7 @@ export function AgentSettingsScreen({
   // ``sdk-section-page``). The body is (re)assigned during render below.
   const buildFieldsRef = useRef<() => AgentProfileFieldsDraft>(() => ({
     agent_kind: "openhands",
+    mcp_server_refs: null,
     enable_sub_agents: false,
   }));
   const stableBuildFields = useCallback(() => buildFieldsRef.current(), []);
@@ -380,19 +553,36 @@ export function AgentSettingsScreen({
   );
   const stableCredReset = useCallback(() => credFormRef.current.reset(), []);
 
-  // Validity/kind are computed here (before the loading early-return) so the
-  // emit effect can depend on them; the full ACP derivation lives after it.
+  // Validity/kind/dirty are computed here (before the loading early-return) so
+  // the emit effect can depend on them; the full ACP derivation lives after it.
   const acpCommandEmpty =
     agentType === "acp" && parseCommand(commandText).length === 0;
-  const embeddedCredentialsDirty = acpCredentialForm.isDirty;
+  // `mcp_server_refs` lives on the profile base, so it is dirty-tracked for both
+  // variants rather than inside the kind-specific branch below.
+  const mcpScopeDirty =
+    mcpMode !== initialMcpRefs.mode ||
+    !sameScopeSelection(orderedSelectedMcpServers, initialMcpRefs.selected);
+  const settingsDirty =
+    agentType !== loadedSnapshot.agentType ||
+    mcpScopeDirty ||
+    (agentType === "acp"
+      ? commandText !== loadedSnapshot.commandText ||
+        acpModel !== loadedSnapshot.acpModel ||
+        isCustomAcpModel !== loadedSnapshot.isCustomAcpModel
+      : subAgentsEnabled !== initialSubAgentsEnabled ||
+        switchLlmToolEnabled !== initialSwitchLlmToolEnabled ||
+        toolConcurrency !== initialToolConcurrency);
+  const credentialsDirty = acpCredentialForm.isDirty;
+  const isAnyDirty = settingsDirty || credentialsDirty;
   useEffect(() => {
     if (!embedded || !onSaveControlChange) return;
     onSaveControlChange({
       agentType,
       isValid: !acpCommandEmpty,
+      isDirty: isAnyDirty,
       buildAgentProfileFields: stableBuildFields,
       credentials: {
-        isDirty: embeddedCredentialsDirty,
+        isDirty: credentialsDirty,
         save: stableCredSave,
         reset: stableCredReset,
       },
@@ -402,7 +592,8 @@ export function AgentSettingsScreen({
     onSaveControlChange,
     agentType,
     acpCommandEmpty,
-    embeddedCredentialsDirty,
+    isAnyDirty,
+    credentialsDirty,
     stableBuildFields,
     stableCredSave,
     stableCredReset,
@@ -441,23 +632,15 @@ export function AgentSettingsScreen({
       commandTokens,
       acpModel,
       subAgentsEnabled,
+      switchLlmToolField,
+      switchLlmToolEnabled,
+      switchLlmToolSupportedOnProfile,
       toolConcurrencyField,
       toolConcurrency,
+      mcpMode,
+      selectedMcpServers: orderedSelectedMcpServers,
     });
 
-  // Dirty tracking: for OpenHands path, also check sub-agents toggle and the
-  // parallel-tool-calls input.
-  const isOpenHandsDirty =
-    !isAcp &&
-    (subAgentsEnabled !== initialSubAgentsEnabled ||
-      toolConcurrency !== initialToolConcurrency);
-  const settingsDirty = isDirty || isOpenHandsDirty;
-  // The single Save covers both the agent spec and ACP credentials, so it is
-  // active when either changed, and shows "Saving…" while either is in flight.
-  // ``isDirty`` is already false off the ACP path (no credential fields), so no
-  // ``isAcp`` guard is needed.
-  const credentialsDirty = acpCredentialForm.isDirty;
-  const isAnyDirty = settingsDirty || credentialsDirty;
   const isSavingAny = isSaving || acpCredentialForm.isSaving;
 
   const handleSave = async () => {
@@ -511,16 +694,30 @@ export function AgentSettingsScreen({
           },
           onSuccess: () => {
             displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
-            setIsDirty(false);
+            setLoadedSnapshot({
+              agentType,
+              commandText,
+              acpModel,
+              isCustomAcpModel,
+            });
+            loadedCommandTextRef.current = commandText;
           },
         },
       );
     } else {
-      // OpenHands path: save agent_kind + sub-agents toggle + parallel tool calls
+      // OpenHands path: save agent_kind + sub-agents toggle + the LLM-switching
+      // toggle + parallel tool calls
       const agentSettingsDiff: Record<string, SettingsValue> = {
         agent_kind: "openhands",
         enable_sub_agents: subAgentsEnabled,
       };
+
+      if (switchLlmToolField) {
+        // Schema-guarded like ``tool_concurrency_limit`` — older agent-servers
+        // that predate the field never receive the key.
+        agentSettingsDiff[ENABLE_SWITCH_LLM_TOOL_FIELD_KEY] =
+          switchLlmToolEnabled;
+      }
 
       if (toolConcurrencyField) {
         let coerced: SettingsValue;
@@ -552,7 +749,12 @@ export function AgentSettingsScreen({
           },
           onSuccess: () => {
             displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
-            setIsDirty(false);
+            setLoadedSnapshot({
+              agentType: "openhands",
+              commandText: "",
+              acpModel: "",
+              isCustomAcpModel: false,
+            });
           },
         },
       );
@@ -570,6 +772,22 @@ export function AgentSettingsScreen({
         subAgentsField.description,
       )
     : t(I18nKey.SCHEMA$ENABLE_SUB_AGENTS$DESCRIPTION);
+
+  // LLM-switching field metadata for OpenHands section
+  const switchLlmToolLabel = switchLlmToolField
+    ? resolveSchemaFieldLabel(
+        t,
+        switchLlmToolField.key,
+        switchLlmToolField.label,
+      )
+    : t(I18nKey.SCHEMA$ENABLE_SWITCH_LLM_TOOL$LABEL);
+  const switchLlmToolDescription = switchLlmToolField
+    ? resolveSchemaFieldDescription(
+        t,
+        switchLlmToolField.key,
+        switchLlmToolField.description,
+      )
+    : t(I18nKey.SCHEMA$ENABLE_SWITCH_LLM_TOOL$DESCRIPTION);
 
   return (
     <div
@@ -613,7 +831,6 @@ export function AgentSettingsScreen({
           } else if (newType === "openhands") {
             setIsCustomAcpModel(false);
           }
-          setIsDirty(true);
         }}
       />
 
@@ -641,6 +858,30 @@ export function AgentSettingsScreen({
         </div>
       )}
 
+      {!isAcp && showSwitchLlmTool ? (
+        <div className="flex flex-col gap-1.5">
+          <SettingsSwitch
+            testId="agent-settings-enable-switch-llm-tool"
+            isToggled={switchLlmToolEnabled}
+            onToggle={(val) => {
+              setSwitchLlmToolEnabled(val);
+            }}
+          >
+            {switchLlmToolLabel}
+          </SettingsSwitch>
+          {switchLlmToolDescription ? (
+            <Typography.Paragraph
+              className={cn(
+                formControlSwitchDescriptionClassName,
+                "text-tertiary-alt text-xs leading-5",
+              )}
+            >
+              {switchLlmToolDescription}
+            </Typography.Paragraph>
+          ) : null}
+        </div>
+      ) : null}
+
       {!isAcp && toolConcurrencyField ? (
         <SchemaField
           field={toolConcurrencyField}
@@ -648,6 +889,84 @@ export function AgentSettingsScreen({
           isDisabled={isSavingAny}
           onChange={setToolConcurrency}
         />
+      ) : null}
+
+      {showProfileScopeFields ? (
+        <div className="flex flex-col gap-2.5">
+          <Typography.Text className="text-sm">
+            {t(I18nKey.SETTINGS$AGENT_PROFILE_MCP)}
+          </Typography.Text>
+          <SettingsDropdownInput
+            testId="agent-settings-mcp-mode"
+            name="agent-mcp-mode"
+            label=""
+            items={[
+              {
+                key: "standard",
+                label: t(I18nKey.SETTINGS$AGENT_PROFILE_MCP_ALL),
+              },
+              {
+                key: "custom",
+                label: t(I18nKey.SETTINGS$AGENT_PROFILE_MCP_CHOOSE),
+              },
+            ]}
+            selectedKey={mcpMode}
+            isDisabled={isSavingAny}
+            onSelectionChange={(key) => {
+              if (!key) return;
+              const mode = key as ProfileScopeMode;
+              setMcpMode(mode);
+              // Seed a first switch to custom from the default — every
+              // configured server — so turning the control on narrows from what
+              // the agent had rather than cutting it off from all of them.
+              if (mode === "custom" && selectedMcpServers.length === 0) {
+                setSelectedMcpServers(
+                  configuredMcpNames.map(({ name }) => name),
+                );
+              }
+            }}
+          />
+          {mcpCatalog.length > 0 ? (
+            <ProfileScopeList
+              testId="agent-settings-mcp"
+              items={mcpCatalog}
+              selected={
+                mcpMode === "custom"
+                  ? orderedSelectedMcpServers
+                  : mcpCatalog.map(({ name }) => name)
+              }
+              isDisabled={isSavingAny || mcpMode === "standard"}
+              onToggle={(name, checked) =>
+                setSelectedMcpServers((prev) =>
+                  checked
+                    ? [...prev, name]
+                    : prev.filter((entry) => entry !== name),
+                )
+              }
+            />
+          ) : (
+            <Typography.Text className="text-xs text-tertiary-alt">
+              {t(I18nKey.SETTINGS$AGENT_PROFILE_MCP_NONE)}
+            </Typography.Text>
+          )}
+          {danglingMcpRefs.length > 0 ? (
+            <Typography.Text
+              testId="agent-settings-mcp-dangling"
+              className="text-xs text-danger"
+            >
+              {t(I18nKey.SETTINGS$AGENT_PROFILE_MCP_DANGLING, {
+                names: danglingMcpRefs.join(", "),
+              })}
+            </Typography.Text>
+          ) : null}
+          <Typography.Text className="text-xs text-tertiary-alt">
+            {t(
+              mcpMode === "custom"
+                ? I18nKey.SETTINGS$AGENT_PROFILE_MCP_CHOOSE_HINT
+                : I18nKey.SETTINGS$AGENT_PROFILE_MCP_ALL_HINT,
+            )}
+          </Typography.Text>
+        </div>
       ) : null}
 
       {isAcp && (
@@ -686,7 +1005,6 @@ export function AgentSettingsScreen({
                 setAcpModel("");
                 setIsCustomAcpModel(true);
               }
-              setIsDirty(true);
             }}
           />
 
@@ -718,7 +1036,6 @@ export function AgentSettingsScreen({
                   setIsCustomAcpModel(false);
                 }
                 setCommandText(nextCommandText);
-                setIsDirty(true);
               }}
             />
             <Typography.Text className="text-xs text-[#717888]">
@@ -753,7 +1070,6 @@ export function AgentSettingsScreen({
                     setIsCustomAcpModel(false);
                     setAcpModel(modelKey);
                   }
-                  setIsDirty(true);
                 }}
               />
             )}
@@ -771,7 +1087,6 @@ export function AgentSettingsScreen({
                 showOptionalTag
                 onChange={(value) => {
                   setAcpModel(value);
-                  setIsDirty(true);
                 }}
               />
             )}

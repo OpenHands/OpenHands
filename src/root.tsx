@@ -242,6 +242,7 @@ export default function App() {
   const hasRegisteredKey = Boolean(getEffectiveLocalBackend()?.apiKey);
   const authMissing = bakedKeyMissing && !hasRegisteredKey;
   const { active } = useActiveBackendContext();
+  const queryClient = useQueryClient();
   // In locked-to-Cloud mode the only valid backend is a Cloud backend whose
   // host matches the configured locked Cloud host. A missing backend, a stale
   // Local backend (e.g. one persisted from a previous non-locked session), or
@@ -326,6 +327,19 @@ export default function App() {
     active.backend.kind === "cloud" &&
     activeCloudHealth?.isConnected === false &&
     isCloudBackendLoggedOutHealthError(activeCloudHealth.lastError);
+  // Cookie-auth (OHE-hosted) deployments: a logged-out Cloud backend means the
+  // main-app session likely expired. Re-run the main-app auth probe and let its
+  // verdict drive the /login redirect above; never redirect off the health
+  // verdict itself — it can be a stale persisted entry that the recovery
+  // modal's one-shot re-probe clears.
+  const cookieSessionMaybeExpired =
+    shouldCheckMainAppAuth && activeCloudLoggedOut;
+  React.useEffect(() => {
+    if (!cookieSessionMaybeExpired) return;
+    void queryClient.invalidateQueries({
+      queryKey: QUERY_KEYS.MAIN_APP_COOKIE_AUTH,
+    });
+  }, [cookieSessionMaybeExpired, queryClient]);
   // A cloud backend the health probe has given up on (disabled after repeated
   // CORS/network failures) is unreachable from this origin — most commonly a
   // self-hosted OHE that doesn't allow this frontend's origin. Route to the
@@ -345,7 +359,11 @@ export default function App() {
     );
   }
 
-  if (waitingForMainAppAuth || redirectingToMainAppLogin) {
+  if (
+    waitingForMainAppAuth ||
+    redirectingToMainAppLogin ||
+    (cookieSessionMaybeExpired && mainAppAuth.isFetching)
+  ) {
     return <AgentServerBootstrapLoading />;
   }
 

@@ -8,10 +8,11 @@ import {
   hasAdvancedSettingsOverrides,
   inferInitialView,
   isValidSettingsSchema,
+  normalizeComparableValue,
   SPECIALLY_RENDERED_KEYS,
 } from "#/utils/sdk-settings-schema";
 import { DEFAULT_SETTINGS } from "#/services/settings";
-import { Settings, SettingsSchema } from "#/types/settings";
+import { Settings, SettingsFieldSchema, SettingsSchema } from "#/types/settings";
 
 const BASE_SETTINGS: Settings = {
   ...DEFAULT_SETTINGS,
@@ -373,6 +374,54 @@ describe("sdk settings schema helpers", () => {
       } as unknown as SettingsSchema;
 
       expect(getVisibleSettingsSections(malformed, {}, "basic")).toEqual([]);
+    });
+  });
+
+  describe("normalizeComparableValue", () => {
+    const numberField: SettingsFieldSchema = {
+      key: "llm.temperature",
+      label: "Temperature",
+      section: "llm",
+      section_label: "LLM",
+      value_type: "number",
+      default: 0.5,
+      choices: [],
+      depends_on: [],
+      prominence: "major",
+      secret: false,
+      required: false,
+    };
+
+    const objectField: SettingsFieldSchema = {
+      key: "llm.litellm_extra_body",
+      label: "Extra Body",
+      section: "llm",
+      section_label: "LLM",
+      value_type: "object",
+      default: {},
+      choices: [],
+      depends_on: [],
+      prominence: "minor",
+      secret: false,
+      required: false,
+    };
+
+    it("treats equivalent number strings as equal", () => {
+      expect(normalizeComparableValue(numberField, "5")).toBe(
+        normalizeComparableValue(numberField, "5.0"),
+      );
+      expect(normalizeComparableValue(numberField, "5")).toBe(
+        normalizeComparableValue(numberField, "05"),
+      );
+    });
+
+    it("treats JSON values equal when only formatting differs", () => {
+      const initial = JSON.stringify({ a: 1, b: 2 }, null, 2);
+      const reformatted = '{\n  "b": 2,\n  "a": 1\n}';
+
+      expect(normalizeComparableValue(objectField, initial)).toBe(
+        normalizeComparableValue(objectField, reformatted),
+      );
     });
   });
 });

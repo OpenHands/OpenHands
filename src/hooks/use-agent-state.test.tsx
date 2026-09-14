@@ -2,16 +2,24 @@ import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAgentState } from "./use-agent-state";
 import { useActiveConversation } from "./query/use-active-conversation";
+import { useOptionalConversationId } from "./use-conversation-id";
 import { useConversationStateStore } from "#/stores/conversation-state-store";
 import { AgentState } from "#/types/agent-state";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
+
+const TEST_CONVERSATION_ID = "test-conversation-id";
 
 vi.mock("./query/use-active-conversation", () => ({
   useActiveConversation: vi.fn(),
 }));
 
+vi.mock("./use-conversation-id", () => ({
+  useOptionalConversationId: vi.fn(),
+}));
+
 describe("useAgentState", () => {
   const mockUseActiveConversation = vi.mocked(useActiveConversation);
+  const mockUseOptionalConversationId = vi.mocked(useOptionalConversationId);
 
   beforeEach(() => {
     act(() => {
@@ -21,6 +29,10 @@ describe("useAgentState", () => {
     mockUseActiveConversation.mockReturnValue({
       data: null,
     } as ReturnType<typeof useActiveConversation>);
+
+    mockUseOptionalConversationId.mockReturnValue({
+      conversationId: TEST_CONVERSATION_ID,
+    });
   });
 
   it("prefers live websocket execution status over cached conversation status", () => {
@@ -33,7 +45,7 @@ describe("useAgentState", () => {
     act(() => {
       useConversationStateStore
         .getState()
-        .setExecutionStatus(ExecutionStatus.RUNNING);
+        .setExecutionStatus(TEST_CONVERSATION_ID, ExecutionStatus.RUNNING);
     });
 
     const { result } = renderHook(() => useAgentState());

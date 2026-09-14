@@ -4,6 +4,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderWithProviders } from "test-utils";
 import { SkillsModal } from "#/components/features/conversation-panel/skills-modal";
 import SkillsService from "#/api/skills-service";
+import SettingsService from "#/api/settings-service/settings-service.api";
+import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 
 describe("SkillsModal", () => {
   const mockOnClose = vi.fn();
@@ -39,16 +41,45 @@ describe("SkillsModal", () => {
     vi.restoreAllMocks();
   });
 
+  describe("Enabled skills only", () => {
+    // The modal reports what the conversation actually has, so a catalog skill
+    // left off the allow-list must not be listed as available.
+    const CATALOG_ON = "add-skill";
+    const CATALOG_OFF = "add-javadoc";
+
+    const catalogSkill = (name: string) => ({
+      name,
+      type: "knowledge" as const,
+      source: "public",
+      triggers: [],
+      content: `content for ${name}`,
+    });
+
+    it("lists a catalog skill on the allow-list and omits one that is off", async () => {
+      vi.spyOn(SkillsService, "getSkills").mockResolvedValue([
+        catalogSkill(CATALOG_ON),
+        catalogSkill(CATALOG_OFF),
+      ]);
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
+        ...MOCK_DEFAULT_USER_SETTINGS,
+        enabled_skills: [CATALOG_ON],
+        disabled_skills: [],
+      });
+
+      renderWithProviders(<SkillsModal {...defaultProps} />);
+
+      expect(await screen.findByText(CATALOG_ON)).toBeInTheDocument();
+      expect(screen.queryByText(CATALOG_OFF)).not.toBeInTheDocument();
+    });
+  });
+
   describe("Refresh Button Rendering", () => {
     it("should render the refresh button as an icon-only control with accessible label", async () => {
       renderWithProviders(<SkillsModal {...defaultProps} />);
 
       const refreshButton = await screen.findByTestId("refresh-skills");
       expect(refreshButton).toBeInTheDocument();
-      expect(refreshButton).toHaveAttribute(
-        "aria-label",
-        "BUTTON$REFRESH",
-      );
+      expect(refreshButton).toHaveAttribute("aria-label", "BUTTON$REFRESH");
       expect(refreshButton).not.toHaveTextContent("BUTTON$REFRESH");
     });
   });
