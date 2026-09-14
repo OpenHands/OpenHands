@@ -1,47 +1,8 @@
-/**
- * TODO: Fix flaky WebSocket tests (https://github.com/OpenHands/OpenHands/issues/11944)
- *
- * Several tests in this file are skipped because they fail intermittently in CI
- * but pass locally. The SUSPECTED root cause is that `wsLink.broadcast()` sends messages
- * to ALL connected clients across all tests, causing cross-test contamination
- * when tests run in parallel with Vitest v4.
- */
 import { act, renderHook, waitFor } from "@testing-library/react";
-import {
-  describe,
-  it,
-  expect,
-  beforeAll,
-  afterAll,
-  afterEach,
-  vi,
-} from "vitest";
-import { ws } from "msw";
-import { setupServer } from "msw/node";
+import { describe, it, expect, vi } from "vitest";
 import { useWebSocket } from "#/hooks/use-websocket";
 
 describe("useWebSocket", () => {
-  // MSW WebSocket mock setup
-  const wsLink = ws.link("ws://acme.com/ws");
-
-  const mswServer = setupServer(
-    wsLink.addEventListener("connection", ({ client, server }) => {
-      // Establish the connection
-      server.connect();
-
-      // Send a welcome message to confirm connection
-      client.send("Welcome to the WebSocket!");
-    }),
-  );
-
-  beforeAll(() =>
-    mswServer.listen({
-      onUnhandledRequest: "warn",
-    }),
-  );
-  afterEach(() => mswServer.resetHandlers());
-  afterAll(() => mswServer.close());
-
   const waitForConnection = async (result: {
     current: {
       isConnected: boolean;
