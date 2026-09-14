@@ -286,6 +286,7 @@ describe("AgentServerConversationService", () => {
 
   describe("remaining public conversation contracts", () => {
     beforeEach(() => {
+      window.localStorage.clear();
       setRegisteredBackends([localBackend]);
       setActiveSelection({ backendId: localBackend.id });
     });
@@ -369,6 +370,12 @@ describe("AgentServerConversationService", () => {
     );
 
     it("does not create or discover local planners on Cloud", async () => {
+      setStoredConversationMetadata("parent", {
+        selected_repository: null,
+        selected_branch: null,
+        git_provider: null,
+        local_planning_conversation_id: "stale-local-planner",
+      });
       setRegisteredBackends([cloudBackend]);
       setActiveSelection({ backendId: cloudBackend.id });
       await expect(
@@ -2394,7 +2401,7 @@ describe("AgentServerConversationService", () => {
 
       await expect(
         AgentServerConversationService.searchConversations(),
-      ).rejects.toThrow(invalidResponseMessage);
+      ).rejects.toEqual(new Error(invalidResponseMessage));
     });
 
     it("drops a non-string pagination cursor", async () => {
