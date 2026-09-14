@@ -1,3 +1,4 @@
+import { AutomationAgentProfileSelector } from "../agent-profile-selector";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
@@ -147,9 +148,19 @@ export function ConfigurationSection({
 
         <ConfigField
           icon={<SparkleIcon className="size-3.5" />}
-          label={t(I18nKey.AUTOMATIONS$DETAIL$MODEL)}
+          label={t(
+            automation.agent_profile_id
+              ? I18nKey.CHAT$AGENT_PROFILE_PLACEHOLDER
+              : I18nKey.AUTOMATIONS$DETAIL$MODEL,
+          )}
         >
-          {automation.model ?? t(I18nKey.COMMON$ACTIVE_PROFILE)}
+          {automation.agent_profile_id ? (
+            <AutomationAgentProfileSelector
+              value={automation.agent_profile_id}
+            />
+          ) : (
+            (automation.model ?? t(I18nKey.COMMON$ACTIVE_PROFILE))
+          )}
         </ConfigField>
 
         {automation.notification && (

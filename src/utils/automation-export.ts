@@ -53,6 +53,18 @@ function validateOptionalString(
   return value;
 }
 
+function validateNullableSelection(
+  record: UnknownRecord,
+  field: string,
+  issues: string[],
+): string | null | undefined {
+  const value = record[field];
+  if (value === null || value === undefined) return value;
+  if (typeof value === "string" && value.trim()) return value;
+  issues.push(`spec.${field}: expected a non-empty string or null`);
+  return undefined;
+}
+
 function validateTrigger(
   value: unknown,
   issues: string[],
@@ -160,6 +172,9 @@ export function serializeAutomation(a: Automation): AutomationExportFile {
     prompt: a.prompt,
     ...(a.repository !== undefined && { repository: a.repository }),
     ...(a.model !== undefined && { model: a.model }),
+    ...(a.agent_profile_id !== undefined && {
+      agent_profile_id: a.agent_profile_id,
+    }),
     ...(a.timeout != null && { timeout: a.timeout }),
     ...(a.branch !== undefined && { branch: a.branch }),
     ...(a.plugins !== undefined && { plugins: [...a.plugins] }),
@@ -239,17 +254,12 @@ export function parseAutomationFile(json: unknown): AutomationSpec {
     issues,
   );
 
-  let model: string | null | undefined;
-  if (json.spec.model === null || json.spec.model === undefined) {
-    model = json.spec.model;
-  } else if (
-    typeof json.spec.model === "string" &&
-    json.spec.model.trim().length > 0
-  ) {
-    model = json.spec.model;
-  } else {
-    issues.push("spec.model: expected a non-empty string or null");
-  }
+  const model = validateNullableSelection(json.spec, "model", issues);
+  const agentProfileId = validateNullableSelection(
+    json.spec,
+    "agent_profile_id",
+    issues,
+  );
 
   let timeout: number | null | undefined;
   if (json.spec.timeout === null || json.spec.timeout === undefined) {
@@ -289,6 +299,7 @@ export function parseAutomationFile(json: unknown): AutomationSpec {
     enabled: enabled as boolean,
     ...(repository !== undefined && { repository }),
     ...(model !== undefined && { model }),
+    ...(agentProfileId !== undefined && { agent_profile_id: agentProfileId }),
     ...(timeout !== undefined && { timeout }),
     ...(branch !== undefined && { branch }),
     ...(plugins !== undefined && { plugins }),

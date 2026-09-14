@@ -1,4 +1,21 @@
 {
+  "AUTOMATIONS$UNAVAILABLE_AGENT_PROFILE": {
+    "en": "Unavailable profile ({{id}})",
+    "ja": "利用できないプロファイル ({{id}})",
+    "zh-CN": "不可用的配置文件 ({{id}})",
+    "zh-TW": "無法使用的設定檔 ({{id}})",
+    "ko-KR": "사용할 수 없는 프로필 ({{id}})",
+    "no": "Utilgjengelig profil ({{id}})",
+    "ar": "ملف تعريف غير متاح ({{id}})",
+    "de": "Nicht verfügbares Profil ({{id}})",
+    "fr": "Profil indisponible ({{id}})",
+    "it": "Profilo non disponibile ({{id}})",
+    "pt": "Perfil indisponível ({{id}})",
+    "es": "Perfil no disponible ({{id}})",
+    "ca": "Perfil no disponible ({{id}})",
+    "tr": "Kullanılamayan profil ({{id}})",
+    "uk": "Недоступний профіль ({{id}})"
+  },
   "COMMON$PATTERN": {
     "ar": "النمط:",
     "ca": "Patró:",
@@ -14262,7 +14279,6 @@
     "uk": "Повідомлено користувацькі метадані завдання.",
     "ca": "S'han informat metadades personalitzades de la tasca."
   },
-
   "AUTOMATIONS$DETAIL$VIEW_CONVERSATION_FOR_RUN": {
     "en": "View conversation for run at {{timestamp}}",
     "ja": "{{timestamp}} の実行の会話を表示",
@@ -14280,7 +14296,6 @@
     "uk": "Переглянути розмову для запуску о {{timestamp}}",
     "ca": "Mostra la conversa de l'execució a {{timestamp}}"
   },
-
   "AUTOMATIONS$DETAIL$PHASE": {
     "ar": "المرحلة",
     "ca": "Fase",
