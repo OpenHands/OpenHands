@@ -15,6 +15,10 @@ import type {
   EventSearchPage,
 } from "./event-service.types";
 
+function isMissingEventFileError(err: unknown): boolean {
+  return err instanceof Error && err.message.includes("Missing event file");
+}
+
 /**
  * Cloud-mode REST calls are split between two upstream hosts (matching
  * OpenHands' cloud frontend):
@@ -146,7 +150,10 @@ class EventService {
           items: data?.items ?? [],
           next_page_id: data?.next_page_id ?? null,
         };
-      } catch (err) {
+      } catch (err: unknown) {
+        if (isMissingEventFileError(err)) {
+          return { items: [], next_page_id: null };
+        }
         if (!hasFilterParams) throw err;
         if (options.strictPagination) throw err;
 
@@ -163,21 +170,31 @@ class EventService {
       }
     }
 
-    const page = await new RemoteEventsList(
-      getAgentServerHttpClientOptions({ conversationUrl, sessionApiKey }),
-      conversationId,
-    ).search({
-      limit,
-      ...(options.pageId ? { page_id: options.pageId } : {}),
-      ...(options.sortOrder ? { sort_order: options.sortOrder } : {}),
-      ...(options.timestampGte ? { timestamp__gte: options.timestampGte } : {}),
-      ...(options.timestampLt ? { timestamp__lt: options.timestampLt } : {}),
-    });
+    try {
+      const searchOptions: import("@openhands/typescript-client/events/remote-events-list").EventSearchOptions =
+        { limit };
+      if (options.pageId) searchOptions.page_id = options.pageId;
+      if (options.sortOrder) searchOptions.sort_order = options.sortOrder;
+      if (options.timestampGte)
+        searchOptions.timestamp__gte = options.timestampGte;
+      if (options.timestampLt)
+        searchOptions.timestamp__lt = options.timestampLt;
 
-    return {
-      items: (page?.items ?? []) as OpenHandsEvent[],
-      next_page_id: page?.next_page_id ?? null,
-    };
+      const page = await new RemoteEventsList(
+        getAgentServerHttpClientOptions({ conversationUrl, sessionApiKey }),
+        conversationId,
+      ).search(searchOptions);
+
+      return {
+        items: (page?.items ?? []) as OpenHandsEvent[],
+        next_page_id: page?.next_page_id ?? null,
+      };
+    } catch (err: unknown) {
+      if (isMissingEventFileError(err)) {
+        return { items: [], next_page_id: null };
+      }
+      throw err;
+    }
   }
 }
 
