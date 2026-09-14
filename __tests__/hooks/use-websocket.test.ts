@@ -154,6 +154,31 @@ describe("useWebSocket connection lifecycle", () => {
     expect("lastMessage" in result.current).toBe(false);
   });
 
+  it("delivers the final asynchronous close after clearing the URL", () => {
+    vi.stubGlobal("WebSocket", BrowserWebSocketDouble);
+    const onClose = vi.fn();
+    const { rerender } = renderHook(
+      ({ url }: { url: string }) => useWebSocket(url, { onClose }),
+      { initialProps: { url: "ws://acme.test/events" } },
+    );
+    const socket = getSocket();
+    act(() => socket.open());
+    socket.close.mockImplementation(() => {
+      socket.readyState = BrowserWebSocketDouble.CLOSED;
+    });
+    rerender({ url: "" });
+    expect(socket.close).toHaveBeenCalledOnce();
+    expect(onClose).not.toHaveBeenCalled();
+    act(() => socket.emitClose(1000, "Finished after URL cleared"));
+    expect(onClose).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        code: 1000,
+        reason: "Finished after URL cleared",
+      }),
+    );
+    expect(BrowserWebSocketDouble.instances).toHaveLength(1);
+  });
+
   it("handles messages and native errors without optional callbacks", () => {
     const { result } = renderWebSocket("ws://acme.test/events");
     const socket = getSocket();
