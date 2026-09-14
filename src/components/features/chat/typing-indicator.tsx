@@ -69,7 +69,7 @@ const isUserRejectObservation = (
 
 export const deriveLiveActivity = (
   events: readonly OHEvent[],
-): EventTitleDescriptor => {
+): EventTitleDescriptor | null => {
   const resolvedActionIds = new Set<string>();
   const resolvedToolCallIds = new Set<string>();
 
@@ -120,7 +120,7 @@ export const deriveLiveActivity = (
     }
   }
 
-  return THINKING_ACTIVITY;
+  return null;
 };
 
 interface TypingIndicatorProps {
@@ -129,6 +129,10 @@ interface TypingIndicatorProps {
 
 export function TypingIndicator({ events }: TypingIndicatorProps) {
   const activity = deriveLiveActivity(events);
+
+  if (!activity) {
+    return null;
+  }
 
   return (
     <div
