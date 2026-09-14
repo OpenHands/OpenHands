@@ -725,6 +725,15 @@ describe("observation titles", () => {
       values: { command: "" },
     },
     {
+      name: "file create",
+      observation: observationOf("FileEditorObservation", {
+        command: "create",
+        path: "/workspace/new.ts",
+      }),
+      key: "OBSERVATION_MESSAGE$WRITE",
+      values: { path: "/workspace/new.ts" },
+    },
+    {
       name: "file read",
       observation: observationOf("FileEditorObservation", {
         command: "view",
