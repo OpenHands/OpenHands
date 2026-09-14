@@ -414,6 +414,8 @@ export interface CreateConversationOptions {
   // generation uses this profile so both the agent and its title use the
   // same model.
   agentLlmProfileRef?: string | null;
+  agentProfileAcpServer?: string | null;
+  agentProfileAcpCommand?: string | readonly string[] | null;
 }
 
 class AgentServerConversationService {
@@ -470,6 +472,8 @@ class AgentServerConversationService {
       agentProfileId,
       agentProfileKind,
       agentLlmProfileRef,
+      agentProfileAcpServer,
+      agentProfileAcpCommand,
     } = options;
 
     if (getActiveBackend().backend.kind === "cloud") {
@@ -552,6 +556,8 @@ class AgentServerConversationService {
       worktree: !isolated && resolvedWorkspaceMode === "new_worktree",
       agentProfileId,
       agentProfileKind,
+      agentProfileAcpServer,
+      agentProfileAcpCommand,
       titleLlmProfile,
     });
 
