@@ -236,6 +236,18 @@ export function getDeploymentMode(
 }
 
 /**
+ * Whether the backend runs inside a container (the Docker image advertises
+ * mode `"docker"` via `/server_info.runtime_services`). Host-side dev stacks
+ * (`dev:automation`, `dev:static`, vite) and unknown/local deployments are
+ * not containerized.
+ */
+export function isContainerizedDeployment(
+  runtimeServicesInfo?: RuntimeServicesInfo | null,
+): boolean {
+  return getDeploymentMode(runtimeServicesInfo) === "docker";
+}
+
+/**
  * Render the runtime services info into a markdown block suitable for
  * appending to the system prompt via `AgentContext.system_message_suffix`.
  *
@@ -925,12 +937,16 @@ function buildConfiguredAcpAgentSettings(
     ),
   };
 
-  // TODO(#1019): set ``acp_isolate_data_dir: true`` here for a containerized
-  // backend so concurrent same-provider conversations don't race on a shared
-  // HOME. The SDK supports it (software-agent-sdk#3492), but the released
-  // ``@openhands/typescript-client`` (1.24.3) doesn't surface it on
-  // ``ACPAgentSettings`` yet, so sending it risks a validation error on older
-  // servers. Cloud grouping isolation is separate (agent-canvas#1016).
+  // Concurrent ACP conversations in one container share the sandbox ``HOME``
+  // and race on CLI auth/config/lock files. When the backend is containerized
+  // (per the launcher-advertised deployment mode), give each conversation its
+  // own CLI data root. Host-side dev stacks keep the shared ``HOME`` so a
+  // pre-existing interactive login (``claude`` / ``gemini`` sign-in) keeps
+  // working — relocating the data dir there would hide it (#1019). Cloud
+  // grouping isolation is separate (agent-canvas#1016).
+  if (isContainerizedDeployment(runtimeServicesInfo)) {
+    payload.acp_isolate_data_dir = true;
+  }
 
   for (const key of ACP_SETTINGS_KEYS) {
     // ``acp_model`` is resolved separately below so a saved ``null`` still
