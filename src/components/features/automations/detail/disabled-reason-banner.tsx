@@ -1,11 +1,11 @@
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import type { Automation } from "#/types/automation";
+import { getDisablementReasonDisplay } from "#/utils/automation-disabled-reason";
 import {
-  getDisablementReasonDisplay,
-  isManualDisable,
-} from "#/utils/automation-disabled-reason";
-import { formatRelativeTime } from "#/utils/format-relative-time";
+  formatRelativeTime,
+  isInvalidTimestamp,
+} from "#/utils/format-relative-time";
 import PauseIcon from "#/icons/pause.svg?react";
 
 interface DisabledReasonBannerProps {
@@ -30,8 +30,7 @@ export function DisabledReasonBanner({
   const display = getDisablementReasonDisplay(automation, t);
   if (!display) return null;
 
-  const manual = isManualDisable(automation);
-  const showTimestamp = Boolean(automation.disabled_at);
+  const showTimestamp = !isInvalidTimestamp(automation.disabled_at);
 
   return (
     <div
@@ -62,11 +61,6 @@ export function DisabledReasonBanner({
               t,
             ),
           })}
-        </p>
-      ) : null}
-      {!manual ? (
-        <p className="text-xs text-muted">
-          {t(I18nKey.AUTOMATIONS$DETAIL$DISABLED_AUTO)}
         </p>
       ) : null}
     </div>

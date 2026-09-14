@@ -108,7 +108,6 @@ describe("getDisablementReasonDisplay", () => {
       identity,
     );
     expect(display).not.toBeNull();
-    expect(display?.labelKey).toBe(I18nKey.AUTOMATIONS$DETAIL$DISABLED_MANUAL);
     expect(display?.text).toBe(I18nKey.AUTOMATIONS$DETAIL$DISABLED_MANUAL);
   });
 
@@ -123,7 +122,6 @@ describe("getDisablementReasonDisplay", () => {
       }),
       identity,
     );
-    expect(display?.labelKey).toBe(I18nKey.AUTOMATIONS$DETAIL$DISABLED_AUTO);
     expect(display?.text).toBe(reason);
   });
 
@@ -133,7 +131,6 @@ describe("getDisablementReasonDisplay", () => {
       automation({ enabled: false, disabled_reason: reason, disabled_detail: null }),
       t,
     );
-    expect(display?.labelKey).toBe(I18nKey.AUTOMATIONS$DETAIL$DISABLED_AUTO);
     expect(display?.text).toBe(reason);
   });
 });

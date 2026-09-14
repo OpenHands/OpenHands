@@ -83,7 +83,14 @@ export interface Automation {
 
 export type AutomationSpec = Omit<
   Automation,
-  "id" | "created_at" | "updated_at" | "last_triggered_at" | "preset_metadata"
+  | "id"
+  | "created_at"
+  | "updated_at"
+  | "last_triggered_at"
+  | "preset_metadata"
+  | "disabled_reason"
+  | "disabled_detail"
+  | "disabled_at"
 >;
 
 /** The envelope constants come from the interface manifest's import/export spec. */

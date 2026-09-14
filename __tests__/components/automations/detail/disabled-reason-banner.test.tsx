@@ -54,10 +54,39 @@ describe("DisabledReasonBanner", () => {
       reason,
     );
     expect(screen.getByTestId("automation-disabled-reason-timestamp")).toBeInTheDocument();
-    expect(screen.getByText(I18nKey.AUTOMATIONS$DETAIL$DISABLED_AUTO)).toBeInTheDocument();
   });
 
-  it("substitutes the manual-disable label and hides the auto-pause subtitle", () => {
+  it("hides the timestamp when disabled_at is missing or invalid", () => {
+    render(
+      <DisabledReasonBanner
+        automation={{
+          ...baseAutomation,
+          disabled_reason: "Paused automatically: the last 5 runs all failed.",
+          disabled_detail: { reason: "consecutive_failures", source: "consecutive_failures" },
+          disabled_at: null,
+        }}
+      />,
+    );
+
+    expect(screen.queryByTestId("automation-disabled-reason-timestamp")).toBeNull();
+  });
+
+  it("hides the timestamp for an epoch/zero disabled_at", () => {
+    render(
+      <DisabledReasonBanner
+        automation={{
+          ...baseAutomation,
+          disabled_reason: "Paused automatically: the last 5 runs all failed.",
+          disabled_detail: { reason: "consecutive_failures", source: "consecutive_failures" },
+          disabled_at: "1970-01-01T00:00:00Z",
+        }}
+      />,
+    );
+
+    expect(screen.queryByTestId("automation-disabled-reason-timestamp")).toBeNull();
+  });
+
+  it("substitutes the manual-disable label", () => {
     render(
       <DisabledReasonBanner
         automation={{
@@ -73,8 +102,5 @@ describe("DisabledReasonBanner", () => {
       I18nKey.AUTOMATIONS$DETAIL$DISABLED_MANUAL,
     );
     expect(screen.queryByTestId("automation-disabled-reason-timestamp")).toBeNull();
-    expect(
-      screen.queryByText(I18nKey.AUTOMATIONS$DETAIL$DISABLED_AUTO),
-    ).toBeNull();
   });
 });

@@ -37,8 +37,6 @@ export function isManualDisable(
 }
 
 export interface DisablementReasonDisplay {
-  /** i18n key for the short label shown next to the badge / in lists. */
-  labelKey: I18nKey;
   /**
    * Full reason text to render. For automatic disables this is the backend's
    * human-readable `disabled_reason` (already phrased for users, e.g.
@@ -61,13 +59,7 @@ export function getDisablementReasonDisplay(
 ): DisablementReasonDisplay | null {
   if (!hasDisablementReason(automation)) return null;
   if (isManualDisable(automation)) {
-    return {
-      labelKey: I18nKey.AUTOMATIONS$DETAIL$DISABLED_MANUAL,
-      text: t(I18nKey.AUTOMATIONS$DETAIL$DISABLED_MANUAL),
-    };
+    return { text: t(I18nKey.AUTOMATIONS$DETAIL$DISABLED_MANUAL) };
   }
-  return {
-    labelKey: I18nKey.AUTOMATIONS$DETAIL$DISABLED_AUTO,
-    text: automation.disabled_reason as string,
-  };
+  return { text: automation.disabled_reason as string };
 }
