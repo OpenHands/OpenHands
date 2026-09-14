@@ -43,6 +43,8 @@ export const LLM_SUBSCRIPTION_QUERY_KEYS = {
 
 export const LOCAL_WORKSPACES_QUERY_KEYS = {
   all: ["local-workspaces"] as const,
+  byBackend: (backendId: string, orgId: string | null) =>
+    ["local-workspaces", backendId, orgId] as const,
 } as const;
 
 export const PLUGINS_QUERY_KEYS = {
