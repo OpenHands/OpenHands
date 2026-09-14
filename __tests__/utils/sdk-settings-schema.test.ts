@@ -25,6 +25,7 @@ import {
   Settings,
   SettingsFieldSchema,
   SettingsSchema,
+  SettingsValue,
 } from "#/types/settings";
 
 const BASE_SETTINGS: Settings = {
@@ -1270,5 +1271,96 @@ describe("sdk settings schema helpers", () => {
 });
 
 it("normalizes missing initial values for comparison", () => {
-  expect(normalizeComparableValue(getMockField({ key: "initial" }), undefined)).toBeNull();
+  expect(
+    normalizeComparableValue(getMockField({ key: "initial" }), undefined),
+  ).toBeNull();
 });
+
+it.each<{
+  label: string;
+  valueType: "object" | "array";
+  defaultValue: SettingsValue;
+  value: SettingsValue;
+}>([
+  {
+    label: "malformed object text without a separator",
+    valueType: "object",
+    defaultValue: { a: 1, b: 2 },
+    value: '{"a":1"b":2}',
+  },
+  {
+    label: "changed object value",
+    valueType: "object",
+    defaultValue: { a: 1, b: 2 },
+    value: { a: 1, b: 3 },
+  },
+  {
+    label: "changed object key",
+    valueType: "object",
+    defaultValue: { a: 1 },
+    value: { b: 1 },
+  },
+  {
+    label: "array element boundaries",
+    valueType: "array",
+    defaultValue: [1, 23],
+    value: [12, 3],
+  },
+  {
+    label: "array order",
+    valueType: "array",
+    defaultValue: [1, 2],
+    value: [2, 1],
+  },
+  {
+    label: "nested null versus object",
+    valueType: "object",
+    defaultValue: { a: null },
+    value: { a: {} },
+  },
+  {
+    label: "nested scalar type",
+    valueType: "object",
+    defaultValue: { a: 1 },
+    value: { a: "1" },
+  },
+  {
+    label: "array versus indexed object",
+    valueType: "object",
+    defaultValue: [1],
+    value: { "0": 1 },
+  },
+])(
+  "recognizes a structured override: $label",
+  ({ valueType, defaultValue, value }) => {
+    const field = getMockField({
+      key: "value",
+      value_type: valueType,
+      default: defaultValue,
+      prominence: "major",
+    });
+    expect(inferInitialView(getSettingsForFields([field], { value }))).toBe(
+      "advanced",
+    );
+  },
+);
+
+it.each(["boolean", "string"] as const)(
+  "preserves absent %s values during comparison",
+  (valueType) => {
+    const field = getMockField({
+      key: "value",
+      value_type: valueType,
+      default: null,
+      prominence: "major",
+    });
+    expect(normalizeComparableValue(field, null)).toBeNull();
+    expect(
+      inferInitialView(
+        getSettingsForFields([field], {
+          value: valueType === "boolean" ? false : "null",
+        }),
+      ),
+    ).toBe("advanced");
+  },
+);
