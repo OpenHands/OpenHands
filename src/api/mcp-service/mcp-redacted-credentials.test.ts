@@ -37,6 +37,49 @@ describe("substituteRedactedMcpCredentials", () => {
     vi.restoreAllMocks();
   });
 
+  it("preserves a missing stored OAuth subtree while restoring a sibling secret", async () => {
+    mockEncryptedMcpConfig({
+      "shttp-0": {
+        auth: {
+          strategy: "oauth2",
+          state: { client_info: { client_secret: "encrypted-client-secret" } },
+        },
+      },
+    });
+    const result = await substituteRedactedMcpCredentials(
+      getRemoteServer({
+        auth: {
+          strategy: "oauth2",
+          state: {
+            tokens: { access_token: REDACTED_MCP_SECRET_VALUE },
+            client_info: { client_secret: REDACTED_MCP_SECRET_VALUE },
+          },
+        },
+      }),
+    );
+    expect(result.auth).toEqual({
+      strategy: "oauth2",
+      state: {
+        tokens: { access_token: REDACTED_MCP_SECRET_VALUE },
+        client_info: { client_secret: "encrypted-client-secret" },
+      },
+    });
+  });
+
+  it.each([undefined, null, "invalid"])(
+    "preserves redacted headers when stored headers are %s",
+    async (headers) => {
+      mockEncryptedMcpConfig({ "shttp-0": { headers } });
+      const server = getRemoteServer({
+        auth: undefined,
+        headers: { Authorization: REDACTED_MCP_SECRET_VALUE },
+      });
+      await expect(substituteRedactedMcpCredentials(server)).resolves.toEqual(
+        server,
+      );
+    },
+  );
+
   it("substitutes a redacted stdio env value with the encrypted stored secret", async () => {
     // The stored server is resolved by its stable id, so renaming the display
     // name must not lose the encrypted secret behind the redaction placeholder.
