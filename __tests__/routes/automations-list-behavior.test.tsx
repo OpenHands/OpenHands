@@ -419,7 +419,7 @@ vi.mock("#/components/features/automations/add-automation-menu", () => ({
   ),
 }));
 
-import AutomationsList from "#/routes/automations-list";
+import AutomationsList, { clientLoader } from "#/routes/automations-list";
 
 function makeAutomation(overrides: Partial<Automation> = {}): Automation {
   return {
@@ -583,6 +583,13 @@ describe("automations list states", () => {
 });
 
 describe("automations list interactions", () => {
+  it("admits the configured interface and opens Git Sync", () => {
+    expect(clientLoader()).toBeNull();
+    render(<AutomationsList />);
+    fireEvent.click(screen.getByTestId("automations-git-sync"));
+    expect(mocks.navigate).toHaveBeenCalledWith("/automations/git-sync");
+  });
+
   it("filters saved automations by name, prompt, repository, and model", async () => {
     const automations = [
       makeAutomation({ id: "by-name", name: "Needle name" }),
