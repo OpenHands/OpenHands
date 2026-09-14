@@ -1,7 +1,0 @@
-{
-  "initialHeight": 20,
-  "heightAfterEnd": 100,
-  "heightAfterLaterMove": 100,
-  "listenersDuringDrag": 2,
-  "listenersAfterEnd": 0
-}
