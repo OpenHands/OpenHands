@@ -924,6 +924,34 @@ describe("Conversation websocket behavior", () => {
     );
   });
 
+  it("queues plan messages for the latest planner ID after it changes", async () => {
+    const view = renderProvider({ subConversationIds: ["planner-old"] });
+    act(() => useConversationStore.setState({ conversationMode: "plan" }));
+    await contextCapture.current?.sendMessage(makeSendRequest("old plan"));
+    expect(socketCapture.queueMessage).toHaveBeenLastCalledWith(
+      "planner-old",
+      makeSendRequest("old plan"),
+      { run: true },
+    );
+    view.rerender(
+      <QueryClientProvider client={view.queryClient}>
+        <ConversationWebSocketProvider
+          conversationId="conv-main"
+          conversationUrl="http://localhost:8000/api/conversations/conv-main"
+          subConversationIds={["planner-new"]}
+        >
+          <ContextProbe />
+        </ConversationWebSocketProvider>
+      </QueryClientProvider>,
+    );
+    await contextCapture.current?.sendMessage(makeSendRequest("new plan"));
+    expect(socketCapture.queueMessage).toHaveBeenLastCalledWith(
+      "planner-new",
+      makeSendRequest("new plan"),
+      { run: true },
+    );
+  });
+
   it("reports missing conversations and REST queue failures", async () => {
     renderProvider({ conversationId: undefined });
 
@@ -1442,7 +1470,7 @@ describe("Conversation websocket behavior", () => {
     socketCapture.readConversationFile.mockImplementation(
       (_variables, callbacks) => callbacks.onSuccess("# Loaded plan"),
     );
-    renderProvider({
+    const view = renderProvider({
       subConversations: [makeSubConversation()],
       subConversationIds: ["conv-planning"],
     });
@@ -1493,6 +1521,17 @@ describe("Conversation websocket behavior", () => {
         expect.objectContaining({ id: "36", isFromPlanningAgent: true }),
       ]),
     );
+    view.rerender(
+      <QueryClientProvider client={view.queryClient}>
+        <ConversationWebSocketProvider
+          conversationId="conv-next"
+          conversationUrl="http://localhost:8000/api/conversations/conv-next"
+        >
+          <ContextProbe />
+        </ConversationWebSocketProvider>
+      </QueryClientProvider>,
+    );
+    expect(useConversationStore.getState().planContent).toBeNull();
   });
 
   it("finishes planning history when the expected count arrives after its events", async () => {
@@ -1740,13 +1779,24 @@ describe("Conversation websocket behavior", () => {
 
   it("flushes planning deltas before later events and ignores replayed error side effects", () => {
     vi.spyOn(window, "requestAnimationFrame").mockReturnValue(1);
-    renderProvider({ subConversations: [makeSubConversation()] });
+    const view = renderProvider({ subConversations: [makeSubConversation()] });
     dispatchPlanning({
       ...baseEvent("delta-plan", "agent"),
       kind: "StreamingDeltaEvent",
       content: "Planning",
       reasoning_content: null,
     });
+    view.rerender(
+      <QueryClientProvider client={view.queryClient}>
+        <ConversationWebSocketProvider
+          conversationId="conv-main"
+          conversationUrl="http://localhost:8000/api/conversations/conv-main"
+          subConversations={[makeSubConversation()]}
+        >
+          <ContextProbe />
+        </ConversationWebSocketProvider>
+      </QueryClientProvider>,
+    );
     const classification = {
       kind: "auth",
       retryable: false,
@@ -1793,6 +1843,37 @@ describe("Conversation websocket behavior", () => {
       "conv-main",
       "call-launch",
     );
+  });
+
+  it("does not launch a child for unrelated actions or without a parent ID", () => {
+    const view = renderProvider();
+    dispatchMain(
+      makeActionEvent(
+        "think",
+        { kind: "ThinkAction", thought: "Review" },
+        "think",
+      ),
+    );
+    expect(socketCapture.launchChild).not.toHaveBeenCalled();
+    view.rerender(
+      <QueryClientProvider client={view.queryClient}>
+        <ConversationWebSocketProvider>
+          <ContextProbe />
+        </ConversationWebSocketProvider>
+      </QueryClientProvider>,
+    );
+    dispatchMain(
+      makeActionEvent(
+        "orphan-launch",
+        {
+          kind: "ClientAction_launch_child_conversation",
+          target: "local",
+          task: "Inspect tests",
+        },
+        "launch_child_conversation",
+      ),
+    );
+    expect(socketCapture.launchChild).not.toHaveBeenCalled();
   });
 
   it("combines multiple LLM costs and preserves the first non-null budget", () => {
