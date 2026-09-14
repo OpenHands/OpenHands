@@ -24,9 +24,9 @@ function extractAllText(extendedContent: TextContent[]): string {
  */
 const extractExtraInfoBlocks = (text: string): string[] => {
   const blockRegex = /<EXTRA_INFO>([\s\S]*?)<\/EXTRA_INFO>/gi;
-  return Array.from(text.matchAll(blockRegex), (match) => match[1].trim()).filter(
-    Boolean,
-  );
+  return Array.from(text.matchAll(blockRegex), (match) =>
+    match[1].trim(),
+  ).filter(Boolean);
 };
 
 /**
