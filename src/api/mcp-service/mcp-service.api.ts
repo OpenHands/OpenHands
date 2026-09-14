@@ -17,6 +17,7 @@ import type {
 } from "#/types/mcp-server";
 import { redactMcpSecrets } from "#/utils/redact-mcp-secrets";
 import { substituteRedactedMcpCredentials } from "./mcp-redacted-credentials";
+import { isValidVerificationUrl } from "#/utils/is-valid-verification-url";
 
 const OAUTH_MCP_TEST_TIMEOUT_SECONDS = 120;
 
@@ -282,6 +283,14 @@ class McpService {
       }
 
       if (popup) {
+        if (!isValidVerificationUrl(start.authorization_url)) {
+          popup.close();
+          return {
+            ok: false,
+            error: "Invalid OAuth authorization URL",
+            error_kind: "unknown",
+          };
+        }
         popup.location.href = start.authorization_url;
       }
 
@@ -301,6 +310,7 @@ class McpService {
         }
       }
 
+      popup?.close();
       return {
         ok: false,
         error: "OAuth authorization timed out",

@@ -235,4 +235,107 @@ describe("McpService.testServer", () => {
     expect(getOAuthStatus).toHaveBeenCalledWith("job/1");
     expect(close).toHaveBeenCalledTimes(1);
   });
+
+  it("rejects an unsafe OAuth authorization URL", async () => {
+    const popup = {
+      location: {
+        href: "",
+      },
+      close: vi.fn(),
+    };
+
+    vi.stubGlobal(
+      "window",
+      {
+        open: vi.fn(() => popup),
+      },
+    );
+
+    startOAuth.mockResolvedValueOnce({
+      ok: true,
+      job_id: "job-1",
+      authorization_url: "javascript:alert(document.domain)",
+    });
+
+    getOAuthStatus.mockResolvedValue({
+      status: "pending",
+      callback_ready: true,
+    });
+
+    const result = await McpService.authorizeOAuth({
+      id: "shttp-0",
+      type: "shttp",
+      name: "test-server",
+      url: "https://example.com/mcp",
+      auth: {
+        strategy: "oauth2",
+        authentication: {
+          type: "oauth",
+          client_auth_method: "none",
+        },
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(popup.close).toHaveBeenCalledTimes(1);
+    expect(popup.location.href).toBe("");
+  });
+
+  it("closes the OAuth popup when authorization times out", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
+    try {
+      const popup = {
+        location: {
+          href: "",
+        },
+        close: vi.fn(),
+      };
+
+      vi.stubGlobal("window", {
+        open: vi.fn(() => popup),
+        setTimeout,
+      });
+
+      startOAuth.mockResolvedValueOnce({
+        ok: true,
+        job_id: "job-timeout",
+        authorization_url: "https://example.com/oauth/authorize",
+      });
+
+      getOAuthStatus.mockResolvedValue({
+        status: "pending",
+        callback_ready: false,
+      });
+
+      const resultPromise = McpService.authorizeOAuth({
+        id: "shttp-0",
+        type: "shttp",
+        name: "test-server",
+        url: "https://example.com/mcp",
+        auth: {
+          strategy: "oauth2",
+          authentication: {
+            type: "oauth",
+            client_auth_method: "none",
+          },
+        },
+      });
+
+      vi.setSystemTime(
+        new Date("2026-01-01T00:03:00.000Z"),
+      );
+
+      await vi.runAllTimersAsync();
+
+      const result = await resultPromise;
+
+      expect(result.ok).toBe(false);
+      expect(result.error_kind).toBe("timeout");
+      expect(popup.close).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
