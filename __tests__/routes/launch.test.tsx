@@ -93,6 +93,28 @@ describe("LaunchRoute", () => {
       expect(screen.getAllByText("owner/repo2").length).toBeGreaterThan(0);
     });
 
+    it("should restore non-Latin-1 parameter values from UTF-8 base64 payloads", () => {
+      const plugins = [
+        {
+          source: "github:owner/repo",
+          parameters: { task: "整理发布说明 🚀" },
+        },
+      ];
+      const utf8Bytes = new TextEncoder().encode(JSON.stringify(plugins));
+      let binary = "";
+      for (const byte of utf8Bytes) {
+        binary += String.fromCharCode(byte);
+      }
+      const encoded = encodeURIComponent(btoa(binary));
+
+      renderLaunchRoute(`?plugins=${encoded}`);
+
+      expect(screen.getByTestId("plugin-launch-modal")).toBeInTheDocument();
+      expect(screen.getByTestId("plugin-0-param-task")).toHaveValue(
+        "整理发布说明 🚀",
+      );
+    });
+
     it("should show error for invalid base64 encoding", () => {
       renderLaunchRoute("?plugins=not-valid-base64!!!");
 
