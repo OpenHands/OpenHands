@@ -7,6 +7,7 @@ import {
 import SettingsService from "../settings-service/settings-service.api";
 import McpService from "./mcp-service.api";
 import { REDACTED_MCP_SECRET_VALUE } from "#/utils/mcp-config";
+import type { MCPServerConfig } from "#/types/mcp-server";
 
 vi.mock("@openhands/typescript-client/clients", () => ({
   MCPClient: vi.fn(),
@@ -234,5 +235,90 @@ describe("McpService.testServer", () => {
 
     expect(getOAuthStatus).toHaveBeenCalledWith("job/1");
     expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  const OAUTH_SERVER: MCPServerConfig = {
+    id: "shttp-0",
+    type: "shttp",
+    name: "superhuman-mail",
+    url: "https://mcp.mail.superhuman.com/mcp",
+    auth: {
+      strategy: "oauth2",
+      authentication: { type: "oauth", client_auth_method: "none" },
+    },
+  };
+
+  it("hands the job id to onJobStarted when the callback server is ready", async () => {
+    // Arrange: pending + callback_ready first, then succeeded.
+    vi.spyOn(window, "open").mockReturnValue(null);
+    getOAuthStatus
+      .mockResolvedValueOnce({
+        ok: true,
+        status: "pending",
+        job_id: "job-1",
+        callback_ready: true,
+      })
+      .mockResolvedValue({
+        ok: true,
+        status: "succeeded",
+        job_id: "job-1",
+        tools: ["search_mail"],
+      });
+    const onJobStarted = vi.fn();
+
+    // Act
+    vi.useFakeTimers();
+    const pending = McpService.authorizeOAuth(OAUTH_SERVER, { onJobStarted });
+    await vi.runAllTimersAsync();
+    const result = await pending;
+    vi.useRealTimers();
+
+    // Assert
+    expect(onJobStarted).toHaveBeenCalledExactlyOnceWith("job-1");
+    expect(result.ok).toBe(true);
+  });
+
+  it("still hands the job id to onJobStarted when readiness is never observed", async () => {
+    // Arrange: the readiness loop exhausts with callback_ready never set —
+    // the deployment where the relay matters most must still be offered.
+    vi.spyOn(window, "open").mockReturnValue(null);
+    getOAuthStatus.mockResolvedValue({
+      ok: true,
+      status: "pending",
+      job_id: "job-1",
+      callback_ready: false,
+    });
+    const onJobStarted = vi.fn();
+
+    // Act
+    vi.useFakeTimers();
+    const pending = McpService.authorizeOAuth(OAUTH_SERVER, { onJobStarted });
+    await vi.runAllTimersAsync();
+    const result = await pending;
+    vi.useRealTimers();
+
+    // Assert
+    expect(onJobStarted).toHaveBeenCalledExactlyOnceWith("job-1");
+    expect(result.ok).toBe(false);
+  });
+
+  it("does not call onJobStarted when OAuth fails to start", async () => {
+    // Arrange
+    vi.spyOn(window, "open").mockReturnValue(null);
+    startOAuth.mockResolvedValue({
+      ok: false,
+      error: "no client",
+      error_kind: "unknown",
+    });
+    const onJobStarted = vi.fn();
+
+    // Act
+    const result = await McpService.authorizeOAuth(OAUTH_SERVER, {
+      onJobStarted,
+    });
+
+    // Assert
+    expect(onJobStarted).not.toHaveBeenCalled();
+    expect(result.ok).toBe(false);
   });
 });

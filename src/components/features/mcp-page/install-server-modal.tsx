@@ -30,6 +30,7 @@ import { makeMcpTestErrorMessage } from "#/utils/mcp-test-error-message";
 import { modalTitleLgClassName } from "#/utils/modal-classes";
 import McpService from "#/api/mcp-service/mcp-service.api";
 import { toMcpServerName } from "#/utils/mcp-server-name";
+import { OauthCallbackFallback } from "./oauth-callback-fallback";
 
 /**
  * Renders a helperText string as React nodes, converting any `[text](url)`
@@ -172,6 +173,7 @@ export function InstallServerModal({
   const [globalError, setGlobalError] = React.useState<string | null>(null);
   const [isFinalizingInstall, setIsFinalizingInstall] = React.useState(false);
   const [isAuthorizingOAuth, setIsAuthorizingOAuth] = React.useState(false);
+  const [oauthJobId, setOauthJobId] = React.useState<string | null>(null);
   const option = getInstallableMcpConnectionOption(entry);
   const template = option?.transport;
 
@@ -238,7 +240,7 @@ export function InstallServerModal({
   const submitServer = (payload: MCPServerConfig) => {
     if (payload.auth?.strategy === "oauth2") {
       setIsAuthorizingOAuth(true);
-      void McpService.authorizeOAuth(payload)
+      void McpService.authorizeOAuth(payload, { onJobStarted: setOauthJobId })
         .then((result) => {
           if (!result.ok) {
             setGlobalError(
@@ -278,7 +280,10 @@ export function InstallServerModal({
           const message = retrieveAxiosErrorMessage(err as AxiosError);
           setGlobalError(message || t(I18nKey.ERROR$GENERIC));
         })
-        .finally(() => setIsAuthorizingOAuth(false));
+        .finally(() => {
+          setIsAuthorizingOAuth(false);
+          setOauthJobId(null);
+        });
       return;
     }
     testMcpServer(payload, {
@@ -696,6 +701,10 @@ export function InstallServerModal({
         )}
 
         <div className="flex flex-col gap-3">{renderFields()}</div>
+
+        {isAuthorizingOAuth && oauthJobId ? (
+          <OauthCallbackFallback jobId={oauthJobId} />
+        ) : null}
 
         {globalError && (
           <p

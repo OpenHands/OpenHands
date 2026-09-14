@@ -319,6 +319,49 @@ describe("InstallServerModal", () => {
     });
   });
 
+  it("offers the callback URL relay while OAuth authorization is pending", async () => {
+    // Arrange: authorization starts, reports its job id, and never resolves —
+    // the state a user is in while the popup waits on the provider.
+    const entry: MarketplaceEntry = {
+      id: "synthetic-oauth-pending",
+      name: "Synthetic OAuth Pending",
+      description: "OAuth entry whose authorization never resolves.",
+      docsUrl: "https://example.com/docs",
+      iconBg: "#000000",
+      connectionOptions: [
+        {
+          id: "oauth",
+          provider: "mcp",
+          transport: { kind: "shttp", url: "https://mcp.example.com/mcp" },
+          auth: { strategy: "oauth2", oauth: { clientAuthentication: "none" } },
+        },
+      ],
+    };
+    vi.spyOn(McpService, "authorizeOAuth").mockImplementation(
+      (_server, options) => {
+        options?.onJobStarted?.("job-1");
+        return new Promise(() => {});
+      },
+    );
+
+    // Act
+    renderWith(
+      <InstallServerModal
+        existingServers={[]}
+        entry={entry}
+        onClose={vi.fn()}
+      />,
+    );
+    await screen.findByTestId("mcp-install-modal");
+    await waitFor(() => expect(SettingsService.getSettings).toHaveBeenCalled());
+    fireEvent.click(screen.getByTestId("mcp-install-submit"));
+
+    // Assert
+    expect(
+      await screen.findByTestId("mcp-oauth-callback-fallback-toggle"),
+    ).toBeInTheDocument();
+  });
+
   it("installs header-field remote servers with tagged header auth", async () => {
     const entry = {
       id: "datadog-style",

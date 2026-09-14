@@ -14,6 +14,7 @@ import type { MarketplaceEntry } from "#/utils/mcp-marketplace-utils";
 import { makeMcpTestErrorMessage } from "#/utils/mcp-test-error-message";
 import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
 import { cn } from "#/utils/utils";
+import { OauthCallbackFallback } from "./oauth-callback-fallback";
 
 interface McpServerHealthSectionProps {
   server: MCPServerConfig;
@@ -74,7 +75,7 @@ export function McpServerHealthSection({
 }: McpServerHealthSectionProps) {
   const { t } = useTranslation("openhands");
   const { backend } = useActiveBackend();
-  const { health, probe, reauthorize } = useMcpServerHealth(server);
+  const { health, probe, reauthorize, oauthJobId } = useMcpServerHealth(server);
   const { mutate: updateMcpServer } = useUpdateMcpServer();
 
   if (backend.kind === "cloud") return null;
@@ -151,6 +152,13 @@ export function McpServerHealthSection({
           {t(I18nKey.MCP$HEALTH_CONNECTIVITY_ONLY_HINT)}
         </p>
       ) : null}
+
+      {/* Token expiry recurs, so this is the path a containerised user hits
+          most often: the reauthorize popup redirects to a loopback port that
+          only exists inside the agent-server's namespace. Offer the relay for
+          as long as the authorization is pending — the Reauthorize button
+          itself disappears while health is "checking". */}
+      {oauthJobId ? <OauthCallbackFallback jobId={oauthJobId} /> : null}
 
       <div className="flex flex-wrap items-center gap-3">
         <button
