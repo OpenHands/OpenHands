@@ -170,6 +170,70 @@ describe("AgentServerUIProviders", () => {
     expect(getI18n()).toBe(getDefaultI18n());
   });
 
+  it("keeps the custom instances active across a Strict Mode setup replay", async () => {
+    const customQueryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+      },
+    });
+    const customI18n = await createTestI18n("Strict mode provider");
+
+    const view = render(
+      <React.StrictMode>
+        <AgentServerUIProviders
+          queryClient={customQueryClient}
+          i18n={customI18n}
+        >
+          <DefaultProbe />
+        </AgentServerUIProviders>
+      </React.StrictMode>,
+    );
+
+    expect(getQueryClient()).toBe(customQueryClient);
+    expect(getI18n()).toBe(customI18n);
+
+    view.unmount();
+
+    expect(getQueryClient()).toBe(getDefaultQueryClient());
+    expect(getI18n()).toBe(getDefaultI18n());
+  });
+
+  it("leaves a sibling root's instances active when the other root unmounts first", async () => {
+    const firstQueryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+      },
+    });
+    const firstI18n = await createTestI18n("First root");
+    const secondQueryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+      },
+    });
+    const secondI18n = await createTestI18n("Second root");
+
+    const first = render(
+      <AgentServerUIProviders queryClient={firstQueryClient} i18n={firstI18n}>
+        <DefaultProbe />
+      </AgentServerUIProviders>,
+    );
+    const second = render(
+      <AgentServerUIProviders queryClient={secondQueryClient} i18n={secondI18n}>
+        <DefaultProbe />
+      </AgentServerUIProviders>,
+    );
+
+    expect(getQueryClient()).toBe(secondQueryClient);
+    expect(getI18n()).toBe(secondI18n);
+
+    first.unmount();
+
+    expect(getQueryClient()).toBe(secondQueryClient);
+    expect(getI18n()).toBe(secondI18n);
+
+    second.unmount();
+  });
+
   it("passes disabled and runtime analytics configuration to TelemetryProvider", () => {
     telemetryProviderMock.mockClear();
 

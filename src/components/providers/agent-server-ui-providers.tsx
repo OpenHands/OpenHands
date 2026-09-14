@@ -88,15 +88,29 @@ export function AgentServerUIProviders({
   setQueryClient(resolvedQueryClient);
   setI18n(resolvedI18n);
 
-  React.useEffect(
-    () => () => {
-      if (previousProvidersRef.current) {
-        setQueryClient(previousProvidersRef.current.queryClient);
-        setI18n(previousProvidersRef.current.i18n);
+  React.useEffect(() => {
+    // Strict Mode replays setup/cleanup without re-rendering in between, so
+    // the render-phase assignment above does not run again after the cleanup
+    // has handed the globals back. Re-install on every setup so this root's
+    // instances stay active for imperative callers.
+    setQueryClient(resolvedQueryClient);
+    setI18n(resolvedI18n);
+
+    return () => {
+      const previous = previousProvidersRef.current;
+      if (!previous) return;
+
+      // Only hand the globals back if this root still owns them. A sibling
+      // root that mounted afterwards is the current owner, and unmounting in
+      // the other order must not clobber its instances.
+      if (getQueryClient() === resolvedQueryClient) {
+        setQueryClient(previous.queryClient);
       }
-    },
-    [],
-  );
+      if (getI18n() === resolvedI18n) {
+        setI18n(previous.i18n);
+      }
+    };
+  }, [resolvedQueryClient, resolvedI18n]);
 
   const posthogConfig =
     analytics && analytics.provider === "posthog"
