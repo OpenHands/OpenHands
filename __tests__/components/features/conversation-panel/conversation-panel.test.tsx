@@ -2618,6 +2618,45 @@ describe("ConversationPanel", () => {
     ).toBeInTheDocument();
   });
 
+  it("keeps a pinned conversation from a later page pinned after loading it", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(AgentServerConversationService, "searchConversations")
+      .mockResolvedValueOnce({
+        items: [
+          createMockConversation({
+            id: "newest",
+            title: "Newest visible conversation",
+          }),
+        ],
+        next_page_id: "page-2",
+      })
+      .mockResolvedValueOnce({
+        items: [
+          createMockConversation({
+            id: "older-pinned",
+            title: "Older pinned conversation",
+          }),
+        ],
+        next_page_id: null,
+      });
+    usePinnedConversationsStore
+      .getState()
+      .pinConversation("default-local", "older-pinned");
+
+    renderConversationPanel();
+    await user.click(await screen.findByTestId("load-more-conversations"));
+
+    const pinnedSection = await screen.findByTestId(
+      "conversation-panel-pinned-section",
+    );
+    expect(
+      within(pinnedSection).getByText("Older pinned conversation"),
+    ).toBeInTheDocument();
+    expect(
+      usePinnedConversationsStore.getState().pinsByBackendId["default-local"],
+    ).toContain("older-pinned");
+  });
+
   it("renders pinned conversations only in the pinned section in chronological mode", async () => {
     usePinnedConversationsStore
       .getState()
