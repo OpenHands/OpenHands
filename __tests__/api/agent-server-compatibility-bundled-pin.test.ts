@@ -16,6 +16,7 @@ import {
   AgentServerUnknownVersionError,
   AgentServerUnsupportedVersionError,
   clearCachedAgentServerInfo,
+  getCachedAgentServerInfo,
   isAgentServerAuthError,
   isAgentServerToolAvailable,
   isAgentServerUnavailableError,
@@ -98,9 +99,9 @@ describe("loadAgentServerInfo", () => {
     expect(AGENT_SERVER_UNKNOWN_VERSION_ERROR_CODE).toBe(
       "AGENT_SERVER_UNKNOWN_VERSION",
     );
-    expect(isAgentServerUnavailableError(new AgentServerUnavailableError())).toBe(
-      true,
-    );
+    expect(
+      isAgentServerUnavailableError(new AgentServerUnavailableError()),
+    ).toBe(true);
     expect(
       isAgentServerUnsupportedVersionError(
         new AgentServerUnsupportedVersionError("1.27.0"),
@@ -336,5 +337,20 @@ describe("loadAgentServerInfo", () => {
     expect(isAgentServerToolAvailable("browser_tool_set")).toBe(true);
     clearCachedAgentServerInfo();
     expect(isAgentServerToolAvailable("browser_tool_set")).toBe(true);
+  });
+  it("returns cached server info only for the probed backend host", async () => {
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+
+    await loadAgentServerInfo();
+
+    expect(getCachedAgentServerInfo({ host: localBackend.host })).toMatchObject(
+      {
+        version: MINIMUM_COMPATIBLE_AGENT_SERVER_VERSION,
+      },
+    );
+    expect(
+      getCachedAgentServerInfo({ host: "http://localhost:9001" }),
+    ).toBeNull();
   });
 });

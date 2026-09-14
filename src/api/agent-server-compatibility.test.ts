@@ -7,6 +7,7 @@ import {
   AgentServerUnsupportedVersionError,
   assertAgentServerVersionIsSupported,
   getDisplayAgentServerVersion,
+  getDisplayAgentServerSdkVersion,
   isAgentServerAuthError,
   isAgentServerUnavailableError,
   isAgentServerUnknownVersionError,
@@ -17,8 +18,8 @@ import {
   type AgentServerInfo,
 } from "./agent-server-compatibility";
 
-const serverInfo = (version?: unknown): AgentServerInfo =>
-  ({ version }) as AgentServerInfo;
+const serverInfo = (version?: unknown, sdkVersion?: string): AgentServerInfo =>
+  ({ version, sdk_version: sdkVersion }) as AgentServerInfo;
 
 const httpError = (status: unknown): Error & { status: unknown } =>
   Object.assign(new Error(`HTTP ${String(status)}`), {
@@ -244,5 +245,24 @@ describe("SDK HTTP error classification", () => {
     authWindow.__AGENT_CANVAS_AUTH_REQUIRED__ = true;
     expect(isAgentServerAuthError(httpError(401))).toBe(true);
     expect(isAgentServerAuthError(httpError(403))).toBe(false);
+  });
+  it("uses sdk_version as the agent-server version fallback", () => {
+    expect(getDisplayAgentServerVersion(serverInfo(undefined, "1.36.1"))).toBe(
+      "1.36.1",
+    );
+    expect(() =>
+      assertAgentServerVersionIsSupported(
+        serverInfo(undefined, MINIMUM_COMPATIBLE_AGENT_SERVER_VERSION),
+      ),
+    ).not.toThrow();
+  });
+
+  it("reports the dedicated agent-server SDK version when present", () => {
+    expect(
+      getDisplayAgentServerSdkVersion(serverInfo("1.36.0", "1.36.1")),
+    ).toBe("1.36.1");
+    expect(getDisplayAgentServerSdkVersion(serverInfo("1.36.0"))).toBe(
+      "1.36.0",
+    );
   });
 });
