@@ -1,4 +1,4 @@
-import { http, HttpResponse } from "msw";
+import { http, HttpResponse, type JsonBodyType } from "msw";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   __resetActiveStoreForTests,
@@ -40,7 +40,7 @@ let capturedRequests: Request[] = [];
 let capturedBodies: Array<Record<string, unknown>> = [];
 
 /** Stub `GET <path>` on the cloud backend, recording the request. */
-function stubGet(path: string, data: unknown, status = 200) {
+function stubGet(path: string, data: JsonBodyType, status = 200) {
   server.use(
     http.get(`${cloudBackend.host}${path}`, ({ request }) => {
       capturedRequests.push(request);
@@ -50,7 +50,7 @@ function stubGet(path: string, data: unknown, status = 200) {
 }
 
 /** Stub `POST <path>` on the cloud backend, recording request + JSON body. */
-function stubPost(path: string, data: unknown = {}, status = 200) {
+function stubPost(path: string, data: JsonBodyType = {}, status = 200) {
   server.use(
     http.post(`${cloudBackend.host}${path}`, async ({ request }) => {
       capturedRequests.push(request);
