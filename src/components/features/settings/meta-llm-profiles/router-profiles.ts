@@ -49,22 +49,19 @@ export function buildRouterModel(provider: string, name: string): string {
 
 /**
  * The set of profile names a router config depends on: every model in the
- * table plus the classifier and default models. De-duplicated, first-seen
- * order, table names first.
+ * table plus the classifier model. De-duplicated, first-seen order, table
+ * names first.
  */
 export function collectRequiredRouterModelNames(config: {
   classifier_model?: string | null;
-  default_model?: string | null;
   model_table?: string | null;
 }): string[] {
   const names = parseModelTableNames(config.model_table);
   const seen = new Set(names.map((name) => name.toLowerCase()));
-  for (const extra of [config.classifier_model, config.default_model]) {
-    const name = (extra ?? "").trim();
-    if (name && !seen.has(name.toLowerCase())) {
-      seen.add(name.toLowerCase());
-      names.push(name);
-    }
+  const extra = (config.classifier_model ?? "").trim();
+  if (extra && !seen.has(extra.toLowerCase())) {
+    seen.add(extra.toLowerCase());
+    names.push(extra);
   }
   return names;
 }

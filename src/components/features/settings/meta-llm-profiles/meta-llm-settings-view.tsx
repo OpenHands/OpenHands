@@ -44,7 +44,6 @@ interface EditingMetaProfile {
 
 const CUSTOM_META_PROFILE_CONFIG: MetaProfile = {
   classifier_model: "",
-  default_model: "",
   classes: [],
   prompt_template: "",
   model_table: "",

@@ -32,9 +32,7 @@ export function MetaProfileRow({
   const [menuOpen, setMenuOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
-  const route = [info.classifier_model, info.default_model]
-    .filter(Boolean)
-    .join(" → ");
+  const route = info.classifier_model ? String(info.classifier_model) : "";
   const mode =
     info.num_classes > 0
       ? `${info.num_classes} ${t(I18nKey.SETTINGS$META_PROFILE_CLASSES)}`

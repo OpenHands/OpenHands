@@ -47,31 +47,28 @@ describe("buildRouterModel", () => {
 });
 
 describe("collectRequiredRouterModelNames", () => {
-  it("combines table names with classifier and default, de-duplicated", () => {
+  it("combines table names with the classifier, de-duplicated", () => {
     expect(
       collectRequiredRouterModelNames({
         classifier_model: "MiniMax-M3",
-        default_model: "router-default",
         model_table: "- GPT-5.4 stats\n- MiniMax-M3 stats",
       }),
-    ).toEqual(["GPT-5.4", "MiniMax-M3", "router-default"]);
+    ).toEqual(["GPT-5.4", "MiniMax-M3"]);
   });
 
-  it("de-duplicates classifier/default against table names case-insensitively", () => {
+  it("de-duplicates the classifier against table names case-insensitively", () => {
     expect(
       collectRequiredRouterModelNames({
         classifier_model: "minimax-m3",
-        default_model: "ROUTER-DEFAULT",
-        model_table: "- MiniMax-M3 stats\n- router-default stats",
+        model_table: "- MiniMax-M3 stats",
       }),
-    ).toEqual(["MiniMax-M3", "router-default"]);
+    ).toEqual(["MiniMax-M3"]);
   });
 
-  it("ignores blank classifier/default and empty tables", () => {
+  it("ignores a blank classifier and empty tables", () => {
     expect(
       collectRequiredRouterModelNames({
         classifier_model: "",
-        default_model: null,
         model_table: null,
       }),
     ).toEqual([]);

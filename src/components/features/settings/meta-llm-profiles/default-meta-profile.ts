@@ -77,7 +77,6 @@ Task:
 
 export const DEFAULT_MAX_SCORE_PARETO_META_PROFILE_DEFAULT: MetaProfile = {
   classifier_model: "minimax-m3",
-  default_model: "minimax-m3",
   classes: [],
   prompt_template: DEFAULT_MAX_SCORE_PARETO_META_PROFILE_PROMPT,
   model_table: DEFAULT_MAX_SCORE_PARETO_META_PROFILE_MODEL_TABLE,
@@ -135,7 +134,6 @@ Return ONLY JSON: {"model": "<exact model name>", "reason": "<short reason>"}`;
 
 export const DEFAULT_MIN_COST_PARETO_META_PROFILE_DEFAULT: MetaProfile = {
   classifier_model: "minimax-m3",
-  default_model: "minimax-m3",
   classes: [],
   prompt_template: DEFAULT_MIN_COST_PARETO_META_PROFILE_PROMPT,
   model_table: DEFAULT_MAX_SCORE_PARETO_META_PROFILE_MODEL_TABLE,

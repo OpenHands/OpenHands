@@ -25,7 +25,6 @@ const CONNECTIONS = [
 
 const FILLED: MetaProfile = {
   classifier_model: "minimax",
-  default_model: "gpt",
   classes: [],
   prompt_template:
     "Return JSON with the best model.\n{{ model_table }}\nTask:\n{{ instance_text }}",
@@ -52,9 +51,6 @@ describe("MetaProfileEditor", () => {
       DEFAULT_MAX_SCORE_PARETO_META_PROFILE_NAME,
     );
     expect(screen.getByTestId("meta-profile-classifier-input")).toHaveValue(
-      "minimax-m3",
-    );
-    expect(screen.getByTestId("meta-profile-default-input")).toHaveValue(
       "minimax-m3",
     );
     expect(screen.getByTestId("meta-profile-prompt-template")).toHaveValue(

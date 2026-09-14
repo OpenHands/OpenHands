@@ -25,7 +25,6 @@ const orgId = "org-1";
 const base = `${backend.host}/api/organizations/${orgId}/meta-profiles`;
 const config: MetaProfile = {
   classifier_model: "classifier",
-  default_model: "default",
   prompt_template: "Route {{ instance_text }}",
   model_table: null,
 };

@@ -54,7 +54,6 @@ interface MetaProfileEditorProps {
 
 const EMPTY_CONFIG: MetaProfile = {
   classifier_model: "",
-  default_model: "",
   prompt_template: "",
   model_table: "",
 };
@@ -70,7 +69,6 @@ ${INSTANCE_TEXT_PLACEHOLDER_TEXT}`;
 
 const normalizeConfig = (config?: MetaProfile): MetaProfile => ({
   classifier_model: config?.classifier_model ?? "",
-  default_model: config?.default_model ?? "",
   classes: [],
   prompt_template: config?.prompt_template ?? "",
   model_table: config?.model_table ?? "",
@@ -163,7 +161,6 @@ export function MetaProfileEditor({
     nameValid &&
     !isDuplicateName &&
     config.classifier_model.trim().length > 0 &&
-    config.default_model.trim().length > 0 &&
     INSTANCE_TEXT_PLACEHOLDER.test(config.prompt_template ?? "");
 
   const handleProviderConnectionSaved = (connection: ProviderConnection) => {
@@ -181,7 +178,6 @@ export function MetaProfileEditor({
       name.trim(),
       {
         classifier_model: config.classifier_model.trim(),
-        default_model: config.default_model.trim(),
         classes: [],
         prompt_template: (config.prompt_template ?? "").trim(),
         model_table: config.model_table?.trim() || null,
@@ -241,30 +237,6 @@ export function MetaProfileEditor({
         />
         <p className="text-xs text-[var(--oh-muted)]">
           {t(I18nKey.SETTINGS$META_PROFILE_CLASSIFIER_HELP)}
-        </p>
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <SettingsDropdownInput
-          testId="meta-profile-default-input"
-          name="default_model"
-          label={t(I18nKey.SETTINGS$META_PROFILE_DEFAULT)}
-          items={profileItems}
-          defaultSelectedKey={startingConfig.default_model || undefined}
-          allowsCustomValue
-          isDisabled={isSaving}
-          onInputChange={(value) =>
-            setConfig((prev) => ({ ...prev, default_model: value }))
-          }
-          onSelectionChange={(key) =>
-            setConfig((prev) => ({
-              ...prev,
-              default_model: key ? String(key) : "",
-            }))
-          }
-        />
-        <p className="text-xs text-[var(--oh-muted)]">
-          {t(I18nKey.SETTINGS$META_PROFILE_DEFAULT_HELP)}
         </p>
       </div>
 

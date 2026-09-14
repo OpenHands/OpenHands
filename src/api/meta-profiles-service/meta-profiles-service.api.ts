@@ -2,7 +2,7 @@
  * MetaProfilesService wraps the agent-server's ``/api/meta-profiles`` endpoints
  * (added in software-agent-sdk PR #4287). A meta-profile is a model-routing
  * configuration consumed by the ``route_task_to_model`` tool: it names a
- * ``classifier_model``, a ``default_model`` and a direct ``prompt_template``
+ * ``classifier_model`` and a direct ``prompt_template``
  * whose returned ``model`` value is matched to saved LLM profile names.
  *
  * Transport goes through the SDK's typed ``MetaProfilesClient`` (mirroring how
@@ -38,8 +38,6 @@ export interface MetaProfileClass {
 export interface MetaProfile {
   /** Name of the saved LLM profile used to classify the task. */
   classifier_model: string;
-  /** Name of the saved LLM profile to use when routing fails or no label matches. */
-  default_model: string;
   /** Structured classes are kept for backend compatibility, but this UI writes direct prompt profiles. */
   classes?: MetaProfileClass[];
   /** Direct-routing prompt template. Must include ``{{ instance_text }}`` when set. */
@@ -51,7 +49,6 @@ export interface MetaProfile {
 export interface MetaProfileInfo {
   name: string;
   classifier_model: string | null;
-  default_model: string | null;
   num_classes: number;
 }
 

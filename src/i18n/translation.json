@@ -5626,40 +5626,6 @@
     "uk": "Профіль LLM, що використовується для класифікації кожного завдання перед маршрутизацією.",
     "ca": "Perfil LLM utilitzat per classificar cada tasca abans de l’encaminament."
   },
-  "SETTINGS$META_PROFILE_DEFAULT": {
-    "en": "Default model",
-    "ja": "デフォルトモデル",
-    "zh-CN": "默认模型",
-    "zh-TW": "預設模型",
-    "ko-KR": "기본 모델",
-    "no": "Standardmodell",
-    "it": "Modello predefinito",
-    "pt": "Modelo padrão",
-    "es": "Modelo predeterminado",
-    "ar": "النموذج الافتراضي",
-    "fr": "Modèle par défaut",
-    "tr": "Varsayılan model",
-    "de": "Standardmodell",
-    "uk": "Типова модель",
-    "ca": "Model predeterminat"
-  },
-  "SETTINGS$META_PROFILE_DEFAULT_HELP": {
-    "en": "LLM profile used when no task class matches.",
-    "ja": "一致するタスククラスがない場合に使う LLM プロファイルです。",
-    "zh-CN": "没有任务类别匹配时使用的 LLM 配置文件。",
-    "zh-TW": "沒有任務類別相符時使用的 LLM 設定檔。",
-    "ko-KR": "일치하는 작업 클래스가 없을 때 사용하는 LLM 프로필입니다.",
-    "no": "LLM-profilen som brukes når ingen oppgaveklasse matcher.",
-    "it": "Profilo LLM usato quando nessuna classe di attività corrisponde.",
-    "pt": "Perfil de LLM usado quando nenhuma classe de tarefa corresponde.",
-    "es": "Perfil de LLM usado cuando no coincide ninguna clase de tarea.",
-    "ar": "ملف LLM المستخدم عندما لا تتطابق أي فئة مهمة.",
-    "fr": "Profil LLM utilisé lorsqu’aucune classe de tâche ne correspond.",
-    "tr": "Hiçbir görev sınıfı eşleşmediğinde kullanılan LLM profili.",
-    "de": "LLM-Profil, das verwendet wird, wenn keine Aufgabenklasse passt.",
-    "uk": "Профіль LLM, який використовується, коли жоден клас завдань не збігається.",
-    "ca": "Perfil LLM utilitzat quan no coincideix cap classe de tasca."
-  },
   "SETTINGS$META_PROFILE_CLASSES": {
     "en": "Task classes",
     "ja": "タスククラス",
@@ -14874,7 +14840,6 @@
     "uk": "Повідомлено користувацькі метадані завдання.",
     "ca": "S'han informat metadades personalitzades de la tasca."
   },
-
   "AUTOMATIONS$DETAIL$VIEW_CONVERSATION_FOR_RUN": {
     "en": "View conversation for run at {{timestamp}}",
     "ja": "{{timestamp}} の実行の会話を表示",
@@ -14892,7 +14857,6 @@
     "uk": "Переглянути розмову для запуску о {{timestamp}}",
     "ca": "Mostra la conversa de l'execució a {{timestamp}}"
   },
-
   "AUTOMATIONS$DETAIL$PHASE": {
     "ar": "المرحلة",
     "ca": "Fase",

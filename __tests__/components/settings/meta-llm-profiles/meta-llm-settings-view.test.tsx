@@ -34,13 +34,11 @@ const mockMetaProfiles = [
   {
     name: "balanced",
     classifier_model: "minimax",
-    default_model: "gpt",
     num_classes: 0,
   },
   {
     name: "cheap",
     classifier_model: "minimax",
-    default_model: "deepseek",
     num_classes: 0,
   },
 ];
@@ -236,7 +234,6 @@ describe("MetaLlmSettingsView", () => {
 
     expect(screen.getByTestId("meta-profile-name-input")).toHaveValue("");
     expect(screen.getByTestId("meta-profile-classifier-input")).toHaveValue("");
-    expect(screen.getByTestId("meta-profile-default-input")).toHaveValue("");
     expect(screen.getByTestId("meta-profile-prompt-template")).toHaveValue("");
     expect(screen.getByTestId("meta-profile-model-table")).toHaveValue("");
     // Custom profiles default to "don't create profiles".
@@ -253,7 +250,7 @@ describe("MetaLlmSettingsView", () => {
     await openMaxScoreTemplate(user);
     await user.click(screen.getByTestId("meta-profile-save"));
 
-    // Every model in the built-in table (plus classifier/default) that is not
+    // Every model in the built-in table (plus the classifier) that is not
     // already a saved profile is created, linked to the connection.
     const expectedNames = collectRequiredRouterModelNames(
       DEFAULT_MAX_SCORE_PARETO_META_PROFILE_DEFAULT,
@@ -295,9 +292,6 @@ describe("MetaLlmSettingsView", () => {
     fireEvent.change(screen.getByTestId("meta-profile-classifier-input"), {
       target: { value: "minimax" },
     });
-    fireEvent.change(screen.getByTestId("meta-profile-default-input"), {
-      target: { value: "gpt" },
-    });
     fireEvent.change(screen.getByTestId("meta-profile-prompt-template"), {
       target: { value: "Task:\n{{ instance_text }}" },
     });
@@ -311,7 +305,6 @@ describe("MetaLlmSettingsView", () => {
         name: "pareto",
         config: {
           classifier_model: "minimax",
-          default_model: "gpt",
           classes: [],
           prompt_template: "Task:\n{{ instance_text }}",
           model_table: null,
@@ -333,9 +326,6 @@ describe("MetaLlmSettingsView", () => {
     await user.type(screen.getByTestId("meta-profile-name-input"), "pareto");
     fireEvent.change(screen.getByTestId("meta-profile-classifier-input"), {
       target: { value: "minimax" },
-    });
-    fireEvent.change(screen.getByTestId("meta-profile-default-input"), {
-      target: { value: "gpt" },
     });
     fireEvent.change(screen.getByTestId("meta-profile-prompt-template"), {
       target: { value: "Task:\n{{ instance_text }}" },
@@ -368,7 +358,6 @@ describe("MetaLlmSettingsView", () => {
       name: "balanced",
       config: {
         classifier_model: "minimax",
-        default_model: "gpt",
         classes: [],
         prompt_template: "Route this task.\n{{ instance_text }}",
         model_table: "- GPT-5.4",
