@@ -1,5 +1,5 @@
 import { http, HttpResponse, type JsonBodyType } from "msw";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   __resetActiveStoreForTests,
   setActiveSelection,
@@ -50,6 +50,13 @@ const cloudBackend: Backend = {
 };
 
 beforeEach(() => {
+  // MSW normalizes an empty method to GET, whereas native fetch rejects it.
+  // Check the browser-facing options while retaining the real MSW transport.
+  const fetch = globalThis.fetch;
+  vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+    expect(init?.method).toBe("GET");
+    return fetch(input, init);
+  });
   window.localStorage.clear();
   __resetActiveStoreForTests();
   setRegisteredBackends([cloudBackend]);
@@ -57,6 +64,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   window.localStorage.clear();
   __resetActiveStoreForTests();
 });
