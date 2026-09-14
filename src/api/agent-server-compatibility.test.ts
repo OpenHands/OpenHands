@@ -266,3 +266,12 @@ describe("SDK HTTP error classification", () => {
     );
   });
 });
+
+it.each([undefined, "unknown"])(
+  "does not display an absent or unknown SDK version: %s",
+  (version) => {
+    expect(
+      getDisplayAgentServerSdkVersion(serverInfo(version, version)),
+    ).toBeNull();
+  },
+);
