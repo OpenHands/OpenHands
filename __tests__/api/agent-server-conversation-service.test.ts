@@ -890,9 +890,7 @@ describe("AgentServerConversationService", () => {
           "conv-malformed-tags",
         ]);
 
-      // ``acp_server`` is the surfaced field on AppConversation; tags is
-      // only on DirectConversationInfo. Asserting both via this read
-      // path keeps the test honest end-to-end.
+      expect(conversation?.tags).toEqual({ acpserver: "codex" });
       expect(conversation?.acp_server).toBe("codex");
     });
   });
@@ -1045,11 +1043,10 @@ describe("AgentServerConversationService", () => {
       expect(requests).toHaveLength(1);
       const [request] = requests;
       expect(request.method).toBe("POST");
-      expect(request.url).toBe(
-        `${cloudBackend.host}/api/v1/app-conversations`,
-      );
+      expect(request.url).toBe(`${cloudBackend.host}/api/v1/app-conversations`);
       expect(request.headers.authorization).toBe("Bearer bearer-token");
       expect(request.body).toMatchObject({
+        trigger: "gui",
         parent_conversation_id: "parent-conv-1",
         agent_type: "plan",
         sandbox_id: "sandbox-9",
@@ -1198,9 +1195,8 @@ describe("AgentServerConversationService", () => {
       setActiveSelection({ backendId: cloudBackend.id });
       const proxyRequests = captureRequests(["post"], {});
       server.use(
-        http.get(
-          "https://app.all-hands.dev/api/v1/app-conversations",
-          () => HttpResponse.json([]),
+        http.get("https://app.all-hands.dev/api/v1/app-conversations", () =>
+          HttpResponse.json([]),
         ),
       );
 
@@ -2372,10 +2368,8 @@ describe("AgentServerConversationService", () => {
         setActiveSelection({ backendId: cloudBackend.id });
         const proxyRequests = captureRequests(["post"], {});
         server.use(
-          http.get(
-            "https://app.all-hands.dev/api/v1/app-conversations",
-            () =>
-              HttpResponse.json([{ id: "conv-cloud", ...cloudConversation }]),
+          http.get("https://app.all-hands.dev/api/v1/app-conversations", () =>
+            HttpResponse.json([{ id: "conv-cloud", ...cloudConversation }]),
           ),
         );
 
