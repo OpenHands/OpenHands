@@ -984,6 +984,22 @@ describe("client tool observation dispatch", () => {
     expect(mocks.resolveVisualizerBody).not.toHaveBeenCalled();
   });
 
+  it("keeps legacy Canvas observations on the normal visualizer path", () => {
+    const event = createObservationEvent(
+      observationOf("CanvasUIObservation", { content: [], is_error: false }),
+      { tool_name: CANVAS_UI_CLIENT_TOOL_NAME },
+    );
+    const action = createActionEvent(
+      actionOf("CanvasUIAction", { command: "open_file" }),
+      { tool_name: CANVAS_UI_CLIENT_TOOL_NAME },
+    );
+    mocks.resolveVisualizerBody.mockReturnValue("legacy visualizer details");
+    expect(getEventContent(event, action).details).toBe(
+      "legacy visualizer details",
+    );
+    expect(mocks.resolveVisualizerBody).toHaveBeenCalledWith(event, action);
+  });
+
   it.each([undefined, "unrelated-tool"])(
     "keeps generic details without a matching Canvas action (%s)",
     (toolName) => {
