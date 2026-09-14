@@ -1,4 +1,4 @@
-import { http, HttpResponse } from "msw";
+import { http, HttpResponse, type JsonBodyType } from "msw";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   __resetActiveStoreForTests,
@@ -20,7 +20,10 @@ import { server } from "#/mocks/node";
 // ultimately issue, then responds with the supplied payload.
 type CapturedRequest = { request: Request | null };
 
-function interceptCloudGit(endpoint: string, payload: unknown): CapturedRequest {
+function interceptCloudGit(
+  endpoint: string,
+  payload: JsonBodyType,
+): CapturedRequest {
   const captured: CapturedRequest = { request: null };
   server.use(
     http.get(`*/api/v1/git/${endpoint}/search`, ({ request }) => {
@@ -75,6 +78,7 @@ describe("getCloudRepositoryBranches", () => {
     // Assert
     const request = requestOf(captured);
     expect(request.method).toBe("GET");
+    expect(request.headers.get("authorization")).toBe("Bearer bearer-token");
     expect(Object.fromEntries(new URL(request.url).searchParams)).toEqual({
       provider: "github",
       repository: "hieptl/hieptl",
