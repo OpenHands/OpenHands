@@ -14434,23 +14434,6 @@
     "uk": "Вимкнено вручну",
     "ca": "Desactivada manualment"
   },
-  "AUTOMATIONS$DETAIL$DISABLED_AUTO": {
-    "en": "Paused automatically",
-    "ja": "自動的に一時停止しました",
-    "zh-CN": "已自动暂停",
-    "zh-TW": "已自動暫停",
-    "ko-KR": "자동으로 일시 중지됨",
-    "no": "Satt på pause automatisk",
-    "it": "Messa in pausa automaticamente",
-    "pt": "Pausada automaticamente",
-    "es": "Pausada automáticamente",
-    "ar": "تم إيقافها مؤقتًا تلقائيًا",
-    "fr": "Mise en pause automatiquement",
-    "tr": "Otomatik olarak duraklatıldı",
-    "de": "Automatisch pausiert",
-    "uk": "Автоматично призупинено",
-    "ca": "Posada en pausa automàticament"
-  },
   "AUTOMATIONS$DETAIL$DISABLED_REASON_HEADING": {
     "en": "Why this is paused",
     "ja": "一時停止の理由",
