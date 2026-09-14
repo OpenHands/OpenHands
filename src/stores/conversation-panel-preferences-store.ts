@@ -1,18 +1,26 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import {
+  DEFAULT_OLDER_CONVERSATION_CUTOFF,
+  isOlderConversationCutoff,
   type AutomationFilterMode,
   type ConversationSortField,
+  type OlderConversationCutoff,
   type ThreadScope,
 } from "#/components/features/conversation-panel/conversation-panel-list-helpers";
 
 /**
  * User-toggleable display preferences for the sidebar conversation list
- * filter menu. These are intentionally persisted to localStorage (via the
- * same `zustand/persist` pattern used by `home-store` and `workspaces-store`)
- * so the menu state survives full reloads.
+ * (the layouts menu and the advanced-options modal behind it). These are
+ * intentionally persisted to localStorage (via the same `zustand/persist`
+ * pattern used by `home-store` and `workspaces-store`) so the menu state
+ * survives full reloads.
  *
- * To add a new preference exposed by the filter menu:
+ * Every persisted narrowing field must have a control that can see and undo
+ * it, or a reload silently hides conversations with nothing on screen to say
+ * why — see `ConversationActiveTagFilters`.
+ *
+ * To add a new preference exposed by those menus:
  *   1. Add a field here with a sensible default in `initialState`.
  *   2. Add matching `setX`/`toggleX` actions below.
  *   3. Read/write through the store in `conversation-panel.tsx`.
@@ -21,6 +29,11 @@ import {
  */
 interface ConversationPanelPreferencesState {
   showOlderConversations: boolean;
+  /**
+   * Age threshold used when `showOlderConversations` is false. Conversations
+   * last updated before this interval are hidden.
+   */
+  olderConversationCutoff: OlderConversationCutoff;
   showArchivedConversations: boolean;
   showRepoBranchMetadata: boolean;
   showLlmProfiles: boolean;
@@ -39,12 +52,40 @@ interface ConversationPanelPreferencesState {
   threadScope: ThreadScope;
   automationFilterMode: AutomationFilterMode;
   selectedAutomationNames: string[];
+  selectedTagFacets: string[];
   groupFolderOrder: string[];
 }
+
+/** The complete preference bundle controlled by conversation layout presets. */
+export type LayoutSettingsSlice = Pick<
+  ConversationPanelPreferencesState,
+  | "groupByContainer"
+  | "groupByWorkspace"
+  | "conversationSort"
+  | "threadScope"
+  | "showOlderConversations"
+  | "showRepoBranchMetadata"
+  | "showLlmProfiles"
+  | "showTagsMetadata"
+  | "showHoverMetadata"
+>;
+
+export const DEFAULT_LAYOUT_SETTINGS: LayoutSettingsSlice = {
+  groupByContainer: false,
+  groupByWorkspace: false,
+  conversationSort: "updated",
+  threadScope: "all",
+  showOlderConversations: true,
+  showRepoBranchMetadata: false,
+  showLlmProfiles: false,
+  showTagsMetadata: true,
+  showHoverMetadata: true,
+};
 
 interface ConversationPanelPreferencesActions {
   setShowOlderConversations: (value: boolean) => void;
   toggleShowOlderConversations: () => void;
+  setOlderConversationCutoff: (value: OlderConversationCutoff) => void;
   setShowArchivedConversations: (value: boolean) => void;
   toggleShowArchivedConversations: () => void;
   setShowRepoBranchMetadata: (value: boolean) => void;
@@ -63,6 +104,18 @@ interface ConversationPanelPreferencesActions {
   setThreadScope: (value: ThreadScope) => void;
   setAutomationFilterMode: (value: AutomationFilterMode) => void;
   toggleAutomationName: (name: string) => void;
+  /**
+   * Clears both facet selections (tags and automation names) — the two
+   * narrowings the active-filter strip renders as chips.
+   *
+   * Deliberately leaves `automationFilterMode` alone: the strip shows no chip
+   * for the mode, and it must not silently switch a surface it doesn't show.
+   * The mode keeps its own rows in the advanced-options modal.
+   */
+  clearFilterSelections: () => void;
+  toggleTagFacet: (facet: string) => void;
+  /** Applies a layout preset's partial bundle in one set(). */
+  applyLayoutSettings: (settings: Partial<LayoutSettingsSlice>) => void;
   setGroupFolderOrder: (order: readonly string[]) => void;
 }
 
@@ -70,18 +123,12 @@ type ConversationPanelPreferencesStore = ConversationPanelPreferencesState &
   ConversationPanelPreferencesActions;
 
 const initialState: ConversationPanelPreferencesState = {
-  showOlderConversations: true,
+  ...DEFAULT_LAYOUT_SETTINGS,
+  olderConversationCutoff: DEFAULT_OLDER_CONVERSATION_CUTOFF,
   showArchivedConversations: false,
-  showRepoBranchMetadata: false,
-  showLlmProfiles: false,
-  showTagsMetadata: false,
-  showHoverMetadata: true,
-  groupByContainer: false,
-  groupByWorkspace: false,
-  conversationSort: "updated",
-  threadScope: "all",
   automationFilterMode: "all",
   selectedAutomationNames: [],
+  selectedTagFacets: [],
   groupFolderOrder: [],
 };
 
@@ -96,6 +143,12 @@ export const useConversationPanelPreferencesStore =
         toggleShowOlderConversations: () =>
           set((state) => ({
             showOlderConversations: !state.showOlderConversations,
+          })),
+        setOlderConversationCutoff: (value) =>
+          set(() => ({
+            olderConversationCutoff: isOlderConversationCutoff(value)
+              ? value
+              : DEFAULT_OLDER_CONVERSATION_CUTOFF,
           })),
 
         setShowArchivedConversations: (value) =>
@@ -146,7 +199,14 @@ export const useConversationPanelPreferencesStore =
           set(() => ({ conversationSort: value })),
         setThreadScope: (value) => set(() => ({ threadScope: value })),
         setAutomationFilterMode: (value) =>
-          set(() => ({ automationFilterMode: value })),
+          set((state) => ({
+            automationFilterMode: value,
+            // Name selections only make sense in only-automations mode;
+            // leaving the mode clears them (self-healing — a stale selection
+            // must never silently narrow an unfiltered-looking list).
+            selectedAutomationNames:
+              value === "only-automations" ? state.selectedAutomationNames : [],
+          })),
         toggleAutomationName: (name) =>
           set((state) => ({
             selectedAutomationNames: state.selectedAutomationNames.includes(
@@ -157,15 +217,59 @@ export const useConversationPanelPreferencesStore =
                 )
               : [...state.selectedAutomationNames, name],
           })),
+        clearFilterSelections: () =>
+          set(() => ({
+            selectedTagFacets: [],
+            selectedAutomationNames: [],
+          })),
+        toggleTagFacet: (facet) =>
+          set((state) => ({
+            selectedTagFacets: state.selectedTagFacets.includes(facet)
+              ? state.selectedTagFacets.filter((existing) => existing !== facet)
+              : [...state.selectedTagFacets, facet],
+          })),
         setGroupFolderOrder: (order) =>
           set(() => ({ groupFolderOrder: [...order] })),
+
+        applyLayoutSettings: (settings) => set(() => ({ ...settings })),
       }),
       {
         name: "conversation-panel-preferences",
         storage: createJSONStorage(() => localStorage),
+        // Preserve the previous single-axis grouped preference when upgrading
+        // to the two independent toggles. Explicit new toggle values always
+        // win once they have been persisted by this version.
+        merge: (persistedState, currentState) => {
+          const persisted = persistedState as
+            | (Partial<ConversationPanelPreferencesState> & {
+                organizeMode?: unknown;
+              })
+            | undefined;
+          if (!persisted) {
+            return currentState;
+          }
+          const { organizeMode, ...preferences } = persisted;
+          return {
+            ...currentState,
+            ...preferences,
+            groupByContainer:
+              typeof preferences.groupByContainer === "boolean"
+                ? preferences.groupByContainer
+                : false,
+            groupByWorkspace:
+              typeof preferences.groupByWorkspace === "boolean"
+                ? preferences.groupByWorkspace
+                : organizeMode === "grouped",
+          };
+        },
         // Only persist the data fields — actions are recreated on each load.
         partialize: (state): ConversationPanelPreferencesState => ({
           showOlderConversations: state.showOlderConversations,
+          olderConversationCutoff: isOlderConversationCutoff(
+            state.olderConversationCutoff,
+          )
+            ? state.olderConversationCutoff
+            : DEFAULT_OLDER_CONVERSATION_CUTOFF,
           showArchivedConversations: state.showArchivedConversations,
           showRepoBranchMetadata: state.showRepoBranchMetadata,
           showLlmProfiles: state.showLlmProfiles,
@@ -177,6 +281,7 @@ export const useConversationPanelPreferencesStore =
           threadScope: state.threadScope,
           automationFilterMode: state.automationFilterMode,
           selectedAutomationNames: state.selectedAutomationNames,
+          selectedTagFacets: state.selectedTagFacets,
           groupFolderOrder: state.groupFolderOrder,
         }),
       },

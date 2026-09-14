@@ -99,6 +99,10 @@ describe("getDisplayConversationTags", () => {
         repo: "other/repo",
         workspace: "/tmp/ws",
         working_dir: "/tmp/wd",
+        automationtrigger: "cron",
+        automationid: "3f2b6c1e-1111-4222-8333-abcdefabcdef",
+        automationname: "Nightly Audit",
+        automationrunid: "run-0001",
       }),
     ).toEqual([
       ["origin", "slack"],
@@ -127,7 +131,7 @@ describe("getDisplayConversationTags", () => {
     expect(getDisplayConversationTags(undefined)).toEqual([]);
   });
 
-  it("drops blank and whitespace-only tag values", () => {
+  it("keeps bare tags (empty value) but drops whitespace-only values", () => {
     expect(
       getDisplayConversationTags({
         appmode: "work",
@@ -138,6 +142,7 @@ describe("getDisplayConversationTags", () => {
     ).toEqual([
       ["appmode", "work"],
       ["owner", "alice"],
+      ["worktools", ""],
     ]);
   });
 });
@@ -201,6 +206,10 @@ describe("getConversationTagLabel", () => {
   it("humanizes unknown snake_case keys", () => {
     expect(humanizeConversationTagKey("my_custom_tag")).toBe("My custom tag");
     expect(getConversationTagLabel("owner", t)).toBe("Owner");
+  });
+
+  it("shows the label alone for bare tags (empty value)", () => {
+    expect(formatConversationTagTooltip("work", "", t)).toBe("Work");
   });
 
   it("labels origin and source by their own names, not Git", () => {

@@ -5,38 +5,40 @@ import {
   dropdownMenuRowClassName,
   dropdownMenuRowIconClassName,
 } from "#/utils/dropdown-classes";
+import { ToggleSwitchVisual } from "#/ui/toggle-switch";
 
 export function MenuRow({
   icon: Icon,
   label,
+  sublabel,
   selected,
-  variant = "radio",
   onClick,
   testId,
   disabled,
+  destructive,
+  variant = "radio",
 }: {
   icon: React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
   label: string;
+  /** Muted second line under the label (e.g. a threshold hint). */
+  sublabel?: string;
   selected?: boolean;
-  /**
-   * `"radio"` (default) is a row that's part of a mutually exclusive group
-   * (picking one clears the others — e.g. Sort by). `"checkbox"` is an
-   * independently toggleable row (e.g. the #15607 grouping toggles) that
-   * doesn't imply anything about sibling rows.
-   */
-  variant?: "radio" | "checkbox";
   onClick: () => void;
   testId?: string;
   disabled?: boolean;
+  /** Destructive action rows (delete/reset) render in the danger color. */
+  destructive?: boolean;
+  /**
+   * "radio" rows mark selection with a checkmark (mutually exclusive
+   * groups); "toggle" rows render a switch pill for independent on/off
+   * preferences that stay put after clicking (modal-style menus).
+   */
+  variant?: "radio" | "toggle";
 }) {
-  // Rows that show a selection checkmark are toggleable preferences, so they
-  // get `role="menuitemradio"` when they're part of a mutually exclusive
-  // group and `role="menuitemcheckbox"` when each row toggles independently.
-  // A row with no `selected` state at all falls back to plain `menuitem`.
   const role =
     selected === undefined
       ? "menuitem"
-      : variant === "checkbox"
+      : variant === "toggle"
         ? "menuitemcheckbox"
         : "menuitemradio";
   return (
@@ -50,15 +52,34 @@ export function MenuRow({
       className={cn(
         "group",
         dropdownMenuRowClassName,
-        "text-[var(--oh-foreground)] disabled:opacity-50",
+        "disabled:opacity-50",
+        destructive ? "text-danger" : "text-[var(--oh-foreground)]",
       )}
     >
       <Icon
-        className={cn("h-3.5 w-3.5", dropdownMenuRowIconClassName)}
+        className={cn(
+          "h-3.5 w-3.5",
+          dropdownMenuRowIconClassName,
+          destructive &&
+            "text-danger group-hover:text-danger group-focus-visible:text-danger",
+        )}
         aria-hidden
       />
-      <span className="min-w-0 flex-1 truncate">{label}</span>
-      {selected ? (
+      <span className="min-w-0 flex-1">
+        <span className="block truncate">{label}</span>
+        {sublabel ? (
+          <span className="block truncate text-[10px] text-[var(--oh-muted)]/70">
+            {sublabel}
+          </span>
+        ) : null}
+      </span>
+      {selected === undefined ? null : variant === "toggle" ? (
+        <ToggleSwitchVisual
+          enabled={Boolean(selected)}
+          size="sm"
+          className="ml-auto"
+        />
+      ) : selected ? (
         <Check
           className="ml-auto h-3.5 w-3.5 shrink-0 text-white"
           aria-hidden

@@ -2,6 +2,7 @@ import { CustomChatInput } from "./custom-chat-input";
 import { useBtwInterceptor } from "#/hooks/chat/use-btw-interceptor";
 import { useGoalInterceptor } from "#/hooks/chat/use-goal-interceptor";
 import { useModelInterceptor } from "#/hooks/chat/use-model-interceptor";
+import { usePlanModeInterceptor } from "#/hooks/chat/use-plan-mode-interceptor";
 import { useChatAttachmentUpload } from "#/hooks/chat/use-chat-attachment-upload";
 import { AgentState } from "#/types/agent-state";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
@@ -52,7 +53,15 @@ export function InteractiveChatBox({
     onSubmit(message, imagesToEmbed, [...files, ...imagesAsFiles]);
     clearAllFiles();
   });
-  const handleAfterModel = useGoalInterceptor(conversationId, handleAfterGoal);
+  const handleAfterPlanMode = usePlanModeInterceptor(
+    conversationId,
+    curAgentState,
+    handleAfterGoal,
+  );
+  const handleAfterModel = useGoalInterceptor(
+    conversationId,
+    handleAfterPlanMode,
+  );
   const handleSubmit = useModelInterceptor(conversationId, handleAfterModel);
 
   const handleSuggestionsClick = (suggestion: string) => {
