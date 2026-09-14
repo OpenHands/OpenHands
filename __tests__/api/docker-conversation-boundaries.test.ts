@@ -1,3 +1,5 @@
+import i18n from "#/i18n";
+import { I18nKey } from "#/i18n/declaration";
 import AgentServerGitService from "#/api/git-service/agent-server-git-service.api";
 import { beforeEach, describe, expect, it } from "vitest";
 import { http, HttpResponse } from "msw";
@@ -8,10 +10,7 @@ import {
 } from "#/api/backend-registry/active-store";
 import { clearCachedAgentServerInfo } from "#/api/agent-server-compatibility";
 import { clearAgentServerHomeDirCache } from "#/api/agent-server-home";
-import {
-  resolveNewConversationWorkspace,
-  ISOLATED_WORKSPACE_MESSAGE,
-} from "#/api/conversation-workspace";
+import { resolveNewConversationWorkspace } from "#/api/conversation-workspace";
 import GitService from "#/api/git-service/git-service.api";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import AgentServerRuntimeService from "#/api/runtime-service/agent-server-runtime-service";
@@ -117,7 +116,7 @@ describe("conversation runtime boundaries", () => {
     async (workingDir) => {
       await expect(
         resolveNewConversationWorkspace({ conversationId: cid, workingDir }),
-      ).rejects.toThrow(ISOLATED_WORKSPACE_MESSAGE);
+      ).rejects.toThrow(i18n.t(I18nKey.HOME$ISOLATED_WORKSPACE_NOTICE));
       expect(paths).toEqual(["/server_info"]);
     },
   );
@@ -128,7 +127,26 @@ describe("conversation runtime boundaries", () => {
         conversationId: cid,
         selectedRepository: "owner/project",
       }),
-    ).rejects.toThrow(ISOLATED_WORKSPACE_MESSAGE);
+    ).rejects.toThrow(i18n.t(I18nKey.HOME$ISOLATED_WORKSPACE_NOTICE));
+  });
+
+  it("uses the active language for workspace rejection errors", async () => {
+    const originalLanguage = i18n.language;
+    const notice = "Ce backend utilise des espaces de travail isolés.";
+    i18n.addResourceBundle("fr", "openhands", {
+      [I18nKey.HOME$ISOLATED_WORKSPACE_NOTICE]: notice,
+    });
+    try {
+      await i18n.changeLanguage("fr");
+      await expect(
+        resolveNewConversationWorkspace({
+          conversationId: cid,
+          selectedRepository: "owner/project",
+        }),
+      ).rejects.toThrow(notice);
+    } finally {
+      await i18n.changeLanguage(originalLanguage);
+    }
   });
 
   it("preserves a Docker child conversation's parent workspace", async () => {
