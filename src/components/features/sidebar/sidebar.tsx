@@ -192,6 +192,7 @@ export function Sidebar() {
     isExtensionsActive,
     currentPath,
     activeBackend: active.backend,
+    activeOrgId: active.orgId,
     activeBackendHealth,
     collapsedBackendPopoverOpen,
     setCollapsedBackendPopoverOpen,

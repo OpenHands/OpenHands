@@ -15,10 +15,6 @@ vi.mock("#/hooks/query/use-settings", () => ({
   useSettings: () => ({ data: { user_consents_to_analytics: true } }),
 }));
 
-vi.mock("#/hooks/query/use-automation-sdk-version", () => ({
-  useAutomationSdkVersion: () => null,
-}));
-
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string) => {

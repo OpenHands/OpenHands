@@ -13,10 +13,6 @@ vi.mock("#/hooks/query/use-settings", () => ({
   useSettings: () => ({ data: undefined }),
 }));
 
-vi.mock("#/hooks/query/use-automation-sdk-version", () => ({
-  useAutomationSdkVersion: () => null,
-}));
-
 describe("Canvas telemetry delivery", () => {
   afterEach(async () => {
     await clearTelemetryData();
