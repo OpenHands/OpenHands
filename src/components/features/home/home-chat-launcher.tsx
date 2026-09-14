@@ -1,6 +1,9 @@
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
+// Deterministic toast ID ensures the loading toast is always dismissed,
+// even if handleSubmit fires multiple times before isPending updates.
+const CREATING_CONVERSATION_TOAST_ID = "creating-conversation";
 import { CustomChatInput } from "#/components/features/chat/custom-chat-input";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
@@ -136,16 +139,16 @@ export function HomeChatLauncher() {
     }
 
     // Loading toast gives the user a clear signal that the request is in
-    // flight; dismissed precisely once the mutation resolves.
-    const toastId = toast.loading(
-      t(I18nKey.HOME$CREATING_CONVERSATION),
-      TOAST_OPTIONS,
-    );
+    // flight; dismissed in a finally block so it always executes regardless
+    // of which code path throws or returns early.
+    toast.loading(t(I18nKey.HOME$CREATING_CONVERSATION), {
+      ...TOAST_OPTIONS,
+      id: CREATING_CONVERSATION_TOAST_ID,
+    });
 
     void (async () => {
       try {
         const data = await createConversation(variables);
-        toast.dismiss(toastId);
         try {
           sessionStorage.removeItem(HOME_PROMPT_DRAFT_KEY);
         } catch {
@@ -215,8 +218,9 @@ export function HomeChatLauncher() {
 
         navigate(`/conversations/${targetConversationId}`);
       } catch (error) {
-        toast.dismiss(toastId);
         displayErrorToast(error instanceof Error ? error.message : null);
+      } finally {
+        toast.dismiss(CREATING_CONVERSATION_TOAST_ID);
       }
     })();
   };
