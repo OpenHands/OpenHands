@@ -9,6 +9,7 @@ import {
   getConversationSettingValue,
   getSettingValue,
   getVisibleSettingsSections,
+  hasCriticalSettings,
   hasAdvancedSettings,
   hasAdvancedSettingsOverrides,
   hasMinorSettings,
@@ -16,6 +17,7 @@ import {
   isSettingsFieldVisible,
   isValidSettingsSchema,
   normalizeFieldValue,
+  normalizeComparableValue,
   SPECIALLY_RENDERED_KEYS,
 } from "#/utils/sdk-settings-schema";
 import { DEFAULT_SETTINGS } from "#/services/settings";
@@ -1234,6 +1236,9 @@ describe("sdk settings schema helpers", () => {
         getMockField({ key: "minor", prominence: "minor" }),
       ]);
 
+      expect(hasCriticalSettings(null)).toBe(false);
+      expect(hasCriticalSettings(getMockSchema([]))).toBe(false);
+      expect(hasCriticalSettings(schema)).toBe(true);
       expect(hasAdvancedSettings(null)).toBe(false);
       expect(hasMinorSettings(null)).toBe(false);
       expect(hasAdvancedSettings(getMockSchema([]))).toBe(false);
@@ -1253,10 +1258,17 @@ describe("sdk settings schema helpers", () => {
         getMockField({ key: "minor", prominence: "minor" }),
       ]);
 
+      expect(hasCriticalSettings(criticalOnly)).toBe(true);
+      expect(hasCriticalSettings(majorOnly)).toBe(false);
+      expect(hasCriticalSettings(minorOnly)).toBe(false);
       expect(hasAdvancedSettings(criticalOnly)).toBe(false);
       expect(hasAdvancedSettings(majorOnly)).toBe(true);
       expect(hasMinorSettings(criticalOnly)).toBe(false);
       expect(hasMinorSettings(minorOnly)).toBe(true);
     });
   });
+});
+
+it("normalizes missing initial values for comparison", () => {
+  expect(normalizeComparableValue(getMockField({ key: "initial" }), undefined)).toBeNull();
 });
