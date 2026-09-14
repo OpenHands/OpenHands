@@ -70,24 +70,25 @@ export function ConversationName() {
     setTitleMode("edit");
   };
 
-  const handleBlur = () => {
-    if (inputRef.current?.value && conversationId) {
+    const handleBlur = () => {
+    if (inputRef.current && conversationId) {
       const trimmed = inputRef.current.value.trim();
-      if (trimmed !== conversation?.title) {
-        updateConversation(
-          { conversationId, newTitle: trimmed },
-          {
-            onSuccess: () => {
-              displaySuccessToast(t(I18nKey.CONVERSATION$TITLE_UPDATED));
+      if (trimmed) {
+        if (trimmed !== conversation?.title) {
+          updateConversation(
+            { conversationId, newTitle: trimmed },
+            {
+              onSuccess: () => {
+                displaySuccessToast(t(I18nKey.CONVERSATION$TITLE_UPDATED));
+              },
             },
-          },
-        );
+          );
+        }
+      } else {
+        // reset the value if it's empty or only whitespace
+        inputRef.current.value = conversation?.title ?? "";
       }
-    } else if (inputRef.current) {
-      // reset the value if it's empty
-      inputRef.current.value = conversation?.title ?? "";
     }
-
     setTitleMode("view");
   };
 
