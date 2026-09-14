@@ -47,6 +47,7 @@ const socketCapture = vi.hoisted(() => ({
   queueMessage: vi.fn(),
   readConversationFile: vi.fn(),
   trackError: vi.fn(),
+  launchChild: vi.fn(),
 }));
 
 const historyCapture = vi.hoisted(() => ({
@@ -91,6 +92,11 @@ vi.mock("#/hooks/mutation/use-read-conversation-file", () => ({
   useReadConversationFile: () => ({
     mutate: socketCapture.readConversationFile,
   }),
+}));
+
+vi.mock("#/services/child-conversation-launch", () => ({
+  handleLaunchChildConversationAction: (...args: unknown[]) =>
+    socketCapture.launchChild(...args),
 }));
 
 vi.mock("#/utils/error-handler", () => ({
@@ -314,6 +320,7 @@ describe("Conversation websocket behavior", () => {
     socketCapture.queueMessage.mockReset().mockResolvedValue(undefined);
     socketCapture.readConversationFile.mockReset();
     socketCapture.trackError.mockReset();
+    socketCapture.launchChild.mockReset().mockResolvedValue(undefined);
     historyCapture.result = {
       data: { events: [] },
       isPending: false,
@@ -1692,6 +1699,129 @@ describe("Conversation websocket behavior", () => {
     act(() => planningOptions().onError?.(new Event("error")));
 
     expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+  });
+
+  it.each(["main", "planning"])(
+    "flushes %s streaming deltas on the next frame and clears connection errors",
+    (source) => {
+      let frame: FrameRequestCallback | undefined;
+      vi.spyOn(window, "requestAnimationFrame").mockImplementation(
+        (callback) => {
+          frame = callback;
+          return 1;
+        },
+      );
+      renderProvider({ subConversations: [makeSubConversation()] });
+      useErrorMessageStore
+        .getState()
+        .setErrorMessage("disconnected", "connection");
+      const dispatch = source === "main" ? dispatchMain : dispatchPlanning;
+      dispatch({
+        ...baseEvent("delta", "agent"),
+        kind: "StreamingDeltaEvent",
+        content: "Streaming",
+        reasoning_content: null,
+      });
+      expect(useEventStore.getState().eventIds.has("delta")).toBe(false);
+      act(() => {
+        if (!frame) throw new Error("Missing scheduled flush");
+        frame(0);
+      });
+      expect(useEventStore.getState().uiEvents).toEqual([
+        expect.objectContaining({
+          kind: "StreamingDeltaEvent",
+          content: "Streaming",
+          ...(source === "planning" ? { isFromPlanningAgent: true } : {}),
+        }),
+      ]);
+      expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+    },
+  );
+
+  it("flushes planning deltas before later events and ignores replayed error side effects", () => {
+    vi.spyOn(window, "requestAnimationFrame").mockReturnValue(1);
+    renderProvider({ subConversations: [makeSubConversation()] });
+    dispatchPlanning({
+      ...baseEvent("delta-plan", "agent"),
+      kind: "StreamingDeltaEvent",
+      content: "Planning",
+      reasoning_content: null,
+    });
+    const classification = {
+      kind: "auth",
+      retryable: false,
+      user_action: "settings",
+    };
+    const error = {
+      ...baseEvent("planning-error"),
+      kind: "ConversationErrorEvent",
+      code: "Auth",
+      detail: "Credentials rejected",
+      classification,
+    };
+    dispatchPlanning(error);
+    expect(useEventStore.getState().uiEvents[0]).toMatchObject({
+      kind: "StreamingDeltaEvent",
+      content: "Planning",
+      isFromPlanningAgent: true,
+    });
+    expect(useErrorMessageStore.getState().errorClassification).toEqual(
+      classification,
+    );
+    expect(socketCapture.trackError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        classification,
+        source: "planning_conversation",
+      }),
+    );
+    dispatchPlanning(error);
+    expect(socketCapture.trackError).toHaveBeenCalledTimes(1);
+  });
+
+  it("forwards the child-launch action with the parent and tool-call IDs", () => {
+    renderProvider();
+    const action = {
+      kind: "ClientAction_launch_child_conversation",
+      target: "local",
+      task: "Inspect tests",
+    };
+    dispatchMain(
+      makeActionEvent("launch", action, "launch_child_conversation"),
+    );
+    expect(socketCapture.launchChild).toHaveBeenCalledWith(
+      action,
+      "conv-main",
+      "call-launch",
+    );
+  });
+
+  it("combines multiple LLM costs and preserves the first non-null budget", () => {
+    renderProvider();
+    dispatchMain(
+      makeStateEvent("multi-metrics", "stats", {
+        usage_to_metrics: {
+          first: {
+            accumulated_cost: 1,
+            max_budget_per_task: null,
+            accumulated_token_usage: null,
+          },
+          second: {
+            accumulated_cost: 2,
+            max_budget_per_task: 10,
+            accumulated_token_usage: null,
+          },
+          third: {
+            accumulated_cost: 3,
+            max_budget_per_task: 20,
+            accumulated_token_usage: null,
+          },
+        },
+      }),
+    );
+    expect(useMetricsStore.getState()).toMatchObject({
+      cost: 6,
+      max_budget_per_task: 10,
+    });
   });
 
   it("routes planning-agent events to the shared conversation experience", () => {
