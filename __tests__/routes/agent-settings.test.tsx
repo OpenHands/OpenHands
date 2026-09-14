@@ -3,6 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { getAcpProvider as getClientAcpProvider } from "@openhands/typescript-client";
 import {
   AgentSettingsScreen,
   type AgentSettingsSaveControl,
@@ -11,6 +12,9 @@ import SettingsService from "#/api/settings-service/settings-service.api";
 import { SecretsService } from "#/api/secrets-service";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import { Settings } from "#/types/settings";
+
+const CLAUDE_COMMAND = getClientAcpProvider("claude-code")!.default_command;
+const CODEX_COMMAND = getClientAcpProvider("codex")!.default_command;
 
 // Stub the login-detection probe so the ACP credentials section doesn't spin a
 // subprocess; default to no detected session so existing tests are unaffected.
@@ -550,10 +554,7 @@ describe("AgentSettingsScreen", () => {
       "agent-command-input",
     ) as HTMLTextAreaElement;
     await user.clear(commandInput);
-    await user.type(
-      commandInput,
-      "npx -y @agentclientprotocol/codex-acp@1.10.0",
-    );
+    await user.type(commandInput, CODEX_COMMAND.join(" "));
 
     // The model field now reflects the Codex default, not the stale Claude one.
     expect(screen.getByLabelText("SETTINGS$AGENT_MODEL")).toHaveValue(
@@ -597,9 +598,7 @@ describe("AgentSettingsScreen", () => {
     const commandInput = (await screen.findByTestId(
       "agent-command-input",
     )) as HTMLTextAreaElement;
-    expect(commandInput.value).toBe(
-      "npx -y @agentclientprotocol/claude-agent-acp@0.63.0",
-    );
+    expect(commandInput.value).toBe(CLAUDE_COMMAND.join(" "));
     expect(screen.getByLabelText("SETTINGS$AGENT_MODEL")).toHaveValue(
       "Claude Opus (1M)",
     );
@@ -791,9 +790,7 @@ describe("AgentSettingsScreen", () => {
     const cmd = (await screen.findByTestId(
       "agent-command-input",
     )) as HTMLTextAreaElement;
-    expect(cmd.value).toBe(
-      "npx -y @agentclientprotocol/claude-agent-acp@0.63.0 --extra-arg",
-    );
+    expect(cmd.value).toBe(`${CLAUDE_COMMAND.join(" ")} --extra-arg`);
 
     // Make a real edit so Save enables, then submit. The payload must
     // carry the registry-default prefix the user can SEE in the textarea,
@@ -810,9 +807,7 @@ describe("AgentSettingsScreen", () => {
     };
     expect(call.agent_settings_diff?.acp_server).toBe("custom");
     expect(call.agent_settings_diff?.acp_command).toEqual([
-      "npx",
-      "-y",
-      "@agentclientprotocol/claude-agent-acp@0.63.0",
+      ...CLAUDE_COMMAND,
       "--extra-arg",
       "--saved",
     ]);
