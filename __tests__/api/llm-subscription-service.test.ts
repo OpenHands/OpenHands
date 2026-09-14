@@ -1,5 +1,6 @@
 import { http, HttpResponse } from "msw";
-import { beforeEach, describe, expect, it } from "vitest";
+import { AgentServerClient } from "@openhands/typescript-client/clients";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import LLMSubscriptionService from "#/api/llm-subscription-service";
 import {
   getActiveSelection,
@@ -19,6 +20,27 @@ import { resetTestHandlersMockSettings } from "#/mocks/settings-handlers";
 describe("LLMSubscriptionService", () => {
   beforeEach(() => {
     resetTestHandlersMockSettings();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("uses an explicit GET request and closes the client after fetching models", async () => {
+    const request = vi
+      .spyOn(AgentServerClient.prototype, "request")
+      .mockResolvedValue({ models: [] });
+    const close = vi.spyOn(AgentServerClient.prototype, "close");
+
+    await expect(LLMSubscriptionService.getOpenAIModels()).resolves.toEqual([]);
+
+    expect(request).toHaveBeenCalledWith({
+      method: "GET",
+      path: OPENAI_SUBSCRIPTION_MODELS_PATH,
+      body: undefined,
+      responseType: "json",
+    });
+    expect(close).toHaveBeenCalledOnce();
   });
 
   it("fetches OpenAI subscription models from the agent-server endpoint", async () => {
