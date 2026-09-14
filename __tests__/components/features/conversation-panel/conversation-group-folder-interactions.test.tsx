@@ -260,6 +260,21 @@ describe("conversation group folder interactions", () => {
     expect(callbacks.onTogglePreviewExpanded).toHaveBeenCalledOnce();
   });
 
+  it("keeps newly discovered conversations visible beyond the collapsed preview", () => {
+    renderRow({
+      conversations: createConversations(7),
+      props: {
+        expanded: true,
+        discoveryConversationIds: new Set(["conversation-6", "conversation-7"]),
+      },
+    });
+    expect(
+      screen
+        .getAllByTestId("conversation-card")
+        .map((card) => card.textContent),
+    ).toEqual(["Conversation conversation-6", "Conversation conversation-7"]);
+  });
+
   it("keeps an active conversation visible beyond the collapsed preview", () => {
     renderRow({
       conversations: createConversations(6),
