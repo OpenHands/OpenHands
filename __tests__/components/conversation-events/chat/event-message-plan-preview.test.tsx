@@ -122,6 +122,62 @@ describe("EventMessage - PlanPreview rendering", () => {
     expect(container.firstChild).toBeNull();
   });
 
+  it("prefers an explicit showPlanPreview value over the legacy set", () => {
+    const event = createPlanningObservationEvent("plan-obs-1");
+    const planPreviewEventIds = new Set(["plan-obs-1"]);
+
+    const { container } = renderWithProviders(
+      <EventMessage
+        event={event}
+        messages={[]}
+        isLastMessage={false}
+        isInLast10Actions={false}
+        planPreviewEventIds={planPreviewEventIds}
+        showPlanPreview={false}
+      />,
+    );
+
+    expect(screen.queryByTestId("plan-preview")).not.toBeInTheDocument();
+    expect(container.firstChild).toBeNull();
+  });
+
+  it("rerenders when the memoized wrapper stops being the live tail", () => {
+    const event = createPlanningObservationEvent("plan-obs-1");
+    vi.mocked(usePlanningAgentState).mockReturnValue({
+      localPlanningConversationId: "planner-1",
+      curPlanningAgentState: AgentState.RUNNING,
+      isPlanningAgentRunning: true,
+    });
+
+    const { rerender } = renderWithProviders(
+      <EventMessage
+        event={event}
+        correspondingAction={null}
+        isLastMessage
+        isInLast10Actions
+        showPlanPreview
+      />,
+    );
+    expect(screen.getByTestId("plan-preview")).toHaveAttribute(
+      "data-is-streaming",
+      "true",
+    );
+
+    rerender(
+      <EventMessage
+        event={event}
+        correspondingAction={null}
+        isLastMessage={false}
+        isInLast10Actions
+        showPlanPreview
+      />,
+    );
+    expect(screen.getByTestId("plan-preview")).toHaveAttribute(
+      "data-is-streaming",
+      "false",
+    );
+  });
+
   it("should use planContent from conversation store", () => {
     const event = createPlanningObservationEvent("plan-obs-1");
     const planPreviewEventIds = new Set(["plan-obs-1"]);

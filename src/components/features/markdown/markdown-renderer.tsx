@@ -1,3 +1,4 @@
+import React from "react";
 import Markdown, { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
@@ -131,7 +132,7 @@ interface MarkdownRendererProps {
  * - includeHeadings: adds h1-h6 heading components
  * - components prop: allows custom overrides or additional components
  */
-export function MarkdownRenderer({
+function MarkdownRendererComponent({
   children,
   content,
   components: customComponents,
@@ -187,3 +188,8 @@ export function MarkdownRenderer({
     </div>
   );
 }
+
+// Parsing markdown and highlighting fenced code are expensive for long chat
+// histories. Keep unchanged bodies stable while their surrounding message
+// wrappers respond to tail, grouping, and conversation-state updates.
+export const MarkdownRenderer = React.memo(MarkdownRendererComponent);
