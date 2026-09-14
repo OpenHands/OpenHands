@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => ({
   canManage: true,
   navigate: vi.fn(),
   useAutomations: vi.fn(),
+  useAutomationRunSummaries: vi.fn(),
   toggle: vi.fn(),
   remove: vi.fn(),
   dispatch: vi.fn(),
@@ -76,7 +77,10 @@ vi.mock("#/context/navigation-context", () => ({
 }));
 
 vi.mock("#/hooks/query/use-automation-run-summaries", () => ({
-  useAutomationRunSummaries: () => ({}),
+  useAutomationRunSummaries: (automations: Automation[], options: unknown) => {
+    mocks.useAutomationRunSummaries(automations, options);
+    return {};
+  },
 }));
 
 vi.mock("#/hooks/query/use-automation-health", () => ({
@@ -504,6 +508,17 @@ beforeEach(() => {
 });
 
 describe("automations list states", () => {
+  it("keeps per-automation run queries disabled for the plain list", () => {
+    const automations = [makeAutomation()];
+    mocks.automationsState.data = { automations, total: 1 };
+
+    renderList();
+
+    expect(mocks.useAutomationRunSummaries).toHaveBeenCalledWith(automations, {
+      enabled: false,
+    });
+  });
+
   it("shows health-check placeholders and waits to enable the list query", () => {
     mocks.healthState.data = undefined;
     mocks.healthState.isLoading = true;
