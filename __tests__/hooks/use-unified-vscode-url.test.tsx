@@ -1,9 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { I18nextProvider } from "react-i18next";
+import { I18nextProvider, initReactI18next } from "react-i18next";
 import i18n from "i18next";
-import { initReactI18next } from "react-i18next";
 import React from "react";
 import { useUnifiedVSCodeUrl } from "#/hooks/query/use-unified-vscode-url";
 import { batchGetCloudSandboxes } from "#/api/cloud/sandbox-service.api";
@@ -148,8 +147,9 @@ const VSCODE_BASE_PATH = "/vscode";
 
 beforeEach(() => {
   vi.resetAllMocks();
-  (window as unknown as Record<string, unknown>).__AGENT_CANVAS_VSCODE_BASE_PATH__ =
-    VSCODE_BASE_PATH;
+  (
+    window as unknown as Record<string, unknown>
+  ).__AGENT_CANVAS_VSCODE_BASE_PATH__ = VSCODE_BASE_PATH;
   mockUseConversationId.mockReturnValue({ conversationId: "conv-123" });
   vi.mocked(useRuntimeIsReady).mockReturnValue(true);
   vi.mocked(useActiveConversation).mockReturnValue({
@@ -596,10 +596,12 @@ describe("useUnifiedVSCodeUrl", () => {
     // fire — that is the whole point of gating on the probe — and the control
     // reports itself unavailable instead of erroring.
     vi.mocked(useActiveBackend).mockReturnValue(localBackend);
-    vi.mocked(AgentServerConversationService.getVSCodeStatus).mockResolvedValue({
-      enabled: false,
-      running: true,
-    });
+    vi.mocked(AgentServerConversationService.getVSCodeStatus).mockResolvedValue(
+      {
+        enabled: false,
+        running: true,
+      },
+    );
 
     const { result } = renderHook(() => useUnifiedVSCodeUrl(), {
       wrapper: createWrapper(),
@@ -614,10 +616,12 @@ describe("useUnifiedVSCodeUrl", () => {
     // `running: false` alongside `enabled: true` is a terminal failed-start,
     // not a startup race, so the URL request is still withheld.
     vi.mocked(useActiveBackend).mockReturnValue(localBackend);
-    vi.mocked(AgentServerConversationService.getVSCodeStatus).mockResolvedValue({
-      enabled: true,
-      running: false,
-    });
+    vi.mocked(AgentServerConversationService.getVSCodeStatus).mockResolvedValue(
+      {
+        enabled: true,
+        running: false,
+      },
+    );
 
     const { result } = renderHook(() => useUnifiedVSCodeUrl(), {
       wrapper: createWrapper(),
@@ -698,5 +702,20 @@ describe("useUnifiedVSCodeUrl", () => {
     });
 
     expect(result.current.isLoading).toBe(true);
+  });
+  it("reports capability-probe failures without treating them as unavailable editors", async () => {
+    const error = new Error("Unauthorized capability probe");
+    vi.mocked(useActiveBackend).mockReturnValue(localBackend);
+    vi.mocked(AgentServerConversationService.getVSCodeStatus).mockRejectedValue(
+      error,
+    );
+    const { result } = renderHook(() => useUnifiedVSCodeUrl(), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error).toBe(error);
+    expect(result.current.isUnavailable).toBe(false);
+    expect(AgentServerConversationService.getVSCodeUrl).not.toHaveBeenCalled();
+    expect(ConversationService.getVSCodeUrl).not.toHaveBeenCalled();
   });
 });
