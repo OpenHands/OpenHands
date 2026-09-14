@@ -121,6 +121,44 @@ describe("LlmNotConfiguredBanner", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows a specific message when the active LLM profile is missing its API key", async () => {
+    // Arrange: profile exists and is selected, but its key was cleared.
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({ llm_api_key_set: false }),
+    );
+    vi.spyOn(ProfilesService, "listProfiles").mockResolvedValue({
+      profiles: [
+        {
+          name: "active-profile",
+          model: "openai/gpt-4.1",
+          base_url: null,
+          api_key_set: false,
+        },
+      ],
+      active_profile: "active-profile",
+    });
+    vi.spyOn(ProfilesService, "getProfile").mockResolvedValue({
+      name: "active-profile",
+      api_key_set: false,
+      config: {
+        model: "openai/gpt-4.1",
+      },
+    });
+
+    // Act
+    renderBanner();
+
+    // Assert
+    const banner = await screen.findByTestId("home-llm-not-configured-banner");
+    expect(banner).toBeInTheDocument();
+    expect(banner).toHaveTextContent(
+      "HOME$LLM_MISSING_ACTIVE_PROFILE_KEY_MESSAGE",
+    );
+    expect(
+      screen.getByTestId("home-llm-not-configured-action"),
+    ).toHaveTextContent("HOME$LLM_MISSING_ACTIVE_PROFILE_KEY_ACTION");
+  });
+
   it("stays hidden once an active LLM profile has a saved API key", async () => {
     // Arrange: the profile endpoint is the source of truth for the active
     // profile shown in LLM settings, even if the legacy settings flag is stale.
