@@ -6,9 +6,11 @@ import {
 import { useFilesTabStore } from "#/stores/files-tab-store";
 import type { CanvasUIAction } from "#/types/agent-server/core";
 import { toFilesTabPath } from "#/utils/path-utils";
+import { useLivePreviewStore } from "#/stores/live-preview-store";
 
 const VALID_TABS: ReadonlySet<ConversationTab> = new Set<ConversationTab>([
   "files",
+  "preview",
   "browser",
   "terminal",
   "planner",
@@ -69,7 +71,13 @@ export function handleCanvasUIAction(
       return;
     }
     case "open_tab":
-      if (action.tab === "vscode") {
+      if (action.tab === "preview") {
+        const path = action.path?.trim();
+        if (path && conversationId) {
+          useLivePreviewStore.getState().setRequestedPath(conversationId, path);
+        }
+        navigateToTab("preview");
+      } else if (action.tab === "vscode") {
         // The in-app VS Code tab was removed — on cloud backends VS Code
         // now opens in a new browser window via the link in the drawer tab
         // row. Route agent requests to Files so the drawer still opens.

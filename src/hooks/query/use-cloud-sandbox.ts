@@ -2,7 +2,17 @@ import { useQuery } from "@tanstack/react-query";
 import { batchGetCloudSandboxes } from "#/api/cloud/sandbox-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 
-export const useCloudSandbox = (sandboxId: string | null | undefined) => {
+export interface UseCloudSandboxOptions {
+  /** Poll until the cloud runtime reports a forwarded worker URL. */
+  pollForWorkerUrls?: boolean;
+}
+
+const WORKER_URL_PREFIX = "WORKER_";
+
+export const useCloudSandbox = (
+  sandboxId: string | null | undefined,
+  options: UseCloudSandboxOptions = {},
+) => {
   const active = useActiveBackend();
   const isCloud = active.backend.kind === "cloud";
 
@@ -14,7 +24,27 @@ export const useCloudSandbox = (sandboxId: string | null | undefined) => {
       return sandbox ?? null;
     },
     enabled: isCloud && !!sandboxId,
-    staleTime: 1000 * 60 * 5,
+    staleTime: options.pollForWorkerUrls ? 0 : 1000 * 60 * 5,
     gcTime: 1000 * 60 * 15,
+    refetchInterval: options.pollForWorkerUrls
+      ? (query) => {
+          const sandbox = query.state.data;
+          if (
+            !sandboxId ||
+            sandbox?.status === "ERROR" ||
+            sandbox?.status === "MISSING"
+          ) {
+            return false;
+          }
+          const hasWorkerUrl = sandbox?.exposed_urls?.some((url) =>
+            url.name.startsWith(WORKER_URL_PREFIX),
+          );
+          return hasWorkerUrl
+            ? false
+            : sandbox?.status === "RUNNING"
+              ? 1500
+              : 3000;
+        }
+      : false,
   });
 };

@@ -77,6 +77,7 @@ const DEFAULT_CONVERSATION_STATE: ConversationState = {
 
 const VALID_CONVERSATION_TABS: ReadonlySet<ConversationTab> = new Set([
   "files",
+  "preview",
   "commits",
   "browser",
   "terminal",
