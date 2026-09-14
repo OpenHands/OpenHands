@@ -18,6 +18,7 @@ import {
   stringRecord,
   toCanonicalMcpServer,
 } from "#/utils/mcp-config";
+import { flattenMcpConfig } from "#/utils/mcp-installed-servers";
 import type { MCPServerConfig } from "#/types/mcp-server";
 
 describe("REDACTED_MCP_SECRET_VALUE", () => {
@@ -273,6 +274,21 @@ describe("parseMcpConfig", () => {
   });
 });
 
+describe("canonical MCP configuration integration", () => {
+  // @spec MCP-003 — Settings map keys are stable MCP identities
+  it("preserves settings keys through parse and installed-server flattening", () => {
+    const config = parseMcpConfig({
+      github: { url: "https://github.example/mcp" },
+      filesystem: { command: "npx" },
+    });
+
+    expect(flattenMcpConfig(config).map(({ id }) => id).sort()).toEqual([
+      "filesystem",
+      "github",
+    ]);
+  });
+});
+
 describe("toCanonicalMcpServer", () => {
   it("serializes a full stdio server", () => {
     const server: MCPServerConfig = {
@@ -519,6 +535,7 @@ describe("buildMcpServerPatch", () => {
     });
   });
 
+  // @spec MCP-002 — Secret patches preserve user intent
   it("skips a redacted credential rather than persisting the mask", () => {
     const edited: MCPServerConfig = {
       id: "s",
@@ -551,6 +568,7 @@ describe("buildMcpServerPatch", () => {
     });
   });
 
+  // @spec MCP-002 — Secret patches preserve user intent
   it("patches header auth by merging headers", () => {
     const previous = {
       transport: "http",
@@ -570,6 +588,7 @@ describe("buildMcpServerPatch", () => {
     });
   });
 
+  // @spec MCP-002 — Secret patches preserve user intent
   it("throws when a header removal is attempted", () => {
     const previous = {
       transport: "http",
@@ -1005,6 +1024,7 @@ describe("buildRenameMcpConfigPatch", () => {
     ).toThrow(MCP_RENAME_CREDENTIAL_ERROR);
   });
 
+  // @spec MCP-003 — Settings map keys are stable MCP identities
   it("removes the old key and writes the merged server under the new key", () => {
     const previous = {
       transport: "http",
@@ -1040,6 +1060,7 @@ describe("buildRenameMcpConfigPatch", () => {
     });
   });
 
+  // @spec MCP-003 — Settings map keys are stable MCP identities
   it("preserves fields the edit does not touch", () => {
     const previous = {
       transport: "http",
