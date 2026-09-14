@@ -155,9 +155,7 @@ describe("useWebSocket connection lifecycle", () => {
   });
 
   it("handles messages and native errors without optional callbacks", () => {
-    const { result } = renderWebSocket(
-      "ws://acme.test/events",
-    );
+    const { result } = renderWebSocket("ws://acme.test/events");
     const socket = getSocket();
 
     act(() => socket.open());
@@ -172,10 +170,7 @@ describe("useWebSocket connection lifecycle", () => {
   });
 
   it("handles messages and native errors when options omit callbacks", () => {
-    const { result } = renderWebSocket(
-      "ws://acme.test/events",
-      {},
-    );
+    const { result } = renderWebSocket("ws://acme.test/events", {});
     const socket = getSocket();
 
     act(() => socket.open());
@@ -288,6 +283,22 @@ describe("useWebSocket messaging", () => {
 });
 
 describe("useWebSocket reconnection", () => {
+  it("adds nonzero jitter to successive retry delays", () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    renderWebSocket("ws://acme.test/events", { reconnect: { enabled: true } });
+    act(() => getSocket().emitClose(1011, "Restart"));
+    act(() => vi.advanceTimersByTime(1149));
+    expect(BrowserWebSocketDouble.instances).toHaveLength(1);
+    act(() => vi.advanceTimersByTime(1));
+    expect(BrowserWebSocketDouble.instances).toHaveLength(2);
+    act(() => getSocket().emitClose(1011, "Still restarting"));
+    act(() => vi.advanceTimersByTime(2299));
+    expect(BrowserWebSocketDouble.instances).toHaveLength(2);
+    act(() => vi.advanceTimersByTime(1));
+    expect(BrowserWebSocketDouble.instances).toHaveLength(3);
+  });
+
   it("automatically retries after the reconnect delay and resets state on success", () => {
     vi.useFakeTimers();
     // Pin the jitter to zero so the first backoff is exactly the 1s base delay.

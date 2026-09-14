@@ -213,7 +213,10 @@ function makeMessageEvent(
       >((text, index) =>
         index === 0
           ? [
-              { type: "image" as const, image_url: "data:image/png;base64,AA" },
+              {
+                type: "image" as const,
+                image_urls: ["data:image/png;base64,AA"],
+              },
               { type: "text" as const, text },
             ]
           : [{ type: "text" as const, text }],
