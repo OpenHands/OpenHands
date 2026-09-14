@@ -37,12 +37,26 @@ describe("getSdkMcpServerMap", () => {
     });
   });
 
-  it("drops a lone top-level server keyed as mcpServers", () => {
+  it("treats a server-shaped mcpServers value as a flat map, not a wrapper", () => {
     const urlServer = { mcpServers: { url: "https://meta.example" } };
     expect(getSdkMcpServerMap(urlServer)).toEqual(urlServer);
 
     const commandServer = { mcpServers: { command: "npx" } };
     expect(getSdkMcpServerMap(commandServer)).toEqual(commandServer);
+  });
+
+  it("keeps a server literally named mcpServers instead of discarding it", () => {
+    // Unwrapping a server-shaped `mcpServers` would strip the only name in the
+    // map, leaving `{ url: ... }` whose entries parse to nothing at all.
+    expect(
+      parseMcpConfig({ mcpServers: { url: "https://meta.example" } }),
+    ).toEqual({
+      mcpServers: { transport: "http", url: "https://meta.example" },
+    });
+
+    expect(parseMcpConfig({ mcpServers: { command: "npx" } })).toEqual({
+      mcpServers: { transport: "stdio", command: "npx" },
+    });
   });
 
   it("does not unwrap when mcpServers is not a record", () => {
@@ -75,7 +89,11 @@ describe("stringRecord", () => {
 });
 
 describe("hasRedactedMcpSecretLeaf", () => {
-  it("detects the redacted sentinel directly", () => {
+  it("detects the redaction marker the agent server actually sends", () => {
+    // The literal is the wire contract: the agent server replaces secrets with
+    // exactly this text, so matching it only symbolically would silently stop
+    // recognizing redacted values if the sentinel ever drifted.
+    expect(hasRedactedMcpSecretLeaf("**********")).toBe(true);
     expect(hasRedactedMcpSecretLeaf(REDACTED_MCP_SECRET_VALUE)).toBe(true);
   });
 
@@ -598,6 +616,11 @@ describe("buildMcpServerPatch", () => {
     expect(() => buildMcpServerPatch(previous, edited)).toThrow(
       MCP_HEADER_REMOVAL_ERROR,
     );
+    // Asserting against the constant alone would still pass if it were emptied,
+    // because `toThrow("")` matches any error. Pin the actionable wording too.
+    expect(() => buildMcpServerPatch(previous, edited)).toThrow(
+      /replace the credential/i,
+    );
   });
 
   it("creates a new oauth credential and drops redacted state leaves", () => {
@@ -1016,6 +1039,11 @@ describe("buildRenameMcpConfigPatch", () => {
     expect(() =>
       buildRenameMcpConfigPatch("old", "new", previous, edited),
     ).toThrow(MCP_RENAME_CREDENTIAL_ERROR);
+    // Asserting against the constant alone would still pass if it were emptied,
+    // because `toThrow("")` matches any error. Pin the actionable wording too.
+    expect(() =>
+      buildRenameMcpConfigPatch("old", "new", previous, edited),
+    ).toThrow(/before renaming this mcp server/i);
   });
 
   // @spec MCP-003 — Settings map keys are stable MCP identities
