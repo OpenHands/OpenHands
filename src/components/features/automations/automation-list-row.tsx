@@ -66,6 +66,8 @@ export function AutomationListRow({
   const isOwner = useIsAutomationOwner(automation);
   // Write actions on a specific automation: manage OR creator (escape hatch).
   const canManage = hasManagePermission || isOwner;
+  // Non-creators may turn an automation off but not back on.
+  const canToggle = automation.enabled ? canManage : isOwner;
 
   const handleView = () => {
     navigate?.(`/automations/${automation.id}`);
@@ -75,6 +77,7 @@ export function AutomationListRow({
     automation,
     t,
     canManage,
+    canToggle,
     onRunNow,
     isRunPending,
     onView: handleView,
