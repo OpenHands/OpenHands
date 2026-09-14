@@ -60,7 +60,7 @@ describe("substituteRedactedMcpCredentials", () => {
     // different key must never leak into the resolved secret.
     mockEncryptedMcpConfig({
       "stdio-0": { command: "npx", env: { TOKEN: "gAAAAA-alpha-token" } },
-      other: { command: "npx", env: { TOKEN: "gAAAAA-beta-token" } },
+      beta: { command: "npx", env: { TOKEN: "gAAAAA-beta-token" } },
     });
 
     const result = await substituteRedactedMcpCredentials(
@@ -592,5 +592,105 @@ describe("substituteRedactedMcpCredentials", () => {
       expect(await substituteRedactedMcpCredentials(server)).toBe(server);
     }
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("preserves fresh OAuth edits while substituting only redacted leaves", async () => {
+    vi.spyOn(SettingsService, "fetchSettingsFromApi").mockResolvedValue({
+      agent_settings: {
+        mcp_config: {
+          "shttp-0": {
+            url: "https://mcp.mail.superhuman.com/mcp",
+            auth: {
+              strategy: "oauth2",
+              state: {
+                tokens: {
+                  access_token: "gAAAAA-encrypted-access-token",
+                  refresh_token: "gAAAAA-encrypted-refresh-token",
+                },
+                client_info: {
+                  client_id: "old-client-id",
+                  client_secret: "gAAAAA-encrypted-client-secret",
+                },
+              },
+            },
+          },
+        },
+      },
+    } as unknown as SettingsApiResponse);
+
+    const result = await substituteRedactedMcpCredentials({
+      id: "shttp-0",
+      type: "shttp",
+      name: "superhuman-mail",
+      url: "https://mcp.mail.superhuman.com/mcp",
+      auth: {
+        strategy: "oauth2",
+        state: {
+          tokens: {
+            access_token: REDACTED_MCP_SECRET_VALUE,
+            refresh_token: REDACTED_MCP_SECRET_VALUE,
+          },
+          client_info: {
+            client_id: "new-client-id",
+            client_secret: REDACTED_MCP_SECRET_VALUE,
+          },
+        },
+      },
+    });
+
+    expect(result.auth).toEqual({
+      strategy: "oauth2",
+      state: {
+        tokens: {
+          access_token: "gAAAAA-encrypted-access-token",
+          refresh_token: "gAAAAA-encrypted-refresh-token",
+        },
+        client_info: {
+          client_id: "new-client-id",
+          client_secret: "gAAAAA-encrypted-client-secret",
+        },
+      },
+    });
+  });
+
+  it("preserves fresh header-auth edits while substituting only redacted leaves", async () => {
+    vi.spyOn(SettingsService, "fetchSettingsFromApi").mockResolvedValue({
+      agent_settings: {
+        mcp_config: {
+          mail: {
+            url: "https://mail.example/mcp",
+            auth: {
+              strategy: "header",
+              headers: {
+                "X-API-Key": "gAAAAA-encrypted-api-key",
+                "X-Region": "us-east-1",
+              },
+            },
+          },
+        },
+      },
+    } as unknown as SettingsApiResponse);
+
+    const result = await substituteRedactedMcpCredentials({
+      id: "mail",
+      type: "shttp",
+      name: "mail",
+      url: "https://mail.example/mcp",
+      auth: {
+        strategy: "header",
+        headers: {
+          "X-API-Key": REDACTED_MCP_SECRET_VALUE,
+          "X-Region": "eu-west-1",
+        },
+      },
+    });
+
+    expect(result.auth).toEqual({
+      strategy: "header",
+      headers: {
+        "X-API-Key": "gAAAAA-encrypted-api-key",
+        "X-Region": "eu-west-1",
+      },
+    });
   });
 });
