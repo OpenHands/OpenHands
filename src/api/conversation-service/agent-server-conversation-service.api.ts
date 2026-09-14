@@ -966,6 +966,15 @@ class AgentServerConversationService {
     return requireAppConversation(conversation, conversationId);
   }
 
+  static async replaceConversationTags(
+    conversationId: string,
+    tags: Record<string, string>,
+  ): Promise<void> {
+    await new ConversationClient(
+      getAgentServerClientOptions(),
+    ).updateConversation(conversationId, { tags });
+  }
+
   /**
    * Replaces the conversation's complete server-side tag map (the PATCH is
    * replace-all, so callers must merge user edits with any reserved/internal
