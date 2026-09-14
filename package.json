@@ -190,7 +190,8 @@
     "dompurify": "3.4.14",
     "typed-rest-client": {
       "qs": "6.15.3"
-    }
+    },
+    "nanoid": "3.3.18"
   },
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
