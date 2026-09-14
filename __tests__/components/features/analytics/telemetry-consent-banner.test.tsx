@@ -50,7 +50,12 @@ vi.mock("#/contexts/active-backend-context", () => ({
 }));
 
 vi.mock("#/hooks/query/use-backends-health", () => ({
-  useBackendsHealth: () => mocks.health,
+  useBackendsHealth: (backends: Backend[]) =>
+    Object.fromEntries(
+      backends
+        .filter((backend) => mocks.health[backend.id])
+        .map((backend) => [backend.id, mocks.health[backend.id]]),
+    ),
 }));
 
 vi.mock("#/hooks/query/use-settings", () => ({
@@ -312,8 +317,6 @@ describe("telemetry consent banner", () => {
     render(<TelemetryConsentBanner />);
     advanceBy(50);
 
-    expect(
-      screen.getByTestId("confirm-telemetry-preferences"),
-    ).toBeDisabled();
+    expect(screen.getByTestId("confirm-telemetry-preferences")).toBeDisabled();
   });
 });
