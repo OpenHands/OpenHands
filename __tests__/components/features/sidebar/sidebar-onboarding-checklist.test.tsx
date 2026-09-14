@@ -132,6 +132,11 @@ describe("SidebarOnboardingChecklist", () => {
       screen.getByTestId("sidebar-onboarding-checklist-item-configure-llm"),
     ).toHaveAttribute("href", "/settings/llm");
     expect(
+      screen.getByTestId(
+        "sidebar-onboarding-checklist-item-configure-subscription-agent",
+      ),
+    ).toHaveAttribute("href", "/settings/agents");
+    expect(
       screen.getByTestId("sidebar-onboarding-checklist-item-connect-mcp"),
     ).toHaveAttribute("href", "/mcp");
     expect(
