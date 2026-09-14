@@ -59,5 +59,5 @@ export const useHandleWSEvents = () => {
         send(generateAgentStateChangeEvent(AgentState.PAUSED));
       }
     }
-  }, [events.length]);
+  }, [events.length, send]);
 };
