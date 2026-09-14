@@ -169,16 +169,21 @@ describe("agent-server compatibility errors", () => {
   it.each([
     new AgentServerUnavailableError(),
     { name: "AgentServerUnavailableError" },
+    { name: "AgentServerUnsupportedVersionError" },
+    { name: "AgentServerUnknownVersionError" },
   ])("recognizes unavailable error %#", (error) => {
     expect(isAgentServerUnavailableError(error)).toBe(true);
   });
 
-  it.each([null, "AgentServerUnavailableError", {}, { name: "AnotherError" }])(
-    "rejects unavailable lookalike %#",
-    (error) => {
-      expect(isAgentServerUnavailableError(error)).toBe(false);
-    },
-  );
+  it.each([
+    null,
+    "AgentServerUnavailableError",
+    {},
+    { name: "AnotherError" },
+    { name: "" },
+  ])("rejects unavailable lookalike %#", (error) => {
+    expect(isAgentServerUnavailableError(error)).toBe(false);
+  });
 
   it.each([
     new AgentServerUnsupportedVersionError("1.27.0"),

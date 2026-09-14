@@ -343,10 +343,15 @@ describe("loadAgentServerInfo", () => {
     expect(isAgentServerToolAvailable("browser_tool_set")).toBe(true);
   });
   it("returns cached server info only for the probed backend host", async () => {
+    expect(getCachedAgentServerInfo()).toBeNull();
     setRegisteredBackends([localBackend]);
     setActiveSelection({ backendId: localBackend.id });
 
     await loadAgentServerInfo();
+
+    expect(getCachedAgentServerInfo()).toEqual({
+      version: MINIMUM_COMPATIBLE_AGENT_SERVER_VERSION,
+    });
 
     expect(getCachedAgentServerInfo({ host: localBackend.host })).toMatchObject(
       {
@@ -390,6 +395,7 @@ describe("local backend validation", () => {
     },
   );
   it("translates an authentication failure and does not probe the server", async () => {
+    expect(INVALID_BACKEND_API_KEY_ERROR).toBe("Invalid API key");
     getSettingsMock.mockRejectedValue(httpError(401));
     await expect(validateLocalBackend(localBackend, 1000)).rejects.toThrow(
       INVALID_BACKEND_API_KEY_ERROR,
@@ -426,5 +432,9 @@ describe("cached display versions", () => {
     expect(getCachedAgentServerSdkVersion(localBackend.host)).toBe("9.8.7");
     expect(getCachedAgentServerVersion("http://elsewhere.test")).toBeNull();
     expect(getCachedAgentServerSdkVersion("http://elsewhere.test")).toBeNull();
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+    expect(getCachedAgentServerVersion(localBackend.host)).toBeNull();
+    expect(getCachedAgentServerSdkVersion(localBackend.host)).toBeNull();
   });
 });

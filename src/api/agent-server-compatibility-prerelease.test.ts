@@ -11,6 +11,7 @@ vi.mock("../../config/defaults.json", () => ({
 import {
   AgentServerUnsupportedVersionError,
   assertAgentServerVersionIsSupported,
+  compareAgentServerVersions,
   MINIMUM_COMPATIBLE_AGENT_SERVER_VERSION,
   type AgentServerInfo,
 } from "./agent-server-compatibility";
@@ -25,6 +26,11 @@ describe("agent-server prerelease minimum compatibility", () => {
     expect(() =>
       assertAgentServerVersionIsSupported(serverInfo("1.28.0")),
     ).not.toThrow();
+    expect(compareAgentServerVersions("1.28.0", "1.28.0-rc.2")).toBe(1);
+  });
+
+  it("normalizes decorated input versions through the public comparator", () => {
+    expect(compareAgentServerVersions(" v1.28.0+build.7 ", "1.28.0")).toBe(0);
   });
 
   it("compares prerelease identifiers at the configured version boundary", () => {
