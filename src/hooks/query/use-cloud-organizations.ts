@@ -7,15 +7,31 @@ import {
 import type { Backend } from "#/api/backend-registry/types";
 
 /**
- * Fetch organizations for every registered cloud backend in parallel.
+ * Fetch organizations for the active Cloud backend, with an opt-in for every
+ * registered Cloud backend when a UI needs to display environment choices.
  *
  * Used by the BackendSelector to flatten each cloud backend into per-org
  * rows. Each query is keyed by the backend ID so React Query caches
- * responses independently and a switch (which clears the cache) refetches.
+ * responses independently and a switch re-keys the active query.
  */
-export function useAllCloudOrganizations() {
-  const { backends } = useActiveBackendContext();
-  const cloudBackends = backends.filter((b) => b.kind === "cloud");
+export interface UseAllCloudOrganizationsOptions {
+  /**
+   * Fetch organizations for non-active Cloud backends too. Keep this off for
+   * always-mounted UI; callers such as the backend menu can enable it while
+   * the user is actively choosing another environment.
+   */
+  includeInactive?: boolean;
+}
+
+export function useAllCloudOrganizations(
+  options: UseAllCloudOrganizationsOptions = {},
+) {
+  const { includeInactive = false } = options;
+  const { backends, active } = useActiveBackendContext();
+  const cloudBackends = backends.filter(
+    (b) =>
+      b.kind === "cloud" && (includeInactive || b.id === active.backend.id),
+  );
 
   const queries = useQueries({
     queries: cloudBackends.map((backend) => ({

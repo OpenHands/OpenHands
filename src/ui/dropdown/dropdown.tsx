@@ -38,6 +38,7 @@ interface DropdownProps {
   openUpward?: boolean;
   hideTrigger?: boolean;
   defaultOpen?: boolean;
+  onOpenChange?: (isOpen: boolean) => void;
   /** Open the dropdown menu on hover instead of requiring a click. */
   openOnHover?: boolean;
   /** When false, the combobox placeholder uses normal (non-italic) type. */
@@ -61,6 +62,7 @@ export function Dropdown({
   openUpward = false,
   hideTrigger = false,
   defaultOpen = false,
+  onOpenChange,
   openOnHover = false,
   italicPlaceholder = true,
   fitContent = false,
@@ -117,6 +119,7 @@ export function Dropdown({
       isOpen: newIsOpen,
       selectedItem: currentSelectedItem,
     }) => {
+      onOpenChange?.(newIsOpen);
       if (newIsOpen) {
         // Clear the input on open so the user sees an empty search box
         // (with the placeholder reminding them of the current value)
