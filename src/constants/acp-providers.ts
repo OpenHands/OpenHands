@@ -144,44 +144,11 @@ const ACP_PROVIDER_UI: Record<
   },
 };
 
-const CODEX_ASTRA_MODEL: ACPModelOption = {
-  id: "gpt-6-astra",
-  label: "GPT-6 Astra",
-};
-// The pinned ``@openhands/typescript-client`` (1.39.0) still mirrors the
-// pre-Astra codex ``default_command`` (1.1.7), which the Codex ACP wrapper
-// rejects for ``gpt-6-astra``. Until that client release ships the upstream
-// fix, Canvas launches codex with the first tested Astra-compatible version.
-const CODEX_LEGACY_ACP_COMMAND = "npx -y @agentclientprotocol/codex-acp@1.1.7";
-const CODEX_ASTRA_ACP_VERSION = "@agentclientprotocol/codex-acp@1.10.0";
-const CODEX_ASTRA_COMMAND = ["npx", "-y", CODEX_ASTRA_ACP_VERSION];
-
-/**
- * Resolve codex's launch command from the SDK registry, applying the temporary
- * Astra shim only to the exact stale pin the pinned client reports. Any other
- * registry value (including a future ``1.10.0``-or-newer release)is
- * authoritative — so once upstream catches up, this shim stops firing and can
- * be deleted without a separate cleanup pass.
- */
-export function resolveCodexDefaultCommand(
-  registryCommand: readonly string[],
-): string[] {
-  if (registryCommand.join(" ") === CODEX_LEGACY_ACP_COMMAND) {
-    return [...CODEX_ASTRA_COMMAND];
-  }
-  return [...registryCommand];
-}
-
 function getAvailableModels(key: string): ACPModelOption[] | undefined {
-  const models = getClientAcpProvider(key)?.available_models?.map((model) => ({
+  return getClientAcpProvider(key)?.available_models?.map((model) => ({
     id: model.id,
     label: model.label,
   }));
-  if (key !== "codex") return models;
-  return [
-    CODEX_ASTRA_MODEL,
-    ...(models ?? []).filter(({ id }) => id !== CODEX_ASTRA_MODEL.id),
-  ];
 }
 
 /**
@@ -203,12 +170,7 @@ export const ACP_PROVIDERS: ACPProviderConfig[] = Object.entries(
   return {
     key,
     display_name: info?.display_name ?? key,
-    default_command:
-      key === "codex"
-        ? resolveCodexDefaultCommand(info?.default_command ?? [])
-        : info
-          ? [...info.default_command]
-          : [],
+    default_command: info ? [...info.default_command] : [],
     available_models: getAvailableModels(key),
     default_model: info?.default_model ?? undefined,
     description_key: ui.description_key,
