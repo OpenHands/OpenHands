@@ -12,6 +12,8 @@ export interface Backend {
   connectionRevision?: number;
 }
 
+export type BackendInput = Omit<Backend, "id" | "connectionRevision">;
+
 export interface BackendSelection {
   backendId: string;
   orgId?: string | null;

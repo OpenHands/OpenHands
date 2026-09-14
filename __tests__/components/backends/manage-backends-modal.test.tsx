@@ -148,6 +148,119 @@ afterEach(() => {
 });
 
 describe("ManageBackendsModal", () => {
+  it("warns about credentials before exporting the backend configuration", async () => {
+    const user = userEvent.setup();
+    const createObjectURL = vi
+      .spyOn(URL, "createObjectURL")
+      .mockReturnValue("blob:backend-export");
+    const revokeObjectURL = vi
+      .spyOn(URL, "revokeObjectURL")
+      .mockImplementation(() => undefined);
+    const downloadClick = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => undefined);
+
+    renderWithProviders(<ManageBackendsModal onClose={vi.fn()} />);
+
+    await user.click(await screen.findByTestId("manage-backends-export"));
+
+    expect(screen.getByText("BACKEND$EXPORT_WARNING")).toBeInTheDocument();
+    expect(createObjectURL).not.toHaveBeenCalled();
+
+    await user.click(screen.getByTestId("confirm-button"));
+
+    expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    expect(downloadClick).toHaveBeenCalledTimes(1);
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:backend-export");
+  });
+
+  it("imports a valid configuration by updating matching URLs and retaining existing backends", async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(
+      <TestSeed
+        onMount={(ctx) => {
+          ctx.addBackend({
+            name: "Existing",
+            host: "https://agents.example.com",
+            apiKey: "old-key",
+            kind: "local",
+          });
+        }}
+      >
+        <ManageBackendsModal onClose={vi.fn()} />
+      </TestSeed>,
+    );
+
+    const file = new File(
+      [
+        JSON.stringify({
+          version: 1,
+          backends: [
+            {
+              name: "Updated",
+              url: "https://agents.example.com/",
+              sessionApiKey: "new-key",
+              kind: "cloud",
+            },
+            {
+              name: "New backend",
+              url: "http://localhost:9000",
+              sessionApiKey: "new-backend-key",
+              kind: "local",
+            },
+          ],
+        }),
+      ],
+      "openhands-backends.json",
+      { type: "application/json" },
+    );
+
+    await user.upload(
+      await screen.findByTestId("manage-backends-import-input"),
+      file,
+    );
+
+    expect(
+      await screen.findByText("BACKEND$IMPORT_SUCCESS"),
+    ).toBeInTheDocument();
+    const stored = JSON.parse(
+      window.localStorage.getItem("openhands-backends") ?? "[]",
+    );
+    expect(stored).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "Updated",
+          host: "https://agents.example.com",
+          apiKey: "new-key",
+          kind: "cloud",
+        }),
+        expect.objectContaining({
+          name: "New backend",
+          host: "http://localhost:9000",
+          apiKey: "new-backend-key",
+          kind: "local",
+        }),
+      ]),
+    );
+  });
+
+  it("rejects malformed imports without changing existing configuration", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ManageBackendsModal onClose={vi.fn()} />);
+    const before = window.localStorage.getItem("openhands-backends");
+
+    await user.upload(
+      await screen.findByTestId("manage-backends-import-input"),
+      new File(["{not-json"], "broken.json", { type: "application/json" }),
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "BACKEND$IMPORT_ERROR",
+    );
+    expect(window.localStorage.getItem("openhands-backends")).toBe(before);
+  });
+
   it("renders a status dot in each row", async () => {
     renderWithProviders(<ManageBackendsModal onClose={vi.fn()} />);
 
@@ -627,9 +740,7 @@ describe("ManageBackendsModal", () => {
     );
 
     await user.click(
-      await screen.findByTestId(
-        "manage-backends-reconnect-cloud-login-button",
-      ),
+      await screen.findByTestId("manage-backends-reconnect-cloud-login-button"),
     );
 
     await waitFor(() => {
@@ -678,9 +789,7 @@ describe("ManageBackendsModal", () => {
     );
 
     await user.click(
-      await screen.findByTestId(
-        "manage-backends-reconnect-cloud-login-button",
-      ),
+      await screen.findByTestId("manage-backends-reconnect-cloud-login-button"),
     );
 
     expect(
