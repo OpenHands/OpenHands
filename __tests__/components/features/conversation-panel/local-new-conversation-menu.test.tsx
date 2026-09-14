@@ -1,4 +1,3 @@
-import { supportsConversationRuntimeRoutes } from "#/api/agent-server-client-options";
 import { http, HttpResponse } from "msw";
 import { server } from "#/mocks/node";
 import { clearCachedAgentServerInfo } from "#/api/agent-server-compatibility";
@@ -111,7 +110,6 @@ describe("LocalNewConversationMenu", () => {
           uptime: 0,
           idle_time: 0,
           conversation_runtime: "docker",
-          workspace_mode: "isolated",
         }),
       ),
     );
@@ -130,16 +128,10 @@ describe("LocalNewConversationMenu", () => {
       expect(screen.getByTestId("launch-workspace")).toBeDisabled(),
     );
     expect(screen.getByRole("status")).toHaveTextContent(
-      supportsConversationRuntimeRoutes()
-        ? "HOME$ISOLATED_WORKSPACE_NOTICE"
-        : "HOME$ISOLATED_WORKSPACE_UPGRADE",
+      "HOME$ISOLATED_WORKSPACE_NOTICE",
     );
     expect(screen.getByTestId("add-workspaces-button")).toBeDisabled();
-    if (supportsConversationRuntimeRoutes()) {
-      expect(screen.getByTestId("launch-no-workspace")).toBeEnabled();
-    } else {
-      expect(screen.getByTestId("launch-no-workspace")).toBeDisabled();
-    }
+    expect(screen.getByTestId("launch-no-workspace")).toBeEnabled();
     expect(screen.getByTestId("launch-workspace")).toHaveAttribute(
       "data-workspace-path",
       "/home/user/project",

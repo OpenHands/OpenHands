@@ -1,25 +1,7 @@
-import { ServerClient } from "@openhands/typescript-client/clients";
-import { getCachedAgentServerInfo } from "./agent-server-compatibility";
 import { buildHttpBaseUrl } from "#/utils/websocket-url";
 import { getAgentServerWorkingDir } from "./agent-server-config";
 import { getEffectiveLocalBackend } from "./backend-registry/active-store";
 import type { Backend } from "./backend-registry/types";
-
-export const CONVERSATION_RUNTIME_CLIENT_UPGRADE_MESSAGE =
-  "This Canvas build cannot access isolated Docker conversations safely. Upgrade Canvas to a build with a TypeScript client supporting conversation runtime routes.";
-
-export function supportsConversationRuntimeRoutes(): boolean {
-  return (
-    "supportsConversationRuntimeRoutes" in ServerClient &&
-    ServerClient.supportsConversationRuntimeRoutes === true
-  );
-}
-
-export function assertConversationRuntimeClientSupport(): void {
-  if (!supportsConversationRuntimeRoutes()) {
-    throw new Error(CONVERSATION_RUNTIME_CLIENT_UPGRADE_MESSAGE);
-  }
-}
 
 export interface AgentServerClientOverrides {
   conversationId?: string;
@@ -86,18 +68,8 @@ export function getAgentServerClientOptions(
       /\/api\/conversations\/([^/?#]+)(?:[/?#]|$)/,
     )?.[1];
 
-  const host = resolveHost(overrides, backend);
-  const info = getCachedAgentServerInfo({ host });
-  if (
-    conversationId &&
-    (info?.conversation_runtime === "docker" ||
-      info?.workspace_mode === "isolated")
-  ) {
-    assertConversationRuntimeClientSupport();
-  }
-
   return {
-    host,
+    host: resolveHost(overrides, backend),
     ...(conversationId ? { conversationId } : {}),
     ...(apiKey ? { apiKey } : {}),
     workingDir: overrides.workingDir ?? getAgentServerWorkingDir(),

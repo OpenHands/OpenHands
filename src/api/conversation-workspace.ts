@@ -2,7 +2,6 @@ import { ServerClient } from "@openhands/typescript-client/clients";
 import type { ServerInfo } from "@openhands/typescript-client";
 import {
   getAgentServerClientOptions,
-  assertConversationRuntimeClientSupport,
   type AgentServerClientOverrides,
 } from "./agent-server-client-options";
 import { getCachedAgentServerInfo } from "./agent-server-compatibility";
@@ -20,10 +19,7 @@ export const ISOLATED_WORKSPACE_MESSAGE =
 export function usesIsolatedWorkspace(
   info: ServerInfo | null | undefined,
 ): boolean {
-  return (
-    info?.conversation_runtime === "docker" ||
-    info?.workspace_mode === "isolated"
-  );
+  return info?.conversation_runtime === "docker";
 }
 
 export async function getConversationServerInfo(
@@ -55,7 +51,6 @@ export async function resolveNewConversationWorkspace(options: {
     ) {
       throw new Error(ISOLATED_WORKSPACE_MESSAGE);
     }
-    assertConversationRuntimeClientSupport();
     return {
       workingDir: ISOLATED_WORKSPACE_DIR,
       hooksProjectDir: null,

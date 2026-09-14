@@ -1,6 +1,5 @@
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
-import { supportsConversationRuntimeRoutes } from "#/api/agent-server-client-options";
 import { useQuery } from "@tanstack/react-query";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import {
@@ -26,12 +25,7 @@ export function useConversationWorkspace() {
   });
   const isolated =
     backend.kind === "local" && usesIsolatedWorkspace(query.data);
-  const clientUnsupported = isolated && !supportsConversationRuntimeRoutes();
   return {
-    clientUnsupported,
-    clientUnsupportedMessage: clientUnsupported
-      ? t(I18nKey.HOME$ISOLATED_WORKSPACE_UPGRADE)
-      : null,
     isolated,
     unsupportedMessage: isolated
       ? t(I18nKey.HOME$ISOLATED_WORKSPACE_NOTICE)

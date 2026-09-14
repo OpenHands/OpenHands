@@ -41937,22 +41937,5 @@
     "ca": "Aquest backend utilitza espais de treball aïllats. No s’hi poden adjuntar carpetes ni projectes de l’amfitrió.",
     "tr": "Bu arka uç yalıtılmış çalışma alanları kullanır. Ana makine klasörleri ve projeleri eklenemez.",
     "uk": "Цей сервер використовує ізольовані робочі простори. Папки та проєкти хоста підключити неможливо."
-  },
-  "HOME$ISOLATED_WORKSPACE_UPGRADE": {
-    "en": "Upgrade Canvas to access isolated conversations.",
-    "ja": "分離された会話にアクセスするには Canvas を更新してください。",
-    "zh-CN": "请升级 Canvas 以访问隔离的对话。",
-    "zh-TW": "請升級 Canvas 以存取隔離的對話。",
-    "ko-KR": "격리된 대화에 액세스하려면 Canvas를 업그레이드하세요.",
-    "no": "Oppgrader Canvas for å få tilgang til isolerte samtaler.",
-    "ar": "حدّث Canvas للوصول إلى المحادثات المعزولة.",
-    "de": "Aktualisieren Sie Canvas, um auf isolierte Unterhaltungen zuzugreifen.",
-    "fr": "Mettez Canvas à jour pour accéder aux conversations isolées.",
-    "it": "Aggiorna Canvas per accedere alle conversazioni isolate.",
-    "pt": "Atualize o Canvas para acessar conversas isoladas.",
-    "es": "Actualiza Canvas para acceder a las conversaciones aisladas.",
-    "ca": "Actualitza Canvas per accedir a les converses aïllades.",
-    "tr": "Yalıtılmış konuşmalara erişmek için Canvas’ı yükseltin.",
-    "uk": "Оновіть Canvas для доступу до ізольованих розмов."
   }
 }

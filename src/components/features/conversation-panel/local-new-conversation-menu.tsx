@@ -83,12 +83,8 @@ export function LocalNewConversationMenu({
   const { mutate: addWorkspaceParents } = useAddWorkspaceParents();
   const { mutate: removeWorkspaceParent } = useRemoveWorkspaceParent();
   const { workspaces } = useResolvedWorkspaces();
-  const {
-    isolated,
-    clientUnsupported,
-    clientUnsupportedMessage,
-    unsupportedMessage: runtimeWorkspaceMessage,
-  } = useConversationWorkspace();
+  const { isolated, unsupportedMessage: runtimeWorkspaceMessage } =
+    useConversationWorkspace();
   const workspacesUnsupportedMessage =
     runtimeWorkspaceMessage ??
     getWorkspacesUnsupportedMessage(workspacesError, t);
@@ -125,12 +121,7 @@ export function LocalNewConversationMenu({
   }, [open, browserOpen, manageOpen]);
 
   const launch = (workingDir?: string) => {
-    if (
-      isCreating ||
-      clientUnsupported ||
-      (workingDir && workspaceActionsDisabled)
-    )
-      return;
+    if (isCreating || (workingDir && workspaceActionsDisabled)) return;
     createConversation(
       { workingDir, entryPoint: "sidebar_local_menu" },
       {
@@ -224,7 +215,7 @@ export function LocalNewConversationMenu({
               role="status"
               className="px-3 py-2 text-xs text-[var(--oh-text-secondary)]"
             >
-              {clientUnsupportedMessage ?? workspacesUnsupportedMessage}
+              {workspacesUnsupportedMessage}
             </p>
           )}
           <ul
@@ -236,7 +227,7 @@ export function LocalNewConversationMenu({
             <li>
               <button
                 type="button"
-                disabled={isCreating || clientUnsupported}
+                disabled={isCreating}
                 data-testid="launch-no-workspace"
                 onClick={() => launch()}
                 className={itemClass}

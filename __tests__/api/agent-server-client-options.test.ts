@@ -1,7 +1,3 @@
-import {
-  assertConversationRuntimeClientSupport,
-  supportsConversationRuntimeRoutes,
-} from "#/api/agent-server-client-options";
 import { describe, expect, it } from "vitest";
 import {
   getAgentServerClientOptions,
@@ -57,17 +53,5 @@ describe("explicit conversation context", () => {
           "http://localhost/runtime/123/api/conversations/conversation-abc?view=files#tab",
       }).conversationId,
     ).toBe("conversation-abc");
-  });
-});
-
-describe("installed SDK support", () => {
-  it("either supports scoped routes or gives an explicit upgrade error", () => {
-    if (supportsConversationRuntimeRoutes()) {
-      expect(() => assertConversationRuntimeClientSupport()).not.toThrow();
-    } else {
-      expect(() => assertConversationRuntimeClientSupport()).toThrow(
-        "Upgrade Canvas",
-      );
-    }
   });
 });

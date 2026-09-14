@@ -1,6 +1,4 @@
-import { supportsConversationRuntimeRoutes } from "#/api/agent-server-client-options";
 import AgentServerGitService from "#/api/git-service/agent-server-git-service.api";
-import { ServerClient } from "@openhands/typescript-client/clients";
 import { beforeEach, describe, expect, it } from "vitest";
 import { http, HttpResponse } from "msw";
 import { server } from "#/mocks/node";
@@ -55,7 +53,6 @@ beforeEach(() => {
           idle_time: 0,
           capabilities: capabilities ? ["conversation_runtime_routes_v1"] : [],
           conversation_runtime: isolated ? "docker" : "local",
-          workspace_mode: isolated ? "isolated" : "host",
           runtime_services: { mode: isolated ? "dev:automation" : "docker" },
         });
       if (url.pathname === "/api/file/home")
@@ -90,149 +87,109 @@ beforeEach(() => {
   );
 });
 
-describe.skipIf(!supportsConversationRuntimeRoutes())(
-  "conversation runtime boundaries",
-  () => {
-    it("scopes live unified git calls even before conversation URL hydration", async () => {
-      expect(
-        await AgentServerGitService.getGitChanges(
-          cid,
-          null,
-          null,
-          "/workspace",
-        ),
-      ).toHaveLength(1);
-      expect(
-        await AgentServerGitService.getGitChangeDiff(
-          cid,
-          null,
-          null,
-          "file.txt",
-        ),
-      ).toEqual({ original: "before", modified: "after" });
-      expect(paths).toContain(
-        `/api/conversations/${cid}/git/changes?path=%2Fworkspace`,
-      );
-      expect(paths).toContain(
-        `/api/conversations/${cid}/git/diff?path=file.txt`,
-      );
-    });
-
-    it("blocks isolated creation when the installed SDK cannot scope runtime calls", async () => {
-      const descriptor = Object.getOwnPropertyDescriptor(
-        ServerClient,
-        "supportsConversationRuntimeRoutes",
-      );
-      Object.defineProperty(ServerClient, "supportsConversationRuntimeRoutes", {
-        value: false,
-        configurable: true,
-      });
-      try {
-        await expect(
-          resolveNewConversationWorkspace({ conversationId: cid }),
-        ).rejects.toThrow("Upgrade Canvas");
-      } finally {
-        if (descriptor)
-          Object.defineProperty(
-            ServerClient,
-            "supportsConversationRuntimeRoutes",
-            descriptor,
-          );
-      }
-    });
-
-    it("uses a new isolated workspace without reading host home or hooks", async () => {
-      expect(
-        await resolveNewConversationWorkspace({ conversationId: cid }),
-      ).toEqual({
-        workingDir: "/workspace",
-        hooksProjectDir: null,
-        isolated: true,
-      });
-      expect(paths).toEqual(["/server_info"]);
-    });
-
-    it.each(["/home/user/project", "/workspace", "relative/project"])(
-      "rejects selected host folder %s rather than discarding it",
-      async (workingDir) => {
-        await expect(
-          resolveNewConversationWorkspace({ conversationId: cid, workingDir }),
-        ).rejects.toThrow(ISOLATED_WORKSPACE_MESSAGE);
-        expect(paths).toEqual(["/server_info"]);
-      },
+describe("conversation runtime boundaries", () => {
+  it("scopes live unified git calls even before conversation URL hydration", async () => {
+    expect(
+      await AgentServerGitService.getGitChanges(cid, null, null, "/workspace"),
+    ).toHaveLength(1);
+    expect(
+      await AgentServerGitService.getGitChangeDiff(cid, null, null, "file.txt"),
+    ).toEqual({ original: "before", modified: "after" });
+    expect(paths).toContain(
+      `/api/conversations/${cid}/git/changes?path=%2Fworkspace`,
     );
+    expect(paths).toContain(`/api/conversations/${cid}/git/diff?path=file.txt`);
+  });
 
-    it("rejects selected host repository metadata", async () => {
+  it("uses a new isolated workspace without reading host home or hooks", async () => {
+    expect(
+      await resolveNewConversationWorkspace({ conversationId: cid }),
+    ).toEqual({
+      workingDir: "/workspace",
+      hooksProjectDir: null,
+      isolated: true,
+    });
+    expect(paths).toEqual(["/server_info"]);
+  });
+
+  it.each(["/home/user/project", "/workspace", "relative/project"])(
+    "rejects selected host folder %s rather than discarding it",
+    async (workingDir) => {
       await expect(
-        resolveNewConversationWorkspace({
-          conversationId: cid,
-          selectedRepository: "owner/project",
-        }),
+        resolveNewConversationWorkspace({ conversationId: cid, workingDir }),
       ).rejects.toThrow(ISOLATED_WORKSPACE_MESSAGE);
-    });
+      expect(paths).toEqual(["/server_info"]);
+    },
+  );
 
-    it("preserves a Docker child conversation's parent workspace", async () => {
-      expect(
-        await resolveNewConversationWorkspace({
-          conversationId: cid,
-          parentConversationId: "parent",
-          workingDir: "/workspace",
-        }),
-      ).toMatchObject({ workingDir: "/workspace", isolated: true });
-    });
+  it("rejects selected host repository metadata", async () => {
+    await expect(
+      resolveNewConversationWorkspace({
+        conversationId: cid,
+        selectedRepository: "owner/project",
+      }),
+    ).rejects.toThrow(ISOLATED_WORKSPACE_MESSAGE);
+  });
 
-    it("uses host metadata rather than runtime_services deployment mode", async () => {
-      isolated = false;
-      expect(
-        await resolveNewConversationWorkspace({
-          conversationId: cid,
-          workingDir: "/home/user/project",
-        }),
-      ).toEqual({
+  it("preserves a Docker child conversation's parent workspace", async () => {
+    expect(
+      await resolveNewConversationWorkspace({
+        conversationId: cid,
+        parentConversationId: "parent",
+        workingDir: "/workspace",
+      }),
+    ).toMatchObject({ workingDir: "/workspace", isolated: true });
+  });
+
+  it("uses host metadata rather than runtime_services deployment mode", async () => {
+    isolated = false;
+    expect(
+      await resolveNewConversationWorkspace({
+        conversationId: cid,
         workingDir: "/home/user/project",
-        hooksProjectDir: "/home/user/project",
-        isolated: false,
-      });
+      }),
+    ).toEqual({
+      workingDir: "/home/user/project",
+      hooksProjectDir: "/home/user/project",
+      isolated: false,
     });
+  });
 
-    it("routes legacy git service changes and diff to the conversation", async () => {
-      expect(await GitService.getGitChanges(cid)).toHaveLength(1);
-      expect(await GitService.getGitChangeDiff(cid, "file.txt")).toEqual({
-        original: "before",
-        modified: "after",
-      });
-      expect(paths).toContain(
-        `/api/conversations/${cid}/git/changes?path=%2Fworkspace`,
-      );
-      expect(paths).toContain(
-        `/api/conversations/${cid}/git/diff?path=file.txt`,
-      );
+  it("routes legacy git service changes and diff to the conversation", async () => {
+    expect(await GitService.getGitChanges(cid)).toHaveLength(1);
+    expect(await GitService.getGitChangeDiff(cid, "file.txt")).toEqual({
+      original: "before",
+      modified: "after",
     });
+    expect(paths).toContain(
+      `/api/conversations/${cid}/git/changes?path=%2Fworkspace`,
+    );
+    expect(paths).toContain(`/api/conversations/${cid}/git/diff?path=file.txt`);
+  });
 
-    it("routes plan downloads and runtime bash to the same conversation", async () => {
-      expect(
-        await AgentServerConversationService.readConversationFile(cid),
-      ).toBe("plan contents");
-      expect(
-        await AgentServerRuntimeService.executeCommand(
-          `${host}/api/conversations/${cid}`,
-          null,
-          "pwd",
-          "/workspace",
-        ),
-      ).toMatchObject({ stdout: "/workspace" });
-      expect(paths).toContain(
-        `/api/conversations/${cid}/file/download?path=%2Fworkspace%2F.agents_tmp%2FPLAN.md`,
-      );
-      expect(paths).toContain(
-        `/api/conversations/${cid}/bash/execute_bash_command`,
-      );
-    });
+  it("routes plan downloads and runtime bash to the same conversation", async () => {
+    expect(await AgentServerConversationService.readConversationFile(cid)).toBe(
+      "plan contents",
+    );
+    expect(
+      await AgentServerRuntimeService.executeCommand(
+        `${host}/api/conversations/${cid}`,
+        null,
+        "pwd",
+        "/workspace",
+      ),
+    ).toMatchObject({ stdout: "/workspace" });
+    expect(paths).toContain(
+      `/api/conversations/${cid}/file/download?path=%2Fworkspace%2F.agents_tmp%2FPLAN.md`,
+    );
+    expect(paths).toContain(
+      `/api/conversations/${cid}/bash/execute_bash_command`,
+    );
+  });
 
-    it("retains cid for legacy servers without canonical capability", async () => {
-      capabilities = false;
-      await GitService.getGitChangeDiff(cid, "file.txt");
-      expect(paths).toContain(`/api/git/diff?path=file.txt&cid=${cid}`);
-    });
-  },
-);
+  it("retains cid for legacy servers without canonical capability", async () => {
+    capabilities = false;
+    await GitService.getGitChangeDiff(cid, "file.txt");
+    expect(paths).toContain(`/api/git/diff?path=file.txt&cid=${cid}`);
+  });
+});

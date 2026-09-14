@@ -670,7 +670,6 @@ describe("isolated workspace selection", () => {
           uptime: 0,
           idle_time: 0,
           conversation_runtime: "docker",
-          workspace_mode: "isolated",
         }),
       ),
     );
