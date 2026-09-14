@@ -118,6 +118,46 @@ afterEach(() => {
 });
 
 describe("manual drag resizing", () => {
+  it.each([false, true])(
+    "does not resize a centered home input on mobile=%s",
+    (mobile) => {
+      vi.mocked(isMobileDevice).mockReturnValue(mobile);
+      Object.defineProperty(window, "innerHeight", {
+        configurable: true,
+        value: 768,
+      });
+      const wrapper = document.createElement("div");
+      wrapper.getBoundingClientRect = () => ({ bottom: 200 }) as DOMRect;
+      document.body.appendChild(wrapper);
+      const grip = createResizeGrip();
+      wrapper.appendChild(grip);
+      const element = createResizeElement();
+      const onHeightChange = vi.fn();
+      const onGripDragStart = vi.fn();
+      const { result } = renderHook(() =>
+        useDragResize({
+          elementRef: { current: element },
+          minHeight: 100,
+          maxHeight: 300,
+          onHeightChange,
+          onGripDragStart,
+        }),
+      );
+      if (mobile) {
+        beginTouchDrag(result.current.handleGripTouchStart);
+        act(() => grip.dispatchEvent(createTouchEvent("touchmove", [80])));
+        act(() => grip.dispatchEvent(createTouchEvent("touchend", [])));
+      } else {
+        beginMouseDrag(result.current.handleGripMouseDown);
+        dispatchDocumentMouseMove(80);
+        act(() => document.dispatchEvent(new MouseEvent("mouseup")));
+      }
+      expect(element.style.height).toBe("");
+      expect(onHeightChange).not.toHaveBeenCalled();
+      expect(onGripDragStart).not.toHaveBeenCalled();
+    },
+  );
+
   it("commits a desktop drag at the movement threshold and removes its listeners on release", () => {
     vi.mocked(isMobileDevice).mockReturnValue(false);
     const element = createResizeElement({
@@ -418,12 +458,7 @@ describe("manual drag resizing", () => {
     expect(onHeightChange).toHaveBeenCalledOnce();
   });
 
-  it("keeps handling mobile capture events after touchend because they are not detached", () => {
-    // Current behaviour: mobile touch listeners are attached to the grip with
-    // `capture: true`, but handleDragEnd calls removeEventListener without the
-    // matching capture flag, so removal is a no-op and the listeners survive.
-    // A second touchmove/touchend therefore keeps resizing and re-fires the
-    // callbacks. (The archived cleanup fix would make each fire exactly once.)
+  it("stops handling mobile capture events after touchend", () => {
     vi.mocked(isMobileDevice).mockReturnValue(true);
     const element = createResizeElement();
     const grip = createResizeGrip();
@@ -445,10 +480,9 @@ describe("manual drag resizing", () => {
     act(() => grip.dispatchEvent(createTouchEvent("touchmove", [70])));
     act(() => grip.dispatchEvent(createTouchEvent("touchend", [])));
 
-    expect(onHeightChange).toHaveBeenCalledTimes(2);
-    expect(onHeightChange).toHaveBeenNthCalledWith(1, 220);
-    expect(onHeightChange).toHaveBeenNthCalledWith(2, 230);
-    expect(onGripDragEnd).toHaveBeenCalledTimes(2);
+    expect(onHeightChange).toHaveBeenCalledExactlyOnceWith(220);
+    expect(onGripDragEnd).toHaveBeenCalledOnce();
+    expect(element.style.height).toBe("220px");
   });
 
   it("finishes a mobile drag safely when the grip is detached before touchend", () => {
@@ -468,11 +502,15 @@ describe("manual drag resizing", () => {
     beginTouchDrag(result.current.handleGripTouchStart);
     act(() => grip.dispatchEvent(createTouchEvent("touchmove", [80])));
     grip.remove();
+    createResizeGrip(); // A replacement must not receive the old grip's cleanup.
     const errors = captureWindowErrors(() => {
       act(() => grip.dispatchEvent(createTouchEvent("touchend", [])));
     });
 
+    act(() => grip.dispatchEvent(createTouchEvent("touchmove", [70])));
+    act(() => grip.dispatchEvent(createTouchEvent("touchend", [])));
     expect(errors).toEqual([]);
     expect(onGripDragEnd).toHaveBeenCalledOnce();
+    expect(element.style.height).toBe("220px");
   });
 });
