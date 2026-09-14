@@ -815,6 +815,16 @@ describe("sdk settings schema helpers", () => {
           field: getMockField({
             key: "value",
             value_type: "object",
+            default: { a: 1, b: { c: 2, d: 3 } },
+            prominence: "major",
+          }),
+          value: '{"b":{"d":3,"c":2},"a":1}',
+          expected: "basic",
+        },
+        {
+          field: getMockField({
+            key: "value",
+            value_type: "object",
             default: null,
             prominence: "major",
           }),
