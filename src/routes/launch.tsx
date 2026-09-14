@@ -5,6 +5,7 @@ import { PluginLaunchModal } from "#/components/features/launch/plugin-launch-mo
 import { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { I18nKey } from "#/i18n/declaration";
+import { decodePluginLaunchPayload } from "#/utils/plugin-launch-url";
 
 type ErrorType = "no_plugins" | "invalid_format" | "creation_failed";
 
@@ -26,8 +27,7 @@ function parsePluginsFromUrl(searchParams: URLSearchParams): ParseResult {
   const pluginsParam = searchParams.get("plugins");
   if (pluginsParam) {
     try {
-      const decoded = atob(pluginsParam);
-      const parsed = JSON.parse(decoded);
+      const parsed = decodePluginLaunchPayload(pluginsParam);
 
       if (!Array.isArray(parsed)) {
         return { plugins: [], error: "invalid_format" };
