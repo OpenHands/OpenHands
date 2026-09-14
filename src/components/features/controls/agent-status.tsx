@@ -36,11 +36,11 @@ export function AgentStatus({
   const { t } = useTranslation("openhands");
   const { setShouldShownAgentLoading } = useConversationStore();
   const { curAgentState, executionStatus } = useAgentState();
-
-  // Trigger browser tab flash and notification sound on state changes
-  useAgentNotification(curAgentState);
-  const webSocketStatus = useUnifiedWebSocketStatus();
   const { data: conversation } = useActiveConversation();
+
+  // Trigger sound and desktop notifications on state changes
+  useAgentNotification(curAgentState, conversation?.title);
+  const webSocketStatus = useUnifiedWebSocketStatus();
   const { taskStatus } = useTaskPolling();
 
   const { subConversationTaskId } = useConversationStore();

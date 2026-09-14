@@ -222,6 +222,15 @@ export function ActiveBackendProvider({
   );
 }
 
+/**
+ * Non-throwing variant of {@link useActiveBackendContext}. Returns null when
+ * no <ActiveBackendProvider> is above the caller, for components that render
+ * both inside and outside the provider and can degrade rather than crash.
+ */
+export function useOptionalActiveBackendContext(): ActiveBackendContextValue | null {
+  return React.useContext(ActiveBackendContext);
+}
+
 export function useActiveBackendContext(): ActiveBackendContextValue {
   const ctx = React.useContext(ActiveBackendContext);
   if (!ctx) {
