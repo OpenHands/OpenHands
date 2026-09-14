@@ -344,6 +344,10 @@ describe("McpService.testServer", () => {
         name: "linear",
         url: "https://mcp.linear.app/mcp",
       });
+      expect(testServer.mock.calls[0][0].tool_call).toEqual({
+        name: "list_teams",
+        arguments: {},
+      });
       expect(result).toEqual(
         isError
           ? {
