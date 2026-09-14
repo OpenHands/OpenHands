@@ -58,12 +58,41 @@ const DEFAULT_AGENT_SERVER_VERSION = SHARED_DEFAULTS.versions.agentServer;
 // the SDK's ACP client. Hold acp <0.11 until a fixed SDK ships. See config/defaults.json.
 const AGENT_CLIENT_PROTOCOL_CONSTRAINT =
   SHARED_DEFAULTS.constraints?.agentClientProtocol;
+// Temporary transitive-dep pin: uvx resolves latest `mcp` (2.x) which broke
+// browser-use's MCP Server API. Hold mcp==1.26.0 until the SDK constrains it.
+// See config/defaults.json and OpenHands/OpenHands#17383.
+const MCP_CONSTRAINT = SHARED_DEFAULTS.constraints?.mcp;
 const DEFAULT_AGENT_SERVER_TELEMETRY_POSTHOG_API_KEY =
   SHARED_DEFAULTS.telemetry.posthogApiKey;
 const DEFAULT_AGENT_SERVER_TELEMETRY_POSTHOG_HOST =
   SHARED_DEFAULTS.telemetry.posthogHost;
 const AGENT_SERVER_POSTHOG_CONSTRAINT = "posthog>=6,<7";
 const FRONTEND_REQUIRED_BINS = ["cross-env", "react-router"];
+
+/**
+ * Append uvx `--with` pins that must apply regardless of agent-server source.
+ *
+ * ACP stays opt-in (PyPI-only today) because git/local SDK checkouts already
+ * constrain `agent-client-protocol` in pyproject.toml. `mcp` is not declared
+ * there, so every source — including local/git, which still pull browser-use
+ * from PyPI — needs the pin.
+ *
+ * @param {string[]} uvxArgs
+ * @param {{ includeAcp?: boolean }} [options]
+ */
+function pushAgentServerTransitiveConstraints(
+  uvxArgs,
+  { includeAcp = false } = {},
+) {
+  if (includeAcp && AGENT_CLIENT_PROTOCOL_CONSTRAINT) {
+    uvxArgs.push("--with", AGENT_CLIENT_PROTOCOL_CONSTRAINT);
+  }
+  if (MCP_CONSTRAINT) {
+    uvxArgs.push("--with", MCP_CONSTRAINT);
+  }
+  uvxArgs.push("--with", AGENT_SERVER_POSTHOG_CONSTRAINT);
+  uvxArgs.push("agent-server");
+}
 
 /**
  * Generate a cryptographically secure random API key.
@@ -454,10 +483,8 @@ export function buildAgentServerCommand(env = process.env) {
       path.join(localPath, "openhands-tools"),
       "--with-editable",
       path.join(localPath, "openhands-workspace"),
-      "--with",
-      AGENT_SERVER_POSTHOG_CONSTRAINT,
-      "agent-server",
     );
+    pushAgentServerTransitiveConstraints(uvxArgs);
     source = `local (${localPath})`;
   } else if (gitRef) {
     // Use git ref with subdirectory syntax for uv workspace monorepo.
@@ -480,10 +507,8 @@ export function buildAgentServerCommand(env = process.env) {
       `${baseGitUrl}#subdirectory=openhands-tools`,
       "--with",
       `${baseGitUrl}#subdirectory=openhands-workspace`,
-      "--with",
-      AGENT_SERVER_POSTHOG_CONSTRAINT,
-      "agent-server",
     );
+    pushAgentServerTransitiveConstraints(uvxArgs);
     source = `git (${gitRef})`;
   } else if (version) {
     // Use specific PyPI version: uvx --from openhands-agent-server==version agent-server
@@ -499,11 +524,7 @@ export function buildAgentServerCommand(env = process.env) {
       "--with",
       `openhands-workspace==${version}`,
     );
-    if (AGENT_CLIENT_PROTOCOL_CONSTRAINT) {
-      uvxArgs.push("--with", AGENT_CLIENT_PROTOCOL_CONSTRAINT);
-    }
-    uvxArgs.push("--with", AGENT_SERVER_POSTHOG_CONSTRAINT);
-    uvxArgs.push("agent-server");
+    pushAgentServerTransitiveConstraints(uvxArgs, { includeAcp: true });
     source = `PyPI (${version})`;
   } else {
     // Default to released PyPI version
@@ -518,11 +539,7 @@ export function buildAgentServerCommand(env = process.env) {
       "--with",
       `openhands-workspace==${DEFAULT_AGENT_SERVER_VERSION}`,
     );
-    if (AGENT_CLIENT_PROTOCOL_CONSTRAINT) {
-      uvxArgs.push("--with", AGENT_CLIENT_PROTOCOL_CONSTRAINT);
-    }
-    uvxArgs.push("--with", AGENT_SERVER_POSTHOG_CONSTRAINT);
-    uvxArgs.push("agent-server");
+    pushAgentServerTransitiveConstraints(uvxArgs, { includeAcp: true });
     source = `PyPI (${DEFAULT_AGENT_SERVER_VERSION}, default)`;
   }
 
