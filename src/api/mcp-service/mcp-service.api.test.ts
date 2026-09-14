@@ -87,6 +87,112 @@ describe("McpService.testServer", () => {
     vi.restoreAllMocks();
   });
 
+  it("allows Cloud configuration without calling the local probe or reading local secrets", async () => {
+    setRegisteredBackends([
+      {
+        id: "cloud",
+        name: "Cloud",
+        host: "https://cloud.example.test",
+        apiKey: "cloud-key",
+        kind: "cloud",
+      },
+    ]);
+    setActiveSelection({ backendId: "cloud", orgId: null });
+    const fetchSettings = vi.spyOn(SettingsService, "fetchSettingsFromApi");
+    await expect(McpService.testServer(oauthServer())).resolves.toEqual({
+      ok: true,
+      tools: [],
+    });
+    expect(MCPClient).not.toHaveBeenCalled();
+    expect(fetchSettings).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])(
+    "redacts submitted and restored secrets from probe output, success=%s",
+    async (ok) => {
+      const storedSecret = "stored-opaque-credential";
+      const freshSecret = "fresh-opaque-credential";
+      vi.spyOn(SettingsService, "fetchSettingsFromApi").mockResolvedValue({
+        agent_settings: {
+          mcp_config: {
+            "shttp-0": { auth: { strategy: "bearer", value: storedSecret } },
+          },
+        },
+        conversation_settings: {},
+        llm_api_key_is_set: false,
+      });
+      const text = `Echo ${storedSecret} and ${freshSecret}`;
+      testServer.mockResolvedValue(
+        ok
+          ? { ok: true, tools: [], tool_result: { is_error: false, text } }
+          : { ok: false, error: text, error_kind: "unknown" },
+      );
+      const result = await McpService.testServer({
+        id: "shttp-0",
+        name: "custom",
+        type: "shttp",
+        url: "https://custom.example.test/mcp",
+        auth: { strategy: "bearer", value: REDACTED_MCP_SECRET_VALUE },
+        headers: { "X-Custom": freshSecret },
+      });
+      const redacted = `Echo ${REDACTED_MCP_SECRET_VALUE} and ${REDACTED_MCP_SECRET_VALUE}`;
+      expect(result).toEqual(
+        ok
+          ? {
+              ok: true,
+              tools: [],
+              tool_result: { is_error: false, text: redacted },
+            }
+          : { ok: false, error: redacted, error_kind: "unknown" },
+      );
+    },
+  );
+
+  it.each([false, true])(
+    "redacts configured secrets from OAuth completion, success=%s",
+    async (ok) => {
+      vi.spyOn(window, "open").mockReturnValue(
+        popupWindow() as unknown as Window,
+      );
+      const secret = "oauth-opaque-credential";
+      const server = oauthServer();
+      server.headers = { "X-Custom": secret };
+      getOAuthStatus.mockResolvedValue(
+        ok
+          ? {
+              ok: true,
+              status: "succeeded",
+              job_id: "job-1",
+              tools: [],
+              tool_result: { is_error: false, text: `Echo ${secret}` },
+            }
+          : {
+              ok: false,
+              status: "failed",
+              job_id: "job-1",
+              error: `Echo ${secret}`,
+              error_kind: "unknown",
+            },
+      );
+      await expect(McpService.authorizeOAuth(server)).resolves.toEqual(
+        ok
+          ? {
+              ok: true,
+              tools: [],
+              tool_result: {
+                is_error: false,
+                text: `Echo ${REDACTED_MCP_SECRET_VALUE}`,
+              },
+            }
+          : {
+              ok: false,
+              error: `Echo ${REDACTED_MCP_SECRET_VALUE}`,
+              error_kind: "unknown",
+            },
+      );
+    },
+  );
+
   it("tests stored remote MCP credentials as encrypted auth, not redacted text", async () => {
     vi.spyOn(SettingsService, "fetchSettingsFromApi").mockResolvedValue({
       llm_api_key_is_set: false,
