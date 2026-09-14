@@ -389,6 +389,9 @@ describe("AgentServerConversationService", () => {
       "uses stored planner metadata when server children are unavailable, fails=%s",
       async (fails) => {
         setStoredConversationMetadata("parent", {
+          selected_repository: null,
+          selected_branch: null,
+          git_provider: null,
           local_planning_conversation_id: "stored-planner",
         });
         if (fails) mockHttpGet.mockRejectedValue(new Error("old server"));
