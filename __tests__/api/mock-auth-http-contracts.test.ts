@@ -1,19 +1,22 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { http, HttpResponse } from "msw";
 
-import { AUTH_HANDLERS } from "#/mocks/auth-handlers";
 import { server } from "#/mocks/node";
 import type { GitUser } from "#/types/git";
 
 const API_ORIGIN = "http://auth.test";
 
-function useAuthHandlers() {
-  server.use(...AUTH_HANDLERS);
-}
+beforeEach(async () => {
+  vi.resetModules();
+  const { AUTH_HANDLERS } = await import("#/mocks/auth-handlers");
+  server.resetHandlers(
+    ...AUTH_HANDLERS,
+    http.all("*", () => new HttpResponse(null, { status: 599 })),
+  );
+});
 
 describe("mock authentication HTTP contracts", () => {
   it("reports that the cloud proxy is unavailable in mock mode", async () => {
-    useAuthHandlers();
-
     const response = await fetch(`${API_ORIGIN}/api/cloud-proxy`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -32,8 +35,6 @@ describe("mock authentication HTTP contracts", () => {
   });
 
   it("returns the mock Git user profile", async () => {
-    useAuthHandlers();
-
     const response = await fetch(`${API_ORIGIN}/api/user/info`);
     const user = (await response.json()) as GitUser;
 
@@ -49,8 +50,6 @@ describe("mock authentication HTTP contracts", () => {
   });
 
   it("acknowledges authentication", async () => {
-    useAuthHandlers();
-
     const response = await fetch(`${API_ORIGIN}/api/authenticate`, {
       method: "POST",
     });
@@ -62,8 +61,6 @@ describe("mock authentication HTTP contracts", () => {
   });
 
   it("acknowledges logout with a JSON null body", async () => {
-    useAuthHandlers();
-
     const response = await fetch(`${API_ORIGIN}/api/logout`, {
       method: "POST",
     });

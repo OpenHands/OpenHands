@@ -1,3 +1,6 @@
+/* eslint-disable local/no-direct-agent-server-fetch -- HTTP contract tests intentionally exercise mock handlers, including malformed requests. */
+import { http, HttpResponse } from "msw";
+import { server } from "#/mocks/node";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   OPENAI_SUBSCRIPTION_DEVICE_POLL_PATH,
@@ -6,10 +9,7 @@ import {
   OPENAI_SUBSCRIPTION_MODELS_PATH,
   OPENAI_SUBSCRIPTION_STATUS_PATH,
 } from "#/constants/llm-subscription";
-import {
-  createMockWebClientConfig,
-  resetTestHandlersMockSettings,
-} from "#/mocks/settings-handlers";
+let createMockWebClientConfig: typeof import("#/mocks/settings-handlers").createMockWebClientConfig;
 
 const BASE_URL = "http://localhost:3000";
 
@@ -19,8 +19,15 @@ const fetchJson = async <T>(path: string, init?: RequestInit) => {
   return (await response.json()) as T;
 };
 
-beforeEach(() => {
-  resetTestHandlersMockSettings();
+beforeEach(async () => {
+  vi.resetModules();
+  const handlers = await import("#/mocks/settings-handlers");
+  handlers.resetTestHandlersMockSettings();
+  createMockWebClientConfig = handlers.createMockWebClientConfig;
+  server.resetHandlers(
+    ...handlers.SETTINGS_HANDLERS,
+    http.all("*", () => new HttpResponse(null, { status: 599 })),
+  );
 });
 
 describe("mock agent-server discovery", () => {

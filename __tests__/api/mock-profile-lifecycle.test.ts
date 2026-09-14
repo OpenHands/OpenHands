@@ -1,5 +1,7 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { resetTestHandlersMockSettings } from "#/mocks/settings-handlers";
+/* eslint-disable local/no-direct-agent-server-fetch -- HTTP contract tests intentionally exercise mock handlers, including malformed requests. */
+import { http, HttpResponse } from "msw";
+import { server } from "#/mocks/node";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const BASE_URL = "http://localhost:3000";
 
@@ -19,8 +21,14 @@ const getProfile = (name: string, exposeSecrets?: string) =>
     headers: exposeSecrets ? { "X-Expose-Secrets": exposeSecrets } : {},
   });
 
-beforeEach(() => {
-  resetTestHandlersMockSettings();
+beforeEach(async () => {
+  vi.resetModules();
+  const handlers = await import("#/mocks/settings-handlers");
+  handlers.resetTestHandlersMockSettings();
+  server.resetHandlers(
+    ...handlers.SETTINGS_HANDLERS,
+    http.all("*", () => new HttpResponse(null, { status: 599 })),
+  );
 });
 
 describe("mock LLM profile lifecycle", () => {

@@ -1,5 +1,8 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { resetTestHandlersMockSettings } from "#/mocks/settings-handlers";
+/* eslint-disable local/no-direct-agent-server-fetch -- HTTP contract tests intentionally exercise mock handlers, including malformed requests. */
+let resetTestHandlersMockSettings: typeof import("#/mocks/settings-handlers").resetTestHandlersMockSettings;
+import { http, HttpResponse } from "msw";
+import { server } from "#/mocks/node";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const BASE_URL = "http://localhost:3000";
 
@@ -14,8 +17,15 @@ const getJson = async <T>(path: string, init?: RequestInit) => {
   return { response, body: (await response.json()) as T };
 };
 
-beforeEach(() => {
+beforeEach(async () => {
+  vi.resetModules();
+  const handlers = await import("#/mocks/settings-handlers");
+  resetTestHandlersMockSettings = handlers.resetTestHandlersMockSettings;
   resetTestHandlersMockSettings();
+  server.resetHandlers(
+    ...handlers.SETTINGS_HANDLERS,
+    http.all("*", () => new HttpResponse(null, { status: 599 })),
+  );
 });
 
 describe("mock settings schemas and state", () => {
