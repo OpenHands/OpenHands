@@ -925,3 +925,118 @@ describe("SettingsService", () => {
     expect(settings.language).toBe("ja");
   });
 });
+
+describe("SettingsService cache scoping", () => {
+  const backendA: Backend = {
+    id: "local-a",
+    name: "Local A",
+    host: "http://127.0.0.1:3101",
+    apiKey: "key-a",
+    kind: "local",
+  };
+  const backendB: Backend = {
+    id: "local-b",
+    name: "Local B",
+    host: "http://127.0.0.1:3102",
+    apiKey: "key-b",
+    kind: "local",
+  };
+
+  /** Answers /api/settings with a model naming the host that was asked. */
+  const perHostSettings = () => {
+    const asked: string[] = [];
+    server.use(
+      http.get("*/api/settings", async ({ request }) => {
+        const url = new URL(request.url);
+        if (url.pathname.split("/").filter(Boolean).length > 2) {
+          return undefined as never;
+        }
+        asked.push(url.port);
+        return HttpResponse.json({
+          agent_settings: {
+            agent: "CodeActAgent",
+            llm: { model: `model-from-${url.port}` },
+          },
+          conversation_settings: {},
+          llm_api_key_is_set: true,
+        });
+      }),
+    );
+    return asked;
+  };
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    resetTestHandlersMockSettings();
+    __resetActiveStoreForTests();
+    SettingsService.invalidateCache();
+    setRegisteredBackends([backendA, backendB]);
+  });
+
+  afterEach(() => {
+    __resetActiveStoreForTests();
+  });
+
+  it("does not answer for one backend with settings fetched from another", async () => {
+    // The cache was keyed on a timestamp alone, so within its five minutes a
+    // switch to another local backend was served the first one's settings —
+    // including the encrypted ones used to start conversations (#17416).
+    const asked = perHostSettings();
+
+    setActiveSelection({ backendId: backendA.id });
+    const fromA = await SettingsService.getSettings();
+
+    setActiveSelection({ backendId: backendB.id });
+    const fromB = await SettingsService.getSettings();
+
+    expect(fromA.llm_model).toBe("model-from-3101");
+    expect(fromB.llm_model).toBe("model-from-3102");
+    expect(asked).toEqual(["3101", "3102"]);
+  });
+
+  it("does not hand one backend's encrypted settings to another", async () => {
+    const asked = perHostSettings();
+
+    setActiveSelection({ backendId: backendA.id });
+    await SettingsService.getSettingsForConversation();
+
+    setActiveSelection({ backendId: backendB.id });
+    const forB = await SettingsService.getSettingsForConversation();
+
+    expect((forB.agentSettings.llm as { model: string }).model).toBe(
+      "model-from-3102",
+    );
+    expect(asked).toEqual(["3101", "3102"]);
+  });
+
+  it("does not reuse settings after the same backend's credentials change", async () => {
+    // `connectionRevision` changes whenever the connection credentials do —
+    // the host stays the same while what it answers with does not, which is
+    // why the query keys across the app already include it.
+    const asked = perHostSettings();
+
+    setActiveSelection({ backendId: backendA.id });
+    await SettingsService.getSettings();
+
+    setRegisteredBackends([
+      { ...backendA, apiKey: "rotated", connectionRevision: 1 },
+      backendB,
+    ]);
+    setActiveSelection({ backendId: backendA.id });
+    await SettingsService.getSettings();
+
+    expect(asked).toEqual(["3101", "3101"]);
+  });
+
+  it("still serves the same backend from cache", async () => {
+    // The accept control: the cache exists to avoid a request per read, and a
+    // fix that simply stopped caching would pass the two cells above.
+    const asked = perHostSettings();
+
+    setActiveSelection({ backendId: backendA.id });
+    await SettingsService.getSettings();
+    await SettingsService.getSettings();
+
+    expect(asked).toEqual(["3101"]);
+  });
+});
