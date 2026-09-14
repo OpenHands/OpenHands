@@ -247,6 +247,32 @@ describe("GitRepoDropdown", () => {
       });
     });
 
+    it("keeps repository options uniquely keyed when results reorder", async () => {
+      const user = userEvent.setup();
+      const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+      const view = renderDropdown();
+      const input = screen.getByTestId("git-repo-dropdown");
+
+      try {
+        await user.click(input);
+        setupDefaultMocks({
+          repositories: [MOCK_REPOSITORIES[2], MOCK_REPOSITORIES[0]],
+        });
+        view.rerender(
+          <GitRepoDropdown provider="github" onChange={mockOnChange} />,
+        );
+
+        expect(
+          screen.getAllByRole("option").map((option) => option.textContent),
+        ).toEqual(["org/feature-repo", "user/repo-one"]);
+        expect(consoleError).not.toHaveBeenCalledWith(
+          expect.stringContaining('unique "key" prop'),
+        );
+      } finally {
+        consoleError.mockRestore();
+      }
+    });
+
     it("should preserve typed text when clicking input while typing", async () => {
       renderDropdown();
 

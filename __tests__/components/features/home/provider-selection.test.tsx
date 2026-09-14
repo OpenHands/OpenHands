@@ -174,6 +174,35 @@ describe("git provider selection", () => {
     ).toEqual(["GitLab", "Azure DevOps"]);
   });
 
+  it("keeps provider options uniquely keyed when their order changes", async () => {
+    const user = userEvent.setup();
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { rerender } = render(
+      <GitProviderDropdown
+        {...createProps({ providers: ["github", "gitlab"] })}
+      />,
+    );
+    const input = screen.getByTestId("git-provider-dropdown");
+
+    try {
+      await user.click(input);
+      rerender(
+        <GitProviderDropdown
+          {...createProps({ providers: ["gitlab", "github"] })}
+        />,
+      );
+
+      expect(
+        screen.getAllByRole("option").map((option) => option.textContent),
+      ).toEqual(["GitLab", "GitHub"]);
+      expect(consoleError).not.toHaveBeenCalledWith(
+        expect.stringContaining('unique "key" prop'),
+      );
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
   it("allows a different provider to be selected without a callback", async () => {
     const user = userEvent.setup();
     render(<GitProviderDropdown providers={["github", "gitlab"]} />);
