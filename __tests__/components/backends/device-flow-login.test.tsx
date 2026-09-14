@@ -322,6 +322,12 @@ describe("device-flow login", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       "Waiting for authorization",
     );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Complete login in your browser",
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Open the authorization page",
+    );
 
     await user.click(screen.getByTestId("cloud-login-auth-cancel"));
     expect(awaitingFlow.cancel).toHaveBeenCalledTimes(1);
@@ -348,6 +354,9 @@ describe("device-flow login", () => {
     expect(open).toHaveBeenCalledTimes(1);
     expect(warn).toHaveBeenCalledWith(
       "Popup blocked - user will need to use manual link",
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Complete login in your browser Open the authorization page",
     );
     expect(screen.getByRole("link", { name: verificationUrl })).toHaveAttribute(
       "href",
