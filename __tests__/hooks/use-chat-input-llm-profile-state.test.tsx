@@ -70,13 +70,39 @@ describe("useChatInputLlmProfileState", () => {
     useCanManageOrgProfilesMock.mockReturnValue(true);
   });
 
-  it("prefers the profile stamped on the conversation over a model match", () => {
+  it("uses the stamped profile to disambiguate profiles that share the running model", () => {
+    useLlmProfilesMock.mockReturnValue({
+      data: {
+        profiles: [
+          ...PROFILES,
+          {
+            name: "Smart Copy",
+            model: "claude-opus",
+            base_url: null,
+            api_key_set: true,
+          },
+        ],
+        active_profile: "Fast",
+      },
+      isLoading: false,
+    });
     useActiveConversationMock.mockReturnValue({
-      data: { active_profile: "Smart", llm_model: "gpt-4o-mini" },
+      data: { active_profile: "Smart Copy", llm_model: "claude-opus" },
     });
     const { result } = renderState();
-    // model "gpt-4o-mini" would match "Fast", but the stamped profile wins.
+    // Model matching alone would pick "Smart", but the valid stamp preserves
+    // the exact profile the conversation launched with.
+    expect(result.current.currentProfileName).toBe("Smart Copy");
+  });
+
+  it("ignores a stale profile stamp whose model differs from the running conversation", () => {
+    useActiveConversationMock.mockReturnValue({
+      data: { active_profile: "Fast", llm_model: "claude-opus" },
+    });
+    const { result } = renderState();
+
     expect(result.current.currentProfileName).toBe("Smart");
+    expect(result.current.currentProfileModel).toBe("claude-opus");
   });
 
   it("falls back to the profile whose model matches the running llm_model", () => {
