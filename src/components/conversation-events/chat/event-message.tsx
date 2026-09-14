@@ -34,7 +34,9 @@ import { GenericEventMessageWrapper } from "./event-message-components/generic-e
 import { ThoughtEventMessage } from "./event-message-components/thought-event-message";
 import { CollapsibleThinking } from "./event-message-components/collapsible-thinking";
 import { HookExecutionEventMessage } from "./event-message-components/hook-execution-event-message";
+import { CorrectiveNudgeMessage } from "./event-message-components/corrective-nudge-message";
 import { createSkillReadyEvent } from "./event-content-helpers/create-skill-ready-event";
+import { isCorrectiveNudge } from "./event-content-helpers/should-render-event";
 import { shouldShowPlanPreview } from "./hooks/use-plan-preview-events";
 import { getReasoningContent, splitInlineThink } from "./event-thought-helpers";
 
@@ -348,6 +350,13 @@ export function EventMessage({
   // Message events (user and assistant messages)
   if (!isActionEvent(event) && !isObservationEvent(event)) {
     const messageEvent = event as MessageEvent;
+
+    // Render the SDK's empty-response corrective nudge as a distinct
+    // informational note (italic + muted + info icon) instead of an
+    // ordinary user bubble.
+    if (isCorrectiveNudge(messageEvent)) {
+      return <CorrectiveNudgeMessage event={messageEvent} />;
+    }
 
     // Check if this is a user message that should display a Skill Ready event
     if (isUserMessageEvent(event) && shouldShowSkillReadyEvent(messageEvent)) {
