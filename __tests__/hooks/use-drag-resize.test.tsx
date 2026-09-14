@@ -118,6 +118,41 @@ afterEach(() => {
 });
 
 describe("manual drag resizing", () => {
+  it.each([648, 647])(
+    "allows resizing at the bottom-anchor boundary but not just outside it: bottom=%s",
+    (bottom) => {
+      vi.mocked(isMobileDevice).mockReturnValue(false);
+      Object.defineProperty(window, "innerHeight", {
+        configurable: true,
+        value: 768,
+      });
+      const wrapper = document.createElement("div");
+      wrapper.getBoundingClientRect = () => ({ bottom }) as DOMRect;
+      document.body.appendChild(wrapper);
+      wrapper.appendChild(createResizeGrip());
+      const element = createResizeElement();
+      const onHeightChange = vi.fn();
+      const { result } = renderHook(() =>
+        useDragResize({
+          elementRef: { current: element },
+          minHeight: 100,
+          maxHeight: 300,
+          onHeightChange,
+        }),
+      );
+      beginMouseDrag(result.current.handleGripMouseDown);
+      dispatchDocumentMouseMove(80);
+      act(() => document.dispatchEvent(new MouseEvent("mouseup")));
+      if (bottom === 648) {
+        expect(element.style.height).toBe("220px");
+        expect(onHeightChange).toHaveBeenCalledExactlyOnceWith(220);
+      } else {
+        expect(element.style.height).toBe("");
+        expect(onHeightChange).not.toHaveBeenCalled();
+      }
+    },
+  );
+
   it.each([false, true])(
     "does not resize a centered home input on mobile=%s",
     (mobile) => {
