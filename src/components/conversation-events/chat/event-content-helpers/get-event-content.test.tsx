@@ -1,3 +1,5 @@
+import { CANVAS_UI_CLIENT_TOOL_NAME } from "#/constants/canvas-ui";
+import { LAUNCH_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversation";
 import React, { isValidElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
@@ -934,6 +936,73 @@ describe("unknown and incomplete events", () => {
     expect(getEventContent(event)).toEqual({
       title: "translated:EVENT$UNKNOWN_EVENT",
       details: "",
+    });
+  });
+});
+
+describe("client tool observation dispatch", () => {
+  it.each([
+    [CANVAS_UI_CLIENT_TOOL_NAME, "OBSERVATION_MESSAGE$CANVAS_UI"],
+    [
+      LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
+      "OBSERVATION_MESSAGE$LAUNCH_CHILD_CONVERSATION",
+    ],
+  ])("routes %s through its translated title", (tool_name, key) => {
+    const event = createObservationEvent(
+      observationOf("ClientToolObservation", { content: [] }),
+      { tool_name },
+    );
+    const result = getEventContent(event);
+    expect(getTranslationProps(result.title).i18nKey).toBe(key);
+    expect(result.details).toBe("observation details");
+  });
+
+  it("renders the Canvas command instead of generic or visualizer details", () => {
+    const event = createObservationEvent(
+      observationOf("ClientToolObservation", { content: [] }),
+      { tool_name: CANVAS_UI_CLIENT_TOOL_NAME },
+    );
+    const action = createActionEvent(
+      actionOf("CanvasUIAction", { command: "open_file" }),
+      { tool_name: CANVAS_UI_CLIENT_TOOL_NAME },
+    );
+    mocks.resolveVisualizerBody.mockReturnValue("visualizer details");
+    const result = getEventContent(event, action);
+    expect(result.details).toBe(
+      "UI command 'open_file' dispatched to the Agent Canvas frontend.",
+    );
+    expect(mocks.getObservationContent).not.toHaveBeenCalled();
+    expect(mocks.resolveVisualizerBody).not.toHaveBeenCalled();
+  });
+
+  it.each([undefined, "unrelated-tool"])(
+    "keeps generic details without a matching Canvas action (%s)",
+    (toolName) => {
+      const event = createObservationEvent(
+        observationOf("ClientToolObservation", { content: [] }),
+        { tool_name: CANVAS_UI_CLIENT_TOOL_NAME },
+      );
+      const action = toolName
+        ? createActionEvent(actionOf("ThinkAction"), { tool_name: toolName })
+        : undefined;
+      expect(getEventContent(event, action).details).toBe(
+        "observation details",
+      );
+      expect(mocks.getObservationContent).toHaveBeenCalledWith(event);
+    },
+  );
+
+  it("does not apply Canvas formatting to another client tool", () => {
+    const event = createObservationEvent(
+      observationOf("ClientToolObservation", { content: [] }),
+    );
+    const action = createActionEvent(
+      actionOf("CanvasUIAction", { command: "open_file" }),
+      { tool_name: CANVAS_UI_CLIENT_TOOL_NAME },
+    );
+    expect(getEventContent(event, action)).toEqual({
+      title: "CLIENTTOOL",
+      details: "observation details",
     });
   });
 });
