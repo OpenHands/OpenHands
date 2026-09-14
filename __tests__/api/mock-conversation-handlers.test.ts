@@ -11,6 +11,7 @@ import {
 } from "#/fixtures/canvas-demo-conversation";
 import { TABLE_DEMO_CONVERSATION_ID } from "#/fixtures/table-demo-conversation";
 import { server } from "#/mocks/node";
+import { ExecutionStatus } from "#/types/agent-server/core";
 
 const API_BASE = "http://localhost:3000";
 
@@ -118,6 +119,7 @@ describe("mock conversation handlers", () => {
 
     expect(conversation?.id).toBe(TABLE_DEMO_CONVERSATION_ID);
     expect(conversation?.title).toBe("Wide table demo");
+    expect(conversation?.workspace?.working_dir?.trim()).toBeTruthy();
   });
 
   it("returns table demo events sorted for conversation history", async () => {
@@ -157,6 +159,11 @@ describe("mock conversation handlers", () => {
   it("supports unfiltered, plain, and bracketed batch conversation lookups", async () => {
     const all =
       await requestJson<MockConversationResponse[]>("/api/conversations");
+    for (const conversation of all.body) {
+      expect(Object.values(ExecutionStatus)).toContain(
+        conversation.execution_status,
+      );
+    }
     const plainIds = await requestJson<(MockConversationResponse | null)[]>(
       "/api/conversations?ids=1&ids=missing",
     );
@@ -292,12 +299,19 @@ describe("mock conversation handlers", () => {
       if (!address || typeof address === "string")
         throw new Error("Expected TCP address");
       // Exercise the mock HTTP passthrough contract against a controlled local server.
-      // eslint-disable-next-line local/no-direct-agent-server-fetch
-      const response = await fetch(
-        `http://127.0.0.1:${address.port}/api/conversations/1/workspace/unrelated.txt`,
-      );
-      expect(response.status).toBe(200);
-      expect(await response.text()).toBe("unrelated workspace file");
+
+      for (const [conversationId, path] of [
+        ["1", "unrelated.txt"],
+        ["1", CANVAS_DEMO_FILE_PATH],
+        [CANVAS_DEMO_CONVERSATION_ID, "unrelated.txt"],
+      ]) {
+        // eslint-disable-next-line local/no-direct-agent-server-fetch -- Exercise HTTP passthrough against the controlled backing server.
+        const response = await fetch(
+          `http://127.0.0.1:${address.port}/api/conversations/${conversationId}/workspace/${path}`,
+        );
+        expect(response.status).toBe(200);
+        expect(await response.text()).toBe("unrelated workspace file");
+      }
     } finally {
       await new Promise<void>((resolve, reject) =>
         backingServer.close((error) => (error ? reject(error) : resolve())),
@@ -646,6 +660,7 @@ describe("mock conversation handlers", () => {
     );
 
     expect(conversation?.title).toBe("Generated canvas demo");
+    expect(conversation?.workspace?.working_dir?.trim()).toBeTruthy();
     expect(page.items).toHaveLength(4);
     expect(page.items).toEqual(
       expect.arrayContaining([
