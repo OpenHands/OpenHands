@@ -63,4 +63,26 @@ describe("redactMcpSecrets", () => {
 
     expect(redactMcpSecrets(text, server)).toBe(text);
   });
+
+  it("still collects query-string secrets when the URL password has a malformed percent escape (fixes #16978)", () => {
+    // The userinfo "alice:pa%ssword" has a "%" that is not followed by two hex digits,
+    // which makes decodeURIComponent throw URIError. The collection must not abort:
+    // the raw password is still added by the addValue() call before the decode, and
+    // the API-key query parameter on the same URL must also be picked up.
+    const server: MCPServerConfig = {
+      id: "shttp-1",
+      type: "shttp",
+      url: "https://alice:pa%ssword@mcp.example.com/mcp?api_key=querysecret456",
+    };
+
+    const redacted = redactMcpSecrets(
+      "401 for https://alice:pa%ssword@mcp.example.com/mcp?api_key=querysecret456",
+      server,
+    );
+
+    expect(redacted).not.toContain("querysecret456");
+    // The raw "%ssword" survives too — the redactor only knows the literal text.
+    expect(redacted).not.toContain("pa%ssword");
+    expect(redacted).toContain(REDACTED_MCP_SECRET_VALUE);
+  });
 });
