@@ -385,6 +385,52 @@ describe("AgentServerConversationService", () => {
       expect(mockHttpGet).not.toHaveBeenCalled();
     });
 
+    it("filters malformed entries out of server-provided child IDs", async () => {
+      mockHttpGet.mockResolvedValue({
+        data: [
+          makeDirectConversation({
+            sub_conversation_ids: ["planner", 17, null, {}],
+          }),
+        ],
+      });
+      const [result] =
+        await AgentServerConversationService.batchGetAppConversations([
+          "conv-1",
+        ]);
+      expect(result?.sub_conversation_ids).toEqual(["planner"]);
+    });
+
+    it.each([false, true])(
+      "returns no planner without server children or a stored hint, parent exists=%s",
+      async (parentExists) => {
+        if (parentExists)
+          setStoredConversationMetadata("parent", {
+            selected_repository: null,
+            selected_branch: null,
+            git_provider: null,
+          });
+        mockHttpGet.mockResolvedValue({
+          data: parentExists
+            ? [
+                makeDirectConversation({
+                  id: "parent",
+                  sub_conversation_ids: [],
+                }),
+              ]
+            : [],
+        });
+        await expect(
+          AgentServerConversationService.getLocalPlanningConversationIds(
+            "parent",
+          ),
+        ).resolves.toEqual([]);
+        expect(mockHttpGet).toHaveBeenCalledExactlyOnceWith(
+          "/api/conversations",
+          { params: { ids: ["parent"] } },
+        );
+      },
+    );
+
     it.each([false, true])(
       "uses stored planner metadata when server children are unavailable, fails=%s",
       async (fails) => {
@@ -2491,6 +2537,10 @@ describe("AgentServerConversationService", () => {
 
     it.each([
       ["conversation URL", { session_api_key: "fetched-key" }],
+      [
+        "nonblank conversation URL",
+        { conversation_url: "   ", session_api_key: "fetched-key" },
+      ],
       [
         "session key",
         {

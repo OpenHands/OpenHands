@@ -7,7 +7,10 @@ import {
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { __resetActiveStoreForTests } from "#/api/backend-registry/active-store";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
-import { setStoredConversationMetadata } from "#/api/conversation-metadata-store";
+import {
+  getStoredConversationMetadata,
+  setStoredConversationMetadata,
+} from "#/api/conversation-metadata-store";
 
 const {
   mockHttpGet,
@@ -604,6 +607,69 @@ describe("AgentServerConversationService", () => {
         { agent: { llm: { model: string } } },
       ];
       expect(payload.agent.llm.model).toBe("openhands/switched-model");
+      expect(getStoredConversationMetadata("conv-abc")).toMatchObject({
+        active_profile: "switched-llm",
+        local_planning_conversation_id: "plan-abc",
+      });
+    });
+
+    it("inherits the launched agent profile model when no active LLM profile is stored", async () => {
+      const { default: AgentProfilesService } =
+        await import("#/api/agent-profiles-service/agent-profiles-service.api");
+      const listProfiles = vi
+        .spyOn(AgentProfilesService, "listProfiles")
+        .mockResolvedValue({
+          active_agent_profile_id: null,
+          profiles: [
+            {
+              id: "launched-profile",
+              name: "Parent agent",
+              agent_kind: "openhands",
+              revision: 1,
+              llm_profile_ref: "parent-model",
+              mcp_server_refs: [],
+            },
+          ],
+        });
+      mockHttpGet.mockResolvedValue({
+        data: [
+          {
+            id: "conv-abc",
+            created_at: "2024-01-01T00:00:00.000Z",
+            updated_at: "2024-01-01T00:00:00.000Z",
+            launched_agent_profile: {
+              agent_profile_id: "launched-profile",
+              revision: 1,
+            },
+            sub_conversation_ids: [],
+          },
+        ],
+      });
+      mockGetProfile.mockResolvedValue({
+        name: "parent-model",
+        api_key_set: true,
+        config: { model: "openhands/parent-profile-model" },
+      });
+      try {
+        await AgentServerConversationService.createLocalPlanningConversation(
+          "conv-abc",
+        );
+        expect(mockGetProfile).toHaveBeenCalledWith("parent-model", {
+          exposeSecrets: "encrypted",
+        });
+        expect(mockHttpPost).toHaveBeenCalledWith(
+          "/api/conversations",
+          expect.objectContaining({
+            agent: expect.objectContaining({
+              llm: expect.objectContaining({
+                model: "openhands/parent-profile-model",
+              }),
+            }),
+          }),
+        );
+      } finally {
+        listProfiles.mockRestore();
+      }
     });
 
     it("streams the planner's LLM tokens, matching the code agent", async () => {
