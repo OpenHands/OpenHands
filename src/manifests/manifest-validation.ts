@@ -26,8 +26,16 @@ const ENTRY_ID_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const FIELD_NAME_PATTERN = /^[a-z][A-Za-z0-9]*$/;
 /** Copy must never be able to inject markup into the host. */
 const MARKUP_PATTERN = /<[A-Za-z/!]/;
-/** Every `{{` must open a known namespace and close immediately. */
-const BUNDLE_VERSION_PATTERN = /^[0-9]+\.[0-9]+\.[0-9]+$/;
+/**
+ * A template version, declared as `version` by a prompt entry and as
+ * `setup.bundle.version` by a bundle one. Sent to the service as template
+ * provenance, so it is checked at admission. Full semver, as the spec at
+ * semver.org states it: a catalog entry published with a pre-release or build
+ * suffix is still a version this host may forward, and refusing one would drop
+ * the entry from the registry outright.
+ */
+const TEMPLATE_VERSION_PATTERN =
+  /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*)?(?:\+[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*)?$/;
 // The characters a command of plain words and paths is made of. No shell
 // metacharacters, which the service rejects anyway and a bundle has no reason
 // to need; where those words may point is `isPlainCommand`'s to say.
@@ -35,6 +43,7 @@ const BUNDLE_COMMAND_PATTERN = /^[A-Za-z0-9 ._/-]+$/;
 const BUNDLE_PATH_PATTERN = /^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/;
 const BUNDLE_SOURCE_PATTERN =
   /^(skills|automations)\/[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/;
+/** Every `{{` must open a known namespace and close immediately. */
 const UNKNOWN_PLACEHOLDER_PATTERN = new RegExp(
   `\\{\\{(?!(?:${SETUP_PLACEHOLDER_NAMESPACES.join("|")})\\.[A-Za-z0-9_.]+\\}\\})`,
 );
@@ -44,9 +53,15 @@ const FIELD_TYPES = [
   "text",
   "textarea",
   "select",
+  "number",
   "cron",
   "timezone",
   "repo-picker",
+  "llm-profile",
+  "event-source",
+  "event-type",
+  "plugin-sources",
+  "tarball-upload",
 ] as const;
 const GIT_PROVIDERS = ["github", "gitlab", "bitbucket"] as const;
 const TRIGGER_KINDS = ["cron", "event"] as const;
@@ -175,8 +190,11 @@ function checkRequires(check: SetupChecker, requires: unknown): void {
   }
 
   const { integrations, features } = requires;
-  if (!isRecord(integrations) || Object.keys(integrations).length === 0) {
-    check.fail("requires.integrations", "must be a non-empty object");
+  // Empty is meaningful rather than malformed: an automation that needs no
+  // credential connects to nothing, and the key stays required so that saying
+  // so is a deliberate statement instead of an omission.
+  if (!isRecord(integrations)) {
+    check.fail("requires.integrations", "must be an object");
   } else {
     Object.entries(integrations).forEach(([id, requirement]) => {
       const path = `requires.integrations.${id}`;
@@ -221,12 +239,18 @@ function checkConstraints(
     return;
   }
 
-  const { minLength, maxLength, format } = constraints;
+  const { minLength, maxLength, min, max, format } = constraints;
   if (minLength !== undefined && !isInteger(minLength, 0)) {
     check.fail(`${path}.minLength`, "must be a non-negative integer");
   }
   if (maxLength !== undefined && !isInteger(maxLength, 1)) {
     check.fail(`${path}.maxLength`, "must be a positive integer");
+  }
+  if (min !== undefined && !isInteger(min, 0)) {
+    check.fail(`${path}.min`, "must be a non-negative integer");
+  }
+  if (max !== undefined && !isInteger(max, 1)) {
+    check.fail(`${path}.max`, "must be a positive integer");
   }
   if (format !== undefined && !isOneOf(format, CONSTRAINT_FORMATS)) {
     check.fail(`${path}.format`, "is not a supported format");
@@ -247,8 +271,14 @@ function checkField(check: SetupChecker, field: unknown, path: string): void {
   check.copy(label, `${path}.label`);
   check.copy(help, `${path}.help`);
   if (placeholder !== undefined) check.copy(placeholder, `${path}.placeholder`);
-  if (field.default !== undefined && typeof field.default !== "string") {
-    check.fail(`${path}.default`, "must be a string");
+  if (
+    field.default !== undefined &&
+    typeof field.default !== "string" &&
+    typeof field.default !== "number" &&
+    typeof field.default !== "boolean" &&
+    field.default !== null
+  ) {
+    check.fail(`${path}.default`, "must be a string, number, boolean or null");
   }
   if (typeof required !== "boolean") {
     check.fail(`${path}.required`, "must be a boolean");
@@ -318,10 +348,13 @@ function checkFields(
 }
 
 /** Returns the trigger kinds declared, in order. */
-function checkForm(check: SetupChecker, form: unknown): string[] {
+function checkForm(
+  check: SetupChecker,
+  form: unknown,
+): { kinds: string[]; fieldNames: string[] } {
   if (!isRecord(form)) {
     check.fail("setup.form", "must be an object");
-    return [];
+    return { kinds: [], fieldNames: [] };
   }
 
   if (form.note !== undefined) check.copy(form.note, "setup.form.note");
@@ -355,22 +388,145 @@ function checkForm(check: SetupChecker, form: unknown): string[] {
     check.fail(`setup.form.${name}`, "is declared more than once"),
   );
 
-  return kinds;
+  return { kinds, fieldNames: names };
 }
 
-function hasRepoPicker(form: unknown): boolean {
-  if (!isRecord(form)) return false;
-  const groups = [
-    form.args,
-    ...Object.values(isRecord(form.triggers) ? form.triggers : {}),
-  ];
-  return groups.some(
-    (group) =>
-      isRecord(group) &&
-      Object.values(group).some(
-        (field) => isRecord(field) && field.type === "repo-picker",
-      ),
+function checkActionFeatures(
+  check: SetupChecker,
+  features: unknown,
+  path: string,
+): void {
+  if (!Array.isArray(features) || features.length === 0) {
+    check.fail(path, "must be a non-empty array");
+    return;
+  }
+  features.forEach((feature, index) => {
+    if (typeof feature !== "string" || feature.length === 0) {
+      check.fail(`${path}[${index}]`, "must be a non-empty string");
+    }
+  });
+}
+
+function checkAction(
+  check: SetupChecker,
+  kind: string,
+  action: unknown,
+  commonFieldNames: string[],
+): void {
+  const path = `setup.actions.${kind}`;
+  if (!isRecord(action)) {
+    check.fail(path, "must be an object");
+    return;
+  }
+
+  check.copy(action.label, `${path}.label`);
+  check.copy(action.help, `${path}.help`);
+  checkActionFeatures(check, action.features, `${path}.features`);
+  const actionFieldNames = checkFields(check, action.args, `${path}.args`);
+  actionFieldNames
+    .filter((name) => commonFieldNames.includes(name))
+    .forEach((name) =>
+      check.fail(`${path}.args.${name}`, "is already declared by the form"),
+    );
+
+  if (kind === "prompt") {
+    check.templateValue(action.prompt, `${path}.prompt`);
+  } else if (kind === "plugin") {
+    check.templateValue(action.prompt, `${path}.prompt`);
+    check.templateValue(action.plugins, `${path}.plugins`);
+  } else if (kind === "upload") {
+    check.templateValue(action.tarballPath, `${path}.tarballPath`);
+    check.templateValue(action.entrypoint, `${path}.entrypoint`);
+    if (action.setupScript !== undefined) {
+      check.templateValue(action.setupScript, `${path}.setupScript`);
+    }
+  } else {
+    check.fail(path, "is not a supported action kind");
+  }
+
+  const allowedByKind: Record<string, string[]> = {
+    prompt: ["label", "help", "features", "args", "prompt"],
+    plugin: ["label", "help", "features", "args", "prompt", "plugins"],
+    upload: [
+      "label",
+      "help",
+      "features",
+      "args",
+      "tarballPath",
+      "entrypoint",
+      "setupScript",
+    ],
+  };
+  const allowed = allowedByKind[kind] ?? [];
+  Object.keys(action)
+    .filter((key) => !allowed.includes(key))
+    .forEach((key) => check.fail(`${path}.${key}`, "is not allowed"));
+}
+
+function checkActions(
+  check: SetupChecker,
+  actions: unknown,
+  commonFieldNames: string[],
+): void {
+  if (!isRecord(actions) || Object.keys(actions).length === 0) {
+    check.fail("setup.actions", "must be a non-empty object");
+    return;
+  }
+  Object.entries(actions).forEach(([kind, action]) =>
+    checkAction(check, kind, action, commonFieldNames),
   );
+}
+
+function fieldsContainType(fields: unknown, type: string): boolean {
+  if (!isRecord(fields)) return false;
+  return Object.values(fields).some(
+    (field) => isRecord(field) && field.type === type,
+  );
+}
+
+function actionHasRepoPicker(action: unknown): boolean {
+  return isRecord(action) && fieldsContainType(action.args, "repo-picker");
+}
+
+/**
+ * Whether an event trigger's `source` is derivable for every selectable action.
+ *
+ * `buildTrigger` fills `source` from a field named `source` in the event
+ * trigger, or failing that from the selected action's repo-picker provider. A
+ * picker in another trigger group (such as `cron`) is never collected for the
+ * event trigger, and a picker in only some actions is invisible when one of the
+ * others is selected — so neither may satisfy this check, or the user can end
+ * up with an empty `source` no form field can fix.
+ */
+function setupSuppliesEventSource(setup: Rec): boolean {
+  const form = isRecord(setup.form) ? setup.form : {};
+  const triggers = isRecord(form.triggers) ? form.triggers : {};
+  const eventFields = triggers.event;
+
+  // An explicit event-source field fills `source` directly, regardless of which
+  // action is selected.
+  if (fieldsContainType(eventFields, "event-source")) return true;
+
+  // A repo-picker in the event trigger is only collected when `event` is the
+  // sole trigger kind; with a sibling trigger the derivation reads no trigger
+  // fields for the picker. `form.args` is shared across every selection, so a
+  // picker there is always available.
+  const singleEventTrigger =
+    "event" in triggers && Object.keys(triggers).length === 1;
+  if (
+    (singleEventTrigger && fieldsContainType(eventFields, "repo-picker")) ||
+    fieldsContainType(form.args, "repo-picker")
+  ) {
+    return true;
+  }
+
+  // Without a shared or event-trigger picker, every selectable action must
+  // carry its own repo-picker; otherwise selecting an action without one
+  // derives `source: ""`.
+  if (!isRecord(setup.actions) || Object.keys(setup.actions).length === 0) {
+    return false;
+  }
+  return Object.values(setup.actions).every(actionHasRepoPicker);
 }
 
 function checkMessage(check: SetupChecker, message: unknown): void {
@@ -400,7 +556,7 @@ function checkBundle(check: SetupChecker, bundle: unknown): void {
 
   if (
     typeof bundle.version !== "string" ||
-    !BUNDLE_VERSION_PATTERN.test(bundle.version)
+    !TEMPLATE_VERSION_PATTERN.test(bundle.version)
   ) {
     check.fail("setup.bundle.version", "must be a semantic version");
   }
@@ -493,25 +649,34 @@ function checkBundleConfig(
   }
 }
 
-function checkMode(check: SetupChecker, setup: Rec, kinds: string[]): void {
+function checkMode(
+  check: SetupChecker,
+  setup: Rec,
+  kinds: string[],
+  commonFieldNames: string[],
+): void {
   if (!isOneOf(setup.mode, SETUP_MODES)) {
     check.fail("setup.mode", "is not a supported mode");
     return;
   }
 
   if (setup.mode === "direct") {
-    // A direct entry produces one of two things: a prompt, or a script bundle
-    // the host packs and uploads. Both would be ambiguous, neither is nothing
-    // to create.
+    // A direct entry produces one of three things: a prompt, a script bundle
+    // the host packs and uploads, or a selectable set of action variants.
+    // More than one would be ambiguous, and none is nothing to create.
     const hasPrompt = setup.prompt !== undefined;
     const hasBundle = setup.bundle !== undefined;
-    if (hasPrompt === hasBundle) {
+    const hasActions = setup.actions !== undefined;
+    const variants = [hasPrompt, hasBundle, hasActions].filter(Boolean);
+    if (variants.length !== 1) {
       check.fail(
         "setup",
-        "must declare exactly one of prompt or bundle for direct setup",
+        "must declare exactly one of prompt, bundle or actions for direct setup",
       );
     } else if (hasBundle) {
       checkBundle(check, setup.bundle);
+    } else if (hasActions) {
+      checkActions(check, setup.actions, commonFieldNames);
     } else {
       check.templateValue(setup.prompt, "setup.prompt");
     }
@@ -520,18 +685,16 @@ function checkMode(check: SetupChecker, setup: Rec, kinds: string[]): void {
     // message.
     if (setup.message !== undefined) checkMessage(check, setup.message);
 
-    // The derivation reads a single trigger kind, and an event trigger takes
-    // its source from the repository field's provider.
-    if (kinds.length !== 1) {
+    if (kinds.length === 0) {
       check.fail(
         "setup.form.triggers",
-        "must declare exactly one trigger kind",
+        "must declare at least one trigger kind",
       );
     }
-    if (kinds.includes("event") && !hasRepoPicker(setup.form)) {
+    if (kinds.includes("event") && !setupSuppliesEventSource(setup)) {
       check.fail(
-        "setup.form",
-        "must declare a repository field for an event trigger",
+        "setup.form.triggers.event",
+        "must declare an event source field or repository picker",
       );
     }
     if (setup.filter !== undefined) {
@@ -547,6 +710,7 @@ function checkMode(check: SetupChecker, setup: Rec, kinds: string[]): void {
   checkMessage(check, setup.message);
   check.absent(setup, "prompt", "setup", "is only allowed for direct setup");
   check.absent(setup, "bundle", "setup", "is only allowed for direct setup");
+  check.absent(setup, "actions", "setup", "is only allowed for direct setup");
   check.absent(setup, "filter", "setup", "is only allowed for direct setup");
 }
 
@@ -588,6 +752,13 @@ export function validateSetupEntry(candidate: unknown): SetupValidationResult {
   check.copy(candidate.name, "name");
   check.copy(candidate.description, "description");
   if (
+    candidate.version !== undefined &&
+    (typeof candidate.version !== "string" ||
+      !TEMPLATE_VERSION_PATTERN.test(candidate.version))
+  ) {
+    check.fail("version", "must be a semantic version");
+  }
+  if (
     candidate.skill !== undefined &&
     (typeof candidate.skill !== "string" ||
       !ENTRY_ID_PATTERN.test(candidate.skill))
@@ -596,8 +767,8 @@ export function validateSetupEntry(candidate: unknown): SetupValidationResult {
   }
 
   checkRequires(check, candidate.requires);
-  const kinds = checkForm(check, setup.form);
-  checkMode(check, setup, kinds);
+  const { kinds, fieldNames } = checkForm(check, setup.form);
+  checkMode(check, setup, kinds, fieldNames);
 
   return { valid: check.errors.length === 0, errors: check.errors };
 }

@@ -1,12 +1,12 @@
 /**
- * Mock-LLM E2E tests: Files tab, Git control bar, and Browser tab.
+ * Mock-LLM E2E tests: Files tab, conversation overview git, and Browser tab.
  *
  * Exercises conversation-panel tabs and git integration against the real
  * agent-server with a scripted mock LLM backend.
  *
  * Coverage (issue #511):
  *   - Files tab diff view can be enabled when a workspace is attached
- *   - Git control bar shows workspace-name pill for folder-attached conversations
+ *   - Conversation overview shows workspace / git identity (composer rail removed)
  *   - Browser tab renders empty state when no page has been browsed
  *   - Files tab defaults to file-tree view when NO workspace is attached
  */
@@ -31,7 +31,7 @@ import {
 const USER_MESSAGE = "Hello, please respond.";
 const WORKSPACE_PATH = "/tmp/e2e-test-project/my-app";
 // The git remote the step-2 trajectory configures for the workspace. Kept as a
-// shared constant so the `git remote add` command and the control-bar pill
+// shared constant so the `git remote add` command and the overview git
 // assertion below can never drift apart.
 const EXPECTED_REPO_SLUG = "test-org/test-repo";
 
@@ -67,7 +67,7 @@ async function seedWorkspaceMetadata(
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("files tab, git control bar, and browser tab", () => {
+test.describe("files tab, conversation overview git, and browser tab", () => {
   const conversationIds = new Set<string>();
   /** Conversation ID from the workspace-attached test, reused across steps. */
   let attachedConversationId: string | null = null;
@@ -188,9 +188,9 @@ test.describe("files tab, git control bar, and browser tab", () => {
     await waitForTestId(page, "chat-interface", 30_000);
   });
 
-  // ── Step 3: Verify git control bar shows workspace name pill ────────
+  // ── Step 3: Verify overview shows workspace / git identity ─────────
 
-  test("step 3: git control bar shows workspace pill and git actions", async ({
+  test("step 3: conversation overview shows workspace and git identity", async ({
     page,
   }) => {
     test.skip(!attachedConversationId, "step 2 must complete first");
@@ -206,52 +206,47 @@ test.describe("files tab, git control bar, and browser tab", () => {
 
     const workspaceName = WORKSPACE_PATH.replace(/\/+$/, "").split("/").pop()!;
 
-    // The git control bar renders below the chat input and shows the
-    // conversation's workspace/repo identity. Either state is valid and the
-    // bar flips between them as the local `git remote get-url origin` probe
-    // resolves: it shows the folder basename ("my-app") until the remote
-    // (added by step 2) is detected, then the repo slug ("test-org/test-repo").
-    // Accept either so the assertion doesn't race that probe (the source of a
-    // pre-existing flake — see GitControlBarRepoButton: selectedRepository ||
-    // workspaceName).
-    const escapeRegExp = (s: string) =>
-      s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const pillText = new RegExp(
-      `${escapeRegExp(workspaceName)}|${escapeRegExp(EXPECTED_REPO_SLUG)}`,
-    );
-    await test.step("verify workspace/repo pill is visible", async () => {
-      await expect(page.getByText(pillText).first()).toBeVisible({
-        timeout: 15_000,
-      });
+    // Composer no longer hosts the git rail; identity lives in overview.
+    await test.step("composer has no git control rail", async () => {
+      await expect(
+        page.getByTestId("interactive-chat-box").getByRole("button", {
+          name: /^(Pull|Push|Create PR|Connect Repo)$/i,
+        }),
+      ).toHaveCount(0);
+    });
+
+    await test.step("open conversation overview", async () => {
+      const toggle = page.getByTestId("conversation-overview-toggle");
+      await expect(toggle).toBeVisible({ timeout: 10_000 });
+      await toggle.click();
+      await waitForTestId(page, "conversation-overview-panel", 10_000);
+    });
+
+    await test.step("verify workspace row shows folder basename", async () => {
+      const workspaceRow = page.getByTestId("conversation-overview-workspace");
+      await expect(workspaceRow).toBeVisible({ timeout: 10_000 });
+      await expect(workspaceRow).toContainText(workspaceName);
     });
 
     // When useLocalGitInfo detects a remote (trajectory ran git init +
-    // remote add in step 2), Pull/Push buttons appear. In the npm path
-    // this happens reliably; in Docker the bash WebSocket probe may be
-    // slower. Use a soft check so Docker CI isn't blocked.
-    await test.step("check for Pull/Push buttons (git detection)", async () => {
-      const pullButton = page.getByRole("button", { name: /Pull/i }).first();
+    // remote add in step 2), the overview git section surfaces the repo
+    // slug. In Docker the bash WebSocket probe may be slower — soft-check.
+    await test.step("check for overview git repo (git detection)", async () => {
+      const repoRow = page.getByTestId("conversation-overview-git-repo");
       try {
-        await expect(pullButton).toBeVisible({ timeout: 20_000 });
-        // If Pull is visible, Push should be too
-        await expect(
-          page.getByRole("button", { name: /Push/i }).first(),
-        ).toBeVisible({ timeout: 5_000 });
+        await expect(repoRow).toBeVisible({ timeout: 20_000 });
+        await expect(repoRow).toContainText(EXPECTED_REPO_SLUG);
       } catch {
-        // Soft-fail: git probe may not have completed in time (Docker).
-        // The workspace pill assertion above is the primary gate.
         console.log(
-          "Pull/Push buttons not visible — git probe likely still pending",
+          "Overview git repo not visible — git probe likely still pending",
         );
       }
     });
   });
 
-  // ── Step 4: Verify Files tab diff toggle can be enabled ─────────────
+  // ── Step 4: Verify Commits tab is available for attached workspace ─
 
-  test("step 4: files tab can enable diff view for attached workspace", async ({
-    page,
-  }) => {
+  test("step 4: commits tab opens for attached workspace", async ({ page }) => {
     test.skip(!attachedConversationId, "step 2 must complete first");
     test.setTimeout(60_000);
 
@@ -263,9 +258,7 @@ test.describe("files tab, git control bar, and browser tab", () => {
     await dismissAnalyticsModal(page);
     await waitForTestId(page, "chat-interface", 30_000);
 
-    // Open the right panel, switch to Files tab, and verify diff toggle
-    await test.step("open files tab and verify diff toggle", async () => {
-      // Open the right panel
+    await test.step("open right panel and Commits tab", async () => {
       const toggle = page.getByTestId("right-panel-toggle");
       await expect(toggle).toBeVisible({ timeout: 10_000 });
       await toggle.click({ force: true });
@@ -273,23 +266,18 @@ test.describe("files tab, git control bar, and browser tab", () => {
         timeout: 10_000,
       });
 
-      // Wait for at least one tab to be visible (panel animation done)
       const anyTab = page.locator('[data-testid^="conversation-tab-"]').first();
       await expect(anyTab).toBeVisible({ timeout: 10_000 });
 
-      // Click the Files tab
-      const filesTab = page.getByTestId("conversation-tab-files");
-      await filesTab.click();
-
-      // Wait for the diff toggle radio group to be visible (both option
-      // buttons render together, so target the parent container rather than
-      // using .or() which hits Playwright strict-mode when both resolve).
-      const diffToggle = page.getByTestId("files-tab-diff-toggle");
-      await expect(diffToggle).toBeVisible({ timeout: 15_000 });
-
-      const diffOnOption = page.getByTestId("files-tab-diff-toggle-option-on");
-      await diffOnOption.click({ force: true });
-      await expect(diffOnOption).toHaveAttribute("aria-checked", "true", {
+      // Commits may be overflowed into the ⋯ menu on narrow viewports.
+      const commitsTab = page.getByTestId("conversation-tab-commits");
+      if (await commitsTab.isVisible().catch(() => false)) {
+        await commitsTab.click();
+      } else {
+        await page.getByTestId("ellipsis-button").click();
+        await page.getByTestId("conversation-tabs-menu-open-commits").click();
+      }
+      await expect(page.getByTestId("conversation-tab-commits")).toBeVisible({
         timeout: 15_000,
       });
     });
@@ -384,27 +372,36 @@ test.describe("files tab, git control bar, and browser tab", () => {
       await page.waitForTimeout(500);
     });
 
-    // Click the Files tab
-    await test.step("click files tab", async () => {
+    // Ensure the Files surface is showing. Opening the drawer already
+    // defaults the selection to Files, and clicking the active tab again
+    // deliberately closes the drawer (see useSelectConversationTab), so only
+    // click when the Files panel is not already visible.
+    await test.step("ensure files tab is active", async () => {
       const filesTab = page.getByTestId("conversation-tab-files");
       await expect(filesTab).toBeVisible({ timeout: 10_000 });
-      await filesTab.click();
-      await page.waitForTimeout(300);
+      if (!(await page.getByTestId("files-tab").isVisible())) {
+        await filesTab.click();
+        await page.waitForTimeout(300);
+      }
     });
 
-    await test.step("verify diff toggle defaults to off (files view)", async () => {
-      // Wait for the diff toggle radio group inside the files tab content.
-      // The parent `files-tab` container can report "hidden" while the
-      // right-panel drawer animation runs, so target the toggle directly.
-      const diffToggle = page.getByTestId("files-tab-diff-toggle");
-      await expect(diffToggle).toBeVisible({ timeout: 15_000 });
-
-      // Without an attached workspace, the "off" (Files) option should be active
-      const diffOffOption = page.getByTestId(
-        "files-tab-diff-toggle-option-off",
-      );
-      await expect(diffOffOption).toBeVisible({ timeout: 10_000 });
-      await expect(diffOffOption).toHaveAttribute("aria-checked", "true");
+    await test.step("verify files tab shows file browser (not diff)", async () => {
+      await expect(page.getByTestId("files-tab")).toBeVisible({
+        timeout: 15_000,
+      });
+      // The file browser's tab strip renders once loading settles; the
+      // content mode toggle only appears after a file is opened, and the
+      // legacy Diff/Commits toggle is gone from the Files surface.
+      await expect(page.getByTestId("file-quick-row")).toBeVisible({
+        timeout: 10_000,
+      });
+      await expect(page.getByTestId("files-tab-content")).toBeVisible({
+        timeout: 10_000,
+      });
+      await expect(
+        page.getByTestId("files-tab-content-mode-toggle"),
+      ).toHaveCount(0);
+      await expect(page.getByTestId("files-tab-diff-toggle")).toHaveCount(0);
     });
   });
 });

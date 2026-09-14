@@ -4,7 +4,15 @@ import { useTranslation } from "react-i18next";
 import type { LatestAutomationRunState } from "#/hooks/query/use-latest-automation-runs";
 import { I18nKey } from "#/i18n/declaration";
 import ClockIcon from "#/icons/clock.svg?react";
-import { AutomationRunStatus, type Automation } from "#/types/automation";
+import {
+  shouldShowRunPhase,
+  useRunPhase,
+} from "#/components/features/automations/detail/run-phase";
+import type { Automation, AutomationRun } from "#/types/automation";
+import {
+  getAutomationRunBadgeLabelKey,
+  getAutomationRunDisplay,
+} from "#/utils/automation-run-display";
 import { formatRelativeTime } from "#/utils/format-relative-time";
 import { AutomationHealthIndicator } from "./automation-health-indicator";
 import {
@@ -18,6 +26,11 @@ export function getRunStatusLabelKey(
   runState: LatestAutomationRunState,
 ): I18nKey {
   if (runState.isError) return I18nKey.FEATURED_AUTOMATIONS$STATUS_UNAVAILABLE;
+  if (runState.latestRun) {
+    return getAutomationRunBadgeLabelKey(
+      getAutomationRunDisplay(runState.latestRun).badgeStatus,
+    );
+  }
   return getRunHealthLabelKey(deriveRunHealth(runState));
 }
 
@@ -39,6 +52,37 @@ function PreviewRow({
 }
 
 /**
+ * The run's phase and how long it has held it. The row that opens this
+ * hovercard has to clip a long phase; here there is room to wrap, so this is
+ * where the whole thing is readable — and the age is what says whether the
+ * run is moving through phases or sitting in one. Only the layout differs
+ * from the row's: what the phase says, and whether its age is meaningful,
+ * comes from the same hook the row uses.
+ */
+function PhaseRow({ run }: { run: AutomationRun | null }) {
+  const { t } = useTranslation("openhands");
+  const phase = useRunPhase({
+    status: run?.status,
+    code: run?.phase_code,
+    label: run?.phase_label,
+    updatedAt: run?.phase_updated_at,
+  });
+
+  if (!run || !shouldShowRunPhase(run.status) || !phase) return null;
+
+  const { text, age } = phase;
+
+  return (
+    <PreviewRow label={t(I18nKey.AUTOMATIONS$DETAIL$PHASE)}>
+      <span data-testid="run-phase-row">
+        {text}
+        {age ? <span className="text-muted"> · {age}</span> : null}
+      </span>
+    </PreviewRow>
+  );
+}
+
+/**
  * Left-nav-style hovercard body for an automation's latest-run health.
  * Matches `ConversationCardPreview` layout: title + label/value rows.
  */
@@ -54,6 +98,7 @@ export function HomeAutomationRunTooltip({
   const timestamp = latestRun ? getLastRunTimestamp(latestRun) : null;
   const TriggerIcon = automation.trigger.type === "event" ? Zap : ClockIcon;
   const health = deriveRunHealth(runState);
+  const display = latestRun ? getAutomationRunDisplay(latestRun) : null;
 
   return (
     <div className="flex w-[280px] flex-col gap-3 p-3">
@@ -79,17 +124,18 @@ export function HomeAutomationRunTooltip({
           </span>
         </PreviewRow>
 
+        <PhaseRow run={latestRun} />
+
         {timestamp ? (
           <PreviewRow label={t(I18nKey.AUTOMATIONS$DETAIL$LAST_RUN)}>
             {formatRelativeTime(timestamp, i18n.language, t)}
           </PreviewRow>
         ) : null}
 
-        {latestRun?.status === AutomationRunStatus.FAILED &&
-        latestRun.error_detail ? (
-          <PreviewRow label={t(I18nKey.STATUS$ERROR)}>
-            <span className="line-clamp-3 text-[var(--oh-status-error)]">
-              {latestRun.error_detail}
+        {display?.summary ? (
+          <PreviewRow label={t(I18nKey.AUTOMATIONS$DETAIL$TASK_LABEL)}>
+            <span className="line-clamp-3 text-[var(--oh-text-secondary)]">
+              {display.summary}
             </span>
           </PreviewRow>
         ) : null}

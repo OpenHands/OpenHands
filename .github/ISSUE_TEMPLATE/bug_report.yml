@@ -54,11 +54,19 @@ body:
     id: steps
     attributes:
       label: Steps to Reproduce
-      description: Step-by-step instructions to reproduce the behavior.
+      description: |
+        Step-by-step instructions to reproduce the behavior. To qualify for the
+        `ready-for-dev` label, include how you ran Agent Canvas using one of
+        these supported methods:
+          - `npx @openhands/agent-canvas` (or `agent-canvas` if installed globally)
+          - `npm run dev` / `npm run dev:minimal` (from a source checkout)
+          - The hosted canvas at `app.all-hands.dev/canvas`
       placeholder: |
-        1. Go to '...'
-        2. Click on '...'
-        3. Scroll down to '...'
+        Run method: `npm run dev`
+
+        1. npm install && npm run dev
+        2. Open http://localhost:8000
+        3. …
         4. See error
     validations:
       required: true
@@ -68,22 +76,14 @@ body:
     attributes:
       label: Actual Behavior
       description: |
-        What actually happened? To qualify for the `ready-for-dev` label, show
-        how you reproduced the bug in a live Agent Canvas session using one of
-        the supported run methods, and attach a screenshot or video of the bug
-        in this section.
-        Run methods (reference at least one):
-          - `npx @openhands/agent-canvas` (or `agent-canvas` if installed globally)
-          - `npm run dev` / `npm run dev:minimal` (from a source checkout)
-          - The hosted canvas at `app.all-hands.dev/canvas`
+        What actually happened? To qualify for the `ready-for-dev` label,
+        describe the observed behavior and attach a screenshot or video of the
+        bug in this section.
         Drag a screenshot/video into this field, or paste a link.
       placeholder: |
-        Run method: `npm run dev`
+        The button moved to the next step unexpectedly.
 
-        1. npm install && npm run dev
-        2. Open http://localhost:8000
-        3. …
-        4. Observed the error shown in the attached screenshot.
+        The attached screenshot shows the observed error.
     validations:
       required: true
 

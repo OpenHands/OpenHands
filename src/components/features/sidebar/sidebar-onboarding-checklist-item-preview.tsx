@@ -21,11 +21,13 @@ const PREVIEW_ACTION_BUTTON_CLASS = cn(
 interface SidebarOnboardingChecklistItemPreviewProps {
   id: SidebarOnboardingChecklistItemId;
   onActionClick?: () => void;
+  onDocsClick?: () => void;
 }
 
 export function SidebarOnboardingChecklistItemPreview({
   id,
   onActionClick,
+  onDocsClick,
 }: SidebarOnboardingChecklistItemPreviewProps) {
   const { t } = useTranslation("openhands");
   const titleKey = SIDEBAR_ONBOARDING_CHECKLIST_I18N_KEYS[id];
@@ -57,6 +59,7 @@ export function SidebarOnboardingChecklistItemPreview({
           rel="noreferrer"
           data-testid={`sidebar-onboarding-checklist-preview-docs-${id}`}
           className="inline-flex min-w-0 items-center gap-2 text-xs text-[var(--oh-muted)] transition-colors hover:text-white hover:underline"
+          onClick={onDocsClick}
         >
           <BookOpen className="size-3.5 shrink-0" aria-hidden />
           {t(I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_DOCS_LINK)}
@@ -77,6 +80,7 @@ export function SidebarOnboardingChecklistItemPreview({
             to={href.href}
             data-testid={`sidebar-onboarding-checklist-preview-action-${id}`}
             className={PREVIEW_ACTION_BUTTON_CLASS}
+            onClick={onActionClick}
           >
             {t(actionKey)}
           </NavigationLink>

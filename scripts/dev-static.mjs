@@ -63,6 +63,11 @@ import {
   buildAutomationTelemetryEnv,
   buildAutomationRuntimeServicesInfo,
   buildConfig,
+  buildRouteArgs,
+  getAgentServerBaseUrl,
+  getLocalServiceRoutes,
+  getNoReferrerPrefixArgs,
+  getVSCodeAdvertiseArgs,
 } from "./dev-with-automation.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -285,42 +290,25 @@ async function waitForService(name, url, timeoutMs = 30000) {
 // dev-with-automation; the only difference is the frontend service.)
 // ═══════════════════════════════════════════════════════════════════════════
 
-// Both backends bind to `0.0.0.0`, which only accepts IPv4, but localhost can
-// resolve to ::1 first (notably on Windows). Every proxy target and readiness
-// probe pointed at them must therefore address IPv4 explicitly.
-function getAgentServerBaseUrl(config) {
-  return `http://127.0.0.1:${config.agentServerPort}`;
-}
-
-function getAutomationBaseUrl(config) {
-  return `http://127.0.0.1:${config.autoBackendPort}`;
-}
-
-const AUTOMATION_ROUTE_PREFIX = "/api/automation";
-const AGENT_SERVER_ROUTE_PREFIXES = [
-  "/api",
-  "/sockets",
-  "/server_info",
-  "/health",
-  "/ready",
-  "/alive",
-  "/docs",
-  "/redoc",
-  "/openapi.json",
-];
-
-// The static server and the ingress proxy front the same two local backends,
-// so they share one route table.
+// The static server and the ingress proxy front the same local backends, so
+// they share one route table — dev-with-automation's, rather than a second
+// copy here. The copy this replaces claimed to stay identical to that table
+// but nothing enforced it, and it had already drifted: the editor prefix was
+// missing, so `/vscode` fell through to the SPA fallback and answered editor
+// requests with the canvas shell.
+//
+// This mode always launches both local backends (it never runs frontend-only),
+// so it asks for their routes unconditionally. Every target is IPv4 loopback:
+// the backends bind to `0.0.0.0`, which only accepts IPv4, but localhost can
+// resolve to ::1 first (notably on Windows).
 function buildLocalServiceRouteArgs(config) {
-  const agentServerUrl = getAgentServerBaseUrl(config);
-  return [
-    "--route",
-    `${AUTOMATION_ROUTE_PREFIX}=${getAutomationBaseUrl(config)}`,
-    ...AGENT_SERVER_ROUTE_PREFIXES.flatMap((prefix) => [
-      "--route",
-      `${prefix}=${agentServerUrl}`,
-    ]),
-  ];
+  return buildRouteArgs(
+    getLocalServiceRoutes({
+      ...config,
+      launchAgentServer: true,
+      launchAutomation: true,
+    }),
+  );
 }
 
 function startAgentServer(config) {
@@ -341,7 +329,12 @@ function startAgentServer(config) {
   });
 
   const agentServerEnv = {
-    ...buildAgentServerEnv(safeConfig),
+    // Opt into prefix-mode: both the static server and the ingress below build
+    // their route tables from `getLocalServiceRoutes`, which registers this
+    // same prefix against `config.vscodePort`.
+    ...buildAgentServerEnv(safeConfig, {
+      vscodeBasePath: config.vscodeBasePath,
+    }),
     ...buildAgentServerAutomationEnv(config),
   };
 
@@ -444,6 +437,11 @@ function startStaticServer(config) {
       "--runtime-services-info",
       runtimeServicesInfo,
       ...buildLocalServiceRouteArgs(config),
+      // Only the static server injects into the document, so only it can tell
+      // the frontend this origin serves the editor. The ingress below routes
+      // the same prefix but proxies the HTML through untouched.
+      ...getVSCodeAdvertiseArgs(config),
+      ...getNoReferrerPrefixArgs(config),
     ],
     {
       cwd: config.canvasPath,
@@ -473,6 +471,7 @@ function startIngress(config) {
       "--runtime-services-info",
       runtimeServicesInfo,
       ...buildLocalServiceRouteArgs(config),
+      ...getNoReferrerPrefixArgs(config),
       "--default",
       `http://localhost:${config.vitePort}`,
     ],
@@ -645,7 +644,6 @@ export {
   buildAutomationBackendEnv,
   buildFrontend,
   buildLocalServiceRouteArgs,
-  getAgentServerBaseUrl,
   startStaticServer,
 };
 

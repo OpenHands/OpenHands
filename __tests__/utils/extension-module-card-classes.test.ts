@@ -5,6 +5,7 @@ import {
   extensionModuleCardGridClassName,
   extensionModuleCardGridContainerClassName,
   extensionModuleCardInteractiveClassName,
+  extensionModuleCardPillClassName,
   extensionModuleCardSurfaceClassName,
 } from "#/utils/extension-module-card-classes";
 
@@ -22,6 +23,12 @@ describe("extensionModuleCardInteractive class", () => {
 describe("extensionModuleCardSurface class", () => {
   it("omits a resting border so tiles stay flush until hover", () => {
     expect(extensionModuleCardSurfaceClassName).not.toContain("border");
+  });
+});
+
+describe("extensionModuleCardPill class", () => {
+  it("omits an outline so chips stay fill-only", () => {
+    expect(extensionModuleCardPillClassName).not.toContain("border");
   });
 });
 

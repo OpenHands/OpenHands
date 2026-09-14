@@ -56,11 +56,13 @@ RUN node -e " \
     'CONFIG_AGENT_SERVER_PORT=' + c.ports.agentServer, \
     'CONFIG_AUTOMATION_PORT=' + c.ports.automation, \
     'CONFIG_PROXY_PORT=' + c.ports.proxy, \
+    'CONFIG_VSCODE_PORT=' + c.ports.vscode, \
     'CONFIG_STATE_SUBDIR=' + c.paths.stateSubdir, \
     'CONFIG_CONVERSATIONS=' + c.paths.conversations, \
     'CONFIG_BASH_EVENTS=' + c.paths.bashEvents, \
     'CONFIG_AUTOMATION_DB=' + c.paths.automationDb, \
     'CONFIG_CANVAS_BASE_PATH=' + c.paths.canvasBasePath, \
+    'CONFIG_VSCODE_BASE_PATH=' + c.paths.vscodeBasePath, \
     'CONFIG_POSTHOG_API_KEY=' + c.telemetry.posthogApiKey, \
     'CONFIG_POSTHOG_HOST=' + c.telemetry.posthogHost, \
   ]; \

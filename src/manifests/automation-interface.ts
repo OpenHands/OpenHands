@@ -42,6 +42,14 @@ const MOUNTED_ROUTES = {
   templates: "/automations/templates",
 } satisfies InterfaceRoutes;
 
+/**
+ * File-format section for portable `.automation.json` export/import. A docs
+ * pointer for the host's import picker, not interface data — the manifest's
+ * `importExport` block has no docs field.
+ */
+export const AUTOMATION_FILE_FORMAT_DOCS_URL =
+  "https://docs.openhands.dev/openhands/usage/agent-canvas/managing-automations#exported-file-format";
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -115,6 +123,17 @@ export function automationDetailPath(id: string): string {
 
 export function automationTemplatesPath(): string {
   return MOUNTED_ROUTES.templates;
+}
+
+/**
+ * Whether `path` (a location pathname) is inside the automation surface: the
+ * list route itself or anything nested under it (detail, setup, templates,
+ * git-sync). Prefix-safe: "/automations-foo" does not match.
+ */
+export function isAutomationsRoute(path: string): boolean {
+  return (
+    path === MOUNTED_ROUTES.list || path.startsWith(`${MOUNTED_ROUTES.list}/`)
+  );
 }
 
 /**

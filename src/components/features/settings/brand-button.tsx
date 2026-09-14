@@ -15,6 +15,8 @@ interface BrandButtonProps {
   ariaLabel?: string;
   /** Indicates busy/loading state for screen readers */
   "aria-busy"?: boolean;
+  "aria-haspopup"?: React.AriaAttributes["aria-haspopup"];
+  "aria-expanded"?: boolean;
 }
 
 export const BrandButton = forwardRef<
@@ -33,6 +35,8 @@ export const BrandButton = forwardRef<
     startContent,
     ariaLabel,
     "aria-busy": ariaBusy,
+    "aria-haspopup": ariaHasPopup,
+    "aria-expanded": ariaExpanded,
   },
   ref,
 ) {
@@ -48,6 +52,8 @@ export const BrandButton = forwardRef<
       onClick={onClick}
       aria-label={ariaLabel}
       aria-busy={ariaBusy}
+      aria-haspopup={ariaHasPopup}
+      aria-expanded={ariaExpanded}
       className={cn(
         formControlButtonClassName,
         variant === "primary" &&

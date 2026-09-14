@@ -9,8 +9,9 @@
  *
  * Summaries are derived from the newest page of runs (the sample the runs
  * hook fetches); `total` alone is the response's lifetime count. Success rate
- * and durations consider only COMPLETED and FAILED runs — a cancelled or
- * skipped run says nothing about either.
+ * and durations consider only terminal lifecycle runs; the success numerator
+ * uses task-aware display status so completed-but-blocked work is not counted
+ * as successful.
  */
 
 import {
@@ -19,6 +20,7 @@ import {
   type AutomationRun,
   type AutomationRunsResponse,
 } from "#/types/automation";
+import { getAutomationRunDisplay } from "#/utils/automation-run-display";
 import type {
   DashboardSortValue,
   DashboardStatusValue,
@@ -51,7 +53,16 @@ export const HEALTH_LABEL_KEYS: Record<
 export interface AutomationRunSummary {
   /** Lifetime run count, from the response — not the sample's length. */
   total: number;
+  /**
+   * Lifetime COMPLETED-run count. From the response's `status_counts` when
+   * the service reports it; an older service leaves that out, so the sample
+   * stands in exactly when it holds the whole history (`total` ≤ its length)
+   * and the count is null — unknowable, never guessed — otherwise.
+   */
+  completedTotal: number | null;
   latestRun: AutomationRun | null;
+  /** Newest-first sample used by the list sparkline (same page as the summary). */
+  recentRuns: AutomationRun[];
   /** COMPLETED over COMPLETED+FAILED in the sample. Null with no terminal runs. */
   recentSuccessRate: number | null;
   /** Mean completed_at − started_at over the sample's terminal runs. */
@@ -72,15 +83,38 @@ const TERMINAL_STATUSES = new Set<AutomationRunStatus>([
   AutomationRunStatus.FAILED,
 ]);
 
+function isTaskSuccessful(run: AutomationRun): boolean {
+  const { badgeStatus } = getAutomationRunDisplay(run);
+  return (
+    badgeStatus === AutomationRunStatus.COMPLETED || badgeStatus === "success"
+  );
+}
+
+function isTaskFailing(run: AutomationRun): boolean {
+  const { badgeStatus } = getAutomationRunDisplay(run);
+  return (
+    badgeStatus === AutomationRunStatus.FAILED ||
+    badgeStatus === "failed" ||
+    badgeStatus === "blocked"
+  );
+}
+
 export function summarizeAutomationRuns(
   response: AutomationRunsResponse,
 ): AutomationRunSummary {
   const terminal = response.runs.filter((run) =>
     TERMINAL_STATUSES.has(run.status),
   );
-  const completed = terminal.filter(
-    (run) => run.status === AutomationRunStatus.COMPLETED,
-  ).length;
+  const completed = terminal.filter(isTaskSuccessful).length;
+
+  let completedTotal: number | null;
+  if (response.status_counts) {
+    completedTotal = response.status_counts[AutomationRunStatus.COMPLETED] ?? 0;
+  } else if (response.total <= response.runs.length) {
+    completedTotal = completed;
+  } else {
+    completedTotal = null;
+  }
 
   const durations = terminal.flatMap((run) => {
     if (!run.completed_at) return [];
@@ -91,7 +125,9 @@ export function summarizeAutomationRuns(
 
   return {
     total: response.total,
+    completedTotal,
     latestRun: response.runs[0] ?? null,
+    recentRuns: response.runs,
     recentSuccessRate:
       terminal.length === 0 ? null : completed / terminal.length,
     averageDurationMs:
@@ -115,14 +151,14 @@ export function deriveAutomationHealth(
   }
   const latest = state.summary.latestRun;
   if (!latest) return "never-run";
-  if (latest.status === AutomationRunStatus.FAILED) return "failing";
+  if (isTaskFailing(latest)) return "failing";
   if (
     latest.status === AutomationRunStatus.PENDING ||
     latest.status === AutomationRunStatus.RUNNING
   ) {
     return "running";
   }
-  return "healthy";
+  return isTaskSuccessful(latest) ? "healthy" : "unknown";
 }
 
 /** "—" unknown, seconds under a minute, minutes under an hour, else "1.5h". */

@@ -10,6 +10,7 @@ import {
   getEffectiveLocalBackend,
   isNoBackend,
 } from "#/api/backend-registry/active-store";
+import type { Backend } from "#/api/backend-registry/types";
 import defaults from "../../config/defaults.json";
 
 const AGENT_SERVER_INFO_TIMEOUT_MS = 5000;
@@ -21,6 +22,14 @@ export const AGENT_SERVER_UNSUPPORTED_VERSION_ERROR_CODE =
   "AGENT_SERVER_UNSUPPORTED_VERSION";
 export const AGENT_SERVER_UNKNOWN_VERSION_ERROR_CODE =
   "AGENT_SERVER_UNKNOWN_VERSION";
+
+/**
+ * Sentinel string thrown (as an Error message) when a local backend
+ * rejects the configured session API key with HTTP 401.
+ * Shared between the backend health probe ({@link validateLocalBackend})
+ * and any consumer that needs to detect this specific failure.
+ */
+export const INVALID_BACKEND_API_KEY_ERROR = "Invalid API key";
 
 export interface AgentServerInfo extends BaseServerInfo {
   sdk_version?: string;
@@ -314,6 +323,41 @@ export function assertAgentServerVersionIsSupported(
   if (comparison < 0) {
     clearCachedAgentServerInfo();
     throw new AgentServerUnsupportedVersionError(actualVersion);
+  }
+}
+
+/**
+ * Validates a local agent-server backend with a two-step probe:
+ *  1. GET /api/settings — authenticates the configured session API key;
+ *     a 401 throws an Error with message {@link INVALID_BACKEND_API_KEY_ERROR}.
+ *  2. GET /server_info  — asserts the server meets the minimum version floor.
+ *
+ * Returns the display version string reported by the server, or `null` when
+ * the server does not report a parseable version. Throws on any failure.
+ *
+ * Used by both the backend health poller and the backend-form connection test
+ * so that auth-check semantics (status codes, error messages) stay in one place.
+ */
+export async function validateLocalBackend(
+  backend: Pick<Backend, "host" | "apiKey">,
+  timeout: number,
+): Promise<string | null> {
+  const clientOptions = getAgentServerClientOptions({
+    host: backend.host,
+    sessionApiKey: backend.apiKey || null,
+    timeout,
+  });
+
+  try {
+    await new SettingsClient(clientOptions).getSettings();
+    const serverInfo = await new ServerClient(clientOptions).getServerInfo();
+    assertAgentServerVersionIsSupported(serverInfo);
+    return getDisplayAgentServerVersion(serverInfo);
+  } catch (error) {
+    if (isSdkHttpStatusError(error, 401)) {
+      throw new Error(INVALID_BACKEND_API_KEY_ERROR);
+    }
+    throw error;
   }
 }
 

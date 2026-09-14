@@ -36,9 +36,11 @@ interface SwitchAcpModelVars {
  * launches resolve the agent server-side purely from the stored profile
  * (``agent_profile_id`` and ``agent_settings`` are mutually exclusive launch
  * sources), so writing ``agent_settings.acp_model`` would not affect them.
- * Only when no ACP profile is active (a legacy backend without the
- * /api/agent-profiles surface) does the write fall back to the
- * ``agent_settings_diff`` the legacy launch path reads.
+ * Only when the profile list resolves with no active ACP profile does the
+ * write fall back to the ``agent_settings_diff`` the legacy launch path
+ * reads. A failed profile discovery propagates instead of downgrading
+ * (#16523): an active-profile launch ignores agent_settings, so persisting
+ * the pick there would silently drop it.
  *
  * Invalidates the same conversation/settings query keys the profile hook does
  * so the chat-input model chip + conversation chip refresh with the new model.
@@ -59,21 +61,21 @@ export const useSwitchAcpModel = () => {
 
       // Home page: resolve the active profile from the shared query cache
       // (same keys/retry policy as useCreateConversation's launch path, so a
-      // pick can't disagree with what a subsequent send would launch).
-      let agentProfiles: AgentProfileListResponse | undefined;
-      try {
-        agentProfiles = await queryClient.ensureQueryData({
+      // pick can't disagree with what a subsequent send would launch). Like
+      // that launch path, do not fall back to the legacy agent_settings
+      // persist when profile discovery fails (#16523): an active-profile
+      // launch ignores agent_settings, so the pick would be silently dropped.
+      // The rejection surfaces via the global mutation error toast.
+      const agentProfiles: AgentProfileListResponse =
+        await queryClient.ensureQueryData({
           queryKey: [...AGENT_PROFILES_QUERY_KEYS.all, backend.id, orgId],
           queryFn: AgentProfilesService.listProfiles,
           ...AGENT_PROFILES_RETRY_OPTIONS,
         });
-      } catch {
-        // Profiles unavailable → legacy agent_settings persist below.
-      }
-      const activeProfile = agentProfiles?.profiles?.find(
+      const activeProfile = agentProfiles.profiles?.find(
         (profile) =>
           profile.id != null &&
-          profile.id === agentProfiles?.active_agent_profile_id,
+          profile.id === agentProfiles.active_agent_profile_id,
       );
 
       if (activeProfile?.agent_kind === "acp") {
@@ -98,10 +100,11 @@ export const useSwitchAcpModel = () => {
         return;
       }
 
-      // Legacy/no-profile backends: persist as the agent-settings default. The
-      // backend deep-merges ``agent_settings_diff`` into the existing
-      // ``agent_settings`` dict, so a scalar ``acp_model`` diff updates only
-      // the model and preserves the selected provider + command.
+      // No active ACP profile: persist as the agent-settings default the
+      // legacy launch path reads. The backend deep-merges
+      // ``agent_settings_diff`` into the existing ``agent_settings`` dict, so
+      // a scalar ``acp_model`` diff updates only the model and preserves the
+      // selected provider + command.
       await SettingsService.saveSettings({
         agent_settings_diff: { acp_model: model },
       });

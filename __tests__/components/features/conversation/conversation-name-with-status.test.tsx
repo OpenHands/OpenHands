@@ -30,6 +30,9 @@ vi.mock("#/hooks/query/use-active-conversation", () => ({
 
 vi.mock("#/hooks/use-conversation-id", () => ({
   useConversationId: () => ({ conversationId: "test-conversation-id" }),
+  useOptionalConversationId: () => ({
+    conversationId: "test-conversation-id",
+  }),
 }));
 
 vi.mock("#/hooks/mutation/use-unified-stop-conversation", () => ({

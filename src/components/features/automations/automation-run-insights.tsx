@@ -57,7 +57,7 @@ export function AutomationRunStats({ state, copy }: AutomationRunStatsProps) {
   return (
     <dl
       data-testid="automation-run-stats"
-      className="grid grid-cols-3 gap-2 border-t border-[var(--oh-border)] pt-3 text-xs"
+      className="grid grid-cols-3 gap-2 text-xs"
     >
       {cells.map((cell) => (
         <div key={cell.label} className="min-w-0">

@@ -100,10 +100,10 @@ export function SkillDetailModal({
       <div
         data-testid="skill-detail-modal"
         data-skill-name={skill.name}
-        className="relative bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-[var(--oh-border)] w-[520px] max-w-[90vw] max-h-[85vh] overflow-y-auto custom-scrollbar"
+        className="relative flex w-[520px] max-w-[90vw] max-h-[85vh] flex-col overflow-hidden rounded-xl border border-[var(--oh-border)] bg-base-secondary"
       >
         <ModalCloseButton onClose={onClose} testId="skill-detail-modal-close" />
-        <div className="flex items-start gap-3 pr-6">
+        <header className="flex flex-shrink-0 items-start gap-3 pb-4 pl-6 pr-12 pt-6">
           <SkillIconBadge skillName={skill.name} />
           <div className="min-w-0 flex-1">
             <h2
@@ -144,51 +144,59 @@ export function SkillDetailModal({
               </div>
             ) : null}
           </div>
-        </div>
+        </header>
 
         <div
-          data-testid={`skill-modal-enable-row-${skill.name}`}
-          className="flex w-full items-center rounded-lg border border-[var(--oh-border)] bg-[rgba(255,255,255,0.04)] px-3 py-2.5"
+          data-testid="skill-detail-modal-content"
+          className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-6 custom-scrollbar-always"
         >
-          <SettingsSwitch
-            testId={`skill-modal-toggle-${skill.name}`}
-            isToggled={enabled}
-            onToggle={onToggle}
-            togglePosition="right"
+          <div
+            data-testid={`skill-modal-enable-row-${skill.name}`}
+            className="flex w-full items-center rounded-lg border border-[var(--oh-border)] bg-[rgba(255,255,255,0.04)] px-3 py-2.5"
           >
-            {t(
-              enabled
-                ? I18nKey.SETTINGS$SKILLS_ENABLED
-                : I18nKey.SETTINGS$SKILLS_DISABLED,
-            )}
-          </SettingsSwitch>
+            <SettingsSwitch
+              testId={`skill-modal-toggle-${skill.name}`}
+              isToggled={enabled}
+              onToggle={onToggle}
+              togglePosition="right"
+            >
+              {t(
+                enabled
+                  ? I18nKey.SETTINGS$SKILLS_ENABLED
+                  : I18nKey.SETTINGS$SKILLS_DISABLED,
+              )}
+            </SettingsSwitch>
+          </div>
+
+          {description ? (
+            <p
+              data-testid={`skill-modal-description-${skill.name}`}
+              className="break-words whitespace-pre-line text-xs text-tertiary-light"
+            >
+              {description}
+            </p>
+          ) : null}
+
+          {pills.length > 0 ? (
+            <SkillCardPillRow
+              pills={pills}
+              testId={`skill-modal-pills-${skill.name}`}
+            />
+          ) : null}
+
+          {skill.content ? (
+            <ReadonlyTextArea
+              testId={`skill-modal-field-content-${skill.name}`}
+              label={t(I18nKey.SETTINGS$SKILLS_CONTENT)}
+              value={skill.content}
+            />
+          ) : null}
         </div>
 
-        {description ? (
-          <p
-            data-testid={`skill-modal-description-${skill.name}`}
-            className="text-xs text-tertiary-light"
-          >
-            {description}
-          </p>
-        ) : null}
-
-        {pills.length > 0 ? (
-          <SkillCardPillRow
-            pills={pills}
-            testId={`skill-modal-pills-${skill.name}`}
-          />
-        ) : null}
-
-        {skill.content ? (
-          <ReadonlyTextArea
-            testId={`skill-modal-field-content-${skill.name}`}
-            label={t(I18nKey.SETTINGS$SKILLS_CONTENT)}
-            value={skill.content}
-          />
-        ) : null}
-
-        <div className="mt-2 flex justify-end gap-2">
+        <footer
+          data-testid="skill-detail-modal-actions"
+          className="flex flex-shrink-0 justify-end gap-2 px-6 pb-6 pt-4"
+        >
           <BrandButton
             type="button"
             variant="secondary"
@@ -209,7 +217,7 @@ export function SkillDetailModal({
           >
             {t(I18nKey.SETTINGS$SKILLS_USE_SKILL_BUTTON)}
           </BrandButton>
-        </div>
+        </footer>
       </div>
     </ModalBackdrop>
   );

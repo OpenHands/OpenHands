@@ -107,11 +107,10 @@ function renderAt(path: string, page: React.ReactElement) {
 async function renderDashboardWithSettledInsights() {
   renderAt("/automations", <AutomationsList />);
   await screen.findByTestId("automation-card-a-ok");
-  // The broken automation's badge carries the manifest's failing caption once
-  // its runs summary settles.
+  // Insights have settled once the failed run's status is on the card.
   await within(
     await screen.findByTestId("automation-card-a-broken"),
-  ).findByText("Broken");
+  ).findByTestId("run-status-icon-failed");
 }
 
 beforeEach(() => {
@@ -154,9 +153,11 @@ describe("AutomationsList — manifest-declared dashboard", () => {
     await renderDashboardWithSettledInsights();
 
     // Assert — navigation, tiles, and controls all carry manifest captions;
-    // the catalog launcher has moved off this page.
+    // the full catalog stays on Templates, and the compact rail is empty-state only.
     const nav = screen.getByTestId("automations-navbar-desktop");
     const automationsTile = screen.getByTestId("overview-tile-automations");
+    const filters = screen.getByTestId("automations-filters");
+    await userEvent.click(within(filters).getByTestId("dropdown-trigger"));
     expect({
       navLabels: [
         within(nav).getByText("Widget dashboard"),
@@ -167,11 +168,15 @@ describe("AutomationsList — manifest-declared dashboard", () => {
       statusFilter: screen.getByLabelText("Filter widgets by state"),
       sortControl: screen.getByLabelText("Order widgets"),
       statsCaptions: screen.getAllByText("Widget wins").length,
+      activity: screen.getAllByTestId(/^automation-activity-/).length,
       launcher: screen.queryByTestId("recommended-automations-section"),
+      rail: screen.queryByTestId("recommended-automations-rail"),
     }).toMatchObject({
       navLabels: 2,
       statsCaptions: 2,
+      activity: 2,
       launcher: null,
+      rail: null,
     });
   });
 
@@ -188,12 +193,100 @@ describe("AutomationsList — manifest-declared dashboard", () => {
     ]);
   });
 
+  it("nests status, trigger, and sort dropdowns inside one Filters control", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    await renderDashboardWithSettledInsights();
+
+    // Assert — the three filters stay inside the combined menu until opened.
+    expect(screen.queryByTestId("automations-filter-status")).toBeNull();
+    expect(screen.queryByTestId("automations-filter-trigger")).toBeNull();
+    expect(screen.queryByTestId("automations-sort")).toBeNull();
+
+    // Act
+    await user.click(
+      within(screen.getByTestId("automations-filters")).getByTestId(
+        "dropdown-trigger",
+      ),
+    );
+
+    // Assert
+    expect(
+      within(screen.getByTestId("automations-filters-menu")).getByTestId(
+        "automations-filter-status",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("automations-filters-menu")).getByTestId(
+        "automations-filter-trigger",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("automations-filters-menu")).getByTestId(
+        "automations-sort",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("automations-filters-menu")).getByText(
+        "Filter widgets by state",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("automations-filters-menu")).getByText(
+        "Filter widgets by trigger",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("automations-filters-menu")).getByText(
+        "Order widgets",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automations-filters-reset"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("resets applied filters from the Filters menu", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    await renderDashboardWithSettledInsights();
+    await user.click(
+      within(screen.getByTestId("automations-filters")).getByTestId(
+        "dropdown-trigger",
+      ),
+    );
+    await user.click(
+      within(screen.getByTestId("automations-filter-status")).getByTestId(
+        "dropdown-trigger",
+      ),
+    );
+    await user.click(screen.getByTestId("automations-filter-status-failing"));
+    await waitFor(() => {
+      expect(screen.queryByTestId("automation-card-a-ok")).toBeNull();
+    });
+
+    // Act
+    await user.click(screen.getByTestId("automations-filters-reset"));
+
+    // Assert
+    await screen.findByTestId("automation-card-a-ok");
+    expect(screen.getByTestId("automation-card-a-broken")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automations-filters-reset"),
+    ).not.toBeInTheDocument();
+  });
+
   it("narrows to latest-run failures through the status filter", async () => {
     // Arrange
     const user = userEvent.setup();
     await renderDashboardWithSettledInsights();
 
-    // Act — pick the manifest's "failing" option.
+    // Act — open Filters, then pick the manifest's "failing" option.
+    await user.click(
+      within(screen.getByTestId("automations-filters")).getByTestId(
+        "dropdown-trigger",
+      ),
+    );
     await user.click(
       within(screen.getByTestId("automations-filter-status")).getByTestId(
         "dropdown-trigger",

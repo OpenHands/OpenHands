@@ -12,8 +12,8 @@ vi.mock("react-i18next", () => ({
         SCHEMA$VERIFICATION$CRITIC_API_KEY$HELP_TEXT:
           "If OpenHands is selected as your active LLM provider, leave this empty because the Critic API Key is the same as your OpenHands Provider LLM Key, which you can find in the",
         SCHEMA$VERIFICATION$CRITIC_API_KEY$HELP_SUFFIX:
-          "tab of OpenHands Cloud; otherwise, enter a Critic API Key from that page.",
-        SETTINGS$NAV_API_KEYS: "API Keys",
+          "section of OpenHands Cloud; otherwise, enter a Critic API Key from that page.",
+        SETTINGS$OPENHANDS_API_KEY_HELP_LINK: "OpenHands LLM Key",
       })[key] ?? key,
   }),
 }));
@@ -94,7 +94,7 @@ describe("SchemaField", () => {
     expect(help).toHaveTextContent(
       "Critic API Key is the same as your OpenHands Provider LLM Key",
     );
-    expect(help).toHaveTextContent("API Keys");
+    expect(help).toHaveTextContent("OpenHands LLM Key");
     expect(help).toHaveClass("text-sm");
     expect(help).toHaveClass("font-normal");
     expect(

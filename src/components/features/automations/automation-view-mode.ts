@@ -15,8 +15,13 @@ export function writeStoredAutomationViewMode(view: AutomationViewMode): void {
   window.localStorage.setItem(AUTOMATIONS_VIEW_MODE_STORAGE_KEY, view);
 }
 
-export {
-  tableContainerClassName as automationListTableClassName,
-  tableRowInteractiveClassName as automationListRowClassName,
-  tableCellClassName as automationListCellClassName,
-} from "#/utils/table-row-classes";
+/** Shared chrome for the dashboard list and the home activity list. */
+export const automationActivityListClassName =
+  "divide-y divide-[var(--oh-border-subtle)] overflow-hidden rounded-xl border border-[var(--oh-border-subtle)] bg-[var(--oh-surface)]";
+
+export const automationActivityRowClassName =
+  "group relative flex items-stretch transition-colors hover:bg-surface-raised has-[:focus-visible]:bg-surface-raised";
+
+/** Inset last-run strip used under the trigger/sparkline row. */
+export const automationCardStatusStripClassName =
+  "mt-3 flex min-h-9 items-center justify-between gap-2 overflow-hidden rounded-md border border-[var(--oh-border-subtle)] bg-[var(--oh-surface)] px-3 py-2 text-xs";

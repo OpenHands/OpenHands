@@ -1,15 +1,18 @@
-import { Loader2 } from "lucide-react";
+import { CircleAlert, CircleHelp, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
-import { I18nKey } from "#/i18n/declaration";
 import CheckCircleIcon from "#/icons/check-circle.svg?react";
 import XCircleIcon from "#/icons/x-circle.svg?react";
 import ClockIcon from "#/icons/clock.svg?react";
 import { AutomationRunStatus } from "#/types/automation";
+import {
+  getAutomationRunBadgeLabelKey,
+  type AutomationRunBadgeStatus,
+} from "#/utils/automation-run-display";
 import { cn } from "#/utils/utils";
 
 interface RunStatusBadgeProps {
-  status: AutomationRunStatus;
+  status: AutomationRunBadgeStatus;
   /**
    * Icon-only mark (no pill). Status text is available via hover tooltip and
    * `aria-label`, unless {@link showLabel} is also set.
@@ -21,39 +24,49 @@ interface RunStatusBadgeProps {
   compact?: boolean;
 }
 
-const statusConfig: Record<
-  AutomationRunStatus,
-  { label: I18nKey; style: string; iconTone: string }
-> = {
+const statusConfig: Record<string, { style: string; iconTone: string }> = {
   [AutomationRunStatus.COMPLETED]: {
-    label: I18nKey.AUTOMATIONS$DETAIL$SUCCESSFUL,
-    style:
-      "border-[var(--oh-success)]/50 bg-[var(--oh-success)]/10 text-[var(--oh-success)]",
+    style: "bg-[var(--oh-success)]/10 text-[var(--oh-success)]",
+    iconTone: "text-[var(--oh-success)]",
+  },
+  success: {
+    style: "bg-[var(--oh-success)]/10 text-[var(--oh-success)]",
     iconTone: "text-[var(--oh-success)]",
   },
   [AutomationRunStatus.FAILED]: {
-    label: I18nKey.AUTOMATIONS$DETAIL$FAILED,
-    style: "border-[var(--oh-danger)]/50 bg-[var(--oh-danger)]/10 text-danger",
+    style: "bg-[var(--oh-danger)]/10 text-danger",
     iconTone: "text-danger",
   },
+  failed: {
+    style: "bg-[var(--oh-danger)]/10 text-danger",
+    iconTone: "text-danger",
+  },
+  blocked: {
+    style: "bg-[var(--oh-warning)]/10 text-[var(--oh-warning)]",
+    iconTone: "text-[var(--oh-warning)]",
+  },
+  partial_success: {
+    style: "bg-[var(--oh-warning)]/10 text-[var(--oh-warning)]",
+    iconTone: "text-[var(--oh-warning)]",
+  },
+  unknown: {
+    style: "bg-[var(--oh-warning)]/10 text-[var(--oh-warning)]",
+    iconTone: "text-[var(--oh-warning)]",
+  },
   [AutomationRunStatus.PENDING]: {
-    label: I18nKey.AUTOMATIONS$DETAIL$PENDING,
-    style: "border-[var(--oh-border)] bg-surface-raised text-muted",
+    style: "bg-surface-raised text-muted",
     iconTone: "text-muted",
   },
   [AutomationRunStatus.RUNNING]: {
-    label: I18nKey.AUTOMATIONS$DETAIL$RUNNING,
-    style: "border-[var(--oh-border)] bg-surface-raised text-muted",
+    style: "bg-surface-raised text-muted",
     iconTone: "text-muted",
   },
   [AutomationRunStatus.CANCELLED]: {
-    label: I18nKey.AUTOMATIONS$DETAIL$CANCELLED,
-    style: "border-[var(--oh-border)] bg-surface-raised text-muted",
+    style: "bg-surface-raised text-muted",
     iconTone: "text-muted",
   },
   [AutomationRunStatus.SKIPPED]: {
-    label: I18nKey.AUTOMATIONS$DETAIL$SKIPPED,
-    style: "border-[var(--oh-border)] bg-surface-raised text-muted",
+    style: "bg-surface-raised text-muted",
     iconTone: "text-muted",
   },
 };
@@ -62,12 +75,13 @@ function StatusIcon({
   status,
   compact = false,
 }: {
-  status: AutomationRunStatus;
+  status: AutomationRunBadgeStatus;
   compact?: boolean;
 }) {
   const iconClass = compact ? "size-3" : "size-3.5";
   switch (status) {
     case AutomationRunStatus.COMPLETED:
+    case "success":
       return (
         <CheckCircleIcon
           data-testid="run-status-icon-completed"
@@ -75,6 +89,7 @@ function StatusIcon({
         />
       );
     case AutomationRunStatus.FAILED:
+    case "failed":
       return (
         <XCircleIcon
           data-testid="run-status-icon-failed"
@@ -86,6 +101,23 @@ function StatusIcon({
         <Loader2
           data-testid="run-status-icon-running"
           className={cn(iconClass, "animate-spin motion-reduce:animate-none")}
+          aria-hidden="true"
+        />
+      );
+    case "blocked":
+    case "partial_success":
+      return (
+        <CircleAlert
+          data-testid="run-status-icon-warning"
+          className={iconClass}
+          aria-hidden="true"
+        />
+      );
+    case "unknown":
+      return (
+        <CircleHelp
+          data-testid="run-status-icon-needs-review"
+          className={iconClass}
           aria-hidden="true"
         />
       );
@@ -109,7 +141,7 @@ export function RunStatusBadge({
   // Degrade instead of crashing on a status the backend added after this enum.
   const config =
     statusConfig[status] ?? statusConfig[AutomationRunStatus.PENDING];
-  const label = t(config.label);
+  const label = t(getAutomationRunBadgeLabelKey(status));
 
   if (iconOnly) {
     if (showLabel) {
@@ -147,10 +179,10 @@ export function RunStatusBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full border font-medium",
+        "inline-flex items-center rounded-full font-medium",
         compact
-          ? "gap-1 px-1.5 py-0 text-[10px] leading-4"
-          : "gap-1.5 px-2.5 py-1 text-xs",
+          ? "gap-1 pl-1 pr-1.5 py-0 text-[10px] leading-4"
+          : "gap-1.5 pl-2 pr-2.5 py-1 text-xs",
         config.style,
       )}
     >
