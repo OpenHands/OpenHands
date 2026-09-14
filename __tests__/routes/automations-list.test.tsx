@@ -10,6 +10,7 @@ import { I18nKey } from "#/i18n/declaration";
 
 import AutomationService from "#/api/automation-service/automation-service.api";
 import { getCloudOrganizationMe } from "#/api/cloud/organization-service.api";
+import ProfilesService from "#/api/profiles-service/profiles-service.api";
 import {
   __resetActiveStoreForTests,
   setActiveSelection,
@@ -33,6 +34,12 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
     deleteAutomation: vi.fn(),
     dispatchAutomation: vi.fn(),
     checkHealth: vi.fn(),
+  },
+}));
+
+vi.mock("#/api/profiles-service/profiles-service.api", () => ({
+  default: {
+    listProfiles: vi.fn(),
   },
 }));
 
@@ -124,6 +131,11 @@ beforeEach(() => {
   vi.mocked(AutomationService.getAutomations).mockResolvedValue(listResponse);
   vi.mocked(AutomationService.updateAutomation).mockReset();
   vi.mocked(AutomationService.dispatchAutomation).mockReset();
+  vi.mocked(ProfilesService.listProfiles).mockReset();
+  vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
+    profiles: [],
+    active_profile: null,
+  });
   vi.mocked(getCloudOrganizationMe).mockReset();
   vi.mocked(getCloudOrganizationMe).mockResolvedValue(orgAdmin);
   setRegisteredBackends([localBackend, cloudBackend]);
@@ -135,7 +147,7 @@ afterEach(() => {
   __resetActiveStoreForTests();
 });
 
-describe("AutomationsList — Edit from the row kebab is local-only", () => {
+describe("AutomationsList — Edit from the row kebab", () => {
   it("opens the Edit modal pre-filled with the row's values when the active backend is local", async () => {
     // Arrange — local backend is active (default beforeEach); render the list
     // and wait for the row to appear.
@@ -162,7 +174,7 @@ describe("AutomationsList — Edit from the row kebab is local-only", () => {
     expect(nameInput.value).toBe(automation.name);
   });
 
-  it("hides Edit in the row kebab when the active backend is cloud", async () => {
+  it("opens the Edit modal pre-filled from the row kebab when the active backend is cloud", async () => {
     // Arrange — switch to the cloud backend (with its org, which is what the
     // permissions come from) before mounting so the page sees it as the
     // active backend on first render.
@@ -174,19 +186,19 @@ describe("AutomationsList — Edit from the row kebab is local-only", () => {
     });
     await screen.findByText(automation.name);
 
-    // Act — open the row kebab. The aria-label resolves to the I18n key
-    // in tests because `t` is mocked to return the key itself.
+    // Act — open the row kebab and pick Edit. The aria-label resolves to
+    // the I18n key in tests because `t` is mocked to return the key itself.
     await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
+    );
 
-    // Assert — Edit must not appear on cloud; Delete still does, proving the
-    // menu actually opened and we didn't merely fail to render it. Delete
-    // waits on the org's /me permissions, so it may land a tick later.
-    expect(
-      await screen.findByRole("button", { name: I18nKey.AUTOMATIONS$DELETE }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
-    ).not.toBeInTheDocument();
+    // Assert — the same Edit modal mounts on cloud, wired to this row; the
+    // permission model decides, not the backend kind.
+    const nameInput = (await screen.findByTestId(
+      "edit-automation-name",
+    )) as HTMLInputElement;
+    expect(nameInput.value).toBe(automation.name);
   });
 });
 

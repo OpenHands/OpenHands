@@ -10,6 +10,7 @@ import {
   getAcpProvider,
   getAcpProviderDisplayName,
   getAcpProviderSecrets,
+  resolveCodexDefaultCommand,
 } from "#/constants/acp-providers";
 
 describe("getAcpProviderDisplayName", () => {
@@ -50,10 +51,22 @@ describe("ACP provider registry", () => {
       const sdk = getClientAcpProvider(provider.key);
       expect(sdk, provider.key).not.toBeNull();
       expect(provider.display_name).toBe(sdk!.display_name);
-      expect(provider.default_command).toEqual([...sdk!.default_command]);
-      expect(provider.available_models).toEqual(
-        sdk!.available_models.map((m) => ({ id: m.id, label: m.label })),
-      );
+      if (provider.key === "codex") {
+        expect(provider.default_command).toEqual([
+          "npx",
+          "-y",
+          "@agentclientprotocol/codex-acp@1.10.0",
+        ]);
+        expect(provider.available_models?.[0]).toEqual({
+          id: "gpt-6-astra",
+          label: "GPT-6 Astra",
+        });
+      } else {
+        expect(provider.default_command).toEqual([...sdk!.default_command]);
+        expect(provider.available_models).toEqual(
+          sdk!.available_models.map((m) => ({ id: m.id, label: m.label })),
+        );
+      }
       expect(provider.default_model).toBe(sdk!.default_model ?? undefined);
       // UI-only overlay stays local.
       expect(provider.icon).toBeTruthy();
@@ -72,6 +85,37 @@ describe("ACP provider registry", () => {
         provider.key,
       ).toBe(true);
     }
+  });
+
+  it("temporarily overrides only the exact stale codex pin from the pinned client", () => {
+    // Unlike the model dedup, the launch-command shim has a guard: once the pinned
+    // client ships the upstream command, Canvas defers to the registry value so the
+    // temporary shim stops firing without a separate cleanup pass.
+    expect(
+      resolveCodexDefaultCommand([
+        "npx",
+        "-y",
+        "@agentclientprotocol/codex-acp@1.1.7",
+      ]),
+    ).toEqual(["npx", "-y", "@agentclientprotocol/codex-acp@1.10.0"]);
+
+    // Registry values at-or-newer than the tested version stay authoritative —
+    // the shim must never revert a future upstream bump.
+
+    expect(
+      resolveCodexDefaultCommand([
+        "npx",
+        "-y",
+        "@agentclientprotocol/codex-acp@1.10.0",
+      ]),
+    ).toEqual(["npx", "-y", "@agentclientprotocol/codex-acp@1.10.0"]);
+    expect(
+      resolveCodexDefaultCommand([
+        "npx",
+        "-y",
+        "@agentclientprotocol/codex-acp@2.0.0",
+      ]),
+    ).toEqual(["npx", "-y", "@agentclientprotocol/codex-acp@2.0.0"]);
   });
 
   it("does not suggest generic default model placeholders", () => {
