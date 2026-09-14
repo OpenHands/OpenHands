@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nextProvider, initReactI18next } from "react-i18next";
 import i18n from "i18next";
@@ -168,6 +168,48 @@ afterEach(() => {
 });
 
 describe("useUnifiedVSCodeUrl", () => {
+  it.each(["cloud", "no origin editor", "runtime stopped"])(
+    "does not fetch a local URL with cached capability when %s",
+    async (disabledState) => {
+      vi.mocked(useActiveBackend).mockReturnValue(
+        disabledState === "cloud" ? cloudBackend : localBackend,
+      );
+      vi.mocked(batchGetCloudSandboxes).mockResolvedValue([makeSandbox()]);
+      if (disabledState === "no origin editor") {
+        delete (window as unknown as Record<string, unknown>)
+          .__AGENT_CANVAS_VSCODE_BASE_PATH__;
+      }
+      if (disabledState === "runtime stopped") {
+        vi.mocked(useRuntimeIsReady).mockReturnValue(false);
+      }
+      const { queryClient, wrapper } = createQueryHarness();
+      const conversation = makeConversation();
+      queryClient.setQueryData(
+        [
+          "unified",
+          "vscode_status",
+          "local",
+          "conv-123",
+          conversation.conversation_url,
+          conversation.session_api_key,
+        ],
+        { enabled: true, running: true },
+      );
+      const { unmount } = renderHook(() => useUnifiedVSCodeUrl(), { wrapper });
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(
+        AgentServerConversationService.getVSCodeStatus,
+      ).not.toHaveBeenCalled();
+      expect(
+        AgentServerConversationService.getVSCodeUrl,
+      ).not.toHaveBeenCalled();
+      unmount();
+      queryClient.clear();
+    },
+  );
+
   it("returns the cloud-computed VSCode URL from sandbox.exposed_urls in cloud mode", async () => {
     // Arrange — cloud backend, sandbox returned with a VSCODE entry.
     // This is the steady-state happy path: the cloud backend pre-builds the
