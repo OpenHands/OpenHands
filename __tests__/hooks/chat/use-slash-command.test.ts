@@ -12,6 +12,7 @@ import {
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
+import { useFreeModelsStore } from "#/stores/free-models-store";
 
 const mockSkills = vi.hoisted(() => ({
   data: undefined as unknown[] | undefined,
@@ -132,6 +133,7 @@ const cloudBackend: Backend = {
 
 describe("useSlashCommand", () => {
   afterEach(() => {
+    useFreeModelsStore.getState().resetFlags();
     vi.clearAllMocks();
     mockSkills.data = undefined;
     mockSkills.isLoading = false;
@@ -201,6 +203,22 @@ describe("useSlashCommand", () => {
       "/model haiku",
       "/model gpt",
     ]);
+    expect(result.current.filteredItems[0].skill.content).toBe(
+      "Switch to anthropic/claude-haiku-4-5",
+    );
+    act(() => {
+      useFreeModelsStore.getState().setFlags({
+        freeModels: new Set(["anthropic/claude-haiku-4-5"]),
+        defaultModel: null,
+      });
+    });
+    expect(result.current.filteredItems[0].skill.content).toBe(
+      "Switch to anthropic/claude-haiku-4-5 (free)",
+    );
+    act(() => useFreeModelsStore.getState().resetFlags());
+    expect(result.current.filteredItems[0].skill.content).toBe(
+      "Switch to anthropic/claude-haiku-4-5",
+    );
   });
 
   it("filters saved LLM profile suggestions by profile name or model", () => {
