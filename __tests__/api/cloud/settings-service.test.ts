@@ -43,6 +43,10 @@ let capturedBodies: Array<Record<string, unknown>> = [];
 function stubGet(path: string, data: JsonBodyType, status = 200) {
   server.use(
     http.get(`${cloudBackend.host}${path}`, ({ request }) => {
+      // MSW normalizes an empty method to GET; native fetch rejects it.
+      expect(vi.mocked(globalThis.fetch).mock.lastCall?.[1]?.method).toBe(
+        "GET",
+      );
       capturedRequests.push(request);
       return HttpResponse.json(data, { status });
     }),
@@ -63,6 +67,7 @@ function stubPost(path: string, data: JsonBodyType = {}, status = 200) {
 }
 
 beforeEach(() => {
+  vi.spyOn(globalThis, "fetch");
   window.localStorage.clear();
   __resetActiveStoreForTests();
   setRegisteredBackends([cloudBackend]);
@@ -72,6 +77,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   window.localStorage.clear();
   __resetActiveStoreForTests();
 });
