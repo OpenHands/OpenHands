@@ -2,11 +2,11 @@ import { act, renderHook } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { useDragResize } from "#/hooks/use-drag-resize";
 
-// Mock isMobileDevice to always return false so the hook uses the desktop
-// event-listener path (document.addEventListener), which our test simulates.
+let mobileDevice = false;
+
 vi.mock("#/utils/utils", async (importOriginal) => ({
   ...(await importOriginal<typeof import("#/utils/utils")>()),
-  isMobileDevice: () => false,
+  isMobileDevice: () => mobileDevice,
 }));
 
 /**
@@ -33,6 +33,7 @@ describe("useDragResize — disabled when not bottom-anchored", () => {
   };
 
   beforeEach(() => {
+    mobileDevice = false;
     // Build the DOM structure that matches CustomChatInput:
     //   <div class="relative w-full" id="wrapper">   ← wrapper
     //     <div id="resize-grip">                      ← grip
@@ -180,5 +181,50 @@ describe("useDragResize — disabled when not bottom-anchored", () => {
     act(() => dragUp(100, 30));
 
     expect(parseFloat(inputEl.style.height)).toBe(20);
+  });
+
+  it("removes mobile listeners with the capture option used during setup", () => {
+    mobileDevice = true;
+    vi.spyOn(wrapperEl, "getBoundingClientRect").mockReturnValue({
+      top: 668,
+      bottom: 768,
+      left: 0,
+      right: 0,
+      width: 800,
+      height: 100,
+      x: 0,
+      y: 668,
+      toJSON: () => ({}),
+    });
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(768);
+    const removeEventListener = vi.spyOn(gripEl, "removeEventListener");
+
+    const { result } = renderHook(() =>
+      useDragResize({
+        elementRef: { current: inputEl },
+        minHeight: 20,
+        maxHeight: 400,
+      }),
+    );
+
+    act(() => {
+      result.current.handleGripTouchStart(
+        new TouchEvent("touchstart", {
+          touches: [{ clientY: 100 } as unknown as Touch],
+        }) as unknown as React.TouchEvent,
+      );
+      gripEl.dispatchEvent(new TouchEvent("touchend"));
+    });
+
+    expect(removeEventListener).toHaveBeenCalledWith(
+      "touchmove",
+      expect.any(Function),
+      { capture: true },
+    );
+    expect(removeEventListener).toHaveBeenCalledWith(
+      "touchend",
+      expect.any(Function),
+      { capture: true },
+    );
   });
 });
