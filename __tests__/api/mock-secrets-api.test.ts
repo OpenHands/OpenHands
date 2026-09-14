@@ -18,6 +18,11 @@ beforeEach(async () => {
 });
 
 describe("mock secrets API", () => {
+  it("declines a secret-list request outside the supported API root", async () => {
+    const response = await fetch(SECRETS_URL.replace("/api/", "/extra/api/"));
+    expect(response.status).toBe(599);
+  });
+
   it("lists secret metadata without exposing stored values", async () => {
     const response = await fetch(SECRETS_URL);
     const body = (await response.json()) as {
