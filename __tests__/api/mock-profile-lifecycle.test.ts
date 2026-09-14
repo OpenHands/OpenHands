@@ -24,7 +24,6 @@ const getProfile = (name: string, exposeSecrets?: string) =>
 beforeEach(async () => {
   vi.resetModules();
   const handlers = await import("#/mocks/settings-handlers");
-  handlers.resetTestHandlersMockSettings();
   server.resetHandlers(
     ...handlers.SETTINGS_HANDLERS,
     http.all("*", () => new HttpResponse(null, { status: 599 })),
@@ -152,6 +151,26 @@ describe("mock LLM profile lifecycle", () => {
   });
 
   it("applies an activated profile and reapplies later saves", async () => {
+    const preserved = {
+      agent_settings: {
+        verification: { critic_enabled: true },
+        condenser: { enable_default_condenser: false, condenser_max_size: 321 },
+      },
+      conversation_settings: { max_iterations: 17 },
+      misc_settings: { app_preferences: { language: "fr" } },
+    };
+    const initialUpdate = await fetch(
+      `${BASE_URL}/api/settings`,
+      jsonRequest(
+        {
+          agent_settings_diff: preserved.agent_settings,
+          conversation_settings_diff: preserved.conversation_settings,
+          misc_settings_diff: preserved.misc_settings,
+        },
+        "PATCH",
+      ),
+    );
+    expect(initialUpdate.status).toBe(200);
     await saveProfile("active", {
       model: "openai/gpt-4o",
       api_key: "first-key",
@@ -168,7 +187,9 @@ describe("mock LLM profile lifecycle", () => {
 
     await saveProfile("inactive", { model: "openhands/minimax-m2.7" });
     const unchangedSettings = await fetch(`${BASE_URL}/api/settings`);
-    await expect(unchangedSettings.json()).resolves.toMatchObject({
+    const activatedSettings = await unchangedSettings.json();
+    expect(activatedSettings).toMatchObject(preserved);
+    expect(activatedSettings).toMatchObject({
       agent_settings: { llm: { model: "openai/gpt-4o" } },
       llm_api_key_is_set: true,
     });
@@ -178,7 +199,9 @@ describe("mock LLM profile lifecycle", () => {
     });
 
     const settings = await fetch(`${BASE_URL}/api/settings`);
-    await expect(settings.json()).resolves.toMatchObject({
+    const updatedSettings = await settings.json();
+    expect(updatedSettings).toMatchObject(preserved);
+    expect(updatedSettings).toMatchObject({
       agent_settings: {
         llm: { model: "anthropic/claude-opus-4-8" },
       },

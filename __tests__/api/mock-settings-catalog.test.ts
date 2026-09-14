@@ -1,4 +1,3 @@
-/* eslint-disable local/no-direct-agent-server-fetch -- HTTP contract tests intentionally exercise mock handlers, including malformed requests. */
 import { http, HttpResponse } from "msw";
 import { server } from "#/mocks/node";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -22,7 +21,6 @@ const fetchJson = async <T>(path: string, init?: RequestInit) => {
 beforeEach(async () => {
   vi.resetModules();
   const handlers = await import("#/mocks/settings-handlers");
-  handlers.resetTestHandlersMockSettings();
   createMockWebClientConfig = handlers.createMockWebClientConfig;
   server.resetHandlers(
     ...handlers.SETTINGS_HANDLERS,
@@ -100,6 +98,14 @@ describe("mock agent-server discovery", () => {
       "claude-sonnet-4-5-20250929",
     ]);
     expect(options.verified_providers).toContain("openai");
+    expect(
+      options.verified_providers.every(
+        (provider) => provider.trim().length > 0,
+      ),
+    ).toBe(true);
+    expect(new Set(options.verified_providers).size).toBe(
+      options.verified_providers.length,
+    );
 
     await expect(
       fetchJson<string[]>("/api/options/security-analyzers"),
@@ -111,6 +117,9 @@ describe("mock agent-server discovery", () => {
       "/api/llm/models",
     );
     expect(modelCatalog.models).toContain("openai/gpt-4o");
+    expect(
+      modelCatalog.models.every((model) => /^[^/]+\/.+$/.test(model)),
+    ).toBe(true);
 
     const verified = await fetchJson<{
       models: Record<string, string[]>;
@@ -120,6 +129,14 @@ describe("mock agent-server discovery", () => {
       "gpt-5.6-sol",
       "gpt-6-astra",
     ]);
+    expect(verified.models.anthropic).toHaveLength(3);
+    expect(verified.models.anthropic).toEqual(
+      expect.arrayContaining([
+        "claude-opus-4-5-20251101",
+        "claude-opus-4-8",
+        "claude-sonnet-4-5-20250929",
+      ]),
+    );
     expect(verified.models.openhands).toEqual([
       "claude-sonnet-4-5-20250929",
       "claude-opus-4-5-20251101",
@@ -252,6 +269,21 @@ describe("mock agent-server discovery", () => {
       faulty_models: [],
       updated_at: expect.any(String),
     });
+  });
+
+  it("marks the free default OpenHands model as available and verified", async () => {
+    const result = await fetchJson<{ items: unknown[] }>(
+      "/api/v1/config/models/search?provider__eq=openhands&query=glm-5.2",
+    );
+    expect(result.items).toEqual([
+      {
+        provider: "openhands",
+        name: "glm-5.2",
+        verified: true,
+        free: true,
+        default: true,
+      },
+    ]);
   });
 
   it("falls back to deterministic settings when shared defaults omit optional sections", async () => {

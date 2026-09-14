@@ -4,6 +4,10 @@ import { http, HttpResponse } from "msw";
 import { server } from "#/mocks/node";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SettingsSchema } from "#/types/settings";
+import {
+  OPENAI_SUBSCRIPTION_DEVICE_POLL_PATH,
+  OPENAI_SUBSCRIPTION_STATUS_PATH,
+} from "#/constants/llm-subscription";
 
 const BASE_URL = "http://localhost:3000";
 
@@ -22,7 +26,6 @@ beforeEach(async () => {
   vi.resetModules();
   const handlers = await import("#/mocks/settings-handlers");
   resetTestHandlersMockSettings = handlers.resetTestHandlersMockSettings;
-  resetTestHandlersMockSettings();
   server.resetHandlers(
     ...handlers.SETTINGS_HANDLERS,
     http.all("*", () => new HttpResponse(null, { status: 599 })),
@@ -30,6 +33,77 @@ beforeEach(async () => {
 });
 
 describe("mock settings schemas and state", () => {
+  it("declines settings requests outside the supported API root", async () => {
+    expect((await fetch(`${BASE_URL}/extra/api/settings`)).status).toBe(599);
+  });
+
+  it("replaces an existing array with an object patch without retaining array indexes", async () => {
+    await getJson(
+      "/api/settings",
+      jsonRequest(
+        { agent_settings_diff: { llm: { stop: ["old", "other"] } } },
+        "PATCH",
+      ),
+    );
+    const result = await getJson<{
+      agent_settings: { llm: { stop: unknown } };
+    }>(
+      "/api/settings",
+      jsonRequest(
+        { agent_settings_diff: { llm: { stop: { mode: "new" } } } },
+        "PATCH",
+      ),
+    );
+    expect(result.response.status).toBe(200);
+    expect(result.body.agent_settings.llm.stop).toEqual({ mode: "new" });
+  });
+
+  it("resets mutated settings, active profiles, and subscription state in the same module instance", async () => {
+    const initial = await getJson("/api/settings");
+    const updated = await getJson(
+      "/api/settings",
+      jsonRequest(
+        {
+          conversation_settings_diff: { max_iterations: 7 },
+          misc_settings_diff: { app_preferences: { language: "fr" } },
+        },
+        "PATCH",
+      ),
+    );
+    expect(updated.response.status).toBe(200);
+    expect(
+      (
+        await getJson(
+          "/api/profiles/reset-me",
+          jsonRequest({ llm: { model: "openai/gpt-4o" } }, "POST"),
+        )
+      ).response.status,
+    ).toBe(201);
+    expect(
+      (await getJson("/api/profiles/reset-me/activate", { method: "POST" }))
+        .response.status,
+    ).toBe(200);
+    const profilesBefore = await getJson("/api/profiles");
+    expect(profilesBefore.body).toMatchObject({
+      active_profile: "reset-me",
+      profiles: [{ name: "reset-me" }],
+    });
+    expect(
+      (await getJson(OPENAI_SUBSCRIPTION_DEVICE_POLL_PATH, { method: "POST" }))
+        .body,
+    ).toMatchObject({ connected: true });
+    resetTestHandlersMockSettings();
+    expect((await getJson("/api/settings")).body).toEqual(initial.body);
+    expect((await getJson("/api/profiles")).body).toEqual({
+      profiles: [],
+      active_profile: null,
+    });
+    expect((await getJson(OPENAI_SUBSCRIPTION_STATUS_PATH)).body).toEqual({
+      connected: false,
+      account_email: null,
+      expires_at: null,
+    });
+  });
   it("serves field contracts that control defaults, masking, validation, and conditional settings", async () => {
     const contract = (
       section: string,
@@ -704,6 +778,19 @@ describe("legacy settings persistence", () => {
     });
     expect(persisted.body.conversation_settings_schema).toMatchObject({
       model_name: "ConversationSettings",
+    });
+    const scalarUpdate = await getJson(
+      "/api/v1/settings",
+      jsonRequest({ language: "ko" }, "POST"),
+    );
+    expect(scalarUpdate.response.status).toBe(200);
+    expect((await getJson("/api/v1/settings")).body).toMatchObject({
+      agent_settings: {
+        llm: { model: "openai/gpt-5.5" },
+        verification: { critic_enabled: true },
+      },
+      conversation_settings: { max_iterations: 7 },
+      language: "ko",
     });
   });
 
