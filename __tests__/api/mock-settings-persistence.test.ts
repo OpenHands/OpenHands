@@ -3,6 +3,7 @@ let resetTestHandlersMockSettings: typeof import("#/mocks/settings-handlers").re
 import { http, HttpResponse } from "msw";
 import { server } from "#/mocks/node";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { SettingsSchema } from "#/types/settings";
 
 const BASE_URL = "http://localhost:3000";
 
@@ -29,6 +30,178 @@ beforeEach(async () => {
 });
 
 describe("mock settings schemas and state", () => {
+  it("serves field contracts that control defaults, masking, validation, and conditional settings", async () => {
+    const contract = (
+      section: string,
+      value_type: string,
+      defaultValue: unknown,
+      prominence: string,
+      overrides: Record<string, unknown> = {},
+    ) => ({
+      section,
+      value_type,
+      default: defaultValue,
+      prominence,
+      secret: false,
+      required: false,
+      choices: [],
+      depends_on: [],
+      ...overrides,
+    });
+    const critic = { depends_on: ["verification.critic_enabled"] };
+    const refinement = {
+      depends_on: [
+        "verification.critic_enabled",
+        "verification.enable_iterative_refinement",
+      ],
+    };
+    const expectedAgent = {
+      enable_sub_agents: contract("general", "boolean", false, "major"),
+      enable_switch_llm_tool: contract("general", "boolean", true, "major"),
+      tool_concurrency_limit: contract("general", "integer", 1, "major"),
+      "llm.model": contract("llm", "string", "openai/gpt-5.6-sol", "critical", {
+        required: true,
+      }),
+      "llm.api_key": contract("llm", "string", null, "critical", {
+        secret: true,
+      }),
+      "llm.base_url": contract("llm", "string", null, "critical"),
+      "llm.temperature": contract("llm", "number", null, "minor"),
+      "verification.critic_enabled": contract(
+        "verification",
+        "boolean",
+        false,
+        "critical",
+      ),
+      "verification.critic_mode": contract(
+        "verification",
+        "string",
+        "finish_and_message",
+        "major",
+        {
+          ...critic,
+          choices: ["finish_and_message", "all_actions"],
+        },
+      ),
+      "verification.enable_iterative_refinement": contract(
+        "verification",
+        "boolean",
+        false,
+        "critical",
+        critic,
+      ),
+      "verification.critic_api_key": contract(
+        "verification",
+        "string",
+        null,
+        "critical",
+        { ...critic, secret: true },
+      ),
+      "verification.critic_threshold": contract(
+        "verification",
+        "number",
+        0.6,
+        "minor",
+        refinement,
+      ),
+      "verification.max_refinement_iterations": contract(
+        "verification",
+        "integer",
+        3,
+        "minor",
+        refinement,
+      ),
+      "verification.critic_server_url": contract(
+        "verification",
+        "string",
+        null,
+        "minor",
+        critic,
+      ),
+      "verification.critic_model_name": contract(
+        "verification",
+        "string",
+        null,
+        "minor",
+        critic,
+      ),
+      "condenser.enable_default_condenser": contract(
+        "condenser",
+        "boolean",
+        true,
+        "critical",
+        { required: true },
+      ),
+      "condenser.condenser_max_size": contract(
+        "condenser",
+        "integer",
+        null,
+        "major",
+      ),
+      "agent_context.load_memory": contract(
+        "agent_context",
+        "boolean",
+        false,
+        "major",
+      ),
+    };
+    const expectedConversation = {
+      max_iterations: contract("general", "integer", 500, "major", {
+        required: true,
+      }),
+      confirmation_mode: contract("verification", "boolean", false, "major", {
+        required: true,
+      }),
+      security_analyzer: contract("verification", "string", "llm", "major", {
+        choices: ["llm", "none"],
+        depends_on: ["confirmation_mode"],
+      }),
+    };
+    for (const version of ["", "/v1"]) {
+      for (const [schema, expected] of [
+        ["agent", expectedAgent],
+        ["conversation", expectedConversation],
+      ] as const) {
+        const { response, body } = await getJson<SettingsSchema>(
+          `/api${version}/settings/${schema}-schema`,
+        );
+        expect(response.status).toBe(200);
+        const fields = body.sections.flatMap(
+          ({ key: sectionKey, fields: sectionFields }) =>
+            sectionFields.map(
+              ({
+                key,
+                section,
+                value_type,
+                default: defaultValue,
+                prominence,
+                secret,
+                required,
+                choices,
+                depends_on,
+              }) => {
+                expect(section).toBe(sectionKey);
+                return [
+                  key,
+                  {
+                    section,
+                    value_type,
+                    default: defaultValue,
+                    prominence,
+                    secret,
+                    required,
+                    choices: choices.map(({ value }) => value),
+                    depends_on,
+                  },
+                ];
+              },
+            ),
+        );
+        expect(Object.fromEntries(fields)).toEqual(expected);
+      }
+    }
+  });
+
   it("serves both supported versions of each settings schema", async () => {
     for (const path of [
       "/api/settings/agent-schema",
@@ -74,7 +247,12 @@ describe("mock settings schemas and state", () => {
     }>("/api/settings");
     expect(modern.response.ok).toBe(true);
     expect(modern.body).toMatchObject({
-      agent_settings: { llm: { model: "openai/gpt-5.6-sol" } },
+      agent_settings: {
+        llm: { model: "openai/gpt-5.6-sol" },
+        condenser: { enable_default_condenser: true, condenser_max_size: null },
+        enable_sub_agents: false,
+        tool_concurrency_limit: 1,
+      },
       conversation_settings: { confirmation_mode: false },
       llm_api_key_is_set: false,
       misc_settings: {
