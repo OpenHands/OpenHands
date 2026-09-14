@@ -237,3 +237,15 @@ Any stdio ACP server works: choose **Custom** in Settings → Agent and enter it
 launch command. Custom servers have no curated model list, so enter the model ID
 the server expects (if any) as a custom model. Pass credentials by adding the
 env vars the server reads as global secrets under **Settings → Secrets**.
+
+### MiniMax Code
+
+Install [MiniMax Code](https://agent.minimax.io) on the machine running the Agent
+Server, following the [CLI installation instructions](https://www.npmjs.com/package/@minimax-ai/code)
+for Node.js and npm script permissions. Run `mcode login` there with the same
+user account as the Agent Server, and make sure `mcode` is on its `PATH`.
+
+In **Settings → Agent**, create or edit an agent profile, select **ACP**, choose
+the **Custom** preset, and enter `mcode acp` as the command. Leave **Model** blank
+to use MCode's configured default. Save the profile, choose **Set as active** from
+its menu, and start a new conversation.
