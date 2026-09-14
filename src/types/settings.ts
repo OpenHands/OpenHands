@@ -13,6 +13,15 @@ export const ProviderOptions = {
 
 export type Provider = keyof typeof ProviderOptions;
 
+/**
+ * Narrow an untrusted value to a {@link Provider}. Server-side conversation
+ * tags are free-form `Record<string, string>` that any API client can PATCH,
+ * so a `git_provider` tag has to be validated rather than cast before it
+ * reaches provider-keyed lookups (icons, repo URLs, token checks).
+ */
+export const isProvider = (value: unknown): value is Provider =>
+  typeof value === "string" && Object.hasOwn(ProviderOptions, value);
+
 export type ProviderToken = {
   token: string;
   host: string | null;
