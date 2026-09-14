@@ -3,6 +3,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import AgentServerGitService from "#/api/git-service/agent-server-git-service.api";
 import EventService from "#/api/event-service/event-service.api";
+import {
+  CANVAS_DEMO_CONVERSATION_ID,
+  CANVAS_DEMO_FILE_PATH,
+  CANVAS_DEMO_MARKDOWN,
+} from "#/fixtures/canvas-demo-conversation";
 import { TABLE_DEMO_CONVERSATION_ID } from "#/fixtures/table-demo-conversation";
 import { server } from "#/mocks/node";
 
@@ -584,5 +589,39 @@ describe("mock conversation handlers", () => {
     expect(vscode.body).toEqual({ url: null });
     expect(skills.body).toEqual({ skills: [] });
     expect(pendingMessage.body).toEqual({ id: "mock-pending-id", position: 0 });
+  });
+  it("returns the generated-canvas demo conversation and file event", async () => {
+    const [conversation] =
+      await AgentServerConversationService.batchGetAppConversations([
+        CANVAS_DEMO_CONVERSATION_ID,
+      ]);
+    const page = await EventService.searchEvents(
+      CANVAS_DEMO_CONVERSATION_ID,
+      null,
+      null,
+      { limit: 50, sortOrder: "TIMESTAMP_DESC" },
+    );
+
+    expect(conversation?.title).toBe("Generated canvas demo");
+    expect(page.items).toHaveLength(4);
+    expect(page.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          observation: expect.objectContaining({
+            kind: "FileEditorObservation",
+            path: CANVAS_DEMO_FILE_PATH,
+          }),
+        }),
+      ]),
+    );
+  });
+  it("serves the generated canvas Markdown from the conversation workspace", async () => {
+    // eslint-disable-next-line local/no-direct-agent-server-fetch -- Verify the mock response bytes and MIME type at the HTTP boundary.
+    const response = await fetch(
+      `${API_BASE}/api/conversations/${CANVAS_DEMO_CONVERSATION_ID}/workspace/${CANVAS_DEMO_FILE_PATH}`,
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/markdown");
+    await expect(response.text()).resolves.toBe(CANVAS_DEMO_MARKDOWN);
   });
 });
