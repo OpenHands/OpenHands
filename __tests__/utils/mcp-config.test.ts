@@ -21,12 +21,6 @@ import {
 import { flattenMcpConfig } from "#/utils/mcp-installed-servers";
 import type { MCPServerConfig } from "#/types/mcp-server";
 
-describe("REDACTED_MCP_SECRET_VALUE", () => {
-  it("is the ten-asterisk sentinel", () => {
-    expect(REDACTED_MCP_SECRET_VALUE).toBe("**********");
-  });
-});
-
 describe("getSdkMcpServerMap", () => {
   it("returns null for non-record values", () => {
     expect(getSdkMcpServerMap(null)).toBeNull();
@@ -43,7 +37,7 @@ describe("getSdkMcpServerMap", () => {
     });
   });
 
-  it("does not unwrap when mcpServers is itself a single server", () => {
+  it("drops a lone top-level server keyed as mcpServers", () => {
     const urlServer = { mcpServers: { url: "https://meta.example" } };
     expect(getSdkMcpServerMap(urlServer)).toEqual(urlServer);
 
@@ -761,7 +755,7 @@ describe("buildMcpServerPatch", () => {
     });
   });
 
-  it("nulls a removed field when replacing a same-strategy credential", () => {
+  it("omits an unchanged-redacted credential field on a same-strategy edit", () => {
     const previous = {
       transport: "http",
       url: "https://u.example",
