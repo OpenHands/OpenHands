@@ -29,6 +29,7 @@ import {
   LLM_AUTH_TYPE_SUBSCRIPTION,
   LLM_SUBSCRIPTION_VENDOR_KEY,
   OPENAI_SUBSCRIPTION_VENDOR,
+  matchSubscriptionModel,
   resolveLlmAuthType,
 } from "#/constants/llm-subscription";
 import { useOpenAISubscriptionModels } from "#/hooks/query/use-llm-subscription-models";
@@ -248,9 +249,10 @@ export function LlmSettingsScreen({
         isCloud && showOpenHandsApiKeyHelp && !isSubscriptionAuth;
       const shouldDisableSubscriptionControls =
         isDisabled || (isSubscriptionAuth && isWaitingForSubscriptionModels);
-      const subscriptionModelValue = subscriptionModels?.includes(modelValue)
-        ? modelValue
-        : (subscriptionModels?.[0] ?? "");
+      const subscriptionModelValue =
+        matchSubscriptionModel(modelValue, subscriptionModels) ??
+        subscriptionModels?.[0] ??
+        "";
 
       const apiKeyValue =
         typeof values["llm.api_key"] === "string" ? values["llm.api_key"] : "";
@@ -362,25 +364,29 @@ export function LlmSettingsScreen({
 
         if (nextAuthType === LLM_AUTH_TYPE_SUBSCRIPTION) {
           setEnableSubscriptionModels(true);
-          if (modelValue && !subscriptionModels?.includes(modelValue)) {
+          const matchedModel = matchSubscriptionModel(
+            modelValue,
+            subscriptionModels,
+          );
+          if (modelValue && !matchedModel) {
             lastApiKeyModelRef.current = modelValue;
           }
           const restoredSubscriptionModel =
-            lastSubscriptionModelRef.current &&
-            subscriptionModels?.includes(lastSubscriptionModelRef.current)
-              ? lastSubscriptionModelRef.current
-              : subscriptionModels?.[0];
+            matchSubscriptionModel(
+              lastSubscriptionModelRef.current,
+              subscriptionModels,
+            ) ?? subscriptionModels?.[0];
           onChange(LLM_SUBSCRIPTION_VENDOR_KEY, OPENAI_SUBSCRIPTION_VENDOR);
-          if (
-            !subscriptionModels?.includes(modelValue) &&
-            restoredSubscriptionModel
-          ) {
+          if (!matchedModel && restoredSubscriptionModel) {
             onChange("llm.model", restoredSubscriptionModel);
           }
           return;
         }
 
-        if (modelValue && subscriptionModels?.includes(modelValue)) {
+        if (
+          modelValue &&
+          matchSubscriptionModel(modelValue, subscriptionModels)
+        ) {
           lastSubscriptionModelRef.current = modelValue;
           onChange("llm.model", lastApiKeyModelRef.current ?? defaultModel);
         }
@@ -585,15 +591,28 @@ export function LlmSettingsScreen({
             ? llm.model
             : String(context.values["llm.model"] ?? "");
         const fallbackSubscriptionModel = subscriptionModels?.[0];
-        if (
-          !subscriptionModels?.includes(model) &&
-          !fallbackSubscriptionModel
-        ) {
+        const matchedSubscriptionModel = matchSubscriptionModel(
+          model,
+          subscriptionModels,
+        );
+        if (!matchedSubscriptionModel && !fallbackSubscriptionModel) {
           throw new Error("Subscription models are not loaded yet.");
         }
-        llm.model = subscriptionModels?.includes(model)
-          ? model
-          : fallbackSubscriptionModel;
+        if (matchedSubscriptionModel) {
+          llm.model = matchedSubscriptionModel;
+        } else if (!model || context.dirty[LLM_AUTH_TYPE_KEY]) {
+          // No prior subscription choice to preserve: a blank model, or a
+          // fresh API-to-subscription switch whose old model cannot run on
+          // the subscription. Seed the first offered model (prior behavior).
+          llm.model = fallbackSubscriptionModel;
+        } else {
+          // The saved model is not offered. Persisting another model id here
+          // would silently run something the user did not pick, so block the
+          // save with an actionable error instead.
+          throw new Error(
+            `Subscription model "${model}" is not offered for the ChatGPT subscription; pick a model from the list.`,
+          );
+        }
         delete llm.api_key;
         delete llm.base_url;
       } else {
