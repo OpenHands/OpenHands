@@ -27,6 +27,7 @@ import {
   SandboxStatus,
 } from "./conversation-service/agent-server-conversation-service.types";
 import { combineUsageMetrics } from "#/utils/conversation-metrics";
+import { extractModelAndProvider } from "#/utils/extract-model-and-provider";
 import {
   buildSkillEnablementFilter,
   findInvokedCatalogSkill,
@@ -1563,6 +1564,10 @@ export async function buildStartPlanningConversationRequestWithEncryptedSettings
 export const SUBSCRIPTION_LOGIN_REQUIRED_ERROR =
   "Connect your ChatGPT subscription before starting a conversation with this LLM profile.";
 
+export function subscriptionModelUnavailableError(model: string): string {
+  return `Model "${model}" is not available through the connected ChatGPT subscription. Select a supported subscription model in LLM settings.`;
+}
+
 /**
  * Throws if a ChatGPT subscription LLM profile is not connected.
  * Called before conversation creation and LLM profile switch only — not on
@@ -1578,6 +1583,27 @@ export async function assertSubscriptionAuthReady(
   const status = await LLMSubscriptionService.getOpenAIStatus();
   if (!status.connected) {
     throw new Error(SUBSCRIPTION_LOGIN_REQUIRED_ERROR);
+  }
+
+  // A subscription profile can carry a model the subscription backend does
+  // not serve (chosen under API-key auth, or from a stale catalog). The
+  // server answers those with a bare 404 deep in the run, so fail fast here
+  // while the advertised list positively excludes the model. An empty list
+  // carries no signal, so never block on it.
+  const configuredModel = typeof llm.model === "string" ? llm.model.trim() : "";
+  if (!configuredModel) return;
+
+  const advertisedModels = await LLMSubscriptionService.getOpenAIModels();
+  if (advertisedModels.length === 0) return;
+
+  const servedModels = new Set<string>();
+  for (const entry of advertisedModels) {
+    servedModels.add(entry);
+    servedModels.add(extractModelAndProvider(entry).model);
+  }
+  const requestedBare = extractModelAndProvider(configuredModel).model;
+  if (!servedModels.has(configuredModel) && !servedModels.has(requestedBare)) {
+    throw new Error(subscriptionModelUnavailableError(configuredModel));
   }
 }
 
