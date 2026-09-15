@@ -42,8 +42,10 @@
  *   config/         ← defaults.json
  *   build/          ← static frontend (npm run build:app output)
  *
- * The bundled uv binary (resources/bin/) lands in <Resources>/bin/ via
- * extraResources so Electron can inject it into PATH on startup.
+ * The bundled uv and doctl binaries (resources/bin/) land in <Resources>/bin/
+ * via extraResources. Electron injects uv/uvx into PATH on startup; doctl is
+ * spawned directly by the MARS port-forward tunnel client
+ * (scripts/tunnel-client.mjs) rather than added to PATH.
  *
  * The bundled Node.js distribution (resources/node/) lands in
  * <Resources>/node/ via extraResources — except for its root-level
@@ -346,7 +348,9 @@ const config = {
 
   // Bundled prerequisites — placed in <Resources>/ so Electron can put
   // them on PATH before starting the backend stack.
-  //   bin/   — uv + uvx (downloaded by `npm run download-uv`)
+  //   bin/   — uv + uvx (downloaded by `npm run download-uv`) and doctl
+  //            (downloaded by `npm run download-doctl`, used by
+  //            scripts/tunnel-client.mjs for MARS port-forward)
   //   node/  — official Node.js distribution; provides `node` plus the
   //            bundled `npm` / `npx` that stdio MCP servers (Slack, GitHub,
   //            Figma, etc.) spawn via `npx -y <package>` (downloaded by
