@@ -20,7 +20,10 @@ export function ConfirmStopModal({
   const { t } = useTranslation("openhands");
 
   return (
-    <ModalBackdrop onClose={onCancel}>
+    <ModalBackdrop
+      onClose={onCancel}
+      aria-label={t(I18nKey.CONVERSATION$CONFIRM_CLOSE_CONVERSATION)}
+    >
       <ModalBody className="items-start border border-[var(--oh-border)]">
         <div className="flex flex-col gap-2">
           <BaseModalTitle

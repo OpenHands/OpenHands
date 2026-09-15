@@ -19,7 +19,10 @@ export function ExitConversationModal({
   const { t } = useTranslation("openhands");
 
   return (
-    <ModalBackdrop onClose={onCancel}>
+    <ModalBackdrop
+      onClose={onCancel}
+      aria-label={t(I18nKey.CONVERSATION$EXIT_WARNING)}
+    >
       <ModalBody testID="confirm-new-conversation-modal">
         <BaseModalTitle title={t(I18nKey.CONVERSATION$EXIT_WARNING)} />
         <div className="flex w-full justify-end gap-2">

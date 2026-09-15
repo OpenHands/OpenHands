@@ -152,7 +152,10 @@ export function EditConversationTagsModal({
   };
 
   return (
-    <ModalBackdrop onClose={onCancel}>
+    <ModalBackdrop
+      onClose={onCancel}
+      aria-label={t(I18nKey.CONVERSATION$EDIT_TAGS)}
+    >
       <ModalBody
         className="items-start border border-[var(--oh-border)]"
         testID="edit-conversation-tags-modal"
