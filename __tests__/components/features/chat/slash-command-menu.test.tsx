@@ -2,12 +2,12 @@ import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeAll } from "vitest";
 import { renderWithProviders } from "test-utils";
+import { SlashCommandMenu } from "#/components/features/chat/components/slash-command-menu";
+import type { SlashCommandItem } from "#/types/slash-command";
 import {
-  SlashCommandMenu,
   getSkillDescription,
   stripMarkdown,
-} from "#/components/features/chat/components/slash-command-menu";
-import { SlashCommandItem } from "#/hooks/chat/use-slash-command";
+} from "#/utils/slash-command-description";
 
 // jsdom does not implement scrollIntoView
 beforeAll(() => {
