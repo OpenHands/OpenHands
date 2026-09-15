@@ -57,15 +57,17 @@ vi.mock("#/routes/llm-settings", async () => {
       const [model, setModel] = React.useState(
         String(initialValuesRef.current["llm.model"] ?? ""),
       );
-      const [apiKey] = React.useState(
+      const [apiKey, setApiKey] = React.useState(
         String(initialValuesRef.current["llm.api_key"] ?? ""),
       );
-      const [baseUrl] = React.useState(
+      const [baseUrl, setBaseUrl] = React.useState(
         String(initialValuesRef.current["llm.base_url"] ?? ""),
       );
       const [temperature, setTemperature] = React.useState("0.2");
       const isDirty =
         model !== String(initialValuesRef.current["llm.model"] ?? "") ||
+        apiKey !== String(initialValuesRef.current["llm.api_key"] ?? "") ||
+        baseUrl !== String(initialValuesRef.current["llm.base_url"] ?? "") ||
         temperature !== "0.2";
       React.useEffect(() => {
         const values = {
@@ -120,11 +122,23 @@ vi.mock("#/routes/llm-settings", async () => {
             All
           </button>
           {view === "basic" ? (
-            <input
-              data-testid="mock-basic-model-input"
-              value={model}
-              onChange={(event) => setModel(event.currentTarget.value)}
-            />
+            <>
+              <input
+                data-testid="mock-basic-model-input"
+                value={model}
+                onChange={(event) => setModel(event.currentTarget.value)}
+              />
+              <input
+                data-testid="mock-basic-api-key-input"
+                value={apiKey}
+                onChange={(event) => setApiKey(event.currentTarget.value)}
+              />
+              <input
+                data-testid="mock-basic-base-url-input"
+                value={baseUrl}
+                onChange={(event) => setBaseUrl(event.currentTarget.value)}
+              />
+            </>
           ) : null}
           {view === "all" ? (
             <input
@@ -802,6 +816,91 @@ describe("LlmSettingsLocalView", () => {
 
       await waitFor(() => expect(mockSaveMutateAsync).toHaveBeenCalled());
       expect(ProfilesService.validateProfile).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("credential validation (#15774)", () => {
+    async function openEditView(user: ReturnType<typeof userEvent.setup>) {
+      vi.mocked(ProfilesService.getProfile).mockResolvedValue({
+        name: "gpt-4-profile",
+        api_key_set: true,
+        config: {
+          model: "openai/gpt-4",
+          api_key: "encrypted-key-123",
+          base_url: "https://api.openai.com/v1",
+        },
+      });
+      renderWithProviders(<LlmSettingsLocalView />);
+      await user.click(screen.getAllByTestId("profile-menu-trigger")[0]);
+      await user.click(screen.getByTestId("profile-edit"));
+      await waitFor(() =>
+        expect(screen.getByTestId("profile-name-input")).toHaveValue(
+          "gpt-4-profile",
+        ),
+      );
+    }
+
+    async function retype(
+      user: ReturnType<typeof userEvent.setup>,
+      testId: string,
+      value: string,
+    ) {
+      const input = await screen.findByTestId(testId);
+      await user.clear(input);
+      await user.type(input, value);
+      await waitFor(() =>
+        expect(screen.getByTestId("save-profile-btn")).not.toBeDisabled(),
+      );
+    }
+
+    it.each([".", "localhost:11434"])(
+      "does not persist the malformed base URL %s",
+      async (badBaseUrl) => {
+        const user = userEvent.setup();
+        await openEditView(user);
+        await retype(user, "mock-basic-base-url-input", badBaseUrl);
+        await user.click(screen.getByTestId("save-profile-btn"));
+
+        await waitFor(() =>
+          expect(screen.getByTestId("save-profile-btn")).not.toBeDisabled(),
+        );
+        expect(ProfilesService.validateProfile).not.toHaveBeenCalled();
+        expect(mockSaveMutateAsync).not.toHaveBeenCalled();
+      },
+    );
+
+    it("does not persist a single-character API key", async () => {
+      const user = userEvent.setup();
+      await openEditView(user);
+      await retype(user, "mock-basic-api-key-input", "-");
+      await user.click(screen.getByTestId("save-profile-btn"));
+
+      await waitFor(() =>
+        expect(screen.getByTestId("save-profile-btn")).not.toBeDisabled(),
+      );
+      expect(ProfilesService.validateProfile).not.toHaveBeenCalled();
+      expect(mockSaveMutateAsync).not.toHaveBeenCalled();
+    });
+
+    it("saves a valid base URL and API key unchanged", async () => {
+      const user = userEvent.setup();
+      vi.mocked(ProfilesService.validateProfile).mockResolvedValue({
+        valid: true,
+      });
+      mockSaveMutateAsync.mockResolvedValue({ success: true });
+      await openEditView(user);
+      await retype(user, "mock-basic-base-url-input", "https://custom.test/v1");
+      await retype(
+        user,
+        "mock-basic-api-key-input",
+        "sk-proj-abcdef0123456789",
+      );
+      await user.click(screen.getByTestId("save-profile-btn"));
+
+      await waitFor(() => expect(mockSaveMutateAsync).toHaveBeenCalled());
+      const { request } = mockSaveMutateAsync.mock.calls[0][0];
+      expect(request.llm.base_url).toBe("https://custom.test/v1");
+      expect(request.llm.api_key).toBe("sk-proj-abcdef0123456789");
     });
   });
 

@@ -39,6 +39,10 @@ import {
   isProfileNameValid,
 } from "#/utils/derive-profile-name";
 import { isOpenHandsProviderModel } from "#/utils/format-model-name";
+import {
+  MIN_LLM_API_KEY_LENGTH,
+  validateLlmCredentials,
+} from "#/utils/validate-llm-credentials";
 import { SdkSectionSaveControl } from "../sdk-settings/sdk-section-page";
 import {
   LLM_AUTH_TYPE_API_KEY,
@@ -371,6 +375,18 @@ export function LlmSettingsLocalView() {
     const model = typeof llmConfig.model === "string" ? llmConfig.model : "";
     if (!model) {
       displayErrorToast(t(I18nKey.SETTINGS$MODEL_REQUIRED));
+      return;
+    }
+
+    // This save path builds its payload from `getDirtyPayload()` rather than
+    // the screen's `buildPayload`, so it has to run the same credential checks
+    // itself. The branches above delete api_key / base_url whenever the
+    // credential lives elsewhere (subscription, provider connection, cloud
+    // OpenHands provider), and only string values are validated, so an
+    // untouched profile is never rejected for a field it does not carry.
+    const credentialErrorKey = validateLlmCredentials(llmConfig);
+    if (credentialErrorKey) {
+      displayErrorToast(t(credentialErrorKey, { min: MIN_LLM_API_KEY_LENGTH }));
       return;
     }
 
