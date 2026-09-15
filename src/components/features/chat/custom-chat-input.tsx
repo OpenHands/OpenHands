@@ -64,6 +64,7 @@ export function CustomChatInput({
   // mid-submit re-render, before `setSubmittedMessage(null)` was applied —
   // producing a duplicate "Sending…" bubble.
   const onSubmitRef = useRef(onSubmit);
+
   useEffect(() => {
     onSubmitRef.current = onSubmit;
   }, [onSubmit]);
@@ -73,11 +74,11 @@ export function CustomChatInput({
     if (!submittedMessage || disabled) {
       return;
     }
+
     onSubmitRef.current(submittedMessage);
     setSubmittedMessage(null);
   }, [submittedMessage, disabled, setSubmittedMessage]);
 
-  // Custom hooks
   const {
     chatInputRef,
     messageToSend,
@@ -89,6 +90,7 @@ export function CustomChatInput({
   const syncCanSubmit = React.useCallback(() => {
     const text = chatInputRef.current?.innerText ?? "";
     const hasAttachments = images.length > 0 || files.length > 0;
+
     setCanSubmit(text.trim().length > 0 || hasAttachments);
   }, [chatInputRef, images, files]);
 
@@ -126,6 +128,7 @@ export function CustomChatInput({
     onSubmit,
     resetManualResize,
   );
+
   const handleSubmitAndSync = React.useCallback(() => {
     handleSubmit();
     syncCanSubmit();
@@ -152,7 +155,6 @@ export function CustomChatInput({
     closeMenu: closeSlashMenu,
   } = useSlashCommand(chatInputRef as React.RefObject<HTMLDivElement | null>);
 
-  // Cleanup: reset suggestions visibility when component unmounts
   useEffect(
     () => () => {
       setShouldHideSuggestions(false);
@@ -160,18 +162,18 @@ export function CustomChatInput({
     },
     [setShouldHideSuggestions, clearAllFiles],
   );
+
   useEffect(() => {
     syncCanSubmit();
   }, [syncCanSubmit, images.length, files.length]);
+
   return (
     <div className={cn("w-full", className)}>
-      {/* Hidden file input */}
       <HiddenFileInput
         fileInputRef={fileInputRef}
         onChange={handleFileInputChange}
       />
 
-      {/* Container with grip */}
       <div className="relative w-full">
         <ChatInputGrip
           gripRef={gripRef}
