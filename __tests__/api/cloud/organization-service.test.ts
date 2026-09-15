@@ -5,6 +5,7 @@ import {
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
 import {
+  getCloudOrganizationMember,
   getCloudOrganizations,
   getCurrentCloudApiKey,
 } from "#/api/cloud/organization-service.api";
@@ -108,5 +109,36 @@ describe("cloud organization-service", () => {
     await expect(getCurrentCloudApiKey(cloudBackend)).rejects.toBeInstanceOf(
       HttpError,
     );
+  });
+
+  it("getCloudOrganizationMember hits /api/organizations/{orgId}/members/{userId} and returns the member", async () => {
+    // Arrange
+    const member = {
+      org_id: "org-1",
+      user_id: "user-1",
+      email: "jdoe@acme.com",
+      role: "member",
+      status: "active",
+    };
+    fetchMock.mockResolvedValueOnce(mockJsonResponse(member));
+
+    // Act
+    const result = await getCloudOrganizationMember(
+      "org-1",
+      "user-1",
+      cloudBackend,
+    );
+
+    // Assert
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe(
+      `${cloudBackend.host}/api/organizations/org-1/members/user-1`,
+    );
+    expect(init).toMatchObject({
+      method: "GET",
+      headers: { Authorization: "Bearer bearer-token" },
+    });
+    expect(result).toEqual(member);
   });
 });

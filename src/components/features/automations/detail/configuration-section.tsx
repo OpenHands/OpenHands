@@ -7,6 +7,7 @@ import GitBranchIcon from "#/icons/git-branch.svg?react";
 import CheckCircleIcon from "#/icons/check-circle.svg?react";
 import CalendarIcon from "#/icons/calendar.svg?react";
 import SparkleIcon from "#/icons/sparkle.svg?react";
+import UserIcon from "#/icons/user.svg?react";
 import { Zap } from "lucide-react";
 import BellIcon from "#/icons/bell.svg?react";
 import CodeTagIcon from "#/icons/code-tag.svg?react";
@@ -18,6 +19,12 @@ import { BranchBadge } from "./branch-badge";
 
 interface ConfigurationSectionProps {
   automation: Automation;
+  /**
+   * Identity the automation runs as — the creator's email, or their raw user
+   * id when the email could not be resolved. Omitted/null hides the field
+   * (local backends, or while the lookup is still in flight).
+   */
+  runsAs?: string | null;
 }
 
 const FILTER_TRUNCATE_LENGTH = 60;
@@ -52,6 +59,7 @@ function FilterExpression({ filter }: { filter: string }) {
 
 export function ConfigurationSection({
   automation,
+  runsAs,
 }: ConfigurationSectionProps) {
   const { t } = useTranslation("openhands");
   const isEvent = automation.trigger.type === "event";
@@ -125,6 +133,15 @@ export function ConfigurationSection({
             label={t(I18nKey.AUTOMATIONS$DETAIL$EVENT_FILTER)}
           >
             <FilterExpression filter={automation.trigger.filter} />
+          </ConfigField>
+        )}
+
+        {runsAs && (
+          <ConfigField
+            icon={<UserIcon className="size-3.5" />}
+            label={t(I18nKey.AUTOMATIONS$DETAIL$RUNS_AS)}
+          >
+            <span className="break-all">{runsAs}</span>
           </ConfigField>
         )}
 

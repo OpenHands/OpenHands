@@ -203,6 +203,7 @@ def test_enhancement_not_ready_prose_acceptance():
 def test_no_type_section_not_ready():
     result = evaluate_readiness("### Something\nSome text", [])
     assert not result.ready
+    assert result.issue_type is None
     assert any("neither" in r.lower() for r in result.reasons)
 
 
@@ -210,10 +211,12 @@ def test_type_inferred_from_body_ignores_labels():
     # A bug-shaped body is treated as a bug even without a `bug` label.
     result = evaluate_readiness(BUG_BODY_READY, [])
     assert result.ready, result.reasons
+    assert result.issue_type == BUG_LABEL
 
     # A feature-shaped body is treated as an enhancement even with a `bug` label.
     result = evaluate_readiness(ENHANCEMENT_BODY_READY, ["bug"])
     assert result.ready, result.reasons
+    assert result.issue_type == ENHANCEMENT_LABEL
 
     # A body with only an `### Actual Behavior` section (no Steps to Reproduce)
     # is still recognized as a bug report.
@@ -225,7 +228,16 @@ def test_type_inferred_from_body_ignores_labels():
 def test_empty_type_section_is_still_classified():
     result = evaluate_readiness("### Actual Behavior\n### Acceptance Criteria\n", [])
     assert not result.ready
+    assert result.issue_type == BUG_LABEL
     assert any("Steps to Reproduce" in r for r in result.reasons)
+
+
+def test_ambiguous_body_does_not_infer_type():
+    body = f"{BUG_BODY_READY}\n{ENHANCEMENT_BODY_READY}"
+    result = evaluate_readiness(body, [])
+    assert not result.ready
+    assert result.issue_type is None
+    assert any("both" in reason.lower() for reason in result.reasons)
 
 
 # ---------------------------------------------------------------------------
@@ -408,6 +420,7 @@ def test_main_json_not_ready(tmp_path, capsys, monkeypatch):
     captured = capsys.readouterr()
     data = json.loads(captured.out)
     assert data["ready"] is False
+    assert data["issue_type"] == BUG_LABEL
     assert len(data["reasons"]) > 0
 
 
@@ -432,6 +445,7 @@ def test_main_json_ready(tmp_path, capsys, monkeypatch):
     captured = capsys.readouterr()
     data = json.loads(captured.out)
     assert data["ready"] is True
+    assert data["issue_type"] == BUG_LABEL
     assert len(data["reasons"]) == 0
 
 
@@ -501,6 +515,7 @@ def test_main_event_path_json_ready(tmp_path, capsys, monkeypatch):
     captured = capsys.readouterr()
     data = json.loads(captured.out)
     assert data["ready"] is True
+    assert data["issue_type"] == BUG_LABEL
     assert len(data["reasons"]) == 0
 
 
