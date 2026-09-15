@@ -585,6 +585,98 @@ export async function ensureMockLLMAgentProfile(
 }
 
 /**
+ * Upsert + activate the seeded "default" agent profile as Claude Code ACP,
+ * pointing ``acp_command`` at the mock ACP server. ``acp_server`` stays
+ * ``claude-code`` so Canvas's Claude skill overlay fires (#16905) without
+ * requiring a real Claude binary.
+ */
+export async function ensureMockClaudeAcpAgentProfile(
+  request: APIRequestContext,
+) {
+  const name = "default";
+  const headers = {
+    "X-Session-API-Key": SESSION_API_KEY,
+    "Content-Type": "application/json",
+  };
+  const acpCommand = `${MOCK_ACP_COMMAND_PYTHON} ${MOCK_ACP_COMMAND_SCRIPT}`;
+
+  const saveResp = await retryOnTransient(
+    request,
+    "POST",
+    `${BACKEND_URL}/api/agent-profiles/${encodeURIComponent(name)}`,
+    {
+      headers,
+      data: {
+        agent_kind: "acp",
+        acp_server: "claude-code",
+        acp_command: acpCommand,
+        acp_args: [],
+      },
+    },
+  );
+  expect(
+    saveResp.ok(),
+    `save Claude ACP profile "${name}": ${saveResp.status()} ${await saveResp.text()}`,
+  ).toBe(true);
+
+  const detailResp = await retryOnTransient(
+    request,
+    "GET",
+    `${BACKEND_URL}/api/agent-profiles/${encodeURIComponent(name)}`,
+    { headers },
+  );
+  expect(
+    detailResp.ok(),
+    `get agent profile "${name}": ${detailResp.status()}`,
+  ).toBe(true);
+  const id = (await detailResp.json())?.profile?.id as string | undefined;
+  expect(id, `agent profile "${name}" id`).toBeTruthy();
+
+  const activateResp = await retryOnTransient(
+    request,
+    "POST",
+    `${BACKEND_URL}/api/agent-profiles/${encodeURIComponent(id!)}/activate`,
+    { headers, data: {} },
+  );
+  expect(
+    activateResp.ok(),
+    `activate Claude ACP profile "${name}": ${activateResp.status()}`,
+  ).toBe(true);
+}
+
+/**
+ * Persist Canvas skill allow/deny lists through the settings API.
+ */
+export async function patchSkillEnablement(
+  request: APIRequestContext,
+  enablement: {
+    enabled_skills?: string[];
+    disabled_skills?: string[];
+  },
+) {
+  const resp = await retryOnTransient(
+    request,
+    "PATCH",
+    `${BACKEND_URL}/api/settings`,
+    {
+      headers: {
+        "X-Session-API-Key": SESSION_API_KEY,
+        "Content-Type": "application/json",
+      },
+      data: {
+        misc_settings_diff: {
+          app_preferences: enablement,
+        },
+      },
+    },
+  );
+  expect(
+    resp.ok(),
+    `PATCH skill enablement failed: ${resp.status()} ${await resp.text()}`,
+  ).toBe(true);
+}
+
+/**
  * Create a new LLM profile through the Settings UI.
  *
  * Assumes the page is already on /settings/llm with profiles loaded

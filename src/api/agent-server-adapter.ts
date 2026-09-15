@@ -33,6 +33,10 @@ import {
   toSkillEnablement,
   type SkillEnablement,
 } from "#/utils/skill-enablement";
+import {
+  buildClaudeAcpSkillSuffixAppend,
+  isClaudeCodeAcpAgent,
+} from "#/utils/acp-claude-skill-bridge";
 import SettingsService from "./settings-service/settings-service.api";
 import { getStoredConversationMetadata } from "./conversation-metadata-store";
 import LLMSubscriptionService from "./llm-subscription-service";
@@ -1096,11 +1100,19 @@ type StartConversationPayloadBase = Record<string, unknown> & {
   tool_module_qualnames?: Record<string, string>;
 };
 
+type AgentLaunchAdditions = {
+  // The only overlay that survives native ACP skill stripping on
+  // agent-server 1.46.x. Do not send ``skills_append`` — ``extra="forbid"``
+  // rejects it until software-agent-sdk#4717.
+  system_message_suffix_append?: string;
+};
+
 type AgentSettingsStartConversationPayload = StartConversationPayloadBase & {
   // Omitted when launching via ``agent_profile_id`` — the two are mutually
   // exclusive agent sources; the server resolves the profile server-side.
   agent_settings?: AgentSettingsPayload;
   agent_profile_id?: string;
+  agent_launch_additions?: AgentLaunchAdditions;
   agent?: never;
 };
 
@@ -1134,6 +1146,10 @@ export interface StartConversationOptions {
   // server-side) instead of an inline ``agent_settings`` dump (#3727).
   agentProfileId?: string;
   agentProfileKind?: AgentKind;
+  // Profile summaries omit ``acp_server`` / ``acp_command``. The Claude skill
+  // overlay reads these from the profile detail fetched at launch (#16905).
+  agentProfileAcpServer?: string | null;
+  agentProfileAcpCommand?: string | readonly string[] | null;
   titleLlmProfile?: string;
   runtimeServicesInfo?: RuntimeServicesInfo | null;
   workspaceHookConfig?: HookConfig | null;
@@ -1329,7 +1345,48 @@ export function buildStartConversationRequest(
     payload.secrets = secrets;
   }
 
+  // Native ACP sourcing strips OpenHands-managed ``agent_context.skills``
+  // after profile/settings resolution. ``system_message_suffix_append`` is the
+  // overlay that still reaches the ACP first-turn suffix (#16905). Compose
+  // as a single string so a later runtime-services append can concatenate.
+  const claudeSkillSuffix = buildClaudeAcpSkillSuffixForLaunch(options);
+  if (claudeSkillSuffix) {
+    payload.agent_launch_additions = {
+      system_message_suffix_append: claudeSkillSuffix,
+    };
+  }
+
   return payload;
+}
+
+function buildClaudeAcpSkillSuffixForLaunch(
+  options: StartConversationOptions,
+): string | undefined {
+  if (!isClaudeCodeAcpLaunch(options)) return undefined;
+  return buildClaudeAcpSkillSuffixAppend({
+    enablement: toSkillEnablement(options.settings),
+    invokedCatalogSkill: findInvokedCatalogSkill(options.query),
+  });
+}
+
+function isClaudeCodeAcpLaunch(options: StartConversationOptions): boolean {
+  if (options.agentProfileId) {
+    return isClaudeCodeAcpAgent({
+      agentKind: options.agentProfileKind,
+      acpServer: options.agentProfileAcpServer,
+      acpCommand: options.agentProfileAcpCommand,
+    });
+  }
+  if (!isAcpAgent(options.settings)) return false;
+  const agentSettings = toRecord(options.settings.agent_settings);
+  return isClaudeCodeAcpAgent({
+    agentKind: "acp",
+    acpServer: getAcpServerTag(options.settings),
+    acpCommand: resolveAcpCommand(agentSettings) as
+      | string
+      | readonly string[]
+      | null,
+  });
 }
 
 export function buildStartPlanningConversationRequest(options: {
@@ -1594,6 +1651,8 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
   worktree?: boolean;
   agentProfileId?: string;
   agentProfileKind?: AgentKind;
+  agentProfileAcpServer?: string | null;
+  agentProfileAcpCommand?: string | readonly string[] | null;
   titleLlmProfile?: string;
 }): Promise<Record<string, unknown>> {
   const [{ SecretsService }, { default: HooksService }] = await Promise.all([

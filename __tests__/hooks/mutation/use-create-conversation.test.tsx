@@ -53,17 +53,29 @@ vi.mock("#/hooks/query/use-agent-profiles", () => ({
 // The launch path resolves the active AgentProfile by awaiting
 // `AgentProfilesService.listProfiles` through the query cache (#3727).
 // Default: no active profile, so a plain create stays on the legacy path.
-const { listAgentProfilesMock } = vi.hoisted(() => ({
+const { listAgentProfilesMock, getAgentProfileMock } = vi.hoisted(() => ({
   listAgentProfilesMock: vi.fn(),
+  getAgentProfileMock: vi.fn(),
 }));
 vi.mock("#/api/agent-profiles-service/agent-profiles-service.api", () => ({
   __esModule: true,
-  default: { listProfiles: listAgentProfilesMock },
+  default: {
+    listProfiles: listAgentProfilesMock,
+    getProfile: getAgentProfileMock,
+  },
   WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME: "default",
 }));
 listAgentProfilesMock.mockResolvedValue({
   profiles: [],
   active_agent_profile_id: null,
+});
+getAgentProfileMock.mockResolvedValue({
+  profile: {
+    agent_kind: "acp",
+    name: "default",
+    acp_server: "custom",
+    acp_command: "python3 mock-acp-server.py",
+  },
 });
 
 // LLM-profile service: real listProfiles calls (the llmProfileExists
@@ -89,6 +101,15 @@ describe("useCreateConversation", () => {
     listAgentProfilesMock.mockResolvedValue({
       profiles: [],
       active_agent_profile_id: null,
+    });
+    getAgentProfileMock.mockReset();
+    getAgentProfileMock.mockResolvedValue({
+      profile: {
+        agent_kind: "acp",
+        name: "default",
+        acp_server: "custom",
+        acp_command: "python3 mock-acp-server.py",
+      },
     });
     listLlmProfilesMock.mockReset();
     listLlmProfilesMock.mockResolvedValue({
@@ -459,6 +480,52 @@ describe("useCreateConversation", () => {
     const call = createConversationSpy.mock.lastCall;
     expect(call?.[0]?.agentProfileId).toBe("profile-acp-default");
     expect(call?.[0]?.agentProfileKind).toBe("acp");
+  });
+
+  it("loads the ACP profile detail so Claude Code can receive Canvas skills (#16905)", async () => {
+    listAgentProfilesMock.mockResolvedValue({
+      profiles: [
+        {
+          id: "profile-acp-default",
+          name: "default",
+          agent_kind: "acp",
+          revision: 1,
+          llm_profile_ref: null,
+          mcp_server_refs: null,
+        },
+      ],
+      active_agent_profile_id: "profile-acp-default",
+    });
+    getAgentProfileMock.mockResolvedValue({
+      profile: {
+        agent_kind: "acp",
+        name: "default",
+        acp_server: "claude-code",
+        acp_command: "npx -y @agentclientprotocol/claude-agent-acp@0.63.0",
+      },
+    });
+    const createConversationSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue({
+        id: "task-id",
+        app_conversation_id: "conv-1",
+        agent_server_url: "http://agent-server.local",
+      } as never);
+
+    const { result } = renderHook(() => useCreateConversation(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={new QueryClient()}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    await result.current.mutateAsync({ query: "hello" });
+
+    expect(getAgentProfileMock).toHaveBeenCalledWith("default");
+    const call = createConversationSpy.mock.lastCall;
+    expect(call?.[0]?.agentProfileAcpServer).toBe("claude-code");
+    expect(call?.[0]?.agentProfileAcpCommand).toContain("claude-agent-acp");
   });
 
   it("launches the seeded `default` profile from its resolved id on cloud (no agent_settings fallback exists there) (#1571)", async () => {
