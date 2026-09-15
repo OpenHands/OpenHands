@@ -24,6 +24,7 @@ interface ProfileActionsMenuProps {
   onDelete: () => void;
   isActive: boolean;
   isActivating: boolean;
+  isReserved?: boolean;
   onClose: () => void;
   /**
    * Element the menu should anchor against. When provided, the menu renders
@@ -42,6 +43,7 @@ export function ProfileActionsMenu({
   onDelete,
   isActive,
   isActivating,
+  isReserved = false,
   onClose,
   anchorRef,
 }: ProfileActionsMenuProps) {
@@ -162,6 +164,7 @@ export function ProfileActionsMenu({
         onClick={() => handleAction(onRename)}
         onKeyDown={handleKeyDown}
         menuItemsRef={menuItemsRef}
+        disabled={isReserved}
         testId="profile-rename"
       />
       <MenuItem
@@ -171,6 +174,7 @@ export function ProfileActionsMenu({
         onClick={() => handleAction(onDuplicate)}
         onKeyDown={handleKeyDown}
         menuItemsRef={menuItemsRef}
+        disabled={isReserved}
         testId="profile-duplicate"
       />
       <MenuItem
