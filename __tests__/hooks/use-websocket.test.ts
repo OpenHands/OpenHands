@@ -823,8 +823,14 @@ describe("useWebSocket", () => {
       expect(onCloseSpy).not.toHaveBeenCalled();
       expect(onErrorSpy).not.toHaveBeenCalled();
 
-      // ...while the current socket's close still notifies as before.
+      // ...and cannot overwrite the replacement's live connection state.
+      expect(result.current.isConnected).toBe(true);
+      expect(result.current.error).toBeNull();
+
+      // The current socket's close still updates state and notifies as before.
       act(() => currentSocket.emitClose());
+      expect(result.current.isConnected).toBe(false);
+      expect(result.current.error).not.toBeNull();
       expect(onCloseSpy).toHaveBeenCalledOnce();
       expect(onErrorSpy).toHaveBeenCalledOnce();
 
