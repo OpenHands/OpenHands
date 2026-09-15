@@ -234,6 +234,20 @@ describe("validateSetupEntry", () => {
     expect(result).toEqual({ valid: true, errors: [] });
   });
 
+  it.each([
+    ["plugins/qa-changes/scripts/prompt.py", true],
+    ["plugins/../outside.py", false],
+    ["/plugins/qa-changes/scripts/prompt.py", false],
+  ])("validates plugin bundle source %s", (source, valid) => {
+    const entry = createSetupEntry({
+      setup: createSetup({
+        prompt: undefined,
+        bundle: { ...bundle, files: { "main.py": source } },
+      }),
+    });
+    expect(validateSetupEntry(entry).valid).toBe(valid);
+  });
+
   // A bundle is the one part of a manifest naming files and a command this
   // host acts on, so each of these would be acted on if it were admitted.
   it.each([
@@ -279,7 +293,7 @@ describe("validateSetupEntry", () => {
       },
     ],
     [
-      "a source outside skills/ and automations/",
+      "a source outside the published package",
       {
         setup: createSetup({
           prompt: undefined,
