@@ -1,8 +1,7 @@
 import type { I18nKey } from "#/i18n/declaration";
-import type { Microagent } from "#/api/open-hands.types";
 import type { SkillInfo } from "#/types/settings";
 
-export type SlashCommandSkill = SkillInfo | Microagent;
+export type SlashCommandSkill = SkillInfo;
 
 export interface SlashCommandItem {
   skill: SlashCommandSkill;
