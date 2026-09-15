@@ -207,7 +207,9 @@ describe("static-server.mjs", () => {
       const result = serializeForInlineScript(input);
       expect(result).not.toContain("<");
       expect(result).not.toContain(">");
-      expect(result).toBe('"\\u003c/script\\u003e\\u003cscript\\u003ealert(1)\\u003c/script\\u003e"');
+      expect(result).toBe(
+        '"\\u003c/script\\u003e\\u003cscript\\u003ealert(1)\\u003c/script\\u003e"',
+      );
     });
 
     it("escapes line and paragraph separators U+2028 and U+2029", () => {
@@ -823,6 +825,48 @@ describe("static-server.mjs", () => {
       expect(response.status).toBe(200);
       expect(body).toContain("window.__AGENT_CANVAS_BASE_PATH__");
       expect(body).toContain('"/canvas"');
+    });
+
+    it("handles asset replacement without restarting the server", async () => {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      const assetsDir = path.join(buildDir, "assets");
+      mkdirSync(assetsDir);
+      writeFileSync(path.join(buildDir, "index.html"), "<main>app</main>");
+
+      const initialAssetPath = path.join(assetsDir, "bundle-old.js");
+      writeFileSync(initialAssetPath, "console.log('old');\n");
+
+      const origin = await startServer(buildDir);
+
+      // Initial asset is served with immutable cache header
+      const initialResponse = await fetch(`${origin}/assets/bundle-old.js`);
+      expect(initialResponse.status).toBe(200);
+      expect(initialResponse.headers.get("cache-control")).toBe(
+        "public, max-age=31536000, immutable",
+      );
+      await expect(initialResponse.text()).resolves.toContain("old");
+
+      // Simulate rebuild: remove old asset and write replacement asset
+      rmSync(initialAssetPath);
+      const replacementAssetPath = path.join(assetsDir, "bundle-new.js");
+      writeFileSync(replacementAssetPath, "console.log('new');\n");
+
+      // Requesting the removed asset returns 404 without crashing the server
+      const removedResponse = await fetch(`${origin}/assets/bundle-old.js`);
+      expect(removedResponse.status).toBe(404);
+
+      // Replacement asset is served immediately without restarting
+      const replacementResponse = await fetch(`${origin}/assets/bundle-new.js`);
+      expect(replacementResponse.status).toBe(200);
+      expect(replacementResponse.headers.get("cache-control")).toBe(
+        "public, max-age=31536000, immutable",
+      );
+      await expect(replacementResponse.text()).resolves.toContain("new");
+
+      // Server remains healthy for SPA requests
+      const indexResponse = await fetch(`${origin}/`);
+      expect(indexResponse.status).toBe(200);
     });
 
     it("serves static assets from underneath the mount", async () => {
