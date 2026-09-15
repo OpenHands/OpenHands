@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useBtwInterceptor } from "#/hooks/chat/use-btw-interceptor";
 import { useBtwStore } from "#/stores/btw-store";
+import { AgentState } from "#/types/agent-state";
 
 const mockAskAgent = vi.hoisted(() =>
   vi.fn<(id: string, q: string) => Promise<{ response: string }>>(),
@@ -12,6 +13,7 @@ vi.mock("#/hooks/mutation/conversation-mutation-utils", () => ({
 }));
 
 const CONV = "conv-1";
+const IDLE = AgentState.AWAITING_USER_INPUT;
 const entries = () => useBtwStore.getState().entriesByConversation[CONV] ?? [];
 
 describe("useBtwInterceptor", () => {
@@ -22,7 +24,9 @@ describe("useBtwInterceptor", () => {
 
   it("falls through to onSubmit for non-/btw messages", () => {
     const onSubmit = vi.fn();
-    const { result } = renderHook(() => useBtwInterceptor(CONV, onSubmit));
+    const { result } = renderHook(() =>
+      useBtwInterceptor(CONV, IDLE, onSubmit),
+    );
     act(() => result.current("hello world"));
     expect(onSubmit).toHaveBeenCalledWith("hello world");
     expect(mockAskAgent).not.toHaveBeenCalled();
@@ -32,7 +36,9 @@ describe("useBtwInterceptor", () => {
   it("intercepts /btw, calls askAgent, and resolves the entry", async () => {
     mockAskAgent.mockResolvedValueOnce({ response: "because" });
     const onSubmit = vi.fn();
-    const { result } = renderHook(() => useBtwInterceptor(CONV, onSubmit));
+    const { result } = renderHook(() =>
+      useBtwInterceptor(CONV, IDLE, onSubmit),
+    );
 
     act(() => result.current("/btw why?"));
 
@@ -49,7 +55,7 @@ describe("useBtwInterceptor", () => {
 
   it("marks the entry as error when askAgent rejects", async () => {
     mockAskAgent.mockRejectedValueOnce(new Error("boom"));
-    const { result } = renderHook(() => useBtwInterceptor(CONV, vi.fn()));
+    const { result } = renderHook(() => useBtwInterceptor(CONV, IDLE, vi.fn()));
     act(() => result.current("/btw why?"));
     await waitFor(() => expect(entries()[0].status).toBe("error"));
     expect(entries()[0].response).toBe("boom");
@@ -57,9 +63,22 @@ describe("useBtwInterceptor", () => {
 
   it("falls through when conversationId is null", () => {
     const onSubmit = vi.fn();
-    const { result } = renderHook(() => useBtwInterceptor(null, onSubmit));
+    const { result } = renderHook(() =>
+      useBtwInterceptor(null, IDLE, onSubmit),
+    );
     act(() => result.current("/btw why?"));
     expect(onSubmit).toHaveBeenCalledWith("/btw why?");
     expect(mockAskAgent).not.toHaveBeenCalled();
+  });
+
+  it("swallows /btw while the agent is running instead of hitting ask_agent", () => {
+    const onSubmit = vi.fn();
+    const { result } = renderHook(() =>
+      useBtwInterceptor(CONV, AgentState.RUNNING, onSubmit),
+    );
+    act(() => result.current("/btw why?"));
+    expect(mockAskAgent).not.toHaveBeenCalled();
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(entries()).toEqual([]);
   });
 });
