@@ -319,6 +319,59 @@ describe("AgentProfilesLocalView save mapping", () => {
     const { profile } = saveMutate.mock.calls[0][0];
     expect(profile.enable_switch_llm_tool).toBe(true);
   });
+  it("edit-save persists edited verification settings", async () => {
+    vi.mocked(AgentProfilesService.getProfile).mockResolvedValue({
+      name: "default",
+      profile: {
+        schema_version: 1,
+        id: "p-1",
+        name: "default",
+        revision: 3,
+        agent_kind: "openhands",
+        llm_profile_ref: "default",
+        enable_sub_agents: false,
+        verification: {
+          critic_enabled: false,
+          enable_iterative_refinement: false,
+        },
+      },
+    } as never);
+
+    emitControl = {
+      agentType: "openhands",
+      isValid: true,
+      isDirty: true,
+      buildAgentProfileFields: () => ({
+        agent_kind: "openhands",
+        mcp_server_refs: null,
+        enable_sub_agents: false,
+        verification: {
+          critic_enabled: true,
+          enable_iterative_refinement: true,
+        },
+      }),
+      credentials: { isDirty: false, save: vi.fn(), reset: vi.fn() },
+    };
+
+    render(<AgentProfilesLocalView />);
+
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("edit-agent-profile"));
+    await screen.findByTestId("mock-agent-settings");
+    await user.click(screen.getByTestId("save-agent-profile-btn"));
+
+    await waitFor(() => expect(saveMutate).toHaveBeenCalledTimes(1));
+
+    const { profile } = saveMutate.mock.calls[0][0];
+
+    expect(profile).toMatchObject({
+      agent_kind: "openhands",
+      verification: {
+        critic_enabled: true,
+        enable_iterative_refinement: true,
+      },
+    });
+  });
 
   it("kind-switch edit-save sends a clean variant payload", async () => {
     vi.mocked(AgentProfilesService.getProfile).mockResolvedValue({

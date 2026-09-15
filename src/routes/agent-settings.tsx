@@ -64,6 +64,9 @@ const ENABLE_SUB_AGENTS_FIELD_KEY = "enable_sub_agents";
 const ENABLE_SWITCH_LLM_TOOL_FIELD_KEY = "enable_switch_llm_tool";
 const TOOL_CONCURRENCY_FIELD_KEY = "tool_concurrency_limit";
 const MCP_SERVER_REFS_KEY = "mcp_server_refs";
+const CRITIC_ENABLED_FIELD_KEY = "verification.critic_enabled";
+const ITERATIVE_REFINEMENT_FIELD_KEY =
+  "verification.enable_iterative_refinement";
 const COMMAND_PLACEHOLDER_FALLBACK = "npx -y <package-name>";
 const ACP_CUSTOM_MODEL_KEY = "__custom_model__";
 const EMPTY_AGENT_SETTINGS_SNAPSHOT: AgentSettingsSnapshot = {
@@ -72,7 +75,23 @@ const EMPTY_AGENT_SETTINGS_SNAPSHOT: AgentSettingsSnapshot = {
   acpModel: "",
   isCustomAcpModel: false,
 };
+function getVerificationSetting(
+  source: Record<string, SettingsValue> | null,
+  key: "critic_enabled" | "enable_iterative_refinement",
+): boolean | undefined {
+  const verification = source?.verification;
 
+  if (
+    typeof verification === "object" &&
+    verification !== null &&
+    !Array.isArray(verification)
+  ) {
+    const value = (verification as Record<string, unknown>)[key];
+    return typeof value === "boolean" ? value : undefined;
+  }
+
+  return undefined;
+}
 function toStringArray(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((v): v is string => typeof v === "string")
@@ -122,7 +141,6 @@ function isKnownAcpModel(
     provider?.available_models?.some(({ id }) => id === model.trim()) ?? false
   );
 }
-
 /**
  * Variant-specific AgentProfile fields derived from the form state. The
  * OpenHands branch omits `llm_profile_ref` — the profile editor supplies it.
@@ -134,6 +152,10 @@ export type AgentProfileFieldsDraft =
       enable_sub_agents: boolean;
       enable_switch_llm_tool?: boolean;
       tool_concurrency_limit?: number;
+      verification?: {
+        critic_enabled: boolean;
+        enable_iterative_refinement: boolean;
+      };
     }
   | {
       agent_kind: "acp";
@@ -156,6 +178,8 @@ export interface AgentProfileFieldsInput {
   subAgentsEnabled: boolean;
   switchLlmToolField?: SettingsFieldSchema;
   switchLlmToolEnabled: boolean;
+  criticEnabled: boolean;
+  iterativeRefinementEnabled: boolean;
   /**
    * Whether the backend's *profile* model accepts `enable_switch_llm_tool`.
    * Tracked apart from {@link switchLlmToolField} because the settings schema
@@ -167,6 +191,7 @@ export interface AgentProfileFieldsInput {
   toolConcurrency: string | boolean;
   mcpMode: ProfileScopeMode;
   selectedMcpServers: string[];
+  verificationDirty: boolean;
 }
 
 /**
@@ -204,6 +229,9 @@ export function buildAgentProfileFields(
     toolConcurrency,
     mcpMode,
     selectedMcpServers,
+    criticEnabled,
+    iterativeRefinementEnabled,
+    verificationDirty,
   } = input;
   // A base-model field, so it rides both variants. No version gate: it has
   // existed since agent profiles shipped, below the supported floor.
@@ -251,6 +279,14 @@ export function buildAgentProfileFields(
         : 1;
     fields.tool_concurrency_limit =
       coerced != null ? Number(coerced) : fallback;
+  }
+  if (verificationDirty) {
+    fields.verification = {
+      critic_enabled: criticEnabled,
+      enable_iterative_refinement: criticEnabled
+        ? iterativeRefinementEnabled
+        : false,
+    };
   }
   return fields;
 }
@@ -368,6 +404,34 @@ export function AgentSettingsScreen({
   }, [toolConcurrencyField, agentSettingsSource]);
   const [toolConcurrency, setToolConcurrency] = useState<string | boolean>(
     initialToolConcurrency,
+  );
+  // --- Verification (OpenHands profile path) ---
+  const criticField = fields?.find(
+    (field) => field.key === CRITIC_ENABLED_FIELD_KEY,
+  );
+  const iterativeRefinementField = fields?.find(
+    (field) => field.key === ITERATIVE_REFINEMENT_FIELD_KEY,
+  );
+
+  const initialCriticEnabled = React.useMemo(
+    () =>
+      getVerificationSetting(agentSettingsSource, "critic_enabled") ??
+      criticField?.default === true,
+    [criticField, agentSettingsSource],
+  );
+
+  const initialIterativeRefinementEnabled = React.useMemo(
+    () =>
+      getVerificationSetting(
+        agentSettingsSource,
+        "enable_iterative_refinement",
+      ) ?? iterativeRefinementField?.default === true,
+    [iterativeRefinementField, agentSettingsSource],
+  );
+
+  const [criticEnabled, setCriticEnabled] = useState(initialCriticEnabled);
+  const [iterativeRefinementEnabled, setIterativeRefinementEnabled] = useState(
+    initialIterativeRefinementEnabled,
   );
 
   // --- MCP servers (both variants; a base-model field) ---
@@ -528,6 +592,13 @@ export function AgentSettingsScreen({
   useEffect(() => {
     setToolConcurrency(initialToolConcurrency);
   }, [initialToolConcurrency]);
+  useEffect(() => {
+    setCriticEnabled(initialCriticEnabled);
+  }, [initialCriticEnabled]);
+
+  useEffect(() => {
+    setIterativeRefinementEnabled(initialIterativeRefinementEnabled);
+  }, [initialIterativeRefinementEnabled]);
 
   // Sync the MCP scope when settings reload
   useEffect(() => {
@@ -562,6 +633,10 @@ export function AgentSettingsScreen({
   const mcpScopeDirty =
     mcpMode !== initialMcpRefs.mode ||
     !sameScopeSelection(orderedSelectedMcpServers, initialMcpRefs.selected);
+
+  const verificationDirty =
+    criticEnabled !== initialCriticEnabled ||
+    iterativeRefinementEnabled !== initialIterativeRefinementEnabled;
   const settingsDirty =
     agentType !== loadedSnapshot.agentType ||
     mcpScopeDirty ||
@@ -571,7 +646,8 @@ export function AgentSettingsScreen({
         isCustomAcpModel !== loadedSnapshot.isCustomAcpModel
       : subAgentsEnabled !== initialSubAgentsEnabled ||
         switchLlmToolEnabled !== initialSwitchLlmToolEnabled ||
-        toolConcurrency !== initialToolConcurrency);
+        toolConcurrency !== initialToolConcurrency ||
+        verificationDirty);
   const credentialsDirty = acpCredentialForm.isDirty;
   const isAnyDirty = settingsDirty || credentialsDirty;
   useEffect(() => {
@@ -639,6 +715,9 @@ export function AgentSettingsScreen({
       toolConcurrency,
       mcpMode,
       selectedMcpServers: orderedSelectedMcpServers,
+      criticEnabled,
+      iterativeRefinementEnabled,
+      verificationDirty,
     });
 
   const isSavingAny = isSaving || acpCredentialForm.isSaving;
@@ -890,6 +969,32 @@ export function AgentSettingsScreen({
           onChange={setToolConcurrency}
         />
       ) : null}
+      {embedded && !isAcp && criticField ? (
+        <SchemaField
+          field={criticField}
+          value={criticEnabled}
+          isDisabled={isSavingAny}
+          onChange={(value) => {
+            const enabled = value === true;
+            setCriticEnabled(enabled);
+
+            if (!enabled) {
+              setIterativeRefinementEnabled(false);
+            }
+          }}
+        />
+      ) : null}
+
+      {embedded && !isAcp && iterativeRefinementField ? (
+        <SchemaField
+          field={iterativeRefinementField}
+          value={iterativeRefinementEnabled}
+          isDisabled={isSavingAny || !criticEnabled}
+          onChange={(value) => {
+            setIterativeRefinementEnabled(value === true);
+          }}
+        />
+      ) : null}
 
       {showProfileScopeFields ? (
         <div className="flex flex-col gap-2.5">
@@ -968,7 +1073,6 @@ export function AgentSettingsScreen({
           </Typography.Text>
         </div>
       ) : null}
-
       {isAcp && (
         <>
           <SettingsDropdownInput
