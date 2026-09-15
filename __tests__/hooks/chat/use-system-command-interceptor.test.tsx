@@ -62,6 +62,8 @@ describe("useSystemCommandInterceptor", () => {
         "/model",
         "/goal",
         "/help",
+        "/plan",
+        "/code",
       ]);
     }
     expect(onSubmit).not.toHaveBeenCalled();
