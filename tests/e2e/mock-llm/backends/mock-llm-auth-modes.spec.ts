@@ -12,7 +12,7 @@
  *
  *   1. **Key rotation (non-public):** The stack runs with key A, but
  *      localStorage still holds a stale key B from a previous session.
- *      Verifies that `syncLauncherDefaultLocalBackend()` and the
+ *      Verifies that `syncLauncherLocalBackends()` and the
  *      static-server's localStorage overwrite clear the stale key so the
  *      app loads and can talk to the backend.
  *
@@ -23,7 +23,7 @@
  *        - Submitting the correct key lets the app through.
  *        - Submitting a wrong key shows an inline error.
  *
- * @spec BM-002 — Key rotation recovery via syncLauncherDefaultLocalBackend
+ * @spec BM-002 — Key rotation recovery via syncLauncherLocalBackends
  */
 
 import { test, expect, type Page } from "@playwright/test";
@@ -159,8 +159,8 @@ test.describe("auth mode: non-public key rotation", () => {
     );
 
     // The runtime session key (injected by static-server) should be the
-    // CORRECT key. `syncLauncherDefaultLocalBackend()` overwrites the
-    // stale apiKey on the registry's default-local entry on boot, and the
+    // CORRECT key. `syncLauncherLocalBackends()` overwrites the stale
+    // apiKey on same-origin local registry entries on boot, and the
     // static-server's localStorage write overwrites the legacy stored
     // sessionApiKey so the next read produces the live key.
     await routeSessionApiKey(page);
