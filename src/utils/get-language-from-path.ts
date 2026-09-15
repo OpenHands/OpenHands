@@ -1,5 +1,8 @@
 export const getLanguageFromPath = (path: string): string => {
   const filename = path.split(/[\\/]/).pop();
+  if (filename?.toLowerCase() === "dockerfile") {
+    return "dockerfile";
+  }
   const extension = filename?.split(".").pop()?.toLowerCase();
   switch (extension) {
     case "js":
