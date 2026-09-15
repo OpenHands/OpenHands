@@ -90,11 +90,12 @@ describe("surfaced ACP providers", () => {
     (key) => !SURFACED_ACP_PROVIDERS.includes(key),
   );
 
-  it("surfaces only Claude Code, Codex and Gemini CLI", () => {
+  it("surfaces only Claude Code, Codex, Gemini CLI and OpenCode", () => {
     expect([...SURFACED_ACP_PROVIDERS]).toEqual([
       "claude-code",
       "codex",
       "gemini-cli",
+      "opencode",
     ]);
   });
 
