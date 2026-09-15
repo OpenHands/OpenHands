@@ -838,6 +838,91 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     expect(useMetricsStore.getState().max_budget_per_task).toBeNull();
   });
 
+  // A stats event as it arrives over the main WebSocket — drives the real
+  // `updateMetricsFromStats` writer rather than seeding the store directly.
+  const makeStatsEvent = () => ({
+    id: "evt-stats-1",
+    timestamp: new Date().toISOString(),
+    source: "environment",
+    kind: "ConversationStateUpdateEvent",
+    key: "stats",
+    value: {
+      usage_to_metrics: {
+        default: {
+          model_name: "test-model",
+          accumulated_cost: 1.5,
+          max_budget_per_task: 5,
+          accumulated_token_usage: {
+            model: "test-model",
+            prompt_tokens: 10,
+            completion_tokens: 20,
+            cache_read_tokens: 1,
+            cache_write_tokens: 2,
+            reasoning_tokens: 0,
+            context_window: 128_000,
+            per_turn_token: 500,
+            response_id: "resp-1",
+          },
+          costs: [],
+          response_latencies: [],
+          token_usages: [],
+        },
+      },
+    },
+  });
+
+  it("resets the metrics store when the conversation route unmounts (New Chat)", async () => {
+    // #17271: New Chat navigates to `/conversations` (the home screen), which
+    // renders the context-window meter outside this provider. The
+    // conversation-switch reset above never re-runs on unmount, so the
+    // previous conversation's usage kept leaking into the new-chat UI.
+    const { unmount } = renderProviderWithUrl("conv-a");
+    await waitFor(() => expect(wsCapture.mainOnMessage).not.toBeNull());
+
+    act(() => {
+      wsCapture.mainOnMessage!({ data: JSON.stringify(makeStatsEvent()) });
+    });
+    expect(useMetricsStore.getState().usage).not.toBeNull();
+
+    // Act: leave the conversation entirely (no new conversationId arrives).
+    unmount();
+
+    expect(useMetricsStore.getState().usage).toBeNull();
+    expect(useMetricsStore.getState().cost).toBeNull();
+    expect(useMetricsStore.getState().max_budget_per_task).toBeNull();
+  });
+
+  it("resets metrics on unmount even after re-entering the same conversation", async () => {
+    // Re-entering the same conversation early-returns the switch-reset (the
+    // event store survives a Settings round-trip); the unmount cleanup must
+    // still be registered on that path or the store leaks on the next exit.
+    const first = renderProvider("conv-a");
+    await waitFor(() => expect(eventIds()).toEqual(["user-msg-conv-a"]));
+    first.unmount();
+
+    const second = renderProvider("conv-a");
+    await waitFor(() => expect(eventIds()).toEqual(["user-msg-conv-a"]));
+
+    useMetricsStore.setState({
+      cost: 1.5,
+      max_budget_per_task: 5,
+      usage: {
+        prompt_tokens: 10,
+        completion_tokens: 20,
+        cache_read_tokens: 1,
+        cache_write_tokens: 2,
+        context_window: 128_000,
+        per_turn_token: 500,
+      },
+    });
+
+    second.unmount();
+
+    expect(useMetricsStore.getState().usage).toBeNull();
+    expect(useMetricsStore.getState().cost).toBeNull();
+    expect(useMetricsStore.getState().max_budget_per_task).toBeNull();
+  });
+
   it("keeps events that arrived after history when re-entering the same conversation", async () => {
     // Arrange: open conversation A, then receive an agent reply over the socket
     // that is not part of the cached REST history page.
