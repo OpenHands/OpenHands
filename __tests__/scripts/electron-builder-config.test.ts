@@ -9,8 +9,8 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { dirname, join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import config from "../../electron-builder.config.mjs";
 
 const afterPack = config.afterPack as (ctx: unknown) => Promise<void>;
@@ -25,11 +25,16 @@ function makeContext(platform: string, appOutDir: string) {
   };
 }
 
+/** Resolve the packaged Resources dir for a platform, mirroring the bundle layout. */
+function resourcesDirFor(platform: string, appOutDir: string) {
+  return platform === "darwin"
+    ? join(appOutDir, `${PRODUCT_FILENAME}.app`, "Contents", "Resources")
+    : join(appOutDir, "resources");
+}
+
 /** Resolve the packaged app dir for a platform, mirroring the bundle layout. */
 function appDirFor(platform: string, appOutDir: string) {
-  return platform === "darwin"
-    ? join(appOutDir, `${PRODUCT_FILENAME}.app`, "Contents", "Resources", "app")
-    : join(appOutDir, "resources", "app");
+  return join(resourcesDirFor(platform, appOutDir), "app");
 }
 
 /**
@@ -43,6 +48,16 @@ function resolveRuntimeImports(appDir: string) {
     ["--input-type=module", "-e", 'await import("sirv"); await import("httpxy");'],
     { cwd: appDir, stdio: "pipe" },
   );
+}
+
+/**
+ * Write a fake POSIX-layout bundled Node dir (npm at lib/node_modules) with
+ * its npm-cli.js marker, as download-node.mjs produces on macOS/Linux.
+ */
+function writeFakeNpmCli(resourcesDir: string, nodeDirName: string) {
+  const npmCli = join(resourcesDir, nodeDirName, "lib", "node_modules", "npm", "bin", "npm-cli.js");
+  mkdirSync(dirname(npmCli), { recursive: true });
+  writeFileSync(npmCli, "// fake npm-cli.js\n");
 }
 
 describe("electron-builder afterPack hook", () => {
@@ -94,6 +109,92 @@ describe("electron-builder afterPack hook", () => {
     expect(existsSync(junkPkg)).toBe(false);
     expect(existsSync(join(appDir, "node_modules", "sirv", "package.json"))).toBe(true);
     expect(existsSync(join(appDir, "node_modules", "httpxy", "package.json"))).toBe(true);
+  });
+
+  it("verifies npm in every per-arch node dir of a universal bundle", async () => {
+    tmp = mkdtempSync(join(tmpdir(), "eb-afterpack-"));
+    const resourcesDir = resourcesDirFor("darwin", tmp);
+    mkdirSync(join(resourcesDir, "app"), { recursive: true });
+    writeFakeNpmCli(resourcesDir, "node-arm64");
+    writeFakeNpmCli(resourcesDir, "node-x64");
+
+    await expect(afterPack(makeContext("darwin", tmp))).resolves.toBeUndefined();
+  });
+
+  it("fails the build when one per-arch node dir of a universal bundle is missing npm", async () => {
+    tmp = mkdtempSync(join(tmpdir(), "eb-afterpack-"));
+    const resourcesDir = resourcesDirFor("darwin", tmp);
+    mkdirSync(join(resourcesDir, "app"), { recursive: true });
+    writeFakeNpmCli(resourcesDir, "node-arm64");
+    // x64 slice gutted: the dir exists but its npm-cli.js does not — the
+    // hook must verify BOTH slices, not just the first one it finds.
+    mkdirSync(join(resourcesDir, "node-x64"), { recursive: true });
+
+    await expect(afterPack(makeContext("darwin", tmp))).rejects.toThrow(
+      /missing npm-cli\.js at .*node-x64/,
+    );
+  });
+
+  it("still verifies the legacy flat node dir (single-arch back-compat)", async () => {
+    tmp = mkdtempSync(join(tmpdir(), "eb-afterpack-"));
+    const resourcesDir = resourcesDirFor("darwin", tmp);
+    mkdirSync(join(resourcesDir, "app"), { recursive: true });
+    writeFakeNpmCli(resourcesDir, "node");
+
+    await expect(afterPack(makeContext("darwin", tmp))).resolves.toBeUndefined();
+  });
+});
+
+// The config is a .mjs module whose extraResources is computed at evaluation
+// time from ELECTRON_ARCH (build:desktop:universal sets it before invoking
+// electron-builder). Each case therefore re-imports the module fresh, with
+// the env var scrubbed in beforeEach and restored in afterEach.
+const ELECTRON_ARCH_ENV = "ELECTRON_ARCH";
+
+describe("extraResources mode switch", () => {
+  let savedArch: string | undefined;
+
+  async function importConfig() {
+    vi.resetModules();
+    return (await import("../../electron-builder.config.mjs")).default;
+  }
+
+  beforeEach(() => {
+    savedArch = process.env[ELECTRON_ARCH_ENV];
+    delete process.env[ELECTRON_ARCH_ENV];
+  });
+
+  afterEach(() => {
+    if (savedArch === undefined) delete process.env[ELECTRON_ARCH_ENV];
+    else process.env[ELECTRON_ARCH_ENV] = savedArch;
+  });
+
+  it("ships the legacy flat runtime dirs when ELECTRON_ARCH is unset", async () => {
+    const cfg = await importConfig();
+
+    expect(cfg.extraResources).toEqual([
+      { from: "resources/bin/", to: "bin/", filter: ["**/*"] },
+      { from: "resources/node/", to: "node/", filter: ["**/*"] },
+    ]);
+  });
+
+  it("ships both per-arch runtime dirs into every universal pass, whitelisted for the merger", async () => {
+    process.env[ELECTRON_ARCH_ENV] = "universal";
+    const cfg = await importConfig();
+
+    // Both per-arch dirs go into BOTH packaging passes: @electron/universal
+    // requires the x64 and arm64 pass trees to carry the same Mach-O file
+    // list, and mac.x64ArchFiles whitelists our intentionally identical
+    // per-arch runtime binaries through the merge. Full rationale in
+    // electron-builder.config.mjs.
+    expect(cfg.extraResources).toEqual([
+      { from: "resources/bin-arm64/", to: "bin-arm64/", filter: ["**/*"] },
+      { from: "resources/bin-x64/", to: "bin-x64/", filter: ["**/*"] },
+      { from: "resources/node-arm64/", to: "node-arm64/", filter: ["**/*"] },
+      { from: "resources/node-x64/", to: "node-x64/", filter: ["**/*"] },
+    ]);
+    expect(cfg.mac).toBeDefined();
+    expect(cfg.mac!.x64ArchFiles).toBe("**/{bin,node}-{arm64,x64}/**");
   });
 });
 
