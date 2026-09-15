@@ -110,7 +110,7 @@ export function AdvancedConversationOptionsModal({
       <ModalBody
         width="md"
         className={cn(
-          "relative items-start overflow-hidden border border-[var(--oh-border)]",
+          "relative items-start overflow-hidden border border-border",
           MODAL_MAX_WIDTH_VIEWPORT,
         )}
         testID="advanced-conversation-options-modal"
@@ -134,7 +134,7 @@ export function AdvancedConversationOptionsModal({
             data-testid="advanced-options-scroll-edge-top"
             data-visible={scrollEdges.top ? "true" : "false"}
             className={cn(
-              "pointer-events-none absolute inset-x-0 top-0 z-10 h-px bg-[var(--oh-border)]",
+              "pointer-events-none absolute inset-x-0 top-0 z-10 h-px bg-border",
               scrollEdges.top ? "opacity-100" : "opacity-0",
             )}
           />
@@ -304,7 +304,7 @@ export function AdvancedConversationOptionsModal({
             data-testid="advanced-options-scroll-edge-bottom"
             data-visible={scrollEdges.bottom ? "true" : "false"}
             className={cn(
-              "pointer-events-none absolute inset-x-0 bottom-0 z-10 h-px bg-[var(--oh-border)]",
+              "pointer-events-none absolute inset-x-0 bottom-0 z-10 h-px bg-border",
               scrollEdges.bottom ? "opacity-100" : "opacity-0",
             )}
           />

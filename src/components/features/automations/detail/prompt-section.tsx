@@ -59,7 +59,7 @@ export function PromptSection({ prompt }: PromptSectionProps) {
           </p>
           {isCollapsed ? (
             <div
-              className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-[var(--oh-surface)] to-transparent"
+              className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-surface to-transparent"
               aria-hidden
               data-testid="automation-prompt-fade"
             />
@@ -69,7 +69,7 @@ export function PromptSection({ prompt }: PromptSectionProps) {
         {isOverflowing ? (
           <button
             type="button"
-            className="self-start cursor-pointer text-sm font-normal text-[var(--oh-muted)] hover:text-white"
+            className="self-start cursor-pointer text-sm font-normal text-muted hover:text-white"
             onClick={() => setIsExpanded((expanded) => !expanded)}
             data-testid="automation-prompt-toggle"
           >

@@ -70,7 +70,7 @@ export function ChatInputLlmProfileMenuContent({
           {/* role="presentation" keeps this a valid <li> child of the
               ContextMenu <ul> without exposing the label as a menu item. */}
           <li role="presentation" className="px-2 pt-1 pb-0.5">
-            <Typography.Text className="text-[11px] font-medium text-[var(--oh-text-dim)] uppercase tracking-wide leading-4">
+            <Typography.Text className="text-[11px] font-medium text-text-dim uppercase tracking-wide leading-4">
               {t(I18nKey.SETTINGS$AVAILABLE_PROFILES)}
             </Typography.Text>
           </li>
@@ -95,7 +95,7 @@ export function ChatInputLlmProfileMenuContent({
                 }}
                 className={cn(
                   "flex flex-col items-stretch gap-0.5",
-                  isCurrent && "bg-[var(--oh-interactive-hover)]",
+                  isCurrent && "bg-interactive-hover",
                 )}
               >
                 <span className="flex items-center gap-2">
@@ -115,7 +115,7 @@ export function ChatInputLlmProfileMenuContent({
                   )}
                 </span>
                 {displayModel && (
-                  <span className="block truncate text-xs leading-4 text-[var(--oh-muted)]">
+                  <span className="block truncate text-xs leading-4 text-muted">
                     {displayModel}
                   </span>
                 )}
@@ -126,12 +126,12 @@ export function ChatInputLlmProfileMenuContent({
       )}
       {readOnlyProfileName && (
         <li className="text-sm" data-testid="chat-input-llm-profile-current">
-          <div className="flex flex-col gap-0.5 p-2 leading-5 text-[var(--oh-foreground)]">
+          <div className="flex flex-col gap-0.5 p-2 leading-5 text-foreground">
             <span className="truncate" title={readOnlyProfileName}>
               {readOnlyProfileName}
             </span>
             {currentProfileModel && (
-              <span className="truncate text-xs leading-4 text-[var(--oh-muted)]">
+              <span className="truncate text-xs leading-4 text-muted">
                 {formatModelPillLabel(currentProfileModel, freeModels)}
               </span>
             )}
@@ -146,7 +146,7 @@ export function ChatInputLlmProfileMenuContent({
           to="/settings/llm"
           onClick={onClose}
           className={cn(
-            "flex h-[30px] items-center gap-2 rounded p-2 leading-5 text-[var(--oh-foreground)] hover:bg-[var(--oh-interactive-hover)] transition-colors",
+            "flex h-7.5 items-center gap-2 rounded p-2 leading-5 text-foreground hover:bg-interactive-hover transition-colors",
             settingsLinkClassName,
           )}
         >
@@ -187,7 +187,7 @@ export function ChatInputLlmProfilePicker() {
       <button
         ref={triggerRef}
         type="button"
-        className={cn(chatInputPillButtonClassName, "max-w-[200px]")}
+        className={cn(chatInputPillButtonClassName, "max-w-50")}
         title={currentProfileName ?? undefined}
         data-testid="chat-input-llm-profile"
         aria-expanded={isPopoverOpen}
@@ -212,7 +212,7 @@ export function ChatInputLlmProfilePicker() {
           position="top"
           alignment="left"
           spacing="none"
-          className="z-[60] mb-2 min-w-[200px] max-w-[320px] max-h-[60vh] overflow-y-auto"
+          className="z-[60] mb-2 min-w-50 max-w-80 max-h-[60vh] overflow-y-auto"
         >
           <ChatInputLlmProfileMenuContent
             onClose={() => setIsPopoverOpen(false)}

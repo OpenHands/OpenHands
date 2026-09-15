@@ -44,7 +44,7 @@ export function ConfirmDeleteModal({
 
   return (
     <ModalBackdrop onClose={onCancel}>
-      <ModalBody className="items-start border border-[var(--oh-border)]">
+      <ModalBody className="items-start border border-border">
         <div className="flex flex-col gap-2">
           <BaseModalTitle
             title={title ?? t(I18nKey.CONVERSATION$CONFIRM_DELETE)}

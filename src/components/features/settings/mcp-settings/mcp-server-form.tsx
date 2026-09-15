@@ -534,7 +534,7 @@ export function MCPServerForm({
                 className={cn(
                   formControlMultilineFieldClassName,
                   "resize-none placeholder:italic",
-                  "disabled:bg-[var(--oh-surface-raised)] disabled:border-[var(--oh-border-subtle)]",
+                  "disabled:bg-surface-raised disabled:border-border-subtle",
                 )}
               />
             </label>
@@ -658,7 +658,7 @@ export function MCPServerForm({
               className={cn(
                 formControlMultilineFieldClassName,
                 "resize-none placeholder:italic",
-                "disabled:bg-[var(--oh-surface-raised)] disabled:border-[var(--oh-border-subtle)]",
+                "disabled:bg-surface-raised disabled:border-border-subtle",
               )}
             />
             <p className="text-xs text-tertiary-alt">
@@ -683,7 +683,7 @@ export function MCPServerForm({
               className={cn(
                 formControlMultilineFieldClassName,
                 "resize-none placeholder:italic",
-                "disabled:bg-[var(--oh-surface-raised)] disabled:border-[var(--oh-border-subtle)]",
+                "disabled:bg-surface-raised disabled:border-border-subtle",
               )}
             />
           </label>

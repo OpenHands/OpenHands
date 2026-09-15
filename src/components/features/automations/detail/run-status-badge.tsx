@@ -26,32 +26,32 @@ interface RunStatusBadgeProps {
 
 const statusConfig: Record<string, { style: string; iconTone: string }> = {
   [AutomationRunStatus.COMPLETED]: {
-    style: "bg-[var(--oh-success)]/10 text-[var(--oh-success)]",
-    iconTone: "text-[var(--oh-success)]",
+    style: "bg-success/10 text-success",
+    iconTone: "text-success",
   },
   success: {
-    style: "bg-[var(--oh-success)]/10 text-[var(--oh-success)]",
-    iconTone: "text-[var(--oh-success)]",
+    style: "bg-success/10 text-success",
+    iconTone: "text-success",
   },
   [AutomationRunStatus.FAILED]: {
-    style: "bg-[var(--oh-danger)]/10 text-danger",
+    style: "bg-danger/10 text-danger",
     iconTone: "text-danger",
   },
   failed: {
-    style: "bg-[var(--oh-danger)]/10 text-danger",
+    style: "bg-danger/10 text-danger",
     iconTone: "text-danger",
   },
   blocked: {
-    style: "bg-[var(--oh-warning)]/10 text-[var(--oh-warning)]",
-    iconTone: "text-[var(--oh-warning)]",
+    style: "bg-warning/10 text-warning",
+    iconTone: "text-warning",
   },
   partial_success: {
-    style: "bg-[var(--oh-warning)]/10 text-[var(--oh-warning)]",
-    iconTone: "text-[var(--oh-warning)]",
+    style: "bg-warning/10 text-warning",
+    iconTone: "text-warning",
   },
   unknown: {
-    style: "bg-[var(--oh-warning)]/10 text-[var(--oh-warning)]",
-    iconTone: "text-[var(--oh-warning)]",
+    style: "bg-warning/10 text-warning",
+    iconTone: "text-warning",
   },
   [AutomationRunStatus.PENDING]: {
     style: "bg-surface-raised text-muted",

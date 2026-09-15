@@ -131,6 +131,7 @@
     "@mswjs/socket.io-binding": "0.2.0",
     "@playwright/test": "1.62.1",
     "@react-router/dev": "7.18.2",
+    "@shadcn/lint": "0.1.0",
     "@stryker-mutator/core": "9.6.1",
     "@stryker-mutator/vitest-runner": "9.6.1",
     "@tailwindcss/typography": "0.5.20",

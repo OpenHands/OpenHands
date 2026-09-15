@@ -67,7 +67,7 @@ describe("git provider selection", () => {
 
     expect(emptyMarkup).toContain('value=""');
     expect(selectedMarkup).toContain("pl-6");
-    expect(selectedMarkup).toContain("min-w-[14px]");
+    expect(selectedMarkup).toContain("min-w-3.5");
   });
 
   it("lists every provider with its user-facing name and selects one", async () => {
@@ -97,15 +97,15 @@ describe("git provider selection", () => {
       "rounded",
       "text-inherit",
       "bg-tertiary",
-      "placeholder:text-[var(--oh-muted)]",
+      "placeholder:text-muted",
       "focus:outline-none",
       "focus:ring-0",
-      "focus:border-[var(--oh-border-input)]",
+      "focus:border-border-input",
       "disabled:bg-tertiary",
       "disabled:cursor-not-allowed",
       "disabled:opacity-60",
       "pl-1.5",
-      "pr-[1px]",
+      "pr-0.25",
       "cursor-pointer",
       "text-xs",
       "font-normal",
@@ -144,8 +144,8 @@ describe("git provider selection", () => {
       "z-10",
     );
     expect(input.previousElementSibling?.querySelector("svg")).toHaveClass(
-      "min-w-[14px]",
-      "h-[14px]",
+      "min-w-3.5",
+      "h-3.5",
     );
     expect(screen.queryByRole("option")).not.toBeInTheDocument();
   });
@@ -388,16 +388,16 @@ describe("git provider selection", () => {
       name: "GitHub",
     });
     expect(selectedOption).toHaveAttribute("aria-selected", "true");
-    expect(selectedOption).toHaveClass("bg-[var(--oh-interactive-selected)]");
+    expect(selectedOption).toHaveClass("bg-interactive-selected");
     expect(selectedOption).not.toHaveClass(
-      "hover:bg-[var(--oh-interactive-hover)]",
+      "hover:bg-interactive-hover",
     );
     expect(unselectedOption).toHaveAttribute("aria-selected", "false");
     expect(unselectedOption).toHaveClass(
-      "hover:bg-[var(--oh-interactive-hover)]",
+      "hover:bg-interactive-hover",
     );
     expect(unselectedOption).not.toHaveClass(
-      "bg-[var(--oh-interactive-selected)]",
+      "bg-interactive-selected",
     );
   });
 });

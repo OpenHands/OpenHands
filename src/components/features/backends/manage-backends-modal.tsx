@@ -137,7 +137,7 @@ export function ManageBackendsModal({
         <div
           data-testid="manage-backends-modal"
           className={cn(
-            "relative flex flex-col bg-[var(--oh-surface)] border border-[var(--oh-border)] rounded-xl",
+            "relative flex flex-col bg-surface border border-border rounded-xl",
             modalWidthClassName("lg"),
             MODAL_MAX_WIDTH_VIEWPORT,
             "max-h-[70vh]",
@@ -155,15 +155,15 @@ export function ManageBackendsModal({
 
           <div className="flex min-h-0 flex-1 flex-col px-5">
             <div
-              className="flex-1 overflow-auto rounded-md border border-[var(--oh-border)] bg-surface-raised custom-scrollbar-always"
+              className="flex-1 overflow-auto rounded-md border border-border bg-surface-raised custom-scrollbar-always"
               data-testid="manage-backends-list"
             >
               {backends.length === 0 ? (
-                <p className="px-3 py-6 text-center text-sm text-[var(--oh-text-secondary)]">
+                <p className="px-3 py-6 text-center text-sm text-text-secondary">
                   {t(I18nKey.BACKEND$MANAGE_EMPTY)}
                 </p>
               ) : (
-                <ul className="divide-y divide-[var(--oh-border)]">
+                <ul className="divide-y divide-border">
                   {backends.map((backend) => (
                     <BackendRow
                       key={backend.id}

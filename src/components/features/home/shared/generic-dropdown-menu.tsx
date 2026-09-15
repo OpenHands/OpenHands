@@ -86,7 +86,7 @@ export function GenericDropdownMenu<T>({
     <div className="relative">
       <div
         className={cn(
-          "absolute z-10 w-full bg-tertiary border border-[var(--oh-border-input)] rounded-lg shadow-none",
+          "absolute z-10 w-full bg-tertiary border border-border-input rounded-lg shadow-none",
           "focus:outline-none mt-1 z-[9999]",
           stickyTopItem || stickyFooterItem ? "max-h-60" : "max-h-60",
         )}
@@ -127,7 +127,7 @@ export function GenericDropdownMenu<T>({
                         <li
                           role="presentation"
                           aria-hidden="true"
-                          className="border-b border-[var(--oh-border-input)] bg-tertiary pb-1 mb-1 h-[1px]"
+                          className="border-b border-border-input bg-tertiary pb-1 mb-1 h-0.25"
                         />
                       )}
                   </React.Fragment>
@@ -137,7 +137,7 @@ export function GenericDropdownMenu<T>({
           )}
         </ul>
         {stickyFooterItem && (
-          <div className="border-t border-[var(--oh-border-input)] bg-tertiary p-1 rounded-b-lg">
+          <div className="border-t border-border-input bg-tertiary p-1 rounded-b-lg">
             {stickyFooterItem}
           </div>
         )}

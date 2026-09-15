@@ -388,14 +388,14 @@ export function OnboardingModal({
             type="button"
             data-testid="onboarding-skip"
             onClick={handleSkipOrDismiss}
-            className="rounded-md px-3 py-2 text-sm text-[var(--oh-muted)] transition-colors hover:bg-white/5 hover:text-white cursor-pointer"
+            className="rounded-md px-3 py-2 text-sm text-muted transition-colors hover:bg-white/5 hover:text-white cursor-pointer"
           >
             {t(I18nKey.ONBOARDING$SKIP)}
           </button>
         ) : null}
 
         {currentPhase === "hello" ? (
-          <label className="flex cursor-pointer items-center justify-center gap-2 text-sm text-[var(--oh-muted)]">
+          <label className="flex cursor-pointer items-center justify-center gap-2 text-sm text-muted">
             <input
               data-testid="onboarding-skip-getting-started-checklist"
               type="checkbox"
