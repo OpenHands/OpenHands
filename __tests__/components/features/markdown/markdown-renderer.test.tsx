@@ -317,8 +317,9 @@ describe("MARKDOWN_SANITIZE_SCHEMA", () => {
   });
 
   it("preserves rel even when it carries unusual but-safe tokens like `nofollow ugc`", () => {
-    // `rel` keywords never execute code or navigate, so allowing any
-    // value is safe. This locks that property in.
+    // Every `rel` keyword except `opener` is passed through untouched:
+    // none of them grants the linked page a capability. `opener` is the
+    // one exception and has its own tests below.
     const tree = sanitize(
       makeAnchor({
         href: "https://example.com",
@@ -331,5 +332,112 @@ describe("MARKDOWN_SANITIZE_SCHEMA", () => {
     const relProp = a?.properties?.rel;
     const rel = Array.isArray(relProp) ? relProp.join(" ") : relProp;
     expect(rel).toBe("nofollow ugc");
+  });
+
+  // `target="_blank"` implies `noopener` in current browsers, and
+  // `rel="opener"` is the documented opt-out. Left in, untrusted markdown
+  // gets a `window.opener` handle on this tab and can navigate it
+  // elsewhere while the user is looking at the page it opened.
+  it("drops a bare rel=opener", () => {
+    const tree = sanitize(
+      makeAnchor({
+        href: "https://example.com",
+        target: "_blank",
+        rel: "opener",
+      }),
+      MARKDOWN_SANITIZE_SCHEMA,
+    ) as Root;
+
+    const relProp = firstAnchor(tree)?.properties?.rel;
+    const rel = Array.isArray(relProp) ? relProp.join(" ") : relProp;
+    expect(rel ?? "").toBe("");
+  });
+
+  it("drops opener but keeps the other tokens when rel carries several", () => {
+    const tree = sanitize(
+      makeAnchor({
+        href: "https://example.com",
+        target: "_blank",
+        rel: ["noreferrer", "opener"],
+      }),
+      MARKDOWN_SANITIZE_SCHEMA,
+    ) as Root;
+
+    const relProp = firstAnchor(tree)?.properties?.rel;
+    const rel = Array.isArray(relProp) ? relProp.join(" ") : relProp;
+    expect(rel).toBe("noreferrer");
+  });
+
+  it("matches rel=opener case-insensitively", () => {
+    const tree = sanitize(
+      makeAnchor({ href: "https://example.com", rel: "OPENER" }),
+      MARKDOWN_SANITIZE_SCHEMA,
+    ) as Root;
+
+    const relProp = firstAnchor(tree)?.properties?.rel;
+    const rel = Array.isArray(relProp) ? relProp.join(" ") : relProp;
+    expect(rel ?? "").toBe("");
+  });
+
+  // An arbitrary `target` names a browsing context, so untrusted markdown
+  // could aim a link at an existing frame; `_top` replaces the app frame.
+  it.each(["frame-name", "_top", "_parent"])("drops target=%s", (target) => {
+    const tree = sanitize(
+      makeAnchor({ href: "https://example.com", target }),
+      MARKDOWN_SANITIZE_SCHEMA,
+    ) as Root;
+
+    expect(firstAnchor(tree)?.properties?.target).toBeUndefined();
+  });
+
+  it.each(["_blank", "_self"])("keeps target=%s", (target) => {
+    const tree = sanitize(
+      makeAnchor({ href: "https://example.com", target }),
+      MARKDOWN_SANITIZE_SCHEMA,
+    ) as Root;
+
+    expect(firstAnchor(tree)?.properties?.target).toBe(target);
+  });
+});
+
+// The schema is the only thing protecting call sites that do not pass
+// `includeStandard`, because the `anchor` component — which hard-codes
+// target/rel — is not mapped in for them. `collapsible-thinking`,
+// `generic-event-message` and `skill-item-expanded` all render untrusted
+// model output that way, so this asserts the rendered DOM, not just HAST.
+describe("MarkdownRenderer without includeStandard", () => {
+  it("does not let rel=opener reach the DOM", () => {
+    const { container } = render(
+      <MarkdownRenderer>
+        {`<a href="https://evil.example" target="_blank" rel="opener">x</a>`}
+      </MarkdownRenderer>,
+    );
+
+    const anchorEl = container.querySelector("a");
+    expect(anchorEl).not.toBeNull();
+    expect(anchorEl?.getAttribute("rel") ?? "").not.toContain("opener");
+  });
+
+  it("does not let an arbitrary target reach the DOM", () => {
+    const { container } = render(
+      <MarkdownRenderer>
+        {`<a href="https://evil.example" target="frame-name">x</a>`}
+      </MarkdownRenderer>,
+    );
+
+    expect(container.querySelector("a")?.getAttribute("target")).toBeNull();
+  });
+
+  it("still renders an ordinary external link", () => {
+    const { container } = render(
+      <MarkdownRenderer>
+        {`<a href="https://example.com" target="_blank" rel="noopener noreferrer">x</a>`}
+      </MarkdownRenderer>,
+    );
+
+    const anchorEl = container.querySelector("a");
+    expect(anchorEl?.getAttribute("href")).toBe("https://example.com");
+    expect(anchorEl?.getAttribute("target")).toBe("_blank");
+    expect(anchorEl?.getAttribute("rel")).toBe("noopener noreferrer");
   });
 });
