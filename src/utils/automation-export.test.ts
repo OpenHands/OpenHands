@@ -28,6 +28,18 @@ const cronAutomation: Automation = {
 };
 
 describe("automation export files", () => {
+  it.each([null, "11111111-1111-4111-8111-111111111111"])(
+    "preserves agent profile selection %s",
+    (agent_profile_id) => {
+      const exported = serializeAutomation({
+        ...cronAutomation,
+        agent_profile_id,
+      });
+      expect(parseAutomationFile(exported).agent_profile_id).toBe(
+        agent_profile_id,
+      );
+    },
+  );
   it("round-trips a cron automation without server-assigned fields", () => {
     const exported = serializeAutomation(cronAutomation);
 
