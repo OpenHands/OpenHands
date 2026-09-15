@@ -65,10 +65,18 @@ function collectTests(suites, parents = [], parentFile = "") {
           (sum, r) => sum + (Number(r.duration) || 0),
           0,
         );
+        // When a test never ran (globalTimeout), Playwright reports an empty
+        // results array with spec.ok === true — the old fallback misclassified
+        // it as passed. Treat empty results as interrupted so it never
+        // contributes to a green verdict.
+        const status =
+          results.length === 0
+            ? "interrupted"
+            : (lastResult?.status ?? (spec.ok ? "passed" : "unknown"));
         tests.push({
           title: [...titles, spec.title].filter(Boolean).join(" › "),
           file: spec.file || suiteFile,
-          status: lastResult?.status ?? (spec.ok ? "passed" : "unknown"),
+          status,
           durationMs: duration,
           retryCount: Math.max(0, results.length - 1),
           error: extractError(lastResult),
@@ -127,7 +135,14 @@ function formatDuration(ms) {
 function overallStatus(tests) {
   if (tests.length === 0) return "no tests";
   if (tests.every((t) => t.status === "passed")) return "passed";
-  if (tests.some((t) => t.status === "failed" || t.status === "timedOut"))
+  if (
+    tests.some(
+      (t) =>
+        t.status === "failed" ||
+        t.status === "timedOut" ||
+        t.status === "interrupted",
+    )
+  )
     return "failed";
   return "mixed";
 }
@@ -160,13 +175,15 @@ export function renderReport({
   const icon = overallIcon(status);
   const passed = tests.filter((t) => t.status === "passed").length;
   const failed = tests.filter(
-    (t) => t.status === "failed" || t.status === "timedOut",
+    (t) =>
+      t.status === "failed" ||
+      t.status === "timedOut" ||
+      t.status === "interrupted",
   ).length;
   const skipped = tests.filter((t) => t.status === "skipped").length;
   const total = tests.length;
   const wasKilledMidSuite =
-    markerMeta?.status === "in_progress" &&
-    markerMeta.total > markerMeta.completed;
+    !!markerMeta && markerMeta.total > markerMeta.completed;
 
   // Determine which tests are new (from newly added spec files).
   // Playwright's JSON file paths are relative to testDir (e.g. "mock-llm-skills.spec.ts")
@@ -295,34 +312,60 @@ function main() {
   const data = loadResults(resultsPath);
   let tests = data ? collectTests(data.suites) : [];
 
+  // Always try to load marker meta from DoneMarkerReporter — even when
+  // results.json exists, globalTimeout can truncate the run and leave
+  // results.json with passed tests while some declared tests never ran.
+  // The marker's completed/total is the authoritative truncation signal.
+  let markerMeta = null;
+  const tryLoadMarkerMeta = () => {
+    const markerDir = args.marker_dir || ".mock-llm-markers";
+    const markerResultsPath = `${markerDir}/.results.json`;
+    if (existsSync(markerResultsPath)) {
+      try {
+        const markerData = JSON.parse(readFileSync(markerResultsPath, "utf8"));
+        return {
+          status: markerData.status,
+          completed: markerData.completed ?? 0,
+          total: markerData.total ?? 0,
+          tests: markerData.tests ?? [],
+        };
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  };
+
+  const markerInfo = tryLoadMarkerMeta();
+  if (markerInfo) {
+    markerMeta = {
+      status: markerInfo.status,
+      completed: markerInfo.completed,
+      total: markerInfo.total,
+    };
+  }
+
   // When Playwright is killed during webServer teardown (or mid-suite),
   // the JSON reporter never flushes results.json. Fall back to .results.json
   // written incrementally by DoneMarkerReporter after every onTestEnd().
-  let markerMeta = null;
   if (!data || tests.length === 0) {
     const markerDir = args.marker_dir || ".mock-llm-markers";
     const markerResultsPath = `${markerDir}/.results.json`;
     const donePath = `${markerDir}/.tests-done`;
 
-    if (existsSync(markerResultsPath)) {
+    if (markerInfo) {
       // Rich results from DoneMarkerReporter — has per-test timing & errors.
       // May be partial (status: "in_progress") if the process was killed
       // before all tests finished.
-      const markerData = JSON.parse(readFileSync(markerResultsPath, "utf8"));
-      tests = (markerData.tests ?? []).map((t) => ({
+      tests = (markerInfo.tests ?? []).map((t) => ({
         title: t.title,
         status: t.status,
         durationMs: t.durationMs ?? 0,
         retryCount: 0,
         error: t.error ?? "",
       }));
-      markerMeta = {
-        status: markerData.status,
-        completed: markerData.completed ?? tests.length,
-        total: markerData.total ?? tests.length,
-      };
       console.log(
-        `No results.json; using marker results (${tests.length} tests run, ${markerMeta.completed}/${markerMeta.total} completed, status: ${markerData.status})`,
+        `No results.json; using marker results (${tests.length} tests run, ${markerMeta.completed}/${markerMeta.total} completed, status: ${markerInfo.status})`,
       );
     } else if (existsSync(donePath)) {
       // Minimal fallback — just pass/fail status, no timing
@@ -368,6 +411,15 @@ function main() {
             (exitCode ? ` (exit code: ${exitCode})` : ""),
         );
       }
+    }
+  } else if (markerInfo) {
+    // results.json exists but marker shows truncation — keep the
+    // Playwright-derived tests (now correctly marking empty results as
+    // interrupted) and surface the not-run count via markerMeta.
+    if (markerInfo.total > markerInfo.completed) {
+      console.log(
+        `Marker shows truncated run (${markerMeta.completed}/${markerMeta.total} completed, status: ${markerInfo.status}); PR comment will show not-run count`,
+      );
     }
   }
 
