@@ -5,7 +5,11 @@ import {
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
-import { testCloudMcpServer } from "#/api/cloud/mcp-service.api";
+import {
+  getCloudMcpOAuthStatus,
+  startCloudMcpOAuth,
+  testCloudMcpServer,
+} from "#/api/cloud/mcp-service.api";
 import {
   getFetchCall,
   getJsonBody,
@@ -73,6 +77,71 @@ describe("testCloudMcpServer", () => {
       ok: false,
       error: "refused",
       error_kind: "connection",
+    });
+  });
+});
+
+describe("startCloudMcpOAuth", () => {
+  it("posts the OAuth start request to /api/v1/mcp/oauth/start", async () => {
+    // Arrange
+    fetchMock.mockResolvedValue(
+      mockJsonResponse({
+        ok: true,
+        job_id: "job-1",
+        authorization_url: "https://auth.example/authorize",
+      }),
+    );
+    const request: Parameters<typeof startCloudMcpOAuth>[0] = {
+      name: "atlassian",
+      server: {
+        type: "http",
+        url: "https://mcp.atlassian.com/v1/mcp/authv2",
+        auth: {
+          strategy: "oauth2",
+          authentication: { type: "oauth", client_auth_method: "none" },
+        },
+      },
+      timeout: 120,
+    };
+
+    // Act
+    const result = await startCloudMcpOAuth(request);
+
+    // Assert
+    const [url, init] = getFetchCall(fetchMock);
+    expect(url).toBe(`${cloudBackend.host}/api/v1/mcp/oauth/start`);
+    expect(init).toMatchObject({ method: "POST" });
+    expect(getJsonBody(init)).toEqual(request);
+    expect(result).toEqual({
+      ok: true,
+      job_id: "job-1",
+      authorization_url: "https://auth.example/authorize",
+    });
+  });
+});
+
+describe("getCloudMcpOAuthStatus", () => {
+  it("reads the job from /api/v1/mcp/oauth/status/{job_id}", async () => {
+    // Arrange
+    fetchMock.mockResolvedValue(
+      mockJsonResponse({
+        ok: true,
+        status: "authorizing",
+        job_id: "job/1",
+        callback_ready: true,
+      }),
+    );
+
+    // Act
+    const result = await getCloudMcpOAuthStatus("job/1");
+
+    // Assert
+    const [url, init] = getFetchCall(fetchMock);
+    expect(url).toBe(`${cloudBackend.host}/api/v1/mcp/oauth/status/job%2F1`);
+    expect(init).toMatchObject({ method: "GET" });
+    expect(result).toMatchObject({
+      status: "authorizing",
+      callback_ready: true,
     });
   });
 });

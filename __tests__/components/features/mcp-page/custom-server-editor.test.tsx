@@ -391,6 +391,49 @@ describe("CustomServerEditor", () => {
     expect(getMcpHealthSnapshot()[key]).toMatchObject({ status: "healthy" });
   });
 
+  it("runs the OAuth flow from Test connection on cloud backends", async () => {
+    // Arrange: a cloud backend is active and an OAuth server is being edited.
+    setRegisteredBackends([
+      {
+        id: "cloud-1",
+        name: "Cloud",
+        host: "https://app.all-hands.dev",
+        apiKey: "k",
+        kind: "cloud",
+      },
+    ]);
+    setActiveSelection({ backendId: "cloud-1" });
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettingsWithMcp(),
+    );
+    const authorizeSpy = vi
+      .spyOn(McpService, "authorizeOAuth")
+      .mockResolvedValue({ ok: true, tools: ["search_mail"] });
+    const testSpy = vi
+      .spyOn(McpService, "testServer")
+      .mockResolvedValue({ ok: true, tools: [] });
+    renderWith(<EditOAuthEditorOnceSettingsLoaded onClose={vi.fn()} />);
+    await screen.findByTestId("mcp-custom-editor");
+
+    // Act
+    fireEvent.click(screen.getByTestId("mcp-test-connection"));
+
+    // Assert
+    await waitFor(() =>
+      expect(screen.getByTestId("mcp-test-message")).toHaveTextContent(
+        "MCP$TEST_SUCCESS",
+      ),
+    );
+    expect(authorizeSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "shttp",
+        url: EDIT_OAUTH_SERVER.url,
+        auth: expect.objectContaining({ strategy: "oauth2" }),
+      }),
+    );
+    expect(testSpy).not.toHaveBeenCalled();
+  });
+
   it("persists OAuth state returned by the connection test when editing", async () => {
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
       buildSettingsWithMcp({
