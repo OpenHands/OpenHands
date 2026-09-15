@@ -30,7 +30,7 @@ agent-canvas has been installed as release {{ .Release.Name }} in namespace {{ .
 
 3. Retrieve the auto-generated session API key (needed for direct API calls):
    kubectl -n {{ .Release.Namespace }} exec {{ include "agent-canvas.fullname" . }}-0 -- \
-     cat {{ .Values.persistence.mountPath }}/session-api-key.txt
+     cat /home/openhands/.openhands/agent-canvas/api-key.txt
 
 {{- if .Values.rbac.enabled }}
 
