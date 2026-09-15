@@ -121,6 +121,24 @@ npm run dev
 
 Access the UI at [http://localhost:8000](http://localhost:8000) for the npm/source launchers, or [http://localhost:8000/canvas](http://localhost:8000/canvas) for the Docker image. You can add additional backends directly from the UI.
 
+## Connect to OpenHands Cloud
+
+To run agents on [OpenHands Cloud](https://app.all-hands.dev) instead of your own machine, open
+**Manage Backends** in the sidebar, choose **Add Backend → OpenHands Cloud**, and select **Connect to
+OpenHands**. That signs you in through your browser and stores the key for you, so there is nothing
+to copy by hand.
+
+OpenHands Cloud uses two different API keys, and they are not interchangeable:
+
+| Key                            | Where it goes                                                                   | What it authenticates                                                                                                                                                             |
+| ------------------------------ | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **OpenHands API key**          | The backend's **API Key** field — filled in for you by **Connect to OpenHands** | Agent Canvas's own requests to the Cloud backend, sent as `Authorization: Bearer`                                                                                                 |
+| **OpenHands Provider LLM key** | **Settings → LLM**, in the **API Key** field                                    | Your model requests, when you select a model whose name starts with `openhands/`. Copy it from the [API Keys](https://app.all-hands.dev/settings/api-keys) tab of OpenHands Cloud |
+
+A local or remote agent-server backend takes a third, unrelated key in the same **API Key** field:
+its own `LOCAL_BACKEND_API_KEY`, sent as `X-Session-API-Key`. See
+[SELF_HOSTING.md](docs/SELF_HOSTING.md) for that one.
+
 # Architecture
 
 Agent Canvas is powered by the [OpenHands Agent Server](https://github.com/OpenHands/software-agent-sdk/tree/main/openhands-agent-server/openhands/agent_server), a REST API for running multiple agents on a single machine. Each Agent Server runs on a single host/port; the Agent Canvas can connect to multiple Agent Servers and easily flip between them.
