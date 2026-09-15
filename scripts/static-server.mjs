@@ -720,8 +720,21 @@ export function startStaticServer(config) {
   });
   server.on("close", uninstallDiagnostics);
 
-  return new Promise((resolveListen) => {
+  return new Promise((resolveListen, rejectListen) => {
+    // A `listen` failure (most commonly EADDRINUSE) emits 'error' on the
+    // server. Without a handler that becomes an uncaught exception: the child
+    // dies with a stack trace and the caller has no way to distinguish "the
+    // port is taken" from "the server is up". Reject instead, so the CLI below
+    // logs the reason and exits 1, and embedded launchers can react.
+    const onListenError = (error) => {
+      rejectListen(error);
+    };
+    server.once("error", onListenError);
+
     server.listen(config.port, config.host, () => {
+      // Past this point the socket is bound; stop intercepting 'error' so later
+      // server errors keep their previous behaviour.
+      server.off("error", onListenError);
       const displayPath = basePath === "/" ? "/" : `${basePath}/`;
       console.log("");
       console.log(

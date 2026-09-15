@@ -1095,4 +1095,105 @@ describe("dev-with-automation CLI", () => {
     expect(exitResult.code).toBe(1);
     expect(output).toContain("uvx");
   });
+
+  it("exits non-zero when a required service dies", async () => {
+    // Regression test for the launcher staying alive after a required child
+    // crashed. Before the fix the parent logged `Exited with code 1`, kept
+    // running, started ingress and printed the healthy banner, so the UI was a
+    // blank page while the command still looked successful. Reproduced here with
+    // a required child that fails the same way the static frontend does when its
+    // port is taken.
+    const moduleUrl = pathToFileURL(
+      path.join(repoRoot, "scripts", "dev-with-automation.mjs"),
+    ).href;
+    const failingChildSource =
+      'process.stderr.write("Error: listen EADDRINUSE: address already in use :::3001\\n"); process.exit(1);';
+    const supervisorSource = [
+      `import { spawnService } from ${JSON.stringify(moduleUrl)};`,
+      `spawnService("static", process.execPath, ["-e", ${JSON.stringify(failingChildSource)}], { required: true });`,
+      // Keep the parent alive so the only way out is the fatal-service path.
+      "setInterval(() => {}, 1_000);",
+    ].join("\n");
+
+    const supervisor = spawn(
+      process.execPath,
+      ["--input-type=module", "--eval", supervisorSource],
+      { cwd: repoRoot, stdio: ["ignore", "pipe", "pipe"] },
+    );
+
+    let output = "";
+    supervisor.stdout.on("data", (chunk: Buffer) => {
+      output += chunk.toString();
+    });
+    supervisor.stderr.on("data", (chunk: Buffer) => {
+      output += chunk.toString();
+    });
+
+    try {
+      // `shutdown()` gives children a 3 s grace period before exiting, so allow
+      // room for that plus process startup.
+      const exitResult = await Promise.race([
+        once(supervisor, "exit").then(([code, signal]) => ({
+          code,
+          signal,
+          timedOut: false,
+        })),
+        delay(8_000).then(() => ({ code: null, signal: null, timedOut: true })),
+      ]);
+
+      // A parent that stays alive is exactly the bug; the timeout branch is the
+      // failure mode we are guarding against.
+      expect(exitResult.timedOut, output).toBe(false);
+      expect(exitResult.code, output).toBe(1);
+      expect(output).toContain("EADDRINUSE");
+      expect(output).toContain('Required service "static"');
+    } finally {
+      if (supervisor.exitCode === null) {
+        supervisor.kill("SIGKILL");
+      }
+    }
+  }, 15_000);
+
+  it("keeps the launcher alive when a non-required service exits non-zero", async () => {
+    // The complement of the test above: `setServiceLogListener` and the other
+    // existing callers spawn short-lived children without `required`, and that
+    // fire-and-forget behaviour must not change.
+    const moduleUrl = pathToFileURL(
+      path.join(repoRoot, "scripts", "dev-with-automation.mjs"),
+    ).href;
+    const supervisorSource = [
+      `import { spawnService } from ${JSON.stringify(moduleUrl)};`,
+      `const child = spawnService("optional", process.execPath, ["-e", "process.exit(3);"]);`,
+      'child.on("exit", () => console.log("OPTIONAL_DONE"));',
+      "setInterval(() => {}, 1_000);",
+    ].join("\n");
+
+    const supervisor = spawn(
+      process.execPath,
+      ["--input-type=module", "--eval", supervisorSource],
+      { cwd: repoRoot, stdio: ["ignore", "pipe", "pipe"] },
+    );
+
+    let output = "";
+    supervisor.stdout.on("data", (chunk: Buffer) => {
+      output += chunk.toString();
+    });
+    supervisor.stderr.on("data", (chunk: Buffer) => {
+      output += chunk.toString();
+    });
+
+    try {
+      const deadline = Date.now() + 5_000;
+      while (!output.includes("OPTIONAL_DONE") && Date.now() < deadline) {
+        await delay(25);
+      }
+
+      expect(output).toContain("OPTIONAL_DONE");
+      expect(output).toContain("Exited with code 3");
+      // Still running: a plain child failure is not fatal.
+      expect(supervisor.exitCode).toBeNull();
+    } finally {
+      supervisor.kill("SIGKILL");
+    }
+  }, 15_000);
 });

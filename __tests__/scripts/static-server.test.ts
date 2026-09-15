@@ -941,4 +941,37 @@ describe("static-server.mjs", () => {
     expect(response.body).toContain("Invalid URL");
     expect(server.listening).toBe(true);
   });
+
+  it("rejects when the listen port is already in use", async () => {
+    const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-busy-"));
+    tempDirs.push(buildDir);
+    writeFileSync(path.join(buildDir, "index.html"), "<main>app</main>");
+
+    // Hold a port open so the static server cannot bind to it.
+    const blocker = createServer();
+    const occupied = await new Promise<number>((resolve, reject) => {
+      blocker.once("error", reject);
+      blocker.listen(0, "127.0.0.1", () => {
+        blocker.off("error", reject);
+        const addr = blocker.address();
+        if (!addr || typeof addr === "string") {
+          reject(new Error("No bound address"));
+          return;
+        }
+        resolve(addr.port);
+      });
+    });
+    servers.push(blocker);
+
+    // Issue #16927: a listen failure (EADDRINUSE) must reject rather than
+    // surface as an uncaught exception, so the launcher can react (exit 1).
+    await expect(
+      startStaticServer({
+        port: occupied,
+        host: "127.0.0.1",
+        dir: buildDir,
+        routes: {},
+      }),
+    ).rejects.toThrow(/EADDRINUSE|address already in use/i);
+  });
 });
