@@ -1,5 +1,10 @@
 import React from "react";
+import { createPortal } from "react-dom";
 import { cn } from "#/utils/utils";
+import {
+  MODAL_PORTAL_HOST_ATTRIBUTE,
+  ModalPortalHostContext,
+} from "#/contexts/modal-portal-host-context";
 import {
   AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES,
   AGENT_SERVER_UI_DEFAULT_THEME,
@@ -27,6 +32,9 @@ export function AgentServerUIRoot({
   contentClassName,
   ...divProps
 }: AgentServerUIRootProps) {
+  const [canUseDOM, setCanUseDOM] = React.useState(false);
+  const [modalPortalHost, setModalPortalHost] =
+    React.useState<HTMLDivElement | null>(null);
   const scopedStyle = React.useMemo(
     () =>
       ({
@@ -36,21 +44,47 @@ export function AgentServerUIRoot({
       }) as React.CSSProperties,
     [style, styleOverrides],
   );
+  const portalScopedStyle = React.useMemo(
+    () =>
+      ({
+        ...AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES,
+        ...styleOverrides,
+      }) as React.CSSProperties,
+    [styleOverrides],
+  );
+
+  React.useEffect(() => {
+    setCanUseDOM(true);
+  }, []);
 
   return (
-    <div
-      data-agent-server-ui=""
-      {...divProps}
-      className={className}
-      // CSS custom properties injected onto the scope root so descendants can resolve var(--oh-*)
-      style={scopedStyle}
-    >
+    <ModalPortalHostContext.Provider value={modalPortalHost}>
       <div
-        className={cn(theme, contentClassName, "text-foreground")}
-        data-theme={theme}
+        data-agent-server-ui=""
+        {...divProps}
+        className={className}
+        // CSS custom properties injected onto the scope root so descendants can resolve var(--oh-*)
+        style={scopedStyle}
       >
-        {children}
+        <div
+          className={cn(theme, contentClassName, "text-foreground")}
+          data-theme={theme}
+        >
+          {children}
+        </div>
       </div>
-    </div>
+      {canUseDOM &&
+        createPortal(
+          <div
+            ref={setModalPortalHost}
+            data-agent-server-ui=""
+            {...{ [MODAL_PORTAL_HOST_ATTRIBUTE]: "" }}
+            className={cn(theme, "text-foreground")}
+            data-theme={theme}
+            style={portalScopedStyle}
+          />,
+          document.body,
+        )}
+    </ModalPortalHostContext.Provider>
   );
 }
