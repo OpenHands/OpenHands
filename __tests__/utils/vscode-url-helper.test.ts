@@ -53,9 +53,30 @@ describe("transformVSCodeUrl", () => {
     expect(transformVSCodeUrl(input)).toBe(input);
   });
 
-  it("should handle invalid URLs gracefully", () => {
-    const input = "not-a-valid-url";
+  // Previously this returned the input unchanged. An unparseable string cannot
+  // be shown to be a safe thing to hand to `window.open`, so it is rejected.
+  it("should return null for unparseable URLs", () => {
+    expect(transformVSCodeUrl("not-a-valid-url")).toBeNull();
+  });
+
+  it.each([
+    ["javascript:", "javascript:alert(document.domain)"],
+    ["data:", "data:text/html,<script>alert(1)</script>"],
+    ["vbscript:", "vbscript:msgbox(1)"],
+    ["file:", "file:///etc/passwd"],
+  ])("should reject a %s URL", (_scheme, input) => {
+    expect(transformVSCodeUrl(input)).toBeNull();
+  });
+
+  it("should allow https URLs", () => {
+    const input = "https://vscode.example.com/?tkn=abc123";
 
     expect(transformVSCodeUrl(input)).toBe(input);
+  });
+
+  it("should rewrite a localhost https URL and keep the scheme", () => {
+    const input = "https://localhost:8080/?tkn=abc123";
+
+    expect(transformVSCodeUrl(input)).toBe("https://example.com:8080/?tkn=abc123");
   });
 });
