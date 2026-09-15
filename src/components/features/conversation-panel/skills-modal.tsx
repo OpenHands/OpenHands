@@ -64,7 +64,7 @@ export function SkillsModal({ onClose }: SkillsModalProps) {
   };
 
   return (
-    <ModalBackdrop onClose={onClose}>
+    <ModalBackdrop onClose={onClose} aria-label={t(I18nKey.SKILLS_MODAL$TITLE)}>
       <ModalBody
         width="lg"
         className="relative max-h-[80vh] flex flex-col items-start border border-[var(--oh-border)]"
