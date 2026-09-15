@@ -6,6 +6,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import McpService from "#/api/mcp-service/mcp-service.api";
 import {
+  __resetActiveStoreForTests,
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
+import {
   __resetMcpHealthStoreForTests,
   getMcpHealthSnapshot,
   setMcpServerHealth,
@@ -36,6 +41,14 @@ const EDIT_OAUTH_SERVER: MCPServerConfig = {
     strategy: "oauth2",
     authentication: { type: "oauth", client_auth_method: "none" },
   },
+};
+
+const EDIT_REMOTE_SERVER: MCPServerConfig = {
+  id: "jira",
+  type: "shttp",
+  name: "jira",
+  url: "https://mcp-jira.example.com/mcp",
+  auth: { strategy: "bearer", value: "**********" },
 };
 
 function buildSettingsWithMcp(overrides: Partial<Settings> = {}): Settings {
@@ -85,6 +98,22 @@ function EditEditorOnceSettingsLoaded({ onClose }: { onClose: () => void }) {
   );
 }
 
+function EditRemoteEditorOnceSettingsLoaded({
+  onClose,
+}: {
+  onClose: () => void;
+}) {
+  const { data } = useSettings();
+  if (!data) return null;
+  return (
+    <CustomServerEditor
+      server={EDIT_REMOTE_SERVER}
+      existingServers={[EDIT_REMOTE_SERVER]}
+      onClose={onClose}
+    />
+  );
+}
+
 function EditOAuthEditorOnceSettingsLoaded({
   onClose,
 }: {
@@ -118,6 +147,10 @@ function renderWith(ui: React.ReactNode) {
 describe("CustomServerEditor", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    // The backend registry persists to localStorage; wipe it before the
+    // reset re-reads storage so each test starts on the default local backend.
+    window.localStorage.clear();
+    __resetActiveStoreForTests();
     vi.spyOn(SettingsService, "createMcpServer").mockImplementation(
       (settingsKey, server) =>
         SettingsService.saveSettings({
@@ -268,6 +301,63 @@ describe("CustomServerEditor", () => {
         "MCP$TEST_ERROR_CREDENTIALS",
       ),
     );
+  });
+
+  it("offers Test connection for remote servers on cloud backends and shows the result", async () => {
+    // Arrange: a cloud backend is active and the probe (routed through the
+    // app server) succeeds.
+    setRegisteredBackends([
+      {
+        id: "cloud-1",
+        name: "Cloud",
+        host: "https://app.all-hands.dev",
+        apiKey: "k",
+        kind: "cloud",
+      },
+    ]);
+    setActiveSelection({ backendId: "cloud-1" });
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettingsWithMcp(),
+    );
+    const testSpy = vi
+      .spyOn(McpService, "testServer")
+      .mockResolvedValue({ ok: true, tools: ["search_issues"] });
+    renderWith(<EditRemoteEditorOnceSettingsLoaded onClose={vi.fn()} />);
+    await screen.findByTestId("mcp-custom-editor");
+
+    // Act
+    fireEvent.click(screen.getByTestId("mcp-test-connection"));
+
+    // Assert
+    await waitFor(() =>
+      expect(screen.getByTestId("mcp-test-message")).toHaveTextContent(
+        "MCP$TEST_SUCCESS",
+      ),
+    );
+    expect(testSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "shttp", url: EDIT_REMOTE_SERVER.url }),
+    );
+  });
+
+  it("hides Test connection for stdio servers on cloud backends", async () => {
+    setRegisteredBackends([
+      {
+        id: "cloud-1",
+        name: "Cloud",
+        host: "https://app.all-hands.dev",
+        apiKey: "k",
+        kind: "cloud",
+      },
+    ]);
+    setActiveSelection({ backendId: "cloud-1" });
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettingsWithMcp(),
+    );
+
+    renderWith(<EditEditorOnceSettingsLoaded onClose={vi.fn()} />);
+    await screen.findByTestId("mcp-custom-editor");
+
+    expect(screen.queryByTestId("mcp-test-connection")).not.toBeInTheDocument();
   });
 
   it("reseeds the edited server's health from the fresh pre-save test", async () => {
