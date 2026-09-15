@@ -253,12 +253,31 @@ function tryPort(port, host = "127.0.0.1") {
 }
 
 /**
+ * Default on-disk state directory for an agent-canvas instance.
+ *
+ * Concurrent stacks that had to remap off the preferred ports get a sibling
+ * directory so two agent-servers do not fight conversation leases. An explicit
+ * `OH_CANVAS_SAFE_STATE_DIR` always wins.
+ *
+ * @param {Record<string, string | undefined>} env
+ * @param {string | null} [instanceKey]
+ * @returns {string}
+ */
+export function defaultCanvasStateDir(env = process.env, instanceKey = null) {
+  if (env.OH_CANVAS_SAFE_STATE_DIR) {
+    return env.OH_CANVAS_SAFE_STATE_DIR;
+  }
+  const base = path.join(homedir(), ".openhands", "agent-canvas");
+  return instanceKey ? `${base}-${instanceKey}` : base;
+}
+
+/**
  * Assert that all listed ports are available, throwing a descriptive error if
  * any are already in use.
  *
- * Intended as a pre-flight check before spawning services so that a concurrent
- * agent-canvas instance is detected immediately rather than silently starting
- * on a different port.
+ * Kept for callers that still want a hard conflict (tests, one-shot probes).
+ * Launchers that start the stack should use {@link findFreePorts} instead so a
+ * second instance can bind elsewhere.
  *
  * @param {Array<{name: string, port: number}>} portConfigs - Named port list
  * @param {string} [host]
@@ -600,16 +619,20 @@ export async function buildSafeDevConfigAsync(
     preferredBackendPort + 1,
   );
 
-  // Fail fast if any required port is already in use.
-  await assertPortsFree([
-    { name: "agent-server", port: preferredBackendPort },
-    { name: "vscode", port: preferredVscodePort },
+  const ports = await findFreePorts([
+    { name: "backendPort", preferred: preferredBackendPort },
+    { name: "vscodePort", preferred: preferredVscodePort },
   ]);
+  const remapped = ports.backendPort !== preferredBackendPort;
+  const instanceKey = remapped ? String(ports.backendPort) : null;
 
   return buildConfigFromPorts(
-    { backendPort: preferredBackendPort, vscodePort: preferredVscodePort },
+    { backendPort: ports.backendPort, vscodePort: ports.vscodePort },
     cwd,
-    env,
+    {
+      ...env,
+      OH_CANVAS_SAFE_STATE_DIR: defaultCanvasStateDir(env, instanceKey),
+    },
   );
 }
 

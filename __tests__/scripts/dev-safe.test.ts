@@ -196,8 +196,8 @@ describe("buildSafeDevConfigAsync", () => {
   }
 
   it("returns config with dynamically allocated ports", async () => {
-    // Use a high port so the assertPortsFree check passes even when a real
-    // dev stack is running on the default port (18000).
+    // Use a high port so allocation stays on the requested port even when a
+    // real dev stack is running on the default port (18000).
     const config = await buildSafeDevConfigAsync(repoRoot, {
       OH_CANVAS_SAFE_BACKEND_PORT: "19800",
       OH_SESSION_API_KEY_PATH: tempKeyPath(),
@@ -211,8 +211,7 @@ describe("buildSafeDevConfigAsync", () => {
     expect(config.backendPort).not.toBe(config.vscodePort);
   });
 
-  it("throws when preferred port is busy", async () => {
-    // Block a specific high port we'll request
+  it("falls back to a free port when the preferred one is busy", async () => {
     const busyPort = 19600;
     const server = net.createServer();
     await new Promise<void>((resolve, reject) => {
@@ -223,13 +222,17 @@ describe("buildSafeDevConfigAsync", () => {
       server.on("error", reject);
     });
 
-    // Request the busy port via env var — should throw instead of falling back
-    await expect(
-      buildSafeDevConfigAsync(repoRoot, {
-        OH_CANVAS_SAFE_BACKEND_PORT: busyPort.toString(),
-        OH_SESSION_API_KEY_PATH: tempKeyPath(),
-      }),
-    ).rejects.toThrow(/agent-server.*port 19600/i);
+    const config = await buildSafeDevConfigAsync(repoRoot, {
+      OH_CANVAS_SAFE_BACKEND_PORT: busyPort.toString(),
+      OH_SESSION_API_KEY_PATH: tempKeyPath(),
+    });
+
+    expect(config.backendPort).not.toBe(busyPort);
+    expect(config.backendPort).toBeGreaterThan(0);
+    expect(config.vscodePort).not.toBe(config.backendPort);
+    expect(config.stateDir).toBe(
+      path.join(homedir(), ".openhands", `agent-canvas-${config.backendPort}`),
+    );
   });
 });
 
@@ -946,7 +949,7 @@ describe("dev-safe CLI startup", () => {
         // Use empty PATH to ensure uvx is not found.
         PATH: "",
         // Redirect the agent-server port to a high free port so the
-        // assertPortsFree pre-flight check passes when a real dev stack is
+        // allocation stays on the requested ports even when a real dev stack is
         // running on the default port (18000) — the test is about uvx, not
         // port detection.
         OH_CANVAS_SAFE_BACKEND_PORT: "19810",
