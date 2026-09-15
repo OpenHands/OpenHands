@@ -6,6 +6,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { getAgentServerWorkingDir } from "#/api/agent-server-config";
 import { useConversationSkills } from "#/hooks/query/use-conversation-skills";
 import { useSkillEnabledFilter } from "#/hooks/use-skill-enablement";
+import { skillEnablementKey } from "#/utils/skill-enablement";
 import {
   groupSkillsByScope,
   SKILL_SCOPE_ORDER,
@@ -24,6 +25,7 @@ interface SkillsModalProps {
 const SECTION_TITLE_KEY: Record<SkillScope, I18nKey> = {
   project: I18nKey.SKILLS_MODAL$SECTION_PROJECT,
   personal: I18nKey.SKILLS_MODAL$SECTION_USER,
+  external: I18nKey.SKILLS_MODAL$SECTION_EXTERNAL,
   public: I18nKey.SKILLS_MODAL$SECTION_PUBLIC,
 };
 
@@ -98,11 +100,12 @@ export function SkillsModal({ onClose }: SkillsModalProps) {
                       count={scopedSkills.length}
                     >
                       {scopedSkills.map((skill) => {
-                        const isExpanded = expandedAgents[skill.name] || false;
+                        const skillKey = skillEnablementKey(skill);
+                        const isExpanded = expandedAgents[skillKey] || false;
 
                         return (
                           <SkillItem
-                            key={`${scope}-${skill.name}`}
+                            key={`${scope}-${skillKey}`}
                             skill={skill}
                             isExpanded={isExpanded}
                             onToggle={toggleAgent}

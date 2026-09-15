@@ -26,6 +26,12 @@ import {
 // (dev-with-automation.mjs and tests still import it from here).
 import { buildRuntimeServicesInfo } from "./runtime-services-info.mjs";
 import { fileLog, stripAnsi } from "./logger.mjs";
+import {
+  collectSkillsSourcesFromArgv,
+  parseSkillsSourcesEnv,
+  resolveExternalSkillsSources,
+  writeExternalSkillsManifest,
+} from "./skills-sources.mjs";
 
 // ── Centralized config (single source of truth for versions, ports, etc.) ───
 const __dev_safe_dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -966,6 +972,37 @@ async function main() {
     mkdirSync(dir, { recursive: true });
   }
 
+  // External skills sources (--skills / OH_SKILLS_SOURCES). dev:minimal has
+  // no parseArgs of its own, so collect the repeatable flag straight off
+  // argv. The resolved manifest reaches the frontend through Vite's
+  // VITE_EXTERNAL_SKILLS_FILE entry-module injection.
+  const skillsSources = [
+    ...collectSkillsSourcesFromArgv(process.argv.slice(2)),
+    ...parseSkillsSourcesEnv(process.env.OH_SKILLS_SOURCES),
+  ].filter((source) => typeof source === "string" && source.trim());
+  let externalSkillsFile = null;
+  if (skillsSources.length > 0) {
+    const manifest = resolveExternalSkillsSources(skillsSources, {
+      cacheDir: path.join(config.stateDir, "external-skills", "cache"),
+      warn: (message) => {
+        console.error(`Warning: ${message}`);
+        fileLog("warn", message);
+      },
+      info: (message) => {
+        console.log(`- ${message}`);
+        fileLog("info", message);
+      },
+    });
+    externalSkillsFile = writeExternalSkillsManifest(
+      path.join(config.stateDir, "external-skills", "manifest.json"),
+      manifest,
+    );
+    console.log(
+      `- external skills: ${manifest.skills.length} skill(s) ` +
+        `(disabled until enabled in Customize → Skills)`,
+    );
+  }
+
   const agentServerCmd = buildAgentServerCommand();
 
   const secretKeySource = process.env.OH_SECRET_KEY
@@ -1096,6 +1133,11 @@ async function main() {
       // own, so it needs its own proxy target rather than VITE_BACKEND_HOST.
       VITE_VSCODE_BASE_PATH: config.vscodeBasePath,
       VITE_VSCODE_TARGET: `http://127.0.0.1:${config.vscodePort}`,
+      // Resolved --skills manifest; vite.config.ts inlines it as a window
+      // global so the skills settings page lists external skills.
+      ...(externalSkillsFile
+        ? { VITE_EXTERNAL_SKILLS_FILE: externalSkillsFile }
+        : {}),
       // dev:minimal deliberately does NOT supply runtime-services info (the
       // frontend here talks straight to the agent-server over
       // VITE_BACKEND_BASE_URL — there is no ingress or static-server in front

@@ -5,11 +5,14 @@ import {
 } from "@openhands/extensions/skills";
 import {
   buildSkillEnablementFilter,
+  externalSkillEnablementKey,
   findInvokedCatalogSkill,
   isCatalogSkill,
+  isExternalSkillKey,
   isRecommendedSkill,
   migrateSkillEnablement,
   resolveEnabledCatalogSkills,
+  skillEnablementKey,
   toSkillEnablement,
 } from "#/utils/skill-enablement";
 
@@ -75,6 +78,41 @@ describe("buildSkillEnablementFilter", () => {
         RECOMMENDED,
       ),
     ).toBe(false);
+  });
+
+  it("keeps external (--skills) entries off unless their qualified key is listed", () => {
+    const key = externalSkillEnablementKey("acme-1234abcd", "deploy");
+    // Off by default, and a bare same-named entry must not switch it on —
+    // same-named skills from different sources toggle independently.
+    expect(buildSkillEnablementFilter({ enabledSkills: ["deploy"] })(key)).toBe(
+      false,
+    );
+    expect(buildSkillEnablementFilter({ enabledSkills: [key] })(key)).toBe(
+      true,
+    );
+    expect(
+      buildSkillEnablementFilter({
+        enabledSkills: [key],
+        disabledSkills: [key],
+      })(key),
+    ).toBe(false);
+  });
+});
+
+describe("skillEnablementKey", () => {
+  it("qualifies external skills by source and leaves the rest by name", () => {
+    expect(isExternalSkillKey("external:acme-1234abcd:deploy")).toBe(true);
+    expect(isExternalSkillKey("deploy")).toBe(false);
+    expect(externalSkillEnablementKey("acme-1234abcd", "deploy")).toBe(
+      "external:acme-1234abcd:deploy",
+    );
+    expect(
+      skillEnablementKey({ name: "deploy", source_id: "acme-1234abcd" }),
+    ).toBe("external:acme-1234abcd:deploy");
+    expect(skillEnablementKey({ name: "deploy" })).toBe("deploy");
+    expect(skillEnablementKey({ name: "deploy", source_id: null })).toBe(
+      "deploy",
+    );
   });
 });
 

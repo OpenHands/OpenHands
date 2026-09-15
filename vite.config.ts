@@ -2,6 +2,7 @@
 /// <reference types="vite-plugin-svgr/client" />
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
+import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve, dirname, relative, isAbsolute } from "node:path";
 import { defineConfig, loadEnv } from "vite";
@@ -97,6 +98,11 @@ export default defineConfig(({ mode }) => {
     VITE_BASE_PATH,
     VITE_VSCODE_BASE_PATH,
     VITE_VSCODE_TARGET,
+    // Path to the launcher's resolved --skills manifest. Read once at server
+    // start by the inject-external-skills plugin below; the static-server
+    // path uses --external-skills-file instead, and the prebuilt binary never
+    // sees this variable.
+    VITE_EXTERNAL_SKILLS_FILE,
     // Runtime-services metadata for the dev server, passed by launchers that
     // run the Vite dev server directly (e.g. dev:minimal). Unlike
     // ingress/static-server, the Vite proxy cannot post-process the upstream
@@ -138,6 +144,40 @@ export default defineConfig(({ mode }) => {
               res.end();
             },
           );
+        },
+      },
+      {
+        // Expose the launcher's resolved external skills manifest (--skills)
+        // as a window global, mirroring static-server's --external-skills-file
+        // injection so dev and packaged modes share one contract.
+        //
+        // react-router dev renders the document itself — there is no
+        // index.html for transformIndexHtml to run against — so instead the
+        // manifest is appended to the client entry module: its module body
+        // executes before hydration, so the global is set before any app
+        // code reads it. `apply: "serve"` keeps builds manifest-free (the
+        // packaged contract is runtime injection via static-server).
+        name: "inject-external-skills-manifest",
+        apply: "serve",
+        transform(code, id) {
+          const pathname = id.split("?")[0].replace(/\\/g, "/");
+          if (!pathname.endsWith("/src/entry.client.tsx")) return null;
+          const manifestFile = VITE_EXTERNAL_SKILLS_FILE?.trim();
+          if (!manifestFile) return null;
+          let manifestJson;
+          try {
+            manifestJson = readFileSync(manifestFile, "utf8");
+            JSON.parse(manifestJson);
+          } catch {
+            return null;
+          }
+          return {
+            code:
+              `${code}\n;if (typeof window !== "undefined") ` +
+              `window.__AGENT_CANVAS_EXTERNAL_SKILLS__=` +
+              `${JSON.stringify(manifestJson).replace(/</g, "\\u003c")};\n`,
+            map: null,
+          };
         },
       },
       {
