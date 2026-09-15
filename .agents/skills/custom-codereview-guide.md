@@ -147,16 +147,35 @@ identity.
 
 - Require evidence proportional to the behavior changed. For UI behavior, use a
   screenshot or video from the real app. For CLI, API, or scripts, require the
-  exact runtime command and observed result. Unit tests alone are not end-to-end
-  evidence.
+  exact runtime command and observed result.
+- Runtime and user-visible bug fixes require before-and-after evidence through
+  the real production-facing path. The before evidence must reproduce the bug on
+  the base branch or released version; the after evidence must repeat the same
+  setup on the PR head and show the corrected behavior. Include exact commands,
+  relevant output, and screenshots or video when the behavior is visual.
+- For lifecycle fixes, evidence must also verify the resulting process or resource
+  state—for example, the parent exit code and whether child services or listening
+  ports remain after shutdown.
+- Unit and integration tests are regression proof, not a substitute for live
+  evidence. If required live evidence is missing, submit **COMMENT**, not
+  **APPROVE**, and identify the exact production-facing verification still needed.
 - Prefer tests that exercise real logic and observable state. Do not reward mocks
   that only prove another mock was called.
 - Keep tests focused: one meaningful assertion path per behavior, no duplicated
   coverage of library behavior, and no brittle presentation-only snapshots.
-- Follow the test routing in `AGENTS.md`. If a change crosses a full-stack flow
-  and lacks suitable coverage, recommend mock-LLM E2E and add the `e2e-tests`
-  label when appropriate.
+- Follow the test routing in `AGENTS.md`. The mock-LLM, Docker mock-LLM, and
+  live LLM-backed E2E suites run after changes reach `main`, not from PR labels.
+  If a risky PR needs pre-merge E2E evidence, recommend manually dispatching the
+  relevant workflow against the PR branch.
 - Never broaden live E2E triggers or secret exposure for convenience.
+
+## Review Context Integrity
+
+Before submitting the review, compare its summary and every finding against the
+current PR title, changed-file manifest, linked issues, and acceptance criteria.
+If the review describes files, behavior, issues, or release paths that are not in
+that context, stop and re-read the PR rather than submitting stale or mismatched
+feedback. Do not approve until this final context check passes.
 
 ## What Not to Comment On
 

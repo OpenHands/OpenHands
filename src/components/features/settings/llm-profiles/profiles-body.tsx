@@ -20,8 +20,8 @@ interface ProfilesBodyProps {
   /**
    * Display name per provider-connection id. When non-empty, profiles are
    * grouped under their connection's name so models sharing a provider are
-   * visually clustered. Empty (the default, and always on cloud) renders a flat
-   * list identical to before.
+   * visually clustered. Empty (the default, e.g. a cloud backend with no org
+   * bound) renders a flat list identical to before.
    */
   connectionNamesById?: Record<string, string>;
   onActivate: (name: string) => void;
@@ -150,7 +150,7 @@ export function ProfilesBody({
   }
 
   // Group only when there is at least one linked connection to show; otherwise
-  // (every profile today, and always on cloud) render the flat list unchanged.
+  // (no profile links to a connection) render the flat list unchanged.
   const hasLinkedProfiles = profiles.some((p) => p.provider_connection_id);
   if (!hasLinkedProfiles) {
     return <div className={listClassName}>{profiles.map(renderRow)}</div>;

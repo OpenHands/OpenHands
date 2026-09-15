@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import React from "react";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -7,6 +7,14 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
+import ProfilesService from "#/api/profiles-service/profiles-service.api";
+import {
+  __resetActiveStoreForTests,
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
+import type { Backend } from "#/api/backend-registry/types";
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { PinnedAutomationsDashboard } from "#/components/features/home/featured-automations/pinned-automations-dashboard";
 import { RunningAutomationsList } from "#/components/features/home/featured-automations/running-automations-list";
 import { NavigationProvider } from "#/context/navigation-context";
@@ -41,9 +49,26 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
   },
 }));
 
+vi.mock("#/api/profiles-service/profiles-service.api", () => ({
+  default: {
+    listProfiles: vi.fn(),
+  },
+}));
+
 vi.mock("#/utils/custom-toast-handlers", () => ({
   displaySuccessToast: vi.fn(),
   displayErrorToast: vi.fn(),
+}));
+
+// Mock permission hooks so home automation components don't need a real
+// ActiveBackendProvider or /me endpoint.
+vi.mock("#/hooks/use-automation-permissions", () => ({
+  useAutomationPermissions: () => ({
+    canView: true,
+    canManage: true,
+    isLoading: false,
+  }),
+  useIsAutomationOwner: () => true,
 }));
 
 vi.mock(
@@ -153,6 +178,10 @@ beforeEach(() => {
   vi.mocked(
     AgentServerConversationService.batchGetAppConversations,
   ).mockResolvedValue([]);
+  vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
+    profiles: [],
+    active_profile: null,
+  });
 });
 
 describe("home automations composer layout", () => {
@@ -191,12 +220,12 @@ describe("home automations composer layout", () => {
 
     expect(
       await screen.findByRole("link", {
-        name: /Daily digest\s*FEATURED_AUTOMATIONS\$LAST_RUN_SUCCEEDED/,
+        name: /Daily digest\s*AUTOMATIONS\$DETAIL\$SUCCESSFUL/,
       }),
     ).toBeInTheDocument();
     expect(
       await screen.findByRole("link", {
-        name: /PR review\s*FEATURED_AUTOMATIONS\$LAST_RUN_FAILED/,
+        name: /PR review\s*AUTOMATIONS\$DETAIL\$FAILED/,
       }),
     ).toBeInTheDocument();
     expect(screen.queryByText("Disabled sweep")).not.toBeInTheDocument();
@@ -527,5 +556,43 @@ describe("home automations composer layout", () => {
     await waitFor(() => {
       expect(displayErrorToast).toHaveBeenCalled();
     });
+  });
+});
+
+describe("home automations on a cloud backend", () => {
+  const cloudBackend: Backend = {
+    id: "cloud-1",
+    name: "Production",
+    host: "https://app.all-hands.dev",
+    apiKey: "bearer-key",
+    kind: "cloud",
+  };
+
+  afterEach(() => {
+    __resetActiveStoreForTests();
+  });
+
+  it("opens the Edit modal in place from a row menu instead of leaving the home surface", async () => {
+    // Arrange — make a cloud backend active before mounting.
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+    const user = userEvent.setup();
+    renderHomeAutomations(
+      <ActiveBackendProvider>
+        <RunningAutomationsList />
+      </ActiveBackendProvider>,
+    );
+    await screen.findByTestId("running-automations-list");
+
+    // Act — pick Edit from the row menu.
+    await user.click(screen.getByTestId("running-automation-menu-auto-1"));
+    await user.click(screen.getByTestId("running-automation-edit-auto-1"));
+
+    // Assert — the editor opens pre-filled for this row rather than
+    // bouncing the user to the detail page.
+    const nameInput = (await screen.findByTestId(
+      "edit-automation-name",
+    )) as HTMLInputElement;
+    expect(nameInput.value).toBe("Daily digest");
   });
 });

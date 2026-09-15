@@ -22,7 +22,7 @@ import { ChatSuggestions } from "./chat-suggestions";
 import { ScrollProvider } from "#/context/scroll-context";
 import { useInitialQueryStore } from "#/stores/initial-query-store";
 import { useSendMessage } from "#/hooks/use-send-message";
-import { useAgentState } from "#/hooks/use-agent-state";
+import { useAgentState, usePlanningAgentState } from "#/hooks/use-agent-state";
 import { useIsArchivedConversation } from "#/hooks/use-is-archived-conversation";
 import { useHandleBuildPlanClick } from "#/hooks/use-handle-build-plan-click";
 
@@ -115,6 +115,7 @@ export function ChatInterface() {
   } = useNewConversationCommand();
 
   const { curAgentState } = useAgentState();
+  const { isPlanningAgentRunning } = usePlanningAgentState();
   const { handleBuildPlanClick } = useHandleBuildPlanClick();
 
   // Cloud conversations whose sandbox is MISSING or ERROR are read-only:
@@ -651,7 +652,8 @@ export function ChatInterface() {
                         <ScrollToBottomButton onClick={scrollDomToBottom} />
                       </div>
                     ) : (
-                      curAgentState === AgentState.RUNNING && (
+                      (curAgentState === AgentState.RUNNING ||
+                        isPlanningAgentRunning) && (
                         <div className="pointer-events-none absolute inset-x-9 bottom-0 flex justify-center">
                           <TypingIndicator events={allConversationEvents} />
                         </div>
