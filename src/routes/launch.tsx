@@ -124,7 +124,7 @@ function ErrorDisplay({
             <button
               type="button"
               onClick={onTryAgain}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
+              className="rounded-md bg-blue-600 px-4 py-2 text-sm text-white text-on-solid hover:bg-blue-700"
               data-testid="try-again-button"
             >
               {t(I18nKey.LAUNCH$TRY_AGAIN)}

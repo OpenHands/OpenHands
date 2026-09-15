@@ -1,6 +1,7 @@
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import React from "react";
+import { useColorTheme } from "#/hooks/use-color-theme";
 import { Command, useCommandStore } from "#/stores/command-store";
 import { parseTerminalOutput } from "#/utils/parse-terminal-output";
 
@@ -90,6 +91,7 @@ function resolveTerminalForeground(host: HTMLElement): string {
 const persistentLastCommandIndex = { current: 0 };
 
 export const useTerminal = () => {
+  const colorTheme = useColorTheme();
   const commands = useCommandStore((state) => state.commands);
   const terminal = React.useRef<Terminal | null>(null);
   const fitAddon = React.useRef<FitAddon | null>(null);
@@ -170,6 +172,15 @@ export const useTerminal = () => {
       lastCommandIndex.current = 0;
     };
   }, []);
+
+  React.useEffect(() => {
+    const host = ref.current;
+    if (!terminal.current?.options || !host) return;
+    terminal.current.options.theme = {
+      background: "rgba(0, 0, 0, 0)",
+      foreground: resolveTerminalForeground(host),
+    };
+  }, [colorTheme]);
 
   React.useEffect(() => {
     if (
