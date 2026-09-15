@@ -11,7 +11,7 @@ import {
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
-import { NavigationProvider } from "#/context/navigation-context";
+import { NavigationProvider } from "#/contexts/navigation-context";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { useConversationSkills } from "#/hooks/query/use-conversation-skills";
 import type { SkillInfo } from "#/types/settings";
