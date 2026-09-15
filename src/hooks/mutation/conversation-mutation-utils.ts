@@ -74,6 +74,17 @@ export const askAgent = async (
   ).askAgent(conversationId, question);
 };
 
+/** Force condensation of an existing conversation's history. */
+export const condenseConversation = async (
+  conversationId: string,
+): Promise<void> => {
+  const { conversationUrl, sessionApiKey } =
+    await fetchConversationData(conversationId);
+  await new ConversationClient(
+    getAgentServerClientOptions({ conversationUrl, sessionApiKey }),
+  ).condenseConversation(conversationId);
+};
+
 /**
  * Start a `/goal` loop on a V1 conversation. The agent server drives the agent
  * toward the objective, judging completion after each run until it is done or

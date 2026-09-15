@@ -1,4 +1,5 @@
-import { SlashCommandItem } from "#/hooks/chat/use-slash-command";
+import type { SlashCommandItem } from "#/types/slash-command";
+import { I18nKey } from "#/i18n/declaration";
 
 export const JSON_VIEW_THEME = {
   base00: "transparent", // background
@@ -50,6 +51,11 @@ export const PLAN_COMMAND = "/plan";
 /** The /code slash command — switches the conversation back to Code mode. */
 export const CODE_COMMAND = "/code";
 
+/** The /help slash command — displays the built-in command reference. */
+export const HELP_COMMAND = "/help";
+
+export const CONDENSE_COMMAND = "/condense";
+
 /** Built-in slash commands surfaced in the menu for V1 conversations. */
 export const BUILT_IN_COMMANDS: SlashCommandItem[] = [
   {
@@ -61,6 +67,7 @@ export const BUILT_IN_COMMANDS: SlashCommandItem[] = [
       triggers: ["/new"],
     },
     command: "/new",
+    descriptionKey: I18nKey.SLASH_COMMAND$NEW_DESCRIPTION,
   },
   {
     skill: {
@@ -71,6 +78,7 @@ export const BUILT_IN_COMMANDS: SlashCommandItem[] = [
       triggers: [BTW_COMMAND],
     },
     command: BTW_COMMAND,
+    descriptionKey: I18nKey.SLASH_COMMAND$BTW_DESCRIPTION,
   },
   {
     skill: {
@@ -82,6 +90,7 @@ export const BUILT_IN_COMMANDS: SlashCommandItem[] = [
       triggers: [MODEL_COMMAND],
     },
     command: MODEL_COMMAND,
+    descriptionKey: I18nKey.SLASH_COMMAND$MODEL_DESCRIPTION,
   },
   {
     skill: {
@@ -93,6 +102,18 @@ export const BUILT_IN_COMMANDS: SlashCommandItem[] = [
       triggers: [GOAL_COMMAND],
     },
     command: GOAL_COMMAND,
+    descriptionKey: I18nKey.SLASH_COMMAND$GOAL_DESCRIPTION,
+  },
+  {
+    skill: {
+      name: "help",
+      type: "agentskills",
+      source: null,
+      content: "List all available slash commands",
+      triggers: [HELP_COMMAND],
+    },
+    command: HELP_COMMAND,
+    descriptionKey: I18nKey.SLASH_COMMAND$HELP_DESCRIPTION,
   },
   {
     skill: {
@@ -115,6 +136,17 @@ export const BUILT_IN_COMMANDS: SlashCommandItem[] = [
       triggers: [CODE_COMMAND],
     },
     command: CODE_COMMAND,
+  },
+  {
+    skill: {
+      name: "condense",
+      type: "agentskills",
+      source: null,
+      content: "Condense the current conversation history",
+      triggers: [CONDENSE_COMMAND],
+    },
+    command: CONDENSE_COMMAND,
+    descriptionKey: I18nKey.SLASH_COMMAND$CONDENSE_DESCRIPTION,
   },
 ];
 
