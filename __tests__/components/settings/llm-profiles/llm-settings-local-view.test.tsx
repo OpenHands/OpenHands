@@ -9,6 +9,7 @@ import {
   shouldReapplyProfileAfterSave,
 } from "#/components/features/settings/llm-profiles/llm-settings-local-view";
 import * as useLlmProfilesHook from "#/hooks/query/use-llm-profiles";
+import * as useProviderConnectionsHook from "#/hooks/query/use-provider-connections";
 import * as useActivateLlmProfileHook from "#/hooks/mutation/use-activate-llm-profile";
 import * as useSaveLlmProfileHook from "#/hooks/mutation/use-save-llm-profile";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
@@ -140,6 +141,7 @@ vi.mock("#/routes/llm-settings", async () => {
 });
 
 vi.mock("#/hooks/query/use-llm-profiles");
+vi.mock("#/hooks/query/use-provider-connections");
 vi.mock("#/hooks/mutation/use-activate-llm-profile");
 vi.mock("#/hooks/mutation/use-save-llm-profile");
 vi.mock("#/api/profiles-service/profiles-service.api");
@@ -221,6 +223,16 @@ describe("LlmSettingsLocalView", () => {
     vi.mocked(useLlmProfilesHook.useLlmProfiles).mockReturnValue(
       createMockLlmProfilesReturn(),
     );
+    vi.mocked(
+      useProviderConnectionsHook.useProviderConnections,
+    ).mockReturnValue({
+      data: [],
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<
+      typeof useProviderConnectionsHook.useProviderConnections
+    >);
 
     vi.mocked(useActivateLlmProfileHook.useActivateLlmProfile).mockReturnValue(
       createMockMutationReturn<
@@ -462,6 +474,32 @@ describe("LlmSettingsLocalView", () => {
       expect(
         screen.queryByTestId("app-settings-skeleton"),
       ).not.toBeInTheDocument();
+    });
+  });
+
+  it("qualifies a bare advanced model with the OpenAI provider before saving", async () => {
+    const user = userEvent.setup();
+    mockSaveMutateAsync.mockResolvedValue({ success: true });
+    vi.mocked(ProfilesService.validateProfile).mockResolvedValue({
+      valid: true,
+    });
+
+    renderWithProviders(<LlmSettingsLocalView />);
+    await user.click(screen.getByTestId("add-llm-profile"));
+
+    const modelInput = screen.getByTestId("mock-basic-model-input");
+    await user.clear(modelInput);
+    await user.type(modelInput, "qwen");
+    await user.click(screen.getByTestId("save-profile-btn"));
+
+    await waitFor(() => {
+      expect(mockSaveMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          request: expect.objectContaining({
+            llm: expect.objectContaining({ model: "openai/qwen" }),
+          }),
+        }),
+      );
     });
   });
 
