@@ -7,6 +7,8 @@ import { EventGroup } from "./event-message-components/event-group";
 import { ThoughtEventMessage } from "./event-message-components/thought-event-message";
 import { useModelStore } from "#/stores/model-store";
 import { ModelMessages } from "#/components/features/chat/model-messages";
+import { SlashCommandOutputMessages } from "#/components/features/chat/slash-command-output-messages";
+import { useSlashCommandOutputStore } from "#/stores/slash-command-output-store";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { ConversationConfirmationButtons } from "#/components/shared/buttons/conversation-confirmation-buttons";
 
@@ -39,6 +41,17 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       }
       return ids.size > 0 ? ids : null;
     }, [modelEntries]);
+    const slashCommandEntries = useSlashCommandOutputStore((state) =>
+      conversationId ? state.entriesByConversation[conversationId] : undefined,
+    );
+    const slashCommandAnchorIds = React.useMemo(() => {
+      if (!slashCommandEntries || slashCommandEntries.length === 0) return null;
+      const ids = new Set<string>();
+      for (const entry of slashCommandEntries) {
+        if (entry.anchorEventId !== null) ids.add(entry.anchorEventId);
+      }
+      return ids.size > 0 ? ids : null;
+    }, [slashCommandEntries]);
 
     const maybeRenderModelMessages = (eventId: string | number | undefined) => {
       if (!modelAnchorIds || eventId === undefined) return null;
@@ -46,6 +59,20 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       if (!modelAnchorIds.has(key)) return null;
       return (
         <ModelMessages conversationId={conversationId} anchorEventId={key} />
+      );
+    };
+
+    const maybeRenderSlashCommandMessages = (
+      eventId: string | number | undefined,
+    ) => {
+      if (!slashCommandAnchorIds || eventId === undefined) return null;
+      const key = String(eventId);
+      if (!slashCommandAnchorIds.has(key)) return null;
+      return (
+        <SlashCommandOutputMessages
+          conversationId={conversationId}
+          anchorEventId={key}
+        />
       );
     };
 
@@ -87,6 +114,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
                     duplication. */}
                 {renderEventMessage(item.event, item.index, true)}
                 {maybeRenderModelMessages(item.event.id)}
+                {maybeRenderSlashCommandMessages(item.event.id)}
               </React.Fragment>
             );
           }
@@ -96,6 +124,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
               <React.Fragment key={`thought-${item.action.id}`}>
                 <ThoughtEventMessage event={item.action} />
                 {maybeRenderModelMessages(item.action.id)}
+                {maybeRenderSlashCommandMessages(item.action.id)}
               </React.Fragment>
             );
           }
@@ -120,6 +149,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
               {item.events.map((event) => (
                 <React.Fragment key={`model-${event.id}`}>
                   {maybeRenderModelMessages(event.id)}
+                  {maybeRenderSlashCommandMessages(event.id)}
                 </React.Fragment>
               ))}
             </React.Fragment>
