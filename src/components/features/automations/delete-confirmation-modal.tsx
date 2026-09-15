@@ -30,7 +30,12 @@ export function DeleteConfirmationModal({
         }}
         role="presentation"
       />
-      <div className="relative w-full max-w-sm rounded-xl border border-[var(--oh-border)] bg-[var(--oh-surface)] p-6">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="delete-automation-title"
+        className="relative w-full max-w-sm rounded-xl border border-[var(--oh-border)] bg-[var(--oh-surface)] p-6"
+      >
         <button
           type="button"
           onClick={onCancel}
@@ -40,7 +45,10 @@ export function DeleteConfirmationModal({
           <XMarkIcon className="size-5" />
         </button>
 
-        <h2 className={modalTitleLgMediumClassName}>
+        <h2
+          id="delete-automation-title"
+          className={modalTitleLgMediumClassName}
+        >
           {t(I18nKey.AUTOMATIONS$DELETE_CONFIRM_TITLE)}
         </h2>
         <p className="mt-2 text-sm text-muted">
@@ -59,6 +67,7 @@ export function DeleteConfirmationModal({
           </button>
           <button
             type="button"
+            data-testid="delete-automation-confirm"
             onClick={onConfirm}
             className="rounded-lg bg-danger px-4 py-2 text-sm text-white hover:bg-danger/80"
           >

@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import EditIcon from "#/icons/u-edit.svg?react";
 import DeleteIcon from "#/icons/u-delete.svg?react";
+import PlusIcon from "#/icons/u-plus.svg?react";
 import { KeyStatusIcon } from "#/components/features/settings/key-status-icon";
 import type { ProviderConnection } from "#/api/provider-connections-service/provider-connections-service.api";
 import { cn } from "#/utils/utils";
@@ -16,6 +17,7 @@ interface ProviderConnectionRowProps {
   linkedProfileCount: number;
   onEdit: (connection: ProviderConnection) => void;
   onDelete: (connection: ProviderConnection) => void;
+  onBulkAddModels: (connection: ProviderConnection) => void;
 }
 
 export function ProviderConnectionRow({
@@ -23,6 +25,7 @@ export function ProviderConnectionRow({
   linkedProfileCount,
   onEdit,
   onDelete,
+  onBulkAddModels,
 }: ProviderConnectionRowProps) {
   const { t } = useTranslation("openhands");
 
@@ -46,9 +49,25 @@ export function ProviderConnectionRow({
             count: linkedProfileCount,
           })}
         </span>
-        <KeyStatusIcon isSet={connection.api_key_set} />
+        <KeyStatusIcon
+          isSet={connection.api_key_set}
+          label={t(
+            connection.api_key_set
+              ? I18nKey.SETTINGS$PROVIDER_CONNECTION_KEY_SET_LABEL
+              : I18nKey.SETTINGS$PROVIDER_CONNECTION_KEY_UNSET_LABEL,
+          )}
+        />
       </div>
       <div className="flex shrink-0 items-center gap-1">
+        <button
+          type="button"
+          data-testid="provider-connection-bulk-add"
+          aria-label={t(I18nKey.SETTINGS$PROVIDER_CONNECTION_BULK_ADD_ACTION)}
+          className={settingsListIconActionButtonClassName}
+          onClick={() => onBulkAddModels(connection)}
+        >
+          <PlusIcon width={16} height={16} />
+        </button>
         <button
           type="button"
           data-testid="provider-connection-edit"
