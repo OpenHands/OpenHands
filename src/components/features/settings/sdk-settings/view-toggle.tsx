@@ -21,7 +21,7 @@ const tabButtonClass = (isActive: boolean, isDisabled: boolean) =>
     "border-b-2 pb-2",
     isActive
       ? "text-white border-white"
-      : "text-[var(--oh-muted)] border-transparent hover:text-white",
+      : "text-muted border-transparent hover:text-white",
     isDisabled && "pointer-events-none opacity-30 cursor-not-allowed",
   );
 

@@ -67,9 +67,9 @@ export function PlanPreview({
   }
 
   return (
-    <div className="bg-[var(--oh-surface)] border border-[#597FF4] rounded-[12px] w-full mt-2">
+    <div className="bg-surface border border-[#597FF4] rounded-xl w-full mt-2">
       {/* Header */}
-      <div className="border-b border-[var(--oh-border)] flex h-[41px] items-center px-2 gap-1">
+      <div className="border-b border-border flex h-10.25 items-center px-2 gap-1">
         <LessonPlanIcon width={18} height={18} color="var(--oh-muted)" />
         <Typography.Text className="font-normal text-[11px] text-white tracking-[0.11px] leading-4">
           {t(I18nKey.COMMON$PLAN_MD)}
@@ -91,7 +91,7 @@ export function PlanPreview({
       {/* Content */}
       <div
         data-testid="plan-preview-content"
-        className="flex flex-col gap-[10px] p-4 text-[15px] text-white leading-[29px]"
+        className="flex flex-col gap-2.5 p-4 text-[15px] text-white leading-7.25"
       >
         {truncatedContent && (
           <>
@@ -116,20 +116,20 @@ export function PlanPreview({
       </div>
 
       {/* Footer */}
-      <div className="border-t border-[var(--oh-border)] flex h-[54px] items-center justify-start px-4">
+      <div className="border-t border-border flex h-13.5 items-center justify-start px-4">
         <button
           type="button"
           onClick={handleBuildClick}
           disabled={isBuildDisabled}
           className={cn(
-            "bg-white flex items-center justify-center h-[26px] px-2 rounded-[4px] w-[93px] transition-opacity",
+            "bg-white flex items-center justify-center h-6.5 px-2 rounded-sm w-23.25 transition-opacity",
             isBuildDisabled
               ? "opacity-50 cursor-not-allowed"
               : "hover:opacity-90 cursor-pointer",
           )}
           data-testid="plan-preview-build-button"
         >
-          <Typography.Text className="font-normal text-[14px] text-black leading-5">
+          <Typography.Text className="font-normal text-sm text-black leading-5">
             {t(I18nKey.COMMON$BUILD)}{" "}
             <Typography.Text className="font-normal text-black">
               ⌘↩

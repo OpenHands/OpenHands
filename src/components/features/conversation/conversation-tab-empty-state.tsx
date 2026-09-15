@@ -26,12 +26,12 @@ export function ConversationTabEmptyState({
       )}
     >
       <div
-        className="shrink-0 text-[var(--oh-muted)] [&_svg]:size-10 [&_svg]:max-h-10 [&_svg]:max-w-10 [&_svg]:shrink-0"
+        className="shrink-0 text-muted [&_svg]:size-10 [&_svg]:max-h-10 [&_svg]:max-w-10 [&_svg]:shrink-0"
         aria-hidden
       >
         {icon}
       </div>
-      <p className="max-w-sm text-center text-sm font-normal leading-5 text-[var(--oh-muted)]">
+      <p className="max-w-sm text-center text-sm font-normal leading-5 text-muted">
         {children}
       </p>
       {action ? <div className="flex justify-center pt-1">{action}</div> : null}

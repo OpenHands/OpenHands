@@ -15,7 +15,7 @@ describe("CirclePlusBadge", () => {
     const plusBadge = screen.getByTestId("automation-plus");
     expect(plusBadge.tagName).toBe("SPAN");
     expect(plusBadge).toHaveAttribute("aria-hidden", "true");
-    expect(plusBadge.className).toContain("hover:bg-[var(--oh-interactive-hover)]");
+    expect(plusBadge.className).toContain("hover:bg-interactive-hover");
     expect(plusBadge.className).not.toContain("group-hover/card");
   });
 });

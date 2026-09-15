@@ -55,7 +55,7 @@ export function AgentProfileRow({
         </span>
         {secondary ? (
           <span
-            className="min-w-0 max-w-full truncate text-sm text-[var(--oh-muted)]"
+            className="min-w-0 max-w-full truncate text-sm text-muted"
             title={secondary}
           >
             {secondary}

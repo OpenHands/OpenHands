@@ -227,7 +227,7 @@ export function CustomServerEditor({
       >
         <div
           data-testid="mcp-custom-editor"
-          className="relative bg-base-secondary p-6 rounded-xl border border-[var(--oh-border)] w-[520px] max-w-[90vw] max-h-[90vh] overflow-y-auto custom-scrollbar"
+          className="relative bg-base-secondary p-6 rounded-xl border border-border w-130 max-w-[90vw] max-h-[90vh] overflow-y-auto custom-scrollbar"
         >
           <ModalCloseButton
             onClose={onClose}

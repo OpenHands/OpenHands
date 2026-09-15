@@ -42,12 +42,12 @@ export function DrawerVSCodeLink() {
       title={t(I18nKey.VSCODE$OPEN)}
       data-testid="drawer-vscode-link"
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-[7px] border border-[var(--oh-border)] bg-base-secondary px-2 py-1 text-xs",
-        "text-[var(--oh-muted)] transition-colors hover:enabled:bg-surface-raised hover:enabled:text-white",
+        "inline-flex items-center gap-1.5 rounded-[7px] border border-border bg-base-secondary px-2 py-1 text-xs",
+        "text-muted transition-colors hover:enabled:bg-surface-raised hover:enabled:text-white",
         "cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed",
       )}
     >
-      <VSCodeIcon className="h-[15px] w-[15px] shrink-0" aria-hidden />
+      <VSCodeIcon className="h-3.75 w-3.75 shrink-0" aria-hidden />
       <span>{t(I18nKey.FILES$VSCODE)}</span>
       <ExternalLink
         className="h-3.5 w-3.5 shrink-0"

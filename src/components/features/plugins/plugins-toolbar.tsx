@@ -34,7 +34,7 @@ export function PluginsToolbar({
       <div
         className={cn(
           "relative flex flex-1 min-w-0 items-center",
-          "rounded-lg border border-[var(--oh-border)] bg-base-secondary",
+          "rounded-lg border border-border bg-base-secondary",
           "focus-within:border-white/40 focus-within:ring-1 focus-within:ring-white/20",
           "transition-colors",
         )}
@@ -70,7 +70,7 @@ export function PluginsToolbar({
 
       <div
         data-testid="plugins-status-filter"
-        className="flex shrink-0 items-center gap-1 rounded-lg border border-[var(--oh-border)] bg-base-secondary p-1"
+        className="flex shrink-0 items-center gap-1 rounded-lg border border-border bg-base-secondary p-1"
       >
         {STATUS_FILTERS.map((filter) => (
           <button

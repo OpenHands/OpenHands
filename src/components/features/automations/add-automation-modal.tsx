@@ -26,7 +26,7 @@ export function AddAutomationModal({
     >
       <div
         data-testid="add-automation-modal"
-        className="relative flex w-full max-w-lg flex-col rounded-xl border border-[var(--oh-border)] bg-base-secondary"
+        className="relative flex w-full max-w-lg flex-col rounded-xl border border-border bg-base-secondary"
       >
         <ModalCloseButton
           onClose={onClose}

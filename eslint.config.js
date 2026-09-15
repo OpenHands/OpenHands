@@ -396,18 +396,37 @@ export default [
   // TRIAL: registers the plugin and enables a single low-risk rule as a
   // starting point. `no-arbitrary-values` forbids one-off Tailwind values
   // like `p-[13px]` or `text-[#abc123]` in favor of the theme scale, which
-  // keeps agent-written UI on the design system. Warn (not error) for now so
-  // the trial surfaces findings without breaking `npm run lint`.
+  // keeps agent-written UI on the design system.
   //
-  // The real value of @shadcn/lint is in per-component `no-restyle` contracts
-  // (e.g. "Button owns its spacing"); those are intentionally left for the
-  // team to author against `src/ui`. See:
-  // https://github.com/shadcn-ui/lint#rules
+  // The `--oh-*` design tokens are mapped into the Tailwind theme (see
+  // `src/tailwind.css`'s `@theme` block), so bracket-token usages like
+  // `text-[var(--oh-muted)]` / `border-[var(--oh-border)]` are now written
+  // as first-class `text-muted` / `border-border` utilities. What remains
+  // under this rule are genuine one-offs (raw hex colors, `vh`/`vw`
+  // breakpoints, `calc()`, grid templates, runtime CSS-variable set/read
+  // patterns) that have no theme-scale equivalent, so the rule stays at
+  // "warn" rather than "error".
+  //
+  // The remaining rules are registered but left OFF so the team can turn
+  // them on incrementally (each needs per-component contracts / theme
+  // awareness to be useful here — see the rules docs):
+  //   - no-restyle: per-component restyling contracts (needs `src/ui` contracts)
+  //   - no-raw-colors: raw palette colors such as `bg-pink-500`
+  //   - no-inline-styles: inline `style` props / `<style>` elements
+  //   - require-static-classes: disallow dynamic `bg-${color}` class strings
+  //   - no-unknown-classes: classes Tailwind cannot generate
+  //
+  // Docs: https://github.com/shadcn-ui/lint#rules
   {
     files: ["src/**/*.{ts,tsx}"],
     plugins: { shadcn: shadcnPlugin },
     rules: {
       "shadcn/no-arbitrary-values": "warn",
+      "shadcn/no-restyle": "off",
+      "shadcn/no-raw-colors": "off",
+      "shadcn/no-inline-styles": "off",
+      "shadcn/require-static-classes": "off",
+      "shadcn/no-unknown-classes": "off",
     },
   },
 ];

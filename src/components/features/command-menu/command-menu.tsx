@@ -204,16 +204,16 @@ export function CommandMenu() {
       <div
         className={cn(
           "relative flex max-h-[min(720px,78vh)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl",
-          "border border-[var(--oh-border)] bg-[var(--oh-surface)]",
+          "border border-border bg-surface",
           "shadow-[0_24px_90px_rgba(0,0,0,0.52),0_0_0_1px_rgba(255,255,255,0.03)_inset]",
         )}
       >
-        <div className="relative flex items-center gap-3 border-b border-[var(--oh-border)] px-4 py-3">
-          <Search className="size-5 shrink-0 text-[var(--oh-text-dim)]" />
+        <div className="relative flex items-center gap-3 border-b border-border px-4 py-3">
+          <Search className="size-5 shrink-0 text-text-dim" />
           <input
             ref={inputRef}
             id={COMMAND_MENU_SEARCH_INPUT_ID}
-            className="h-11 min-w-0 flex-1 bg-transparent text-base text-white outline-none placeholder:text-[var(--oh-text-dim)]"
+            className="h-11 min-w-0 flex-1 bg-transparent text-base text-white outline-none placeholder:text-text-dim"
             placeholder={t(I18nKey.COMMAND_MENU$PLACEHOLDER)}
             aria-label={t(I18nKey.COMMAND_MENU$SEARCH_LABEL)}
             role="combobox"
@@ -229,7 +229,7 @@ export function CommandMenu() {
           {query ? (
             <button
               type="button"
-              className="inline-flex size-8 items-center justify-center rounded-lg text-[var(--oh-muted)] hover:bg-[var(--oh-surface-raised)] hover:text-white"
+              className="inline-flex size-8 items-center justify-center rounded-lg text-muted hover:bg-surface-raised hover:text-white"
               aria-label={t(I18nKey.COMMAND_MENU$CLEAR_SEARCH_LABEL)}
               onClick={() => {
                 setQuery(EMPTY_QUERY);
@@ -239,7 +239,7 @@ export function CommandMenu() {
               <X className="size-4" />
             </button>
           ) : null}
-          <kbd className="hidden rounded-md border border-[var(--oh-border)] bg-black/25 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--oh-text-dim)] sm:inline-flex">
+          <kbd className="hidden rounded-md border border-border bg-black/25 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-text-dim sm:inline-flex">
             {t(I18nKey.COMMAND_MENU$SHORTCUT)}
           </kbd>
         </div>
@@ -251,13 +251,13 @@ export function CommandMenu() {
         >
           {filteredItems.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-2 px-6 py-16 text-center">
-              <div className="flex size-11 items-center justify-center rounded-2xl border border-dashed border-[var(--oh-border)] text-[var(--oh-text-dim)]">
+              <div className="flex size-11 items-center justify-center rounded-2xl border border-dashed border-border text-text-dim">
                 <Search className="size-5" />
               </div>
               <p className="text-sm font-medium text-white">
                 {t(I18nKey.COMMAND_MENU$NO_RESULTS_TITLE)}
               </p>
-              <p className="max-w-sm text-xs leading-5 text-[var(--oh-muted)]">
+              <p className="max-w-sm text-xs leading-5 text-muted">
                 {t(I18nKey.COMMAND_MENU$NO_RESULTS_DESCRIPTION)}
               </p>
             </div>
@@ -273,7 +273,7 @@ export function CommandMenu() {
 
               return (
                 <section key={groupId} className="py-1">
-                  <div className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--oh-text-dim)]">
+                  <div className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-text-dim">
                     {t(COMMAND_MENU_GROUP_LABELS[groupId])}
                   </div>
                   <div className="space-y-1">
@@ -294,7 +294,7 @@ export function CommandMenu() {
                         "group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors duration-150",
                         isActive
                           ? "bg-white/[0.09] text-white shadow-[0_0_0_1px_rgba(255,255,255,0.08)_inset]"
-                          : "text-[var(--oh-muted)] hover:bg-white/[0.05] hover:text-white",
+                          : "text-muted hover:bg-white/[0.05] hover:text-white",
                       );
 
                       const content = (
@@ -303,8 +303,8 @@ export function CommandMenu() {
                             className={cn(
                               "flex size-9 shrink-0 items-center justify-center rounded-lg border transition-colors duration-150",
                               isActive
-                                ? "border-[var(--oh-accent)] bg-[var(--oh-accent)]/15 text-white"
-                                : "border-[var(--oh-border)] bg-black/15 text-[var(--oh-text-dim)] group-hover:text-white",
+                                ? "border-accent bg-accent/15 text-white"
+                                : "border-border bg-black/15 text-text-dim group-hover:text-white",
                             )}
                             aria-hidden="true"
                           >
@@ -318,7 +318,7 @@ export function CommandMenu() {
                                 t,
                               )}
                             </span>
-                            <span className="mt-0.5 block truncate text-xs text-[var(--oh-text-dim)]">
+                            <span className="mt-0.5 block truncate text-xs text-text-dim">
                               {commandMenuItemCopy(
                                 item.description,
                                 item.descriptionKey,
@@ -326,7 +326,7 @@ export function CommandMenu() {
                               )}
                             </span>
                           </span>
-                          <span className="hidden shrink-0 rounded-md border border-[var(--oh-border)] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--oh-text-dim)] sm:inline-flex">
+                          <span className="hidden shrink-0 rounded-md border border-border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-text-dim sm:inline-flex">
                             {to
                               ? t(I18nKey.COMMAND_MENU$GO_HINT)
                               : t(I18nKey.COMMAND_MENU$RUN_HINT)}
@@ -386,7 +386,7 @@ export function CommandMenu() {
           )}
         </div>
 
-        <div className="border-t border-[var(--oh-border)] px-4 py-2.5 text-[11px] text-[var(--oh-text-dim)]">
+        <div className="border-t border-border px-4 py-2.5 text-[11px] text-text-dim">
           {t(I18nKey.COMMAND_MENU$FOOTER_HINT)}
         </div>
       </div>

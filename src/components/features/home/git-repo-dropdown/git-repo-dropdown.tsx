@@ -287,7 +287,7 @@ export function GitRepoDropdown({
 
   return (
     <div className={cn("relative", className)}>
-      <div className="group relative text-[var(--oh-muted)] hover:text-white">
+      <div className="group relative text-muted hover:text-white">
         <div className="absolute left-2 top-1/2 transform -translate-y-1/2 z-10">
           {isLoadingState ? (
             <div className="animate-spin h-4 w-4 border-2 border-transparent border-t-white rounded-full" />
@@ -303,7 +303,7 @@ export function GitRepoDropdown({
             className: cn(
               formControlFieldClassName,
               "text-inherit shadow-none pl-7 pr-16 text-sm font-normal leading-5",
-              "placeholder:text-[var(--oh-muted)]",
+              "placeholder:text-muted",
               "disabled:cursor-not-allowed disabled:opacity-60",
             ),
             // Direct onChange for cursor position preservation

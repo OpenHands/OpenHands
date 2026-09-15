@@ -5,7 +5,7 @@ export const formControlHeightClassName = "h-9 min-h-9";
 
 export const formControlRadiusClassName = "rounded-lg";
 
-export const formControlBorderClassName = "border border-[var(--oh-border)]";
+export const formControlBorderClassName = "border border-border";
 
 export const formControlSurfaceClassName = "bg-base-secondary";
 
@@ -48,14 +48,14 @@ export const formControlMutedHoverClassName =
 /** Text/icon pill triggers in the chat input actions row. */
 export const chatInputPillButtonClassName = cn(
   "inline-flex items-center gap-1 rounded-[100px] border border-transparent px-1.5",
-  "text-sm font-normal leading-5 text-[var(--oh-muted)] whitespace-nowrap min-w-0 cursor-pointer",
+  "text-sm font-normal leading-5 text-muted whitespace-nowrap min-w-0 cursor-pointer",
   formControlTransitionClassName,
   formControlMutedHoverClassName,
 );
 
 /** Circular icon triggers in the chat input actions row. */
 export const chatInputIconButtonClassName = cn(
-  "flex items-center justify-center rounded-full text-[var(--oh-muted)] cursor-pointer",
+  "flex items-center justify-center rounded-full text-muted cursor-pointer",
   formControlTransitionClassName,
   formControlMutedHoverClassName,
 );
@@ -140,7 +140,7 @@ export const formControlFilterTriggerClassName = cn(
 /** Muted back navigation control with tertiary hover fill (settings sub-pages, detail views). */
 export const formControlBackNavButtonClassName = cn(
   "inline-flex items-center gap-2 self-start rounded-lg p-2",
-  "text-sm font-normal leading-5 text-[var(--oh-muted)] cursor-pointer",
+  "text-sm font-normal leading-5 text-muted cursor-pointer",
   formControlTransitionClassName,
   "hover:bg-tertiary hover:text-white",
 );

@@ -66,7 +66,7 @@ function renderIndicator(visual: Visual) {
         <svg
           data-testid="conversation-status-check"
           viewBox="0 0 12 12"
-          className="w-2.5 h-2.5 stroke-[var(--oh-status-success)]"
+          className="w-2.5 h-2.5 stroke-status-success"
           fill="none"
           strokeWidth={2.25}
           strokeLinecap="round"
@@ -80,35 +80,35 @@ function renderIndicator(visual: Visual) {
       return (
         <span
           data-testid="conversation-status-working"
-          className="w-1.5 h-1.5 rounded-full animate-pulse bg-[var(--oh-status-success)]"
+          className="w-1.5 h-1.5 rounded-full animate-pulse bg-status-success"
         />
       );
     case "active":
       return (
         <span
           data-testid="conversation-status-active"
-          className="w-1.5 h-1.5 rounded-full bg-[var(--oh-status-success)]"
+          className="w-1.5 h-1.5 rounded-full bg-status-success"
         />
       );
     case "paused":
       return (
         <span
           data-testid="conversation-status-paused"
-          className="w-1.5 h-1.5 rounded-full bg-[var(--oh-muted)]"
+          className="w-1.5 h-1.5 rounded-full bg-muted"
         />
       );
     case "error":
       return (
         <span
           data-testid="conversation-status-error"
-          className="w-1.5 h-1.5 rounded-full bg-[var(--oh-status-error)]"
+          className="w-1.5 h-1.5 rounded-full bg-status-error"
         />
       );
     default:
       return (
         <span
           data-testid="conversation-status-unknown"
-          className="w-1.5 h-1.5 rounded-full bg-[var(--oh-color-tertiary)]"
+          className="w-1.5 h-1.5 rounded-full bg-tertiary"
         />
       );
   }
@@ -138,7 +138,7 @@ export function ConversationStatusDot({
     <FaArchive
       data-testid="conversation-status-archived"
       size={10}
-      className="shrink-0 text-[var(--oh-muted)] opacity-60"
+      className="shrink-0 text-muted opacity-60"
       aria-hidden
     />
   ) : (

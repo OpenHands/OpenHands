@@ -436,7 +436,7 @@ describe("home automations composer layout", () => {
     );
     expect(pinnedCard.className).toContain("extension-module-card-interactive");
     expect(pinnedCard.className).toContain("bg-base-secondary");
-    expect(pinnedCard.className).not.toContain("border-[var(--oh-border)]");
+    expect(pinnedCard.className).not.toContain("border-border");
     expect(pinnedCard).toBeInTheDocument();
     expect(
       within(dashboard).getByTestId("pinned-automation-pills-auto-1-wrap"),

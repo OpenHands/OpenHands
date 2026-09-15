@@ -31,7 +31,7 @@ export function SettingsDesktopSidebar({
     <aside
       data-testid="settings-navbar-desktop"
       className={cn(
-        "hidden md:flex md:w-[260px] md:shrink-0 md:flex-col md:gap-2",
+        "hidden md:flex md:w-65 md:shrink-0 md:flex-col md:gap-2",
         "md:sticky md:top-8 md:self-start md:pl-8",
       )}
     >

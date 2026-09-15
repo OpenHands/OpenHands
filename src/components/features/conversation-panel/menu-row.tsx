@@ -53,7 +53,7 @@ export function MenuRow({
         "group",
         dropdownMenuRowClassName,
         "disabled:opacity-50",
-        destructive ? "text-danger" : "text-[var(--oh-foreground)]",
+        destructive ? "text-danger" : "text-foreground",
       )}
     >
       <Icon
@@ -68,7 +68,7 @@ export function MenuRow({
       <span className="min-w-0 flex-1">
         <span className="block truncate">{label}</span>
         {sublabel ? (
-          <span className="block truncate text-[10px] text-[var(--oh-muted)]/70">
+          <span className="block truncate text-[10px] text-muted/70">
             {sublabel}
           </span>
         ) : null}

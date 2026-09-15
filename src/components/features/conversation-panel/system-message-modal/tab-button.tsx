@@ -23,7 +23,7 @@ export function TabButton({
         "px-4 py-2 font-normal border-b-2 transition-colors",
         isActive
           ? "border-foreground text-foreground"
-          : "border-transparent text-[var(--oh-muted)] hover:text-[var(--oh-foreground)]",
+          : "border-transparent text-muted hover:text-foreground",
         disabled && "opacity-50 cursor-not-allowed",
         className,
       )}

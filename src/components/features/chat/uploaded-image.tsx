@@ -34,7 +34,7 @@ export function UploadedImage({
   }, [image]);
 
   return (
-    <div className="group relative flex h-[49px] w-[51px] min-h-[49px] min-w-[51px] items-center justify-center rounded-lg bg-[var(--oh-interactive-hover)]">
+    <div className="group relative flex h-12.25 w-12.75 min-h-12.25 min-w-12.75 items-center justify-center rounded-lg bg-interactive-hover">
       {isLoading ? (
         <LoaderCircle className="animate-spin w-5 h-5" color="white" />
       ) : (

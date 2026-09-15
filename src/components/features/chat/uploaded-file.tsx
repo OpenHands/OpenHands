@@ -17,14 +17,14 @@ export function UploadedFile({
   const fileExtension = getFileExtension(file.name);
 
   return (
-    <div className="group flex gap-2 rounded-lg bg-[var(--oh-interactive-hover)] max-w-[160px] px-3 py-1 relative">
+    <div className="group flex gap-2 rounded-lg bg-interactive-hover max-w-40 px-3 py-1 relative">
       <div className="flex flex-col justify-center gap-0.25">
         <RemoveFileButton onClick={onRemove} />
         <div className="flex items-center gap-2 w-full">
           <span
             className={cn(
-              "text-sm font-normal leading-5 flex-1 max-w-[136px] truncate",
-              isLoading ? "max-w-[108px] text-[var(--oh-muted)]" : "text-white",
+              "text-sm font-normal leading-5 flex-1 max-w-34 truncate",
+              isLoading ? "max-w-27 text-muted" : "text-white",
             )}
           >
             {file.name}
@@ -32,7 +32,7 @@ export function UploadedFile({
         </div>
         <div className="flex items-center gap-2">
           <FileIcon width={12} height={12} color="var(--oh-muted)" />
-          <span className="text-[9px] font-normal leading-5 text-[var(--oh-muted)]">
+          <span className="text-[9px] font-normal leading-5 text-muted">
             {fileExtension}
           </span>
         </div>

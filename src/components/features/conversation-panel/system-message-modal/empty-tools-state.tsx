@@ -7,7 +7,7 @@ export function EmptyToolsState() {
 
   return (
     <div className="flex items-center justify-center h-full p-4">
-      <Typography.Text className="text-[var(--oh-muted)]">
+      <Typography.Text className="text-muted">
         {t(I18nKey.SYSTEM_MESSAGE_MODAL$NO_TOOLS)}
       </Typography.Text>
     </div>

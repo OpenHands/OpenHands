@@ -44,7 +44,7 @@ export function PluginFilesSection({
       <h3 className="text-sm font-medium text-white">
         {t(I18nKey.COMMON$FILES)}
       </h3>
-      <div className="min-w-0 rounded-lg border border-[var(--oh-border)] bg-[rgba(255,255,255,0.04)]">
+      <div className="min-w-0 rounded-lg border border-border bg-[rgba(255,255,255,0.04)]">
         <div className="max-h-48 overflow-y-auto custom-scrollbar">
           <FileTreeView
             paths={files}
@@ -57,7 +57,7 @@ export function PluginFilesSection({
         {effectivePath ? (
           <div
             data-testid="plugin-file-content"
-            className="flex h-60 min-w-0 flex-col border-t border-[var(--oh-border)]"
+            className="flex h-60 min-w-0 flex-col border-t border-border"
           >
             <p
               className="truncate px-3 py-2 text-xs text-tertiary-alt"

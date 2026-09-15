@@ -294,7 +294,7 @@ export function ConversationOverviewContextMenu({
       <li key={key} className="list-none">
         <div
           className={cn(
-            "group flex h-[30px] w-full min-w-0 items-stretch rounded hover:bg-[var(--oh-interactive-hover)]",
+            "group flex h-7.5 w-full min-w-0 items-stretch rounded hover:bg-interactive-hover",
             indent && "pl-4",
           )}
         >

@@ -153,9 +153,9 @@ describe("ConversationCard", () => {
     const branch = screen.getByTestId("conversation-card-selected-branch");
     const tag = screen.getByTestId("conversation-card-tag-chip");
 
-    expect(repo).toHaveClass("bg-[var(--oh-surface-raised)]");
-    expect(branch).toHaveClass("bg-[var(--oh-surface-raised)]");
-    expect(tag).toHaveClass("bg-[var(--oh-surface-raised)]");
+    expect(repo).toHaveClass("bg-surface-raised");
+    expect(branch).toHaveClass("bg-surface-raised");
+    expect(tag).toHaveClass("bg-surface-raised");
 
     // Identical pill look. The one intentional difference is flex-shrink:
     // repo and branch share a single overflow-hidden row, so they must shrink

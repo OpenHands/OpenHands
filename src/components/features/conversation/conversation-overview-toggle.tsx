@@ -163,9 +163,9 @@ export function ConversationOverviewToggle({
               // keeping the smaller Info glyph.
               mobileTopBarIconButtonClassName,
               "size-7",
-              isOverviewVisible && "bg-white/10 text-[var(--oh-foreground)]",
+              isOverviewVisible && "bg-white/10 text-foreground",
               isArchivedConversation &&
-                "cursor-not-allowed opacity-50 hover:bg-transparent hover:text-[var(--oh-muted)]",
+                "cursor-not-allowed opacity-50 hover:bg-transparent hover:text-muted",
               className,
             )}
             aria-label={tooltipText}

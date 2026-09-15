@@ -534,7 +534,7 @@ export function InstallServerModal({
           {oauthMode ? (
             <div
               data-testid="mcp-install-oauth-info"
-              className="flex flex-col gap-2 p-3 rounded-lg border border-[var(--oh-border)] bg-base-tertiary"
+              className="flex flex-col gap-2 p-3 rounded-lg border border-border bg-base-tertiary"
             >
               <p className="text-sm text-secondary-light">
                 {t(I18nKey.MCP$OAUTH_CONNECT_INFO)}
@@ -665,7 +665,7 @@ export function InstallServerModal({
         data-testid="mcp-install-modal"
         data-marketplace-id={entry.id}
         onSubmit={handleSubmit}
-        className="relative bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-[var(--oh-border)] w-[520px] max-w-[90vw] max-h-[85vh] overflow-y-auto custom-scrollbar"
+        className="relative bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-border w-130 max-w-[90vw] max-h-[85vh] overflow-y-auto custom-scrollbar"
       >
         <ModalCloseButton
           onClose={onClose}
@@ -689,7 +689,7 @@ export function InstallServerModal({
             href={entry.docsUrl}
             target="_blank"
             rel="noreferrer"
-            className="text-xs text-[var(--oh-muted)] hover:text-white hover:underline self-start transition-colors"
+            className="text-xs text-muted hover:text-white hover:underline self-start transition-colors"
           >
             {t(I18nKey.MCP$VIEW_DOCS)}
           </a>

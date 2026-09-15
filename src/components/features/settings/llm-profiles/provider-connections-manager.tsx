@@ -61,7 +61,7 @@ export function ProviderConnectionsManager({
           data-testid="provider-connections-empty"
           className={extensionModuleEmptyStateClassName}
         >
-          <p className="text-sm text-[var(--oh-muted)]">
+          <p className="text-sm text-muted">
             {t(I18nKey.SETTINGS$PROVIDER_CONNECTIONS_EMPTY)}
           </p>
         </div>
@@ -96,7 +96,7 @@ export function ProviderConnectionsManager({
             <h2 className="text-base font-medium text-white">
               {t(I18nKey.SETTINGS$PROVIDER_CONNECTIONS_TITLE)}
             </h2>
-            <p className="text-sm text-[var(--oh-muted)]">
+            <p className="text-sm text-muted">
               {t(I18nKey.SETTINGS$PROVIDER_CONNECTIONS_SUBLINE)}
             </p>
           </div>

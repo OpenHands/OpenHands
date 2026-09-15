@@ -39,7 +39,7 @@ export function TreeNode({
         >
           <span
             aria-hidden
-            className="inline-flex w-3.5 shrink-0 items-center justify-center text-[var(--oh-muted)]"
+            className="inline-flex w-3.5 shrink-0 items-center justify-center text-muted"
           >
             {isOpen ? (
               <ChevronDown className="w-3.5 h-3.5" />
@@ -77,9 +77,7 @@ export function TreeNode({
         className={cn(
           "flex w-full items-center gap-1.5 py-1 pr-2 text-left text-sm",
           "hover:bg-tertiary cursor-pointer",
-          isSelected
-            ? "bg-[var(--oh-interactive-hover)] text-white"
-            : "text-[var(--oh-text-tertiary)]",
+          isSelected ? "bg-interactive-hover text-white" : "text-text-tertiary",
         )}
         // per-row indentation computed from tree depth at runtime
         style={{ paddingLeft: `${indentPx + 16}px` }}

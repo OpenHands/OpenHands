@@ -12,7 +12,7 @@ export function SecretListItemSkeleton() {
     <div
       className={cn(
         settingsListRowClassName,
-        "justify-between border-t border-[var(--oh-border)] first:border-t-0",
+        "justify-between border-t border-border first:border-t-0",
       )}
     >
       <div className="flex min-w-0 flex-1 items-center gap-4">

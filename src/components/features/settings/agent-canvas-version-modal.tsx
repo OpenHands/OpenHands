@@ -98,7 +98,7 @@ export function AgentCanvasVersionModal({
       onClose={onClose}
       aria-label={t(I18nKey.SETTINGS$VERSION_MODAL_ARIA_LABEL)}
     >
-      <section className="relative flex w-[520px] max-w-[90vw] flex-col gap-5 rounded-xl border border-[var(--oh-border)] bg-base-secondary p-6 shadow-xl">
+      <section className="relative flex w-130 max-w-[90vw] flex-col gap-5 rounded-xl border border-border bg-base-secondary p-6 shadow-xl">
         <ModalCloseButton
           onClose={onClose}
           testId="agent-canvas-version-modal-close"
@@ -112,7 +112,7 @@ export function AgentCanvasVersionModal({
             />
           ) : (
             <CheckCircle2
-              className="size-7 shrink-0 text-[var(--oh-status-success)]"
+              className="size-7 shrink-0 text-status-success"
               aria-hidden
             />
           )}
@@ -155,7 +155,7 @@ export function AgentCanvasVersionModal({
                 })}
               </p>
               {latestVersion ? (
-                <p className="whitespace-nowrap text-sm text-[var(--oh-status-success)]">
+                <p className="whitespace-nowrap text-sm text-status-success">
                   {t(I18nKey.SETTINGS$VERSION_LATEST_MESSAGE)}{" "}
                   <a
                     href={AGENT_CANVAS_RELEASE_NOTES_URL}
@@ -168,7 +168,7 @@ export function AgentCanvasVersionModal({
                   </a>
                 </p>
               ) : (
-                <p className="text-sm text-[var(--oh-muted)]">
+                <p className="text-sm text-muted">
                   {t(I18nKey.SETTINGS$VERSION_CHECK_UNAVAILABLE)}
                 </p>
               )}
@@ -188,7 +188,7 @@ export function AgentCanvasVersionModal({
                     "inline-flex items-center gap-1.5 px-3 pb-2 text-sm font-medium",
                     selectedTab === tab
                       ? "border-b border-white text-white"
-                      : "text-[var(--oh-muted)] hover:text-white",
+                      : "text-muted hover:text-white",
                   )}
                 >
                   <UpdateCommandTabIcon tab={tab} />
@@ -196,7 +196,7 @@ export function AgentCanvasVersionModal({
                 </button>
               ))}
             </div>
-            <div className="flex items-center gap-3 rounded-lg border border-[var(--oh-border)] bg-[var(--oh-surface-deep)] px-4 py-3">
+            <div className="flex items-center gap-3 rounded-lg border border-border bg-surface-deep px-4 py-3">
               <code className="min-w-0 flex-1 overflow-visible whitespace-nowrap font-mono text-sm text-white">
                 {command}
               </code>
@@ -209,13 +209,10 @@ export function AgentCanvasVersionModal({
                     : I18nKey.SETTINGS$VERSION_COPY_COMMAND,
                 )}
                 disabled={copied}
-                className="shrink-0 text-[var(--oh-muted)] hover:text-white disabled:hover:text-[var(--oh-muted)]"
+                className="shrink-0 text-muted hover:text-white disabled:hover:text-muted"
               >
                 {copied ? (
-                  <Check
-                    className="size-4 text-[var(--oh-status-success)]"
-                    aria-hidden
-                  />
+                  <Check className="size-4 text-status-success" aria-hidden />
                 ) : (
                   <Copy className="size-4" aria-hidden />
                 )}
@@ -229,7 +226,7 @@ export function AgentCanvasVersionModal({
             <button
               type="button"
               onClick={onCheckForUpdates}
-              className="inline-flex items-center gap-2 text-sm font-medium text-white hover:text-[var(--oh-text)] disabled:cursor-wait disabled:text-[var(--oh-muted)]"
+              className="inline-flex items-center gap-2 text-sm font-medium text-white hover:text-[var(--oh-text)] disabled:cursor-wait disabled:text-muted"
               disabled={isChecking}
             >
               {t(I18nKey.SETTINGS$VERSION_CHECK_FOR_UPDATES)}

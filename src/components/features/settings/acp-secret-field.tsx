@@ -73,7 +73,7 @@ export function AcpSecretField({
           placeholder={placeholder}
         />
       )}
-      <span className="text-xs text-[var(--oh-muted)]">
+      <span className="text-xs text-muted">
         {t(field.hint_key, field.hint_values)}
       </span>
     </div>

@@ -42,7 +42,7 @@ export function InstalledServersSection({
       return (
         <div
           data-testid="mcp-installed-empty-search"
-          className="rounded-xl border border-[var(--oh-border)] p-6 text-center"
+          className="rounded-xl border border-border p-6 text-center"
         >
           <p className="text-xs text-tertiary-light">
             {t(I18nKey.MCP$SEARCH_EMPTY)}

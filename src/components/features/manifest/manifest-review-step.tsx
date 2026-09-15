@@ -35,7 +35,7 @@ export function SetupReviewStep({
         {selectedAction &&
           setup.actions?.[selectedAction as keyof typeof setup.actions] && (
             <div className="flex flex-col gap-0.5">
-              <dt className="text-xs text-[var(--oh-muted)]">
+              <dt className="text-xs text-muted">
                 {t(I18nKey.SETUP$ACTION_LABEL)}
               </dt>
               <dd className="text-sm break-words">
@@ -50,7 +50,7 @@ export function SetupReviewStep({
           collectFields(setup, selectedTrigger, selectedAction),
         ).map(([name, field]) => (
           <div key={name} className="flex flex-col gap-0.5">
-            <dt className="text-xs text-[var(--oh-muted)]">{field.label}</dt>
+            <dt className="text-xs text-muted">{field.label}</dt>
             <dd className="text-sm break-words">
               {/* A field collecting several values reads as a list of them. */}
               {fieldValues(values[name]).join(", ") ||

@@ -18,7 +18,7 @@ export function ErrorState({ onRetry }: ErrorStateProps) {
       <button
         type="button"
         onClick={onRetry}
-        className="mt-4 rounded-lg border border-[var(--oh-border)] px-4 py-2 text-sm text-white hover:bg-surface-raised"
+        className="mt-4 rounded-lg border border-border px-4 py-2 text-sm text-white hover:bg-surface-raised"
       >
         {t(I18nKey.AUTOMATIONS$ERROR_RETRY)}
       </button>

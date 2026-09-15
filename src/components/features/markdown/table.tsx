@@ -12,7 +12,7 @@ export function table({
     <MarkdownTableScroll>
       <table
         className={[
-          "my-4 w-max min-w-full border-separate border-spacing-0 overflow-hidden rounded-xl border border-[var(--oh-border)] text-sm",
+          "my-4 w-max min-w-full border-separate border-spacing-0 overflow-hidden rounded-xl border border-border text-sm",
           "[&_td]:border-b [&_td]:border-r [&_th]:border-b [&_th]:border-r",
           "[&_td:last-child]:border-r-0 [&_th:last-child]:border-r-0",
           "[&_tbody_tr:last-child_td]:border-b-0",
@@ -31,7 +31,7 @@ export function th({
   React.ThHTMLAttributes<HTMLTableCellElement> &
   ExtraProps) {
   return (
-    <th className="whitespace-nowrap border-[var(--oh-border)] bg-[var(--oh-surface)] px-3 py-2 text-left font-semibold text-white">
+    <th className="whitespace-nowrap border-border bg-surface px-3 py-2 text-left font-semibold text-white">
       {children}
     </th>
   );
@@ -44,7 +44,7 @@ export function td({
   React.TdHTMLAttributes<HTMLTableCellElement> &
   ExtraProps) {
   return (
-    <td className="whitespace-nowrap border-[var(--oh-border)] px-3 py-2 align-top">
+    <td className="whitespace-nowrap border-border px-3 py-2 align-top">
       {children}
     </td>
   );

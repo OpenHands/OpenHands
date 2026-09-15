@@ -13,7 +13,7 @@ export function RemoveFileButton({ onClick }: RemoveFileButtonProps) {
       type="button"
       onClick={onClick}
       className={cn(
-        "z-10 flex w-4 h-4 rounded-full items-center justify-center bg-[var(--oh-surface)] hover:bg-[var(--oh-muted)] cursor-pointer absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200",
+        "z-10 flex w-4 h-4 rounded-full items-center justify-center bg-surface hover:bg-muted cursor-pointer absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200",
         isMobile && "opacity-100",
       )}
     >

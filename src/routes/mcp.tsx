@@ -112,7 +112,7 @@ export default function MCPPage() {
     >
       <ExtensionsNavigation />
       <main className={settingsLikeMainScrollClassName}>
-        <div className="mx-auto flex w-full min-w-0 max-w-[800px] flex-col gap-6">
+        <div className="mx-auto flex w-full min-w-0 max-w-200 flex-col gap-6">
           <div className="min-w-0">
             <div className="flex items-start justify-between gap-4">
               <div className="space-y-1">

@@ -137,7 +137,7 @@ export function TranscriptExportModal({
     >
       <ModalBody
         testID="transcript-export-modal"
-        className="relative items-start border border-[var(--oh-border)]"
+        className="relative items-start border border-border"
       >
         <ModalCloseButton
           onClose={handleClose}
@@ -155,7 +155,7 @@ export function TranscriptExportModal({
           <legend className="mb-2 text-sm font-medium text-white">
             {t(I18nKey.TRANSCRIPT_EXPORT$FORMAT)}
           </legend>
-          <label className="flex cursor-pointer items-center gap-3 rounded-md border border-[var(--oh-border)] px-3 py-2 text-sm text-white">
+          <label className="flex cursor-pointer items-center gap-3 rounded-md border border-border px-3 py-2 text-sm text-white">
             <input
               type="radio"
               name={TRANSCRIPT_FORMAT_RADIO_NAME}
@@ -166,7 +166,7 @@ export function TranscriptExportModal({
             />
             {t(I18nKey.TRANSCRIPT_EXPORT$MARKDOWN)}
           </label>
-          <label className="flex cursor-pointer items-center gap-3 rounded-md border border-[var(--oh-border)] px-3 py-2 text-sm text-white">
+          <label className="flex cursor-pointer items-center gap-3 rounded-md border border-border px-3 py-2 text-sm text-white">
             <input
               type="radio"
               name={TRANSCRIPT_FORMAT_RADIO_NAME}

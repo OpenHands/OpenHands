@@ -92,11 +92,7 @@ function RailIntegrationIcons({
             key={entry.id}
             entry={entry}
             size="base"
-            className={
-              isOverlap
-                ? "ring-2 ring-[var(--oh-color-base-secondary)]"
-                : undefined
-            }
+            className={isOverlap ? "ring-2 ring-base-secondary" : undefined}
           />
         ))
       )}
@@ -154,7 +150,7 @@ export function RecommendedAutomationsRail({
       aria-label={t(I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_LABEL)}
       className={cn("w-full", AUTOMATION_STACK_SECTION_BOTTOM_CLASS, className)}
     >
-      <h2 className="mb-2 text-sm font-medium text-[var(--oh-foreground)]">
+      <h2 className="mb-2 text-sm font-medium text-foreground">
         {t(I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_LABEL)}
       </h2>
 
@@ -177,7 +173,7 @@ export function RecommendedAutomationsRail({
                 data-testid={`recommended-automation-rail-card-${automation.id}`}
                 onClick={() => onSelect(automation)}
                 className={cn(
-                  "flex w-[220px] shrink-0 flex-col gap-3 p-3 text-left",
+                  "flex w-55 shrink-0 flex-col gap-3 p-3 text-left",
                   extensionModuleCardSurfaceClassName,
                   extensionModuleCardInteractiveClassName,
                 )}

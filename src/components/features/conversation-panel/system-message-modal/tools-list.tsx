@@ -13,7 +13,7 @@ export function ToolsList({
   onToggleTool,
 }: ToolsListProps) {
   return (
-    <div className="divide-y divide-[var(--oh-border)]">
+    <div className="divide-y divide-border">
       {tools.map((tool, index) => (
         <ToolItem
           key={index}

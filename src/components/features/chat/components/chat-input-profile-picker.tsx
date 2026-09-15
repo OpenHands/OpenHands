@@ -51,7 +51,7 @@ export function ChatInputProfileMenuContent({
           {/* role="presentation" keeps this a valid <li> child of the
               ContextMenu <ul> without exposing the label as a menu item. */}
           <li role="presentation" className="px-2 pt-1 pb-0.5">
-            <Typography.Text className="text-[11px] font-medium text-[var(--oh-text-dim)] uppercase tracking-wide leading-4">
+            <Typography.Text className="text-[11px] font-medium text-text-dim uppercase tracking-wide leading-4">
               {t(I18nKey.SETTINGS$AVAILABLE_PROFILES)}
             </Typography.Text>
           </li>
@@ -74,7 +74,7 @@ export function ChatInputProfileMenuContent({
                 }}
                 className={cn(
                   "flex items-center gap-2",
-                  isCurrent && "bg-[var(--oh-interactive-hover)]",
+                  isCurrent && "bg-interactive-hover",
                 )}
               >
                 <span
@@ -96,7 +96,7 @@ export function ChatInputProfileMenuContent({
           })}
           {isInConversation && (
             <li role="presentation" className="px-2 pt-0.5 pb-1">
-              <Typography.Text className="text-[11px] text-[var(--oh-text-dim)] leading-4">
+              <Typography.Text className="text-[11px] text-text-dim leading-4">
                 {t(I18nKey.CHAT$START_NEW_WITH_PROFILE_HINT)}
               </Typography.Text>
             </li>
@@ -109,7 +109,7 @@ export function ChatInputProfileMenuContent({
           to="/settings/agents"
           onClick={onClose}
           className={cn(
-            "flex h-[30px] items-center gap-2 rounded p-2 leading-5 text-[var(--oh-foreground)] hover:bg-[var(--oh-interactive-hover)] transition-colors",
+            "flex h-7.5 items-center gap-2 rounded p-2 leading-5 text-foreground hover:bg-interactive-hover transition-colors",
             settingsLinkClassName,
           )}
         >

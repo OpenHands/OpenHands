@@ -151,7 +151,7 @@ export function ModelSelector({
   return (
     <div
       className={cn(
-        "flex flex-col md:flex-row w-full min-w-0 justify-between gap-4 md:gap-[46px]",
+        "flex flex-col md:flex-row w-full min-w-0 justify-between gap-4 md:gap-11.5",
         wrapperClassName,
       )}
     >
@@ -174,8 +174,7 @@ export function ModelSelector({
           defaultSelectedKey={selectedProvider ?? undefined}
           selectedKey={selectedProvider}
           classNames={{
-            popoverContent:
-              "bg-content1 rounded-xl border border-[var(--oh-border)]",
+            popoverContent: "bg-content1 rounded-xl border border-border",
             selectorButton: heroUiAutocompleteSelectorButtonClassName,
           }}
           selectorButtonProps={{ disableRipple: true }}
@@ -187,7 +186,7 @@ export function ModelSelector({
         >
           <AutocompleteSection
             title={t(I18nKey.MODEL_SELECTOR$VERIFIED)}
-            classNames={{ heading: "text-[var(--oh-muted)]" }}
+            classNames={{ heading: "text-muted" }}
           >
             {verifiedProviders.map((provider) => (
               <AutocompleteItem
@@ -201,7 +200,7 @@ export function ModelSelector({
           {unverifiedProviders.length > 0 ? (
             <AutocompleteSection
               title={t(I18nKey.MODEL_SELECTOR$OTHERS)}
-              classNames={{ heading: "text-[var(--oh-muted)]" }}
+              classNames={{ heading: "text-muted" }}
             >
               {unverifiedProviders.map((provider) => (
                 <AutocompleteItem key={provider.name}>
@@ -246,8 +245,7 @@ export function ModelSelector({
             selectedKey={selectedModel}
             defaultSelectedKey={selectedModel ?? undefined}
             classNames={{
-              popoverContent:
-                "bg-content1 rounded-xl border border-[var(--oh-border)]",
+              popoverContent: "bg-content1 rounded-xl border border-border",
               selectorButton: heroUiAutocompleteSelectorButtonClassName,
             }}
             selectorButtonProps={{ disableRipple: true }}
@@ -259,7 +257,7 @@ export function ModelSelector({
           >
             <AutocompleteSection
               title={t(I18nKey.MODEL_SELECTOR$VERIFIED)}
-              classNames={{ heading: "text-[var(--oh-muted)]" }}
+              classNames={{ heading: "text-muted" }}
             >
               {verifiedModels.map((model) => (
                 <AutocompleteItem key={model.name} textValue={model.name}>
@@ -277,7 +275,7 @@ export function ModelSelector({
             {unverifiedModels.length > 0 ? (
               <AutocompleteSection
                 title={t(I18nKey.MODEL_SELECTOR$OTHERS)}
-                classNames={{ heading: "text-[var(--oh-muted)]" }}
+                classNames={{ heading: "text-muted" }}
               >
                 {unverifiedModels.map((model) => (
                   <AutocompleteItem

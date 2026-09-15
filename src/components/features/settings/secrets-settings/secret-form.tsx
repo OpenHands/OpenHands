@@ -182,7 +182,7 @@ export function SecretForm({
             "resize-none",
             formControlMultilineFieldClassName,
             "placeholder:italic",
-            "disabled:bg-[var(--oh-surface-raised)] disabled:border-[var(--oh-border-subtle)] disabled:cursor-not-allowed",
+            "disabled:bg-surface-raised disabled:border-border-subtle disabled:cursor-not-allowed",
           )}
           rows={8}
         />
@@ -200,7 +200,7 @@ export function SecretForm({
           onChange={(event) => setDescription(event.currentTarget.value)}
           className={cn(
             formControlSettingsFieldClassName,
-            "disabled:bg-[var(--oh-surface-raised)] disabled:border-[var(--oh-border-subtle)]",
+            "disabled:bg-surface-raised disabled:border-border-subtle",
           )}
         />
       </label>

@@ -50,7 +50,7 @@ export function ConversationOverviewDrawer({
     }
 
     return (
-      <ConversationOverviewDrawerContent className="max-h-[min(50vh,420px)] w-full border-t border-[var(--oh-border)]" />
+      <ConversationOverviewDrawerContent className="max-h-[min(50vh,420px)] w-full border-t border-border" />
     );
   }
 
@@ -79,7 +79,7 @@ export function ConversationOverviewDrawer({
         }}
       >
         <div
-          className="flex h-full flex-col overflow-hidden border-l border-[var(--oh-border)] bg-base-secondary"
+          className="flex h-full flex-col overflow-hidden border-l border-border bg-base-secondary"
           style={{ width: `${drawerWidth}px` }}
         >
           {isOpen ? (

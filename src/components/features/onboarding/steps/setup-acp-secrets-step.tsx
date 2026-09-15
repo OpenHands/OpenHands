@@ -143,7 +143,7 @@ export function SetupAcpSecretsStep({
         <h2 className="text-2xl font-medium text-white">
           {t(I18nKey.ONBOARDING$ACP_SECRETS_TITLE)}
         </h2>
-        <p className="text-sm text-[var(--oh-muted)]">
+        <p className="text-sm text-muted">
           {t(I18nKey.ONBOARDING$ACP_SECRETS_SUBTITLE, {
             provider: providerName,
           })}
@@ -151,7 +151,7 @@ export function SetupAcpSecretsStep({
         {required && !isAuthenticated ? (
           <p
             data-testid="onboarding-acp-secrets-required-note"
-            className="text-sm text-[var(--oh-muted)]"
+            className="text-sm text-muted"
           >
             {t(I18nKey.ONBOARDING$ACP_SECRETS_REQUIRED_NOTE, {
               provider: providerName,
@@ -161,7 +161,7 @@ export function SetupAcpSecretsStep({
           authStatus !== "authenticated" && (
             // When already signed in, the success banner below already says to
             // leave the fields blank, so this general reminder would be redundant.
-            <p className="text-sm text-[var(--oh-muted)]">
+            <p className="text-sm text-muted">
               {t(I18nKey.ONBOARDING$ACP_SECRETS_SUBSCRIPTION_NOTE)}
             </p>
           )

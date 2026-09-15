@@ -40,7 +40,7 @@ export function ResponderDeploymentModal({
     >
       <div
         data-testid="responder-deployment-modal"
-        className="relative flex w-full max-w-3xl flex-col rounded-xl border border-[var(--oh-border)] bg-base-secondary"
+        className="relative flex w-full max-w-3xl flex-col rounded-xl border border-border bg-base-secondary"
       >
         <ModalCloseButton
           onClose={onClose}
@@ -63,7 +63,7 @@ export function ResponderDeploymentModal({
               <div
                 key={option.target}
                 data-testid={option.testId}
-                className="flex flex-1 flex-col gap-3 rounded-xl border border-[var(--oh-border)] bg-surface-raised p-4"
+                className="flex flex-1 flex-col gap-3 rounded-xl border border-border bg-surface-raised p-4"
               >
                 <div className="flex flex-col gap-1">
                   <h3 className="text-sm font-semibold text-white">

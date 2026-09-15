@@ -173,7 +173,7 @@ export function WorkspaceSelectionForm({
       {/* Skip the in-form "Workspaces" header in dialog mode — the dialog
           already shows an "Open Workspace" title, so this would be redundant. */}
       {!onConfirm && (
-        <div className="flex items-center gap-[10px] pb-4">
+        <div className="flex items-center gap-2.5 pb-4">
           <FolderIcon width={24} height={24} />
           <span className="leading-5 font-bold text-base text-white">
             {t(I18nKey.HOME$WORKSPACES_TAB)}
@@ -181,7 +181,7 @@ export function WorkspaceSelectionForm({
         </div>
       )}
 
-      <div className="flex flex-col gap-[10px] pb-4">
+      <div className="flex flex-col gap-2.5 pb-4">
         <WorkspaceDropdown
           workspaces={workspaces}
           parents={resolvedParents}
@@ -205,7 +205,7 @@ export function WorkspaceSelectionForm({
 
         {showWorkspaceStatus && workspaceStatusText && (
           <p
-            className="px-1 text-xs text-[var(--oh-text-secondary)]"
+            className="px-1 text-xs text-text-secondary"
             data-testid="workspace-status-message"
           >
             {workspaceStatusText}

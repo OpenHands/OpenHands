@@ -26,4 +26,4 @@ export const extensionModuleCardGridClassName =
 
 /** Bordered empty-state panel used on MCP Installed and Automations list pages. */
 export const extensionModuleEmptyStateClassName =
-  "rounded-xl border border-[var(--oh-border)] p-8 text-center";
+  "rounded-xl border border-border p-8 text-center";

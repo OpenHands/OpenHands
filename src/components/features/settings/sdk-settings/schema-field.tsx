@@ -138,7 +138,7 @@ export function SchemaField({
           className={cn(
             formControlMultilineFieldClassName,
             "min-h-32 font-mono placeholder:italic",
-            "disabled:bg-[var(--oh-surface-raised)] disabled:border-[var(--oh-border-subtle)]",
+            "disabled:bg-surface-raised disabled:border-border-subtle",
           )}
         />
         <FieldHelp field={field} />

@@ -101,7 +101,7 @@ export function DetailHeader({
           {canManage && onRunNow && (
             <button
               type="button"
-              className="inline-flex items-center gap-1.5 rounded-md border border-[var(--oh-border)] px-3 py-1.5 text-sm font-medium text-content transition-colors hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-medium text-content transition-colors hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-60"
               disabled={isRunningNow || !automation.enabled}
               onClick={onRunNow}
             >

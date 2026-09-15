@@ -47,8 +47,8 @@ function PreviewRow({
 }) {
   return (
     <div className="flex items-start gap-2 text-xs">
-      <span className="w-20 shrink-0 text-[var(--oh-muted)]">{label}</span>
-      <span className="min-w-0 flex-1 break-words text-[var(--oh-foreground)]">
+      <span className="w-20 shrink-0 text-muted">{label}</span>
+      <span className="min-w-0 flex-1 break-words text-foreground">
         {children}
       </span>
     </div>
@@ -108,7 +108,7 @@ export function HomeAutomationRunTooltip({
     : null;
 
   return (
-    <div className="flex w-[280px] flex-col gap-3 p-3">
+    <div className="flex w-70 flex-col gap-3 p-3">
       <span className="break-words text-sm font-medium text-white">
         {automation.name}
       </span>
@@ -137,7 +137,7 @@ export function HomeAutomationRunTooltip({
           >
             <span
               data-testid="automation-tooltip-disabled-reason"
-              className="line-clamp-3 text-[var(--oh-text-secondary)]"
+              className="line-clamp-3 text-text-secondary"
             >
               {disabledReason.text}
             </span>
@@ -154,7 +154,7 @@ export function HomeAutomationRunTooltip({
 
         {display?.summary ? (
           <PreviewRow label={t(I18nKey.AUTOMATIONS$DETAIL$TASK_LABEL)}>
-            <span className="line-clamp-3 text-[var(--oh-text-secondary)]">
+            <span className="line-clamp-3 text-text-secondary">
               {display.summary}
             </span>
           </PreviewRow>

@@ -20,7 +20,7 @@ const GIT_ACTIONS_BUTTON_CLASSNAME = cn(
   "rounded-md text-xs font-normal leading-none",
   formControlBorderClassName,
   formControlTransitionClassName,
-  "text-[var(--oh-muted)]",
+  "text-muted",
   formControlMutedHoverClassName,
   "disabled:cursor-not-allowed disabled:opacity-30",
 );
@@ -75,9 +75,9 @@ export function ConversationGitActionsToggle({
       disabled={isArchivedConversation}
       className={cn(
         GIT_ACTIONS_BUTTON_CLASSNAME,
-        isGitMenuOpen && "bg-white/10 text-[var(--oh-foreground)]",
+        isGitMenuOpen && "bg-white/10 text-foreground",
         isArchivedConversation &&
-          "cursor-not-allowed opacity-50 hover:bg-transparent hover:text-[var(--oh-muted)]",
+          "cursor-not-allowed opacity-50 hover:bg-transparent hover:text-muted",
         className,
       )}
       aria-expanded={isGitMenuOpen}

@@ -41,7 +41,7 @@ export function DropdownMenu({
         "absolute z-50 overflow-hidden text-white",
         fitContent ? "min-w-full w-max" : "w-full",
         openUpward ? "bottom-full mb-1" : "mt-1",
-        "bg-tertiary rounded-[6px] context-menu-box-shadow p-1",
+        "bg-tertiary rounded-md context-menu-box-shadow p-1",
         "max-h-60 overflow-auto",
         !isOpen && "hidden",
       )}
@@ -50,7 +50,7 @@ export function DropdownMenu({
         {...getMenuProps({ className: cn("p-0", dropdownMenuListClassName) })}
       >
         {isOpen && filteredOptions.length === 0 && (
-          <li className="px-2 py-2 text-sm text-[var(--oh-muted)] italic">
+          <li className="px-2 py-2 text-sm text-muted italic">
             {emptyMessage}
           </li>
         )}
@@ -65,7 +65,7 @@ export function DropdownMenu({
                   dropdownMenuRowClassName,
                   "focus:outline-none",
                   selectedItem?.value === option.value &&
-                    "bg-[var(--oh-interactive-selected)] text-white",
+                    "bg-interactive-selected text-white",
                 ),
               })}
             >

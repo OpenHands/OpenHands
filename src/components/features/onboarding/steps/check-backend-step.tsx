@@ -101,8 +101,8 @@ function ConnectionBanner({
       data-testid="onboarding-backend-checking"
       className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3"
     >
-      <Loader2 className="mt-0.5 size-5 shrink-0 animate-spin text-[var(--oh-text-tertiary)]" />
-      <span className="text-sm text-[var(--oh-text-tertiary)]">
+      <Loader2 className="mt-0.5 size-5 shrink-0 animate-spin text-text-tertiary" />
+      <span className="text-sm text-text-tertiary">
         {t(I18nKey.ONBOARDING$BACKEND_CHECKING)}
       </span>
     </div>
@@ -243,7 +243,7 @@ export function CheckBackendStep({
         {treatAsNoBackend ? null : (
           <p
             data-testid="onboarding-backend-subtitle"
-            className="text-sm text-[var(--oh-muted)]"
+            className="text-sm text-muted"
           >
             {t(I18nKey.ONBOARDING$BACKEND_SUBTITLE)}
           </p>
@@ -264,7 +264,7 @@ export function CheckBackendStep({
           onClick={() => setConfigurationOpen((open) => !open)}
           aria-expanded={configurationOpen}
           data-testid="onboarding-backend-show-configuration"
-          className="flex w-full cursor-pointer items-center justify-center gap-1 text-center text-xs text-[var(--oh-muted)] transition-colors hover:text-content-2"
+          className="flex w-full cursor-pointer items-center justify-center gap-1 text-center text-xs text-muted transition-colors hover:text-content-2"
         >
           <span>
             {configurationOpen

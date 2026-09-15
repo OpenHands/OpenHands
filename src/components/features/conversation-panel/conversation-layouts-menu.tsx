@@ -190,7 +190,7 @@ export function ConversationLayoutsMenu({
         aria-expanded={menuOpen}
         onClick={() => setMenuOpen(!menuOpen)}
         className={cn(
-          "relative inline-flex h-7 w-7 items-center justify-center rounded-md text-[var(--oh-muted)] hover:text-white hover:bg-[var(--oh-surface-raised)]",
+          "relative inline-flex h-7 w-7 items-center justify-center rounded-md text-muted hover:text-white hover:bg-surface-raised",
           dropdownInstantColorClassName,
         )}
       >
@@ -212,7 +212,7 @@ export function ConversationLayoutsMenu({
           data-testid="conversation-layouts-menu"
           onKeyDown={handleMenuKeyDown}
           className={cn(
-            "absolute right-0 top-full z-50 mt-0 w-64 rounded-md border border-[var(--oh-border-subtle)] bg-tertiary px-1 py-1 text-[var(--oh-foreground)] shadow-lg",
+            "absolute right-0 top-full z-50 mt-0 w-64 rounded-md border border-border-subtle bg-tertiary px-1 py-1 text-foreground shadow-lg",
             dropdownMenuListClassName,
             dropdownMenuViewportScrollClassName,
           )}
@@ -256,7 +256,7 @@ export function ConversationLayoutsMenu({
             ) : (
               <p
                 data-testid="tag-filters-empty"
-                className="px-2 py-1 text-[11px] text-[var(--oh-muted)]/70"
+                className="px-2 py-1 text-[11px] text-muted/70"
               >
                 {t(I18nKey.CONVERSATION_PANEL$NO_VISIBLE_TAGS)}
               </p>

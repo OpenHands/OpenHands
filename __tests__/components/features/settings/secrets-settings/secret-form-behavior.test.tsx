@@ -80,14 +80,14 @@ describe("Secret form behavior", () => {
     expect(screen.getByTestId("value-input")).toHaveClass(
       "resize-none",
       "placeholder:italic",
-      "disabled:bg-[var(--oh-surface-raised)]",
-      "disabled:border-[var(--oh-border-subtle)]",
+      "disabled:bg-surface-raised",
+      "disabled:border-border-subtle",
       "disabled:cursor-not-allowed",
     );
     expect(screen.getByTestId("description-input")).toHaveValue("");
     expect(screen.getByTestId("description-input")).toHaveClass(
-      "disabled:bg-[var(--oh-surface-raised)]",
-      "disabled:border-[var(--oh-border-subtle)]",
+      "disabled:bg-surface-raised",
+      "disabled:border-border-subtle",
     );
     expect(screen.getByTestId("submit-button")).toHaveTextContent(
       I18nKey.SECRETS$ADD_SECRET,

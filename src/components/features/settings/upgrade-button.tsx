@@ -21,7 +21,7 @@ export function UpgradeButton({
       onClick={onClick}
       disabled={isDisabled}
       className={cn(
-        "bg-[var(--oh-interactive-selected)] text-white text-[9px] font-normal w-16 h-4 rounded-[100px] mix-blend-multiply hover:opacity-80 transition-opacity cursor-pointer",
+        "bg-interactive-selected text-white text-[9px] font-normal w-16 h-4 rounded-[100px] mix-blend-multiply hover:opacity-80 transition-opacity cursor-pointer",
         className,
       )}
     >

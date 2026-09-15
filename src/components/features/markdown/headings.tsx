@@ -60,7 +60,7 @@ export function h5({
   React.HTMLAttributes<HTMLHeadingElement> &
   ExtraProps) {
   return (
-    <h5 className="text-sm font-normal text-[var(--oh-text-tertiary)] mb-1.5 mt-2.5 first:mt-0">
+    <h5 className="text-sm font-normal text-text-tertiary mb-1.5 mt-2.5 first:mt-0">
       {children}
     </h5>
   );
@@ -73,7 +73,7 @@ export function h6({
   React.HTMLAttributes<HTMLHeadingElement> &
   ExtraProps) {
   return (
-    <h6 className="text-sm font-normal text-[var(--oh-text-tertiary)] mb-1.5 mt-2.5 first:mt-0">
+    <h6 className="text-sm font-normal text-text-tertiary mb-1.5 mt-2.5 first:mt-0">
       {children}
     </h6>
   );

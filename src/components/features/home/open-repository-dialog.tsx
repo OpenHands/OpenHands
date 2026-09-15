@@ -33,7 +33,7 @@ export function OpenRepositoryDialog({
     <ModalBackdrop onClose={onClose}>
       <ModalBody
         width="sm"
-        className="relative items-start border border-[var(--oh-border)] !gap-4"
+        className="relative items-start border border-border !gap-4"
       >
         <ModalCloseButton
           onClose={onClose}

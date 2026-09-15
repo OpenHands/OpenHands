@@ -5,10 +5,10 @@ import { cn } from "#/utils/utils";
 export type ModalWidth = "sm" | "md" | "lg" | "xl";
 
 export const MODAL_WIDTH_CLASS: Record<ModalWidth, string> = {
-  sm: "w-[384px]",
-  md: "w-[520px]",
-  lg: "w-[640px]",
-  xl: "w-[720px]",
+  sm: "w-96",
+  md: "w-130",
+  lg: "w-160",
+  xl: "w-180",
 };
 
 export const MODAL_MAX_WIDTH_VIEWPORT = "max-w-[90vw]";

@@ -38,7 +38,7 @@ export function SegmentedToggle<T extends string>({
       data-testid={testId}
       className={cn(
         equalWidth ? "flex w-full" : "inline-flex",
-        "items-center rounded-md bg-[var(--oh-surface-raised)] p-0.5 text-xs",
+        "items-center rounded-md bg-surface-raised p-0.5 text-xs",
         className,
       )}
     >
@@ -58,8 +58,8 @@ export function SegmentedToggle<T extends string>({
               "inline-flex items-center gap-1.5 px-2 py-0.5 rounded cursor-pointer transition-colors",
               equalWidth && "flex-1 justify-center text-center",
               isActive
-                ? "bg-[var(--oh-interactive-hover)] text-white"
-                : "text-[var(--oh-muted)] hover:text-white",
+                ? "bg-interactive-hover text-white"
+                : "text-muted hover:text-white",
             )}
           >
             {option.icon}

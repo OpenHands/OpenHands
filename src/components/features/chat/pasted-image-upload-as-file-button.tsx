@@ -36,7 +36,7 @@ export function PastedImageUploadAsFileButton({
             onToggle();
           }}
           className={cn(
-            "flex h-4 w-4 items-center justify-center rounded-full bg-[var(--oh-surface)] text-[var(--oh-foreground)] transition-colors cursor-pointer hover:bg-[var(--oh-muted)]",
+            "flex h-4 w-4 items-center justify-center rounded-full bg-surface text-foreground transition-colors cursor-pointer hover:bg-muted",
           )}
         >
           {active ? (

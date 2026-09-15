@@ -57,10 +57,10 @@ interface PreviewRowProps {
 function PreviewRow({ label, children }: PreviewRowProps) {
   return (
     <div className="flex items-start gap-2 text-xs leading-4">
-      <span className="w-20 shrink-0 whitespace-normal break-words text-[var(--oh-muted)]">
+      <span className="w-20 shrink-0 whitespace-normal break-words text-muted">
         {label}
       </span>
-      <span className="min-w-0 flex-1 overflow-visible whitespace-normal break-words text-[var(--oh-foreground)]">
+      <span className="min-w-0 flex-1 overflow-visible whitespace-normal break-words text-foreground">
         {children}
       </span>
     </div>
@@ -134,7 +134,7 @@ export function ConversationCardPreview({
   return (
     <div
       data-testid="conversation-card-preview"
-      className="flex w-[280px] max-w-[min(280px,90vw)] flex-col gap-3 overflow-visible p-3"
+      className="flex w-70 max-w-[min(280px,90vw)] flex-col gap-3 overflow-visible p-3"
     >
       <div className="flex items-start gap-2">
         {executionStatus !== undefined ? (

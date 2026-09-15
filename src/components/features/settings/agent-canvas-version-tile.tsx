@@ -51,7 +51,7 @@ export function AgentCanvasVersionTile({
         onClick={() => setIsModalOpen(true)}
         aria-label={t(I18nKey.SETTINGS$VERSION_TILE_ARIA_LABEL)}
         className={cn(
-          "flex w-full items-center gap-3 rounded-md border border-[var(--oh-border)] bg-base-secondary px-3 py-2 text-left hover:bg-[var(--oh-surface-raised)]",
+          "flex w-full items-center gap-3 rounded-md border border-border bg-base-secondary px-3 py-2 text-left hover:bg-surface-raised",
           className,
         )}
       >
@@ -62,7 +62,7 @@ export function AgentCanvasVersionTile({
               : t(I18nKey.SETTINGS$VERSION_PRODUCT_NAME)}
           </span>
           <span className="flex min-w-0 items-center gap-1.5 truncate text-xs leading-5">
-            <span className="text-[var(--oh-muted)]">
+            <span className="text-muted">
               {t(I18nKey.SETTINGS$APP_UPDATE_VERSION_LABEL)}
             </span>
             <span className="truncate text-white">
@@ -79,7 +79,7 @@ export function AgentCanvasVersionTile({
           />
         ) : (
           <CheckCircle2
-            className="size-5 shrink-0 text-[var(--oh-status-success)]"
+            className="size-5 shrink-0 text-status-success"
             aria-hidden
           />
         )}

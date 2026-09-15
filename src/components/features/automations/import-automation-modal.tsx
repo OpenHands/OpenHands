@@ -106,11 +106,11 @@ function ImportAutomationPicker({ onFile }: { onFile: (file: File) => void }) {
         className={cn(
           "flex cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border border-dashed px-6 py-10 text-center",
           isDragging
-            ? "border-[var(--oh-focus)] bg-[var(--oh-interactive-hover)]"
-            : "border-[var(--oh-border)] bg-[var(--oh-surface)]",
+            ? "border-focus bg-interactive-hover"
+            : "border-border bg-surface",
         )}
       >
-        <FileUp className="size-8 text-[var(--oh-muted)]" aria-hidden />
+        <FileUp className="size-8 text-muted" aria-hidden />
         <p className="text-sm font-medium text-content">
           {t(I18nKey.AUTOMATIONS$IMPORT_DROPZONE)}
         </p>
@@ -168,7 +168,7 @@ export function ImportAutomationModal({
       <div
         data-testid="import-automation-modal"
         data-view={spec ? "preview" : "picker"}
-        className="relative flex max-h-[85vh] w-[min(36rem,calc(100vw-2rem))] flex-col rounded-xl border border-[var(--oh-border)] bg-base-secondary"
+        className="relative flex max-h-[85vh] w-[min(36rem,calc(100vw-2rem))] flex-col rounded-xl border border-border bg-base-secondary"
       >
         <ModalCloseButton
           onClose={onClose}
@@ -188,7 +188,7 @@ export function ImportAutomationModal({
 
         {spec ? (
           <>
-            <dl className="mx-6 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto rounded-xl border border-[var(--oh-border)] bg-[var(--oh-surface)] px-4 py-4">
+            <dl className="mx-6 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto rounded-xl border border-border bg-surface px-4 py-4">
               <PreviewField
                 label={t(I18nKey.AUTOMATIONS$NAME)}
                 value={spec.name}

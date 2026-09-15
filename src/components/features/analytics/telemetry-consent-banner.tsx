@@ -80,7 +80,7 @@ function LocalTelemetryConsentBanner({
         onSubmit={handleSubmit}
         className="flex flex-col gap-2"
       >
-        <ModalBody className="border border-[var(--oh-border)]">
+        <ModalBody className="border border-border">
           <BaseModalTitle title={t(I18nKey.TELEMETRY$CONSENT_TITLE)} />
           <BaseModalDescription>
             {t(I18nKey.TELEMETRY$CONSENT_DESCRIPTION)}

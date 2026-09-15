@@ -132,14 +132,14 @@ export function TypingIndicator({ events }: TypingIndicatorProps) {
 
   return (
     <div
-      className="flex min-w-0 max-w-full items-center gap-2 rounded-full border border-[var(--oh-border)] bg-[var(--oh-surface)] px-3 py-1.5 text-xs text-[var(--oh-text-secondary)]"
+      className="flex min-w-0 max-w-full items-center gap-2 rounded-full border border-border bg-surface px-3 py-1.5 text-xs text-text-secondary"
       data-testid="live-activity-chip"
       role="status"
       aria-live="polite"
     >
       <span
         aria-hidden="true"
-        className="size-1.5 shrink-0 animate-pulse rounded-full bg-[var(--oh-status-success)] motion-reduce:animate-none"
+        className="size-1.5 shrink-0 animate-pulse rounded-full bg-status-success motion-reduce:animate-none"
       />
       <span className="min-w-0 truncate">
         {activity.kind === "text" ? (

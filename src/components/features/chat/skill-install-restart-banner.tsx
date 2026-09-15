@@ -69,11 +69,11 @@ export function SkillInstallRestartBanner({
 
   return (
     <div
-      className="flex w-full items-start gap-2 rounded-lg border border-[var(--oh-border)] bg-[var(--oh-surface-raised)] p-2 text-[var(--oh-foreground)]"
+      className="flex w-full items-start gap-2 rounded-lg border border-border bg-surface-raised p-2 text-foreground"
       data-testid="skill-install-restart-banner"
     >
       <div className="min-w-0 flex-1">
-        <p className="text-sm text-[var(--oh-foreground)]">
+        <p className="text-sm text-foreground">
           {t(I18nKey.SKILLS$INSTALL_BANNER_MESSAGE, {
             skills: skillNames.join(", "),
           })}
@@ -82,7 +82,7 @@ export function SkillInstallRestartBanner({
           type="button"
           onClick={handleRestart}
           disabled={isPending || isCreatingElsewhere}
-          className="mt-2 cursor-pointer rounded-md border border-[var(--oh-border)] px-2 py-1 text-xs font-normal text-[var(--oh-foreground)] hover:bg-[var(--oh-interactive-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+          className="mt-2 cursor-pointer rounded-md border border-border px-2 py-1 text-xs font-normal text-foreground hover:bg-interactive-hover disabled:cursor-not-allowed disabled:opacity-50"
           data-testid="skill-install-restart-action"
         >
           {t(I18nKey.SKILLS$INSTALL_BANNER_ACTION)}
@@ -91,7 +91,7 @@ export function SkillInstallRestartBanner({
       <button
         type="button"
         onClick={dismissAll}
-        className="shrink-0 cursor-pointer rounded-md p-1 text-[var(--oh-muted)] hover:bg-[var(--oh-interactive-hover)] hover:text-[var(--oh-foreground)]"
+        className="shrink-0 cursor-pointer rounded-md p-1 text-muted hover:bg-interactive-hover hover:text-foreground"
         aria-label={t(I18nKey.BUTTON$CLOSE)}
         data-testid="skill-install-restart-dismiss"
       >

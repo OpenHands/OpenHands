@@ -254,7 +254,7 @@ export function ChatInputActions({
     formControlTransitionClassName,
   );
   const overflowSettingsIconClassName = cn(
-    "text-[var(--oh-muted)] group-hover:text-[var(--oh-foreground)]",
+    "text-muted group-hover:text-foreground",
     formControlTransitionClassName,
   );
 
@@ -293,7 +293,7 @@ export function ChatInputActions({
       testId="chat-input-overflow-menu"
       position="top"
       alignment="left"
-      className="!static !top-auto !bottom-auto !left-auto !right-auto !mt-0 overflow-visible min-w-[200px]"
+      className="!static !top-auto !bottom-auto !left-auto !right-auto !mt-0 overflow-visible min-w-50"
     >
       {showChangeAgentButton && !showCodeInline && (
         <div className="relative group/overflow-agent">
@@ -307,7 +307,7 @@ export function ChatInputActions({
             isDisabled={isAgentSwitcherDisabled}
           >
             <ToolsContextMenuIconText
-              icon={<CodePillIcon className="h-[11px] w-[11px]" />}
+              icon={<CodePillIcon className="h-2.75 w-2.75" />}
               text={
                 conversationMode === "code"
                   ? t(I18nKey.COMMON$CODE)
@@ -319,7 +319,7 @@ export function ChatInputActions({
           {!isAgentSwitcherDisabled && (
             <div
               className={cn(
-                "absolute left-full top-[-4px] z-60 opacity-0 invisible pointer-events-none transition-all duration-200 ml-[1px]",
+                "absolute left-full top-[-4px] z-60 opacity-0 invisible pointer-events-none transition-all duration-200 ml-0.25",
                 "group-hover/overflow-agent:opacity-100 group-hover/overflow-agent:visible group-hover/overflow-agent:pointer-events-auto",
                 "hover:opacity-100 hover:visible hover:pointer-events-auto",
                 activeSubmenu === "agent" &&
@@ -328,7 +328,7 @@ export function ChatInputActions({
             >
               <ContextMenu
                 testId="overflow-agent-submenu"
-                className="overflow-visible min-w-[195px]"
+                className="overflow-visible min-w-48.75"
               >
                 <ContextMenuListItem
                   testId="overflow-agent-code"
@@ -340,7 +340,7 @@ export function ChatInputActions({
                   }}
                 >
                   <ToolsContextMenuIconText
-                    icon={<CodePillIcon className="h-[11px] w-[11px]" />}
+                    icon={<CodePillIcon className="h-2.75 w-2.75" />}
                     text={t(I18nKey.COMMON$CODE)}
                   />
                 </ContextMenuListItem>
@@ -385,7 +385,7 @@ export function ChatInputActions({
           </ContextMenuListItem>
           <div
             className={cn(
-              "absolute left-full top-[-4px] z-60 opacity-0 invisible pointer-events-none transition-all duration-200 ml-[1px]",
+              "absolute left-full top-[-4px] z-60 opacity-0 invisible pointer-events-none transition-all duration-200 ml-0.25",
               "group-hover/overflow-model:opacity-100 group-hover/overflow-model:visible group-hover/overflow-model:pointer-events-auto",
               "hover:opacity-100 hover:visible hover:pointer-events-auto",
               activeSubmenu === "model" &&
@@ -399,7 +399,7 @@ export function ChatInputActions({
                 + Settings link. Revisit if floating children are added here. */}
             <ContextMenu
               testId="overflow-model-submenu"
-              className="min-w-[220px] max-w-[320px] max-h-[60vh] overflow-y-auto gap-0"
+              className="min-w-55 max-w-80 max-h-[60vh] overflow-y-auto gap-0"
             >
               {pickerKind === "model" ? (
                 <ChatInputModelMenuContent

@@ -100,7 +100,7 @@ export function EnumFilterDropdown<T extends string>({
           aria-label={resolvedAriaLabel}
           className={cn(
             "absolute right-0 top-full z-50 mt-1 min-w-full w-max",
-            "max-h-60 overflow-auto rounded-[6px] bg-tertiary p-1 context-menu-box-shadow",
+            "max-h-60 overflow-auto rounded-md bg-tertiary p-1 context-menu-box-shadow",
             dropdownMenuListClassName,
           )}
         >
@@ -119,7 +119,7 @@ export function EnumFilterDropdown<T extends string>({
                 }}
                 className={cn(
                   dropdownMenuRowClassName,
-                  selected && "bg-[var(--oh-interactive-selected)]",
+                  selected && "bg-interactive-selected",
                 )}
               >
                 <span className="min-w-0 flex-1 truncate">

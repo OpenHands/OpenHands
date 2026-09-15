@@ -69,7 +69,7 @@ export function CommitList({
       {hasMore && (
         <div
           data-testid="commit-list-cap-notice"
-          className="px-3 py-2.5 text-xs text-[var(--oh-muted)]"
+          className="px-3 py-2.5 text-xs text-muted"
         >
           {t(I18nKey.DIFF_VIEWER$COMMITS_CAP, { count: commits.length })}
         </div>

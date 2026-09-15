@@ -17,7 +17,7 @@ interface ConversationOverviewGitItemsPanelProps {
 }
 
 const EXTERNAL_LINK_ICON_CLASSNAME = cn(
-  "size-3.5 shrink-0 text-[var(--oh-muted)]",
+  "size-3.5 shrink-0 text-muted",
   "opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100",
 );
 
@@ -52,8 +52,8 @@ export function ConversationOverviewGitItemsHeaderLink({
       data-testid={`conversation-overview-${kind}-open-external`}
       className={cn(
         "inline-flex h-7 min-h-7 shrink-0 items-center gap-1.5 whitespace-nowrap",
-        "px-1 text-xs text-[var(--oh-muted)] transition-colors",
-        "hover:text-[var(--oh-foreground)]",
+        "px-1 text-xs text-muted transition-colors",
+        "hover:text-foreground",
       )}
     >
       {t(I18nKey.CONVERSATION$OVERVIEW_VIEW_ON_PROVIDER, {
@@ -99,7 +99,7 @@ export function ConversationOverviewGitItemsPanel({
       className="min-h-0 flex-1 overflow-y-auto px-2 py-2"
     >
       {query.isLoading ? (
-        <p className="px-2 py-4 text-sm text-[var(--oh-muted)]">
+        <p className="px-2 py-4 text-sm text-muted">
           {t(I18nKey.HOME$LOADING)}
         </p>
       ) : query.isError ? (
@@ -126,10 +126,10 @@ export function ConversationOverviewGitItemsPanel({
                   "transition-colors hover:bg-white/5",
                 )}
               >
-                <span className="shrink-0 text-sm tabular-nums text-[var(--oh-muted)]">
+                <span className="shrink-0 text-sm tabular-nums text-muted">
                   #{item.number}
                 </span>
-                <span className="min-w-0 flex-1 truncate text-sm text-[var(--oh-foreground)]">
+                <span className="min-w-0 flex-1 truncate text-sm text-foreground">
                   {item.title}
                 </span>
                 <ExternalLink

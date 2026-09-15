@@ -226,7 +226,7 @@ export function AppSettingsScreen() {
 
           <GettingStartedChecklistSwitch />
 
-          <div className="border-t border-[var(--oh-border)] pt-6 mt-2">
+          <div className="border-t border-border pt-6 mt-2">
             <h3 className="text-lg font-medium mb-2">
               {t(I18nKey.SETTINGS$CONVERSATION_TITLES)}
             </h3>
@@ -258,7 +258,7 @@ export function AppSettingsScreen() {
             </NavigationLink>
           </div>
 
-          <div className="border-t border-[var(--oh-border)] pt-6 mt-2">
+          <div className="border-t border-border pt-6 mt-2">
             <h3 className="text-lg font-medium mb-2">
               {t(I18nKey.SETTINGS$GIT_SETTINGS)}
             </h3>

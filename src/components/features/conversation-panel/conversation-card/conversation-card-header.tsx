@@ -23,7 +23,7 @@ export function ConversationCardHeader({
   return (
     <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
       {executionStatus !== undefined && (
-        <div className="flex w-[18px] shrink-0 items-center justify-center">
+        <div className="flex w-4.5 shrink-0 items-center justify-center">
           <ConversationStatusDot
             executionStatus={executionStatus}
             sandboxStatus={sandboxStatus}

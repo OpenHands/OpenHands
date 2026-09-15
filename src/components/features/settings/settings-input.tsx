@@ -102,7 +102,7 @@ export const SettingsInput = forwardRef<HTMLInputElement, SettingsInputProps>(
           {hint && (
             <span
               data-testid={testId ? `${testId}-hint` : undefined}
-              className="min-w-0 text-xs text-[var(--oh-muted)]"
+              className="min-w-0 text-xs text-muted"
             >
               {hint}
             </span>
@@ -131,7 +131,7 @@ export const SettingsInput = forwardRef<HTMLInputElement, SettingsInputProps>(
           aria-invalid={!!error || ariaInvalid}
           className={cn(
             formControlSettingsFieldClassName,
-            "disabled:bg-[var(--oh-surface-raised)] disabled:border-[var(--oh-border-subtle)]",
+            "disabled:bg-surface-raised disabled:border-border-subtle",
             error && "border-red-500",
             inputClassName,
           )}
