@@ -62,6 +62,27 @@ export const LLM_SUBSCRIPTION_SCHEMA_FIELDS = [
   LLM_SUBSCRIPTION_VENDOR_FIELD,
 ];
 
+/**
+ * Resolve a saved `llm.model` value to the canonical id in the server's
+ * subscription-models list. Exact match wins; otherwise a single `openai/`
+ * provider prefix is stripped before comparing — mirroring the agent-server,
+ * which strips `openai/` from subscription models before validating them.
+ * Returns the list id to persist, or `null` when the model is not offered.
+ */
+export function matchSubscriptionModel(
+  model: unknown,
+  subscriptionModels: readonly string[] | undefined,
+): string | null {
+  if (typeof model !== "string" || !subscriptionModels) return null;
+  if (subscriptionModels.includes(model)) return model;
+  const prefix = `${OPENAI_SUBSCRIPTION_VENDOR}/`;
+  if (model.startsWith(prefix)) {
+    const stripped = model.slice(prefix.length);
+    if (subscriptionModels.includes(stripped)) return stripped;
+  }
+  return null;
+}
+
 export function resolveLlmAuthType(value: unknown): LlmAuthType {
   return value === LLM_AUTH_TYPE_SUBSCRIPTION
     ? LLM_AUTH_TYPE_SUBSCRIPTION

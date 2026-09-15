@@ -704,3 +704,159 @@ describe("LlmSettingsRoute - backend mode rendering", () => {
     expect(screen.getByTestId("add-llm-profile")).toBeInTheDocument();
   });
 });
+
+describe("LlmSettingsScreen - ChatGPT subscription model matching (issue #17391)", () => {
+  const subscriptionSettings = (model: string) =>
+    buildSettings({
+      llm_model: model,
+      agent_settings: {
+        ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+        llm: {
+          model,
+          auth_type: "subscription",
+          subscription_vendor: "openai",
+        },
+      },
+    });
+
+  async function renderSubscriptionScreenWithPrefill({
+    savedModel,
+    serverModels,
+  }: {
+    savedModel: string;
+    serverModels: string[];
+  }) {
+    vi.spyOn(LLMSubscriptionService, "getOpenAIStatus").mockResolvedValue({
+      vendor: "openai",
+      connected: true,
+      accountEmail: "graham@example.com",
+      expiresAt: null,
+    });
+    vi.spyOn(LLMSubscriptionService, "getOpenAIModels").mockResolvedValue(
+      serverModels,
+    );
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      subscriptionSettings(savedModel),
+    );
+    const saveSettingsSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+
+    // The prefill mirrors onboarding: the saved model arrives with the
+    // `openai/` provider prefix while the server list holds bare ids, and the
+    // override starts dirty so the form is saveable without a touch.
+    renderLlmSettingsScreen({
+      initialValueOverrides: { "llm.model": savedModel },
+    });
+
+    await screen.findByTestId("llm-subscription-settings");
+    // Wait until the server list has loaded so the save path reads it.
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("llm-subscription-model-input"),
+      ).not.toBeDisabled();
+    });
+    return saveSettingsSpy;
+  }
+
+  function savedLlmModel(payload: Record<string, unknown>) {
+    return (payload.agent_settings_diff as Record<string, unknown>)
+      .llm as Record<string, unknown>;
+  }
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.spyOn(activeBackendContext, "useActiveBackend").mockReturnValue({
+      backend: mockLocalBackend,
+      orgId: null,
+    } as ReturnType<typeof activeBackendContext.useActiveBackend>);
+    useFreeModelsStore.getState().setFlags({
+      freeModels: new Set(["openhands/kimi-k3"]),
+      defaultModel: "openhands/kimi-k3",
+    });
+  });
+
+  it("saves the canonical server id when the saved model carries the openai/ prefix", async () => {
+    const saveSettingsSpy = await renderSubscriptionScreenWithPrefill({
+      savedModel: "openai/gpt-5.6-terra",
+      serverModels: ["gpt-5.2-codex", "gpt-5.6-terra"],
+    });
+
+    fireEvent.click(screen.getByTestId("save-button"));
+
+    await waitFor(() => expect(saveSettingsSpy).toHaveBeenCalled());
+    const payload = saveSettingsSpy.mock.calls[0][0] as Record<string, unknown>;
+    // The user's selected model must survive the save — never silently
+    // replaced by the first server-list entry.
+    expect(savedLlmModel(payload).model).toBe("gpt-5.6-terra");
+  });
+
+  it("blocks the save instead of swapping in another model when the saved model is not offered", async () => {
+    const saveSettingsSpy = await renderSubscriptionScreenWithPrefill({
+      savedModel: "openai/gpt-5.6-terra",
+      serverModels: ["gpt-5.2-codex"],
+    });
+
+    fireEvent.click(screen.getByTestId("save-button"));
+
+    // Give the save a chance to fire: the payload must never be built.
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(saveSettingsSpy).not.toHaveBeenCalled();
+  });
+
+  it("still seeds the first offered model on a fresh API-to-subscription switch", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(LLMSubscriptionService, "getOpenAIStatus").mockResolvedValue({
+      vendor: "openai",
+      connected: false,
+      accountEmail: null,
+      expiresAt: null,
+    });
+    vi.spyOn(LLMSubscriptionService, "getOpenAIModels").mockResolvedValue([
+      "gpt-5.2-codex",
+      "gpt-5.6-terra",
+    ]);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        llm_model: "openai/gpt-4o",
+        llm_api_key_set: true,
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          llm: {
+            model: "openai/gpt-4o",
+            api_key: null,
+            base_url: "",
+          },
+        },
+      }),
+    );
+    const saveSettingsSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+
+    renderLlmSettingsScreen();
+
+    await screen.findByTestId("llm-settings-screen");
+    const authTypeInput = await screen.findByTestId("llm-auth-type-input");
+    await user.click(authTypeInput);
+    await user.click(
+      await screen.findByText("SETTINGS$LLM_AUTH_TYPE_SUBSCRIPTION"),
+    );
+
+    await screen.findByTestId("llm-subscription-settings");
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("llm-subscription-model-input"),
+      ).not.toBeDisabled();
+    });
+    fireEvent.click(screen.getByTestId("save-button"));
+
+    await waitFor(() => expect(saveSettingsSpy).toHaveBeenCalled());
+    const payload = saveSettingsSpy.mock.calls[0][0] as Record<string, unknown>;
+    const llm = savedLlmModel(payload);
+    expect(llm.auth_type).toBe("subscription");
+    // Migration from an API-key model has no prior subscription choice, so
+    // seeding the first offered model is preserved behavior.
+    expect(llm.model).toBe("gpt-5.2-codex");
+  });
+});
