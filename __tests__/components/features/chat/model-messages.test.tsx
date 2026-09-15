@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "test-utils";
 import { ModelMessages } from "#/components/features/chat/model-messages";
 import { useModelStore } from "#/stores/model-store";
+import { useFreeModelsStore } from "#/stores/free-models-store";
 import type { ProfileInfo } from "#/api/profiles-service/profiles-service.api";
 
 const CONVERSATION_ID = "conv-1";
@@ -36,6 +37,10 @@ describe("ModelMessages", () => {
     i18n.addResourceBundle("en", "translation", resources, true, true);
     i18n.addResourceBundle("en", "openhands", resources, true, true);
     useModelStore.setState({ entriesByConversation: {} });
+    useFreeModelsStore.getState().setFlags({
+      freeModels: new Set(),
+      defaultModel: null,
+    });
   });
 
   it("renders only entries anchored to the requested event", async () => {
@@ -105,12 +110,16 @@ describe("ModelMessages", () => {
     );
   });
 
-  it("labels a free OpenHands route in expanded profile diagnostics", async () => {
+  it("labels a DB-flagged free OpenHands route in expanded profile diagnostics", async () => {
     const user = userEvent.setup();
+    useFreeModelsStore.getState().setFlags({
+      freeModels: new Set(["openhands/glm-5.2"]),
+      defaultModel: "openhands/glm-5.2",
+    });
     useModelStore.getState().show(CONVERSATION_ID, "event-1", [
       {
         name: "free",
-        model: "openhands/deepseek-v4-flash",
+        model: "openhands/glm-5.2",
         base_url: null,
         api_key_set: true,
       },
@@ -129,7 +138,7 @@ describe("ModelMessages", () => {
     );
 
     expect(
-      screen.getByText(/model:\s+OpenHands DeepSeek V4 Flash \(free\)/),
+      screen.getByText(/model:\s+openhands\/glm-5\.2 \(free\)/),
     ).toBeInTheDocument();
   });
 });
