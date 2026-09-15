@@ -17,7 +17,7 @@ import {
 import { useAutomationHealth } from "#/hooks/query/use-automation-health";
 import { useCloudOrgMember } from "#/hooks/query/use-cloud-org-member";
 import { useActiveBackend } from "#/contexts/active-backend-context";
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 import {
   automationListPath,
   hasAutomationInterface,

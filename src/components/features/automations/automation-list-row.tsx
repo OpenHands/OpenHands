@@ -9,7 +9,7 @@ import {
   useAutomationPermissions,
   useIsAutomationOwner,
 } from "#/hooks/use-automation-permissions";
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import PlayIcon from "#/icons/play.svg?react";
 import ClockIcon from "#/icons/clock.svg?react";

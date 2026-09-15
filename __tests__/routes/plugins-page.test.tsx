@@ -20,7 +20,7 @@ import { buildPluginLaunchPath } from "#/utils/plugin-launch-url";
 
 const navigateMock = vi.fn();
 
-vi.mock("#/context/navigation-context", () => ({
+vi.mock("#/contexts/navigation-context", () => ({
   useNavigation: () => ({
     navigate: navigateMock,
     currentPath: "/plugins",

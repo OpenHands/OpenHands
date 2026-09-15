@@ -12,7 +12,7 @@ import {
 import {
   NavigationProvider,
   type NavigationContextValue,
-} from "#/context/navigation-context";
+} from "#/contexts/navigation-context";
 import { BackendFormModal } from "#/components/features/backends/backend-form-modal";
 
 const getServerInfoMock = vi.hoisted(() => vi.fn());

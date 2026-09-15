@@ -7,7 +7,7 @@ import * as telemetry from "#/services/telemetry";
 
 const mockNavigate = vi.fn();
 
-vi.mock("#/context/navigation-context", () => ({
+vi.mock("#/contexts/navigation-context", () => ({
   useNavigation: () => ({
     currentPath: "/conversations/conv-123",
     conversationId: "conv-123",

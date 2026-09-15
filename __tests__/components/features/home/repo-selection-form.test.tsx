@@ -90,7 +90,7 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => mockUseTranslation(),
 }));
 
-vi.mock("#/context/auth-context", () => ({
+vi.mock("#/contexts/auth-context", () => ({
   useAuth: () => mockUseAuth(),
 }));
 
