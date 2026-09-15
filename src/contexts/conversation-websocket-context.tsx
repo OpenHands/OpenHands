@@ -227,12 +227,20 @@ export function ConversationWebSocketProvider({
       // usage_to_metrics is keyed by arbitrary LLM usage ids ("default",
       // "condenser", "profile:<name>:<uuid>", …) — combine across all of
       // them, mirroring getCombinedMetrics on the REST path.
-      const combined = Object.values(usageToMetrics).reduce<{
+      // `per_turn_token` is the agent's current context fill, so it must come
+      // from the primary ("default") usage when present: a secondary usage
+      // such as the condenser keeps its own larger last-turn size after the
+      // agent compacts, and a max across entries would pin the meter and the
+      // compaction hook's drop check to that stale value. Mirrors
+      // combineUsageMetrics on the REST path.
+      let primaryPerTurnToken: number | null = null;
+
+      const combined = Object.entries(usageToMetrics).reduce<{
         cost: number;
         maxBudgetPerTask: number | null;
         usage: MetricsState["usage"];
       }>(
-        (acc, metrics) => {
+        (acc, [usageId, metrics]) => {
           acc.cost += metrics.accumulated_cost;
           if (
             acc.maxBudgetPerTask === null &&
@@ -242,6 +250,9 @@ export function ConversationWebSocketProvider({
           }
           const tokenUsage = metrics.accumulated_token_usage;
           if (tokenUsage) {
+            if (usageId === "default") {
+              primaryPerTurnToken = tokenUsage.per_turn_token;
+            }
             acc.usage = {
               prompt_tokens:
                 (acc.usage?.prompt_tokens ?? 0) + tokenUsage.prompt_tokens,
@@ -268,6 +279,10 @@ export function ConversationWebSocketProvider({
         },
         { cost: 0, maxBudgetPerTask: null, usage: null },
       );
+
+      if (combined.usage && primaryPerTurnToken !== null) {
+        combined.usage.per_turn_token = primaryPerTurnToken;
+      }
 
       useMetricsStore.getState().setMetrics({
         cost: combined.cost,
