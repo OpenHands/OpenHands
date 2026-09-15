@@ -100,7 +100,12 @@ export function CustomServerEditor({
     const otherServers = isEditing
       ? existingServers.filter((existing) => existing.id !== server.id)
       : existingServers;
-    seedMcpServerHealth(serverToSave, result, otherServers);
+    seedMcpServerHealth(
+      { backendId: backend.id, connectionRevision: backend.connectionRevision },
+      serverToSave,
+      result,
+      otherServers,
+    );
   };
 
   // Shared error handler so both add and update surface backend errors

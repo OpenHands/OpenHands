@@ -1,5 +1,7 @@
+import React from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import SettingsService from "#/api/settings-service/settings-service.api";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 import { MCPServerConfig } from "#/types/mcp-server";
 import { SETTINGS_QUERY_KEYS } from "#/hooks/query/query-keys";
 import { clearMcpServerHealth } from "#/api/mcp-health/mcp-health-store";
@@ -15,6 +17,15 @@ import { getMcpServerHealthKey } from "#/utils/mcp-server-health-key";
 // @spec MCP-003 — Settings map keys are stable MCP identities
 export function useDeleteMcpServer() {
   const queryClient = useQueryClient();
+  const active = useActiveBackend();
+  const scopeRef = React.useRef({
+    backendId: active.backend.id,
+    connectionRevision: active.backend.connectionRevision,
+  });
+  scopeRef.current = {
+    backendId: active.backend.id,
+    connectionRevision: active.backend.connectionRevision,
+  };
 
   return useMutation({
     mutationFn: async (target: MCPServerConfig): Promise<void> => {
@@ -23,8 +34,10 @@ export function useDeleteMcpServer() {
     onSuccess: (_data, target) => {
       // Drop the deleted server's health entry so a later server that
       // happens to produce the same key starts "unchecked" instead of
-      // inheriting this one's verdict.
-      clearMcpServerHealth(getMcpServerHealthKey(target));
+      // inheriting this one's verdict. The key is backend-scoped: a
+      // sibling server on another backend with the same name and shape
+      // is not affected.
+      clearMcpServerHealth(getMcpServerHealthKey(scopeRef.current, target));
       queryClient.invalidateQueries({
         queryKey: SETTINGS_QUERY_KEYS.personal(),
       });

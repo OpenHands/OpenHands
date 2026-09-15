@@ -10,7 +10,10 @@ import {
   seedMcpServerHealth,
 } from "#/api/mcp-health/probe-mcp-server-health";
 import McpService from "#/api/mcp-service/mcp-service.api";
-import type { ExtendedMCPTestResponse, MCPServerConfig } from "#/types/mcp-server";
+import type {
+  ExtendedMCPTestResponse,
+  MCPServerConfig,
+} from "#/types/mcp-server";
 import { getMcpServerHealthKey } from "#/utils/mcp-server-health-key";
 
 /** Matches the catalog `github` entry, so the `get_me` probe spec applies. */
@@ -29,6 +32,9 @@ const CUSTOM: MCPServerConfig = {
   name: "custom",
   url: "https://mcp.example.com/mcp",
 };
+
+const SCOPE_A = { backendId: "backend-a", connectionRevision: 0 };
+const SCOPE_B = { backendId: "backend-b", connectionRevision: 0 };
 
 describe("interpretMcpTestResponse", () => {
   it("passes a non-auth connection failure through with its kind", () => {
@@ -114,9 +120,9 @@ describe("probeMcpServerHealth", () => {
         resolveProbe = resolve;
       }),
     );
-    const key = getMcpServerHealthKey(CUSTOM);
+    const key = getMcpServerHealthKey(SCOPE_A, CUSTOM);
 
-    const probe = probeMcpServerHealth(CUSTOM);
+    const probe = probeMcpServerHealth(SCOPE_A, CUSTOM);
     expect(getMcpHealthSnapshot()[key]).toMatchObject({ status: "checking" });
 
     resolveProbe({ ok: true, tools: ["a", "b"] });
@@ -134,11 +140,42 @@ describe("probeMcpServerHealth", () => {
       new Error("network down"),
     );
 
-    await probeMcpServerHealth(CUSTOM);
+    await probeMcpServerHealth(SCOPE_A, CUSTOM);
 
-    expect(getMcpHealthSnapshot()[getMcpServerHealthKey(CUSTOM)]).toMatchObject(
-      { status: "failed", kind: "unknown", error: "network down" },
+    expect(
+      getMcpHealthSnapshot()[getMcpServerHealthKey(SCOPE_A, CUSTOM)],
+    ).toMatchObject({
+      status: "failed",
+      kind: "unknown",
+      error: "network down",
+    });
+  });
+
+  it("writes the verdict into the scope captured at probe start, not the active scope at resolution", async () => {
+    // Simulate a backend switch that happens between when the probe is
+    // kicked off and when its response resolves. The scope argument is
+    // captured at probe start, so a switch to backend B mid-flight must
+    // not redirect the verdict into B's bucket.
+    let resolveProbe!: (value: ExtendedMCPTestResponse) => void;
+    vi.spyOn(McpService, "testServer").mockReturnValue(
+      new Promise((resolve) => {
+        resolveProbe = resolve;
+      }),
     );
+
+    const probe = probeMcpServerHealth(SCOPE_A, CUSTOM);
+    // The user switches backends to B before the probe resolves.
+    resolveProbe({ ok: true, tools: ["a"] });
+    await probe;
+
+    expect(
+      getMcpHealthSnapshot()[getMcpServerHealthKey(SCOPE_A, CUSTOM)],
+    ).toMatchObject({
+      status: "healthy",
+    });
+    expect(
+      getMcpHealthSnapshot()[getMcpServerHealthKey(SCOPE_B, CUSTOM)],
+    ).toBeUndefined();
   });
 });
 
@@ -148,11 +185,11 @@ describe("seedMcpServerHealth", () => {
   });
 
   it("publishes the saved server's health from its pre-save test result", () => {
-    seedMcpServerHealth(CUSTOM, { ok: true, tools: ["a"] }, []);
+    seedMcpServerHealth(SCOPE_A, CUSTOM, { ok: true, tools: ["a"] }, []);
 
-    expect(getMcpHealthSnapshot()[getMcpServerHealthKey(CUSTOM)]).toMatchObject(
-      { status: "healthy" },
-    );
+    expect(
+      getMcpHealthSnapshot()[getMcpServerHealthKey(SCOPE_A, CUSTOM)],
+    ).toMatchObject({ status: "healthy" });
   });
 
   it("skips seeding when another installed server shares the health key", () => {
@@ -164,16 +201,17 @@ describe("seedMcpServerHealth", () => {
       error: "bad token",
       checkedAt: 1,
     } as const;
-    setMcpServerHealth(getMcpServerHealthKey(GITHUB), existingVerdict);
+    setMcpServerHealth(getMcpServerHealthKey(SCOPE_A, GITHUB), existingVerdict);
 
     seedMcpServerHealth(
+      SCOPE_A,
       { ...GITHUB, id: "shttp-9" },
       { ok: true, tools: ["get_me"] },
       [GITHUB],
     );
 
-    expect(getMcpHealthSnapshot()[getMcpServerHealthKey(GITHUB)]).toEqual(
-      existingVerdict,
-    );
+    expect(
+      getMcpHealthSnapshot()[getMcpServerHealthKey(SCOPE_A, GITHUB)],
+    ).toEqual(existingVerdict);
   });
 });

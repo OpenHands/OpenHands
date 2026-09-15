@@ -12,6 +12,13 @@ import { useDeleteMcpServer } from "#/hooks/mutation/use-delete-mcp-server";
 import type { MCPServerConfig } from "#/types/mcp-server";
 import { getMcpServerHealthKey } from "#/utils/mcp-server-health-key";
 
+// The hook calls `useActiveBackend()`, which in this hook-level test (no
+// `<ActiveBackendProvider>`) returns `makeDefaultLocalBackend()`. In jsdom
+// that resolves to `{ id: "default-local", connectionRevision: undefined }`.
+// This MUST match the production fallback exactly; if a future change
+// reshapes `makeDefaultLocalBackend`, update this constant accordingly.
+const DEFAULT_LOCAL_SCOPE = { backendId: "default-local" };
+
 const createWrapper = () => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -62,7 +69,7 @@ describe("useDeleteMcpServer", () => {
       name: "github",
       url: "https://github.example/mcp",
     };
-    const key = getMcpServerHealthKey(target);
+    const key = getMcpServerHealthKey(DEFAULT_LOCAL_SCOPE, target);
     setMcpServerHealth(key, {
       status: "healthy",
       verification: "verified",
