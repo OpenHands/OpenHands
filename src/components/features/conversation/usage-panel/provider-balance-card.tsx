@@ -3,12 +3,9 @@ import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useLLMBalance } from "#/hooks/query/use-llm-balance";
+import { CostText } from "#/components/shared/cost-text";
 import { MetricRow } from "../metrics-modal/metric-row";
 import { cn } from "#/utils/utils";
-
-function formatCredits(amount: number): string {
-  return `$${amount.toFixed(2)}`;
-}
 
 /**
  * Remaining credits for the active LLM provider (OpenRouter). Fetched once
@@ -64,12 +61,12 @@ export function ProviderBalanceCard() {
         {hasCap ? (
           <MetricRow
             label={t(I18nKey.CONVERSATION$CREDITS_REMAINING)}
-            value={formatCredits(balance.limitRemaining ?? 0)}
+            value={<CostText amount={balance.limitRemaining ?? 0} />}
           />
         ) : null}
         <MetricRow
           label={t(I18nKey.CONVERSATION$CREDITS_USED)}
-          value={formatCredits(balance.usage)}
+          value={<CostText amount={balance.usage} />}
           valueClassName={hasCap ? "" : "font-semibold"}
           labelClassName={hasCap ? "text-[var(--oh-muted)]" : ""}
         />
