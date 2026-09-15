@@ -1,3 +1,4 @@
+import { useConversationWorkspace } from "#/hooks/query/use-conversation-workspace";
 import React from "react";
 import { useTranslation } from "react-i18next";
 
@@ -84,10 +85,14 @@ export function WorkspaceSelectionForm({
     isError: hasWorkspaceError,
     error: resolvedWorkspacesError,
   } = useResolvedWorkspaces();
-  const workspacesUnsupportedMessage = getWorkspacesUnsupportedMessage(
-    workspacesError ?? resolvedWorkspacesError,
-    t,
-  );
+  const { unsupportedMessage: runtimeWorkspaceMessage } =
+    useConversationWorkspace();
+  const workspacesUnsupportedMessage =
+    runtimeWorkspaceMessage ??
+    getWorkspacesUnsupportedMessage(
+      workspacesError ?? resolvedWorkspacesError,
+      t,
+    );
   const [selectedWorkspace, setSelectedWorkspace] =
     React.useState<LocalWorkspace | null>(null);
   const [isBrowserOpen, setIsBrowserOpen] = React.useState(false);
@@ -155,7 +160,7 @@ export function WorkspaceSelectionForm({
     (isLoadingWorkspaces && workspaces.length === 0);
 
   const handleLaunch = () => {
-    if (!selectedWorkspace) return;
+    if (!selectedWorkspace || workspacesUnsupportedMessage) return;
     if (onConfirm) {
       onConfirm(selectedWorkspace);
       return;
@@ -218,6 +223,7 @@ export function WorkspaceSelectionForm({
         variant="primary"
         type="button"
         isDisabled={
+          Boolean(workspacesUnsupportedMessage) ||
           !selectedWorkspace ||
           (!onConfirm && isCreatingConversation) ||
           isLoadingSettings

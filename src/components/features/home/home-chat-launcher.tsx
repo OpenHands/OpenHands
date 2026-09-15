@@ -1,3 +1,4 @@
+import { useConversationWorkspace } from "#/hooks/query/use-conversation-workspace";
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
@@ -73,9 +74,11 @@ export function HomeChatLauncher() {
     useConversationStore();
   const { handleUpload } = useChatAttachmentUpload();
   const { error: workspacesError } = useLocalWorkspaces({ enabled: isLocal });
-  const workspacesUnsupportedMessage = isLocal
-    ? getWorkspacesUnsupportedMessage(workspacesError, t)
-    : null;
+  const { isolated, unsupportedMessage: runtimeWorkspaceMessage } =
+    useConversationWorkspace();
+  const workspacesUnsupportedMessage =
+    runtimeWorkspaceMessage ??
+    (isLocal ? getWorkspacesUnsupportedMessage(workspacesError, t) : null);
 
   const setWorkspaceMode = (mode: WorkspaceMode) => {
     setWorkspaceModeState(mode);
@@ -245,6 +248,22 @@ export function HomeChatLauncher() {
           />
         </div>
 
+        {isolated && (
+          <p role="status" className="text-xs text-[var(--oh-text-secondary)]">
+            {pendingWorkspace
+              ? runtimeWorkspaceMessage
+              : t(I18nKey.HOME$ISOLATED_WORKSPACE_NEW)}
+            {pendingWorkspace && (
+              <button
+                type="button"
+                className="ml-2 underline"
+                onClick={() => setPendingWorkspace(null)}
+              >
+                {t(I18nKey.HOME$CLEAR_HOST_WORKSPACE)}
+              </button>
+            )}
+          </p>
+        )}
         <div className="flex items-center justify-start gap-2">
           {hasSelection ? (
             <HomeGitControlBarPreview

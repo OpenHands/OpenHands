@@ -359,6 +359,7 @@ describe("GitService", () => {
         ],
       );
       expect(workspaceMocks.clientOptions).toHaveBeenCalledWith({
+        conversationId: "conversation-1",
         workingDir: "/workspace/project",
       });
       expect(workspaceMocks.gitChanges).toHaveBeenCalledWith(
