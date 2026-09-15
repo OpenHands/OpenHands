@@ -116,7 +116,25 @@ export class SecretsService {
     );
 
     if (name !== secretToEdit) {
-      await this.deleteSecret(secretToEdit);
+      // Upsert-then-delete, not the reverse: if this delete fails, the
+      // caller ends up with an extra (stale-named) entry to clean up
+      // manually — bad, but recoverable. Deleting first and having the
+      // upsert then fail would lose the secret's value outright, which is
+      // worse. Either way, a delete failure here must not look like the
+      // whole rename failed (the new entry did save) or succeed silently
+      // (the old, possibly since-rotated value would keep existing under
+      // its old name indefinitely with no visible sign anything went
+      // wrong) — surface it as its own distinct, actionable error.
+      try {
+        await this.deleteSecret(secretToEdit);
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `Secret saved as "${name}", but the previous entry "${secretToEdit}" ` +
+            `could not be removed (${detail}). Delete it manually to avoid ` +
+            `keeping a stale copy.`,
+        );
+      }
     }
   }
 

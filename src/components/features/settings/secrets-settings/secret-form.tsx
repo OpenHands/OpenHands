@@ -13,6 +13,7 @@ import {
 import { BrandButton } from "../brand-button";
 import { useSearchSecrets } from "#/hooks/query/use-get-secrets";
 import { OptionalTag } from "../optional-tag";
+import { getApiErrorMessage } from "#/utils/api-error-message";
 
 interface SecretFormProps {
   mode: "add" | "edit";
@@ -72,8 +73,17 @@ export function SecretForm({
     createSecret(
       { name, value, description },
       {
-        onSettled: onCancel,
-        onSuccess: invalidateSecrets,
+        // Only leave the form on an actual save — onSettled fires on error
+        // too, which previously navigated back to the list exactly as if
+        // the secret had saved, discarding the typed value with no visible
+        // failure beyond a toast the user may have missed.
+        onSuccess: () => {
+          invalidateSecrets();
+          onCancel();
+        },
+        onError: (mutationError) => {
+          setError(getApiErrorMessage(mutationError, t(I18nKey.ERROR$GENERIC)));
+        },
       },
     );
   };
@@ -87,8 +97,13 @@ export function SecretForm({
     updateSecret(
       { secretToEdit, name, description, value },
       {
-        onSettled: onCancel,
-        onSuccess: invalidateSecrets,
+        onSuccess: () => {
+          invalidateSecrets();
+          onCancel();
+        },
+        onError: (mutationError) => {
+          setError(getApiErrorMessage(mutationError, t(I18nKey.ERROR$GENERIC)));
+        },
       },
     );
   };

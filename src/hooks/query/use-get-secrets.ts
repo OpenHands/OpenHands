@@ -20,7 +20,12 @@ export const useSearchSecrets = (options: UseSearchSecretsOptions = {}) => {
 
   const query = useQuery<CustomSecretWithoutValue[], Error>({
     queryKey: ["secrets", active.backend.id, active.orgId],
-    queryFn: SecretsService.getSecrets,
+    // getSecretsOrThrow, not getSecrets: the latter swallows a fetch failure
+    // into an empty array, so a real error (network, backend down) rendered
+    // as the plain "you have no secrets yet" empty state with no way to
+    // tell it apart from actually having none. This hook already exposes
+    // isError for exactly this distinction — it just never used to fire.
+    queryFn: SecretsService.getSecretsOrThrow,
     enabled,
     staleTime: 1000 * 60 * 5,
     gcTime: 1000 * 60 * 15,
