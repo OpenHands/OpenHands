@@ -585,6 +585,7 @@ function setStaticHeaders(res, pathname) {
 
 function createStaticMiddleware(dirAbs) {
   return sirv(dirAbs, {
+    dev: true,
     etag: true,
     single: false,
     setHeaders: setStaticHeaders,
