@@ -135,6 +135,8 @@ describe("useSystemCommandInterceptor", () => {
         "/model",
         "/goal",
         "/help",
+        "/plan",
+        "/code",
         "/skills",
       ]);
     }
