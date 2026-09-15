@@ -43,10 +43,7 @@
  *   build/          ← static frontend (npm run build:app output)
  *
  * The bundled uv binary (resources/bin/) lands in <Resources>/bin/ via
- * extraResources so Electron can inject it into PATH on startup. The MARS
- * port-forward tunnel client (scripts/tunnel-client.mjs, tools/mars_tunnel.py)
- * runs on this same bundled uv/Python runtime via `uv run` — no separate
- * binary of its own to bundle.
+ * extraResources so Electron can inject it into PATH on startup.
  *
  * The bundled Node.js distribution (resources/node/) lands in
  * <Resources>/node/ via extraResources — except for its root-level
