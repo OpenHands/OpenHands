@@ -45,14 +45,18 @@ export function InteractiveChatBox({
 
   const { handleUpload } = useChatAttachmentUpload();
 
-  const handleAfterGoal = useBtwInterceptor(conversationId, (message) => {
-    const { imagesToEmbed, imagesAsFiles } = partitionImagesForUpload(
-      images,
-      imagesMarkedUploadAsFile,
-    );
-    onSubmit(message, imagesToEmbed, [...files, ...imagesAsFiles]);
-    clearAllFiles();
-  });
+  const handleAfterGoal = useBtwInterceptor(
+    conversationId,
+    curAgentState,
+    (message) => {
+      const { imagesToEmbed, imagesAsFiles } = partitionImagesForUpload(
+        images,
+        imagesMarkedUploadAsFile,
+      );
+      onSubmit(message, imagesToEmbed, [...files, ...imagesAsFiles]);
+      clearAllFiles();
+    },
+  );
   const handleAfterPlanMode = usePlanModeInterceptor(
     conversationId,
     curAgentState,
