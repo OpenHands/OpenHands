@@ -11559,6 +11559,23 @@
     "uk": "Введіть свій ключ API.",
     "ca": "Introduïu la vostra clau d'API."
   },
+  "SETTINGS$API_KEY_TOO_SHORT": {
+    "en": "API key must be at least 2 characters.",
+    "zh-CN": "API 密钥至少需要 2 个字符。",
+    "zh-TW": "API 金鑰至少需要 2 個字元。",
+    "de": "Der API-Schlüssel muss mindestens 2 Zeichen lang sein.",
+    "ko-KR": "API 키는 2자 이상이어야 합니다.",
+    "no": "API-nøkkelen må ha minst 2 tegn.",
+    "it": "La chiave API deve contenere almeno 2 caratteri.",
+    "pt": "A chave de API deve ter pelo menos 2 caracteres.",
+    "es": "La clave de API debe tener al menos 2 caracteres.",
+    "ar": "يجب أن يتكون مفتاح API من حرفين على الأقل.",
+    "fr": "La clé API doit contenir au moins 2 caractères.",
+    "tr": "API anahtarı en az 2 karakter olmalıdır.",
+    "ja": "APIキーは2文字以上である必要があります。",
+    "uk": "Ключ API має містити щонайменше 2 символи.",
+    "ca": "La clau d'API ha de tenir almenys 2 caràcters."
+  },
   "SETTINGS$LLM_API_KEY": {
     "en": "OpenHands LLM Key",
     "zh-CN": "OpenHands LLM 密钥",

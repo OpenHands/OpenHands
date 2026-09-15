@@ -424,4 +424,104 @@ describe("sdk settings schema helpers", () => {
       );
     });
   });
+
+  describe("field format validation", () => {
+    const buildPayloadWith = (key: string, value: string) =>
+      buildSdkSettingsPayload(
+        BASE_SETTINGS.agent_settings_schema!,
+        {
+          ...buildInitialSettingsFormValues(BASE_SETTINGS),
+          [key]: value,
+        },
+        { [key]: true },
+      );
+
+    describe("URL fields", () => {
+      // Reported in #15774: "." was accepted with a success toast and only
+      // surfaced later as an opaque provider error.
+      it.each([
+        ".",
+        "-",
+        "localhost:8000",
+        "api.openai.com",
+        "ftp://files.test",
+      ])("refuses to build a payload for the malformed base URL %j", (url) => {
+        expect(() => buildPayloadWith("llm.base_url", url)).toThrow(
+          "Base URL must use http:// or https://",
+        );
+      });
+
+      it.each([
+        "https://api.openai.com",
+        "https://api.openai.com/v1",
+        "http://127.0.0.1:8000",
+        "http://localhost:11434",
+      ])("passes the valid base URL %j through unchanged", (url) => {
+        expect(buildPayloadWith("llm.base_url", url)).toEqual({
+          llm: { base_url: url },
+        });
+      });
+
+      it("treats a blank base URL as clearing the field, not as invalid", () => {
+        // `llm.base_url` is optional, so blank means "use the provider
+        // default" and must stay saveable.
+        expect(buildPayloadWith("llm.base_url", "")).toEqual({
+          llm: { base_url: null },
+        });
+      });
+
+      it("validates the trimmed value but stores the raw one", () => {
+        // Pins current coercion behaviour: surrounding whitespace is
+        // tolerated for the format check, while trimming itself stays the
+        // adapter's job.
+        expect(
+          buildPayloadWith("llm.base_url", "  https://api.openai.com  "),
+        ).toEqual({ llm: { base_url: "  https://api.openai.com  " } });
+      });
+
+      it("leaves string fields that are not URLs unvalidated", () => {
+        // The gate is scoped by field key: a model name is a plain string and
+        // "." is a legitimate (if odd) value for it.
+        expect(buildPayloadWith("llm.model", ".")).toEqual({
+          llm: { model: "." },
+        });
+      });
+    });
+
+    describe("API key fields", () => {
+      // #15774's motivating example: a single special character saved
+      // "successfully" as an API key.
+      it.each(["-", ".", "x"])(
+        "refuses to build a payload for the single-character API key %j",
+        (apiKey) => {
+          expect(() => buildPayloadWith("llm.api_key", apiKey)).toThrow(
+            "API Key must be at least 2 characters",
+          );
+        },
+      );
+
+      it.each(["sk-test-1234", "ollama", "xx"])(
+        "passes the plausible API key %j through unchanged",
+        (apiKey) => {
+          expect(buildPayloadWith("llm.api_key", apiKey)).toEqual({
+            llm: { api_key: apiKey },
+          });
+        },
+      );
+
+      it("keeps an empty API key valid so the field can stay unset", () => {
+        // `llm.api_key` is a secret, so blank coerces to "" (the backend
+        // clears the stored key) rather than null — and must not throw.
+        expect(buildPayloadWith("llm.api_key", "")).toEqual({
+          llm: { api_key: "" },
+        });
+      });
+
+      it("leaves non-key string fields alone even when single-character", () => {
+        expect(buildPayloadWith("llm.model", "-")).toEqual({
+          llm: { model: "-" },
+        });
+      });
+    });
+  });
 });

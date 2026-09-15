@@ -4,12 +4,17 @@ import { OptionalTag } from "#/components/features/settings/optional-tag";
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
 import { SettingsInput } from "#/components/features/settings/settings-input";
 import { SettingsSwitch } from "#/components/features/settings/settings-switch";
+import { I18nKey } from "#/i18n/declaration";
 import { SettingsFieldSchema } from "#/types/settings";
 import {
   getSettingsFieldConstraints,
   resolveSchemaChoiceLabel,
   resolveSchemaFieldLabel,
 } from "#/utils/sdk-settings-field-metadata";
+import {
+  getSettingsFieldFormatError,
+  isUrlField,
+} from "#/utils/sdk-settings-schema";
 import { cn } from "#/utils/utils";
 import {
   formControlMultilineFieldClassName,
@@ -37,10 +42,6 @@ function isBooleanField(field: SettingsFieldSchema): boolean {
 
 function isJsonField(field: SettingsFieldSchema): boolean {
   return field.value_type === "array" || field.value_type === "object";
-}
-
-function isUrlField(field: SettingsFieldSchema): boolean {
-  return field.key.endsWith("url") || field.key.endsWith("_url");
 }
 
 function getInputType(
@@ -146,6 +147,14 @@ export function SchemaField({
     );
   }
 
+  const formatError = getSettingsFieldFormatError(field, value);
+  const formatErrorMessage =
+    formatError === "url"
+      ? t(I18nKey.SETTINGS$MCP_ERROR_URL_INVALID_PROTOCOL)
+      : formatError === "api_key"
+        ? t(I18nKey.SETTINGS$API_KEY_TOO_SHORT)
+        : undefined;
+
   return (
     <div className="flex flex-col gap-1.5">
       <SettingsInput
@@ -162,6 +171,7 @@ export function SchemaField({
         min={constraints?.min}
         max={constraints?.max}
         step={constraints?.step}
+        error={formatErrorMessage}
       />
       <FieldHelp field={field} />
     </div>
