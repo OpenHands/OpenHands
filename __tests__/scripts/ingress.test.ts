@@ -1,4 +1,4 @@
-import { createServer, request, type Server } from "node:http";
+import { Agent, createServer, request, type Server } from "node:http";
 import { connect as netConnect, type AddressInfo, type Socket } from "node:net";
 import type { Duplex } from "node:stream";
 import { spawn, type ChildProcess } from "node:child_process";
@@ -126,9 +126,9 @@ async function getJson(url: string) {
   });
 }
 
-async function getText(url: string) {
+async function getText(url: string, agent?: Agent) {
   return new Promise<{ status: number; body: string }>((resolve, reject) => {
-    const req = request(url, { method: "GET" }, (res) => {
+    const req = request(url, { method: "GET", agent }, (res) => {
       let body = "";
       res.setEncoding("utf8");
       res.on("data", (chunk) => {
@@ -269,6 +269,7 @@ describe("ingress proxy functionality", () => {
   let backend1Port: number;
   let backend2Port: number;
   let ingressPort: number;
+  let ingressStderr = "";
 
   beforeAll(async () => {
     // Create mock backend 1
@@ -305,6 +306,9 @@ describe("ingress proxy functionality", () => {
         stdio: ["ignore", "pipe", "pipe"],
       },
     );
+    ingressProcess.stderr?.on("data", (chunk) => {
+      ingressStderr += chunk.toString();
+    });
 
     await waitForPort(ingressPort, ingressProcess);
   });
@@ -313,6 +317,23 @@ describe("ingress proxy functionality", () => {
     await stopChild(ingressProcess);
     await closeServer(backend1);
     await closeServer(backend2);
+  });
+
+  it("does not accumulate timeout listeners on a reused connection", async () => {
+    const agent = new Agent({ keepAlive: true, maxSockets: 1 });
+    try {
+      for (let index = 0; index < 20; index += 1) {
+        const response = await getText(
+          `${originForPort(ingressPort)}/request-${index}`,
+          agent,
+        );
+        expect(response.status).toBe(200);
+      }
+      await delay(50);
+      expect(ingressStderr).not.toContain("MaxListenersExceededWarning");
+    } finally {
+      agent.destroy();
+    }
   });
 
   it("routes /api requests to backend1", async () => {
