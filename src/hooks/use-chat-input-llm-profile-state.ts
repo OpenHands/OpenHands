@@ -70,12 +70,14 @@ export function useChatInputLlmProfileState(): ChatInputLlmProfileState {
     stampedProfile && profiles.some((p) => p.name === stampedProfile)
       ? stampedProfile
       : null;
+  const modelMatchProfile = conversationModel
+    ? (profiles.find((p) => p.model === conversationModel)?.name ?? null)
+    : null;
   const currentProfileName =
     optimisticActiveProfile ??
     conversationProfile ??
-    (conversationModel
-      ? (profiles.find((p) => p.model === conversationModel)?.name ?? null)
-      : (data?.active_profile ?? null));
+    modelMatchProfile ??
+    (conversationId ? null : (data?.active_profile ?? null));
   const currentProfileModel =
     profiles.find((p) => p.name === currentProfileName)?.model ??
     conversationModel ??
