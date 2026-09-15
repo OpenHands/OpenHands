@@ -106,8 +106,21 @@ export function PluginLaunchModal({
     if (source.startsWith("github:")) {
       return source.replace("github:", "");
     }
-    if (source.includes("github.com/")) {
-      return source.split("github.com/")[1]?.replace(".git", "") || source;
+    // Only shorten a real github.com URL to its repo coordinate: the host is
+    // parsed, not substring-matched, so `github.com/` appearing in the path of
+    // another host (e.g. https://evil.example/github.com/owner/repo) is
+    // displayed whole and the fetching host stays visible in the trust prompt.
+    try {
+      const url = new URL(source);
+      if (
+        (url.hostname === "github.com" || url.hostname === "www.github.com") &&
+        url.pathname.length > 1
+      ) {
+        const coordinate = url.pathname.replace(/^\//, "").replace(/\.git$/, "");
+        if (coordinate) return coordinate;
+      }
+    } catch {
+      // not a parseable URL — display whole
     }
     return source;
   };
