@@ -1,3 +1,5 @@
+import { buildConversationEventStreamUrl } from "@openhands/typescript-client/clients";
+
 /**
  * Extracts the base host from conversation URL
  * @param conversationUrl The conversation URL containing host/port (e.g., "http://localhost:3000/api/conversations/123")
@@ -114,22 +116,8 @@ export function buildWebSocketUrl(
     return null;
   }
 
-  const baseHost = extractBaseHost(conversationUrl);
-  const pathPrefix = extractPathPrefix(conversationUrl);
-
-  // Build WebSocket URL: ws://host:port[/path-prefix]/sockets/events/{conversationId}
-  // The path prefix (e.g., /runtime/55313) is needed for proxy deployments
-  // Note: Query params should be passed via the useWebSocket hook options
-  //
-  // Protocol selection follows the actual HTTP access path. A page served
-  // over HTTPS must use WSS, but an HTTP page that reaches a remote dev ingress
-  // over plain HTTP (for example a Tailscale hostname) must use WS; forcing WSS
-  // sends a TLS handshake to the HTTP-only ingress and Node reports it as a
-  // malformed HTTP method.
-  const pageIsSecure = window.location.protocol === "https:";
-  const targetIsSecure =
-    getConversationUrlProtocol(conversationUrl) === "https:";
-  const protocol = pageIsSecure || targetIsSecure ? "wss:" : "ws:";
-
-  return `${protocol}//${baseHost}${pathPrefix}/sockets/events/${conversationId}`;
+  return buildConversationEventStreamUrl(
+    buildHttpBaseUrl(conversationUrl),
+    conversationId,
+  );
 }
