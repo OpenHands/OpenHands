@@ -71,6 +71,10 @@ export function LlmProfilesManager({
     }
     return counts;
   }, [profiles]);
+  const existingProfileNames = useMemo(
+    () => new Set(profiles.map((p) => p.name)),
+    [profiles],
+  );
 
   const handleActivate = async (name: string) => {
     try {
@@ -162,6 +166,7 @@ export function LlmProfilesManager({
           <ProviderConnectionsManager
             connections={connectionList}
             linkedCountById={linkedCountById}
+            existingProfileNames={existingProfileNames}
             isLoading={isLoadingConnections}
             loadError={connectionsError ?? null}
           />
@@ -170,6 +175,7 @@ export function LlmProfilesManager({
 
       <RenameProfileModal
         profile={profileToRename}
+        activeProfileName={active}
         onClose={() => setProfileToRename(null)}
       />
       <DeleteProfileModal
