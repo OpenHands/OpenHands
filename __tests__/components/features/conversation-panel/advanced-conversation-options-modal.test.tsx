@@ -41,6 +41,8 @@ describe("AdvancedConversationOptionsModal", () => {
     useConversationPanelPreferencesStore.setState({
       showOlderConversations: true,
       olderConversationCutoff: "7d",
+      groupByContainer: false,
+      groupByWorkspace: false,
     });
     vi.unstubAllGlobals();
   });
@@ -91,6 +93,38 @@ describe("AdvancedConversationOptionsModal", () => {
       "aria-checked",
       "false",
     );
+  });
+
+  it("toggles workspace and container grouping independently", () => {
+    renderWithProviders(
+      <AdvancedConversationOptionsModal
+        open
+        onClose={vi.fn()}
+        backendKind="local"
+        automationNameFacets={[]}
+      />,
+    );
+
+    const workspaceRow = screen.getByTestId("organize-group-by-workspace");
+    const containerRow = screen.getByTestId("organize-group-by-container");
+    expect(workspaceRow).toHaveAttribute("role", "menuitemcheckbox");
+    expect(containerRow).toHaveAttribute("role", "menuitemcheckbox");
+
+    fireEvent.click(workspaceRow);
+    expect(
+      useConversationPanelPreferencesStore.getState().groupByWorkspace,
+    ).toBe(true);
+    expect(
+      useConversationPanelPreferencesStore.getState().groupByContainer,
+    ).toBe(false);
+
+    fireEvent.click(containerRow);
+    expect(
+      useConversationPanelPreferencesStore.getState().groupByWorkspace,
+    ).toBe(true);
+    expect(
+      useConversationPanelPreferencesStore.getState().groupByContainer,
+    ).toBe(true);
   });
 
   it("hides conversations older than the selected interval", () => {
@@ -146,7 +180,9 @@ describe("AdvancedConversationOptionsModal", () => {
 
     const scroller = screen.getByTestId("advanced-options-scroll");
     const topEdge = screen.getByTestId("advanced-options-scroll-edge-top");
-    const bottomEdge = screen.getByTestId("advanced-options-scroll-edge-bottom");
+    const bottomEdge = screen.getByTestId(
+      "advanced-options-scroll-edge-bottom",
+    );
 
     mockVerticalScrollMetrics(scroller, {
       scrollHeight: 900,
