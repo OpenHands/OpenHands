@@ -107,11 +107,10 @@
     "example:acp-docker:env": "node scripts/gen-acp-docker-env.mjs",
     "predesktop": "node scripts/brand-dev-electron.mjs",
     "desktop": "npm run build:app && electron electron",
-    "build:desktop": "npm run build:app && node scripts/download-uv.mjs && node scripts/download-node.mjs && node scripts/download-doctl.mjs && electron-builder --config electron-builder.config.mjs --publish never",
-    "build:desktop:universal": "npm run build:app && node scripts/download-uv.mjs && node scripts/download-node.mjs && node scripts/download-doctl.mjs && cross-env ELECTRON_ARCH=universal electron-builder --config electron-builder.config.mjs --publish never",
+    "build:desktop": "npm run build:app && node scripts/download-uv.mjs && node scripts/download-node.mjs && electron-builder --config electron-builder.config.mjs --publish never",
+    "build:desktop:universal": "npm run build:app && node scripts/download-uv.mjs && node scripts/download-node.mjs && cross-env ELECTRON_ARCH=universal electron-builder --config electron-builder.config.mjs --publish never",
     "download-uv": "node scripts/download-uv.mjs",
     "download-node": "node scripts/download-node.mjs",
-    "download-doctl": "node scripts/download-doctl.mjs",
     "generate-icons": "node scripts/generate-icons.mjs"
   },
   "lint-staged": {

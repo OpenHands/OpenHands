@@ -5,88 +5,64 @@
  * `doctl agents port-forward` plays at the terminal today: given a session
  * id and a remote port inside that session's sandbox, it dials MARS's
  * port-forward WebSocket tunnel and exposes the result as an ordinary local
- * TCP listener that pipes bytes bidirectionally. Rather than reimplementing
- * that WebSocket client in JS, this shells out to the real `doctl` binary
- * (see download-doctl.mjs) — same precedent as bundling uv/uvx.
+ * TCP listener that pipes bytes bidirectionally.
  *
- * Multi-session note: this module starts one `doctl` process per call, each
- * owning one local listener for one (session, remote port) pair. Building a
- * `session_id -> tunnel` registry on top of this (port allocation, reuse,
- * targeted teardown, reconnect detection) is MARSOHS-1428 — out of scope
- * here.
+ * v1 implementation language is Python (tools/mars_tunnel.py), a port of
+ * doctl's `agent_port_forward.go` reference implementation, run via `uv run`
+ * — the same bundled Python runtime uv/uvx already provide for the Agent
+ * Server itself. This adds no new runtime dependency and no dependency on a
+ * doctl release (see openhands-canvas-dataplane-design.md's "Decision"
+ * section for why this replaced an earlier bundled-`doctl`-binary approach).
+ *
+ * Multi-session note: this module starts one `uv run` subprocess per call,
+ * each owning one local listener for one (session, remote port) pair.
+ * Building a `session_id -> tunnel` registry on top of this (port
+ * allocation, reuse, targeted teardown, reconnect detection) is a separate,
+ * follow-on ticket — out of scope here.
  */
 
 import { spawn } from "node:child_process";
 import net from "node:net";
-import path from "node:path";
-import process from "node:process";
+import { fileURLToPath } from "node:url";
 
 import {
   getProcessTreeSpawnOptions,
   signalProcessTree,
 } from "./dev-process-utils.mjs";
 
-const READY_LINE = "Ready. Press Ctrl-C to stop.";
 const DEFAULT_HEALTHY_TIMEOUT_MS = 15_000;
 
-// Matches doctl's `RunAgentsPortForward` announcement, e.g.
-// "Forwarding 127.0.0.1:54321 -> port 8000 in session sess_abc123"
-const FORWARD_LINE_RE =
-  /^Forwarding\s+(\S+):(\d+)\s+->\s+port\s+(\d+)\s+in session\s+(\S+)/;
+// tools/ is a sibling of scripts/ both in dev (repo root) and packaged
+// (Resources/app/) layouts — see dev-safe.mjs's canvasToolsDir for the same
+// pattern, used there to locate tools/canvas_ui_tool.py.
+const MARS_TUNNEL_SCRIPT_PATH = fileURLToPath(
+  new URL("../tools/mars_tunnel.py", import.meta.url),
+);
 
-/**
- * Resolve the doctl binary to spawn: the bundled copy under
- * <resourcesPath>/bin/ when packaged (see electron-builder.config.mjs's
- * extraResources), otherwise whatever `doctl` resolves to on PATH — mirrors
- * main.mjs's injectBundledUv fallback-to-system behavior for dev/tests.
- */
-export function resolveDoctlBinary({
-  resourcesPath,
-  isPackaged,
-  platform = process.platform,
-} = {}) {
-  const binName = platform === "win32" ? "doctl.exe" : "doctl";
-  if (isPackaged && resourcesPath) {
-    return path.join(resourcesPath, "bin", binName);
-  }
-  return binName;
+/** Matches mars_tunnel.py's `TUNNEL_READY <port>` readiness line. */
+const READY_LINE_RE = /^TUNNEL_READY\s+(\d+)\s*$/;
+
+export function resolveMarsTunnelScriptPath() {
+  return MARS_TUNNEL_SCRIPT_PATH;
 }
 
 /**
- * Build the `doctl agents port-forward` argv for one session/port pair.
- * `localPort: 0` lets doctl ask the OS to pick a free port (doctl's own
- * `[<local-port>:]<remote-port>` parsing treats a leading "0:" as such).
+ * Parse one line of the tunnel subprocess's stdout, or null if it isn't the
+ * readiness line.
  */
-export function buildPortForwardArgs({ sessionId, remotePort, localPort = 0 }) {
-  if (!sessionId) {
-    throw new Error("sessionId is required");
-  }
-  if (!Number.isInteger(remotePort) || remotePort <= 0 || remotePort > 65535) {
-    throw new Error(`Invalid remote port: ${remotePort}`);
-  }
-  if (!Number.isInteger(localPort) || localPort < 0 || localPort > 65535) {
-    throw new Error(`Invalid local port: ${localPort}`);
-  }
-  return ["agents", "port-forward", sessionId, `${localPort}:${remotePort}`];
-}
-
-/** Parse one line of doctl's port-forward stdout, or null if it doesn't match. */
-export function parseForwardedPort(line) {
-  const match = FORWARD_LINE_RE.exec(line.trim());
+export function parseTunnelReadyLine(line) {
+  const match = READY_LINE_RE.exec(line.trim());
   if (!match) return null;
-  return {
-    address: match[1],
-    localPort: Number(match[2]),
-    remotePort: Number(match[3]),
-    sessionId: match[4],
-  };
+  return Number(match[1]);
 }
 
 /**
  * Poll a TCP connect against the tunnel's local listener until it accepts a
  * connection or `timeoutMs` elapses. This is the "wait-for-healthy" check
- * before reporting the tunnel ready — the port-forward listener can exist
- * slightly before doctl has finished readying the underlying WS bridge.
+ * before reporting the tunnel ready (mirrors dev-extra-backend.mjs's
+ * waitForServer pattern) — independent of the subprocess's own readiness
+ * claim, which only confirms the listener socket was bound, not that a
+ * client can actually reach it.
  */
 function waitForLocalListener(port, host, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
@@ -126,30 +102,55 @@ export async function startPortForwardTunnel({
   accessToken,
   apiUrl,
   localPort = 0,
-  doctlPath = "doctl",
+  address = "127.0.0.1",
+  scriptPath = MARS_TUNNEL_SCRIPT_PATH,
+  uvCommand = "uv",
   healthyTimeoutMs = DEFAULT_HEALTHY_TIMEOUT_MS,
   spawnFn = spawn,
 } = {}) {
+  if (!sessionId) {
+    throw new Error("sessionId is required");
+  }
+  if (!Number.isInteger(remotePort) || remotePort <= 0 || remotePort > 65535) {
+    throw new Error(`Invalid remote port: ${remotePort}`);
+  }
   if (!accessToken) {
     throw new Error("accessToken is required");
   }
 
-  const args = buildPortForwardArgs({ sessionId, remotePort, localPort });
-  args.push("--access-token", accessToken);
+  const args = [
+    "run",
+    scriptPath,
+    "--session-id",
+    sessionId,
+    "--remote-port",
+    String(remotePort),
+    "--local-port",
+    String(localPort),
+    "--address",
+    address,
+  ];
   if (apiUrl) {
     args.push("--api-url", apiUrl);
   }
 
   const child = spawnFn(
-    doctlPath,
+    uvCommand,
     args,
-    getProcessTreeSpawnOptions({ stdio: ["ignore", "pipe", "pipe"] }),
+    getProcessTreeSpawnOptions({
+      stdio: ["ignore", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        // Passed via env, not argv, so the bearer token never shows up in a
+        // `ps` listing (mars_tunnel.py reads this exact variable).
+        MARS_TUNNEL_ACCESS_TOKEN: accessToken,
+      },
+    }),
   );
 
-  let resolvedPort = null;
   let stderrTail = "";
 
-  const forwardedPort = await new Promise((resolve, reject) => {
+  const announcedPort = await new Promise((resolve, reject) => {
     let stdoutBuffer = "";
 
     function cleanup() {
@@ -166,13 +167,10 @@ export async function startPortForwardTunnel({
         const line = stdoutBuffer.slice(0, newlineIndex);
         stdoutBuffer = stdoutBuffer.slice(newlineIndex + 1);
 
-        const forwarded = parseForwardedPort(line);
-        if (forwarded && resolvedPort == null) {
-          resolvedPort = forwarded.localPort;
-        }
-        if (line.trim() === READY_LINE && resolvedPort != null) {
+        const readyPort = parseTunnelReadyLine(line);
+        if (readyPort != null) {
           cleanup();
-          resolve(resolvedPort);
+          resolve(readyPort);
           return;
         }
       }
@@ -180,7 +178,7 @@ export async function startPortForwardTunnel({
 
     function onStderr(chunk) {
       // Keep a bounded tail so a hung/rejected dial's error is diagnosable
-      // without buffering an unbounded amount of doctl output.
+      // without buffering an unbounded amount of subprocess output.
       stderrTail = (stderrTail + chunk.toString()).slice(-4000);
     }
 
@@ -193,7 +191,7 @@ export async function startPortForwardTunnel({
       cleanup();
       reject(
         new Error(
-          `doctl exited before the tunnel was ready (code=${code ?? "null"}, signal=${signal ?? "null"}): ${stderrTail.trim()}`,
+          `mars_tunnel.py exited before the tunnel was ready (code=${code ?? "null"}, signal=${signal ?? "null"}): ${stderrTail.trim()}`,
         ),
       );
     }
@@ -204,12 +202,12 @@ export async function startPortForwardTunnel({
     child.once("exit", onExit);
   });
 
-  await waitForLocalListener(forwardedPort, "127.0.0.1", healthyTimeoutMs);
+  await waitForLocalListener(announcedPort, "127.0.0.1", healthyTimeoutMs);
 
   return {
     sessionId,
     remotePort,
-    localPort: forwardedPort,
+    localPort: announcedPort,
     process: child,
     stop(signal = "SIGTERM") {
       return signalProcessTree(child, signal);
