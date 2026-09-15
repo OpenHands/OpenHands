@@ -1,15 +1,26 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MCPClient } from "@openhands/typescript-client/clients";
 import {
   setActiveSelection,
   setRegisteredBackends,
 } from "../backend-registry/active-store";
+import {
+  getCloudMcpOAuthStatus,
+  startCloudMcpOAuth,
+} from "../cloud/mcp-service.api";
 import SettingsService from "../settings-service/settings-service.api";
 import McpService from "./mcp-service.api";
+import type { MCPServerConfig } from "#/types/mcp-server";
 import { REDACTED_MCP_SECRET_VALUE } from "#/utils/mcp-config";
 
 vi.mock("@openhands/typescript-client/clients", () => ({
   MCPClient: vi.fn(),
+}));
+
+vi.mock("../cloud/mcp-service.api", () => ({
+  testCloudMcpServer: vi.fn(),
+  startCloudMcpOAuth: vi.fn(),
+  getCloudMcpOAuthStatus: vi.fn(),
 }));
 
 const testServer = vi.fn();
@@ -234,5 +245,99 @@ describe("McpService.testServer", () => {
 
     expect(getOAuthStatus).toHaveBeenCalledWith("job/1");
     expect(close).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("McpService.authorizeOAuth on cloud backends", () => {
+  const ROVO: MCPServerConfig = {
+    id: "atlassian_rovo",
+    type: "shttp",
+    name: "Atlassian Rovo",
+    url: "https://mcp.atlassian.com/v1/mcp/authv2",
+    auth: {
+      strategy: "oauth2",
+      authentication: { type: "oauth", client_auth_method: "none" },
+    },
+  };
+  const AUTHORIZATION_URL = "https://auth.atlassian.com/authorize?state=s";
+  let popup: { close: ReturnType<typeof vi.fn>; location: { href: string } };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setRegisteredBackends([
+      {
+        id: "cloud",
+        name: "Cloud",
+        host: "https://app.all-hands.dev",
+        apiKey: "bearer-token",
+        kind: "cloud",
+      },
+    ]);
+    setActiveSelection({ backendId: "cloud", orgId: null });
+    popup = { close: vi.fn(), location: { href: "" } };
+    vi.spyOn(window, "open").mockReturnValue(popup as unknown as Window);
+    vi.mocked(startCloudMcpOAuth).mockReset();
+    vi.mocked(getCloudMcpOAuthStatus).mockReset();
+    vi.mocked(startCloudMcpOAuth).mockResolvedValue({
+      ok: true,
+      job_id: "job-1",
+      authorization_url: AUTHORIZATION_URL,
+    });
+    vi.mocked(getCloudMcpOAuthStatus)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: "authorizing",
+        job_id: "job-1",
+        callback_ready: true,
+      })
+      .mockResolvedValue({
+        ok: true,
+        status: "succeeded",
+        job_id: "job-1",
+        callback_ready: true,
+        tools: ["search"],
+        oauth_state: { tokens: { access_token: "plain-access-token" } },
+      });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("runs the OAuth flow through the app server instead of a local agent-server", async () => {
+    vi.useFakeTimers();
+    try {
+      // Act
+      const pending = McpService.authorizeOAuth(ROVO);
+      await vi.advanceTimersByTimeAsync(1000);
+      const result = await pending;
+
+      // Assert
+      expect(MCPClient).not.toHaveBeenCalled();
+      expect(startCloudMcpOAuth).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(startCloudMcpOAuth).mock.calls[0][0]).toMatchObject({
+        name: "atlassian_rovo",
+        server: { type: "http", url: ROVO.url, auth: ROVO.auth },
+        timeout: 120,
+      });
+      expect(popup.location.href).toBe(AUTHORIZATION_URL);
+      expect(getCloudMcpOAuthStatus).toHaveBeenCalledWith("job-1");
+      expect(popup.close).toHaveBeenCalledTimes(1);
+      expect(result).toMatchObject({
+        ok: true,
+        tools: ["search"],
+        oauth_state: { tokens: { access_token: "plain-access-token" } },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("closes the popup when the app server call fails", async () => {
+    vi.mocked(startCloudMcpOAuth).mockRejectedValue(new Error("boom"));
+
+    await expect(McpService.authorizeOAuth(ROVO)).rejects.toThrow("boom");
+
+    expect(popup.close).toHaveBeenCalledTimes(1);
   });
 });
