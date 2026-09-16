@@ -385,6 +385,24 @@ describe("formatMissingUvxGuidance", () => {
 });
 
 describe("buildAgentServerTelemetryEnv", () => {
+  const agentServerConfig = {
+    cwd: "/tmp/cwd",
+    backendPort: 18000,
+    tmuxTmpDir: "/tmp/tmux",
+    stateDir: "/tmp/state",
+    conversationsPath: "/tmp/conversations",
+    workspacesPath: "/tmp/workspaces",
+    bashEventsDir: "/tmp/bash-events",
+    vscodePort: 19000,
+    vscodeBasePath: "/vscode",
+    secretKey: "secret",
+    sessionApiKey: "session",
+    backendBaseUrl: "http://127.0.0.1:18000",
+    backendHost: "127.0.0.1:18000",
+    workingDir: "/tmp/workspaces",
+    canvasToolsDir: "/tmp/tools",
+  };
+
   it("configures PostHog telemetry by default without seeding consent", () => {
     expect(buildAgentServerTelemetryEnv({})).toEqual({
       OH_TELEMETRY_EXPORTER: "posthog",
@@ -432,31 +450,37 @@ describe("buildAgentServerTelemetryEnv", () => {
   });
 
   it("includes telemetry defaults in the full agent-server environment", () => {
-    const env = buildAgentServerEnv(
-      {
-        cwd: "/tmp/cwd",
-        backendPort: 18000,
-        tmuxTmpDir: "/tmp/tmux",
-        stateDir: "/tmp/state",
-        conversationsPath: "/tmp/conversations",
-        workspacesPath: "/tmp/workspaces",
-        bashEventsDir: "/tmp/bash-events",
-        vscodePort: 19000,
-        vscodeBasePath: "/vscode",
-        secretKey: "secret",
-        sessionApiKey: "session",
-        backendBaseUrl: "http://127.0.0.1:18000",
-        backendHost: "127.0.0.1:18000",
-        workingDir: "/tmp/workspaces",
-        canvasToolsDir: "/tmp/tools",
-      },
-      { env: {} },
-    );
+    const env = buildAgentServerEnv(agentServerConfig, { env: {} });
 
     expect(env).toMatchObject({
       OH_TELEMETRY_EXPORTER: "posthog",
       OH_SESSION_API_KEYS_0: "session",
     });
+  });
+
+  it("forwards configured Docker conversation runtime settings", () => {
+    const configured = buildAgentServerEnv(agentServerConfig, {
+      env: {
+        OH_CONVERSATION_RUNTIME: "docker",
+        OH_CONVERSATION_IMAGE: "agent-server:test",
+        OH_CONVERSATION_CONTAINER_MEMORY: "2g",
+        OH_CONVERSATION_CONTAINER_CPUS: "1",
+        OH_CONVERSATION_CONTAINER_PIDS_LIMIT: "256",
+        OH_CONVERSATION_CONTAINER_STARTUP_TIMEOUT: "180",
+      },
+    });
+
+    expect(configured).toMatchObject({
+      OH_CONVERSATION_RUNTIME: "docker",
+      OH_CONVERSATION_IMAGE: "agent-server:test",
+      OH_CONVERSATION_CONTAINER_MEMORY: "2g",
+      OH_CONVERSATION_CONTAINER_CPUS: "1",
+      OH_CONVERSATION_CONTAINER_PIDS_LIMIT: "256",
+      OH_CONVERSATION_CONTAINER_STARTUP_TIMEOUT: "180",
+    });
+    expect(
+      buildAgentServerEnv(agentServerConfig, { env: {} }),
+    ).not.toHaveProperty("OH_CONVERSATION_RUNTIME");
   });
 });
 

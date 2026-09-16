@@ -789,8 +789,21 @@ export function buildAgentServerTelemetryEnv(env = process.env) {
  */
 export function buildAgentServerEnv(config, options = {}) {
   const { vscodeBasePath = null, env = process.env } = options;
+  const conversationRuntimeEnv = Object.fromEntries(
+    [
+      "OH_CONVERSATION_RUNTIME",
+      "OH_CONVERSATION_IMAGE",
+      "OH_CONVERSATION_CONTAINER_MEMORY",
+      "OH_CONVERSATION_CONTAINER_CPUS",
+      "OH_CONVERSATION_CONTAINER_PIDS_LIMIT",
+      "OH_CONVERSATION_CONTAINER_STARTUP_TIMEOUT",
+    ]
+      .filter((key) => env[key] !== undefined)
+      .map((key) => [key, env[key]]),
+  );
   return {
     ...buildAgentServerTelemetryEnv(env),
+    ...conversationRuntimeEnv,
     // Force Python to use UTF-8 for all file I/O and streams.
     //
     // On Windows, Python defaults to the system ANSI codepage (e.g. cp1252).
