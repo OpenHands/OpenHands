@@ -449,6 +449,81 @@ describe("handleEventForUI", () => {
       expect(slotsOf(result)[0].content).toBe("fresh text");
     });
 
+    it("keeps streamed text when the current attempt's start is repeated", () => {
+      const opened = openStreamingSlot(started("item-1"), []);
+      const streamed = appendStreamingDeltas([delta("item-1", "kept")], opened);
+
+      const result = openStreamingSlot(started("item-1"), streamed);
+
+      expect(result).toBe(streamed);
+      expect(slotsOf(result)[0].content).toBe("kept");
+    });
+
+    it("places the slot by anchor_seq when a message lands before the first token", () => {
+      // The SDK reads the anchor when the step opens, before the LLM call; a
+      // user message persisted while waiting for the first token has a higher
+      // seq and has already rendered by the time item_started arrives.
+      const history = [
+        { ...mockMessageEvent, seq: 0 },
+        { ...mockMessageEvent, id: "sent-while-waiting", seq: 1 },
+      ];
+
+      const result = openStreamingSlot(
+        started("item-1", { anchor_seq: 0 }),
+        history,
+      );
+
+      expect(result.map((event) => event.id)).toEqual([
+        mockMessageEvent.id,
+        "item-1",
+        "sent-while-waiting",
+      ]);
+      // Borrowing the anchor's timestamp keeps it there through a re-sort.
+      expect(slotsOf(result)[0].timestamp).toBe(mockMessageEvent.timestamp);
+    });
+
+    it("borrows the anchor event's timestamp, not its neighbour's", () => {
+      const history = [
+        {
+          ...mockMessageEvent,
+          timestamp: "2026-09-16T10:00:00.000001",
+          seq: 4,
+        },
+        // e.g. a transient or client-stamped event with a different clock
+        {
+          ...mockMessageEvent,
+          id: "no-seq",
+          timestamp: "2026-09-16T23:59:59Z",
+        },
+      ];
+
+      const result = openStreamingSlot(
+        started("item-1", { anchor_seq: 4 }),
+        history,
+      );
+
+      expect(slotsOf(result)[0].timestamp).toBe("2026-09-16T10:00:00.000001");
+    });
+
+    it("supersedes on a higher-attempt delta even without its item_started", () => {
+      const opened = openStreamingSlot(started("item-1"), []);
+      const first = appendStreamingDeltas([delta("item-1", "stale")], opened);
+
+      const result = appendStreamingDeltas(
+        [
+          delta("item-1", "fresh", { attempt: 2 }),
+          delta("item-1", "think", { attempt: 2, kind: "reasoning" }),
+        ],
+        first,
+      );
+
+      expect(slotsOf(result)[0]).toMatchObject({
+        attempt: 2,
+        content: "fresh",
+        reasoning_content: "think",
+      });
+    });
+
     it("ignores frames from an attempt already superseded", () => {
       const opened = openStreamingSlot(started("item-1", { attempt: 2 }), []);
       const result = appendStreamingDeltas(

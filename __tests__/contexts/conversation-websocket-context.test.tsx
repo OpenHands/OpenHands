@@ -2,6 +2,8 @@ import React from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, waitFor, act } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { createUserMessageEvent } from "test-utils";
 import {
   ConversationWebSocketProvider,
@@ -29,6 +31,8 @@ type QueryParams = Record<string, string | boolean>;
 
 type CapturedWebSocketOptions = {
   onMessage?: (event: { data: string }) => void;
+  onOpen?: (event: Event) => void;
+  onClose?: (event: CloseEvent) => void;
   queryParams?: QueryParams | (() => QueryParams);
   sessionApiKey?: string | null;
 };
@@ -51,6 +55,7 @@ const wsCapture = vi.hoisted(() => ({
   mainOnMessage: null as null | ((event: { data: string }) => void),
   mainOptions: null as CapturedWebSocketOptions | null,
   planningOnMessage: null as null | ((event: { data: string }) => void),
+  planningOptions: null as CapturedWebSocketOptions | null,
   calls: [] as Array<{
     url: string;
     options?: CapturedWebSocketOptions;
@@ -80,6 +85,7 @@ vi.mock("#/hooks/use-websocket", () => ({
         wsCapture.mainOptions = options;
       } else {
         wsCapture.planningOnMessage = options.onMessage;
+        wsCapture.planningOptions = options;
       }
     }
     return { socket: null, reconnect: vi.fn() };
@@ -142,6 +148,7 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     wsCapture.mainOnMessage = null;
     wsCapture.mainOptions = null;
     wsCapture.planningOnMessage = null;
+    wsCapture.planningOptions = null;
     wsCapture.calls.length = 0;
     window.localStorage.clear();
     queryClient = new QueryClient({
@@ -166,6 +173,9 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
 
     // The cached REST history page ends at the user's message — a fresh page
     // per conversation so we can detect cross-conversation leakage.
+    // Unfiltered count = log length; the history page turns it into the
+    // first-connect cursor.
+    vi.spyOn(EventService, "getEventCount").mockResolvedValue(1);
     vi.spyOn(EventService, "searchEvents").mockImplementation(
       async (conversationId: string) => ({
         items: [createUserMessageEvent(`user-msg-${conversationId}`)],
@@ -1016,6 +1026,371 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     ]);
     expect(JSON.stringify(uiEvents)).not.toContain("STALE");
     expect(JSON.stringify(events)).not.toContain("STALE");
+  });
+
+  describe("session socket resume cursor", () => {
+    const mainAfterSeq = () =>
+      resolveQueryParams(wsCapture.mainOptions).after_seq;
+
+    it("resumes the first connect from the history page, not the whole log", async () => {
+      vi.mocked(EventService.getEventCount).mockResolvedValue(42);
+      renderProviderWithUrl("conv-cursor");
+      await waitFor(() => expect(wsCapture.mainOptions).not.toBeNull());
+
+      // after_seq=-1 would replay history older than the page through
+      // non-idempotent side effects (terminal, banners, client tools).
+      await waitFor(() => expect(mainAfterSeq()).toBe("41"));
+    });
+
+    it("advances past each durable frame, so a reconnect resumes there", async () => {
+      renderProviderWithUrl("conv-advance");
+      await waitFor(() => expect(wsCapture.mainOnMessage).not.toBeNull());
+      // Connect: count is 1, so the socket resumes after seq 0.
+      await waitFor(() => expect(mainAfterSeq()).toBe("0"));
+
+      act(() => {
+        wsCapture.mainOnMessage!({
+          data: durable(makeAgentMessage("agent-1", "hi"), 1),
+        });
+        wsCapture.mainOnMessage!({
+          data: durable(makeAgentMessage("agent-2", "hi"), 2),
+        });
+      });
+
+      expect(mainAfterSeq()).toBe("2");
+    });
+
+    it("does not resume past a durable frame still in flight", async () => {
+      renderProviderWithUrl("conv-gap");
+      await waitFor(() => expect(wsCapture.mainOnMessage).not.toBeNull());
+      await waitFor(() => expect(mainAfterSeq()).toBe("0"));
+
+      // agent-server 1.47.0 delivers a state update (#2) ahead of the user
+      // message persisted before it (#1). If the socket drops here, resuming
+      // after #2 would lose #1 for good.
+      act(() => {
+        wsCapture.mainOnMessage!({
+          data: durable(makeAgentMessage("state-2", "later"), 2),
+        });
+      });
+      expect(mainAfterSeq()).toBe("0");
+
+      act(() => {
+        wsCapture.mainOnMessage!({
+          data: durable(makeAgentMessage("msg-1", "earlier"), 1),
+        });
+        wsCapture.mainOnMessage!({
+          data: durable(makeAgentMessage("state-2", "later"), 2),
+        });
+      });
+      expect(mainAfterSeq()).toBe("2");
+    });
+
+    it("does not carry a cursor into the next conversation", async () => {
+      const { rerender } = renderProviderWithUrl("conv-first");
+      await waitFor(() => expect(wsCapture.mainOnMessage).not.toBeNull());
+      await waitFor(() => expect(mainAfterSeq()).toBe("0"));
+      act(() => {
+        wsCapture.mainOnMessage!({
+          data: durable(makeAgentMessage("agent-first", "hi"), 1),
+        });
+      });
+      expect(mainAfterSeq()).toBe("1");
+
+      vi.mocked(EventService.getEventCount).mockResolvedValue(3);
+      rerender(
+        <QueryClientProvider client={queryClient}>
+          <ConversationWebSocketProvider
+            conversationId="conv-second"
+            conversationUrl="http://localhost/api"
+          >
+            <div />
+          </ConversationWebSocketProvider>
+        </QueryClientProvider>,
+      );
+
+      // Resolving params starts the cursor, exactly as a connect does, so wait
+      // until conv-second's socket actually exists (it is gated on history).
+      await waitFor(() =>
+        expect(wsCapture.calls.at(-1)?.url ?? "").toContain("conv-second"),
+      );
+      // conv-first's position means nothing in conv-second's log.
+      expect(mainAfterSeq()).toBe("2");
+    });
+  });
+
+  it("does not carry the planner's cursor into a different planning conversation", async () => {
+    const planner = (id: string): AppConversation =>
+      ({
+        id,
+        conversation_url: `http://planner.example/api/conversations/${id}`,
+        session_api_key: null,
+      }) as AppConversation;
+    const renderWith = (plannerId: string) => (
+      <QueryClientProvider client={queryClient}>
+        <ConversationWebSocketProvider
+          conversationId="conv-plan-switch"
+          conversationUrl="http://localhost/api"
+          subConversationIds={[plannerId]}
+          subConversations={[planner(plannerId)]}
+        >
+          <div />
+        </ConversationWebSocketProvider>
+      </QueryClientProvider>
+    );
+    const plannerAfterSeq = () =>
+      resolveQueryParams(wsCapture.planningOptions).after_seq;
+
+    const { rerender } = render(renderWith("planner-a"));
+    await waitFor(() => expect(wsCapture.planningOnMessage).not.toBeNull());
+    expect(plannerAfterSeq()).toBe("-1");
+    act(() => {
+      wsCapture.planningOnMessage!({
+        data: durable(makeAgentMessage("plan-0", "a"), 0),
+      });
+    });
+    expect(plannerAfterSeq()).toBe("0");
+
+    rerender(renderWith("planner-b"));
+    await waitFor(() =>
+      expect(
+        wsCapture.calls.some(({ url }) => url.endsWith("/planner-b")),
+      ).toBe(true),
+    );
+    expect(plannerAfterSeq()).toBe("-1");
+  });
+
+  describe("streaming slots across reconnects", () => {
+    const slots = () =>
+      useEventStore
+        .getState()
+        .uiEvents.filter((event) => isStreamingDeltaEvent(event));
+
+    it("leaves no orphaned bubble when the socket drops mid-stream", async () => {
+      renderProviderWithUrl("conv-drop");
+      await waitFor(() => expect(wsCapture.mainOnMessage).not.toBeNull());
+      await waitFor(() => expect(eventIds()).toEqual(["user-msg-conv-drop"]));
+
+      act(() => {
+        wsCapture.mainOnMessage!({ data: itemStarted("agent-drop") });
+        wsCapture.mainOnMessage!({ data: delta("agent-drop", "half a", 0) });
+      });
+      await waitFor(() => expect(slots()).toHaveLength(1));
+
+      // Connection lost: progress frames are never replayed, so the slot goes.
+      act(() => {
+        wsCapture.mainOptions!.onClose!({} as CloseEvent);
+      });
+      expect(slots()).toHaveLength(0);
+
+      // Reconnect. A stale delta for the dead slot must not resurrect it, and
+      // the finished message arrives on the cursor exactly once.
+      act(() => {
+        wsCapture.mainOptions!.onOpen!({} as Event);
+        wsCapture.mainOnMessage!({ data: delta("agent-drop", " sentence", 1) });
+        wsCapture.mainOnMessage!({
+          data: durable(makeAgentMessage("agent-drop", "half a sentence")),
+        });
+      });
+
+      const { uiEvents } = useEventStore.getState();
+      expect(slots()).toHaveLength(0);
+      expect(uiEvents.map((event) => event.id)).toEqual([
+        "user-msg-conv-drop",
+        "agent-drop",
+      ]);
+    });
+
+    it("drops the slot on item_aborted", async () => {
+      renderProviderWithUrl("conv-abort");
+      await waitFor(() => expect(wsCapture.mainOnMessage).not.toBeNull());
+
+      act(() => {
+        wsCapture.mainOnMessage!({ data: itemStarted("agent-abort") });
+        wsCapture.mainOnMessage!({ data: delta("agent-abort", "partial", 0) });
+        wsCapture.mainOnMessage!({
+          data: JSON.stringify({
+            type: "item_aborted",
+            item_id: "agent-abort",
+            attempt: 1,
+            reason: "cancelled",
+          }),
+        });
+      });
+
+      expect(slots()).toHaveLength(0);
+    });
+
+    it("re-streams a retry in the same bubble instead of appending to it", async () => {
+      renderProviderWithUrl("conv-retry");
+      await waitFor(() => expect(wsCapture.mainOnMessage).not.toBeNull());
+
+      act(() => {
+        wsCapture.mainOnMessage!({ data: itemStarted("agent-retry") });
+        wsCapture.mainOnMessage!({
+          data: delta("agent-retry", "first try", 0),
+        });
+        wsCapture.mainOnMessage!({
+          data: JSON.stringify({
+            type: "item_started",
+            item_id: "agent-retry",
+            attempt: 2,
+          }),
+        });
+        wsCapture.mainOnMessage!({
+          data: JSON.stringify({
+            type: "delta",
+            item_id: "agent-retry",
+            attempt: 2,
+            order: 0,
+            kind: "text",
+            content: "second try",
+          }),
+        });
+      });
+
+      await waitFor(() => expect(slots()[0]?.content).toBe("second try"));
+      expect(slots()).toHaveLength(1);
+    });
+  });
+
+  // Frames recorded from a real agent-server 1.47.0 session socket, driven by a
+  // word-by-word streaming mock LLM. Large strings are trimmed; nothing else is
+  // edited, so these pin the client to what the server actually sends —
+  // including durable frames that arrive out of seq order.
+  describe("recorded agent-server 1.47.0 transcripts", () => {
+    type Frame = {
+      type: string;
+      seq?: number;
+      item_id?: string;
+      event?: { id: string; source?: string; llm_message?: unknown };
+    };
+    const load = <T,>(name: string): T =>
+      JSON.parse(
+        readFileSync(
+          resolve(process.cwd(), "__tests__/fixtures/session-socket", name),
+          "utf8",
+        ),
+      );
+    const feed = (frames: Frame[]) =>
+      act(() => {
+        for (const frame of frames) {
+          wsCapture.mainOnMessage!({ data: JSON.stringify(frame) });
+        }
+      });
+    const slots = () =>
+      useEventStore
+        .getState()
+        .uiEvents.filter((event) => isStreamingDeltaEvent(event));
+    const retiringIds = (frames: Frame[]) =>
+      frames.filter((f) => f.type === "item_started").map((f) => f.item_id!);
+
+    beforeEach(() => {
+      // REST history comes from the same server clock as the recording (naive
+      // local time), and predates it.
+      vi.mocked(EventService.searchEvents).mockImplementation(
+        async (conversationId: string) => ({
+          items: [
+            {
+              ...createUserMessageEvent(`user-msg-${conversationId}`),
+              timestamp: "2026-09-16T10:00:00.000000",
+            },
+          ],
+          next_page_id: null,
+        }),
+      );
+    });
+
+    it("keeps one whole bubble when a user message lands mid-stream (#15433)", async () => {
+      const frames = load<Frame[]>(
+        "mid-stream-user-message.agent-server-1.47.0.json",
+      );
+      renderProviderWithUrl("conv-recorded-a");
+      await waitFor(() => expect(wsCapture.mainOnMessage).not.toBeNull());
+      await waitFor(() => expect(wsCapture.mainOptions).not.toBeNull());
+      resolveQueryParams(wsCapture.mainOptions); // connect
+
+      const midUser = frames.findIndex(
+        (f) => f.type === "durable" && f.event?.source === "user" && f.seq! > 1,
+      );
+      expect(midUser).toBeGreaterThan(
+        frames.findIndex((f) => f.type === "item_started"),
+      );
+
+      // Up to and including the first delta after the interrupting message.
+      feed(frames.slice(0, midUser + 2));
+      await waitFor(() =>
+        expect(slots()[0]?.content).toBe("Let me check the workspace"),
+      );
+      expect(slots()).toHaveLength(1);
+      const order = useEventStore.getState().uiEvents.map((e) => e.id);
+      expect(order.indexOf(slots()[0].id)).toBeLessThan(
+        order.indexOf(frames[midUser].event!.id),
+      );
+
+      feed(frames.slice(midUser + 2));
+      await waitFor(() => expect(slots()).toHaveLength(0));
+
+      const { events } = useEventStore.getState();
+      const ids = events.map((e) => e.id);
+      for (const itemId of retiringIds(frames)) {
+        expect(ids.filter((id) => id === itemId)).toHaveLength(1);
+      }
+      expect(
+        events.filter((e) => e.source === "agent" && "llm_message" in e),
+      ).toHaveLength(1);
+      // The cursor survived the out-of-order delivery and reached the end.
+      const lastSeq = Math.max(
+        ...frames.filter((f) => f.type === "durable").map((f) => f.seq!),
+      );
+      expect(resolveQueryParams(wsCapture.mainOptions).after_seq).toBe(
+        String(lastSeq),
+      );
+    });
+
+    it("leaves no orphan and loses nothing across a real mid-stream reconnect", async () => {
+      const { before, resumeAfterSeq, after } = load<{
+        before: Frame[];
+        resumeAfterSeq: number;
+        after: Frame[];
+      }>("reconnect-mid-stream.agent-server-1.47.0.json");
+      renderProviderWithUrl("conv-recorded-b");
+      await waitFor(() => expect(wsCapture.mainOnMessage).not.toBeNull());
+      await waitFor(() => expect(wsCapture.mainOptions).not.toBeNull());
+      resolveQueryParams(wsCapture.mainOptions); // connect
+
+      feed(before);
+      await waitFor(() => expect(slots()).toHaveLength(1));
+      const openItem = slots()[0].id;
+
+      // The client computes the same resume point the recording used.
+      act(() => {
+        wsCapture.mainOptions!.onClose!({} as CloseEvent);
+      });
+      expect(slots()).toHaveLength(0);
+      expect(resolveQueryParams(wsCapture.mainOptions).after_seq).toBe(
+        String(resumeAfterSeq),
+      );
+      act(() => {
+        wsCapture.mainOptions!.onOpen!({} as Event);
+      });
+
+      feed(after);
+      await waitFor(() => {
+        expect(slots()).toHaveLength(0);
+      });
+      const ids = useEventStore.getState().events.map((e) => e.id);
+      expect(ids.filter((id) => id === openItem)).toHaveLength(1);
+      const serverIds = new Set(
+        [...before, ...after]
+          .filter((f) => f.type === "durable")
+          .map((f) => f.event!.id),
+      );
+      for (const id of serverIds) {
+        expect(ids).toContain(id);
+      }
+      expect(new Set(ids).size).toBe(ids.length);
+    });
   });
 
   it("consumes the optimistic pending bubble when the echoed user message arrives via REST preload", async () => {

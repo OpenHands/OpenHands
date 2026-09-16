@@ -80,4 +80,16 @@ describe("useStreamedText", () => {
     rerender({ text: "a completely different retry" });
     expect(result.current).toBe("a completely different retry");
   });
+
+  it("cancels the pending frame on unmount", () => {
+    const { rerender, unmount } = renderHook(
+      ({ text }) => useStreamedText(text),
+      { initialProps: { text: "a" } },
+    );
+    rerender({ text: `a${"b".repeat(50)}` });
+    expect(frames.pending()).toBe(1);
+
+    unmount();
+    expect(frames.pending()).toBe(0);
+  });
 });

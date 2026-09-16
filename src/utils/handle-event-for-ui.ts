@@ -51,8 +51,7 @@ const slotInsertIndex = (
 
 /**
  * Open (or re-open, for a higher attempt) the slot an `item_started` frame
- * announces. A lower attempt is a late frame from a stream already superseded
- * and is ignored.
+ * announces. A lower or equal attempt is ignored.
  */
 export const openStreamingSlot = (
   frame: ItemStartedFrame,
@@ -64,7 +63,8 @@ export const openStreamingSlot = (
 
   if (existingIndex !== -1) {
     const slot = uiEvents[existingIndex] as StreamingDeltaEvent;
-    if (attemptOf(slot) > attempt) {
+    // Only a higher attempt supersedes; a repeat of the current one is a no-op.
+    if (attemptOf(slot) >= attempt) {
       return uiEvents;
     }
     const next = [...uiEvents];
@@ -78,9 +78,17 @@ export const openStreamingSlot = (
   }
 
   const insertIndex = slotInsertIndex(uiEvents, frame.anchor_seq);
-  // Borrow the anchor's timestamp so the store's timestamp sort (which fires
-  // whenever an out-of-order event arrives) cannot drag the slot away from it.
-  const anchor = uiEvents[insertIndex - 1];
+  // Borrow the anchor's timestamp so the store's timestamp sort — which fires
+  // whenever durable frames arrive out of order, as they routinely do — keeps
+  // the slot right after it. Prefer the anchor event itself: a neighbour may be
+  // a client-stamped event whose clock does not match the server's.
+  const anchor =
+    uiEvents.find(
+      (event) =>
+        frame.anchor_seq !== null &&
+        frame.anchor_seq !== undefined &&
+        event.seq === frame.anchor_seq,
+    ) ?? uiEvents[insertIndex - 1];
   const slot: StreamingDeltaEvent & StreamingSlotMeta = {
     kind: "StreamingDeltaEvent",
     id: frame.item_id,

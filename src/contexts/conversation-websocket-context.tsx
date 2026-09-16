@@ -57,6 +57,7 @@ import type {
 } from "#/types/agent-server/core/events/conversation-state-event";
 import { handleActionEventCacheInvalidation } from "#/utils/cache-utils";
 import { buildWebSocketUrl } from "#/utils/websocket-url";
+import { createSeqCursor, type SeqCursor } from "#/utils/session-seq-cursor";
 import type {
   AppConversation,
   SendMessageRequest,
@@ -136,7 +137,7 @@ function extractMessageEventText(
 const routeSessionFrame = (
   raw: unknown,
   batcher: StreamingDeltaBatcher | null,
-  /** Advance this socket's resume cursor to the highest `seq` it has seen. */
+  /** Report a durable frame's `seq` to this socket's resume cursor. */
   advanceCursor: (seq: number) => void,
   slotMeta: { isFromPlanningAgent?: boolean } = {},
 ): unknown | null => {
@@ -232,11 +233,10 @@ export function ConversationWebSocketProvider({
     });
   }
 
-  // Resume cursor: the highest `seq` a durable frame carried on this socket.
-  // Read at connect time (see the lazy `queryParams` below) so it can advance
-  // per frame without re-rendering. `-1` asks for the full log.
-  const mainAfterSeqRef = useRef<number | null>(null);
-  const planningAfterSeqRef = useRef<number | null>(null);
+  // Resume cursors, one per socket. Started at connect time (see the lazy
+  // `queryParams` below) and advanced per durable frame without re-rendering.
+  const mainCursorRef = useRef<SeqCursor>(createSeqCursor());
+  const planningCursorRef = useRef<SeqCursor>(createSeqCursor());
 
   // History loading state.
   // - Main conversation history is now loaded via REST (`useConversationHistory`),
@@ -348,6 +348,20 @@ export function ConversationWebSocketProvider({
   // background — the socket gate below also keys on `isPending`, so that
   // refetch never drops a live socket.
   const isLoadingHistoryMain = !!conversationId && isPreloadingHistory;
+
+  // First-connect cursor from the REST page (see `afterSeq`). Read lazily by
+  // the socket's `queryParams`; after the first connect the socket's own
+  // cursor takes over.
+  const historyAfterSeqRef = useRef<number | null>(null);
+  useEffect(() => {
+    historyAfterSeqRef.current = preloadedHistory?.afterSeq ?? null;
+  }, [preloadedHistory]);
+
+  // The planner has its own log: reset its cursor when it is a different one.
+  const planningSocketConversationId = subConversations?.[0]?.id ?? null;
+  useEffect(() => {
+    planningCursorRef.current.clear();
+  }, [planningSocketConversationId]);
 
   // Clear the (global, not conversation-scoped) event store when the active
   // conversation changes, BEFORE the preloaded-history effect below re-seeds
@@ -566,6 +580,9 @@ export function ConversationWebSocketProvider({
   useEffect(() => {
     hasConnectedRefMain.current = false;
     hasConnectedRefPlanning.current = false;
+    // A cursor is a position in one conversation's log; carrying it into the
+    // next would skip that conversation's events below it.
+    mainCursorRef.current.clear();
     // Reset the tracked event ref when conversation changes
     latestPlanningFileEventRef.current = null;
   }, [conversationId]);
@@ -594,12 +611,7 @@ export function ConversationWebSocketProvider({
         const event = routeSessionFrame(
           JSON.parse(messageEvent.data),
           mainDeltaBatcherRef.current,
-          (seq) => {
-            mainAfterSeqRef.current = Math.max(
-              mainAfterSeqRef.current ?? -1,
-              seq,
-            );
-          },
+          mainCursorRef.current.observe,
         );
 
         // History loading for the main conversation is REST-driven now;
@@ -819,12 +831,7 @@ export function ConversationWebSocketProvider({
         const event = routeSessionFrame(
           JSON.parse(messageEvent.data),
           planningDeltaBatcherRef.current,
-          (seq) => {
-            planningAfterSeqRef.current = Math.max(
-              planningAfterSeqRef.current ?? -1,
-              seq,
-            );
-          },
+          planningCursorRef.current.observe,
           { isFromPlanningAgent: true },
         );
         if (event === null) {
@@ -1043,9 +1050,11 @@ export function ConversationWebSocketProvider({
     // captured at render. The first connect has no cursor and asks for the
     // whole log (`-1`); the REST preload (`useConversationHistory`) still
     // renders instantly and the event store dedupes the overlap by id.
-    const queryParams = () => ({
-      after_seq: String(mainAfterSeqRef.current ?? -1),
-    });
+    const queryParams = () => {
+      const cursor = mainCursorRef.current;
+      cursor.start(cursor.value ?? historyAfterSeqRef.current ?? -1);
+      return { after_seq: String(cursor.value) };
+    };
 
     return {
       queryParams,
@@ -1081,9 +1090,11 @@ export function ConversationWebSocketProvider({
   const planningWebsocketOptions: WebSocketHookOptions = useMemo(() => {
     // The planner's history is not preloaded over REST, so it always replays
     // from the start on a first connect and from its cursor after that.
-    const queryParams = () => ({
-      after_seq: String(planningAfterSeqRef.current ?? -1),
-    });
+    const queryParams = () => {
+      const cursor = planningCursorRef.current;
+      cursor.start(cursor.value ?? -1);
+      return { after_seq: String(cursor.value) };
+    };
 
     const planningAgentConversation = subConversations?.[0];
     const planningApiKey =
