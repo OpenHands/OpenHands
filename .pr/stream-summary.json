@@ -1,0 +1,134 @@
+{
+  "conversation": "1ab0aee7-8515-4fca-904f-d09811bbf714",
+  "fault": "One browser-only WebSocket close; all frames forwarded unchanged from actual Agent Server.",
+  "fault_at": "2026-09-13T15:01:39.669Z",
+  "frames": [
+    {
+      "file": "stream-01-live.png",
+      "at": "2026-09-13T15:01:38.035Z",
+      "url": "http://127.0.0.1:9104/conversations/1ab0aee7-8515-4fca-904f-d09811bbf714"
+    },
+    {
+      "file": "stream-02-before-disconnect.png",
+      "at": "2026-09-13T15:01:39.668Z",
+      "url": "http://127.0.0.1:9104/conversations/1ab0aee7-8515-4fca-904f-d09811bbf714"
+    },
+    {
+      "file": "stream-03-disconnected.png",
+      "at": "2026-09-13T15:01:42.393Z",
+      "url": "http://127.0.0.1:9104/conversations/1ab0aee7-8515-4fca-904f-d09811bbf714"
+    },
+    {
+      "file": "stream-04-live.png",
+      "at": "2026-09-13T15:01:50.939Z",
+      "url": "http://127.0.0.1:9104/conversations/1ab0aee7-8515-4fca-904f-d09811bbf714"
+    },
+    {
+      "file": "stream-05-live.png",
+      "at": "2026-09-13T15:02:00.045Z",
+      "url": "http://127.0.0.1:9104/conversations/1ab0aee7-8515-4fca-904f-d09811bbf714"
+    },
+    {
+      "file": "stream-06-live.png",
+      "at": "2026-09-13T15:02:10.387Z",
+      "url": "http://127.0.0.1:9104/conversations/1ab0aee7-8515-4fca-904f-d09811bbf714"
+    },
+    {
+      "file": "stream-07-live.png",
+      "at": "2026-09-13T15:02:18.800Z",
+      "url": "http://127.0.0.1:9104/conversations/1ab0aee7-8515-4fca-904f-d09811bbf714"
+    },
+    {
+      "file": "stream-08-live.png",
+      "at": "2026-09-13T15:02:27.198Z",
+      "url": "http://127.0.0.1:9104/conversations/1ab0aee7-8515-4fca-904f-d09811bbf714"
+    },
+    {
+      "file": "stream-09-live.png",
+      "at": "2026-09-13T15:02:35.988Z",
+      "url": "http://127.0.0.1:9104/conversations/1ab0aee7-8515-4fca-904f-d09811bbf714"
+    },
+    {
+      "file": "stream-10-live.png",
+      "at": "2026-09-13T15:02:45.659Z",
+      "url": "http://127.0.0.1:9104/conversations/1ab0aee7-8515-4fca-904f-d09811bbf714"
+    }
+  ],
+  "connections": [
+    {
+      "path": "/sockets/events/1ab0aee7-8515-4fca-904f-d09811bbf714",
+      "query_keys": [
+        "resend_mode",
+        "after_timestamp"
+      ],
+      "opened": "2026-09-13T15:01:33.574Z",
+      "closed": "2026-09-13T15:01:39.736Z",
+      "first_client_frame": {
+        "type": "auth",
+        "keys": [
+          "type",
+          "session_api_key"
+        ]
+      },
+      "received_count": 243,
+      "event_kinds": [
+        "ActionEvent",
+        "ConversationStateUpdateEvent",
+        "ObservationEvent",
+        "StreamingDeltaEvent"
+      ],
+      "first_event": {
+        "kind": "ConversationStateUpdateEvent",
+        "id": "bd62826b-d3c6-4888-98a0-157377c0aebb",
+        "at": "2026-09-13T15:01:34.420Z"
+      },
+      "last_event": {
+        "kind": "StreamingDeltaEvent",
+        "id": "d0e5d2fe-9a2a-4007-8f43-ad61e3b9acf6",
+        "at": "2026-09-13T15:01:39.877Z"
+      }
+    },
+    {
+      "path": "/sockets/events/1ab0aee7-8515-4fca-904f-d09811bbf714",
+      "query_keys": [
+        "resend_mode",
+        "after_timestamp"
+      ],
+      "opened": "2026-09-13T15:01:40.741Z",
+      "closed": null,
+      "first_client_frame": {
+        "type": "auth",
+        "keys": [
+          "type",
+          "session_api_key"
+        ]
+      },
+      "received_count": 1673,
+      "event_kinds": [
+        "ActionEvent",
+        "ConversationStateUpdateEvent",
+        "ObservationEvent",
+        "StreamingDeltaEvent"
+      ],
+      "first_event": {
+        "kind": "ConversationStateUpdateEvent",
+        "id": "a7bbbdd4-b2ee-45fa-ba55-6fcee901a113",
+        "at": "2026-09-13T15:01:41.158Z"
+      },
+      "last_event": {
+        "kind": "ConversationStateUpdateEvent",
+        "id": "2014390d-5bde-4673-8a12-b790e652b75d",
+        "at": "2026-09-13T15:02:45.411Z"
+      }
+    }
+  ],
+  "event_ids_seen": 1911,
+  "duplicate_event_ids": [
+    "7fd9b7de-b2be-4b90-b086-7fd480327dd5",
+    "18b44b68-a3e0-40fe-8e25-5997b772e150",
+    "eb4154eb-c94f-43b1-8948-079a4adb8c6d",
+    "09b2d650-0771-4255-89c3-c1675e2bb242",
+    "bb3711a7-e35f-4818-8c11-d26fcd01b302"
+  ],
+  "credential_in_url": false
+}

@@ -30,6 +30,17 @@ function collectSourceFiles(dir: string): string[] {
 }
 
 describe("agent-server API access", () => {
+  it("delegates conversation WebSocket transport to the SDK", () => {
+    const source = readFileSync(
+      join(SRC_ROOT, "hooks/use-websocket.ts"),
+      "utf8",
+    );
+    expect(source).not.toMatch(/new\s+WebSocket\s*\(/);
+    expect(source).not.toContain("sendWebSocketAuth");
+    expect(source).not.toContain("startHandshakeWatchdog");
+    expect(source).toContain("ConversationEventStream");
+  });
+
   it("uses typed @openhands/typescript-client access instead of ad-hoc HTTP", () => {
     const violations = collectSourceFiles(SRC_ROOT).flatMap((relPath) => {
       const source = readFileSync(join(SRC_ROOT, relPath), "utf8");
