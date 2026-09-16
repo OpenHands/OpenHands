@@ -39,6 +39,10 @@ import {
 } from "../cloud/conversation-service.api";
 import {
   DirectConversationInfo,
+  GIT_PROVIDER_TAG_KEY,
+  REPOSITORY_TAG_KEY,
+  SELECTED_BRANCH_TAG_KEY,
+  WORKSPACE_TAG_KEY,
   assertSubscriptionAuthReady,
   buildStartConversationRequestWithEncryptedSettings,
   buildStartPlanningConversationRequestWithEncryptedSettings,
@@ -534,6 +538,31 @@ class AgentServerConversationService {
       titleLlmProfile,
     });
 
+    // Stamp the raw `workingDirOverride`, not the resolved `workingDir`: the
+    // sidebar groups by the path the user picked; a worktree launch resolves
+    // `workingDir` to a per-conversation dir that matches no stored workspace.
+    // Merge into (not replace) `payload.tags` — `buildStartConversationRequest`
+    // already stamps `clientsource` and, for ACP launches, `acpserver`.
+    const metadataTags: Record<string, string> = {};
+    if (metadata?.selected_repository) {
+      metadataTags[REPOSITORY_TAG_KEY] = metadata.selected_repository;
+    }
+    if (metadata?.selected_branch) {
+      metadataTags[SELECTED_BRANCH_TAG_KEY] = metadata.selected_branch;
+    }
+    if (metadata?.git_provider) {
+      metadataTags[GIT_PROVIDER_TAG_KEY] = metadata.git_provider;
+    }
+    if (workingDirOverride) {
+      metadataTags[WORKSPACE_TAG_KEY] = workingDirOverride;
+    }
+    if (Object.keys(metadataTags).length > 0) {
+      // `payload.tags` is always `Record<string, string>` when present
+      // (see `StartConversationPayload` in the adapter).
+      const existingTags = payload.tags as Record<string, string> | undefined;
+      payload.tags = { ...existingTags, ...metadataTags };
+    }
+
     const telemetryDistinctId = await getTelemetryDistinctId();
     const data = await new ConversationClient(
       getAgentServerClientOptions({ timeout: CREATE_CONVERSATION_TIMEOUT_MS }),
@@ -545,12 +574,6 @@ class AgentServerConversationService {
     if (!localBackend) throw new NoBackendAvailableError();
 
     if (metadata?.selected_repository || workingDirOverride) {
-      // The agent-server runtime has no concept of selected repo/branch/
-      // workspace, so persist the home-page selection client-side.
-      // `toAppConversation` reads the repo/branch fields back to hydrate
-      // the chat-page badges; `useHasAttachedSource` reads
-      // `selected_workspace` to default the Files tab to Diff mode when
-      // the user explicitly attached a local workspace.
       setStoredConversationMetadata(data.id, {
         selected_repository: metadata?.selected_repository ?? null,
         selected_branch: metadata?.selected_branch ?? null,
@@ -779,6 +802,28 @@ class AgentServerConversationService {
     branch?: string | null,
     gitProvider?: string | null,
   ): Promise<AppConversation> {
+    if (getActiveBackend().backend.kind !== "cloud") {
+      // Read existing tags before PATCHing so the write merges rather than
+      // replaces — a full replace would drop keys like acpserver and clientsource.
+      const client = new ConversationClient(getAgentServerClientOptions());
+      const current = requireDirectConversationInfo(
+        await client.getConversation<DirectConversationInfo>(conversationId),
+      );
+      const newTags = { ...(current.tags ?? {}) };
+      if (repository) {
+        newTags[REPOSITORY_TAG_KEY] = repository;
+        if (branch) newTags[SELECTED_BRANCH_TAG_KEY] = branch;
+        else delete newTags[SELECTED_BRANCH_TAG_KEY];
+        if (gitProvider) newTags[GIT_PROVIDER_TAG_KEY] = gitProvider;
+        else delete newTags[GIT_PROVIDER_TAG_KEY];
+      } else {
+        delete newTags[REPOSITORY_TAG_KEY];
+        delete newTags[SELECTED_BRANCH_TAG_KEY];
+        delete newTags[GIT_PROVIDER_TAG_KEY];
+        delete newTags[WORKSPACE_TAG_KEY];
+      }
+      await client.updateConversation(conversationId, { tags: newTags });
+    }
     if (repository) {
       const existing = getStoredConversationMetadata(conversationId);
       setStoredConversationMetadata(conversationId, {
