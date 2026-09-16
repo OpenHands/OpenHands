@@ -6,7 +6,11 @@ import type {
 } from "@openhands/typescript-client";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import { Settings, SettingsSchema, SettingsValue } from "#/types/settings";
-import { stringRecord } from "#/utils/mcp-config";
+import {
+  applyMcpServerPatch,
+  getSdkMcpServerMap,
+  stringRecord,
+} from "#/utils/mcp-config";
 import type { SkillEnablement } from "#/utils/skill-enablement";
 import { getActiveBackend } from "../backend-registry/active-store";
 import {
@@ -186,6 +190,23 @@ const clearCache = () => {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === "object" && !Array.isArray(value);
 
+/**
+ * Raw name-keyed MCP server map from a cloud `GET /api/v1/settings` response,
+ * exactly as returned (secrets redacted to "**********"). The cloud nests the
+ * catalog under `agent_settings.mcp_config`; a flat `mcp_config` is accepted
+ * as a fallback. Deliberately not `parseMcpConfig`: untouched servers are
+ * resent verbatim so the cloud's by-key secret restore matches them.
+ */
+const readCloudMcpCatalog = (stored: unknown): Record<string, unknown> => {
+  if (!isRecord(stored)) return {};
+  const agentSettings = isRecord(stored.agent_settings)
+    ? stored.agent_settings
+    : undefined;
+  return (
+    getSdkMcpServerMap(agentSettings?.mcp_config ?? stored.mcp_config) ?? {}
+  );
+};
+
 const basicAuthHeader = (username: string, password: string): string => {
   const token = btoa(`${username}:${password}`);
   return `Basic ${token}`;
@@ -235,14 +256,24 @@ const headersFromMcpAuth = (
 /**
  * Convert SDK `auth` credentials to the cloud's header-only storage shape.
  *
- * The cloud settings endpoint applies `mcp_config` as a merge patch, so a
- * credential change must also tombstone the headers the previous credential
- * produced — otherwise stale secrets survive a strategy switch (e.g. an
- * api_key's custom header after moving to bearer). Stored headers that the
- * new credential still produces (via the patch's carried `headers` or the
- * converted auth) are left untouched; any other stored header is cleared.
+ * Only the entries in `value` are converted. The cloud `POST /api/v1/settings`
+ * applies an `mcp_config` map WITHOUT a `null` entry as a full-catalog
+ * replacement and only a map WITH a `null` entry (delete / rename) as a
+ * sparse merge — see `buildCloudMcpConfigPayload`. A credential change must
+ * also tombstone the headers the previous credential produced — otherwise
+ * stale secrets survive a strategy switch (e.g. an api_key's custom header
+ * after moving to bearer). Stored headers that the new credential still
+ * produces (via the patch's carried `headers` or the converted auth) are left
+ * untouched; any other stored header is cleared with a `null` tombstone. On
+ * the replace path the caller resolves those tombstones client-side (the
+ * cloud rejects `null` header values there); on the sparse path they are sent
+ * as-is. `storedServers` is the already-read cloud catalog; when omitted it is
+ * read lazily, and only if the patch carries a credential.
  */
-const cloudCompatibleMcpConfig = async (value: unknown): Promise<unknown> => {
+const cloudCompatibleMcpConfig = async (
+  value: unknown,
+  storedServers?: Record<string, unknown>,
+): Promise<unknown> => {
   if (!isRecord(value)) return value;
 
   const hasWrapper = isRecord(value.mcpServers);
@@ -251,27 +282,31 @@ const cloudCompatibleMcpConfig = async (value: unknown): Promise<unknown> => {
     : value;
 
   const needsStoredCredential =
+    storedServers === undefined &&
     Object.values(serverMap).some(
       (server) =>
         isRecord(server) && isRecord(server.auth) && server.auth !== null,
-    ) && getActiveBackend().backend.kind === "cloud";
+    ) &&
+    getActiveBackend().backend.kind === "cloud";
 
   const storedHeadersByServer = new Map<string, Record<string, string>>();
-  if (needsStoredCredential) {
-    try {
-      const stored = await fetchCloudSettings();
-      const storedMcp = isRecord(stored.mcp_config) ? stored.mcp_config : {};
-      for (const [name, server] of Object.entries(storedMcp)) {
-        if (isRecord(server)) {
-          const headers = stringRecord(
-            (server as Record<string, unknown>).headers,
-          );
-          if (headers) storedHeadersByServer.set(name, headers);
-        }
+  const collectStoredHeaders = (servers: Record<string, unknown>) => {
+    for (const [name, server] of Object.entries(servers)) {
+      if (isRecord(server)) {
+        const headers = stringRecord(server.headers);
+        if (headers) storedHeadersByServer.set(name, headers);
       }
+    }
+  };
+  if (storedServers) {
+    collectStoredHeaders(storedServers);
+  } else if (needsStoredCredential) {
+    try {
+      collectStoredHeaders(readCloudMcpCatalog(await fetchCloudSettings()));
     } catch {
-      // Fall back to the patch-only conversion; a transient fetch failure
-      // must not block saving the user's explicit edits.
+      // Tombstone enrichment on the sparse path only: fall back to the
+      // patch-only conversion; a transient fetch failure must not block
+      // saving the user's explicit edits.
     }
   }
 
@@ -316,6 +351,64 @@ const cloudCompatibleMcpConfig = async (value: unknown): Promise<unknown> => {
   );
 
   return hasWrapper ? { ...value, mcpServers: converted } : converted;
+};
+
+/**
+ * Build the `mcp_config` value for a cloud `POST /api/v1/settings`.
+ *
+ * The cloud applies a map WITHOUT a `null` entry as a full-catalog
+ * replacement (the bundled settings UI resends the whole catalog) and only a
+ * map WITH a `null` entry (delete / rename) as a sparse merge. Sending a
+ * sparse add/update as-is therefore erases every other stored server
+ * (OHE-3248). For add/update, resend the whole stored catalog: untouched
+ * siblings verbatim from the redacted GET (the cloud restores "**********"
+ * secrets by key), patched entries merged onto their stored entry
+ * client-side. Redacted values are never used as input for the patched entry.
+ */
+const buildCloudMcpConfigPayload = async (
+  patch: MCPConfigPatch,
+): Promise<unknown> => {
+  const hasDeletion = Object.values(patch).some((server) => server === null);
+  if (hasDeletion) return cloudCompatibleMcpConfig(patch);
+
+  // A failed read must fail the mutation: the only fallback is the sparse
+  // payload, which the cloud would apply as "replace the catalog with this
+  // one server".
+  const catalog = readCloudMcpCatalog(
+    await withRetry(() => fetchCloudSettings()),
+  );
+  const converted = await cloudCompatibleMcpConfig(patch, catalog);
+  if (!isRecord(converted)) return converted;
+
+  const next: Record<string, unknown> = { ...catalog };
+  for (const [key, rawEntry] of Object.entries(patch)) {
+    const stored = catalog[key];
+    const entry = converted[key];
+    if (!isRecord(stored) || !isRecord(rawEntry) || !isRecord(entry)) {
+      // New server: `createMcpServer` always sends a complete `MCPServer`.
+      next[key] = entry;
+      continue;
+    }
+    // Sparse `MCPServerPatch` onto the stored entry. Nested `null`s (header
+    // tombstones) delete keys client-side — the cloud rejects `null` header
+    // values on the replace path.
+    const merged = applyMcpServerPatch(
+      stored as unknown as MCPServer,
+      entry as MCPServerPatch,
+    ) as unknown as Record<string, unknown>;
+    // A secret carrier cleared by the patch must reach the cloud as an
+    // explicit `null`: an omitted `headers`/`env`/`auth` makes the cloud carry
+    // the stored secret back.
+    for (const field of ["headers", "env", "auth"] as const) {
+      if (entry[field] === null) merged[field] = null;
+    }
+    // The credential was converted into headers (or cleared): drop the stored
+    // `auth` explicitly, otherwise the cloud restores the previous credential
+    // next to the new Authorization header.
+    if ("auth" in rawEntry && !("auth" in entry)) merged.auth = null;
+    next[key] = merged;
+  }
+  return next;
 };
 
 /**
@@ -555,13 +648,17 @@ class SettingsService {
   }
 
   /**
-   * Apply one name-keyed MCP merge patch in exactly one request. The server
-   * owns the stored catalog and secret preservation; Canvas never rebuilds
-   * the catalog from redacted display settings.
+   * Apply one name-keyed MCP merge patch. Locally this is exactly one PATCH
+   * (the agent-server deep-merges `mcp_config`). On cloud it is one GET plus
+   * one POST carrying the full catalog, because the cloud replaces the whole
+   * catalog for a map without `null` entries — see
+   * `buildCloudMcpConfigPayload`. Untouched siblings are resent verbatim from
+   * the redacted GET (the cloud restores their secrets by key); redacted
+   * values are never used as input for the patched entry.
    */
   static async patchMcpConfig(patch: MCPConfigPatch): Promise<boolean> {
     if (getActiveBackend().backend.kind === "cloud") {
-      const mcpConfig = await cloudCompatibleMcpConfig(patch);
+      const mcpConfig = await buildCloudMcpConfigPayload(patch);
       await withRetry(() =>
         saveCloudSettings({
           agent_settings_diff: { mcp_config: mcpConfig as SettingsValue },
@@ -628,6 +725,10 @@ class SettingsService {
   /**
    * Save settings to the agent server API.
    * Uses PATCH for incremental updates.
+   *
+   * On cloud, an `agent_settings_diff.mcp_config` map without a `null` entry
+   * replaces the whole stored catalog: send a full catalog here, or use
+   * `patchMcpConfig` for sparse MCP mutations.
    */
   static async saveSettings(
     settings: Partial<Settings> & Record<string, unknown>,
