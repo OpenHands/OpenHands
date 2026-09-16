@@ -9,6 +9,7 @@ import { HttpError } from "@openhands/typescript-client";
 import { I18nKey } from "#/i18n/declaration";
 
 import AutomationService from "#/api/automation-service/automation-service.api";
+import ProfilesService from "#/api/profiles-service/profiles-service.api";
 import {
   __resetActiveStoreForTests,
   setActiveSelection,
@@ -32,6 +33,12 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
     deleteAutomation: vi.fn(),
     dispatchAutomation: vi.fn(),
     checkHealth: vi.fn(),
+  },
+}));
+
+vi.mock("#/api/profiles-service/profiles-service.api", () => ({
+  default: {
+    listProfiles: vi.fn(),
   },
 }));
 
@@ -109,6 +116,11 @@ beforeEach(() => {
   vi.mocked(AutomationService.getAutomations).mockResolvedValue(listResponse);
   vi.mocked(AutomationService.updateAutomation).mockReset();
   vi.mocked(AutomationService.dispatchAutomation).mockReset();
+  vi.mocked(ProfilesService.listProfiles).mockReset();
+  vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
+    profiles: [],
+    active_profile: null,
+  });
   setRegisteredBackends([localBackend, cloudBackend]);
   setActiveSelection({ backendId: localBackend.id });
 });
@@ -118,7 +130,7 @@ afterEach(() => {
   __resetActiveStoreForTests();
 });
 
-describe("AutomationsList — Edit from the row kebab is local-only", () => {
+describe("AutomationsList — Edit from the row kebab", () => {
   it("opens the Edit modal pre-filled with the row's values when the active backend is local", async () => {
     // Arrange — local backend is active (default beforeEach); render the list
     // and wait for the row to appear.
@@ -145,7 +157,7 @@ describe("AutomationsList — Edit from the row kebab is local-only", () => {
     expect(nameInput.value).toBe(automation.name);
   });
 
-  it("hides Edit in the row kebab when the active backend is cloud", async () => {
+  it("opens the Edit modal pre-filled from the row kebab when the active backend is cloud", async () => {
     // Arrange — switch to the cloud backend before mounting so the page sees
     // it as the active backend on first render.
     setActiveSelection({ backendId: cloudBackend.id });
@@ -156,18 +168,34 @@ describe("AutomationsList — Edit from the row kebab is local-only", () => {
     });
     await screen.findByText(automation.name);
 
-    // Act — open the row kebab. The aria-label resolves to the I18n key
-    // in tests because `t` is mocked to return the key itself.
+    // Act — open the row kebab and pick Edit. The aria-label resolves to
+    // the I18n key in tests because `t` is mocked to return the key itself.
     await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
+    );
 
-    // Assert — Edit must not appear on cloud; Delete still does, proving the
-    // menu actually opened and we didn't merely fail to render it.
+    // Assert — the same Edit modal mounts on cloud, wired to this row; the
+    // permission model (mocked to canManage above) decides, not the backend.
+    const nameInput = (await screen.findByTestId(
+      "edit-automation-name",
+    )) as HTMLInputElement;
+    expect(nameInput.value).toBe(automation.name);
+  });
+});
+
+describe("AutomationsList — Git Sync entry point", () => {
+  it("hides the Git Sync button when the active backend is cloud", async () => {
+    // Arrange — Git Sync is a local-only operator feature that used to share
+    // Edit's backend gate; it must not follow Edit onto cloud.
+    setActiveSelection({ backendId: cloudBackend.id });
+    renderList();
+    await screen.findByText(automation.name);
+
+    // Assert
     expect(
-      screen.queryByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
+      screen.queryByTestId("automations-git-sync"),
     ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$DELETE }),
-    ).toBeInTheDocument();
   });
 });
 
