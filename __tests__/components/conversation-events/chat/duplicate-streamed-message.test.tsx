@@ -255,6 +255,45 @@ describe("issue #1534 — streamed intermediate message duplication", () => {
   });
 });
 
+describe("reasoning on a finished message", () => {
+  const REASONING = "I should inspect the files before replying to the user.";
+
+  // Shape recorded from agent-server 1.47.0: the durable MessageEvent carries
+  // the streamed reasoning on `llm_message.reasoning_content`.
+  const finalMessage: MessageEvent = {
+    id: "agent-reasoned",
+    timestamp: "2026-06-12T12:00:02Z",
+    source: "agent",
+    llm_message: {
+      role: "assistant",
+      content: [{ type: "text", text: "All done." }],
+      reasoning_content: REASONING,
+    },
+    activated_skills: [],
+    extended_content: [],
+  };
+
+  it("keeps the Thinking section when the message retires its slot", () => {
+    const steps: Step[] = [
+      userMessage,
+      stream(finalMessage.id, "All done.", REASONING),
+      finalMessage,
+    ];
+    const uiEvents = replay(steps);
+    expect(uiEvents.at(-1)).toBe(finalMessage);
+
+    renderWithProviders(
+      <Messages messages={uiEvents} allEvents={durableOf(steps)} />,
+    );
+
+    expect(screen.getAllByTestId("collapsible-thinking")).toHaveLength(1);
+    fireEvent.click(screen.getByTestId("collapsible-thinking-toggle"));
+    expect(
+      screen.getByTestId("collapsible-thinking-content"),
+    ).toHaveTextContent(REASONING);
+  });
+});
+
 // A model that streams reasoning only: the slot renders it until the durable
 // action — which carries the same reasoning, and the slot's id — replaces it.
 describe("duplicate Thinking blocks", () => {

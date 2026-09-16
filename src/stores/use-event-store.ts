@@ -101,7 +101,10 @@ export interface EventState {
     frame: ItemStartedFrame,
     meta?: StreamingSlotMeta,
   ) => void;
-  appendStreamingDeltas: (frames: DeltaFrame[]) => void;
+  appendStreamingDeltas: (
+    frames: DeltaFrame[],
+    meta?: StreamingSlotMeta,
+  ) => void;
   abortStreamingSlot: (itemId: string) => void;
   /** Discard every open slot for one socket (on connect and disconnect). */
   clearStreamingSlots: (isFromPlanningAgent?: boolean) => void;
@@ -209,9 +212,14 @@ export const useEventStore = create<EventState>()((set) => ({
       const uiEvents = openStreamingSlot(frame, state.uiEvents, meta);
       return uiEvents === state.uiEvents ? state : { ...state, uiEvents };
     }),
-  appendStreamingDeltas: (frames: DeltaFrame[]) =>
+  appendStreamingDeltas: (frames: DeltaFrame[], meta: StreamingSlotMeta = {}) =>
     set((state) => {
-      const uiEvents = appendStreamingDeltas(frames, state.uiEvents);
+      const uiEvents = appendStreamingDeltas(frames, state.uiEvents, {
+        ...meta,
+        // The durable event carries the item's id, so seeing it means the
+        // stream is over and a straggling delta must not reopen it.
+        isFinished: (itemId) => state.eventIds.has(itemId),
+      });
       return uiEvents === state.uiEvents ? state : { ...state, uiEvents };
     }),
   abortStreamingSlot: (itemId: string) =>

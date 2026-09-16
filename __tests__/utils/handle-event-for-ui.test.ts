@@ -537,13 +537,29 @@ describe("handleEventForUI", () => {
       );
     });
 
-    it("drops a delta with no open slot rather than resurrecting a bubble", () => {
+    it("opens a slot for a live delta whose item_started predates the connection", () => {
       const result = appendStreamingDeltas(
-        [delta("item-gone", "orphan")],
+        [delta("item-late", "streamed after connect")],
         [mockMessageEvent],
+        { isFromPlanningAgent: true },
       );
 
-      expect(result).toEqual([mockMessageEvent]);
+      expect(slotsOf(result)).toHaveLength(1);
+      expect(slotsOf(result)[0]).toMatchObject({
+        id: "item-late",
+        content: "streamed after connect",
+        isFromPlanningAgent: true,
+      });
+    });
+
+    it("does not reopen an item whose durable event already arrived", () => {
+      const result = appendStreamingDeltas(
+        [delta("test-agent-message-1", "straggler")],
+        [mockMessageEvent, mockAgentMessageEvent],
+        { isFinished: (itemId) => itemId === mockAgentMessageEvent.id },
+      );
+
+      expect(slotsOf(result)).toHaveLength(0);
     });
 
     it("drops the slot on item_aborted: nothing durable is coming", () => {

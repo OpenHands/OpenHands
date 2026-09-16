@@ -1183,8 +1183,8 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
       });
       expect(slots()).toHaveLength(0);
 
-      // Reconnect. A stale delta for the dead slot must not resurrect it, and
-      // the finished message arrives on the cursor exactly once.
+      // Reconnect. The stream is still live, so its next delta reopens the
+      // bubble, and the finished message retires it exactly once.
       act(() => {
         wsCapture.mainOptions!.onOpen!({} as Event);
         wsCapture.mainOnMessage!({ data: delta("agent-drop", " sentence", 1) });
@@ -1199,6 +1199,29 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
         "user-msg-conv-drop",
         "agent-drop",
       ]);
+    });
+
+    it("streams a reply whose item_started went by before the socket connected", async () => {
+      renderProviderWithUrl("conv-late");
+      await waitFor(() => expect(wsCapture.mainOnMessage).not.toBeNull());
+
+      // Recorded on agent-server 1.47.0: a conversation started from the home
+      // page begins streaming before its page's socket opens.
+      act(() => {
+        wsCapture.mainOnMessage!({ data: delta("agent-late", "Let me", 3) });
+        wsCapture.mainOnMessage!({ data: delta("agent-late", " check", 4) });
+      });
+      await waitFor(() => expect(slots()[0]?.content).toBe("Let me check"));
+
+      act(() => {
+        wsCapture.mainOnMessage!({
+          data: durable(makeAgentMessage("agent-late", "Let me check.")),
+        });
+        // A straggler overtaken by its own durable event must not reopen it.
+        wsCapture.mainOnMessage!({ data: delta("agent-late", " late", 5) });
+      });
+      await new Promise((r) => setTimeout(r, 50));
+      expect(slots()).toHaveLength(0);
     });
 
     it("drops the slot on item_aborted", async () => {

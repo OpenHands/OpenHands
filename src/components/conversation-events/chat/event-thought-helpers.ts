@@ -25,7 +25,9 @@ export const getActionThoughtText = (action: ActionEvent): string =>
  * models). Falls back to the text from `thinking_blocks` (Anthropic
  * extended thinking). Returns an empty string when neither is available.
  */
-export const getReasoningContent = (action: ActionEvent): string => {
+export const getReasoningContent = (
+  action: Partial<Pick<ActionEvent, "reasoning_content" | "thinking_blocks">>,
+): string => {
   if (action.reasoning_content) {
     return action.reasoning_content;
   }

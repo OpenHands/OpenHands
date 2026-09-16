@@ -111,22 +111,43 @@ export const openStreamingSlot = (
 /**
  * Append a batch of `delta` frames to their slots.
  *
- * A delta with no open slot is dropped: after a reconnect the slot was
- * discarded on purpose, and conjuring one back would recreate the orphan
- * bubble the slot model exists to prevent. The text is not lost — the durable
- * message carries it.
+ * A delta with no open slot opens one: its `item_started` went by before this
+ * socket connected (progress frames are never replayed) — which is the normal
+ * case for the first reply of a conversation started from the home page, since
+ * the socket waits for the history load. This cannot orphan a bubble: slots
+ * and buffered deltas are discarded on connect and disconnect, so the delta is
+ * live on this connection, and the server retires every stream on it. The one
+ * race — a delta overtaken by its own durable event, which travels a different
+ * fan-out — is closed by `isFinished`.
  */
 export const appendStreamingDeltas = (
   frames: DeltaFrame[],
   uiEvents: UIEvent[],
+  {
+    isFinished = () => false,
+    ...meta
+  }: StreamingSlotMeta & { isFinished?: (itemId: string) => boolean } = {},
 ): UIEvent[] => {
   let next = uiEvents;
   let copied = false;
 
   for (const frame of frames) {
-    const index = findSlotIndex(next, frame.item_id);
+    let index = findSlotIndex(next, frame.item_id);
     if (index === -1) {
-      continue;
+      if (isFinished(frame.item_id)) {
+        continue;
+      }
+      next = openStreamingSlot(
+        {
+          type: "item_started",
+          item_id: frame.item_id,
+          attempt: frame.attempt,
+        },
+        next,
+        meta,
+      );
+      copied = true;
+      index = findSlotIndex(next, frame.item_id);
     }
     const slot = next[index] as StreamingDeltaEvent;
     const attempt = frame.attempt ?? 1;

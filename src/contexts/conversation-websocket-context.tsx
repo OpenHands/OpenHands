@@ -228,7 +228,9 @@ export function ConversationWebSocketProvider({
   const planningDeltaBatcherRef = useRef<StreamingDeltaBatcher | null>(null);
   if (planningDeltaBatcherRef.current === null) {
     planningDeltaBatcherRef.current = createStreamingDeltaBatcher((frames) => {
-      useEventStore.getState().appendStreamingDeltas(frames);
+      useEventStore
+        .getState()
+        .appendStreamingDeltas(frames, { isFromPlanningAgent: true });
       useErrorMessageStore.getState().clearConnectionError();
     });
   }
