@@ -374,6 +374,94 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     );
   });
 
+  it("does not let planning-socket stats events overwrite the main conversation's metrics", async () => {
+    // The context meter (useLiveConversationMetrics) prefers the WebSocket
+    // metrics store, which is conversation-scoped to the MAIN conversation:
+    // it resets on conversation switch and feeds the active conversation's
+    // cost/usage readout. The planning sub-conversation's event stream also
+    // carries ConversationStateUpdateEvent stats for the planner's own LLM
+    // usage; those must never overwrite the main conversation's meter, the
+    // same way the planner's execution_status is scoped to its own id.
+    const planningConversation: AppConversation = {
+      id: "conv-plan",
+      created_by_user_id: null,
+      selected_repository: null,
+      selected_branch: null,
+      git_provider: null,
+      title: "Planner",
+      trigger: null,
+      pr_number: [],
+      llm_model: null,
+      metrics: null,
+      created_at: "2026-07-28T00:00:00Z",
+      updated_at: "2026-07-28T00:00:00Z",
+      execution_status: null,
+      conversation_url: "http://planner.example/api/conversations/conv-plan",
+      session_api_key: null,
+      sandbox_id: null,
+      sub_conversation_ids: [],
+    };
+
+    const makeStatsEvent = (id: string, cost: number, perTurn: number) => ({
+      id,
+      kind: "ConversationStateUpdateEvent",
+      key: "stats",
+      timestamp: new Date().toISOString(),
+      source: "environment",
+      value: {
+        usage_to_metrics: {
+          default: {
+            accumulated_cost: cost,
+            max_budget_per_task: null,
+            accumulated_token_usage: {
+              prompt_tokens: 10,
+              completion_tokens: 5,
+              cache_read_tokens: 0,
+              cache_write_tokens: 0,
+              context_window: 1000,
+              per_turn_token: perTurn,
+            },
+          },
+        },
+      },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ConversationWebSocketProvider
+          conversationId="conv-main"
+          conversationUrl="http://main.example/api/conversations/conv-main"
+          subConversationIds={[planningConversation.id]}
+          subConversations={[planningConversation]}
+        >
+          <div />
+        </ConversationWebSocketProvider>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(wsCapture.mainOnMessage).not.toBeNull());
+    await waitFor(() => expect(wsCapture.planningOnMessage).not.toBeNull());
+
+    // Main conversation reports its own usage.
+    act(() => {
+      wsCapture.mainOnMessage!({
+        data: JSON.stringify(makeStatsEvent("evt-stats-main", 5, 500)),
+      });
+    });
+    expect(useMetricsStore.getState().cost).toBe(5);
+    expect(useMetricsStore.getState().usage?.per_turn_token).toBe(500);
+
+    // The planning helper then reports its own usage over its socket. The
+    // main conversation's meter must keep showing the main conversation's
+    // numbers.
+    act(() => {
+      wsCapture.planningOnMessage!({
+        data: JSON.stringify(makeStatsEvent("evt-stats-plan", 2, 50)),
+      });
+    });
+    expect(useMetricsStore.getState().cost).toBe(5);
+    expect(useMetricsStore.getState().usage?.per_turn_token).toBe(500);
+  });
+
   // The socket is never OPEN in these tests (the useWebSocket mock returns
   // `socket: null`), so every send falls through to the REST queue — exactly
   // the window this suite is about.

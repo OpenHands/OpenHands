@@ -903,12 +903,14 @@ export function ConversationWebSocketProvider({
             ) {
               setExecutionStatus(planningConversationId, event.value);
             }
-            if (isStatsConversationStateUpdateEvent(event)) {
-              updateMetricsFromStats(event);
-            }
+            // Stats are deliberately NOT applied from this socket: the shared
+            // metrics store feeds the main conversation's context meter (and
+            // resets on conversation switch), so the planner's own token/cost
+            // usage must not overwrite it. Same scoping as execution_status
+            // above, which keys on the planning conversation's own id.
             // Mirror goal status into the store. Intentionally duplicated across
-            // the main and planning WebSocket handlers (like the execution_status
-            // and stats branches above), not a merge artifact.
+            // the main and planning WebSocket handlers (like the
+            // execution_status branches above), not a merge artifact.
             if (isGoalConversationStateUpdateEvent(event) && conversationId) {
               useGoalStore.getState().setStatus(conversationId, event.value);
             }
