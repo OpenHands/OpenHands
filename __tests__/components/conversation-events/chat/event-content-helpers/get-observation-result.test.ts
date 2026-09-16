@@ -133,6 +133,26 @@ describe("getObservationResult", () => {
     expect(getObservationResult(terminal(undefined, null))).toBe("success");
   });
 
+  it("maps terminal non-zero exits to error even when is_error is false", () => {
+    // The server sets is_error only for exceptional paths (rejections,
+    // timeouts); an ordinary command that completes with a non-zero exit
+    // code arrives with is_error=false and must still render as a failure.
+    const terminal = (exitCode: number, metadataExitCode: number) =>
+      makeObs({
+        kind: "TerminalObservation",
+        content: [],
+        command: "npm test",
+        exit_code: exitCode,
+        is_error: false,
+        timeout: false,
+        metadata: makeMetadata(metadataExitCode),
+      } as unknown as ObservationEvent["observation"]);
+
+    expect(getObservationResult(terminal(1, 1))).toBe("error");
+    expect(getObservationResult(terminal(2, 2))).toBe("error");
+    expect(getObservationResult(terminal(127, 127))).toBe("error");
+  });
+
   it("maps editor errors and successful editor outcomes", () => {
     const editor = (kind: string, error: string | null) =>
       makeObs({
