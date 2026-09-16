@@ -32,6 +32,7 @@ export function SecretsSettingsScreen() {
   const {
     data: secrets,
     isLoading: isLoadingSecrets,
+    isError: isSecretsLoadError,
     hasNextPage,
     isFetchingNextPage,
     onLoadMore,
@@ -144,72 +145,95 @@ export function SecretsSettingsScreen() {
         </ul>
       )}
 
-      {view === "list" && !isLoadingSecrets && secrets?.length === 0 && (
+      {view === "list" && !isLoadingSecrets && isSecretsLoadError && (
         <div
-          data-testid="secrets-empty"
+          data-testid="secrets-load-error"
           className={extensionModuleEmptyStateClassName}
         >
-          <p className="text-sm text-[var(--oh-muted)]">
-            {t(I18nKey.SECRETS$EMPTY)}
+          <p className="text-sm text-red-400">
+            {t(I18nKey.SECRETS$LOAD_ERROR)}
           </p>
         </div>
       )}
 
-      {view === "list" && !isLoadingSecrets && (secrets?.length ?? 0) > 0 && (
-        <div
-          ref={tableContainerRef}
-          className={settingsListScrollContainerClassName}
-          onScroll={handleScroll}
-        >
-          <table className="w-full min-w-full table-fixed">
-            <thead className={settingsListTableHeadClassName}>
-              <tr>
-                <th
-                  className={cn(settingsListTableHeaderCellClassName, "w-1/4")}
-                >
-                  {t(I18nKey.SETTINGS$NAME)}
-                </th>
-                <th
-                  className={cn(settingsListTableHeaderCellClassName, "w-1/2")}
-                >
-                  {t(I18nKey.SECRETS$DESCRIPTION)}
-                </th>
-                <th
-                  className={cn(
-                    settingsListTableHeaderCellClassName,
-                    "w-1/4 text-right",
-                  )}
-                >
-                  {t(I18nKey.SETTINGS$ACTIONS)}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {secrets?.map((secret) => (
-                <SecretListItem
-                  key={secret.name}
-                  title={secret.name}
-                  description={secret.description}
-                  onEdit={() => {
-                    setView("edit-secret-form");
-                    setSelectedSecret(secret.name);
-                  }}
-                  onDelete={() => {
-                    setConfirmationModalIsVisible(true);
-                    setSelectedSecret(secret.name);
-                  }}
-                />
-              ))}
-            </tbody>
-          </table>
+      {view === "list" &&
+        !isLoadingSecrets &&
+        !isSecretsLoadError &&
+        secrets?.length === 0 && (
+          <div
+            data-testid="secrets-empty"
+            className={extensionModuleEmptyStateClassName}
+          >
+            <p className="text-sm text-[var(--oh-muted)]">
+              {t(I18nKey.SECRETS$EMPTY)}
+            </p>
+          </div>
+        )}
 
-          {isFetchingNextPage && (
-            <div className="flex justify-center p-4">
-              <LoadingSpinner size="small" />
-            </div>
-          )}
-        </div>
-      )}
+      {view === "list" &&
+        !isLoadingSecrets &&
+        !isSecretsLoadError &&
+        (secrets?.length ?? 0) > 0 && (
+          <div
+            ref={tableContainerRef}
+            className={settingsListScrollContainerClassName}
+            onScroll={handleScroll}
+          >
+            <table className="w-full min-w-full table-fixed">
+              <thead className={settingsListTableHeadClassName}>
+                <tr>
+                  <th
+                    className={cn(
+                      settingsListTableHeaderCellClassName,
+                      "w-1/4",
+                    )}
+                  >
+                    {t(I18nKey.SETTINGS$NAME)}
+                  </th>
+                  <th
+                    className={cn(
+                      settingsListTableHeaderCellClassName,
+                      "w-1/2",
+                    )}
+                  >
+                    {t(I18nKey.SECRETS$DESCRIPTION)}
+                  </th>
+                  <th
+                    className={cn(
+                      settingsListTableHeaderCellClassName,
+                      "w-1/4 text-right",
+                    )}
+                  >
+                    {t(I18nKey.SETTINGS$ACTIONS)}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {secrets?.map((secret) => (
+                  <SecretListItem
+                    key={secret.name}
+                    title={secret.name}
+                    description={secret.description}
+                    onEdit={() => {
+                      setView("edit-secret-form");
+                      setSelectedSecret(secret.name);
+                    }}
+                    onDelete={() => {
+                      setConfirmationModalIsVisible(true);
+                      setSelectedSecret(secret.name);
+                    }}
+                  />
+                ))}
+              </tbody>
+            </table>
+
+            {isFetchingNextPage && (
+              <div className="flex justify-center p-4">
+                <LoadingSpinner size="small" />
+              </div>
+            )}
+          </div>
+        )}
 
       {(view === "add-secret-form" || view === "edit-secret-form") && (
         <SecretForm

@@ -193,6 +193,7 @@ export function SdkSectionPage({
   getInitialView,
   forceShowAdvancedView = false,
   allowAllView = true,
+  hideBasicView = false,
   initialValueOverrides,
   markInitialOverridesDirty = true,
   embedded = false,
@@ -226,6 +227,16 @@ export function SdkSectionPage({
   ) => SettingsView;
   forceShowAdvancedView?: boolean;
   allowAllView?: boolean;
+  /**
+   * Hide the Basic tab regardless of the schema's critical fields. For a
+   * section whose Basic-tier UI can't represent the current value at all
+   * (e.g. an LLM profile linked to a provider connection, or a custom model
+   * absent from the selected provider's catalog) — showing Basic there
+   * doesn't just look wrong, its controls silently overwrite the real value
+   * with the nearest thing they *can* represent. Floors the view at
+   * Advanced/All instead of letting it be reached.
+   */
+  hideBasicView?: boolean;
   /**
    * Per-field initial value overrides that win over the values derived from
    * `useSettings`. When {@link markInitialOverridesDirty} is true (default),
@@ -329,9 +340,9 @@ export function SdkSectionPage({
   // The basic tier only exists when some field renders in it; a critical-less
   // page (e.g. Memory, whose only field is major) hides the Basic tab and
   // floors its view at "advanced".
-  const showBasic = resolvedSources.some((src) =>
-    hasCriticalSettings(src.filteredSchema),
-  );
+  const showBasic =
+    !hideBasicView &&
+    resolvedSources.some((src) => hasCriticalSettings(src.filteredSchema));
   const showAdvanced =
     forceShowAdvancedView ||
     resolvedSources.some((src) => hasAdvancedSettings(src.filteredSchema));

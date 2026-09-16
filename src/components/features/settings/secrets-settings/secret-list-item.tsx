@@ -1,5 +1,7 @@
 import { Pencil, Trash2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "#/utils/utils";
+import { I18nKey } from "#/i18n/declaration";
 import {
   settingsListIconActionButtonClassName,
   settingsListRowClassName,
@@ -40,6 +42,8 @@ export function SecretListItem({
   onEdit,
   onDelete,
 }: SecretListItemProps) {
+  const { t } = useTranslation("openhands");
+
   return (
     <tr data-testid="secret-item" className={settingsListTableRowClassName}>
       <td
@@ -68,7 +72,7 @@ export function SecretListItem({
             data-testid="edit-secret-button"
             type="button"
             onClick={onEdit}
-            aria-label={`Edit ${title}`}
+            aria-label={t(I18nKey.SECRETS$EDIT_SECRET_ARIA, { name: title })}
             className={settingsListIconActionButtonClassName}
           >
             <Pencil aria-hidden className="size-4" strokeWidth={2} />
@@ -77,7 +81,7 @@ export function SecretListItem({
             data-testid="delete-secret-button"
             type="button"
             onClick={onDelete}
-            aria-label={`Delete ${title}`}
+            aria-label={t(I18nKey.SECRETS$DELETE_SECRET_ARIA, { name: title })}
             className={settingsListIconActionButtonClassName}
           >
             <Trash2 aria-hidden className="size-4" strokeWidth={2} />
