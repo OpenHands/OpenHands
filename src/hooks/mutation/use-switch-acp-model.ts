@@ -11,7 +11,6 @@ import {
   AGENT_PROFILES_RETRY_OPTIONS,
   SETTINGS_QUERY_KEYS,
 } from "#/hooks/query/query-keys";
-import { agentProfileDetailQueryKey } from "#/hooks/query/use-active-acp-profile-detail";
 import { invalidateConversationQueries } from "./conversation-mutation-utils";
 
 interface SwitchAcpModelVars {
@@ -82,7 +81,7 @@ export const useSwitchAcpModel = () => {
         // Merge over the stored profile so a model-only pick can't wipe the
         // fields this surface doesn't model (command, session mode, …).
         const detail = await queryClient.ensureQueryData({
-          queryKey: agentProfileDetailQueryKey(
+          queryKey: AGENT_PROFILES_QUERY_KEYS.detail(
             backend.id,
             orgId,
             activeProfile.name,

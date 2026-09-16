@@ -550,6 +550,8 @@ export async function ensureMockLLMAgentProfile(
       data: {
         agent_kind: "openhands",
         llm_profile_ref: llmProfileRef,
+        // Keep the deterministic mock harness from resolving CI ambient secrets.
+        secret_refs: [],
       },
     },
   );
