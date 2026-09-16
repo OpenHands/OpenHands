@@ -25,6 +25,9 @@ import { ReactRouterNavigationProvider } from "./react-router-navigation-provide
 import { OnboardingHost } from "#/components/features/onboarding";
 import { isOnboardingPreviewActive } from "#/components/features/onboarding/onboarding-preview";
 import { CanvasExtensionsRuntimeProvider } from "#/components/features/canvas-extensions/canvas-extensions-runtime";
+import { isMacDesktopShell } from "#/utils/desktop-shell";
+import { useDesktopFullScreen } from "#/hooks/use-desktop-full-screen";
+import { cn } from "#/utils/utils";
 
 const EnvironmentSwitchOverlay = React.lazy(
   () => import("#/components/features/backends/environment-switch-overlay"),
@@ -78,6 +81,7 @@ export default function MainApp() {
   const appTitle = useAppTitle();
   const { data: settings } = useSettings();
   const config = useConfig();
+  const isFullScreen = useDesktopFullScreen();
 
   useSyncAutomationTelemetryConsent();
 
@@ -108,6 +112,8 @@ export default function MainApp() {
     location.pathname,
   );
   const showOnboardingPreview = isOnboardingPreviewActive(location.search);
+  // Fullscreen hides the traffic lights, so the band has nothing to clear.
+  const showTitleBarBand = isMacDesktopShell() && !isFullScreen;
 
   return (
     <ReactRouterNavigationProvider>
@@ -115,9 +121,19 @@ export default function MainApp() {
         <SidebarMobileNavProvider>
           <div
             data-testid="root-layout"
-            className="h-screen lg:min-w-5xl flex flex-col md:flex-row bg-base overflow-hidden p-0"
+            className={cn(
+              "h-screen lg:min-w-5xl flex flex-col md:flex-row bg-base overflow-hidden p-0",
+              showTitleBarBand && "oh-titlebar-inset",
+            )}
           >
             <title>{appTitle}</title>
+            {showTitleBarBand ? (
+              <div
+                data-testid="titlebar-drag-region"
+                aria-hidden="true"
+                className="oh-titlebar-drag-region fixed inset-x-0 top-0 z-50"
+              />
+            ) : null}
             <Sidebar />
 
             <div className="flex min-h-0 flex-col w-full min-w-0 h-full gap-3">

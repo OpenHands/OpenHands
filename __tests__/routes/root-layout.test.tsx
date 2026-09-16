@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { type ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRoutesStub, data, Link } from "react-router";
 import MainApp, { ErrorBoundary } from "#/routes/root-layout";
 import { I18nKey } from "#/i18n/declaration";
@@ -428,5 +428,132 @@ describe("root layout error boundary", () => {
     expect(
       await screen.findByRole("heading", { name: I18nKey.ERROR$UNKNOWN }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("macOS desktop title bar", () => {
+  type ShellWindow = Window & { desktopShell?: { platform?: string } };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useConfigMock.mockReturnValue({
+      isLoading: false,
+      data: {
+        maintenance_start_time: null,
+        faulty_models: [],
+        error_message: null,
+        updated_at: new Date().toISOString(),
+      },
+    });
+    useSettingsMock.mockReturnValue({
+      data: { language: "en", user_consents_to_analytics: true },
+    });
+  });
+
+  afterEach(() => {
+    delete (window as ShellWindow).desktopShell;
+  });
+
+  it("reserves a draggable band for the traffic lights on the macOS desktop app", () => {
+    (window as ShellWindow).desktopShell = { platform: "darwin" };
+
+    renderMainApp();
+
+    expect(screen.getByTestId("titlebar-drag-region")).toBeInTheDocument();
+    expect(screen.getByTestId("root-layout")).toHaveClass("oh-titlebar-inset");
+  });
+
+  it("keeps the band out of the accessibility tree", () => {
+    (window as ShellWindow).desktopShell = { platform: "darwin" };
+
+    renderMainApp();
+
+    expect(screen.getByTestId("titlebar-drag-region")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+  });
+
+  it("adds no band in a browser tab, where the shell owns no window chrome", () => {
+    renderMainApp();
+
+    expect(
+      screen.queryByTestId("titlebar-drag-region"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("root-layout")).not.toHaveClass(
+      "oh-titlebar-inset",
+    );
+  });
+
+  it.each(["win32", "linux"])(
+    "adds no band on %s, which keeps the native title bar",
+    (platform) => {
+      (window as ShellWindow).desktopShell = { platform };
+
+      renderMainApp();
+
+      expect(
+        screen.queryByTestId("titlebar-drag-region"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("root-layout")).not.toHaveClass(
+        "oh-titlebar-inset",
+      );
+    },
+  );
+});
+
+describe("fullscreen", () => {
+  type FsWindow = Window & {
+    desktopShell?: {
+      platform?: string;
+      onFullScreenChange?: (cb: (v: boolean) => void) => () => void;
+    };
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useConfigMock.mockReturnValue({
+      isLoading: false,
+      data: {
+        maintenance_start_time: null,
+        faulty_models: [],
+        error_message: null,
+        updated_at: new Date().toISOString(),
+      },
+    });
+    useSettingsMock.mockReturnValue({
+      data: { language: "en", user_consents_to_analytics: true },
+    });
+  });
+
+  afterEach(() => {
+    delete (window as FsWindow).desktopShell;
+  });
+
+  it("drops the band once the window goes fullscreen, where macOS hides the traffic lights", async () => {
+    let emit: ((value: boolean) => void) | undefined;
+    (window as FsWindow).desktopShell = {
+      platform: "darwin",
+      onFullScreenChange: (cb) => {
+        emit = cb;
+        return () => {};
+      },
+    };
+
+    renderMainApp();
+    expect(screen.getByTestId("titlebar-drag-region")).toBeInTheDocument();
+
+    await act(async () => emit?.(true));
+
+    expect(
+      screen.queryByTestId("titlebar-drag-region"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("root-layout")).not.toHaveClass(
+      "oh-titlebar-inset",
+    );
+
+    await act(async () => emit?.(false));
+
+    expect(screen.getByTestId("titlebar-drag-region")).toBeInTheDocument();
   });
 });

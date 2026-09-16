@@ -363,13 +363,27 @@ function createMainWindow() {
     // App-shell background (--oh-background in src/index.css) — avoids white
     // flashes during the show → maximize repaint after the splash closes.
     backgroundColor: "#0b0e14",
+    // hiddenInset hides the native title bar but keeps the traffic lights
+    // floating over the app shell; the renderer reserves a drag band for them.
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     icon: appIconPath,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: join(__dirname, "preload-main.cjs"),
     },
   });
+
+  // The renderer drops its reserved traffic-light band in fullscreen, where
+  // macOS hides the buttons. Replay the state on load too: a reload must not
+  // leave a window that is already fullscreen showing the band again.
+  const sendFullScreenState = () => {
+    if (!mainWin || mainWin.isDestroyed()) return;
+    mainWin.webContents.send("window:full-screen", mainWin.isFullScreen());
+  };
+  mainWin.on("enter-full-screen", sendFullScreenState);
+  mainWin.on("leave-full-screen", sendFullScreenState);
+  mainWin.webContents.on("did-finish-load", sendFullScreenState);
 
   mainWin.loadURL("http://localhost:8000");
 
