@@ -152,4 +152,70 @@ describe("mergeAgentProfileSaveInput", () => {
 
     expect(mergeAgentProfileSaveInput(null, edited)).toEqual(edited);
   });
+it("preserves stored verification fields when only some verification settings are edited", () => {
+    const edited = {
+      agent_kind: "openhands",
+      verification: {
+        critic_enabled: false,
+        enable_iterative_refinement: false,
+      },
+    } as unknown as AgentProfileSaveInput;
+
+    const merged = mergeAgentProfileSaveInput(storedOpenHands, edited);
+
+    expect(merged).toMatchObject({
+      verification: {
+        critic_enabled: false,
+        critic_mode: "finish_and_message",
+        enable_iterative_refinement: false,
+        critic_threshold: 0.8,
+        max_refinement_iterations: 5,
+        critic_server_url: null,
+        critic_model_name: null,
+      },
+    });
+  });
+
+  it("preserves stored verification when verification is not edited", () => {
+    const edited: AgentProfileSaveInput = {
+      agent_kind: "openhands",
+      enable_sub_agents: true,
+      llm_profile_ref: "new-llm",
+    };
+
+    const merged = mergeAgentProfileSaveInput(storedOpenHands, edited);
+
+    expect(merged).toMatchObject({
+      verification: (storedOpenHands as Extract<
+        AgentProfile,
+        { agent_kind: "openhands" }
+      >).verification,
+    });
+  });
+
+  it("allows edited verification values to override stored values", () => {
+    const edited = {
+      agent_kind: "openhands",
+      verification: {
+        critic_enabled: false,
+        critic_mode: "message",
+        critic_threshold: 0.95,
+        enable_iterative_refinement: true,
+      },
+    } as unknown as AgentProfileSaveInput;
+
+    const merged = mergeAgentProfileSaveInput(storedOpenHands, edited);
+
+    expect(merged).toMatchObject({
+      verification: {
+        critic_enabled: false,
+        critic_mode: "message",
+        enable_iterative_refinement: true,
+        critic_threshold: 0.95,
+        max_refinement_iterations: 5,
+        critic_server_url: null,
+        critic_model_name: null,
+      },
+    });
+  });
 });
