@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MockInstance } from "vitest";
+import { getAcpProvider as getClientAcpProvider } from "@openhands/typescript-client";
 import { CANVAS_UI_CLIENT_TOOL_NAME } from "#/constants/canvas-ui";
 import { LAUNCH_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversation";
 
@@ -261,7 +262,7 @@ describe("buildStartConversationRequest", () => {
     expect(payload.initial_message.content[0]?.text).toBe("hello");
   });
 
-  it("uses subscription auth metadata without API credentials", () => {
+  it("preserves base_url for subscription auth while stripping api_key", () => {
     const payload = buildStartConversationRequest({
       settings: {
         ...DEFAULT_SETTINGS,
@@ -270,7 +271,7 @@ describe("buildStartConversationRequest", () => {
           llm: {
             model: "gpt-5.2-codex",
             api_key: "stale-api-key",
-            base_url: "https://api.openai.com/v1",
+            base_url: "https://chatgpt.com/backend-api/codex",
             auth_type: LLM_AUTH_TYPE_SUBSCRIPTION,
             subscription_vendor: OPENAI_SUBSCRIPTION_VENDOR,
           },
@@ -281,6 +282,7 @@ describe("buildStartConversationRequest", () => {
     expect(payload.agent_settings.llm).toEqual({
       model: "gpt-5.2-codex",
       stream: true,
+      base_url: "https://chatgpt.com/backend-api/codex",
       auth_type: LLM_AUTH_TYPE_SUBSCRIPTION,
       subscription_vendor: OPENAI_SUBSCRIPTION_VENDOR,
     });
@@ -1518,9 +1520,7 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     expect(payload.agent).toBeUndefined();
     expect(payload.agent_settings.agent_kind).toBe("acp");
     expect(payload.agent_settings.acp_command).toEqual([
-      "npx",
-      "-y",
-      "@agentclientprotocol/claude-agent-acp@0.63.0",
+      ...getClientAcpProvider("claude-code")!.default_command,
     ]);
     expect(payload.agent_settings.acp_model).toBe("claude-opus-4-5");
     // LLM-only fields must not leak into the ACP settings payload.
@@ -1670,9 +1670,7 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     };
 
     expect(payload.agent_settings.acp_command).toEqual([
-      "npx",
-      "-y",
-      "@agentclientprotocol/claude-agent-acp@0.63.0",
+      ...getClientAcpProvider("claude-code")!.default_command,
     ]);
   });
 
@@ -1692,9 +1690,7 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     };
 
     expect(payload.agent_settings.acp_command).toEqual([
-      "npx",
-      "-y",
-      "@agentclientprotocol/codex-acp@1.1.7",
+      ...getClientAcpProvider("codex")!.default_command,
     ]);
   });
 
@@ -1839,9 +1835,7 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
 
     expect(acpPayload.agent_settings.agent_kind).toBe("acp");
     expect(acpPayload.agent_settings.acp_command).toEqual([
-      "npx",
-      "-y",
-      "@agentclientprotocol/claude-agent-acp@0.63.0",
+      ...getClientAcpProvider("claude-code")!.default_command,
     ]);
     expect(acpPayload.agent_settings.acp_model).toBe("claude-opus-4-5");
     // acp_env is no longer a forwarded ACP setting — a stale value on saved

@@ -28,7 +28,7 @@
  *
  * Environment variables:
  *   - PORT: Ingress port (default: 8000)
- *   - OH_AUTOMATION_GIT_REF: Git ref for automation (default: main)
+ *   - OH_AUTOMATION_GIT_REF: Git ref for automation (overrides default version)
  *   - OH_AGENT_SERVER_LOCAL_PATH: Absolute path to a local software-agent-sdk
  *     checkout. Highest precedence for agent-server source selection: rebuilds
  *     the agent-server from local source and installs openhands-sdk,
