@@ -76,7 +76,7 @@ describe("useBashCommandRunner", () => {
       JSON.stringify({ command: "pwd", cwd: "/workspace", timeout: 30 }),
     ]);
 
-    socket.receive({ kind: "BashCommand", id: "command-1" });
+    socket.receive({ kind: "BashCommand", id: "command-1", command: "pwd" });
     socket.receive({
       kind: "BashOutput",
       command_id: "command-1",
@@ -115,7 +115,11 @@ describe("useBashCommandRunner", () => {
       }),
     ]);
 
-    socket.receive({ kind: "BashCommand", id: "command-1" });
+    socket.receive({
+      kind: "BashCommand",
+      id: "command-1",
+      command: "git status",
+    });
     socket.receive({
       kind: "BashOutput",
       command_id: "command-1",
@@ -191,5 +195,58 @@ describe("useBashCommandRunner", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+  it("ignores BashCommand echoes from other clients on the shared bash-events stream", async () => {
+    // The /sockets/bash-events endpoint broadcasts every BashCommand started
+    // on the runtime (any socket client or REST /api/bash caller) to every
+    // subscriber. A foreign echo must not be paired with our pending request.
+    vi.stubGlobal("WebSocket", MockWebSocket);
+    const { result, unmount } = renderHook(() =>
+      useBashCommandRunner(
+        "http://runtime.example.com/api/conversations/conv-1",
+        null,
+        true,
+      ),
+    );
+    const socket = MockWebSocket.instance!;
+    socket.open();
+
+    const ours = result.current("git remote get-url origin", "/workspace", 10);
+
+    // A different client starts its own command first; the echo reaches us.
+    socket.receive({
+      kind: "BashCommand",
+      id: "foreign-1",
+      command: "claude auth status",
+    });
+    socket.receive({
+      kind: "BashOutput",
+      command_id: "foreign-1",
+      stdout: "logged in",
+      stderr: "",
+      exit_code: 0,
+    });
+
+    // Our own echo and output arrive afterwards.
+    socket.receive({
+      kind: "BashCommand",
+      id: "ours-1",
+      command: "git remote get-url origin",
+    });
+    socket.receive({
+      kind: "BashOutput",
+      command_id: "ours-1",
+      stdout: "git@github.com:acme/repo.git\n",
+      stderr: "",
+      exit_code: 0,
+    });
+
+    await expect(ours).resolves.toEqual({
+      exit_code: 0,
+      stdout: "git@github.com:acme/repo.git\n",
+      stderr: "",
+    });
+
+    unmount();
   });
 });

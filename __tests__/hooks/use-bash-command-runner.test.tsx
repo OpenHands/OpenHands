@@ -65,11 +65,13 @@ function installControlledWebSocket() {
   };
 }
 
-const bashCommand = (id: string) => ({
+// The real server echoes the request verbatim, so fixtures must carry the
+// command text the client sent: the hook pairs echoes by content, not order.
+const bashCommand = (id: string, command: string) => ({
   kind: "BashCommand",
   id,
   timestamp: "2026-07-12T00:00:00.000Z",
-  command: "ignored server echo",
+  command,
 });
 
 const bashOutput = (
@@ -160,9 +162,11 @@ describe("bash command execution over a persistent socket", () => {
       { command: "pwd", cwd: "/workspace", timeout: 10 },
     ]);
 
-    act(() => sockets.socket.emit(bashCommand("command-1")));
+    act(() => sockets.socket.emit(bashCommand("command-1", "pwd")));
     act(() =>
-      sockets.socket.emit(bashOutput("command-1", { stdout: "ok", exit_code: 0 })),
+      sockets.socket.emit(
+        bashOutput("command-1", { stdout: "ok", exit_code: 0 }),
+      ),
     );
     await expect(pending).resolves.toEqual({
       exit_code: 0,
@@ -178,9 +182,11 @@ describe("bash command execution over a persistent socket", () => {
     expect(
       sockets.socket.sent.map((payload) => JSON.parse(payload)).at(-1),
     ).toEqual({ command: "ls", cwd: "/workspace", timeout: 5 });
-    act(() => sockets.socket.emit(bashCommand("command-2")));
+    act(() => sockets.socket.emit(bashCommand("command-2", "ls")));
     act(() =>
-      sockets.socket.emit(bashOutput("command-2", { stdout: "", exit_code: 0 })),
+      sockets.socket.emit(
+        bashOutput("command-2", { stdout: "", exit_code: 0 }),
+      ),
     );
     await expect(followUp).resolves.toEqual({
       exit_code: 0,
@@ -189,7 +195,7 @@ describe("bash command execution over a persistent socket", () => {
     });
   });
 
-  it("buffers commands while connecting, correlates them FIFO, and aggregates output chunks", async () => {
+  it("buffers commands while connecting, correlates them by command, and aggregates output chunks", async () => {
     const sockets = installControlledWebSocket();
     const { result } = renderHook(() =>
       useBashCommandRunner(
@@ -220,7 +226,7 @@ describe("bash command execution over a persistent socket", () => {
     ]);
 
     act(() => {
-      sockets.socket.emit(bashCommand("command-1"));
+      sockets.socket.emit(bashCommand("command-1", "printf first"));
       sockets.socket.emit(
         bashOutput("command-1", {
           stdout: "first ",
@@ -235,7 +241,7 @@ describe("bash command execution over a persistent socket", () => {
           exit_code: 0,
         }),
       );
-      sockets.socket.emit(bashCommand("command-2"));
+      sockets.socket.emit(bashCommand("command-2", "printf second"));
       sockets.socket.emit(
         bashOutput("command-2", {
           stdout: "second result",
@@ -271,7 +277,7 @@ describe("bash command execution over a persistent socket", () => {
       sockets.socket.emit({ kind: "FutureBashEvent" });
       sockets.socket.emit(bashOutput("", { exit_code: 0 }));
       sockets.socket.emit(bashOutput("not-active", { exit_code: 0 }));
-      sockets.socket.emit(bashCommand("active-command"));
+      sockets.socket.emit(bashCommand("active-command", "echo safe"));
       sockets.socket.emit({
         kind: "FutureBashEvent",
         command_id: "active-command",
@@ -279,7 +285,9 @@ describe("bash command execution over a persistent socket", () => {
         stderr: "forged",
         exit_code: 99,
       });
-      sockets.socket.emit(bashCommand("unrequested-command"));
+      sockets.socket.emit(
+        bashCommand("unrequested-command", "someone elses probe"),
+      );
       sockets.socket.emit(
         bashOutput("active-command", {
           stdout: "",
@@ -355,7 +363,7 @@ describe("bash command execution over a persistent socket", () => {
     const command = withSettlementDeadline(
       result.current("pwd", "/workspace", 10),
     );
-    act(() => sockets.socket.emit(bashCommand("active-command")));
+    act(() => sockets.socket.emit(bashCommand("active-command", "pwd")));
 
     act(() => sockets.socket.disconnect());
 
