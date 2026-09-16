@@ -102,11 +102,10 @@ function classifyFetchError(error: unknown): SandboxIssue | null {
  * Search `BashOutput` events for an automation run's bash command.
  *
  * - **Local backend**: the query fires as soon as the modal opens and
- *   we have a `bash_command_id`. The conversation lookup runs in
+ *   we have both the command and owning conversation IDs. The conversation lookup runs in
  *   parallel; if it resolves with `session_api_key`/`conversation_url`
  *   those are passed through, but a missing/stale conversation does not
- *   block the bash query (the local agent-server hosts events under a
- *   single root).
+ *   block the conversation-scoped bash query.
  * - **Cloud backend**: pre-checks `sandbox_status` and the existence of
  *   a `conversation_url` before firing — paused, starting, errored, or
  *   missing sandboxes report a `sandboxIssue` and skip the request
@@ -132,10 +131,9 @@ export function useBashCommandLogs(options: UseBashCommandLogsOptions) {
   const conversationFetched = conversationQuery.isFetched;
 
   // Resolve a single "sandbox issue" only for cloud backends. Local
-  // backends don't carry sandbox_status, and the agent-server hosts
-  // events under a single root so there's nothing to gate on.
+  // backends do not carry the Cloud sandbox_status model.
   let preflightIssue: SandboxIssue | null = null;
-  let conversationMissing = false;
+  let conversationMissing = !conversationId;
   if (isCloud && conversationFetched) {
     if (!conversation) {
       conversationMissing = true;
@@ -151,6 +149,7 @@ export function useBashCommandLogs(options: UseBashCommandLogsOptions) {
   const hasRequiredAuth = isCloud ? !!conversationUrl : true;
   const canFire =
     enabled &&
+    !!conversationId &&
     !!bashCommandId &&
     hasRequiredAuth &&
     !preflightIssue &&
@@ -159,6 +158,7 @@ export function useBashCommandLogs(options: UseBashCommandLogsOptions) {
   const query = useQuery({
     queryKey: [
       ...BASH_COMMAND_LOGS_QUERY_KEY,
+      conversationId,
       bashCommandId,
       conversationUrl,
       sessionApiKey,
@@ -167,6 +167,7 @@ export function useBashCommandLogs(options: UseBashCommandLogsOptions) {
     ],
     queryFn: () =>
       BashService.listOutputs(
+        conversationId as string,
         conversationUrl,
         sessionApiKey,
         bashCommandId as string,
@@ -197,7 +198,7 @@ export function useBashCommandLogs(options: UseBashCommandLogsOptions) {
     isPending: query.isPending,
     /** True while we're still resolving the conversation runtime URL. */
     isResolvingConversation: isCloud && conversationQuery.isPending,
-    /** Cloud-only: conversation lookup failed (deleted or no access). */
+    /** No owner ID, or the Cloud conversation is deleted or inaccessible. */
     conversationMissing,
     /**
      * Reason the bash query couldn't / didn't usefully complete. Always

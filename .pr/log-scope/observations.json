@@ -1,0 +1,58 @@
+[
+  {
+    "variant": "before",
+    "port": 9110,
+    "run": "7a447b5a-58b1-4c4a-ba27-85365ac1baed",
+    "requests": [
+      {
+        "path": "/api/bash/bash_events/search",
+        "status": 400,
+        "query_keys": [
+          "kind__eq",
+          "command_id__eq",
+          "sort_order"
+        ]
+      },
+      {
+        "path": "/api/conversations/7a447b5a-58b1-4c4a-ba27-85365ac1baed/bash/bash_events/search",
+        "status": 200,
+        "query_keys": [
+          "kind__eq",
+          "command_id__eq",
+          "sort_order"
+        ]
+      }
+    ],
+    "captured_at": "2026-09-13T15:26:37.777Z",
+    "visible_merge_confirmation": true,
+    "visible_scope_error": true
+  },
+  {
+    "variant": "after",
+    "port": 9111,
+    "run": "7a447b5a-58b1-4c4a-ba27-85365ac1baed",
+    "requests": [
+      {
+        "path": "/api/conversations/7a447b5a-58b1-4c4a-ba27-85365ac1baed/bash/bash_events/search",
+        "status": 200,
+        "query_keys": [
+          "kind__eq",
+          "command_id__eq",
+          "sort_order"
+        ]
+      },
+      {
+        "path": "/api/conversations/7a447b5a-58b1-4c4a-ba27-85365ac1baed/bash/bash_events/search",
+        "status": 200,
+        "query_keys": [
+          "kind__eq",
+          "command_id__eq",
+          "sort_order"
+        ]
+      }
+    ],
+    "captured_at": "2026-09-13T15:26:43.942Z",
+    "visible_merge_confirmation": true,
+    "visible_scope_error": false
+  }
+]

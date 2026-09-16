@@ -386,6 +386,17 @@ describe("useBashCommandLogs — local backend", () => {
     // Even network/5xx errors stay as raw errors in local mode — they
     // typically mean the local agent-server is misconfigured, not a
     // sandbox lifecycle issue.
-    expect(listOutputsMock).toHaveBeenCalledTimes(1);
+    expect(listOutputsMock).toHaveBeenCalledWith("conv-1", null, null, "cmd-1");
+  });
+
+  it("does not issue an unscoped request without a conversation", () => {
+    setConversation(null);
+    const { result } = renderHook(
+      () =>
+        useBashCommandLogs({ conversationId: null, bashCommandId: "cmd-1" }),
+      { wrapper },
+    );
+    expect(listOutputsMock).not.toHaveBeenCalled();
+    expect(result.current.conversationMissing).toBe(true);
   });
 });

@@ -1,0 +1,62 @@
+{
+  "before": {
+    "runtime": "local",
+    "canvas_url": "http://127.0.0.1:9109",
+    "started_at": 1789315855.717624,
+    "available_kib": 8100336,
+    "commits": {
+      "sdk": "ac6d12b0b9d76f1cc38a6eb1ea51cd92e34a0bf2",
+      "automation": "ffeacca2dc24c604d693414b8d0dead1abec66c2",
+      "canvas": "4cd1513bbe74abd2c1f9e58a77cf64375aafe001"
+    },
+    "bundle": {
+      "sha256": "97981e6d82502099366e59bd1efbaf97d9db80c27b650674d8cabdf87a60d564",
+      "file": "fixture.tar.gz",
+      "purpose": "Identical before/after opaque entrypoint fixture; only synthetic secret diagnostic"
+    },
+    "max_concurrent": 1,
+    "synthetic_secrets_only": true,
+    "comparison_case": "errors",
+    "baseline_reverse_patch": null
+  },
+  "after": {
+    "runtime": "local",
+    "canvas_url": "http://127.0.0.1:9109",
+    "started_at": 1789316097.7103808,
+    "available_kib": 8401424,
+    "commits": {
+      "sdk": "ac6d12b0b9d76f1cc38a6eb1ea51cd92e34a0bf2",
+      "automation": "ffeacca2dc24c604d693414b8d0dead1abec66c2",
+      "canvas": "9874c820a23e4026483ad9540ec9cb56194ce3ec"
+    },
+    "bundle": {
+      "sha256": "97981e6d82502099366e59bd1efbaf97d9db80c27b650674d8cabdf87a60d564",
+      "file": "fixture.tar.gz",
+      "purpose": "Identical before/after opaque entrypoint fixture; only synthetic secret diagnostic"
+    },
+    "max_concurrent": 1,
+    "synthetic_secrets_only": true,
+    "comparison_case": "errors",
+    "baseline_reverse_patch": null
+  },
+  "persisted_state": {
+    "conversation_id": "d86043b9-c22e-43d4-905a-67fd3dc3a4b9",
+    "execution_status": "error",
+    "files": [
+      {
+        "name": "checkpoint-comment-after.txt",
+        "size": 280
+      },
+      {
+        "name": "checkpoint-comment-before.txt",
+        "size": 418
+      }
+    ]
+  },
+  "tested_production_commit": "41732d59c",
+  "capture_notes": [
+    "Before initially collapsed active Files tab; final claimed baseline uses Show panel and was visually inspected.",
+    "After first screenshot was valid but script hit duplicate filename locator; repeat used file-tree-file-checkpoint-comment-after.txt and succeeded.",
+    "No message, pause or resume was sent during this before/after comparison."
+  ]
+}
