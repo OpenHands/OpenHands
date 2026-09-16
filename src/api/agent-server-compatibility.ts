@@ -273,7 +273,50 @@ export function compareAgentServerVersions(actual: string, required: string) {
     return 1;
   }
   if (parsedActual.prerelease && parsedRequired.prerelease) {
-    return parsedActual.prerelease.localeCompare(parsedRequired.prerelease);
+    return comparePrereleaseIdentifiers(
+      parsedActual.prerelease,
+      parsedRequired.prerelease,
+    );
+  }
+
+  return 0;
+}
+
+const NUMERIC_PRERELEASE_IDENTIFIER = /^\d+$/;
+
+/**
+ * semver.org rule 11.4: prerelease identifiers compare dot-by-dot, numeric
+ * identifiers numerically and before alphanumeric ones, alphanumeric ones in
+ * ASCII order, and a shorter list is earlier when the shared prefix is equal.
+ * A plain string compare gets the numeric case wrong once an identifier has
+ * more than one digit — `alpha.10` reads as earlier than `alpha.2` — which
+ * flips the verdict for the canvas prereleases that actually shipped to npm.
+ */
+function comparePrereleaseIdentifiers(a: string, b: string): number {
+  const aIdentifiers = a.split(".");
+  const bIdentifiers = b.split(".");
+  const length = Math.max(aIdentifiers.length, bIdentifiers.length);
+
+  for (let index = 0; index < length; index += 1) {
+    const aIdentifier = aIdentifiers[index];
+    const bIdentifier = bIdentifiers[index];
+    if (aIdentifier === undefined) return -1;
+    if (bIdentifier === undefined) return 1;
+    if (aIdentifier === bIdentifier) continue;
+
+    const aNumeric = NUMERIC_PRERELEASE_IDENTIFIER.test(aIdentifier);
+    const bNumeric = NUMERIC_PRERELEASE_IDENTIFIER.test(bIdentifier);
+    if (aNumeric && bNumeric) {
+      // Pure-digit strings order numerically as length, then lexically —
+      // safe for identifiers too long for a float.
+      if (aIdentifier.length !== bIdentifier.length) {
+        return aIdentifier.length < bIdentifier.length ? -1 : 1;
+      }
+      return aIdentifier < bIdentifier ? -1 : 1;
+    }
+    if (aNumeric) return -1;
+    if (bNumeric) return 1;
+    return aIdentifier < bIdentifier ? -1 : 1;
   }
 
   return 0;
