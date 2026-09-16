@@ -44,6 +44,8 @@ import {
   deleteProfileIfExists,
   activateProfileViaUI,
   ensureMockLLMAgentProfile,
+  profileRowByName,
+  closeProfileActionsMenu,
 } from "../utils/mock-llm-helpers";
 
 const MOCK_MODEL = "openai/mock-test-model";
@@ -130,29 +132,25 @@ test.describe("active profile deletion + reconciliation", () => {
     // Activate the first profile through the UI
     await activateProfileViaUI(page, ACTIVE_PROFILE);
 
-    const rowFor = async (name: string) => {
-      const rows = page.getByTestId("profile-row");
-      const count = await rows.count();
-      for (let i = 0; i < count; i++) {
-        const row = rows.nth(i);
-        if ((await row.textContent())?.includes(name)) return row;
-      }
-      return null;
+    const rowFor = (name: string) => profileRowByName(page, name);
+
+    const openMenuFor = async (name: string) => {
+      await closeProfileActionsMenu(page);
+      const row = rowFor(name);
+      await expect(
+        row,
+        `Could not find profile row for "${name}"`,
+      ).toBeVisible();
+      await row.getByTestId("profile-menu-trigger").click();
+      await waitForTestId(page, "profile-actions-menu");
+      return page.getByTestId("profile-actions-menu");
     };
 
     // ── Delete is now enabled on the active profile (the #1127 guard was
     //    removed; useEnsureActiveProfile keeps a profile active instead) ──
     await test.step("active profile: delete button is enabled", async () => {
-      const activeRow = await rowFor(ACTIVE_PROFILE);
-      expect(
-        activeRow,
-        `Could not find profile row for "${ACTIVE_PROFILE}"`,
-      ).not.toBeNull();
-
-      await activeRow!.getByTestId("profile-menu-trigger").click();
-      await waitForTestId(page, "profile-actions-menu");
-
-      const deleteButton = page.getByTestId("profile-delete");
+      const menu = await openMenuFor(ACTIVE_PROFILE);
+      const deleteButton = menu.getByTestId("profile-delete");
       await expect(
         deleteButton,
         "Delete button should be present in the menu",
@@ -163,67 +161,34 @@ test.describe("active profile deletion + reconciliation", () => {
       ).toBeEnabled();
 
       // Edit and Set-as-active should still be present
-      await expect(page.getByTestId("profile-edit")).toBeVisible();
-      await expect(page.getByTestId("profile-set-active")).toBeVisible();
+      await expect(menu.getByTestId("profile-edit")).toBeVisible();
+      await expect(menu.getByTestId("profile-set-active")).toBeVisible();
 
-      await page.keyboard.press("Escape");
+      await closeProfileActionsMenu(page);
     });
 
     // ── Delete is enabled on an inactive profile too ──
     await test.step("inactive profile: delete button is enabled", async () => {
-      const inactiveRow = await rowFor(INACTIVE_PROFILE);
-      expect(
-        inactiveRow,
-        `Could not find profile row for "${INACTIVE_PROFILE}"`,
-      ).not.toBeNull();
-
-      await inactiveRow!.getByTestId("profile-menu-trigger").click();
-      await waitForTestId(page, "profile-actions-menu");
-      await expect(page.getByTestId("profile-delete")).toBeEnabled();
-      await page.keyboard.press("Escape");
+      const menu = await openMenuFor(INACTIVE_PROFILE);
+      await expect(menu.getByTestId("profile-delete")).toBeEnabled();
+      await closeProfileActionsMenu(page);
     });
 
     // ── Deleting the active profile reconciles to the remaining one ──
     await test.step("deleting the active profile activates the remaining profile", async () => {
-      const activeRow = await rowFor(ACTIVE_PROFILE);
-      expect(activeRow).not.toBeNull();
+      // Wait for the delete mutation to finish on this page. Reloading
+      // immediately after confirm can abort the request and leave both
+      // profiles in a racy state (CI deleted the leftover-menu target).
+      await deleteProfileIfExists(page, ACTIVE_PROFILE);
+      await expect(rowFor(ACTIVE_PROFILE)).toHaveCount(0);
+      await expect(rowFor(INACTIVE_PROFILE)).toBeVisible();
 
-      await activeRow!.getByTestId("profile-menu-trigger").click();
-      await waitForTestId(page, "profile-actions-menu");
-      await page.getByTestId("profile-delete").click();
-
-      // Confirm in the delete modal.
-      await page.getByTestId("delete-profile-confirm").click();
-
-      // useEnsureActiveProfile re-activates the only remaining profile. Poll
-      // with reload — the delete + activate mutations may take a moment on CI.
-      await expect
-        .poll(
-          async () => {
-            await page.goto("/settings/llm", {
-              waitUntil: "domcontentloaded",
-            });
-            await waitForTestId(page, "add-llm-profile");
-            const remaining = await rowFor(INACTIVE_PROFILE);
-            if (!remaining) return false;
-            // The deleted profile must be gone, and reconciliation must keep
-            // *some* profile active (the "always have an active profile"
-            // guarantee). We don't assert it's INACTIVE_PROFILE specifically —
-            // other profiles may linger on the shared agent-server and
-            // useEnsureActiveProfile activates the first keyed one.
-            const goneRow = await rowFor(ACTIVE_PROFILE);
-            const activeBadges = await page
-              .getByTestId("profile-active-badge")
-              .count();
-            return goneRow === null && activeBadges > 0;
-          },
-          {
-            message: `"${INACTIVE_PROFILE}" should become active after deleting "${ACTIVE_PROFILE}"`,
-            timeout: 15_000,
-            intervals: [1_000, 2_000, 3_000],
-          },
-        )
-        .toBe(true);
+      // useEnsureActiveProfile promotes a remaining profile. Other
+      // profiles may linger on the shared agent-server, so we only
+      // require that *some* Default badge is present.
+      await expect(
+        page.getByTestId("profile-active-badge").first(),
+      ).toBeVisible({ timeout: 15_000 });
     });
   });
 });

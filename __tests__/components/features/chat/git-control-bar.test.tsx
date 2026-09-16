@@ -166,25 +166,18 @@ describe("GitControlBar repo button visibility", () => {
     vi.mocked(getStoredConversationMetadata).mockReturnValue(null);
   });
 
-  it("hides the repo button on a local backend with no repository or workspace name", () => {
-    vi.mocked(useActiveBackend).mockReturnValue(makeBackend("local"));
+  it.each(["local", "cloud"] as const)(
+    "hides the repo button on a %s backend with no repository or workspace name",
+    (kind) => {
+      vi.mocked(useActiveBackend).mockReturnValue(makeBackend(kind));
 
-    renderWithProviders(<GitControlBar onSuggestionsClick={vi.fn()} />);
+      renderWithProviders(<GitControlBar onSuggestionsClick={vi.fn()} />);
 
-    expect(
-      screen.queryByTestId("git-control-bar-repo-button"),
-    ).not.toBeInTheDocument();
-  });
-
-  it("shows the repo button on a cloud backend with no repository connected", () => {
-    vi.mocked(useActiveBackend).mockReturnValue(makeBackend("cloud"));
-
-    renderWithProviders(<GitControlBar onSuggestionsClick={vi.fn()} />);
-
-    expect(
-      screen.getByTestId("git-control-bar-repo-button"),
-    ).toBeInTheDocument();
-  });
+      expect(
+        screen.queryByTestId("git-control-bar-repo-button"),
+      ).not.toBeInTheDocument();
+    },
+  );
 
   it("renders the repo button as disabled on a local backend when only a workspace name is available", () => {
     vi.mocked(useActiveBackend).mockReturnValue(makeBackend("local"));
@@ -200,6 +193,13 @@ describe("GitControlBar repo button visibility", () => {
 
   it("renders the repo button as disabled while conversation history is loading", () => {
     vi.mocked(useActiveBackend).mockReturnValue(makeBackend("cloud"));
+    vi.mocked(useActiveConversation).mockReturnValue({
+      data: {
+        id: "test-conversation-id",
+        selected_repository: "user/repo",
+        git_provider: "github",
+      },
+    } as ReturnType<typeof useActiveConversation>);
     vi.mocked(useConversationWebSocket).mockReturnValue({
       isLoadingHistory: true,
     } as ReturnType<typeof useConversationWebSocket>);
@@ -216,7 +216,11 @@ describe("GitControlBar - Auto-scroll on clone (issue #817)", () => {
     mocks.modalLaunchHandler.current = null;
     vi.mocked(useActiveBackend).mockReturnValue(makeBackend("cloud"));
     vi.mocked(useActiveConversation).mockReturnValue({
-      data: { id: "test-conversation-id" },
+      data: {
+        id: "test-conversation-id",
+        selected_repository: "user/repo",
+        git_provider: "github",
+      },
     } as ReturnType<typeof useActiveConversation>);
     vi.mocked(useTaskPolling).mockReturnValue({
       repositoryInfo: null,

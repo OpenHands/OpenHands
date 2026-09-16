@@ -52,7 +52,9 @@ vi.mock("#/components/features/conversation/conversation-name", () => ({
 }));
 
 vi.mock("#/components/features/conversation/right-panel-toggle", () => ({
-  RightPanelToggle: () => null,
+  RightPanelToggle: () => (
+    <button type="button" data-testid="right-panel-toggle" />
+  ),
 }));
 
 vi.mock("react-i18next", async () => {
@@ -167,5 +169,19 @@ describe("ConversationNameWithStatus", () => {
     expect(
       screen.getByTestId("server-status-context-menu"),
     ).toBeInTheDocument();
+  });
+
+  it("aligns git actions, overview, and drawer in one 28px row", () => {
+    renderWithProviders(<ConversationNameWithStatus />);
+
+    const actions = screen.getByTestId("conversation-header-actions");
+    expect(actions).toHaveClass("h-7", "items-center");
+    expect(actions).toContainElement(
+      screen.getByTestId("conversation-git-actions-toggle"),
+    );
+    expect(actions).toContainElement(
+      screen.getByTestId("conversation-overview-toggle"),
+    );
+    expect(actions).toContainElement(screen.getByTestId("right-panel-toggle"));
   });
 });

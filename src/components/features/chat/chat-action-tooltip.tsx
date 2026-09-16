@@ -17,7 +17,9 @@ export function ChatActionTooltip({
       placement="bottom"
       tooltipClassName="bg-white text-black text-xs font-medium leading-5"
     >
-      <span data-aria-label={ariaLabel}>{children}</span>
+      <span className="inline-flex items-center" data-aria-label={ariaLabel}>
+        {children}
+      </span>
     </StyledTooltip>
   );
 }

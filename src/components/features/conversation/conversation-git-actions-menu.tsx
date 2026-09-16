@@ -117,7 +117,7 @@ export function ConversationGitActionsMenu({
       >
         <ToolsContextMenuIconText
           icon={<GitCommitHorizontal className="size-4" aria-hidden />}
-          text={t(I18nKey.DIFF_VIEWER$COMMITS)}
+          text={t(I18nKey.COMMON$COMMIT)}
         />
       </ContextMenuListItem>
       <ContextMenuListItem

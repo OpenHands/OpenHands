@@ -106,7 +106,7 @@ describe("ConversationOverviewToggle", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("stays visible and supports hover peek on smaller screens", async () => {
+  it("does not peek the overview on hover on mobile", async () => {
     const user = userEvent.setup();
     breakpointIsMobile.value = true;
     useConversationStore.setState({
@@ -115,12 +115,39 @@ describe("ConversationOverviewToggle", () => {
     });
     render(<ConversationOverviewToggle />);
 
-    const toggle = screen.getByTestId("conversation-overview-toggle");
-    expect(toggle).toBeInTheDocument();
+    await user.hover(screen.getByTestId("conversation-overview-toggle"));
 
-    await user.hover(toggle);
+    expect(useConversationStore.getState().isOverviewPanelPeeked).toBe(false);
+    expect(
+      screen.queryByTestId("conversation-overview-dropdown"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("conversation-overview-peek"),
+    ).not.toBeInTheDocument();
+  });
 
-    expect(useConversationStore.getState().isOverviewPanelPeeked).toBe(true);
-    expect(screen.getByTestId("conversation-overview-peek")).toBeInTheDocument();
+  it("opens overview as a dropdown on mobile click and closes on outside click", async () => {
+    const user = userEvent.setup();
+    breakpointIsMobile.value = true;
+    render(
+      <div>
+        <ConversationOverviewToggle />
+        <button type="button">outside</button>
+      </div>,
+    );
+
+    expect(
+      screen.queryByTestId("conversation-overview-dropdown"),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("conversation-overview-toggle"));
+    expect(
+      screen.getByTestId("conversation-overview-dropdown"),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "outside" }));
+    expect(
+      screen.queryByTestId("conversation-overview-dropdown"),
+    ).not.toBeInTheDocument();
   });
 });

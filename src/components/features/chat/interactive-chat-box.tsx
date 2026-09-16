@@ -7,7 +7,6 @@ import { useChatAttachmentUpload } from "#/hooks/chat/use-chat-attachment-upload
 import { AgentState } from "#/types/agent-state";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
-import { GitControlBar } from "./git-control-bar";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useAgentState } from "#/hooks/use-agent-state";
 import { useSubConversationTaskPolling } from "#/hooks/query/use-sub-conversation-task-polling";
@@ -64,10 +63,6 @@ export function InteractiveChatBox({
   );
   const handleSubmit = useModelInterceptor(conversationId, handleAfterModel);
 
-  const handleSuggestionsClick = (suggestion: string) => {
-    handleSubmit(suggestion);
-  };
-
   const isDisabled =
     disabled ||
     curAgentState === AgentState.AWAITING_USER_CONFIRMATION ||
@@ -82,9 +77,6 @@ export function InteractiveChatBox({
         onSubmit={handleSubmit}
         onFilesPaste={handleUpload}
       />
-      <div className="mt-3 pb-3">
-        <GitControlBar onSuggestionsClick={handleSuggestionsClick} />
-      </div>
     </div>
   );
 }

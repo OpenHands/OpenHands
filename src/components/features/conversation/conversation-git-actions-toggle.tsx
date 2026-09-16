@@ -11,12 +11,13 @@ import {
   formControlMutedHoverClassName,
   formControlTransitionClassName,
 } from "#/utils/form-control-classes";
+import { conversationHeaderActionSlotClassName } from "#/utils/mobile-top-bar-icon-button-classes";
 import { ChatActionTooltip } from "../chat/chat-action-tooltip";
 import { ConversationGitActionsMenu } from "./conversation-git-actions-menu";
 
-/** Same 28px height as overview / drawer header icon buttons. */
+/** Same 28px box as overview / drawer header icon buttons (`box-border` keeps the border inside). */
 const GIT_ACTIONS_BUTTON_CLASSNAME = cn(
-  "inline-flex h-7 min-h-7 w-fit shrink-0 cursor-pointer items-center justify-center gap-1.5 px-2.5",
+  "inline-flex box-border h-7 min-h-7 w-fit shrink-0 cursor-pointer items-center justify-center gap-1.5 px-2.5",
   "rounded-md text-xs font-normal leading-none",
   formControlBorderClassName,
   formControlTransitionClassName,
@@ -91,7 +92,7 @@ export function ConversationGitActionsToggle({
   );
 
   return (
-    <div className="relative inline-flex items-center self-center">
+    <div className={conversationHeaderActionSlotClassName}>
       {/* Label is visible, so a tooltip only adds value for the disabled reason. */}
       {isArchivedConversation ? (
         <ChatActionTooltip
