@@ -8,17 +8,20 @@ import {
   OpenHandsEvent,
   SecurityRisk,
 } from "#/types/agent-server/core";
-import { StreamingDeltaEvent } from "#/types/agent-server/core/events/streaming-delta-event";
-import { handleEventForUI } from "#/utils/handle-event-for-ui";
+import {
+  appendStreamingDeltas,
+  handleEventForUI,
+  openStreamingSlot,
+} from "#/utils/handle-event-for-ui";
 import { Messages } from "#/components/conversation-events/chat/messages";
 
 // Regression for issue #1534. With stream=true the agent streams its
-// pre-tool-call text as a StreamingDeltaEvent and then emits an intermediate
-// ActionEvent whose `thought` is that same text. The chat hoists the action's
-// thought into its own message, so the leftover streaming delta used to render
-// the identical text a second time. This test drives the real reducer
-// (handleEventForUI) and renders the real <Messages> tree to assert the text
-// shows exactly once.
+// pre-tool-call text into a slot and then emits the intermediate ActionEvent
+// whose `thought` is that same text — built with the slot's own id, because
+// the SDK mints it when the stream opens. The chat hoists the action's thought
+// into its own message, so the slot must be retired rather than left to render
+// the identical text a second time. These tests drive the real reducers and
+// render the real <Messages> tree to assert the text shows exactly once.
 
 const THOUGHT =
   "I'll create a webpage explaining what OpenHands can do. " +
@@ -37,17 +40,6 @@ const userMessage: MessageEvent = {
   },
   activated_skills: [],
   extended_content: [],
-};
-
-// The reasoning streamed as a delta; many models carry reasoning ONLY here, so
-// the collapsible "Thinking" must survive the reconciliation.
-const streamingDelta: StreamingDeltaEvent = {
-  id: "delta-1",
-  kind: "StreamingDeltaEvent",
-  timestamp: "2026-06-12T12:00:01Z",
-  source: "agent",
-  content: THOUGHT,
-  reasoning_content: "Considering the request before acting.",
 };
 
 const action: ActionEvent = {
@@ -101,54 +93,110 @@ const observation: ObservationEvent = {
   action_id: "action-1",
 };
 
-const reduce = (events: OpenHandsEvent[]): OpenHandsEvent[] =>
-  events.reduce<OpenHandsEvent[]>((ui, ev) => handleEventForUI(ev, ui), []);
+/**
+ * Replay a turn: `stream(itemId, …)` opens a slot and feeds it, everything
+ * else goes through the durable reducer — the same order the session socket
+ * delivers them in.
+ */
+const stream = (
+  itemId: string,
+  text: string | null,
+  reasoning: string | null = null,
+) => ({ itemId, text, reasoning });
+
+type Step = OpenHandsEvent | ReturnType<typeof stream>;
+
+const isStreamStep = (step: Step): step is ReturnType<typeof stream> =>
+  "itemId" in step;
+
+/** The durable events of a replay, in arrival order (the `allEvents` list). */
+const durableOf = (steps: Step[]): OpenHandsEvent[] =>
+  steps.filter((step): step is OpenHandsEvent => !isStreamStep(step));
+
+const replay = (steps: Step[]): OpenHandsEvent[] =>
+  steps.reduce<OpenHandsEvent[]>((ui, step) => {
+    if (!isStreamStep(step)) {
+      return handleEventForUI(step, ui);
+    }
+    const opened = openStreamingSlot(
+      { type: "item_started", item_id: step.itemId },
+      ui,
+    );
+    return appendStreamingDeltas(
+      [
+        ...(step.reasoning
+          ? [
+              {
+                type: "delta" as const,
+                item_id: step.itemId,
+                attempt: 1,
+                order: 0,
+                kind: "reasoning" as const,
+                content: step.reasoning,
+              },
+            ]
+          : []),
+        ...(step.text
+          ? [
+              {
+                type: "delta" as const,
+                item_id: step.itemId,
+                attempt: 1,
+                order: 1,
+                kind: "text" as const,
+                content: step.text,
+              },
+            ]
+          : []),
+      ],
+      opened,
+    );
+  }, []);
 
 describe("issue #1534 — streamed intermediate message duplication", () => {
   it("renders the intermediate thought text exactly once", () => {
-    const allEvents = [userMessage, streamingDelta, action, observation];
-    const uiEvents = reduce(allEvents);
+    const steps: Step[] = [
+      userMessage,
+      stream(action.id, THOUGHT, "Considering the request before acting."),
+      action,
+      observation,
+    ];
+    const uiEvents = replay(steps);
 
     const { container } = renderWithProviders(
-      <Messages messages={uiEvents} allEvents={allEvents} />,
+      <Messages messages={uiEvents} allEvents={durableOf(steps)} />,
     );
 
     expect(countOccurrences(container.textContent ?? "", THOUGHT)).toBe(1);
   });
 
-  it("keeps the streamed reasoning visible (Thinking section survives)", () => {
-    const allEvents = [userMessage, streamingDelta, action, observation];
-    const uiEvents = reduce(allEvents);
+  it("retires the slot on the action that carries its id", () => {
+    const streamed = replay([userMessage, stream(action.id, THOUGHT)]);
+    // While streaming, the slot renders the provisional text.
+    expect(streamed.map((event) => event.id)).toEqual([
+      userMessage.id,
+      action.id,
+    ]);
 
-    renderWithProviders(<Messages messages={uiEvents} allEvents={allEvents} />);
-
-    // The collapsible "Thinking" section is still rendered (collapsed by
-    // default); expanding it reveals the reasoning that was streamed on the
-    // delta, proving the reconciliation kept the reasoning.
-    fireEvent.click(screen.getByTestId("collapsible-thinking-toggle"));
-    expect(
-      screen.getByTestId("collapsible-thinking-content").textContent ?? "",
-    ).toContain("Considering the request before acting.");
+    const uiEvents = handleEventForUI(action, streamed);
+    expect(uiEvents).toEqual([userMessage, action]);
   });
 
   it("renders a single Thinking section when the action carries its own reasoning", () => {
-    // When the finalized action also reports reasoning, the streamed delta's
-    // reasoning would duplicate the action's "Thinking" — so the delta is
-    // dropped and only one Thinking section renders.
     const reasoningAction: ActionEvent = {
       ...action,
       reasoning_content: "Considering the request before acting.",
     };
-    const allEvents = [
+    const steps: Step[] = [
       userMessage,
-      streamingDelta,
+      stream(action.id, THOUGHT, "Considering the request before acting."),
       reasoningAction,
       observation,
     ];
-    const uiEvents = reduce(allEvents);
+    const uiEvents = replay(steps);
 
     const { container } = renderWithProviders(
-      <Messages messages={uiEvents} allEvents={allEvents} />,
+      <Messages messages={uiEvents} allEvents={durableOf(steps)} />,
     );
 
     expect(screen.getAllByTestId("collapsible-thinking")).toHaveLength(1);
@@ -172,68 +220,47 @@ describe("issue #1534 — streamed intermediate message duplication", () => {
         metadata: null,
       },
     };
-    const allEvents = [userMessage, streamingDelta, finalMessage];
-    const uiEvents = reduce(allEvents);
+    const steps: Step[] = [
+      userMessage,
+      stream(finalMessage.id, THOUGHT),
+      finalMessage,
+    ];
+    const uiEvents = replay(steps);
 
     expect(uiEvents.at(-1)).toBe(finalMessage);
 
     const { container } = renderWithProviders(
-      <Messages messages={uiEvents} allEvents={allEvents} />,
+      <Messages messages={uiEvents} allEvents={durableOf(steps)} />,
     );
 
     expect(countOccurrences(container.textContent ?? "", THOUGHT)).toBe(1);
     expect(screen.getByLabelText("Score: 72.0%")).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId("collapsible-thinking-toggle"));
-    expect(
-      screen.getByTestId("collapsible-thinking-content"),
-    ).toHaveTextContent("Considering the request before acting.");
   });
 
-  it("renders once when streamed text has leading whitespace", () => {
-    const leadingWhitespaceDelta: StreamingDeltaEvent = {
-      ...streamingDelta,
-      content: `\n${THOUGHT}`,
-    };
-    const finalMessage: MessageEvent = {
-      id: "agent-msg-leading-whitespace",
-      timestamp: "2026-06-12T12:00:02Z",
-      source: "agent",
-      llm_message: {
-        role: "assistant",
-        content: [{ type: "text", text: THOUGHT }],
-      },
-      activated_skills: [],
-      extended_content: [],
-    };
-    const allEvents = [userMessage, leadingWhitespaceDelta, finalMessage];
-    const uiEvents = reduce(allEvents);
+  it("keeps the streamed reasoning visible while the slot is still open", () => {
+    const steps: Step[] = [
+      userMessage,
+      stream(action.id, THOUGHT, "Considering the request before acting."),
+    ];
+    const uiEvents = replay(steps);
 
-    expect(uiEvents.at(-1)).toBe(finalMessage);
-
-    const { container } = renderWithProviders(
-      <Messages messages={uiEvents} allEvents={allEvents} />,
+    renderWithProviders(
+      <Messages messages={uiEvents} allEvents={durableOf(steps)} />,
     );
 
-    expect(countOccurrences(container.textContent ?? "", THOUGHT)).toBe(1);
+    fireEvent.click(screen.getByTestId("collapsible-thinking-toggle"));
+    expect(
+      screen.getByTestId("collapsible-thinking-content").textContent ?? "",
+    ).toContain("Considering the request before acting.");
   });
 });
 
-// A model that streams its reasoning but whose action `thought` does not repeat
-// that text used to render the delta's reasoning and the action's own reasoning
-// as two identical "Thinking" bubbles.
+// A model that streams reasoning only: the slot renders it until the durable
+// action — which carries the same reasoning, and the slot's id — replaces it.
 describe("duplicate Thinking blocks", () => {
   const REASONING =
     "Let me read the full PRD to understand all the requirements. " +
     "I need to see sections that were clipped.";
-
-  const reasoningOnlyDelta: StreamingDeltaEvent = {
-    id: "delta-reasoning-only",
-    kind: "StreamingDeltaEvent",
-    timestamp: "2026-06-12T12:00:01Z",
-    source: "agent",
-    content: null,
-    reasoning_content: REASONING,
-  };
 
   const reasoningAction: ActionEvent = {
     ...action,
@@ -242,16 +269,16 @@ describe("duplicate Thinking blocks", () => {
   };
 
   it("renders the reasoning in a single Thinking section", () => {
-    const allEvents = [
+    const steps: Step[] = [
       userMessage,
-      reasoningOnlyDelta,
+      stream(reasoningAction.id, null, REASONING),
       reasoningAction,
       observation,
     ];
-    const uiEvents = reduce(allEvents);
+    const uiEvents = replay(steps);
 
     const { container } = renderWithProviders(
-      <Messages messages={uiEvents} allEvents={allEvents} />,
+      <Messages messages={uiEvents} allEvents={durableOf(steps)} />,
     );
 
     expect(screen.getAllByTestId("collapsible-thinking")).toHaveLength(1);
@@ -263,19 +290,17 @@ describe("duplicate Thinking blocks", () => {
     expect(countOccurrences(container.textContent ?? "", REASONING)).toBe(1);
   });
 
-  it("keeps the streamed reasoning when the action carries none", () => {
-    const plainAction: ActionEvent = { ...action, thought: [] };
-    const allEvents = [
+  it("renders the streamed reasoning while the slot is open", () => {
+    const steps: Step[] = [
       userMessage,
-      reasoningOnlyDelta,
-      plainAction,
-      observation,
+      stream(reasoningAction.id, null, REASONING),
     ];
-    const uiEvents = reduce(allEvents);
+    const uiEvents = replay(steps);
 
-    renderWithProviders(<Messages messages={uiEvents} allEvents={allEvents} />);
+    renderWithProviders(
+      <Messages messages={uiEvents} allEvents={durableOf(steps)} />,
+    );
 
-    // The delta is the sole reasoning carrier, so its Thinking must survive.
     expect(screen.getAllByTestId("collapsible-thinking")).toHaveLength(1);
     fireEvent.click(screen.getByTestId("collapsible-thinking-toggle"));
     expect(

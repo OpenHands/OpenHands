@@ -1,15 +1,19 @@
 import { create } from "zustand";
-import { OpenHandsEvent } from "#/types/agent-server/core";
 import {
+  abortStreamingSlot,
+  appendStreamingDeltas,
+  clearStreamingSlots,
   handleEventForUI,
-  isSameStreamingSender,
-  mergeStreamingDeltaEvent,
+  openStreamingSlot,
+  type StreamingSlotMeta,
+  type UIEvent,
 } from "#/utils/handle-event-for-ui";
-import { isStreamingDeltaEvent } from "#/types/agent-server/type-guards";
+import type {
+  DeltaFrame,
+  ItemStartedFrame,
+} from "#/types/agent-server/session-frames";
 
-export type OHEvent = OpenHandsEvent & {
-  isFromPlanningAgent?: boolean;
-};
+export type OHEvent = UIEvent;
 
 const getEventId = (event: OHEvent): string | number | undefined =>
   "id" in event ? event.id : undefined;
@@ -87,42 +91,38 @@ export interface EventState {
    * right order.
    */
   clearEventsForConversation: (conversationId: string | null) => void;
+  /**
+   * Streaming slots. They live only in `uiEvents`: nothing reads `events` for
+   * provisional text, and keeping them out means their id — which is the id
+   * the durable event will carry — can never be mistaken for one already seen
+   * and dedupe the real message away.
+   */
+  openStreamingSlot: (
+    frame: ItemStartedFrame,
+    meta?: StreamingSlotMeta,
+  ) => void;
+  appendStreamingDeltas: (frames: DeltaFrame[]) => void;
+  abortStreamingSlot: (itemId: string) => void;
+  /** Discard every open slot for one socket (on connect and disconnect). */
+  clearStreamingSlots: (isFromPlanningAgent?: boolean) => void;
 }
 
 const appendEvent = (state: EventState, event: OHEvent): EventState => {
   const eventId = getEventId(event);
-  // Transient deltas merge by position and are never persisted/resent, so skip
-  // id tracking for them — copying the growing `eventIds` Set per token would
-  // otherwise be O(n^2).
-  const isDelta = isStreamingDeltaEvent(event);
 
   // Deduplicate: skip if event with same id already exists (O(1) lookup)
-  if (!isDelta && eventId !== undefined && state.eventIds.has(eventId)) {
+  if (eventId !== undefined && state.eventIds.has(eventId)) {
     return state;
   }
 
   const newEventIds =
-    !isDelta && eventId !== undefined
+    eventId !== undefined
       ? new Set(state.eventIds).add(eventId)
       : state.eventIds;
 
-  const lastEventIndex = state.events.length - 1;
-  const lastEvent = state.events[lastEventIndex];
-  const shouldMergeStreamingDelta =
-    lastEvent &&
-    isDelta &&
-    isStreamingDeltaEvent(lastEvent) &&
-    isSameStreamingSender(event, lastEvent);
-  const events = [...state.events];
-  if (shouldMergeStreamingDelta) {
-    events[lastEventIndex] = mergeStreamingDeltaEvent(event, lastEvent);
-  } else {
-    events.push(event);
-  }
-
   return {
     ...state,
-    events,
+    events: [...state.events, event],
     eventIds: newEventIds,
     uiEvents: handleEventForUI(event, state.uiEvents),
   };
@@ -167,30 +167,14 @@ export const useEventStore = create<EventState>()((set) => ({
 
       for (const event of incoming) {
         const eventId = getEventId(event);
-        // See `appendEvent`: transient deltas are not tracked in `eventIds`.
-        const isDelta = isStreamingDeltaEvent(event);
-        const isDuplicate =
-          !isDelta && eventId !== undefined && eventIds.has(eventId);
+        const isDuplicate = eventId !== undefined && eventIds.has(eventId);
 
         if (!isDuplicate) {
           added = true;
-          if (!isDelta && eventId !== undefined) {
+          if (eventId !== undefined) {
             eventIds.add(eventId);
           }
-
-          const lastEventIndex = events.length - 1;
-          const lastEvent = events[lastEventIndex];
-          if (
-            lastEvent &&
-            isStreamingDeltaEvent(event) &&
-            isStreamingDeltaEvent(lastEvent) &&
-            isSameStreamingSender(event, lastEvent)
-          ) {
-            events[lastEventIndex] = mergeStreamingDeltaEvent(event, lastEvent);
-          } else {
-            events.push(event);
-          }
-
+          events.push(event);
           uiEvents = handleEventForUI(event, uiEvents);
         }
       }
@@ -220,6 +204,26 @@ export const useEventStore = create<EventState>()((set) => ({
       uiEvents: [],
       loadedConversationId: conversationId,
     })),
+  openStreamingSlot: (frame: ItemStartedFrame, meta: StreamingSlotMeta = {}) =>
+    set((state) => {
+      const uiEvents = openStreamingSlot(frame, state.uiEvents, meta);
+      return uiEvents === state.uiEvents ? state : { ...state, uiEvents };
+    }),
+  appendStreamingDeltas: (frames: DeltaFrame[]) =>
+    set((state) => {
+      const uiEvents = appendStreamingDeltas(frames, state.uiEvents);
+      return uiEvents === state.uiEvents ? state : { ...state, uiEvents };
+    }),
+  abortStreamingSlot: (itemId: string) =>
+    set((state) => {
+      const uiEvents = abortStreamingSlot(itemId, state.uiEvents);
+      return uiEvents === state.uiEvents ? state : { ...state, uiEvents };
+    }),
+  clearStreamingSlots: (isFromPlanningAgent = false) =>
+    set((state) => {
+      const uiEvents = clearStreamingSlots(state.uiEvents, isFromPlanningAgent);
+      return uiEvents === state.uiEvents ? state : { ...state, uiEvents };
+    }),
 }));
 
 // In dev builds, expose the store on `window` so that fixture/preview

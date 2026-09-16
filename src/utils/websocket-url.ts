@@ -117,7 +117,9 @@ export function buildWebSocketUrl(
   const baseHost = extractBaseHost(conversationUrl);
   const pathPrefix = extractPathPrefix(conversationUrl);
 
-  // Build WebSocket URL: ws://host:port[/path-prefix]/sockets/events/{conversationId}
+  // Build WebSocket URL: ws://host:port[/path-prefix]/sockets/session/{conversationId}
+  // The session endpoint speaks the envelope protocol (durable events plus
+  // stream-progress frames); the legacy /sockets/events endpoint is frozen.
   // The path prefix (e.g., /runtime/55313) is needed for proxy deployments
   // Note: Query params should be passed via the useWebSocket hook options
   //
@@ -131,5 +133,5 @@ export function buildWebSocketUrl(
     getConversationUrlProtocol(conversationUrl) === "https:";
   const protocol = pageIsSecure || targetIsSecure ? "wss:" : "ws:";
 
-  return `${protocol}//${baseHost}${pathPrefix}/sockets/events/${conversationId}`;
+  return `${protocol}//${baseHost}${pathPrefix}/sockets/session/${conversationId}`;
 }

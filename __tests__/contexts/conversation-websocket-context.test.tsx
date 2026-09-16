@@ -25,13 +25,29 @@ import type { AppConversation } from "#/api/conversation-service/agent-server-co
 import type { MessageEvent } from "#/types/agent-server/core";
 import { isStreamingDeltaEvent } from "#/types/agent-server/type-guards";
 
+type QueryParams = Record<string, string | boolean>;
+
 type CapturedWebSocketOptions = {
   onMessage?: (event: { data: string }) => void;
-  queryParams?: Record<string, string | boolean>;
+  queryParams?: QueryParams | (() => QueryParams);
   sessionApiKey?: string | null;
 };
 
+/** Both sockets resolve their params at connect time (the resume cursor). */
+const resolveQueryParams = (
+  options?: { queryParams?: QueryParams | (() => QueryParams) } | null,
+): QueryParams => {
+  const params = options?.queryParams;
+  return typeof params === "function" ? params() : (params ?? {});
+};
+
+/** Wrap a durable event the way `/sockets/session/{id}` does. */
+let nextSeq = 0;
+const durable = (event: unknown, seq = nextSeq++) =>
+  JSON.stringify({ type: "durable", seq, event });
+
 const wsCapture = vi.hoisted(() => ({
+  hookCalls: 0,
   mainOnMessage: null as null | ((event: { data: string }) => void),
   mainOptions: null as CapturedWebSocketOptions | null,
   planningOnMessage: null as null | ((event: { data: string }) => void),
@@ -53,22 +69,18 @@ vi.mock("#/hooks/use-websocket", () => ({
     if (url) {
       wsCapture.calls.push({ url, options });
     }
-    if (
-      url &&
-      options?.onMessage &&
-      options.queryParams &&
-      "resend_mode" in options.queryParams
-    ) {
-      wsCapture.mainOnMessage = options.onMessage;
-      wsCapture.mainOptions = options;
-    }
-    if (
-      url &&
-      options?.onMessage &&
-      options.queryParams &&
-      "resend_all" in options.queryParams
-    ) {
-      wsCapture.planningOnMessage = options.onMessage;
+    // Both sockets speak the same protocol now, so neither the URL nor the
+    // query params tell them apart. Hooks run in declaration order on every
+    // render — main socket first, planning second — so call parity does.
+    const isMain = wsCapture.hookCalls % 2 === 0;
+    wsCapture.hookCalls += 1;
+    if (url && options?.onMessage) {
+      if (isMain) {
+        wsCapture.mainOnMessage = options.onMessage;
+        wsCapture.mainOptions = options;
+      } else {
+        wsCapture.planningOnMessage = options.onMessage;
+      }
     }
     return { socket: null, reconnect: vi.fn() };
   }),
@@ -125,6 +137,8 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     );
 
   beforeEach(() => {
+    nextSeq = 0;
+    wsCapture.hookCalls = 0;
     wsCapture.mainOnMessage = null;
     wsCapture.mainOptions = null;
     wsCapture.planningOnMessage = null;
@@ -202,7 +216,7 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     // Act: the agent switches to "fast-opus" via the SwitchLLM tool.
     act(() => {
       wsCapture.mainOnMessage!({
-        data: JSON.stringify(makeAgentSwitchObservation("fast-opus")),
+        data: durable(makeAgentSwitchObservation("fast-opus")),
       });
     });
 
@@ -232,7 +246,7 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     await waitFor(() => expect(wsCapture.mainOptions).not.toBeNull());
 
     expect(wsCapture.mainOptions?.sessionApiKey).toBe(sessionApiKey);
-    expect(wsCapture.mainOptions?.queryParams).not.toHaveProperty(
+    expect(resolveQueryParams(wsCapture.mainOptions)).not.toHaveProperty(
       "session_api_key",
     );
   });
@@ -272,18 +286,14 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     );
     await waitFor(() => expect(wsCapture.mainOptions).not.toBeNull());
 
-    // Every render's main-socket call (the one carrying `resend_mode`),
+    // Every render's main-socket call (see the mock: main is the even one),
     // including any teardown call with an empty URL.
     const mainCalls = () =>
-      vi
-        .mocked(useWebSocket)
-        .mock.calls.filter(
-          ([, options]) =>
-            options?.queryParams && "resend_mode" in options.queryParams,
-        );
+      vi.mocked(useWebSocket).mock.calls.filter((_, index) => index % 2 === 0);
     const connectedAt = mainCalls().length;
-    const anchor = wsCapture.mainOptions?.queryParams?.after_timestamp;
-    expect(anchor).toBeTruthy();
+    expect(resolveQueryParams(wsCapture.mainOptions)).toHaveProperty(
+      "after_seq",
+    );
 
     // Act: a background refetch starts (as `refetchOnMount: "always"` fires
     // when returning to a conversation) and stays in flight.
@@ -297,13 +307,10 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     );
 
     // Assert: since the socket connected, no render tore it down (empty URL)
-    // and none degraded the `since` anchor to a full resend.
+    // and every call still carries the resume cursor.
     for (const [url, options] of mainCalls().slice(connectedAt - 1)) {
-      expect(url).toContain("/sockets/events/conv-refetch");
-      expect(options?.queryParams).toMatchObject({
-        resend_mode: "since",
-        after_timestamp: anchor,
-      });
+      expect(url).toContain("/sockets/session/conv-refetch");
+      expect(resolveQueryParams(options)).toHaveProperty("after_seq");
     }
 
     // The refetch settling must not churn the socket either.
@@ -311,7 +318,7 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
       resolveRefetch(historyPage());
     });
     const [urlAfterRefetch] = mainCalls().at(-1)!;
-    expect(urlAfterRefetch).toContain("/sockets/events/conv-refetch");
+    expect(urlAfterRefetch).toContain("/sockets/session/conv-refetch");
   });
 
   it("uses the planning sub-conversation session key", async () => {
@@ -355,21 +362,24 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     await waitFor(() =>
       expect(
         wsCapture.calls.some(({ url }) =>
-          url.endsWith("/sockets/events/planning-auth"),
+          url.endsWith("/sockets/session/planning-auth"),
         ),
       ).toBe(true),
     );
 
     const planningCall = wsCapture.calls.find(({ url }) =>
-      url.endsWith("/sockets/events/planning-auth"),
+      url.endsWith("/sockets/session/planning-auth"),
     );
 
     expect(planningCall?.url).toBe(
-      "ws://planner.example/sockets/events/planning-auth",
+      "ws://planner.example/sockets/session/planning-auth",
     );
     expect(planningCall?.options?.sessionApiKey).toBe(planningSessionApiKey);
-    expect(planningCall?.options?.queryParams).toEqual({ resend_all: true });
-    expect(planningCall?.options?.queryParams).not.toHaveProperty(
+    // No REST preload for the planner, so it replays the whole log.
+    expect(resolveQueryParams(planningCall?.options)).toEqual({
+      after_seq: "-1",
+    });
+    expect(resolveQueryParams(planningCall?.options)).not.toHaveProperty(
       "session_api_key",
     );
   });
@@ -482,7 +492,7 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     // Act: the agent switches model via the SwitchLLM tool.
     act(() => {
       wsCapture.mainOnMessage!({
-        data: JSON.stringify(makeAgentSwitchObservation("fast-opus")),
+        data: durable(makeAgentSwitchObservation("fast-opus")),
       });
     });
 
@@ -607,7 +617,7 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
 
     const deliver = (event: unknown) =>
       act(() => {
-        wsCapture.mainOnMessage!({ data: JSON.stringify(event) });
+        wsCapture.mainOnMessage!({ data: durable(event) });
       });
 
     it("does not re-append terminal input/output for replayed bash events", async () => {
@@ -742,7 +752,7 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
 
       act(() => {
         wsCapture.planningOnMessage!({
-          data: JSON.stringify(makeAgentError("agent-err-2", classification)),
+          data: durable(makeAgentError("agent-err-2", classification)),
         });
       });
 
@@ -860,14 +870,23 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     expect(eventIds()).toHaveLength(2);
   });
 
-  const makeStreamingDelta = (id: string, content: string) => ({
-    id,
-    timestamp: new Date().toISOString(),
-    source: "agent",
-    kind: "StreamingDeltaEvent",
-    content,
-    reasoning_content: null,
-  });
+  const itemStarted = (itemId: string, anchorSeq: number | null = null) =>
+    JSON.stringify({
+      type: "item_started",
+      item_id: itemId,
+      attempt: 1,
+      ...(anchorSeq === null ? {} : { anchor_seq: anchorSeq }),
+    });
+
+  const delta = (itemId: string, content: string, order: number) =>
+    JSON.stringify({
+      type: "delta",
+      item_id: itemId,
+      attempt: 1,
+      order,
+      kind: "text",
+      content,
+    });
 
   const makeAgentMessage = (id: string, text: string): MessageEvent => ({
     id,
@@ -890,45 +909,72 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
       </QueryClientProvider>,
     );
 
-  it("buffers streaming deltas, then flushes them (reconciled) when the final message arrives", async () => {
+  it("buffers deltas, then retires the slot by id when the durable message arrives", async () => {
     renderProviderWithUrl("conv-stream");
     await waitFor(() => expect(wsCapture.mainOnMessage).not.toBeNull());
     await waitFor(() => expect(eventIds()).toEqual(["user-msg-conv-stream"]));
 
-    // Deltas arrive: they are buffered by the batcher, NOT committed per token.
+    // The slot opens before the first token; deltas are buffered by the
+    // batcher, NOT committed per token.
     act(() => {
+      wsCapture.mainOnMessage!({ data: itemStarted("agent-final") });
+      wsCapture.mainOnMessage!({ data: delta("agent-final", "I'll help", 0) });
       wsCapture.mainOnMessage!({
-        data: JSON.stringify(makeStreamingDelta("d1", "I'll help")),
-      });
-      wsCapture.mainOnMessage!({
-        data: JSON.stringify(makeStreamingDelta("d2", " with that.")),
+        data: delta("agent-final", " with that.", 1),
       });
     });
+    // Slots live only in `uiEvents`; the durable log is untouched.
     expect(eventIds()).toEqual(["user-msg-conv-stream"]);
 
-    // The final agent message is a non-delta event: the handler flushes the
-    // buffered deltas first, so the message reconciles the streamed text in
-    // place instead of racing ahead of it.
+    // The durable frame flushes the buffer first, then retires the slot on
+    // `event.id === item_id` — one equality test, no text comparison.
     act(() => {
       wsCapture.mainOnMessage!({
-        data: JSON.stringify(
-          makeAgentMessage("agent-final", "I'll help with that. Done."),
-        ),
+        data: durable(makeAgentMessage("agent-final", "I'll help with that.")),
       });
     });
 
     const { uiEvents, eventIds: ids } = useEventStore.getState();
-    // One reconciled agent bubble: the canonical final message supersedes the
-    // flushed deltas, so the streamed text renders once and is never duplicated.
     expect(uiEvents).toHaveLength(2);
     const bubble = uiEvents[1] as MessageEvent;
     expect(bubble.id).toBe("agent-final");
-    expect(bubble.llm_message.content).toEqual([
-      { type: "text", text: "I'll help with that. Done." },
-    ]);
     expect(uiEvents.some((event) => isStreamingDeltaEvent(event))).toBe(false);
-    // eventIds tracks the two durable events, never the deltas.
+    // eventIds tracks the two durable events, never the slot.
     expect(ids.size).toBe(2);
+  });
+
+  it("keeps a user message that lands mid-stream below the bubble (#15433)", async () => {
+    renderProviderWithUrl("conv-split");
+    await waitFor(() => expect(wsCapture.mainOnMessage).not.toBeNull());
+    await waitFor(() => expect(eventIds()).toEqual(["user-msg-conv-split"]));
+
+    act(() => {
+      wsCapture.mainOnMessage!({ data: itemStarted("agent-split", 0) });
+      wsCapture.mainOnMessage!({ data: delta("agent-split", "First half", 0) });
+    });
+    act(() => {
+      // A user message arrives mid-stream, sequenced after the slot's anchor.
+      wsCapture.mainOnMessage!({
+        data: durable(createUserMessageEvent("mid-stream"), 1),
+      });
+      wsCapture.mainOnMessage!({
+        data: delta("agent-split", " second half", 1),
+      });
+    });
+
+    // One bubble, still whole, with the interrupting message below it.
+    await waitFor(() => {
+      const slots = useEventStore
+        .getState()
+        .uiEvents.filter((event) => isStreamingDeltaEvent(event));
+      expect(slots).toHaveLength(1);
+      expect(slots[0].content).toBe("First half second half");
+    });
+    expect(useEventStore.getState().uiEvents.map((event) => event.id)).toEqual([
+      "user-msg-conv-split",
+      "agent-split",
+      "mid-stream",
+    ]);
   });
 
   it("discards buffered deltas from the previous conversation on switch", async () => {
@@ -938,9 +984,8 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
 
     // Buffer deltas for A, then switch to B before they flush.
     act(() => {
-      wsCapture.mainOnMessage!({
-        data: JSON.stringify(makeStreamingDelta("a1", "STALE")),
-      });
+      wsCapture.mainOnMessage!({ data: itemStarted("stale-item") });
+      wsCapture.mainOnMessage!({ data: delta("stale-item", "STALE", 0) });
     });
     rerender(
       <QueryClientProvider client={queryClient}>
@@ -954,14 +999,13 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     );
     await waitFor(() => expect(eventIds()).toEqual(["user-msg-conv-b"]));
 
-    // B streams and finalizes. If the switch had NOT reset the batcher, A's
-    // "STALE" delta would still be buffered and merge into B's stream here.
+    // B streams and finalizes. Had the switch not reset the batcher, A's
+    // "STALE" delta would still be buffered and commit here.
     act(() => {
+      wsCapture.mainOnMessage!({ data: itemStarted("agent-b") });
+      wsCapture.mainOnMessage!({ data: delta("agent-b", "fresh", 0) });
       wsCapture.mainOnMessage!({
-        data: JSON.stringify(makeStreamingDelta("b1", "fresh")),
-      });
-      wsCapture.mainOnMessage!({
-        data: JSON.stringify(makeAgentMessage("agent-b", "fresh.")),
+        data: durable(makeAgentMessage("agent-b", "fresh.")),
       });
     });
 
@@ -970,12 +1014,7 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     expect((uiEvents[1] as MessageEvent).llm_message.content).toEqual([
       { type: "text", text: "fresh." },
     ]);
-    // The committed delta carries B's text only — had A's buffer survived the
-    // switch it would have merged in ahead of it as "STALEfresh".
-    const committedDeltas = events.filter((event) =>
-      isStreamingDeltaEvent(event),
-    );
-    expect(committedDeltas.map((delta) => delta.content)).toEqual(["fresh"]);
+    expect(JSON.stringify(uiEvents)).not.toContain("STALE");
     expect(JSON.stringify(events)).not.toContain("STALE");
   });
 

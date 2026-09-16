@@ -1,336 +1,182 @@
-import {
-  ActionEvent,
-  ImageContent,
-  OpenHandsEvent,
-  TextContent,
-} from "#/types/agent-server/core";
+import { OpenHandsEvent } from "#/types/agent-server/core";
 import {
   isACPToolCallEvent,
-  isActionEvent,
-  isMessageEvent,
   isObservationEvent,
   isStreamingDeltaEvent,
 } from "#/types/agent-server/type-guards";
 import { StreamingDeltaEvent } from "#/types/agent-server/core/events/streaming-delta-event";
-import {
-  getReasoningContent,
-  splitInlineThink,
-} from "#/components/conversation-events/chat/event-thought-helpers";
+import type {
+  DeltaFrame,
+  ItemStartedFrame,
+} from "#/types/agent-server/session-frames";
 
-export const mergeStreamingDeltaEvent = (
-  incoming: StreamingDeltaEvent,
-  existing: StreamingDeltaEvent,
-): StreamingDeltaEvent => ({
-  ...existing,
-  content: `${existing.content ?? ""}${incoming.content ?? ""}` || null,
-  reasoning_content:
-    `${existing.reasoning_content ?? ""}${incoming.reasoning_content ?? ""}` ||
-    null,
-});
-
-// Deltas only merge into one bubble when they share a sender; the planning flag
-// is the only discriminator (every delta has `source: "agent"`). Prevents a
-// planning-agent delta concatenating onto a main-agent one, misattributed (#1656).
-export const isSameStreamingSender = (
-  a: OpenHandsEvent & { isFromPlanningAgent?: boolean },
-  b: OpenHandsEvent & { isFromPlanningAgent?: boolean },
-): boolean => Boolean(a.isFromPlanningAgent) === Boolean(b.isFromPlanningAgent);
-
-const findLastUserMessageIndex = (events: OpenHandsEvent[]): number => {
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const event = events[index];
-    if (isMessageEvent(event) && event.source === "user") {
-      return index;
-    }
-  }
-  return -1;
+/**
+ * An event as held by the UI list. `seq` is the log index a `durable` frame
+ * carried; slots and transient events have none, which is what makes "has a
+ * seq" mean "is resumable".
+ */
+export type UIEvent = OpenHandsEvent & {
+  isFromPlanningAgent?: boolean;
+  seq?: number;
 };
 
-// Join text blocks WITHOUT a separator: streaming deltas concatenate content
-// tokens directly with no separator between LLM content blocks, so using "\n"
-// here would cause startsWith/findTextSegmentsInOrder to miss when reconciling
-// a multi-block message/thought against the already-rendered streaming delta.
-const joinTextBlocks = (blocks: (TextContent | ImageContent)[]): string =>
-  blocks
-    .filter((block) => block.type === "text")
-    .map((block) => block.text)
-    .join("");
+export interface StreamingSlotMeta {
+  isFromPlanningAgent?: boolean;
+}
 
-const findTextSegmentsInOrder = (
-  text: string,
-  segments: string[],
-): { matched: boolean; lastMatchEnd: number } => {
-  let searchStart = 0;
-  let lastMatchEnd = 0;
+const attemptOf = (slot: StreamingDeltaEvent): number => slot.attempt ?? 1;
 
-  for (const segment of segments) {
-    const index = text.indexOf(segment, searchStart);
-    if (index === -1) {
-      return { matched: false, lastMatchEnd };
-    }
-    lastMatchEnd = index + segment.length;
-    searchStart = lastMatchEnd;
-  }
-
-  return { matched: true, lastMatchEnd };
-};
-
-// Content-bearing streaming deltas of the current turn (after the last user
-// message) that share the final event's sender. Reasoning-only deltas are
-// excluded: reasoning renders in its own collapsed bubble and never overlaps
-// the message text being reconciled. Sender scoping matters because the main
-// and planning sockets share this event store — without it, one agent's final
-// event would strip the other agent's still-live streamed deltas (#1656).
-const getCurrentTurnContentDeltas = (
-  uiEvents: OpenHandsEvent[],
-  finalEvent: OpenHandsEvent,
-): { event: StreamingDeltaEvent; index: number }[] => {
-  const lastUserMessageIndex = findLastUserMessageIndex(uiEvents);
-  return uiEvents
-    .map((event, index) => ({ event, index }))
-    .filter(
-      (item): item is { event: StreamingDeltaEvent; index: number } =>
-        item.index > lastUserMessageIndex &&
-        isStreamingDeltaEvent(item.event) &&
-        (item.event.content?.length ?? 0) > 0 &&
-        isSameStreamingSender(finalEvent, item.event),
-    );
-};
-
-// The current step's streaming delta(s): the trailing run at the end of
-// `uiEvents`. Earlier steps' deltas are separated by their observations, so
-// this never folds an earlier step's delta into the current one.
-const getTrailingDeltas = (
-  uiEvents: OpenHandsEvent[],
-  selects: (event: StreamingDeltaEvent) => boolean,
-): { event: StreamingDeltaEvent; index: number }[] => {
-  const deltas: { event: StreamingDeltaEvent; index: number }[] = [];
-  for (let index = uiEvents.length - 1; index >= 0; index -= 1) {
-    const event = uiEvents[index];
-    if (!isStreamingDeltaEvent(event)) {
-      break;
-    }
-    if (selects(event)) {
-      deltas.unshift({ event, index });
-    }
-  }
-  return deltas;
-};
-
-// Sender-scoped for the same reason as `getTrailingReasoningDeltas` (#1656):
-// a main-agent action must not strip the planning agent's live content.
-const getTrailingContentDeltas = (
-  uiEvents: OpenHandsEvent[],
-  finalEvent: OpenHandsEvent,
-) =>
-  getTrailingDeltas(
-    uiEvents,
-    (event) =>
-      (event.content?.length ?? 0) > 0 &&
-      isSameStreamingSender(finalEvent, event),
+const findSlotIndex = (uiEvents: UIEvent[], itemId: string): number =>
+  uiEvents.findIndex(
+    (event) => isStreamingDeltaEvent(event) && event.id === itemId,
   );
 
-// Sender-scoped: the main and planning sockets share this event store, so a
-// main-agent action must not strip the planning agent's live reasoning (#1656).
-const getTrailingReasoningDeltas = (
-  uiEvents: OpenHandsEvent[],
-  finalEvent: OpenHandsEvent,
-) =>
-  getTrailingDeltas(
-    uiEvents,
-    (event) =>
-      Boolean(event.reasoning_content) &&
-      isSameStreamingSender(finalEvent, event),
-  );
-
-// Strip the streamed content deltas, keeping a delta only when it carries
-// reasoning the replacement itself won't render (many models stream reasoning
-// solely through the delta). Shared by the finalize and intermediate-action
-// reconciliation paths.
-const supersedeStreamingContent = (
-  uiEvents: OpenHandsEvent[],
-  contentDeltas: { event: StreamingDeltaEvent; index: number }[],
-  replacementRendersReasoning: boolean,
-): OpenHandsEvent[] => {
-  const indexesToStrip = new Set(contentDeltas.map(({ index }) => index));
-  const nextUiEvents: OpenHandsEvent[] = [];
-  uiEvents.forEach((event, index) => {
-    if (!indexesToStrip.has(index) || !isStreamingDeltaEvent(event)) {
-      nextUiEvents.push(event);
-      return;
-    }
-
-    // Keep the delta only to render reasoning the replacement itself lacks.
-    if (!replacementRendersReasoning && event.reasoning_content) {
-      nextUiEvents.push({ ...event, content: null });
-    }
-  });
-  return nextUiEvents;
-};
-
-// Whether the streamed `segments` (in order) reconcile against `targetText`.
-// `lastMatchEnd` is the offset past the matched text, so callers can recover
-// any not-yet-streamed suffix. The SDK strips the finalized text, so tolerate
-// leading and trailing whitespace that appeared only in the stream.
-const matchStreamedSegments = (
-  targetText: string,
-  segments: string[],
-): { matched: boolean; lastMatchEnd: number } => {
-  const streamedText = segments.join("");
-  const candidates = new Set([
-    streamedText,
-    streamedText.trimEnd(),
-    streamedText.trimStart(),
-    streamedText.trim(),
-  ]);
-  for (const candidate of candidates) {
-    if (candidate && targetText.startsWith(candidate)) {
-      return { matched: true, lastMatchEnd: candidate.length };
-    }
+/**
+ * Where a slot anchored after `anchorSeq` belongs: before the first event the
+ * server sequenced after it. This is what keeps a user message that lands
+ * mid-stream *below* the bubble instead of splitting it (#15433).
+ */
+const slotInsertIndex = (
+  uiEvents: UIEvent[],
+  anchorSeq: number | null | undefined,
+): number => {
+  if (anchorSeq === null || anchorSeq === undefined) {
+    return uiEvents.length;
   }
-  // Segments may be interleaved with not-yet-streamed text; locate them in
-  // order, trimming the last segment's trailing whitespace.
-  const lastIndex = segments.length - 1;
-  const searchSegments = segments.map((segment, index) =>
-    index === lastIndex ? segment.trimEnd() : segment,
+  const index = uiEvents.findIndex(
+    (event) => event.seq !== undefined && event.seq > anchorSeq,
   );
-  return findTextSegmentsInOrder(targetText, searchSegments);
-};
-
-// A `<function=` marker means the delta still holds the raw prompted-tool-call
-// XML the SDK strips only after the response completes, so the streamed text is
-// a superset of the action's `thought` that `matchStreamedSegments` can't match.
-const hasUnstrippedFunctionCallMarker = (segments: string[]): boolean =>
-  segments.some((segment) => segment.includes("<function="));
-
-// Whether the finalized event renders its own reasoning: an ActionEvent via
-// reasoning_content/thinking_blocks, an agent MessageEvent via an inline
-// <think> block in its content. Decides if a replaced delta's reasoning must
-// be preserved separately.
-const eventRendersReasoning = (event: OpenHandsEvent): boolean => {
-  if (isActionEvent(event)) {
-    return getReasoningContent(event).trim().length > 0;
-  }
-
-  if (isMessageEvent(event) && event.source === "agent") {
-    return (
-      splitInlineThink(joinTextBlocks(event.llm_message.content)).reasoning
-        .length > 0
-    );
-  }
-
-  return false;
-};
-
-// The final MessageEvent/FinishAction is authoritative for the turn's text. Drop
-// the provisional streamed deltas and render the canonical final event instead,
-// so the message is rendered exactly once (never holey or duplicated) and its
-// metadata — critic_result, activated_skills — renders too. Stream-only
-// reasoning is preserved. Returns null when there is no streamed content to
-// reconcile, leaving the caller to append the final event normally.
-const finalizeStreamingDeltasInPlace = (
-  finalEvent: OpenHandsEvent,
-  uiEvents: OpenHandsEvent[],
-): OpenHandsEvent[] | null => {
-  const contentStreamingDeltas = getCurrentTurnContentDeltas(
-    uiEvents,
-    finalEvent,
-  );
-  if (contentStreamingDeltas.length === 0) {
-    return null;
-  }
-
-  const nextUiEvents = supersedeStreamingContent(
-    uiEvents,
-    contentStreamingDeltas,
-    eventRendersReasoning(finalEvent),
-  );
-  nextUiEvents.push(finalEvent);
-  return nextUiEvents;
+  return index === -1 ? uiEvents.length : index;
 };
 
 /**
- * Reconcile the current turn's streaming delta when an intermediate
- * (tool-calling) `ActionEvent` arrives. With `stream=true` the step's
- * pre-tool-call text is streamed as delta `content`, then the action's
- * `thought` repeats it and the chat hoists that into its own message (see
- * `group-events.ts`), so the text would render twice (issue #1534).
- *
- * The action must stay because it owns the tool call. The streamed text is
- * cleared from the delta, and the delta is kept only to carry reasoning the
- * action itself lacks (for many models the delta is the sole reasoning
- * carrier), otherwise dropped.
- *
- * Only the current step's trailing delta run is considered. Returns the updated
- * array, or `null` when there is nothing to reconcile.
+ * Open (or re-open, for a higher attempt) the slot an `item_started` frame
+ * announces. A lower attempt is a late frame from a stream already superseded
+ * and is ignored.
  */
-const supersedeStreamedThoughtWithAction = (
-  action: ActionEvent,
-  uiEvents: OpenHandsEvent[],
-): OpenHandsEvent[] | null => {
-  const thoughtText = joinTextBlocks(action.thought);
-  if (!thoughtText) {
-    return null;
+export const openStreamingSlot = (
+  frame: ItemStartedFrame,
+  uiEvents: UIEvent[],
+  meta: StreamingSlotMeta = {},
+): UIEvent[] => {
+  const attempt = frame.attempt ?? 1;
+  const existingIndex = findSlotIndex(uiEvents, frame.item_id);
+
+  if (existingIndex !== -1) {
+    const slot = uiEvents[existingIndex] as StreamingDeltaEvent;
+    if (attemptOf(slot) > attempt) {
+      return uiEvents;
+    }
+    const next = [...uiEvents];
+    next[existingIndex] = {
+      ...slot,
+      attempt,
+      content: null,
+      reasoning_content: null,
+    };
+    return next;
   }
 
-  const contentDeltas = getTrailingContentDeltas(uiEvents, action);
-  if (contentDeltas.length === 0) {
-    return null;
-  }
+  const insertIndex = slotInsertIndex(uiEvents, frame.anchor_seq);
+  // Borrow the anchor's timestamp so the store's timestamp sort (which fires
+  // whenever an out-of-order event arrives) cannot drag the slot away from it.
+  const anchor = uiEvents[insertIndex - 1];
+  const slot: StreamingDeltaEvent & StreamingSlotMeta = {
+    kind: "StreamingDeltaEvent",
+    id: frame.item_id,
+    source: "agent",
+    timestamp:
+      anchor && "timestamp" in anchor && anchor.timestamp
+        ? anchor.timestamp
+        : new Date().toISOString(),
+    content: null,
+    reasoning_content: null,
+    attempt,
+    ...meta,
+  };
 
-  const streamingSegments = contentDeltas.map(
-    ({ event }) => event.content ?? "",
-  );
-
-  // Strip on a thought match, or on an unstripped `<function=...>` marker whose
-  // streamed text is a superset of `thought` that the match can't reconcile.
-  const matchedThought = matchStreamedSegments(
-    thoughtText,
-    streamingSegments,
-  ).matched;
-  if (!matchedThought && !hasUnstrippedFunctionCallMarker(streamingSegments)) {
-    return null;
-  }
-
-  // Keeping the delta's reasoning would duplicate the action's own "Thinking".
-  return supersedeStreamingContent(
-    uiEvents,
-    contentDeltas,
-    getReasoningContent(action).trim().length > 0,
-  );
+  const next = [...uiEvents];
+  next.splice(insertIndex, 0, slot);
+  return next;
 };
 
-// Drop the current step's streamed reasoning when the action renders that
-// reasoning itself, so "Thinking" renders once. Unlike
-// `supersedeStreamedThoughtWithAction` this does not require the streamed text
-// to match the thought, which models streaming reasoning-only deltas never do.
-const supersedeStreamedReasoningWithAction = (
-  action: ActionEvent,
-  uiEvents: OpenHandsEvent[],
-): OpenHandsEvent[] | null => {
-  if (getReasoningContent(action).trim().length === 0) {
-    return null;
+/**
+ * Append a batch of `delta` frames to their slots.
+ *
+ * A delta with no open slot is dropped: after a reconnect the slot was
+ * discarded on purpose, and conjuring one back would recreate the orphan
+ * bubble the slot model exists to prevent. The text is not lost — the durable
+ * message carries it.
+ */
+export const appendStreamingDeltas = (
+  frames: DeltaFrame[],
+  uiEvents: UIEvent[],
+): UIEvent[] => {
+  let next = uiEvents;
+  let copied = false;
+
+  for (const frame of frames) {
+    const index = findSlotIndex(next, frame.item_id);
+    if (index === -1) {
+      continue;
+    }
+    const slot = next[index] as StreamingDeltaEvent;
+    const attempt = frame.attempt ?? 1;
+    if (attempt < attemptOf(slot)) {
+      continue;
+    }
+    // A higher attempt re-streams the item, so the old tail is superseded.
+    const superseded = attempt > attemptOf(slot);
+    const content = superseded ? "" : (slot.content ?? "");
+    const reasoning = superseded ? "" : (slot.reasoning_content ?? "");
+    const isReasoning = frame.kind === "reasoning";
+
+    if (!copied) {
+      next = [...next];
+      copied = true;
+    }
+    next[index] = {
+      ...slot,
+      attempt,
+      content: (isReasoning ? content : content + frame.content) || null,
+      reasoning_content:
+        (isReasoning ? reasoning + frame.content : reasoning) || null,
+    };
   }
 
-  const reasoningDeltas = getTrailingReasoningDeltas(uiEvents, action);
-  if (reasoningDeltas.length === 0) {
-    return null;
+  return next;
+};
+
+/**
+ * Drop the slot for `itemId`. Used by `item_aborted`: the stream ended without
+ * a durable event, so nothing is coming to supersede the provisional text.
+ */
+export const abortStreamingSlot = (
+  itemId: string,
+  uiEvents: UIEvent[],
+): UIEvent[] => {
+  const index = findSlotIndex(uiEvents, itemId);
+  if (index === -1) {
+    return uiEvents;
   }
+  return uiEvents.filter((_, position) => position !== index);
+};
 
-  const indexesToStrip = new Set(reasoningDeltas.map(({ index }) => index));
-  const nextUiEvents: OpenHandsEvent[] = [];
-  uiEvents.forEach((event, index) => {
-    if (!indexesToStrip.has(index) || !isStreamingDeltaEvent(event)) {
-      nextUiEvents.push(event);
-      return;
-    }
-
-    // Keep the delta only for streamed text the action itself lacks.
-    if (event.content) {
-      nextUiEvents.push({ ...event, reasoning_content: null });
-    }
-  });
-  return nextUiEvents;
+/**
+ * Drop every open slot for one socket. Called on connect and disconnect:
+ * progress frames are never replayed, so an open slot cannot survive the gap,
+ * and the message it was standing in for arrives on the durable cursor.
+ */
+export const clearStreamingSlots = (
+  uiEvents: UIEvent[],
+  isFromPlanningAgent = false,
+): UIEvent[] => {
+  const next = uiEvents.filter(
+    (event) =>
+      !isStreamingDeltaEvent(event) ||
+      Boolean((event as UIEvent).isFromPlanningAgent) !== isFromPlanningAgent,
+  );
+  return next.length === uiEvents.length ? uiEvents : next;
 };
 
 /**
@@ -346,58 +192,20 @@ const supersedeStreamedReasoningWithAction = (
  * its action below.
  */
 export const handleEventForUI = (
-  event: OpenHandsEvent,
-  uiEvents: OpenHandsEvent[],
-): OpenHandsEvent[] => {
+  event: UIEvent,
+  uiEvents: UIEvent[],
+): UIEvent[] => {
   const newUiEvents = [...uiEvents];
 
-  if (isStreamingDeltaEvent(event)) {
-    if (event.content === null && event.reasoning_content === null) {
+  // The durable event *is* the item: the SDK mints its id when the stream
+  // opens, so one equality test retires the slot — and replacing in place
+  // keeps the finished message where the streamed text already was.
+  const eventId = "id" in event ? event.id : undefined;
+  if (eventId !== undefined) {
+    const slotIndex = findSlotIndex(newUiEvents, eventId);
+    if (slotIndex !== -1) {
+      newUiEvents[slotIndex] = event;
       return newUiEvents;
-    }
-
-    const lastIndex = newUiEvents.length - 1;
-    const lastEvent = newUiEvents[lastIndex];
-    if (
-      lastEvent &&
-      isStreamingDeltaEvent(lastEvent) &&
-      isSameStreamingSender(event, lastEvent)
-    ) {
-      newUiEvents[lastIndex] = mergeStreamingDeltaEvent(event, lastEvent);
-      return newUiEvents;
-    }
-
-    newUiEvents.push(event);
-    return newUiEvents;
-  }
-
-  if (
-    (isActionEvent(event) && event.action.kind === "FinishAction") ||
-    (isMessageEvent(event) && event.source === "agent")
-  ) {
-    const finalizedUiEvents = finalizeStreamingDeltasInPlace(
-      event,
-      newUiEvents,
-    );
-    if (finalizedUiEvents) {
-      return finalizedUiEvents;
-    }
-  }
-
-  // Intermediate tool-calling action whose thought was streamed: clear the
-  // duplicated text from the delta (issue #1534). ThinkAction is excluded — its
-  // thought renders through its own collapsible, not a hoisted thought.
-  if (
-    isActionEvent(event) &&
-    event.action.kind !== "FinishAction" &&
-    event.action.kind !== "ThinkAction"
-  ) {
-    const reconciledUiEvents =
-      supersedeStreamedThoughtWithAction(event, newUiEvents) ??
-      supersedeStreamedReasoningWithAction(event, newUiEvents);
-    if (reconciledUiEvents) {
-      reconciledUiEvents.push(event);
-      return reconciledUiEvents;
     }
   }
 

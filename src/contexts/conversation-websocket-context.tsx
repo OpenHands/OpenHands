@@ -38,9 +38,12 @@ import {
   isBrowserNavigateActionEvent,
   isSwitchLLMObservationEvent,
   isCanvasUIActionEvent,
-  isStreamingDeltaEvent,
   isLaunchChildConversationActionEvent,
 } from "#/types/agent-server/type-guards";
+import {
+  asSessionFrame,
+  type SessionFrame,
+} from "#/types/agent-server/session-frames";
 import {
   createStreamingDeltaBatcher,
   StreamingDeltaBatcher,
@@ -121,6 +124,55 @@ function extractMessageEventText(
     .join("");
 }
 
+/**
+ * Route one frame of `/sockets/session/{id}`.
+ *
+ * Progress frames (`item_started` / `delta` / `item_aborted`) are applied to
+ * the streaming slot here and produce no event. Durable and transient frames
+ * are unwrapped and returned for the caller's normal event handling; a durable
+ * frame also advances the resume cursor and stamps its `seq` on the event, so
+ * the UI can place a slot relative to it.
+ */
+const routeSessionFrame = (
+  raw: unknown,
+  batcher: StreamingDeltaBatcher | null,
+  /** Advance this socket's resume cursor to the highest `seq` it has seen. */
+  advanceCursor: (seq: number) => void,
+  slotMeta: { isFromPlanningAgent?: boolean } = {},
+): unknown | null => {
+  const frame: SessionFrame | null = asSessionFrame(raw);
+  if (!frame) {
+    return null;
+  }
+
+  if (frame.type === "delta") {
+    batcher?.enqueue(frame);
+    return null;
+  }
+
+  // Nothing else may overtake text that was streamed ahead of it.
+  batcher?.flush();
+
+  switch (frame.type) {
+    case "item_started":
+      useEventStore.getState().openStreamingSlot(frame, slotMeta);
+      return null;
+    case "item_aborted":
+      // Nothing durable is coming to supersede the provisional text.
+      useEventStore.getState().abortStreamingSlot(frame.item_id);
+      return null;
+    case "durable":
+      advanceCursor(frame.seq);
+      return { ...frame.event, seq: frame.seq };
+    case "transient":
+      return frame.event;
+    default:
+      // `sync` needs nothing (the cursor advances on durable frames) and
+      // `error` is a socket-level fault the reconnect path already handles.
+      return null;
+  }
+};
+
 export function ConversationWebSocketProvider({
   children,
   conversationId,
@@ -166,21 +218,25 @@ export function ConversationWebSocketProvider({
   // Separate batchers keep the main and planning streams from ever merging.
   const mainDeltaBatcherRef = useRef<StreamingDeltaBatcher | null>(null);
   if (mainDeltaBatcherRef.current === null) {
-    mainDeltaBatcherRef.current = createStreamingDeltaBatcher((delta) => {
-      useEventStore.getState().addEvent(delta);
+    mainDeltaBatcherRef.current = createStreamingDeltaBatcher((frames) => {
+      useEventStore.getState().appendStreamingDeltas(frames);
       // A delta means connectivity recovered — mirror handleNonErrorEvent.
       useErrorMessageStore.getState().clearConnectionError();
     });
   }
   const planningDeltaBatcherRef = useRef<StreamingDeltaBatcher | null>(null);
   if (planningDeltaBatcherRef.current === null) {
-    planningDeltaBatcherRef.current = createStreamingDeltaBatcher((delta) => {
-      useEventStore
-        .getState()
-        .addEvent({ ...delta, isFromPlanningAgent: true });
+    planningDeltaBatcherRef.current = createStreamingDeltaBatcher((frames) => {
+      useEventStore.getState().appendStreamingDeltas(frames);
       useErrorMessageStore.getState().clearConnectionError();
     });
   }
+
+  // Resume cursor: the highest `seq` a durable frame carried on this socket.
+  // Read at connect time (see the lazy `queryParams` below) so it can advance
+  // per frame without re-rendering. `-1` asks for the full log.
+  const mainAfterSeqRef = useRef<number | null>(null);
+  const planningAfterSeqRef = useRef<number | null>(null);
 
   // History loading state.
   // - Main conversation history is now loaded via REST (`useConversationHistory`),
@@ -359,22 +415,6 @@ export function ConversationWebSocketProvider({
     consumeMatchingPendingMessage,
   ]);
 
-  /**
-   * Timestamp of the latest event we already have from REST. Used as
-   * `after_timestamp` when opening the WebSocket so the server only resends
-   * events strictly after this point. `null` until the first REST page lands
-   * (the WS connection is gated on that — see `wsUrl` below). During
-   * background refetches `preloadedHistory` keeps the last-known page, so the
-   * anchor holds steady instead of flipping to null; reconnects read the
-   * freshest value from the options ref at connect time.
-   */
-  const initialAfterTimestamp = useMemo<string | null>(() => {
-    const events = preloadedHistory?.events ?? [];
-    const latest = events[events.length - 1];
-    if (!latest || !("timestamp" in latest) || !latest.timestamp) return null;
-    return latest.timestamp;
-  }, [preloadedHistory]);
-
   // Build WebSocket URL from props.
   //
   // We deliberately wait for the FIRST history load (`isPending`: no data for
@@ -551,21 +591,22 @@ export function ConversationWebSocketProvider({
   const handleMainMessage = useCallback(
     (messageEvent: MessageEvent) => {
       try {
-        const event = JSON.parse(messageEvent.data);
+        const event = routeSessionFrame(
+          JSON.parse(messageEvent.data),
+          mainDeltaBatcherRef.current,
+          (seq) => {
+            mainAfterSeqRef.current = Math.max(
+              mainAfterSeqRef.current ?? -1,
+              seq,
+            );
+          },
+        );
 
         // History loading for the main conversation is REST-driven now;
-        // every WS message is a new event we add to the store.
+        // every durable frame is a new event we add to the store.
 
         // Use type guard to validate v1 event structure
         if (isAgentServerEvent(event)) {
-          // Buffer deltas; nothing else in this handler applies to them.
-          if (isStreamingDeltaEvent(event)) {
-            mainDeltaBatcherRef.current?.enqueue(event);
-            return;
-          }
-          // Flush buffered deltas before this event so it can't overtake them.
-          mainDeltaBatcherRef.current?.flush();
-
           // A reconnect replays the backlog from a stale anchor. The store
           // dedups by id, but the side-effects below aren't idempotent, so skip
           // them for replayed events (#1656).
@@ -775,10 +816,23 @@ export function ConversationWebSocketProvider({
   const handlePlanningMessage = useCallback(
     (messageEvent: MessageEvent) => {
       try {
-        const event = JSON.parse(messageEvent.data);
+        const event = routeSessionFrame(
+          JSON.parse(messageEvent.data),
+          planningDeltaBatcherRef.current,
+          (seq) => {
+            planningAfterSeqRef.current = Math.max(
+              planningAfterSeqRef.current ?? -1,
+              seq,
+            );
+          },
+          { isFromPlanningAgent: true },
+        );
+        if (event === null) {
+          return;
+        }
 
-        // Track received events for history loading (count ALL events from WebSocket)
-        // Always count when loading, even if we don't have the expected count yet
+        // Track received events for history loading. Only events count:
+        // progress frames are not part of the replayed log.
         if (isLoadingHistoryPlanning) {
           receivedEventCountRefPlanning.current += 1;
 
@@ -792,14 +846,6 @@ export function ConversationWebSocketProvider({
 
         // Use type guard to validate v1 event structure
         if (isAgentServerEvent(event)) {
-          // Buffer deltas (the commit re-applies the planning flag).
-          if (isStreamingDeltaEvent(event)) {
-            planningDeltaBatcherRef.current?.enqueue(event);
-            return;
-          }
-          // Flush buffered deltas before this event so it can't overtake them.
-          planningDeltaBatcherRef.current?.flush();
-
           // Skip non-idempotent side-effects for replayed events, as in the
           // main handler (#1656).
           const isDuplicateEvent = useEventStore
@@ -991,15 +1037,15 @@ export function ConversationWebSocketProvider({
 
   // Separate WebSocket options for main connection
   const mainWebsocketOptions: WebSocketHookOptions = useMemo(() => {
-    // History was already loaded over REST (`useConversationHistory`).
-    // Subscribe with `resend_mode='since'` so the server only resends events
-    // strictly after the latest one we already have. If REST returned no
-    // events at all (brand-new conversation), fall back to `'all'` so any
-    // events that may have been written between the REST call and the WS
-    // handshake still show up. Dedup in the event store handles overlap.
-    const queryParams: Record<string, string | boolean> = initialAfterTimestamp
-      ? { resend_mode: "since", after_timestamp: initialAfterTimestamp }
-      : { resend_mode: "all" };
+    // `after_seq` replaces the legacy resend_mode/after_timestamp pair, which
+    // compared naive local timestamps. Resolved lazily so a reconnect resumes
+    // from the newest `seq` this socket actually saw rather than from a value
+    // captured at render. The first connect has no cursor and asks for the
+    // whole log (`-1`); the REST preload (`useConversationHistory`) still
+    // renders instantly and the event store dedupes the overlap by id.
+    const queryParams = () => ({
+      after_seq: String(mainAfterSeqRef.current ?? -1),
+    });
 
     return {
       queryParams,
@@ -1009,9 +1055,16 @@ export function ConversationWebSocketProvider({
         setMainConnectionState("OPEN");
         hasConnectedRefMain.current = true; // Mark that we've successfully connected
         clearConnectionError(); // Clear a previous connection error; keep sticky conversation errors
+        // Progress frames are never replayed, so any slot left open across the
+        // gap can never be retired. Discard and wait: the durable message is
+        // coming on the cursor regardless.
+        mainDeltaBatcherRef.current?.reset();
+        useEventStore.getState().clearStreamingSlots();
       },
       onClose: () => {
         setMainConnectionState("CLOSED");
+        mainDeltaBatcherRef.current?.reset();
+        useEventStore.getState().clearStreamingSlots();
       },
       onError: () => {
         setMainConnectionState("CLOSED");
@@ -1022,19 +1075,15 @@ export function ConversationWebSocketProvider({
       },
       onMessage: handleMainMessage,
     };
-  }, [
-    handleMainMessage,
-    setErrorMessage,
-    clearConnectionError,
-    sessionApiKey,
-    initialAfterTimestamp,
-  ]);
+  }, [handleMainMessage, setErrorMessage, clearConnectionError, sessionApiKey]);
 
   // Separate WebSocket options for planning agent connection
   const planningWebsocketOptions: WebSocketHookOptions = useMemo(() => {
-    const queryParams: Record<string, string | boolean> = {
-      resend_all: true,
-    };
+    // The planner's history is not preloaded over REST, so it always replays
+    // from the start on a first connect and from its cursor after that.
+    const queryParams = () => ({
+      after_seq: String(planningAfterSeqRef.current ?? -1),
+    });
 
     const planningAgentConversation = subConversations?.[0];
     const planningApiKey =
@@ -1048,6 +1097,9 @@ export function ConversationWebSocketProvider({
         setPlanningConnectionState("OPEN");
         hasConnectedRefPlanning.current = true; // Mark that we've successfully connected
         clearConnectionError(); // Clear a previous connection error; keep sticky conversation errors
+        // See the main socket: an open slot cannot survive the gap.
+        planningDeltaBatcherRef.current?.reset();
+        useEventStore.getState().clearStreamingSlots(true);
 
         // Fetch expected event count for history loading detection
         if (
@@ -1074,6 +1126,8 @@ export function ConversationWebSocketProvider({
       },
       onClose: () => {
         setPlanningConnectionState("CLOSED");
+        planningDeltaBatcherRef.current?.reset();
+        useEventStore.getState().clearStreamingSlots(true);
       },
       onError: () => {
         setPlanningConnectionState("CLOSED");
