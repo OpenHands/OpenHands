@@ -7,13 +7,13 @@ export const MENU_DIVIDER_VERTICAL_CLASS = "h-3";
 const dividerVariants = cva("shrink-0 self-stretch min-w-full bg-border", {
   variants: {
     orientation: {
-      horizontal: "h-0.25",
+      horizontal: "h-px",
     },
     color: {
       light: "bg-border",
     },
     size: {
-      thin: "h-0.25",
+      thin: "h-px",
     },
     inset: {
       none: "",

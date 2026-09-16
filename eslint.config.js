@@ -391,32 +391,11 @@ export default [
     },
   },
 
-  // @shadcn/lint — agent-first linter for the Tailwind v4 design system.
-  //
-  // TRIAL: registers the plugin and enables a single low-risk rule as a
-  // starting point. `no-arbitrary-values` forbids one-off Tailwind values
-  // like `p-[13px]` or `text-[#abc123]` in favor of the theme scale, which
-  // keeps agent-written UI on the design system.
-  //
-  // The `--oh-*` design tokens are mapped into the Tailwind theme (see
-  // `src/tailwind.css`'s `@theme` block), so bracket-token usages like
-  // `text-[var(--oh-muted)]` / `border-[var(--oh-border)]` are now written
-  // as first-class `text-muted` / `border-border` utilities. What remains
-  // under this rule are genuine one-offs (raw hex colors, `vh`/`vw`
-  // breakpoints, `calc()`, grid templates, runtime CSS-variable set/read
-  // patterns) that have no theme-scale equivalent, so the rule stays at
-  // "warn" rather than "error".
-  //
-  // The remaining rules are registered but left OFF so the team can turn
-  // them on incrementally (each needs per-component contracts / theme
-  // awareness to be useful here — see the rules docs):
-  //   - no-restyle: per-component restyling contracts (needs `src/ui` contracts)
-  //   - no-raw-colors: raw palette colors such as `bg-pink-500`
-  //   - no-inline-styles: inline `style` props / `<style>` elements
-  //   - require-static-classes: disallow dynamic `bg-${color}` class strings
-  //   - no-unknown-classes: classes Tailwind cannot generate
-  //
-  // Docs: https://github.com/shadcn-ui/lint#rules
+  // @shadcn/lint — design-system linter for Tailwind v4.
+  // Rules: https://github.com/shadcn-ui/lint#rules
+  // `no-arbitrary-values` stays at "warn": the remaining hits are one-offs
+  // (raw hex, vh/vw, calc(), grid templates) with no theme-scale equivalent.
+  // The other rules need per-component contracts before they are useful here.
   {
     files: ["src/**/*.{ts,tsx}"],
     plugins: { shadcn: shadcnPlugin },

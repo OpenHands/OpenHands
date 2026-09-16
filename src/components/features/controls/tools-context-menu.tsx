@@ -114,7 +114,7 @@ export function ToolsContextMenu({
           </ContextMenuListItem>
           <div
             className={cn(
-              "absolute left-full top-[-4px] z-60 opacity-0 invisible pointer-events-none transition-all duration-200 ml-0.25",
+              "absolute left-full top-[-4px] z-60 opacity-0 invisible pointer-events-none transition-all duration-200 ml-px",
               "group-hover/agent-profile:opacity-100 group-hover/agent-profile:visible group-hover/agent-profile:pointer-events-auto",
               "hover:opacity-100 hover:visible hover:pointer-events-auto",
               activeSubmenu === "agent-profile" &&
@@ -156,7 +156,7 @@ export function ToolsContextMenu({
           {!isArchivedConversation && (
             <div
               className={cn(
-                "absolute left-full top-[-6px] z-60 opacity-0 invisible pointer-events-none transition-all duration-200 ml-0.25",
+                "absolute left-full top-[-6px] z-60 opacity-0 invisible pointer-events-none transition-all duration-200 ml-px",
                 "group-hover/git:opacity-100 group-hover/git:visible group-hover/git:pointer-events-auto",
                 "hover:opacity-100 hover:visible hover:pointer-events-auto",
                 activeSubmenu === "git" &&
@@ -187,7 +187,7 @@ export function ToolsContextMenu({
         {!isArchivedConversation && (
           <div
             className={cn(
-              "absolute left-full top-[-4px] z-60 opacity-0 invisible pointer-events-none transition-all duration-200 ml-0.25",
+              "absolute left-full top-[-4px] z-60 opacity-0 invisible pointer-events-none transition-all duration-200 ml-px",
               "group-hover/macros:opacity-100 group-hover/macros:visible group-hover/macros:pointer-events-auto",
               "hover:opacity-100 hover:visible hover:pointer-events-auto",
               activeSubmenu === "macros" &&

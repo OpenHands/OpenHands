@@ -55,9 +55,6 @@
   --color-accent: var(--oh-accent);
   --color-warning: var(--oh-warning);
 
-  /* Shared radius token */
-  --radius-default: var(--oh-radius);
-
   /* Cool Grey scale */
   --color-cool-grey-50:  var(--cool-grey-50);
   --color-cool-grey-100: var(--cool-grey-100);

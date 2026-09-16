@@ -105,7 +105,7 @@ describe("git provider selection", () => {
       "disabled:cursor-not-allowed",
       "disabled:opacity-60",
       "pl-1.5",
-      "pr-0.25",
+      "pr-px",
       "cursor-pointer",
       "text-xs",
       "font-normal",

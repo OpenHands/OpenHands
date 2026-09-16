@@ -181,7 +181,7 @@ export function GitProviderDropdown({
               "text-inherit bg-tertiary placeholder:text-muted",
               "focus:outline-none focus:ring-0 focus:border-border-input",
               "disabled:bg-tertiary disabled:cursor-not-allowed disabled:opacity-60",
-              "pl-1.5 pr-0.25 cursor-pointer text-xs font-normal leading-5", // Space for toggle button and pointer cursor
+              "pl-1.5 pr-px cursor-pointer text-xs font-normal leading-5", // Space for toggle button and pointer cursor
               selectedItem && "pl-6",
               inputClassName,
             ),

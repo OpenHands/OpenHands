@@ -319,7 +319,7 @@ export function ChatInputActions({
           {!isAgentSwitcherDisabled && (
             <div
               className={cn(
-                "absolute left-full top-[-4px] z-60 opacity-0 invisible pointer-events-none transition-all duration-200 ml-0.25",
+                "absolute left-full top-[-4px] z-60 opacity-0 invisible pointer-events-none transition-all duration-200 ml-px",
                 "group-hover/overflow-agent:opacity-100 group-hover/overflow-agent:visible group-hover/overflow-agent:pointer-events-auto",
                 "hover:opacity-100 hover:visible hover:pointer-events-auto",
                 activeSubmenu === "agent" &&
@@ -385,7 +385,7 @@ export function ChatInputActions({
           </ContextMenuListItem>
           <div
             className={cn(
-              "absolute left-full top-[-4px] z-60 opacity-0 invisible pointer-events-none transition-all duration-200 ml-0.25",
+              "absolute left-full top-[-4px] z-60 opacity-0 invisible pointer-events-none transition-all duration-200 ml-px",
               "group-hover/overflow-model:opacity-100 group-hover/overflow-model:visible group-hover/overflow-model:pointer-events-auto",
               "hover:opacity-100 hover:visible hover:pointer-events-auto",
               activeSubmenu === "model" &&

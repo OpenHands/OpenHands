@@ -127,7 +127,7 @@ export function GenericDropdownMenu<T>({
                         <li
                           role="presentation"
                           aria-hidden="true"
-                          className="border-b border-border-input bg-tertiary pb-1 mb-1 h-0.25"
+                          className="border-b border-border-input bg-tertiary pb-1 mb-1 h-px"
                         />
                       )}
                   </React.Fragment>
