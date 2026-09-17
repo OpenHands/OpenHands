@@ -7,7 +7,6 @@ export const DEFAULT_MIN_COST_PARETO_META_PROFILE_NAME =
 
 export const DEFAULT_MAX_SCORE_PARETO_META_PROFILE_MODEL_TABLE = `- gpt-5.4: swe-bench: 75.60%/$0.63; swt-bench: 70.40%/$0.47; swe-bench-multimodal: 36.80%/$1.45; commit0: 56.20%/$4.04; gaia: 82.40%/$0.61
 - gpt-5.5: swe-bench: 78.20%/$1.52; swt-bench: 83.40%/$0.92; swe-bench-multimodal: 38.20%/$2.81; commit0: 43.80%/$5.56; gaia: 86.10%/$0.74
-- minimax-m3: swe-bench: 76.40%/$0.17; swt-bench: 81.10%/$0.11; swe-bench-multimodal: 36.80%/$0.35; commit0: 25.00%/$0.62; gaia: 66.70%/$0.35
 - claude-opus-4-6: swe-bench: 76.80%/$0.77; swt-bench: 78.80%/$0.43; swe-bench-multimodal: 41.80%/$2.37; commit0: 56.20%/$7.69; gaia: 80.00%/$0.44
 - claude-opus-4-7: swe-bench: 81.60%/$1.33; swt-bench: 80.80%/$0.82; swe-bench-multimodal: 48.50%/$2.83; commit0: 56.20%/$5.69; gaia: 81.20%/$0.89
 - claude-opus-4-8: swe-bench: 83.80%/$0.75; swt-bench: 84.30%/$0.73; swe-bench-multimodal: 50.00%/$1.81; commit0: 62.50%/$7.83; gaia: 78.80%/$1.17
@@ -36,12 +35,12 @@ Step 2 — Judge difficulty within the category using four tiers:
 Step 3 — Route using these rules (exact model names):
 
 BUG-FIX / CODE REPAIR:
-- EASY: "minimax-m3" — very strong cheap solver on well-scoped patches; large savings when it solves.
+- EASY: "kimi-k2.6" — very strong cheap solver on well-scoped patches; large savings when it solves.
 - STANDARD: "claude-opus-4-8" — best solve-rate-per-dollar on repository bug fixes. Do NOT escalate above it here: escalating on ordinary bug fixes only converts an already-solved instance into a more expensive one.
 - HARD or EXCEPTIONAL (the task text itself signals that claude-opus-4-8 would plausibly fail: sprawling scope, many subsystems, extreme subtlety): "claude-fable-5" — its solve advantage is decisive exactly on these instances.
 
 TEST GENERATION / TEST REPAIR:
-- EASY or STANDARD: "minimax-m3" — near-frontier on test writing at a small fraction of frontier cost; the default for normal test tasks.
+- EASY or STANDARD: "kimi-k2.6" — near-frontier on test writing at a small fraction of frontier cost; the default for normal test tasks.
 - HARD (complex fixtures, intricate reproduction, deep repo comprehension needed): "claude-opus-4-8".
 - EXCEPTIONAL only (async/flaky/deeply entangled behavior a normal frontier model would likely fail): "claude-fable-5".
 
@@ -76,7 +75,7 @@ Task:
 {{ instance_text }}`;
 
 export const DEFAULT_MAX_SCORE_PARETO_META_PROFILE_DEFAULT: MetaProfile = {
-  classifier_model: "minimax-m3",
+  classifier_model: "kimi-k2.6",
   classes: [],
   prompt_template: DEFAULT_MAX_SCORE_PARETO_META_PROFILE_PROMPT,
   model_table: DEFAULT_MAX_SCORE_PARETO_META_PROFILE_MODEL_TABLE,
@@ -97,11 +96,11 @@ CORE PRINCIPLES:
 TASK FAMILIES AND DECISION LADDERS:
 
 1. Test writing / reproduction tasks (write or extend tests for a described behavior or bug)
-   Default: MiniMax-M3. This family is dominated by cheap strong test models; it has the highest safe-downgrade rate of any family and premium routing here is almost always waste.
+   Default: Kimi-K2.6. This family is dominated by cheap strong test models; it has the highest safe-downgrade rate of any family and premium routing here is almost always waste.
    Escalate (rarely) to GPT-5.5 or claude-opus-4-8 only for genuinely hard testing: intricate fixtures, async/concurrency behavior, deep framework mocking, or tests requiring understanding of a large multi-component interaction. A single unfamiliar framework name is not a difficulty signal.
 
 2. Localized coding / issue fixes in an existing repository (a described bug or small feature with a clear locus)
-   Default: MiniMax-M3, including for large or famous repositories — repo size alone predicts nothing. Use Kimi-K2.6 as an intermediate step when the change is moderately involved but still localized.
+   Default: Kimi-K2.6, including for large or famous repositories — repo size alone predicts nothing.
    Escalate to claude-opus-4-8 only when TWO OR MORE concrete signals are present: ambiguous or underspecified behavior, multi-component or cross-layer changes, framework internals, migrations, concurrency, serialization, or data-integrity concerns. Historical escalations on a single signal mostly paid premium prices for tasks the cheap default already solves — treat one signal as a reason to use the intermediate tier, not the premium tier.
 
 3. Information / research / question answering (answer a question using tools, retrieval, or reasoning)
@@ -133,7 +132,7 @@ Task:
 Return ONLY JSON: {"model": "<exact model name>", "reason": "<short reason>"}`;
 
 export const DEFAULT_MIN_COST_PARETO_META_PROFILE_DEFAULT: MetaProfile = {
-  classifier_model: "minimax-m3",
+  classifier_model: "kimi-k2.6",
   classes: [],
   prompt_template: DEFAULT_MIN_COST_PARETO_META_PROFILE_PROMPT,
   model_table: DEFAULT_MAX_SCORE_PARETO_META_PROFILE_MODEL_TABLE,

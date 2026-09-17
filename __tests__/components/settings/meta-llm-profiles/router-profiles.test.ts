@@ -9,13 +9,13 @@ describe("parseModelTableNames", () => {
   it("extracts the leading token of each list row and ignores descriptions", () => {
     const table = [
       "- GPT-5.4: swe-bench: 75.60%/$0.63; gaia: 82.40%",
-      "- MiniMax-M3 efficient fallback",
+      "- Kimi-K2.6 efficient fallback",
       "not a list line",
       "- claude-opus-4-8",
     ].join("\n");
     expect(parseModelTableNames(table)).toEqual([
       "GPT-5.4",
-      "MiniMax-M3",
+      "Kimi-K2.6",
       "claude-opus-4-8",
     ]);
   });
@@ -25,8 +25,8 @@ describe("parseModelTableNames", () => {
   });
 
   it("de-duplicates case-insensitively while preserving the first spelling", () => {
-    expect(parseModelTableNames("- MiniMax-M3 x\n- minimax-m3 y")).toEqual([
-      "MiniMax-M3",
+    expect(parseModelTableNames("- Kimi-K2.6 x\n- kimi-k2.6 y")).toEqual([
+      "Kimi-K2.6",
     ]);
   });
 
@@ -50,19 +50,19 @@ describe("collectRequiredRouterModelNames", () => {
   it("combines table names with the classifier, de-duplicated", () => {
     expect(
       collectRequiredRouterModelNames({
-        classifier_model: "MiniMax-M3",
-        model_table: "- GPT-5.4 stats\n- MiniMax-M3 stats",
+        classifier_model: "Kimi-K2.6",
+        model_table: "- GPT-5.4 stats\n- Kimi-K2.6 stats",
       }),
-    ).toEqual(["GPT-5.4", "MiniMax-M3"]);
+    ).toEqual(["GPT-5.4", "Kimi-K2.6"]);
   });
 
   it("de-duplicates the classifier against table names case-insensitively", () => {
     expect(
       collectRequiredRouterModelNames({
-        classifier_model: "minimax-m3",
-        model_table: "- MiniMax-M3 stats",
+        classifier_model: "kimi-k2.6",
+        model_table: "- Kimi-K2.6 stats",
       }),
-    ).toEqual(["MiniMax-M3"]);
+    ).toEqual(["Kimi-K2.6"]);
   });
 
   it("ignores a blank classifier and empty tables", () => {
