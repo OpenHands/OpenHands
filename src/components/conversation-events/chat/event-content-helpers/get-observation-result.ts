@@ -43,10 +43,19 @@ export const getObservationResult = (
       if (observation.is_error) return "error";
       return "success";
     }
+    case "BrowserObservation":
+      if (observation.is_error) return "error";
+      return "success";
+    case "GlobObservation":
+    case "GrepObservation":
+      if (observation.is_error) return "error";
+      return "success";
     case "FileEditorObservation":
     case "StrReplaceEditorObservation":
-      // Check if there's an error
-      if (observation.error) return "error";
+      if (observation.is_error) return "error";
+      return "success";
+    case "PlanningFileEditorObservation":
+      if (observation.is_error) return "error";
       return "success";
     case "MCPToolObservation":
       if (observation.is_error) return "error";

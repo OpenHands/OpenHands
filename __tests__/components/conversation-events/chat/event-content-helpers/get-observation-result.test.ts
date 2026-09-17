@@ -133,8 +133,105 @@ describe("getObservationResult", () => {
     expect(getObservationResult(terminal(undefined, null))).toBe("success");
   });
 
+  it("maps browser, glob, and grep tool failures to error", () => {
+    // All three tools report failures with is_error=true on the current
+    // agent-server (browser_use/glob/grep impls). None of them had a
+    // branch, so the default rendered their failures as success.
+    const browser = makeObs({
+      kind: "BrowserObservation",
+      output: "",
+      error: null,
+      screenshot_data: null,
+      is_error: true,
+    } as unknown as ObservationEvent["observation"]);
+    expect(getObservationResult(browser)).toBe("error");
+
+    const glob = makeObs({
+      kind: "GlobObservation",
+      content: [],
+      is_error: true,
+      files: [],
+      pattern: "*.ts",
+      search_path: "/missing",
+      truncated: false,
+    } as unknown as ObservationEvent["observation"]);
+    expect(getObservationResult(glob)).toBe("error");
+
+    const grep = makeObs({
+      kind: "GrepObservation",
+      content: [],
+      is_error: true,
+      matches: [],
+      pattern: "TODO",
+      search_path: "/missing",
+      include_pattern: null,
+      truncated: false,
+    } as unknown as ObservationEvent["observation"]);
+    expect(getObservationResult(grep)).toBe("error");
+  });
+
+  it("maps planning and current-wire file editor failures to error", () => {
+    // PlanningFileEditorObservation propagates is_error from the file editor
+    // executor (e.g. editing anything but PLAN.md fails). It had no branch,
+    // so the default rendered its failures as success.
+    const planning = makeObs({
+      kind: "PlanningFileEditorObservation",
+      content: [],
+      is_error: true,
+      command: "create",
+      path: "/workspace/PLAN.md",
+      prev_exist: true,
+      old_content: null,
+      new_content: null,
+    } as unknown as ObservationEvent["observation"]);
+    expect(getObservationResult(planning)).toBe("error");
+
+    // The current agent-server reports file editor failures with
+    // is_error=true and no legacy `error` string.
+    const fileEditor = makeObs({
+      kind: "FileEditorObservation",
+      command: "str_replace",
+      output: "",
+      path: "/workspace/file.ts",
+      prev_exist: true,
+      old_content: null,
+      new_content: null,
+      error: null,
+      is_error: true,
+    } as unknown as ObservationEvent["observation"]);
+    expect(getObservationResult(fileEditor)).toBe("error");
+
+    const strReplace = makeObs({
+      kind: "StrReplaceEditorObservation",
+      command: "str_replace",
+      output: "",
+      path: "/workspace/file.ts",
+      prev_exist: true,
+      old_content: null,
+      new_content: null,
+      error: null,
+      is_error: true,
+    } as unknown as ObservationEvent["observation"]);
+    expect(getObservationResult(strReplace)).toBe("error");
+
+    const planningOk = makeObs({
+      kind: "PlanningFileEditorObservation",
+      content: [],
+      is_error: false,
+      command: "view",
+      path: "/workspace/PLAN.md",
+      prev_exist: true,
+      old_content: null,
+      new_content: null,
+    } as unknown as ObservationEvent["observation"]);
+    expect(getObservationResult(planningOk)).toBe("success");
+  });
+
   it("maps editor errors and successful editor outcomes", () => {
-    const editor = (kind: string, error: string | null) =>
+    // The current agent-server reports editor failures with is_error=true;
+    // the legacy `error` string predates the agent-server line and is not
+    // sent by any supported backend.
+    const editor = (kind: string, isError: boolean) =>
       makeObs({
         kind,
         command: "view",
@@ -143,19 +240,18 @@ describe("getObservationResult", () => {
         prev_exist: true,
         old_content: null,
         new_content: null,
-        error,
+        error: null,
+        is_error: isError,
       } as ObservationEvent["observation"]);
 
+    expect(getObservationResult(editor("FileEditorObservation", true))).toBe(
+      "error",
+    );
     expect(
-      getObservationResult(editor("FileEditorObservation", "Not found")),
-    ).toBe("error");
-    expect(
-      getObservationResult(editor("StrReplaceEditorObservation", null)),
+      getObservationResult(editor("StrReplaceEditorObservation", false)),
     ).toBe("success");
     expect(
-      getObservationResult(
-        editor("StrReplaceEditorObservation", "Replacement failed"),
-      ),
+      getObservationResult(editor("StrReplaceEditorObservation", true)),
     ).toBe("error");
   });
 
