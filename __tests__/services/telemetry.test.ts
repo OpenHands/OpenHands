@@ -124,7 +124,7 @@ describe("Telemetry Service", () => {
           consent_persistence_name: "agent-canvas-consent",
           person_profiles: "always",
           capture_pageview: "history_change",
-          autocapture: true,
+          autocapture: false,
         }),
         "agent-canvas",
       );
