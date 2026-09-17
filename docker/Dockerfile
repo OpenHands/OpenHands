@@ -101,12 +101,12 @@ RUN if command -v apt-get >/dev/null 2>&1; then \
       rm -rf /var/lib/apt/lists/*; \
     fi
 
-# Install automation server via pip.
-# Shared deps (openhands-sdk, fastapi, uvicorn, pydantic, httpx, …) are
-# already satisfied by the agent-server base image, so only automation-
-# specific packages (asyncpg, sqlalchemy, boto3, gcloud, …) are added.
-RUN uv pip install --system "openhands-automation==${AUTOMATION_VERSION}" 2>/dev/null \
-    || pip install --no-cache-dir "openhands-automation==${AUTOMATION_VERSION}"
+# Install automation server and the tool models its SDK clients deserialize.
+# Match openhands-tools to the SDK already provided by the agent-server image,
+# just as the local Canvas launcher does.
+RUN SDK_VERSION="$(python -c 'from importlib.metadata import version; print(version("openhands-sdk"))')" && \
+    (uv pip install --system "openhands-automation==${AUTOMATION_VERSION}" "openhands-tools==${SDK_VERSION}" 2>/dev/null \
+      || pip install --no-cache-dir "openhands-automation==${AUTOMATION_VERSION}" "openhands-tools==${SDK_VERSION}")
 
 RUN if [ -n "${AGENT_SERVER_SDK_GIT_REF}" ]; then \
       BASE_GIT_URL="git+https://github.com/OpenHands/software-agent-sdk@${AGENT_SERVER_SDK_GIT_REF}" && \
