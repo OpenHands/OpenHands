@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { ConversationClient } from "@openhands/typescript-client/clients";
 import {
   __resetActiveStoreForTests,
   setActiveSelection,
@@ -110,6 +111,12 @@ describe("AgentServerConversationService.condenseConversation", () => {
     );
 
     expect(mockCondenseConversation).toHaveBeenCalledWith("conv-1");
+    expect(ConversationClient).toHaveBeenCalledWith(
+      expect.objectContaining({
+        host: buildHttpBaseUrl(RUNTIME_URL),
+        apiKey: "sess-key",
+      }),
+    );
     expect(callCloudProxy).not.toHaveBeenCalled();
   });
 });
