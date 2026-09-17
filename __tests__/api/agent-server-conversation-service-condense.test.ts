@@ -62,7 +62,7 @@ describe("AgentServerConversationService.condenseConversation", () => {
     __resetActiveStoreForTests();
   });
 
-  it("routes cloud conversations to the runtime condense endpoint with the session key", async () => {
+  it("routes cloud conversations straight to the runtime via ConversationClient", async () => {
     setRegisteredBackends([cloudBackend]);
     setActiveSelection({ backendId: cloudBackend.id });
 
@@ -72,23 +72,21 @@ describe("AgentServerConversationService.condenseConversation", () => {
       "sess-key",
     );
 
-    expect(callCloudProxy).toHaveBeenCalledWith(
+    // Cloud now calls the runtime host directly (CORS allowlisted), not
+    // the /api/cloud-proxy envelope.
+    expect(callCloudProxy).not.toHaveBeenCalled();
+    expect(ConversationClient).toHaveBeenCalledWith(
       expect.objectContaining({
-        backend: cloudBackend,
-        method: "POST",
-        hostOverride: buildHttpBaseUrl(RUNTIME_URL),
-        path: "/api/conversations/conv-1/condense",
-        authMode: "session-api-key",
-        sessionApiKey: "sess-key",
+        host: buildHttpBaseUrl(RUNTIME_URL),
+        apiKey: "sess-key",
       }),
     );
-    expect(mockCondenseConversation).not.toHaveBeenCalled();
+    expect(mockCondenseConversation).toHaveBeenCalledWith("conv-1");
   });
 
-  it("throws when a cloud conversation has no runtime URL to proxy to", async () => {
-    // getEffectiveLocalBackend only resolves when the ACTIVE backend is
-    // local, so a cloud conversation without a conversation_url has no
-    // ConversationClient fallback: the proxy path is the only route.
+  it("throws when a cloud conversation has no runtime URL to call", async () => {
+    // With no conversation_url and a cloud active backend, there is no
+    // host to target and no local fallback — NoBackendAvailableError.
     setRegisteredBackends([cloudBackend, localBackend]);
     setActiveSelection({ backendId: cloudBackend.id });
 

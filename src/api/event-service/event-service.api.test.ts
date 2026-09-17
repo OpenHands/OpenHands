@@ -95,9 +95,9 @@ describe("EventService", () => {
   });
 
   describe("respondToConfirmation", () => {
-    it("routes cloud confirmations through the runtime proxy with session authentication", async () => {
+    it("routes cloud confirmations straight to the runtime via the typed client", async () => {
       const request = { accept: false, reason: "Needs human review" };
-      callCloudProxyMock.mockResolvedValue({ success: true });
+      respondToConfirmationMock.mockResolvedValue({ success: true });
 
       await expect(
         EventService.respondToConfirmation(
@@ -108,19 +108,23 @@ describe("EventService", () => {
         ),
       ).resolves.toEqual({ success: true });
 
-      expect(buildHttpBaseUrlMock).toHaveBeenCalledWith(
-        "wss://runtime.example.com/base/api/conversations/conversation-cloud",
-      );
-      expect(callCloudProxyMock).toHaveBeenCalledWith({
-        backend: cloudBackend,
-        method: "POST",
-        hostOverride: "https://runtime.example.com/base",
-        path: "/api/conversations/conversation-cloud/events/respond_to_confirmation",
-        body: request,
-        authMode: "session-api-key",
+      // Cloud now calls the runtime host directly (CORS allowlisted),
+      // authenticated with the session key — no /api/cloud-proxy envelope.
+      expect(callCloudProxyMock).not.toHaveBeenCalled();
+      expect(getAgentServerClientOptionsMock).toHaveBeenCalledWith({
+        conversationUrl:
+          "wss://runtime.example.com/base/api/conversations/conversation-cloud",
         sessionApiKey: "session-key",
       });
-      expect(conversationClientConstructorMock).not.toHaveBeenCalled();
+      expect(conversationClientConstructorMock).toHaveBeenCalledWith({
+        host: "http://local-client.example.com",
+        apiKey: "client-key",
+        workingDir: "workspace/project",
+      });
+      expect(respondToConfirmationMock).toHaveBeenCalledWith(
+        "conversation-cloud",
+        request,
+      );
     });
 
     it("uses the typed conversation client for local confirmations", async () => {
@@ -154,8 +158,8 @@ describe("EventService", () => {
   });
 
   describe("getEventCount", () => {
-    it("gets the cloud count from the runtime proxy", async () => {
-      callCloudProxyMock.mockResolvedValue(17);
+    it("gets the cloud count straight from the runtime via the typed client", async () => {
+      getEventCountMock.mockResolvedValue(17);
 
       await expect(
         EventService.getEventCount(
@@ -165,18 +169,20 @@ describe("EventService", () => {
         ),
       ).resolves.toBe(17);
 
-      expect(buildHttpBaseUrlMock).toHaveBeenCalledWith(
-        "https://runtime.example.com/api/conversations/conversation-cloud",
-      );
-      expect(callCloudProxyMock).toHaveBeenCalledWith({
-        backend: cloudBackend,
-        method: "GET",
-        hostOverride: "https://runtime.example.com/base",
-        path: "/api/conversations/conversation-cloud/events/count",
-        authMode: "session-api-key",
+      // Cloud now calls the runtime host directly (CORS allowlisted) —
+      // no /api/cloud-proxy envelope.
+      expect(callCloudProxyMock).not.toHaveBeenCalled();
+      expect(getAgentServerClientOptionsMock).toHaveBeenCalledWith({
+        conversationUrl:
+          "https://runtime.example.com/api/conversations/conversation-cloud",
         sessionApiKey: null,
       });
-      expect(conversationClientConstructorMock).not.toHaveBeenCalled();
+      expect(conversationClientConstructorMock).toHaveBeenCalledWith({
+        host: "http://local-client.example.com",
+        apiKey: "client-key",
+        workingDir: "workspace/project",
+      });
+      expect(getEventCountMock).toHaveBeenCalledWith("conversation-cloud");
     });
 
     it("gets the local count from the typed conversation client", async () => {

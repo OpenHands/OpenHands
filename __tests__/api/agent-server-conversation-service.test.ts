@@ -1305,7 +1305,7 @@ describe("AgentServerConversationService", () => {
     it("sends a cloud message with runtime credentials supplied by the caller", async () => {
       setRegisteredBackends([cloudBackend]);
       setActiveSelection({ backendId: cloudBackend.id });
-      const proxyRequests = captureRequests(["post"], {});
+      mockSendEvent.mockResolvedValue(undefined);
 
       const result = await AgentServerConversationService.sendMessage(
         "conv-cloud",
@@ -1318,17 +1318,17 @@ describe("AgentServerConversationService", () => {
       );
 
       // Runtime credentials supplied by the caller: no batch-get is issued,
-      // only the single cloud-proxy POST to the runtime.
-      expect(proxyRequests).toHaveLength(1);
-      const [request] = proxyRequests;
-      expect(request.url).toBe("http://localhost:54928/api/cloud-proxy");
-      expect(request.body).toMatchObject({
-        host: "http://runtime.example",
-        method: "POST",
-        path: "/api/conversations/conv-cloud/events",
-        headers: { "X-Session-API-Key": "session-key" },
-        body: { ...message, run: true },
+      // and the message goes straight to the runtime via ConversationClient
+      // (no /api/cloud-proxy envelope).
+      expect(mockSendEvent).toHaveBeenCalledWith("conv-cloud", message, {
+        run: true,
       });
+      expect(ConversationClient).toHaveBeenCalledWith(
+        expect.objectContaining({
+          host: "http://runtime.example",
+          apiKey: "session-key",
+        }),
+      );
       expect(result).toEqual(message);
     });
 
@@ -1336,6 +1336,7 @@ describe("AgentServerConversationService", () => {
       setRegisteredBackends([cloudBackend]);
       setActiveSelection({ backendId: cloudBackend.id });
       const requests: RecordedRequest[] = [];
+      mockSendEvent.mockResolvedValue(undefined);
       server.use(
         http.get(
           "https://app.all-hands.dev/api/v1/app-conversations",
@@ -1356,27 +1357,23 @@ describe("AgentServerConversationService", () => {
             ]);
           },
         ),
-        http.post("*/api/cloud-proxy", async ({ request }) => {
-          requests.push({
-            method: request.method,
-            url: request.url,
-            headers: Object.fromEntries(request.headers.entries()),
-            body: await readJsonBody(request),
-          });
-          return HttpResponse.json({});
-        }),
       );
 
       await AgentServerConversationService.sendMessage("conv-cloud", message);
 
+      // The batch-get still resolves runtime credentials from the App API...
       const batchGet = requests.find((req) => req.method === "GET");
-      const proxyPost = requests.find(
-        (req) => req.url === "http://localhost:54928/api/cloud-proxy",
-      );
       expect(batchGet?.url).toContain("ids=conv-cloud");
-      expect(proxyPost?.body).toMatchObject({
-        host: "http://runtime.example",
-        headers: { "X-Session-API-Key": "fetched-key" },
+      // ...but the send now targets the runtime host directly with the
+      // fetched session key (no /api/cloud-proxy POST).
+      expect(ConversationClient).toHaveBeenCalledWith(
+        expect.objectContaining({
+          host: "http://runtime.example",
+          apiKey: "fetched-key",
+        }),
+      );
+      expect(mockSendEvent).toHaveBeenCalledWith("conv-cloud", message, {
+        run: true,
       });
     });
 
@@ -2493,6 +2490,7 @@ describe("AgentServerConversationService", () => {
         setRegisteredBackends([cloudBackend]);
         setActiveSelection({ backendId: cloudBackend.id });
         const requests: RecordedRequest[] = [];
+        mockSendEvent.mockResolvedValue(undefined);
         server.use(
           http.get(
             "https://app.all-hands.dev/api/v1/app-conversations",
@@ -2513,15 +2511,6 @@ describe("AgentServerConversationService", () => {
               ]);
             },
           ),
-          http.post("*/api/cloud-proxy", async ({ request }) => {
-            requests.push({
-              method: request.method,
-              url: request.url,
-              headers: Object.fromEntries(request.headers.entries()),
-              body: await readJsonBody(request),
-            });
-            return HttpResponse.json({});
-          }),
         );
 
         await AgentServerConversationService.sendMessage(
@@ -2530,14 +2519,19 @@ describe("AgentServerConversationService", () => {
           runtime,
         );
 
+        // The missing credential is refreshed from the App API...
         const batchGets = requests.filter((req) => req.method === "GET");
-        const proxyPost = requests.find(
-          (req) => req.url === "http://localhost:54928/api/cloud-proxy",
-        );
         expect(batchGets).toHaveLength(1);
-        expect(proxyPost?.body).toMatchObject({
-          host: "http://fetched-runtime.example",
-          headers: { "X-Session-API-Key": "fetched-key" },
+        // ...then the send targets the fetched runtime host directly with
+        // the fetched session key (no /api/cloud-proxy envelope).
+        expect(ConversationClient).toHaveBeenCalledWith(
+          expect.objectContaining({
+            host: "http://fetched-runtime.example",
+            apiKey: "fetched-key",
+          }),
+        );
+        expect(mockSendEvent).toHaveBeenCalledWith("conv-cloud", message, {
+          run: true,
         });
       },
     );

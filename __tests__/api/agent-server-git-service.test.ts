@@ -1,5 +1,4 @@
 import { RemoteWorkspace } from "@openhands/typescript-client/workspace/remote-workspace";
-import { AxiosError } from "axios";
 import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   __resetActiveStoreForTests,
@@ -8,7 +7,6 @@ import {
 } from "#/api/backend-registry/active-store";
 import { callCloudProxy } from "#/api/cloud/proxy";
 import type { Backend } from "#/api/backend-registry/types";
-import { buildHttpBaseUrl } from "#/utils/websocket-url";
 import AgentServerGitService from "../../src/api/git-service/agent-server-git-service.api";
 
 const { mockGitChanges, mockGitDiff, mockClientGet } = vi.hoisted(() => ({
@@ -389,9 +387,9 @@ describe("AgentServerGitService", () => {
     });
 
     describe("getGitCommits", () => {
-      test("reaches the runtime through the generic cloud-proxy envelope", async () => {
+      test("reaches the runtime directly via the SDK HttpClient", async () => {
         // Arrange
-        vi.mocked(callCloudProxy).mockResolvedValue({
+        mockClientGet.mockResolvedValue({
           commits: [],
           has_more: false,
         });
@@ -403,23 +401,21 @@ describe("AgentServerGitService", () => {
           "workspace/project",
         );
 
-        // Assert — session-api-key envelope to the conversation's runtime
-        // host, with the git path normalized to an absolute runtime path.
-        expect(callCloudProxy).toHaveBeenCalledWith({
-          backend: cloudBackend,
-          method: "GET",
-          hostOverride: buildHttpBaseUrl(runtimeConversationUrl),
-          path: "/api/git/commits?path=%2Fworkspace%2Fproject&limit=50",
-          authMode: "session-api-key",
-          sessionApiKey: "session-key",
+        // Assert — direct call to the conversation's runtime host (CORS
+        // allowlisted for the Canvas origin), with the git path normalized
+        // to an absolute runtime path. No /api/cloud-proxy envelope.
+        expect(callCloudProxy).not.toHaveBeenCalled();
+        expect(mockClientGet).toHaveBeenCalledWith("/api/git/commits", {
+          params: { path: "/workspace/project", limit: "50" },
         });
       });
 
       test("resolves null when the runtime predates the endpoint (404)", async () => {
-        // Arrange — the proxy hop surfaces upstream failures as AxiosErrors.
-        vi.mocked(callCloudProxy).mockRejectedValue(
-          Object.assign(new AxiosError("Not Found"), {
-            response: { status: 404 },
+        // Arrange — the SDK HttpClient throws a raw HttpError carrying status.
+        mockClientGet.mockRejectedValue(
+          Object.assign(new Error("Not Found"), {
+            name: "HttpError",
+            status: 404,
           }),
         );
 
@@ -433,23 +429,31 @@ describe("AgentServerGitService", () => {
         // Assert
         expect(page).toBeNull();
       });
+
+      test("throws when no conversation URL is provided on cloud backends", async () => {
+        await expect(
+          AgentServerGitService.getGitCommits(null, "session-key", "ws/p"),
+        ).rejects.toThrow(/requires a conversation URL on cloud backends/);
+        expect(callCloudProxy).not.toHaveBeenCalled();
+        expect(RemoteWorkspace).not.toHaveBeenCalled();
+      });
     });
 
-    test("does not touch the runtime workspace SDK on cloud backends", async () => {
-      // Arrange
-      vi.mocked(callCloudProxy).mockResolvedValue([]);
+    test("does not touch the cloud proxy for runtime git reads", async () => {
+      // Arrange — getGitCommits now reads commits straight from the runtime.
+      mockClientGet.mockResolvedValue({ commits: [], has_more: false });
 
       // Act
-      await AgentServerGitService.getGitChanges(
-        "conv-1",
+      await AgentServerGitService.getGitCommits(
         runtimeConversationUrl,
         "session-key",
         "workspace/project",
       );
 
-      // Assert — the conversation's runtime URL must no longer be dialed
-      // from the browser; the cloud API makes the runtime hop server-side.
-      expect(RemoteWorkspace).not.toHaveBeenCalled();
+      // Assert — runtime git reads go direct; only the App-API changes/diff
+      // listing still uses callCloudProxy.
+      expect(callCloudProxy).not.toHaveBeenCalled();
+      expect(RemoteWorkspace).toHaveBeenCalledTimes(1);
     });
   });
 });
