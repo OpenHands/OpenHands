@@ -7,6 +7,9 @@ import { LlmProfilesManager } from "#/components/features/settings/llm-profiles/
 import ProfilesService, {
   ProfileInfo,
 } from "#/api/profiles-service/profiles-service.api";
+import ProviderConnectionsService, {
+  type ProviderConnection,
+} from "#/api/provider-connections-service/provider-connections-service.api";
 import {
   displayErrorToast,
   displaySuccessToast,
@@ -14,8 +17,19 @@ import {
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string, params?: Record<string, string>) => {
+    t: (key: string, params?: Record<string, string | number>) => {
       const translations: Record<string, string> = {
+        SETTINGS$PROFILES_UNGROUPED: "Not linked",
+        SETTINGS$PROVIDER_CONNECTIONS_TITLE: "Provider connections",
+        SETTINGS$PROVIDER_CONNECTIONS_SUBLINE:
+          "Share one API key across multiple models.",
+        SETTINGS$PROVIDER_CONNECTIONS_EMPTY: "No provider connections yet.",
+        SETTINGS$PROVIDER_CONNECTIONS_LOAD_ERROR:
+          "Failed to load provider connections.",
+        SETTINGS$PROVIDER_CONNECTION_ADD: "Add connection",
+        SETTINGS$PROVIDER_CONNECTION_EDIT_TITLE: "Edit provider connection",
+        SETTINGS$PROVIDER_CONNECTION_DELETE_TITLE: "Delete provider connection",
+        SETTINGS$PROVIDER_CONNECTION_MODEL_COUNT: `${params?.count} model(s)`,
         SETTINGS$AVAILABLE_PROFILES: "Available LLM Profiles",
         SETTINGS$ADD_LLM_PROFILE: "Add LLM Profile",
         SETTINGS$PROFILES_LOAD_ERROR: "Failed to load profiles",
@@ -53,11 +67,26 @@ vi.mock("react-i18next", () => ({
 }));
 
 vi.mock("#/api/profiles-service/profiles-service.api");
+vi.mock("#/api/provider-connections-service/provider-connections-service.api");
 vi.mock("#/utils/custom-toast-handlers");
 
 const canManage = vi.hoisted(() => ({ value: true }));
 vi.mock("#/hooks/use-can-manage-org-profiles", () => ({
   useCanManageOrgProfiles: () => canManage.value,
+}));
+
+// The manager decides whether provider connections are addressable from the
+// active backend, so the backend kind/org pair is driven per test rather than
+// stubbing `supportsConnections` itself.
+const activeBackend = vi.hoisted(() => ({
+  kind: "local" as "local" | "cloud",
+  orgId: null as string | null,
+}));
+vi.mock("#/contexts/active-backend-context", () => ({
+  useActiveBackend: () => ({
+    backend: { id: "backend-1", kind: activeBackend.kind },
+    orgId: activeBackend.orgId,
+  }),
 }));
 
 function makeProfile(overrides: Partial<ProfileInfo> = {}): ProfileInfo {
@@ -80,16 +109,48 @@ const mockProfiles: ProfileInfo[] = [
   }),
 ];
 
+function makeConnection(
+  overrides: Partial<ProviderConnection> = {},
+): ProviderConnection {
+  return {
+    id: "conn-openai",
+    display_name: "Shared OpenAI",
+    provider: "openai",
+    base_url: null,
+    created_at: 1,
+    updated_at: 2,
+    api_key_set: true,
+    ...overrides,
+  };
+}
+
 describe("LlmProfilesManager", () => {
   const renderManager = (
     props: {
       onAddProfile?: () => void;
       onEditProfile?: (profile: ProfileInfo) => void;
     } = {},
-    options: { canManage?: boolean } = {},
+    options: {
+      canManage?: boolean;
+      backendKind?: "local" | "cloud";
+      orgId?: string | null;
+      connections?: ProviderConnection[];
+      connectionsError?: Error;
+    } = {},
   ) => {
     vi.clearAllMocks();
     canManage.value = options.canManage ?? true;
+    activeBackend.kind = options.backendKind ?? "local";
+    activeBackend.orgId = options.orgId ?? null;
+    if (options.connectionsError) {
+      vi.mocked(ProviderConnectionsService.list).mockRejectedValue(
+        options.connectionsError,
+      );
+    } else {
+      vi.mocked(ProviderConnectionsService.list).mockResolvedValue(
+        options.connections ?? [],
+      );
+    }
     const queryClient = new QueryClient({
       defaultOptions: {
         queries: { retry: false },
@@ -168,6 +229,182 @@ describe("LlmProfilesManager", () => {
     expect(
       screen.queryByTestId("profile-menu-trigger"),
     ).not.toBeInTheDocument();
+  });
+
+  it("hides provider connection controls from view-only members", async () => {
+    const connections = [makeConnection()];
+    vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
+      profiles: [makeProfile({ provider_connection_id: "conn-openai" })],
+      active_profile: "gpt-4-profile",
+    });
+
+    renderManager(
+      { onAddProfile: vi.fn(), onEditProfile: vi.fn() },
+      { canManage: false, connections },
+    );
+
+    await screen.findByText("gpt-4-profile");
+    // A view-only member may still see which connection groups a profile, but
+    // must not reach the connection add/edit/delete surface.
+    expect(screen.getByTestId("profile-group-header")).toHaveTextContent(
+      "Shared OpenAI",
+    );
+    await waitFor(() => {
+      expect(ProviderConnectionsService.list).toHaveBeenCalled();
+    });
+    expect(screen.queryByText("Provider connections")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("add-provider-connection"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("provider-connection-row"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("provider-connection-edit"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("provider-connection-delete"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows provider connection controls to managers on a local backend", async () => {
+    vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
+      profiles: mockProfiles,
+      active_profile: "gpt-4-profile",
+    });
+
+    renderManager({}, { connections: [makeConnection()] });
+
+    expect(await screen.findByText("Provider connections")).toBeInTheDocument();
+    expect(screen.getByTestId("add-provider-connection")).toBeInTheDocument();
+    const row = await screen.findByTestId("provider-connection-row");
+    expect(within(row).getByTestId("provider-connection-edit")).toBeVisible();
+    expect(within(row).getByTestId("provider-connection-delete")).toBeVisible();
+  });
+
+  it("hides provider connections on a cloud backend without an org", async () => {
+    vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
+      profiles: mockProfiles,
+      active_profile: "gpt-4-profile",
+    });
+
+    renderManager(
+      {},
+      {
+        backendKind: "cloud",
+        orgId: null,
+        connections: [makeConnection()],
+      },
+    );
+
+    await screen.findByText("gpt-4-profile");
+    expect(screen.queryByText("Provider connections")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("add-provider-connection"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows provider connections on a cloud backend bound to an org", async () => {
+    vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
+      profiles: mockProfiles,
+      active_profile: "gpt-4-profile",
+    });
+
+    renderManager(
+      {},
+      {
+        backendKind: "cloud",
+        orgId: "org-42",
+        connections: [makeConnection()],
+      },
+    );
+
+    expect(await screen.findByText("Provider connections")).toBeInTheDocument();
+    expect(screen.getByTestId("add-provider-connection")).toBeInTheDocument();
+  });
+
+  it("groups profiles by connection name and counts each linked profile", async () => {
+    const connections = [
+      makeConnection(),
+      makeConnection({
+        id: "conn-anthropic",
+        display_name: "Shared Anthropic",
+        provider: "anthropic",
+      }),
+    ];
+    vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
+      profiles: [
+        makeProfile({ name: "gpt-a", provider_connection_id: "conn-openai" }),
+        makeProfile({ name: "gpt-b", provider_connection_id: "conn-openai" }),
+        makeProfile({
+          name: "claude-a",
+          provider_connection_id: "conn-anthropic",
+        }),
+        makeProfile({ name: "standalone" }),
+      ],
+      active_profile: "gpt-a",
+    });
+
+    renderManager({}, { connections });
+
+    await screen.findByText("gpt-a");
+    const headers = screen.getAllByTestId("profile-group-header");
+    expect(headers.map((h) => h.textContent)).toEqual([
+      "Shared OpenAI",
+      "Shared Anthropic",
+      "Not linked",
+    ]);
+
+    const rows = await screen.findAllByTestId("provider-connection-row");
+    expect(within(rows[0]).getByText("2 model(s)")).toBeInTheDocument();
+    expect(within(rows[1]).getByText("1 model(s)")).toBeInTheDocument();
+  });
+
+  it("reports no linked models for a connection without profiles", async () => {
+    vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
+      profiles: [makeProfile({ name: "standalone" })],
+      active_profile: "standalone",
+    });
+
+    renderManager({}, { connections: [makeConnection()] });
+
+    const row = await screen.findByTestId("provider-connection-row");
+    expect(within(row).getByText("0 model(s)")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("profile-group-header"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("falls back to the connection id when its name is unknown", async () => {
+    vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
+      profiles: [
+        makeProfile({ name: "orphan", provider_connection_id: "conn-missing" }),
+      ],
+      active_profile: "orphan",
+    });
+
+    renderManager({}, { connections: [makeConnection()] });
+
+    await screen.findByText("orphan");
+    expect(screen.getByTestId("profile-group-header")).toHaveTextContent(
+      "conn-missing",
+    );
+  });
+
+  it("surfaces a provider connections load failure", async () => {
+    vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
+      profiles: mockProfiles,
+      active_profile: "gpt-4-profile",
+    });
+
+    renderManager(
+      {},
+      { connectionsError: new Error("connections unavailable") },
+    );
+
+    expect(
+      await screen.findByTestId("provider-connections-load-error"),
+    ).toHaveTextContent("Failed to load provider connections.");
   });
 
   it("displays profiles when they exist", async () => {
