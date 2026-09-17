@@ -21,6 +21,10 @@ import {
   getRunHealthLabelKey,
   getTriggerSummary,
 } from "./automation-run-health";
+import {
+  getDisablementReasonDisplay,
+  hasDisablementReason,
+} from "#/utils/automation-disabled-reason";
 
 export function getRunStatusLabelKey(
   runState: LatestAutomationRunState,
@@ -99,6 +103,9 @@ export function HomeAutomationRunTooltip({
   const TriggerIcon = automation.trigger.type === "event" ? Zap : ClockIcon;
   const health = deriveRunHealth(runState);
   const display = latestRun ? getAutomationRunDisplay(latestRun) : null;
+  const disabledReason = hasDisablementReason(automation)
+    ? getDisablementReasonDisplay(automation, t)
+    : null;
 
   return (
     <div className="flex w-[280px] flex-col gap-3 p-3">
@@ -123,6 +130,19 @@ export function HomeAutomationRunTooltip({
             <span>{t(getRunStatusLabelKey(runState))}</span>
           </span>
         </PreviewRow>
+
+        {disabledReason ? (
+          <PreviewRow
+            label={t(I18nKey.AUTOMATIONS$DETAIL$DISABLED_REASON_HEADING)}
+          >
+            <span
+              data-testid="automation-tooltip-disabled-reason"
+              className="line-clamp-3 text-[var(--oh-text-secondary)]"
+            >
+              {disabledReason.text}
+            </span>
+          </PreviewRow>
+        ) : null}
 
         <PhaseRow run={latestRun} />
 
