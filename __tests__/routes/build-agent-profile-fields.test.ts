@@ -19,6 +19,10 @@ const baseAcp = {
   secretsMode: "standard" as const,
   selectedSecrets: [] as string[],
   secretRefsSupportedOnProfile: true,
+  toolsMode: "standard" as const,
+  selectedTools: [] as string[],
+  toolParams: {},
+  toolCatalogSupported: true,
 };
 
 const switchLlmToolField: SettingsFieldSchema = {
@@ -220,6 +224,10 @@ describe("buildAgentProfileFields — mcp_server_refs", () => {
     commandTokens: [],
     acpModel: "",
     subAgentsEnabled: false,
+    toolsMode: "standard" as const,
+    selectedTools: [] as string[],
+    toolParams: {},
+    toolCatalogSupported: true,
     switchLlmToolField: undefined,
     switchLlmToolEnabled: false,
     switchLlmToolSupportedOnProfile: true,
@@ -286,6 +294,10 @@ describe("buildAgentProfileFields — secret scope", () => {
     secretRefsSupportedOnProfile: true,
     mcpMode: "standard" as const,
     selectedMcpServers: [] as string[],
+    toolsMode: "standard" as const,
+    selectedTools: [] as string[],
+    toolParams: {},
+    toolCatalogSupported: true,
   };
 
   it("persists null when every secret is allowed", () => {
@@ -330,5 +342,54 @@ describe("buildAgentProfileFields — secret scope", () => {
       secretRefsSupportedOnProfile: false,
     });
     expect(fields).not.toHaveProperty("secret_refs");
+  });
+});
+
+describe("tool selection", () => {
+  const baseOpenHands = { ...baseAcp, isAcp: false };
+
+  it("saves null while the profile follows the server's standard set", () => {
+    const fields = buildAgentProfileFields(baseOpenHands);
+
+    expect(fields).toMatchObject({ agent_kind: "openhands", tools: null });
+  });
+
+  it("saves the selection with its stored params", () => {
+    const fields = buildAgentProfileFields({
+      ...baseOpenHands,
+      toolsMode: "custom",
+      selectedTools: ["terminal", "glob"],
+      toolParams: { terminal: { username: "dev" } },
+    });
+
+    expect(fields).toMatchObject({
+      tools: [
+        { name: "terminal", params: { username: "dev" } },
+        { name: "glob", params: {} },
+      ],
+    });
+  });
+
+  it("omits tools entirely when the backend serves no catalog", () => {
+    // The save overwrites the whole profile, so emitting null here would clear
+    // a selection this build never showed the user.
+    const fields = buildAgentProfileFields({
+      ...baseOpenHands,
+      toolCatalogSupported: false,
+      toolsMode: "custom",
+      selectedTools: ["glob"],
+    });
+
+    expect(fields).not.toHaveProperty("tools");
+  });
+
+  it("never sends tools for an ACP profile, which owns its own tooling", () => {
+    const fields = buildAgentProfileFields({
+      ...baseAcp,
+      toolsMode: "custom",
+      selectedTools: ["glob"],
+    });
+
+    expect(fields).not.toHaveProperty("tools");
   });
 });

@@ -28,9 +28,22 @@ vi.mock("#/hooks/query/use-acp-auth-status", () => ({
 // probe so both sides of that gate are reachable without a live server.
 const profileSupportsSwitchLlmToolMock = vi.hoisted(() => vi.fn(() => true));
 const profileSupportsSecretRefsMock = vi.hoisted(() => vi.fn(() => true));
+const profileSupportsToolCatalogMock = vi.hoisted(() => vi.fn(() => true));
 vi.mock("#/api/agent-profiles-service/profile-field-support", () => ({
   agentProfileSupportsSwitchLlmTool: () => profileSupportsSwitchLlmToolMock(),
   agentProfileSupportsSecretRefs: () => profileSupportsSecretRefsMock(),
+  agentProfileSupportsToolCatalog: () => profileSupportsToolCatalogMock(),
+}));
+
+// The tool picker renders what the server offers and what it says a draft
+// resolves to; stub both so these tests need no live agent-server.
+const toolCatalogMock = vi.hoisted(() =>
+  vi.fn<() => { name: string; user_selectable: boolean; usable: boolean }[]>(),
+);
+const resolvedToolsMock = vi.hoisted(() => vi.fn<() => string[]>());
+vi.mock("#/hooks/query/use-tool-catalog", () => ({
+  useToolCatalog: () => ({ data: toolCatalogMock() }),
+  useResolvedProfileTools: () => ({ data: resolvedToolsMock() }),
 }));
 
 // The secret picker lists the user's saved secrets; stub the query so these
@@ -1698,5 +1711,108 @@ describe("AgentSettingsScreen — MCP scope dirty tracking", () => {
         screen.getByTestId("agent-settings-secrets-mode"),
       ).toBeInTheDocument();
     });
+  });
+});
+
+describe("AgentSettingsScreen — tool selection", () => {
+  const CATALOG = [
+    { name: "terminal", user_selectable: true, usable: true },
+    { name: "file_editor", user_selectable: true, usable: true },
+    { name: "glob", user_selectable: true, usable: true },
+    // Not offered: owned by the sub-agents toggle, and unusable on this runtime.
+    { name: "task_tool_set", user_selectable: false, usable: true },
+    { name: "browser_tool_set", user_selectable: true, usable: false },
+  ];
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.spyOn(SettingsService, "saveSettings").mockResolvedValue(true);
+    profileSupportsToolCatalogMock.mockReturnValue(true);
+    toolCatalogMock.mockReturnValue(CATALOG);
+    resolvedToolsMock.mockReturnValue(["terminal", "file_editor"]);
+  });
+
+  function renderEditor(
+    overrides: Record<string, unknown> = {},
+  ): { control: () => AgentSettingsSaveControl } {
+    let captured: AgentSettingsSaveControl | null = null;
+    renderAgentSettingsScreen({
+      embedded: true,
+      profileName: "explorer",
+      llmProfileRef: "main",
+      agentSettingsOverride: {
+        agent_kind: "openhands",
+        enable_sub_agents: false,
+        tools: null,
+        ...overrides,
+      },
+      onSaveControlChange: (next) => {
+        captured = next;
+      },
+    });
+    return { control: () => captured! };
+  }
+
+  it("previews the server's standard set read-only and saves null", async () => {
+    const { control } = renderEditor();
+    await screen.findByTestId("agent-settings-screen");
+
+    const terminal = screen.getByTestId("agent-settings-tool-terminal");
+    expect(terminal).toBeChecked();
+    expect(terminal).toBeDisabled();
+    // The preview is the server's answer, not a list this build maintains.
+    expect(screen.queryByTestId("agent-settings-tool-glob")).toBeNull();
+    expect(control().buildAgentProfileFields()).toMatchObject({ tools: null });
+  });
+
+  it("seeds from a stored selection and saves it back", async () => {
+    const { control } = renderEditor({
+      tools: [{ name: "glob", params: {} }],
+    });
+    await screen.findByTestId("agent-settings-screen");
+
+    expect(screen.getByTestId("agent-settings-tool-glob")).toBeChecked();
+    expect(screen.getByTestId("agent-settings-tool-terminal")).not.toBeChecked();
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      tools: [{ name: "glob", params: {} }],
+    });
+  });
+
+  it("offers only tools the server marks selectable and usable", async () => {
+    renderEditor({ tools: [{ name: "glob", params: {} }] });
+    await screen.findByTestId("agent-settings-screen");
+
+    expect(screen.getByTestId("agent-settings-tool-terminal")).toBeTruthy();
+    // Owned by `enable_sub_agents`, and one the runtime cannot run.
+    expect(screen.queryByTestId("agent-settings-tool-task_tool_set")).toBeNull();
+    expect(
+      screen.queryByTestId("agent-settings-tool-browser_tool_set"),
+    ).toBeNull();
+  });
+
+  it("keeps a stored tool the catalog no longer offers", async () => {
+    // Visible means clearable: the save overwrites the whole profile, so a
+    // hidden entry would be dropped without the user ever seeing it.
+    renderEditor({ tools: [{ name: "retired_tool", params: {} }] });
+    await screen.findByTestId("agent-settings-screen");
+
+    expect(screen.getByTestId("agent-settings-tool-retired_tool")).toBeChecked();
+  });
+
+  it("hides the picker when the backend serves no catalog", async () => {
+    profileSupportsToolCatalogMock.mockReturnValue(false);
+    const { control } = renderEditor({ tools: [{ name: "glob", params: {} }] });
+    await screen.findByTestId("agent-settings-screen");
+
+    expect(screen.queryByTestId("agent-settings-tools-mode")).toBeNull();
+    // ... and the stored selection survives the save untouched.
+    expect(control().buildAgentProfileFields()).not.toHaveProperty("tools");
+  });
+
+  it("hides the picker outside the profile editor", async () => {
+    renderAgentSettingsScreen();
+    await screen.findByTestId("agent-settings-screen");
+
+    expect(screen.queryByTestId("agent-settings-tools-mode")).toBeNull();
   });
 });

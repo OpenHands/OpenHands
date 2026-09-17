@@ -12,6 +12,11 @@ import { SchemaField } from "#/components/features/settings/sdk-settings/schema-
 import { AcpCredentialsSection } from "#/components/features/settings/acp-credentials-section";
 import { useAcpCredentialForm } from "#/hooks/use-acp-credential-form";
 import { BrandButton } from "#/components/features/settings/brand-button";
+import {
+  buildProfileToolsValue,
+  readProfileTools,
+  type ProfileToolSpec,
+} from "#/constants/profile-tools";
 import { ProfileScopeList } from "#/components/features/settings/agent-profiles/profile-scope-list";
 import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
@@ -46,10 +51,15 @@ import {
   sameScopeSelection,
   type ProfileScopeMode,
 } from "#/constants/profile-scope";
+import {
+  useResolvedProfileTools,
+  useToolCatalog,
+} from "#/hooks/query/use-tool-catalog";
 import { flattenMcpConfig } from "#/utils/mcp-installed-servers";
 import { parseMcpConfig } from "#/utils/mcp-config";
 import {
   agentProfileSupportsSecretRefs,
+  agentProfileSupportsToolCatalog,
   agentProfileSupportsSwitchLlmTool,
 } from "#/api/agent-profiles-service/profile-field-support";
 import { useSearchSecrets } from "#/hooks/query/use-get-secrets";
@@ -70,6 +80,7 @@ const ENABLE_SWITCH_LLM_TOOL_FIELD_KEY = "enable_switch_llm_tool";
 const TOOL_CONCURRENCY_FIELD_KEY = "tool_concurrency_limit";
 const MCP_SERVER_REFS_KEY = "mcp_server_refs";
 const SECRET_REFS_KEY = "secret_refs";
+const TOOLS_KEY = "tools";
 const COMMAND_PLACEHOLDER_FALLBACK = "npx -y <package-name>";
 const ACP_CUSTOM_MODEL_KEY = "__custom_model__";
 const EMPTY_AGENT_SETTINGS_SNAPSHOT: AgentSettingsSnapshot = {
@@ -141,6 +152,7 @@ export type AgentProfileFieldsDraft =
       enable_switch_llm_tool?: boolean;
       tool_concurrency_limit?: number;
       secret_refs?: string[] | null;
+      tools?: ProfileToolSpec[] | null;
     }
   | {
       agent_kind: "acp";
@@ -179,6 +191,16 @@ export interface AgentProfileFieldsInput {
   selectedSecrets: string[];
   /** Whether the backend's *profile* model accepts `secret_refs`. */
   secretRefsSupportedOnProfile: boolean;
+  toolsMode?: ProfileScopeMode;
+  selectedTools?: string[];
+  /** Stored params per tool, kept so the editor cannot drop what it ignores. */
+  toolParams?: Record<string, Record<string, SettingsValue>>;
+  /**
+   * Whether the backend serves the tool catalog (and so offers a picker).
+   * Defaults to false: a caller that knows nothing about tools must leave the
+   * stored selection alone rather than clear it.
+   */
+  toolCatalogSupported?: boolean;
 }
 
 /**
@@ -219,6 +241,10 @@ export function buildAgentProfileFields(
     secretsMode,
     selectedSecrets,
     secretRefsSupportedOnProfile,
+    toolsMode = "standard",
+    selectedTools = [],
+    toolParams = {},
+    toolCatalogSupported = false,
   } = input;
   // Both are base-model fields, so they ride both variants. `mcp_server_refs`
   // needs no version gate — it has existed since agent profiles shipped, below
@@ -244,12 +270,25 @@ export function buildAgentProfileFields(
       acp_args: null,
     };
   }
+  // Omitted, not nulled, on a backend without the catalog: the save is a
+  // whole-profile overwrite, so emitting `null` would clear a selection made
+  // elsewhere against a picker this build never showed.
+  const toolSelection = toolCatalogSupported
+    ? {
+        tools: buildProfileToolsValue({
+          mode: toolsMode,
+          selected: selectedTools,
+          params: toolParams,
+        }),
+      }
+    : {};
   const fields: Extract<AgentProfileFieldsDraft, { agent_kind: "openhands" }> =
     {
       agent_kind: "openhands",
       ...mcpRefs,
       enable_sub_agents: subAgentsEnabled,
       ...secretRefs,
+      ...toolSelection,
     };
   if (switchLlmToolField && switchLlmToolSupportedOnProfile) {
     // Two conditions, two different questions. The schema tells us the field
@@ -313,12 +352,21 @@ interface AgentSettingsScreenProps {
    * stored profile's fields.
    */
   agentSettingsOverride?: Record<string, SettingsValue> | null;
+  /**
+   * Identity of the profile being edited (embedded mode). The tool picker asks
+   * the server what a draft resolves to, and a draft is only resolvable with a
+   * name and an LLM reference.
+   */
+  profileName?: string;
+  llmProfileRef?: string | null;
   onSaveControlChange?: (control: AgentSettingsSaveControl) => void;
 }
 
 export function AgentSettingsScreen({
   embedded = false,
   agentSettingsOverride = null,
+  profileName,
+  llmProfileRef = null,
   onSaveControlChange,
 }: AgentSettingsScreenProps = {}) {
   const { t } = useTranslation("openhands");
@@ -389,6 +437,60 @@ export function AgentSettingsScreen({
   }, [toolConcurrencyField, agentSettingsSource]);
   const [toolConcurrency, setToolConcurrency] = useState<string | boolean>(
     initialToolConcurrency,
+  );
+
+  // --- Tools (OpenHands only) ---
+  // Offered only where the server serves its catalog: which tools a user may
+  // pick, and what a profile resolves to, are facts the server owns
+  // (software-agent-sdk#4958).
+  const toolCatalogSupported = agentProfileSupportsToolCatalog();
+  const initialTools = React.useMemo(
+    () => readProfileTools(agentSettingsSource?.[TOOLS_KEY]),
+    [agentSettingsSource],
+  );
+  const [toolsMode, setToolsMode] = useState<ProfileScopeMode>(
+    initialTools.mode,
+  );
+  const [selectedTools, setSelectedTools] = useState<string[]>(
+    initialTools.selected,
+  );
+  const { data: toolCatalog } = useToolCatalog({
+    enabled: embedded && toolCatalogSupported,
+  });
+  const standardToolsDraft = React.useMemo(
+    () =>
+      profileName && llmProfileRef
+        ? {
+            name: profileName,
+            agent_kind: "openhands",
+            llm_profile_ref: llmProfileRef,
+            enable_sub_agents: subAgentsEnabled,
+          }
+        : null,
+    [profileName, llmProfileRef, subAgentsEnabled],
+  );
+  const { data: standardToolNames } = useResolvedProfileTools({
+    draft: standardToolsDraft,
+    enabled: embedded && toolCatalogSupported,
+  });
+  /** Pickable tools this runtime can run, plus anything the profile stores. */
+  const toolPickerCatalog = React.useMemo(() => {
+    const names = (toolCatalog ?? [])
+      .filter(({ user_selectable: selectable, usable }) => selectable && usable)
+      .map(({ name }) => name);
+    // A stored name outside the catalog rides along: the save overwrites the
+    // whole profile, so hiding it would silently drop the user's choice.
+    initialTools.selected.forEach((name) => {
+      if (!names.includes(name)) names.push(name);
+    });
+    return names.map((name) => ({ name }));
+  }, [toolCatalog, initialTools]);
+  const orderedSelectedTools = React.useMemo(
+    () =>
+      toolPickerCatalog
+        .map(({ name }) => name)
+        .filter((name) => selectedTools.includes(name)),
+    [toolPickerCatalog, selectedTools],
   );
 
   // --- MCP servers (both variants; a base-model field) ---
@@ -617,6 +719,12 @@ export function AgentSettingsScreen({
     setSelectedMcpServers(initialMcpRefs.selected);
   }, [initialMcpRefs]);
 
+  // Sync the tool selection when settings reload
+  useEffect(() => {
+    setToolsMode(initialTools.mode);
+    setSelectedTools(initialTools.selected);
+  }, [initialTools]);
+
   // Sync the secret scope when settings reload
   useEffect(() => {
     setSecretsMode(initialSecretRefs.mode);
@@ -654,10 +762,15 @@ export function AgentSettingsScreen({
   const secretScopeDirty =
     secretsMode !== initialSecretRefs.mode ||
     !sameScopeSelection(orderedSelectedSecrets, initialSecretRefs.selected);
+  // `tools` is OpenHands-only, but tracked here with the other profile fields.
+  const toolSelectionDirty =
+    toolsMode !== initialTools.mode ||
+    !sameScopeSelection(orderedSelectedTools, initialTools.selected);
   const settingsDirty =
     agentType !== loadedSnapshot.agentType ||
     mcpScopeDirty ||
     secretScopeDirty ||
+    toolSelectionDirty ||
     (agentType === "acp"
       ? commandText !== loadedSnapshot.commandText ||
         acpModel !== loadedSnapshot.acpModel ||
@@ -735,6 +848,10 @@ export function AgentSettingsScreen({
       secretsMode,
       selectedSecrets: orderedSelectedSecrets,
       secretRefsSupportedOnProfile,
+      toolsMode,
+      selectedTools: orderedSelectedTools,
+      toolParams: initialTools.params,
+      toolCatalogSupported,
     });
 
   const isSavingAny = isSaving || acpCredentialForm.isSaving;
@@ -1067,6 +1184,75 @@ export function AgentSettingsScreen({
               mcpMode === "custom"
                 ? I18nKey.SETTINGS$AGENT_PROFILE_MCP_CHOOSE_HINT
                 : I18nKey.SETTINGS$AGENT_PROFILE_MCP_ALL_HINT,
+            )}
+          </Typography.Text>
+        </div>
+      ) : null}
+
+      {showProfileScopeFields && !isAcp && toolCatalogSupported ? (
+        <div className="flex flex-col gap-2.5">
+          <Typography.Text className="text-sm">
+            {t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS)}
+          </Typography.Text>
+          <SettingsDropdownInput
+            testId="agent-settings-tools-mode"
+            name="agent-tools-mode"
+            label=""
+            items={[
+              {
+                key: "standard",
+                label: t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_STANDARD),
+              },
+              {
+                key: "custom",
+                label: t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_CHOOSE),
+              },
+            ]}
+            selectedKey={toolsMode}
+            isDisabled={isSavingAny}
+            onSelectionChange={(key) => {
+              if (!key) return;
+              const mode = key as ProfileScopeMode;
+              setToolsMode(mode);
+              // Start a custom selection from what the server says the standard
+              // set is, so switching mode never silently drops tools.
+              if (mode === "custom" && selectedTools.length === 0) {
+                setSelectedTools(
+                  (standardToolNames ?? []).filter((name) =>
+                    toolPickerCatalog.some((entry) => entry.name === name),
+                  ),
+                );
+              }
+            }}
+          />
+          {toolsMode === "standard" ? (
+            <ProfileScopeList
+              testId="agent-settings-tool"
+              items={(standardToolNames ?? []).map((name) => ({ name }))}
+              selected={standardToolNames ?? []}
+              isDisabled
+              onToggle={() => {}}
+            />
+          ) : (
+            <ProfileScopeList
+              testId="agent-settings-tool"
+              items={toolPickerCatalog}
+              selected={orderedSelectedTools}
+              isDisabled={isSavingAny}
+              onToggle={(name, checked) =>
+                setSelectedTools((prev) =>
+                  checked
+                    ? [...prev, name]
+                    : prev.filter((entry) => entry !== name),
+                )
+              }
+            />
+          )}
+          <Typography.Text className="text-xs text-tertiary-alt">
+            {t(
+              toolsMode === "custom"
+                ? I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_CHOOSE_HINT
+                : I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_STANDARD_HINT,
             )}
           </Typography.Text>
         </div>
