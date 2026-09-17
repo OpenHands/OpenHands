@@ -248,6 +248,7 @@ function EventMessageComponent({
             type="agent"
             message={message}
             isFromPlanningAgent={isFromPlanningAgent}
+            timestamp={event.timestamp}
           />
         )}
       </>

@@ -91,7 +91,7 @@ export default function CanvasExtensionPage() {
             {t(I18nKey.SETUP$UNAVAILABLE_TITLE)}
           </h1>
           <p className="mt-2 text-sm text-tertiary-light">
-            {error || t(I18nKey.SETTINGS$CANVAS_EXTENSIONS_PAGE_UNAVAILABLE)}
+            {error || t(I18nKey.SETTINGS$APPS_PAGE_UNAVAILABLE)}
           </p>
         </div>
       </main>

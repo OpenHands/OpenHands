@@ -185,3 +185,59 @@ describe("HomeAutomationRunTooltip — task outcome", () => {
     ).not.toBeInTheDocument();
   });
 });
+
+describe("HomeAutomationRunTooltip — disabled reason", () => {
+  it("surfaces an automatic-pause reason on an inactive automation", () => {
+    const reason =
+      "Paused automatically: auth — Invalid API key. This failed the last 3 runs and needs a configuration fix.";
+    render(
+      <HomeAutomationRunTooltip
+        automation={{
+          ...automation,
+          enabled: false,
+          disabled_reason: reason,
+          disabled_detail: {
+            reason: "consecutive_permanent_failures",
+            source: "consecutive_permanent_failures",
+          },
+        }}
+        runState={makeState(null)}
+      />,
+    );
+
+    expect(screen.getByTestId("automation-tooltip-disabled-reason")).toHaveTextContent(
+      reason,
+    );
+  });
+
+  it("substitutes the manual-disable label instead of the raw 'manual' value", () => {
+    render(
+      <HomeAutomationRunTooltip
+        automation={{
+          ...automation,
+          enabled: false,
+          disabled_reason: "manual",
+          disabled_detail: { reason: "manual", source: "user" },
+        }}
+        runState={makeState(null)}
+      />,
+    );
+
+    expect(screen.getByTestId("automation-tooltip-disabled-reason")).toHaveTextContent(
+      "AUTOMATIONS$DETAIL$DISABLED_MANUAL",
+    );
+  });
+
+  it("omits the disabled-reason row for an enabled automation", () => {
+    render(
+      <HomeAutomationRunTooltip
+        automation={{ ...automation, enabled: true, disabled_reason: null }}
+        runState={makeState(makeRun())}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("automation-tooltip-disabled-reason"),
+    ).not.toBeInTheDocument();
+  });
+});
