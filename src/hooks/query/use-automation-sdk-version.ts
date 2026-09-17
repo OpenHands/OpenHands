@@ -41,6 +41,8 @@ export function useAutomationSdkVersion() {
       initialData: canFetchSdkVersion ? undefined : null,
       staleTime: AUTOMATION_SDK_VERSION_CACHE_TIME_MS,
       gcTime: AUTOMATION_SDK_VERSION_CACHE_TIME_MS,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
     },
     providerQueryClient ?? getQueryClient(),
   );

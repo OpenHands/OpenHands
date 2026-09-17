@@ -268,6 +268,7 @@ export function validateFormValues(
   return Object.entries(
     collectFields(setup, selectedTrigger, selectedAction),
   ).reduce<SetupFieldErrors>((errors, [name, field]) => {
+    if (values.agent_profile_id && field.type === "llm-profile") return errors;
     const error = validateField(name, field, values[name], overrides);
     return error ? { ...errors, [name]: error } : errors;
   }, {});

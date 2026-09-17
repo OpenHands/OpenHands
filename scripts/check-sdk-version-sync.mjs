@@ -3,8 +3,15 @@
 /**
  * Check SDK Version Sync
  *
- * Verifies that the released automation package (openhands-automation on PyPI)
- * uses the SDK version expected for that automation release for all agent SDK libraries:
+ * Verifies two things against versions.agentServer in config/defaults.json:
+ *
+ * 1. The local @openhands/typescript-client pin in package.json. Canvas renders
+ *    the ACP provider picker from that generated registry mirror but launches
+ *    the adapter through the agent-server image, so a skew ships a picker
+ *    offering models and launch commands agent-server does not implement.
+ *
+ * 2. That the released automation package (openhands-automation on PyPI)
+ *    uses the SDK version expected for that automation release for all agent SDK libraries:
  *   - openhands-sdk
  *   - openhands-tools
  *   - openhands-workspace
@@ -19,7 +26,7 @@
  *
  * Usage:
  *   node scripts/check-sdk-version-sync.mjs
- *   EXPECTED_SDK_VERSION=1.46.0 node scripts/check-sdk-version-sync.mjs
+ *   EXPECTED_SDK_VERSION=1.49.1 node scripts/check-sdk-version-sync.mjs
  *   node scripts/check-sdk-version-sync.mjs --check-pypi
  *
  * Environment variables:
@@ -78,7 +85,7 @@ Triggering from other repos:
     -H "Authorization: token \$GITHUB_TOKEN" \\
     -H "Accept: application/vnd.github.v3+json" \\
     https://api.github.com/repos/OpenHands/OpenHands/dispatches \\
-    -d '{"event_type": "sdk-version-check", "client_payload": {"version": "1.46.0"}}'
+    -d '{"event_type": "sdk-version-check", "client_payload": {"version": "1.49.1"}}'
 `);
   process.exit(0);
 }
@@ -100,6 +107,11 @@ const SDK_PACKAGES = [
   "openhands-workspace",
   "openhands-agent-server",
 ];
+
+// Mirrors the SDK's ACP provider registry. Must track versions.agentServer:
+// the picker is rendered from this pin but the adapter is launched by that
+// image, so a skew advertises models the running agent-server cannot run.
+const CLIENT_PACKAGE_NAME = "@openhands/typescript-client";
 
 // Configurable automation package (can be overridden via env)
 const AUTOMATION_PACKAGE_NAME = process.env.AUTOMATION_PACKAGE_NAME || "openhands-automation";
@@ -171,6 +183,34 @@ function getExpectedVersion() {
     version: SHARED_DEFAULTS.versions.agentServer,
     source: "config/defaults.json (versions.agentServer)",
   };
+}
+
+/**
+ * Compare the local typescript-client pin against the expected SDK version.
+ * Returns a mismatch descriptor, or null when they agree.
+ */
+function findClientPinMismatch(pinnedVersion, expectedVersion) {
+  if (!pinnedVersion) {
+    return { package: CLIENT_PACKAGE_NAME, expected: expectedVersion, actual: null };
+  }
+  // A range would reintroduce the skew this check exists to catch.
+  if (!/^[0-9]/.test(pinnedVersion)) {
+    return { package: CLIENT_PACKAGE_NAME, expected: expectedVersion, actual: pinnedVersion };
+  }
+  if (versionsEqual(pinnedVersion, expectedVersion)) {
+    return null;
+  }
+  return { package: CLIENT_PACKAGE_NAME, expected: expectedVersion, actual: pinnedVersion };
+}
+
+/**
+ * Read the typescript-client pin from package.json.
+ */
+function readClientPin() {
+  const pkg = JSON.parse(
+    readFileSync(join(projectRoot, "package.json"), "utf-8"),
+  );
+  return pkg.dependencies?.[CLIENT_PACKAGE_NAME] ?? null;
 }
 
 /**
@@ -260,9 +300,9 @@ async function fetchPyPIDependencies(packageName, version) {
  * Parse PyPI requires_dist array and extract SDK package versions
  *
  * PyPI returns dependencies in PEP 508 format like:
- *   "openhands-sdk>=1.46.0,<2.0.0"
- *   "openhands-tools==1.46.0"
- *   "openhands-workspace (>=1.46.0)"
+ *   "openhands-sdk>=1.49.1,<2.0.0"
+ *   "openhands-tools==1.49.1"
+ *   "openhands-workspace (>=1.49.1)"
  */
 function parseSdkVersionsFromRequiresDist(requiresDist) {
   const versions = {};
@@ -276,7 +316,7 @@ function parseSdkVersionsFromRequiresDist(requiresDist) {
       }
 
       // Extract the version number - look for patterns like:
-      // ">=1.46.0", "==1.46.0", "(>=1.46.0)", "~=1.46.0"
+      // ">=1.49.1", "==1.49.1", "(>=1.49.1)", "~=1.49.1"
       // After the package name and before any comma or closing paren
       const versionPattern = /[><=~!]+\s*([0-9]+(?:\.[0-9]+)*)/;
       const match = dep.match(versionPattern);
@@ -306,6 +346,34 @@ async function main() {
     const { version: expectedVersion, source: versionSource } = getExpectedVersion();
     console.log(
       `Expected automation SDK version: ${colors.green}${expectedVersion}${colors.reset} (from ${versionSource})`,
+    );
+
+    // Offline, so it runs first and fails fast without the PyPI round trip.
+    const clientMismatch = findClientPinMismatch(readClientPin(), expectedVersion);
+    if (clientMismatch) {
+      console.log("");
+      console.log(
+        `  ${CLIENT_PACKAGE_NAME.padEnd(30)} ${colors.red}✗ ${clientMismatch.actual ?? "(absent)"} (expected ${expectedVersion})${colors.reset}`,
+      );
+      console.log("");
+      console.log(`${colors.red}Version mismatch detected!${colors.reset}`);
+      console.log("");
+      console.log(
+        `${CLIENT_PACKAGE_NAME} mirrors the SDK's ACP provider registry that Canvas renders the`,
+      );
+      console.log(
+        `ACP picker from, but the adapter is launched by agent-server ${expectedVersion}. A skew ships a`,
+      );
+      console.log("picker offering models and launch commands that agent-server does not implement.");
+      console.log("");
+      console.log("To fix, update one of the following:");
+      console.log(`  1. Pin ${CLIENT_PACKAGE_NAME} to ${expectedVersion} in package.json`);
+      console.log("  2. Update versions.agentServer in config/defaults.json");
+      console.log("");
+      process.exit(1);
+    }
+    console.log(
+      `Client registry pin: ${colors.green}${CLIENT_PACKAGE_NAME}@${expectedVersion}${colors.reset} (matches versions.agentServer)`,
     );
 
     // Get automation version from env var or config/defaults.json
@@ -422,7 +490,10 @@ export {
   normalizeVersion,
   versionsEqual,
   parseSdkVersionsFromRequiresDist,
+  findClientPinMismatch,
+  readClientPin,
   SDK_PACKAGES,
+  CLIENT_PACKAGE_NAME,
   AUTOMATION_PACKAGE_NAME,
 };
 
