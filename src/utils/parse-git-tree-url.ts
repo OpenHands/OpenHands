@@ -27,11 +27,15 @@ export function parseGitTreeUrl(
   if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null;
 
   const pathname = parsed.pathname.replace(/^\/+|\/+$/g, "");
+  // `origin` drops userinfo; keep it so token-authenticated URLs still clone.
+  const userinfo = parsed.username
+    ? `${parsed.username}${parsed.password ? `:${parsed.password}` : ""}@`
+    : "";
   for (const pattern of TREE_URL_PATTERNS) {
     const groups = pattern.exec(pathname)?.groups;
     if (groups) {
       return {
-        source: `${parsed.origin}/${groups.repo.replace(/\.git$/, "")}`,
+        source: `${parsed.protocol}//${userinfo}${parsed.host}/${groups.repo.replace(/\.git$/, "")}`,
         ref: decodeURIComponent(groups.ref),
         repoPath: groups.path ? decodeURIComponent(groups.path) : null,
       };

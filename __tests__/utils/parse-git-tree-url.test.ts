@@ -28,6 +28,12 @@ describe("parseGitTreeUrl", () => {
       null,
     ],
     [
+      "https://oauth2:tok@gitlab.example.com:8443/g/r/-/tree/main/x",
+      "https://oauth2:tok@gitlab.example.com:8443/g/r",
+      "main",
+      "x",
+    ],
+    [
       "https://bitbucket.org/ws/repo/src/main/apps/demo/",
       "https://bitbucket.org/ws/repo",
       "main",
