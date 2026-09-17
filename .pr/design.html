@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude ACP skill overlay (#16905)</title>
+<style>
+  :root{
+    --fg:#1a1a1a; --muted:#5a5a5a; --subtle:#8a8a82;
+    --bg:#fdfdfb; --card:#ffffff; --elevated:#f7f6f1;
+    --accent:#2b4eaa; --accent-soft:#e6ecfa;
+    --rule:#e2e2dc; --rule-strong:#bdbcb4;
+    --code-bg:#f3f1ec; --warn:#b25b0e; --ok:#2f7a3a; --crit:#a02020;
+    --changed:#c45c00;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans)}
+  body{line-height:1.6;font-size:16px}
+  .wrap{display:grid;grid-template-columns:240px minmax(0,1fr);gap:48px;max-width:1180px;margin:0 auto;padding:32px 28px 96px}
+  nav.toc{position:sticky;top:24px;align-self:start;font-size:13px}
+  nav.toc h2{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+  nav.toc ol{list-style:none;padding:0;margin:0;counter-reset:toc}
+  nav.toc li{counter-increment:toc;margin:4px 0}
+  nav.toc li::before{content:counter(toc) ". ";color:var(--muted)}
+  nav.toc a{color:var(--fg);text-decoration:none} nav.toc a:hover{color:var(--accent)}
+  header.title{border-bottom:1px solid var(--rule);padding-bottom:22px;margin-bottom:28px}
+  header.title .eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  header.title h1{font-size:34px;margin:6px 0 4px;letter-spacing:-.01em}
+  header.title .sub{color:var(--muted);max-width:740px}
+  h2{font-size:22px;margin:44px 0 10px} h2 .num{color:var(--muted);font-weight:500;margin-right:8px}
+  h3{font-size:16px;margin:22px 0 8px}
+  code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);padding:1px 5px;border-radius:3px}
+  pre{font-family:var(--mono);font-size:13px;background:var(--code-bg);padding:14px 16px;border-radius:6px;overflow-x:auto;border:1px solid var(--rule)}
+  table{border-collapse:collapse;width:100%;font-size:14px;margin:12px 0}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
+  th{font-weight:600;background:var(--code-bg)}
+  .callout{border-left:3px solid var(--accent);background:var(--accent-soft);padding:10px 14px;margin:14px 0;border-radius:0 4px 4px 0;font-size:14.5px}
+  .callout.warn{border-color:var(--warn);background:#fbf1e6}
+  .callout.note{border-color:var(--muted);background:#f3f1ec}
+  .fig{margin:18px 0 22px}
+  .fig svg{display:block;max-width:100%;height:auto;background:#fff;border:1px solid var(--rule);border-radius:6px}
+  .fig figcaption{font-size:13px;color:var(--muted);margin-top:6px;text-align:center}
+  a.src{font-family:var(--mono);font-size:12px;color:var(--accent);text-decoration:none;border-bottom:1px dotted var(--accent)}
+  .ba{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+  .meta{font-size:13px;color:var(--muted)}
+  .pill{display:inline-block;font-size:11px;letter-spacing:.04em;text-transform:uppercase;background:var(--elevated);border:1px solid var(--rule);border-radius:999px;padding:2px 8px;margin-right:6px}
+  @media(max-width:760px){.wrap{grid-template-columns:1fr}.ba{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="toc">
+    <h2>Contents</h2>
+    <ol>
+      <li><a href="#decision">What changed</a></li>
+      <li><a href="#api">API before → after</a></li>
+      <li><a href="#files">Files</a></li>
+      <li><a href="#limits">Limits / follow-ups</a></li>
+    </ol>
+  </nav>
+  <main>
+    <header class="title">
+      <div class="eyebrow">OpenHands #16905 · Canvas-only overlay</div>
+      <h1>Claude ACP skill overlay</h1>
+      <p class="sub">Claude Code ACP launches from <code>agent_profile_id</code>. The server then strips <code>agent_context.skills</code>. Canvas now appends enabled catalog instructions through <code>agent_launch_additions.system_message_suffix_append</code> so they still reach Claude's first prompt.</p>
+      <p class="meta">10 files · +906 / −3 · head <code>56c0e6e55</code> · merge-base <code>410b6296a</code></p>
+    </header>
+
+    <section id="decision">
+      <h2><span class="num">1</span>What changed</h2>
+      <div class="callout">★ Stay on the ACP profile path. Do not send <code>skills_append</code> on agent-server 1.46 — <code>AgentLaunchAdditions</code> is <code>extra="forbid"</code> and only accepts <code>system_message_suffix_append</code> (max 32768). See <a class="src" href="https://github.com/gokay-ai/OpenHands/blob/56c0e6e552c5cf52ee036eac47dc5abb3ce31ffe/src/api/agent-server-adapter.ts#L1348-L1356">agent-server-adapter.ts:1348</a>.</div>
+      <p>Activation is pointer-only, so global <code>agent_settings</code> is often still OpenHands when Claude is active. An ACP <code>default</code> profile must keep launching via <code>agent_profile_id</code>. The overlay reads <code>acp_server</code> / <code>acp_command</code> from the profile detail, not from that stale settings blob.</p>
+
+      <figure class="fig">
+        <svg viewBox="0 0 920 280" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Before and after conversation start">
+          <text x="20" y="24" font-size="13" fill="#5a5a5a" font-family="ui-sans-serif,system-ui,sans-serif">Before (bug)</text>
+          <rect x="20" y="36" width="200" height="44" rx="6" fill="#f7f6f1" stroke="#bdbcb4"/>
+          <text x="32" y="63" font-size="12" font-family="ui-monospace,Menlo,monospace">useCreateConversation</text>
+          <rect x="248" y="36" width="200" height="44" rx="6" fill="#f7f6f1" stroke="#bdbcb4"/>
+          <text x="262" y="63" font-size="12" font-family="ui-monospace,Menlo,monospace">POST agent_profile_id</text>
+          <rect x="476" y="36" width="200" height="44" rx="6" fill="#fbf1e6" stroke="#b25b0e"/>
+          <text x="492" y="56" font-size="12" font-family="ui-monospace,Menlo,monospace" fill="#b25b0e">ACP strip</text>
+          <text x="492" y="72" font-size="11" font-family="ui-monospace,Menlo,monospace" fill="#b25b0e">skills=[]</text>
+          <rect x="704" y="36" width="196" height="44" rx="6" fill="#fdecec" stroke="#a02020"/>
+          <text x="716" y="63" font-size="12" font-family="ui-monospace,Menlo,monospace" fill="#a02020">Claude: no skill</text>
+          <path d="M220 58 H248" stroke="#8a8a82" stroke-width="1.5" marker-end="url(#arr)"/>
+          <path d="M448 58 H476" stroke="#8a8a82" stroke-width="1.5"/>
+          <path d="M676 58 H704" stroke="#8a8a82" stroke-width="1.5"/>
+
+          <text x="20" y="148" font-size="13" fill="#5a5a5a" font-family="ui-sans-serif,system-ui,sans-serif">After (this PR)</text>
+          <rect x="20" y="160" width="200" height="56" rx="6" fill="#fff" stroke="#c45c00" stroke-width="2"/>
+          <text x="32" y="182" font-size="12" font-family="ui-monospace,Menlo,monospace">getProfile(name)</text>
+          <text x="32" y="198" font-size="11" fill="#c45c00" font-family="ui-monospace,Menlo,monospace">acp_server=claude-code</text>
+          <rect x="248" y="160" width="200" height="56" rx="6" fill="#fff" stroke="#c45c00" stroke-width="2"/>
+          <text x="262" y="182" font-size="12" font-family="ui-monospace,Menlo,monospace">profile_id + suffix</text>
+          <text x="262" y="198" font-size="11" fill="#c45c00" font-family="ui-monospace,Menlo,monospace">system_message_suffix_append</text>
+          <rect x="476" y="160" width="200" height="56" rx="6" fill="#f7f6f1" stroke="#bdbcb4"/>
+          <text x="492" y="182" font-size="12" font-family="ui-monospace,Menlo,monospace">ACP still strips skills</text>
+          <text x="492" y="198" font-size="11" font-family="ui-monospace,Menlo,monospace">suffix copied/appended</text>
+          <rect x="704" y="160" width="196" height="56" rx="6" fill="#eaf6ec" stroke="#2f7a3a"/>
+          <text x="716" y="182" font-size="12" font-family="ui-monospace,Menlo,monospace" fill="#2f7a3a">Claude first prompt</text>
+          <text x="716" y="198" font-size="11" font-family="ui-monospace,Menlo,monospace" fill="#2f7a3a">CANVAS_ENABLED_SKILLS</text>
+          <path d="M220 188 H248" stroke="#c45c00" stroke-width="2"/>
+          <path d="M448 188 H476" stroke="#8a8a82" stroke-width="1.5"/>
+          <path d="M676 188 H704" stroke="#2f7a3a" stroke-width="2"/>
+        </svg>
+        <figcaption>Native ACP sourcing still clears <code>skills</code>. The suffix overlay is what survives.</figcaption>
+      </figure>
+    </section>
+
+    <section id="api">
+      <h2><span class="num">2</span>API before → after</h2>
+      <p>Compatibility: additive on the local start payload. Cloud create is unchanged. Codex / OpenHands profile launches still omit <code>agent_launch_additions</code>.</p>
+      <div class="ba">
+        <div>
+          <h3>Before</h3>
+          <pre>{
+  "agent_profile_id": "…",
+  "tags": { "client_source": "agent_canvas" }
+}</pre>
+        </div>
+        <div>
+          <h3>After (Claude only)</h3>
+          <pre>{
+  "agent_profile_id": "…",
+  "agent_launch_additions": {
+    "system_message_suffix_append":
+      "&lt;CANVAS_ENABLED_SKILLS&gt;…"
+  }
+}</pre>
+        </div>
+      </div>
+      <p>Enablement still uses <code>buildSkillEnablementFilter</code> (deny-list wins) from <a class="src" href="https://github.com/gokay-ai/OpenHands/blob/56c0e6e552c5cf52ee036eac47dc5abb3ce31ffe/src/utils/skill-enablement.ts#L49-L58">skill-enablement.ts:49</a>.</p>
+    </section>
+
+    <section id="files">
+      <h2><span class="num">3</span>Files</h2>
+      <table>
+        <thead><tr><th></th><th>File</th><th>Behavior</th></tr></thead>
+        <tbody>
+          <tr><td>🟢</td><td><a class="src" href="https://github.com/gokay-ai/OpenHands/blob/56c0e6e552c5cf52ee036eac47dc5abb3ce31ffe/src/utils/acp-claude-skill-bridge.ts">src/utils/acp-claude-skill-bridge.ts</a></td><td>Claude detection, catalog selection, 32 KiB pack (largest-first, truncate rather than drop automation).</td></tr>
+          <tr><td>✏️</td><td><a class="src" href="https://github.com/gokay-ai/OpenHands/blob/56c0e6e552c5cf52ee036eac47dc5abb3ce31ffe/src/hooks/mutation/use-create-conversation.ts#L218-L278">use-create-conversation.ts:218</a></td><td>Local ACP profile launches fetch detail and forward <code>acp_server</code> / <code>acp_command</code>. Lookup failure does not block start.</td></tr>
+          <tr><td>✏️</td><td><a class="src" href="https://github.com/gokay-ai/OpenHands/blob/56c0e6e552c5cf52ee036eac47dc5abb3ce31ffe/src/api/agent-server-adapter.ts#L1348-L1389">agent-server-adapter.ts:1348</a></td><td>Attaches the suffix on Claude profile and inline Claude launches.</td></tr>
+          <tr><td>✏️</td><td>agent-server-conversation-service.api.ts</td><td>Threads the two ACP hint fields into the encrypted-settings builder. Cloud path untouched.</td></tr>
+          <tr><td>🟢</td><td>tests/e2e/mock-llm/skills/mock-llm-claude-acp-skills.spec.ts</td><td>Claude-tagged mock ACP profile. Asserts POST overlay and GET <code>agent.agent_context.system_message_suffix</code> with <code>include_skills=true</code>.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="limits">
+      <h2><span class="num">4</span>Limits / follow-ups</h2>
+      <div class="callout warn">
+        <code>openhands-automation</code> is ~39 KiB; the launch addition cap is 32768. Packing largest-first keeps the automation heading, but later sections of that SKILL.md can truncate. software-agent-sdk#4717 (<code>skills_append</code>) is the real fix after a server bump.
+      </div>
+      <ul>
+        <li>Do not steal OpenHands#17279: runtime-services should concatenate onto the same field later, not overwrite this suffix.</li>
+        <li>Fork PR: delete <code>.pr/</code> before merge (cleanup workflow skips forks).</li>
+      </ul>
+    </section>
+  </main>
+</div>
+</body>
+</html>
