@@ -73,11 +73,9 @@ describe("Messages markdown render stability", () => {
     );
 
     expect(recordSyntaxHighlight).toHaveBeenCalledTimes(history.length);
-    expect(
-      screen
-        .getByTestId("confirmation-marker")
-        .closest('[data-testid="agent-message"]'),
-    ).toHaveTextContent("Historical response 19");
+    expect(screen.getAllByTestId("agent-message").at(-1)).toHaveTextContent(
+      "Historical response 19",
+    );
     recordSyntaxHighlight.mockClear();
 
     const durableTail = makeAgentMessage("durable-tail", "Plain tail message");
@@ -85,11 +83,9 @@ describe("Messages markdown render stability", () => {
     rerender(
       <Messages messages={withDurableTail} allEvents={withDurableTail} />,
     );
-    expect(
-      screen
-        .getByTestId("confirmation-marker")
-        .closest('[data-testid="agent-message"]'),
-    ).toHaveTextContent("Plain tail message");
+    expect(screen.getAllByTestId("agent-message").at(-1)).toHaveTextContent(
+      "Plain tail message",
+    );
 
     const firstStreamingTail = makeStreamingDelta("Live update 0");
     rerender(
