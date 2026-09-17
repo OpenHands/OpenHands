@@ -68,6 +68,16 @@ export interface DirectConversationInfo {
   execution_status?: string | null;
   /** Cloud-only sandbox lifecycle state. Omitted / null for local agent-server conversations. */
   sandbox_status?: string | null;
+  /** Availability of the runtime that backs a local conversation. */
+  runtime_info?: {
+    runtime_status:
+      | "available"
+      | "starting"
+      | "missing"
+      | "ownership_lost"
+      | "error";
+    can_resume: boolean;
+  } | null;
   metrics?: {
     accumulated_cost?: number | null;
     max_budget_per_task?: number | null;
@@ -419,7 +429,11 @@ export function toAppConversation(
     execution_status:
       (info.execution_status as AppConversation["execution_status"]) ??
       ExecutionStatus.IDLE,
-    sandbox_status: (info.sandbox_status as SandboxStatus | null) ?? null,
+    sandbox_status:
+      info.runtime_info?.runtime_status === "missing" &&
+      !info.runtime_info.can_resume
+        ? "MISSING"
+        : ((info.sandbox_status as SandboxStatus | null) ?? null),
     conversation_url: toConversationUrl(info.id),
     session_api_key: getAgentServerClientOptions().apiKey ?? null,
     sandbox_id: null,

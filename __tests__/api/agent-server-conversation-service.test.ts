@@ -888,6 +888,30 @@ describe("AgentServerConversationService", () => {
       expect(conversation?.sandbox_status).toBeNull();
     });
 
+    it("archives a local conversation whose runtime cannot resume", async () => {
+      mockHttpGet.mockResolvedValue({
+        data: [
+          {
+            id: "legacy-local-conversation",
+            created_at: "2024-01-01",
+            updated_at: "2024-01-01",
+            runtime_info: {
+              runtime_status: "missing",
+              can_resume: false,
+              runtime_error: null,
+            },
+          },
+        ],
+      });
+
+      const [conversation] =
+        await AgentServerConversationService.batchGetAppConversations([
+          "legacy-local-conversation",
+        ]);
+
+      expect(conversation?.sandbox_status).toBe("MISSING");
+    });
+
     it("sanitizes malformed optional conversation fields", async () => {
       mockHttpGet.mockResolvedValue({
         data: [

@@ -997,6 +997,30 @@ describe("toAppConversation", () => {
     updated_at: "2026-01-01T00:00:00Z",
   };
 
+  it("uses the archived status for a missing runtime that cannot resume", () => {
+    const result = toAppConversation({
+      ...baseInfo,
+      runtime_info: {
+        runtime_status: "missing",
+        can_resume: false,
+      },
+    });
+
+    expect(result.sandbox_status).toBe("MISSING");
+  });
+
+  it("does not archive a missing runtime that can resume", () => {
+    const result = toAppConversation({
+      ...baseInfo,
+      runtime_info: {
+        runtime_status: "missing",
+        can_resume: true,
+      },
+    });
+
+    expect(result.sandbox_status).toBeNull();
+  });
+
   it("combines stats.usage_to_metrics into metrics when the backend doesn't set metrics directly (#16480)", () => {
     const result = toAppConversation({
       ...baseInfo,
