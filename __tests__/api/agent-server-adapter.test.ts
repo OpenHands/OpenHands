@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MockInstance } from "vitest";
+import { getAcpProvider as getClientAcpProvider } from "@openhands/typescript-client";
 import { CANVAS_UI_CLIENT_TOOL_NAME } from "#/constants/canvas-ui";
 import { LAUNCH_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversation";
 
@@ -1519,9 +1520,7 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     expect(payload.agent).toBeUndefined();
     expect(payload.agent_settings.agent_kind).toBe("acp");
     expect(payload.agent_settings.acp_command).toEqual([
-      "npx",
-      "-y",
-      "@agentclientprotocol/claude-agent-acp@0.63.0",
+      ...getClientAcpProvider("claude-code")!.default_command,
     ]);
     expect(payload.agent_settings.acp_model).toBe("claude-opus-4-5");
     // LLM-only fields must not leak into the ACP settings payload.
@@ -1671,9 +1670,7 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     };
 
     expect(payload.agent_settings.acp_command).toEqual([
-      "npx",
-      "-y",
-      "@agentclientprotocol/claude-agent-acp@0.63.0",
+      ...getClientAcpProvider("claude-code")!.default_command,
     ]);
   });
 
@@ -1693,9 +1690,7 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     };
 
     expect(payload.agent_settings.acp_command).toEqual([
-      "npx",
-      "-y",
-      "@agentclientprotocol/codex-acp@1.1.7",
+      ...getClientAcpProvider("codex")!.default_command,
     ]);
   });
 
@@ -1840,9 +1835,7 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
 
     expect(acpPayload.agent_settings.agent_kind).toBe("acp");
     expect(acpPayload.agent_settings.acp_command).toEqual([
-      "npx",
-      "-y",
-      "@agentclientprotocol/claude-agent-acp@0.63.0",
+      ...getClientAcpProvider("claude-code")!.default_command,
     ]);
     expect(acpPayload.agent_settings.acp_model).toBe("claude-opus-4-5");
     // acp_env is no longer a forwarded ACP setting — a stale value on saved

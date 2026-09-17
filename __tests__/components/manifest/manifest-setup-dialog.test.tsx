@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import { SetupDialog } from "#/components/features/manifest/manifest-setup-dialog";
 import type { SetupPrerequisitesResult } from "#/hooks/query/use-manifest-prerequisites";
-import type { SetupEntry } from "#/manifests/types";
+import type { DeploymentCapabilities, SetupEntry } from "#/manifests/types";
 import {
   createSetup,
   createSetupEntry,
@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   runAction: vi.fn(),
   prerequisites: vi.fn(),
   capabilities: vi.fn(),
+  llmProfiles: vi.fn(),
   missingCreateEndpoints: vi.fn<(entry: SetupEntry) => string[]>(() => []),
   tracking: {
     trackAutomationSetupOpened: vi.fn(),
@@ -51,6 +52,18 @@ vi.mock("#/hooks/query/use-manifest-capabilities", () => ({
 
 vi.mock("#/hooks/query/use-manifest-prerequisites", () => ({
   useSetupPrerequisites: () => mocks.prerequisites(),
+}));
+
+vi.mock("#/hooks/query/use-agent-profiles", () => ({
+  useAgentProfiles: () => ({
+    data: { profiles: [{ id: "review-profile", name: "Reviewer" }] },
+    isLoading: false,
+  }),
+}));
+
+vi.mock("#/hooks/query/use-llm-profiles", () => ({
+  useLlmProfiles: (options: { enabled?: boolean } = {}) =>
+    mocks.llmProfiles(options),
 }));
 
 // Which endpoints an entry cannot be created without is read off the published
@@ -118,6 +131,10 @@ beforeEach(() => {
     unmet: [],
     isLoading: false,
   });
+  mocks.llmProfiles.mockReturnValue({
+    data: { profiles: [] },
+    isLoading: false,
+  });
   vi.mocked(AutomationService.validateDraft).mockResolvedValue({
     valid: true,
     errors: [],
@@ -161,6 +178,77 @@ const UNSUPPORTED = {
   isLoading: false,
 };
 
+const CRON_ONLY_CAPABILITIES: DeploymentCapabilities = {
+  ready: true,
+  maxAutomationTimeoutSeconds: 900,
+  triggerKinds: ["cron"],
+  eventSources: ["github"],
+  eventTypes: ["issue_comment.created"],
+  triggers: {
+    cron: { minIntervalSeconds: 60, timezones: ["UTC"] },
+    event: { filterLanguage: "jmespath", filterFunctions: ["icontains"] },
+  },
+  features: [],
+};
+
+const EVENT_FIRST_MIXED_TRIGGER_ENTRY: SetupEntry = (() => {
+  const { form } = createSetup();
+  return createSetupEntry({
+    setup: createSetup({
+      form: {
+        ...form,
+        triggers: {
+          event: {
+            source: {
+              type: "event-source",
+              label: "Event source",
+              help: "Where events come from.",
+              default: "github",
+              required: true,
+            },
+            on: {
+              type: "event-type",
+              label: "Event type",
+              help: "Which event to watch.",
+              default: "issue_comment.created",
+              required: true,
+            },
+            mention: {
+              type: "text",
+              label: "Mention",
+              help: "Text that must appear in the comment.",
+              default: "@openhands",
+              required: true,
+            },
+          },
+          cron: form.triggers!.cron,
+        },
+      },
+      filter: "icontains(comment.body, '{{form.mention}}')",
+    }),
+  });
+})();
+
+const LLM_PROFILE_ENTRY: SetupEntry = (() => {
+  const { form } = createSetup();
+  return createSetupEntry({
+    setup: createSetup({
+      form: {
+        ...form,
+        args: {
+          ...form.args,
+          model: {
+            type: "llm-profile",
+            label: "LLM profile",
+            help: "Which saved profile should run this automation.",
+            required: false,
+          },
+        },
+      },
+    }),
+  });
+})();
+
 describe("SetupDialog", () => {
   it("asks about an unconnected integration before it asks anything else", async () => {
     // Arrange — an advisory integration, which is shown but does not block.
@@ -183,6 +271,39 @@ describe("SetupDialog", () => {
     // Assert
     expect(screen.getByTestId("setup-field-widgetName")).toBeInTheDocument();
     expect(screen.queryByTestId("setup-prerequisites")).toBeNull();
+  });
+
+  it("hides trigger variants unsupported by the deployment", async () => {
+    mocks.capabilities.mockReturnValue({
+      capabilities: CRON_ONLY_CAPABILITIES,
+      supported: true,
+      unmet: [],
+      isLoading: false,
+    });
+    mocks.runAction.mockResolvedValue({ response: { id: "automation-1" } });
+    const { user } = renderDialog(EVENT_FIRST_MIXED_TRIGGER_ENTRY);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("setup-field-schedule")).toBeInTheDocument(),
+    );
+    expect(screen.queryByTestId("setup-trigger-kind")).toBeNull();
+    expect(screen.queryByTestId("setup-field-source")).toBeNull();
+    await fillForm(user);
+
+    await user.click(screen.getByTestId("setup-continue-button"));
+    await waitFor(() =>
+      expect(screen.getByTestId("setup-review")).toBeInTheDocument(),
+    );
+    await user.click(screen.getByTestId("setup-continue-button"));
+
+    await waitFor(() => expect(mocks.runAction).toHaveBeenCalled());
+    expect(mocks.runAction.mock.calls[0][2]).toEqual({
+      name: "Widget monitor - OpenHands/agent-server-gui",
+      prompt: "Report on Widgets in OpenHands/agent-server-gui.",
+      repos: [{ url: "OpenHands/agent-server-gui", provider: "github" }],
+      trigger: { type: "cron", schedule: "*/15 * * * *" },
+    });
+    expect(mocks.runAction.mock.calls[0][3]).toBe("cron");
   });
 
   it("holds an unanswered required field back from the service", async () => {
@@ -229,6 +350,56 @@ describe("SetupDialog", () => {
     });
   });
 
+  it("waits for LLM profiles before continuing", () => {
+    // Arrange — profile names come from the backend, not the manifest, so the
+    // form should not validate while that closed set is still unknown.
+    mocks.llmProfiles.mockReturnValue({ data: undefined, isLoading: true });
+
+    // Act
+    renderDialog(LLM_PROFILE_ENTRY);
+
+    // Assert
+    expect(mocks.llmProfiles).toHaveBeenCalledWith({ enabled: true });
+    expect(screen.getByTestId("setup-continue-button")).toBeDisabled();
+    expect(screen.getByTestId("setup-field-model")).toHaveAttribute(
+      "role",
+      "combobox",
+    );
+    expect(screen.getByTestId("setup-field-model")).toBeDisabled();
+  });
+
+  it("submits a selected backend LLM profile name", async () => {
+    // Arrange
+    mocks.llmProfiles.mockReturnValue({
+      data: { profiles: [{ name: "Fast" }, { name: "Smart" }] },
+      isLoading: false,
+    });
+    mocks.runAction.mockResolvedValue({ response: { id: "automation-1" } });
+    const { user } = renderDialog(LLM_PROFILE_ENTRY);
+
+    // Act
+    const modelInput = screen.getByTestId("setup-field-model");
+    expect(modelInput).toHaveAttribute("role", "combobox");
+    await user.click(modelInput);
+    await user.click(await screen.findByText("Smart"));
+    await fillForm(user);
+    await user.click(screen.getByTestId("setup-continue-button"));
+    await waitFor(() =>
+      expect(screen.getByTestId("setup-review")).toBeInTheDocument(),
+    );
+    await user.click(screen.getByTestId("setup-continue-button"));
+
+    // Assert
+    await waitFor(() => expect(mocks.runAction).toHaveBeenCalled());
+    expect(mocks.runAction.mock.calls[0][2]).toEqual({
+      name: "Widget monitor - OpenHands/agent-server-gui",
+      model: "Smart",
+      prompt: "Report on Widgets in OpenHands/agent-server-gui.",
+      repos: [{ url: "OpenHands/agent-server-gui", provider: "github" }],
+      trigger: { type: "cron", schedule: "*/15 * * * *" },
+    });
+  });
+
   it("offers the conversation fallback when the deployment cannot run a direct entry", async () => {
     // Arrange — capabilities answered and came up short, and the entry ships
     // a fallback-conversation seed.
@@ -256,6 +427,8 @@ describe("SetupDialog", () => {
     expect(mocks.runAction).toHaveBeenCalledWith(
       entry,
       expect.anything(),
+      null,
+      "cron",
       null,
     );
   });
@@ -342,5 +515,36 @@ describe("SetupDialog", () => {
     );
     expect(screen.queryByTestId("setup-review")).toBeNull();
     expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+});
+
+it("creates a bundle with an optional selected agent profile", async () => {
+  mocks.capabilities.mockReturnValue({
+    capabilities: {
+      ...CRON_ONLY_CAPABILITIES,
+      features: ["agentProfiles", "customTarball"],
+    },
+    supported: true,
+    unmet: [],
+    isLoading: false,
+  });
+  const entry = {
+    ...BUNDLE_ENTRY,
+    requires: {
+      ...BUNDLE_ENTRY.requires,
+      features: ["agentProfiles", "customTarball"],
+    },
+  };
+  const { user } = renderDialog(entry);
+  await fillForm(user);
+  await user.click(screen.getByTestId("automation-agent-profile"));
+  await user.click(await screen.findByRole("option", { name: "Reviewer" }));
+  await user.click(screen.getByTestId("setup-continue-button"));
+  await waitFor(() =>
+    expect(screen.getByTestId("setup-review")).toBeInTheDocument(),
+  );
+  await user.click(screen.getByTestId("setup-continue-button"));
+  expect(mocks.runAction.mock.calls[0][1]).toMatchObject({
+    agent_profile_id: "review-profile",
   });
 });
