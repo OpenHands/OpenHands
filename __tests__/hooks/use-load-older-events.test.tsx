@@ -383,6 +383,96 @@ describe("useLoadOlderEvents", () => {
     });
   });
 
+  it("drops in-flight results and does not poison state when navigating to another conversation", async () => {
+    // Seed the store with a single recent event for conversation A so the
+    // hook has an anchor before the request starts.
+    const recent = makeEvent("evt-recent", "2024-06-01T00:00:00Z");
+    act(() => {
+      useEventStore.getState().addEvent(recent);
+    });
+
+    // Hold the page request for conversation A in flight.
+    let resolvePage!: (page: EventSearchPage<OpenHandsEvent>) => void;
+    const pendingPage = new Promise<EventSearchPage<OpenHandsEvent>>(
+      (resolve) => {
+        resolvePage = resolve;
+      },
+    );
+
+    const olderA = [
+      makeEvent("evt-older-a-1", "2024-05-01T00:00:00Z"),
+      makeEvent("evt-older-a-2", "2024-05-15T00:00:00Z"),
+    ];
+    const spy = vi
+      .spyOn(EventService, "searchEvents")
+      .mockReturnValueOnce(pendingPage);
+
+    const { result, rerender } = renderHook(
+      ({ conversationId }: { conversationId: string | null }) =>
+        useLoadOlderEvents(conversationId),
+      {
+        wrapper,
+        initialProps: { conversationId: "conv-a" },
+      },
+    );
+
+    // Start the load, then navigate to conversation B while it's in flight.
+    await act(async () => {
+      const loadPromise = result.current.loadOlder();
+      rerender({ conversationId: "conv-b" });
+      // Resolve A's stale request after the navigation.
+      resolvePage(makePage(olderA, null));
+      await loadPromise;
+    });
+
+    // A's events must NOT be injected into the store.
+    const storeIds = useEventStore
+      .getState()
+      .events.map((e) => (e as any).id);
+    expect(storeIds).toEqual(["evt-recent"]);
+    expect(storeIds).not.toContain("evt-older-a-1");
+
+    // The stale request must not permanently disable "load older".
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(result.current.hasMore).toBe(true);
+  });
+
+  it("resets loading state when the stale request finally settles", async () => {
+    act(() => {
+      useEventStore
+        .getState()
+        .addEvent(makeEvent("evt-recent", "2024-06-01T00:00:00Z"));
+    });
+
+    let resolvePage!: (page: EventSearchPage<OpenHandsEvent>) => void;
+    const pendingPage = new Promise<EventSearchPage<OpenHandsEvent>>(
+      (resolve) => {
+        resolvePage = resolve;
+      },
+    );
+
+    vi.spyOn(EventService, "searchEvents").mockReturnValueOnce(pendingPage);
+
+    const { result, rerender } = renderHook(
+      ({ conversationId }: { conversationId: string | null }) =>
+        useLoadOlderEvents(conversationId),
+      {
+        wrapper,
+        initialProps: { conversationId: "conv-a" },
+      },
+    );
+
+    await act(async () => {
+      const loadPromise = result.current.loadOlder();
+      rerender({ conversationId: "conv-b" });
+      resolvePage(makePage([makeEvent("evt-older-a", "2024-05-01T00:00:00Z")], null));
+      await loadPromise;
+    });
+
+    // After navigation, the new conversation's loading state is restored.
+    expect(result.current.isLoading).toBe(false);
+  });
+
   it("does not paginate on start-task placeholder conversation ids", async () => {
     act(() => {
       useEventStore
