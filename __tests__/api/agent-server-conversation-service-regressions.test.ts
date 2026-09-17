@@ -344,6 +344,26 @@ describe("AgentServerConversationService", () => {
         "Unable to load conversations because the selected agent server returned",
       );
     });
+
+    it("rethrows a systemic backend error instead of dropping every row", async () => {
+      // The active backend disappears mid-search (removed/switched while the
+      // request is in flight): conversion then throws NoBackendAvailableError
+      // for every valid row. That is systemic, not per-record corruption, so
+      // the query must reject rather than resolve with a silently empty page.
+      const searchConversations = vi.fn().mockImplementation(async () => {
+        setRegisteredBackends([]);
+        return { items: [{ id: "was-valid" }], next_page_id: null };
+      });
+      mockConversationClient.mockReturnValue({ searchConversations });
+      const warn = vi
+        .spyOn(console, "warn")
+        .mockImplementation(() => undefined);
+
+      await expect(
+        AgentServerConversationService.searchConversations(),
+      ).rejects.toThrow("No backend is configured.");
+      expect(warn).not.toHaveBeenCalled();
+    });
   });
 
   describe("createConversation", () => {

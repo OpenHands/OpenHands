@@ -49,6 +49,7 @@ import {
 import { GetVSCodeUrlResponse } from "../open-hands.types";
 import {
   getAgentServerClientOptions,
+  isNoBackendAvailableError,
   NoBackendAvailableError,
 } from "../agent-server-client-options";
 import SettingsService from "../settings-service/settings-service.api";
@@ -365,6 +366,11 @@ function toResilientConversationPage(page: unknown): AppConversationPage {
       if (conversation.tags?.[LOCAL_PLANNER_PARENT_TAG_KEY]) continue;
       items.push(toAppConversation(conversation));
     } catch (error) {
+      // Systemic failures (e.g. the active backend was removed mid-search) are
+      // not per-record corruption: swallowing them would report every valid row
+      // as malformed and resolve with a silently empty page. Rethrow so the
+      // query surfaces the real error instead.
+      if (isNoBackendAvailableError(error)) throw error;
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       console.warn(
