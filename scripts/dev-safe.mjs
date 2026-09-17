@@ -421,7 +421,7 @@ export const AGENT_SERVER_IMPORT_MODULES = "canvas_ui_tool";
  *   edits are picked up without a manual reinstall. The agent-server itself
  *   is rebuilt from local source on each invocation (--reinstall).
  * - OH_AGENT_SERVER_GIT_REF: Git commit SHA or branch name
- * - OH_AGENT_SERVER_VERSION: Specific PyPI version (e.g., "1.44.0")
+ * - OH_AGENT_SERVER_VERSION: Specific PyPI version (e.g., "1.49.1")
  *
  * If none are set, defaults to the released version specified by
  * DEFAULT_AGENT_SERVER_VERSION. Set OH_AGENT_SERVER_GIT_REF to use a
@@ -789,8 +789,21 @@ export function buildAgentServerTelemetryEnv(env = process.env) {
  */
 export function buildAgentServerEnv(config, options = {}) {
   const { vscodeBasePath = null, env = process.env } = options;
+  const conversationRuntimeEnv = Object.fromEntries(
+    [
+      "OH_CONVERSATION_RUNTIME",
+      "OH_CONVERSATION_IMAGE",
+      "OH_CONVERSATION_CONTAINER_MEMORY",
+      "OH_CONVERSATION_CONTAINER_CPUS",
+      "OH_CONVERSATION_CONTAINER_PIDS_LIMIT",
+      "OH_CONVERSATION_CONTAINER_STARTUP_TIMEOUT",
+    ]
+      .filter((key) => env[key] !== undefined)
+      .map((key) => [key, env[key]]),
+  );
   return {
     ...buildAgentServerTelemetryEnv(env),
+    ...conversationRuntimeEnv,
     // Force Python to use UTF-8 for all file I/O and streams.
     //
     // On Windows, Python defaults to the system ANSI codepage (e.g. cp1252).

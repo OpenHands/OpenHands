@@ -1,3 +1,4 @@
+import { AutomationAgentProfileSelector } from "../agent-profile-selector";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
@@ -19,6 +20,8 @@ import {
   formatTimeOfDay,
   parseTimeOfDay,
   formatEventOn,
+  validateCronSchedule,
+  CRON_EXPRESSION_EXAMPLE,
   type SchedulePresetKind,
 } from "#/utils/automation-schedule";
 import {
@@ -62,6 +65,7 @@ const WEEKDAY_KEYS: I18nKey[] = [
 ];
 
 interface FormState {
+  agentProfileId: string | null;
   name: string;
   prompt: string;
   model: string;
@@ -79,6 +83,7 @@ function buildInitialState(automation: Automation): FormState {
     return {
       name: automation.name,
       prompt: automation.prompt ?? "",
+      agentProfileId: automation.agent_profile_id ?? null,
       model: automation.model ?? "",
       frequency: "custom",
       weekday: 1,
@@ -93,6 +98,7 @@ function buildInitialState(automation: Automation): FormState {
     return {
       name: automation.name,
       prompt: automation.prompt ?? "",
+      agentProfileId: automation.agent_profile_id ?? null,
       model: automation.model ?? "",
       frequency: "custom",
       weekday: 1,
@@ -108,6 +114,7 @@ function buildInitialState(automation: Automation): FormState {
   return {
     name: automation.name,
     prompt: automation.prompt ?? "",
+    agentProfileId: automation.agent_profile_id ?? null,
     model: automation.model ?? "",
     frequency: parsed.kind,
     weekday: parsed.kind === "weekly" ? (parsed.weekday ?? 1) : 1,
@@ -152,12 +159,14 @@ export function EditAutomationModal({
   const [form, setForm] = useState<FormState>(initial);
   const [nameError, setNameError] = useState<string | null>(null);
   const [timeoutError, setTimeoutError] = useState<string | null>(null);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       setForm(initial);
       setNameError(null);
       setTimeoutError(null);
+      setScheduleError(null);
     }
   }, [isOpen, initial]);
 
@@ -191,11 +200,6 @@ export function EditAutomationModal({
     label: t(key),
   }));
 
-  const isTimeEditable =
-    !form.isCustomSchedule ||
-    parseTimeOfDay(form.timeOfDay) !== null ||
-    form.timeOfDay === "";
-
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
@@ -225,7 +229,10 @@ export function EditAutomationModal({
       body.prompt = trimmedPrompt.length === 0 ? null : trimmedPrompt;
     }
 
-    const selectedModel = form.model.trim();
+    if (form.agentProfileId !== (automation.agent_profile_id ?? null)) {
+      body.agent_profile_id = form.agentProfileId;
+    }
+    const selectedModel = form.agentProfileId ? "" : form.model.trim();
     const initialModel = automation.model ?? "";
     if (selectedModel !== initialModel) {
       body.model = selectedModel === "" ? null : selectedModel;
@@ -235,7 +242,22 @@ export function EditAutomationModal({
       body.timeout = timeoutResult.value;
     }
 
-    if (!form.isCustomSchedule && form.frequency !== "custom") {
+    if (automation.trigger.type !== "event" && form.isCustomSchedule) {
+      // An untouched schedule is the service's business, not the form's.
+      const trimmedSchedule = form.rawSchedule.trim();
+      if (trimmedSchedule !== (automation.trigger.schedule ?? "").trim()) {
+        const scheduleResult = validateCronSchedule(form.rawSchedule);
+        if ("errorKey" in scheduleResult) {
+          setScheduleError(t(scheduleResult.errorKey));
+          return;
+        }
+        body.trigger = {
+          ...automation.trigger,
+          schedule: scheduleResult.schedule,
+        };
+      }
+      setScheduleError(null);
+    } else if (!form.isCustomSchedule && form.frequency !== "custom") {
       const parsedTime = parseTimeOfDay(form.timeOfDay);
       if (parsedTime) {
         const newSchedule = buildCronSchedule({
@@ -337,23 +359,33 @@ export function EditAutomationModal({
             </label>
           )}
 
-          {modelSpec.present && (isLoadingProfiles || profiles.length > 0) && (
-            <SettingsDropdownInput
-              testId="edit-automation-model"
-              name="model"
-              label={modelSpec.label}
-              items={modelItems}
-              selectedKey={form.model || ACTIVE_PROFILE_KEY}
-              isLoading={isLoadingProfiles}
-              placeholder={t(I18nKey.COMMON$ACTIVE_PROFILE)}
-              onSelectionChange={(key) =>
-                setForm((f) => ({
-                  ...f,
-                  model: key && key !== ACTIVE_PROFILE_KEY ? String(key) : "",
-                }))
+          {capabilities?.features.includes("agentProfiles") && (
+            <AutomationAgentProfileSelector
+              value={form.agentProfileId}
+              onChange={(agentProfileId) =>
+                setForm((current) => ({ ...current, agentProfileId }))
               }
             />
           )}
+          {!form.agentProfileId &&
+            modelSpec.present &&
+            (isLoadingProfiles || profiles.length > 0) && (
+              <SettingsDropdownInput
+                testId="edit-automation-model"
+                name="model"
+                label={modelSpec.label}
+                items={modelItems}
+                selectedKey={form.model || ACTIVE_PROFILE_KEY}
+                isLoading={isLoadingProfiles}
+                placeholder={t(I18nKey.COMMON$ACTIVE_PROFILE)}
+                onSelectionChange={(key) =>
+                  setForm((f) => ({
+                    ...f,
+                    model: key && key !== ACTIVE_PROFILE_KEY ? String(key) : "",
+                  }))
+                }
+              />
+            )}
 
           {timeoutSpec.present && (
             <div className="flex flex-col gap-2.5 w-full min-w-0">
@@ -464,7 +496,7 @@ export function EditAutomationModal({
                   onChange={(e) =>
                     setForm((f) => ({ ...f, timeOfDay: e.target.value }))
                   }
-                  disabled={form.isCustomSchedule && !isTimeEditable}
+                  disabled={form.isCustomSchedule}
                   className={cn(
                     formControlSettingsFieldClassName,
                     "disabled:bg-[var(--oh-surface-raised)]",
@@ -478,20 +510,18 @@ export function EditAutomationModal({
               </label>
 
               {form.isCustomSchedule && (
-                <p
-                  className="text-xs text-muted"
-                  data-testid="custom-schedule-hint"
-                >
-                  {t(I18nKey.AUTOMATIONS$CUSTOM_SCHEDULE_HINT)}
-                  {form.rawSchedule && (
-                    <>
-                      {" "}
-                      <code className="text-xs text-content">
-                        {form.rawSchedule}
-                      </code>
-                    </>
-                  )}
-                </p>
+                <SettingsInput
+                  testId="edit-automation-cron"
+                  name="cron"
+                  type="text"
+                  label={t(I18nKey.AUTOMATIONS$CRON_EXPRESSION)}
+                  value={form.rawSchedule}
+                  onChange={(value) =>
+                    setForm((f) => ({ ...f, rawSchedule: value }))
+                  }
+                  error={scheduleError ?? undefined}
+                  placeholder={CRON_EXPRESSION_EXAMPLE}
+                />
               )}
             </>
           ) : null}

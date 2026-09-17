@@ -1,0 +1,811 @@
+/* eslint-disable local/no-direct-agent-server-fetch -- HTTP contract tests intentionally exercise mock handlers, including malformed requests. */
+let resetTestHandlersMockSettings: typeof import("#/mocks/settings-handlers").resetTestHandlersMockSettings;
+import { http, HttpResponse } from "msw";
+import { server } from "#/mocks/node";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { SettingsSchema } from "#/types/settings";
+import {
+  OPENAI_SUBSCRIPTION_DEVICE_POLL_PATH,
+  OPENAI_SUBSCRIPTION_STATUS_PATH,
+} from "#/constants/llm-subscription";
+
+const BASE_URL = "http://localhost:3000";
+
+const jsonRequest = (body: unknown, method: "PATCH" | "POST"): RequestInit => ({
+  method,
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(body),
+});
+
+const getJson = async <T>(path: string, init?: RequestInit) => {
+  const response = await fetch(`${BASE_URL}${path}`, init);
+  return { response, body: (await response.json()) as T };
+};
+
+beforeEach(async () => {
+  vi.resetModules();
+  const handlers = await import("#/mocks/settings-handlers");
+  resetTestHandlersMockSettings = handlers.resetTestHandlersMockSettings;
+  server.resetHandlers(
+    ...handlers.SETTINGS_HANDLERS,
+    http.all("*", () => new HttpResponse(null, { status: 599 })),
+  );
+});
+
+describe("mock settings schemas and state", () => {
+  it("declines settings requests outside the supported API root", async () => {
+    expect((await fetch(`${BASE_URL}/extra/api/settings`)).status).toBe(599);
+  });
+
+  it("replaces an existing array with an object patch without retaining array indexes", async () => {
+    await getJson(
+      "/api/settings",
+      jsonRequest(
+        { agent_settings_diff: { llm: { stop: ["old", "other"] } } },
+        "PATCH",
+      ),
+    );
+    const result = await getJson<{
+      agent_settings: { llm: { stop: unknown } };
+    }>(
+      "/api/settings",
+      jsonRequest(
+        { agent_settings_diff: { llm: { stop: { mode: "new" } } } },
+        "PATCH",
+      ),
+    );
+    expect(result.response.status).toBe(200);
+    expect(result.body.agent_settings.llm.stop).toEqual({ mode: "new" });
+  });
+
+  it("resets mutated settings, active profiles, and subscription state in the same module instance", async () => {
+    const initial = await getJson("/api/settings");
+    const updated = await getJson(
+      "/api/settings",
+      jsonRequest(
+        {
+          conversation_settings_diff: { max_iterations: 7 },
+          misc_settings_diff: { app_preferences: { language: "fr" } },
+        },
+        "PATCH",
+      ),
+    );
+    expect(updated.response.status).toBe(200);
+    expect(
+      (
+        await getJson(
+          "/api/profiles/reset-me",
+          jsonRequest({ llm: { model: "openai/gpt-4o" } }, "POST"),
+        )
+      ).response.status,
+    ).toBe(201);
+    expect(
+      (await getJson("/api/profiles/reset-me/activate", { method: "POST" }))
+        .response.status,
+    ).toBe(200);
+    const profilesBefore = await getJson("/api/profiles");
+    expect(profilesBefore.body).toMatchObject({
+      active_profile: "reset-me",
+      profiles: [{ name: "reset-me" }],
+    });
+    expect(
+      (await getJson(OPENAI_SUBSCRIPTION_DEVICE_POLL_PATH, { method: "POST" }))
+        .body,
+    ).toMatchObject({ connected: true });
+    resetTestHandlersMockSettings();
+    expect((await getJson("/api/settings")).body).toEqual(initial.body);
+    expect((await getJson("/api/profiles")).body).toEqual({
+      profiles: [],
+      active_profile: null,
+    });
+    expect((await getJson(OPENAI_SUBSCRIPTION_STATUS_PATH)).body).toEqual({
+      connected: false,
+      account_email: null,
+      expires_at: null,
+    });
+  });
+  it("serves field contracts that control defaults, masking, validation, and conditional settings", async () => {
+    const contract = (
+      section: string,
+      value_type: string,
+      defaultValue: unknown,
+      prominence: string,
+      overrides: Record<string, unknown> = {},
+    ) => ({
+      section,
+      value_type,
+      default: defaultValue,
+      prominence,
+      secret: false,
+      required: false,
+      choices: [],
+      depends_on: [],
+      ...overrides,
+    });
+    const critic = { depends_on: ["verification.critic_enabled"] };
+    const refinement = {
+      depends_on: [
+        "verification.critic_enabled",
+        "verification.enable_iterative_refinement",
+      ],
+    };
+    const expectedAgent = {
+      enable_sub_agents: contract("general", "boolean", false, "major"),
+      enable_switch_llm_tool: contract("general", "boolean", true, "major"),
+      tool_concurrency_limit: contract("general", "integer", 1, "major"),
+      "llm.model": contract("llm", "string", "openai/gpt-5.6-sol", "critical", {
+        required: true,
+      }),
+      "llm.api_key": contract("llm", "string", null, "critical", {
+        secret: true,
+      }),
+      "llm.base_url": contract("llm", "string", null, "critical"),
+      "llm.temperature": contract("llm", "number", null, "minor"),
+      "verification.critic_enabled": contract(
+        "verification",
+        "boolean",
+        false,
+        "critical",
+      ),
+      "verification.critic_mode": contract(
+        "verification",
+        "string",
+        "finish_and_message",
+        "major",
+        {
+          ...critic,
+          choices: ["finish_and_message", "all_actions"],
+        },
+      ),
+      "verification.enable_iterative_refinement": contract(
+        "verification",
+        "boolean",
+        false,
+        "critical",
+        critic,
+      ),
+      "verification.critic_api_key": contract(
+        "verification",
+        "string",
+        null,
+        "critical",
+        { ...critic, secret: true },
+      ),
+      "verification.critic_threshold": contract(
+        "verification",
+        "number",
+        0.6,
+        "minor",
+        refinement,
+      ),
+      "verification.max_refinement_iterations": contract(
+        "verification",
+        "integer",
+        3,
+        "minor",
+        refinement,
+      ),
+      "verification.critic_server_url": contract(
+        "verification",
+        "string",
+        null,
+        "minor",
+        critic,
+      ),
+      "verification.critic_model_name": contract(
+        "verification",
+        "string",
+        null,
+        "minor",
+        critic,
+      ),
+      "condenser.enable_default_condenser": contract(
+        "condenser",
+        "boolean",
+        true,
+        "critical",
+        { required: true },
+      ),
+      "condenser.condenser_max_size": contract(
+        "condenser",
+        "integer",
+        null,
+        "major",
+      ),
+      "agent_context.load_memory": contract(
+        "agent_context",
+        "boolean",
+        false,
+        "major",
+      ),
+    };
+    const expectedConversation = {
+      max_iterations: contract("general", "integer", 500, "major", {
+        required: true,
+      }),
+      confirmation_mode: contract("verification", "boolean", false, "major", {
+        required: true,
+      }),
+      security_analyzer: contract("verification", "string", "llm", "major", {
+        choices: ["llm", "none"],
+        depends_on: ["confirmation_mode"],
+      }),
+    };
+    for (const version of ["", "/v1"]) {
+      for (const [schema, expected] of [
+        ["agent", expectedAgent],
+        ["conversation", expectedConversation],
+      ] as const) {
+        const { response, body } = await getJson<SettingsSchema>(
+          `/api${version}/settings/${schema}-schema`,
+        );
+        expect(response.status).toBe(200);
+        const fields = body.sections.flatMap(
+          ({ key: sectionKey, fields: sectionFields }) =>
+            sectionFields.map(
+              ({
+                key,
+                section,
+                value_type,
+                default: defaultValue,
+                prominence,
+                secret,
+                required,
+                choices,
+                depends_on,
+              }) => {
+                expect(section).toBe(sectionKey);
+                return [
+                  key,
+                  {
+                    section,
+                    value_type,
+                    default: defaultValue,
+                    prominence,
+                    secret,
+                    required,
+                    choices: choices.map(({ value }) => value),
+                    depends_on,
+                  },
+                ];
+              },
+            ),
+        );
+        expect(Object.fromEntries(fields)).toEqual(expected);
+      }
+    }
+  });
+
+  it("serves both supported versions of each settings schema", async () => {
+    for (const path of [
+      "/api/settings/agent-schema",
+      "/api/v1/settings/agent-schema",
+    ]) {
+      const { response, body } = await getJson<{
+        model_name: string;
+        sections: { key: string }[];
+      }>(path);
+      expect(response.ok).toBe(true);
+      expect(body.model_name).toBe("AgentSettings");
+      expect(body.sections.map(({ key }) => key)).toEqual([
+        "general",
+        "llm",
+        "verification",
+        "condenser",
+        "agent_context",
+      ]);
+    }
+
+    for (const path of [
+      "/api/settings/conversation-schema",
+      "/api/v1/settings/conversation-schema",
+    ]) {
+      const { response, body } = await getJson<{
+        model_name: string;
+        sections: { key: string }[];
+      }>(path);
+      expect(response.ok).toBe(true);
+      expect(body).toMatchObject({
+        model_name: "ConversationSettings",
+        sections: [{ key: "general" }, { key: "verification" }],
+      });
+    }
+  });
+
+  it("returns deterministic defaults from both settings APIs", async () => {
+    const modern = await getJson<{
+      agent_settings: { llm: { model: string } };
+      conversation_settings: { confirmation_mode: boolean };
+      llm_api_key_is_set: boolean;
+      misc_settings: { app_preferences: Record<string, unknown> };
+    }>("/api/settings");
+    expect(modern.response.ok).toBe(true);
+    expect(modern.body).toMatchObject({
+      agent_settings: {
+        llm: { model: "openai/gpt-5.6-sol" },
+        condenser: { enable_default_condenser: true, condenser_max_size: null },
+        enable_sub_agents: false,
+        tool_concurrency_limit: 1,
+      },
+      conversation_settings: { confirmation_mode: false },
+      llm_api_key_is_set: false,
+      misc_settings: {
+        app_preferences: {
+          language: null,
+          user_consents_to_analytics: null,
+          enable_sound_notifications: null,
+          git_user_name: null,
+          git_user_email: null,
+          disabled_skills: [],
+        },
+      },
+    });
+
+    const legacy = await getJson<{ agent_settings: unknown }>(
+      "/api/v1/settings",
+    );
+    expect(legacy.response.ok).toBe(true);
+    expect(legacy.body.agent_settings).toEqual(
+      expect.objectContaining({
+        llm: expect.objectContaining({ model: "openai/gpt-5.6-sol" }),
+      }),
+    );
+  });
+
+  it("rejects empty and no-op incremental updates", async () => {
+    const nullBody = await getJson<{ error: string }>(
+      "/api/settings",
+      jsonRequest(null, "PATCH"),
+    );
+    expect(nullBody.response.status).toBe(400);
+    expect(nullBody.body).toEqual({ error: "Empty body" });
+
+    for (const body of [
+      {},
+      {
+        agent_settings_diff: null,
+        conversation_settings_diff: null,
+        misc_settings_diff: null,
+      },
+    ]) {
+      const result = await getJson<{ error: string }>(
+        "/api/settings",
+        jsonRequest(body, "PATCH"),
+      );
+      expect(result.response.status).toBe(400);
+      expect(result.body.error).toContain("At least one of");
+    }
+  });
+
+  it("deep-merges agent settings and persists all supported diff groups", async () => {
+    const update = await getJson<{
+      agent_settings: Record<string, unknown>;
+      conversation_settings: Record<string, unknown>;
+      llm_api_key_is_set: boolean;
+      misc_settings: { app_preferences: Record<string, unknown> };
+    }>(
+      "/api/settings",
+      jsonRequest(
+        {
+          agent_settings_diff: {
+            llm: {
+              api_key: "sk-secret",
+              base_url: "https://api.example.test/v1",
+              stop: ["DONE"],
+              parameters: { reasoning: "high" },
+            },
+            verification: { critic_enabled: true },
+            mcp_config: null,
+          },
+          conversation_settings_diff: {
+            max_iterations: 12,
+            confirmation_mode: true,
+          },
+          misc_settings_diff: {
+            app_preferences: {
+              language: "fr",
+              disabled_skills: ["legacy-skill"],
+            },
+          },
+        },
+        "PATCH",
+      ),
+    );
+    expect(update.response.ok).toBe(true);
+    expect(update.body).toMatchObject({
+      agent_settings: {
+        llm: {
+          model: "openai/gpt-5.6-sol",
+          api_key: "sk-secret",
+          base_url: "https://api.example.test/v1",
+          stop: ["DONE"],
+          parameters: { reasoning: "high" },
+        },
+        verification: {
+          critic_enabled: true,
+          enable_iterative_refinement: false,
+        },
+        mcp_config: null,
+      },
+      conversation_settings: {
+        max_iterations: 12,
+        confirmation_mode: true,
+      },
+      llm_api_key_is_set: true,
+      misc_settings: {
+        app_preferences: {
+          language: "fr",
+          disabled_skills: ["legacy-skill"],
+        },
+      },
+    });
+  });
+
+  it("replaces incompatible nested values without leaking their previous shape", async () => {
+    const result = await getJson<{
+      agent_settings: {
+        verification: unknown;
+        llm: { model: unknown };
+      };
+    }>(
+      "/api/settings",
+      jsonRequest(
+        {
+          agent_settings_diff: {
+            verification: "disabled",
+            llm: { model: { family: "custom" } },
+          },
+        },
+        "PATCH",
+      ),
+    );
+
+    expect(result.body.agent_settings.verification).toBe("disabled");
+    expect(result.body.agent_settings.llm.model).toEqual({ family: "custom" });
+  });
+
+  it("redacts, encrypts, or exposes persisted settings secrets", async () => {
+    await fetch(
+      `${BASE_URL}/api/settings`,
+      jsonRequest(
+        { agent_settings_diff: { llm: { api_key: "sk-abcdefghijk" } } },
+        "PATCH",
+      ),
+    );
+
+    const redacted = await getJson<{
+      agent_settings: { llm: { api_key: string } };
+    }>("/api/settings");
+    expect(redacted.body.agent_settings.llm.api_key).toBe("**********");
+
+    const plaintext = await getJson<{
+      agent_settings: { llm: { api_key: string } };
+    }>("/api/settings", { headers: { "X-Expose-Secrets": "plaintext" } });
+    expect(plaintext.body.agent_settings.llm.api_key).toBe("sk-abcdefghijk");
+
+    const encrypted = await getJson<{
+      agent_settings: { llm: { api_key: string } };
+    }>("/api/settings", { headers: { "X-Expose-Secrets": "encrypted" } });
+    expect(encrypted.body.agent_settings.llm.api_key).toBe(
+      "gAAAAA_mock_encrypted_sk-abcde",
+    );
+  });
+
+  it("does not mark blank or non-string API keys as configured", async () => {
+    for (const apiKey of ["", "   ", 42]) {
+      resetTestHandlersMockSettings();
+      const result = await getJson<{ llm_api_key_is_set: boolean }>(
+        "/api/settings",
+        jsonRequest(
+          { agent_settings_diff: { llm: { api_key: apiKey } } },
+          "PATCH",
+        ),
+      );
+      expect(result.body.llm_api_key_is_set).toBe(false);
+    }
+  });
+
+  it("handles absent LLM settings and independent API-key signals", async () => {
+    const withoutLlm = await getJson<{
+      agent_settings: { llm: null };
+      llm_api_key_is_set: boolean;
+    }>(
+      "/api/settings",
+      jsonRequest({ agent_settings_diff: { llm: null } }, "PATCH"),
+    );
+    expect(withoutLlm.body).toMatchObject({
+      agent_settings: { llm: null },
+      llm_api_key_is_set: false,
+    });
+    const fetchedWithoutLlm = await getJson<{
+      agent_settings: { llm: null };
+      llm_api_key_is_set: boolean;
+    }>("/api/settings");
+    expect(fetchedWithoutLlm.body).toMatchObject({
+      agent_settings: { llm: null },
+      llm_api_key_is_set: false,
+    });
+
+    resetTestHandlersMockSettings();
+    await fetch(
+      `${BASE_URL}/api/v1/settings`,
+      jsonRequest(
+        {
+          llm_api_key_set: true,
+          agent_settings_diff: { llm: { api_key: null } },
+        },
+        "POST",
+      ),
+    );
+    const flagOnly = await getJson<{ llm_api_key_is_set: boolean }>(
+      "/api/settings",
+    );
+    expect(flagOnly.body.llm_api_key_is_set).toBe(true);
+
+    resetTestHandlersMockSettings();
+    await fetch(
+      `${BASE_URL}/api/v1/settings`,
+      jsonRequest(
+        {
+          llm_api_key_set: false,
+          agent_settings_diff: { llm: { api_key: "nested-key" } },
+        },
+        "POST",
+      ),
+    );
+    const nestedOnly = await getJson<{ llm_api_key_is_set: boolean }>(
+      "/api/settings",
+    );
+    expect(nestedOnly.body.llm_api_key_is_set).toBe(true);
+  });
+
+  it("merges app preferences across incremental updates", async () => {
+    const emptyMisc = await getJson<{ misc_settings: unknown }>(
+      "/api/settings",
+      jsonRequest({ misc_settings_diff: {} }, "PATCH"),
+    );
+    expect(emptyMisc.body.misc_settings).toEqual({});
+
+    await fetch(
+      `${BASE_URL}/api/settings`,
+      jsonRequest(
+        {
+          misc_settings_diff: {
+            app_preferences: { language: "de", git_user_name: "Ada" },
+          },
+        },
+        "PATCH",
+      ),
+    );
+    const second = await getJson<{
+      misc_settings: { app_preferences: Record<string, unknown> };
+    }>(
+      "/api/settings",
+      jsonRequest(
+        {
+          misc_settings_diff: {
+            app_preferences: {
+              language: "es",
+              disabled_skills: ["skill-a"],
+            },
+          },
+        },
+        "PATCH",
+      ),
+    );
+    expect(second.body.misc_settings.app_preferences).toEqual({
+      language: "es",
+      git_user_name: "Ada",
+      disabled_skills: ["skill-a"],
+    });
+
+    const persisted = await getJson<{
+      misc_settings: { app_preferences: Record<string, unknown> };
+    }>("/api/settings");
+    expect(persisted.body.misc_settings.app_preferences).toMatchObject({
+      language: "es",
+      git_user_name: "Ada",
+      git_user_email: null,
+      disabled_skills: ["skill-a"],
+    });
+  });
+
+  it("preserves unrelated persisted misc settings while merging preferences", async () => {
+    await fetch(
+      `${BASE_URL}/api/v1/settings`,
+      jsonRequest(
+        {
+          misc_settings: {
+            marker: "keep-me",
+            app_preferences: { language: "en" },
+          },
+        },
+        "POST",
+      ),
+    );
+
+    const updated = await getJson<{
+      misc_settings: {
+        marker: string;
+        app_preferences: Record<string, unknown>;
+      };
+    }>(
+      "/api/settings",
+      jsonRequest(
+        {
+          misc_settings_diff: {
+            app_preferences: { git_user_name: "Ada" },
+          },
+        },
+        "PATCH",
+      ),
+    );
+
+    expect(updated.body.misc_settings).toEqual({
+      marker: "keep-me",
+      app_preferences: { language: "en", git_user_name: "Ada" },
+    });
+  });
+
+  it("supports independent conversation-settings updates", async () => {
+    const result = await getJson<{
+      agent_settings: Record<string, unknown>;
+      conversation_settings: Record<string, unknown>;
+      misc_settings: { app_preferences: Record<string, unknown> };
+    }>(
+      "/api/settings",
+      jsonRequest(
+        { conversation_settings_diff: { max_iterations: 99 } },
+        "PATCH",
+      ),
+    );
+    expect(result.body.conversation_settings).toMatchObject({
+      confirmation_mode: false,
+      max_iterations: 99,
+    });
+    expect(result.body.agent_settings).toMatchObject({
+      llm: { model: "openai/gpt-5.6-sol" },
+      verification: { critic_enabled: false },
+    });
+    expect(result.body.misc_settings).toEqual({ app_preferences: {} });
+  });
+
+  it("normalizes a persisted null API-key flag in update responses", async () => {
+    await fetch(
+      `${BASE_URL}/api/v1/settings`,
+      jsonRequest({ llm_api_key_set: null }, "POST"),
+    );
+
+    const result = await getJson<{ llm_api_key_is_set: boolean }>(
+      "/api/settings",
+      jsonRequest(
+        { conversation_settings_diff: { max_iterations: 3 } },
+        "PATCH",
+      ),
+    );
+    expect(result.body.llm_api_key_is_set).toBe(false);
+  });
+
+  it("reports successful MCP connectivity with a mock tool", async () => {
+    const result = await getJson<{ ok: boolean; tools: string[] }>(
+      "/api/mcp/test",
+      { method: "POST" },
+    );
+    expect(result.response.ok).toBe(true);
+    expect(result.body).toEqual({ ok: true, tools: ["mock_tool"] });
+  });
+});
+
+describe("legacy settings persistence", () => {
+  it("rejects direct nested settings and identifies offending keys", async () => {
+    const both = await getJson<{ error: string; keys: string[] }>(
+      "/api/v1/settings",
+      jsonRequest({ agent_settings: {}, conversation_settings: {} }, "POST"),
+    );
+    expect(both.response.status).toBe(422);
+    expect(both.body).toEqual({
+      error: "Use *_diff nested settings payloads",
+      keys: ["agent_settings", "conversation_settings"],
+    });
+
+    const one = await getJson<{ keys: string[] }>(
+      "/api/v1/settings",
+      jsonRequest({ agent_settings: {} }, "POST"),
+    );
+    expect(one.response.status).toBe(422);
+    expect(one.body.keys).toEqual(["agent_settings"]);
+
+    const conversationOnly = await getJson<{ error: string; keys: string[] }>(
+      "/api/v1/settings",
+      jsonRequest({ conversation_settings: {} }, "POST"),
+    );
+    expect(conversationOnly.response.status).toBe(422);
+    expect(conversationOnly.body).toEqual({
+      error: "Use *_diff nested settings payloads",
+      keys: ["conversation_settings"],
+    });
+  });
+
+  it("accepts nested diffs and independent top-level settings", async () => {
+    const response = await fetch(
+      `${BASE_URL}/api/v1/settings`,
+      jsonRequest(
+        {
+          agent_settings_diff: {
+            llm: { model: "openai/gpt-5.5" },
+            verification: { critic_enabled: true },
+          },
+          conversation_settings_diff: {
+            max_iterations: 7,
+          },
+          agent_settings_schema: { ignored: true },
+          conversation_settings_schema: { ignored: true },
+          language: "ja",
+          llm_api_key_set: true,
+        },
+        "POST",
+      ),
+    );
+    expect(response.status).toBe(200);
+
+    const persisted = await getJson<{
+      agent_settings: Record<string, unknown>;
+      conversation_settings: Record<string, unknown>;
+      agent_settings_schema: { model_name: string };
+      conversation_settings_schema: { model_name: string };
+      language: string;
+      llm_api_key_set: boolean;
+    }>("/api/v1/settings");
+    expect(persisted.body).toMatchObject({
+      agent_settings: {
+        llm: { model: "openai/gpt-5.5" },
+        verification: {
+          critic_enabled: true,
+          enable_iterative_refinement: false,
+        },
+      },
+      conversation_settings: {
+        confirmation_mode: false,
+        max_iterations: 7,
+      },
+      language: "ja",
+      llm_api_key_set: true,
+    });
+    expect(persisted.body).not.toHaveProperty("agent_settings_diff");
+    expect(persisted.body).not.toHaveProperty("conversation_settings_diff");
+    expect(persisted.body.agent_settings_schema).toMatchObject({
+      model_name: "AgentSettings",
+    });
+    expect(persisted.body.conversation_settings_schema).toMatchObject({
+      model_name: "ConversationSettings",
+    });
+    const scalarUpdate = await getJson(
+      "/api/v1/settings",
+      jsonRequest({ language: "ko" }, "POST"),
+    );
+    expect(scalarUpdate.response.status).toBe(200);
+    expect((await getJson("/api/v1/settings")).body).toMatchObject({
+      agent_settings: {
+        llm: { model: "openai/gpt-5.5" },
+        verification: { critic_enabled: true },
+      },
+      conversation_settings: { max_iterations: 7 },
+      language: "ko",
+    });
+  });
+
+  it("accepts an empty object but rejects a null body", async () => {
+    const empty = await fetch(
+      `${BASE_URL}/api/v1/settings`,
+      jsonRequest({}, "POST"),
+    );
+    expect(empty.status).toBe(200);
+
+    const nullBody = await fetch(
+      `${BASE_URL}/api/v1/settings`,
+      jsonRequest(null, "POST"),
+    );
+    expect(nullBody.status).toBe(400);
+    await expect(nullBody.json()).resolves.toBeNull();
+  });
+});

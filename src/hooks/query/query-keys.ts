@@ -24,6 +24,9 @@ export const LLM_PROFILES_QUERY_KEYS = {
 
 export const AGENT_PROFILES_QUERY_KEYS = {
   all: ["agent-profiles"] as const,
+  // Nested under `all` so profile mutations invalidate cached details too.
+  detail: (backendId: string, orgId: string | null | undefined, name: string) =>
+    ["agent-profiles", backendId, orgId, "detail", name] as const,
 } as const;
 
 export const PROVIDER_CONNECTIONS_QUERY_KEYS = {
@@ -78,6 +81,14 @@ export const SETUP_QUERY_KEYS = {
 export const APP_UPDATE_QUERY_KEYS = {
   /** Latest published @openhands/agent-canvas version (npm `latest` dist-tag). */
   latestVersion: ["agent-canvas-latest-version"] as const,
+} as const;
+
+export const CONVERSATION_QUERY_KEYS = {
+  subConversations: ["v1", "sub-conversations"] as const,
+} as const;
+
+export const LOCAL_PLANNER_MUTATION_KEYS = {
+  create: ["create-local-planning-conversation"] as const,
 } as const;
 
 /** Cache configuration shared across all config-related queries */

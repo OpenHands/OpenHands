@@ -148,3 +148,96 @@ describe("HomeAutomationRunTooltip — phase", () => {
     expect(screen.queryByTestId("run-phase-row")).not.toBeInTheDocument();
   });
 });
+
+describe("HomeAutomationRunTooltip — task outcome", () => {
+  it("shows completed run task outcome and summary instead of infra error copy", () => {
+    render(
+      <HomeAutomationRunTooltip
+        automation={automation}
+        runState={makeState(
+          makeRun({
+            status: AutomationRunStatus.COMPLETED,
+            completed_at: "2026-08-01T10:05:00Z",
+            error_detail: "HUBSPOT_API_KEY was unavailable.",
+            run_metadata: {
+              finish_tool_response: {
+                status: "blocked",
+                outcome_summary:
+                  "Attempted HubSpot CRM contact search but HUBSPOT_API_KEY was unavailable.",
+              },
+            },
+          }),
+        )}
+      />,
+    );
+
+    expect(screen.getByText("AUTOMATIONS$DETAIL$BLOCKED")).toBeInTheDocument();
+    expect(
+      screen.getByText("AUTOMATIONS$DETAIL$TASK_LABEL"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Attempted HubSpot CRM contact search but HUBSPOT_API_KEY was unavailable.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("HUBSPOT_API_KEY was unavailable."),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("HomeAutomationRunTooltip — disabled reason", () => {
+  it("surfaces an automatic-pause reason on an inactive automation", () => {
+    const reason =
+      "Paused automatically: auth — Invalid API key. This failed the last 3 runs and needs a configuration fix.";
+    render(
+      <HomeAutomationRunTooltip
+        automation={{
+          ...automation,
+          enabled: false,
+          disabled_reason: reason,
+          disabled_detail: {
+            reason: "consecutive_permanent_failures",
+            source: "consecutive_permanent_failures",
+          },
+        }}
+        runState={makeState(null)}
+      />,
+    );
+
+    expect(screen.getByTestId("automation-tooltip-disabled-reason")).toHaveTextContent(
+      reason,
+    );
+  });
+
+  it("substitutes the manual-disable label instead of the raw 'manual' value", () => {
+    render(
+      <HomeAutomationRunTooltip
+        automation={{
+          ...automation,
+          enabled: false,
+          disabled_reason: "manual",
+          disabled_detail: { reason: "manual", source: "user" },
+        }}
+        runState={makeState(null)}
+      />,
+    );
+
+    expect(screen.getByTestId("automation-tooltip-disabled-reason")).toHaveTextContent(
+      "AUTOMATIONS$DETAIL$DISABLED_MANUAL",
+    );
+  });
+
+  it("omits the disabled-reason row for an enabled automation", () => {
+    render(
+      <HomeAutomationRunTooltip
+        automation={{ ...automation, enabled: true, disabled_reason: null }}
+        runState={makeState(makeRun())}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("automation-tooltip-disabled-reason"),
+    ).not.toBeInTheDocument();
+  });
+});

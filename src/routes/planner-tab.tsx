@@ -9,6 +9,8 @@ import { useScrollToBottom } from "#/hooks/use-scroll-to-bottom";
 import { MarkdownRenderer } from "#/components/features/markdown/markdown-renderer";
 import { planComponents } from "#/components/features/markdown/plan-components";
 import { useHandlePlanClick } from "#/hooks/use-handle-plan-click";
+import { useActiveConversation } from "#/hooks/query/use-active-conversation";
+import { useReadConversationFile } from "#/hooks/mutation/use-read-conversation-file";
 
 function PlannerTab() {
   const { t } = useTranslation("openhands");
@@ -20,7 +22,41 @@ function PlannerTab() {
     scrollDomToBottom,
   } = useScrollToBottom(scrollRef);
 
-  const { planContent, conversationMode } = useConversationStore();
+  const {
+    planContent,
+    conversationMode,
+    localPlanningConversationId,
+    setPlanContent,
+  } = useConversationStore();
+  const { data: conversation } = useActiveConversation();
+  const { mutate: readConversationFile } = useReadConversationFile();
+
+  React.useEffect(() => {
+    // Prefer the planner helper's own id — it's where PLAN.md is canonically
+    // read from (see conversation-websocket-context.tsx). The parent id is
+    // only a fallback for local planners created before the working_dir was
+    // shared, where both ids happen to resolve to the same file.
+    const readConversationId = localPlanningConversationId ?? conversation?.id;
+    if (!readConversationId || planContent !== null) return;
+
+    readConversationFile(
+      { conversationId: readConversationId },
+      {
+        onSuccess: (fileContent) => {
+          setPlanContent(fileContent);
+        },
+        onError: () => {
+          // Missing PLAN.md is the normal empty-planner state.
+        },
+      },
+    );
+  }, [
+    conversation?.id,
+    localPlanningConversationId,
+    planContent,
+    readConversationFile,
+    setPlanContent,
+  ]);
 
   // Auto-scroll to bottom when plan content changes
   React.useEffect(() => {
@@ -29,7 +65,8 @@ function PlannerTab() {
     }
   }, [planContent, autoScroll, scrollDomToBottom]);
   const isPlanMode = conversationMode === "plan";
-  const { handlePlanClick } = useHandlePlanClick();
+  const { handlePlanClick, hasPlanner, isCreatingConversation } =
+    useHandlePlanClick();
 
   if (planContent !== null && planContent !== undefined) {
     return (
@@ -53,7 +90,7 @@ function PlannerTab() {
           type="button"
           variant="secondary"
           onClick={handlePlanClick}
-          isDisabled={isPlanMode}
+          isDisabled={isPlanMode || isCreatingConversation || hasPlanner}
           className="min-w-40 justify-center px-6"
         >
           {t(I18nKey.COMMON$CREATE_A_PLAN)}
