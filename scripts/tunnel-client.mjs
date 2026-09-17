@@ -113,9 +113,28 @@ export async function startPortForwardTunnel({
       });
     });
 
+    // Flow control: one in-flight chunk at a time per direction (pause the
+    // source until the sink reports it drained), so a fast producer and a
+    // slow consumer on either side can't make this process buffer an
+    // unbounded amount of the stream in memory.
     ws.on("open", () => {
-      localSocket.on("data", (chunk) => ws.send(chunk));
-      ws.on("message", (data) => localSocket.write(data));
+      localSocket.on("data", (chunk) => {
+        localSocket.pause();
+        ws.send(chunk, (err) => {
+          if (err) {
+            log(`local->ws send failed: ${err.message}`);
+            return;
+          }
+          localSocket.resume();
+        });
+      });
+
+      ws.on("message", (data) => {
+        if (!localSocket.write(data)) {
+          ws.pause();
+          localSocket.once("drain", () => ws.resume());
+        }
+      });
     });
 
     ws.on("close", () => localSocket.end());
@@ -136,7 +155,12 @@ export async function startPortForwardTunnel({
     localSocket.on("error", () => ws.close());
   }
 
-  const server = createServer(bridgeConnection);
+  // allowHalfOpen: true — without it, Node auto-closes this socket's writable
+  // side the instant the local client's FIN arrives, silently dropping any
+  // response still in flight from the tunnel (e.g. a client that writes a
+  // request and immediately half-closes while awaiting a reply). Closing is
+  // instead driven explicitly by the ws "close" handler below.
+  const server = createServer({ allowHalfOpen: true }, bridgeConnection);
 
   return new Promise((resolve, reject) => {
     function onListenError(err) {

@@ -121,6 +121,56 @@ describe("startPortForwardTunnel", () => {
     expect(response.toString()).toBe("echo:hello-mars");
   });
 
+  it("relays a large payload intact under backpressure in both directions", async () => {
+    // A raw byte-for-byte echo (no "echo:" prefix) so the received buffer can
+    // be compared directly against what was sent.
+    const wss = new WebSocketServer({ noServer: true });
+    const rawHarness = createServer((_req, res) => res.writeHead(404).end());
+    rawHarness.on("upgrade", (req, socket, head) => {
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        ws.on("message", (data) => ws.send(data as Buffer));
+      });
+    });
+    const rawPort = await new Promise<number>((resolve) => {
+      rawHarness.listen(0, "127.0.0.1", () =>
+        resolve((rawHarness.address() as net.AddressInfo).port),
+      );
+    });
+    harness = { port: rawPort, close: () => { wss.close(); rawHarness.close(); } };
+
+    tunnel = await startPortForwardTunnel({
+      sessionId,
+      remotePort,
+      accessToken: "test-token",
+      apiUrl: `http://127.0.0.1:${harness.port}`,
+    });
+
+    // Several MB, well beyond a single TCP read chunk, so the tunnel's
+    // localSocket "data" handler fires many times — if pause()/resume()
+    // ever got mismatched (paused but never resumed), this would hang and
+    // the test would time out rather than silently pass.
+    const payload = Buffer.alloc(4 * 1024 * 1024);
+    for (let i = 0; i < payload.length; i += 1) payload[i] = i % 256;
+
+    const received = await new Promise<Buffer>((resolve, reject) => {
+      const socket = net.connect({ port: tunnel!.localPort, host: "127.0.0.1" });
+      const chunks: Buffer[] = [];
+      let total = 0;
+      socket.on("connect", () => socket.end(payload));
+      socket.on("data", (chunk: Buffer) => {
+        chunks.push(chunk);
+        total += chunk.length;
+        if (total >= payload.length) {
+          socket.end();
+          resolve(Buffer.concat(chunks));
+        }
+      });
+      socket.once("error", reject);
+    });
+
+    expect(received.equals(payload)).toBe(true);
+  }, 15_000);
+
   it("surfaces the server's rejection message for a bad token", async () => {
     harness = await startFakeHarness({ expectToken: "test-token" });
 
