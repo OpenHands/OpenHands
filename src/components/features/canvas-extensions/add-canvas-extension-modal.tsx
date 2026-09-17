@@ -6,7 +6,7 @@ import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import { ModalCloseButton } from "#/components/shared/modals/modal-close-button";
 import { useInstallCanvasExtension } from "#/hooks/mutation/use-manage-canvas-extensions";
 import { I18nKey } from "#/i18n/declaration";
-import { parseGitHubTreeUrl } from "#/utils/parse-github-tree-url";
+import { parseGitTreeUrl } from "#/utils/parse-git-tree-url";
 import { cn } from "#/utils/utils";
 import { modalTitleLgClassName } from "#/utils/modal-classes";
 
@@ -29,7 +29,7 @@ export function AddCanvasExtensionModal({
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     if (!canSubmit) return;
-    const treeUrl = parseGitHubTreeUrl(trimmedSource);
+    const treeUrl = parseGitTreeUrl(trimmedSource);
     install.mutate(
       {
         source: treeUrl?.source ?? trimmedSource,
