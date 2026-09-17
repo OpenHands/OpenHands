@@ -30,6 +30,16 @@ interface LlmConfiguredResult {
    * warning doesn't flash before data loads or on a transient network error.
    */
   isLoading: boolean;
+  /**
+   * Name of the local LLM profile that exists and is active but has lost its
+   * API key (`api_key_set: false`), or `null` in every other state.
+   *
+   * This is a different failure from "no LLM at all": the profile is still
+   * selected — the dropdown shows it — so telling the user to "set up an LLM"
+   * reads like a bug. Naming the profile lets callers say exactly what needs
+   * repairing. Subscription profiles carry no key by design and report `null`.
+   */
+  missingKeyProfileName: string | null;
 }
 
 /**
@@ -163,6 +173,13 @@ export function useLlmConfigured(): LlmConfiguredResult {
 
   return {
     isConfigured: isAcpAgent || llmSettingsHidden || hasUsableLlm,
+    missingKeyProfileName:
+      isLocal &&
+      activeProfile &&
+      !hasActiveProfileApiKey &&
+      !hasActiveProfileSubscription
+        ? activeProfile.name
+        : null,
     isLoading:
       settingsIndeterminate ||
       configIndeterminate ||

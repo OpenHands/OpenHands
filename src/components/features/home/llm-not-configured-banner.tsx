@@ -15,11 +15,15 @@ import { Typography } from "#/ui/typography";
  * Renders nothing while settings load (avoids a flash) or once the LLM is
  * configured; the settings query refetches after a key is saved, so the banner
  * unmounts on its own.
+ *
+ * When a local LLM profile is selected but no longer carries its API key the
+ * generic "finish setup" copy is misleading — the selected profile is still on
+ * screen — so the banner names that profile and asks for the key instead.
  */
 export function LlmNotConfiguredBanner() {
   const { t } = useTranslation("openhands");
   const { navigate } = useNavigation();
-  const { isConfigured, isLoading } = useLlmConfigured();
+  const { isConfigured, isLoading, missingKeyProfileName } = useLlmConfigured();
 
   if (isLoading || isConfigured) {
     return null;
@@ -36,7 +40,11 @@ export function LlmNotConfiguredBanner() {
           <FaTriangleExclamation className="align-middle text-yellow-400" />
         </div>
         <Typography.Text className="ml-3 text-sm font-medium">
-          {t(I18nKey.HOME$LLM_NOT_CONFIGURED_MESSAGE)}
+          {missingKeyProfileName
+            ? t(I18nKey.HOME$LLM_PROFILE_MISSING_KEY_MESSAGE, {
+                profile: missingKeyProfileName,
+              })
+            : t(I18nKey.HOME$LLM_NOT_CONFIGURED_MESSAGE)}
         </Typography.Text>
       </div>
 
@@ -47,7 +55,9 @@ export function LlmNotConfiguredBanner() {
         className="w-fit shrink-0 self-start whitespace-nowrap sm:self-auto"
         onClick={() => navigate("/settings/llm")}
       >
-        {t(I18nKey.HOME$LLM_NOT_CONFIGURED_ACTION)}
+        {missingKeyProfileName
+          ? t(I18nKey.HOME$LLM_PROFILE_MISSING_KEY_ACTION)
+          : t(I18nKey.HOME$LLM_NOT_CONFIGURED_ACTION)}
       </BrandButton>
     </div>
   );
