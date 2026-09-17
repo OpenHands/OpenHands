@@ -18,7 +18,7 @@ export default [
     route("customize", "routes/extensions-hub.tsx"),
     route("skills", "routes/skills-settings.tsx"),
     route("plugins", "routes/skills-plugins.tsx"),
-    route("extensions", "routes/canvas-extensions.tsx"),
+    route("apps", "routes/canvas-extensions.tsx"),
     route("extensions/:extensionName/*", "routes/canvas-extension-page.tsx"),
     route("mcp", "routes/mcp.tsx"),
     route("settings", "routes/settings.tsx", [

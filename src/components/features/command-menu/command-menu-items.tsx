@@ -19,6 +19,8 @@ import {
   getInterfaceCopy,
   hasAutomationInterface,
 } from "#/manifests/automation-interface";
+import { getLockedCloudHost } from "#/api/agent-server-config";
+import { LOCKED_CLOUD_SETTINGS_NAV_PATH } from "#/constants/settings-nav";
 
 const ICON_SIZE = 18;
 
@@ -96,119 +98,133 @@ export const createCommandMenuItems = ({
   toggleSidebar,
 }: {
   toggleSidebar: () => void;
-}): CommandMenuItemDefinition[] => [
-  {
-    id: "new-chat",
-    group: "navigation",
-    titleKey: I18nKey.COMMAND_MENU$NEW_CHAT_TITLE,
-    descriptionKey: I18nKey.COMMAND_MENU$NEW_CHAT_DESCRIPTION,
-    keywordsKey: I18nKey.COMMAND_MENU$NEW_CHAT_KEYWORDS,
-    icon: <Home size={ICON_SIZE} />,
-    to: COMMAND_MENU_ROUTE.conversations,
-  },
-  {
-    id: "customize",
-    group: "navigation",
-    titleKey: I18nKey.COMMAND_MENU$CUSTOMIZE_TITLE,
-    descriptionKey: I18nKey.COMMAND_MENU$CUSTOMIZE_DESCRIPTION,
-    keywordsKey: I18nKey.COMMAND_MENU$CUSTOMIZE_KEYWORDS,
-    icon: <Sparkles size={ICON_SIZE} />,
-    to: COMMAND_MENU_ROUTE.customize,
-  },
-  // The automation interface owns this entry's copy, so an absent manifest
-  // leaves the command menu without it rather than with host copy.
-  ...(hasAutomationInterface()
-    ? [
-        {
-          id: "automations" as const,
-          group: "navigation" as const,
-          title: getInterfaceCopy().commandMenuTitle,
-          description: getInterfaceCopy().commandMenuDescription,
-          keywords: getInterfaceCopy().commandMenuKeywords,
-          icon: <Zap size={ICON_SIZE} />,
-          to: COMMAND_MENU_ROUTE.automations,
-        },
-      ]
-    : []),
-  {
-    id: "mcp",
-    group: "navigation",
-    titleKey: I18nKey.COMMAND_MENU$MCP_TITLE,
-    descriptionKey: I18nKey.COMMAND_MENU$MCP_DESCRIPTION,
-    keywordsKey: I18nKey.COMMAND_MENU$MCP_KEYWORDS,
-    icon: <Wrench size={ICON_SIZE} />,
-    to: COMMAND_MENU_ROUTE.mcp,
-  },
-  {
-    id: "settings",
-    group: "settings",
-    titleKey: I18nKey.COMMAND_MENU$SETTINGS_TITLE,
-    descriptionKey: I18nKey.COMMAND_MENU$SETTINGS_DESCRIPTION,
-    keywordsKey: I18nKey.COMMAND_MENU$SETTINGS_KEYWORDS,
-    icon: <Settings size={ICON_SIZE} />,
-    to: COMMAND_MENU_ROUTE.settings,
-  },
-  {
-    id: "agent-settings",
-    group: "settings",
-    titleKey: I18nKey.COMMAND_MENU$AGENT_SETTINGS_TITLE,
-    descriptionKey: I18nKey.COMMAND_MENU$AGENT_SETTINGS_DESCRIPTION,
-    keywordsKey: I18nKey.COMMAND_MENU$AGENT_SETTINGS_KEYWORDS,
-    icon: <Bot size={ICON_SIZE} />,
-    to: COMMAND_MENU_ROUTE.agentSettings,
-  },
-  {
-    id: "llm-settings",
-    group: "settings",
-    titleKey: I18nKey.COMMAND_MENU$LLM_SETTINGS_TITLE,
-    descriptionKey: I18nKey.COMMAND_MENU$LLM_SETTINGS_DESCRIPTION,
-    keywordsKey: I18nKey.COMMAND_MENU$LLM_SETTINGS_KEYWORDS,
-    icon: <Search size={ICON_SIZE} />,
-    to: COMMAND_MENU_ROUTE.llmSettings,
-  },
-  {
-    id: "condenser-settings",
-    group: "settings",
-    titleKey: I18nKey.COMMAND_MENU$CONDENSER_SETTINGS_TITLE,
-    descriptionKey: I18nKey.COMMAND_MENU$CONDENSER_SETTINGS_DESCRIPTION,
-    keywordsKey: I18nKey.COMMAND_MENU$CONDENSER_SETTINGS_KEYWORDS,
-    icon: <ListTodo size={ICON_SIZE} />,
-    to: COMMAND_MENU_ROUTE.condenserSettings,
-  },
-  {
-    id: "verification-settings",
-    group: "settings",
-    titleKey: I18nKey.COMMAND_MENU$VERIFICATION_SETTINGS_TITLE,
-    descriptionKey: I18nKey.COMMAND_MENU$VERIFICATION_SETTINGS_DESCRIPTION,
-    keywordsKey: I18nKey.COMMAND_MENU$VERIFICATION_SETTINGS_KEYWORDS,
-    icon: <ShieldCheck size={ICON_SIZE} />,
-    to: COMMAND_MENU_ROUTE.verificationSettings,
-  },
-  {
-    id: "app-settings",
-    group: "settings",
-    titleKey: I18nKey.COMMAND_MENU$APP_SETTINGS_TITLE,
-    descriptionKey: I18nKey.COMMAND_MENU$APP_SETTINGS_DESCRIPTION,
-    keywordsKey: I18nKey.COMMAND_MENU$APP_SETTINGS_KEYWORDS,
-    icon: <PanelsTopLeft size={ICON_SIZE} />,
-    to: COMMAND_MENU_ROUTE.appSettings,
-  },
-  {
-    id: "secrets-settings",
-    group: "settings",
-    titleKey: I18nKey.COMMAND_MENU$SECRETS_SETTINGS_TITLE,
-    descriptionKey: I18nKey.COMMAND_MENU$SECRETS_SETTINGS_DESCRIPTION,
-    keywordsKey: I18nKey.COMMAND_MENU$SECRETS_SETTINGS_KEYWORDS,
-    icon: <KeyRound size={ICON_SIZE} />,
-    to: COMMAND_MENU_ROUTE.secretsSettings,
-  },
-  {
-    id: "toggle-sidebar",
-    group: "actions",
-    titleKey: I18nKey.COMMAND_MENU$TOGGLE_SIDEBAR_TITLE,
-    descriptionKey: I18nKey.COMMAND_MENU$TOGGLE_SIDEBAR_DESCRIPTION,
-    keywordsKey: I18nKey.COMMAND_MENU$TOGGLE_SIDEBAR_KEYWORDS,
-    icon: <Keyboard size={ICON_SIZE} />,
-    perform: toggleSidebar,
-  },
-];
+}): CommandMenuItemDefinition[] => {
+  const items: CommandMenuItemDefinition[] = [
+    {
+      id: "new-chat",
+      group: "navigation",
+      titleKey: I18nKey.COMMAND_MENU$NEW_CHAT_TITLE,
+      descriptionKey: I18nKey.COMMAND_MENU$NEW_CHAT_DESCRIPTION,
+      keywordsKey: I18nKey.COMMAND_MENU$NEW_CHAT_KEYWORDS,
+      icon: <Home size={ICON_SIZE} />,
+      to: COMMAND_MENU_ROUTE.conversations,
+    },
+    {
+      id: "customize",
+      group: "navigation",
+      titleKey: I18nKey.COMMAND_MENU$CUSTOMIZE_TITLE,
+      descriptionKey: I18nKey.COMMAND_MENU$CUSTOMIZE_DESCRIPTION,
+      keywordsKey: I18nKey.COMMAND_MENU$CUSTOMIZE_KEYWORDS,
+      icon: <Sparkles size={ICON_SIZE} />,
+      to: COMMAND_MENU_ROUTE.customize,
+    },
+    // The automation interface owns this entry's copy, so an absent manifest
+    // leaves the command menu without it rather than with host copy.
+    ...(hasAutomationInterface()
+      ? [
+          {
+            id: "automations" as const,
+            group: "navigation" as const,
+            title: getInterfaceCopy().commandMenuTitle,
+            description: getInterfaceCopy().commandMenuDescription,
+            keywords: getInterfaceCopy().commandMenuKeywords,
+            icon: <Zap size={ICON_SIZE} />,
+            to: COMMAND_MENU_ROUTE.automations,
+          },
+        ]
+      : []),
+    {
+      id: "mcp",
+      group: "navigation",
+      titleKey: I18nKey.COMMAND_MENU$MCP_TITLE,
+      descriptionKey: I18nKey.COMMAND_MENU$MCP_DESCRIPTION,
+      keywordsKey: I18nKey.COMMAND_MENU$MCP_KEYWORDS,
+      icon: <Wrench size={ICON_SIZE} />,
+      to: COMMAND_MENU_ROUTE.mcp,
+    },
+    {
+      id: "settings",
+      group: "settings",
+      titleKey: I18nKey.COMMAND_MENU$SETTINGS_TITLE,
+      descriptionKey: I18nKey.COMMAND_MENU$SETTINGS_DESCRIPTION,
+      keywordsKey: I18nKey.COMMAND_MENU$SETTINGS_KEYWORDS,
+      icon: <Settings size={ICON_SIZE} />,
+      to: COMMAND_MENU_ROUTE.settings,
+    },
+    {
+      id: "agent-settings",
+      group: "settings",
+      titleKey: I18nKey.COMMAND_MENU$AGENT_SETTINGS_TITLE,
+      descriptionKey: I18nKey.COMMAND_MENU$AGENT_SETTINGS_DESCRIPTION,
+      keywordsKey: I18nKey.COMMAND_MENU$AGENT_SETTINGS_KEYWORDS,
+      icon: <Bot size={ICON_SIZE} />,
+      to: COMMAND_MENU_ROUTE.agentSettings,
+    },
+    {
+      id: "llm-settings",
+      group: "settings",
+      titleKey: I18nKey.COMMAND_MENU$LLM_SETTINGS_TITLE,
+      descriptionKey: I18nKey.COMMAND_MENU$LLM_SETTINGS_DESCRIPTION,
+      keywordsKey: I18nKey.COMMAND_MENU$LLM_SETTINGS_KEYWORDS,
+      icon: <Search size={ICON_SIZE} />,
+      to: COMMAND_MENU_ROUTE.llmSettings,
+    },
+    {
+      id: "condenser-settings",
+      group: "settings",
+      titleKey: I18nKey.COMMAND_MENU$CONDENSER_SETTINGS_TITLE,
+      descriptionKey: I18nKey.COMMAND_MENU$CONDENSER_SETTINGS_DESCRIPTION,
+      keywordsKey: I18nKey.COMMAND_MENU$CONDENSER_SETTINGS_KEYWORDS,
+      icon: <ListTodo size={ICON_SIZE} />,
+      to: COMMAND_MENU_ROUTE.condenserSettings,
+    },
+    {
+      id: "verification-settings",
+      group: "settings",
+      titleKey: I18nKey.COMMAND_MENU$VERIFICATION_SETTINGS_TITLE,
+      descriptionKey: I18nKey.COMMAND_MENU$VERIFICATION_SETTINGS_DESCRIPTION,
+      keywordsKey: I18nKey.COMMAND_MENU$VERIFICATION_SETTINGS_KEYWORDS,
+      icon: <ShieldCheck size={ICON_SIZE} />,
+      to: COMMAND_MENU_ROUTE.verificationSettings,
+    },
+    {
+      id: "app-settings",
+      group: "settings",
+      titleKey: I18nKey.COMMAND_MENU$APP_SETTINGS_TITLE,
+      descriptionKey: I18nKey.COMMAND_MENU$APP_SETTINGS_DESCRIPTION,
+      keywordsKey: I18nKey.COMMAND_MENU$APP_SETTINGS_KEYWORDS,
+      icon: <PanelsTopLeft size={ICON_SIZE} />,
+      to: COMMAND_MENU_ROUTE.appSettings,
+    },
+    {
+      id: "secrets-settings",
+      group: "settings",
+      titleKey: I18nKey.COMMAND_MENU$SECRETS_SETTINGS_TITLE,
+      descriptionKey: I18nKey.COMMAND_MENU$SECRETS_SETTINGS_DESCRIPTION,
+      keywordsKey: I18nKey.COMMAND_MENU$SECRETS_SETTINGS_KEYWORDS,
+      icon: <KeyRound size={ICON_SIZE} />,
+      to: COMMAND_MENU_ROUTE.secretsSettings,
+    },
+    {
+      id: "toggle-sidebar",
+      group: "actions",
+      titleKey: I18nKey.COMMAND_MENU$TOGGLE_SIDEBAR_TITLE,
+      descriptionKey: I18nKey.COMMAND_MENU$TOGGLE_SIDEBAR_DESCRIPTION,
+      keywordsKey: I18nKey.COMMAND_MENU$TOGGLE_SIDEBAR_KEYWORDS,
+      icon: <Keyboard size={ICON_SIZE} />,
+      perform: toggleSidebar,
+    },
+  ];
+
+  // Locked-to-Cloud (SaaS / self-hosted OHE) lists only the Application page;
+  // the OHE settings shell owns the rest (OHE-3168).
+  const isLockedToCloud = getLockedCloudHost() !== null;
+
+  return items.filter(
+    (item) =>
+      !isLockedToCloud ||
+      item.group !== "settings" ||
+      item.to === COMMAND_MENU_ROUTE.settings ||
+      item.to === LOCKED_CLOUD_SETTINGS_NAV_PATH,
+  );
+};

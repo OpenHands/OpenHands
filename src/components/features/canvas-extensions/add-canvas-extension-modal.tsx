@@ -6,6 +6,7 @@ import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import { ModalCloseButton } from "#/components/shared/modals/modal-close-button";
 import { useInstallCanvasExtension } from "#/hooks/mutation/use-manage-canvas-extensions";
 import { I18nKey } from "#/i18n/declaration";
+import { parseGitTreeUrl } from "#/utils/parse-git-tree-url";
 import { cn } from "#/utils/utils";
 import { modalTitleLgClassName } from "#/utils/modal-classes";
 
@@ -28,11 +29,12 @@ export function AddCanvasExtensionModal({
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     if (!canSubmit) return;
+    const treeUrl = parseGitTreeUrl(trimmedSource);
     install.mutate(
       {
-        source: trimmedSource,
-        ref: ref.trim() || null,
-        repo_path: repoPath.trim() || null,
+        source: treeUrl?.source ?? trimmedSource,
+        ref: ref.trim() || treeUrl?.ref || null,
+        repo_path: repoPath.trim() || treeUrl?.repoPath || null,
       },
       { onSuccess: onClose },
     );
@@ -41,7 +43,7 @@ export function AddCanvasExtensionModal({
   return (
     <ModalBackdrop
       onClose={onClose}
-      aria-label={t(I18nKey.SETTINGS$CANVAS_EXTENSIONS_ADD_BUTTON)}
+      aria-label={t(I18nKey.SETTINGS$APPS_ADD_BUTTON)}
     >
       <form
         onSubmit={handleSubmit}
@@ -54,16 +56,16 @@ export function AddCanvasExtensionModal({
         />
         <header className="flex-shrink-0 px-6 pb-4 pt-6">
           <h2 className={cn("pr-6", modalTitleLgClassName)}>
-            {t(I18nKey.SETTINGS$CANVAS_EXTENSIONS_ADD_BUTTON)}
+            {t(I18nKey.SETTINGS$APPS_ADD_BUTTON)}
           </h2>
           <p className="mt-4 text-sm text-tertiary-light">
-            {t(I18nKey.SETTINGS$CANVAS_EXTENSIONS_ADD_MODAL_INTRO)}
+            {t(I18nKey.SETTINGS$APPS_ADD_MODAL_INTRO)}
           </p>
         </header>
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-6 custom-scrollbar">
           <SettingsInput
             testId="add-canvas-extension-source-input"
-            label={t(I18nKey.SETTINGS$PLUGINS_SOURCE_LABEL)}
+            label={t(I18nKey.SETTINGS$APPS_SOURCE_LABEL)}
             type="text"
             value={source}
             onChange={setSource}

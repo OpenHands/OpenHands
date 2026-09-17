@@ -238,6 +238,7 @@ export function EventMessage({
             type="agent"
             message={message}
             isFromPlanningAgent={isFromPlanningAgent}
+            timestamp={event.timestamp}
           />
         )}
       </>

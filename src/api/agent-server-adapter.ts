@@ -1,5 +1,8 @@
 import { ACP_SETTINGS_KEYS } from "@openhands/typescript-client";
-import type { HookConfig } from "@openhands/typescript-client";
+import type {
+  ConversationRuntimeInfo,
+  HookConfig,
+} from "@openhands/typescript-client";
 import { ServerClient } from "@openhands/typescript-client/clients";
 import { SKILLS_CATALOG } from "@openhands/extensions/skills";
 import { DEFAULT_SETTINGS } from "#/services/settings";
@@ -68,6 +71,11 @@ export interface DirectConversationInfo {
   execution_status?: string | null;
   /** Cloud-only sandbox lifecycle state. Omitted / null for local agent-server conversations. */
   sandbox_status?: string | null;
+  /** Availability of the runtime that backs a local conversation. */
+  runtime_info?: Pick<
+    ConversationRuntimeInfo,
+    "runtime_status" | "can_resume"
+  > | null;
   metrics?: {
     accumulated_cost?: number | null;
     max_budget_per_task?: number | null;
@@ -419,7 +427,11 @@ export function toAppConversation(
     execution_status:
       (info.execution_status as AppConversation["execution_status"]) ??
       ExecutionStatus.IDLE,
-    sandbox_status: (info.sandbox_status as SandboxStatus | null) ?? null,
+    sandbox_status:
+      info.runtime_info?.runtime_status === "missing" &&
+      !info.runtime_info.can_resume
+        ? "MISSING"
+        : ((info.sandbox_status as SandboxStatus | null) ?? null),
     conversation_url: toConversationUrl(info.id),
     session_api_key: getAgentServerClientOptions().apiKey ?? null,
     sandbox_id: null,
@@ -632,7 +644,6 @@ function buildNormalizedLlmSettings(value: unknown): SettingsRecord {
     llm.auth_type = LLM_AUTH_TYPE_SUBSCRIPTION;
     llm.subscription_vendor = OPENAI_SUBSCRIPTION_VENDOR;
     delete llm.api_key;
-    delete llm.base_url;
   } else {
     delete llm.auth_type;
     delete llm.subscription_vendor;

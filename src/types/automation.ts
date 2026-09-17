@@ -26,8 +26,39 @@ export interface Automation {
   name: string;
   trigger: AutomationTrigger;
   enabled: boolean;
+  /**
+   * Human-readable reason the automation was last disabled (the latest
+   * disablement event overwrites this). Mirrors the automation service's
+   * `AutomationResponse.disabled_reason`. `null`/absent for enabled automations
+   * or an automation service older than the release that started recording it.
+   */
+  disabled_reason?: string | null;
+  /**
+   * Structured disablement metadata from the automation service
+   * (`AutomationResponse.disabled_detail`): `{reason, source, run_id, ...}`
+   * plus rule-specific fields (threshold, consecutive counts, status_detail).
+   * Used to tell user-initiated ("manual") disables from automatic ones
+   * (consecutive failures, permanent config faults).
+   */
+  disabled_detail?: {
+    reason?: string;
+    source?: string;
+    run_id?: string | null;
+    [key: string]: unknown;
+  } | null;
+  /** UTC timestamp the automation was last disabled. */
+  disabled_at?: string | null;
+  /**
+   * UUID of the user who created this automation. The backend returns it in
+   * `AutomationResponse.user_id`; the frontend uses it to implement the
+   * "creator escape hatch" — a member (view-only) may still edit their own
+   * automations even without `manage_automations`.
+   */
+  user_id?: string;
   repository?: string;
-  /** LLM/model profile name used for automation runs. */
+  /** Saved agent profile controlling model, tools, and selected secrets. */
+  agent_profile_id?: string | null;
+  /** LLM/model profile name used when no agent profile is selected. */
   model?: string | null;
   /**
    * Maximum run time in seconds. `null`/omitted uses the server default
@@ -54,7 +85,14 @@ export interface Automation {
 
 export type AutomationSpec = Omit<
   Automation,
-  "id" | "created_at" | "updated_at" | "last_triggered_at" | "preset_metadata"
+  | "id"
+  | "created_at"
+  | "updated_at"
+  | "last_triggered_at"
+  | "preset_metadata"
+  | "disabled_reason"
+  | "disabled_detail"
+  | "disabled_at"
 >;
 
 /** The envelope constants come from the interface manifest's import/export spec. */
