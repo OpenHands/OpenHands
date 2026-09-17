@@ -8,6 +8,7 @@ import {
 } from "#/api/backend-registry/active-store";
 import AgentServerRuntimeService from "#/api/runtime-service/agent-server-runtime-service";
 import { callCloudProxy } from "#/api/cloud/proxy";
+import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
 import type { Backend } from "#/api/backend-registry/types";
 
 // ─── SDK client mocks ───────────────────────────────────────────────────────
@@ -72,6 +73,12 @@ beforeEach(() => {
   executeCommandMock.mockReset();
   downloadFileMock.mockReset();
   vi.mocked(callCloudProxy).mockReset();
+  vi.mocked(getAgentServerClientOptions).mockReset();
+  vi.mocked(getAgentServerClientOptions).mockReturnValue({
+    host: "http://local-agent.example.com",
+    apiKey: "local-key",
+    workingDir: "/workspace/project",
+  });
 });
 
 afterEach(() => {
@@ -99,12 +106,51 @@ describe("AgentServerRuntimeService.executeCommand", () => {
       );
 
       expect(RemoteWorkspace).toHaveBeenCalledTimes(1);
+      expect(getAgentServerClientOptions).toHaveBeenCalledWith({
+        conversationUrl:
+          "http://local-agent.example.com/api/conversations/conv-1",
+        sessionApiKey: SESSION_KEY,
+      });
       expect(executeCommandMock).toHaveBeenCalledWith(
         "git rev-parse --abbrev-ref HEAD",
         "/workspace/project",
         10,
       );
       expect(result).toEqual({ exit_code: 0, stdout: "main\n", stderr: "" });
+    });
+
+    it("does not pass the command timeout into the client options (unit mismatch)", async () => {
+      // The SDK HttpClient timeout is in ms; `timeout` here is seconds. The
+      // SDK's executeCommand sets its own (timeout+10)*1000 ms per-request
+      // timeout, so the client default must stay unset (60s) — never the raw
+      // seconds value.
+      executeCommandMock.mockResolvedValue({ exit_code: 0, stdout: "" });
+
+      await AgentServerRuntimeService.executeCommand(
+        "http://local-agent.example.com/api/conversations/conv-1",
+        SESSION_KEY,
+        "ls",
+        "/",
+        5,
+      );
+
+      expect(getAgentServerClientOptions).toHaveBeenCalledWith({
+        conversationUrl:
+          "http://local-agent.example.com/api/conversations/conv-1",
+        sessionApiKey: SESSION_KEY,
+      });
+    });
+
+    it("coerces missing stdout/stderr/exit_code to safe defaults", async () => {
+      executeCommandMock.mockResolvedValue({});
+
+      const result = await AgentServerRuntimeService.executeCommand(
+        "http://local-agent.example.com/api/conversations/conv-1",
+        SESSION_KEY,
+        "true",
+      );
+
+      expect(result).toEqual({ exit_code: -1, stdout: "", stderr: "" });
     });
 
     it("does not call callCloudProxy for local backends", async () => {

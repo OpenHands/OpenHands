@@ -36,13 +36,26 @@ class AgentServerRuntimeService {
       );
     }
 
+    // `RemoteWorkspace.executeCommand` forwards `timeout` (seconds) to the
+    // agent-server as the command timeout AND sets the HTTP request timeout to
+    // `(timeout + 10) * 1000` ms — the same +10s buffer the old cloud
+    // `callCloudProxy` branch used (`timeoutSeconds: timeout + 10`). We
+    // deliberately do NOT pass `timeout` into `getAgentServerClientOptions`:
+    // that option is the SDK HttpClient's default timeout in *milliseconds*,
+    // so a seconds value (e.g. 30) would be read as 30 ms. The per-request
+    // timeout the SDK sets on `executeCommand` overrides the client default
+    // anyway, but passing a ms-mismatched default is a latent footgun if any
+    // method on the client ever lacks a per-request timeout.
     const result = await new RemoteWorkspace(
-      getAgentServerClientOptions({ conversationUrl, sessionApiKey, timeout }),
+      getAgentServerClientOptions({ conversationUrl, sessionApiKey }),
     ).executeCommand(command, cwd, timeout);
+    // The SDK already coerces these (`exit_code ?? 0`, `stdout || ''`,
+    // `stderr || ''`); keep a defensive fallback so a contract drift in the
+    // client can never surface `undefined` to callers.
     return {
-      exit_code: result.exit_code,
-      stdout: result.stdout,
-      stderr: result.stderr,
+      exit_code: result.exit_code ?? -1,
+      stdout: result.stdout ?? "",
+      stderr: result.stderr ?? "",
     };
   }
 

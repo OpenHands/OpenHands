@@ -85,8 +85,9 @@ describe("AgentServerConversationService.condenseConversation", () => {
   });
 
   it("throws when a cloud conversation has no runtime URL to call", async () => {
-    // With no conversation_url and a cloud active backend, there is no
-    // host to target and no local fallback — NoBackendAvailableError.
+    // Symmetric with every other cloud runtime call: a missing conversation
+    // URL on a cloud backend is a caller bug, surfaced with a specific
+    // message rather than the generic NoBackendAvailableError.
     setRegisteredBackends([cloudBackend, localBackend]);
     setActiveSelection({ backendId: cloudBackend.id });
 
@@ -96,7 +97,7 @@ describe("AgentServerConversationService.condenseConversation", () => {
         null,
         "sess-key",
       ),
-    ).rejects.toThrow("No backend is configured");
+    ).rejects.toThrow(/requires a conversation URL on cloud backends/);
     expect(callCloudProxy).not.toHaveBeenCalled();
     expect(mockCondenseConversation).not.toHaveBeenCalled();
   });

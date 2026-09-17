@@ -864,6 +864,19 @@ class AgentServerConversationService {
     conversationUrl: string | null | undefined,
     sessionApiKey?: string | null,
   ): Promise<void> {
+    const active = getActiveBackend().backend;
+
+    // Symmetric with every other cloud runtime call in this module: on cloud
+    // backends the condense endpoint lives on the per-conversation runtime
+    // host, so a missing conversation URL is a caller bug, not a "no backend
+    // configured" condition. Throw the specific message instead of letting
+    // `getAgentServerClientOptions` surface a generic `NoBackendAvailableError`.
+    if (active.kind === "cloud" && !conversationUrl) {
+      throw new Error(
+        "AgentServerConversationService.condenseConversation requires a conversation URL on cloud backends",
+      );
+    }
+
     await new ConversationClient(
       getAgentServerClientOptions({ conversationUrl, sessionApiKey }),
     ).condenseConversation(conversationId);
