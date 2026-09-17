@@ -5,12 +5,18 @@ import {
   SettingsClient,
 } from "@openhands/typescript-client/clients";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { __resetActiveStoreForTests } from "#/api/backend-registry/active-store";
+import {
+  __resetActiveStoreForTests,
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
+import type { Backend } from "#/api/backend-registry/types";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import {
   getStoredConversationMetadata,
   setStoredConversationMetadata,
 } from "#/api/conversation-metadata-store";
+import { LOCAL_PLANNER_PARENT_TAG_KEY } from "#/utils/plan-file";
 
 const {
   mockHttpGet,
@@ -48,6 +54,14 @@ const {
 
 const originalFetch = global.fetch;
 const fetchMock = vi.fn();
+
+const localBackend: Backend = {
+  id: "self-hosted",
+  name: "Self-hosted",
+  host: "http://localhost:54928",
+  apiKey: "test-api-key",
+  kind: "local",
+};
 
 vi.mock("@openhands/typescript-client/clients", async () => {
   const actual = await vi.importActual<
@@ -172,6 +186,163 @@ describe("AgentServerConversationService", () => {
     });
     mockSettingsClient.mockReturnValue({
       listSecrets: vi.fn().mockResolvedValue({ secrets: [] }),
+    });
+  });
+
+  describe("resilient conversation list parsing", () => {
+    beforeEach(() => {
+      window.localStorage.clear();
+      __resetActiveStoreForTests();
+      setRegisteredBackends([localBackend]);
+      setActiveSelection({ backendId: localBackend.id });
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+      window.localStorage.clear();
+      __resetActiveStoreForTests();
+    });
+
+    it("drops a list item without an id and keeps its siblings", async () => {
+      const searchConversations = vi.fn().mockResolvedValue({
+        items: [
+          { id: "good-before" },
+          { title: "missing id" },
+          { id: "good-after" },
+        ],
+        next_page_id: "next-page",
+      });
+      mockConversationClient.mockReturnValue({ searchConversations });
+      const warn = vi
+        .spyOn(console, "warn")
+        .mockImplementation(() => undefined);
+
+      const result =
+        await AgentServerConversationService.searchConversations();
+
+      expect(result.items.map(({ id }) => id)).toEqual([
+        "good-before",
+        "good-after",
+      ]);
+      expect(result.next_page_id).toBe("next-page");
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("index 1 (id: <unknown>)"),
+      );
+      expect(warn.mock.calls[0]?.[0]).toContain(
+        "Unable to load conversations because the selected agent server returned",
+      );
+    });
+
+    it("drops a valid-id item when stats conversion fails", async () => {
+      const searchConversations = vi.fn().mockResolvedValue({
+        items: [
+          { id: "good-before" },
+          {
+            id: "bad-stats",
+            stats: { usage_to_metrics: { broken: null } },
+          },
+          { id: "good-after" },
+        ],
+      });
+      mockConversationClient.mockReturnValue({ searchConversations });
+      const warn = vi
+        .spyOn(console, "warn")
+        .mockImplementation(() => undefined);
+
+      const result =
+        await AgentServerConversationService.searchConversations();
+
+      expect(result.items.map(({ id }) => id)).toEqual([
+        "good-before",
+        "good-after",
+      ]);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("index 1 (id: bad-stats)"),
+      );
+      expect(warn.mock.calls[0]?.[0]).toContain("accumulated_cost");
+    });
+
+    it("returns an empty page when every list item is malformed", async () => {
+      const searchConversations = vi.fn().mockResolvedValue({
+        items: [null, { id: "   " }, []],
+        next_page_id: null,
+      });
+      mockConversationClient.mockReturnValue({ searchConversations });
+
+      await expect(
+        AgentServerConversationService.searchConversations(),
+      ).resolves.toEqual({ items: [], next_page_id: null });
+    });
+
+    it.each([
+      ["primitive page", null],
+      ["missing item list", { items: null, next_page_id: null }],
+    ])(
+      "still rejects a malformed search page shape: %s",
+      async (_label, page) => {
+        const searchConversations = vi.fn().mockResolvedValue(page);
+        mockConversationClient.mockReturnValue({ searchConversations });
+
+        await expect(
+          AgentServerConversationService.searchConversations(),
+        ).rejects.toThrow(
+          "Unable to load conversations because the selected agent server returned",
+        );
+      },
+    );
+
+    it("filters planner-parent records without warning or counting a drop", async () => {
+      const searchConversations = vi.fn().mockResolvedValue({
+        items: [
+          { id: "visible-before" },
+          {
+            id: "planner-helper",
+            tags: { [LOCAL_PLANNER_PARENT_TAG_KEY]: "parent-conversation" },
+          },
+          { id: "visible-after" },
+        ],
+      });
+      mockConversationClient.mockReturnValue({ searchConversations });
+      const warn = vi
+        .spyOn(console, "warn")
+        .mockImplementation(() => undefined);
+
+      const result =
+        await AgentServerConversationService.searchConversations();
+
+      expect(result.items.map(({ id }) => id)).toEqual([
+        "visible-before",
+        "visible-after",
+      ]);
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it("keeps single-conversation and batch fetches strict", async () => {
+      const corruptConversation = { title: "missing id" };
+      const getConversation = vi.fn().mockResolvedValue(corruptConversation);
+      const getConversations = vi
+        .fn()
+        .mockResolvedValue([corruptConversation]);
+      mockConversationClient.mockReturnValue({
+        getConversation,
+        getConversations,
+      });
+
+      await expect(
+        AgentServerConversationService.getRuntimeConversation(
+          "corrupt-conversation",
+          null,
+        ),
+      ).rejects.toThrow(
+        "Unable to load conversations because the selected agent server returned",
+      );
+      await expect(
+        AgentServerConversationService.batchGetAppConversations([
+          "corrupt-conversation",
+        ]),
+      ).rejects.toThrow(
+        "Unable to load conversations because the selected agent server returned",
+      );
     });
   });
 
