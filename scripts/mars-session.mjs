@@ -25,6 +25,7 @@ const TERMINAL_STATUSES = new Set([
   "SESSION_STATUS_FAILED",
 ]);
 
+const DEFAULT_API_URL = "https://api.digitalocean.com/";
 const DEFAULT_POLL_INTERVAL_MS = 2_000;
 const DEFAULT_TIMEOUT_MS = 120_000;
 
@@ -66,7 +67,7 @@ function delay(ms) {
  * doesn't reach ready within timeoutMs.
  *
  * @param {object} options
- * @param {string} options.apiUrl
+ * @param {string} [options.apiUrl]
  * @param {string} options.sessionId
  * @param {string} options.accessToken
  * @param {number} [options.pollIntervalMs]
@@ -75,7 +76,7 @@ function delay(ms) {
  * @returns {Promise<{status: string, [key: string]: any}>} the session, once ready
  */
 export async function ensureSessionAwake({
-  apiUrl,
+  apiUrl = DEFAULT_API_URL,
   sessionId,
   accessToken,
   pollIntervalMs = DEFAULT_POLL_INTERVAL_MS,

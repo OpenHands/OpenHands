@@ -7,6 +7,9 @@ import { describe, expect, it, vi } from "vitest";
 import { createTunnelRegistry } from "../../scripts/tunnel-registry.mjs";
 import { startPortForwardTunnel } from "../../scripts/tunnel-client.mjs";
 
+/** A stub ensureAwake that resolves immediately, for tests only exercising tunnel logic. */
+const noopEnsureAwake = async () => ({ status: "SESSION_STATUS_READY" });
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (err: unknown) => void;
@@ -36,7 +39,7 @@ function fakeStartTunnel() {
 describe("createTunnelRegistry", () => {
   it("attaches a session and reports it connected", async () => {
     const { fn } = fakeStartTunnel();
-    const registry = createTunnelRegistry({ startTunnel: fn });
+    const registry = createTunnelRegistry({ startTunnel: fn, ensureAwake: noopEnsureAwake });
 
     const result = await registry.attach({
       sessionId: "sess_a",
@@ -51,7 +54,7 @@ describe("createTunnelRegistry", () => {
 
   it("reuses an existing tunnel instead of opening a duplicate", async () => {
     const { fn } = fakeStartTunnel();
-    const registry = createTunnelRegistry({ startTunnel: fn });
+    const registry = createTunnelRegistry({ startTunnel: fn, ensureAwake: noopEnsureAwake });
 
     const first = await registry.attach({ sessionId: "sess_a", remotePort: 8000, accessToken: "t" });
     const second = await registry.attach({ sessionId: "sess_a", remotePort: 8000, accessToken: "t" });
@@ -66,7 +69,7 @@ describe("createTunnelRegistry", () => {
       await gate.promise;
       return { sessionId: options.sessionId, remotePort: options.remotePort, localPort: 41000, stop: vi.fn() };
     });
-    const registry = createTunnelRegistry({ startTunnel: fn });
+    const registry = createTunnelRegistry({ startTunnel: fn, ensureAwake: noopEnsureAwake });
 
     const attempt1 = registry.attach({ sessionId: "sess_a", remotePort: 8000, accessToken: "t" });
     const attempt2 = registry.attach({ sessionId: "sess_a", remotePort: 8000, accessToken: "t" });
@@ -79,7 +82,7 @@ describe("createTunnelRegistry", () => {
 
   it("gives independent sessions independent, non-colliding ports", async () => {
     const { fn } = fakeStartTunnel();
-    const registry = createTunnelRegistry({ startTunnel: fn });
+    const registry = createTunnelRegistry({ startTunnel: fn, ensureAwake: noopEnsureAwake });
 
     const [a, b] = await Promise.all([
       registry.attach({ sessionId: "sess_a", remotePort: 8000, accessToken: "t" }),
@@ -93,7 +96,7 @@ describe("createTunnelRegistry", () => {
 
   it("detach() tears down only the targeted session", async () => {
     const { fn } = fakeStartTunnel();
-    const registry = createTunnelRegistry({ startTunnel: fn });
+    const registry = createTunnelRegistry({ startTunnel: fn, ensureAwake: noopEnsureAwake });
 
     const a = await registry.attach({ sessionId: "sess_a", remotePort: 8000, accessToken: "t" });
     await registry.attach({ sessionId: "sess_b", remotePort: 8000, accessToken: "t" });
@@ -108,7 +111,7 @@ describe("createTunnelRegistry", () => {
 
   it("detachAll() tears down every session", async () => {
     const { fn } = fakeStartTunnel();
-    const registry = createTunnelRegistry({ startTunnel: fn });
+    const registry = createTunnelRegistry({ startTunnel: fn, ensureAwake: noopEnsureAwake });
 
     await registry.attach({ sessionId: "sess_a", remotePort: 8000, accessToken: "t" });
     await registry.attach({ sessionId: "sess_b", remotePort: 8000, accessToken: "t" });
@@ -133,7 +136,7 @@ describe("createTunnelRegistry", () => {
       }
       return { sessionId: options.sessionId, remotePort: options.remotePort, localPort: 42000, stop: vi.fn() };
     });
-    const registry = createTunnelRegistry({ startTunnel: fn });
+    const registry = createTunnelRegistry({ startTunnel: fn, ensureAwake: noopEnsureAwake });
 
     await registry.attach({ sessionId: "sess_ok", remotePort: 8000, accessToken: "t" });
     await expect(
@@ -150,11 +153,50 @@ describe("createTunnelRegistry", () => {
 
   it("rejects when sessionId is missing", async () => {
     const { fn } = fakeStartTunnel();
-    const registry = createTunnelRegistry({ startTunnel: fn });
+    const registry = createTunnelRegistry({ startTunnel: fn, ensureAwake: noopEnsureAwake });
     await expect(
       // @ts-expect-error deliberately omitting a required field to test runtime validation
       registry.attach({ remotePort: 8000, accessToken: "t" }),
     ).rejects.toThrow(/sessionId/);
+  });
+
+  it("waits for the session to be awake before dialing the tunnel", async () => {
+    const order: string[] = [];
+    const ensureAwake = vi.fn(async () => {
+      order.push("ensureAwake");
+      return { status: "SESSION_STATUS_READY" };
+    });
+    const { fn } = fakeStartTunnel();
+    fn.mockImplementation(async (options) => {
+      order.push("startTunnel");
+      return { sessionId: options.sessionId, remotePort: options.remotePort, localPort: 43000, stop: vi.fn() };
+    });
+    const registry = createTunnelRegistry({ startTunnel: fn, ensureAwake });
+
+    await registry.attach({ sessionId: "sess_a", remotePort: 8000, accessToken: "t" });
+
+    expect(order).toEqual(["ensureAwake", "startTunnel"]);
+    expect(ensureAwake).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: "sess_a", accessToken: "t" }),
+    );
+  });
+
+  it("surfaces a failure to wake the session without ever dialing the tunnel", async () => {
+    const ensureAwake = vi.fn(async () => {
+      throw new Error("Session sess_a is SESSION_STATUS_FAILED and cannot be connected to.");
+    });
+    const { fn } = fakeStartTunnel();
+    const registry = createTunnelRegistry({ startTunnel: fn, ensureAwake });
+
+    await expect(
+      registry.attach({ sessionId: "sess_a", remotePort: 8000, accessToken: "t" }),
+    ).rejects.toThrow(/SESSION_STATUS_FAILED/);
+
+    expect(fn).not.toHaveBeenCalled();
+    expect(registry.get("sess_a")).toMatchObject({
+      status: "error",
+      error: expect.stringMatching(/SESSION_STATUS_FAILED/),
+    });
   });
 });
 
@@ -167,7 +209,19 @@ describe("createTunnelRegistry", () => {
 describe("createTunnelRegistry (real tunnel client)", () => {
   function startFakeHarness(sessionId: string, remotePort: number, expectToken: string) {
     const expectedPath = `/v2/agents/sessions/${sessionId}/port-forward/${remotePort}`;
-    const httpServer = createServer((_req, res) => res.writeHead(404).end());
+    const sessionPath = `/v2/agents/sessions/${sessionId}`;
+    const httpServer = createServer((req, res) => {
+      // Also serves the plain REST session-status endpoint ensureSessionAwake
+      // hits before the tunnel is dialed — always READY here, so this test
+      // stays focused on the tunnel/registry path rather than resume logic
+      // (covered separately in mars-session.test.ts).
+      if (req.method === "GET" && req.url === sessionPath) {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ session: { session_id: sessionId, status: "SESSION_STATUS_READY" } }));
+        return;
+      }
+      res.writeHead(404).end();
+    });
     const wss = new WebSocketServer({ noServer: true });
 
     httpServer.on("upgrade", (req, socket, head) => {

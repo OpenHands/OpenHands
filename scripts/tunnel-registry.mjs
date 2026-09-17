@@ -21,6 +21,9 @@
  *   - Concurrent-attach dedup: two attach() calls for the same session
  *     firing before either has resolved share one in-flight attempt rather
  *     than racing to open two tunnels.
+ *   - Waking a paused session before dialing it, via mars-session.mjs's
+ *     ensureSessionAwake() — MARS auto-pauses idle sessions, and a tunnel
+ *     that isn't open yet has generated no activity to have prevented that.
  *
  * Explicitly NOT this module's job:
  *   - Reconnect-after-app-restart detection. Because tunnels here run
@@ -44,6 +47,7 @@
  */
 
 import { startPortForwardTunnel } from "./tunnel-client.mjs";
+import { ensureSessionAwake } from "./mars-session.mjs";
 
 /**
  * @typedef {{
@@ -58,8 +62,12 @@ import { startPortForwardTunnel } from "./tunnel-client.mjs";
 /**
  * @param {object} [options]
  * @param {typeof startPortForwardTunnel} [options.startTunnel] Override for tests
+ * @param {typeof ensureSessionAwake} [options.ensureAwake] Override for tests
  */
-export function createTunnelRegistry({ startTunnel = startPortForwardTunnel } = {}) {
+export function createTunnelRegistry({
+  startTunnel = startPortForwardTunnel,
+  ensureAwake = ensureSessionAwake,
+} = {}) {
   /** @type {Map<string, { status: "connecting" | "connected" | "error", remotePort: number, tunnel: object | null, error: Error | null, promise: Promise<void> | null }>} */
   const entries = new Map();
 
@@ -114,6 +122,11 @@ export function createTunnelRegistry({ startTunnel = startPortForwardTunnel } = 
     entries.set(sessionId, entry);
 
     entry.promise = (async () => {
+      // MARS auto-pauses idle sessions, and a tunnel that isn't open yet
+      // can't have generated any activity to prevent that — so a session
+      // being attached to for the first time in a while may need waking
+      // before dialing it can succeed at all.
+      await ensureAwake({ apiUrl, sessionId, accessToken });
       const tunnel = await startTunnel({ sessionId, remotePort, accessToken, apiUrl, localPort });
       entry.tunnel = tunnel;
       entry.status = "connected";
