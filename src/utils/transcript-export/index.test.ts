@@ -16,6 +16,7 @@ import type {
 } from "#/types/agent-server/core/base/observation";
 import type { StreamingDeltaEvent } from "#/types/agent-server/core/events/streaming-delta-event";
 import { SecurityRisk } from "#/types/agent-server/core/base/common";
+import type { ACPToolCallEvent } from "#/types/agent-server/core/events/acp-tool-call-event";
 import { eventsToHtml, eventsToMarkdown } from ".";
 
 vi.mock("#/i18n", () => ({
@@ -25,7 +26,7 @@ vi.mock("#/i18n", () => ({
     resolvedLanguage: "en",
     t: (key: string, values?: Record<string, string>) => {
       const translations: Record<string, string> = {
-        ACTION_MESSAGE$ACP_TOOL: "Use tool",
+        ACTION_MESSAGE$ACP_TOOL: "<cmd>{{title}}</cmd>",
         CHAT_INTERFACE$ASSISTANT: "Assistant",
         COMMON$ERROR: "Error",
         TASK$QUERY: "Query",
@@ -37,7 +38,13 @@ vi.mock("#/i18n", () => ({
         TRANSCRIPT_EXPORT$TOOL: "Tool",
         TRANSCRIPT_EXPORT$USER: "User",
       };
-      return translations[key] ?? values?.name ?? key;
+      // Mirror i18next interpolation: substitute provided values and leave
+      // unmatched placeholders literal, so tests see what users would.
+      const template = translations[key] ?? values?.name ?? key;
+      return template.replace(
+        /\{\{(\w+)\}\}/g,
+        (match, name) => values?.[name] ?? match,
+      );
     },
   },
 }));
@@ -360,5 +367,34 @@ describe("conversation transcript export", () => {
 
     expect(html).not.toMatch(/<(?:link|script)[^>]+(?:href|src)=/i);
     expect(html).toMatchSnapshot();
+  });
+
+  it("does not leak the raw i18n template for a titleless ACP tool call", () => {
+    // ACP servers report tool calls over the wire; the renderer tolerates an
+    // empty/absent title (see stripRedundantTitlePrefix's guard). The export
+    // must fall back to a plain label - rendering the ACTION_MESSAGE$ACP_TOOL
+    // template without a `title` interpolation would leak "<cmd>{{title}}</cmd>"
+    // verbatim into the transcript.
+    const titlelessAcpToolCall: ACPToolCallEvent = {
+      id: "acp-1",
+      timestamp,
+      source: "agent",
+      kind: "ACPToolCallEvent",
+      tool_call_id: "acp-call-1",
+      title: "",
+      status: "completed",
+      tool_kind: "other",
+      raw_input: { query: "status" },
+      raw_output: "ok",
+      content: null,
+      is_error: false,
+    };
+
+    const markdown = eventsToMarkdown([titlelessAcpToolCall], defaultOptions);
+    const html = eventsToHtml([titlelessAcpToolCall], defaultOptions);
+
+    expect(markdown).not.toContain("{{title}}");
+    expect(markdown).toContain("<strong>Tool:</strong> Tool");
+    expect(html).not.toContain("{{title}}");
   });
 });

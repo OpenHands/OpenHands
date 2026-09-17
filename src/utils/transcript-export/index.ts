@@ -446,7 +446,7 @@ const buildTranscriptEntries = (
           kind: "tool",
           summary:
             stripRedundantTitlePrefix(event) ||
-            i18n.t(I18nKey.ACTION_MESSAGE$ACP_TOOL),
+            i18n.t(I18nKey.TRANSCRIPT_EXPORT$TOOL),
           details: includeToolDetails ? getACPToolCallContent(event) : "",
           timestamp: event.timestamp ?? "",
         });
