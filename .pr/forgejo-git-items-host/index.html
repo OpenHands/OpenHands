@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Forgejo PR/issue lists queried api.github.com - repro evidence</title>
+</head>
+<body>
+  <h1>Reproduction evidence</h1>
+  <p>Terminal runs of <code>__tests__/api/git-provider-items-service.test.ts</code>: failing twice on main (requests go to api.github.com), passing twice with the fix (requests go to codeberg.org/api/v1).</p>
+  <img src="terminal.png" alt="vitest runs failing before the fix and passing after it" style="max-width:100%" />
+</body>
+</html>
