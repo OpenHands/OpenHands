@@ -1,5 +1,8 @@
 import { ACP_SETTINGS_KEYS } from "@openhands/typescript-client";
-import type { HookConfig } from "@openhands/typescript-client";
+import type {
+  ConversationRuntimeInfo,
+  HookConfig,
+} from "@openhands/typescript-client";
 import { ServerClient } from "@openhands/typescript-client/clients";
 import { SKILLS_CATALOG } from "@openhands/extensions/skills";
 import { DEFAULT_SETTINGS } from "#/services/settings";
@@ -69,15 +72,10 @@ export interface DirectConversationInfo {
   /** Cloud-only sandbox lifecycle state. Omitted / null for local agent-server conversations. */
   sandbox_status?: string | null;
   /** Availability of the runtime that backs a local conversation. */
-  runtime_info?: {
-    runtime_status:
-      | "available"
-      | "starting"
-      | "missing"
-      | "ownership_lost"
-      | "error";
-    can_resume: boolean;
-  } | null;
+  runtime_info?: Pick<
+    ConversationRuntimeInfo,
+    "runtime_status" | "can_resume"
+  > | null;
   metrics?: {
     accumulated_cost?: number | null;
     max_budget_per_task?: number | null;
