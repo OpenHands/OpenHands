@@ -831,6 +831,33 @@ describe("useDraftPersistence", () => {
       expect(() => act(() => result.current.clearDraft())).not.toThrow();
     });
 
+    it("flushes the latest tracked prompt once storage recovers", () => {
+      sessionStorage.setItem(HOME_PROMPT_DRAFT_KEY, "older home prompt");
+      const chatInputRef: { current: HTMLDivElement | null } =
+        createMockChatInputRef();
+      const { result, unmount } = renderHook(() =>
+        useDraftPersistence(undefined, chatInputRef),
+      );
+
+      chatInputRef.current!.textContent = "newer home prompt";
+      vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+        throw new Error("storage disabled");
+      });
+      act(() => result.current.saveDraft());
+      vi.restoreAllMocks();
+
+      expect(sessionStorage.getItem(HOME_PROMPT_DRAFT_KEY)).toBe(
+        "older home prompt",
+      );
+
+      chatInputRef.current = null;
+      unmount();
+
+      expect(sessionStorage.getItem(HOME_PROMPT_DRAFT_KEY)).toBe(
+        "newer home prompt",
+      );
+    });
+
     it("clears the persisted home prompt", () => {
       sessionStorage.setItem(HOME_PROMPT_DRAFT_KEY, "home prompt");
       const chatInputRef = createMockChatInputRef("home prompt");
