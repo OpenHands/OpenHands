@@ -684,6 +684,47 @@ describe("buildMcpServerPatch", () => {
     });
   });
 
+  // @spec MCP-002 — Secret patches preserve user intent
+  it("nulls every editable oauth authentication field the edit clears", () => {
+    const previous = {
+      transport: "http",
+      url: "https://u.example",
+      auth: {
+        strategy: "oauth2",
+        authentication: {
+          type: "oauth",
+          client_auth_method: "client_secret_post",
+          scopes: "mail.read",
+          client_id: "old-client",
+          client_secret: REDACTED_MCP_SECRET_VALUE,
+          client_name: "OpenHands Canvas",
+        },
+      },
+    } as MCPServer;
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "shttp",
+      url: "https://u.example",
+      auth: { strategy: "oauth2", authentication: { type: "oauth" } },
+    };
+    // Every user-editable field must be nulled individually: an emptied field
+    // list would silently leave the stale client registration in place.
+    expect(buildMcpServerPatch(previous, edited)).toEqual({
+      transport: "http",
+      url: "https://u.example",
+      auth: {
+        strategy: "oauth2",
+        authentication: {
+          type: "oauth",
+          client_auth_method: null,
+          scopes: null,
+          client_id: null,
+          client_secret: null,
+        },
+      },
+    });
+  });
+
   it("omits the auth key when an oauth credential is unchanged", () => {
     const previous = {
       transport: "http",
@@ -813,6 +854,28 @@ describe("buildMcpServerPatch", () => {
       transport: "http",
       url: "https://u.example",
       auth: { strategy: "bearer", value: "x", headers: null },
+    });
+  });
+
+  // @spec MCP-002 — Secret patches preserve user intent
+  it("keeps the new secret when a strategy replacement reuses a field name", () => {
+    const previous = {
+      transport: "http",
+      url: "https://u.example",
+      auth: { strategy: "api_key", value: "old" },
+    } as MCPServer;
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "shttp",
+      url: "https://u.example",
+      auth: { strategy: "bearer", value: "new" },
+    };
+    // `value` exists on both strategies, so the stale-field deletes must skip
+    // it; nulling it would erase the credential the user just entered.
+    expect(buildMcpServerPatch(previous, edited)).toEqual({
+      transport: "http",
+      url: "https://u.example",
+      auth: { strategy: "bearer", value: "new" },
     });
   });
 
