@@ -47,3 +47,37 @@ export async function fetchCloudSkills(): Promise<SkillInfo[]> {
 
   return skills;
 }
+
+interface CloudConversationSkill {
+  name: string;
+  type: SkillInfo["type"];
+  content: string;
+  triggers: string[];
+}
+
+interface CloudConversationSkillsResponse {
+  skills: CloudConversationSkill[];
+}
+
+/**
+ * Fetch the skills loaded into a running cloud conversation from the
+ * per-conversation route (the one the OpenHands web UI's own "Show Available
+ * Skills" modal uses). Unlike `/api/v1/skills/search`, which only scans the
+ * API host's built-in skills directory, this resolves the conversation's
+ * sandbox and asks its agent-server for the merged set: public catalog,
+ * user/org repos, project skills and auto-loaded marketplace plugins. The
+ * route reports no `source`, so it is `null`.
+ */
+export async function fetchCloudConversationSkills(
+  conversationId: string,
+): Promise<SkillInfo[]> {
+  const backend = getActiveCloudBackend();
+
+  const data = await callCloudProxy<CloudConversationSkillsResponse>({
+    backend,
+    method: "GET",
+    path: `/api/v1/app-conversations/${conversationId}/skills`,
+  });
+
+  return (data?.skills ?? []).map((skill) => ({ ...skill, source: null }));
+}

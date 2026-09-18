@@ -82,6 +82,7 @@ export const useDragResize = ({
     resizeGrip.addEventListener("touchend", handleDragEnd, {
       capture: true,
     });
+    return resizeGrip;
   };
 
   // Setup event listeners for desktop devices
@@ -98,6 +99,7 @@ export const useDragResize = ({
     const isMobile = isMobileDevice();
     const startHeight = elementRef.current?.offsetHeight || minHeight;
     let dragCommitted = false;
+    let resizeGrip: HTMLElement | undefined;
 
     const handleDragMove = (moveEvent: MouseEvent | TouchEvent) => {
       moveEvent.preventDefault();
@@ -149,7 +151,6 @@ export const useDragResize = ({
       }
 
       if (isMobile) {
-        const resizeGrip = document.getElementById("resize-grip");
         if (!resizeGrip) {
           return;
         }
