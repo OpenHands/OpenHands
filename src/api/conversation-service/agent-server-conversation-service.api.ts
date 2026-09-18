@@ -45,11 +45,11 @@ import {
   emptyHooksResponse,
   getDefaultConversationTitle,
   toAppConversation,
-  toConversationPage,
 } from "../agent-server-adapter";
 import { GetVSCodeUrlResponse } from "../open-hands.types";
 import {
   getAgentServerClientOptions,
+  isNoBackendAvailableError,
   NoBackendAvailableError,
 } from "../agent-server-client-options";
 import SettingsService from "../settings-service/settings-service.api";
@@ -63,7 +63,10 @@ import {
   type WorkspaceMode,
 } from "../conversation-metadata-store";
 import { resolveTitleLlmProfile } from "#/utils/title-llm-profile";
-import { isPlannerConversationOf } from "#/utils/plan-file";
+import {
+  isPlannerConversationOf,
+  LOCAL_PLANNER_PARENT_TAG_KEY,
+} from "#/utils/plan-file";
 import type {
   GetHooksResponse,
   PluginSpec,
@@ -325,26 +328,58 @@ function requireDirectConversationItems(
   return items.map(requireDirectConversationInfo);
 }
 
-function requireConversationSearchPage(page: unknown): {
-  items: DirectConversationInfo[];
-  next_page_id: string | null;
-} {
+function getConversationIdForWarning(item: unknown): string {
+  try {
+    if (!isRecord(item)) return "<unknown>";
+    const id = item.id;
+    return typeof id === "string" && id.trim() ? id : "<unknown>";
+  } catch {
+    return "<unknown>";
+  }
+}
+
+function toResilientConversationPage(page: unknown): AppConversationPage {
+  let rawItems: unknown;
+  let nextPageId: string | null;
+
   if (Array.isArray(page)) {
-    return {
-      items: requireDirectConversationItems(page),
-      next_page_id: null,
-    };
+    rawItems = page;
+    nextPageId = null;
+  } else {
+    if (!isRecord(page)) {
+      throw invalidConversationResponse();
+    }
+
+    rawItems = page.items;
+    nextPageId =
+      typeof page.next_page_id === "string" ? page.next_page_id : null;
   }
 
-  if (!isRecord(page)) {
+  if (!Array.isArray(rawItems)) {
     throw invalidConversationResponse();
   }
 
-  return {
-    items: requireDirectConversationItems(page.items),
-    next_page_id:
-      typeof page.next_page_id === "string" ? page.next_page_id : null,
-  };
+  const items: AppConversation[] = [];
+  for (const [index, rawItem] of rawItems.entries()) {
+    try {
+      const conversation = requireDirectConversationInfo(rawItem);
+      if (conversation.tags?.[LOCAL_PLANNER_PARENT_TAG_KEY]) continue;
+      items.push(toAppConversation(conversation));
+    } catch (error) {
+      // Systemic failures (e.g. the active backend was removed mid-search) are
+      // not per-record corruption: swallowing them would report every valid row
+      // as malformed and resolve with a silently empty page. Rethrow so the
+      // query surfaces the real error instead.
+      if (isNoBackendAvailableError(error)) throw error;
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      console.warn(
+        `Skipping malformed conversation at index ${index} (id: ${getConversationIdForWarning(rawItem)}): ${errorMessage}`,
+      );
+    }
+  }
+
+  return { items, next_page_id: nextPageId };
 }
 
 const RUNTIME_STATUSES = new Set<string>([
@@ -931,7 +966,7 @@ class AgentServerConversationService {
       sort_order: ConversationSortOrder.UPDATED_AT_DESC,
     });
 
-    return toConversationPage(requireConversationSearchPage(data));
+    return toResilientConversationPage(data);
   }
 
   static async deleteConversation(conversationId: string): Promise<void> {
