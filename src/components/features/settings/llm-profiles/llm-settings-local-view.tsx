@@ -55,6 +55,10 @@ import {
 import { BackNavButton } from "#/components/shared/buttons/back-nav-button";
 import { Typography } from "#/ui/typography";
 import { useSettingsSectionHeader } from "#/contexts/settings-section-header-context";
+import {
+  isOracleProfileName,
+  ORACLE_PROFILE_NAME,
+} from "#/utils/oracle-profile";
 
 type ViewMode = "list" | "create" | "edit";
 
@@ -132,6 +136,7 @@ export function LlmSettingsLocalView() {
 
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [profileName, setProfileName] = useState("");
+  const [isOracleProfileCreation, setIsOracleProfileCreation] = useState(false);
   const [editingProfile, setEditingProfile] = useState<EditingProfile | null>(
     null,
   );
@@ -152,10 +157,20 @@ export function LlmSettingsLocalView() {
     [profilesData],
   );
 
+  const isOracleProfileFlow =
+    isOracleProfileCreation ||
+    isOracleProfileName(editingProfile?.profile.name ?? "");
+
   // Validate profile name. The shared validator rejects any whitespace, so
   // duplicate checks below compare the raw value directly.
   const isNameValid = useMemo(() => {
     if (!isProfileNameValid(profileName, { isRequired: true })) return false;
+    if (
+      (isOracleProfileFlow && !isOracleProfileName(profileName)) ||
+      (!isOracleProfileFlow && isOracleProfileName(profileName))
+    ) {
+      return false;
+    }
     // In create mode, check for duplicates
     if (viewMode === "create" && existingNames.has(profileName)) return false;
     // In edit mode, name can match current profile name
@@ -167,10 +182,17 @@ export function LlmSettingsLocalView() {
       return false;
     }
     return true;
-  }, [profileName, viewMode, existingNames, editingProfile?.profile.name]);
+  }, [
+    profileName,
+    viewMode,
+    existingNames,
+    editingProfile?.profile.name,
+    isOracleProfileFlow,
+  ]);
 
-  const handleAddProfile = useCallback(() => {
-    setProfileName("");
+  const handleAddProfile = useCallback((initialName = "") => {
+    setProfileName(initialName);
+    setIsOracleProfileCreation(isOracleProfileName(initialName));
     setEditingProfile(null);
     setViewMode("create");
   }, []);
@@ -232,6 +254,7 @@ export function LlmSettingsLocalView() {
 
         setEditingProfile({ profile, initialValues, baseConfig: config });
         setProfileName(profile.name);
+        setIsOracleProfileCreation(false);
         setViewMode("edit");
       } catch (error) {
         console.error("Failed to fetch profile details:", error);
@@ -245,6 +268,7 @@ export function LlmSettingsLocalView() {
     setViewMode("list");
     setEditingProfile(null);
     setProfileName("");
+    setIsOracleProfileCreation(false);
     setSaveControl(null);
   }, []);
 
@@ -375,6 +399,13 @@ export function LlmSettingsLocalView() {
     }
 
     const trimmedName = profileName.trim();
+    if (
+      (isOracleProfileFlow && !isOracleProfileName(trimmedName)) ||
+      (!isOracleProfileFlow && isOracleProfileName(trimmedName))
+    ) {
+      displayErrorToast(t(I18nKey.SETTINGS$PROFILE_RESERVED_NAME));
+      return;
+    }
     const originalName = editingProfile?.profile.name;
     const isRename =
       viewMode === "edit" && originalName && originalName !== trimmedName;
@@ -445,6 +476,7 @@ export function LlmSettingsLocalView() {
     profileName,
     viewMode,
     editingProfile,
+    isOracleProfileFlow,
     backend.kind,
     profilesData?.active_profile,
     saveProfile,
@@ -457,8 +489,9 @@ export function LlmSettingsLocalView() {
   if (viewMode === "list") {
     return (
       <LlmProfilesManager
-        onAddProfile={handleAddProfile}
+        onAddProfile={() => handleAddProfile()}
         onEditProfile={handleEditProfile}
+        onConfigureOracle={() => handleAddProfile(ORACLE_PROFILE_NAME)}
       />
     );
   }
@@ -467,8 +500,9 @@ export function LlmSettingsLocalView() {
     viewMode === "edit"
       ? t(I18nKey.SETTINGS$EDIT_LLM_PROFILE)
       : t(I18nKey.SETTINGS$ADD_LLM_PROFILE);
-  const profileEditorDescription =
-    viewMode === "edit" && editingProfile
+  const profileEditorDescription = isOracleProfileFlow
+    ? t(I18nKey.SETTINGS$ORACLE_PROFILE_EDITOR_DESCRIPTION)
+    : viewMode === "edit" && editingProfile
       ? t(I18nKey.SETTINGS$PROFILE_LOADED, {
           name: editingProfile.profile.name,
         })
@@ -499,7 +533,19 @@ export function LlmSettingsLocalView() {
         value={profileName}
         onChange={setProfileName}
         isRequired
+        isDisabled={isOracleProfileFlow}
+        isReservedName={
+          isOracleProfileName(profileName) && !isOracleProfileFlow
+        }
       />
+      {isOracleProfileFlow ? (
+        <p
+          data-testid="oracle-profile-name-hint"
+          className="text-sm leading-5 text-tertiary-light"
+        >
+          {t(I18nKey.SETTINGS$ORACLE_PROFILE_NAME_HINT)}
+        </p>
+      ) : null}
 
       {/* Profile form - key ensures form remounts when switching profiles.
           In create mode, wait for the DB default query to settle before

@@ -1,9 +1,15 @@
 import { useTranslation } from "react-i18next";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { ProfileRow } from "./profile-row";
+import { BrandBadge } from "#/components/shared/badge";
+import { BrandButton } from "#/components/features/settings/brand-button";
 import { ProfileInfo } from "#/api/profiles-service/profiles-service.api";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
+import {
+  isOracleProfileName,
+  ORACLE_PROFILE_NAME,
+} from "#/utils/oracle-profile";
 import {
   settingsListContainerClassName,
   settingsListDividerClassName,
@@ -29,6 +35,7 @@ interface ProfilesBodyProps {
   onRename: (profile: ProfileInfo) => void;
   onDuplicate: (profile: ProfileInfo) => void;
   onDelete: (profile: ProfileInfo) => void;
+  onConfigureOracle?: () => void;
   isActivating: boolean;
 }
 
@@ -79,6 +86,63 @@ export function groupProfilesByConnection(
     : linkedGroups;
 }
 
+export function shouldShowOracleProfileEntry(profiles: ProfileInfo[]): boolean {
+  return !profiles.some((profile) => isOracleProfileName(profile.name));
+}
+
+function OracleProfileEntry({
+  canManage,
+  onConfigure,
+}: {
+  canManage: boolean;
+  onConfigure: () => void;
+}) {
+  const { t } = useTranslation("openhands");
+
+  return (
+    <div
+      data-testid="oracle-profile-entry"
+      aria-disabled={!canManage}
+      className="flex items-center justify-between gap-4 rounded-lg border border-dashed border-[var(--oh-border-subtle)] bg-[var(--oh-surface-secondary)] p-4 opacity-80"
+    >
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <span
+            className="text-sm font-medium text-[var(--oh-foreground)]"
+            title={ORACLE_PROFILE_NAME}
+          >
+            {ORACLE_PROFILE_NAME}
+          </span>
+          <BrandBadge className="px-2 py-0.5 text-xs">
+            {t(I18nKey.SETTINGS$ORACLE_PROFILE_BADGE)}
+          </BrandBadge>
+        </div>
+        <p
+          data-testid="oracle-profile-description"
+          className="mt-1 max-w-2xl text-sm leading-5 text-[var(--oh-muted)]"
+        >
+          {t(I18nKey.SETTINGS$ORACLE_PROFILE_DESCRIPTION)}
+        </p>
+      </div>
+      {canManage ? (
+        <BrandButton
+          testId="configure-oracle-profile"
+          type="button"
+          variant="secondary"
+          className="shrink-0"
+          onClick={onConfigure}
+        >
+          {t(I18nKey.SETTINGS$ORACLE_PROFILE_CONFIGURE)}
+        </BrandButton>
+      ) : (
+        <span className="shrink-0 text-xs text-[var(--oh-muted)]">
+          {t(I18nKey.SETTINGS$ORACLE_PROFILE_VIEW_ONLY)}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function ProfilesBody({
   isLoading,
   loadError,
@@ -91,9 +155,13 @@ export function ProfilesBody({
   onRename,
   onDuplicate,
   onDelete,
+  onConfigureOracle = () => undefined,
   isActivating,
 }: ProfilesBodyProps) {
   const { t } = useTranslation("openhands");
+  const oracleEntry = shouldShowOracleProfileEntry(profiles) ? (
+    <OracleProfileEntry canManage={canManage} onConfigure={onConfigureOracle} />
+  ) : null;
 
   const renderRow = (profile: ProfileInfo) => (
     <ProfileRow
@@ -106,6 +174,7 @@ export function ProfilesBody({
       onRename={onRename}
       onDuplicate={onDuplicate}
       onDelete={onDelete}
+      isReserved={isOracleProfileName(profile.name)}
       isActivating={isActivating}
     />
   );
@@ -138,13 +207,16 @@ export function ProfilesBody({
 
   if (profiles.length === 0) {
     return (
-      <div
-        data-testid="profiles-empty"
-        className={extensionModuleEmptyStateClassName}
-      >
-        <p className="text-sm text-[var(--oh-muted)]">
-          {t(I18nKey.SETTINGS$PROFILES_EMPTY)}
-        </p>
+      <div className="flex flex-col gap-3">
+        {oracleEntry}
+        <div
+          data-testid="profiles-empty"
+          className={extensionModuleEmptyStateClassName}
+        >
+          <p className="text-sm text-[var(--oh-muted)]">
+            {t(I18nKey.SETTINGS$PROFILES_EMPTY)}
+          </p>
+        </div>
       </div>
     );
   }
@@ -153,12 +225,18 @@ export function ProfilesBody({
   // (no profile links to a connection) render the flat list unchanged.
   const hasLinkedProfiles = profiles.some((p) => p.provider_connection_id);
   if (!hasLinkedProfiles) {
-    return <div className={listClassName}>{profiles.map(renderRow)}</div>;
+    return (
+      <div className="flex flex-col gap-3">
+        {oracleEntry}
+        <div className={listClassName}>{profiles.map(renderRow)}</div>
+      </div>
+    );
   }
 
   const groups = groupProfilesByConnection(profiles, connectionNamesById);
   return (
     <div className="flex flex-col gap-4">
+      {oracleEntry}
       {groups.map((group) => (
         <div
           key={group.connectionId ?? "__unlinked__"}

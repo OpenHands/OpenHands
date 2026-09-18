@@ -24,6 +24,7 @@ interface ProfileRowProps {
   onRename: (profile: ProfileInfo) => void;
   onDuplicate: (profile: ProfileInfo) => void;
   onDelete: (profile: ProfileInfo) => void;
+  isReserved?: boolean;
   isActivating: boolean;
 }
 
@@ -36,6 +37,7 @@ export function ProfileRow({
   onRename,
   onDuplicate,
   onDelete,
+  isReserved = false,
   isActivating,
 }: ProfileRowProps) {
   const { t } = useTranslation("openhands");
@@ -75,6 +77,14 @@ export function ProfileRow({
             {t(I18nKey.SETTINGS$PROFILE_DEFAULT)}
           </BrandBadge>
         )}
+        {isReserved && (
+          <BrandBadge
+            className="shrink-0 whitespace-nowrap px-2.5 py-1 text-xs"
+            data-testid="profile-oracle-badge"
+          >
+            {t(I18nKey.SETTINGS$ORACLE_PROFILE_BADGE)}
+          </BrandBadge>
+        )}
         {profile.provider_connection_broken && (
           <span
             className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-[var(--oh-warning,#f59e0b)] px-2 py-0.5 text-xs font-medium text-black"
@@ -103,6 +113,7 @@ export function ProfileRow({
               onDuplicate={() => onDuplicate(profile)}
               onSetActive={() => onActivate(profile.name)}
               onDelete={() => onDelete(profile)}
+              isReserved={isReserved}
               isActive={isActive}
               isActivating={isActivating}
               onClose={() => setMenuOpen(false)}

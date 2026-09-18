@@ -24,11 +24,13 @@ import { I18nKey } from "#/i18n/declaration";
 interface LlmProfilesManagerProps {
   onAddProfile?: () => void;
   onEditProfile?: (profile: ProfileInfo) => void;
+  onConfigureOracle?: () => void;
 }
 
 export function LlmProfilesManager({
   onAddProfile,
   onEditProfile,
+  onConfigureOracle,
 }: LlmProfilesManagerProps) {
   const { t } = useTranslation("openhands");
   const { data, isLoading, error } = useLlmProfiles();
@@ -154,6 +156,7 @@ export function LlmProfilesManager({
             onRename={setProfileToRename}
             onDuplicate={handleDuplicate}
             onDelete={setProfileToDelete}
+            onConfigureOracle={onConfigureOracle ?? (() => undefined)}
             isActivating={activateProfile.isPending}
           />
         </div>

@@ -17,6 +17,8 @@ interface ProfileNameInputProps {
   isOptional?: boolean;
   /** When true, empty values will show red validation styling (required field behavior). */
   isRequired?: boolean;
+  /** When true, the name is reserved by a built-in capability. */
+  isReservedName?: boolean;
 }
 
 export const ProfileNameInput = forwardRef<
@@ -33,11 +35,13 @@ export const ProfileNameInput = forwardRef<
     isDisabled,
     isOptional,
     isRequired = false,
+    isReservedName = false,
   },
   ref,
 ) {
   const { t } = useTranslation("openhands");
   const isValid = isProfileNameValid(value, { isRequired });
+  const inputIsValid = isValid && !isReservedName;
   const label = isOptional
     ? `${t(I18nKey.SETTINGS$PROFILE_NAME_LABEL)} (${t(I18nKey.COMMON$OPTIONAL)})`
     : t(I18nKey.SETTINGS$PROFILE_NAME_LABEL);
@@ -62,17 +66,19 @@ export const ProfileNameInput = forwardRef<
         onKeyDown={onKeyDown}
         isDisabled={isDisabled}
         ariaDescribedBy={describedById}
-        ariaInvalid={!isValid}
+        ariaInvalid={!inputIsValid}
       />
       <p
         id={describedById}
         data-testid={ruleTestId}
         className={cn(
           "text-xs",
-          isValid ? "text-[var(--oh-muted)]" : "text-red-400",
+          inputIsValid ? "text-[var(--oh-muted)]" : "text-red-400",
         )}
       >
-        {t(I18nKey.SETTINGS$PROFILE_NAME_RULE)}
+        {isReservedName
+          ? t(I18nKey.SETTINGS$PROFILE_RESERVED_NAME)
+          : t(I18nKey.SETTINGS$PROFILE_NAME_RULE)}
       </p>
     </div>
   );

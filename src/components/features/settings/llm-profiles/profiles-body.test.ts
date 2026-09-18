@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { ProfileInfo } from "#/api/profiles-service/profiles-service.api";
-import { groupProfilesByConnection } from "./profiles-body";
+import {
+  groupProfilesByConnection,
+  shouldShowOracleProfileEntry,
+} from "./profiles-body";
 
 function profile(name: string, connectionId?: string | null): ProfileInfo {
   return {
@@ -57,5 +60,19 @@ describe("groupProfilesByConnection", () => {
 
     expect(groups).toHaveLength(1);
     expect(groups[0].connectionId).toBe("conn-1");
+  });
+});
+
+describe("shouldShowOracleProfileEntry", () => {
+  it("shows the Oracle entry until the reserved profile exists", () => {
+    expect(shouldShowOracleProfileEntry([profile("default")])).toBe(true);
+  });
+
+  it("hides the Oracle entry when the exact reserved profile exists", () => {
+    expect(shouldShowOracleProfileEntry([profile("oracle")])).toBe(false);
+  });
+
+  it("does not treat a differently-cased name as the reserved profile", () => {
+    expect(shouldShowOracleProfileEntry([profile("Oracle")])).toBe(true);
   });
 });
