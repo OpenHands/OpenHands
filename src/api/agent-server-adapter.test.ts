@@ -273,6 +273,45 @@ describe("buildStartConversationRequest", () => {
     expect(payload.secrets_encrypted).toBeUndefined();
   });
 
+  it("isolates the ACP data dir for containerized deployments", () => {
+    const agentSettings = {
+      agent_kind: "acp",
+      acp_server: "codex",
+      acp_command: ["codex-acp"],
+      acp_model: "gpt-5.5/medium",
+    };
+    const settings = makeSettings(agentSettings);
+
+    const payload = buildStartConversationRequest({
+      settings,
+      runtimeServicesInfo: { mode: "docker", services: {} },
+    });
+
+    expect(payload.agent_settings!.acp_isolate_data_dir).toBe(true);
+  });
+
+  it("keeps the shared HOME for host-side dev stacks and unknown modes", () => {
+    const agentSettings = {
+      agent_kind: "acp",
+      acp_server: "codex",
+      acp_command: ["codex-acp"],
+      acp_model: "gpt-5.5/medium",
+    };
+
+    for (const runtimeServicesInfo of [
+      { mode: "dev:automation", services: {} },
+      null,
+    ]) {
+      const settings = makeSettings(agentSettings);
+      const payload = buildStartConversationRequest({
+        settings,
+        runtimeServicesInfo,
+      });
+
+      expect(payload.agent_settings!.acp_isolate_data_dir).toBeUndefined();
+    }
+  });
+
   it("ships only allow-listed catalog skills to a OpenHands conversation context", () => {
     const settings = makeSettings({
       agent_kind: "openhands",
