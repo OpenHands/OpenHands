@@ -1,14 +1,23 @@
 import { useState } from "react";
+import { Square } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import TerminalIcon from "#/icons/terminal.svg?react";
+import { useCancelAutomationRun } from "#/hooks/query/use-automations";
+import { useAutomationPermissions } from "#/hooks/use-automation-permissions";
+import { isInFlightAutomationRun } from "#/hooks/use-home-automation-actions";
 import {
   AutomationRunStatus,
   type Automation,
   type AutomationRun,
 } from "#/types/automation";
-import { isInvalidTimestamp } from "#/utils/format-relative-time";
+import { getApiErrorMessage } from "#/utils/api-error-message";
 import { getAutomationRunDisplay } from "#/utils/automation-run-display";
+import {
+  displayErrorToast,
+  displaySuccessToast,
+} from "#/utils/custom-toast-handlers";
+import { isInvalidTimestamp } from "#/utils/format-relative-time";
 import { RunStatusBadge } from "./run-status-badge";
 import { RunPhase, shouldShowRunPhase } from "./run-phase";
 import { RunLogsModal } from "./run-logs-modal";
@@ -50,6 +59,8 @@ function formatRunCost(cost: number | null | undefined): string | null {
 
 export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
   const { t, i18n } = useTranslation("openhands");
+  const { canManage } = useAutomationPermissions();
+  const cancelMutation = useCancelAutomationRun();
   const hasConversation = !!run.conversation_id;
   const hasBashCommand = !!run.bash_command_id;
   // Only surface "Conversation not created" when the run has reached a
@@ -107,6 +118,48 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
     </button>
   ) : null;
 
+  const isCancelPending =
+    cancelMutation.isPending && cancelMutation.variables?.runId === run.id;
+  const canCancel = canManage && !!automation && isInFlightAutomationRun(run);
+
+  const handleCancelClick = (
+    e:
+      | React.MouseEvent<HTMLButtonElement>
+      | React.KeyboardEvent<HTMLButtonElement>,
+  ) => {
+    // Same reason as handleLogsClick: don't let the click fall through to
+    // the parent <a> and navigate away before the mutation fires.
+    e.stopPropagation();
+    e.preventDefault();
+    if (!automation) return;
+    cancelMutation.mutate(
+      { automationId: automation.id, runId: run.id },
+      {
+        onSuccess: () => {
+          displaySuccessToast(t(I18nKey.AUTOMATIONS$CANCEL_RUN_SUCCESS));
+        },
+        onError: (error) => {
+          displayErrorToast(
+            getApiErrorMessage(error, t(I18nKey.AUTOMATIONS$CANCEL_RUN_ERROR)),
+          );
+        },
+      },
+    );
+  };
+
+  const cancelButton = canCancel ? (
+    <button
+      type="button"
+      onClick={handleCancelClick}
+      disabled={isCancelPending}
+      className="rounded-md p-1 text-muted hover:bg-surface-raised hover:text-foreground focus:bg-surface-raised focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+      aria-label={t(I18nKey.AUTOMATIONS$CANCEL_RUN)}
+      title={t(I18nKey.AUTOMATIONS$CANCEL_RUN)}
+    >
+      <Square className="size-3.5 fill-current" aria-hidden />
+    </button>
+  ) : null;
+
   const content = (
     <>
       <div className="min-w-0 flex-1">
@@ -132,6 +185,7 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
             {formattedCost}
           </span>
         )}
+        {cancelButton}
         {logsButton}
         {showPhase && (
           <RunPhase
