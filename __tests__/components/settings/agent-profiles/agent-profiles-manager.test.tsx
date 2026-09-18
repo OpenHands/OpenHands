@@ -19,7 +19,7 @@ vi.mock("react-i18next", () => ({
         SETTINGS$PROFILE_DEFAULT: "Default",
         SETTINGS$PROFILE_MENU: "Profile menu",
         SETTINGS$PROFILE_EDIT: "Edit",
-        SETTINGS$PROFILE_SET_ACTIVE: "Set as active",
+        SETTINGS$PROFILE_SET_DEFAULT: "Set as default",
         SETTINGS$PROFILE_DELETE_TITLE: "Delete Profile",
         SETTINGS$AGENT_TYPE_ACP: "ACP",
         SETTINGS$PROFILE_DELETE_CONFIRMATION: params?.name
@@ -216,12 +216,34 @@ describe("AgentProfilesManager", () => {
 
     await screen.findByText("my-claude");
     const user = userEvent.setup();
-    // Second row (my-claude) is not active, so Set active is enabled.
+    // Second row (my-claude) is not the default, so Set as default is enabled.
     const triggers = screen.getAllByTestId("agent-profile-menu-trigger");
     await user.click(triggers[1]);
-    await user.click(screen.getByText("Set as active"));
+    const setDefault = screen.getByTestId("agent-profile-set-active");
+    expect(setDefault).toHaveTextContent("Set as default");
+    expect(setDefault).toBeEnabled();
+    await user.click(setDefault);
 
     expect(AgentProfilesService.activateProfile).toHaveBeenCalledWith("id-acp");
+  });
+
+  it("disables Set as default for the current default profile", async () => {
+    vi.mocked(AgentProfilesService.listProfiles).mockResolvedValue({
+      profiles: mockProfiles,
+      active_agent_profile_id: "id-oh",
+    });
+
+    renderManager();
+
+    await screen.findByText("my-openhands");
+    const user = userEvent.setup();
+    const triggers = screen.getAllByTestId("agent-profile-menu-trigger");
+    await user.click(triggers[0]);
+
+    const setDefault = screen.getByTestId("agent-profile-set-active");
+    expect(setDefault).toHaveTextContent("Set as default");
+    expect(setDefault).toBeDisabled();
+    expect(AgentProfilesService.activateProfile).not.toHaveBeenCalled();
   });
 
   it("opens the delete modal from the row menu", async () => {
