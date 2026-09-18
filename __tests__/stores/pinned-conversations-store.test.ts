@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store";
 
 const STORAGE_KEY = "pinned-conversations";
@@ -46,10 +46,14 @@ describe("pinned-conversations store", () => {
 
     usePinnedConversationsStore
       .getState()
+      .togglePin(BACKEND_ID, "conversation-b");
+
+    usePinnedConversationsStore
+      .getState()
       .togglePin(BACKEND_ID, "conversation-a");
     expect(
       usePinnedConversationsStore.getState().pinsByBackendId[BACKEND_ID],
-    ).toEqual([]);
+    ).toEqual(["conversation-b"]);
   });
 
   it("prunes missing conversations and persists pin order", () => {
@@ -73,5 +77,54 @@ describe("pinned-conversations store", () => {
     expect(persisted.state.pinsByBackendId[BACKEND_ID]).toEqual([
       "conversation-b",
     ]);
+  });
+
+  it("does not change state when unpinning or pruning already-current pins", () => {
+    const initial = usePinnedConversationsStore.getState().pinsByBackendId;
+    usePinnedConversationsStore
+      .getState()
+      .unpinConversation(BACKEND_ID, "missing");
+    expect(usePinnedConversationsStore.getState().pinsByBackendId).toBe(
+      initial,
+    );
+
+    usePinnedConversationsStore
+      .getState()
+      .pinConversation(BACKEND_ID, "conversation-a");
+    const pinned = usePinnedConversationsStore.getState().pinsByBackendId;
+    usePinnedConversationsStore
+      .getState()
+      .pruneMissingConversations(BACKEND_ID, ["conversation-a", "other"]);
+    expect(usePinnedConversationsStore.getState().pinsByBackendId).toBe(pinned);
+  });
+
+  it("creates a complete fresh store with scoped persistence", async () => {
+    window.localStorage.clear();
+    vi.resetModules();
+
+    try {
+      const { usePinnedConversationsStore: freshStore } =
+        await import("#/stores/pinned-conversations-store");
+
+      expect(freshStore.getState().pinsByBackendId).toEqual({});
+      freshStore.getState().pinConversation(BACKEND_ID, "conversation-a");
+
+      expect(freshStore.getState().pinsByBackendId).toEqual({
+        [BACKEND_ID]: ["conversation-a"],
+      });
+      expect(
+        JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "{}"),
+      ).toEqual({
+        state: {
+          pinsByBackendId: {
+            [BACKEND_ID]: ["conversation-a"],
+          },
+        },
+        version: 0,
+      });
+    } finally {
+      window.localStorage.clear();
+      vi.resetModules();
+    }
   });
 });

@@ -22,7 +22,10 @@ interface UseLoadOlderEventsResult {
    * returns a short page (i.e. it ran out of older events).
    */
   hasMore: boolean;
-  /** Trigger one more older-events page. Resolves when the page is merged. */
+  /**
+   * Trigger one more older-events page. Resolves after the page is merged, or
+   * without changing state if the load became stale.
+   */
   loadOlder: () => Promise<void>;
 }
 
@@ -54,6 +57,13 @@ export const useLoadOlderEvents = (
   const [hasMore, setHasMore] = React.useState(true);
   const isLoadingRef = React.useRef(false);
   const hasMoreRef = React.useRef(true);
+  const activeLoadMarkerRef = React.useRef<object | null>(null);
+
+  React.useEffect(() => {
+    return () => {
+      activeLoadMarkerRef.current = null;
+    };
+  }, [conversationId]);
 
   React.useEffect(() => {
     isLoadingRef.current = false;
@@ -121,6 +131,12 @@ export const useLoadOlderEvents = (
 
     isLoadingRef.current = true;
     setIsLoading(true);
+    const loadMarker = {};
+    activeLoadMarkerRef.current = loadMarker;
+    const isActiveLoad = () =>
+      activeLoadMarkerRef.current === loadMarker &&
+      useEventStore.getState().loadedConversationId === conversationId;
+
     try {
       const page = await EventService.searchEvents(
         conversationId,
@@ -132,6 +148,14 @@ export const useLoadOlderEvents = (
           timestampLt: oldestTimestamp,
         },
       );
+
+      // Conversation switches atomically replace `loadedConversationId` and
+      // clear the global event store. Do not merge this page if the store now
+      // belongs to another conversation. There is no `await` below this guard,
+      // so a navigation cannot interleave between the check and `addEvents`.
+      if (!isActiveLoad()) {
+        return;
+      }
 
       if (!Array.isArray(page.items)) {
         throw new Error(
@@ -159,9 +183,20 @@ export const useLoadOlderEvents = (
         hasMoreRef.current = false;
         setHasMore(false);
       }
+    } catch (error) {
+      // Errors from an abandoned conversation are no longer relevant to the
+      // active view. Preserve the existing error behavior for current loads.
+      if (isActiveLoad()) {
+        throw error;
+      }
     } finally {
-      isLoadingRef.current = false;
-      setIsLoading(false);
+      // A newer conversation may already have its own request in flight; an
+      // older request must not clear that request's loading state.
+      if (isActiveLoad()) {
+        activeLoadMarkerRef.current = null;
+        isLoadingRef.current = false;
+        setIsLoading(false);
+      }
     }
   }, [
     conversationId,
