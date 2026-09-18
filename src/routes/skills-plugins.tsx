@@ -21,7 +21,7 @@ import { useSetPluginEnabled } from "#/hooks/mutation/use-set-plugin-enabled";
 import { useUninstallPlugin } from "#/hooks/mutation/use-uninstall-plugin";
 import { useRefreshPlugin } from "#/hooks/mutation/use-refresh-plugin";
 import { useActiveBackend } from "#/contexts/active-backend-context";
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 import { buildPluginLaunchPath } from "#/utils/plugin-launch-url";
