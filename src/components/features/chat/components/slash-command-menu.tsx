@@ -6,75 +6,12 @@ import {
   dropdownMenuListClassName,
 } from "#/utils/dropdown-classes";
 import { Text } from "#/ui/typography";
-import { SlashCommandItem } from "#/hooks/chat/use-slash-command";
+import type { SlashCommandItem } from "#/types/slash-command";
 import { I18nKey } from "#/i18n/declaration";
-
-/**
- * Strip common inline Markdown syntax so descriptions render as plain text.
- * Handles: bold, italic, inline code, links, and images.
- */
-export function stripMarkdown(text: string): string {
-  return (
-    text
-      // Images: ![alt](url) → alt
-      .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
-      // Links: [text](url) → text
-      .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-      // Bold/italic: ***text***, **text**, *text*, ___text___, __text__, _text_
-      .replace(/\*{3}(.+?)\*{3}/g, "$1")
-      .replace(/\*{2}(.+?)\*{2}/g, "$1")
-      .replace(/\*(.+?)\*/g, "$1")
-      .replace(/_{3}(.+?)_{3}/g, "$1")
-      .replace(/_{2}(.+?)_{2}/g, "$1")
-      .replace(/_(.+?)_/g, "$1")
-      // Inline code: `text` → text
-      .replace(/`(.+?)`/g, "$1")
-      // Strikethrough: ~~text~~ → text
-      .replace(/~~(.+?)~~/g, "$1")
-  );
-}
-
-/**
- * Extract a short description from skill content.
- * Tries YAML frontmatter "description:" first, then falls back
- * to the first meaningful line after headers and frontmatter.
- * Returns plain text with Markdown formatting stripped.
- */
-export function getSkillDescription(content: string): string | null {
-  let body = content;
-
-  // Try to extract description from YAML frontmatter
-  const frontmatterMatch = content.match(/^---\s*\n([\s\S]*?)\n---/);
-  if (frontmatterMatch) {
-    const descMatch = frontmatterMatch[1].match(/^description:\s*(.+)$/m);
-    if (descMatch) {
-      let desc = descMatch[1].trim();
-      // Strip surrounding quotes from YAML values
-      if (
-        (desc.startsWith('"') && desc.endsWith('"')) ||
-        (desc.startsWith("'") && desc.endsWith("'"))
-      ) {
-        desc = desc.slice(1, -1);
-      }
-      return stripMarkdown(desc);
-    }
-    // Skip frontmatter for body parsing
-    body = content.slice(frontmatterMatch[0].length);
-  }
-
-  // Fall back to first meaningful line (skip headers, empty lines, frontmatter delimiters)
-  const meaningful = body
-    .split("\n")
-    .map((line) => line.trim())
-    .find((line) => line.length > 0 && !line.startsWith("#") && line !== "---");
-
-  if (!meaningful) return null;
-
-  // Strip Markdown first so URLs inside links don't confuse sentence detection
-  const stripped = stripMarkdown(meaningful);
-  const sentence = stripped.match(/^[^.!?\n]*[.!?]/);
-  return sentence?.[0] || stripped;
-}
+import {
+  getSkillDescription,
+  stripMarkdown,
+} from "#/utils/slash-command-description";
 
 interface SlashCommandMenuItemProps {
   item: SlashCommandItem;
@@ -89,7 +26,9 @@ function SlashCommandMenuItem({
   onSelect,
   ref,
 }: SlashCommandMenuItemProps) {
+  const { t } = useTranslation("openhands");
   const description = useMemo(() => {
+    if (item.descriptionKey) return t(item.descriptionKey);
     if ("description" in item.skill && item.skill.description) {
       return stripMarkdown(item.skill.description);
     }
@@ -97,7 +36,7 @@ function SlashCommandMenuItem({
       return getSkillDescription(item.skill.content);
     }
     return null;
-  }, [item.skill]);
+  }, [item.descriptionKey, item.skill, t]);
 
   return (
     <button
