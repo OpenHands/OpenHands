@@ -381,6 +381,7 @@ function requireAppConversation(
  */
 export interface CreateConversationOptions {
   initialUserMsg?: string;
+  automationSetup?: boolean;
   conversationInstructions?: string;
   plugins?: PluginSpec[];
   metadata?: ConversationMetadata | null;
@@ -449,6 +450,7 @@ class AgentServerConversationService {
   ): Promise<AppConversationStartTask> {
     const {
       initialUserMsg,
+      automationSetup,
       conversationInstructions,
       plugins,
       metadata,
@@ -540,6 +542,7 @@ class AgentServerConversationService {
     const payload = await buildStartConversationRequestWithEncryptedSettings({
       settings,
       query: initialUserMsg,
+      automationSetup,
       conversationInstructions,
       plugins,
       conversationId,

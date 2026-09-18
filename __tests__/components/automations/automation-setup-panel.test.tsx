@@ -1,14 +1,23 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   NavigationProvider,
   type NavigationContextValue,
 } from "#/context/navigation-context";
-import { AutomationSetupPanel } from "#/components/features/automations/setup/automation-setup-panel";
+import {
+  AGENT_FIELD_STREAM_CHARACTER_DELAY_MS,
+  AGENT_FIELD_STREAM_SETTLE_DELAY_MS,
+  AutomationSetupPanel,
+} from "#/components/features/automations/setup/automation-setup-panel";
 import AutomationService from "#/api/automation-service/automation-service.api";
-import type { AutomationSetupDraft } from "#/api/automation-setup-draft-store";
+import {
+  setAutomationSetupDraft,
+  type AutomationSetupDraft,
+} from "#/api/automation-setup-draft-store";
 import { packTarGzip } from "#/utils/tar-gzip";
+import { handleAutomationFormUpdateAction } from "#/services/automation-form";
+import { AUTOMATION_FORM_UPDATE_ACTION_KIND } from "#/constants/automation-form";
 
 const mockNavigate = vi.fn();
 const mockToastSuccess = vi.fn();
@@ -52,24 +61,34 @@ function renderPanel(
     prompt: "Review every pull request",
     kind: "prompt",
   },
+  conversationId = "conv-1",
 ) {
   const value: NavigationContextValue = {
-    currentPath: "/conversations/conv-1",
-    conversationId: "conv-1",
+    currentPath: `/conversations/${conversationId}`,
+    conversationId,
     isNavigating: false,
     navigate: mockNavigate,
   };
 
   return render(
     <NavigationProvider value={value}>
-      <AutomationSetupPanel draft={draft} onClose={vi.fn()} />
+      <AutomationSetupPanel
+        draft={draft}
+        conversationId={conversationId}
+        onClose={vi.fn()}
+      />
     </NavigationProvider>,
   );
 }
 
 describe("AutomationSetupPanel", () => {
   beforeEach(() => {
+    window.sessionStorage.clear();
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("switches between prompt, plugin, and custom form types", async () => {
@@ -99,6 +118,10 @@ describe("AutomationSetupPanel", () => {
         ) as HTMLTextAreaElement
       ).value,
     ).toContain("Review every pull request");
+    expect(screen.queryByText("AUTOMATIONS$TIMEZONE")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("AUTOMATIONS$TIMEZONE")).toBe(
+      screen.getByTestId("automation-setup-timezone"),
+    );
     expect(
       screen.queryByTestId("automation-setup-rendered-code"),
     ).not.toBeInTheDocument();
@@ -135,6 +158,101 @@ describe("AutomationSetupPanel", () => {
     expect(screen.getByTestId("automation-setup-status")).toHaveTextContent(
       "AUTOMATION_SETUP$TEST_PASSED",
     );
+  });
+
+  it("streams agent form updates field by field without overwriting user edits", async () => {
+    vi.useFakeTimers();
+    const conversationId = "conv-agent-updates";
+    const draft: AutomationSetupDraft = {
+      prompt: "Review every pull request",
+      kind: "prompt",
+    };
+    setAutomationSetupDraft(conversationId, draft);
+    renderPanel(draft, conversationId);
+
+    await act(async () => {
+      handleAutomationFormUpdateAction(
+        {
+          kind: AUTOMATION_FORM_UPDATE_ACTION_KIND,
+          fields: {
+            name: "PR Review Assistant",
+            prompt: "Watch pull requests and draft review notes",
+            frequency: "weekly",
+            time: "10:30",
+            timezone: "UTC",
+          },
+        },
+        conversationId,
+        "agent-event-1",
+        "2026-01-01T00:00:00.000Z",
+      );
+    });
+
+    const nameInput = screen.getByTestId("automation-setup-name");
+    const promptInput = screen.getByTestId("automation-setup-prompt");
+    expect(nameInput.closest("label")).toHaveAttribute(
+      "data-streaming-active",
+      "true",
+    );
+    expect(promptInput).toHaveValue("Review every pull request");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AGENT_FIELD_STREAM_CHARACTER_DELAY_MS);
+    });
+    expect(nameInput).toHaveValue("P");
+    expect(promptInput).toHaveValue("Review every pull request");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(
+        "PR Review Assistant".length * AGENT_FIELD_STREAM_CHARACTER_DELAY_MS +
+          AGENT_FIELD_STREAM_SETTLE_DELAY_MS +
+          AGENT_FIELD_STREAM_CHARACTER_DELAY_MS,
+      );
+    });
+    expect(nameInput).toHaveValue("PR Review Assistant");
+    expect(promptInput.closest("label")).toHaveAttribute(
+      "data-streaming-active",
+      "true",
+    );
+    expect((promptInput as HTMLTextAreaElement).value).toMatch(/^W/);
+    expect((promptInput as HTMLTextAreaElement).value).not.toBe(
+      "Watch pull requests and draft review notes",
+    );
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+    expect(promptInput).toHaveValue(
+      "Watch pull requests and draft review notes",
+    );
+    expect(
+      screen.getByTestId("automation-setup-frequency-weekly"),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("automation-setup-time")).toHaveValue("10:30");
+    expect(screen.getByTestId("automation-setup-timezone")).toHaveValue("UTC");
+    expect(screen.getByTestId("automation-setup-at-row")).toHaveTextContent(
+      "AUTOMATION_SETUP$FILLED_BY_OPENHANDS",
+    );
+    expect(
+      screen.getAllByText("AUTOMATION_SETUP$FILLED_BY_OPENHANDS").length,
+    ).toBeGreaterThan(0);
+
+    vi.useRealTimers();
+    const realUser = userEvent.setup();
+    await realUser.clear(nameInput);
+    await realUser.type(nameInput, "Manual name");
+
+    handleAutomationFormUpdateAction(
+      {
+        kind: AUTOMATION_FORM_UPDATE_ACTION_KIND,
+        fields: { name: "Agent replacement" },
+      },
+      conversationId,
+      "agent-event-2",
+      "2026-01-01T00:00:01.000Z",
+    );
+
+    expect(nameInput).toHaveValue("Manual name");
   });
 
   it("creates plugin drafts with the selected plugin source", async () => {
