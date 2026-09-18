@@ -11,6 +11,7 @@ import {
 import {
   ExecuteBashAction,
   FileEditorAction,
+  GrepAction,
 } from "#/types/agent-server/core/base/action";
 import { ExecuteBashObservation } from "#/types/agent-server/core/base/observation";
 
@@ -66,6 +67,35 @@ const makeBashObservation = (
   },
 });
 
+const makeFileEditorAction = (
+  id: string,
+  command: FileEditorAction["command"],
+): ActionEvent<FileEditorAction> => ({
+  ...makeBashAction(id, command),
+  action: {
+    kind: "FileEditorAction",
+    command,
+    path: `/workspace/${id}.ts`,
+    file_text: null,
+    old_str: null,
+    new_str: null,
+    insert_line: null,
+    view_range: null,
+  },
+  tool_name: "file_editor",
+});
+
+const makeGrepAction = (id: string): ActionEvent<GrepAction> => ({
+  ...makeBashAction(id, "grep"),
+  action: {
+    kind: "GrepAction",
+    pattern: "TODO",
+    path: "/workspace",
+    include: null,
+  },
+  tool_name: "grep",
+});
+
 describe("EventGroup", () => {
   it("returns null for an empty events array", () => {
     const { container } = renderWithProviders(
@@ -77,7 +107,7 @@ describe("EventGroup", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("renders a 'completed' summary when all events are observations", () => {
+  it("renders category counts when all events are observations", () => {
     const events = [
       makeBashObservation("o1", "a1", "ls"),
       makeBashObservation("o2", "a2", "pwd"),
@@ -91,13 +121,13 @@ describe("EventGroup", () => {
     );
 
     expect(
-      screen.getByText("EVENT_GROUP$ACTIONS_COMPLETED"),
+      screen.getByText("EVENT_GROUP$COMMAND_COUNT_other"),
     ).toBeInTheDocument();
     // Children should not be visible in the collapsed state.
     expect(screen.queryByTestId("child")).not.toBeInTheDocument();
   });
 
-  it("renders a progress summary and the running action title while in flight", () => {
+  it("renders category counts and a spinner while in flight", () => {
     const events = [
       makeBashObservation("o1", "a1", "ls"),
       makeBashObservation("o2", "a2", "pwd"),
@@ -107,20 +137,17 @@ describe("EventGroup", () => {
 
     renderWithProviders(
       <EventGroup events={events}>
-        <div>child</div>
+        <div />
       </EventGroup>,
     );
 
     expect(
-      screen.getByText("EVENT_GROUP$ACTIONS_PROGRESS"),
+      screen.getByText("EVENT_GROUP$COMMAND_COUNT_other"),
     ).toBeInTheDocument();
-    // The running action's title is rendered next to the summary. Translations
-    // aren't loaded in tests, so we just verify the action's translation key
-    // shows up (the localized version would interpolate the command).
-    expect(screen.getByText(/ACTION_MESSAGE\$RUN/)).toBeInTheDocument();
+    expect(screen.getByTestId("spinner-icon")).toBeInTheDocument();
   });
 
-  it("keeps showing the latest completed action's title while the group is still the live tail", () => {
+  it("keeps showing the category summary while the group is still the live tail", () => {
     // All observations -> nothing in flight, but the group has not been
     // "moved past" yet, so we expect the latest observation's title to keep
     // showing as the prominent summary alongside the completed count.
@@ -137,14 +164,13 @@ describe("EventGroup", () => {
     );
 
     // Latest observation's title is still in the summary line.
-    expect(screen.getByText(/OBSERVATION_MESSAGE\$RUN/)).toBeInTheDocument();
-    // ...next to the completed count.
     expect(
-      screen.getByText("EVENT_GROUP$ACTIONS_COMPLETED"),
+      screen.getByText("EVENT_GROUP$COMMAND_COUNT_other"),
     ).toBeInTheDocument();
+    // ...next to the completed count.
   });
 
-  it("hides the latest action title once the group is finalized", () => {
+  it("preserves the category summary once the group is finalized", () => {
     const events = [
       makeBashObservation("o1", "a1", "ls"),
       makeBashObservation("o2", "a2", "pwd"),
@@ -158,7 +184,7 @@ describe("EventGroup", () => {
     );
 
     expect(
-      screen.getByText("EVENT_GROUP$ACTIONS_COMPLETED"),
+      screen.getByText("EVENT_GROUP$COMMAND_COUNT_other"),
     ).toBeInTheDocument();
     // Once moved past, we collapse to just the count — the per-action title
     // and the success check both go away.
@@ -193,6 +219,86 @@ describe("EventGroup", () => {
     );
     expect(screen.queryByTestId("spinner-icon")).not.toBeInTheDocument();
     expect(screen.queryByTestId("status-icon")).not.toBeInTheDocument();
+  });
+
+  it("summarizes mixed action categories with singular and plural labels", () => {
+    const events = [
+      makeFileEditorAction("read-file", "view"),
+      makeGrepAction("search-files"),
+      makeFileEditorAction("edit-file", "str_replace"),
+      makeBashAction("run-command", "npm test"),
+    ];
+
+    renderWithProviders(
+      <EventGroup events={events}>
+        <div>child</div>
+      </EventGroup>,
+    );
+
+    expect(
+      screen.getByText("EVENT_GROUP$READ_COUNT_other"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("EVENT_GROUP$EDIT_COUNT_one")).toBeInTheDocument();
+    expect(
+      screen.getByText("EVENT_GROUP$COMMAND_COUNT_one"),
+    ).toBeInTheDocument();
+  });
+
+  it("updates the collapsed summary when a new action is appended", () => {
+    const initialEvents = [
+      makeFileEditorAction("read-file", "view"),
+      makeBashAction("run-command", "npm test"),
+    ];
+    const { rerender } = renderWithProviders(
+      <EventGroup events={initialEvents}>
+        <div />
+      </EventGroup>,
+    );
+
+    expect(screen.getByText("EVENT_GROUP$READ_COUNT_one")).toBeInTheDocument();
+    expect(
+      screen.getByText("EVENT_GROUP$COMMAND_COUNT_one"),
+    ).toBeInTheDocument();
+
+    rerender(
+      <EventGroup
+        events={[
+          ...initialEvents,
+          makeBashAction("run-second-command", "npm run lint"),
+        ]}
+      >
+        <div />
+      </EventGroup>,
+    );
+
+    expect(screen.getByText("EVENT_GROUP$READ_COUNT_one")).toBeInTheDocument();
+    expect(
+      screen.getByText("EVENT_GROUP$COMMAND_COUNT_other"),
+    ).toBeInTheDocument();
+  });
+
+  it("resolves observations to actions and avoids duplicate live counts", () => {
+    const readAction = makeFileEditorAction("read-file", "view");
+    const commandAction = makeBashAction("run-command", "npm test");
+    const commandObservation = makeBashObservation(
+      "command-result",
+      commandAction.id,
+      "npm test",
+    );
+
+    renderWithProviders(
+      <EventGroup
+        events={[readAction, commandAction, commandObservation]}
+        allEvents={[readAction, commandAction, commandObservation]}
+      >
+        <div />
+      </EventGroup>,
+    );
+
+    expect(screen.getByText("EVENT_GROUP$READ_COUNT_one")).toBeInTheDocument();
+    expect(
+      screen.getByText("EVENT_GROUP$COMMAND_COUNT_one"),
+    ).toBeInTheDocument();
   });
 
   it("updates accessibility state while toggling the group", async () => {

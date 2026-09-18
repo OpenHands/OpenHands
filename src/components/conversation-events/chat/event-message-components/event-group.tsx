@@ -1,6 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { LoaderCircle } from "lucide-react";
+import { BookOpen, LoaderCircle, Pencil, Terminal, Wrench } from "lucide-react";
 import ArrowDown from "#/icons/angle-down-solid.svg?react";
 import ArrowUp from "#/icons/angle-up-solid.svg?react";
 import { OpenHandsEvent, ActionEvent } from "#/types/agent-server/core";
@@ -9,9 +9,61 @@ import {
   isObservationEvent,
 } from "#/types/agent-server/type-guards";
 import { I18nKey } from "#/i18n/declaration";
-import { getEventContent } from "../event-content-helpers/get-event-content";
 import { IsInEventGroupContext } from "../../../features/chat/is-in-event-group-context";
-import { PathInteractiveContext } from "../../../features/chat/path-component";
+
+type ActionCategory = "read" | "edit" | "command" | "other";
+
+const getActionCategory = (event: ActionEvent): ActionCategory => {
+  const { action } = event;
+
+  if (
+    action.kind === "FileEditorAction" ||
+    action.kind === "StrReplaceEditorAction"
+  ) {
+    return action.command === "view" ? "read" : "edit";
+  }
+
+  if (
+    action.kind === "GlobAction" ||
+    action.kind === "GrepAction" ||
+    action.kind.startsWith("Browser")
+  ) {
+    return "read";
+  }
+
+  if (action.kind === "ExecuteBashAction" || action.kind === "TerminalAction") {
+    return "command";
+  }
+
+  return "other";
+};
+
+const getObservationCategory = (event: OpenHandsEvent): ActionCategory => {
+  if (!isObservationEvent(event)) return "other";
+
+  if (
+    event.observation.kind === "FileEditorObservation" ||
+    event.observation.kind === "StrReplaceEditorObservation"
+  ) {
+    return "edit";
+  }
+  if (
+    event.observation.kind === "ExecuteBashObservation" ||
+    event.observation.kind === "TerminalObservation"
+  ) {
+    return "command";
+  }
+  if (event.observation.kind.startsWith("Browser")) return "read";
+
+  return "other";
+};
+
+const CATEGORY_CONFIG = {
+  read: { icon: BookOpen, key: "EVENT_GROUP$READ_COUNT" },
+  edit: { icon: Pencil, key: "EVENT_GROUP$EDIT_COUNT" },
+  command: { icon: Terminal, key: "EVENT_GROUP$COMMAND_COUNT" },
+  other: { icon: Wrench, key: "EVENT_GROUP$OTHER_COUNT" },
+} as const;
 
 interface EventGroupProps {
   /** The events represented by this group. Used to compute the summary. */
@@ -23,13 +75,7 @@ interface EventGroupProps {
    * omitted.
    */
   allEvents?: OpenHandsEvent[];
-  /**
-   * `true` once an event outside this group has been emitted after it, so the
-   * group is no longer the "live" tail of the chat. While `false` (the
-   * default), the group keeps showing the most recent action's title as its
-   * prominent summary, with the count of completed actions shown subtly on
-   * the right.
-   */
+  /** Retained for callers that distinguish live and finalized groups. */
   isFinalized?: boolean;
   /** The fully-rendered event messages to show when the group is expanded. */
   children: React.ReactNode;
@@ -39,29 +85,15 @@ interface EventGroupProps {
  * Collapsible container that wraps a run of consecutive agent action/observation
  * events into a single summary card.
  *
- * Collapsed, while the group is still the live tail of the chat
- * (`isFinalized=false`):
- *   - Left (prominent): the title of the most recent action/observation in
- *     the group — i.e. either the action currently in flight, or the latest
- *     completed step.
- *   - Right (subdued):  "{completed}/{total} actions completed" while at
- *     least one action is still pending (with a spinner), otherwise
- *     "{count} actions completed" followed by a success check.
- *
- * Collapsed, after the group has been "moved past" (`isFinalized=true`):
- *   - "{count} actions completed" is promoted to the prominent foreground
- *     style and the count is the only thing shown next to the chevron.
+ * Collapsed, it summarizes every represented event by user-facing action
+ * categories with distinct icons for reads, edits, commands, and other
+ * actions. A live group keeps its running spinner while an action is pending.
  *
  * Expanded:
  *   - Renders the children verbatim, so each individual action/observation can
  *     still be expanded the way it was before grouping.
  */
-export function EventGroup({
-  events,
-  allEvents,
-  isFinalized = false,
-  children,
-}: EventGroupProps) {
+export function EventGroup({ events, allEvents, children }: EventGroupProps) {
   const { t } = useTranslation("openhands");
   const [expanded, setExpanded] = React.useState(false);
   const contentId = React.useId();
@@ -79,24 +111,36 @@ export function EventGroup({
   const totalCount = events.length;
   const isRunning = !!pendingAction;
 
-  // Title of the most recent groupable event. While running this is the
-  // pending action; otherwise it's the latest observation, with its
-  // originating action looked up so the title can be the action-style summary
-  // ("Editing path/to/file") instead of the observation default.
-  const latestEvent = events[events.length - 1];
-  let latestTitle: React.ReactNode = null;
-  if (latestEvent) {
-    if (isActionEvent(latestEvent)) {
-      latestTitle = getEventContent(latestEvent).title;
-    } else if (isObservationEvent(latestEvent)) {
-      const lookupSource = allEvents ?? events;
-      const correspondingAction = lookupSource.find(
-        (e): e is ActionEvent =>
-          isActionEvent(e) && e.id === latestEvent.action_id,
-      );
-      latestTitle = getEventContent(latestEvent, correspondingAction).title;
-    }
-  }
+  const lookupSource = allEvents ?? events;
+  const categories: Record<ActionCategory, number> = {
+    read: 0,
+    edit: 0,
+    command: 0,
+    other: 0,
+  };
+  const countedActionIds = new Set<string>();
+  events.forEach((event, index) => {
+    const action = isActionEvent(event)
+      ? event
+      : isObservationEvent(event)
+        ? lookupSource.find(
+            (candidate): candidate is ActionEvent =>
+              isActionEvent(candidate) && candidate.id === event.action_id,
+          )
+        : undefined;
+    const actionId =
+      action?.id ??
+      (isObservationEvent(event) ? event.action_id : undefined) ??
+      event.id ??
+      `event-${index}`;
+    if (countedActionIds.has(actionId)) return;
+
+    countedActionIds.add(actionId);
+    const category = action
+      ? getActionCategory(action)
+      : getObservationCategory(event);
+    categories[category] += 1;
+  });
 
   const countSummary = isRunning
     ? t(I18nKey.EVENT_GROUP$ACTIONS_PROGRESS, {
@@ -123,32 +167,35 @@ export function EventGroup({
         data-testid="event-group-toggle"
         className="w-full flex items-center justify-between gap-2 text-left cursor-pointer"
       >
-        {isFinalized ? (
-          <span className="flex items-center gap-2 min-w-0 font-normal text-[var(--oh-muted)]">
-            <Chevron className="h-4 w-4 fill-[var(--oh-muted)] flex-shrink-0" />
-            <span className="truncate">{countSummary}</span>
+        <span className="flex items-center gap-2 min-w-0 font-normal text-[var(--oh-muted)]">
+          <Chevron className="h-4 w-4 fill-[var(--oh-muted)] flex-shrink-0" />
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            {(Object.keys(CATEGORY_CONFIG) as ActionCategory[]).map(
+              (category) => {
+                const count = categories[category];
+                if (count === 0) return null;
+                const { icon: Icon, key } = CATEGORY_CONFIG[category];
+                return (
+                  <span
+                    key={category}
+                    className="inline-flex items-center gap-1 whitespace-nowrap"
+                    data-testid={`event-group-${category}-count`}
+                  >
+                    <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                    {t(`${key}_${count === 1 ? "one" : "other"}`, { count })}
+                  </span>
+                );
+              },
+            )}
           </span>
-        ) : (
-          <>
-            <span className="flex items-center gap-2 min-w-0 font-normal text-[var(--oh-muted)]">
-              <Chevron className="h-4 w-4 fill-[var(--oh-muted)] flex-shrink-0" />
-              <span className="truncate">
-                <PathInteractiveContext.Provider value={false}>
-                  {latestTitle ?? countSummary}
-                </PathInteractiveContext.Provider>
-              </span>
-            </span>
-            <span className="flex items-center flex-shrink-0 font-normal text-[var(--oh-muted)]">
-              <span className="truncate">{countSummary}</span>
-              {isRunning ? (
-                <LoaderCircle
-                  data-testid="spinner-icon"
-                  className="h-4 w-4 ml-2 inline animate-spin text-[var(--oh-muted)]"
-                />
-              ) : null}
-            </span>
-          </>
-        )}
+        </span>
+        {isRunning ? (
+          <LoaderCircle
+            data-testid="spinner-icon"
+            aria-label={countSummary}
+            className="h-4 w-4 inline flex-shrink-0 animate-spin text-[var(--oh-muted)]"
+          />
+        ) : null}
       </button>
 
       {expanded && (
