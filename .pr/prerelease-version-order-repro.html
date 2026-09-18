@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>prerelease version ordering - repro</title>
+<style>body{font-family:ui-monospace,Menlo,monospace;margin:2rem;background:#0d1117;color:#c9d1d9}
+h1{font-size:1.2rem}h2{font-size:1rem;margin-top:2rem}pre{background:#161b22;padding:1rem;border-radius:6px;overflow-x:auto;white-space:pre-wrap}
+.bad{color:#f85149}.good{color:#3fb950}</style></head><body>
+<h1>compareAgentServerVersions: prerelease ordering, red on main vs green on branch</h1>
+<p>Same two assertions run twice: once against <code>src/api/agent-server-compatibility.ts</code> as of main
+(<code>82203bb</code>, copied into a temp file and imported by a temp test), once against this branch's
+<code>src/api/agent-server-compatibility.test.ts</code>. Command: <code>npx vitest run &lt;file&gt;</code>.</p>
+<h2 class="bad">main @ 82203bb - FAIL: 1.0.0-alpha.10 reported older than 1.0.0-alpha.2</h2>
+<pre>RUN  v4.1.10 /home/sandbox/openhands
+
+ ❯ src/api/__repro.test.ts (1 test | 1 failed) 51ms
+     × semver prerelease ordering 12ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/api/__repro.test.ts &gt; repro against main &gt; semver prerelease ordering
+AssertionError: expected -1 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ -1
+
+ ❯ src/api/__repro.test.ts:6:75
+      4| describe(&quot;repro against main&quot;, () =&gt; {
+      5|   it(&quot;semver prerelease ordering&quot;, () =&gt; {
+      6|     expect(compareAgentServerVersions(&quot;1.0.0-alpha.10&quot;, &quot;1.0.0-alpha.2…
+       |                                                                           ^
+      7|     expect(compareAgentServerVersions(&quot;1.0.0-alpha.2&quot;, &quot;1.0.0-alpha.10…
+      8|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  09:01:34
+   Duration  1.46s (transform 447ms, setup 510ms, import 205ms, tests 51ms, environment 573ms)</pre>
+<h2 class="good">this branch - PASS (7/7, including the semver prerelease cases)</h2>
+<pre>RUN  v4.1.10 /home/sandbox/openhands
+
+ ✓ src/api/agent-server-compatibility.test.ts (7 tests) 46ms
+
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Start at  09:01:36
+   Duration  1.42s (transform 439ms, setup 514ms, import 203ms, tests 46ms, environment 544ms)</pre>
+<h2>Why the versions are real</h2>
+<pre>npm registry, @openhands/agent-canvas published versions include:
+1.0.0-alpha.1 ... 1.0.0-alpha.9, 1.0.0-alpha.10
+(https://registry.npmjs.org/@openhands/agent-canvas)</pre>
+</body></html>

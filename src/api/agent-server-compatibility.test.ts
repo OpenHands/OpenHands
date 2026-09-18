@@ -6,6 +6,7 @@ import {
   AgentServerUnknownVersionError,
   AgentServerUnsupportedVersionError,
   assertAgentServerVersionIsSupported,
+  compareAgentServerVersions,
   getDisplayAgentServerVersion,
   getDisplayAgentServerSdkVersion,
   isAgentServerAuthError,
@@ -120,6 +121,26 @@ describe("agent-server version compatibility", () => {
     { version: "1.28.0-rc.1", display: "1.28.0-rc.1" },
   ])("displays $version as $display", ({ version, display }) => {
     expect(getDisplayAgentServerVersion(serverInfo(version))).toBe(display);
+  });
+
+  it("orders prerelease identifiers by semver rules, not string order", () => {
+    // These exact prereleases shipped to npm as @openhands/agent-canvas
+    // 1.0.0-alpha.1 through 1.0.0-alpha.10: a multi-digit numeric identifier
+    // must compare numerically, so alpha.10 is newer than alpha.2.
+    expect(compareAgentServerVersions("1.0.0-alpha.10", "1.0.0-alpha.2")).toBe(
+      1,
+    );
+    expect(compareAgentServerVersions("1.0.0-alpha.2", "1.0.0-alpha.10")).toBe(
+      -1,
+    );
+    // A numeric identifier sorts before any alphanumeric one.
+    expect(compareAgentServerVersions("1.0.0-1", "1.0.0-alpha")).toBe(-1);
+    // With an equal shared prefix, fewer identifiers means earlier.
+    expect(compareAgentServerVersions("1.0.0-alpha", "1.0.0-alpha.1")).toBe(-1);
+    expect(compareAgentServerVersions("1.0.0-alpha.1", "1.0.0-alpha")).toBe(1);
+    expect(compareAgentServerVersions("1.0.0-alpha.1", "1.0.0-alpha.1")).toBe(
+      0,
+    );
   });
 });
 
