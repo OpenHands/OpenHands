@@ -15,9 +15,12 @@ import {
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
 
+// Only the "openhands" namespace holds these keys, so a component asking for
+// any other namespace must fall through to the raw key.
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({
+  useTranslation: (namespace: string) => ({
     t: (key: string, params?: Record<string, string | number>) => {
+      if (namespace !== "openhands") return key;
       const translations: Record<string, string> = {
         SETTINGS$PROFILES_UNGROUPED: "Not linked",
         SETTINGS$PROVIDER_CONNECTIONS_TITLE: "Provider connections",
