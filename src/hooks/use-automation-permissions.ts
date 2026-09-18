@@ -16,7 +16,7 @@ export const MANAGE_AUTOMATIONS = "manage_automations";
 export interface AutomationPermissionsResult {
   /** Read-only access (list, get, list runs, capabilities, git-sync status). */
   canView: boolean;
-  /** Full write access (create, update, delete, dispatch, git-sync config). */
+  /** Full write access (update, delete, dispatch, git-sync config). */
   canManage: boolean;
   /**
    * `true` when permissions are still being resolved on cloud. Local always
