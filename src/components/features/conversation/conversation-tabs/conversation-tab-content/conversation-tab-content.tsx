@@ -10,6 +10,7 @@ import { useConversationId } from "#/hooks/use-conversation-id";
 // xterm.css are large enough that we don't want them in the conversation
 // route's eager graph just because the terminal tab might be selected later.
 const FilesTab = lazy(() => import("#/routes/files-tab"));
+const LivePreviewTab = lazy(() => import("#/routes/live-preview-tab"));
 const CommitsTab = lazy(() => import("#/routes/commits-tab"));
 const BrowserTab = lazy(() => import("#/routes/browser-tab"));
 const PlannerTab = lazy(() => import("#/routes/planner-tab"));
@@ -20,6 +21,7 @@ const Terminal = lazy(() => import("#/components/features/terminal/terminal"));
 const TAB_CONFIG = {
   tasklist: { component: TaskListTab },
   files: { component: FilesTab },
+  preview: { component: LivePreviewTab },
   commits: { component: CommitsTab },
   browser: { component: BrowserTab },
   terminal: { component: Terminal },
