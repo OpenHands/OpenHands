@@ -1,3 +1,4 @@
+import { isServedOriginHost } from "../agent-server-config";
 import {
   SEEDED_DEFAULT_BACKEND_ID,
   makeDefaultLocalBackend,
@@ -53,11 +54,30 @@ function isLoopbackUrl(value: string): boolean {
   }
 }
 
-function shouldSyncLauncherDefaultLocalBackend(
+/**
+ * Whether this stored local backend should pick up the launcher-injected
+ * session key after a rotation/reinstall.
+ *
+ * Same-origin local entries (including renamed or hand-added ones) match via
+ * `isServedOriginHost`, which is port-sensitive and normalizes protocol /
+ * trailing slash. The seeded `default-local` entry also rotates across
+ * loopback aliases (localhost ↔ 127.0.0.1). That alias is *not* applied to
+ * custom backends: `isLoopbackUrl` ignores port, so a second agent-server on
+ * another loopback port would get the wrong key.
+ */
+function shouldSyncLauncherLocalBackend(
   backend: Backend,
   defaultBackend: Backend,
 ): boolean {
-  if (backend.id !== SEEDED_DEFAULT_BACKEND_ID || backend.kind !== "local") {
+  if (backend.kind !== "local") {
+    return false;
+  }
+
+  if (isServedOriginHost(backend.host)) {
+    return true;
+  }
+
+  if (backend.id !== SEEDED_DEFAULT_BACKEND_ID) {
     return false;
   }
 
@@ -67,23 +87,28 @@ function shouldSyncLauncherDefaultLocalBackend(
   );
 }
 
-function syncLauncherDefaultLocalBackend(backends: Backend[]): Backend[] {
+function withSyncedLauncherApiKey(backend: Backend, apiKey: string): Backend {
+  return {
+    ...backend,
+    apiKey,
+    connectionRevision: (backend.connectionRevision ?? 0) + 1,
+  };
+}
+
+function syncLauncherLocalBackends(backends: Backend[]): Backend[] {
   const defaultBackend = makeDefaultLocalBackend();
   if (!defaultBackend) return backends;
 
   let didSync = false;
   const syncedBackends = backends.map((backend) => {
-    if (!shouldSyncLauncherDefaultLocalBackend(backend, defaultBackend)) {
+    if (!shouldSyncLauncherLocalBackend(backend, defaultBackend)) {
       return backend;
     }
 
     if (backend.apiKey === defaultBackend.apiKey) return backend;
 
     didSync = true;
-    return {
-      ...backend,
-      apiKey: defaultBackend.apiKey,
-    };
+    return withSyncedLauncherApiKey(backend, defaultBackend.apiKey);
   });
 
   if (!didSync) return backends;
@@ -141,8 +166,7 @@ export function readStoredBackends(): Backend[] {
       return [defaultBackend];
     }
 
-    const synced = syncLauncherDefaultLocalBackend(valid);
-    return synced;
+    return syncLauncherLocalBackends(valid);
   } catch {
     return [];
   }
