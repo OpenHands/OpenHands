@@ -52,6 +52,7 @@ export function SidebarOnboardingChecklistItemIcon({
 
   switch (id) {
     case "configure-llm":
+    case "configure-subscription-agent":
       return (
         <span data-testid={testId} className="inline-flex shrink-0">
           <KeyIcon
