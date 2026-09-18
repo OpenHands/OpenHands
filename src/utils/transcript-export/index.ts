@@ -29,6 +29,7 @@ import {
 import { groupEvents } from "#/components/conversation-events/chat/group-events";
 import {
   getActionThoughtText,
+  getMessageReasoningContent,
   getReasoningContent,
   splitInlineThink,
 } from "#/components/conversation-events/chat/event-thought-helpers";
@@ -347,7 +348,13 @@ const buildTranscriptEntries = (
       if (isMessageEvent(event)) {
         const parsed = parseMessageFromEvent(event).trim();
         if (event.source === "agent") {
-          const { reasoning, message } = splitInlineThink(parsed);
+          // Prefer the SDK's structured reasoning (llm_message.reasoning_content
+          // / thinking_blocks), falling back to an inline  thinking block, so
+          // text-only final replies export their reasoning too.
+          const structuredReasoning = getMessageReasoningContent(event);
+          const { reasoning, message } = structuredReasoning
+            ? { reasoning: structuredReasoning, message: parsed }
+            : splitInlineThink(parsed);
           [reasoning, message].filter(Boolean).forEach((content) => {
             entries.push({
               kind: "message",
