@@ -12,6 +12,12 @@ import type { Backend } from "#/api/backend-registry/types";
  * Used by the BackendSelector to flatten each cloud backend into per-org
  * rows. Each query is keyed by the backend ID so React Query caches
  * responses independently and a switch (which clears the cache) refetches.
+ *
+ * Note: issue #15822 was about the 30s OPTIONS preflight spam from
+ * `useBackendsHealth`'s polling. This hook is bounded by `staleTime: 5min`
+ * and the BackendSelector needs every cloud backend's orgs to render its
+ * dropdown, so we deliberately do NOT gate on the active backend. The
+ * related preflight gate lives in `useBackendsHealth`.
  */
 export function useAllCloudOrganizations() {
   const { backends } = useActiveBackendContext();
