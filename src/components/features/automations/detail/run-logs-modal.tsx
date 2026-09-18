@@ -36,6 +36,11 @@ type LogTab = "stdout" | "stderr";
 interface RunLogsModalProps {
   /** Conversation that owns the bash command. */
   conversationId: string | null;
+  /**
+   * Cloud sandbox that ran the command; the runtime handle for runs with
+   * no conversation (script automations).
+   */
+  sandboxId?: string | null;
   /** Bash command id to fetch logs for. */
   bashCommandId: string | null;
   isOpen: boolean;
@@ -188,6 +193,7 @@ function RunInspectionSummary({ run }: { run: AutomationRun | undefined }) {
 
 export function RunLogsModal({
   conversationId,
+  sandboxId,
   bashCommandId,
   isOpen,
   onClose,
@@ -206,6 +212,7 @@ export function RunLogsModal({
     error,
   } = useBashCommandLogs({
     conversationId,
+    sandboxId,
     bashCommandId,
     enabled: isOpen,
   });
