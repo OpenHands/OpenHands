@@ -502,6 +502,8 @@ describe("buildAgentServerCommand", () => {
       "--with",
       "agent-client-protocol<0.11",
       "--with",
+      "mcp==1.26.0",
+      "--with",
       "posthog>=6,<7",
       "agent-server",
       "--import-modules",
@@ -528,6 +530,8 @@ describe("buildAgentServerCommand", () => {
       "--with",
       "agent-client-protocol<0.11",
       "--with",
+      "mcp==1.26.0",
+      "--with",
       "posthog>=6,<7",
       "agent-server",
       "--import-modules",
@@ -553,6 +557,8 @@ describe("buildAgentServerCommand", () => {
       "--with",
       "git+https://github.com/OpenHands/software-agent-sdk@feature-branch#subdirectory=openhands-workspace",
       "--with",
+      "mcp==1.26.0",
+      "--with",
       "posthog>=6,<7",
       "agent-server",
       "--import-modules",
@@ -575,6 +581,8 @@ describe("buildAgentServerCommand", () => {
       "git+https://github.com/OpenHands/software-agent-sdk@abc1234#subdirectory=openhands-tools",
       "--with",
       "git+https://github.com/OpenHands/software-agent-sdk@abc1234#subdirectory=openhands-workspace",
+      "--with",
+      "mcp==1.26.0",
       "--with",
       "posthog>=6,<7",
       "agent-server",
@@ -613,6 +621,8 @@ describe("buildAgentServerCommand", () => {
       path.join(sdk, "openhands-tools"),
       "--with-editable",
       path.join(sdk, "openhands-workspace"),
+      "--with",
+      "mcp==1.26.0",
       "--with",
       "posthog>=6,<7",
       "agent-server",
@@ -665,6 +675,30 @@ describe("buildAgentServerCommand", () => {
         OH_AGENT_SERVER_LOCAL_PATH: "./software-agent-sdk",
       }),
     ).toThrow(/must be an absolute path/);
+  });
+
+  it("pins mcp from defaults.json on every agent-server install source", () => {
+    const defaults = JSON.parse(
+      readFileSync(path.join(repoRoot, "config/defaults.json"), "utf-8"),
+    ) as { constraints: { mcp: string } };
+    const mcpConstraint = defaults.constraints.mcp;
+    expect(mcpConstraint).toBe("mcp==1.26.0");
+
+    const sources = [
+      {},
+      { OH_AGENT_SERVER_VERSION: "1.18.0" },
+      { OH_AGENT_SERVER_GIT_REF: "feature-branch" },
+      { OH_AGENT_SERVER_LOCAL_PATH: "/abs/path/to/software-agent-sdk" },
+    ];
+    for (const env of sources) {
+      const { args } = buildAgentServerCommand(env);
+      const executable = args.indexOf("agent-server");
+      expect(executable).toBeGreaterThan(-1);
+      const withIndex = args.lastIndexOf("--with", executable);
+      expect(args[withIndex + 1]).toBe("posthog>=6,<7");
+      expect(args.slice(0, executable)).toContain(mcpConstraint);
+      expect(args.indexOf(mcpConstraint)).toBeLessThan(executable);
+    }
   });
 });
 
