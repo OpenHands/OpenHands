@@ -75,6 +75,7 @@ AUTH MODES:
 
 OPTIONS:
   -p, --port <port>     Ingress port (default: 8000)
+  --frontend-port <port>  Frontend static-server port (default: 3001)
   --public              Enable public mode (see above)
   --frontend-only       Start only the static frontend behind ingress
   --backend-only        Start only agent-server + automation behind ingress
@@ -106,6 +107,9 @@ EXAMPLES:
 
   # Use a specific port
   npx @openhands/agent-canvas --port 3000
+
+  # Use a specific frontend port (useful when 3001 is already taken)
+  npx @openhands/agent-canvas --frontend-port 3100
 
   # Start only the static frontend behind ingress
   npx @openhands/agent-canvas --frontend-only
