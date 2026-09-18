@@ -163,9 +163,10 @@ identity.
   that only prove another mock was called.
 - Keep tests focused: one meaningful assertion path per behavior, no duplicated
   coverage of library behavior, and no brittle presentation-only snapshots.
-- Follow the test routing in `AGENTS.md`. If a change crosses a full-stack flow
-  and lacks suitable coverage, recommend mock-LLM E2E and add the `e2e-tests`
-  label when appropriate.
+- Follow the test routing in `AGENTS.md`. The mock-LLM, Docker mock-LLM, and
+  live LLM-backed E2E suites run after changes reach `main`, not from PR labels.
+  If a risky PR needs pre-merge E2E evidence, recommend manually dispatching the
+  relevant workflow against the PR branch.
 - Never broaden live E2E triggers or secret exposure for convenience.
 
 ## Review Context Integrity
