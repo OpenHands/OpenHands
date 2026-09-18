@@ -66,7 +66,7 @@ Access at `http://localhost:3001/`
 
 ### Agent server version selection
 
-By default, the latest released version from PyPI is used. You can override this (highest precedence first):
+By default, launchers pin the PyPI version from [`config/defaults.json`](../config/defaults.json) (`versions.agentServer`, currently `1.44.1`), not the latest PyPI release. You can override this (highest precedence first):
 
 ```sh
 # Run against a local software-agent-sdk checkout.
@@ -77,7 +77,7 @@ OH_AGENT_SERVER_GIT_REF=main npm run dev
 OH_AGENT_SERVER_GIT_REF=abc1234 npm run dev
 
 # Use a specific PyPI version
-OH_AGENT_SERVER_VERSION=1.18.0 npm run dev
+OH_AGENT_SERVER_VERSION=1.44.1 npm run dev
 ```
 
 `OH_AGENT_SERVER_LOCAL_PATH` must be an absolute path to a `software-agent-sdk` checkout containing the `openhands-agent-server`, `openhands-sdk`, `openhands-tools`, and `openhands-workspace` workspace packages. The agent-server itself is rebuilt from local source on each start (`uvx --reinstall`); the other workspace packages are installed editable, so their source changes take effect without a rebuild.
