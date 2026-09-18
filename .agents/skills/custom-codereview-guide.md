@@ -42,8 +42,7 @@ maintainability.
 | Repository                     | Owns                                                                                                            |
 | ------------------------------ | --------------------------------------------------------------------------------------------------------------- |
 | `OpenHands/OpenHands`          | Agent Canvas UI, frontend state, backend selection, frontend service integration, and local-stack orchestration |
-| `OpenHands/software-agent-sdk` | Agent Server, agents, tools, conversations, events, workspaces, and the canonical server API                    |
-| `OpenHands/typescript-client`  | Browser-compatible typed access to the Agent Server API                                                         |
+| `OpenHands/software-agent-sdk` | Agent Server, SDK, canonical server API, and browser-compatible client in `clients/typescript/`                 |
 | `OpenHands/extensions`         | Reusable skills, plugins, and integrations                                                                      |
 | `OpenHands/automation`         | Scheduling, webhooks, run history, and automation dispatch                                                      |
 
