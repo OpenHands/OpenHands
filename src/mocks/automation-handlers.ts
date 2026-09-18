@@ -360,6 +360,7 @@ export const AUTOMATION_HANDLERS = [
     };
     draft.last_test_run_id = run.id;
     return HttpResponse.json(run, { status: 201 });
+  }),
 
   // POST /api/automation/v1/uploads — Upload custom automation tarball
   http.post("*/api/automation/v1/uploads", async ({ request }) => {

@@ -60,6 +60,7 @@ type AutomationDraftCreateTarget = SetupEntry | "prompt" | "plugin" | "custom";
 
 function automationCreateEndpointForTarget(
   target?: AutomationDraftCreateTarget,
+  selectedAction?: string | null,
 ): string {
   if (target === "plugin") return getAutomationEndpoint("createPlugin");
   if (target === "custom") {
@@ -72,7 +73,7 @@ function automationCreateEndpointForTarget(
     return endpoint;
   }
   if (!target || target === "prompt") return automationCreateEndpoint();
-  return automationCreateEndpoint(target);
+  return automationCreateEndpoint(target, selectedAction);
 }
 
 export interface AutomationHealthResponse {
@@ -720,10 +721,12 @@ class AutomationService {
     body: SetupRequestBody,
     /** The entry or generic draft kind decides the create endpoint. */
     target?: AutomationDraftCreateTarget,
+    selectedAction?: string | null,
   ): Promise<Record<string, unknown>> {
     const active = getActiveBackend().backend;
     const path = `${AUTOMATION_BASE_PATH}${automationCreateEndpointForTarget(
       target,
+      selectedAction,
     )}`;
 
     if (active.kind === "cloud") {
