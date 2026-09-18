@@ -1,6 +1,11 @@
+import type {
+  MouseEvent as ReactMouseEvent,
+  TouchEvent as ReactTouchEvent,
+} from "react";
 import { act, renderHook } from "@testing-library/react";
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useDragResize } from "#/hooks/use-drag-resize";
+import { isMobileDevice } from "#/utils/utils";
 
 let mobileDevice = false;
 
@@ -9,28 +14,93 @@ vi.mock("#/utils/utils", async (importOriginal) => ({
   isMobileDevice: () => mobileDevice,
 }));
 
-/**
- * Coverage for the top-grip resize direction fix (OHE-3062).
- *
- * The same chat-input component is used on the conversation page (where the
- * input is bottom-anchored) and the home page (where the input is centred).
- * On the conversation page, dragging the top grip makes the box grow upward —
- * correct. On the home page, the same drag would grow the box downward, which
- * is confusing, so the hook disables manual resizing entirely when the input
- * is not bottom-anchored.
- */
-describe("useDragResize — disabled when not bottom-anchored", () => {
-  let inputEl: HTMLDivElement;
-  let wrapperEl: HTMLDivElement;
-  let gripEl: HTMLDivElement;
+interface ResizeElementOptions {
+  offsetHeight?: number;
+  scrollHeight?: number;
+}
 
-  // Helper to simulate a drag from startY upward by `distance` px.
-  const dragUp = (startY: number, distance: number) => {
-    document.dispatchEvent(
-      new MouseEvent("mousemove", { clientY: startY - distance }),
-    );
-    document.dispatchEvent(new MouseEvent("mouseup", { clientY: startY }));
+const createResizeElement = ({
+  offsetHeight = 200,
+  scrollHeight = 100,
+}: ResizeElementOptions = {}) => {
+  const element = document.createElement("div");
+  Object.defineProperties(element, {
+    offsetHeight: { configurable: true, value: offsetHeight },
+    scrollHeight: { configurable: true, value: scrollHeight },
+  });
+  document.body.appendChild(element);
+  return element;
+};
+
+const createResizeGrip = () => {
+  const grip = document.createElement("div");
+  grip.id = "resize-grip";
+  document.body.appendChild(grip);
+  return grip;
+};
+
+const createTouchEvent = (type: string, clientYs: number[]) => {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "touches", {
+    value: clientYs.map((clientY) => ({ clientY })),
+  });
+  return event as TouchEvent;
+};
+
+const beginMouseDrag = (
+  handleGripMouseDown: (event: ReactMouseEvent) => void,
+  clientY = 100,
+) => {
+  const preventDefault = vi.fn();
+  act(() => {
+    handleGripMouseDown({
+      clientY,
+      preventDefault,
+    } as unknown as ReactMouseEvent);
+  });
+  expect(preventDefault).toHaveBeenCalledOnce();
+};
+
+const beginTouchDrag = (
+  handleGripTouchStart: (event: ReactTouchEvent) => void,
+  clientY = 100,
+) => {
+  const preventDefault = vi.fn();
+  act(() => {
+    handleGripTouchStart({
+      touches: [{ clientY }],
+      preventDefault,
+    } as unknown as ReactTouchEvent);
+  });
+  expect(preventDefault).toHaveBeenCalledOnce();
+};
+
+const dispatchDocumentMouseMove = (clientY: number) => {
+  const event = new MouseEvent("mousemove", {
+    bubbles: true,
+    cancelable: true,
+    clientY,
+  });
+  act(() => document.dispatchEvent(event));
+  return event;
+};
+
+const captureWindowErrors = (action: () => void) => {
+  const errors: unknown[] = [];
+  const handleError = (event: ErrorEvent) => {
+    event.preventDefault();
+    errors.push(event.error);
   };
+  window.addEventListener("error", handleError);
+  try {
+    action();
+  } catch (error) {
+    errors.push(error);
+  } finally {
+    window.removeEventListener("error", handleError);
+  }
+  return errors;
+};
 
   beforeEach(() => {
     mobileDevice = false;
