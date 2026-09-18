@@ -12,7 +12,8 @@ type EventType =
   | "TaskTracker"
   | "PlanningFileEditor"
   | "InvokeSkill"
-  | "SwitchLLM";
+  | "SwitchLLM"
+  | "ClassifyAndSwitchLLM";
 
 type ActionOnlyType =
   | "BrowserNavigate"

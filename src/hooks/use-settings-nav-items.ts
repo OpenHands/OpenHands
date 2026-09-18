@@ -1,6 +1,6 @@
 import { useConfig } from "#/hooks/query/use-config";
 import {
-  LOCKED_CLOUD_SETTINGS_NAV_PATH,
+  LOCKED_CLOUD_SETTINGS_NAV_PATHS,
   OSS_NAV_ITEMS,
   SettingsNavItem,
 } from "#/constants/settings-nav";
@@ -21,14 +21,14 @@ export function useSettingsNavItems(): SettingsNavRenderedItem[] {
   const { data: config } = useConfig();
   const { backend } = useActiveBackend();
   const featureFlags = config?.feature_flags;
-  // Locked-to-Cloud (SaaS / self-hosted OHE) lists only the Application page;
-  // the OHE settings shell behind "All Cloud Settings" owns the rest (OHE-3168).
+  // Locked-to-Cloud still lists the full Canvas settings nav; the Cloud shell
+  // remains available through "All Cloud Settings" for Cloud-owned pages.
   const isLockedToCloud = getLockedCloudHost() !== null;
 
   return OSS_NAV_ITEMS.filter(
     (item) =>
       !isSettingsPageHidden(item.to, featureFlags) &&
-      (!isLockedToCloud || item.to === LOCKED_CLOUD_SETTINGS_NAV_PATH),
+      (!isLockedToCloud || LOCKED_CLOUD_SETTINGS_NAV_PATHS.has(item.to)),
   ).map((item) => {
     const renamedItem =
       item.to === "/settings"

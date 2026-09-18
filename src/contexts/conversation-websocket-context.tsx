@@ -37,6 +37,7 @@ import {
   isBrowserObservationEvent,
   isBrowserNavigateActionEvent,
   isSwitchLLMObservationEvent,
+  isClassifyAndSwitchLLMObservationEvent,
   isCanvasUIActionEvent,
   isStreamingDeltaEvent,
   isLaunchChildConversationActionEvent,
@@ -575,6 +576,8 @@ export function ConversationWebSocketProvider({
           const switchLLMObservation = isSwitchLLMObservationEvent(event)
             ? event
             : null;
+          const classifyAndSwitchLLMObservation =
+            isClassifyAndSwitchLLMObservationEvent(event) ? event : null;
           addEvent(event);
           if (isDuplicateEvent) {
             return;
@@ -732,6 +735,39 @@ export function ConversationWebSocketProvider({
                 switchLLMObservation.observation.active_model,
               );
             }
+
+            invalidateConversationQueries(queryClient, conversationId);
+          }
+
+          // Router-driven model switch (Pareto/meta-profile classifier).
+          // Same UI semantics as SwitchLLMObservation: update the combobox,
+          // stamp the active profile, record the inline "Switched to"
+          // message. The "profile name" in agent-canvas terms is the LLM
+          // profile the SDK matched the classifier's model output against —
+          // i.e. `active_model`, which equals the saved profile name on a
+          // successful match.
+          if (
+            conversationId &&
+            classifyAndSwitchLLMObservation &&
+            !classifyAndSwitchLLMObservation.observation.is_error &&
+            classifyAndSwitchLLMObservation.observation.active_model
+          ) {
+            const activeModel =
+              classifyAndSwitchLLMObservation.observation.active_model;
+
+            recordModelSwitchMessage(conversationId, activeModel);
+
+            stampActiveLlmProfile(
+              conversationId,
+              activeModel,
+              classifyAndSwitchLLMObservation.timestamp,
+            );
+
+            updateConversationLlmModelInCache(
+              queryClient,
+              conversationId,
+              activeModel,
+            );
 
             invalidateConversationQueries(queryClient, conversationId);
           }
