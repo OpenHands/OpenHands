@@ -1,14 +1,30 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { SidebarMobileNavProvider } from "#/components/features/sidebar/sidebar-mobile-nav-context";
+import {
+  NavigationProvider,
+  type NavigationContextValue,
+} from "#/context/navigation-context";
+import type { AutomationSetupDraft } from "#/api/automation-setup-draft-store";
 
 // Mutable mock state for controlling breakpoint
 let mockIsMobile = false;
 let mockIsRightPanelShown = false;
 let mockLeftWidth = 50;
+let mockAutomationSetupDraft: AutomationSetupDraft | null = null;
+
+const mockNavigate = vi.fn();
+const mockSetHasRightPanelToggled = vi.fn();
+const mockSetIsRightPanelShown = vi.fn();
+const mockClearAutomationSetupDraft = vi.fn();
 
 // Track ChatInterface unmount via vi.fn()
 const chatInterfaceUnmount = vi.fn();
+
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({ t: (key: string) => key }),
+}));
 
 vi.mock("#/hooks/use-breakpoint", () => ({
   useBreakpoint: () => mockIsMobile,
@@ -28,6 +44,20 @@ vi.mock("#/hooks/use-resizable-panels", () => ({
 vi.mock("#/stores/conversation-store", () => ({
   useConversationStore: () => ({
     isRightPanelShown: mockIsRightPanelShown,
+    setHasRightPanelToggled: mockSetHasRightPanelToggled,
+    setIsRightPanelShown: mockSetIsRightPanelShown,
+  }),
+}));
+
+vi.mock("#/api/automation-setup-draft-store", () => ({
+  getAutomationSetupDraft: () => mockAutomationSetupDraft,
+  clearAutomationSetupDraft: (...args: unknown[]) =>
+    mockClearAutomationSetupDraft(...args),
+}));
+
+vi.mock("#/hooks/query/use-active-conversation", () => ({
+  useActiveConversation: () => ({
+    data: { title: "Daily Morning Haiku" },
   }),
 }));
 
@@ -71,13 +101,49 @@ vi.mock(
   }),
 );
 
+vi.mock(
+  "#/components/features/automations/setup/automation-setup-panel",
+  () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { createPortal } = require("react-dom");
+    return {
+      AutomationSetupPanel: ({
+        toolbarPortal,
+      }: {
+        toolbarPortal?: HTMLElement | null;
+      }) => (
+        <>
+          {toolbarPortal
+            ? createPortal(
+                <button type="button" data-testid="automation-setup-create">
+                  Create automation
+                </button>,
+                toolbarPortal,
+              )
+            : null}
+          <div data-testid="automation-setup-panel" />
+        </>
+      ),
+    };
+  },
+);
+
 import { ConversationMain } from "#/components/features/conversation/conversation-main/conversation-main";
 
 function renderConversationMain() {
+  const navigation: NavigationContextValue = {
+    currentPath: "/conversations/conv-1",
+    conversationId: "conv-1",
+    isNavigating: false,
+    navigate: mockNavigate,
+  };
+
   return render(
-    <SidebarMobileNavProvider>
-      <ConversationMain />
-    </SidebarMobileNavProvider>,
+    <NavigationProvider value={navigation}>
+      <SidebarMobileNavProvider>
+        <ConversationMain />
+      </SidebarMobileNavProvider>
+    </NavigationProvider>,
   );
 }
 
@@ -86,7 +152,12 @@ describe("ConversationMain - Layout Transition Stability", () => {
     mockIsMobile = false;
     mockIsRightPanelShown = false;
     mockLeftWidth = 50;
+    mockAutomationSetupDraft = null;
     chatInterfaceUnmount.mockClear();
+    mockNavigate.mockClear();
+    mockSetHasRightPanelToggled.mockClear();
+    mockSetIsRightPanelShown.mockClear();
+    mockClearAutomationSetupDraft.mockClear();
   });
 
   it("renders ChatInterface at desktop width", () => {
@@ -109,9 +180,18 @@ describe("ConversationMain - Layout Transition Stability", () => {
     // Cross the breakpoint to mobile
     mockIsMobile = true;
     rerender(
-      <SidebarMobileNavProvider>
-        <ConversationMain />
-      </SidebarMobileNavProvider>,
+      <NavigationProvider
+        value={{
+          currentPath: "/conversations/conv-1",
+          conversationId: "conv-1",
+          isNavigating: false,
+          navigate: mockNavigate,
+        }}
+      >
+        <SidebarMobileNavProvider>
+          <ConversationMain />
+        </SidebarMobileNavProvider>
+      </NavigationProvider>,
     );
 
     // ChatInterface must NOT have been unmounted and remounted
@@ -127,9 +207,18 @@ describe("ConversationMain - Layout Transition Stability", () => {
     // Cross the breakpoint to desktop
     mockIsMobile = false;
     rerender(
-      <SidebarMobileNavProvider>
-        <ConversationMain />
-      </SidebarMobileNavProvider>,
+      <NavigationProvider
+        value={{
+          currentPath: "/conversations/conv-1",
+          conversationId: "conv-1",
+          isNavigating: false,
+          navigate: mockNavigate,
+        }}
+      >
+        <SidebarMobileNavProvider>
+          <ConversationMain />
+        </SidebarMobileNavProvider>
+      </NavigationProvider>,
     );
 
     // ChatInterface must NOT have been unmounted and remounted
@@ -145,13 +234,71 @@ describe("ConversationMain - Layout Transition Stability", () => {
     for (const mobile of [true, false, true, false, true]) {
       mockIsMobile = mobile;
       rerender(
-        <SidebarMobileNavProvider>
-          <ConversationMain />
-        </SidebarMobileNavProvider>,
+        <NavigationProvider
+          value={{
+            currentPath: "/conversations/conv-1",
+            conversationId: "conv-1",
+            isNavigating: false,
+            navigate: mockNavigate,
+          }}
+        >
+          <SidebarMobileNavProvider>
+            <ConversationMain />
+          </SidebarMobileNavProvider>
+        </NavigationProvider>,
       );
     }
 
     expect(chatInterfaceUnmount).not.toHaveBeenCalled();
     expect(screen.getByTestId("chat-interface")).toBeInTheDocument();
+  });
+
+  it("uses a single automation setup top bar with splash back navigation", async () => {
+    const user = userEvent.setup();
+    mockIsRightPanelShown = true;
+    mockAutomationSetupDraft = {
+      prompt: "Write a haiku each morning",
+      kind: "prompt",
+    };
+
+    renderConversationMain();
+
+    expect(screen.getByTestId("automation-setup-topbar")).toBeInTheDocument();
+    expect(screen.queryByTestId("chat-pane-header")).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("automation-setup-conversation-title"),
+    ).toHaveTextContent("Daily Morning Haiku");
+    expect(screen.getByTestId("automation-setup-create")).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("automation-setup-back"));
+
+    expect(mockNavigate).toHaveBeenCalledWith("/");
+  });
+
+  it("expands the automation form to full width when hiding the agent", async () => {
+    const user = userEvent.setup();
+    mockIsRightPanelShown = true;
+    mockAutomationSetupDraft = {
+      prompt: "Write a haiku each morning",
+      kind: "prompt",
+    };
+
+    renderConversationMain();
+
+    expect(screen.getByTestId("conversation-chat-panel")).toHaveStyle({
+      width: "50%",
+    });
+    expect(screen.getByTestId("conversation-right-panel")).toHaveStyle({
+      width: "50%",
+    });
+
+    await user.click(screen.getByTestId("automation-setup-agent-toggle"));
+
+    expect(screen.getByTestId("conversation-chat-panel")).toHaveStyle({
+      width: "0%",
+    });
+    expect(screen.getByTestId("conversation-right-panel")).toHaveStyle({
+      width: "100%",
+    });
   });
 });
