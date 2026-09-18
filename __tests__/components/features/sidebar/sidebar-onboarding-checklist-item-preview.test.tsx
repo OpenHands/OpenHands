@@ -5,7 +5,7 @@ import { SidebarOnboardingChecklistItemPreview } from "#/components/features/sid
 import {
   NavigationProvider,
   type NavigationContextValue,
-} from "#/context/navigation-context";
+} from "#/contexts/navigation-context";
 import { I18nKey } from "#/i18n/declaration";
 
 const navigation: NavigationContextValue = {

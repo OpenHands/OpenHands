@@ -5,7 +5,7 @@ import {
   mobileTopBarIconButtonClassName,
   mobileTopBarIconClassName,
 } from "#/utils/mobile-top-bar-icon-button-classes";
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 import { getMobileTopBarState } from "#/utils/mobile-section-nav";
 import { SidebarMobileMenuToggle } from "./sidebar-mobile-menu-toggle";
 
