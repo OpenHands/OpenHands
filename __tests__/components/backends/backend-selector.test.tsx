@@ -790,6 +790,96 @@ describe("BackendSelector", () => {
     expect(input.value).toBe("BACKEND$NO_BACKEND_AVAILABLE");
   });
 
+  describe("settings link", () => {
+    it("renders the settings link as a NavigationLink for a local backend", async () => {
+      let localId = "";
+      renderWithProviders(
+        <TestSeed
+          onMount={(ctx) => {
+            localId = ctx.addBackend(SEED_LOCAL_1).id;
+            ctx.setActive(localId, null);
+          }}
+        >
+          <BackendSelector />
+        </TestSeed>,
+      );
+
+      const link = screen.getByTestId("backend-selector-settings-link");
+      expect(link).toHaveAttribute("href", "/settings");
+      expect(link).not.toHaveAttribute("target", "_blank");
+    });
+
+    it("renders the settings link as an external anchor for a cloud backend", async () => {
+      let cloudId = "";
+      renderWithProviders(
+        <TestSeed
+          onMount={(ctx) => {
+            cloudId = ctx.addBackend(SEED_CLOUD_PRODUCTION).id;
+            ctx.setActive(cloudId, null);
+          }}
+        >
+          <BackendSelector />
+        </TestSeed>,
+      );
+
+      const link = screen.getByTestId("backend-selector-settings-link");
+      expect(link).toHaveAttribute(
+        "href",
+        `${SEED_CLOUD_PRODUCTION.host}/settings`,
+      );
+      expect(link).toHaveAttribute("target", "_blank");
+      expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    });
+
+    it("passes the active org to the cloud settings link", () => {
+      let cloudId = "";
+      renderWithProviders(
+        <TestSeed
+          onMount={(ctx) => {
+            cloudId = ctx.addBackend(SEED_CLOUD_PRODUCTION).id;
+            ctx.setActive(cloudId, "org-2");
+          }}
+        >
+          <BackendSelector />
+        </TestSeed>,
+      );
+
+      expect(
+        screen.getByTestId("backend-selector-settings-link"),
+      ).toHaveAttribute(
+        "href",
+        `${SEED_CLOUD_PRODUCTION.host}/settings?org=org-2`,
+      );
+    });
+
+    it("renders the cloud settings link as a same-tab anchor when locked to Cloud", async () => {
+      // Arrange: an OHE/SaaS-hosted canvas locked to the active cloud host
+      vi.stubEnv("VITE_LOCK_TO_CLOUD", SEED_CLOUD_PRODUCTION.host);
+      let cloudId = "";
+
+      // Act
+      renderWithProviders(
+        <TestSeed
+          onMount={(ctx) => {
+            cloudId = ctx.addBackend(SEED_CLOUD_PRODUCTION).id;
+            ctx.setActive(cloudId, null);
+          }}
+        >
+          <BackendSelector />
+        </TestSeed>,
+      );
+
+      // Assert: same tab, so browser Back returns to the canvas
+      const link = screen.getByTestId("backend-selector-settings-link");
+      expect(link).toHaveAttribute(
+        "href",
+        `${SEED_CLOUD_PRODUCTION.host}/settings`,
+      );
+      expect(link).not.toHaveAttribute("target");
+      expect(link).not.toHaveAttribute("rel");
+    });
+  });
+
   describe("connection indicator", () => {
     it("renders one status dot per option, green when the probe succeeds", async () => {
       vi.mocked(SettingsClient).mockImplementation(

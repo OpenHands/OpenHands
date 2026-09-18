@@ -23,6 +23,7 @@ import {
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import { useFreeModelsStore } from "#/stores/free-models-store";
 
 // We'll use the actual i18next implementation but override the translation function
 
@@ -780,6 +781,9 @@ describe("ConversationCard", () => {
       expect(
         within(chips[1]).getByTestId("conversation-card-tag-chip-icon"),
       ).toHaveAttribute("data-tag-key", "owner");
+      expect(
+        screen.queryByTestId("conversation-tags-indicator"),
+      ).not.toBeInTheDocument();
     });
 
     it("filters reserved tag keys out of the chip row", () => {
@@ -810,11 +814,12 @@ describe("ConversationCard", () => {
       expect(chips[0].getAttribute("title")).not.toContain("origin");
     });
 
-    it("keeps the automation name/trigger chips but hides the automation id chips", () => {
-      // The automation id/run-id tags are raw UUIDs consumed by the panel's
-      // automation filter — chip noise — while the human-meaningful name and
-      // trigger stay visible. Like every tag chip they render value-only,
-      // with the humanized ``key: value`` pair in the tooltip.
+    it("hides every automation provenance chip", () => {
+      // The whole automation family is reserved: the SDK stamps it at
+      // creation and the panel's automation filter is its first-class UI
+      // source. Rendering it as tag chips would double-book the user-facing
+      // tag surface — and let user-authored tags spoof automation
+      // classification.
       renderWithProviders(
         <ConversationCard
           title="Conversation 1"
@@ -830,15 +835,9 @@ describe("ConversationCard", () => {
         />,
       );
 
-      const chips = screen.getAllByTestId("conversation-card-tag-chip");
-      expect(chips).toHaveLength(2);
-      expect(chips[0]).toHaveTextContent("Nightly Audit");
-      expect(chips[0]).toHaveAttribute(
-        "title",
-        "Automationname: Nightly Audit",
-      );
-      expect(chips[1]).toHaveTextContent("cron");
-      expect(chips[1]).toHaveAttribute("title", "Automationtrigger: cron");
+      expect(
+        screen.queryByTestId("conversation-card-tag-chip"),
+      ).not.toBeInTheDocument();
     });
 
     it("hides the chips when showTags is omitted", () => {
@@ -853,6 +852,44 @@ describe("ConversationCard", () => {
 
       expect(
         screen.queryByTestId("conversation-card-tag-chip"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("renders no tag UI at all when the Tags preference is off", () => {
+      // The preference owns presence: off means nothing about tags on the
+      // card, not even the indicator. This is what keeps the preference and
+      // the card from ever disagreeing — there is no card-level control left
+      // that could put tags back on screen while the toggle reads off.
+      renderWithProviders(
+        <ConversationCard
+          title="Conversation 1"
+          selectedRepository={null}
+          lastUpdatedAt="2021-10-01T12:00:00Z"
+          tags={{ origin: "slack", owner: "alice" }}
+        />,
+      );
+
+      expect(
+        screen.queryByTestId("conversation-tags-indicator"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("conversation-card-tag-chip"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("renders no indicator when every tag is reserved", () => {
+      renderWithProviders(
+        <ConversationCard
+          title="Conversation 1"
+          selectedRepository={null}
+          lastUpdatedAt="2021-10-01T12:00:00Z"
+          showTags
+          tags={{ acpserver: "claude-code" }}
+        />,
+      );
+
+      expect(
+        screen.queryByTestId("conversation-tags-indicator"),
       ).not.toBeInTheDocument();
     });
 
@@ -1086,7 +1123,11 @@ describe("ConversationCard", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("labels a free OpenHands route on native conversation chips", () => {
+    it("labels a DB-flagged free OpenHands route on native conversation chips", () => {
+      useFreeModelsStore.getState().setFlags({
+        freeModels: new Set(["openhands/glm-5.2"]),
+        defaultModel: "openhands/glm-5.2",
+      });
       renderWithProviders(
         <ConversationCard
           title="Conversation 1"
@@ -1099,8 +1140,13 @@ describe("ConversationCard", () => {
       );
 
       const chip = screen.getByTestId("conversation-card-agent-chip");
-      expect(chip).toHaveTextContent("glm-5.2");
+      expect(chip).toHaveTextContent("glm-5.2 (free)");
       expect(chip).toHaveAttribute("title", "openhands/glm-5.2");
+
+      useFreeModelsStore.getState().setFlags({
+        freeModels: new Set(),
+        defaultModel: null,
+      });
     });
 
     it("hides the chip for OpenHands conversations with no model", () => {

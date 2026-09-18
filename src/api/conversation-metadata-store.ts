@@ -48,6 +48,12 @@ export interface ConversationMetadata {
   stamped_at?: string | null;
   /** Store plugin coordinates only; parameters may contain secrets. */
   plugins?: PluginSpec[] | null;
+  /**
+   * Local-only client-managed planning conversation id. Cloud backends expose
+   * real sub-conversations through `sub_conversation_ids`; local agent-server
+   * backends do not, so Canvas stores the relationship here.
+   */
+  local_planning_conversation_id?: string | null;
 }
 
 export const toPluginCoordinates = (plugin: PluginSpec): PluginSpec => ({
@@ -91,6 +97,25 @@ export const setStoredConversationMetadata = (
   const all = readAll();
   all[conversationId] = metadata;
   writeAll(all);
+};
+
+/**
+ * Merge `patch` into a conversation's stored metadata, preserving every
+ * existing field — `setStoredConversationMetadata` does a full-object
+ * replace, which would otherwise silently drop fields the caller doesn't
+ * enumerate (e.g. `plugins`).
+ */
+export const mergeStoredConversationMetadata = (
+  conversationId: string,
+  patch: Partial<ConversationMetadata>,
+): void => {
+  setStoredConversationMetadata(conversationId, {
+    selected_repository: null,
+    selected_branch: null,
+    git_provider: null,
+    ...(getStoredConversationMetadata(conversationId) ?? {}),
+    ...patch,
+  });
 };
 
 export const removeStoredConversationMetadata = (

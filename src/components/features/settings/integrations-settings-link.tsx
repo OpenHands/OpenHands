@@ -21,12 +21,15 @@ import {
 export function IntegrationsSettingsLink() {
   const { t } = useTranslation("openhands");
   const { active } = useActiveBackendContext();
-  const { backend } = active;
+  const { backend, orgId } = active;
 
   if (isNoBackend(backend) || backend.kind !== "cloud") return null;
   if (getLockedCloudHost() !== null) return null;
 
-  const integrationsUrl = `${backend.host.replace(/\/+$/, "")}/settings/integrations`;
+  // `org` is consumed by the cloud settings loader so the page opens on the
+  // org that is active here instead of the cloud's last-used org.
+  const orgQuery = orgId ? `?org=${encodeURIComponent(orgId)}` : "";
+  const integrationsUrl = `${backend.host.replace(/\/+$/, "")}/settings/integrations${orgQuery}`;
 
   return (
     <a
