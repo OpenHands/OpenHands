@@ -27,12 +27,19 @@
  * earlier download-npm.mjs).
  *
  * Usage:
- *   node scripts/download-node.mjs           # uses NODE_BUNDLE_VERSION below
+ *   node scripts/download-node.mjs                       # host arch → resources/node/
  *   NODE_VERSION=22.10.0 node scripts/download-node.mjs
+ *   ELECTRON_ARCH=universal node scripts/download-node.mjs  # macOS only
  *
  * Output (per platform):
  *   POSIX:   resources/node/bin/{node,npm,npx} + resources/node/lib/node_modules/npm/...
  *   Windows: resources/node/{node.exe,npm.cmd,npx.cmd} + resources/node/node_modules/npm/...
+ *
+ * With ELECTRON_ARCH=universal on macOS, both darwin slices are downloaded
+ * into resources/node-arm64/ and resources/node-x64/ so an electron-builder
+ * universal build can bundle a real Node per arch. A universal .app that
+ * only carries the host-arch Node would silently break npx-spawned stdio
+ * MCP servers on the other arch.
  */
 
 import {
@@ -50,12 +57,12 @@ import {
 import { get } from "node:https";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
+import { resolveDownloadArches, resourceDirName } from "./download-arch-utils.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, "..");
-const outDir = join(projectRoot, "resources", "node");
 
 // Pinned Node version. Electron 42 ships Node 22, so we bundle a 22.x
 // LTS release to match the embedded runtime's ABI/native-module surface.
@@ -85,26 +92,26 @@ const ARCH = process.arch; // 'x64' | 'arm64' | 'ia32'
  *   win32 x64    → node-v<ver>-win-x64.zip
  *   win32 arm64  → node-v<ver>-win-arm64.zip
  */
-function getPlatformSpec(version) {
+export function getPlatformSpec(version, platform = PLATFORM, arch = ARCH) {
   const base = `node-v${version}`;
-  if (PLATFORM === "darwin") {
-    const arch = ARCH === "arm64" ? "arm64" : "x64";
-    return { name: `${base}-darwin-${arch}`, ext: "tar.gz" };
+  if (platform === "darwin") {
+    const distArch = arch === "arm64" ? "arm64" : "x64";
+    return { name: `${base}-darwin-${distArch}`, ext: "tar.gz" };
   }
-  if (PLATFORM === "linux") {
-    const arch = ARCH === "arm64" ? "arm64" : "x64";
-    return { name: `${base}-linux-${arch}`, ext: "tar.gz" };
+  if (platform === "linux") {
+    const distArch = arch === "arm64" ? "arm64" : "x64";
+    return { name: `${base}-linux-${distArch}`, ext: "tar.gz" };
   }
-  if (PLATFORM === "win32") {
-    const arch = ARCH === "arm64" ? "arm64" : "x64";
-    return { name: `${base}-win-${arch}`, ext: "zip" };
+  if (platform === "win32") {
+    const distArch = arch === "arm64" ? "arm64" : "x64";
+    return { name: `${base}-win-${distArch}`, ext: "zip" };
   }
-  throw new Error(`Unsupported platform for Node download: ${PLATFORM}/${ARCH}`);
+  throw new Error(`Unsupported platform for Node download: ${platform}/${arch}`);
 }
 
 // ── Version resolution ───────────────────────────────────────────────────────
 
-function resolveVersion() {
+export function resolveVersion() {
   const requested = process.env.NODE_VERSION?.replace(/^v/, "");
   return requested || NODE_BUNDLE_VERSION;
 }
@@ -164,13 +171,13 @@ function ensureExecutable(p) {
  * Confirm the extracted tree has the binaries we depend on.
  * On Unix Node puts them in bin/; on Windows they live at the root.
  */
-function verifyLayout() {
-  const isWin = PLATFORM === "win32";
+function verifyLayout(dir, platform) {
+  const isWin = platform === "win32";
   const required = isWin
     ? ["node.exe", "npm.cmd", "npx.cmd"]
     : ["bin/node", "bin/npm", "bin/npx"];
   for (const rel of required) {
-    const p = join(outDir, rel);
+    const p = join(dir, rel);
     if (!existsSync(p)) {
       throw new Error(
         `Expected ${rel} in extracted Node distribution but it is missing ` +
@@ -184,8 +191,8 @@ function verifyLayout() {
   // points; verify the targets exist too so a packaged build doesn't ship
   // a half-broken installation.
   const npmCli = isWin
-    ? join(outDir, "node_modules", "npm", "bin", "npm-cli.js")
-    : join(outDir, "lib", "node_modules", "npm", "bin", "npm-cli.js");
+    ? join(dir, "node_modules", "npm", "bin", "npm-cli.js")
+    : join(dir, "lib", "node_modules", "npm", "bin", "npm-cli.js");
   if (!existsSync(npmCli)) {
     throw new Error(`Bundled Node is missing npm-cli.js at ${npmCli}`);
   }
@@ -204,7 +211,7 @@ function verifyLayout() {
  *   lib/node_modules/{npm,corepack} — npm itself
  *   LICENSE                         — required by the BSD-style Node license
  */
-function pruneUnusedFiles() {
+function pruneUnusedFiles(dir, platform) {
   // IMPORTANT: every entry that points into a directory we delete must also
   // delete any symlink/shim that targets into it, otherwise electron-builder
   // hits ENOENT trying to stat() the dangling symlink while copying the
@@ -215,7 +222,7 @@ function pruneUnusedFiles() {
   // module under lib/ but leave the symlink, `electron-builder` fails with
   //   ENOENT: ... Resources/node/bin/corepack
   const candidates =
-    PLATFORM === "win32"
+    platform === "win32"
       ? [
           // Windows Node zip lays out npm directly under node_modules/, not lib/.
           // Strip docs, headers, and node_modules/corepack (the npm runtime
@@ -239,7 +246,7 @@ function pruneUnusedFiles() {
           "bin/corepack",
         ];
   for (const rel of candidates) {
-    const p = join(outDir, rel);
+    const p = join(dir, rel);
     // `rmSync(force: true)` resolves the path through symlinks, so once the
     // corepack target directory is deleted the now-dangling `bin/corepack`
     // link reads as "already gone" and silently survives — the exact ENOENT
@@ -268,9 +275,9 @@ function pruneUnusedFiles() {
  * ENOENT — fail at download time instead, with a message that says which
  * pruned directory the symlink was reaching into.
  */
-function failOnDanglingSymlinks() {
+function failOnDanglingSymlinks(dir) {
   const broken = [];
-  const stack = [outDir];
+  const stack = [dir];
   while (stack.length) {
     const next = stack.pop();
     let entries;
@@ -306,7 +313,7 @@ function failOnDanglingSymlinks() {
         "(or its target) to pruneUnusedFiles() in this script:",
     );
     for (const entry of broken) console.error("  •", entry);
-    throw new Error(`${broken.length} dangling symlink(s) in resources/node/`);
+    throw new Error(`${broken.length} dangling symlink(s) in ${dir}`);
   }
 }
 
@@ -340,43 +347,71 @@ function dirSizeBytes(dir) {
 // ── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
+  // Resolve both up front: the version must be identical for every arch
+  // (one source of truth, no per-arch drift), and the arch list is decided
+  // once by ELECTRON_ARCH (see download-arch-utils.mjs).
   const version = resolveVersion();
-  const spec = getPlatformSpec(version);
-  const archiveName = `${spec.name}.${spec.ext}`;
-  const url = `https://nodejs.org/dist/v${version}/${archiveName}`;
-  const tmpFile = join(tmpdir(), `node-download-${Date.now()}.${spec.ext}`);
+  const arches = resolveDownloadArches();
+  const multi = arches.length > 1;
+  if (multi) {
+    console.log(
+      `[download-node] macOS universal build: downloading per-arch Node runtimes for ${arches.join(", ")}`,
+    );
+  }
 
-  console.log(
-    `[download-node] Downloading Node v${version} for ${PLATFORM}/${ARCH}`,
-  );
-  console.log(`[download-node] URL: ${url}`);
+  for (const arch of arches) {
+    const outDir = join(
+      projectRoot,
+      "resources",
+      resourceDirName("node", arch, multi),
+    );
+    const spec = getPlatformSpec(version, PLATFORM, arch);
+    const archiveName = `${spec.name}.${spec.ext}`;
+    const url = `https://nodejs.org/dist/v${version}/${archiveName}`;
+    const tmpFile = join(
+      tmpdir(),
+      `node-download-${arch}-${Date.now()}.${spec.ext}`,
+    );
 
-  try {
-    // Clear any previous output so stale files (different Node version, or
-    // a stale resources/npm/ from the previous wrapper approach) don't
-    // linger in the bundle.
-    if (existsSync(outDir)) rmSync(outDir, { recursive: true, force: true });
-    mkdirSync(outDir, { recursive: true });
+    console.log(
+      `[download-node] Downloading Node v${version} for ${PLATFORM}/${arch}`,
+    );
+    console.log(`[download-node] URL: ${url}`);
 
-    console.log(`[download-node] Downloading to ${tmpFile}`);
-    await downloadFile(url, tmpFile);
-    console.log(`[download-node] Extracting to ${outDir}`);
-    extract(tmpFile, outDir, spec.ext);
-
-    verifyLayout();
-    pruneUnusedFiles();
-    failOnDanglingSymlinks();
-
-    const mb = Math.round(dirSizeBytes(outDir) / (1024 * 1024));
-    console.log(`[download-node] ✓ Node v${version} ready at ${outDir} (~${mb} MB)`);
-  } finally {
     try {
-      rmSync(tmpFile, { force: true });
-    } catch {}
+      // Clear any previous output so stale files (different Node version, or
+      // a stale resources/npm/ from the previous wrapper approach) don't
+      // linger in the bundle.
+      if (existsSync(outDir)) rmSync(outDir, { recursive: true, force: true });
+      mkdirSync(outDir, { recursive: true });
+
+      console.log(`[download-node] Downloading to ${tmpFile}`);
+      await downloadFile(url, tmpFile);
+      console.log(`[download-node] Extracting to ${outDir}`);
+      extract(tmpFile, outDir, spec.ext);
+
+      verifyLayout(outDir, PLATFORM);
+      pruneUnusedFiles(outDir, PLATFORM);
+      failOnDanglingSymlinks(outDir);
+
+      const mb = Math.round(dirSizeBytes(outDir) / (1024 * 1024));
+      console.log(`[download-node] ✓ Node v${version} ready at ${outDir} (~${mb} MB)`);
+    } finally {
+      try {
+        rmSync(tmpFile, { force: true });
+      } catch {}
+    }
   }
 }
 
-main().catch((err) => {
-  console.error("[download-node] Error:", err.message);
-  process.exit(1);
-});
+// Run only when executed directly (`node scripts/download-node.mjs`), not
+// when imported — __tests__/scripts/download-node.test.ts imports this
+// module to exercise getPlatformSpec/resolveVersion with zero network I/O.
+// process.argv[1] is undefined when the module is plain-imported (vitest),
+// and pathToFileURL(undefined) would throw, so guard on it first.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((err) => {
+    console.error("[download-node] Error:", err.message);
+    process.exit(1);
+  });
+}
