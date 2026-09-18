@@ -116,6 +116,11 @@ export const shouldRenderEvent = (event: OpenHandsEvent) => {
     return true;
   }
 
+  // Render conversation error events (LLM provider errors, etc.)
+  if (isConversationErrorEvent(event)) {
+    return true;
+  }
+
   // Render hook execution events
   if (isHookExecutionEvent(event)) {
     return true;
