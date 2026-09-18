@@ -33,29 +33,33 @@ export function useSendMessage() {
           };
         };
 
-        if (action === "message" && args?.content) {
-          // Build agent-server message content array
-          const content: Array<MessageContent> = [
-            {
+        if (action === "message") {
+          const content: Array<MessageContent> = [];
+
+          // Add text if present and non-empty (omits empty text blocks for image-only messages)
+          if (args?.content && args.content.trim().length > 0) {
+            content.push({
               type: "text",
               text: args.content,
-            },
-          ];
+            });
+          }
 
           // Add images if present - using SDK's ImageContent format
-          if (args.image_urls && args.image_urls.length > 0) {
+          if (args?.image_urls && args.image_urls.length > 0) {
             content.push({
               type: "image",
               image_urls: args.image_urls,
             });
           }
 
-          // Send via WebSocket context (uses correct host/port)
-          const result = await conversationContext.sendMessage({
-            role: "user",
-            content,
-          });
-          return result;
+          // Send only if there is at least one content block (text or image)
+          if (content.length > 0) {
+            const result = await conversationContext.sendMessage({
+              role: "user",
+              content,
+            });
+            return result;
+          }
         }
         return { queued: false };
       }
