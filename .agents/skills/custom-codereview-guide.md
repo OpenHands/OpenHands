@@ -75,11 +75,7 @@ Apply this checkpoint when Canvas begins relying on a new Agent Server endpoint,
 field, schema, or behavior. Canvas and the Agent Server are independently
 versioned.
 
-Require one of the following:
-
-- a fallback that preserves behavior for every supported Agent Server version;
-  or
-- an increase to `minimumAgentServer` to the first compatible released version.
+Require an increase to `minimumAgentServer` to the first compatible released version.
 
 Verify the compatibility boundary. Adding a TypeScript-client method does not
 make older Agent Servers support it. Submit **COMMENT** if a supported backend
