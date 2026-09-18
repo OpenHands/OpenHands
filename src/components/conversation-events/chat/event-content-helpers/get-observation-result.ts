@@ -40,6 +40,10 @@ export const getObservationResult = (
 
       if (observation.timeout || exitCode === -1) return "timeout";
       if (exitCode === 0) return "success";
+      // The server sets is_error only for exceptional paths (rejections,
+      // guard rails); an ordinary command that completed with a non-zero
+      // exit code arrives with is_error=false and is still a failure.
+      if (exitCode !== null) return "error";
       if (observation.is_error) return "error";
       return "success";
     }

@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Failed terminal commands rendered as success - repro evidence</title>
+</head>
+<body>
+  <h1>Reproduction evidence</h1>
+  <p>Terminal runs of <code>__tests__/components/conversation-events/chat/event-content-helpers/get-observation-result.test.ts</code>: failing twice on main (a TerminalObservation with exit_code 1 and is_error=false maps to "success"), passing twice with the fix.</p>
+  <img src="terminal.png" alt="vitest runs failing before the fix and passing after it" style="max-width:100%" />
+</body>
+</html>
