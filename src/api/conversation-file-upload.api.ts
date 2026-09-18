@@ -12,6 +12,14 @@ import {
 
 const FILE_UPLOAD_CONCURRENCY = 5;
 
+/** Progress info passed to the optional `onProgress` callback. */
+export interface UploadProgressInfo {
+  completed: number;
+  total: number;
+  /** Integer 0–100. */
+  percentage: number;
+}
+
 export interface ConversationRuntimeContext {
   conversationUrl: string | null;
   sessionApiKey: string | null;
@@ -73,6 +81,7 @@ export async function uploadFilesToConversation(
   conversationId: string,
   files: File[],
   currentConversation?: AppConversation | null,
+  onProgress?: (info: UploadProgressInfo) => void,
 ): Promise<FileUploadSuccessResponse> {
   const workingDir = await resolveConversationUploadWorkingDir(
     conversationId,
@@ -103,6 +112,7 @@ export async function uploadFilesToConversation(
       workingDir,
       conversationUrl: cloudRuntime.conversationUrl,
       sessionApiKey: cloudRuntime.sessionApiKey,
+      onProgress,
     });
   }
 
@@ -111,6 +121,7 @@ export async function uploadFilesToConversation(
     workingDir,
     conversationUrl,
     sessionApiKey,
+    onProgress,
   });
 }
 
@@ -119,8 +130,10 @@ async function uploadFilesToRuntime(options: {
   workingDir: string;
   conversationUrl: string | null;
   sessionApiKey: string | null;
+  onProgress?: (info: UploadProgressInfo) => void;
 }): Promise<FileUploadSuccessResponse> {
-  const { files, workingDir, conversationUrl, sessionApiKey } = options;
+  const { files, workingDir, conversationUrl, sessionApiKey, onProgress } =
+    options;
   const workspace = new RemoteWorkspace(
     getAgentServerClientOptions({
       conversationUrl,
@@ -156,9 +169,16 @@ async function uploadFilesToRuntime(options: {
   };
 
   const results: Awaited<ReturnType<typeof uploadFile>>[] = [];
+  let completedCount = 0;
   for (let index = 0; index < files.length; index += FILE_UPLOAD_CONCURRENCY) {
     const batch = files.slice(index, index + FILE_UPLOAD_CONCURRENCY);
     results.push(...(await Promise.all(batch.map(uploadFile))));
+    completedCount += batch.length;
+    onProgress?.({
+      completed: completedCount,
+      total: files.length,
+      percentage: Math.round((completedCount / files.length) * 100),
+    });
   }
 
   return {
