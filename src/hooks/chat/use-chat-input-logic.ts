@@ -34,12 +34,17 @@ export const useChatInputLogic = () => {
   );
 
   // On the home page (no conversationId) the right-panel / messageToSend
-  // mechanism is not relevant.  More importantly, a stale messageToSend value
-  // in the Zustand store causes useAutoResize to overwrite the just-restored
-  // sessionStorage draft with an empty string (see useAutoResize value effect).
-  // Returning null here keeps value=undefined in useAutoResize so it never
-  // touches the element content on the home page.
-  const messageToSend = conversationId ? rawMessageToSend : null;
+  // mechanism is not relevant.  More importantly, a stale *empty* messageToSend
+  // value in the Zustand store causes useAutoResize to overwrite the
+  // just-restored sessionStorage draft with an empty string (see useAutoResize
+  // value effect). Empty values are still filtered to null so useAutoResize
+  // keeps value=undefined and never touches the element content on the home
+  // page. Non-empty seeded prompts (e.g. the automation "Create Automation"
+  // flow) must pass through, otherwise the home-page input renders blank.
+  const messageToSend =
+    conversationId || (rawMessageToSend?.text.trim().length ?? 0) > 0
+      ? rawMessageToSend
+      : null;
 
   // Restore a cancelled pending send back into the input only when empty.
   useEffect(() => {
