@@ -144,24 +144,25 @@ const ACP_PROVIDER_UI: Record<
   },
 };
 
+function getAvailableModels(key: string): ACPModelOption[] | undefined {
+  return getClientAcpProvider(key)?.available_models?.map((model) => ({
+    id: model.id,
+    label: model.label,
+  }));
+}
+
 /**
  * The ACP harnesses Canvas surfaces — its own declaration of what it offers,
  * independent of what the SDK registry happens to contain. Registering a
  * harness upstream is a no-op here: nothing in Canvas enumerates the registry,
  * so there is no list to keep in step with it.
- *
- * The same constant name carries the same meaning in
- * ``OpenHands/enterprise`` (``openhands/app_server/acp_providers.py``), where
- * it also fails conversation start closed. The two are declared independently
- * and hold the same three keys today.
  */
 export const SURFACED_ACP_PROVIDERS: readonly string[] =
   Object.keys(ACP_PROVIDER_UI);
 
 // Built-in ACP providers Canvas surfaces, built by enriching each upstream
 // registry record (``@openhands/typescript-client`` → Python SDK) with the
-// Canvas UI metadata above. Model lists + defaults are no longer hand-kept
-// here (closes agent-canvas#740) — they track the SDK via the pinned client.
+// Canvas UI metadata above.
 export const ACP_PROVIDERS: ACPProviderConfig[] = Object.entries(
   ACP_PROVIDER_UI,
 ).map(([key, ui]) => {
@@ -170,10 +171,7 @@ export const ACP_PROVIDERS: ACPProviderConfig[] = Object.entries(
     key,
     display_name: info?.display_name ?? key,
     default_command: info ? [...info.default_command] : [],
-    available_models: info?.available_models?.map((model) => ({
-      id: model.id,
-      label: model.label,
-    })),
+    available_models: getAvailableModels(key),
     default_model: info?.default_model ?? undefined,
     description_key: ui.description_key,
     icon: ui.icon,

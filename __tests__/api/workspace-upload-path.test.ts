@@ -6,6 +6,11 @@ import {
   resolveConversationUploadWorkingDir,
 } from "#/api/workspace-upload-path";
 import { clearAgentServerHomeDirCache } from "#/api/agent-server-home";
+import { DEFAULT_WORKING_DIR } from "#/api/agent-server-config";
+import {
+  removeStoredConversationMetadata,
+  setStoredConversationMetadata,
+} from "#/api/conversation-metadata-store";
 
 const mockGetHome = vi.fn();
 
@@ -95,6 +100,19 @@ describe("workspace-upload-path", () => {
     expect(getSafeUploadFileName("../../evil.txt")).toBe("evil.txt");
   });
 
+  it("ignores trailing separators when choosing the upload file name", () => {
+    expect(getSafeUploadFileName("folder/file.txt//")).toBe("file.txt");
+  });
+
+  it.each(["", ".", "..", "path/to/.."])(
+    "rejects invalid upload file name %j",
+    async (fileName) => {
+      await expect(
+        buildWorkspaceUploadPath(fileName, "/workspace/project"),
+      ).rejects.toThrow("Invalid file name");
+    },
+  );
+
   // @spec WUP-001 — buildWorkspaceUploadPath uses the resolver and a safe leaf.
   it("builds an absolute upload path from a relative working dir", async () => {
     const upload = await buildWorkspaceUploadPath("a.txt", "workspace/project");
@@ -120,11 +138,77 @@ describe("workspace-upload-path", () => {
   it("prefers the active conversation workspace when ids match", async () => {
     const dir = await resolveConversationUploadWorkingDir("conv-uuid", {
       id: "conv-uuid",
-      workspace: { working_dir: "/workspace/project/custom" },
+      workspace: { working_dir: "  /workspace/project/custom  " },
     } as never);
 
     expect(dir).toBe("/workspace/project/custom");
   });
+
+  it.each([undefined, "   "])(
+    "uses the configured working directory when the active workspace is %j",
+    async (workingDir) => {
+      const dir = await resolveConversationUploadWorkingDir(
+        "named-conversation",
+        {
+          id: "named-conversation",
+          workspace:
+            workingDir === undefined ? {} : { working_dir: workingDir },
+        } as never,
+      );
+
+      expect(dir).toBe(DEFAULT_WORKING_DIR);
+    },
+  );
+
+  it("uses the configured working directory when the active conversation has no workspace", async () => {
+    const dir = await resolveConversationUploadWorkingDir(
+      "named-conversation",
+      { id: "named-conversation" } as never,
+    );
+
+    expect(dir).toBe(DEFAULT_WORKING_DIR);
+  });
+
+  it("uses the stored workspace when the active conversation does not match", async () => {
+    const conversationId = "stored-conversation";
+    setStoredConversationMetadata(conversationId, {
+      selected_repository: null,
+      selected_branch: null,
+      git_provider: null,
+      selected_workspace: "  /workspace/project/stored  ",
+    });
+
+    try {
+      const dir = await resolveConversationUploadWorkingDir(conversationId, {
+        id: "different-conversation",
+        workspace: { working_dir: "/workspace/project/active" },
+      } as never);
+
+      expect(dir).toBe("/workspace/project/stored");
+    } finally {
+      removeStoredConversationMetadata(conversationId);
+    }
+  });
+
+  it.each([undefined, "   "])(
+    "uses the configured working directory when the stored workspace is %j",
+    async (selectedWorkspace) => {
+      const conversationId = "stored-without-workspace";
+      setStoredConversationMetadata(conversationId, {
+        selected_repository: null,
+        selected_branch: null,
+        git_provider: null,
+        selected_workspace: selectedWorkspace,
+      });
+
+      try {
+        const dir = await resolveConversationUploadWorkingDir(conversationId);
+        expect(dir).toBe(DEFAULT_WORKING_DIR);
+      } finally {
+        removeStoredConversationMetadata(conversationId);
+      }
+    },
+  );
 
   it("resolves per-conversation dirs for UUID ids", async () => {
     const dir = await resolveConversationUploadWorkingDir(
@@ -133,5 +217,11 @@ describe("workspace-upload-path", () => {
     );
 
     expect(dir).toBe("/workspace/project/550e8400e29b41d4a716446655440000");
+  });
+
+  it("uses the configured working directory for non-UUID conversations", async () => {
+    const dir = await resolveConversationUploadWorkingDir("named-conversation");
+
+    expect(dir).toBe(DEFAULT_WORKING_DIR);
   });
 });
