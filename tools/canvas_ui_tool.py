@@ -20,7 +20,7 @@ at the bottom runs before any conversation is created.
 """
 
 from collections.abc import Sequence
-from typing import Literal
+from typing import ClassVar, Literal
 
 from pydantic import Field
 
@@ -116,6 +116,10 @@ the same turn."""
 
 class CanvasUITool(ToolDefinition[CanvasUIAction, CanvasUIObservation]):
     """Tool for controlling the Agent Canvas UI from the agent."""
+
+    # Canvas attaches this itself for every conversation it hosts; it is not a
+    # capability a user chooses per profile.
+    user_selectable: ClassVar[bool] = False
 
     @classmethod
     def create(
