@@ -70,8 +70,8 @@ export function ManageBackendsModal({
   const healthByBackendId = useBackendsHealth(backends, {
     probeDisabledOnce: true,
   });
-  const cloudOrgs = useAllCloudOrganizations();
-  const currentUserIds = useCloudCurrentUserId();
+  const cloudOrgs = useAllCloudOrganizations({ includeInactive: true });
+  const currentUserIds = useCloudCurrentUserId({ includeInactive: true });
   const personalWorkspaceLabel = t(I18nKey.BACKEND$PERSONAL_WORKSPACE);
   const lockedCloudHost = getLockedCloudHost();
   const isLockedToCloud = lockedCloudHost !== null;
