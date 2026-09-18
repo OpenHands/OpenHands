@@ -1,9 +1,14 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { Plus } from "lucide-react";
+import { Download, Plus, Upload } from "lucide-react";
 
 import { getLockedCloudHost } from "#/api/agent-server-config";
 import { type Backend } from "#/api/backend-registry/types";
+import {
+  parsePortableBackendConfig,
+  PORTABLE_BACKEND_CONFIG_FILENAME,
+  serializePortableBackendConfig,
+} from "#/api/backend-registry/portable-config";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { ConfirmationModal } from "#/components/shared/modals/confirmation-modal";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
@@ -17,7 +22,7 @@ import { useBackendsHealth } from "#/hooks/query/use-backends-health";
 import { useAllCloudOrganizations } from "#/hooks/query/use-cloud-organizations";
 import { useCloudCurrentUserId } from "#/hooks/query/use-cloud-current-user-id";
 import { I18nKey } from "#/i18n/declaration";
-import { cn } from "#/utils/utils";
+import { cn, downloadBlob } from "#/utils/utils";
 import { modalTitleLgClassName } from "#/utils/modal-classes";
 import { BackendFormModal } from "./backend-form-modal";
 import { BackendRow } from "./backend-row";
@@ -65,8 +70,14 @@ export function ManageBackendsModal({
   recoveryMode = false,
 }: ManageBackendsModalProps) {
   const { t } = useTranslation("openhands");
-  const { backends, active, removeBackend, setActive, updateBackend } =
-    useActiveBackendContext();
+  const {
+    backends,
+    active,
+    importBackends,
+    removeBackend,
+    setActive,
+    updateBackend,
+  } = useActiveBackendContext();
   const healthByBackendId = useBackendsHealth(backends, {
     probeDisabledOnce: true,
   });
@@ -94,6 +105,10 @@ export function ManageBackendsModal({
     null,
   );
   const [showAddForm, setShowAddForm] = React.useState(false);
+  const [showExportWarning, setShowExportWarning] = React.useState(false);
+  const [importError, setImportError] = React.useState(false);
+  const [importSucceeded, setImportSucceeded] = React.useState(false);
+  const importInputRef = React.useRef<HTMLInputElement>(null);
 
   const handleConfirmRemoval = () => {
     if (!pendingRemoval) return;
@@ -124,6 +139,34 @@ export function ManageBackendsModal({
       updateBackend(lockedCloudBackend.id, { apiKey });
     },
     [lockedCloudBackend, updateBackend],
+  );
+
+  const handleExport = React.useCallback(() => {
+    const blob = new Blob([serializePortableBackendConfig(backends)], {
+      type: "application/json",
+    });
+    downloadBlob(blob, PORTABLE_BACKEND_CONFIG_FILENAME);
+    setShowExportWarning(false);
+  }, [backends]);
+
+  const handleImport = React.useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const input = event.currentTarget;
+      const file = input.files?.[0];
+      input.value = "";
+      if (!file) return;
+
+      setImportError(false);
+      setImportSucceeded(false);
+      try {
+        const imported = parsePortableBackendConfig(await file.text());
+        importBackends(imported);
+        setImportSucceeded(true);
+      } catch {
+        setImportError(true);
+      }
+    },
+    [importBackends],
   );
 
   return (
@@ -195,6 +238,52 @@ export function ManageBackendsModal({
             </div>
           </div>
 
+          {isLockedToCloud ? null : (
+            <div className="flex flex-wrap items-center justify-between gap-2 px-5 pt-3">
+              <div aria-live="polite" className="text-xs">
+                {importError ? (
+                  <p role="alert" className="text-danger">
+                    {t(I18nKey.BACKEND$IMPORT_ERROR)}
+                  </p>
+                ) : null}
+                {importSucceeded ? (
+                  <p className="text-success">
+                    {t(I18nKey.BACKEND$IMPORT_SUCCESS)}
+                  </p>
+                ) : null}
+              </div>
+              <div className="flex gap-2">
+                <BrandButton
+                  type="button"
+                  variant="secondary"
+                  onClick={() => importInputRef.current?.click()}
+                  testId="manage-backends-import"
+                  startContent={<Upload width={14} height={14} />}
+                >
+                  {t(I18nKey.BACKEND$IMPORT)}
+                </BrandButton>
+                <input
+                  ref={importInputRef}
+                  type="file"
+                  accept="application/json,.json"
+                  className="sr-only"
+                  data-testid="manage-backends-import-input"
+                  aria-label={t(I18nKey.BACKEND$IMPORT)}
+                  onChange={handleImport}
+                />
+                <BrandButton
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setShowExportWarning(true)}
+                  testId="manage-backends-export"
+                  startContent={<Download width={14} height={14} />}
+                >
+                  {t(I18nKey.BACKEND$EXPORT)}
+                </BrandButton>
+              </div>
+            </div>
+          )}
+
           <div className="flex justify-end gap-2 p-5">
             {isLockedToCloud ? (
               lockedCloudBackend ? (
@@ -256,6 +345,14 @@ export function ManageBackendsModal({
           })}
           onConfirm={handleConfirmRemoval}
           onCancel={() => setPendingRemoval(null)}
+        />
+      ) : null}
+
+      {showExportWarning ? (
+        <ConfirmationModal
+          text={t(I18nKey.BACKEND$EXPORT_WARNING)}
+          onConfirm={handleExport}
+          onCancel={() => setShowExportWarning(false)}
         />
       ) : null}
     </>
