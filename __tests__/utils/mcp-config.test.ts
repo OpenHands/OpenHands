@@ -453,6 +453,27 @@ describe("buildMcpServerPatch", () => {
     });
   });
 
+  // @spec MCP-002 — Secret patches preserve user intent
+  it("clears the entire stdio environment when all entries are removed", () => {
+    const previous: MCPServer = {
+      transport: "stdio",
+      command: "npx",
+      env: { API_KEY: "stored-secret" },
+    };
+    // The form omits env after the user removes every environment entry.
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "stdio",
+      command: "npx",
+    };
+
+    expect(buildMcpServerPatch(previous, edited)).toEqual({
+      transport: "stdio",
+      command: "npx",
+      env: null,
+    });
+  });
+
   it("emits enabled:false when the edit disables the server", () => {
     const edited: MCPServerConfig = {
       id: "s",
