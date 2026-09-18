@@ -78,6 +78,12 @@ OPTIONS:
   --public              Enable public mode (see above)
   --frontend-only       Start only the static frontend behind ingress
   --backend-only        Start only agent-server + automation behind ingress
+  --skills <source>     Extra skills source; repeatable. A local directory,
+                        a git URL, or host/path shorthand such as
+                        github.com/acmecorp/skills. Sources are scanned for
+                        Agent Skills without executing repository code, shown
+                        in Customize -> Skills, and stay disabled until
+                        enabled there.
   -v, --version         Show version number
   --info                Show version and default stack configuration
   -h, --help            Show this help message
@@ -90,6 +96,8 @@ ENVIRONMENT VARIABLES:
   OH_AGENT_SERVER_GIT_REF      Git ref for agent-server
   OH_AGENT_SERVER_LOCAL_PATH   Path to local SDK checkout (for development)
   OH_AGENT_SERVER_VERSION      Specific PyPI version for agent-server
+  OH_SKILLS_SOURCES            Comma/newline-separated extra skills sources
+                               (same values as --skills)
 
 Note: LLM settings are configured through the web UI settings page,
 not environment variables.
@@ -112,6 +120,10 @@ EXAMPLES:
 
   # Start only the agent-server and automation backend behind ingress
   npx @openhands/agent-canvas --backend-only
+
+  # Attach shared skills sources (repeatable; local dir or git repo)
+  npx @openhands/agent-canvas --skills github.com/acmecorp/skills
+  npx @openhands/agent-canvas --skills /path/to/acme-skills
 
   # Show default stack versions and ports
   npx @openhands/agent-canvas --info

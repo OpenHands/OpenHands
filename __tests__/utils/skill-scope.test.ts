@@ -16,7 +16,8 @@ describe("getSkillScope", () => {
     expect(
       getSkillScope(
         buildSkill({
-          source: "/Users/test/.openhands/cache/skills/public-skills/skills/deno/SKILL.md",
+          source:
+            "/Users/test/.openhands/cache/skills/public-skills/skills/deno/SKILL.md",
         }),
       ),
     ).toBe("public");
@@ -46,18 +47,41 @@ describe("getSkillScope", () => {
     ).toBe("project");
     expect(getSkillScope(buildSkill({ source: "project" }))).toBe("project");
   });
+
+  it("classifies launcher --skills sources as external regardless of source", () => {
+    // The raw flag value (a path or URL) would otherwise misfile as public.
+    expect(
+      getSkillScope(
+        buildSkill({
+          source: "github.com/acmecorp/skills",
+          source_id: "acme-1234abcd",
+        }),
+      ),
+    ).toBe("external");
+    expect(
+      getSkillScope(
+        buildSkill({
+          source: "/opt/acme/skills",
+          source_id: "acme-1234abcd",
+        }),
+      ),
+    ).toBe("external");
+  });
 });
 
 describe("groupSkillsByScope", () => {
   it("groups and sorts skills by scope", () => {
-    const grouped = groupSkillsByScope([
-      buildSkill({ name: "beta", source: "public" }),
-      buildSkill({ name: "alpha", source: "user" }),
-      buildSkill({
-        name: "gamma",
-        source: "/workspace/project/.agents/skills/gamma/SKILL.md",
-      }),
-    ], "/workspace/project");
+    const grouped = groupSkillsByScope(
+      [
+        buildSkill({ name: "beta", source: "public" }),
+        buildSkill({ name: "alpha", source: "user" }),
+        buildSkill({
+          name: "gamma",
+          source: "/workspace/project/.agents/skills/gamma/SKILL.md",
+        }),
+      ],
+      "/workspace/project",
+    );
 
     expect(grouped.public.map((skill) => skill.name)).toEqual(["beta"]);
     expect(grouped.personal.map((skill) => skill.name)).toEqual(["alpha"]);

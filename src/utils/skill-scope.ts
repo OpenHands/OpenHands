@@ -1,10 +1,11 @@
 import type { SkillInfo } from "#/types/settings";
 
-export type SkillScope = "project" | "personal" | "public";
+export type SkillScope = "project" | "personal" | "external" | "public";
 
 export const SKILL_SCOPE_ORDER: SkillScope[] = [
   "project",
   "personal",
+  "external",
   "public",
 ];
 
@@ -80,6 +81,12 @@ export function getSkillScope(
   skill: SkillInfo,
   projectDir?: string | null,
 ): SkillScope {
+  // Launcher `--skills` sources carry a qualified identity; their `source`
+  // string is the raw flag value and would otherwise misfile as "public".
+  if (skill.source_id) {
+    return "external";
+  }
+
   const source = skill.source?.trim();
   if (!source) {
     return skill.type === "repo" ? "project" : "public";
@@ -112,6 +119,7 @@ export function groupSkillsByScope(
   const groups: Record<SkillScope, SkillInfo[]> = {
     project: [],
     personal: [],
+    external: [],
     public: [],
   };
 
