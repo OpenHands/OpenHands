@@ -35,6 +35,7 @@ import type {
   SetupRequestBody,
   ValidateDraftResponse,
 } from "#/manifests/types";
+import { downloadBlob } from "#/utils/utils";
 import type { Backend, ResolvedActiveBackend } from "../backend-registry/types";
 import {
   getActiveBackend,
@@ -502,32 +503,34 @@ class AutomationService {
     return AutomationService.updateAutomation(id, { enabled });
   }
 
-  static async downloadTarball(id: string, name: string): Promise<void> {
+  /** The automation's bundle as the service stores it: (gzipped) tar bytes. */
+  static async fetchTarballBytes(id: string): Promise<Uint8Array<ArrayBuffer>> {
     const active = getActiveBackend().backend;
     const path = `${AUTOMATION_BASE_PATH}${getAutomationIdEndpoint("tarball", id)}`;
 
-    let blob: Blob;
     if (active.kind === "cloud") {
-      blob = await callCloudProxy<Blob>({
+      const buffer = await callCloudProxy<ArrayBuffer>({
         backend: active,
         method: "GET",
         path,
-        responseType: "blob",
+        responseType: "arrayBuffer",
         headers: await buildAutomationRequestHeaders(),
       });
-    } else {
-      const { data } = await localAutomationAxios.get<Blob>(path, {
-        responseType: "blob",
-      });
-      blob = data;
+      return new Uint8Array(buffer);
     }
 
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${name}.tar`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const { data } = await localAutomationAxios.get<ArrayBuffer>(path, {
+      responseType: "arraybuffer",
+    });
+    return new Uint8Array(data);
+  }
+
+  static async downloadTarball(id: string, name: string): Promise<void> {
+    const bytes = await AutomationService.fetchTarballBytes(id);
+    downloadBlob(
+      new Blob([bytes], { type: "application/x-tar" }),
+      `${name}.tar`,
+    );
   }
 
   /**

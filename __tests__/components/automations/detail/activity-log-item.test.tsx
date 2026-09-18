@@ -27,13 +27,19 @@ vi.mock("#/components/features/automations/detail/run-logs-modal", () => ({
     isOpen,
     onClose,
     bashCommandId,
+    sandboxId,
   }: {
     isOpen: boolean;
     onClose: () => void;
     bashCommandId: string | null;
+    sandboxId?: string | null;
   }) =>
     isOpen ? (
-      <div data-testid="logs-modal" data-bash-command-id={bashCommandId}>
+      <div
+        data-testid="logs-modal"
+        data-bash-command-id={bashCommandId}
+        data-sandbox-id={sandboxId ?? ""}
+      >
         <button type="button" onClick={onClose}>
           close
         </button>
@@ -578,4 +584,56 @@ describe("ActivityLogItem — run phase hidden for CANCELLED/SKIPPED", () => {
       expect(screen.getByText(badgeKey)).toBeInTheDocument();
     },
   );
+});
+
+describe("ActivityLogItem — script runs (a command but no conversation)", () => {
+  beforeEach(() => {
+    __resetActiveStoreForTests();
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+  });
+
+  afterEach(() => {
+    __resetActiveStoreForTests();
+  });
+
+  it("explains that the run executed a script and points at the logs once it has finished", () => {
+    // Arrange: a script automation run — the bash command ran, no agent did.
+    const run = makeRun({
+      status: AutomationRunStatus.COMPLETED,
+      conversation_id: null,
+      bash_command_id: "cmd-1",
+      sandbox_id: "sb-1",
+    });
+
+    // Act
+    renderItem(run);
+
+    // Assert
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$SCRIPT_RUN_NO_CONVERSATION),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(I18nKey.AUTOMATIONS$DETAIL$NO_CONVERSATION),
+    ).not.toBeInTheDocument();
+  });
+
+  it("hands the run's sandbox id to the logs modal", () => {
+    // Arrange
+    const run = makeRun({
+      conversation_id: null,
+      bash_command_id: "cmd-1",
+      sandbox_id: "sb-1",
+    });
+    renderItem(run);
+
+    // Act
+    fireEvent.click(screen.getByRole("button", { name: LOGS_BUTTON_NAME }));
+
+    // Assert
+    expect(screen.getByTestId("logs-modal")).toHaveAttribute(
+      "data-sandbox-id",
+      "sb-1",
+    );
+  });
 });
