@@ -148,6 +148,40 @@ afterEach(() => {
 });
 
 describe("AutomationsList — manifest-declared dashboard", () => {
+  it("shows zero automations while the initial list request is pending", async () => {
+    vi.mocked(AutomationService.getAutomations).mockReturnValue(
+      new Promise(() => {}),
+    );
+
+    renderAt("/automations", <AutomationsList />);
+
+    await waitFor(() =>
+      expect(AutomationService.getAutomations).toHaveBeenCalled(),
+    );
+    const tile = screen.getByTestId("overview-tile-automations");
+    expect(within(tile).getByText("0", { exact: true })).toBeInTheDocument();
+    expect(within(tile).getByText("0 live")).toBeInTheDocument();
+  });
+
+  it("uses the manifest's zero detail when no automation needs attention", async () => {
+    vi.mocked(AutomationService.getAutomationRuns).mockResolvedValue({
+      runs: [createRun({})],
+      total: 1,
+    });
+
+    renderAt("/automations", <AutomationsList />);
+
+    await within(
+      await screen.findByTestId("automation-card-a-broken"),
+    ).findByTestId("run-status-icon-completed");
+    const tile = screen.getByTestId("overview-tile-needs-attention");
+    expect(within(tile).getByText("0", { exact: true })).toBeInTheDocument();
+    expect(within(tile).getByText("No broken widgets")).toBeInTheDocument();
+    expect(
+      within(tile).queryByText("Broken widgets", { exact: true }),
+    ).toBeNull();
+  });
+
   it("composes the manifest's sub-page surface around the list", async () => {
     // Arrange & Act
     await renderDashboardWithSettledInsights();

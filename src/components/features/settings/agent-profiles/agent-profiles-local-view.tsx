@@ -41,10 +41,14 @@ type ViewMode = "list" | "create" | "edit";
 function toAgentSettingsOverride(
   profile: AgentProfile,
 ): Record<string, SettingsValue> {
+  const secretRefs =
+    ((profile as { secret_refs?: unknown }).secret_refs as SettingsValue) ??
+    null;
   if (profile.agent_kind === "acp") {
     return {
       agent_kind: "acp",
       mcp_server_refs: profile.mcp_server_refs ?? null,
+      secret_refs: secretRefs,
       acp_server: profile.acp_server,
       acp_command: profile.acp_command ? parseCommand(profile.acp_command) : [],
       acp_args: profile.acp_args ?? [],
@@ -64,6 +68,7 @@ function toAgentSettingsOverride(
     enable_sub_agents: profile.enable_sub_agents,
     enable_switch_llm_tool: switchLlmToolEnabled,
     tool_concurrency_limit: profile.tool_concurrency_limit,
+    secret_refs: secretRefs,
   };
 }
 
