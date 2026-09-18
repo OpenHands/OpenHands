@@ -119,8 +119,6 @@ export default function AutomationsList() {
 
   const active = useActiveBackend();
   const { navigate } = useNavigation();
-  // Git Sync is only available on local backends.
-  const isLocalBackend = active.backend.kind === "local";
   // Creating an automation requires manage_automations (no owner escape hatch
   // — it's a new record, not a mutation of an existing one).
   const { canManage } = useAutomationPermissions();
@@ -376,7 +374,10 @@ export default function AutomationsList() {
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap justify-end gap-2">
-          {isLocalBackend && (
+          {/* Git sync is org-level config, so it follows manage_automations
+              (admins/owners) on every backend kind, not the local-only edit
+              gate. */}
+          {canManage && (
             <BrandButton
               type="button"
               variant="secondary"

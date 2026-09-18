@@ -682,8 +682,8 @@ class AutomationService {
   // Git sync paths are literal rather than routed through
   // `getAutomationEndpoint`. That manifest describes the automation surface a
   // host may remap, and `InterfaceEndpoints` requires every key it declares --
-  // adding these would break existing manifests. Git sync is a local-mode
-  // operator feature outside that surface.
+  // adding these would break existing manifests. Git sync is an org-admin
+  // feature outside that surface.
   static async getGitSyncStatus(): Promise<GitSyncStatus> {
     const active = getActiveBackend().backend;
     const path = `${AUTOMATION_BASE_PATH}/v1/git-sync/status`;
@@ -693,6 +693,7 @@ class AutomationService {
         backend: active,
         method: "GET",
         path,
+        headers: await buildAutomationRequestHeaders(),
       });
     }
 
@@ -712,6 +713,7 @@ class AutomationService {
         method: "PUT",
         path,
         body: body as Record<string, unknown>,
+        headers: await buildAutomationRequestHeaders(),
       });
     }
 
@@ -736,6 +738,7 @@ class AutomationService {
         method: "POST",
         path,
         body: body as Record<string, unknown>,
+        headers: await buildAutomationRequestHeaders(),
       });
     }
 
@@ -755,6 +758,7 @@ class AutomationService {
         backend: active,
         method: "POST",
         path,
+        headers: await buildAutomationRequestHeaders(),
       });
     }
 
