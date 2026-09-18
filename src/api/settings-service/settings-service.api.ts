@@ -39,15 +39,24 @@ export type AppPreferenceField = (typeof APP_PREFERENCE_FIELDS)[number];
 export type AppPreferences = Partial<Pick<Settings, AppPreferenceField>>;
 
 /**
+ * Frontend-owned UI state the agent doesn't interpret, stored under
+ * `misc_settings.ui_preferences`.
+ */
+export interface UiPreferences {
+  /**
+   * Pinned automation IDs per backend+org, keyed by `"${backendId}:${orgId}"`.
+   * The value is an ordered array of automation IDs.
+   */
+  home_pinned_automations?: Record<string, string[]>;
+}
+
+/**
  * Container for frontend-owned settings the agent doesn't interpret.
  * Mirrors the SDK `MiscSettings` model introduced in agent-server 1.27.
- *
- * Single nested category today (`app_preferences`). Adding a future
- * category (e.g. `ui_preferences`) is a non-breaking change for the wire
- * shape — it just adds another optional sibling here.
  */
 export interface MiscSettings {
   app_preferences?: AppPreferences;
+  ui_preferences?: UiPreferences;
 }
 
 /**
@@ -722,6 +731,21 @@ class SettingsService {
     clearCache();
 
     return true;
+  }
+
+  /**
+   * Deep-merge a UI-preferences diff into `misc_settings.ui_preferences`.
+   *
+   * No-op for cloud backends (cloud doesn't store `ui_preferences`).
+   */
+  static async patchUiPreferences(diff: UiPreferences): Promise<void> {
+    if (getActiveBackend().backend.kind === "cloud") return;
+    await withRetry(() =>
+      new SettingsClient(getAgentServerClientOptions()).updateSettings({
+        misc_settings_diff: { ui_preferences: diff },
+      }),
+    );
+    clearCache();
   }
 
   /**
