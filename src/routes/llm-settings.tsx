@@ -19,6 +19,8 @@ import { Settings, SettingsSchema, SettingsScope } from "#/types/settings";
 import { extractModelAndProvider } from "#/utils/extract-model-and-provider";
 import {
   inferInitialView,
+  isValidApiKey,
+  isValidSettingsUrl,
   type SettingsFormValues,
   type SettingsView,
 } from "#/utils/sdk-settings-schema";
@@ -254,6 +256,17 @@ export function LlmSettingsScreen({
 
       const apiKeyValue =
         typeof values["llm.api_key"] === "string" ? values["llm.api_key"] : "";
+      // Blank is valid — both fields are optional — so only flag a value
+      // the save-time coercion would reject, and flag it here so the user
+      // sees why before clicking Save.
+      const baseUrlError =
+        baseUrlValue.trim() && !isValidSettingsUrl(baseUrlValue)
+          ? t(I18nKey.SETTINGS$MCP_ERROR_URL_INVALID_PROTOCOL)
+          : undefined;
+      const apiKeyError =
+        apiKeyValue.trim() && !isValidApiKey(apiKeyValue)
+          ? t(I18nKey.SETTINGS$API_KEY_TOO_SHORT)
+          : undefined;
       // For embedded profile forms (create/edit) the global
       // `llm_api_key_set` flag is misleading: a brand-new profile would show a
       // "key set" indicator just because some other profile has a key. Reflect
@@ -335,6 +348,7 @@ export function LlmSettingsScreen({
             startContent={
               apiKeyIsSet ? <KeyStatusIcon isSet={apiKeyIsSet} /> : undefined
             }
+            error={apiKeyError}
           />
 
           {/* The OpenHands provider's key lives in the OpenHands Cloud "API
@@ -525,6 +539,7 @@ export function LlmSettingsScreen({
                       placeholder="https://api.openai.com"
                       onChange={(value) => onChange("llm.base_url", value)}
                       isDisabled={isDisabled}
+                      error={baseUrlError}
                     />
                   )}
 
