@@ -53,7 +53,7 @@ const socketCapture = vi.hoisted(() => ({
 const historyCapture = vi.hoisted(() => ({
   result: {
     data: { events: [] as OpenHandsEvent[] } as
-      | { events: OpenHandsEvent[] }
+      | { events: OpenHandsEvent[]; afterSeq?: number | null }
       | undefined,
     isPending: false,
     isFetching: false,
@@ -292,18 +292,36 @@ function planningOptions(): WebSocketHookOptions {
   return socketCapture.planningOptions!;
 }
 
-function dispatchMain(event: unknown) {
+/** Resolve a socket's query params the way `useWebSocket` does at connect. */
+function queryParamsOf(options: WebSocketHookOptions) {
+  const params = options.queryParams;
+  return typeof params === "function" ? params() : params;
+}
+
+let nextSeq = 0;
+
+/** Send a raw session-socket frame (progress frames, malformed payloads). */
+function dispatchMainFrame(frame: unknown) {
   act(() => {
-    mainOptions().onMessage?.({ data: JSON.stringify(event) } as MessageEvent);
+    mainOptions().onMessage?.({ data: JSON.stringify(frame) } as MessageEvent);
   });
 }
 
-function dispatchPlanning(event: unknown) {
+function dispatchPlanningFrame(frame: unknown) {
   act(() => {
     planningOptions().onMessage?.({
-      data: JSON.stringify(event),
+      data: JSON.stringify(frame),
     } as MessageEvent);
   });
+}
+
+/** Deliver an event the way `/sockets/session/{id}` does: as a durable frame. */
+function dispatchMain(event: unknown) {
+  dispatchMainFrame({ type: "durable", seq: nextSeq++, event });
+}
+
+function dispatchPlanning(event: unknown) {
+  dispatchPlanningFrame({ type: "durable", seq: nextSeq++, event });
 }
 
 describe("Conversation websocket behavior", () => {
@@ -321,6 +339,7 @@ describe("Conversation websocket behavior", () => {
     socketCapture.readConversationFile.mockReset();
     socketCapture.trackError.mockReset();
     socketCapture.launchChild.mockReset().mockResolvedValue(undefined);
+    nextSeq = 0;
     historyCapture.result = {
       data: { events: [] },
       isPending: false,
@@ -372,7 +391,7 @@ describe("Conversation websocket behavior", () => {
   it("hydrates history, consumes matching optimistic messages, and subscribes after the latest event", async () => {
     const first = makeMessageEvent("01", "assistant", ["first"]);
     const latest = makeMessageEvent("02", "user", ["hello", " world"]);
-    historyCapture.result.data = { events: [first, latest] };
+    historyCapture.result.data = { events: [first, latest], afterSeq: 41 };
     const consumeMatchingPendingMessage = vi.spyOn(
       useOptimisticUserMessageStore.getState(),
       "consumeMatchingPendingMessage",
@@ -415,17 +434,14 @@ describe("Conversation websocket behavior", () => {
       "conv-main",
       "hello world",
     );
-    expect(socketCapture.mainUrl).toContain("/sockets/events/conv-main");
+    expect(socketCapture.mainUrl).toContain("/sockets/session/conv-main");
     // The session key is now passed via the dedicated `sessionApiKey` option
     // rather than folded into the query string.
-    expect(mainOptions().queryParams).toEqual({
-      resend_mode: "since",
-      after_timestamp: latest.timestamp,
-    });
+    // Resumes after the last seq the history page covered, not a timestamp.
+    expect(queryParamsOf(mainOptions())).toEqual({ after_seq: "41" });
     expect(mainOptions().sessionApiKey).toBe("session-key");
-    expect(planningOptions().queryParams).toEqual({
-      resend_all: true,
-    });
+    // The planner has no REST preload, so it replays its whole log.
+    expect(queryParamsOf(planningOptions())).toEqual({ after_seq: "-1" });
     expect(planningOptions().sessionApiKey).toBe("session-key");
     expect(mainOptions().reconnect).toEqual({ enabled: true });
     expect(planningOptions().reconnect).toEqual({ enabled: true });
@@ -441,7 +457,7 @@ describe("Conversation websocket behavior", () => {
     renderProvider();
 
     expect(socketCapture.mainUrl).toBe("");
-    expect(mainOptions().queryParams).toEqual({ resend_mode: "all" });
+    expect(queryParamsOf(mainOptions())).toEqual({ after_seq: "-1" });
     expect(screen.getByTestId("connection-state")).toHaveTextContent(
       "CONNECTING",
     );
@@ -465,8 +481,8 @@ describe("Conversation websocket behavior", () => {
 
     renderProvider();
 
-    expect(socketCapture.mainUrl).toContain("/sockets/events/conv-main");
-    expect(mainOptions().queryParams).toEqual({ resend_mode: "all" });
+    expect(socketCapture.mainUrl).toContain("/sockets/session/conv-main");
+    expect(queryParamsOf(mainOptions())).toEqual({ after_seq: "-1" });
   });
 
   it("does not build socket URLs without complete conversation coordinates", () => {
@@ -502,7 +518,7 @@ describe("Conversation websocket behavior", () => {
     socketCapture.callIndex = 0;
     historyCapture.result.data = undefined;
     const first = renderProvider();
-    expect(mainOptions().queryParams).toEqual({ resend_mode: "all" });
+    expect(queryParamsOf(mainOptions())).toEqual({ after_seq: "-1" });
     expect(addEvents).not.toHaveBeenCalled();
     first.unmount();
 
@@ -571,7 +587,7 @@ describe("Conversation websocket behavior", () => {
 
     const latest = makeMessageEvent("07", "assistant", ["fresh tail"]);
     historyCapture.result = {
-      data: { events: [latest] },
+      data: { events: [latest], afterSeq: 6 },
       isPending: false,
       isFetching: false,
       isError: false,
@@ -590,16 +606,13 @@ describe("Conversation websocket behavior", () => {
     await waitFor(() =>
       expect(useEventStore.getState().events).toHaveLength(1),
     );
-    expect(socketCapture.mainUrl).toContain("/sockets/events/conv-main");
-    expect(mainOptions().queryParams).toEqual({
-      resend_mode: "since",
-      after_timestamp: latest.timestamp,
-    });
+    expect(socketCapture.mainUrl).toContain("/sockets/session/conv-main");
+    expect(queryParamsOf(mainOptions())).toEqual({ after_seq: "6" });
     expect(
-      Object.hasOwn(mainOptions().queryParams ?? {}, "session_api_key"),
+      Object.hasOwn(queryParamsOf(mainOptions()) ?? {}, "session_api_key"),
     ).toBe(false);
     expect(
-      Object.hasOwn(planningOptions().queryParams ?? {}, "session_api_key"),
+      Object.hasOwn(queryParamsOf(planningOptions()) ?? {}, "session_api_key"),
     ).toBe(false);
   });
 
@@ -622,7 +635,7 @@ describe("Conversation websocket behavior", () => {
     );
 
     expect(socketCapture.planningUrl).toContain(
-      "/sockets/events/conv-planning",
+      "/sockets/session/conv-planning",
     );
   });
 
@@ -1754,12 +1767,16 @@ describe("Conversation websocket behavior", () => {
       useErrorMessageStore
         .getState()
         .setErrorMessage("disconnected", "connection");
-      const dispatch = source === "main" ? dispatchMain : dispatchPlanning;
+      const dispatch =
+        source === "main" ? dispatchMainFrame : dispatchPlanningFrame;
+      dispatch({ type: "item_started", item_id: "delta", attempt: 1 });
       dispatch({
-        ...baseEvent("delta", "agent"),
-        kind: "StreamingDeltaEvent",
+        type: "delta",
+        item_id: "delta",
+        attempt: 1,
+        order: 0,
+        kind: "text",
         content: "Streaming",
-        reasoning_content: null,
       });
       expect(useEventStore.getState().eventIds.has("delta")).toBe(false);
       act(() => {
@@ -1780,11 +1797,18 @@ describe("Conversation websocket behavior", () => {
   it("flushes planning deltas before later events and ignores replayed error side effects", () => {
     vi.spyOn(window, "requestAnimationFrame").mockReturnValue(1);
     const view = renderProvider({ subConversations: [makeSubConversation()] });
-    dispatchPlanning({
-      ...baseEvent("delta-plan", "agent"),
-      kind: "StreamingDeltaEvent",
+    dispatchPlanningFrame({
+      type: "item_started",
+      item_id: "delta-plan",
+      attempt: 1,
+    });
+    dispatchPlanningFrame({
+      type: "delta",
+      item_id: "delta-plan",
+      attempt: 1,
+      order: 0,
+      kind: "text",
       content: "Planning",
-      reasoning_content: null,
     });
     view.rerender(
       <QueryClientProvider client={view.queryClient}>
@@ -1810,8 +1834,15 @@ describe("Conversation websocket behavior", () => {
       classification,
     };
     dispatchPlanning(error);
-    expect(useEventStore.getState().uiEvents[0]).toMatchObject({
-      kind: "StreamingDeltaEvent",
+    // requestAnimationFrame never fires here, so the slot only holds the
+    // streamed text if the durable frame flushed the buffer before it.
+    expect(
+      useEventStore
+        .getState()
+        .uiEvents.find(
+          (event) => "kind" in event && event.kind === "StreamingDeltaEvent",
+        ),
+    ).toMatchObject({
       content: "Planning",
       isFromPlanningAgent: true,
     });

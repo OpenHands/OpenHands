@@ -458,4 +458,63 @@ describe("useConversationHistory cache key stability", () => {
     expect(queries).toHaveLength(1);
     expect(queries[0].options.gcTime).toBeGreaterThanOrEqual(30 * 60 * 1000);
   });
+
+  describe("session-socket resume cursor (afterSeq)", () => {
+    const withUrl = () =>
+      vi.mocked(useUserConversation).mockReturnValue({
+        data: {
+          ...makeConversation("V1"),
+          conversation_url: "http://localhost:18000/api/conversations/conv-seq",
+        },
+        isLoading: false,
+        isPending: false,
+        isError: false,
+        error: null,
+        refetch: vi.fn(),
+      } as any);
+
+    it("derives afterSeq from the count read before the page", async () => {
+      withUrl();
+      const calls: string[] = [];
+      vi.spyOn(EventService, "getEventCount").mockImplementation(async () => {
+        calls.push("count");
+        return 120;
+      });
+      vi.spyOn(EventService, "searchEvents").mockImplementation(async () => {
+        calls.push("search");
+        return makePage([makeEvent()]);
+      });
+
+      const { result } = renderHook(() => useConversationHistory("conv-seq"), {
+        wrapper,
+      });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      // Count first: anything appended between the two reads has
+      // seq >= count, so it is replayed rather than skipped.
+      expect(calls).toEqual(["count", "search"]);
+      expect(result.current.data?.afterSeq).toBe(119);
+    });
+
+    it("still loads the page, without a cursor, when the count fails", async () => {
+      withUrl();
+      vi.spyOn(EventService, "getEventCount").mockRejectedValue(
+        new Error("boom"),
+      );
+      vi.spyOn(EventService, "searchEvents").mockResolvedValue(
+        makePage([makeEvent("evt-a")]),
+      );
+
+      const { result } = renderHook(
+        () => useConversationHistory("conv-seq-2"),
+        {
+          wrapper,
+        },
+      );
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(result.current.data?.events).toHaveLength(1);
+      expect(result.current.data?.afterSeq).toBeNull();
+    });
+  });
 });

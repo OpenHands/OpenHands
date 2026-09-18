@@ -37,6 +37,7 @@ import { HookExecutionEventMessage } from "./event-message-components/hook-execu
 import { createSkillReadyEvent } from "./event-content-helpers/create-skill-ready-event";
 import { shouldShowPlanPreview } from "./hooks/use-plan-preview-events";
 import { getReasoningContent, splitInlineThink } from "./event-thought-helpers";
+import { useStreamedText } from "#/hooks/use-streamed-text";
 
 interface EventMessageProps {
   event: OpenHandsEvent & { isFromPlanningAgent?: boolean };
@@ -184,6 +185,13 @@ export function EventMessage({
   // Read isFromPlanningAgent directly from the event object
   const isFromPlanningAgent = event.isFromPlanningAgent || false;
 
+  // Streaming slots render on a clock rather than at the granularity the
+  // network delivered (#15493). Unconditional: hooks cannot be nested in the
+  // per-kind branches below, and a non-slot event has no streamed content.
+  const streamedContent = useStreamedText(
+    isStreamingDeltaEvent(event) ? (event.content ?? "") : "",
+  );
+
   // Common props for components that need them
   const commonProps = {
     isLastMessage,
@@ -224,7 +232,7 @@ export function EventMessage({
   if (isStreamingDeltaEvent(event)) {
     // Route an inline <think> block to the thinking section, not the bubble.
     const { reasoning: inlineThink, message } = splitInlineThink(
-      event.content ?? "",
+      streamedContent,
       { streaming: true },
     );
     const reasoningContent = [event.reasoning_content ?? "", inlineThink]

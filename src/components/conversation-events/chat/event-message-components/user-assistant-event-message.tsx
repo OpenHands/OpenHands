@@ -7,7 +7,10 @@ import { ImageCarousel } from "../../../features/images/image-carousel";
 import { parseMessageFromEvent } from "../event-content-helpers/parse-message-from-event";
 import { CriticResultDisplay } from "./critic-result-display";
 import { CollapsibleThinking } from "./collapsible-thinking";
-import { splitInlineThink } from "../event-thought-helpers";
+import {
+  getReasoningContent,
+  splitInlineThink,
+} from "../event-thought-helpers";
 import RepoForkedIcon from "#/icons/repo-forked.svg?react";
 import { I18nKey } from "#/i18n/declaration";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
@@ -42,10 +45,19 @@ export function UserAssistantEventMessage({
   const parsed = parseMessageFromEvent(event);
   // Route an inline <think> block (e.g. from a streamed reply) to the thinking
   // section so reloaded conversations match the live rendering.
-  const { reasoning, message } =
+  const { reasoning: inlineThink, message } =
     event.source === "agent"
       ? splitInlineThink(parsed)
       : { reasoning: "", message: parsed };
+  // The finished message replaces its streaming slot outright, so reasoning the
+  // model streamed must render from the message itself or it vanishes on
+  // finalize (and never shows after a reload).
+  const reasoning = [
+    event.source === "agent" ? getReasoningContent(event.llm_message) : "",
+    inlineThink,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 
   const imageUrls: string[] = [];
   if (Array.isArray(event.llm_message.content)) {
