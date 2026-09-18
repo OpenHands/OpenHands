@@ -257,10 +257,10 @@ describe("MetaLlmSettingsView", () => {
     ).filter((n) => !["minimax", "gpt", "deepseek"].includes(n.toLowerCase()));
 
     await waitFor(() =>
-      expect(ProfilesService.saveProfile).toHaveBeenCalledWith("GPT-5.4", {
+      expect(ProfilesService.saveProfile).toHaveBeenCalledWith("gpt-5.4", {
         llm: {
-          model: "openhands/GPT-5.4",
-          usage_id: "GPT-5.4",
+          model: "openhands/gpt-5.4",
+          usage_id: "gpt-5.4",
           provider_connection_id: "conn-openhands",
         },
         include_secrets: true,
