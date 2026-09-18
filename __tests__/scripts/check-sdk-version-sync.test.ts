@@ -4,6 +4,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 type NormalizeVersion = (version: string | null) => string | null;
 type VersionsEqual = (v1: string, v2: string) => boolean;
 type ParseSdkVersions = (requiresDist: string[]) => Record<string, string>;
+type FindClientPinMismatch = (
+  pinned: string | null,
+  expected: string,
+) => { package: string; expected: string; actual: string | null } | null;
+type ReadClientPin = () => string | null;
 
 // Import after mocking - need dynamic import since the script has side effects
 describe("check-sdk-version-sync helpers", () => {
@@ -11,6 +16,9 @@ describe("check-sdk-version-sync helpers", () => {
   let versionsEqual: VersionsEqual;
   let parseSdkVersionsFromRequiresDist: ParseSdkVersions;
   let SDK_PACKAGES: string[];
+  let findClientPinMismatch: FindClientPinMismatch;
+  let readClientPin: ReadClientPin;
+  let CLIENT_PACKAGE_NAME: string;
 
   beforeEach(async () => {
     // Reset modules to get fresh imports
@@ -27,6 +35,10 @@ describe("check-sdk-version-sync helpers", () => {
     parseSdkVersionsFromRequiresDist =
       module.parseSdkVersionsFromRequiresDist as ParseSdkVersions;
     SDK_PACKAGES = module.SDK_PACKAGES as string[];
+    findClientPinMismatch =
+      module.findClientPinMismatch as FindClientPinMismatch;
+    readClientPin = module.readClientPin as ReadClientPin;
+    CLIENT_PACKAGE_NAME = module.CLIENT_PACKAGE_NAME as string;
   });
 
   afterEach(() => {
@@ -156,6 +168,43 @@ describe("check-sdk-version-sync helpers", () => {
       expect(SDK_PACKAGES).toContain("openhands-workspace");
       expect(SDK_PACKAGES).toContain("openhands-agent-server");
       expect(SDK_PACKAGES).toHaveLength(4);
+    });
+  });
+
+  describe("findClientPinMismatch", () => {
+    it("accepts a pin equal to the expected agent-server version", () => {
+      expect(findClientPinMismatch("1.46.0", "1.46.0")).toBeNull();
+      expect(findClientPinMismatch("1.46", "1.46.0")).toBeNull();
+    });
+
+    it("reports the skew that ships a stale ACP picker", () => {
+      // 1.39.0 against agent-server 1.46.0 is the drift that left GPT-6 Astra
+      // out of the Codex picker while offering three ids the server rejects.
+      expect(findClientPinMismatch("1.39.0", "1.46.0")).toEqual({
+        package: CLIENT_PACKAGE_NAME,
+        expected: "1.46.0",
+        actual: "1.39.0",
+      });
+    });
+
+    it("rejects a range, which would let the skew back in", () => {
+      for (const range of ["^1.46.0", "~1.46.0", ">=1.46.0", "latest"]) {
+        expect(findClientPinMismatch(range, "1.46.0"), range).not.toBeNull();
+      }
+    });
+
+    it("reports an absent dependency rather than passing silently", () => {
+      expect(findClientPinMismatch(null, "1.46.0")).toEqual({
+        package: CLIENT_PACKAGE_NAME,
+        expected: "1.46.0",
+        actual: null,
+      });
+    });
+  });
+
+  describe("readClientPin", () => {
+    it("reads an exact pin this repo actually ships", () => {
+      expect(readClientPin()).toMatch(/^[0-9]+\.[0-9]+\.[0-9]+$/);
     });
   });
 });

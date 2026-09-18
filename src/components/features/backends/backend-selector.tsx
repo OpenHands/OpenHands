@@ -191,6 +191,11 @@ export function BackendSelector({
     : options.find((o) => o.value === activeValue);
   const isSettingsActive = Boolean(settingsMatch || settingsSubrouteMatch);
   const settingsLabel = t(I18nKey.SIDEBAR$SETTINGS);
+  // `org` is consumed by the cloud settings loader so the page opens on the
+  // org that is active here instead of the cloud's last-used org.
+  const cloudSettingsOrgQuery = active.orgId
+    ? `?org=${encodeURIComponent(active.orgId)}`
+    : "";
   const isRightPanelShown = useConversationStore(
     (state) => state.isRightPanelShown,
   );
@@ -420,9 +425,9 @@ export function BackendSelector({
           >
             {active.backend.kind === "cloud" ? (
               <a
-                href={`${active.backend.host.replace(/\/+$/, "")}/settings`}
-                target="_blank"
-                rel="noopener noreferrer"
+                href={`${active.backend.host.replace(/\/+$/, "")}/settings${cloudSettingsOrgQuery}`}
+                target={isLockedToCloud ? undefined : "_blank"}
+                rel={isLockedToCloud ? undefined : "noopener noreferrer"}
                 data-testid="backend-selector-settings-link"
                 aria-label={settingsLabel}
                 className={cn(
