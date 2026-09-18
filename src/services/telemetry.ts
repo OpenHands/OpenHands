@@ -377,7 +377,7 @@ export async function initializePostHogClient(
         consent_persistence_name: `${POSTHOG_INSTANCE_NAME}-consent`,
         person_profiles: "always",
         capture_pageview: POSTHOG_PAGEVIEW_CAPTURE_MODE,
-        autocapture: true,
+        autocapture: false,
         disable_session_recording: true,
         bootstrap: pendingBootstrap,
         before_send: addCanvasEventProperties,

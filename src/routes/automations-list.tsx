@@ -119,9 +119,8 @@ export default function AutomationsList() {
 
   const active = useActiveBackend();
   const { navigate } = useNavigation();
-  // Edit is a local-backend-only feature in MVP — cloud automations
-  // are managed elsewhere and we don't yet surface them here.
-  const canEdit = active.backend.kind === "local";
+  // Git Sync is only available on local backends.
+  const isLocalBackend = active.backend.kind === "local";
   // Creating an automation requires manage_automations (no owner escape hatch
   // — it's a new record, not a mutation of an existing one).
   const { canManage } = useAutomationPermissions();
@@ -377,7 +376,7 @@ export default function AutomationsList() {
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap justify-end gap-2">
-          {canEdit && (
+          {isLocalBackend && (
             <BrandButton
               type="button"
               variant="secondary"
@@ -468,7 +467,7 @@ export default function AutomationsList() {
                 }
                 onDelete={handleDeleteRequest}
                 onExport={handleExport}
-                onEdit={canEdit ? handleEditRequest : undefined}
+                onEdit={handleEditRequest}
                 insights={groupInsights}
               />
               <AutomationGroup
@@ -485,7 +484,7 @@ export default function AutomationsList() {
                 }
                 onDelete={handleDeleteRequest}
                 onExport={handleExport}
-                onEdit={canEdit ? handleEditRequest : undefined}
+                onEdit={handleEditRequest}
                 insights={groupInsights}
               />
 
@@ -517,7 +516,7 @@ export default function AutomationsList() {
         onCancel={() => setDeleteTarget(null)}
       />
 
-      {/* Edit modal — local backends only */}
+      {/* Edit modal */}
       {editTarget && (
         <EditAutomationModal
           automation={editTarget}

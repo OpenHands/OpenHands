@@ -151,6 +151,50 @@ export const AUTOMATION_HANDLERS = [
     return HttpResponse.json(response);
   }),
 
+  // POST /api/automation/v1/uploads — Upload custom automation tarball
+  http.post("*/api/automation/v1/uploads", async ({ request }) => {
+    await delay(200);
+    const url = new URL(request.url);
+    const name = url.searchParams.get("name") || "automation";
+    return HttpResponse.json({
+      tarball_path: `oh-internal://uploads/${encodeURIComponent(name)}-${crypto.randomUUID()}.tar.gz`,
+    });
+  }),
+
+  // POST /api/automation/v1 — Create an automation from uploaded tarball
+  http.post("*/api/automation/v1", async ({ request }) => {
+    await delay(200);
+
+    const body = (await request.clone().json()) as {
+      name: string;
+      model?: string;
+      trigger: Automation["trigger"];
+      timeout?: number;
+      tarball_path?: string;
+      entrypoint?: string;
+      setup_script_path?: string;
+    };
+    const now = new Date().toISOString();
+    const automation: Automation = {
+      id: crypto.randomUUID(),
+      name: body.name,
+      prompt: null,
+      model: body.model ?? null,
+      trigger: body.trigger,
+      enabled: true,
+      created_at: now,
+      updated_at: now,
+      last_triggered_at: null,
+      ...(typeof body.timeout === "number" && { timeout: body.timeout }),
+      ...(typeof body.trigger.timezone === "string" && {
+        timezone: body.trigger.timezone,
+      }),
+    };
+
+    automations.set(automation.id, automation);
+    return HttpResponse.json(automation, { status: 201 });
+  }),
+
   // POST /api/automation/v1/preset/:kind — Create a prompt/plugin automation
   http.post("*/api/automation/v1/preset/:kind", async ({ params, request }) => {
     await delay(200);

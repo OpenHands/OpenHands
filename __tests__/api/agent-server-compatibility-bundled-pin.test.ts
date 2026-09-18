@@ -1,4 +1,7 @@
-import { ServerClient } from "@openhands/typescript-client/clients";
+import {
+  ServerClient,
+  SettingsClient,
+} from "@openhands/typescript-client/clients";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   __resetActiveStoreForTests,
@@ -7,17 +10,29 @@ import {
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
 import {
+  AGENT_SERVER_UNKNOWN_VERSION_ERROR_CODE,
+  AGENT_SERVER_UNSUPPORTED_VERSION_ERROR_CODE,
   AgentServerUnavailableError,
   AgentServerUnknownVersionError,
   AgentServerUnsupportedVersionError,
   clearCachedAgentServerInfo,
   getCachedAgentServerInfo,
+  getCachedAgentServerVersion,
+  getCachedAgentServerSdkVersion,
+  validateLocalBackend,
+  INVALID_BACKEND_API_KEY_ERROR,
+  isAgentServerAuthError,
+  isAgentServerToolAvailable,
+  isAgentServerUnavailableError,
+  isAgentServerUnknownVersionError,
+  isAgentServerUnsupportedVersionError,
   loadAgentServerInfo,
   MINIMUM_COMPATIBLE_AGENT_SERVER_VERSION,
 } from "#/api/agent-server-compatibility";
 
-const { getServerInfoMock } = vi.hoisted(() => ({
+const { getServerInfoMock, getSettingsMock } = vi.hoisted(() => ({
   getServerInfoMock: vi.fn(),
+  getSettingsMock: vi.fn(),
 }));
 
 vi.mock("@openhands/typescript-client/clients", () => ({
@@ -28,10 +43,16 @@ vi.mock("@openhands/typescript-client/clients", () => ({
   }),
   SettingsClient: vi.fn(function SettingsClientMock() {
     return {
-      getSettings: vi.fn(),
+      getSettings: getSettingsMock,
     };
   }),
 }));
+
+const httpError = (status: number) =>
+  Object.assign(new Error(`HTTP ${status}`), {
+    name: "HttpError",
+    status,
+  });
 
 const cloudBackend: Backend = {
   id: "prod",
@@ -51,22 +72,57 @@ const localBackend: Backend = {
 
 beforeEach(() => {
   window.localStorage.clear();
-  clearCachedAgentServerInfo();
   __resetActiveStoreForTests();
   getServerInfoMock.mockReset();
+  getSettingsMock.mockReset();
   vi.mocked(ServerClient).mockClear();
+  vi.mocked(SettingsClient).mockClear();
   getServerInfoMock.mockResolvedValue({
     version: MINIMUM_COMPATIBLE_AGENT_SERVER_VERSION,
   });
+  getSettingsMock.mockResolvedValue({});
+  clearCachedAgentServerInfo();
+  delete (window as unknown as Record<string, unknown>)
+    .__AGENT_CANVAS_AUTH_REQUIRED__;
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   window.localStorage.clear();
-  clearCachedAgentServerInfo();
   __resetActiveStoreForTests();
+  clearCachedAgentServerInfo();
+  delete (window as unknown as Record<string, unknown>)
+    .__AGENT_CANVAS_AUTH_REQUIRED__;
 });
 
 describe("loadAgentServerInfo", () => {
+  it("exposes stable compatibility error contracts through the public alias", () => {
+    expect(AGENT_SERVER_UNSUPPORTED_VERSION_ERROR_CODE).toBe(
+      "AGENT_SERVER_UNSUPPORTED_VERSION",
+    );
+    expect(AGENT_SERVER_UNKNOWN_VERSION_ERROR_CODE).toBe(
+      "AGENT_SERVER_UNKNOWN_VERSION",
+    );
+    expect(
+      isAgentServerUnavailableError(new AgentServerUnavailableError()),
+    ).toBe(true);
+    expect(
+      isAgentServerUnsupportedVersionError(
+        new AgentServerUnsupportedVersionError("1.27.0"),
+      ),
+    ).toBe(true);
+    expect(
+      isAgentServerUnknownVersionError(
+        new AgentServerUnknownVersionError("dev-build"),
+      ),
+    ).toBe(true);
+
+    (
+      window as unknown as Record<string, unknown>
+    ).__AGENT_CANVAS_AUTH_REQUIRED__ = true;
+    expect(isAgentServerAuthError(httpError(401))).toBe(true);
+  });
+
   it("returns server info when the local backend reports the minimum compatible version", async () => {
     setRegisteredBackends([localBackend]);
     setActiveSelection({ backendId: localBackend.id });
@@ -77,22 +133,25 @@ describe("loadAgentServerInfo", () => {
       version: MINIMUM_COMPATIBLE_AGENT_SERVER_VERSION,
     });
     expect(ServerClient).toHaveBeenCalled();
+    expect(SettingsClient).not.toHaveBeenCalled();
   });
 
-  it("returns cached server info only for the probed backend host", async () => {
-    setRegisteredBackends([localBackend]);
-    setActiveSelection({ backendId: localBackend.id });
+  it("omits an empty local API key from the client options", async () => {
+    const backendWithoutKey = { ...localBackend, apiKey: "" };
+    setRegisteredBackends([backendWithoutKey]);
+    setActiveSelection({ backendId: backendWithoutKey.id });
 
     await loadAgentServerInfo();
 
-    expect(getCachedAgentServerInfo({ host: localBackend.host })).toMatchObject(
-      {
-        version: MINIMUM_COMPATIBLE_AGENT_SERVER_VERSION,
-      },
+    expect(ServerClient).toHaveBeenCalledWith(
+      expect.objectContaining({
+        host: backendWithoutKey.host,
+        timeout: 5000,
+      }),
     );
-    expect(
-      getCachedAgentServerInfo({ host: "http://localhost:9001" }),
-    ).toBeNull();
+    expect(vi.mocked(ServerClient).mock.calls[0]?.[0]).not.toHaveProperty(
+      "apiKey",
+    );
   });
 
   it("throws AgentServerUnsupportedVersionError when the local backend is too old", async () => {
@@ -133,9 +192,249 @@ describe("loadAgentServerInfo", () => {
     // Empty registry — no backends at all (frontend-only with no config).
     setRegisteredBackends([]);
 
-    await expect(loadAgentServerInfo()).rejects.toThrow(
+    await expect(loadAgentServerInfo()).rejects.toMatchObject({
+      name: AgentServerUnavailableError.name,
+      message:
+        "No agent server backend is configured yet. Add a backend to get started.",
+      details: "No backend configured",
+      noBackendConfigured: true,
+    });
+    expect(ServerClient).not.toHaveBeenCalled();
+  });
+
+  it("preserves a 401 returned by the server-info probe", async () => {
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+    const unauthorized = httpError(401);
+    getServerInfoMock.mockRejectedValue(unauthorized);
+
+    await expect(loadAgentServerInfo()).rejects.toBe(unauthorized);
+  });
+
+  it("wraps an HTTP server-info failure as an unavailable error", async () => {
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+    getServerInfoMock.mockRejectedValue(httpError(503));
+
+    await expect(loadAgentServerInfo()).rejects.toMatchObject({
+      name: AgentServerUnavailableError.name,
+      details: "HTTP 503",
+      noBackendConfigured: false,
+    });
+  });
+
+  it("wraps a non-Error server-info failure without fabricated details", async () => {
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+    getServerInfoMock.mockRejectedValue("connection closed");
+
+    await expect(loadAgentServerInfo()).rejects.toMatchObject({
+      name: AgentServerUnavailableError.name,
+      details: null,
+    });
+  });
+
+  it("validates the key against settings when runtime auth is required", async () => {
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+    (
+      window as unknown as Record<string, unknown>
+    ).__AGENT_CANVAS_AUTH_REQUIRED__ = true;
+
+    await expect(loadAgentServerInfo()).resolves.toMatchObject({
+      version: MINIMUM_COMPATIBLE_AGENT_SERVER_VERSION,
+    });
+
+    expect(ServerClient).toHaveBeenCalledWith(
+      expect.objectContaining({
+        host: localBackend.host,
+        apiKey: localBackend.apiKey,
+        timeout: 5000,
+      }),
+    );
+    expect(SettingsClient).toHaveBeenCalledWith(
+      expect.objectContaining({
+        host: localBackend.host,
+        apiKey: localBackend.apiKey,
+        timeout: 5000,
+      }),
+    );
+    expect(getSettingsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves a 401 returned by the authenticated settings probe", async () => {
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+    (
+      window as unknown as Record<string, unknown>
+    ).__AGENT_CANVAS_AUTH_REQUIRED__ = true;
+    const unauthorized = httpError(401);
+    getSettingsMock.mockRejectedValue(unauthorized);
+
+    await expect(loadAgentServerInfo()).rejects.toBe(unauthorized);
+  });
+
+  it("continues after a non-401 settings probe failure", async () => {
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+    (
+      window as unknown as Record<string, unknown>
+    ).__AGENT_CANVAS_AUTH_REQUIRED__ = true;
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const forbidden = httpError(403);
+    getSettingsMock.mockRejectedValue(forbidden);
+
+    await expect(loadAgentServerInfo()).resolves.toMatchObject({
+      version: MINIMUM_COMPATIBLE_AGENT_SERVER_VERSION,
+    });
+    expect(warning).toHaveBeenCalledWith(
+      "[agent-server] getSettings() probe failed (non-401):",
+      forbidden,
+    );
+    warning.mockRestore();
+  });
+
+  it("uses advertised tools after a successful probe", async () => {
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+    getServerInfoMock.mockResolvedValue({
+      version: MINIMUM_COMPATIBLE_AGENT_SERVER_VERSION,
+      usable_tools: ["terminal"],
+    });
+
+    await loadAgentServerInfo();
+
+    expect(isAgentServerToolAvailable("terminal")).toBe(true);
+    expect(isAgentServerToolAvailable("browser_tool_set")).toBe(false);
+    clearCachedAgentServerInfo();
+    expect(isAgentServerToolAvailable("browser_tool_set")).toBe(true);
+  });
+
+  it("clears advertised tools when a later server-info probe fails", async () => {
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+    getServerInfoMock.mockResolvedValue({
+      version: MINIMUM_COMPATIBLE_AGENT_SERVER_VERSION,
+      usable_tools: ["terminal"],
+    });
+    await loadAgentServerInfo();
+    expect(isAgentServerToolAvailable("browser_tool_set")).toBe(false);
+
+    getServerInfoMock.mockRejectedValue(new Error("connection closed"));
+
+    await expect(loadAgentServerInfo()).rejects.toBeInstanceOf(
       AgentServerUnavailableError,
     );
-    expect(ServerClient).not.toHaveBeenCalled();
+    expect(isAgentServerToolAvailable("browser_tool_set")).toBe(true);
+  });
+
+  it("allows tools when the server does not advertise a tool list", async () => {
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+    getServerInfoMock.mockResolvedValue({
+      version: MINIMUM_COMPATIBLE_AGENT_SERVER_VERSION,
+      usable_tools: null,
+    });
+
+    await loadAgentServerInfo();
+
+    expect(isAgentServerToolAvailable("browser_tool_set")).toBe(true);
+    clearCachedAgentServerInfo();
+    expect(isAgentServerToolAvailable("browser_tool_set")).toBe(true);
+  });
+  it("returns cached server info only for the probed backend host", async () => {
+    expect(getCachedAgentServerInfo()).toBeNull();
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+
+    await loadAgentServerInfo();
+
+    expect(getCachedAgentServerInfo()).toEqual({
+      version: MINIMUM_COMPATIBLE_AGENT_SERVER_VERSION,
+    });
+
+    expect(getCachedAgentServerInfo({ host: localBackend.host })).toMatchObject(
+      {
+        version: MINIMUM_COMPATIBLE_AGENT_SERVER_VERSION,
+      },
+    );
+    expect(
+      getCachedAgentServerInfo({ host: "http://localhost:9001" }),
+    ).toBeNull();
+  });
+});
+
+describe("local backend validation", () => {
+  it.each(["session-key", ""])(
+    "authenticates before probing server info with the explicit backend and key %s",
+    async (apiKey) => {
+      setRegisteredBackends([{ ...localBackend, apiKey: "" }]);
+      setActiveSelection({ backendId: localBackend.id });
+      const backend = { host: "http://explicit.example.test", apiKey };
+      await expect(validateLocalBackend(backend, 1234)).resolves.toBe(
+        MINIMUM_COMPATIBLE_AGENT_SERVER_VERSION,
+      );
+      const options = {
+        host: backend.host,
+        timeout: 1234,
+        ...(apiKey ? { apiKey } : {}),
+      };
+      expect(SettingsClient).toHaveBeenCalledWith(
+        expect.objectContaining(options),
+      );
+      expect(ServerClient).toHaveBeenCalledWith(
+        expect.objectContaining(options),
+      );
+      if (!apiKey)
+        expect(vi.mocked(SettingsClient).mock.calls[0][0]).not.toHaveProperty(
+          "apiKey",
+        );
+      expect(getSettingsMock.mock.invocationCallOrder[0]).toBeLessThan(
+        getServerInfoMock.mock.invocationCallOrder[0],
+      );
+    },
+  );
+  it("translates an authentication failure and does not probe the server", async () => {
+    expect(INVALID_BACKEND_API_KEY_ERROR).toBe("Invalid API key");
+    getSettingsMock.mockRejectedValue(httpError(401));
+    await expect(validateLocalBackend(localBackend, 1000)).rejects.toThrow(
+      INVALID_BACKEND_API_KEY_ERROR,
+    );
+    expect(getServerInfoMock).not.toHaveBeenCalled();
+  });
+  it("preserves a non-authentication probe failure", async () => {
+    const failure = new Error("network failure");
+    getServerInfoMock.mockRejectedValue(failure);
+    await expect(validateLocalBackend(localBackend, 1000)).rejects.toBe(
+      failure,
+    );
+  });
+});
+
+describe("cached display versions", () => {
+  it("returns no versions without a cache and limits populated values to the active host", async () => {
+    expect(getCachedAgentServerVersion()).toBeNull();
+    expect(getCachedAgentServerSdkVersion()).toBeNull();
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+    getServerInfoMock.mockResolvedValue({
+      version: MINIMUM_COMPATIBLE_AGENT_SERVER_VERSION,
+      sdk_version: "9.8.7",
+    });
+    await loadAgentServerInfo();
+    expect(getCachedAgentServerVersion()).toBe(
+      MINIMUM_COMPATIBLE_AGENT_SERVER_VERSION,
+    );
+    expect(getCachedAgentServerSdkVersion()).toBe("9.8.7");
+    expect(getCachedAgentServerVersion(localBackend.host)).toBe(
+      MINIMUM_COMPATIBLE_AGENT_SERVER_VERSION,
+    );
+    expect(getCachedAgentServerSdkVersion(localBackend.host)).toBe("9.8.7");
+    expect(getCachedAgentServerVersion("http://elsewhere.test")).toBeNull();
+    expect(getCachedAgentServerSdkVersion("http://elsewhere.test")).toBeNull();
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+    expect(getCachedAgentServerVersion(localBackend.host)).toBeNull();
+    expect(getCachedAgentServerSdkVersion(localBackend.host)).toBeNull();
   });
 });
