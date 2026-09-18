@@ -191,7 +191,7 @@ const basicAuthHeader = (username: string, password: string): string => {
   return `Basic ${token}`;
 };
 
-const headersFromMcpAuth = (
+export const headersFromMcpAuth = (
   auth: Record<string, unknown>,
 ): Record<string, string> | null => {
   switch (auth.strategy) {

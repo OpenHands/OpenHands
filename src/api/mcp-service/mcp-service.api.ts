@@ -5,6 +5,8 @@ import {
   getActiveBackend,
   getRegisteredBackends,
 } from "../backend-registry/active-store";
+import { testCloudMcpServer } from "../cloud/mcp-service.api";
+import { headersFromMcpAuth } from "../settings-service/settings-service.api";
 import {
   getCredentialValidationForServer,
   type CredentialValidation,
@@ -19,6 +21,8 @@ import { redactMcpSecrets } from "#/utils/redact-mcp-secrets";
 import { substituteRedactedMcpCredentials } from "./mcp-redacted-credentials";
 
 const OAUTH_MCP_TEST_TIMEOUT_SECONDS = 120;
+// Upper bound accepted by the app server's `POST /api/v1/mcp/test`.
+const MAX_CLOUD_MCP_TEST_TIMEOUT_SECONDS = 120;
 
 function toMcpServer(
   server: MCPServerConfig,
@@ -180,18 +184,17 @@ class McpService {
   static async testServer(
     server: MCPServerConfig,
   ): Promise<ExtendedMCPTestResponse> {
-    // The MCP connectivity-test endpoint lives on the local agent-server. It
-    // spawns the configured stdio command / opens an SSE-or-SHTTP connection
-    // from that process's environment. Cloud backends don't expose this
-    // endpoint to the frontend — the MCP server would actually run inside the
-    // cloud sandbox, which isn't reachable from the browser before the user
-    // starts a conversation. Calling `getAgentServerClientOptions()` here for
-    // a cloud-active session would throw `NoBackendAvailableError("No backend
-    // is configured.")` and block the install flow entirely. Short-circuit
-    // with a synthetic success so saving proceeds; any real connection
-    // failure surfaces inside the conversation runtime instead.
     if (getActiveBackend().backend.kind === "cloud") {
-      return { ok: true, tools: [] };
+      // A stdio server spawns inside the cloud sandbox, which isn't reachable
+      // from the browser before the user starts a conversation, so it cannot
+      // be probed from the settings page. Short-circuit with a synthetic
+      // success so saving/installing proceeds; any real failure surfaces
+      // inside the conversation runtime instead. (Throwing here would block
+      // the install flow entirely — see the cloud regression test.)
+      if (server.type === "stdio") {
+        return { ok: true, tools: [] };
+      }
+      return McpService.testRemoteServerViaCloud(server);
     }
     const validation = getCredentialValidationForServer(server);
     const { host, apiKey } = getAgentServerClientOptions();
@@ -207,6 +210,43 @@ class McpService {
     } finally {
       client.close();
     }
+  }
+
+  /**
+   * Remote servers on cloud backends are probed by the app server's
+   * `POST /api/v1/mcp/test`. Unchanged (redacted) credentials are not
+   * substituted here: the app server restores them from the stored server of
+   * the same settings key, which is why the key is sent as `name`. `auth` is
+   * flattened to headers the same way cloud saves persist it so that
+   * restoration matches; an `auth` that cannot be flattened (e.g. OAuth
+   * without tokens) is passed through and the app server answers with a
+   * structured failure.
+   */
+  private static async testRemoteServerViaCloud(
+    server: MCPServerConfig,
+  ): Promise<ExtendedMCPTestResponse> {
+    const validation = getCredentialValidationForServer(server);
+    const authHeaders = server.auth
+      ? headersFromMcpAuth({ ...server.auth })
+      : null;
+    const headers = { ...server.headers, ...authHeaders };
+    const name = server.id || server.name;
+    const timeout = getMcpTestTimeout(server);
+    const request: AgentServerMCPTestRequest = {
+      server: {
+        type: server.type === "sse" ? "sse" : "http",
+        url: server.url!,
+        ...(Object.keys(headers).length > 0 && { headers }),
+        ...(server.auth && authHeaders === null && { auth: server.auth }),
+      },
+      ...(name ? { name } : {}),
+      ...(timeout !== undefined && {
+        timeout: Math.min(timeout, MAX_CLOUD_MCP_TEST_TIMEOUT_SECONDS),
+      }),
+      ...(validation ? { tool_call: validation.toolCall } : {}),
+    };
+    const result = await testCloudMcpServer(request);
+    return finalizeMcpTestResponse(result, validation, [server]);
   }
 
   static async startOAuth(
