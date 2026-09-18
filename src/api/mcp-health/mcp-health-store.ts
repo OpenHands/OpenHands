@@ -6,7 +6,8 @@ export type McpHealthMap = Record<string, McpServerHealth>;
 
 /**
  * In-memory MCP connection-health store, keyed by
- * `getMcpServerHealthKey(server)`. Mirrors the module-store shape of
+ * `getMcpServerHealthKey(scope, server)` where the scope carries the active
+ * backend identity. Mirrors the module-store shape of
  * `#/api/backend-registry/health-store` but is deliberately NOT persisted:
  * a health verdict is only as fresh as its probe, so a page reload resets
  * every server to "unchecked" instead of resurrecting a possibly-stale
