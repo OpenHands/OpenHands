@@ -111,14 +111,7 @@ export function mapAutomationRunToExportRow(
     // not a screen — a completed run's last phase is real data, and dropping
     // it here would make the phase of a run that finished indistinguishable
     // from one that never reported a phase at all.
-    //
-    // Falling back to the label: without it, a phase reported with only a
-    // label would export as an empty cell, indistinguishable from no phase.
-    // Trimmed rather than nullish-coalesced: the service stores a
-    // whitespace-only field as sent — it rejects only a phase blank on
-    // *both* — so `??` would let a blank code suppress a real label, which
-    // is exactly the empty cell this fallback exists to prevent.
-    phase: run.phase_code?.trim() || run.phase_label?.trim() || null,
+    phase: run.current_phase?.trim() || null,
   };
 }
 

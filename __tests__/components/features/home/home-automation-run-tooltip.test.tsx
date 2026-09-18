@@ -61,62 +61,11 @@ describe("HomeAutomationRunTooltip — phase", () => {
     render(
       <HomeAutomationRunTooltip
         automation={automation}
-        runState={makeState(
-          makeRun({ phase_code: "drafting_notes", phase_label: LONG_LABEL }),
-        )}
+        runState={makeState(makeRun({ current_phase: LONG_LABEL }))}
       />,
     );
 
     expect(screen.getByTestId("run-phase-row")).toHaveTextContent(LONG_LABEL);
-  });
-
-  it("translates a phase code the frontend knows instead of printing it raw", () => {
-    render(
-      <HomeAutomationRunTooltip
-        automation={automation}
-        runState={makeState(
-          makeRun({ phase_code: "bundle_upload", phase_label: null }),
-        )}
-      />,
-    );
-
-    expect(screen.getByTestId("run-phase-row")).toHaveTextContent(
-      "AUTOMATIONS$DETAIL$PHASE_BUNDLE_UPLOAD",
-    );
-  });
-
-  it("says how long the run has held the phase, so a stall is visible without opening the run", () => {
-    render(
-      <HomeAutomationRunTooltip
-        automation={automation}
-        runState={makeState(
-          makeRun({
-            phase_code: "drafting_notes",
-            phase_label: LONG_LABEL,
-            phase_updated_at: new Date(Date.now() - 25 * 60_000).toISOString(),
-          }),
-        )}
-      />,
-    );
-
-    expect(screen.getByTestId("run-phase-row")).toHaveTextContent(
-      "AUTOMATIONS$DETAIL$TIME_MINUTES_AGO:25",
-    );
-  });
-
-  it("shows the phase without an age against a service that sends no timestamp", () => {
-    render(
-      <HomeAutomationRunTooltip
-        automation={automation}
-        runState={makeState(
-          makeRun({ phase_code: "drafting_notes", phase_label: LONG_LABEL }),
-        )}
-      />,
-    );
-
-    const row = screen.getByTestId("run-phase-row");
-    expect(row).toHaveTextContent(LONG_LABEL);
-    expect(row.textContent).not.toContain("AUTOMATIONS$DETAIL$TIME_");
   });
 
   it("omits the phase row for a finished run, matching every other surface", () => {
@@ -127,8 +76,7 @@ describe("HomeAutomationRunTooltip — phase", () => {
           makeRun({
             status: AutomationRunStatus.COMPLETED,
             completed_at: "2026-08-01T10:05:00Z",
-            phase_code: "running_agent",
-            phase_label: null,
+            current_phase: "Agent is working on the task",
           }),
         )}
       />,
