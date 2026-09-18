@@ -9,6 +9,7 @@ import {
 } from "#/types/automation";
 import { isInvalidTimestamp } from "#/utils/format-relative-time";
 import { getAutomationRunDisplay } from "#/utils/automation-run-display";
+import { useFormatCost } from "#/stores/cost-currency-store";
 import { RunStatusBadge } from "./run-status-badge";
 import { RunPhase, shouldShowRunPhase } from "./run-phase";
 import { RunLogsModal } from "./run-logs-modal";
@@ -35,21 +36,9 @@ function getConversationUrl(conversationId: string): string {
   return `/conversations/${conversationId}`;
 }
 
-/**
- * Format the run's accumulated LLM cost, or return null when it is unknown.
- *
- * A genuine `0` is rendered (`$0.0000`) rather than hidden: the automation
- * service records zero only when the SDK reported a real zero-cost run, and
- * leaves the value null when the cost could not be determined. Matches the
- * 4-decimal USD convention used by the conversation metrics modal.
- */
-function formatRunCost(cost: number | null | undefined): string | null {
-  if (typeof cost !== "number" || !Number.isFinite(cost)) return null;
-  return `$${cost.toFixed(4)}`;
-}
-
 export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
   const { t, i18n } = useTranslation("openhands");
+  const formatCost = useFormatCost();
   const hasConversation = !!run.conversation_id;
   const hasBashCommand = !!run.bash_command_id;
   // Only surface "Conversation not created" when the run has reached a
@@ -78,7 +67,13 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
     effectiveStartedAt,
     i18n.language,
   );
-  const formattedCost = formatRunCost(run.cost);
+  // Genuine `0` is shown; null/undefined (unknown cost) stay hidden.
+  const formattedCost =
+    typeof run.cost === "number" && Number.isFinite(run.cost)
+      ? formatCost(run.cost, run.completed_at ?? run.started_at, {
+          detailed: true,
+        })
+      : null;
   const display = getAutomationRunDisplay(run);
 
   const handleLogsClick = (
