@@ -63,6 +63,11 @@ export const useFileHandling = (
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = Array.from(e.target.files || []);
       addFiles(files);
+      // Reset the input so picking the same file again (e.g. after removing
+      // the attachment chip) still fires `change` - a file input whose value
+      // is unchanged suppresses the event.
+      const input = e.target;
+      input.value = "";
     },
     [addFiles],
   );
