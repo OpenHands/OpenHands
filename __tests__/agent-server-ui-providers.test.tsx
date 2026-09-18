@@ -1,4 +1,5 @@
 import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, useQueryClient } from "@tanstack/react-query";
@@ -23,6 +24,7 @@ import {
   setQueryClient,
 } from "#/index";
 import i18n from "#/i18n";
+import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 
 const telemetryProviderMock = vi.hoisted(() => vi.fn());
 vi.mock("#/components/providers/telemetry-provider", () => ({
@@ -275,5 +277,103 @@ describe("AgentServerUIProviders", () => {
     expect(themedContainer).toHaveAttribute("data-theme", "light");
     expect(themedContainer).toHaveClass("light", "inner-shell");
     expect(themedContainer).toContainElement(screen.getByTestId("root-child"));
+  });
+
+  it("portals simultaneous modals into isolated body-level hosts", async () => {
+    render(
+      <>
+        <AgentServerUIRoot
+          theme="light"
+          style={{ transform: "translateX(0)" }}
+          styleOverrides={{ "--oh-color-base": "#fefefe" }}
+        >
+          <ModalBackdrop aria-label="light-root-modal">
+            <div>light modal</div>
+          </ModalBackdrop>
+        </AgentServerUIRoot>
+        <AgentServerUIRoot
+          theme="dark"
+          styleOverrides={{ "--oh-color-base": "#010101" }}
+        >
+          <ModalBackdrop elevated aria-label="dark-root-modal">
+            <div>dark modal</div>
+          </ModalBackdrop>
+        </AgentServerUIRoot>
+      </>,
+    );
+
+    await waitFor(() => {
+      expect(
+        document.querySelectorAll("[data-agent-server-ui-portal-host]"),
+      ).toHaveLength(2);
+    });
+
+    const lightDialog = screen.getByRole("dialog", {
+      name: "light-root-modal",
+    });
+    const darkDialog = screen.getByRole("dialog", {
+      name: "dark-root-modal",
+    });
+    const lightHost = lightDialog.closest<HTMLDivElement>(
+      "[data-agent-server-ui-portal-host]",
+    );
+    const darkHost = darkDialog.closest<HTMLDivElement>(
+      "[data-agent-server-ui-portal-host]",
+    );
+
+    expect(lightHost?.parentElement).toBe(document.body);
+    expect(darkHost?.parentElement).toBe(document.body);
+    expect(lightHost).not.toBe(darkHost);
+    expect(lightHost).toHaveAttribute("data-agent-server-ui");
+    expect(lightHost).toHaveAttribute("data-theme", "light");
+    expect(lightHost).toHaveClass("light", "text-foreground");
+    expect(lightHost?.style.getPropertyValue("--oh-color-base")).toBe(
+      "#fefefe",
+    );
+    expect(lightHost).not.toHaveStyle({ transform: "translateX(0)" });
+    expect(darkHost).toHaveAttribute("data-theme", "dark");
+    expect(darkHost).toHaveClass("dark", "text-foreground");
+    expect(darkHost?.style.getPropertyValue("--oh-color-base")).toBe("#010101");
+    expect(lightHost).not.toContainElement(darkDialog);
+    expect(darkHost).not.toContainElement(lightDialog);
+  });
+
+  it("creates one portal host through Strict Mode and removes it on unmount", async () => {
+    const view = render(
+      <React.StrictMode>
+        <AgentServerUIRoot>
+          <ModalBackdrop aria-label="strict-mode-modal">
+            <div>strict modal</div>
+          </ModalBackdrop>
+        </AgentServerUIRoot>
+      </React.StrictMode>,
+    );
+
+    await waitFor(() => {
+      expect(
+        document.querySelectorAll("[data-agent-server-ui-portal-host]"),
+      ).toHaveLength(1);
+    });
+    expect(
+      screen.getByRole("dialog", { name: "strict-mode-modal" }),
+    ).toBeInTheDocument();
+
+    view.unmount();
+
+    expect(
+      document.querySelector("[data-agent-server-ui-portal-host]"),
+    ).toBeNull();
+  });
+
+  it("renders the scoped root without touching the document during SSR", () => {
+    expect(() =>
+      renderToStaticMarkup(
+        <AgentServerUIRoot>
+          <ModalBackdrop aria-label="server-modal">
+            <div>server modal</div>
+          </ModalBackdrop>
+        </AgentServerUIRoot>,
+      ),
+    ).not.toThrow();
   });
 });
