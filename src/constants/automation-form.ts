@@ -6,3 +6,11 @@ export const AUTOMATION_FORM_UPDATE_TOOL_NAME = "automation_form_update";
  */
 export const AUTOMATION_FORM_UPDATE_ACTION_KIND =
   `ClientAction_${AUTOMATION_FORM_UPDATE_TOOL_NAME}` as const;
+
+/**
+ * The capabilities feature flag the automation service advertises (see
+ * `OpenHands/automation` PR #417) when server-backed automation drafts are
+ * available. The setup form gates the persisted-draft flow on this so a
+ * deployment that predates the endpoints falls back to client-only state.
+ */
+export const AUTOMATION_DRAFTS_FEATURE = "automationDrafts";
