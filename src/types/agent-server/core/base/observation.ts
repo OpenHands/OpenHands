@@ -361,8 +361,7 @@ export interface SwitchLLMObservation extends ObservationBase<"SwitchLLMObservat
   active_model: string | null;
 }
 
-export interface ClassifyAndSwitchLLMObservation
-  extends ObservationBase<"ClassifyAndSwitchLLMObservation"> {
+export interface ClassifyAndSwitchLLMObservation extends ObservationBase<"ClassifyAndSwitchLLMObservation"> {
   /**
    * Content returned from the classify-and-switch router tool.
    */
