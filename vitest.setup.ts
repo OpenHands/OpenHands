@@ -66,10 +66,10 @@ if (typeof requestAnimationFrame === "undefined") {
 // XMLHttpRequestUpload`). Vitest's jsdom environment installs these as own
 // properties on `globalThis` and removes them during per-file teardown with
 // `keys.forEach((key) => delete global[key])`. If an in-flight intercepted
-// XHR (e.g. PostHog analytics, or any request that escaped to the real
-// network under `onUnhandledRequest: "bypass"` and is still waiting on a
-// socket) settles after teardown, its callback evaluates `ProgressEvent`
-// against a torn-down global and throws
+// XHR (e.g. PostHog analytics, or a loopback request allowed through by
+// `src/mocks/loopback-passthrough.ts` and still waiting on a socket) settles
+// after teardown, its callback evaluates
+// `ProgressEvent` against a torn-down global and throws
 // `ReferenceError: ProgressEvent is not defined` (or the
 // `XMLHttpRequestUpload` equivalent). Vitest reports that as an
 // unhandled rejection and fails the whole run even though every test passed.
@@ -176,9 +176,13 @@ vi.mock("react-router", async (importOriginal) => ({
 // Import the Zustand mock to enable automatic store resets
 vi.mock("zustand");
 
-// Mock requests during tests
+// Mock requests during tests. The unhandled-request policy is fail-closed: a
+// request without a matching handler fails the test that made it instead of
+// escaping to the real network. The only allowance is the loopback passthrough
+// handler in `#/mocks/loopback-passthrough`, which intentionally local traffic
+// matches before this policy sees it.
 beforeAll(() => {
-  server.listen({ onUnhandledRequest: "bypass" });
+  server.listen({ onUnhandledRequest: "error" });
   vi.stubGlobal("ResizeObserver", MockResizeObserver);
 });
 
