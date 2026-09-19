@@ -14,6 +14,8 @@ import {
 } from "#/hooks/query/use-free-models";
 import { LlmSettingsInputsSkeleton } from "#/components/features/settings/llm-settings/llm-settings-inputs-skeleton";
 import { deriveProfileNameFromModel } from "#/utils/derive-profile-name";
+import type { SaveProfileRequest } from "#/api/profiles-service/profiles-service.api";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 interface SetupLlmStepProps {
   onBack: () => void;
@@ -57,6 +59,11 @@ export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
   const [saveControl, setSaveControl] =
     React.useState<SdkSectionSaveControl | null>(null);
   const [isFinalizing, setIsFinalizing] = React.useState(false);
+  const [hasFinalizationError, setHasFinalizationError] = React.useState(false);
+  const profileDraftRef = React.useRef<{
+    name: string;
+    llm: SaveProfileRequest["llm"];
+  } | null>(null);
 
   // On local backends the LLM profiles list is the user-facing source of
   // truth; without this step the form save only updates agent_settings and
@@ -68,39 +75,34 @@ export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
     string | null
   > => {
     if (!isLocalBackend || !saveControl) return null;
-    const values = saveControl.values;
-    const model =
-      typeof values["llm.model"] === "string" ? values["llm.model"] : "";
-    if (!model) return null;
-    const apiKey =
-      typeof values["llm.api_key"] === "string" ? values["llm.api_key"] : "";
-    const baseUrl =
-      typeof values["llm.base_url"] === "string" ? values["llm.base_url"] : "";
 
-    const name = deriveProfileNameFromModel(model);
-    const llmConfig: { model: string; api_key?: string; base_url?: string } = {
-      model,
-    };
-    if (apiKey) llmConfig.api_key = apiKey;
-    if (baseUrl) llmConfig.base_url = baseUrl;
-
-    try {
-      await saveProfile.mutateAsync({
-        name,
-        request: { llm: llmConfig, include_secrets: true },
-      });
-      await activateProfile.mutateAsync(name);
-      return name;
-    } catch (error) {
-      // Best-effort: the agent_settings save already succeeded, so the
-      // user is not blocked from completing onboarding.
-      console.error("Failed to persist onboarding LLM as profile:", error);
-      return null;
+    let profileDraft = profileDraftRef.current;
+    if (!profileDraft) {
+      const payload = saveControl.getSavePayload();
+      const agentSettings = payload.agent_settings_diff;
+      if (!agentSettings || typeof agentSettings !== "object") return null;
+      const llmConfig = (agentSettings as Record<string, unknown>).llm;
+      if (!llmConfig || typeof llmConfig !== "object") return null;
+      const model = (llmConfig as Record<string, unknown>).model;
+      if (typeof model !== "string" || !model) return null;
+      profileDraft = {
+        name: deriveProfileNameFromModel(model),
+        llm: llmConfig as SaveProfileRequest["llm"],
+      };
+      profileDraftRef.current = profileDraft;
     }
+
+    await saveProfile.mutateAsync({
+      name: profileDraft.name,
+      request: { llm: profileDraft.llm, include_secrets: true },
+    });
+    await activateProfile.mutateAsync(profileDraft.name);
+    return profileDraft.name;
   }, [isLocalBackend, saveControl, saveProfile, activateProfile]);
 
   const handleSaveSuccess = React.useCallback(async () => {
     setIsFinalizing(true);
+    setHasFinalizationError(false);
     try {
       const llmProfileName = await persistAsProfile();
       // Point the active AGENT profile at the LLM the user just configured so
@@ -121,17 +123,27 @@ export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
           llm_profile_ref: llmProfileName,
         });
       }
+      profileDraftRef.current = null;
+      onNext();
+    } catch {
+      setHasFinalizationError(true);
+      displayErrorToast(t(I18nKey.ERROR$GENERIC));
     } finally {
       setIsFinalizing(false);
-      onNext();
     }
-  }, [persistAsProfile, applyAgentProfile, onNext]);
+  }, [persistAsProfile, applyAgentProfile, onNext, t]);
 
   const handleNext = () => {
     if (saveControl?.isDirty) {
+      profileDraftRef.current = null;
+      setHasFinalizationError(false);
       saveControl.save();
       // `onSaveSuccess` (wired to `handleSaveSuccess` below) will advance
       // once the mutation resolves successfully.
+      return;
+    }
+    if (hasFinalizationError) {
+      void handleSaveSuccess();
       return;
     }
     onNext();
