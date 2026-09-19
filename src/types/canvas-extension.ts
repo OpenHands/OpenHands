@@ -59,11 +59,29 @@ export type CanvasExtensionPageMount = (
   context: CanvasExtensionPageMountContext,
 ) => void | CanvasExtensionDispose | Promise<void | CanvasExtensionDispose>;
 
+export interface CanvasExtensionCompanionMountContext {
+  container: HTMLElement;
+  navigate: (path: string) => void;
+}
+
+/** A small shell surface that survives page navigation, e.g. voice controls. */
+export interface CanvasExtensionCompanion {
+  id: string;
+  mount: (
+    context: CanvasExtensionCompanionMountContext,
+  ) => void | CanvasExtensionDispose | Promise<void | CanvasExtensionDispose>;
+}
+
 export interface CanvasExtensionAgentServerRequest {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   path: string;
   body?: unknown;
   headers?: Record<string, string>;
+}
+
+export interface CanvasConversationContextChangeRequest {
+  conversationId: string;
+  reason: "condense";
 }
 
 export interface CanvasExtensionHost {
@@ -81,6 +99,15 @@ export interface CanvasExtensionHost {
   registerPage: (
     contributionId: string,
     mount: CanvasExtensionPageMount,
+    options?: { icon?: "cat" },
+  ) => CanvasExtensionDispose;
+  /** Optional on older v1 hosts. Disposed on disable, update, or backend change. */
+  registerCompanion?: (
+    companion: CanvasExtensionCompanion,
+  ) => CanvasExtensionDispose;
+  /** Optional v1 capability. Runs before a context action, not on API success. */
+  onConversationContextChangeRequested?: (
+    listener: (event: CanvasConversationContextChangeRequest) => void,
   ) => CanvasExtensionDispose;
   navigate: (path: string) => void;
   agentServer: {

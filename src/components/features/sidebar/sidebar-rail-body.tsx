@@ -7,6 +7,7 @@ import {
   Server,
   Settings,
   PanelsTopLeft,
+  Cat,
 } from "lucide-react";
 import { OpenHandsLogoButton } from "#/components/shared/buttons/openhands-logo-button";
 import { NavigationLink } from "#/components/shared/navigation-link";
@@ -271,7 +272,13 @@ export function SidebarRailBody({
             label={page.contribution.nav_label || page.contribution.title}
             testId={`sidebar-canvas-extension-${page.extension.name}-${page.contribution.id}`}
             collapsed={collapsed}
-            icon={<PanelsTopLeft width={ICON_SIZE} height={ICON_SIZE} />}
+            icon={
+              page.icon === "cat" ? (
+                <Cat width={ICON_SIZE} height={ICON_SIZE} />
+              ) : (
+                <PanelsTopLeft width={ICON_SIZE} height={ICON_SIZE} />
+              )
+            }
           />
         ))}
       </nav>

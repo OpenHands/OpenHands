@@ -117,10 +117,40 @@ host API contains:
 
 - `apiVersion: "1"`
 - immutable extension/backend metadata
-- `registerPage(id, mount)` for page factories declared by the manifest
+- `registerPage(id, mount, options?)` for page factories declared by the manifest;
+  the optional `{ icon: "cat" }` selects the host's cat navigation icon
+- optional `registerCompanion({ id, mount })` for small persistent controls
+  such as an active voice session; older v1 hosts may omit this capability
+- optional `onConversationContextChangeRequested(listener)` for releasing
+  context-bound resources before a Canvas compaction action
 - `navigate(path)` using Canvas base-path-aware routing
 - `agentServer.request(...)`, an authenticated request helper targeting the
   extension's owning backend
+
+A companion's `mount({ container, navigate })` returns a cleanup function (or a
+promise of one), just like a page mount. Canvas owns its responsive shell surface
+in a normal-flow dock below the page outlet, reserving space so controls cannot
+cover the chat composer. Empty or hidden content consumes no height; tall
+controls scroll within the dock. Navigating between an App and a regular conversation
+does not reactivate the App or remount its companion. A companion should remain
+hidden until it has something to show, identify the conversation it controls, and
+provide an explicit stop action. Registration returns an unregister function.
+Disabling or updating the App, changing the backend/organization/connection, or
+unmounting Canvas disposes both activation and companion. App cleanup must stop
+microphone tracks and close its connections, including pending asynchronous work.
+The request helper retains its owning backend after disposal so late resource
+cleanup can finish there. Apps must cancel their own pending work on disposal
+and guard asynchronous continuations before submitting new work.
+
+Context-action listeners receive `{ conversationId, reason: "condense" }`
+synchronously before Canvas submits a permitted compaction request. This is an
+intent notification, not confirmation that compaction succeeded. Subscriptions
+are scoped to the activation's backend, organization, and connection revision,
+and are disposed with the activation. A voice App should end only the matching
+conversation's call and offer Start voice after compaction completes, so its new
+call receives the updated context. A failed request may also have ended the call.
+Apps on older hosts without this optional capability must explain how to restart
+voice after compacting in regular chat.
 
 The runtime fetches the bundle as authenticated text and imports it through a
 temporary Blob URL. A direct `<script src>` or `import(backendUrl)` cannot carry

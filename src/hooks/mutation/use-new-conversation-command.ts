@@ -11,6 +11,11 @@ import {
 import { useNavigation } from "#/context/navigation-context";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useTracking } from "#/hooks/use-tracking";
+import { useBackendScopedPath } from "#/hooks/use-backend-scoped-path";
+import {
+  INSIDER_CAT_NEW_PATH,
+  isInsiderConversation,
+} from "#/utils/insider-cat";
 
 export const useNewConversationCommand = () => {
   const queryClient = useQueryClient();
@@ -18,11 +23,23 @@ export const useNewConversationCommand = () => {
   const { t } = useTranslation("openhands");
   const { data: conversation } = useActiveConversation();
   const { trackConversationCreated } = useTracking();
+  const backendScopedPath = useBackendScopedPath();
+  const isInsider = isInsiderConversation(conversation);
 
   const mutation = useMutation({
     mutationFn: async () => {
       if (!conversation?.id) {
         throw new Error("No active conversation");
+      }
+
+      // The App owns Insider's profile, role injection and controller tags.
+      // Opening its explicit New Cat flow keeps /new from creating a plain
+      // worker conversation or copying the previous controller's identity.
+      if (isInsider) {
+        return {
+          kind: "insider" as const,
+          insiderPath: backendScopedPath(INSIDER_CAT_NEW_PATH),
+        };
       }
 
       // /new reuses the parent conversation's sandbox (matches OpenHands
@@ -49,18 +66,24 @@ export const useNewConversationCommand = () => {
         : `task-${startTask.id}`;
 
       return {
+        kind: "conversation" as const,
         newConversationId,
         oldConversationId: conversation.id,
         taskId: startTask.id,
       };
     },
     onMutate: () => {
+      if (isInsider) return;
       toast.loading(t(I18nKey.CONVERSATION$CLEARING), {
         ...TOAST_OPTIONS,
         id: "clear-conversation",
       });
     },
     onSuccess: (data) => {
+      if (data.kind === "insider") {
+        navigate(data.insiderPath);
+        return;
+      }
       trackConversationCreated({
         conversationId: data.newConversationId,
         taskId: data.taskId,

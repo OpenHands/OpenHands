@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, test, vi } from "vitest";
 import {
+  act,
+  cleanup,
   fireEvent,
   render,
   screen,
@@ -31,7 +33,7 @@ import { useTaskPolling } from "#/hooks/query/use-task-polling";
 import { AgentState } from "#/types/agent-state";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useGoalStore } from "#/stores/goal-store";
-import { act } from "@testing-library/react";
+import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 
 const mockSend = vi.fn();
 vi.mock("#/hooks/use-send-message", () => ({
@@ -328,13 +330,15 @@ describe("ChatInterface - Scroll-up loads older events", () => {
   });
 
   afterEach(() => {
+    cleanup();
     useEventStore.setState({
       events: [],
       eventIds: new Set(),
       uiEvents: [],
       loadedConversationId: null,
     });
-    vi.clearAllMocks();
+    // Restore the real conversation query after the pagination failure spy.
+    vi.restoreAllMocks();
   });
 
   // Helper: install a controllable mock of useLoadOlderEvents and seed the
@@ -722,6 +726,67 @@ describe("ChatInterface - Pending message queue", () => {
       </QueryClientProvider>,
     );
   }
+
+  it.each([
+    [AgentState.FINISHED, true],
+    [AgentState.AWAITING_USER_CONFIRMATION, false],
+  ])(
+    "handles /condense locally in agent state %s",
+    async (agentState, allowed) => {
+      const batchSpy = vi
+        .spyOn(AgentServerConversationService, "batchGetAppConversations")
+        .mockResolvedValue([
+          {
+            id: "test-conversation-id",
+            title: "Insider Cat",
+            agent_kind: "openhands",
+            execution_status: "idle",
+            conversation_url: null,
+            session_api_key: null,
+          },
+        ] as never);
+      const condenseSpy = vi
+        .spyOn(AgentServerConversationService, "condenseConversation")
+        .mockResolvedValue(undefined);
+      vi.mocked(useAgentState).mockReturnValue({ curAgentState: agentState });
+
+      try {
+        renderInterface();
+        await waitFor(() => {
+          expect(
+            queryClient
+              .getQueriesData({ queryKey: ["user", "conversation"] })
+              .some(
+                ([, value]) =>
+                  value && typeof value === "object" && "id" in value,
+              ),
+          ).toBe(true);
+        });
+
+        submitMessage("/condense");
+
+        if (allowed) {
+          await waitFor(() =>
+            expect(condenseSpy).toHaveBeenCalledWith(
+              "test-conversation-id",
+              null,
+              null,
+            ),
+          );
+        } else {
+          await act(async () => {});
+          expect(condenseSpy).not.toHaveBeenCalled();
+        }
+        expect(mockSend).not.toHaveBeenCalled();
+      } finally {
+        batchSpy.mockRestore();
+        condenseSpy.mockRestore();
+        vi.mocked(useAgentState).mockReturnValue({
+          curAgentState: AgentState.AWAITING_USER_INPUT,
+        });
+      }
+    },
+  );
 
   it("shows the message in 'sending' state immediately when submitted", async () => {
     let resolveSend: ((value: unknown) => void) | undefined;

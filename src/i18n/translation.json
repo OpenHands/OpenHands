@@ -14279,7 +14279,6 @@
     "uk": "Повідомлено користувацькі метадані завдання.",
     "ca": "S'han informat metadades personalitzades de la tasca."
   },
-
   "AUTOMATIONS$DETAIL$VIEW_CONVERSATION_FOR_RUN": {
     "en": "View conversation for run at {{timestamp}}",
     "ja": "{{timestamp}} の実行の会話を表示",
@@ -14297,7 +14296,6 @@
     "uk": "Переглянути розмову для запуску о {{timestamp}}",
     "ca": "Mostra la conversa de l'execució a {{timestamp}}"
   },
-
   "AUTOMATIONS$DETAIL$PHASE": {
     "ar": "المرحلة",
     "ca": "Fase",
@@ -42058,5 +42056,39 @@
     "de": "Sie haben noch keine Geheimnisse gespeichert.",
     "uk": "Ви ще не зберегли жодного секрету.",
     "ca": "Encara no has desat cap secret."
+  },
+  "CONVERSATION$INSIDER_CAT": {
+    "ar": "Insider Cat",
+    "ca": "Insider Cat",
+    "de": "Insider Cat",
+    "en": "Insider Cat",
+    "es": "Insider Cat",
+    "fr": "Insider Cat",
+    "it": "Insider Cat",
+    "ja": "Insider Cat",
+    "ko-KR": "Insider Cat",
+    "no": "Insider Cat",
+    "pt": "Insider Cat",
+    "tr": "Insider Cat",
+    "uk": "Insider Cat",
+    "zh-CN": "Insider Cat",
+    "zh-TW": "Insider Cat"
+  },
+  "CONVERSATION$OPEN_INSIDER_CAT": {
+    "ar": "افتح Insider Cat",
+    "ca": "Obre Insider Cat",
+    "de": "Insider Cat öffnen",
+    "en": "Open Insider Cat",
+    "es": "Abrir Insider Cat",
+    "fr": "Ouvrir Insider Cat",
+    "it": "Apri Insider Cat",
+    "ja": "Insider Cat を開く",
+    "ko-KR": "Insider Cat 열기",
+    "no": "Åpne Insider Cat",
+    "pt": "Abrir Insider Cat",
+    "tr": "Insider Cat’i aç",
+    "uk": "Відкрити Insider Cat",
+    "zh-CN": "打开 Insider Cat",
+    "zh-TW": "開啟 Insider Cat"
   }
 }
