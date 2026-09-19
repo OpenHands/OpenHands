@@ -10,8 +10,9 @@ import { cn } from "#/utils/utils";
  * manifest's `insights.health` block.
  */
 const HEALTH_STYLES: Record<AutomationHealth, string> = {
-  healthy: "border-success/50 bg-success/10 text-success",
-  failing: "border-danger/50 bg-danger/10 text-danger",
+  healthy:
+    "border-semantic-success/50 bg-semantic-success/10 text-semantic-success",
+  failing: "border-semantic-danger/50 bg-semantic-danger/10 text-danger",
   running: "border-border bg-surface-raised text-muted",
   disabled: "border-border bg-surface-raised text-muted",
   "never-run": "border-warning/50 bg-warning/10 text-warning",

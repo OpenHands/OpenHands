@@ -26,19 +26,19 @@ interface RunStatusBadgeProps {
 
 const statusConfig: Record<string, { style: string; iconTone: string }> = {
   [AutomationRunStatus.COMPLETED]: {
-    style: "bg-success/10 text-success",
-    iconTone: "text-success",
+    style: "bg-semantic-success/10 text-semantic-success",
+    iconTone: "text-semantic-success",
   },
   success: {
-    style: "bg-success/10 text-success",
-    iconTone: "text-success",
+    style: "bg-semantic-success/10 text-semantic-success",
+    iconTone: "text-semantic-success",
   },
   [AutomationRunStatus.FAILED]: {
-    style: "bg-danger/10 text-danger",
+    style: "bg-semantic-danger/10 text-danger",
     iconTone: "text-danger",
   },
   failed: {
-    style: "bg-danger/10 text-danger",
+    style: "bg-semantic-danger/10 text-danger",
     iconTone: "text-danger",
   },
   blocked: {
