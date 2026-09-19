@@ -49,9 +49,18 @@ it instead.
 
 | Variable                  | Description                    | Default |
 | ------------------------- | ------------------------------ | ------- |
-| `PORT`                    | Ingress port                   | `8000`  |
+| `PORT`                    | Ingress port (**only** the ingress; the browser origin) | `8000`  |
+| `OH_CANVAS_SAFE_VITE_PORT` | Frontend/Vite port. If the requested port is busy, a free one is chosen automatically | `3001`  |
 | `OH_AUTOMATION_GIT_REF`   | Git ref for automation backend (overrides the pinned default version) | *(unset)* |
 | `OH_AGENT_SERVER_GIT_REF` | Git ref for agent-server (overrides the pinned default version) | *(unset)* |
+
+> [!NOTE]
+> The ingress port is the only port you open in the browser. The internal
+> frontend/Vite port defaults to `3001`; when that port is already bound by a
+> non-agent-canvas process, the stack automatically falls back to a free port
+> instead of aborting. Use `OH_CANVAS_SAFE_VITE_PORT` to pin it explicitly
+> (honored when the requested port is free). A concurrent `agent-canvas`
+> instance is still detected via the ingress port, which is never auto-allocated.
 
 ### Alternative: Minimal Mode (without Automation)
 
@@ -62,7 +71,8 @@ npm run dev:minimal
 ```
 
 This runs only agent-server + Vite (no automation backend or ingress).
-Access at `http://localhost:3001/`
+Access at `http://localhost:3001/` — Vite keeps `3001` when it is free and
+auto-selects a free port otherwise.
 
 ### Agent server version selection
 
@@ -86,6 +96,7 @@ OH_AGENT_SERVER_VERSION=1.18.0 npm run dev
 
 - `OH_CANVAS_SAFE_BACKEND_PORT` — backend port for the isolated server (default `18000`)
 - `OH_CANVAS_SAFE_VSCODE_PORT` — VS Code sidecar port (default `backend port + 1`)
+- `OH_CANVAS_SAFE_VITE_PORT` — frontend/Vite port (default `3001`; falls back to a free port when busy)
 - `OH_CANVAS_SAFE_STATE_DIR` — base directory for isolated server state
 - `VITE_WORKING_DIR` — repo root used for new conversations (defaults to the current checkout)
 
