@@ -7,6 +7,8 @@ name: Issue Readiness Check
 # a `##`/`### Steps to Reproduce` or `##`/`### Actual Behavior` section is
 # checked as a bug report, and a body with a `##`/`### Desired Behavior`
 # section is checked as an enhancement. The criteria themselves are unchanged.
+# When exactly one type is inferred, the workflow also synchronizes the `bug`
+# and `enhancement` labels so API-created issues do not require manual labeling.
 #
 # When criteria are met the label is added (idempotently); when they are not the
 # label is removed. A feedback comment is posted (or updated) in three cases:
@@ -47,10 +49,57 @@ jobs:
                   set -euo pipefail
                   python .github/scripts/check_issue_readiness.py --json > /tmp/result.json || true
                   echo "ready=$(jq -r '.ready' /tmp/result.json)" >> "$GITHUB_OUTPUT"
+                  echo "issue_type=$(jq -r '.issue_type // empty' /tmp/result.json)" >> "$GITHUB_OUTPUT"
                   # Write reasons to a file so the comment step can read them
                   # without shell-escaping multiline text.
                   jq -r '.reasons[]?' /tmp/result.json > /tmp/reasons.txt || true
                   echo "reasons_file=/tmp/reasons.txt" >> "$GITHUB_OUTPUT"
+
+            - name: Synchronize inferred issue type label
+              if: steps.readiness.outputs.issue_type != ''
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  ISSUE_TYPE: ${{ steps.readiness.outputs.issue_type }}
+              run: |
+                  set -euo pipefail
+
+                  if ! issue_labels_json=$(gh issue view \
+                      "${{ github.event.issue.number }}" \
+                      --repo "${{ github.repository }}" \
+                      --json labels --jq '[.labels[].name]' 2>/tmp/gh-err.txt); then
+                    echo "::warning::Failed to read current issue labels:" \
+                        >> "$GITHUB_STEP_SUMMARY"
+                    cat /tmp/gh-err.txt >> "$GITHUB_STEP_SUMMARY"
+                    exit 0
+                  fi
+
+                  if [ "$ISSUE_TYPE" = "bug" ]; then
+                    other_type="enhancement"
+                  else
+                    other_type="bug"
+                  fi
+
+                  label_args=()
+                  if ! jq -e --arg label "$ISSUE_TYPE" \
+                      'index($label) != null' <<< "$issue_labels_json" >/dev/null; then
+                    label_args+=(--add-label "$ISSUE_TYPE")
+                  fi
+                  if jq -e --arg label "$other_type" \
+                      'index($label) != null' <<< "$issue_labels_json" >/dev/null; then
+                    label_args+=(--remove-label "$other_type")
+                  fi
+
+                  if [ "${#label_args[@]}" -eq 0 ]; then
+                    exit 0
+                  fi
+
+                  if ! gh issue edit "${{ github.event.issue.number }}" \
+                      --repo "${{ github.repository }}" \
+                      "${label_args[@]}" 2>/tmp/gh-err.txt; then
+                    echo "::warning::Failed to synchronize inferred issue type label:" \
+                        >> "$GITHUB_STEP_SUMMARY"
+                    cat /tmp/gh-err.txt >> "$GITHUB_STEP_SUMMARY"
+                  fi
 
             - name: Add ready-for-dev label
               if: steps.readiness.outputs.ready == 'true'
