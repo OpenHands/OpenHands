@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   clearTextContent,
   clearFileInput,
@@ -15,6 +15,40 @@ export const useChatSubmission = (
   onSubmit: (message: string) => void,
   resetManualResize?: () => void,
 ) => {
+  const [pendingMessage, setPendingMessage] = useState<string | null>(null);
+  const loadingFiles = useConversationStore((state) => state.loadingFiles);
+  const loadingImages = useConversationStore((state) => state.loadingImages);
+
+  const isUploading = loadingFiles.length > 0 || loadingImages.length > 0;
+
+  const completeSubmit = useCallback(
+    (message: string) => {
+      onSubmit(message);
+
+      // Clear the input
+      clearTextContent(chatInputRef.current);
+      clearFileInput(fileInputRef.current);
+
+      // Reset height and show suggestions again
+      smartResize();
+
+      // Reset manual resize state for next message
+      resetManualResize?.();
+    },
+    [chatInputRef, fileInputRef, smartResize, onSubmit, resetManualResize],
+  );
+
+  // Send a message that was requested while files were still uploading.
+  useEffect(() => {
+    if (pendingMessage === null || isUploading) {
+      return;
+    }
+
+    const message = pendingMessage;
+    setPendingMessage(null);
+    completeSubmit(message);
+  }, [pendingMessage, isUploading, completeSubmit]);
+
   // Send button click handler
   const handleSubmit = useCallback(() => {
     const message = chatInputRef.current?.innerText || "";
@@ -26,18 +60,14 @@ export const useChatSubmission = (
       return;
     }
 
-    onSubmit(message);
+    // Keep the prompt visible until all attachments finish processing.
+    if (isUploading) {
+      setPendingMessage(message);
+      return;
+    }
 
-    // Clear the input
-    clearTextContent(chatInputRef.current);
-    clearFileInput(fileInputRef.current);
-
-    // Reset height and show suggestions again
-    smartResize();
-
-    // Reset manual resize state for next message
-    resetManualResize?.();
-  }, [chatInputRef, fileInputRef, smartResize, onSubmit, resetManualResize]);
+    completeSubmit(message);
+  }, [chatInputRef, isUploading, completeSubmit]);
 
   // Handle stop button click
   const handleStop = useCallback((onStop?: () => void) => {
