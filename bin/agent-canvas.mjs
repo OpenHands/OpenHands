@@ -45,6 +45,7 @@ Default ports:
   ingress:         ${defaults.ports.proxy}
   agent-server:    ${defaults.ports.agentServer}
   automation:      ${defaults.ports.automation}
+  frontend:        3001 (falls back to a free port when busy; override with --frontend-port)
 
 Override versions via environment variables:
   OH_AGENT_SERVER_VERSION, OH_AGENT_SERVER_GIT_REF, OH_AGENT_SERVER_LOCAL_PATH
@@ -74,13 +75,17 @@ AUTH MODES:
               frontend. Users must paste it when the UI loads.
 
 OPTIONS:
-  -p, --port <port>     Ingress port (default: 8000)
-  --public              Enable public mode (see above)
-  --frontend-only       Start only the static frontend behind ingress
-  --backend-only        Start only agent-server + automation behind ingress
-  -v, --version         Show version number
-  --info                Show version and default stack configuration
-  -h, --help            Show this help message
+  -p, --port <port>           Ingress port (default: 8000). Controls the
+                              unified entry point only.
+  --frontend-port <port>      Internal frontend static-server port (default:
+                              3001). When the preferred port is busy, an
+                              available port is chosen automatically.
+  --public                    Enable public mode (see above)
+  --frontend-only             Start only the static frontend behind ingress
+  --backend-only              Start only agent-server + automation behind ingress
+  -v, --version               Show version number
+  --info                      Show version and default stack configuration
+  -h, --help                  Show this help message
 
 ENVIRONMENT VARIABLES:
   LOCAL_BACKEND_API_KEY        API key for the server. Required in --public
@@ -104,8 +109,11 @@ EXAMPLES:
   # Public mode — users must enter the API key in the browser
   LOCAL_BACKEND_API_KEY=my-secret npx @openhands/agent-canvas --public
 
-  # Use a specific port
+  # Use a specific ingress port
   npx @openhands/agent-canvas --port 3000
+
+  # Use a specific frontend port (useful when 3001 is already taken)
+  npx @openhands/agent-canvas --frontend-port 3100
 
   # Start only the static frontend behind ingress
   npx @openhands/agent-canvas --frontend-only

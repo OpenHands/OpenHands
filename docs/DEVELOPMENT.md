@@ -49,7 +49,8 @@ it instead.
 
 | Variable                  | Description                    | Default |
 | ------------------------- | ------------------------------ | ------- |
-| `PORT`                    | Ingress port                   | `8000`  |
+| `PORT`                    | Ingress port — the unified entry point only (`--port` is the CLI equivalent) | `8000`  |
+| `OH_CANVAS_SAFE_VITE_PORT` | Internal frontend port (`--frontend-port` is the CLI equivalent; falls back to a free port when busy) | `3001` |
 | `OH_AUTOMATION_GIT_REF`   | Git ref for automation backend (overrides the pinned default version) | *(unset)* |
 | `OH_AGENT_SERVER_GIT_REF` | Git ref for agent-server (overrides the pinned default version) | *(unset)* |
 
@@ -62,7 +63,8 @@ npm run dev:minimal
 ```
 
 This runs only agent-server + Vite (no automation backend or ingress).
-Access at `http://localhost:3001/`
+Access at `http://localhost:3001/` (set `OH_CANVAS_SAFE_VITE_PORT` to run the
+frontend on a different port, e.g. when 3001 is already taken).
 
 ### Agent server version selection
 
@@ -86,6 +88,7 @@ OH_AGENT_SERVER_VERSION=1.18.0 npm run dev
 
 - `OH_CANVAS_SAFE_BACKEND_PORT` — backend port for the isolated server (default `18000`)
 - `OH_CANVAS_SAFE_VSCODE_PORT` — VS Code sidecar port (default `backend port + 1`)
+- `OH_CANVAS_SAFE_VITE_PORT` — frontend (Vite/static) port. When the preferred port is busy, an available port is chosen automatically instead of aborting startup (default `3001`)
 - `OH_CANVAS_SAFE_STATE_DIR` — base directory for isolated server state
 - `VITE_WORKING_DIR` — repo root used for new conversations (defaults to the current checkout)
 
