@@ -228,7 +228,7 @@ export function ConversationTagChips({ tags }: ConversationTagChipsProps) {
       <div
         ref={measureRef}
         aria-hidden
-        className="pointer-events-none fixed top-0 left-2500 z-[-1] flex flex-nowrap items-center gap-1 opacity-0"
+        className="pointer-events-none fixed top-0 -left-2500 z-[-1] flex flex-nowrap items-center gap-1 opacity-0"
       >
         {tags.map(([key, value]) => (
           <span key={key} className={CONVERSATION_CARD_META_CHIP_CLASSNAME}>

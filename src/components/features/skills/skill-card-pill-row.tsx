@@ -189,7 +189,7 @@ export function SkillCardPillRow({ pills, testId }: SkillCardPillRowProps) {
       <div
         ref={measureRef}
         aria-hidden
-        className="pointer-events-none fixed top-0 left-2500 z-[-1] flex flex-nowrap items-center gap-1.5 opacity-0"
+        className="pointer-events-none fixed top-0 -left-2500 z-[-1] flex flex-nowrap items-center gap-1.5 opacity-0"
       >
         {pills.map((pill) => (
           <span key={pill.id} className="inline-flex shrink-0">

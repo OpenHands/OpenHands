@@ -221,7 +221,7 @@ export function ConversationTabsContextMenu({
                   {pinned ? (
                     <span
                       className={cn(
-                        "mr-1.25 ml-auto",
+                        "-mr-1.25 ml-auto",
                         dropdownMenuRowIconWrapperClassName,
                       )}
                       aria-hidden
