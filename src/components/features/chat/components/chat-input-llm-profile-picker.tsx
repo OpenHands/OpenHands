@@ -169,10 +169,36 @@ export function ChatInputLlmProfilePicker() {
     useChatInputLlmProfileState();
   const [isPopoverOpen, setIsPopoverOpen] = React.useState(false);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
+  const [popoverMaxHeight, setPopoverMaxHeight] = React.useState<number>();
   const popoverRef = useClickOutsideElement<HTMLUListElement>(
     () => setIsPopoverOpen(false),
     triggerRef,
   );
+
+  React.useLayoutEffect(() => {
+    if (!isPopoverOpen) return undefined;
+    const measureAvailableSpace = () => {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+      // Leave room for the menu margin and an 8px viewport gutter.
+      setPopoverMaxHeight(
+        Math.max(
+          0,
+          Math.min(
+            window.innerHeight * 0.6,
+            trigger.getBoundingClientRect().top - 16,
+          ),
+        ),
+      );
+    };
+    measureAvailableSpace();
+    window.addEventListener("resize", measureAvailableSpace);
+    window.addEventListener("scroll", measureAvailableSpace, true);
+    return () => {
+      window.removeEventListener("resize", measureAvailableSpace);
+      window.removeEventListener("scroll", measureAvailableSpace, true);
+    };
+  }, [isPopoverOpen]);
 
   // No LLM profiles yet (or the agent-server lacks the surface): stay out of
   // the way, exactly like the ACP/AgentProfile pickers.
@@ -209,6 +235,7 @@ export function ChatInputLlmProfilePicker() {
         <ContextMenu
           ref={popoverRef}
           testId="chat-input-llm-profile-popover"
+          style={{ maxHeight: popoverMaxHeight }}
           position="top"
           alignment="left"
           spacing="none"
