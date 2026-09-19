@@ -1510,6 +1510,86 @@ describe("agent_settings runtime services suffix", () => {
       payload.agent_settings.agent_context.system_message_suffix as string,
     ).toContain("<RUNTIME_SERVICES>");
   });
+
+  it("sets system_message_suffix from a profile suffix when no runtime info is provided", () => {
+    const payload = buildStartConversationRequest({
+      settings: DEFAULT_SETTINGS,
+      query: "hello",
+      systemMessageSuffix: "Always respond in English.",
+    }) as {
+      agent_settings: { agent_context: Record<string, unknown> };
+    };
+    expect(payload.agent_settings.agent_context.system_message_suffix).toBe(
+      "Always respond in English.",
+    );
+  });
+
+  it("composes a profile suffix with the runtime-services block", () => {
+    const payload = buildStartConversationRequest({
+      settings: DEFAULT_SETTINGS,
+      query: "hello",
+      systemMessageSuffix: "Always respond in English.",
+      runtimeServicesInfo: {
+        mode: "dev:automation",
+        services: {
+          agent_server: { url_from_agent: "http://localhost:18000" },
+        },
+      },
+    }) as {
+      agent_settings: { agent_context: Record<string, unknown> };
+    };
+    const suffix = payload.agent_settings.agent_context
+      .system_message_suffix as string;
+    expect(suffix).toContain("Always respond in English.");
+    expect(suffix).toContain("<RUNTIME_SERVICES>");
+    expect(suffix.indexOf("Always respond in English.")).toBeLessThan(
+      suffix.indexOf("<RUNTIME_SERVICES>"),
+    );
+  });
+
+  it.each([undefined, null, "", "   "] as const)(
+    "leaves the runtime-services suffix unchanged when the profile suffix is %j",
+    (systemMessageSuffix) => {
+      const payload = buildStartConversationRequest({
+        settings: DEFAULT_SETTINGS,
+        query: "hello",
+        systemMessageSuffix,
+        runtimeServicesInfo: {
+          mode: "dev:automation",
+          services: {
+            agent_server: { url_from_agent: "http://localhost:18000" },
+          },
+        },
+      }) as {
+        agent_settings: { agent_context: Record<string, unknown> };
+      };
+      const suffix = payload.agent_settings.agent_context
+        .system_message_suffix as string;
+      expect(suffix).toContain("<RUNTIME_SERVICES>");
+      expect(suffix).not.toContain("Always respond in English.");
+    },
+  );
+
+  it("does not apply a profile suffix to ACP agent_settings", () => {
+    const payload = buildStartConversationRequest({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        agent_settings: {
+          schema_version: 1,
+          agent_kind: "acp",
+          acp_server: "claude-code",
+          acp_command: [],
+          acp_model: "claude-opus-4-5",
+        },
+      },
+      systemMessageSuffix: "Always respond in English.",
+    }) as {
+      agent_settings: { agent_context?: Record<string, unknown> };
+    };
+    expect(
+      payload.agent_settings.agent_context?.system_message_suffix,
+    ).toBeUndefined();
+  });
 });
 
 describe("buildStartConversationRequest — ACP discriminator", () => {

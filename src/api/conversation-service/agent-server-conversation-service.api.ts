@@ -395,6 +395,9 @@ export interface CreateConversationOptions {
   // encrypted-settings builder; cloud sends it as a flat request field.
   agentProfileId?: string;
   agentProfileKind?: AgentKind;
+  // OpenHands profile Custom instructions, applied on the agent_settings
+  // fallback path so they compose with the runtime-services suffix (#17498).
+  systemMessageSuffix?: string;
 }
 
 class AgentServerConversationService {
@@ -459,6 +462,7 @@ class AgentServerConversationService {
       sandboxId,
       agentProfileId,
       agentProfileKind,
+      systemMessageSuffix,
     } = options;
 
     if (getActiveBackend().backend.kind === "cloud") {
@@ -554,6 +558,7 @@ class AgentServerConversationService {
       agentProfileId,
       agentProfileKind,
       titleLlmProfile,
+      systemMessageSuffix,
     });
 
     const telemetryDistinctId = await getTelemetryDistinctId();
