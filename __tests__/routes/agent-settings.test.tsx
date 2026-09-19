@@ -47,7 +47,10 @@ const toolCatalogMock = vi.hoisted(() =>
 const resolvedToolsMock = vi.hoisted(() => vi.fn<() => string[] | undefined>());
 vi.mock("#/hooks/query/use-tool-catalog", () => ({
   useToolCatalog: () => ({ data: toolCatalogMock() }),
-  useResolvedProfileTools: () => {
+  // Mirrors react-query: a query disabled for want of a draft reports
+  // `isPending` too, so a create-mode form must not read that as "in flight".
+  useResolvedProfileTools: ({ draft }: { draft: unknown }) => {
+    if (draft === null) return { data: undefined, isPending: true };
     const data = resolvedToolsMock();
     return { data, isPending: data === undefined };
   },
@@ -1593,6 +1596,25 @@ describe("AgentSettingsScreen — tool selection", () => {
       mode.hasAttribute("disabled") ||
         mode.getAttribute("aria-disabled") === "true",
     ).toBe(true);
+  });
+
+  it("leaves the mode control usable while naming a brand-new profile", async () => {
+    // No name yet, so there is no draft to materialise and the query never
+    // runs. That is not "an answer in flight" — locking here would strand the
+    // create form (react-query reports isPending for a disabled query too).
+    renderAgentSettingsScreen({
+      embedded: true,
+      profileName: "",
+      llmProfileRef: "main",
+      agentSettingsOverride: { agent_kind: "openhands", tools: null },
+    });
+    await screen.findByTestId("agent-settings-screen");
+
+    const mode = screen.getByTestId("agent-settings-tools-mode");
+    expect(
+      mode.hasAttribute("disabled") ||
+        mode.getAttribute("aria-disabled") === "true",
+    ).toBe(false);
   });
 
   it("seeds the custom selection once the standard set resolves", async () => {
