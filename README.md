@@ -121,6 +121,8 @@ npm run dev
 
 Access the UI at [http://localhost:8000](http://localhost:8000) for the npm/source launchers, or [http://localhost:8000/canvas](http://localhost:8000/canvas) for the Docker image. You can add additional backends directly from the UI.
 
+`npx @openhands/agent-canvas`, `npm run dev`, and `npm run dev:static` serve the frontend on an internal port (default `3001`). If that port is already taken by another application, the launcher automatically picks a free port instead of exiting. To pin the frontend port explicitly, use `--frontend-port <port>` or `OH_CANVAS_SAFE_VITE_PORT`. Note that `--port`/`PORT` controls only the ingress port (default `8000`) — the single URL you visit — never the frontend port.
+
 # Architecture
 
 Agent Canvas is powered by the [OpenHands Agent Server](https://github.com/OpenHands/software-agent-sdk/tree/main/openhands-agent-server/openhands/agent_server), a REST API for running multiple agents on a single machine. Each Agent Server runs on a single host/port; the Agent Canvas can connect to multiple Agent Servers and easily flip between them.
