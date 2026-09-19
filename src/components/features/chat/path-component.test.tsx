@@ -7,7 +7,7 @@ import {
   PathInteractiveContext,
   isLikelyDirectory,
 } from "./path-component";
-import { NavigationProvider } from "#/context/navigation-context";
+import { NavigationProvider } from "#/contexts/navigation-context";
 import { openWorkspaceFile } from "#/services/canvas-ui";
 
 vi.mock("#/services/canvas-ui", () => ({ openWorkspaceFile: vi.fn() }));

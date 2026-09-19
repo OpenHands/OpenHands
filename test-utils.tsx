@@ -14,7 +14,7 @@ import {
 import {
   NavigationProvider,
   type NavigationContextValue,
-} from "#/context/navigation-context";
+} from "#/contexts/navigation-context";
 import { SecurityRisk } from "#/types/agent-server/core";
 
 export const useParamsMock = vi.fn(() => ({
