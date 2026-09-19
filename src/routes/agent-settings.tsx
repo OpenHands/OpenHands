@@ -373,11 +373,15 @@ export function AgentSettingsScreen({
         : null,
     [profileName, llmProfileRef],
   );
-  const { data: standardToolNames, isPending: isStandardToolsPending } =
-    useResolvedProfileTools({
-      draft: standardToolsDraft,
-      enabled: embedded && toolCatalogSupported,
-    });
+  const { data: standardToolNames } = useResolvedProfileTools({
+    draft: standardToolsDraft,
+    enabled: embedded && toolCatalogSupported,
+  });
+  // A draft the server has not answered for yet. Deliberately not the query's
+  // `isPending`, which is also true when there is no draft to ask about (a
+  // profile being named) — that would strand the create form.
+  const standardToolsUnresolved =
+    standardToolsDraft !== null && standardToolNames === undefined;
   /** Pickable tools this runtime can run, plus anything the profile stores. */
   const toolPickerCatalog = React.useMemo(() => {
     const items = (toolCatalog ?? [])
@@ -1024,7 +1028,7 @@ export function AgentSettingsScreen({
             // Locked until the server has answered what "standard" is: seeding
             // a custom selection from a pending answer would save an agent with
             // no tools at all.
-            isDisabled={isSavingAny || isStandardToolsPending}
+            isDisabled={isSavingAny || standardToolsUnresolved}
             onSelectionChange={(key) => {
               if (!key) return;
               const mode = key as ProfileScopeMode;
