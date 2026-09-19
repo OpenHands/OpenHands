@@ -40,4 +40,22 @@ describe("dev-static", () => {
     expect(args).toContain("/server_info=http://127.0.0.1:18000");
     expect(args.filter((arg: string) => arg.includes("localhost"))).toEqual([]);
   });
+
+  it("allows the direct frontend origin in automation CORS", () => {
+    const env = buildAutomationBackendEnv(
+      {
+        agentServerPort: 18000,
+        ingressPort: 8000,
+        vitePort: 18423,
+        launchFrontend: true,
+        sessionApiKey: "shared-session-key",
+        stateDir: "/tmp/agent-canvas-state",
+      },
+      {},
+    );
+
+    expect(env.AUTOMATION_CORS_ORIGINS).toBe(
+      "http://localhost:8000,http://127.0.0.1:8000,http://localhost:18423,http://127.0.0.1:18423",
+    );
+  });
 });

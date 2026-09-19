@@ -29,7 +29,7 @@ flowchart LR
         direction LR
         nginx["nginx :443<br/>(TLS)"]
         ingress["Ingress proxy<br/>127.0.0.1:8000"]
-        static["Static server<br/>:3001"]
+        static["Static server<br/>:3001 (auto-fallback)"]
         agent["Agent server<br/>:18000<br/>(LOCAL_BACKEND_API_KEY)"]
         automation["Automation backend<br/>:18001"]
         nginx --> ingress
@@ -84,7 +84,8 @@ Cloud Firewall, AWS Security Group, GCP firewall rule, etc.):
 
 - **Inbound 22 (SSH)** — restrict to your own IP / VPN CIDR.
 - **Everything else** — drop. The ingress port (`:8000`), agent server
-  (`:18000`), automation backend (`:18001`), and static server (`:3001`)
+  (`:18000`), automation backend (`:18001`), and static server (`:3001`
+  by default — it falls back to a free port if `3001` is taken)
   must not be reachable from outside the host.
 
 At this point your machine is reachable only over SSH. That's enough to run
