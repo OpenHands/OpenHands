@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1260" height="470" role="img" aria-label="Automation telemetry consent retry verification">
+  <rect width="100%" height="100%" rx="18" fill="#0b1020"/>
+  <circle cx="34" cy="32" r="8" fill="#ff5f56"/>
+  <circle cx="60" cy="32" r="8" fill="#ffbd2e"/>
+  <circle cx="86" cy="32" r="8" fill="#27c93f"/>
+  <text x="28" y="78" fill="#d7e2ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">Regression: initial Automation consent POST rejects</text>
+  <text x="28" y="116" fill="#ff9b91" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">Before: the attempt was marked complete; the unchanged consent was never retried</text>
+  <text x="28" y="164" fill="#d7e2ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">After: rejection → 1 s backoff → retry succeeds; successful keys remain deduplicated</text>
+  <text x="28" y="218" fill="#d7e2ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="18">$ npx vitest run use-sync-automation-telemetry-consent automation-service telemetry</text>
+  <text x="28" y="256" fill="#8ef0a1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">Test Files 3 passed (3) · Tests 75 passed (75)</text>
+  <text x="28" y="310" fill="#d7e2ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">$ npm test</text>
+  <text x="28" y="348" fill="#8ef0a1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">Test Files 623 passed (623) · Tests 5276 passed | 4 skipped | 7 todo</text>
+  <text x="28" y="402" fill="#d7e2ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">$ npm run lint &amp;&amp; npm run build &amp;&amp; npm run build:lib</text>
+  <text x="28" y="440" fill="#8ef0a1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21">Passed on merged main · Node 24.19.0</text>
+</svg>
