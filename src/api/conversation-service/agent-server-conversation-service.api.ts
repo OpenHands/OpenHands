@@ -153,6 +153,27 @@ function normalizeStats(value: unknown): RuntimeConversationStats | null {
     : null;
 }
 
+function normalizeRuntimeInfo(
+  value: unknown,
+): DirectConversationInfo["runtime_info"] {
+  if (!isRecord(value)) return null;
+  const runtimeStatus = value.runtime_status;
+  if (
+    runtimeStatus !== "available" &&
+    runtimeStatus !== "starting" &&
+    runtimeStatus !== "missing" &&
+    runtimeStatus !== "ownership_lost" &&
+    runtimeStatus !== "error"
+  ) {
+    return null;
+  }
+
+  return {
+    runtime_status: runtimeStatus,
+    can_resume: value.can_resume === true,
+  };
+}
+
 function normalizeAgent(value: unknown): DirectConversationInfo["agent"] {
   if (!isRecord(value)) return null;
   const llm = isRecord(value.llm)
@@ -274,6 +295,7 @@ function requireDirectConversationInfo(item: unknown): DirectConversationInfo {
     updated_at: readTimestamp(item, "updated_at", "updatedAt"),
     execution_status: stringOrNull(item.execution_status),
     sandbox_status: stringOrNull(item.sandbox_status),
+    runtime_info: normalizeRuntimeInfo(item.runtime_info),
     metrics: normalizeMetrics(item.metrics),
     stats: normalizeStats(item.stats),
     agent: normalizeAgent(item.agent),
