@@ -55,18 +55,11 @@ function toAgentSettingsOverride(
       acp_model: profile.acp_model ?? "",
     };
   }
-  // `enable_switch_llm_tool` rides untyped — the pinned ts-client predates it
-  // on the profile model (same pattern as `disabled_skills` in the merge
-  // fixtures). Fall back to the SDK default (true) when a stored profile
-  // predates the field.
-  const switchLlmToolEnabled =
-    (profile as { enable_switch_llm_tool?: boolean }).enable_switch_llm_tool ??
-    true;
   return {
     agent_kind: "openhands",
     mcp_server_refs: profile.mcp_server_refs ?? null,
-    enable_sub_agents: profile.enable_sub_agents,
-    enable_switch_llm_tool: switchLlmToolEnabled,
+    // Untyped in the pinned ts-client, like `secret_refs` above.
+    tools: ((profile as { tools?: unknown }).tools as SettingsValue) ?? null,
     tool_concurrency_limit: profile.tool_concurrency_limit,
     secret_refs: secretRefs,
   };
@@ -332,6 +325,8 @@ export function AgentProfilesLocalView() {
         key={viewMode === "edit" ? `edit-${editingProfile?.id}` : "new-profile"}
         embedded
         agentSettingsOverride={override}
+        profileName={profileName}
+        llmProfileRef={llmProfileRef}
         onSaveControlChange={setSaveControl}
       />
 

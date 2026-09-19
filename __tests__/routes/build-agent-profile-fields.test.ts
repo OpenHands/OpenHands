@@ -8,10 +8,6 @@ const baseAcp = {
   isDefaultProviderCommand: true,
   commandTokens: ["npx", "-y", "@zed-industries/claude-code-acp"],
   acpModel: "claude-opus-4-8",
-  subAgentsEnabled: false,
-  switchLlmToolField: undefined,
-  switchLlmToolEnabled: false,
-  switchLlmToolSupportedOnProfile: true,
   toolConcurrencyField: undefined,
   toolConcurrency: "",
   mcpMode: "standard" as const,
@@ -19,20 +15,10 @@ const baseAcp = {
   secretsMode: "standard" as const,
   selectedSecrets: [] as string[],
   secretRefsSupportedOnProfile: true,
-};
-
-const switchLlmToolField: SettingsFieldSchema = {
-  key: "enable_switch_llm_tool",
-  label: "Enable LLM switching tool",
-  section: "general",
-  section_label: "General",
-  value_type: "boolean",
-  default: true,
-  choices: [],
-  depends_on: [],
-  prominence: "major",
-  secret: false,
-  required: false,
+  toolsMode: "standard" as const,
+  selectedTools: [] as string[],
+  toolParams: {},
+  toolCatalogSupported: true,
 };
 
 const concurrencyField: SettingsFieldSchema = {
@@ -105,10 +91,6 @@ describe("buildAgentProfileFields — OpenHands", () => {
     isDefaultProviderCommand: false,
     commandTokens: [],
     acpModel: "",
-    subAgentsEnabled: true,
-    switchLlmToolField: undefined,
-    switchLlmToolEnabled: false,
-    switchLlmToolSupportedOnProfile: true,
     toolConcurrencyField: undefined,
     toolConcurrency: "",
     mcpMode: "standard" as const,
@@ -118,50 +100,13 @@ describe("buildAgentProfileFields — OpenHands", () => {
     secretRefsSupportedOnProfile: true,
   };
 
-  it("passes through enable_sub_agents and omits concurrency when the field is absent", () => {
-    expect(buildAgentProfileFields(baseOh)).toEqual({
-      agent_kind: "openhands",
-      mcp_server_refs: null,
-      enable_sub_agents: true,
-      secret_refs: null,
-    });
-  });
+  it("no longer emits the retired tool switches", () => {
+    // Delegation and LLM switching are picked in `tools` now, so a profile
+    // save must not carry a second control over the same tools.
+    const fields = buildAgentProfileFields({ ...baseAcp, isAcp: false });
 
-  it("emits enable_switch_llm_tool when the schema exposes the field", () => {
-    const fields = buildAgentProfileFields({
-      ...baseOh,
-      switchLlmToolField,
-      switchLlmToolEnabled: true,
-    });
-    if (fields.agent_kind === "openhands") {
-      expect(fields.enable_switch_llm_tool).toBe(true);
-    }
-  });
-
-  it("omits enable_switch_llm_tool when the schema has it but the profile model does not", () => {
-    // agent-server 1.29.0–1.30.x: agent profiles exist and the settings schema
-    // advertises the field, but `OpenHandsAgentProfile` gained it in 1.31.0.
-    // The profile POST is `extra="forbid"`, so emitting here 422s the save.
-    const fields = buildAgentProfileFields({
-      ...baseOh,
-      switchLlmToolField,
-      switchLlmToolEnabled: false,
-      switchLlmToolSupportedOnProfile: false,
-    });
+    expect(fields).not.toHaveProperty("enable_sub_agents");
     expect(fields).not.toHaveProperty("enable_switch_llm_tool");
-  });
-
-  it("omits enable_switch_llm_tool when the schema predates the field", () => {
-    // Older agent-servers would reject the unknown key on the whole-profile
-    // overwrite, so the key is only emitted when the schema advertises it.
-    const fields = buildAgentProfileFields({
-      ...baseOh,
-      switchLlmToolField: undefined,
-      switchLlmToolEnabled: true,
-    });
-    if (fields.agent_kind === "openhands") {
-      expect(fields).not.toHaveProperty("enable_switch_llm_tool");
-    }
   });
 
   it("coerces a valid tool_concurrency_limit to a number", () => {
@@ -219,10 +164,10 @@ describe("buildAgentProfileFields — mcp_server_refs", () => {
     isDefaultProviderCommand: false,
     commandTokens: [],
     acpModel: "",
-    subAgentsEnabled: false,
-    switchLlmToolField: undefined,
-    switchLlmToolEnabled: false,
-    switchLlmToolSupportedOnProfile: true,
+    toolsMode: "standard" as const,
+    selectedTools: [] as string[],
+    toolParams: {},
+    toolCatalogSupported: true,
     toolConcurrencyField: undefined,
     toolConcurrency: "",
     mcpMode: "standard" as const,
@@ -275,10 +220,6 @@ describe("buildAgentProfileFields — secret scope", () => {
     isDefaultProviderCommand: false,
     commandTokens: [] as string[],
     acpModel: "",
-    subAgentsEnabled: false,
-    switchLlmToolField: undefined,
-    switchLlmToolEnabled: false,
-    switchLlmToolSupportedOnProfile: true,
     toolConcurrencyField: undefined,
     toolConcurrency: "",
     secretsMode: "standard" as const,
@@ -286,6 +227,10 @@ describe("buildAgentProfileFields — secret scope", () => {
     secretRefsSupportedOnProfile: true,
     mcpMode: "standard" as const,
     selectedMcpServers: [] as string[],
+    toolsMode: "standard" as const,
+    selectedTools: [] as string[],
+    toolParams: {},
+    toolCatalogSupported: true,
   };
 
   it("persists null when every secret is allowed", () => {
@@ -330,5 +275,54 @@ describe("buildAgentProfileFields — secret scope", () => {
       secretRefsSupportedOnProfile: false,
     });
     expect(fields).not.toHaveProperty("secret_refs");
+  });
+});
+
+describe("tool selection", () => {
+  const baseOpenHands = { ...baseAcp, isAcp: false };
+
+  it("saves null while the profile follows the server's standard set", () => {
+    const fields = buildAgentProfileFields(baseOpenHands);
+
+    expect(fields).toMatchObject({ agent_kind: "openhands", tools: null });
+  });
+
+  it("saves the selection with its stored params", () => {
+    const fields = buildAgentProfileFields({
+      ...baseOpenHands,
+      toolsMode: "custom",
+      selectedTools: ["terminal", "glob"],
+      toolParams: { terminal: { username: "dev" } },
+    });
+
+    expect(fields).toMatchObject({
+      tools: [
+        { name: "terminal", params: { username: "dev" } },
+        { name: "glob", params: {} },
+      ],
+    });
+  });
+
+  it("omits tools entirely when the backend serves no catalog", () => {
+    // The save overwrites the whole profile, so emitting null here would clear
+    // a selection this build never showed the user.
+    const fields = buildAgentProfileFields({
+      ...baseOpenHands,
+      toolCatalogSupported: false,
+      toolsMode: "custom",
+      selectedTools: ["glob"],
+    });
+
+    expect(fields).not.toHaveProperty("tools");
+  });
+
+  it("never sends tools for an ACP profile, which owns its own tooling", () => {
+    const fields = buildAgentProfileFields({
+      ...baseAcp,
+      toolsMode: "custom",
+      selectedTools: ["glob"],
+    });
+
+    expect(fields).not.toHaveProperty("tools");
   });
 });

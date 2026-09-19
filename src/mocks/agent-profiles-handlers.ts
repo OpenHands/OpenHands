@@ -41,7 +41,13 @@ const DEFAULT_VERIFICATION = {
 };
 
 function makeOpenHandsProfile(
-  overrides: Partial<AgentProfile> & { id: string; name: string },
+  // `tools` rides untyped: the pinned ts-client predates it on the profile
+  // model (same pattern as `secret_refs`).
+  overrides: Partial<AgentProfile> & {
+    id: string;
+    name: string;
+    tools?: { name: string; params: Record<string, unknown> }[];
+  },
 ): AgentProfile {
   return {
     schema_version: 1,
@@ -54,7 +60,6 @@ function makeOpenHandsProfile(
     system_message_suffix: null,
     condenser: null,
     verification: DEFAULT_VERIFICATION,
-    enable_sub_agents: false,
     tool_concurrency_limit: 1,
     ...overrides,
   } as AgentProfile;
@@ -72,7 +77,7 @@ const SEEDED_PROFILES: readonly AgentProfile[] = [
   makeOpenHandsProfile({
     id: "3f1c1b7e-0000-4000-8000-000000000002",
     name: "research",
-    enable_sub_agents: true,
+    tools: [{ name: "task_tool_set", params: {} }],
     tool_concurrency_limit: 4,
   }),
 ];
