@@ -19,6 +19,9 @@ const {
   mockResolveWorkingDir,
   mockSendMessage,
   mockUpdateTitle,
+  mockBatchGetConversations,
+  mockReplaceConversationTags,
+  mockFindConversationByTag,
   mockCreateCloudAppConversation,
   mockGetCloudStartTask,
   mockPickCloudBackend,
@@ -28,6 +31,9 @@ const {
   mockResolveWorkingDir: vi.fn(),
   mockSendMessage: vi.fn(),
   mockUpdateTitle: vi.fn(),
+  mockBatchGetConversations: vi.fn(),
+  mockReplaceConversationTags: vi.fn(),
+  mockFindConversationByTag: vi.fn(),
   mockCreateCloudAppConversation: vi.fn(),
   mockGetCloudStartTask: vi.fn(),
   mockPickCloudBackend: vi.fn(),
@@ -42,6 +48,9 @@ vi.mock(
       resolveConversationWorkingDir: mockResolveWorkingDir,
       sendMessage: mockSendMessage,
       updateConversationTitle: mockUpdateTitle,
+      batchGetAppConversations: mockBatchGetConversations,
+      replaceConversationTags: mockReplaceConversationTags,
+      findConversationByTag: mockFindConversationByTag,
     },
   }),
 );
@@ -131,6 +140,9 @@ describe("handleLaunchChildConversationAction", () => {
       status: "READY",
     });
     mockUpdateTitle.mockResolvedValue(undefined);
+    mockBatchGetConversations.mockResolvedValue([{ tags: { clientsource: "agentcanvas" } }]);
+    mockReplaceConversationTags.mockResolvedValue(undefined);
+    mockFindConversationByTag.mockResolvedValue(null);
     mockSendMessage.mockResolvedValue(undefined);
     mockGetCachedAgentServerVersion.mockReturnValue("1.37.1");
   });
@@ -482,6 +494,79 @@ describe("handleLaunchChildConversationAction", () => {
         'target="local"',
       );
       expect(mockCreateCloudAppConversation).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("cross-device dedup", () => {
+    it("stamps parent_tool_call_id on the child after a successful local launch", async () => {
+      const toolCallId = nextToolCallId();
+
+      await handleLaunchChildConversationAction(
+        action({}),
+        PARENT_ID,
+        toolCallId,
+      );
+
+      expect(mockBatchGetConversations).toHaveBeenCalledWith(["child-id"]);
+      expect(mockReplaceConversationTags).toHaveBeenCalledWith("child-id", {
+        clientsource: "agentcanvas",
+        parent_tool_call_id: toolCallId,
+      });
+    });
+
+    it("skips the launch when another client already handled the tool call", async () => {
+      const toolCallId = nextToolCallId();
+      mockFindConversationByTag.mockResolvedValue({
+        id: "existing-child-id",
+        tags: { parent_tool_call_id: toolCallId },
+      });
+
+      await handleLaunchChildConversationAction(
+        action({}),
+        PARENT_ID,
+        toolCallId,
+      );
+
+      expect(mockCreateConversation).not.toHaveBeenCalled();
+      expect(mockSendMessage).not.toHaveBeenCalled();
+    });
+
+    it("still launches when the cross-device check throws", async () => {
+      mockFindConversationByTag.mockRejectedValue(new Error("network error"));
+
+      await handleLaunchChildConversationAction(
+        action({}),
+        PARENT_ID,
+        nextToolCallId(),
+      );
+
+      expect(mockCreateConversation).toHaveBeenCalledTimes(1);
+      expect(reportedResult()).toMatchObject({ status: "launched" });
+    });
+
+    it("does not do the cross-device check for cloud targets", async () => {
+      const cloudBackend = {
+        id: "cloud-1",
+        kind: "cloud" as const,
+        host: "https://app.all-hands.dev",
+        apiKey: "secret",
+        name: "Cloud",
+      };
+      mockPickCloudBackend.mockReturnValue(cloudBackend);
+      mockCreateCloudAppConversation.mockResolvedValue({
+        id: "start-task-id",
+        app_conversation_id: "cloud-child-id",
+        status: "READY",
+      });
+
+      await handleLaunchChildConversationAction(
+        action({ target: "cloud" }),
+        PARENT_ID,
+        nextToolCallId(),
+      );
+
+      expect(mockFindConversationByTag).not.toHaveBeenCalled();
+      expect(mockCreateCloudAppConversation).toHaveBeenCalledTimes(1);
     });
   });
 
