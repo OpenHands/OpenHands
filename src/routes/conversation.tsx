@@ -29,6 +29,7 @@ import { WebSocketProviderWrapper } from "#/contexts/websocket-provider-wrapper"
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { I18nKey } from "#/i18n/declaration";
 import { resumeCloudSandbox } from "#/api/cloud/conversation-service.api";
+import { useCloudSandboxResume } from "#/hooks/use-cloud-sandbox-resume";
 
 function AppContent() {
   const { t } = useTranslation("openhands");
@@ -51,7 +52,11 @@ function AppContent() {
     mountedBackendId.current !== active.backend.id ||
     mountedOrgId.current !== active.orgId;
 
-  const { data: conversation, isFetched } = useActiveConversation();
+  const {
+    data: conversation,
+    isFetched,
+    dataUpdatedAt,
+  } = useActiveConversation();
   const { data: isAuthed } = useIsAuthed();
   const { resetConversationState } = useConversationStore();
   const navigate = useNavigate();
@@ -153,29 +158,18 @@ function AppContent() {
   // interval in useActiveConversation (active while conversation_url is null)
   // polls until conversation_url populates, then the WebSocket connects.
   //
-  // A ref guards against duplicate triggers per unique conversation.id within
-  // the same route-mount lifetime.
-  const resumeTriggeredForRef = React.useRef<string | null>(null);
-  React.useEffect(() => {
-    if (!isFetched || !conversation) return;
-    if (active.backend.kind !== "cloud") return;
-    if (conversation.sandbox_status !== "PAUSED") return; // only resume PAUSED sandboxes
-    if (!conversation.sandbox_id) return; // no sandbox to resume
-    if (resumeTriggeredForRef.current === conversation.id) return; // already sent
-
-    resumeTriggeredForRef.current = conversation.id;
-
-    resumeCloudSandbox(conversation.sandbox_id).catch(() => {
-      displayErrorToast(t(I18nKey.CONVERSATION$FAILED_TO_START_FROM_TASK));
-    });
-  }, [
-    isFetched,
-    conversation?.id,
-    conversation?.sandbox_status,
-    conversation?.sandbox_id,
-    active.backend.kind,
-    t,
-  ]);
+  const handleResumeError = React.useCallback(() => {
+    displayErrorToast(t(I18nKey.CONVERSATION$FAILED_TO_RESUME));
+  }, [t]);
+  useCloudSandboxResume({
+    enabled: isFetched && active.backend.kind === "cloud",
+    conversationId: conversation?.id,
+    sandboxId: conversation?.sandbox_id,
+    sandboxStatus: conversation?.sandbox_status,
+    dataUpdatedAt,
+    onResume: resumeCloudSandbox,
+    onError: handleResumeError,
+  });
 
   // A backend switch is in flight (BackendSelector flips the active backend
   // and redirects to /conversations on the next tick). The conversationId in
