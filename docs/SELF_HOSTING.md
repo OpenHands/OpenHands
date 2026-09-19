@@ -29,7 +29,7 @@ flowchart LR
         direction LR
         nginx["nginx :443<br/>(TLS)"]
         ingress["Ingress proxy<br/>127.0.0.1:8000"]
-        static["Static server<br/>:3001"]
+        static["Static server<br/>:3001 (default)"]
         agent["Agent server<br/>:18000<br/>(LOCAL_BACKEND_API_KEY)"]
         automation["Automation backend<br/>:18001"]
         nginx --> ingress
@@ -84,8 +84,9 @@ Cloud Firewall, AWS Security Group, GCP firewall rule, etc.):
 
 - **Inbound 22 (SSH)** — restrict to your own IP / VPN CIDR.
 - **Everything else** — drop. The ingress port (`:8000`), agent server
-  (`:18000`), automation backend (`:18001`), and static server (`:3001`)
-  must not be reachable from outside the host.
+  (`:18000`), automation backend (`:18001`), and static server (default
+  `:3001`, auto-selected when busy) must not be reachable from outside the host. `--port` / `PORT` control only the ingress port; to pin the internal
+  frontend/static port set `OH_CANVAS_SAFE_VITE_PORT=<port>`.
 
 At this point your machine is reachable only over SSH. That's enough to run
 the agent (step 3) and access the UI through an SSH tunnel. If you also want

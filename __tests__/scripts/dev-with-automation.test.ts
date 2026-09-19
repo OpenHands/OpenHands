@@ -17,6 +17,8 @@ import { describe, expect, it, afterEach } from "vitest";
 import {
   buildAgentServerAutomationEnv,
   buildAutomationCommand,
+  buildAutomationCorsOrigins,
+  buildAutomationRuntimeServicesInfo,
   buildAutomationTelemetryEnv,
   buildConfig,
   buildRouteArgs,
@@ -342,6 +344,85 @@ describe("buildConfig", () => {
     );
 
     expect(config.ingressPort).toBe(preferredPort);
+  });
+
+  it("keeps the default frontend port 3001 when it is free", async () => {
+    // Only meaningful when no real dev stack owns 3001. Probe first and
+    // skip gracefully when a local stack is running on it.
+    const env = envWithIsolatedKeyPath();
+    delete env.OH_CANVAS_SAFE_VITE_PORT;
+    const portFree = await new Promise<boolean>((resolve) => {
+      const probe = net.createServer();
+      probe.once("error", () => resolve(false));
+      probe.listen(3001, "127.0.0.1", () => {
+        probe.close(() => resolve(true));
+      });
+    });
+    if (!portFree) return;
+
+    const config = await buildConfig({}, env);
+    expect(config.vitePort).toBe(3001);
+  });
+
+  it("falls back to a free frontend port when 3001 is busy", async () => {
+    // Block port 3001 (another non-agent-canvas app).
+    const server = net.createServer();
+    await new Promise<void>((resolve, reject) => {
+      server.listen(3001, "127.0.0.1", () => {
+        servers.push(server);
+        resolve();
+      });
+      server.on("error", reject);
+    });
+
+    const env = envWithIsolatedKeyPath();
+    delete env.OH_CANVAS_SAFE_VITE_PORT;
+    const config = await buildConfig({}, env);
+
+    expect(config.vitePort).not.toBe(3001);
+    expect(config.vitePort).toBeGreaterThan(0);
+
+    // The fallback must be a port the stack can actually bind.
+    await expect(
+      new Promise<number>((resolve, reject) => {
+        const probe = net.createServer();
+        probe.once("error", reject);
+        probe.listen(config.vitePort, "127.0.0.1", () => {
+          probe.close(() => resolve(config.vitePort));
+        });
+      }),
+    ).resolves.toBe(config.vitePort);
+  });
+
+  it("honors an explicit OH_CANVAS_SAFE_VITE_PORT override when free", async () => {
+    const explicitFrontendPort = 19750;
+
+    const env = envWithIsolatedKeyPath({
+      OH_CANVAS_SAFE_VITE_PORT: explicitFrontendPort.toString(),
+    });
+    const config = await buildConfig({}, env);
+
+    expect(config.vitePort).toBe(explicitFrontendPort);
+  });
+
+  it("propagates the resolved frontend port to CORS and runtime services", async () => {
+    const config = await buildConfig({}, envWithIsolatedKeyPath());
+
+    const cors = buildAutomationCorsOrigins(config, {});
+    expect(cors).toContain(`http://localhost:${config.vitePort}`);
+    expect(cors).toContain(`http://127.0.0.1:${config.vitePort}`);
+    // No stale hardcoded default survives on the propagated paths.
+
+    expect(cors).not.toContain("3001");
+    expect(getFrontendBackend(config)).toBe(
+      `http://localhost:${config.vitePort}`,
+    );
+
+    const info = buildAutomationRuntimeServicesInfo(config);
+    expect(info.services.frontend.url_from_agent).toBe(
+      `http://localhost:${config.vitePort}`,
+    );
+    expect(info.services.frontend.url_from_agent).not.toContain("3001");
   });
 
   it("throws when ingress port is busy", async () => {

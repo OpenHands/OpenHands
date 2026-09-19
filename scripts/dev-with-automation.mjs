@@ -59,9 +59,11 @@ import {
   buildAgentServerEnv,
   buildNpmScriptCommand,
   buildRuntimeServicesInfo,
+  findFreePort,
   formatMissingUvxGuidance,
   validateFrontendDependencies,
   validateLocalAgentServerPath,
+  DEFAULT_VITE_PORT,
 } from "./dev-safe.mjs";
 import {
   createShutdownHookRegistry,
@@ -249,13 +251,14 @@ OPTIONS:
   -h, --help                  Show this help
 
 ENVIRONMENT VARIABLES:
-  PORT                        Alternative to --port
+  PORT                        Alternative to --port (ingress port only)
   OH_AUTOMATION_GIT_REF       Git ref for automation (overrides default version)
   OH_AUTOMATION_VERSION       Specific PyPI version for automation (default: ${DEFAULT_AUTOMATION_VERSION})
   OH_AUTOMATION_LOCAL_PATH    Absolute path to a local automation checkout (overridden only by --automation-git-ref)
   OH_AGENT_SERVER_LOCAL_PATH  Absolute path to a local software-agent-sdk checkout (highest precedence)
   OH_AGENT_SERVER_GIT_REF     Git ref for agent-server SDK (overrides default version)
   OH_AGENT_SERVER_VERSION     Specific PyPI version for agent-server
+  OH_CANVAS_SAFE_VITE_PORT    Frontend/Vite port (default: 3001; auto-falls back when busy)
   OH_SECRET_KEY               Secret key for sessions
 
 SECRETS:
@@ -428,9 +431,15 @@ async function buildConfig(args, env = process.env) {
     parseInt(env.OH_CANVAS_SAFE_BACKEND_PORT, 10) || DEFAULT_BACKEND_PORT;
   const preferredAutomationPort =
     parseInt(env.OH_CANVAS_SAFE_AUTOMATION_PORT, 10) || DEFAULT_AUTOMATION_PORT;
-  const preferredVitePort = parseInt(env.OH_CANVAS_SAFE_VITE_PORT, 10) || 3001;
+  const preferredVitePort =
+    parseInt(env.OH_CANVAS_SAFE_VITE_PORT, 10) || DEFAULT_VITE_PORT;
 
-  // Fail fast if any preferred port for a service in this mode is already in use.
+  // Fail fast if any preferred port for a hard-failing service is already in use.
+  // The ingress port stays a hard failure so a concurrent agent-canvas
+  // instance is still detected (see issue #16904). The frontend port, in
+  // contrast, falls back to a free port when the preferred default is taken
+  // (issue #17546), so it is not part of the hard-failing set.
+
   const requiredPorts = [{ name: "ingress", port: preferredIngressPort }];
   if (launchAgentServer) {
     requiredPorts.push({ name: "agent-server", port: preferredBackendPort });
@@ -438,12 +447,17 @@ async function buildConfig(args, env = process.env) {
   if (launchAutomation) {
     requiredPorts.push({ name: "automation", port: preferredAutomationPort });
   }
-  if (launchFrontend) {
-    requiredPorts.push({ name: "frontend", port: preferredVitePort });
-  }
 
   logStep("ports", "Checking ports...");
   await assertPortsFree(requiredPorts);
+
+  // Allocate a free port for the internal frontend/Vite service, preferring the
+  // explicit override or the default 3001. This lets users run the stack
+  // while another non-agent-canvas process already owns 3001 (issue #17546.;
+  // when 3001 is free the default lands unchanged.
+
+  logStep("ports", "Allocating frontend port...");
+  const vitePort = await findFreePort(preferredVitePort);
 
   const vscodePort = preferredBackendPort + 1000;
 
@@ -483,7 +497,7 @@ async function buildConfig(args, env = process.env) {
     // Service ports (internal)
     agentServerPort: preferredBackendPort,
     autoBackendPort: preferredAutomationPort,
-    vitePort: preferredVitePort,
+    vitePort,
     vscodePort,
     // Prefix the editor is served under on the ingress origin. Carried on the
     // config so the route table and the agent-server env are built from one
@@ -960,6 +974,34 @@ function startAgentServer(config) {
   );
 }
 
+/**
+ * Build the AUTOMATION_CORS_ORIGINS value for a local dev stack.
+
+ * Allows the ingress and the (possibly auto-allocated frontend origin so
+ * direct access to the Vite/static server is permitted. An explicitly set
+ * AUTOMATION_CORS_ORIGINS env var wins over the derived value.
+
+
+
+ * @param {object} config - Launcher config (reads ingressPort,, vitePort)
+
+
+
+ * @param {Record<string, string | undefined>} [env] - Environment (default: process.env)
+
+
+
+
+ * @returns {string}
+
+ */
+export function buildAutomationCorsOrigins(config, env = process.env) {
+  return (
+    env.AUTOMATION_CORS_ORIGINS ||
+    `http://localhost:${config.ingressPort},http://127.0.0.1:${config.ingressPort},http://localhost:${config.vitePort},http://127.0.0.1:${config.vitePort}`
+  );
+}
+
 function startAutomationBackend(config) {
   logService(
     "automation",
@@ -1049,9 +1091,7 @@ function startAutomationBackend(config) {
         AUTOMATION_KV_SECRET:
           process.env.AUTOMATION_KV_SECRET || config.sessionApiKey,
         // CORS: allow localhost origins for dev, unless explicitly overridden.
-        AUTOMATION_CORS_ORIGINS:
-          process.env.AUTOMATION_CORS_ORIGINS ||
-          `http://localhost:${config.ingressPort},http://127.0.0.1:${config.ingressPort},http://localhost:3001,http://127.0.0.1:3001`,
+        AUTOMATION_CORS_ORIGINS: buildAutomationCorsOrigins(config),
         FILE_STORE: "local",
         LOCAL_STORAGE_PATH: join(config.stateDir, "storage"),
         OPENHANDS_SUPPRESS_BANNER: "1",

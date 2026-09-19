@@ -60,6 +60,7 @@ import {
 import {
   buildAgentServerAutomationEnv,
   buildAutomationCommand,
+  buildAutomationCorsOrigins,
   buildAutomationTelemetryEnv,
   buildAutomationRuntimeServicesInfo,
   buildConfig,
@@ -168,9 +169,11 @@ OPTIONS:
   -h, --help                  Show this help
 
 ENVIRONMENT VARIABLES:
-  PORT                        Alternative to --port
+  PORT                        Alternative to --port (ingress port only)
   OH_AUTOMATION_GIT_REF       Alternative to --automation-ref
   OH_AGENT_SERVER_GIT_REF     Git ref for agent-server SDK
+  OH_CANVAS_SAFE_VITE_PORT    Frontend/static port (default: 3001; auto-falls back when busy)
+
   OH_SECRET_KEY               Secret key for sessions
 
 ACCESS POINTS:
@@ -366,7 +369,7 @@ function buildAutomationBackendEnv(config, env = process.env) {
     AUTOMATION_WORKSPACE_BASE: join(config.stateDir, "workspaces"),
     AUTOMATION_LOCAL_API_KEY: config.sessionApiKey,
     ...buildAutomationTelemetryEnv(env),
-    AUTOMATION_CORS_ORIGINS: `http://localhost:${config.ingressPort},http://127.0.0.1:${config.ingressPort},http://localhost:3001,http://127.0.0.1:3001`,
+    AUTOMATION_CORS_ORIGINS: buildAutomationCorsOrigins(config),
     FILE_STORE: "local",
     LOCAL_STORAGE_PATH: join(config.stateDir, "storage"),
     OPENHANDS_SUPPRESS_BANNER: "1",
@@ -407,9 +410,10 @@ function startStaticServer(config) {
   logService("static", `Starting on port ${config.vitePort}...`, c.magenta);
 
   // Mirror the proxy targets that vite.config.ts exposes in dev mode so that
-  // hitting :3001 directly behaves like Vite's dev server (e.g. /server_info
-  // is forwarded to the agent-server instead of falling back to the SPA
-  // shell). Without this, /server_info on :3001 returns index.html.
+  // hitting the frontend/static port directly behaves like Vite's dev server (e.g.
+  // /server_info is forwarded to the agent-server instead of falling back
+  // to the SPA shell). Without this, /server_info on the frontend port returns
+  // index.html.
   const staticServerScript = join(projectRoot, "scripts", "static-server.mjs");
   const runtimeServicesInfo = JSON.stringify(
     buildAutomationRuntimeServicesInfo({
