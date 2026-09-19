@@ -5,7 +5,7 @@ import {
   getTextContent,
 } from "#/components/features/chat/utils/chat-input.utils";
 import { useConversationStore } from "#/stores/conversation-store";
-import { useOptionalConversationId } from "#/hooks/use-conversation-id";
+import { useNavigation } from "#/context/navigation-context";
 import { useDraftPersistence } from "./use-draft-persistence";
 
 /**
@@ -13,10 +13,10 @@ import { useDraftPersistence } from "./use-draft-persistence";
  */
 export const useChatInputLogic = () => {
   const chatInputRef = useRef<HTMLDivElement | null>(null);
-  // Optional because the chat input also renders on the home page, where no
-  // conversation route is mounted yet. Draft persistence is conversation-
-  // scoped, so it no-ops when this is undefined.
-  const { conversationId } = useOptionalConversationId();
+  // The chat input also renders on the home page, where no conversation route
+  // is mounted yet. Draft persistence is conversation-scoped, so it no-ops
+  // when conversationId is undefined.
+  const { conversationId, isNavigating } = useNavigation();
 
   const {
     messageToSend: rawMessageToSend,
@@ -34,12 +34,22 @@ export const useChatInputLogic = () => {
   );
 
   // On the home page (no conversationId) the right-panel / messageToSend
-  // mechanism is not relevant.  More importantly, a stale messageToSend value
-  // in the Zustand store causes useAutoResize to overwrite the just-restored
-  // sessionStorage draft with an empty string (see useAutoResize value effect).
-  // Returning null here keeps value=undefined in useAutoResize so it never
-  // touches the element content on the home page.
-  const messageToSend = conversationId ? rawMessageToSend : null;
+  // mechanism is not relevant.  More importantly, a stale *empty* messageToSend
+  // value in the Zustand store causes useAutoResize to overwrite the
+  // just-restored sessionStorage draft with an empty string (see useAutoResize
+  // value effect). Empty values are still filtered to null so useAutoResize
+  // keeps value=undefined and never touches the element content on the home
+  // page. Non-empty seeded prompts (e.g. the automation "Create Automation"
+  // flow) must pass through, otherwise the home-page input renders blank.
+  // While a navigation is in flight this page can still be mounted even though
+  // a prompt was seeded for the destination route (producers inject via
+  // setTimeout right after navigate), so home must not expose — and one-shot
+  // consume — a value addressed to the next page's composer.
+  const messageToSend =
+    conversationId ||
+    (!isNavigating && (rawMessageToSend?.text.trim().length ?? 0) > 0)
+      ? rawMessageToSend
+      : null;
 
   // Restore a cancelled pending send back into the input only when empty.
   useEffect(() => {
