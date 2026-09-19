@@ -156,3 +156,6 @@ register_tool("canvas_ui", CanvasUITool)
 # this once the SDK registers its builtins for remote conversations.
 if FinishTool.__name__ not in list_registered_tools():
     register_tool(FinishTool.__name__, FinishTool)
+if FinishTool.__name__ not in list_registered_tools():
+    raise RuntimeError("FinishTool failed to register")
+

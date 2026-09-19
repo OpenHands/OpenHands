@@ -43,4 +43,13 @@ describe("canvas_ui client tool", () => {
       'register_tool("canvas_ui", CanvasUITool)',
     );
   });
+
+  it("registers the builtin FinishTool with a verification guard", () => {
+    expect(legacyToolSource).toContain(
+      "register_tool(FinishTool.__name__, FinishTool)",
+    );
+    expect(legacyToolSource).toContain(
+      'raise RuntimeError("FinishTool failed to register")',
+    );
+  });
 });
