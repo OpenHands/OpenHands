@@ -1632,9 +1632,8 @@ function startStaticFrontend(config, staticDir) {
       // In local mode, inject the API key so the pre-built frontend can
       // authenticate transparently. In public mode, pass --auth-required
       // so the frontend shows the API key entry screen instead.
-      ...(config.launchAgentServer && !config.isPublic && config.sessionApiKey
-        ? ["--session-api-key", config.sessionApiKey]
-        : []),
+      // The key travels via SESSION_API_KEY env (not argv) so it is not
+      // visible in `ps`/`/proc/<pid>/cmdline` on shared hosts.
       ...(config.launchAgentServer && config.isPublic
         ? ["--auth-required"]
         : []),
@@ -1656,6 +1655,11 @@ function startStaticFrontend(config, staticDir) {
     {
       cwd: config.canvasPath,
       color: c.magenta,
+      // Pass the session key through the environment instead of argv so it
+      // never shows up in process listings on shared hosts.
+      ...(config.launchAgentServer && !config.isPublic && config.sessionApiKey
+        ? { env: { SESSION_API_KEY: config.sessionApiKey } }
+        : {}),
     },
   );
 }
