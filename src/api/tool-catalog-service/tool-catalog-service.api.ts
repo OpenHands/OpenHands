@@ -20,6 +20,8 @@ export interface ToolCatalogEntry {
   user_selectable: boolean;
   /** Whether this server's runtime can actually run it. */
   usable: boolean;
+  /** One line on what the tool lets the agent do; may be absent on older servers. */
+  description?: string;
 }
 
 interface ToolCatalogResponse {

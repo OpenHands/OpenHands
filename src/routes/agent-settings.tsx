@@ -373,22 +373,32 @@ export function AgentSettingsScreen({
         : null,
     [profileName, llmProfileRef],
   );
-  const { data: standardToolNames } = useResolvedProfileTools({
-    draft: standardToolsDraft,
-    enabled: embedded && toolCatalogSupported,
-  });
+  const { data: standardToolNames, isPending: isStandardToolsPending } =
+    useResolvedProfileTools({
+      draft: standardToolsDraft,
+      enabled: embedded && toolCatalogSupported,
+    });
   /** Pickable tools this runtime can run, plus anything the profile stores. */
   const toolPickerCatalog = React.useMemo(() => {
-    const names = (toolCatalog ?? [])
+    const items = (toolCatalog ?? [])
       .filter(({ user_selectable: selectable, usable }) => selectable && usable)
-      .map(({ name }) => name);
+      .map(({ name, description }) => ({ name, description }));
     // A stored name outside the catalog rides along: the save overwrites the
     // whole profile, so hiding it would silently drop the user's choice.
     initialTools.selected.forEach((name) => {
-      if (!names.includes(name)) names.push(name);
+      if (!items.some((item) => item.name === name))
+        items.push({ name, description: undefined });
     });
-    return names.map((name) => ({ name }));
+    return items;
   }, [toolCatalog, initialTools]);
+  /** The server's blurb for a tool, by name. */
+  const toolDescriptions = React.useMemo(
+    () =>
+      new Map(
+        (toolCatalog ?? []).map(({ name, description }) => [name, description]),
+      ),
+    [toolCatalog],
+  );
   const orderedSelectedTools = React.useMemo(
     () =>
       toolPickerCatalog
@@ -1011,7 +1021,10 @@ export function AgentSettingsScreen({
               },
             ]}
             selectedKey={toolsMode}
-            isDisabled={isSavingAny}
+            // Locked until the server has answered what "standard" is: seeding
+            // a custom selection from a pending answer would save an agent with
+            // no tools at all.
+            isDisabled={isSavingAny || isStandardToolsPending}
             onSelectionChange={(key) => {
               if (!key) return;
               const mode = key as ProfileScopeMode;
@@ -1030,7 +1043,10 @@ export function AgentSettingsScreen({
           {toolsMode === "standard" ? (
             <ProfileScopeList
               testId="agent-settings-tool"
-              items={(standardToolNames ?? []).map((name) => ({ name }))}
+              items={(standardToolNames ?? []).map((name) => ({
+                name,
+                description: toolDescriptions.get(name),
+              }))}
               selected={standardToolNames ?? []}
               isDisabled
               onToggle={() => {}}

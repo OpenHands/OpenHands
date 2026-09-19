@@ -33,12 +33,24 @@ vi.mock("#/api/agent-profiles-service/profile-field-support", () => ({
 // The tool picker renders what the server offers and what it says a draft
 // resolves to; stub both so these tests need no live agent-server.
 const toolCatalogMock = vi.hoisted(() =>
-  vi.fn<() => { name: string; user_selectable: boolean; usable: boolean }[]>(),
+  vi.fn<
+    () => {
+      name: string;
+      user_selectable: boolean;
+      usable: boolean;
+      description?: string;
+    }[]
+  >(),
 );
-const resolvedToolsMock = vi.hoisted(() => vi.fn<() => string[]>());
+// `undefined` stands for "the server has not answered yet", so `isPending`
+// tracks it the way react-query would.
+const resolvedToolsMock = vi.hoisted(() => vi.fn<() => string[] | undefined>());
 vi.mock("#/hooks/query/use-tool-catalog", () => ({
   useToolCatalog: () => ({ data: toolCatalogMock() }),
-  useResolvedProfileTools: () => ({ data: resolvedToolsMock() }),
+  useResolvedProfileTools: () => {
+    const data = resolvedToolsMock();
+    return { data, isPending: data === undefined };
+  },
 }));
 
 // The secret picker lists the user's saved secrets; stub the query so these
@@ -1469,7 +1481,12 @@ describe("AgentSettingsScreen — MCP scope dirty tracking", () => {
 
 describe("AgentSettingsScreen — tool selection", () => {
   const CATALOG = [
-    { name: "terminal", user_selectable: true, usable: true },
+    {
+      name: "terminal",
+      user_selectable: true,
+      usable: true,
+      description: "Run shell commands.",
+    },
     { name: "file_editor", user_selectable: true, usable: true },
     { name: "glob", user_selectable: true, usable: true },
     { name: "task_tool_set", user_selectable: true, usable: true },
@@ -1547,6 +1564,54 @@ describe("AgentSettingsScreen — tool selection", () => {
     expect(
       screen.queryByTestId("agent-settings-tool-browser_tool_set"),
     ).toBeNull();
+  });
+
+  it("shows the server's blurb beside a tool", async () => {
+    renderEditor({ tools: [{ name: "terminal", params: {} }] });
+    await screen.findByTestId("agent-settings-screen");
+
+    expect(screen.getByText("Run shell commands.")).toBeTruthy();
+  });
+
+  it("shows the blurb in the read-only standard list too", async () => {
+    resolvedToolsMock.mockReturnValue(["terminal"]);
+    renderEditor({ tools: null });
+    await screen.findByTestId("agent-settings-screen");
+
+    expect(screen.getByText("Run shell commands.")).toBeTruthy();
+  });
+
+  it("will not let an unresolved standard set become an empty selection", async () => {
+    // The race the picker must not lose: switching to "choose" before the
+    // server answers would seed from nothing and save a tool-less agent.
+    resolvedToolsMock.mockReturnValue(undefined);
+    renderEditor({ tools: null });
+    await screen.findByTestId("agent-settings-screen");
+
+    const mode = screen.getByTestId("agent-settings-tools-mode");
+    expect(
+      mode.hasAttribute("disabled") ||
+        mode.getAttribute("aria-disabled") === "true",
+    ).toBe(true);
+  });
+
+  it("seeds the custom selection once the standard set resolves", async () => {
+    const { control } = renderEditor({ tools: null });
+    await screen.findByTestId("agent-settings-screen");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("agent-settings-tools-mode"));
+    await user.click(
+      await screen.findByRole("option", {
+        name: "SETTINGS$AGENT_PROFILE_TOOLS_CHOOSE",
+      }),
+    );
+
+    const fields = control().buildAgentProfileFields();
+    expect(fields.agent_kind === "openhands" && fields.tools).toEqual([
+      { name: "terminal", params: {} },
+      { name: "file_editor", params: {} },
+    ]);
   });
 
   it("keeps a stored tool the catalog no longer offers", async () => {
