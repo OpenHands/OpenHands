@@ -16,6 +16,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, it, afterEach } from "vitest";
 import {
   buildAgentServerAutomationEnv,
+  buildAutomationCorsOrigins,
   buildAutomationCommand,
   buildAutomationTelemetryEnv,
   buildConfig,
@@ -33,10 +34,12 @@ import {
   DEFAULT_AUTOMATION_VERSION,
   DEFAULT_BACKEND_PORT,
   DEFAULT_AUTOMATION_PORT,
+  DEFAULT_FRONTEND_PORT,
 } from "../../scripts/dev-with-automation.mjs";
 import {
   buildAgentServerEnv,
   buildSafeDevConfig,
+  isPortBusy,
   resetPersistedSessionApiKeyCache,
 } from "../../scripts/dev-safe.mjs";
 import { createRouter } from "../../scripts/proxy-utils.mjs";
@@ -244,6 +247,39 @@ describe("buildAutomationTelemetryEnv", () => {
   });
 });
 
+describe("buildAutomationCorsOrigins", () => {
+  it("allows the configured ingress and frontend origins", () => {
+    const origins = buildAutomationCorsOrigins(
+      { ingressPort: 8000, vitePort: 3101 },
+      {},
+    );
+
+    expect(origins).toBe(
+      "http://localhost:8000,http://127.0.0.1:8000,http://localhost:3101,http://127.0.0.1:3101",
+    );
+  });
+
+  it("follows the auto-allocated frontend port instead of hardcoding 3001", () => {
+    const origins = buildAutomationCorsOrigins(
+      { ingressPort: 8000, vitePort: 3105 },
+      {},
+    );
+
+    expect(origins).toContain("http://localhost:3105");
+    expect(origins).toContain("http://127.0.0.1:3105");
+    expect(origins).not.toContain("3001");
+  });
+
+  it("respects an explicit AUTOMATION_CORS_ORIGINS override", () => {
+    const origins = buildAutomationCorsOrigins(
+      { ingressPort: 8000, vitePort: 3101 },
+      { AUTOMATION_CORS_ORIGINS: "https://custom.example" },
+    );
+
+    expect(origins).toBe("https://custom.example");
+  });
+});
+
 describe("buildConfig", () => {
   const servers: net.Server[] = [];
   const keyDirs: string[] = [];
@@ -282,6 +318,19 @@ describe("buildConfig", () => {
       OH_CANVAS_SAFE_VITE_PORT: "19903",
       ...extra,
     };
+  }
+
+  /** Bind a loopback server to a free port and record it for teardown. */
+  async function bindServer(): Promise<{ server: net.Server; port: number }> {
+    return new Promise((resolve, reject) => {
+      const server = net.createServer();
+      server.on("error", reject);
+      server.listen(0, "127.0.0.1", () => {
+        const { port } = server.address() as net.AddressInfo;
+        servers.push(server);
+        resolve({ server, port });
+      });
+    });
   }
 
   it("builds default config with correct ports", async () => {
@@ -342,6 +391,74 @@ describe("buildConfig", () => {
     );
 
     expect(config.ingressPort).toBe(preferredPort);
+  });
+
+  it("uses the preferred frontend port when it is free", async () => {
+    const config = await buildConfig({}, envWithIsolatedKeyPath());
+
+    // With OH_CANVAS_SAFE_VITE_PORT=19903 free, the frontend stays on it.
+    expect(config.vitePort).toBe(19903);
+  });
+
+  it("falls back to a free frontend port when the default 3001 is occupied", async () => {
+    // Occupy 3001 exactly, simulating the reported bug (another app bound to
+    // the default frontend port). buildConfig must still succeed and return a
+    // different, free port instead of throwing "port already in use".
+    if (!(await isPortBusy(3001))) {
+      const server = net.createServer();
+      await new Promise<void>((resolve, reject) => {
+        server.listen(3001, "127.0.0.1", () => {
+          servers.push(server);
+          resolve();
+        });
+        server.on("error", reject);
+      });
+    }
+
+    // Do not set OH_CANVAS_SAFE_VITE_PORT so the preferred frontend port is
+    // the real default 3001 (occupied above or already by the environment).
+    const env = envWithIsolatedKeyPath();
+    delete env.OH_CANVAS_SAFE_VITE_PORT;
+    const config = await buildConfig({}, env);
+
+    expect(config.vitePort).not.toBe(3001);
+    expect(config.vitePort).toBeGreaterThan(0);
+  });
+
+  it("honors an explicit --frontend-port override when it is free", async () => {
+    const config = await buildConfig(
+      { frontendPort: 19504 },
+      envWithIsolatedKeyPath(),
+    );
+
+    expect(config.vitePort).toBe(19504);
+  });
+
+  it("--frontend-port takes precedence over OH_CANVAS_SAFE_VITE_PORT", async () => {
+    const config = await buildConfig(
+      { frontendPort: 19505 },
+      envWithIsolatedKeyPath({ OH_CANVAS_SAFE_VITE_PORT: "19599" }),
+    );
+
+    expect(config.vitePort).toBe(19505);
+  });
+
+  it("exposes the default frontend port constant", () => {
+    expect(DEFAULT_FRONTEND_PORT).toBe(3001);
+  });
+
+  it("falls back to a free frontend port when an explicit frontend-port is taken", async () => {
+    // Occupy a high port and point --frontend-port at it. Unlike the ingress
+    // port, the frontend port auto-falls back rather than aborting.
+    const { port } = await bindServer();
+
+    const config = await buildConfig(
+      { frontendPort: port },
+      envWithIsolatedKeyPath(),
+    );
+
+    expect(config.vitePort).not.toBe(port);
+    expect(config.vitePort).toBeGreaterThan(0);
   });
 
   it("throws when ingress port is busy", async () => {
@@ -977,6 +1094,8 @@ describe("dev-with-automation CLI", () => {
     expect(output).toContain("--dynamic");
     expect(output).toContain("--frontend-only");
     expect(output).toContain("--backend-only");
+    expect(output).toContain("--frontend-port");
+    expect(output).toContain("OH_CANVAS_SAFE_VITE_PORT");
     expect(output).toContain("OH_AUTOMATION_GIT_REF");
     expect(output).toContain("OH_AGENT_SERVER_LOCAL_PATH");
     expect(output).toContain("OPENHANDS_AUTOMATION_API_KEY");
