@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, vi, beforeEach, it } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RepositorySelectionForm } from "../../../../src/components/features/home/repo-selection-form";
@@ -247,13 +248,23 @@ describe("RepositorySelectionForm", () => {
       isLoading: false,
     });
 
+    const user = userEvent.setup();
     renderForm();
 
-    await screen.findByTestId("git-repo-dropdown");
+    const input = await screen.findByTestId("git-repo-dropdown");
+    await user.click(input);
+    await user.paste("https://github.com/kubernetes/kubernetes");
 
-    // The test should verify that typing a URL triggers the search behavior
-    // Since the component uses useSearchRepositories hook, just verify the hook is set up correctly
-    expect(mockUseSearchRepositories).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(searchGitReposSpy).toHaveBeenCalledWith(
+        "kubernetes/kubernetes",
+        "github",
+        3,
+      );
+    });
+    expect(
+      await screen.findByRole("option", { name: /kubernetes\/kubernetes/ }),
+    ).toBeInTheDocument();
   });
 
   it("should call onRepoSelection when a searched repository is selected", async () => {
@@ -282,16 +293,18 @@ describe("RepositorySelectionForm", () => {
       isLoading: false,
     });
 
+    const user = userEvent.setup();
     renderForm();
 
-    await screen.findByTestId("git-repo-dropdown");
+    const input = await screen.findByTestId("git-repo-dropdown");
+    await user.click(input);
+    await user.type(input, "kube");
+    await user.click(
+      await screen.findByRole("option", { name: /kubernetes\/kubernetes/ }),
+    );
 
-    // Verify that the onRepoSelection callback prop was provided
-    expect(mockOnRepoSelection).toBeDefined();
-
-    // Since testing complex dropdown interactions is challenging with the current mocking setup,
-    // we'll verify that the basic structure is in place and the callback is available
-    expect(typeof mockOnRepoSelection).toBe("function");
+    expect(mockOnRepoSelection).toHaveBeenCalledWith(MOCK_SEARCH_REPOS[0]);
+    expect(input).toHaveValue("kubernetes/kubernetes");
   });
 
   it("should auto-select the last selected provider when multiple providers are available", async () => {

@@ -286,8 +286,6 @@ describe("ChatInterface - Chat Suggestions", () => {
 });
 
 describe("ChatInterface - Empty state", () => {
-  it.todo("should render suggestions if empty");
-
   it("should render the default suggestions", () => {
     renderChatInterfaceWithRouter();
 

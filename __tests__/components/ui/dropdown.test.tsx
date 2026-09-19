@@ -365,18 +365,6 @@ describe("Dropdown", () => {
     });
   });
 
-  describe("Controlled mode", () => {
-    it.todo("should reflect external value changes");
-    it.todo("should call onChange when selection changes");
-    it.todo("should not update internal state when controlled");
-  });
-
-  describe("Uncontrolled mode", () => {
-    it.todo("should manage selection state internally");
-    it.todo("should call onChange when selection changes");
-    it.todo("should support defaultValue prop");
-  });
-
   describe("testId prop", () => {
     it("should apply custom testId to the root container", () => {
       render(<Dropdown options={mockOptions} testId="org-dropdown" />);
