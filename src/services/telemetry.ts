@@ -84,6 +84,19 @@ export interface TelemetryConfig {
   uiHost?: string;
 }
 
+export type WebsiteHandoffAttribution = Partial<
+  Record<
+    | "utm_source"
+    | "utm_medium"
+    | "utm_campaign"
+    | "landing_page_category"
+    | "cta_id"
+    | "cta_surface"
+    | "referring_domain_category",
+    string
+  >
+>;
+
 export type TelemetryConfiguration = TelemetryConfig | false;
 
 export type TelemetryConsent = "granted" | "denied" | "pending";
@@ -135,6 +148,13 @@ const CANVAS_EVENT_PROPERTIES = Object.freeze({
 
 let telemetryBackendContext = getBackendTelemetryProperties({});
 let telemetryCloudContext = getCloudTelemetryProperties();
+let telemetryWebsiteAttribution: WebsiteHandoffAttribution = {};
+
+export function setTelemetryWebsiteAttribution(
+  attribution: WebsiteHandoffAttribution | undefined,
+): void {
+  telemetryWebsiteAttribution = attribution ?? {};
+}
 
 export function setTelemetryBackendContext(
   context: BackendTelemetryContextInput,
@@ -158,6 +178,7 @@ function addCanvasEventProperties(
     properties: {
       ...telemetryBackendContext,
       ...telemetryCloudContext,
+      ...telemetryWebsiteAttribution,
       ...event.properties,
       ...CANVAS_EVENT_PROPERTIES,
     },
@@ -877,6 +898,7 @@ export async function clearTelemetryData(): Promise<void> {
 
   telemetryBackendContext = getBackendTelemetryProperties({});
   telemetryCloudContext = getCloudTelemetryProperties();
+  telemetryWebsiteAttribution = {};
   desiredTelemetryIdentity = null;
   desiredIdentityRevision += 1;
   appliedIdentityRevision = -1;
