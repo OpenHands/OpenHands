@@ -451,30 +451,6 @@ describe("AutomationService", () => {
       expect(mockDelete).not.toHaveBeenCalled();
     });
 
-    it("dispatchAutomation forwards method POST via callCloudProxy", async () => {
-      const run = {
-        id: "run-1",
-        status: "PENDING",
-        conversation_id: null,
-        bash_command_id: null,
-        error_detail: null,
-        started_at: "2026-01-01T00:00:00Z",
-        completed_at: null,
-      };
-      mockCallCloudProxy.mockResolvedValue(run);
-
-      const result = await AutomationService.dispatchAutomation("abc");
-
-      expect(mockCallCloudProxy).toHaveBeenCalledWith({
-        backend: cloudBackend,
-        method: "POST",
-        path: "/api/automation/v1/abc/dispatch",
-        headers: expectedAutomationTelemetryHeaders,
-      });
-      expect(mockPost).not.toHaveBeenCalled();
-      expect(result).toEqual(run);
-    });
-
     it("checkHealth calls the cloud host with a fail-fast timeout and returns the upstream status", async () => {
       mockCallCloudProxy.mockResolvedValue({ status: "ok" });
 

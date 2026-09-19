@@ -4,8 +4,6 @@ import { describe, expect, it, vi } from "vitest";
 import { BrandButton } from "#/components/features/settings/brand-button";
 
 describe("BrandButton", () => {
-  const onClickMock = vi.fn();
-
   it("should set a test id", () => {
     render(
       <BrandButton testId="brand-button" type="button" variant="primary">
@@ -18,6 +16,7 @@ describe("BrandButton", () => {
 
   it("should call onClick when clicked", async () => {
     const user = userEvent.setup();
+    const onClickMock = vi.fn();
     render(
       <BrandButton type="button" variant="primary" onClick={onClickMock}>
         Test Button
@@ -25,6 +24,8 @@ describe("BrandButton", () => {
     );
 
     await user.click(screen.getByText("Test Button"));
+
+    expect(onClickMock).toHaveBeenCalledOnce();
   });
 
   it("should be disabled if isDisabled is true", () => {
@@ -50,6 +51,6 @@ describe("BrandButton", () => {
       </BrandButton>,
     );
 
-    screen.getByTestId("custom-start-content");
+    expect(screen.getByTestId("custom-start-content")).toBeInTheDocument();
   });
 });

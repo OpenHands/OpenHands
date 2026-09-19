@@ -582,23 +582,19 @@ describe("ConversationNameContextMenu", () => {
     );
   });
 
-  it("should call onClose when context menu is closed", () => {
+  it("should call onClose when clicking outside the context menu", async () => {
+    const user = userEvent.setup();
     const onClose = vi.fn();
-    const handlers = {
-      onRename: vi.fn(),
-    };
 
     renderWithProviders(
-      <ConversationNameContextMenu
-        {...defaultProps}
-        onClose={onClose}
-        {...handlers}
-      />,
+      <ConversationNameContextMenu {...defaultProps} onClose={onClose} />,
     );
 
-    // The onClose is typically called by the parent component when clicking outside
-    // This test verifies the prop is properly passed
-    expect(onClose).toBeDefined();
+    await user.click(screen.getByTestId("conversation-name-context-menu"));
+    expect(onClose).not.toHaveBeenCalled();
+
+    await user.click(document.body);
+    expect(onClose).toHaveBeenCalledOnce();
   });
 });
 

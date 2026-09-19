@@ -6,10 +6,16 @@ import { createRoutesStub } from "react-router";
 import DeviceVerify from "#/routes/device-verify";
 
 const { useIsAuthedMock } = vi.hoisted(() => ({
-  useIsAuthedMock: vi.fn(() => ({
-    data: false as boolean | undefined,
-    isLoading: false,
-  })),
+  useIsAuthedMock: vi.fn(
+    (): {
+      data: boolean | undefined;
+      isLoading: boolean;
+      isFetching?: boolean;
+    } => ({
+      data: false,
+      isLoading: false,
+    }),
+  ),
 }));
 
 vi.mock("#/hooks/query/use-is-authed", () => ({
@@ -79,6 +85,24 @@ describe("DeviceVerify", () => {
       });
 
       expect(screen.getByText("DEVICE$PROCESSING")).toBeInTheDocument();
+    });
+
+    it("keeps the authorization request visible while auth refetches in the background", async () => {
+      useIsAuthedMock.mockReturnValue({
+        data: true,
+        isLoading: false,
+        isFetching: true,
+      });
+
+      render(
+        <RouterStub initialEntries={["/device-verify?user_code=ABC-123"]} />,
+        { wrapper: createWrapper() },
+      );
+
+      expect(
+        await screen.findByText("DEVICE$AUTHORIZATION_REQUEST"),
+      ).toBeInTheDocument();
+      expect(document.querySelector(".animate-spin")).not.toBeInTheDocument();
     });
   });
 

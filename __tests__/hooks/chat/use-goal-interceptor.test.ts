@@ -76,20 +76,31 @@ describe("useGoalInterceptor", () => {
     });
   });
 
-  it("does nothing for a bare /goal with no objective", () => {
+  it("toasts and starts nothing for a bare /goal with no objective", () => {
     const onSubmit = vi.fn();
     const { result } = renderHook(() => useGoalInterceptor(CONV, onSubmit));
     act(() => result.current("/goal"));
+    expect(mockToast).toHaveBeenCalledWith("GOAL$OBJECTIVE_REQUIRED");
     expect(onSubmit).not.toHaveBeenCalled();
     expect(mockStartGoal).not.toHaveBeenCalled();
   });
 
-  it("falls through when conversationId is null", () => {
+  it("toasts and starts nothing for a flag-only /goal with no objective", () => {
+    const onSubmit = vi.fn();
+    const { result } = renderHook(() => useGoalInterceptor(CONV, onSubmit));
+    act(() => result.current("/goal --max 5"));
+    expect(mockToast).toHaveBeenCalledWith("GOAL$OBJECTIVE_REQUIRED");
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(mockStartGoal).not.toHaveBeenCalled();
+  });
+
+  it("falls through without a toast when conversationId is null", () => {
     const onSubmit = vi.fn();
     const { result } = renderHook(() => useGoalInterceptor(null, onSubmit));
     act(() => result.current("/goal do it"));
     expect(onSubmit).toHaveBeenCalledWith("/goal do it");
     expect(mockStartGoal).not.toHaveBeenCalled();
+    expect(mockToast).not.toHaveBeenCalled();
   });
 
   it("shows an error toast when startGoal rejects", async () => {

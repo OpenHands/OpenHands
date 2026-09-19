@@ -1007,6 +1007,35 @@ describe("Conversation websocket behavior", () => {
     );
   });
 
+  it("updates browser screenshot and URL exactly once per browser event", () => {
+    const setScreenshotSrc = vi.spyOn(
+      useBrowserStore.getState(),
+      "setScreenshotSrc",
+    );
+    const setUrl = vi.spyOn(useBrowserStore.getState(), "setUrl");
+    renderProvider();
+
+    dispatchMain(
+      makeObservationEvent(
+        "40",
+        { kind: "BrowserObservation", screenshot_data: "shot" },
+        "browser",
+      ),
+    );
+    dispatchMain(
+      makeActionEvent(
+        "41",
+        { kind: "BrowserNavigateAction", url: "https://example.com" },
+        "browser",
+      ),
+    );
+
+    expect(setScreenshotSrc).toHaveBeenCalledOnce();
+    expect(setScreenshotSrc).toHaveBeenCalledWith("data:image/png;base64,shot");
+    expect(setUrl).toHaveBeenCalledOnce();
+    expect(setUrl).toHaveBeenCalledWith("https://example.com");
+  });
+
   it("routes main-conversation events to their user-visible stores", () => {
     const consumeMatchingPendingMessage = vi.spyOn(
       useOptimisticUserMessageStore.getState(),
