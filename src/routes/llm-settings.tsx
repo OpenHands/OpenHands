@@ -40,6 +40,15 @@ import {
   isOpenHandsProviderModel,
 } from "#/utils/format-model-name";
 import { FreeOpenHandsModelsNote } from "#/components/shared/free-models-note";
+import {
+  isOciGenaiModel,
+  OCI_API_KEYS_DOCS_URL,
+  OCI_GENAI_PROVIDER,
+  OCI_MODELS_DOCS_URL,
+  OCI_PROJECT_DOCS_URL,
+  OCI_PROJECT_ID_KEY,
+  OCI_REGION_KEY,
+} from "#/constants/oci-genai";
 
 /** Form-values key for the shared provider connection a profile links to. */
 export const LLM_PROVIDER_CONNECTION_KEY = "llm.provider_connection_id";
@@ -51,6 +60,8 @@ const LLM_EXCLUDED_KEYS = new Set([
   "llm.model",
   "llm.api_key",
   "llm.base_url",
+  OCI_REGION_KEY,
+  OCI_PROJECT_ID_KEY,
   LLM_PROVIDER_CONNECTION_KEY,
   LLM_AUTH_TYPE_KEY,
   LLM_SUBSCRIPTION_VENDOR_KEY,
@@ -237,6 +248,15 @@ export function LlmSettingsScreen({
         typeof values["llm.base_url"] === "string"
           ? values["llm.base_url"]
           : "";
+      const isOciGenai = isOciGenaiModel(modelValue);
+      const ociRegionValue =
+        typeof values[OCI_REGION_KEY] === "string"
+          ? values[OCI_REGION_KEY]
+          : "";
+      const ociProjectIdValue =
+        typeof values[OCI_PROJECT_ID_KEY] === "string"
+          ? values[OCI_PROJECT_ID_KEY]
+          : "";
       const showOpenHandsApiKeyHelp = isOpenHandsProviderModel(modelValue);
       const authType = resolveLlmAuthType(values[LLM_AUTH_TYPE_KEY]);
       const isSubscriptionAuth = authType === LLM_AUTH_TYPE_SUBSCRIPTION;
@@ -347,11 +367,68 @@ export function LlmSettingsScreen({
               testId={helpTestId}
               text={t(I18nKey.SETTINGS$DONT_KNOW_API_KEY)}
               linkText={t(I18nKey.SETTINGS$CLICK_FOR_INSTRUCTIONS)}
-              href="https://docs.openhands.dev/usage/local-setup#getting-an-api-key"
+              href={
+                isOciGenai
+                  ? OCI_API_KEYS_DOCS_URL
+                  : "https://docs.openhands.dev/usage/local-setup#getting-an-api-key"
+              }
             />
           )}
         </>
       );
+
+      const renderOciGenaiInputs = () => (
+        <div className="flex flex-col gap-4">
+          <SettingsInput
+            testId="oci-region-input"
+            name={OCI_REGION_KEY}
+            label={t(I18nKey.SETTINGS$OCI_REGION)}
+            type="text"
+            className="w-full"
+            value={ociRegionValue}
+            // eslint-disable-next-line i18next/no-literal-string -- OCI region identifier example
+            placeholder="us-chicago-1"
+            onChange={(value) => onChange(OCI_REGION_KEY, value)}
+            isDisabled={isDisabled}
+            required
+            showRequiredTag
+          />
+          <HelpLink
+            testId="oci-models-help"
+            text={t(I18nKey.SETTINGS$OCI_MODELS_HELP_TEXT)}
+            linkText={t(I18nKey.SETTINGS$OCI_MODELS_HELP_LINK)}
+            href={OCI_MODELS_DOCS_URL}
+          />
+          <SettingsInput
+            testId="oci-project-id-input"
+            name={OCI_PROJECT_ID_KEY}
+            label={t(I18nKey.SETTINGS$OCI_PROJECT_OCID)}
+            type="text"
+            className="w-full"
+            value={ociProjectIdValue}
+            // eslint-disable-next-line i18next/no-literal-string -- OCI resource identifier example
+            placeholder="ocid1.generativeaiproject.oc1..."
+            onChange={(value) => onChange(OCI_PROJECT_ID_KEY, value)}
+            isDisabled={isDisabled}
+            required
+            showRequiredTag
+          />
+          <HelpLink
+            testId="oci-project-help"
+            text={t(I18nKey.SETTINGS$OCI_PROJECT_HELP_TEXT)}
+            linkText={t(I18nKey.SETTINGS$OCI_PROJECT_HELP_LINK)}
+            href={OCI_PROJECT_DOCS_URL}
+          />
+        </div>
+      );
+
+      const handleModelValueChange = (nextModel: string) => {
+        if (isOciGenai && !isOciGenaiModel(nextModel)) {
+          onChange(OCI_REGION_KEY, "");
+          onChange(OCI_PROJECT_ID_KEY, "");
+        }
+        onChange("llm.model", nextModel);
+      };
 
       const handleAuthTypeChange = (selectedKey: React.Key | null) => {
         const nextAuthType =
@@ -458,14 +535,20 @@ export function LlmSettingsScreen({
                   <ModelSelector
                     currentModel={modelValue || undefined}
                     onChange={(provider, model) => {
-                      const nextModel = buildModelId(provider, model);
+                      const nextModel =
+                        buildModelId(provider, model) ??
+                        (provider === OCI_GENAI_PROVIDER
+                          ? `${provider}/`
+                          : null);
                       if (nextModel) {
-                        onChange("llm.model", nextModel);
+                        handleModelValueChange(nextModel);
                       }
                     }}
                     wrapperClassName="!flex-col !gap-6"
                     isDisabled={isDisabled}
                   />
+
+                  {isOciGenai ? renderOciGenaiInputs() : null}
 
                   {showConnectionSelector ? renderConnectionSelector() : null}
 
@@ -500,9 +583,11 @@ export function LlmSettingsScreen({
                     className="w-full"
                     value={modelValue}
                     placeholder={defaultModel}
-                    onChange={(value) => onChange("llm.model", value)}
+                    onChange={handleModelValueChange}
                     isDisabled={isDisabled}
                   />
+
+                  {isOciGenai ? renderOciGenaiInputs() : null}
 
                   {showOpenHandsApiKeyHelp && !isLinkedToConnection ? (
                     <>
@@ -514,7 +599,9 @@ export function LlmSettingsScreen({
 
                   {showConnectionSelector ? renderConnectionSelector() : null}
 
-                  {isLinkedToConnection || hideInlineCredentials ? null : (
+                  {isLinkedToConnection ||
+                  hideInlineCredentials ||
+                  isOciGenai ? null : (
                     <SettingsInput
                       testId="base-url-input"
                       label={t(I18nKey.SETTINGS$BASE_URL)}

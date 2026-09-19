@@ -24,6 +24,7 @@ test("mapProvider", () => {
   expect(mapProvider("replicate")).toBe("Replicate");
   expect(mapProvider("voyage")).toBe("Voyage AI");
   expect(mapProvider("openrouter")).toBe("OpenRouter");
+  expect(mapProvider("oci_genai")).toBe("OCI Generative AI");
   expect(mapProvider("clarifai")).toBe("Clarifai");
   expect(mapProvider("moonshot")).toBe("Moonshot");
 });
