@@ -432,6 +432,157 @@ describe("useCreateConversation", () => {
 
     const call = createConversationSpy.mock.lastCall;
     expect(call?.[0]?.agentProfileId).toBeUndefined();
+    expect(call?.[0]?.systemMessageSuffix).toBeUndefined();
+  });
+
+  it("preserves the default profile's system_message_suffix on the agent_settings fallback (#17498)", async () => {
+    listAgentProfilesMock.mockResolvedValue({
+      profiles: [
+        {
+          id: "profile-default",
+          name: "default",
+          agent_kind: "openhands",
+          revision: 1,
+          llm_profile_ref: "gpt",
+          mcp_server_refs: null,
+        },
+      ],
+      active_agent_profile_id: "profile-default",
+    });
+    getAgentProfileMock.mockResolvedValue({
+      name: "default",
+      profile: {
+        agent_kind: "openhands",
+        secret_refs: null,
+        system_message_suffix: "Always respond in English.",
+      },
+    });
+    listLlmProfilesMock.mockResolvedValue({
+      profiles: [{ name: "gpt" }],
+      active_profile: "gpt",
+    });
+    const createConversationSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue({
+        id: "task-id",
+        app_conversation_id: "conv-1",
+        agent_server_url: "http://agent-server.local",
+      } as never);
+
+    const { result } = renderHook(() => useCreateConversation(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={new QueryClient()}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    await result.current.mutateAsync({ query: "hello" });
+
+    const call = createConversationSpy.mock.lastCall;
+    expect(call?.[0]?.agentProfileId).toBeUndefined();
+    expect(call?.[0]?.systemMessageSuffix).toBe("Always respond in English.");
+  });
+
+  it.each([null, "", "   "] as const)(
+    "does not pass systemMessageSuffix when the default profile suffix is %j (#17498)",
+    async (suffix) => {
+      listAgentProfilesMock.mockResolvedValue({
+        profiles: [
+          {
+            id: "profile-default",
+            name: "default",
+            agent_kind: "openhands",
+            revision: 1,
+            llm_profile_ref: "gpt",
+            mcp_server_refs: null,
+          },
+        ],
+        active_agent_profile_id: "profile-default",
+      });
+      getAgentProfileMock.mockResolvedValue({
+        name: "default",
+        profile: {
+          agent_kind: "openhands",
+          secret_refs: null,
+          system_message_suffix: suffix,
+        },
+      });
+      listLlmProfilesMock.mockResolvedValue({
+        profiles: [{ name: "gpt" }],
+        active_profile: "gpt",
+      });
+      const createConversationSpy = vi
+        .spyOn(AgentServerConversationService, "createConversation")
+        .mockResolvedValue({
+          id: "task-id",
+          app_conversation_id: "conv-1",
+          agent_server_url: "http://agent-server.local",
+        } as never);
+
+      const { result } = renderHook(() => useCreateConversation(), {
+        wrapper: ({ children }) => (
+          <QueryClientProvider client={new QueryClient()}>
+            {children}
+          </QueryClientProvider>
+        ),
+      });
+
+      await result.current.mutateAsync({ query: "hello" });
+
+      const call = createConversationSpy.mock.lastCall;
+      expect(call?.[0]?.agentProfileId).toBeUndefined();
+      expect(call?.[0]?.systemMessageSuffix).toBeUndefined();
+    },
+  );
+
+  it("preserves system_message_suffix on the LLM-ref agent_settings fallback (#17498)", async () => {
+    listAgentProfilesMock.mockResolvedValue({
+      profiles: [
+        {
+          id: "profile-custom",
+          name: "research",
+          agent_kind: "openhands",
+          revision: 1,
+          llm_profile_ref: "missing",
+          mcp_server_refs: null,
+        },
+      ],
+      active_agent_profile_id: "profile-custom",
+    });
+    getAgentProfileMock.mockResolvedValue({
+      name: "research",
+      profile: {
+        agent_kind: "openhands",
+        secret_refs: null,
+        system_message_suffix: "Be terse.",
+      },
+    });
+    listLlmProfilesMock.mockResolvedValue({
+      profiles: [],
+      active_profile: null,
+    });
+    const createConversationSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue({
+        id: "task-id",
+        app_conversation_id: "conv-1",
+        agent_server_url: "http://agent-server.local",
+      } as never);
+
+    const { result } = renderHook(() => useCreateConversation(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={new QueryClient()}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    await result.current.mutateAsync({ query: "hello" });
+
+    const call = createConversationSpy.mock.lastCall;
+    expect(call?.[0]?.agentProfileId).toBeUndefined();
+    expect(call?.[0]?.systemMessageSuffix).toBe("Be terse.");
   });
 
   it.each([
@@ -542,6 +693,7 @@ describe("useCreateConversation", () => {
     const call = createConversationSpy.mock.lastCall;
     expect(call?.[0]?.agentProfileId).toBe("profile-acp-default");
     expect(call?.[0]?.agentProfileKind).toBe("acp");
+    expect(call?.[0]?.systemMessageSuffix).toBeUndefined();
   });
 
   it("launches the seeded `default` profile from its resolved id on cloud (no agent_settings fallback exists there) (#1571)", async () => {

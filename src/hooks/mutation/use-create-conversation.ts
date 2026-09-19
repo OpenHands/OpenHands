@@ -52,6 +52,26 @@ export interface CreateConversationVariables {
 
 export const CREATE_CONVERSATION_MUTATION_KEY = ["create-conversation"];
 
+function readOpenHandsSystemMessageSuffix(
+  profile: unknown,
+): string | undefined {
+  if (!profile || typeof profile !== "object") {
+    return undefined;
+  }
+  const record = profile as {
+    agent_kind?: unknown;
+    system_message_suffix?: unknown;
+  };
+  if (record.agent_kind !== "openhands") {
+    return undefined;
+  }
+  if (typeof record.system_message_suffix !== "string") {
+    return undefined;
+  }
+  const trimmed = record.system_message_suffix.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
 interface CreateConversationResponse {
   conversation_id: string;
   session_api_key: string | null;
@@ -146,8 +166,10 @@ export const useCreateConversation = () => {
         // system-message suffix and project-skill loading (buildAgentContext).
         // Named profiles are deliberate custom configs and still use the profile
         // path (accepting that enrichment boundary).
-        // Trade-off: per-profile fields set on `default` itself don't apply on
-        // home-launch — custom per-profile config belongs in a named profile.
+        // Trade-off: most per-profile fields set on `default` itself don't apply
+        // on home-launch — custom per-profile config belongs in a named profile.
+        // Exception: a non-empty `system_message_suffix` is copied onto
+        // agent_context and composed with the runtime-services block (#17498).
         //
         // Scoped to OpenHands: an ACP `default` must keep the profile path.
         // Activation is pointer-only, so global agent_settings is stale (often
@@ -206,10 +228,9 @@ export const useCreateConversation = () => {
           // (the in-conversation profile picker) is a deliberate profile pick,
           // so its pinned ref stays authoritative. Local-only like the
           // downgrades above — cloud has no agent_settings payload to fall
-          // back to. Trade-off: the named profile's non-LLM config doesn't
-          // apply to this launch; the start request has no per-launch LLM
-          // override that could preserve it (AgentLaunchAdditions carries only
-          // a system-message suffix).
+          // back to. Trade-off: most of the named profile's non-LLM config
+          // doesn't apply to this launch. `system_message_suffix` is copied
+          // onto agent_context so Custom instructions still apply (#17498).
           prefersAgentSettingsFallback = true;
         }
       }
@@ -221,6 +242,7 @@ export const useCreateConversation = () => {
       // fail closed by preserving the profile id and letting Agent Server return
       // the underlying profile-resolution error.
       let profileAllowsAgentSettingsFallback = true;
+      let fallbackSystemMessageSuffix: string | undefined;
       if (prefersAgentSettingsFallback && resolvedAgentProfile) {
         try {
           // Revalidate stale cached details: policy may have changed since the
@@ -238,6 +260,11 @@ export const useCreateConversation = () => {
           const secretRefs = (detail.profile as { secret_refs?: unknown })
             .secret_refs;
           profileAllowsAgentSettingsFallback = !Array.isArray(secretRefs);
+          if (profileAllowsAgentSettingsFallback) {
+            fallbackSystemMessageSuffix = readOpenHandsSystemMessageSuffix(
+              detail.profile,
+            );
+          }
         } catch {
           profileAllowsAgentSettingsFallback = false;
         }
@@ -271,7 +298,9 @@ export const useCreateConversation = () => {
                 agentProfileId: effectiveAgentProfileId,
                 agentProfileKind: resolvedAgentProfile?.agent_kind,
               }
-            : {}),
+            : fallbackSystemMessageSuffix
+              ? { systemMessageSuffix: fallbackSystemMessageSuffix }
+              : {}),
         });
 
       // Stamp the active LLM profile onto the (local) conversation so the
