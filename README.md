@@ -60,12 +60,25 @@ Notably, you can run the backend in _multiple different environments_, and switc
 them from the same Agent Canvas frontend. E.g. you can share an Agent Server with your team for agents doing
 code review and dependency updates, then have your personal agents running on your laptop.
 
+### Prerequisites
+
+Before choosing an installation method, make sure you have access to a terminal (Terminal on macOS/Linux or
+PowerShell/Windows Terminal on Windows) and install the tools required by that method:
+
+| Installation method | Required software                                                                                                                                                                |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Without a sandbox   | [Node.js 22.12 or later](https://nodejs.org/en/download) (includes npm) and [uv](https://docs.astral.sh/uv/getting-started/installation/)                                        |
+| Docker sandbox      | [Docker Desktop](https://docs.docker.com/desktop/) on macOS/Windows, or [Docker Engine](https://docs.docker.com/engine/install/) on Linux                                        |
+| From source         | [Git](https://git-scm.com/downloads), [Node.js 22.12 or later](https://nodejs.org/en/download) (includes npm), and [uv](https://docs.astral.sh/uv/getting-started/installation/) |
+
+Make sure you also have enough free disk space for the installation method you choose, its dependencies or
+container images, and the projects your agents will use. Windows users following the Docker option should use
+the [Windows quickstart](./README.windows.md).
+
 ### Option 1: Without a Sandbox
 
 > [!WARNING]
 > This runs the agent-server directly on the machine you're installing on — the agent will have full access to your filesystem!
-
-**Prerequisites**: Node.js 22.12.x or later, `uv`
 
 ```sh
 npm install -g @openhands/agent-canvas
@@ -81,10 +94,8 @@ agent-canvas --backend-only   # agent server + automation backend + ingress only
 
 ### Option 2: With a Docker Sandbox
 
-**Prerequisites**:
-
-- Docker: Docker Desktop on macOS/Windows, or Docker Engine/Docker Desktop on Linux.
-- A host directory for `PROJECTS_PATH` containing the project folders you want the agent to access. Create it before starting the container.
+Choose a host directory for `PROJECTS_PATH` containing the project folders you want the agent to access.
+The commands below create it if needed.
 
 **macOS / Linux:**
 
@@ -107,8 +118,6 @@ The agent will be able to access any project under `PROJECTS_PATH`.
 
 > [!WARNING]
 > This runs the agent-server directly on the machine you're installing on — the agent will have full access to your filesystem!
-
-**Prerequisites**: Node.js 22.12.x or later, `npm`, `uv` (for running the agent server via `uvx`)
 
 ```sh
 git clone https://github.com/OpenHands/OpenHands.git
