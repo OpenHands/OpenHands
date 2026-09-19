@@ -151,8 +151,42 @@ register_tool("canvas_ui", CanvasUITool)
 # advertises it to the agent-server as `openhands.sdk.tool.builtins.finish` — a
 # module that does not self-register — so the remote conversation every Agent
 # Canvas automation run dispatches fails with "ToolDefinition 'FinishTool' is
-# not registered". Registering the plain builtin here is enough: resolve_tool()
-# strips `response_schema` before FinishTool.create() and re-applies it. Drop
-# this once the SDK registers its builtins for remote conversations.
+# not registered".
+#
+# That 500s POST /api/conversations/{id}/events after the other executors
+# initialize (OpenHands/OpenHands#17436). Register a factory that pops
+# ``response_schema`` and forwards any other leftover kwargs to
+# ``FinishTool.create()`` so malformed non-preset specs still raise. Drop
+# this once remote conversations always resolve builtins without create()
+# kwargs.
+
+
+class _RemoteConversationFinishTool(FinishTool):
+    @classmethod
+    def create(
+        cls,
+        conv_state=None,
+        **params,
+    ) -> Sequence[FinishTool]:
+        params = dict(params)
+        response_schema = params.pop("response_schema", None)
+        # Remaining kwargs are forwarded so malformed non-preset tool specs
+        # still raise from FinishTool.create() instead of being dropped.
+        tools = FinishTool.create(conv_state=conv_state, **params)
+        if response_schema is not None:
+            tool = tools[0]
+            # Current SDK (frozen ToolDefinition) returns a copy. Older or
+            # PYTHONPATH-patched SDKs may mutate in place and return None —
+            # keep the original instance then, never wrap None.
+            updated = tool.set_response_schema(response_schema)
+            tools = [updated if updated is not None else tool]
+        return tools
+
+
+# Safe re-register: overwrite any prior FinishTool factory. The previous
+# skip-if-present guard (FinishTool.__name__ not in list_registered_tools())
+# would leave a pre-registered builtin in place. Current SDK warns on
+# duplicate names rather than raising; that overwrite is intentional.
+register_tool(FinishTool.__name__, _RemoteConversationFinishTool)
 if FinishTool.__name__ not in list_registered_tools():
-    register_tool(FinishTool.__name__, FinishTool)
+    raise RuntimeError("FinishTool factory failed to register")
