@@ -366,7 +366,13 @@ function buildAutomationBackendEnv(config, env = process.env) {
     AUTOMATION_WORKSPACE_BASE: join(config.stateDir, "workspaces"),
     AUTOMATION_LOCAL_API_KEY: config.sessionApiKey,
     ...buildAutomationTelemetryEnv(env),
-    AUTOMATION_CORS_ORIGINS: `http://localhost:${config.ingressPort},http://127.0.0.1:${config.ingressPort},http://localhost:3001,http://127.0.0.1:3001`,
+    // The ingress origin plus the direct frontend origin (vitePort) so the
+    // canvas UI loads through either entry point (see #17546). dev-static
+    // always launches the frontend, but the same conditional keeps this in
+    // lockstep with dev-with-automation.mjs.
+    AUTOMATION_CORS_ORIGINS: config.launchFrontend
+      ? `http://localhost:${config.ingressPort},http://127.0.0.1:${config.ingressPort},http://localhost:${config.vitePort},http://127.0.0.1:${config.vitePort}`
+      : `http://localhost:${config.ingressPort},http://127.0.0.1:${config.ingressPort}`,
     FILE_STORE: "local",
     LOCAL_STORAGE_PATH: join(config.stateDir, "storage"),
     OPENHANDS_SUPPRESS_BANNER: "1",

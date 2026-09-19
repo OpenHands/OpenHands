@@ -50,8 +50,18 @@ it instead.
 | Variable                  | Description                    | Default |
 | ------------------------- | ------------------------------ | ------- |
 | `PORT`                    | Ingress port                   | `8000`  |
+| `OH_CANVAS_SAFE_VITE_PORT` | Preferred frontend (Vite) port � falls back to a free port when busy | `3001` |
 | `OH_AUTOMATION_GIT_REF`   | Git ref for automation backend (overrides the pinned default version) | *(unset)* |
 | `OH_AGENT_SERVER_GIT_REF` | Git ref for agent-server (overrides the pinned default version) | *(unset)* |
+
+> [!NOTE]
+> `--port` / `PORT` controls **only** the ingress port (`:8000`). The frontend
+> (Vite or static server) listens on its own internal port, which defaults
+> to `:3001` and automatically falls back to a free port when `3001` is
+> already taken by another app. Set `OH_CANVAS_SAFE_VITE_PORT` to force a
+> specific frontend port; the chosen port is reflected in logs, CORS,
+> and the `/server_info` runtime-services block. A busy ingress port is still
+> a hard error so concurrent `agent-canvas` instances are detected.
 
 ### Alternative: Minimal Mode (without Automation)
 
@@ -62,7 +72,8 @@ npm run dev:minimal
 ```
 
 This runs only agent-server + Vite (no automation backend or ingress).
-Access at `http://localhost:3001/`
+Access at `http://localhost:3001/` (or the auto-fallback port if `3001`
+is taken).
 
 ### Agent server version selection
 
@@ -86,6 +97,7 @@ OH_AGENT_SERVER_VERSION=1.18.0 npm run dev
 
 - `OH_CANVAS_SAFE_BACKEND_PORT` — backend port for the isolated server (default `18000`)
 - `OH_CANVAS_SAFE_VSCODE_PORT` — VS Code sidecar port (default `backend port + 1`)
+- `OH_CANVAS_SAFE_VITE_PORT` — preferred frontend (Vite) port for the local stack (default `3001`, falls back to a free port when taken)
 - `OH_CANVAS_SAFE_STATE_DIR` — base directory for isolated server state
 - `VITE_WORKING_DIR` — repo root used for new conversations (defaults to the current checkout)
 
@@ -201,5 +213,5 @@ You can create a `.env` file in the project directory with these variables based
 | `VITE_BASE_PATH`            | Build/serve the SPA under a subpath such as `/canvas`                                     | `/`                    |
 | `VITE_MOCK_API`             | Enable/disable API mocking with MSW                                                       | `false`                |
 | `VITE_USE_TLS`              | Use HTTPS/WSS for the Vite proxy target                                                   | `false`                |
-| `VITE_FRONTEND_PORT`        | Port to run the frontend application                                                      | `3001`                 |
+| `VITE_FRONTEND_PORT`        | Port to run the plain `dev:minimal` frontend (the full stack falls back to a free port when `3001` is taken) | `3001`                 |
 | `VITE_INSECURE_SKIP_VERIFY` | Skip TLS certificate verification for proxied backend requests                            | `false`                |
