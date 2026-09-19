@@ -1,3 +1,6 @@
+// @vitest-environment node
+
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -23,6 +26,17 @@ const developmentDoc = readFileSync(
   resolve(repoRoot, "docs/DEVELOPMENT.md"),
   "utf8",
 );
+const sdkVersion = (
+  JSON.parse(
+    readFileSync(resolve(repoRoot, "config/defaults.json"), "utf8"),
+  ) as { versions: { agentServer: string } }
+).versions.agentServer;
+const pythonFactoryTests = resolve(
+  repoRoot,
+  "__tests__/tools/test_canvas_ui_tool.py",
+);
+const uvAvailable =
+  spawnSync("uv", ["--version"], { encoding: "utf8" }).status === 0;
 
 describe("canvas_ui client tool", () => {
   it("tells the agent to capture a browser screenshot before opening the browser tab", () => {
@@ -52,18 +66,35 @@ describe("canvas_ui client tool", () => {
     );
   });
 
-  it("registers a FinishTool factory that accepts leftover response_schema params", () => {
-    // Preset automations advertise FinishTool with params={response_schema: TaskOutcome}.
-    // The builtin FinishTool.create() raises if any params remain, which 500s
-    // POST /api/conversations/{id}/events after the other executors initialize.
-    // The startup module must register a factory that pops response_schema
-    // rather than the builtin class itself.
-    expect(legacyToolSource).toContain("register_tool(FinishTool.__name__");
-    expect(legacyToolSource).toContain('params.pop("response_schema"');
-    expect(legacyToolSource).not.toMatch(
-      /register_tool\(FinishTool\.__name__,\s*FinishTool\)/,
-    );
-  });
+  // Frontend CI (`npm test`) does not install uv. When uv is present, this
+  // actually invokes the factory against the pinned SDK instead of inspecting
+  // source text. `__tests__/tools/test_canvas_ui_tool.py` is the same suite.
+  it.skipIf(!uvAvailable)(
+    "invokes the FinishTool factory for leftover response_schema params",
+    () => {
+      // Preset automations advertise FinishTool with params={response_schema: TaskOutcome}.
+      // The builtin FinishTool.create() raises if any params remain, which 500s
+      // POST /api/conversations/{id}/events after the other executors initialize.
+      const result = spawnSync(
+        "uv",
+        [
+          "run",
+          "--with",
+          `openhands-sdk==${sdkVersion}`,
+          "python",
+          pythonFactoryTests,
+        ],
+        {
+          encoding: "utf8",
+          cwd: repoRoot,
+          env: { ...process.env, OPENHANDS_SUPPRESS_BANNER: "1" },
+        },
+      );
+      expect(result.error).toBeUndefined();
+      expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+    },
+    120_000,
+  );
 
   it("imports the FinishTool factory at Docker agent-server startup", () => {
     expect(dockerEntrypoint).toContain(

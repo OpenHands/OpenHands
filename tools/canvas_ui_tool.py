@@ -29,6 +29,7 @@ from openhands.sdk.tool import (
     FinishTool,
     ToolAnnotations,
     ToolExecutor,
+    list_registered_tools,
     register_tool,
 )
 
@@ -158,9 +159,10 @@ register_tool("canvas_ui", CanvasUITool)
 #
 # That 500s POST /api/conversations/{id}/events after the other executors
 # initialize (OpenHands/OpenHands#17436). Register a factory that pops
-# ``response_schema`` (and ignores other leftovers) so both resolve_tool()
-# shapes work. Drop this once remote conversations always resolve builtins
-# without create() kwargs.
+# ``response_schema`` and forwards any other leftover kwargs to
+# ``FinishTool.create()`` so malformed non-preset specs still raise. Drop
+# this once remote conversations always resolve builtins without create()
+# kwargs.
 
 
 class _RemoteConversationFinishTool(FinishTool):
@@ -174,10 +176,23 @@ class _RemoteConversationFinishTool(FinishTool):
     ) -> Sequence[FinishTool]:
         params = dict(params)
         response_schema = params.pop("response_schema", None)
-        tools = FinishTool.create(conv_state=conv_state)
+        # Remaining kwargs are forwarded so malformed non-preset tool specs
+        # still raise from FinishTool.create() instead of being dropped.
+        tools = FinishTool.create(conv_state=conv_state, **params)
         if response_schema is not None:
-            tools = [tools[0].set_response_schema(response_schema)]
+            tool = tools[0]
+            # Current SDK (frozen ToolDefinition) returns a copy. Older or
+            # PYTHONPATH-patched SDKs may mutate in place and return None —
+            # keep the original instance then, never wrap None.
+            updated = tool.set_response_schema(response_schema)
+            tools = [updated if updated is not None else tool]
         return tools
 
 
+# Safe re-register: overwrite any prior FinishTool factory. The previous
+# skip-if-present guard (FinishTool.__name__ not in list_registered_tools())
+# would leave a pre-registered builtin in place. Current SDK warns on
+# duplicate names rather than raising; that overwrite is intentional.
 register_tool(FinishTool.__name__, _RemoteConversationFinishTool)
+if FinishTool.__name__ not in list_registered_tools():
+    raise RuntimeError("FinishTool factory failed to register")
