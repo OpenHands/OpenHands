@@ -6,9 +6,9 @@ import type {
 /**
  * Merge the minimal editor's fields over the stored profile so an edit-save
  * doesn't wipe the fields the editor doesn't model (condenser, verification,
- * system_message_suffix, mcp_server_refs, the disabled_skills deny-list, ACP
- * session mode/timeout, …) — `POST /api/agent-profiles/{name}` is a
- * whole-profile overwrite, and unset fields fall back to server-side defaults.
+ * the disabled_skills deny-list, ACP session mode/timeout, …) —
+ * `POST /api/agent-profiles/{name}` is a whole-profile overwrite, and unset
+ * fields fall back to server-side defaults.
  *
  * Kind-aware: when the editor switched `agent_kind`, the stored variant's
  * fields must NOT be carried over — the server's `extra="forbid"` profile

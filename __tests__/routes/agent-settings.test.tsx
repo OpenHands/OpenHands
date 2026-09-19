@@ -1700,3 +1700,127 @@ describe("AgentSettingsScreen — MCP scope dirty tracking", () => {
     });
   });
 });
+
+describe("AgentSettingsScreen — custom instructions", () => {
+  function seedOpenHandsSettings() {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          agent_kind: "openhands",
+        },
+      }),
+    );
+  }
+
+  it("is hidden outside the profile editor", async () => {
+    seedOpenHandsSettings();
+    renderAgentSettingsScreen({});
+    await screen.findByTestId("agent-settings-screen");
+    expect(
+      screen.queryByTestId("agent-settings-instructions"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("seeds the field from the stored suffix and persists edits", async () => {
+    seedOpenHandsSettings();
+    let control: AgentSettingsSaveControl | null = null;
+    renderAgentSettingsScreen({
+      embedded: true,
+      agentSettingsOverride: {
+        agent_kind: "openhands",
+        enable_sub_agents: false,
+        system_message_suffix: "Be terse.",
+      },
+      onSaveControlChange: (next) => {
+        control = next;
+      },
+    });
+    await screen.findByTestId("agent-settings-screen");
+
+    const textarea = screen.getByTestId("agent-settings-instructions");
+    expect(textarea).toHaveValue("Be terse.");
+    expect(
+      screen.getByText("SETTINGS$AGENT_PROFILE_INSTRUCTIONS"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("SETTINGS$AGENT_PROFILE_INSTRUCTIONS_HINT"),
+    ).toBeInTheDocument();
+    expect(textarea).toHaveAttribute(
+      "placeholder",
+      "SETTINGS$AGENT_PROFILE_INSTRUCTIONS_PLACEHOLDER",
+    );
+    expect(control!.buildAgentProfileFields()).toMatchObject({
+      system_message_suffix: "Be terse.",
+    });
+    expect(control!.isDirty).toBe(false);
+
+    const user = userEvent.setup();
+    await user.clear(textarea);
+    await user.type(textarea, "Always respond in English.");
+
+    await waitFor(() => {
+      expect(control!.buildAgentProfileFields()).toMatchObject({
+        system_message_suffix: "Always respond in English.",
+      });
+    });
+    expect(control!.isDirty).toBe(true);
+  });
+
+  it("clears a stored suffix to null when the field is emptied", async () => {
+    seedOpenHandsSettings();
+    let control: AgentSettingsSaveControl | null = null;
+    renderAgentSettingsScreen({
+      embedded: true,
+      agentSettingsOverride: {
+        agent_kind: "openhands",
+        enable_sub_agents: false,
+        system_message_suffix: "Be terse.",
+      },
+      onSaveControlChange: (next) => {
+        control = next;
+      },
+    });
+    await screen.findByTestId("agent-settings-screen");
+
+    const user = userEvent.setup();
+    await user.clear(screen.getByTestId("agent-settings-instructions"));
+
+    await waitFor(() => {
+      expect(control!.buildAgentProfileFields()).toMatchObject({
+        system_message_suffix: null,
+      });
+    });
+    expect(control!.isDirty).toBe(true);
+  });
+
+  it("hides the field on ACP and omits the incompatible value from the save payload", async () => {
+    seedOpenHandsSettings();
+    let control: AgentSettingsSaveControl | null = null;
+    renderAgentSettingsScreen({
+      embedded: true,
+      agentSettingsOverride: {
+        agent_kind: "openhands",
+        enable_sub_agents: false,
+        system_message_suffix: "Be terse.",
+      },
+      onSaveControlChange: (next) => {
+        control = next;
+      },
+    });
+    await screen.findByTestId("agent-settings-instructions");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("agent-type-selector"));
+    await user.click(
+      await screen.findByRole("option", { name: "SETTINGS$AGENT_TYPE_ACP" }),
+    );
+
+    expect(
+      screen.queryByTestId("agent-settings-instructions"),
+    ).not.toBeInTheDocument();
+    expect(control!.buildAgentProfileFields()).not.toHaveProperty(
+      "system_message_suffix",
+    );
+  });
+});

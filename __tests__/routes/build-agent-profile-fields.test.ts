@@ -124,6 +124,7 @@ describe("buildAgentProfileFields — OpenHands", () => {
       mcp_server_refs: null,
       enable_sub_agents: true,
       secret_refs: null,
+      system_message_suffix: null,
     });
   });
 
@@ -209,6 +210,60 @@ describe("buildAgentProfileFields — OpenHands", () => {
         toolConcurrency: "abc",
       }),
     ).toThrow();
+  });
+});
+
+describe("buildAgentProfileFields — custom instructions", () => {
+  const baseOh = {
+    isAcp: false,
+    selectedPreset: "custom",
+    isDefaultProviderCommand: false,
+    commandTokens: [],
+    acpModel: "",
+    subAgentsEnabled: false,
+    switchLlmToolField: undefined,
+    switchLlmToolEnabled: false,
+    switchLlmToolSupportedOnProfile: true,
+    toolConcurrencyField: undefined,
+    toolConcurrency: "",
+    mcpMode: "standard" as const,
+    selectedMcpServers: [] as string[],
+    secretsMode: "standard" as const,
+    selectedSecrets: [] as string[],
+    secretRefsSupportedOnProfile: true,
+  };
+
+  it("persists the trimmed system_message_suffix on OpenHands profiles", () => {
+    const fields = buildAgentProfileFields({
+      ...baseOh,
+      instructions: "  Always respond in English.  ",
+    });
+    expect(fields).toMatchObject({
+      agent_kind: "openhands",
+      system_message_suffix: "Always respond in English.",
+    });
+  });
+
+  it("clears an empty field with null rather than an empty string", () => {
+    // `""` would append a blank line to every system prompt, and omitting
+    // the key would let the whole-profile merge keep a previously saved suffix.
+    const fields = buildAgentProfileFields({ ...baseOh, instructions: "   " });
+    expect(fields).toMatchObject({
+      agent_kind: "openhands",
+      system_message_suffix: null,
+    });
+  });
+
+  it("never emits system_message_suffix on the ACP branch", () => {
+    const fields = buildAgentProfileFields({
+      ...baseOh,
+      isAcp: true,
+      selectedPreset: "claude-code",
+      commandTokens: ["npx", "claude-code-acp"],
+      instructions: "ignored on ACP",
+    });
+    expect(fields.agent_kind).toBe("acp");
+    expect(fields).not.toHaveProperty("system_message_suffix");
   });
 });
 

@@ -6,8 +6,8 @@ import type {
 import { mergeAgentProfileSaveInput } from "#/components/features/settings/agent-profiles/merge-agent-profile-save-input";
 
 // Mirrors the seeded `default` profile: fields the minimal editor does NOT
-// model (condenser, verification, suffix, mcp_server_refs, the disabled_skills
-// deny-list) carry non-default values so a wipe-to-defaults would be visible.
+// model (condenser, verification, the disabled_skills deny-list) carry
+// non-default values so a wipe-to-defaults would be visible.
 // `disabled_skills` rides untyped (the pinned ts-client predates it) — the
 // merge must still round-trip it, so the fixture includes it via the cast.
 const storedOpenHands = {
@@ -77,6 +77,19 @@ describe("mergeAgentProfileSaveInput", () => {
       enable_switch_llm_tool: false,
       tool_concurrency_limit: 4,
     });
+  });
+
+  it("lets an emptied system_message_suffix win over the stored value", () => {
+    const edited: AgentProfileSaveInput = {
+      agent_kind: "openhands",
+      enable_sub_agents: false,
+      llm_profile_ref: "new-llm",
+      system_message_suffix: null,
+    };
+
+    const merged = mergeAgentProfileSaveInput(storedOpenHands, edited);
+
+    expect(merged).toMatchObject({ system_message_suffix: null });
   });
 
   it("lets an edited enable_switch_llm_tool win over the stored value", () => {
