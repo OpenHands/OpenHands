@@ -30,7 +30,11 @@ preset template with an agent-server started outside the launcher.
 
 Canvas launchers import `tools/canvas_ui_tool.py` at agent-server startup
 (`--import-modules canvas_ui_tool` and `OH_EXTRA_PYTHON_PATH`) so that
-resolution works. Starting agent-server yourself must replicate both settings.
+resolution works. The imported module registers a `FinishTool` factory that
+pops leftover `response_schema` create() params, applies the schema even when
+`set_response_schema` returns `None`, and forwards any other leftover kwargs
+to `FinishTool.create()` so malformed non-preset specs still raise. Starting
+agent-server yourself must replicate both settings.
 
 `presets/*/setup.sh` is **not** in this repository. It lives in
 [`OpenHands/automation`](https://github.com/OpenHands/automation) and is copied
