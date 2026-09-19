@@ -1,7 +1,7 @@
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AxiosError } from "axios";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -99,7 +99,7 @@ function renderSdkSectionPage(
   });
   mockUseSearchParams.mockReturnValue([{ get: () => null }, vi.fn()]);
 
-  return render(React.createElement(SdkSectionPage, props), {
+  const result = render(React.createElement(SdkSectionPage, props), {
     wrapper: ({ children }) => {
       const tree = (
         <QueryClientProvider client={queryClient}>
@@ -109,6 +109,9 @@ function renderSdkSectionPage(
       return strict ? <React.StrictMode>{tree}</React.StrictMode> : tree;
     },
   });
+  // Exposed so a test can drive a background refetch, which is otherwise
+  // unreachable from outside the component.
+  return { ...result, queryClient };
 }
 
 beforeEach(() => {
@@ -1206,6 +1209,879 @@ describe("SdkSectionPage", () => {
     await userEvent.type(endpointInput, "https://seeded.example.com");
     await waitFor(() => {
       expect(screen.getByTestId("save-button")).toBeDisabled();
+    });
+  });
+
+  describe("unsaved edits across background refetches", () => {
+    /**
+     * Two fields so a refetch can change one while the user is editing the
+     * other — the case that separates a real baseline/overlay split from
+     * simply refusing to re-hydrate.
+     */
+    function buildTwoFieldSettings(
+      llm: { endpoint?: string; model?: string } = {},
+    ): Settings {
+      return buildSettings({
+        agent_settings_schema: {
+          model_name: "AgentSettings",
+          sections: [
+            {
+              key: "llm",
+              label: "LLM",
+              fields: [
+                {
+                  key: "llm.endpoint",
+                  label: "Endpoint",
+                  section: "llm",
+                  section_label: "LLM",
+                  value_type: "string",
+                  default: "https://api.example.com",
+                  choices: [],
+                  depends_on: [],
+                  prominence: "critical",
+                  secret: false,
+                  required: true,
+                },
+                {
+                  key: "llm.model",
+                  label: "Model",
+                  section: "llm",
+                  section_label: "LLM",
+                  value_type: "string",
+                  default: "gpt-4",
+                  choices: [],
+                  depends_on: [],
+                  prominence: "critical",
+                  secret: false,
+                  required: true,
+                },
+              ],
+            },
+          ],
+        },
+        agent_settings: {
+          llm: {
+            endpoint: "https://api.example.com",
+            model: "gpt-4",
+            ...llm,
+          },
+        },
+      });
+    }
+
+    const AGENT_LLM_SOURCE = [
+      { settingsSource: "agent_settings" as const, sectionKeys: ["llm"] },
+    ];
+
+    it("keeps an unsaved edit when a settings refetch lands", async () => {
+      // The bug: the hydration effect replaced local values on every refetch,
+      // so a background refresh silently reverted what the user had typed
+      // while the form stayed on screen.
+      const getSettingsSpy = vi
+        .spyOn(SettingsService, "getSettings")
+        .mockResolvedValue(buildTwoFieldSettings());
+
+      const { queryClient } = renderSdkSectionPage({
+        settingsSources: AGENT_LLM_SOURCE,
+      });
+
+      const endpointInput = await screen.findByTestId(
+        "sdk-settings-llm.endpoint",
+      );
+      await userEvent.clear(endpointInput);
+      await userEvent.type(endpointInput, "https://typed.example.com");
+
+      // A refetch resolves with different server state.
+      getSettingsSpy.mockResolvedValue(
+        buildTwoFieldSettings({ model: "gpt-5-from-server" }),
+      );
+      await queryClient.invalidateQueries();
+
+      await waitFor(() => {
+        expect(screen.getByTestId("sdk-settings-llm.model")).toHaveValue(
+          "gpt-5-from-server",
+        );
+      });
+      // The untouched field took the server's new value; the edited one did not.
+      expect(screen.getByTestId("sdk-settings-llm.endpoint")).toHaveValue(
+        "https://typed.example.com",
+      );
+    });
+
+    it("still shows the edit as dirty after the refetch", async () => {
+      // Preserving the value but clearing the flag would leave Save disabled
+      // on a form that visibly holds unsaved input.
+      const getSettingsSpy = vi
+        .spyOn(SettingsService, "getSettings")
+        .mockResolvedValue(buildTwoFieldSettings());
+
+      const { queryClient } = renderSdkSectionPage({
+        settingsSources: AGENT_LLM_SOURCE,
+      });
+
+      const endpointInput = await screen.findByTestId(
+        "sdk-settings-llm.endpoint",
+      );
+      await userEvent.clear(endpointInput);
+      await userEvent.type(endpointInput, "https://typed.example.com");
+
+      getSettingsSpy.mockResolvedValue(
+        buildTwoFieldSettings({ model: "gpt-5-from-server" }),
+      );
+      await queryClient.invalidateQueries();
+
+      await waitFor(() => {
+        expect(screen.getByTestId("sdk-settings-llm.model")).toHaveValue(
+          "gpt-5-from-server",
+        );
+      });
+      expect(screen.getByTestId("save-button")).not.toBeDisabled();
+    });
+
+    it("submits the edited value, not the value the refetch brought in", async () => {
+      // The payload is built from the merged view, so an overlay that
+      // displayed correctly but saved the baseline would still lose the edit.
+      const getSettingsSpy = vi
+        .spyOn(SettingsService, "getSettings")
+        .mockResolvedValue(buildTwoFieldSettings());
+      const saveSettingsSpy = vi
+        .spyOn(SettingsService, "saveSettings")
+        .mockResolvedValue(true);
+
+      const { queryClient } = renderSdkSectionPage({
+        settingsSources: AGENT_LLM_SOURCE,
+      });
+
+      const endpointInput = await screen.findByTestId(
+        "sdk-settings-llm.endpoint",
+      );
+      await userEvent.clear(endpointInput);
+      await userEvent.type(endpointInput, "https://typed.example.com");
+
+      getSettingsSpy.mockResolvedValue(
+        buildTwoFieldSettings({
+          endpoint: "https://server-moved-on.example.com",
+        }),
+      );
+      await queryClient.invalidateQueries();
+      await userEvent.click(screen.getByTestId("save-button"));
+
+      await waitFor(() => {
+        expect(saveSettingsSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            agent_settings_diff: expect.objectContaining({
+              llm: expect.objectContaining({
+                endpoint: "https://typed.example.com",
+              }),
+            }),
+          }),
+        );
+      });
+    });
+
+    it("keeps the saved value on screen after a successful save", async () => {
+      // Clearing the overlay without folding the save into the baseline would
+      // flick the field back to its pre-save value until the refetch landed.
+      const getSettingsSpy = vi
+        .spyOn(SettingsService, "getSettings")
+        .mockResolvedValue(buildTwoFieldSettings());
+      vi.spyOn(SettingsService, "saveSettings").mockImplementation(async () => {
+        getSettingsSpy.mockResolvedValue(
+          buildTwoFieldSettings({ endpoint: "https://saved.example.com" }),
+        );
+        return true;
+      });
+
+      renderSdkSectionPage({ settingsSources: AGENT_LLM_SOURCE });
+
+      const endpointInput = await screen.findByTestId(
+        "sdk-settings-llm.endpoint",
+      );
+      await userEvent.clear(endpointInput);
+      await userEvent.type(endpointInput, "https://saved.example.com");
+      await userEvent.click(screen.getByTestId("save-button"));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("save-button")).toBeDisabled();
+      });
+      expect(screen.getByTestId("sdk-settings-llm.endpoint")).toHaveValue(
+        "https://saved.example.com",
+      );
+    });
+
+    it("preserves the edit when the save fails", async () => {
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+        buildTwoFieldSettings(),
+      );
+      vi.spyOn(SettingsService, "saveSettings").mockRejectedValue(
+        new AxiosError("nope"),
+      );
+
+      renderSdkSectionPage({ settingsSources: AGENT_LLM_SOURCE });
+
+      const endpointInput = await screen.findByTestId(
+        "sdk-settings-llm.endpoint",
+      );
+      await userEvent.clear(endpointInput);
+      await userEvent.type(endpointInput, "https://failed.example.com");
+      await userEvent.click(screen.getByTestId("save-button"));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("save-button")).not.toBeDisabled();
+      });
+      expect(screen.getByTestId("sdk-settings-llm.endpoint")).toHaveValue(
+        "https://failed.example.com",
+      );
+    });
+
+    it("discards edits when the source selection changes", async () => {
+      // Guard, not a bug repro: a scope or source change is a different form,
+      // so edits made against the previous one must not carry over and get
+      // submitted somewhere they were never typed. Both go through the same
+      // reset effect, but only the source half is reachable: `getSettingsQueryFn`
+      // throws `Unsupported settings scope` for anything but "personal"
+      // (`src/hooks/query/use-settings.ts`), so no scope change exists to test
+      // anywhere in the product today.
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+        buildTwoFieldSettings(),
+      );
+
+      const { rerender } = renderSdkSectionPage({
+        settingsSources: AGENT_LLM_SOURCE,
+      });
+
+      const endpointInput = await screen.findByTestId(
+        "sdk-settings-llm.endpoint",
+      );
+      await userEvent.clear(endpointInput);
+      await userEvent.type(endpointInput, "https://personal.example.com");
+      expect(screen.getByTestId("save-button")).not.toBeDisabled();
+
+      rerender(
+        React.createElement(SdkSectionPage, {
+          settingsSources: [
+            {
+              settingsSource: "agent_settings" as const,
+              sectionKeys: ["llm"],
+              excludeKeys: new Set<string>(),
+            },
+          ],
+        }),
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("sdk-settings-llm.endpoint")).toHaveValue(
+          "https://api.example.com",
+        );
+      });
+      expect(screen.getByTestId("save-button")).toBeDisabled();
+    });
+
+    it("keeps initial overrides dirty across a refetch", async () => {
+      // Overrides are prefilled on the user's behalf and must stay savable
+      // untouched — a refetch must not quietly clean them.
+      const getSettingsSpy = vi
+        .spyOn(SettingsService, "getSettings")
+        .mockResolvedValue(buildTwoFieldSettings());
+
+      const { queryClient } = renderSdkSectionPage({
+        settingsSources: AGENT_LLM_SOURCE,
+        initialValueOverrides: { "llm.model": "prefilled-model" },
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("sdk-settings-llm.model")).toHaveValue(
+          "prefilled-model",
+        );
+      });
+      expect(screen.getByTestId("save-button")).not.toBeDisabled();
+
+      getSettingsSpy.mockResolvedValue(
+        buildTwoFieldSettings({ endpoint: "https://moved.example.com" }),
+      );
+      await queryClient.invalidateQueries();
+
+      await waitFor(() => {
+        expect(screen.getByTestId("sdk-settings-llm.endpoint")).toHaveValue(
+          "https://moved.example.com",
+        );
+      });
+      expect(screen.getByTestId("sdk-settings-llm.model")).toHaveValue(
+        "prefilled-model",
+      );
+      expect(screen.getByTestId("save-button")).not.toBeDisabled();
+    });
+
+    it("keeps an unsaved edit when the refetch brings a changed schema", async () => {
+      // The other half of the same acceptance criterion. Note this drives the
+      // settings query carrying a new inline schema, not the schema query:
+      // `useSettingsSchema` short-circuits to its fallback whenever
+      // `settings.agent_settings_schema` is present, which it always is here.
+      // Same hydration path either way, since initial values are derived from
+      // the schema as well as the settings.
+      const getSettingsSpy = vi
+        .spyOn(SettingsService, "getSettings")
+        .mockResolvedValue(buildTwoFieldSettings());
+
+      const { queryClient } = renderSdkSectionPage({
+        settingsSources: AGENT_LLM_SOURCE,
+      });
+
+      const endpointInput = await screen.findByTestId(
+        "sdk-settings-llm.endpoint",
+      );
+      await userEvent.clear(endpointInput);
+      await userEvent.type(endpointInput, "https://typed.example.com");
+
+      // Same values, but the schema gains a field — a new schema identity.
+      const withExtraField = buildTwoFieldSettings();
+      withExtraField.agent_settings_schema!.sections[0].fields.push({
+        key: "llm.temperature",
+        label: "Temperature",
+        section: "llm",
+        section_label: "LLM",
+        value_type: "string",
+        default: "0.5",
+        choices: [],
+        depends_on: [],
+        prominence: "critical",
+        secret: false,
+        required: false,
+      });
+      getSettingsSpy.mockResolvedValue(withExtraField);
+      await queryClient.invalidateQueries();
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("sdk-settings-llm.temperature"),
+        ).toBeInTheDocument();
+      });
+      expect(screen.getByTestId("sdk-settings-llm.endpoint")).toHaveValue(
+        "https://typed.example.com",
+      );
+    });
+
+    it("keeps per-source edits separate when a refetch lands on a multi-source page", async () => {
+      // Two sources that both expose a "verification" section. An overlay
+      // keyed by source must not let one source's edit leak into the other's
+      // diff, and a refetch must not merge them.
+      const agentSchema: NonNullable<Settings["agent_settings_schema"]> = {
+        model_name: "AgentSettings",
+        sections: [
+          {
+            key: "verification",
+            label: "Verification",
+            fields: [
+              {
+                key: "verification.critic_enabled",
+                label: "Enable critic",
+                section: "verification",
+                section_label: "Verification",
+                value_type: "boolean",
+                default: false,
+                choices: [],
+                depends_on: [],
+                prominence: "critical",
+                secret: false,
+                required: false,
+              },
+            ],
+          },
+        ],
+      };
+      const conversationSchema: NonNullable<
+        Settings["conversation_settings_schema"]
+      > = {
+        model_name: "ConversationSettings",
+        sections: [
+          {
+            key: "verification",
+            label: "Verification",
+            fields: [
+              {
+                key: "confirmation_mode",
+                label: "Confirmation mode",
+                section: "verification",
+                section_label: "Verification",
+                value_type: "boolean",
+                default: false,
+                choices: [],
+                depends_on: [],
+                prominence: "critical",
+                secret: false,
+                required: false,
+              },
+            ],
+          },
+        ],
+      };
+      const build = () =>
+        buildSettings({
+          agent_settings_schema: agentSchema,
+          conversation_settings_schema: conversationSchema,
+          agent_settings: { verification: { critic_enabled: false } },
+          conversation_settings: { confirmation_mode: false },
+        });
+
+      const getSettingsSpy = vi
+        .spyOn(SettingsService, "getSettings")
+        .mockResolvedValue(build());
+      const saveSettingsSpy = vi
+        .spyOn(SettingsService, "saveSettings")
+        .mockResolvedValue(true);
+
+      const { queryClient } = renderSdkSectionPage({
+        settingsSources: [
+          {
+            settingsSource: "conversation_settings",
+            sectionKeys: ["verification"],
+          },
+          { settingsSource: "agent_settings", sectionKeys: ["verification"] },
+        ],
+      });
+
+      const criticInput = await screen.findByTestId(
+        "sdk-settings-verification.critic_enabled",
+      );
+      await userEvent.click(criticInput.closest("label")!);
+
+      // Must differ in content: an identical payload is structurally shared by
+      // react-query, so `settings` keeps its identity and hydration never runs
+      // — the refetch this test exists to exercise would not happen.
+      const moved = build();
+      (
+        moved.conversation_settings as Record<string, unknown>
+      ).confirmation_mode = true;
+      const callsBefore = getSettingsSpy.mock.calls.length;
+      getSettingsSpy.mockResolvedValue(moved);
+      await queryClient.invalidateQueries();
+      await waitFor(() => {
+        expect(getSettingsSpy.mock.calls.length).toBeGreaterThan(callsBefore);
+      });
+
+      await userEvent.click(screen.getByTestId("save-button"));
+
+      // Only the agent source is dirty, so only its diff is submitted.
+      await waitFor(() => {
+        expect(saveSettingsSpy).toHaveBeenCalledWith({
+          agent_settings_diff: { verification: { critic_enabled: true } },
+        });
+      });
+    });
+
+    it("does not strand the form when a refetch drops an edited field", async () => {
+      // An overlay entry for a field the schema no longer defines can never be
+      // rendered or submitted, but it still counted as dirty — leaving Save
+      // enabled over a payload that builds empty and silently no-ops.
+      const getSettingsSpy = vi
+        .spyOn(SettingsService, "getSettings")
+        .mockResolvedValue(buildTwoFieldSettings());
+      const saveSettingsSpy = vi
+        .spyOn(SettingsService, "saveSettings")
+        .mockResolvedValue(true);
+
+      const { queryClient } = renderSdkSectionPage({
+        settingsSources: AGENT_LLM_SOURCE,
+      });
+
+      const modelInput = await screen.findByTestId("sdk-settings-llm.model");
+      await userEvent.clear(modelInput);
+      await userEvent.type(modelInput, "edited-then-removed");
+
+      // The refetch returns a schema without `llm.model`.
+      const withoutModel = buildTwoFieldSettings();
+      withoutModel.agent_settings_schema!.sections[0].fields =
+        withoutModel.agent_settings_schema!.sections[0].fields.filter(
+          (f) => f.key !== "llm.model",
+        );
+      getSettingsSpy.mockResolvedValue(withoutModel);
+      await queryClient.invalidateQueries();
+
+      await waitFor(() => {
+        expect(
+          screen.queryByTestId("sdk-settings-llm.model"),
+        ).not.toBeInTheDocument();
+      });
+      expect(screen.getByTestId("save-button")).toBeDisabled();
+      expect(saveSettingsSpy).not.toHaveBeenCalled();
+    });
+
+    it("does not let a prefill overwrite the value the user saved", async () => {
+      // Overrides are a local prefill, so they belong in the overlay. Merging
+      // them into the baseline let the prefill outrank the server copy — and
+      // because `useSaveSettings` invalidates on success, the refetch that
+      // confirms a save would immediately revert the saved value and leave it
+      // looking clean. That is this issue's own bug, on the save path.
+      const getSettingsSpy = vi
+        .spyOn(SettingsService, "getSettings")
+        .mockResolvedValue(buildTwoFieldSettings({ model: "server-original" }));
+      vi.spyOn(SettingsService, "saveSettings").mockImplementation(async () => {
+        getSettingsSpy.mockResolvedValue(
+          buildTwoFieldSettings({ model: "user-chose" }),
+        );
+        return true;
+      });
+
+      renderSdkSectionPage({
+        settingsSources: AGENT_LLM_SOURCE,
+        initialValueOverrides: { "llm.model": "prefilled" },
+      });
+
+      const modelInput = await screen.findByTestId("sdk-settings-llm.model");
+      await waitFor(() => expect(modelInput).toHaveValue("prefilled"));
+
+      await userEvent.clear(modelInput);
+      await userEvent.type(modelInput, "user-chose");
+
+      const callsBefore = getSettingsSpy.mock.calls.length;
+      await userEvent.click(screen.getByTestId("save-button"));
+
+      // The save invalidates the settings query, so wait for that confirming
+      // read to land before asserting — the rebase alone shows the right value.
+      await waitFor(() => {
+        expect(screen.getByTestId("save-button")).toBeDisabled();
+      });
+      await waitFor(() => {
+        expect(getSettingsSpy.mock.calls.length).toBeGreaterThan(callsBefore);
+      });
+
+      expect(screen.getByTestId("sdk-settings-llm.model")).toHaveValue(
+        "user-chose",
+      );
+    });
+
+    it("survives the refetch that a successful save triggers", async () => {
+      // Guard rather than a bug repro: `useSaveSettings` invalidates the
+      // settings query on success, so a refetch always follows a save, and the
+      // saved value must survive it. This passes on main too — main never
+      // reset values either — but it pins the contract the rebase has to keep.
+      const getSettingsSpy = vi
+        .spyOn(SettingsService, "getSettings")
+        .mockResolvedValue(buildTwoFieldSettings());
+      vi.spyOn(SettingsService, "saveSettings").mockImplementation(async () => {
+        // The write lands, so every later read reflects it.
+        getSettingsSpy.mockResolvedValue(
+          buildTwoFieldSettings({ endpoint: "https://saved.example.com" }),
+        );
+        return true;
+      });
+
+      renderSdkSectionPage({ settingsSources: AGENT_LLM_SOURCE });
+
+      const endpointInput = await screen.findByTestId(
+        "sdk-settings-llm.endpoint",
+      );
+      await userEvent.clear(endpointInput);
+      await userEvent.type(endpointInput, "https://saved.example.com");
+      await userEvent.click(screen.getByTestId("save-button"));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("save-button")).toBeDisabled();
+      });
+      await waitFor(() => {
+        expect(getSettingsSpy.mock.calls.length).toBeGreaterThan(1);
+      });
+      expect(screen.getByTestId("sdk-settings-llm.endpoint")).toHaveValue(
+        "https://saved.example.com",
+      );
+    });
+
+    it("keeps an edit across a refetch under StrictMode", async () => {
+      // StrictMode double-invokes effects and updaters; the overlay must not
+      // be seeded or pruned twice.
+      const getSettingsSpy = vi
+        .spyOn(SettingsService, "getSettings")
+        .mockResolvedValue(buildTwoFieldSettings());
+
+      const { queryClient } = renderSdkSectionPage(
+        {
+          settingsSources: AGENT_LLM_SOURCE,
+          initialValueOverrides: { "llm.model": "prefilled" },
+        },
+        { strict: true },
+      );
+
+      const endpointInput = await screen.findByTestId(
+        "sdk-settings-llm.endpoint",
+      );
+      await userEvent.clear(endpointInput);
+      await userEvent.type(endpointInput, "https://strict.example.com");
+
+      const callsBefore = getSettingsSpy.mock.calls.length;
+      getSettingsSpy.mockResolvedValue(
+        buildTwoFieldSettings({ endpoint: "https://server.example.com" }),
+      );
+      await queryClient.invalidateQueries();
+      // Sync on the refetch itself. `llm.model` is already "prefilled" before
+      // it lands, so waiting on that value would let the test finish without
+      // the refetch ever happening.
+      await waitFor(() => {
+        expect(getSettingsSpy.mock.calls.length).toBeGreaterThan(callsBefore);
+      });
+      await waitFor(() => {
+        expect(screen.getByTestId("sdk-settings-llm.model")).toHaveValue(
+          "prefilled",
+        );
+      });
+      expect(screen.getByTestId("sdk-settings-llm.endpoint")).toHaveValue(
+        "https://strict.example.com",
+      );
+    });
+
+    it("shows a changed prefill instead of the one seeded before it", async () => {
+      // Seeding spread the previous overlay last, so an already-seeded value
+      // outranked the new override and a changed prefill never reached the
+      // form — while the effect dutifully recorded the new signature.
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+        buildTwoFieldSettings(),
+      );
+
+      const { rerender } = renderSdkSectionPage({
+        settingsSources: AGENT_LLM_SOURCE,
+        initialValueOverrides: { "llm.model": "first-prefill" },
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("sdk-settings-llm.model")).toHaveValue(
+          "first-prefill",
+        );
+      });
+
+      rerender(
+        React.createElement(SdkSectionPage, {
+          settingsSources: AGENT_LLM_SOURCE,
+          initialValueOverrides: { "llm.model": "second-prefill" },
+        }),
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("sdk-settings-llm.model")).toHaveValue(
+          "second-prefill",
+        );
+      });
+    });
+
+    it("still prunes a dropped schema field even when it is also a prefill", async () => {
+      // Sparing every override key from the prune brings back the stranded
+      // form: a field the schema stops defining is unreachable, so it must be
+      // dropped whether or not the caller also prefilled it.
+      const getSettingsSpy = vi
+        .spyOn(SettingsService, "getSettings")
+        .mockResolvedValue(buildTwoFieldSettings());
+      const saveSettingsSpy = vi
+        .spyOn(SettingsService, "saveSettings")
+        .mockResolvedValue(true);
+
+      const { queryClient } = renderSdkSectionPage({
+        settingsSources: AGENT_LLM_SOURCE,
+        initialValueOverrides: { "llm.model": "prefilled" },
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("sdk-settings-llm.model")).toHaveValue(
+          "prefilled",
+        );
+      });
+
+      const withoutModel = buildTwoFieldSettings();
+      withoutModel.agent_settings_schema!.sections[0].fields =
+        withoutModel.agent_settings_schema!.sections[0].fields.filter(
+          (f) => f.key !== "llm.model",
+        );
+      const callsBefore = getSettingsSpy.mock.calls.length;
+      getSettingsSpy.mockResolvedValue(withoutModel);
+      await queryClient.invalidateQueries();
+      await waitFor(() => {
+        expect(getSettingsSpy.mock.calls.length).toBeGreaterThan(callsBefore);
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.queryByTestId("sdk-settings-llm.model"),
+        ).not.toBeInTheDocument();
+      });
+      expect(screen.getByTestId("save-button")).toBeDisabled();
+      expect(saveSettingsSpy).not.toHaveBeenCalled();
+    });
+
+    it("keeps a caller-driven value the schema never defined", async () => {
+      // `llm-settings-local-view` prefills `llm.provider_connection_id`, which
+      // is deliberately outside the schema, and reads it back off
+      // `saveControl.values`. Pruning it on a refetch would drop the link and
+      // silently unlink the profile on the next save.
+      const getSettingsSpy = vi
+        .spyOn(SettingsService, "getSettings")
+        .mockResolvedValue(buildTwoFieldSettings());
+      let latestControl: SdkSectionSaveControl | null = null;
+
+      const { queryClient } = renderSdkSectionPage({
+        settingsSources: AGENT_LLM_SOURCE,
+        initialValueOverrides: { "llm.provider_connection_id": "conn-123" },
+        onSaveControlChange: (control) => {
+          latestControl = control;
+        },
+      });
+
+      await screen.findByTestId("sdk-settings-llm.endpoint");
+
+      const callsBefore = getSettingsSpy.mock.calls.length;
+      getSettingsSpy.mockResolvedValue(
+        buildTwoFieldSettings({ model: "server-moved-on" }),
+      );
+      await queryClient.invalidateQueries();
+      await waitFor(() => {
+        expect(getSettingsSpy.mock.calls.length).toBeGreaterThan(callsBefore);
+      });
+      await waitFor(() => {
+        expect(screen.getByTestId("sdk-settings-llm.model")).toHaveValue(
+          "server-moved-on",
+        );
+      });
+
+      await waitFor(() => {
+        expect(latestControl?.values["llm.provider_connection_id"]).toBe(
+          "conn-123",
+        );
+      });
+    });
+
+    it("keeps an edit made while the save was in flight", async () => {
+      // A successful save consumes only the edits it actually submitted. A
+      // field typed into after Save was pressed was never part of that
+      // request, so clearing the whole overlay would discard it — the same
+      // class of silent loss this issue is about.
+      const getSettingsSpy = vi
+        .spyOn(SettingsService, "getSettings")
+        .mockResolvedValue(buildTwoFieldSettings());
+      let release: () => void = () => {};
+      const inFlight = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      vi.spyOn(SettingsService, "saveSettings").mockImplementation(async () => {
+        await inFlight;
+        getSettingsSpy.mockResolvedValue(
+          buildTwoFieldSettings({ endpoint: "https://submitted.example.com" }),
+        );
+        return true;
+      });
+
+      renderSdkSectionPage({ settingsSources: AGENT_LLM_SOURCE });
+
+      const endpointInput = await screen.findByTestId(
+        "sdk-settings-llm.endpoint",
+      );
+      await userEvent.clear(endpointInput);
+      await userEvent.type(endpointInput, "https://submitted.example.com");
+      await userEvent.click(screen.getByTestId("save-button"));
+
+      // Typed while the request is still open, so it is not in the payload.
+      const modelInput = screen.getByTestId("sdk-settings-llm.model");
+      await userEvent.clear(modelInput);
+      await userEvent.type(modelInput, "typed-during-save");
+
+      release();
+
+      await waitFor(() => {
+        expect(screen.getByTestId("sdk-settings-llm.endpoint")).toHaveValue(
+          "https://submitted.example.com",
+        );
+      });
+      expect(screen.getByTestId("sdk-settings-llm.model")).toHaveValue(
+        "typed-during-save",
+      );
+      expect(screen.getByTestId("save-button")).not.toBeDisabled();
+    });
+
+    it("keeps an embedded form's prefill when a refetch brings new settings", async () => {
+      // The profile editor mounts this embedded, with `hideSaveButton` and
+      // `markInitialOverridesDirty: false`, and drives it entirely from
+      // `initialValueOverrides` — the profile being edited. A settings refetch
+      // must not repopulate that form with global settings.
+      const getSettingsSpy = vi
+        .spyOn(SettingsService, "getSettings")
+        .mockResolvedValue(buildTwoFieldSettings());
+
+      const { queryClient } = renderSdkSectionPage({
+        settingsSources: AGENT_LLM_SOURCE,
+        hideSaveButton: true,
+        markInitialOverridesDirty: false,
+        initialValueOverrides: {
+          "llm.endpoint": "https://from-the-profile.example.com",
+        },
+      });
+
+      const endpointInput = await screen.findByTestId(
+        "sdk-settings-llm.endpoint",
+      );
+      await waitFor(() =>
+        expect(endpointInput).toHaveValue(
+          "https://from-the-profile.example.com",
+        ),
+      );
+
+      // The refetch must carry a real delta, or structural sharing keeps the
+      // same `settings` reference and hydration never re-runs.
+      const callsBefore = getSettingsSpy.mock.calls.length;
+      getSettingsSpy.mockResolvedValue(
+        buildTwoFieldSettings({ model: "global-settings-changed" }),
+      );
+      await queryClient.invalidateQueries();
+      await waitFor(() => {
+        expect(getSettingsSpy.mock.calls.length).toBeGreaterThan(callsBefore);
+      });
+      // Then let effects settle. Waiting on a DOM change is not an option here:
+      // when the guard works, nothing on this form changes at all — which is
+      // exactly the property under test.
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      });
+
+      expect(screen.getByTestId("sdk-settings-llm.endpoint")).toHaveValue(
+        "https://from-the-profile.example.com",
+      );
+      // The embedded form is caller-driven, so global settings must not leak in.
+      expect(screen.getByTestId("sdk-settings-llm.model")).not.toHaveValue(
+        "global-settings-changed",
+      );
+    });
+
+    it("keeps getDirtyPayload dirty-only after a refetch", async () => {
+      // A refetch changing an untouched field must not make it look edited.
+      const getSettingsSpy = vi
+        .spyOn(SettingsService, "getSettings")
+        .mockResolvedValue(buildTwoFieldSettings());
+      let latestControl: SdkSectionSaveControl | null = null;
+
+      const { queryClient } = renderSdkSectionPage({
+        settingsSources: AGENT_LLM_SOURCE,
+        onSaveControlChange: (control) => {
+          latestControl = control;
+        },
+      });
+
+      const endpointInput = await screen.findByTestId(
+        "sdk-settings-llm.endpoint",
+      );
+      await userEvent.clear(endpointInput);
+      await userEvent.type(endpointInput, "https://typed.example.com");
+
+      getSettingsSpy.mockResolvedValue(
+        buildTwoFieldSettings({ model: "gpt-5-from-server" }),
+      );
+      await queryClient.invalidateQueries();
+
+      await waitFor(() => {
+        expect(screen.getByTestId("sdk-settings-llm.model")).toHaveValue(
+          "gpt-5-from-server",
+        );
+      });
+      // Asserted inside `waitFor` like the other save-control test: outside a
+      // closure the control-flow analysis narrows `latestControl` to `null`.
+      await waitFor(() => {
+        expect(latestControl?.getDirtyPayload()).toEqual({
+          llm: { endpoint: "https://typed.example.com" },
+        });
+      });
     });
   });
 });
