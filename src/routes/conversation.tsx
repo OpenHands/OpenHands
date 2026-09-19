@@ -23,6 +23,7 @@ import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { useIsAuthed } from "#/hooks/query/use-is-authed";
 import { ConversationMain } from "#/components/features/conversation/conversation-main/conversation-main";
 import { ConversationMobilePanelPage } from "#/components/features/conversation/conversation-main/conversation-mobile-panel-page";
+import { ConversationOverviewDrawerProvider } from "#/components/features/conversation/conversation-overview-drawer-context";
 
 import { WebSocketProviderWrapper } from "#/contexts/websocket-provider-wrapper";
 import { useErrorMessageStore } from "#/stores/error-message-store";
@@ -192,15 +193,19 @@ function AppContent() {
 
   const content = (
     <EventHandler>
-      <div data-testid="app-route" className="flex h-full flex-col">
-        {panelViewMatch ? (
-          <ConversationMobilePanelPage
-            onNavigateBack={() => navigate(`/conversations/${conversationId}`)}
-          />
-        ) : (
-          <ConversationMain />
-        )}
-      </div>
+      <ConversationOverviewDrawerProvider>
+        <div data-testid="app-route" className="flex h-full flex-col">
+          {panelViewMatch ? (
+            <ConversationMobilePanelPage
+              onNavigateBack={() =>
+                navigate(`/conversations/${conversationId}`)
+              }
+            />
+          ) : (
+            <ConversationMain />
+          )}
+        </div>
+      </ConversationOverviewDrawerProvider>
     </EventHandler>
   );
 

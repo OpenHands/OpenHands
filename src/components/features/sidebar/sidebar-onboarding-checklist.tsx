@@ -2,12 +2,15 @@ import { Tooltip } from "@heroui/react";
 import { Check, ChevronDown } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { NavigationLink } from "#/components/shared/navigation-link";
+import { useTracking } from "#/hooks/use-tracking";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 import {
   getSidebarOnboardingChecklistHref,
   isExternalSidebarOnboardingChecklistItem,
+  SIDEBAR_ONBOARDING_CHECKLIST_DESTINATION_TYPES,
   SIDEBAR_ONBOARDING_CHECKLIST_I18N_KEYS,
+  SIDEBAR_ONBOARDING_CHECKLIST_LINK_IDS,
   type SidebarOnboardingChecklistItemId,
 } from "./sidebar-onboarding-checklist.constants";
 import { SidebarOnboardingChecklistItemPreview } from "./sidebar-onboarding-checklist-item-preview";
@@ -51,9 +54,33 @@ function ChecklistItem({
   onActivate?: () => void;
 }) {
   const { t } = useTranslation("openhands");
+  const { trackOnboardingLinkClicked } = useTracking();
   const labelKey = SIDEBAR_ONBOARDING_CHECKLIST_I18N_KEYS[id];
   const disableAnimation = import.meta.env.MODE === "test";
   const href = getSidebarOnboardingChecklistHref(id);
+  const linkId = SIDEBAR_ONBOARDING_CHECKLIST_LINK_IDS[id];
+
+  const handleLinkClick = () => {
+    trackOnboardingLinkClicked({
+      linkId,
+      destinationType: SIDEBAR_ONBOARDING_CHECKLIST_DESTINATION_TYPES[id],
+      surface: "landing_checklist",
+      checklistItem: linkId,
+      isExternal: href.kind === "external",
+    });
+    onActivate?.();
+  };
+
+  const handleDocsClick = () => {
+    trackOnboardingLinkClicked({
+      linkId: "open_docs",
+      destinationType: "documentation",
+      surface: "landing_checklist",
+      checklistItem: linkId,
+      isExternal: true,
+    });
+  };
+
   const itemClassName = cn(
     CHECKLIST_ITEM_CLASS,
     isComplete ? "text-muted" : "text-content",
@@ -80,7 +107,8 @@ function ChecklistItem({
         content={
           <SidebarOnboardingChecklistItemPreview
             id={id}
-            onActionClick={onActivate}
+            onActionClick={handleLinkClick}
+            onDocsClick={handleDocsClick}
           />
         }
       >
@@ -91,7 +119,7 @@ function ChecklistItem({
             rel="noreferrer"
             data-testid={`sidebar-onboarding-checklist-item-${id}`}
             className={itemClassName}
-            onClick={onActivate}
+            onClick={handleLinkClick}
           >
             {label}
           </a>
@@ -100,6 +128,7 @@ function ChecklistItem({
             to={href.href}
             data-testid={`sidebar-onboarding-checklist-item-${id}`}
             className={itemClassName}
+            onClick={handleLinkClick}
           >
             {label}
           </NavigationLink>

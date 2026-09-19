@@ -19,11 +19,20 @@ export function useSelectConversationTab() {
     selectedTab,
     isRightPanelShown,
     setHasRightPanelToggled,
+    setIsOverviewPanelShown,
+    setIsRightPanelShown,
     setSelectedTab,
+    setCommitsAutoExpandSection,
   } = useConversationStore();
 
-  const { setSelectedTab: setPersistedSelectedTab } =
+  const { setSelectedTab: setPersistedSelectedTab, setRightPanelShown } =
     useConversationLocalStorageState(conversationId ?? "");
+
+  const setPanelOpen = (open: boolean) => {
+    setHasRightPanelToggled(open);
+    setIsRightPanelShown(open);
+    setRightPanelShown?.(open);
+  };
 
   const onTabChange = (value: ConversationTab | null) => {
     setSelectedTab(value);
@@ -37,12 +46,13 @@ export function useSelectConversationTab() {
    */
   const selectTab = (tab: ConversationTab) => {
     if (selectedTab === tab && isRightPanelShown) {
-      setHasRightPanelToggled(false);
+      setPanelOpen(false);
     } else {
       onTabChange(tab);
       if (!isRightPanelShown) {
-        setHasRightPanelToggled(true);
+        setPanelOpen(true);
       }
+      setIsOverviewPanelShown(false);
     }
   };
 
@@ -53,9 +63,18 @@ export function useSelectConversationTab() {
    */
   const navigateToTab = (tab: ConversationTab) => {
     onTabChange(tab);
-    if (!isRightPanelShown) {
-      setHasRightPanelToggled(true);
-    }
+    setPanelOpen(true);
+    setIsOverviewPanelShown(false);
+  };
+
+  const navigateToChanges = () => {
+    setCommitsAutoExpandSection("uncommitted");
+    navigateToTab("commits");
+  };
+
+  const navigateToCommits = () => {
+    setCommitsAutoExpandSection(null);
+    navigateToTab("commits");
   };
 
   /**
@@ -67,6 +86,8 @@ export function useSelectConversationTab() {
   return {
     selectTab,
     navigateToTab,
+    navigateToChanges,
+    navigateToCommits,
     isTabActive,
     onTabChange,
     selectedTab,

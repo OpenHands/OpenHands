@@ -131,4 +131,65 @@ describe("useBashCommandRunner", () => {
 
     unmount();
   });
+
+  it("closes a handshake stuck in CONNECTING at the timeout", () => {
+    // Arrange: the server never completes the 101 upgrade. Left alone, this
+    // socket would hold the browser's per-host handshake lock and block the
+    // conversation's events socket indefinitely.
+    vi.stubGlobal("WebSocket", MockWebSocket);
+    vi.useFakeTimers();
+
+    try {
+      const { unmount } = renderHook(() =>
+        useBashCommandRunner(
+          "http://runtime.example.com/api/conversations/conv-1",
+          null,
+          true,
+        ),
+      );
+      const socket = MockWebSocket.instance!;
+      const closeSpy = vi.spyOn(socket, "close");
+
+      // Act/Assert: untouched just before the timeout, closed right at it.
+      vi.advanceTimersByTime(9_999);
+      expect(closeSpy).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(1);
+      expect(closeSpy).toHaveBeenCalledOnce();
+      expect(socket.readyState).toBe(MockWebSocket.CLOSED);
+
+      unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not close a socket that finished its handshake in time", () => {
+    vi.stubGlobal("WebSocket", MockWebSocket);
+    vi.useFakeTimers();
+
+    try {
+      const { unmount } = renderHook(() =>
+        useBashCommandRunner(
+          "http://runtime.example.com/api/conversations/conv-1",
+          null,
+          true,
+        ),
+      );
+      const socket = MockWebSocket.instance!;
+      const closeSpy = vi.spyOn(socket, "close");
+
+      // Act: the handshake completes, then the watchdog window elapses.
+      socket.open();
+      vi.advanceTimersByTime(60_000);
+
+      // Assert: the cleared watchdog never touched the healthy socket.
+      expect(closeSpy).not.toHaveBeenCalled();
+      expect(socket.readyState).toBe(MockWebSocket.OPEN);
+
+      unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

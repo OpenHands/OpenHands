@@ -92,6 +92,17 @@ the agent (step 3) and access the UI through an SSH tunnel. If you also want
 to reach it from a browser without tunneling, you'll open ports 80 and 443
 in step 4.
 
+> [!NOTE]
+> **The bundled editor shares the canvas's browser origin.** OpenVSCode is
+> served under a path prefix (`/vscode` by default) on the proxy port rather
+> than on a published port of its own — that is what keeps the deployment to a
+> single port, but a path prefix routes requests, it does not isolate them.
+> Script running anywhere on that origin, including editor content reached
+> through an extension or a compromised asset, can read the canvas's
+> `localStorage`, which holds the SESSION API key of _every_ backend registered
+> in that browser. Tracked in
+> [#16492](https://github.com/OpenHands/OpenHands/issues/16492).
+
 ## 3. Run Agent Canvas
 
 Install the prerequisites on the machine. On Ubuntu:

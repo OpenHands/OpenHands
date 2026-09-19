@@ -19,6 +19,13 @@ interface EnumFilterDropdownProps<T extends string> {
   /** Plain-string labels, e.g. manifest-supplied copy. Wins over the keys. */
   labelByValue?: Record<T, string>;
   ariaLabel?: string;
+  className?: string;
+  /** Overrides trigger chip colors, padding, and radius. Menu styles stay shared. */
+  triggerClassName?: string;
+  /** Stretch the trigger to the container width, e.g. inside a parent menu. */
+  fullWidth?: boolean;
+  /** Highlight the trigger when the value is not the first option. */
+  emphasizeNonDefault?: boolean;
 }
 
 export function EnumFilterDropdown<T extends string>({
@@ -29,6 +36,10 @@ export function EnumFilterDropdown<T extends string>({
   labelKeyByValue,
   labelByValue,
   ariaLabel,
+  className,
+  triggerClassName,
+  fullWidth = false,
+  emphasizeNonDefault = true,
 }: EnumFilterDropdownProps<T>) {
   const { t } = useTranslation("openhands");
   const [open, setOpen] = React.useState(false);
@@ -48,7 +59,11 @@ export function EnumFilterDropdown<T extends string>({
   return (
     <div
       ref={containerRef}
-      className="relative shrink-0 w-auto"
+      className={cn(
+        "relative shrink-0",
+        fullWidth ? "w-full" : "w-auto",
+        className,
+      )}
       data-testid={testId}
     >
       <button
@@ -60,9 +75,12 @@ export function EnumFilterDropdown<T extends string>({
         onClick={() => setOpen((prev) => !prev)}
         className={cn(
           dropdownFilterTriggerClassName,
-          defaultOption &&
+          fullWidth && "w-full justify-between",
+          emphasizeNonDefault &&
+            defaultOption &&
             value !== defaultOption &&
             "border-white/60 bg-white/10",
+          triggerClassName,
         )}
       >
         <span className="whitespace-nowrap">{selectedLabel}</span>

@@ -33,6 +33,10 @@ import {
   getTriggerSource,
 } from "./automation-run-health";
 import {
+  automationActivityListClassName,
+  automationActivityRowClassName,
+} from "#/components/features/automations/automation-view-mode";
+import {
   buildHomeAutomationActivityItems,
   hrefForActivityItem,
   type HomeAutomationActivityItem,
@@ -75,7 +79,6 @@ function RunningAutomationRow({
     automation,
     t,
     canManage: actions.canManage,
-    canEdit: actions.canEdit,
     isRunPending: actions.isRunPending,
     isCancelPending: actions.isCancelPending,
     canCancel: actions.canCancel,
@@ -85,7 +88,7 @@ function RunningAutomationRow({
     onRunNow: actions.runNow,
     onCancelRun: actions.cancelRun,
     onView: actions.viewDetails,
-    onEdit: actions.canEdit ? actions.openEdit : undefined,
+    onEdit: actions.openEdit,
     onTurnOff: actions.requestTurnOff,
     onTogglePin: () => togglePin(item.id),
   });
@@ -93,7 +96,7 @@ function RunningAutomationRow({
   return (
     <li
       data-testid={`running-automation-row-${item.id}`}
-      className="group relative flex items-stretch transition-colors hover:bg-[var(--oh-interactive-hover)] has-[:focus-visible]:bg-[var(--oh-interactive-hover)]"
+      className={automationActivityRowClassName}
     >
       <Tooltip
         content={
@@ -256,7 +259,7 @@ export function RunningAutomationsList() {
     <section
       aria-labelledby="running-automations-heading"
       data-testid="running-automations-list"
-      className="mt-8 w-full"
+      className="w-full"
     >
       <div className="mb-2 flex items-center justify-between gap-2">
         <h2
@@ -291,7 +294,7 @@ export function RunningAutomationsList() {
       ) : (
         <ul
           aria-label={t(I18nKey.FEATURED_AUTOMATIONS$RECENT_GROUP_LABEL)}
-          className="divide-y divide-[var(--oh-border-subtle)] overflow-hidden rounded-xl border border-[var(--oh-border-subtle)] bg-[var(--oh-surface)]"
+          className={automationActivityListClassName}
         >
           {visibleItems.map((item) => {
             const automation = automationById.get(item.id);

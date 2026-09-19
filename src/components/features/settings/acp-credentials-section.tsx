@@ -24,7 +24,14 @@ export function AcpCredentialsSection({
   providerKey: string;
 }) {
   const { t } = useTranslation("openhands");
-  const { fields, values, setValue, secretExists, conflicts } = form;
+  const {
+    fields,
+    values,
+    setValue,
+    secretExists,
+    conflicts,
+    credentialsConfigured,
+  } = form;
   const { status: authStatus, isChecking } = useAcpAuthStatus(providerKey);
   const providerName = getAcpProviderDisplayName(providerKey) ?? providerKey;
 
@@ -44,6 +51,7 @@ export function AcpCredentialsSection({
       <AcpAuthStatusBanner
         status={authStatus}
         isChecking={isChecking}
+        credentialsConfigured={credentialsConfigured}
         providerName={providerName}
         testIdPrefix="settings-acp-auth"
       />

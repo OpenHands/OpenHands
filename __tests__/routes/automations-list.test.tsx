@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import React from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
@@ -9,6 +9,7 @@ import { HttpError } from "@openhands/typescript-client";
 import { I18nKey } from "#/i18n/declaration";
 
 import AutomationService from "#/api/automation-service/automation-service.api";
+import ProfilesService from "#/api/profiles-service/profiles-service.api";
 import {
   __resetActiveStoreForTests,
   setActiveSelection,
@@ -22,6 +23,7 @@ import {
   type Automation,
   type AutomationsResponse,
 } from "#/types/automation";
+import { AUTOMATION_STACK_SECTION_BOTTOM_CLASS } from "#/utils/automation-stack-section";
 
 vi.mock("#/api/automation-service/automation-service.api", () => ({
   default: {
@@ -34,9 +36,25 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
   },
 }));
 
+vi.mock("#/api/profiles-service/profiles-service.api", () => ({
+  default: {
+    listProfiles: vi.fn(),
+  },
+}));
+
 vi.mock("#/utils/custom-toast-handlers", () => ({
   displaySuccessToast: vi.fn(),
   displayErrorToast: vi.fn(),
+}));
+
+// Mock permission hooks so cloud-backend tests don't need a real /me endpoint.
+vi.mock("#/hooks/use-automation-permissions", () => ({
+  useAutomationPermissions: () => ({
+    canView: true,
+    canManage: true,
+    isLoading: false,
+  }),
+  useIsAutomationOwner: () => true,
 }));
 
 const localBackend: Backend = {
@@ -98,6 +116,11 @@ beforeEach(() => {
   vi.mocked(AutomationService.getAutomations).mockResolvedValue(listResponse);
   vi.mocked(AutomationService.updateAutomation).mockReset();
   vi.mocked(AutomationService.dispatchAutomation).mockReset();
+  vi.mocked(ProfilesService.listProfiles).mockReset();
+  vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
+    profiles: [],
+    active_profile: null,
+  });
   setRegisteredBackends([localBackend, cloudBackend]);
   setActiveSelection({ backendId: localBackend.id });
 });
@@ -107,7 +130,7 @@ afterEach(() => {
   __resetActiveStoreForTests();
 });
 
-describe("AutomationsList — Edit from the row kebab is local-only", () => {
+describe("AutomationsList — Edit from the row kebab", () => {
   it("opens the Edit modal pre-filled with the row's values when the active backend is local", async () => {
     // Arrange — local backend is active (default beforeEach); render the list
     // and wait for the row to appear.
@@ -134,7 +157,7 @@ describe("AutomationsList — Edit from the row kebab is local-only", () => {
     expect(nameInput.value).toBe(automation.name);
   });
 
-  it("hides Edit in the row kebab when the active backend is cloud", async () => {
+  it("opens the Edit modal pre-filled from the row kebab when the active backend is cloud", async () => {
     // Arrange — switch to the cloud backend before mounting so the page sees
     // it as the active backend on first render.
     setActiveSelection({ backendId: cloudBackend.id });
@@ -145,23 +168,39 @@ describe("AutomationsList — Edit from the row kebab is local-only", () => {
     });
     await screen.findByText(automation.name);
 
-    // Act — open the row kebab. The aria-label resolves to the I18n key
-    // in tests because `t` is mocked to return the key itself.
+    // Act — open the row kebab and pick Edit. The aria-label resolves to
+    // the I18n key in tests because `t` is mocked to return the key itself.
     await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
+    );
 
-    // Assert — Edit must not appear on cloud; Delete still does, proving the
-    // menu actually opened and we didn't merely fail to render it.
+    // Assert — the same Edit modal mounts on cloud, wired to this row; the
+    // permission model (mocked to canManage above) decides, not the backend.
+    const nameInput = (await screen.findByTestId(
+      "edit-automation-name",
+    )) as HTMLInputElement;
+    expect(nameInput.value).toBe(automation.name);
+  });
+});
+
+describe("AutomationsList — Git Sync entry point", () => {
+  it("hides the Git Sync button when the active backend is cloud", async () => {
+    // Arrange — Git Sync is a local-only operator feature that used to share
+    // Edit's backend gate; it must not follow Edit onto cloud.
+    setActiveSelection({ backendId: cloudBackend.id });
+    renderList();
+    await screen.findByText(automation.name);
+
+    // Assert
     expect(
-      screen.queryByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
+      screen.queryByTestId("automations-git-sync"),
     ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$DELETE }),
-    ).toBeInTheDocument();
   });
 });
 
 describe("AutomationsList — view mode toggle", () => {
-  it("switches saved automations from cards to table rows", async () => {
+  it("switches saved automations from cards to list rows", async () => {
     const user = userEvent.setup();
     renderList();
     await waitFor(() => {
@@ -204,6 +243,24 @@ describe("AutomationsList — view mode toggle", () => {
     expect(
       screen.queryByTestId("automations-view-toggle-list"),
     ).not.toBeInTheDocument();
+  });
+
+  it("keeps the recommended rail inside the empty state instead of above it", async () => {
+    vi.mocked(AutomationService.getAutomations).mockResolvedValue({
+      automations: [],
+      total: 0,
+    });
+    renderList();
+
+    const empty = await screen.findByTestId("automations-empty");
+    const rail = await within(empty).findByTestId(
+      "recommended-automations-rail",
+    );
+    expect(rail).toBeInTheDocument();
+    expect(rail).not.toHaveClass(AUTOMATION_STACK_SECTION_BOTTOM_CLASS);
+    expect(screen.getAllByTestId("recommended-automations-rail")).toHaveLength(
+      1,
+    );
   });
 });
 
@@ -337,6 +394,49 @@ describe("AutomationsList — Run now toasts", () => {
     await waitFor(() => {
       expect(displayErrorToast).toHaveBeenCalledWith("Runner quota exceeded");
     });
+  });
+});
+
+describe("AutomationsList — add automation menu", () => {
+  it("opens create and import from the Add Automation dropdown", async () => {
+    const user = userEvent.setup();
+    renderList();
+    await screen.findByText(automation.name);
+
+    const addTrigger = screen.getByTestId("automations-add-automation");
+    expect(addTrigger).toHaveClass("bg-base-secondary");
+    expect(
+      screen.queryByTestId("automations-import-automation"),
+    ).not.toBeInTheDocument();
+
+    await user.click(addTrigger);
+    expect(screen.getByTestId("automations-add-automation-menu")).not.toHaveClass(
+      "mt-2",
+    );
+    expect(
+      screen.getByTestId("automations-import-automation"),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("automations-add-automation-create"));
+    expect(screen.getByTestId("add-automation-modal")).toBeInTheDocument();
+  });
+
+  it("opens the import picker from the Add Automation menu", async () => {
+    const user = userEvent.setup();
+    renderList();
+    await screen.findByText(automation.name);
+
+    await user.click(screen.getByTestId("automations-add-automation"));
+    await user.click(screen.getByTestId("automations-import-automation"));
+
+    const modal = screen.getByTestId("import-automation-modal");
+    expect(modal).toHaveAttribute("data-view", "picker");
+    expect(
+      screen.getByTestId("import-automation-dropzone"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("import-automation-choose-file"),
+    ).toBeInTheDocument();
   });
 });
 

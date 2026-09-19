@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 
 import FileIcon from "#/icons/file.svg?react";
 import FolderIcon from "#/icons/folder.svg?react";
@@ -38,12 +39,13 @@ export function TreeNode({
         >
           <span
             aria-hidden
-            className={cn(
-              "inline-block w-3 text-[10px] text-[var(--oh-muted)] transition-transform",
-              isOpen ? "rotate-90" : "rotate-0",
-            )}
+            className="inline-flex w-3.5 shrink-0 items-center justify-center text-[var(--oh-muted)]"
           >
-            ▶
+            {isOpen ? (
+              <ChevronDown className="w-3.5 h-3.5" />
+            ) : (
+              <ChevronRight className="w-3.5 h-3.5" />
+            )}
           </span>
           <FolderIcon className="w-3.5 h-3.5 shrink-0" />
           <span className="truncate">{node.name}</span>

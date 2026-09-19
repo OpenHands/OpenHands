@@ -24,6 +24,7 @@ import {
   getAgentServerBaseUrl,
   getFrontendBackend,
   getLocalServiceRoutes,
+  getRejectPrefixes,
   setServiceLogListener,
   spawnService,
   validateLocalAutomationPath,
@@ -33,7 +34,12 @@ import {
   DEFAULT_BACKEND_PORT,
   DEFAULT_AUTOMATION_PORT,
 } from "../../scripts/dev-with-automation.mjs";
-import { resetPersistedSessionApiKeyCache } from "../../scripts/dev-safe.mjs";
+import {
+  buildAgentServerEnv,
+  buildSafeDevConfig,
+  resetPersistedSessionApiKeyCache,
+} from "../../scripts/dev-safe.mjs";
+import { createRouter } from "../../scripts/proxy-utils.mjs";
 
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -630,6 +636,79 @@ describe("stack mode routing", () => {
     expect(routeArgs).not.toContain("--default");
   });
 
+  it("routes the editor base path to the vscode port in the stock config", async () => {
+    // The whole point of the base path is that a stock launcher — no
+    // INGRESS_ROUTES, no OH_VSCODE_BASE_PATH — already reaches the editor
+    // through the single ingress origin. Both the outer ingress and the
+    // static-server route list are built from getLocalServiceRoutes, so
+    // asserting it here covers both.
+    const config = await buildConfig({}, envWithIsolatedKeyPath());
+
+    expect(config.vscodeBasePath).toBe("/vscode");
+
+    const routes = getLocalServiceRoutes(config);
+    expect(routes).toContainEqual([
+      config.vscodeBasePath,
+      `http://127.0.0.1:${config.vscodePort}`,
+    ]);
+    expect(buildRouteArgs(routes)).toContain(
+      `/vscode=http://127.0.0.1:${config.vscodePort}`,
+    );
+    // The editor must not collide with the agent-server or automation ports;
+    // it is a separate process reached through the same origin.
+    expect(config.vscodePort).not.toBe(config.agentServerPort);
+    expect(config.vscodePort).not.toBe(config.autoBackendPort);
+  });
+
+  it("passes the agent-server a base path matching the ingress route", async () => {
+    // The advertised URL and the route that serves it come from two different
+    // places (agent-server's /api/vscode/url vs. the proxy route table). They
+    // only agree because both read the same config value — assert that rather
+    // than each side in isolation.
+    const config = await buildConfig({}, envWithIsolatedKeyPath());
+    const env = buildAgentServerEnv(
+      buildSafeDevConfig(process.cwd(), {
+        ...envWithIsolatedKeyPath(),
+        OH_CANVAS_SAFE_BACKEND_PORT: String(config.agentServerPort),
+        OH_CANVAS_SAFE_VSCODE_PORT: String(config.vscodePort),
+      }),
+      { vscodeBasePath: config.vscodeBasePath },
+    );
+
+    expect(env.OH_VSCODE_BASE_PATH).toBe(config.vscodeBasePath);
+    expect(env.OH_VSCODE_PORT).toBe(String(config.vscodePort));
+
+    const [, vscodeBackend] =
+      getLocalServiceRoutes(config).find(
+        ([prefix]) => prefix === env.OH_VSCODE_BASE_PATH,
+      ) ?? [];
+    expect(vscodeBackend).toBe(`http://127.0.0.1:${env.OH_VSCODE_PORT}`);
+  });
+
+  it("preserves the editor prefix rather than stripping it", async () => {
+    // openvscode-server is launched with --server-base-path, so it generates
+    // its HTTP and WebSocket URLs beneath the prefix and only answers there.
+    // A router that stripped the prefix would 404 every asset.
+    const config = await buildConfig({}, envWithIsolatedKeyPath());
+    const routes = Object.fromEntries(getLocalServiceRoutes(config));
+    const route = createRouter(routes);
+    const vscodeBackend = `http://127.0.0.1:${config.vscodePort}`;
+
+    expect(route("/vscode")).toBe(vscodeBackend);
+    expect(route("/vscode/")).toBe(vscodeBackend);
+    // Workbench assets and the WebSocket upgrade path both sit under the
+    // prefix; the proxy forwards req.url unchanged, so matching is all that
+    // is needed for the prefix to survive.
+    expect(route("/vscode/static/out/vs/workbench/workbench.web.main.js")).toBe(
+      vscodeBackend,
+    );
+    expect(route("/vscode/stable-abc/?tkn=k")).toBe(vscodeBackend);
+    // Longest-prefix matching must not let /vscode swallow /api or vice versa.
+    expect(route("/api/vscode/url")).toBe(
+      `http://127.0.0.1:${config.agentServerPort}`,
+    );
+  });
+
   it("addresses the agent-server over IPv4 for readiness and secret seeding", async () => {
     const config = await buildConfig({}, envWithIsolatedKeyPath());
 
@@ -640,6 +719,18 @@ describe("stack mode routing", () => {
     expect(getAgentServerBaseUrl(config)).toBe(
       `http://127.0.0.1:${config.agentServerPort}`,
     );
+  });
+
+  it("rejects the editor prefix when no agent-server is launched", async () => {
+    // Without an agent-server there is no editor behind the prefix. Falling
+    // back to index.html would answer an editor request with the canvas shell.
+    const config = await buildConfig(
+      { frontendOnly: true },
+      envWithIsolatedKeyPath(),
+    );
+
+    expect(getLocalServiceRoutes(config)).toEqual([]);
+    expect(getRejectPrefixes(config)).toContain("/vscode");
   });
 
   it("rejects mutually exclusive partial-stack modes", async () => {

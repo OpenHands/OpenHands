@@ -24,13 +24,18 @@ import {
 } from "#/utils/mcp-marketplace-utils";
 import { InstallServerModal } from "#/components/features/mcp-page/install-server-modal";
 import { useTracking } from "#/hooks/use-tracking";
-import { automationSetupPath } from "#/manifests/automation-interface";
+import {
+  automationSetupPath,
+  hasAutomationInterface,
+} from "#/manifests/automation-interface";
 import { SETUP_REGISTRY } from "#/manifests/manifest-sources";
 import {
   getAutomationLaunchPrompt,
   getRequiredIntegrationIds,
 } from "#/utils/automation-catalog";
 import { isResponderAutomation } from "#/utils/responder-deployment";
+import { useAutomations } from "#/hooks/query/use-automations";
+import { RecommendedAutomationsRail } from "./recommended-automations-rail";
 import { RecommendedAutomationsSection } from "./recommended-automations-section";
 import { ResponderDeploymentModal } from "./responder-deployment-modal";
 
@@ -39,6 +44,12 @@ interface RecommendedAutomationsLauncherProps {
   onLaunched?: () => void;
   /** When true, only the automation card grid scrolls inside its section. */
   scrollableGrid?: boolean;
+  /**
+   * Compact discovery rail for New Chat and the automations dashboard.
+   * The templates page keeps the full catalog section.
+   */
+  variant?: "catalog" | "rail";
+  className?: string;
 }
 
 /**
@@ -62,6 +73,8 @@ export function RecommendedAutomationsLauncher({
   query,
   onLaunched,
   scrollableGrid = false,
+  variant = "catalog",
+  className,
 }: RecommendedAutomationsLauncherProps) {
   const activeBackend = useActiveBackend();
   const { navigate } = useNavigation();
@@ -83,6 +96,11 @@ export function RecommendedAutomationsLauncher({
   const localSetupInFlightRef = useRef(false);
   const [isPreparingLocalResponder, setIsPreparingLocalResponder] =
     useState(false);
+  const isRail = variant === "rail";
+  const { data: automationsData, isLoading: isAutomationsLoading } =
+    useAutomations({
+      enabled: isRail && activeBackend.backend.kind === "local",
+    });
 
   const installedMcpConfig = useMemo(
     () =>
@@ -251,19 +269,33 @@ export function RecommendedAutomationsLauncher({
 
   const installEntry = installQueue[0] ?? null;
 
+  // Like every automation surface, the launcher renders only behind the
+  // interface-manifest gate; New Chat mounts it outside the gated routes.
+  if (!hasAutomationInterface()) return null;
+
   // Recommended automations are a local-backend-only feature; cloud
   // automations are managed elsewhere.
   if (activeBackend.backend.kind === "cloud") return null;
 
+  if (isRail && isAutomationsLoading) return null;
+
   return (
     <>
-      <RecommendedAutomationsSection
-        backendKind={activeBackend.backend.kind}
-        installedServers={installedMcpConfig}
-        query={query}
-        onSelect={handleSelectAutomation}
-        scrollableGrid={scrollableGrid}
-      />
+      {isRail ? (
+        <RecommendedAutomationsRail
+          className={className}
+          installedAutomations={automationsData?.automations ?? []}
+          onSelect={handleSelectAutomation}
+        />
+      ) : (
+        <RecommendedAutomationsSection
+          backendKind={activeBackend.backend.kind}
+          installedServers={installedMcpConfig}
+          query={query}
+          onSelect={handleSelectAutomation}
+          scrollableGrid={scrollableGrid}
+        />
+      )}
 
       {installEntry && (
         <InstallServerModal

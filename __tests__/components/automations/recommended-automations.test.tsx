@@ -24,6 +24,7 @@ import {
   type NavigationContextValue,
 } from "#/context/navigation-context";
 import type { Backend } from "#/api/backend-registry/types";
+import AutomationService from "#/api/automation-service/automation-service.api";
 import { RecommendedAutomationsLauncher } from "#/components/features/automations/recommended-automations-launcher";
 import {
   RecommendedAutomationsSection,
@@ -103,14 +104,20 @@ const navigationValue: NavigationContextValue = {
   navigate: mockNavigate,
 };
 
-function renderLauncher({ withBackendProvider = false } = {}) {
+function renderLauncher({
+  withBackendProvider = false,
+  variant = "catalog",
+}: {
+  withBackendProvider?: boolean;
+  variant?: "catalog" | "rail";
+} = {}) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
 
   const launcher = (
     <NavigationProvider value={navigationValue}>
-      <RecommendedAutomationsLauncher />
+      <RecommendedAutomationsLauncher variant={variant} />
     </NavigationProvider>
   );
 
@@ -147,7 +154,7 @@ function settingsWithGithubMcp() {
 
 function continueGithubResponderLocally() {
   fireEvent.click(
-    screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
+    screen.getByTestId("recommended-automation-card-github-repo-monitor"),
   );
   const continueButton = screen.getByTestId(
     "responder-deployment-continue-local",
@@ -199,12 +206,25 @@ describe("recommended automations", () => {
 
     expect(cardIds).toEqual([
       "github-pr-reviewer",
-      "github-repo-monitor",
+      "custom-automation",
+      "github-issue-to-pr",
       "slack-channel-monitor",
+      "github-agents-md-maintainer",
+      "news-digest",
+      "github-repo-monitor",
       "slack-standup-digest",
       "linear-triage-assistant",
+      "linear-issue-to-github-pr",
+      "gitlab-issue-to-mr",
+      "linear-issue-to-gitlab-mr",
+      "linear-issue-to-bitbucket-pr",
       "jira-issue-to-pr",
+      "qa-changes",
+      "jira-issue-to-gitlab-mr",
       "research-brief-writer",
+      "jira-issue-to-bitbucket-pr",
+      "github-delivery-watchdog",
+      "github-issue-triage",
       "upstream-fork-sync",
       "incident-retrospective-drafter",
     ]);
@@ -222,7 +242,7 @@ describe("recommended automations", () => {
     const provenHeading = screen.getByText(
       I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_TITLE,
     ).parentElement!;
-    expect(within(provenHeading).getByText("3")).toBeInTheDocument();
+    expect(within(provenHeading).getByText("6")).toBeInTheDocument();
 
     const betaHeading = screen.getByTestId(
       "recommended-automations-beta-heading",
@@ -230,7 +250,7 @@ describe("recommended automations", () => {
     expect(betaHeading).toHaveTextContent(
       I18nKey.RECOMMENDED_AUTOMATIONS$BETA_LABEL,
     );
-    expect(within(betaHeading).getByText("6")).toBeInTheDocument();
+    expect(within(betaHeading).getByText("16")).toBeInTheDocument();
 
     const betaSection = screen.getByTestId(
       "recommended-automations-beta-section",
@@ -307,6 +327,24 @@ describe("recommended automations", () => {
         "recommended-automation-icon-incident-retrospective-drafter",
       ),
     ).toHaveAttribute("data-layout", "quadrants");
+  });
+
+  it("shows the declared glyph instead of a logo stack when an entry names one", () => {
+    render(
+      <RecommendedAutomationsSection
+        backendKind="local"
+        installedServers={[]}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    // `news-digest` connects to nothing, so there are no logos to stack; it
+    // names its own glyph, and the badge must render that rather than the
+    // generic placeholder a bare empty stack would give.
+    const badge = screen.getByTestId("recommended-automation-icon-news-digest");
+    expect(badge).not.toHaveAttribute("data-layout");
+    expect(badge.querySelector("svg")).toBeInTheDocument();
+    expect(badge.querySelector("img")).not.toBeInTheDocument();
   });
 
   it("renders missing MCP connect copy as a pill on the same row", () => {
@@ -595,7 +633,7 @@ describe("recommended automations", () => {
     renderLauncher();
 
     fireEvent.click(
-      screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
+      screen.getByTestId("recommended-automation-card-github-repo-monitor"),
     );
     fireEvent.click(screen.getByTestId("responder-deployment-continue-local"));
 
@@ -645,7 +683,7 @@ describe("recommended automations", () => {
 
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith(
-        "/automations/new/github-pr-reviewer",
+        "/automations/new/github-repo-monitor",
       ),
     );
     expect(mockCreateSecret).not.toHaveBeenCalled();
@@ -829,7 +867,7 @@ describe("recommended automations", () => {
     renderLauncher();
 
     fireEvent.click(
-      screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
+      screen.getByTestId("recommended-automation-card-github-repo-monitor"),
     );
     fireEvent.click(screen.getByTestId("responder-deployment-continue-local"));
 
@@ -845,12 +883,12 @@ describe("recommended automations", () => {
     renderLauncher();
 
     fireEvent.click(
-      screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
+      screen.getByTestId("recommended-automation-card-github-repo-monitor"),
     );
     fireEvent.click(screen.getByTestId("responder-deployment-continue-local"));
     // The launch is now in flight; re-selecting the card must not launch again.
     fireEvent.click(
-      screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
+      screen.getByTestId("recommended-automation-card-github-repo-monitor"),
     );
 
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledTimes(1));
@@ -867,6 +905,54 @@ describe("recommended automations", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("renders the compact rail instead of the catalog section", async () => {
+    // Earlier cases call `vi.unstubAllGlobals()`, which also removes the
+    // setup file's ResizeObserver stub the rail's fade tracking needs.
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+
+        unobserve() {}
+
+        disconnect() {}
+      },
+    );
+    vi.spyOn(AutomationService, "getAutomations").mockResolvedValue({
+      automations: [
+        {
+          id: "installed-1",
+          name: "GitHub code review",
+          trigger: { type: "cron", schedule: "0 9 * * *" },
+          enabled: true,
+          prompt: "Review PRs",
+          created_at: "2026-01-01T00:00:00Z",
+          updated_at: "2026-01-01T00:00:00Z",
+        },
+      ],
+      total: 1,
+    });
+
+    renderLauncher({ variant: "rail" });
+
+    expect(
+      await screen.findByTestId("recommended-automations-rail"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("recommended-automations-section"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId(
+        "recommended-automation-rail-card-github-pr-reviewer",
+      ),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId(
+        "recommended-automation-rail-card-slack-standup-digest",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("launches the recommendation after the missing MCP is installed", async () => {
     const createSpy = vi
       .spyOn(SettingsService, "createMcpServer")
@@ -875,7 +961,7 @@ describe("recommended automations", () => {
     renderLauncher();
 
     fireEvent.click(
-      screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
+      screen.getByTestId("recommended-automation-card-github-repo-monitor"),
     );
     fireEvent.click(screen.getByTestId("responder-deployment-continue-local"));
     await screen.findByTestId("mcp-install-modal");
@@ -888,7 +974,7 @@ describe("recommended automations", () => {
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith(
-        "/automations/new/github-pr-reviewer",
+        "/automations/new/github-repo-monitor",
       ),
     );
   });
@@ -899,7 +985,7 @@ describe("recommended automations", () => {
     renderLauncher();
 
     fireEvent.click(
-      screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
+      screen.getByTestId("recommended-automation-card-github-repo-monitor"),
     );
     fireEvent.click(
       screen.getByTestId("responder-deployment-open-openhands-cloud"),

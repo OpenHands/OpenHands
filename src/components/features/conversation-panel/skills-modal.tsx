@@ -5,6 +5,7 @@ import { ModalBody } from "#/components/shared/modals/modal-body";
 import { I18nKey } from "#/i18n/declaration";
 import { getAgentServerWorkingDir } from "#/api/agent-server-config";
 import { useConversationSkills } from "#/hooks/query/use-conversation-skills";
+import { useSkillEnabledFilter } from "#/hooks/use-skill-enablement";
 import {
   groupSkillsByScope,
   SKILL_SCOPE_ORDER,
@@ -41,10 +42,18 @@ export function SkillsModal({ onClose }: SkillsModalProps) {
     refetch,
     isRefetching,
   } = useConversationSkills();
+  const isSkillEnabled = useSkillEnabledFilter();
+
+  // The modal reports what the conversation actually has, so it lists the
+  // enabled set rather than the whole catalog.
+  const visibleSkills = useMemo(
+    () => (skills ?? []).filter(isSkillEnabled),
+    [skills, isSkillEnabled],
+  );
 
   const groupedSkills = useMemo(
-    () => (skills ? groupSkillsByScope(skills, projectDir) : null),
-    [skills, projectDir],
+    () => groupSkillsByScope(visibleSkills, projectDir),
+    [visibleSkills, projectDir],
   );
 
   const toggleAgent = (agentName: string) => {
@@ -71,7 +80,7 @@ export function SkillsModal({ onClose }: SkillsModalProps) {
         <div className="w-full h-[60vh] overflow-auto rounded-md border border-[var(--oh-border)] bg-surface-raised custom-scrollbar-always">
           {isLoading ? (
             <SkillsLoadingState />
-          ) : isError || !skills || skills.length === 0 ? (
+          ) : isError || !skills || visibleSkills.length === 0 ? (
             <SkillsEmptyState isError={isError} />
           ) : (
             groupedSkills && (

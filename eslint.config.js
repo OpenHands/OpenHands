@@ -108,6 +108,9 @@ export default [
       "test-results/**",
       "test-results-live/**",
       "public/mockServiceWorker.js",
+      // Self-contained browser ES module served to extensions at runtime;
+      // not part of the TypeScript project.
+      "src/fixtures/canvas-extensions/**/*.js",
       "src/i18n/declaration.d.ts",
     ],
   },

@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import type { VSCodeStatusResponse } from "@openhands/typescript-client";
 import { useTranslation } from "react-i18next";
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { I18nKey } from "#/i18n/declaration";
@@ -9,6 +10,10 @@ import { useRuntimeIsReady } from "#/hooks/use-runtime-is-ready";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useCloudSandbox } from "#/hooks/query/use-cloud-sandbox";
+import {
+  getOriginVSCodeBasePath,
+  isVSCodeUrlServedByOrigin,
+} from "#/utils/vscode-origin";
 
 interface VSCodeUrlResult {
   url: string | null;
@@ -28,11 +33,54 @@ export const useUnifiedVSCodeUrl = () => {
   const sandboxId = conversation?.sandbox_id ?? null;
   const isCloud = active.backend.kind === "cloud";
 
+  // The origin half of the availability question. The agent-server will
+  // happily report an editor this page has no route to — see
+  // `#/utils/vscode-origin`. `null` means this origin serves no editor, in
+  // which case there is nothing to probe for and nothing to render.
+  const originBasePath = getOriginVSCodeBasePath();
+  const originServesEditor = originBasePath !== null;
+
   // Cloud mode: read VSCode URL from the cloud-computed `exposed_urls` on
   // the conversation's sandbox. The runtime's `/api/vscode/url` only
   // knows its internal `localhost:8001`, so calling it returned a URL
   // the user's browser couldn't reach.
   const cloudSandboxQuery = useCloudSandbox(isCloud ? sandboxId : null);
+
+  // Capability probe. `/api/vscode/status` answers 200 with
+  // `enabled: false` when the deployment set `enable_vscode: false`, so a
+  // deliberately editor-less deployment is a value here rather than an
+  // error — unlike `/api/vscode/url`, which answers 503 and is therefore
+  // indistinguishable from an auth, proxy, or server failure.
+  //
+  // Gating the URL request on this means a disabled editor never issues
+  // the 503 in the first place, so the global error toast needs no
+  // blanket suppression and genuine failures stay observable.
+  const statusQuery = useQuery<VSCodeStatusResponse>({
+    queryKey: [
+      "unified",
+      "vscode_status",
+      "local",
+      conversationId,
+      conversationUrl,
+      sessionApiKey,
+    ],
+    queryFn: () =>
+      AgentServerConversationService.getVSCodeStatus(
+        conversationUrl,
+        sessionApiKey,
+      ),
+    enabled:
+      !isCloud && originServesEditor && runtimeIsReady && !!conversationId,
+    refetchOnMount: true,
+  });
+
+  // `enabled: false` is the deployment switch. `running: false` alongside
+  // `enabled: true` means the process failed to start or has died: the
+  // agent-server awaits `VSCodeService.start()` in its lifespan before it
+  // serves any request, so this is a terminal state rather than a startup
+  // window we would be racing.
+  const editorIsAvailable =
+    statusQuery.data?.enabled === true && statusQuery.data?.running === true;
 
   const localQuery = useQuery<VSCodeUrlResult>({
     // Include conversation host + key in the cache key so different
@@ -56,7 +104,12 @@ export const useUnifiedVSCodeUrl = () => {
 
       return { url: transformVSCodeUrl(response.vscode_url) };
     },
-    enabled: !isCloud && runtimeIsReady && !!conversationId,
+    enabled:
+      !isCloud &&
+      originServesEditor &&
+      runtimeIsReady &&
+      !!conversationId &&
+      editorIsAvailable,
     refetchOnMount: true,
     retry: 3,
   });
@@ -68,6 +121,9 @@ export const useUnifiedVSCodeUrl = () => {
   let status: typeof localQuery.status;
   let error: unknown;
   let refetch: () => Promise<{ data: VSCodeUrlResult | undefined }>;
+  // True once we know there is nothing to open, so callers can render nothing
+  // instead of a control whose activation is a no-op.
+  let isUnavailable: boolean;
 
   if (isCloud) {
     const sandbox = cloudSandboxQuery.data;
@@ -94,17 +150,47 @@ export const useUnifiedVSCodeUrl = () => {
           : undefined,
       };
     };
+    // Cloud behavior is deliberately unchanged: a sandbox with no VSCODE
+    // entry in `exposed_urls` still surfaces the control. Narrowing this
+    // change to self-hosted keeps its blast radius off the cloud path.
+    isUnavailable = false;
   } else {
     data = localQuery.data;
-    isLoading = localQuery.isLoading;
-    isError = localQuery.isError;
+    // The URL request only starts once the capability probe has cleared it,
+    // so the control is "loading" for the probe as well — otherwise it would
+    // look ready while there is still nothing to open.
+    isLoading = statusQuery.isLoading || localQuery.isLoading;
+    isError = statusQuery.isError || localQuery.isError;
     isSuccess = localQuery.isSuccess;
     status = localQuery.status;
-    error = localQuery.error;
+    error = statusQuery.error ?? localQuery.error;
     refetch = async () => {
+      // Load-bearing and easy to misread: this fires a real request even when
+      // the probe failed and left the URL query `enabled: false`. An observer's
+      // own `refetch()` does not consult `enabled` — only
+      // `queryClient.refetchQueries` skips disabled queries — so a click after
+      // a failed probe still retries rather than silently doing nothing.
       const result = await localQuery.refetch();
       return { data: result.data };
     };
+    // Hide only on an explicit, terminal capability answer:
+    //   - this origin serves no editor at all, so nothing it advertises is
+    //     reachable from this page,
+    //   - the probe succeeded and reports no usable editor (disabled, or
+    //     enabled but not running),
+    //   - the editor is there but reports no URL to open, or
+    //   - the URL resolves somewhere this origin does not route the editor —
+    //     an extra backend with no prefix of its own hands back the canvas
+    //     root, which would open this app again instead of an editor.
+    // A failed probe is deliberately not "unavailable": transport, auth and
+    // server faults stay visible as query errors with their normal retry and
+    // toast, rather than silently removing the control.
+    isUnavailable =
+      !originServesEditor ||
+      (statusQuery.isSuccess && !editorIsAvailable) ||
+      (isSuccess && !localQuery.data?.url) ||
+      (isSuccess &&
+        !isVSCodeUrlServedByOrigin(localQuery.data?.url, originBasePath));
   }
 
   // Derive the i18n'd "URL unavailable" message outside `queryFn` so the
@@ -118,6 +204,7 @@ export const useUnifiedVSCodeUrl = () => {
     isLoading,
     isError,
     isSuccess,
+    isUnavailable,
     status,
     refetch,
   };

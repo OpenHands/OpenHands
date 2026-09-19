@@ -66,3 +66,12 @@ export const OSS_NAV_ITEMS: SettingsNavItem[] = [
     subtitle: "SETTINGS$PAGE_SECRETS_SUBLINE",
   },
 ];
+
+/**
+ * The only OSS nav entry listed when the canvas is locked to a Cloud host —
+ * i.e. deployed into SaaS / self-hosted OHE next to the OHE web app, whose own
+ * settings shell (reached via "All Cloud Settings") owns everything else. The
+ * other pages stay routable for in-app deep links; they are just unlisted
+ * (OHE-3168).
+ */
+export const LOCKED_CLOUD_SETTINGS_NAV_PATH = "/settings/app";

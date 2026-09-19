@@ -80,12 +80,19 @@ export const useConversationHistory = (conversationId?: string) => {
     // refetch every return replays the entire post-first-load history over the
     // socket (and it gets worse the longer the goal has been running).
     //
-    // refetchOnWindowFocus is disabled because the WebSocket connection is
-    // gated on this query settling (see conversation-websocket-context.tsx); a
-    // focus-driven refetch would otherwise needlessly drop and reconnect it.
+    // refetchOnWindowFocus and refetchOnReconnect are disabled: focus changes
+    // and online/offline flapping (frequent on flaky links) would refetch this
+    // query in a loop, and events missed while offline arrive over the
+    // WebSocket `since` replay on reconnect anyway. retry is capped at 1 so a
+    // slow or failing initial load (60s HTTP timeout per attempt) can't hold
+    // the initial WebSocket gate (see conversation-websocket-context.tsx)
+    // closed for minutes — on failure the socket connects with
+    // `resend_mode='all'` instead.
     staleTime: 0,
     gcTime: 30 * 60 * 1000, // 30 minutes — keep cached data to render instantly on return
     refetchOnMount: "always",
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: 1,
   });
 };

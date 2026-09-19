@@ -21,6 +21,7 @@ import { AppSettingsInputsSkeleton } from "#/components/features/settings/app-se
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
+import { useFreeModels } from "#/hooks/query/use-free-models";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { formatModelNameForDisplay } from "#/utils/format-model-name";
 
@@ -40,6 +41,7 @@ export function AppSettingsScreen() {
   const isCloudBackend = activeBackend.backend.kind === "cloud";
   const { data: llmProfiles, isLoading: areLlmProfilesLoading } =
     useLlmProfiles();
+  const freeModels = useFreeModels();
 
   const [languageInputHasChanged, setLanguageInputHasChanged] =
     React.useState(false);
@@ -89,12 +91,14 @@ export function AppSettingsScreen() {
         label: profile.model
           ? t(I18nKey.SETTINGS$TITLE_GENERATION_PROFILE_OPTION, {
               name: profile.name,
-              model: formatModelNameForDisplay(profile.model) ?? profile.model,
+              model:
+                formatModelNameForDisplay(profile.model, freeModels) ??
+                profile.model,
             })
           : profile.name,
       })) ?? []),
     ],
-    [llmProfiles?.profiles, t],
+    [llmProfiles?.profiles, freeModels, t],
   );
 
   const formAction = (formData: FormData) => {
