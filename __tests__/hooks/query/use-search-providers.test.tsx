@@ -61,7 +61,8 @@ describe("useSearchProviders — local backend", () => {
     // Assert: the picker must surface every provider the backend reports.
     const names = result.current.data?.map((provider) => provider.name) ?? [];
     expect(names).toContain("openrouter");
-    expect(names).toHaveLength(providers.length + 1); // + the verified "openhands"
+    expect(names).toContain("oci_genai");
+    expect(names).toHaveLength(providers.length + 2); // + "openhands" and OCI GenAI
   });
 });
 
@@ -130,7 +131,8 @@ describe("useSearchProviders — cloud backend pagination", () => {
     const names = result.current.data?.map((provider) => provider.name) ?? [];
     expect(names).toContain("openrouter");
     expect(names).toContain("xai");
-    expect(names).toHaveLength(allProviders.length);
+    expect(names).toContain("oci_genai");
+    expect(names).toHaveLength(allProviders.length + 1);
 
     const calls = vi.mocked(callCloudProxy).mock.calls;
     expect(calls.length).toBeGreaterThanOrEqual(2);

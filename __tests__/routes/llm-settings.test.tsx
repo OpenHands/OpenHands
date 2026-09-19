@@ -149,6 +149,70 @@ describe("LlmSettingsScreen", () => {
     expect(screen.getByTestId("llm-api-key-input")).toBeInTheDocument();
   });
 
+  it("renders and persists first-class OCI Generative AI settings", async () => {
+    let saveControl:
+      | Parameters<
+          NonNullable<
+            Parameters<typeof LlmSettingsScreen>[0]["onSaveControlChange"]
+          >
+        >[0]
+      | null = null;
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({ llm_model: "oci_genai/xai.grok-4.6" }),
+    );
+
+    renderLlmSettingsScreen({
+      embedded: true,
+      hideSaveButton: true,
+      initialValueOverrides: {
+        "llm.model": "oci_genai/xai.grok-4.6",
+        "llm.oci_region": "us-chicago-1",
+        "llm.oci_project_id":
+          "ocid1.generativeaiproject.oc1.us-chicago-1.example",
+      },
+      markInitialOverridesDirty: false,
+      onSaveControlChange: (control) => {
+        saveControl = control;
+      },
+    });
+
+    await screen.findByTestId("llm-settings-screen");
+    expect(screen.getByTestId("oci-region-input")).toHaveValue("us-chicago-1");
+    expect(screen.getByTestId("oci-project-id-input")).toHaveValue(
+      "ocid1.generativeaiproject.oc1.us-chicago-1.example",
+    );
+    expect(
+      within(screen.getByTestId("oci-models-help")).getByRole("link"),
+    ).toHaveAttribute(
+      "href",
+      "https://docs.oracle.com/en-us/iaas/Content/generative-ai/pretrained-models.htm",
+    );
+    expect(
+      within(screen.getByTestId("llm-api-key-help-anchor")).getByRole("link"),
+    ).toHaveAttribute(
+      "href",
+      "https://docs.oracle.com/en-us/iaas/Content/generative-ai/api-keys.htm",
+    );
+    expect(
+      within(screen.getByTestId("oci-project-help")).getByRole("link"),
+    ).toHaveAttribute(
+      "href",
+      "https://docs.oracle.com/en-us/iaas/Content/generative-ai/use-project.htm",
+    );
+
+    fireEvent.change(screen.getByTestId("oci-project-id-input"), {
+      target: {
+        value: "ocid1.generativeaiproject.oc1.us-chicago-1.updated",
+      },
+    });
+
+    await waitFor(() => expect(saveControl).not.toBeNull());
+    const dirty = saveControl!.getDirtyPayload().llm as Record<string, unknown>;
+    expect(dirty.oci_project_id).toBe(
+      "ocid1.generativeaiproject.oc1.us-chicago-1.updated",
+    );
+  });
+
   it("shows the API key as set on the global settings page when a key exists", async () => {
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
       buildSettings({ llm_model: "openai/gpt-4o", llm_api_key_set: true }),
