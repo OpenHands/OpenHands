@@ -15,6 +15,9 @@ interface ModalBackdropProps {
   "aria-label"?: string;
 }
 
+let activeModalCount = 0;
+let bodyOverflowBeforeLock = "";
+
 export function ModalBackdrop({
   children,
   onClose,
@@ -23,6 +26,22 @@ export function ModalBackdrop({
   elevated = false,
   "aria-label": ariaLabel,
 }: ModalBackdropProps) {
+  React.useEffect(() => {
+    if (activeModalCount === 0) {
+      bodyOverflowBeforeLock = document.body.style.overflow;
+    }
+    activeModalCount += 1;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      activeModalCount -= 1;
+      if (activeModalCount === 0) {
+        document.body.style.overflow = bodyOverflowBeforeLock;
+        bodyOverflowBeforeLock = "";
+      }
+    };
+  }, []);
+
   React.useEffect(() => {
     if (!closeOnEscape) return undefined;
     const handleEscape = (e: KeyboardEvent) => {
