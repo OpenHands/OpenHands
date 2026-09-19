@@ -180,7 +180,7 @@ export function RepositorySelectionForm({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-[10px] pb-4">
             <RepoForkedIcon width={24} height={24} />
-            <span className="leading-5 font-bold text-base text-white">
+            <span className="leading-5 font-bold text-base text-contrast">
               {t(I18nKey.COMMON$OPEN_REPOSITORY)}
             </span>
           </div>
@@ -189,7 +189,7 @@ export function RepositorySelectionForm({
 
       <div className="flex flex-col gap-[10px] pb-4">
         <div className="flex items-center justify-between">
-          <span className="text-sm text-white font-normal leading-[22px]">
+          <span className="text-sm text-contrast font-normal leading-[22px]">
             {t(I18nKey.HOME$SELECT_OR_INSERT_URL)}
           </span>
           {renderProviderSelector()}

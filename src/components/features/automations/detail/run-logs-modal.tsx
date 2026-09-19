@@ -241,7 +241,7 @@ export function RunLogsModal({
 
   const tabBaseClass =
     "border-b-2 px-3 py-2 text-sm font-normal transition-colors focus:outline-none";
-  const tabActiveClass = "border-[var(--oh-primary)] text-white";
+  const tabActiveClass = "border-[var(--oh-primary)] text-contrast";
   const tabInactiveClass = "border-transparent text-muted hover:text-content";
 
   return (

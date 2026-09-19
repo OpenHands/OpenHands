@@ -23,7 +23,7 @@ export function createPlanComponents(extraClassName?: string) {
     h1: ({ children, className }: ElementProps) => (
       <h1
         className={cn(
-          "text-lg text-white font-bold leading-6 mb-1.5 mt-3 first:mt-0",
+          "text-lg text-contrast font-bold leading-6 mb-1.5 mt-3 first:mt-0",
           className,
           extraClassName,
         )}
@@ -34,7 +34,7 @@ export function createPlanComponents(extraClassName?: string) {
     h2: ({ children, className }: ElementProps) => (
       <h2
         className={cn(
-          "text-base font-semibold leading-5 text-white mb-1 mt-2.5 first:mt-0",
+          "text-base font-semibold leading-5 text-contrast mb-1 mt-2.5 first:mt-0",
           className,
           extraClassName,
         )}
@@ -45,7 +45,7 @@ export function createPlanComponents(extraClassName?: string) {
     h3: ({ children, className }: ElementProps) => (
       <h3
         className={cn(
-          "text-sm font-semibold text-white mb-1 mt-2 first:mt-0",
+          "text-sm font-semibold text-contrast mb-1 mt-2 first:mt-0",
           className,
           extraClassName,
         )}
@@ -56,7 +56,7 @@ export function createPlanComponents(extraClassName?: string) {
     h4: ({ children, className }: ElementProps) => (
       <h4
         className={cn(
-          "text-sm font-semibold text-white mb-1 mt-2 first:mt-0",
+          "text-sm font-semibold text-contrast mb-1 mt-2 first:mt-0",
           className,
           extraClassName,
         )}
@@ -67,7 +67,7 @@ export function createPlanComponents(extraClassName?: string) {
     h5: ({ children, className }: ElementProps) => (
       <h5
         className={cn(
-          "text-xs font-semibold text-white mb-0.5 mt-1.5 first:mt-0",
+          "text-xs font-semibold text-contrast mb-0.5 mt-1.5 first:mt-0",
           className,
           extraClassName,
         )}

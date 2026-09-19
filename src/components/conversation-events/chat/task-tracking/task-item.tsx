@@ -39,7 +39,7 @@ export function TaskItem({ task }: TaskItemProps) {
       <div className="flex flex-col items-start justify-center leading-[20px] text-nowrap whitespace-pre font-normal">
         <Typography.Text
           className={cn(
-            "text-[12px] text-white",
+            "text-[12px] text-contrast",
             isDoneStatus && "text-[var(--oh-muted)]",
           )}
         >

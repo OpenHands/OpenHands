@@ -222,7 +222,7 @@ export function SkillCardPillRow({ pills, testId }: SkillCardPillRowProps) {
             onKeyDown={stopCardActivation}
             className={cn(
               extensionModuleCardPillClassName,
-              "cursor-pointer font-medium text-tertiary-alt hover:text-white",
+              "cursor-pointer font-medium text-tertiary-alt hover:text-contrast",
             )}
           >
             {t(I18nKey.SETTINGS$SKILLS_PILLS_MORE, { count: hiddenCount })}

@@ -213,7 +213,7 @@ export function CommandMenu() {
           <input
             ref={inputRef}
             id={COMMAND_MENU_SEARCH_INPUT_ID}
-            className="h-11 min-w-0 flex-1 bg-transparent text-base text-white outline-none placeholder:text-[var(--oh-text-dim)]"
+            className="h-11 min-w-0 flex-1 bg-transparent text-base text-contrast outline-none placeholder:text-[var(--oh-text-dim)]"
             placeholder={t(I18nKey.COMMAND_MENU$PLACEHOLDER)}
             aria-label={t(I18nKey.COMMAND_MENU$SEARCH_LABEL)}
             role="combobox"
@@ -229,7 +229,7 @@ export function CommandMenu() {
           {query ? (
             <button
               type="button"
-              className="inline-flex size-8 items-center justify-center rounded-lg text-[var(--oh-muted)] hover:bg-[var(--oh-surface-raised)] hover:text-white"
+              className="inline-flex size-8 items-center justify-center rounded-lg text-[var(--oh-muted)] hover:bg-[var(--oh-surface-raised)] hover:text-contrast"
               aria-label={t(I18nKey.COMMAND_MENU$CLEAR_SEARCH_LABEL)}
               onClick={() => {
                 setQuery(EMPTY_QUERY);
@@ -254,7 +254,7 @@ export function CommandMenu() {
               <div className="flex size-11 items-center justify-center rounded-2xl border border-dashed border-[var(--oh-border)] text-[var(--oh-text-dim)]">
                 <Search className="size-5" />
               </div>
-              <p className="text-sm font-medium text-white">
+              <p className="text-sm font-medium text-contrast">
                 {t(I18nKey.COMMAND_MENU$NO_RESULTS_TITLE)}
               </p>
               <p className="max-w-sm text-xs leading-5 text-[var(--oh-muted)]">
@@ -293,8 +293,8 @@ export function CommandMenu() {
                       const optionClassName = cn(
                         "group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors duration-150",
                         isActive
-                          ? "bg-white/[0.09] text-white shadow-[0_0_0_1px_rgba(255,255,255,0.08)_inset]"
-                          : "text-[var(--oh-muted)] hover:bg-white/[0.05] hover:text-white",
+                          ? "bg-contrast/[0.09] text-contrast shadow-[0_0_0_1px_rgba(255,255,255,0.08)_inset]"
+                          : "text-[var(--oh-muted)] hover:bg-contrast/[0.05] hover:text-contrast",
                       );
 
                       const content = (
@@ -303,8 +303,8 @@ export function CommandMenu() {
                             className={cn(
                               "flex size-9 shrink-0 items-center justify-center rounded-lg border transition-colors duration-150",
                               isActive
-                                ? "border-[var(--oh-accent)] bg-[var(--oh-accent)]/15 text-white"
-                                : "border-[var(--oh-border)] bg-black/15 text-[var(--oh-text-dim)] group-hover:text-white",
+                                ? "border-[var(--oh-accent)] bg-[var(--oh-accent)]/15 text-contrast"
+                                : "border-[var(--oh-border)] bg-black/15 text-[var(--oh-text-dim)] group-hover:text-contrast",
                             )}
                             aria-hidden="true"
                           >

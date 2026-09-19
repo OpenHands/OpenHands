@@ -108,7 +108,7 @@ export function PluginDetailModal({
 
           {plugin.skills?.length ? (
             <section className="flex min-w-0 flex-col gap-2">
-              <h3 className="text-sm font-medium text-white">
+              <h3 className="text-sm font-medium text-contrast">
                 {t(I18nKey.SETTINGS$PLUGINS_SKILLS_IN_BUNDLE)}
               </h3>
               <ul className="flex min-w-0 flex-col gap-2">
@@ -120,7 +120,7 @@ export function PluginDetailModal({
                   >
                     <SkillIconBadge skillName={skill.name} />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-white">
+                      <p className="truncate text-sm font-semibold text-contrast">
                         {skill.name}
                       </p>
                       {skill.description ? (

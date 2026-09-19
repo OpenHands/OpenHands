@@ -9,7 +9,7 @@ import { CloudNewConversationMenu } from "./cloud-new-conversation-menu";
 const triggerClassName = cn(
   "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
   "text-[var(--oh-muted)] transition-colors",
-  "hover:bg-[var(--oh-surface-raised)] hover:text-white",
+  "hover:bg-[var(--oh-surface-raised)] hover:text-contrast",
   "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--oh-border)]",
   "disabled:cursor-not-allowed disabled:opacity-50",
 );

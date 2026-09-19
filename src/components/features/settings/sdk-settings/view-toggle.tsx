@@ -20,8 +20,8 @@ const tabButtonClass = (isActive: boolean, isDisabled: boolean) =>
     formControlTransitionClassName,
     "border-b-2 pb-2",
     isActive
-      ? "text-white border-white"
-      : "text-[var(--oh-muted)] border-transparent hover:text-white",
+      ? "text-contrast border-contrast"
+      : "text-[var(--oh-muted)] border-transparent hover:text-contrast",
     isDisabled && "pointer-events-none opacity-30 cursor-not-allowed",
   );
 

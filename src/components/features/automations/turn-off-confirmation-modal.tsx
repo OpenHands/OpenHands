@@ -61,7 +61,7 @@ export function TurnOffConfirmationModal({
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-lg border border-[var(--oh-border)] px-4 py-2 text-sm text-white hover:bg-surface-raised"
+            className="rounded-lg border border-[var(--oh-border)] px-4 py-2 text-sm text-contrast hover:bg-surface-raised"
           >
             {t(I18nKey.AUTOMATIONS$CANCEL)}
           </button>

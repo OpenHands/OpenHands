@@ -246,8 +246,8 @@ describe("ChangeAgentButton mode selection", () => {
       "border-transparent",
       "text-[var(--oh-muted)]",
       "cursor-pointer",
-      "hover:text-white",
-      "hover:bg-white/10",
+      "hover:text-contrast",
+      "hover:bg-contrast/10",
     );
     expect(screen.getByTestId("code-agent-icon")).toBeInTheDocument();
     expect(screen.queryByTestId("plan-agent-icon")).not.toBeInTheDocument();
@@ -373,13 +373,16 @@ describe("ChangeAgentButton availability", () => {
     expect(button).toHaveClass("opacity-50", "cursor-not-allowed");
     [
       "cursor-pointer",
-      "hover:text-white",
-      "hover:bg-white/10",
-      "text-white",
+      "hover:text-contrast",
+      "hover:bg-contrast/10",
       "hover:bg-[#597FF4]",
     ].forEach((interactiveClass) => {
       expect(button).not.toHaveClass(interactiveClass);
     });
+    if (overrides.conversationMode === "plan") {
+      expect(button).toHaveClass("text-white", "bg-[#4A67BD]");
+      expect(screen.getByText("COMMON$PLAN")).toHaveClass("text-inherit");
+    }
 
     await user.click(button);
     fireEvent.keyDown(document, { key: "Tab", shiftKey: true });

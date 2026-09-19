@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 
 import { I18nKey } from "#/i18n/declaration";
+import { useColorTheme } from "#/hooks/use-color-theme";
 import { useWorkspaceFileContent } from "#/hooks/query/use-workspace-file-content";
 import {
   useWorkspaceMutationCounter,
@@ -8,6 +9,8 @@ import {
 } from "#/stores/use-workspace-mutation-counter";
 import { MarkdownRenderer } from "#/components/features/markdown/markdown-renderer";
 import { isMarkdownFilePath } from "#/utils/is-markdown-file-path";
+import { COLOR_THEMES } from "#/themes/color-themes";
+import { cn } from "#/utils/utils";
 import { HighlightedSourceView } from "./highlighted-source-view";
 import type { ViewMode } from "./view-mode";
 
@@ -68,6 +71,8 @@ function UnpreviewableFallback({ path }: { path: string }) {
  */
 export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
   const { t } = useTranslation("openhands");
+  const colorTheme = useColorTheme();
+  const isLightTheme = COLOR_THEMES[colorTheme].appearance === "light";
   const query = useWorkspaceFileContent(path);
   // Subscribe to the workspace mutation counter so the iframe / <img> src
   // changes after every agent-side edit, forcing a fresh fetch even when
@@ -186,18 +191,18 @@ export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
     // blends with the surrounding files tab instead of painting a stark
     // white card. `--oh-scroll-fade-from` keeps wide-table edge fades on
     // the same surface (otherwise they default to `--oh-color-base`).
-    // We use `prose-invert` (typography plugin's dark-theme variant) and
-    // then layer arbitrary CSS-variable overrides on top to pin body /
-    // bold / quote text to pure white — the user specifically asked for
-    // every text element (not just headings) to read as white. The custom
-    // heading components in `markdown/headings.tsx` already hard-code
-    // `text-white`, so headers stay white through this change.
     return (
       <div
         data-testid="file-content-viewer-markdown"
-        className="h-full w-full overflow-auto bg-[var(--oh-surface)] text-white custom-scrollbar-always [--oh-scroll-fade-from:var(--oh-surface)]"
+        className="h-full w-full overflow-auto bg-[var(--oh-surface)] text-foreground custom-scrollbar-always [--oh-scroll-fade-from:var(--oh-surface)]"
       >
-        <div className="prose prose-sm prose-invert max-w-none p-6 [--tw-prose-body:#fff] [--tw-prose-bold:#fff] [--tw-prose-headings:#fff] [--tw-prose-lead:#fff] [--tw-prose-counters:#fff] [--tw-prose-quotes:#fff] [--tw-prose-quote-borders:var(--oh-border-subtle)] [--tw-prose-bullets:var(--oh-muted)] [--tw-prose-hr:var(--oh-border-subtle)] [--tw-prose-captions:var(--oh-muted)] [--tw-prose-kbd:#fff]">
+        <div
+          className={cn(
+            "prose prose-sm max-w-none p-6",
+            "[--tw-prose-body:var(--oh-foreground)] [--tw-prose-bold:var(--oh-foreground)] [--tw-prose-headings:var(--oh-foreground)] [--tw-prose-lead:var(--oh-text-secondary)] [--tw-prose-counters:var(--oh-text-secondary)] [--tw-prose-quotes:var(--oh-foreground)] [--tw-prose-quote-borders:var(--oh-border-subtle)] [--tw-prose-bullets:var(--oh-muted)] [--tw-prose-hr:var(--oh-border-subtle)] [--tw-prose-captions:var(--oh-muted)] [--tw-prose-kbd:var(--oh-foreground)]",
+            !isLightTheme && "prose-invert",
+          )}
+        >
           <MarkdownRenderer
             content={text ?? ""}
             includeStandard

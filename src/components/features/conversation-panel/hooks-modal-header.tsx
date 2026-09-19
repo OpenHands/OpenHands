@@ -15,7 +15,7 @@ interface HooksModalHeaderProps {
 }
 
 const ICON_BUTTON_CLASS =
-  "rounded-md p-1 text-white hover:bg-tertiary cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed";
+  "rounded-md p-1 text-contrast hover:bg-tertiary cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed";
 
 export function HooksModalHeader({
   isLoading,

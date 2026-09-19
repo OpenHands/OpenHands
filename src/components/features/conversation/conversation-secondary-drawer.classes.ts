@@ -12,5 +12,5 @@ export const CONVERSATION_SECONDARY_DRAWER_HEADER_ACTION_CLASSNAME = cn(
 
 export const CONVERSATION_SECONDARY_DRAWER_CLOSE_BUTTON_CLASSNAME = cn(
   "inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md",
-  "text-muted transition-colors hover:bg-white/10 hover:text-white",
+  "text-muted transition-colors hover:bg-contrast/10 hover:text-contrast",
 );

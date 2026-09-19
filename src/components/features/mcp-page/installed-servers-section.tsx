@@ -55,7 +55,7 @@ export function InstalledServersSection({
         data-testid="mcp-installed-empty"
         className={extensionModuleEmptyStateClassName}
       >
-        <p className="text-sm text-white">
+        <p className="text-sm text-contrast">
           {t(I18nKey.MCP$INSTALLED_EMPTY_TITLE)}
         </p>
         <p className="text-xs text-tertiary-light mt-1">

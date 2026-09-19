@@ -20,7 +20,7 @@ function InlineCodeChip({ children }: { children?: ReactNode }) {
       data-testid="automations-create-instructions-example"
       className={cn(
         "mx-0.5 inline-block rounded-sm border border-[var(--oh-border-subtle)]",
-        "bg-[var(--oh-surface-raised)] px-1.5 py-0.5 align-baseline font-mono text-[11px] text-white",
+        "bg-[var(--oh-surface-raised)] px-1.5 py-0.5 align-baseline font-mono text-[11px] text-contrast",
       )}
     >
       {children}

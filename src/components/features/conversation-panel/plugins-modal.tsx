@@ -58,7 +58,7 @@ export function PluginsModal({ onClose }: PluginsModalProps) {
                   data-testid={`active-plugin-${getPluginDisplayName(plugin)}`}
                   className="flex flex-col gap-1 p-4"
                 >
-                  <Typography.Text className="font-semibold text-white">
+                  <Typography.Text className="font-semibold text-contrast">
                     {getPluginDisplayName(plugin)}
                   </Typography.Text>
                   <Typography.Text className="text-xs text-tertiary-alt">

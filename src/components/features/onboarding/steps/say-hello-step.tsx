@@ -78,7 +78,7 @@ export function SayHelloStep({
       className="flex max-h-[calc(90vh-7rem)] flex-col"
     >
       <header className="flex shrink-0 flex-col gap-2">
-        <h2 className="text-2xl font-medium text-white">
+        <h2 className="text-2xl font-medium text-contrast">
           {t(I18nKey.ONBOARDING$HELLO_TITLE)}
         </h2>
         <p className="text-sm text-[var(--oh-muted)]">
@@ -107,7 +107,7 @@ export function SayHelloStep({
               }}
               placeholder={defaultMessage}
               disabled={isLaunching}
-              className="min-h-[20px] w-full flex-1 bg-transparent text-[16px] font-normal leading-[20px] text-white outline-none placeholder:text-[var(--oh-text-tertiary)] disabled:cursor-not-allowed disabled:opacity-50"
+              className="min-h-[20px] w-full flex-1 bg-transparent text-[16px] font-normal leading-[20px] text-contrast outline-none placeholder:text-[var(--oh-text-tertiary)] disabled:cursor-not-allowed disabled:opacity-50"
             />
           </div>
         </div>

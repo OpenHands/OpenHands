@@ -158,7 +158,7 @@ export function ConversationStatusDot({
       content={label}
       placement="right"
       showArrow
-      tooltipClassName="bg-base text-white text-xs shadow-lg"
+      tooltipClassName="bg-base text-contrast text-xs shadow-lg"
     >
       {dot}
     </StyledTooltip>

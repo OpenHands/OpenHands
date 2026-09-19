@@ -41,7 +41,7 @@ export function PluginFilesSection({
       data-testid="plugin-files-section"
       className="flex min-w-0 flex-col gap-2"
     >
-      <h3 className="text-sm font-medium text-white">
+      <h3 className="text-sm font-medium text-contrast">
         {t(I18nKey.COMMON$FILES)}
       </h3>
       <div className="min-w-0 rounded-lg border border-[var(--oh-border)] bg-[rgba(255,255,255,0.04)]">

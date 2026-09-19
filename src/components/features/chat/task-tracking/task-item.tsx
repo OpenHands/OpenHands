@@ -41,7 +41,7 @@ export function TaskItem({ task }: TaskItemProps) {
         <Typography.Text
           className={cn(
             "text-[12px]",
-            isDoneStatus ? "text-[var(--oh-muted)]" : "text-white",
+            isDoneStatus ? "text-[var(--oh-muted)]" : "text-contrast",
           )}
         >
           {task.title}

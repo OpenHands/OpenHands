@@ -41,12 +41,12 @@ export function ConversationTabNav({
     "flex items-center rounded-md cursor-pointer",
     "pl-1.5 pr-2 py-1 lg:py-1.5",
     "text-[var(--oh-muted)] bg-transparent",
-    isActive && "bg-[var(--oh-interactive-active)] text-white",
+    isActive && "bg-[var(--oh-interactive-active)] text-contrast",
     isActive
-      ? "hover:text-white hover:bg-[var(--oh-interactive-hover)]"
-      : "hover:text-white hover:bg-white/5",
+      ? "hover:text-contrast hover:bg-[var(--oh-interactive-hover)]"
+      : "hover:text-contrast hover:bg-contrast/5",
     isActive
-      ? "focus-within:text-white"
+      ? "focus-within:text-contrast"
       : "focus-within:text-[var(--oh-muted)]",
     className,
   );

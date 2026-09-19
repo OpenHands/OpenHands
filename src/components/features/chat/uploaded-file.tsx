@@ -24,7 +24,9 @@ export function UploadedFile({
           <span
             className={cn(
               "text-sm font-normal leading-5 flex-1 max-w-[136px] truncate",
-              isLoading ? "max-w-[108px] text-[var(--oh-muted)]" : "text-white",
+              isLoading
+                ? "max-w-[108px] text-[var(--oh-muted)]"
+                : "text-contrast",
             )}
           >
             {file.name}

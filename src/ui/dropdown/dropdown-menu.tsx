@@ -38,7 +38,7 @@ export function DropdownMenu({
   return (
     <div
       className={cn(
-        "absolute z-50 overflow-hidden text-white",
+        "absolute z-50 overflow-hidden text-contrast",
         fitContent ? "min-w-full w-max" : "w-full",
         openUpward ? "bottom-full mb-1" : "mt-1",
         "bg-tertiary rounded-[6px] context-menu-box-shadow p-1",
@@ -65,7 +65,7 @@ export function DropdownMenu({
                   dropdownMenuRowClassName,
                   "focus:outline-none",
                   selectedItem?.value === option.value &&
-                    "bg-[var(--oh-interactive-selected)] text-white",
+                    "bg-[var(--oh-interactive-selected)] text-contrast",
                 ),
               })}
             >
