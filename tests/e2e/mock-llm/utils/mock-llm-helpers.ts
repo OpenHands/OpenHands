@@ -7,6 +7,7 @@
 
 import { resolve } from "node:path";
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
+import { evaluateBashObservation } from "./bash-observation-oracle";
 
 // Tokens that the mock LLM server uses — must match mock-llm-server.py.
 export const BASH_TOKEN = "MOCK_LLM_E2E_BASH_OK";
@@ -228,54 +229,57 @@ export async function waitForNonUserMessageText(
     .toBe(true);
 }
 
+const BASH_OBSERVATION_POLL_INTERVAL_MS = 500;
+
 /**
- * Poll the bash events API for a BashOutput containing BASH_TOKEN.
+ * Wait until this conversation's terminal observation proves that exactly
+ * BASH_COMMAND ran, exited 0, and printed BASH_TOKEN.
  *
- * The agent-server keeps tool executions in a separate bash event stream
- * (`/api/bash/bash_events/search`), not the conversation events API.
- * Conversation events only contain high-level MessageEvents.
+ * The agent's terminal tool reports commands as ObservationEvents in the
+ * conversation event stream. The global `/api/bash/bash_events` stream only
+ * holds commands the UI runs itself (git status, file listing), so it cannot
+ * prove the agent's command ran. Fails fast when the command finishes
+ * unsuccessfully instead of waiting out the timeout.
  */
 export async function waitForSuccessfulBashObservation(
   request: APIRequestContext,
-  _conversationId: string,
+  conversationId: string,
   timeout = 30_000,
 ) {
+  const expected = { command: BASH_COMMAND, token: BASH_TOKEN };
+  const deadline = Date.now() + timeout;
   let lastDiag = "no polls yet";
-  await expect
-    .poll(
-      async () => {
-        const resp = await request.get(
-          `${BACKEND_URL}/api/bash/bash_events/search`,
-          {
-            headers: { "X-Session-API-Key": SESSION_API_KEY },
-            params: { limit: "50", kind__eq: "BashOutput" },
-          },
-        );
-        if (!resp.ok()) {
-          lastDiag = `bash events API returned ${resp.status()}`;
-          return false;
-        }
-        const body = (await resp.json()) as { items?: unknown[] };
-        const items = body.items ?? [];
-        lastDiag = `${items.length} BashOutput events`;
-        // Success: any BashOutput with exit_code 0 proves our command ran.
-        // The agent-server may return stdout as null for the completion
-        // event, so we accept null stdout when exit_code is 0.
-        return items.some((e: any) => {
-          if (e.kind !== "BashOutput" || e.exit_code !== 0) return false;
-          const stdout = typeof e.stdout === "string" ? e.stdout : "";
-          return stdout.includes(BASH_TOKEN) || e.stdout === null;
-        });
+
+  while (Date.now() < deadline) {
+    const resp = await request.get(
+      `${BACKEND_URL}/api/conversations/${encodeURIComponent(conversationId)}/events/search`,
+      {
+        headers: { "X-Session-API-Key": SESSION_API_KEY },
+        params: { limit: "100", sort_order: "TIMESTAMP_DESC" },
       },
-      { timeout },
-    )
-    .toBe(true)
-    .catch((err) => {
-      throw new Error(
-        `No successful bash execution after ${timeout}ms. ${lastDiag}`,
-        { cause: err },
-      );
+    );
+    if (resp.ok()) {
+      const body = (await resp.json()) as { items?: unknown[] };
+      const verdict = evaluateBashObservation(body.items ?? [], expected);
+      if (verdict.status === "success") return;
+      if (verdict.status === "failed") {
+        throw new Error(
+          `Bash command failed in conversation ${conversationId}: ${verdict.detail}`,
+        );
+      }
+      lastDiag = verdict.detail;
+    } else {
+      lastDiag = `conversation events API returned ${resp.status()}`;
+    }
+    await new Promise((resolveDelay) => {
+      setTimeout(resolveDelay, BASH_OBSERVATION_POLL_INTERVAL_MS);
     });
+  }
+
+  throw new Error(
+    `No successful bash observation in conversation ${conversationId} ` +
+      `after ${timeout}ms. ${lastDiag}`,
+  );
 }
 
 /**

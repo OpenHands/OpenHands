@@ -38,6 +38,13 @@ REPLY_TOKEN = "MOCK_LLM_E2E_REPLY_OK"
 # _is_preflight_ping() so the check never touches the scripted trajectory.
 PREFLIGHT_PING_TEXT = "ping"
 
+# The agent-server asks the conversation's LLM for a title after the first
+# user message (openhands-sdk ``conversation/title_utils.py``). It races the
+# agent's first turn, so feeding it to TestLLM would let it consume the
+# scripted terminal tool call. Matched by _is_title_request().
+TITLE_PROMPT_PREFIX = "Generate a title (maximum"
+MOCK_TITLE = "Mock LLM E2E conversation"
+
 # SDK exception → (HTTP status, OpenAI error type)
 ERROR_MAP: dict[type, tuple[int, str]] = {
     LLMAuthenticationError: (401, "invalid_api_key"),
@@ -167,21 +174,23 @@ class MockLLMHandler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", 0))
         body = json.loads(self.rfile.read(length)) if length else {}
 
-        # ── Profile pre-flight ping ──
-        # Saving a profile against agent-server >= 1.43 fires a 1-token "ping"
-        # completion through the submitted config, and the canvas waits at
-        # most 30 s for the verdict. Answer it here instead of feeding it to
-        # TestLLM: it would otherwise consume a scripted turn, and once the
-        # trajectory is exhausted the 500 below makes the SDK retry with
-        # backoff until the canvas gives up — leaving the profile editor stuck
-        # on "Validating...". It stays out of the request history, which tests
-        # read for the conversation's own completions.
-        if _is_preflight_ping(body):
-            raw = _preflight_pong(body.get("model"))
+        # ── Side requests answered outside the scripted trajectory ──
+        # Profile pre-flight ping: saving a profile against agent-server
+        # >= 1.43 fires a 1-token "ping" completion through the submitted
+        # config, and the canvas waits at most 30 s for the verdict. Fed to
+        # TestLLM it would consume a scripted turn, and once the trajectory is
+        # exhausted the 500 below makes the SDK retry with backoff until the
+        # canvas gives up — leaving the profile editor stuck on "Validating...".
+        # Title generation: races the agent's first turn and would otherwise
+        # steal the scripted terminal tool call, so the agent never runs it.
+        # Both stay out of the request history, which tests read for the
+        # conversation's own completions.
+        canned = _canned_reply(body)
+        if canned is not None:
             if body.get("stream"):
-                self._send_streaming(raw)
+                self._send_streaming(canned)
             else:
-                self._send_json(200, raw)
+                self._send_json(200, canned)
             return
 
         # Append to request history for test verification.
@@ -375,31 +384,71 @@ def _is_preflight_ping(body: dict) -> bool:
     message = messages[0]
     if not isinstance(message, dict) or message.get("role") != "user":
         return False
+    return _message_text(message).strip() == PREFLIGHT_PING_TEXT
+
+
+def _is_title_request(body: dict) -> bool:
+    """Match the agent-server's conversation title generation.
+
+    It is a tool-less completion whose user turn starts with the SDK's
+    "Generate a title (maximum N characters) ..." prompt.
+    """
+    if body.get("tools"):
+        return False
+    messages = body.get("messages")
+    if not isinstance(messages, list):
+        return False
+    return any(
+        isinstance(message, dict)
+        and message.get("role") == "user"
+        and _message_text(message).startswith(TITLE_PROMPT_PREFIX)
+        for message in messages
+    )
+
+
+def _message_text(message: dict) -> str:
+    """Text of a chat message, whether a plain string or OpenAI content parts."""
     content = message.get("content")
     if isinstance(content, list):
-        content = "".join(
+        return "".join(
             part.get("text", "")
             for part in content
             if isinstance(part, dict) and part.get("type") == "text"
         )
-    return isinstance(content, str) and content.strip() == PREFLIGHT_PING_TEXT
+    return content if isinstance(content, str) else ""
+
+
+def _canned_reply(body: dict) -> dict | None:
+    """Reply for side requests that must not consume the scripted trajectory."""
+    if _is_preflight_ping(body):
+        return _preflight_pong(body.get("model"))
+    if _is_title_request(body):
+        return _text_completion("chatcmpl-mock-title", body.get("model"), MOCK_TITLE)
+    return None
 
 
 def _preflight_pong(model: str | None) -> dict:
-    """Minimal OpenAI-style completion for the pre-flight ping.
+    """Minimal OpenAI-style completion for the pre-flight ping."""
+    return _text_completion(
+        "chatcmpl-mock-preflight", model or "mock-preflight", "pong"
+    )
+
+
+def _text_completion(completion_id: str, model: str | None, text: str) -> dict:
+    """Minimal OpenAI-style text completion.
 
     Uses the raw shape ``_send_streaming`` also understands, so the reply works
     whether or not the caller asked for streaming.
     """
     return {
-        "id": "chatcmpl-mock-preflight",
+        "id": completion_id,
         "object": "chat.completion",
         "created": int(time.time()),
-        "model": model or "mock-preflight",
+        "model": model or "mock-llm",
         "choices": [
             {
                 "index": 0,
-                "message": {"role": "assistant", "content": "pong"},
+                "message": {"role": "assistant", "content": text},
                 "finish_reason": "stop",
             }
         ],
