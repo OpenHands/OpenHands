@@ -705,7 +705,7 @@ export function MCPServerForm({
 
       <div
         className={cn(
-          "flex w-full items-center gap-2",
+          "flex w-full flex-wrap items-center gap-2",
           onDelete ? "justify-between" : "justify-end",
         )}
       >
@@ -723,7 +723,7 @@ export function MCPServerForm({
             {t(I18nKey.BUTTON$DELETE)}
           </BrandButton>
         ) : null}
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 [&_button]:whitespace-nowrap">
           <BrandButton
             testId="cancel-button"
             type="button"
