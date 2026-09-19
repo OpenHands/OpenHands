@@ -147,8 +147,7 @@ export function RepositorySelectionForm({
         provider={selectedProvider || providers[0]}
         value={selectedRepository?.id || null}
         repositoryName={selectedRepository?.full_name || null}
-        // eslint-disable-next-line i18next/no-literal-string -- example value, not translatable
-        placeholder="user/repo"
+        placeholder={t(I18nKey.COMMON$SELECT_REPOSITORY_PLACEHOLDER)}
         disabled={!selectedProvider || isLoadingSettings}
         onChange={handleRepoSelection}
         className="max-w-auto"
