@@ -100,7 +100,7 @@ describe("Stryker diff runner", () => {
       "src/a.ts,src/ui/card.tsx",
     ]);
     expect(result.calls[1]?.args[0]).toMatch(
-      /node_modules\/@stryker-mutator\/core\/bin\/stryker\.js$/,
+      /node_modules[/\\]@stryker-mutator[/\\]core[/\\]bin[/\\]stryker\.js$/,
     );
     expect(result.calls[1]?.options).toEqual({
       stdio: "inherit",
