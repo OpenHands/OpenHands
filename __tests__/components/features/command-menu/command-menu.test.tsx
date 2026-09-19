@@ -409,13 +409,13 @@ describe("CommandMenu", () => {
 
     expect(surface).toHaveClass(
       "max-w-2xl",
-      "border-[var(--oh-border)]",
+      "border-border",
       "shadow-[0_24px_90px_rgba(0,0,0,0.52),0_0_0_1px_rgba(255,255,255,0.03)_inset]",
     );
     expect(activeOption).toHaveClass("rounded-xl", "bg-white/[0.09]");
-    expect(inactiveOption).toHaveClass("rounded-xl", "text-[var(--oh-muted)]");
-    expect(activeIcon).toHaveClass("size-9", "border-[var(--oh-accent)]");
-    expect(inactiveIcon).toHaveClass("size-9", "border-[var(--oh-border)]");
+    expect(inactiveOption).toHaveClass("rounded-xl", "text-muted");
+    expect(activeIcon).toHaveClass("size-9", "border-accent");
+    expect(inactiveIcon).toHaveClass("size-9", "border-border");
   });
 
   it("leaves modified command links to native browser behavior", () => {

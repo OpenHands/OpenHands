@@ -76,7 +76,7 @@ export function WorkspaceModeSelector({
           "border border-[rgba(71,74,84,0.50)] bg-transparent text-white",
           disabled
             ? "cursor-not-allowed opacity-50"
-            : "cursor-pointer hover:border-[var(--oh-border-subtle)]",
+            : "cursor-pointer hover:border-border-subtle",
         )}
       >
         <span className="flex size-3 shrink-0 items-center justify-center">
@@ -93,7 +93,7 @@ export function WorkspaceModeSelector({
           role="menu"
           data-testid={`${testId}-menu`}
           className={cn(
-            "absolute left-0 top-full z-50 mt-1 min-w-[180px] rounded-lg border border-[var(--oh-border)] bg-[var(--oh-surface)] p-1 shadow-lg",
+            "absolute left-0 top-full z-50 mt-1 min-w-45 rounded-lg border border-border bg-surface p-1 shadow-lg",
             dropdownMenuListClassName,
           )}
         >

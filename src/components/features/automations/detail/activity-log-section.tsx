@@ -88,9 +88,9 @@ export function ActivityLogSection({
   return (
     <div
       data-testid="automation-activity-log"
-      className="rounded-2xl border border-[var(--oh-border)] bg-[var(--oh-surface)]"
+      className="rounded-2xl border border-border bg-surface"
     >
-      <div className="flex items-center gap-2 border-b border-[var(--oh-border)] px-5 py-3">
+      <div className="flex items-center gap-2 border-b border-border px-5 py-3">
         <span className="size-4 text-muted">
           <ActivityIcon className="size-4" />
         </span>
@@ -153,8 +153,8 @@ export function ActivityLogSection({
                     : undefined
                 }
                 className={cn(
-                  index > 0 ? "border-t border-[var(--oh-border)]" : "",
-                  isHighlighted && "bg-[var(--oh-focus)]/10",
+                  index > 0 ? "border-t border-border" : "",
+                  isHighlighted && "bg-focus/10",
                 )}
               >
                 <ActivityLogItem run={run} automation={automation} />
@@ -163,7 +163,7 @@ export function ActivityLogSection({
           })}
 
           {hasMore && (
-            <div className="border-t border-[var(--oh-border)] px-5 py-3">
+            <div className="border-t border-border px-5 py-3">
               <button
                 type="button"
                 onClick={() => setLimit((prev) => prev + PAGE_SIZE)}

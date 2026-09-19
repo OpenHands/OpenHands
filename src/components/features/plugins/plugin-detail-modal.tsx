@@ -42,7 +42,7 @@ export function PluginDetailModal({
       <div
         data-testid="plugin-detail-modal"
         data-plugin-name={plugin.name}
-        className="relative flex w-[640px] max-w-[90vw] max-h-[85vh] flex-col rounded-xl border border-[var(--oh-border)] bg-base-secondary"
+        className="relative flex w-160 max-w-[90vw] max-h-[85vh] flex-col rounded-xl border border-border bg-base-secondary"
       >
         <ModalCloseButton
           onClose={onClose}
@@ -116,7 +116,7 @@ export function PluginDetailModal({
                   <li
                     key={skill.name}
                     data-testid={`plugin-bundled-skill-${skill.name}`}
-                    className="flex items-start gap-3 rounded-lg border border-[var(--oh-border)] bg-[rgba(255,255,255,0.04)] px-3 py-2.5"
+                    className="flex items-start gap-3 rounded-lg border border-border bg-[rgba(255,255,255,0.04)] px-3 py-2.5"
                   >
                     <SkillIconBadge skillName={skill.name} />
                     <div className="min-w-0 flex-1">

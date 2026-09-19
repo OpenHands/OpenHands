@@ -22,14 +22,14 @@ interface McpServerHealthSectionProps {
 }
 
 const DOT_CLASS_BY_STATUS: Record<McpServerHealth["status"], string> = {
-  unchecked: "bg-[var(--oh-text-tertiary)]",
-  checking: "bg-[var(--oh-interactive-selected)] animate-pulse",
-  healthy: "bg-[var(--oh-status-success)]",
+  unchecked: "bg-text-tertiary",
+  checking: "bg-interactive-selected animate-pulse",
+  healthy: "bg-status-success",
   failed: "bg-red-500",
 };
 
 const actionClassName =
-  "text-xs text-[var(--oh-muted)] underline transition-colors hover:text-white disabled:cursor-not-allowed disabled:opacity-60";
+  "text-xs text-muted underline transition-colors hover:text-white disabled:cursor-not-allowed disabled:opacity-60";
 
 function getDotStatus(health: McpServerHealth): string {
   if (health.status === "healthy") {

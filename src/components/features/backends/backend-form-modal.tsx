@@ -242,10 +242,10 @@ function BackendStatusBadge({
           {statusLabel}
         </span>
         <span className="text-tertiary-alt">·</span>
-        <span className="text-[var(--oh-text-tertiary)]">{kindLabel}</span>
+        <span className="text-text-tertiary">{kindLabel}</span>
         {version ? (
           <span
-            className="text-xs text-[var(--oh-muted)]"
+            className="text-xs text-muted"
             data-testid={`${testIdRoot}-version`}
           >
             {t(I18nKey.BACKEND$VERSION_LABEL, { version })}
@@ -261,7 +261,7 @@ function BackendStatusBadge({
           <span className="font-semibold text-red-300">
             {t(I18nKey.BACKEND$HEALTH_FAILED_TITLE)}
           </span>
-          <span className="text-xs text-[var(--oh-text-tertiary)]">
+          <span className="text-xs text-text-tertiary">
             {t(I18nKey.BACKEND$HEALTH_FAILED_DETAIL, {
               count: consecutiveFailures,
             })}
@@ -1017,7 +1017,7 @@ function CloudLoginColumn({
         className="w-full items-center"
         idleDescription={
           <p
-            className="text-center text-sm leading-relaxed text-[var(--oh-muted)]"
+            className="text-center text-sm leading-relaxed text-muted"
             data-testid={`${testIdRoot}-cloud-description`}
           >
             {t(I18nKey.BACKEND$CLOUD_DESCRIPTION)}
@@ -1037,7 +1037,7 @@ function CloudLoginColumn({
                 aria-expanded={advancedOpen}
                 aria-controls={advancedPanelId}
                 data-testid={`${testIdRoot}-advanced-toggle`}
-                className="flex w-full cursor-pointer items-center justify-center gap-1 text-center text-xs text-[var(--oh-muted)] transition-colors hover:text-content-2"
+                className="flex w-full cursor-pointer items-center justify-center gap-1 text-center text-xs text-muted transition-colors hover:text-content-2"
               >
                 <span>{t(I18nKey.BACKEND$ADVANCED)}</span>
                 <ChevronDownSmallIcon
@@ -1079,7 +1079,7 @@ function CloudLoginColumn({
                       placeholder={DEFAULT_OPENHANDS_CLOUD_HOST}
                       className="w-full"
                     />
-                    <p className="mt-1 text-xs text-[var(--oh-muted)]">
+                    <p className="mt-1 text-xs text-muted">
                       {t(I18nKey.BACKEND$LOGIN_CLOUD_HINT)}
                     </p>
                   </div>
@@ -1135,11 +1135,11 @@ function BackendOptionTab({
       onClick={() => onSelect(value)}
       className={cn(
         "relative flex min-h-16 w-full cursor-pointer items-center gap-3 px-3 py-3 text-left transition-colors",
-        "first:border-r first:border-r-[var(--oh-border)]",
+        "first:border-r first:border-r-border",
         "focus-visible:z-10 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-300",
         isSelected
-          ? "bg-[var(--oh-surface-raised)] text-white after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-primary"
-          : "text-[var(--oh-muted)] hover:bg-[var(--oh-surface-raised)] hover:text-white",
+          ? "bg-surface-raised text-white after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-primary"
+          : "text-muted hover:bg-surface-raised hover:text-white",
       )}
     >
       <span
@@ -1150,7 +1150,7 @@ function BackendOptionTab({
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium">{title}</span>
-        <span className="mt-0.5 block text-xs leading-tight text-[var(--oh-muted)]">
+        <span className="mt-0.5 block text-xs leading-tight text-muted">
           {description}
         </span>
       </span>
@@ -1241,7 +1241,7 @@ function AgentServerGuidance({ location }: { location: AgentServerLocation }) {
   return (
     <aside
       data-testid={`${testIdRoot}-guidance`}
-      className="rounded-lg bg-[var(--oh-surface-raised)] text-sm text-[var(--oh-muted)]"
+      className="rounded-lg bg-surface-raised text-sm text-muted"
     >
       {/* Heading wraps the button so the accordion keeps a real heading in the
           document outline while the whole row stays clickable. */}
@@ -1257,20 +1257,17 @@ function AgentServerGuidance({ location }: { location: AgentServerLocation }) {
             // Padding lives on the button rather than the card so the hover
             // fill spans the full row.
             "flex w-full cursor-pointer items-center justify-between gap-2 rounded-lg px-3 py-2 text-left font-medium",
-            "transition-colors hover:bg-[var(--oh-interactive-hover)]",
+            "transition-colors hover:bg-interactive-hover",
             "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300",
           )}
         >
           <span className="flex min-w-0 items-center gap-2">
-            <Info
-              className="size-4 shrink-0 text-[var(--oh-muted)]"
-              aria-hidden
-            />
+            <Info className="size-4 shrink-0 text-muted" aria-hidden />
             <span className="truncate">{title}</span>
           </span>
           <ChevronDown
             className={cn(
-              "size-5 shrink-0 text-[var(--oh-muted)] transition-transform duration-200 ease-out",
+              "size-5 shrink-0 text-muted transition-transform duration-200 ease-out",
               isExpanded && "rotate-180",
             )}
             aria-hidden
@@ -1359,7 +1356,7 @@ function AddBackendChooser({
       <div
         role="tablist"
         aria-label={t(I18nKey.BACKEND$CHOOSER_TITLE)}
-        className="grid grid-cols-2 overflow-hidden rounded-lg border border-[var(--oh-border)]"
+        className="grid grid-cols-2 overflow-hidden rounded-lg border border-border"
       >
         <BackendOptionTab
           value="cloud"
@@ -1404,7 +1401,7 @@ function AddBackendChooser({
               <div
                 data-testid="add-backend-cloud-panel"
                 className={cn(
-                  "relative isolate flex min-h-[13.5rem] w-full items-center justify-center rounded-xl border border-[var(--oh-border)] px-5 py-6",
+                  "relative isolate flex min-h-[13.5rem] w-full items-center justify-center rounded-xl border border-border px-5 py-6",
                   // A soft greyscale halo sits behind the CTA; -z-10 keeps it under the
                   // content rather than washing over it.
                   "before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:rounded-xl",
@@ -1426,10 +1423,7 @@ function AddBackendChooser({
                 {/* Rules on either side center the toggle and read as a
                     divider between the chooser and the connection form. */}
                 <div className="flex items-center gap-3">
-                  <span
-                    className="h-px flex-1 bg-[var(--oh-border)]"
-                    aria-hidden
-                  />
+                  <span className="h-px flex-1 bg-border" aria-hidden />
                   <SegmentedToggle<AgentServerLocation>
                     value={agentServerLocation}
                     options={[
@@ -1448,10 +1442,7 @@ function AddBackendChooser({
                     ariaLabel={t(I18nKey.BACKEND$AGENT_SERVER_LOCATION)}
                     testId="add-backend-location"
                   />
-                  <span
-                    className="h-px flex-1 bg-[var(--oh-border)]"
-                    aria-hidden
-                  />
+                  <span className="h-px flex-1 bg-border" aria-hidden />
                 </div>
 
                 <div className="mt-4 flex flex-col gap-4">
@@ -1555,7 +1546,7 @@ export function BackendFormModal({
             hideCloseButton ? "onboarding-modal" : "add-backend-modal"
           }
           className={cn(
-            "relative max-h-[92vh] w-[720px] overflow-y-auto rounded-xl border border-[var(--oh-border)] bg-base-secondary p-6",
+            "relative max-h-[92vh] w-180 overflow-y-auto rounded-xl border border-border bg-base-secondary p-6",
             MODAL_MAX_WIDTH_VIEWPORT,
           )}
         >
@@ -1568,7 +1559,7 @@ export function BackendFormModal({
                 {t(I18nKey.BACKEND$CHOOSER_TITLE)}
               </h2>
               <p
-                className="mt-2 text-sm leading-6 text-[var(--oh-muted)]"
+                className="mt-2 text-sm leading-6 text-muted"
                 data-testid="add-backend-description"
               >
                 {t(I18nKey.BACKEND$CHOOSER_DESCRIPTION)}{" "}
@@ -1609,7 +1600,7 @@ export function BackendFormModal({
       <div
         data-testid={`${testIdRoot}-modal`}
         className={cn(
-          "relative bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-[var(--oh-border)]",
+          "relative bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-border",
           modalWidthClassName("md"),
         )}
       >
