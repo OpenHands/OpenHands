@@ -377,11 +377,14 @@ export function AgentSettingsScreen({
     draft: standardToolsDraft,
     enabled: embedded && toolCatalogSupported,
   });
-  // A draft the server has not answered for yet. Deliberately not the query's
-  // `isPending`, which is also true when there is no draft to ask about (a
-  // profile being named) — that would strand the create form.
+  // A draft the server has not usefully answered for yet: still in flight, or
+  // failed, or answered with nothing. Deliberately not the query's `isPending`,
+  // which is also true when there is no draft to ask about (a profile being
+  // named) — that would strand the create form. An empty answer counts as no
+  // answer because the standard set is never legitimately empty, and seeding a
+  // selection from it would save an agent with no tools at all.
   const standardToolsUnresolved =
-    standardToolsDraft !== null && standardToolNames === undefined;
+    standardToolsDraft !== null && !standardToolNames?.length;
   /** Pickable tools this runtime can run, plus anything the profile stores. */
   const toolPickerCatalog = React.useMemo(() => {
     const items = (toolCatalog ?? [])
@@ -1025,9 +1028,6 @@ export function AgentSettingsScreen({
               },
             ]}
             selectedKey={toolsMode}
-            // Locked until the server has answered what "standard" is: seeding
-            // a custom selection from a pending answer would save an agent with
-            // no tools at all.
             isDisabled={isSavingAny || standardToolsUnresolved}
             onSelectionChange={(key) => {
               if (!key) return;

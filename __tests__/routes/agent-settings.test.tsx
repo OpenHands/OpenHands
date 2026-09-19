@@ -1617,6 +1617,20 @@ describe("AgentSettingsScreen — tool selection", () => {
     ).toBe(false);
   });
 
+  it("stays locked when materialize answers with nothing", async () => {
+    // A dangling llm_profile_ref resolves 200 with no tools. That is not a
+    // legitimate standard set, so it must not seed an empty custom selection.
+    resolvedToolsMock.mockReturnValue([]);
+    renderEditor({ tools: null });
+    await screen.findByTestId("agent-settings-screen");
+
+    const mode = screen.getByTestId("agent-settings-tools-mode");
+    expect(
+      mode.hasAttribute("disabled") ||
+        mode.getAttribute("aria-disabled") === "true",
+    ).toBe(true);
+  });
+
   it("seeds the custom selection once the standard set resolves", async () => {
     const { control } = renderEditor({ tools: null });
     await screen.findByTestId("agent-settings-screen");
