@@ -42,9 +42,11 @@ Compatibility:
   agent-server:    >= ${defaults.compatibility.minimumAgentServer}
 
 Default ports:
-  ingress:         ${defaults.ports.proxy}
-  agent-server:    ${defaults.ports.agentServer}
-  automation:      ${defaults.ports.automation}
+  ingress (--port / PORT):   ${defaults.ports.proxy}
+  agent-server:              ${defaults.ports.agentServer}
+  automation:                ${defaults.ports.automation}
+  frontend:                  3001 (auto-falls back to a free port if taken;
+                               override with OH_CANVAS_SAFE_VITE_PORT)
 
 Override versions via environment variables:
   OH_AGENT_SERVER_VERSION, OH_AGENT_SERVER_GIT_REF, OH_AGENT_SERVER_LOCAL_PATH
@@ -74,7 +76,10 @@ AUTH MODES:
               frontend. Users must paste it when the UI loads.
 
 OPTIONS:
-  -p, --port <port>     Ingress port (default: 8000)
+  -p, --port <port>     Ingress port (default: 8000). Only the entry point;
+                        the frontend (static-server) port is set separately
+                        (default: 3001, auto-fallback if taken, or override
+                        via OH_CANVAS_SAFE_VITE_PORT).
   --public              Enable public mode (see above)
   --frontend-only       Start only the static frontend behind ingress
   --backend-only        Start only agent-server + automation behind ingress
@@ -90,6 +95,9 @@ ENVIRONMENT VARIABLES:
   OH_AGENT_SERVER_GIT_REF      Git ref for agent-server
   OH_AGENT_SERVER_LOCAL_PATH   Path to local SDK checkout (for development)
   OH_AGENT_SERVER_VERSION      Specific PyPI version for agent-server
+  OH_CANVAS_SAFE_VITE_PORT     Frontend (static-server) port (default: 3001).
+                               If the preferred port is taken, the launcher
+                               picks a free port automatically.
 
 Note: LLM settings are configured through the web UI settings page,
 not environment variables.
