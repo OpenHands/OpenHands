@@ -854,15 +854,34 @@ function buildBundledSkills(): BundledSkill[] {
   });
 }
 
+/** Join non-empty system-message suffix parts with a blank line. */
+function composeSystemMessageSuffix(
+  ...parts: Array<string | null | undefined>
+): string | undefined {
+  const nonempty = parts
+    .filter((part): part is string => typeof part === "string")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+  if (nonempty.length === 0) {
+    return undefined;
+  }
+  return nonempty.join("\n\n");
+}
+
 function buildAgentContext(
   agentSettings: SettingsRecord,
   runtimeServicesInfo?: RuntimeServicesInfo | null,
   enablement: SkillEnablement = {},
   invokedCatalogSkill?: string,
+  additionalSystemMessageSuffix?: string | null,
 ): SettingsRecord {
   const runtimeServicesSuffix =
     buildRuntimeServicesSystemSuffix(runtimeServicesInfo);
   const existingContext = toRecord(agentSettings.agent_context);
+  const composedSuffix = composeSystemMessageSuffix(
+    additionalSystemMessageSuffix,
+    runtimeServicesSuffix,
+  );
 
   // Merge bundled public skills with any skills already present in the
   // agent context (e.g. user-defined skills set via the settings API).
@@ -909,9 +928,7 @@ function buildAgentContext(
     // prompt too. The allow-list has no counterpart to send: the backend
     // loads no catalog skills of its own (`load_public_skills` is false).
     disabled_skills: disabledSkills,
-    ...(runtimeServicesSuffix
-      ? { system_message_suffix: runtimeServicesSuffix }
-      : {}),
+    ...(composedSuffix ? { system_message_suffix: composedSuffix } : {}),
   };
 }
 
@@ -1014,6 +1031,7 @@ function buildConfiguredOpenHandsAgentSettings(
   settings: Settings,
   runtimeServicesInfo?: RuntimeServicesInfo | null,
   query?: string,
+  systemMessageSuffix?: string | null,
 ): AgentSettingsPayload {
   const agentSettings = toRecord(settings.agent_settings);
   const llm = buildNormalizedLlmSettings(agentSettings.llm);
@@ -1044,6 +1062,7 @@ function buildConfiguredOpenHandsAgentSettings(
       runtimeServicesInfo,
       toSkillEnablement(settings),
       findInvokedCatalogSkill(query),
+      systemMessageSuffix,
     ),
     tools: getAgentTools(agentSettings),
   };
@@ -1053,6 +1072,7 @@ function buildConfiguredAgentSettings(
   settings: Settings,
   runtimeServicesInfo?: RuntimeServicesInfo | null,
   query?: string,
+  systemMessageSuffix?: string | null,
 ): AgentSettingsPayload {
   return isAcpAgent(settings)
     ? buildConfiguredAcpAgentSettings(settings, runtimeServicesInfo, query)
@@ -1060,6 +1080,7 @@ function buildConfiguredAgentSettings(
         settings,
         runtimeServicesInfo,
         query,
+        systemMessageSuffix,
       );
 }
 
@@ -1185,6 +1206,9 @@ export interface StartConversationOptions {
   runtimeServicesInfo?: RuntimeServicesInfo | null;
   executionRuntime?: AgentServerInfo["execution_runtime"];
   workspaceHookConfig?: HookConfig | null;
+  // Copied from the resolved OpenHands Agent Profile when launching via the
+  // legacy agent_settings fallback so Custom instructions still apply (#17498).
+  systemMessageSuffix?: string | null;
 }
 
 /**
@@ -1236,6 +1260,7 @@ export function buildStartConversationRequest(
     sourceAgentSettings,
     options.runtimeServicesInfo,
     options.query,
+    options.systemMessageSuffix,
   );
   const acpServerTag = acpMode
     ? getAcpServerTag(sourceAgentSettings)
@@ -1657,6 +1682,7 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
   agentProfileId?: string;
   agentProfileKind?: AgentKind;
   titleLlmProfile?: string;
+  systemMessageSuffix?: string | null;
 }): Promise<Record<string, unknown>> {
   const [{ SecretsService }, { default: HooksService }] = await Promise.all([
     import("./secrets-service"),

@@ -357,6 +357,38 @@ describe("AgentServerConversationService", () => {
         parent_conversation_id: "parent-conversation-id",
       });
     });
+
+    it("applies a profile system_message_suffix on the agent_settings launch path (#17498)", async () => {
+      mockGetSettings.mockResolvedValue({
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "conversation-1",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      await AgentServerConversationService.createConversation({
+        systemMessageSuffix: "Always respond in English.",
+      });
+
+      const payload = mockHttpPost.mock.calls[0][1] as {
+        agent_settings: {
+          agent_context: { system_message_suffix?: string };
+        };
+      };
+      expect(
+        payload.agent_settings.agent_context.system_message_suffix,
+      ).toContain("Always respond in English.");
+    });
   });
 
   describe("deleteConversation local branch", () => {
