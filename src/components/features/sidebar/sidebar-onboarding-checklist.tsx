@@ -35,7 +35,7 @@ function ChecklistStatusIcon({ isComplete }: { isComplete: boolean }) {
       className={cn(
         "inline-flex size-4 shrink-0 items-center justify-center rounded-full border",
         isComplete
-          ? "border-primary bg-primary text-base"
+          ? "border-primary bg-primary text-on-primary"
           : "border-border bg-transparent",
       )}
     >
