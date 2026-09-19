@@ -2,6 +2,7 @@ import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { useEventStore } from "#/stores/use-event-store";
 import {
+  ACPToolCallEvent,
   ActionEvent,
   MessageEvent,
   ObservationEvent,
@@ -279,5 +280,108 @@ describe("useEventStore", () => {
     // Verify events were cleared
     expect(result.current.events).toEqual([]);
     expect(result.current.uiEvents).toEqual([]);
+  });
+
+  it("should project one observation when an older action arrives after it (#16947)", () => {
+    const { result } = renderHook(() => useEventStore());
+    const action: ActionEvent = {
+      ...mockActionEvent,
+      id: "page-action",
+      timestamp: "2024-01-01T00:00:00.000Z",
+      tool_call_id: "call_page",
+      tool_call: {
+        ...mockActionEvent.tool_call,
+        id: "call_page",
+      },
+    };
+    const observation: ObservationEvent = {
+      ...mockObservationEvent,
+      id: "page-obs",
+      timestamp: "2024-01-01T00:00:01.000Z",
+      action_id: "page-action",
+      tool_call_id: "call_page",
+    };
+
+    act(() => {
+      result.current.clearEvents();
+      // Newest REST page lands first and only has the observation.
+      result.current.addEvent(observation);
+      // Older-history pagination bulk-inserts the matching action.
+      result.current.addEvents([action]);
+    });
+
+    expect(result.current.events.map((event) => event.id)).toEqual([
+      "page-action",
+      "page-obs",
+    ]);
+    expect(result.current.uiEvents.map((event) => event.id)).toEqual([
+      "page-obs",
+    ]);
+  });
+
+  it("should keep one ACP card when started/terminal events split across pages (#16947)", () => {
+    const { result } = renderHook(() => useEventStore());
+    const started: ACPToolCallEvent = {
+      kind: "ACPToolCallEvent",
+      id: "acp-started",
+      timestamp: "2024-01-01T00:00:00.000Z",
+      source: "agent",
+      tool_call_id: "toolu_page",
+      title: "ls",
+      tool_kind: "execute",
+      status: "in_progress",
+      raw_input: { command: "ls" },
+      raw_output: null,
+      content: null,
+      is_error: false,
+    };
+    const completed: ACPToolCallEvent = {
+      ...started,
+      id: "acp-completed",
+      timestamp: "2024-01-01T00:00:01.000Z",
+      status: "completed",
+      raw_output: "ok",
+    };
+
+    act(() => {
+      result.current.clearEvents();
+      result.current.addEvent(completed);
+      result.current.addEvents([started]);
+    });
+
+    expect(result.current.events.map((event) => event.id)).toEqual([
+      "acp-started",
+      "acp-completed",
+    ]);
+    expect(result.current.uiEvents.map((event) => event.id)).toEqual([
+      "acp-completed",
+    ]);
+  });
+
+  it("should keep equal-timestamp events in insertion order after a bulk prepend", () => {
+    const { result } = renderHook(() => useEventStore());
+    const first = makeUserMessageEvent("eq-first", "2024-01-01T00:00:00.000Z");
+    const second = makeUserMessageEvent(
+      "eq-second",
+      "2024-01-01T00:00:00.000Z",
+    );
+    const newer = makeUserMessageEvent("eq-newer", "2024-01-02T00:00:00.000Z");
+
+    act(() => {
+      result.current.clearEvents();
+      result.current.addEvent(newer);
+      result.current.addEvents([first, second]);
+    });
+
+    expect(result.current.events.map((event) => event.id)).toEqual([
+      "eq-first",
+      "eq-second",
+      "eq-newer",
+    ]);
+    expect(result.current.uiEvents.map((event) => event.id)).toEqual([
+      "eq-first",
+      "eq-second",
+      "eq-newer",
+    ]);
   });
 });
