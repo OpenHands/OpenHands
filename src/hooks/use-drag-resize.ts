@@ -171,7 +171,7 @@ export const useDragResize = ({
 
     // Setup event listeners based on device type
     if (isMobile) {
-      setupMobileEventListeners(handleDragMove, handleDragEnd);
+      resizeGrip = setupMobileEventListeners(handleDragMove, handleDragEnd);
       activeCleanupRef.current = handleDragEnd;
     } else {
       setupDesktopEventListeners(handleDragMove, handleDragEnd);
