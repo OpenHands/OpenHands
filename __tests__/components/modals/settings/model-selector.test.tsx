@@ -12,6 +12,7 @@ const mockProviders: LLMProvider[] = [
   { name: "openai", verified: true },
   { name: "azure", verified: false },
   { name: "vertex_ai", verified: false },
+  { name: "openrouter", verified: false },
 ];
 
 const model = (partial: Partial<LLMModel> & Pick<LLMModel, "name">): LLMModel => ({
@@ -35,6 +36,7 @@ const mockModelsByProvider: Record<string, LLMModel[]> = {
     model({ provider: "vertex_ai", name: "chat-bison" }),
     model({ provider: "vertex_ai", name: "chat-bison-32k" }),
   ],
+  openrouter: [model({ provider: "openrouter", name: "anthropic/claude-3.5" })],
 };
 
 vi.mock("#/hooks/query/use-search-providers", () => ({
@@ -55,6 +57,9 @@ vi.mock("react-i18next", () => ({
         LLM$MODEL: "LLM Model",
         LLM$SELECT_PROVIDER_PLACEHOLDER: "Select a provider",
         LLM$SELECT_MODEL_PLACEHOLDER: "Select a model",
+        SETTINGS$CUSTOM_MODEL: "Custom Model",
+        MODEL_SELECTOR$CUSTOM_MODEL_HINT:
+          "Enter the model ID as the provider lists it.",
       };
       return translations[key] || key;
     },
@@ -155,4 +160,54 @@ describe("ModelSelector", () => {
     expect(modelInput.getAttribute("placeholder") ?? "").toBe("");
   });
 
+  it("should report a model the provider catalog does not list", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+
+    renderWithQuery(<ModelSelector onChange={onChange} />);
+
+    await user.click(screen.getByLabelText("LLM Provider"));
+    await user.click(screen.getByText("OpenRouter"));
+
+    await user.click(screen.getByLabelText("LLM Model"));
+    await user.click(screen.getByTestId("model-item-custom"));
+
+    const customInput = await screen.findByTestId("custom-model-input");
+    // `SettingsForm` submits the raw form, so the visible field must be the one
+    // carrying the model's form name.
+    expect(customInput).toHaveAttribute("name", "llm-model-input");
+    await user.type(customInput, "thinkingmachines/inkling-small:free");
+
+    expect(onChange).toHaveBeenLastCalledWith(
+      "openrouter",
+      "thinkingmachines/inkling-small:free",
+    );
+  });
+
+  it("should edit a saved model the provider catalog does not list", async () => {
+    renderWithQuery(
+      <ModelSelector currentModel="openrouter/thinkingmachines/inkling-small:free" />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("LLM Provider")).toHaveValue("OpenRouter");
+    });
+
+    expect(await screen.findByTestId("custom-model-input")).toHaveValue(
+      "thinkingmachines/inkling-small:free",
+    );
+  });
+
+  it("should not offer the custom model input for a listed model", async () => {
+    const user = userEvent.setup();
+    renderWithQuery(<ModelSelector />);
+
+    await user.click(screen.getByLabelText("LLM Provider"));
+    await user.click(screen.getByText("Azure"));
+
+    await user.click(screen.getByLabelText("LLM Model"));
+    await user.click(screen.getByText("ada"));
+
+    expect(screen.queryByTestId("custom-model-input")).not.toBeInTheDocument();
+  });
 });

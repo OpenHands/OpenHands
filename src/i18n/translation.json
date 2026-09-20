@@ -20163,6 +20163,23 @@
     "uk": "Інші моделі",
     "ca": "Altres models"
   },
+  "MODEL_SELECTOR$CUSTOM_MODEL_HINT": {
+    "en": "Enter the model ID exactly as the provider lists it. The provider prefix is added for you.",
+    "ja": "プロバイダーが表示しているとおりにモデル ID を入力してください。プロバイダーの接頭辞は自動的に付加されます。",
+    "zh-CN": "请按照提供商列出的方式输入模型 ID。提供商前缀会自动添加。",
+    "zh-TW": "請依照供應商列出的方式輸入模型 ID。供應商前綴會自動加上。",
+    "ko-KR": "제공업체가 표시한 그대로 모델 ID를 입력하세요. 제공업체 접두사는 자동으로 추가됩니다.",
+    "no": "Skriv inn modell-ID-en nøyaktig slik leverandøren oppgir den. Leverandørprefikset legges til automatisk.",
+    "it": "Inserisci l'ID del modello esattamente come lo indica il provider. Il prefisso del provider viene aggiunto automaticamente.",
+    "pt": "Insira o ID do modelo exatamente como o provedor o lista. O prefixo do provedor é adicionado automaticamente.",
+    "es": "Introduce el ID del modelo exactamente como lo indica el proveedor. El prefijo del proveedor se añade automáticamente.",
+    "ar": "أدخل معرّف النموذج تمامًا كما يعرضه المزوّد. تتم إضافة بادئة المزوّد تلقائيًا.",
+    "fr": "Saisissez l'identifiant du modèle exactement comme le fournisseur l'indique. Le préfixe du fournisseur est ajouté automatiquement.",
+    "tr": "Model kimliğini sağlayıcının listelediği şekilde girin. Sağlayıcı ön eki otomatik olarak eklenir.",
+    "de": "Geben Sie die Modell-ID genau so ein, wie der Anbieter sie angibt. Das Anbieter-Präfix wird automatisch hinzugefügt.",
+    "uk": "Введіть ідентифікатор моделі точно так, як його вказує постачальник. Префікс постачальника додається автоматично.",
+    "ca": "Introduïu l'ID del model tal com el llista el proveïdor. El prefix del proveïdor s'afegeix automàticament."
+  },
   "GITLAB$TOKEN_LABEL": {
     "en": "GitLab Token",
     "ja": "GitLabトークン",

@@ -17,6 +17,15 @@ import { useSearchProviders } from "#/hooks/query/use-search-providers";
 import { useProviderModels } from "#/hooks/query/use-provider-models";
 import { FREE_MODEL_BADGE_LABEL } from "#/utils/format-model-name";
 import { FreeOpenHandsModelsNote } from "#/components/shared/free-models-note";
+import { SettingsInput } from "#/components/features/settings/settings-input";
+import { Typography } from "#/ui/typography";
+
+/**
+ * Dropdown sentinel for "the model I want is not listed". The provider's
+ * catalog is whatever LiteLLM knows about, so aggregators such as OpenRouter
+ * always lag behind the models they actually serve.
+ */
+const CUSTOM_MODEL_KEY = "__custom_model__";
 
 const freeModelBadgeClassName =
   "shrink-0 rounded-full border border-warning/40 bg-warning/10 px-1.5 py-0.5 text-[10px] leading-none text-warning";
@@ -46,6 +55,7 @@ export function ModelSelector({
     null,
   );
   const [selectedModel, setSelectedModel] = React.useState<string | null>(null);
+  const [isCustomModel, setIsCustomModel] = React.useState(false);
 
   const { data: providers = [] } = useSearchProviders();
   const {
@@ -97,18 +107,33 @@ export function ModelSelector({
   const handleChangeProvider = (provider: string) => {
     setSelectedProvider(provider);
     setSelectedModel(null);
+    setIsCustomModel(false);
     setLitellmId(`${provider}/`);
     onChange?.(provider, null);
   };
 
   const handleChangeModel = (model: string) => {
+    // Switching to free text keeps the current model as the starting point, so
+    // the form never holds a model the user can no longer see.
+    if (model === CUSTOM_MODEL_KEY) {
+      setIsCustomModel(true);
+      return;
+    }
+
     let fullModel = `${selectedProvider}/${model}`;
     if (selectedProvider === "openai") {
       fullModel = model;
     }
+    setIsCustomModel(false);
     setLitellmId(fullModel);
     setSelectedModel(model);
     onChange?.(selectedProvider, model);
+  };
+
+  const handleChangeCustomModel = (model: string) => {
+    setSelectedModel(model || null);
+    setLitellmId(model ? `${selectedProvider}/${model}` : null);
+    onChange?.(selectedProvider, model || null);
   };
 
   const clear = () => {
@@ -116,8 +141,23 @@ export function ModelSelector({
     setLitellmId(null);
   };
 
+  // A model the provider's catalog does not list is edited as free text. The
+  // catalog is only authoritative once it has loaded, so an empty list is
+  // treated as "not known yet" rather than as "nothing matches".
+  const isListedModel = providerModels.some(
+    (model) => model.name === selectedModel,
+  );
+  const showCustomModelInput =
+    isCustomModel ||
+    (!!selectedModel && providerModels.length > 0 && !isListedModel);
+  const modelSelectorKey = showCustomModelInput
+    ? CUSTOM_MODEL_KEY
+    : selectedModel;
+
   const isSelectedModelFree = Boolean(
-    selectedModel && freeModelNameSet.has(selectedModel),
+    !showCustomModelInput &&
+    selectedModel &&
+    freeModelNameSet.has(selectedModel),
   );
   const selectedModelMeasureRef = React.useRef<HTMLSpanElement>(null);
   const [selectedModelTextWidth, setSelectedModelTextWidth] = React.useState(0);
@@ -236,15 +276,18 @@ export function ModelSelector({
             isRequired
             isVirtualized={false}
             isLoading={isLoadingModels}
-            name="llm-model-input"
+            // `SettingsForm` reads the model straight off the form, so the
+            // field that actually holds it owns the name: in custom mode this
+            // combobox only holds the "Custom Model" label.
+            name={showCustomModelInput ? undefined : "llm-model-input"}
             aria-label={t(I18nKey.LLM$MODEL)}
             isClearable={false}
             onSelectionChange={(e) => {
               if (e?.toString()) handleChangeModel(e.toString());
             }}
             isDisabled={isDisabled || !selectedProvider}
-            selectedKey={selectedModel}
-            defaultSelectedKey={selectedModel ?? undefined}
+            selectedKey={modelSelectorKey}
+            defaultSelectedKey={modelSelectorKey ?? undefined}
             classNames={{
               popoverContent:
                 "bg-content1 rounded-xl border border-[var(--oh-border)]",
@@ -290,6 +333,13 @@ export function ModelSelector({
                 ))}
               </AutocompleteSection>
             ) : null}
+            <AutocompleteItem
+              data-testid="model-item-custom"
+              key={CUSTOM_MODEL_KEY}
+              textValue={t(I18nKey.SETTINGS$CUSTOM_MODEL)}
+            >
+              {t(I18nKey.SETTINGS$CUSTOM_MODEL)}
+            </AutocompleteItem>
           </Autocomplete>
           {isSelectedModelFree && selectedModel ? (
             <>
@@ -315,6 +365,23 @@ export function ModelSelector({
             </>
           ) : null}
         </div>
+        {showCustomModelInput ? (
+          <div className="flex flex-col gap-1.5">
+            <SettingsInput
+              testId="custom-model-input"
+              name="llm-model-input"
+              label={t(I18nKey.SETTINGS$CUSTOM_MODEL)}
+              type="text"
+              className="w-full"
+              value={selectedModel ?? ""}
+              onChange={handleChangeCustomModel}
+              isDisabled={isDisabled}
+            />
+            <Typography.Text className="text-xs text-[var(--oh-muted)]">
+              {t(I18nKey.MODEL_SELECTOR$CUSTOM_MODEL_HINT)}
+            </Typography.Text>
+          </div>
+        ) : null}
         {modelsError && (
           <p data-testid="models-error" className="text-danger text-xs">
             {t(I18nKey.CONFIGURATION$ERROR_FETCH_MODELS)}
