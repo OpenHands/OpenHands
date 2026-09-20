@@ -8,6 +8,7 @@ import { isMobileDevice } from "#/utils/utils";
 
 /** Movement required before a pointer gesture is treated as a resize drag. */
 const DRAG_COMMIT_PX = 2;
+const MOBILE_RESIZE_CAPTURE = true;
 
 /**
  * Distance (px) from the viewport bottom within which we consider the chat
@@ -75,10 +76,10 @@ export const useDragResize = ({
 
     resizeGrip.addEventListener("touchmove", handleDragMove, {
       passive: false,
-      capture: true,
+      capture: MOBILE_RESIZE_CAPTURE,
     });
     resizeGrip.addEventListener("touchend", handleDragEnd, {
-      capture: true,
+      capture: MOBILE_RESIZE_CAPTURE,
     });
     return resizeGrip;
   };
@@ -153,15 +154,16 @@ export const useDragResize = ({
           return;
         }
 
-        // Remove both mouse and touch event listeners
-        resizeGrip.removeEventListener("mousemove", handleDragMove);
-        resizeGrip.removeEventListener("mouseup", handleDragEnd);
-        resizeGrip.removeEventListener("touchmove", handleDragMove, {
-          capture: true,
-        });
-        resizeGrip.removeEventListener("touchend", handleDragEnd, {
-          capture: true,
-        });
+        resizeGrip.removeEventListener(
+          "touchmove",
+          handleDragMove,
+          MOBILE_RESIZE_CAPTURE,
+        );
+        resizeGrip.removeEventListener(
+          "touchend",
+          handleDragEnd,
+          MOBILE_RESIZE_CAPTURE,
+        );
       } else {
         document.removeEventListener("mousemove", handleDragMove);
         document.removeEventListener("mouseup", handleDragEnd);
