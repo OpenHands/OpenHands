@@ -230,7 +230,7 @@ export function LlmSettingsScreen({
   );
 
   const buildHeader = React.useCallback(
-    ({ values, isDisabled, view, onChange }: SdkSectionHeaderProps) => {
+    ({ values, errors, isDisabled, view, onChange }: SdkSectionHeaderProps) => {
       const modelValue =
         typeof values["llm.model"] === "string" ? values["llm.model"] : "";
       const baseUrlValue =
@@ -332,6 +332,7 @@ export function LlmSettingsScreen({
             placeholder={apiKeyIsSet ? "<hidden>" : ""}
             onChange={(value) => onChange("llm.api_key", value)}
             isDisabled={isDisabled}
+            error={errors["llm.api_key"]}
             startContent={
               apiKeyIsSet ? <KeyStatusIcon isSet={apiKeyIsSet} /> : undefined
             }
@@ -525,6 +526,7 @@ export function LlmSettingsScreen({
                       placeholder="https://api.openai.com"
                       onChange={(value) => onChange("llm.base_url", value)}
                       isDisabled={isDisabled}
+                      error={errors["llm.base_url"]}
                     />
                   )}
 

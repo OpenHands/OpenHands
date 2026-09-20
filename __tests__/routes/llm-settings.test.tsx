@@ -149,6 +149,64 @@ describe("LlmSettingsScreen", () => {
     expect(screen.getByTestId("llm-api-key-input")).toBeInTheDocument();
   });
 
+  it("shows an inline error and disables Save for an invalid Base URL", async () => {
+    const user = userEvent.setup();
+
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        llm_model: "openai/gpt-4o",
+        llm_api_key_set: false,
+      }),
+    );
+
+    renderLlmSettingsScreen();
+
+    await screen.findByTestId("llm-settings-screen");
+
+    await user.click(screen.getByTestId("sdk-section-all-toggle"));
+
+    const baseUrlInput = await screen.findByTestId("base-url-input");
+
+    await user.clear(baseUrlInput);
+    await user.type(baseUrlInput, "localhost:11434");
+
+    expect(
+      screen.getByText("Base URL must be a valid HTTP(S) URL"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("save-button")).toBeDisabled();
+
+    await user.clear(baseUrlInput);
+    await user.type(baseUrlInput, "http://localhost:11434");
+
+    expect(
+      screen.queryByText("Base URL must be a valid HTTP(S) URL"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("save-button")).toBeEnabled();
+  });
+
+  it("shows an inline error and disables Save for an invalid API key", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        llm_model: "openai/gpt-4o",
+        llm_api_key_set: false,
+      }),
+    );
+
+    renderLlmSettingsScreen();
+
+    await screen.findByTestId("llm-settings-screen");
+
+    fireEvent.change(screen.getByTestId("llm-api-key-input"), {
+      target: { value: "-" },
+    });
+
+    expect(
+      screen.getByText("API Key must be at least 2 characters"),
+    ).toBeInTheDocument();
+
+    expect(screen.getByTestId("save-button")).toBeDisabled();
+  });
+
   it("shows the API key as set on the global settings page when a key exists", async () => {
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
       buildSettings({ llm_model: "openai/gpt-4o", llm_api_key_set: true }),

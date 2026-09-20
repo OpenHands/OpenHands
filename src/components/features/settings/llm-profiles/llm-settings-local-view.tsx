@@ -273,7 +273,7 @@ export function LlmSettingsLocalView() {
   );
 
   const handleSave = useCallback(async () => {
-    if (!saveControl || !isNameValid) return;
+    if (!saveControl || !saveControl.isValid || !isNameValid) return;
 
     // Coerced, dirty-only changes from the embedded form. Merging these over
     // the profile's existing full config preserves fields the user did not
@@ -558,6 +558,7 @@ export function LlmSettingsLocalView() {
             isSaving ||
             isValidating ||
             !saveControl ||
+            !saveControl.isValid ||
             !(
               viewMode === "create" ||
               saveControl.isDirty ||

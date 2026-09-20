@@ -19,6 +19,7 @@ import {
   normalizeFieldValue,
   normalizeComparableValue,
   SPECIALLY_RENDERED_KEYS,
+  validateSettingsFieldValue,
 } from "#/utils/sdk-settings-schema";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import {
@@ -1038,6 +1039,75 @@ describe("sdk settings schema helpers", () => {
       expect(() => coerceFieldValue(integerField, "1.5")).toThrow(
         "Expected an integer value, received: 1.5",
       );
+    });
+
+    it("validates LLM API keys and base URLs", () => {
+      const apiKeyField = getMockField({
+        key: "llm.api_key",
+        label: "API Key",
+        value_type: "string",
+        secret: true,
+      });
+
+      const baseUrlField = getMockField({
+        key: "llm.base_url",
+        label: "Base URL",
+        value_type: "string",
+      });
+
+      expect(validateSettingsFieldValue(apiKeyField, "")).toBe(
+        "API Key must be at least 2 characters",
+      );
+      expect(validateSettingsFieldValue(apiKeyField, "-")).toBe(
+        "API Key must be at least 2 characters",
+      );
+      expect(validateSettingsFieldValue(apiKeyField, "sk-valid")).toBeNull();
+
+      expect(validateSettingsFieldValue(baseUrlField, "")).toBeNull();
+      expect(validateSettingsFieldValue(baseUrlField, ".")).toBe(
+        "Base URL must be a valid HTTP(S) URL",
+      );
+      expect(validateSettingsFieldValue(baseUrlField, "localhost:11434")).toBe(
+        "Base URL must be a valid HTTP(S) URL",
+      );
+      expect(
+        validateSettingsFieldValue(baseUrlField, "http://localhost:11434"),
+      ).toBeNull();
+      expect(
+        validateSettingsFieldValue(baseUrlField, "https://api.openai.com/v1"),
+      ).toBeNull();
+    });
+
+    it("rejects malformed LLM base URLs", () => {
+      const field = getMockField({
+        key: "llm.base_url",
+        label: "Base URL",
+        value_type: "string",
+      });
+
+      expect(() => coerceFieldValue(field, ".")).toThrow();
+      expect(() => coerceFieldValue(field, "localhost:11434")).toThrow();
+
+      expect(coerceFieldValue(field, "http://localhost:11434")).toBe(
+        "http://localhost:11434",
+      );
+      expect(coerceFieldValue(field, "https://api.openai.com/v1")).toBe(
+        "https://api.openai.com/v1",
+      );
+    });
+
+    it("rejects empty and single-character LLM API keys", () => {
+      const field = getMockField({
+        key: "llm.api_key",
+        label: "API Key",
+        value_type: "string",
+        secret: true,
+      });
+
+      expect(() => coerceFieldValue(field, "")).toThrow();
+      expect(() => coerceFieldValue(field, "-")).toThrow();
+
+      expect(coerceFieldValue(field, "sk-test")).toBe("sk-test");
     });
 
     it("enforces configured minimum and maximum values", () => {

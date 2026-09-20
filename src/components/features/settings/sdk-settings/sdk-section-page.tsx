@@ -33,6 +33,7 @@ import {
   inferInitialView,
   isValidSettingsSchema,
   normalizeComparableValue,
+  validateSettingsFieldValue,
   SettingsDirtyState,
   SettingsFormValues,
   type SettingsValueSource,
@@ -132,6 +133,7 @@ export interface SettingsSourceConfig {
 
 export interface SdkSectionHeaderProps {
   values: SettingsFormValues;
+  errors: Record<string, string>;
   isDisabled: boolean;
   view: SettingsView;
   onChange: (key: string, value: string | boolean) => void;
@@ -154,6 +156,7 @@ export interface SdkSectionSaveControl {
   isSaving: boolean;
   /** At least one field is dirty (or `extraDirty` was passed in). */
   isDirty: boolean;
+  isValid: boolean;
   /** Current form values (for custom save flows). */
   values: SettingsFormValues;
   /** The active view tier (basic/advanced/all) the form is rendering. */
@@ -515,6 +518,25 @@ export function SdkSectionPage({
     return map;
   }, [resolvedSources]);
 
+  const validationErrors = React.useMemo(() => {
+    const errors: Record<string, string> = {};
+
+    for (const fieldKey of Object.keys(flatDirty)) {
+      const field = fieldsByKey.get(fieldKey);
+      if (!field) continue;
+
+      const error = validateSettingsFieldValue(field, flatValues[fieldKey]);
+
+      if (error) {
+        errors[fieldKey] = error;
+      }
+    }
+
+    return errors;
+  }, [fieldsByKey, flatDirty, flatValues]);
+
+  const isValid = Object.keys(validationErrors).length === 0;
+
   const initialValuesBySourceRef = React.useRef(initialValuesBySource);
   initialValuesBySourceRef.current = initialValuesBySource;
   const initialValueOverridesRef = React.useRef(initialValueOverrides);
@@ -675,11 +697,12 @@ export function SdkSectionPage({
       save: stableSave,
       isSaving: isPending,
       isDirty: saveControlIsDirty,
+      isValid,
       values: flatValues,
       view,
       getDirtyPayload: stableGetDirtyPayload,
     });
-  }, [isPending, saveControlIsDirty, flatValues, view]);
+  }, [isPending, saveControlIsDirty, isValid, flatValues, view]);
 
   // Keep existing form content visible during background refetches to avoid
   // flashing the full skeleton (notably during onboarding Next transitions).
@@ -734,6 +757,7 @@ export function SdkSectionPage({
       <div className={bodyClassName}>
         {header?.({
           values: flatValues,
+          errors: validationErrors,
           isDisabled: isReadOnly,
           view,
           onChange: handleFieldChange,
@@ -784,7 +808,7 @@ export function SdkSectionPage({
               testId="save-button"
               type="button"
               variant="primary"
-              isDisabled={isPending || (!isDirty && !extraDirty)}
+              isDisabled={isPending || !isValid || (!isDirty && !extraDirty)}
               onClick={handleSave}
             >
               {isPending

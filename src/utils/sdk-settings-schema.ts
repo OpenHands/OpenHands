@@ -357,6 +357,41 @@ function parseBooleanFieldValue(rawValue: string | boolean): boolean | null {
   throw new Error(`Expected a boolean value, received: ${rawValue}`);
 }
 
+export function validateSettingsFieldValue(
+  field: SettingsFieldSchema,
+  rawValue: string | boolean,
+): string | null {
+  if (field.value_type !== "string") {
+    return null;
+  }
+
+  const stringValue = String(rawValue);
+
+  if (stringValue === "" && !field.secret) {
+    return null;
+  }
+
+  if (field.key === "llm.api_key" && stringValue.length < 2) {
+    return `${field.label} must be at least 2 characters`;
+  }
+
+  if (field.key === "llm.base_url") {
+    let parsedUrl: URL;
+
+    try {
+      parsedUrl = new URL(stringValue);
+    } catch {
+      return `${field.label} must be a valid HTTP(S) URL`;
+    }
+
+    if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+      return `${field.label} must be a valid HTTP(S) URL`;
+    }
+  }
+
+  return null;
+}
+
 export function coerceFieldValue(
   field: SettingsFieldSchema,
   rawValue: string | boolean,
@@ -424,6 +459,11 @@ export function coerceFieldValue(
   const stringValue = String(rawValue);
   if (stringValue === "" && !field.secret) {
     return null;
+  }
+
+  const validationError = validateSettingsFieldValue(field, rawValue);
+  if (validationError) {
+    throw new Error(validationError);
   }
 
   return stringValue;

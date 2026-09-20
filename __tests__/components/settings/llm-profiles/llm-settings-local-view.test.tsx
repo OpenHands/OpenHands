@@ -41,6 +41,7 @@ vi.mock("#/routes/llm-settings", async () => {
         save: () => void;
         isSaving: boolean;
         isDirty: boolean;
+        isValid: boolean;
         view: "basic" | "all";
         values: Record<string, string | boolean>;
         getDirtyPayload: () => { llm: Record<string, unknown> };
@@ -57,7 +58,7 @@ vi.mock("#/routes/llm-settings", async () => {
       const [model, setModel] = React.useState(
         String(initialValuesRef.current["llm.model"] ?? ""),
       );
-      const [apiKey] = React.useState(
+      const [apiKey, setApiKey] = React.useState(
         String(initialValuesRef.current["llm.api_key"] ?? ""),
       );
       const [baseUrl] = React.useState(
@@ -66,7 +67,10 @@ vi.mock("#/routes/llm-settings", async () => {
       const [temperature, setTemperature] = React.useState("0.2");
       const isDirty =
         model !== String(initialValuesRef.current["llm.model"] ?? "") ||
+        apiKey !== String(initialValuesRef.current["llm.api_key"] ?? "") ||
+        baseUrl !== String(initialValuesRef.current["llm.base_url"] ?? "") ||
         temperature !== "0.2";
+      const isValid = apiKey.length === 0 || apiKey.length >= 2;
       React.useEffect(() => {
         const values = {
           ...(initialValueOverridesRef.current ?? {}),
@@ -78,6 +82,7 @@ vi.mock("#/routes/llm-settings", async () => {
           save: vi.fn(),
           isSaving: false,
           isDirty,
+          isValid,
           view,
           values,
           getDirtyPayload: () => {
@@ -97,6 +102,7 @@ vi.mock("#/routes/llm-settings", async () => {
         apiKey,
         baseUrl,
         isDirty,
+        isValid,
         model,
         onSaveControlChange,
         temperature,
@@ -120,11 +126,18 @@ vi.mock("#/routes/llm-settings", async () => {
             All
           </button>
           {view === "basic" ? (
-            <input
-              data-testid="mock-basic-model-input"
-              value={model}
-              onChange={(event) => setModel(event.currentTarget.value)}
-            />
+            <>
+              <input
+                data-testid="mock-basic-model-input"
+                value={model}
+                onChange={(event) => setModel(event.currentTarget.value)}
+              />
+              <input
+                data-testid="mock-basic-api-key-input"
+                value={apiKey}
+                onChange={(event) => setApiKey(event.currentTarget.value)}
+              />
+            </>
           ) : null}
           {view === "all" ? (
             <input
@@ -586,6 +599,50 @@ describe("LlmSettingsLocalView", () => {
       await user.type(modelInput, "openai/gpt-4o");
       await waitFor(() => {
         expect(screen.getByTestId("save-profile-btn")).not.toBeDisabled();
+      });
+    });
+
+    it("disables Save when the embedded settings form is invalid", async () => {
+      const user = userEvent.setup();
+
+      vi.mocked(ProfilesService.getProfile).mockResolvedValue({
+        name: "gpt-4-profile",
+        api_key_set: true,
+        config: {
+          model: "openai/gpt-4",
+          api_key: "encrypted-key-123",
+          base_url: "https://api.openai.com/v1",
+        },
+      });
+
+      renderWithProviders(<LlmSettingsLocalView />);
+
+      await user.click(screen.getAllByTestId("profile-menu-trigger")[0]);
+      await user.click(screen.getByTestId("profile-edit"));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("profile-name-input")).toHaveValue(
+          "gpt-4-profile",
+        );
+      });
+
+      const saveButton = screen.getByTestId("save-profile-btn");
+      const apiKeyInput = await screen.findByTestId("mock-basic-api-key-input");
+
+      expect(saveButton).toBeDisabled();
+
+      await user.clear(apiKeyInput);
+      await user.type(apiKeyInput, "-");
+
+      await waitFor(() => {
+        expect(saveButton).toBeDisabled();
+      });
+
+      await user.clear(apiKeyInput);
+      await user.type(apiKeyInput, "valid-api-key");
+
+      await waitFor(() => {
+        expect(saveButton).toBeEnabled();
       });
     });
   });
