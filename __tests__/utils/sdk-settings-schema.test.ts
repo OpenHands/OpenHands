@@ -1051,6 +1051,11 @@ describe("sdk settings schema helpers", () => {
         label: "Temperature",
         value_type: "number",
       });
+      const condenserMaxSizeField = getMockField({
+        key: "condenser.condenser_max_size",
+        label: "Condenser max size",
+        value_type: "integer",
+      });
 
       expect(() => coerceFieldValue(concurrencyField, "0")).toThrow(
         "Tool concurrency must be at least 1",
@@ -1058,6 +1063,10 @@ describe("sdk settings schema helpers", () => {
       expect(coerceFieldValue(concurrencyField, "1")).toBe(1);
       expect(coerceFieldValue(temperatureField, "0")).toBe(0);
       expect(coerceFieldValue(temperatureField, "2")).toBe(2);
+      expect(() => coerceFieldValue(condenserMaxSizeField, "-1")).toThrow(
+        "Condenser max size must be at least 0",
+      );
+      expect(coerceFieldValue(condenserMaxSizeField, "0")).toBe(0);
       expect(() => coerceFieldValue(temperatureField, "2.1")).toThrow(
         "Temperature must be at most 2",
       );
