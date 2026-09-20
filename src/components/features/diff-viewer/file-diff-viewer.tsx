@@ -47,6 +47,23 @@ function clampDiffEditorHeight(height: number): number {
   return Math.min(height, MAX_DIFF_EDITOR_HEIGHT_PX);
 }
 
+function disposeModelAfterEditorDisposes(
+  model: editor_t.ITextModel | null,
+  onEditorDispose: (listener: () => void) => unknown,
+) {
+  if (!model) return;
+
+  // @monaco-editor/react disposes models before the editor widget by default.
+  // Defer model disposal until the widget has completed its own teardown.
+  onEditorDispose(() => {
+    queueMicrotask(() => {
+      if (!model.isDisposed()) {
+        model.dispose();
+      }
+    });
+  });
+}
+
 const STATUS_MAP: Record<GitChangeStatus, string | IconType> = {
   A: LuFilePlus,
   D: LuFileMinus,
@@ -182,12 +199,21 @@ export function FileDiffViewer({
     updateEditorHeight();
     editor.getOriginalEditor().onDidContentSizeChange(updateEditorHeight);
     editor.getModifiedEditor().onDidContentSizeChange(updateEditorHeight);
+
+    const model = editor.getModel();
+    const onEditorDispose = (listener: () => void) =>
+      editor.onDidDispose(listener);
+    disposeModelAfterEditorDisposes(model?.original ?? null, onEditorDispose);
+    disposeModelAfterEditorDisposes(model?.modified ?? null, onEditorDispose);
   };
 
   const handleSingleEditorMount = (editor: editor_t.IStandaloneCodeEditor) => {
     singleEditorRef.current = editor;
     updateSingleEditorHeight();
     editor.onDidContentSizeChange(updateSingleEditorHeight);
+    disposeModelAfterEditorDisposes(editor.getModel(), (listener) =>
+      editor.onDidDispose(listener),
+    );
   };
 
   const status = (type === "U" ? STATUS_MAP.A : STATUS_MAP[type]) || "?";
@@ -240,6 +266,8 @@ export function FileDiffViewer({
           modified={isDeleted ? "" : (diff?.modified ?? "")}
           theme="custom-diff-theme"
           onMount={handleDiffEditorMount}
+          keepCurrentOriginalModel
+          keepCurrentModifiedModel
           beforeMount={beforeMount}
           options={{
             ...SHARED_EDITOR_OPTIONS,
@@ -275,6 +303,7 @@ export function FileDiffViewer({
         theme="custom-diff-theme"
         beforeMount={beforeMount}
         onMount={handleSingleEditorMount}
+        keepCurrentModel
         options={SHARED_EDITOR_OPTIONS}
       />,
     );
