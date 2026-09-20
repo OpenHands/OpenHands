@@ -186,6 +186,8 @@ export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
           variant="primary"
           isDisabled={
             !isDefaultModelReady ||
+            (saveControl !== null &&
+              !String(saveControl.values["llm.model"] ?? "").trim()) ||
             (saveControl?.isSaving ?? false) ||
             isFinalizing
           }

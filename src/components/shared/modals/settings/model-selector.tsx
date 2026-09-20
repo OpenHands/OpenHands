@@ -58,10 +58,16 @@ export function ModelSelector({
     () => providers.filter((p) => p.verified),
     [providers],
   );
-  const unverifiedProviders = React.useMemo(
-    () => providers.filter((p) => !p.verified),
-    [providers],
-  );
+  const unverifiedProviders = React.useMemo(() => {
+    const unverified = providers.filter((p) => !p.verified);
+    if (
+      selectedProvider &&
+      !providers.some((p) => p.name === selectedProvider)
+    ) {
+      return [...unverified, { name: selectedProvider, verified: false }];
+    }
+    return unverified;
+  }, [providers, selectedProvider]);
 
   const verifiedModels = React.useMemo(
     () => providerModels.filter((m) => m.verified),

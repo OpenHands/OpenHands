@@ -3,6 +3,14 @@ import ConfigService from "#/api/config-service/config-service.api";
 import type { LLMModel } from "#/api/config-service/config-service.types";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import {
+  fetchOpenRouterModels,
+  OPENROUTER_PROVIDER,
+} from "#/api/openrouter-models-service";
+import {
+  CONFIG_CACHE_OPTIONS,
+  OPENROUTER_MODELS_QUERY_KEY,
+} from "./query-keys";
+import {
   VERIFIED_MODELS_GC_TIME,
   VERIFIED_MODELS_QUERY_KEY,
   VERIFIED_MODELS_STALE_TIME,
@@ -58,12 +66,40 @@ export const useProviderModels = (provider: string | null) => {
   return useQuery({
     queryKey: ["config", "models", provider, ...backendScope],
     queryFn: async ({ client }) => {
-      const verifiedByProvider = await client.fetchQuery({
+      const verifiedRequest = client.fetchQuery({
         queryKey: [...VERIFIED_MODELS_QUERY_KEY, ...backendScope],
         queryFn: fetchVerifiedModelsByProvider,
         staleTime: VERIFIED_MODELS_STALE_TIME,
       });
-      return fetchPage(provider!, verifiedByProvider);
+      if (provider === OPENROUTER_PROVIDER) {
+        // Verification is optional metadata, not a prerequisite for public
+        // discovery. Do not mark new catalog entries as OpenHands-verified.
+        const [catalog, verifiedByProvider] = await Promise.all([
+          client
+            .fetchQuery({
+              queryKey: OPENROUTER_MODELS_QUERY_KEY,
+              queryFn: fetchOpenRouterModels,
+              ...CONFIG_CACHE_OPTIONS,
+              retry: false,
+            })
+            .catch(() => null),
+          verifiedRequest.catch(() => ({}) as Record<string, string[]>),
+        ]);
+        if (catalog) {
+          const verified = new Set(verifiedByProvider[provider] ?? []);
+          return catalog.map((name) => ({
+            provider,
+            name,
+            verified: verified.has(name),
+            free: false,
+            default: false,
+          }));
+        }
+        // Offline, blocked by deployment CSP, or temporarily unavailable:
+        // retain the backend catalog rather than disabling model selection.
+        return fetchPage(provider, verifiedByProvider);
+      }
+      return fetchPage(provider!, await verifiedRequest);
     },
     enabled: !!provider,
     staleTime: VERIFIED_MODELS_STALE_TIME,

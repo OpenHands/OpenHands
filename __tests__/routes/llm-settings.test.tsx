@@ -7,6 +7,8 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { http, HttpResponse } from "msw";
+import { server } from "#/mocks/node";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 // Import the named export LlmSettingsScreen directly for testing the form component.
@@ -119,10 +121,100 @@ function createMockLlmProfilesReturn(
 describe("LlmSettingsScreen", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    server.use(
+      http.get("https://openrouter.ai/api/v1/models", () =>
+        HttpResponse.json({ data: [{ id: "vendor/model" }] }),
+      ),
+    );
     useFreeModelsStore.getState().setFlags({
       freeModels: new Set(["openhands/kimi-k3"]),
       defaultModel: "openhands/kimi-k3",
     });
+  });
+
+  it("clears the saved model when the provider changes without a model selection", async () => {
+    const user = userEvent.setup();
+    let latestValues: Record<string, string | boolean> = {};
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        llm_model: "openai/gpt-4o",
+        llm_base_url: "",
+        agent_settings: { llm: { model: "openai/gpt-4o", base_url: "" } },
+      }),
+    );
+    vi.spyOn(ConfigService, "searchProviders").mockResolvedValue({
+      items: [
+        { name: "openai", verified: true },
+        { name: "openrouter", verified: false },
+      ],
+      next_page_id: null,
+    });
+    renderLlmSettingsScreen({
+      onSaveControlChange: (control) => {
+        latestValues = control.values;
+      },
+    });
+    const provider = await screen.findByTestId("llm-provider-input");
+    await user.click(provider);
+    await user.click(await screen.findByText("OpenRouter"));
+    await waitFor(() => expect(latestValues["llm.model"]).toBe(""));
+    expect(provider).toHaveValue("OpenRouter");
+    const saveSettings = vi.spyOn(SettingsService, "saveSettings");
+    await user.click(screen.getByTestId("save-button"));
+    expect(saveSettings).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["https://openrouter.ai/api/v1/", "basic"],
+    ["https://api.openai.com/v1", "all"],
+    ["https://gateway.example/v1", "all"],
+  ])(
+    "uses the correct view for an OpenRouter profile at %s",
+    async (baseUrl, view) => {
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+        buildSettings({
+          llm_model: "openrouter/vendor/model",
+          llm_base_url: baseUrl,
+          agent_settings: {
+            llm: { model: "openrouter/vendor/model", base_url: baseUrl },
+          },
+        }),
+      );
+      renderLlmSettingsScreen();
+      await screen.findByTestId("llm-settings-screen");
+      if (view === "basic") {
+        expect(screen.getByTestId("llm-provider-input")).toBeInTheDocument();
+      } else {
+        expect(screen.getByTestId("base-url-input")).toHaveValue(baseUrl);
+      }
+    },
+  );
+
+  it("preserves a saved OpenRouter provider when discovery omits it", async () => {
+    vi.spyOn(ConfigService, "searchProviders").mockResolvedValue({
+      items: [],
+      next_page_id: null,
+    });
+    renderLlmSettingsScreen({
+      embedded: true,
+      initialValueOverrides: { "llm.model": "openrouter/vendor/model" },
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("llm-provider-input")).toHaveValue(
+        "OpenRouter",
+      ),
+    );
+  });
+
+  it("links OpenRouter profiles to their API key setup page", async () => {
+    renderLlmSettingsScreen({
+      embedded: true,
+      initialValueOverrides: { "llm.model": "openrouter/vendor/model" },
+    });
+    await screen.findByTestId("llm-settings-screen");
+    expect(
+      within(screen.getByTestId("llm-api-key-help-anchor")).getByRole("link"),
+    ).toHaveAttribute("href", "https://openrouter.ai/keys");
   });
 
   it("renders the OSS LLM settings form from the SDK schema fallback", async () => {
