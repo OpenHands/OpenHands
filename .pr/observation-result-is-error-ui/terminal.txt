@@ -1,0 +1,38 @@
+=== ON MAIN LOGIC (getObservationResult without is_error branches) ===
+     × maps browser, glob, and grep tool failures to error 5ms
+     × maps planning and current-wire file editor failures to error 1ms
+     × maps editor errors and successful editor outcomes 1ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  __tests__/components/conversation-events/chat/event-content-helpers/get-observation-result.test.ts > getObservationResult > maps browser, glob, and grep tool failures to error
+AssertionError: expected 'success' to be 'error' // Object.is equality
+Expected: "error"
+Received: "success"
+ FAIL  __tests__/components/conversation-events/chat/event-content-helpers/get-observation-result.test.ts > getObservationResult > maps planning and current-wire file editor failures to error
+AssertionError: expected 'success' to be 'error' // Object.is equality
+Expected: "error"
+Received: "success"
+ FAIL  __tests__/components/conversation-events/chat/event-content-helpers/get-observation-result.test.ts > getObservationResult > maps editor errors and successful editor outcomes
+AssertionError: expected 'success' to be 'error' // Object.is equality
+Expected: "error"
+Received: "success"
+ Test Files  1 failed (1)
+      Tests  3 failed | 13 passed (16)
+
+=== WITH FIX ===
+
+> @openhands/agent-canvas@1.20.0 test
+> npm run make-i18n && vitest run __tests__/components/conversation-events/chat/event-content-helpers/get-observation-result.test.ts __tests__/components/features/chat/success-indicator.test.tsx
+
+
+> @openhands/agent-canvas@1.20.0 make-i18n
+> node scripts/make-i18n-translations.cjs
+
+
+ RUN  v4.1.10 /workspace/OpenHands
+
+
+ Test Files  2 passed (2)
+      Tests  19 passed (19)
+   Start at  20:36:19
+   Duration  1.32s (transform 534ms, setup 892ms, import 152ms, tests 121ms, environment 1.12s)
+
