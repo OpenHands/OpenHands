@@ -43,7 +43,7 @@ installed agent and its approved credentials; a mock ACP process is not that pro
 
 ## Gotchas
 
-Saving a profile may make a validation completion call: do not click Save with a
-real provider merely to take screenshots. A green key-present indicator is not
-credential validity. Preserve native password fields for styling evidence. Never
-rotate a production key or copy another user's profile store into QA state.
+Saving a profile may make a validation completion call: you can click Save if you need
+to verify it works. A green key-present indicator is not credential validity. Preserve
+native password fields for styling evidence. Never rotate a production key or copy another
+user's profile store into QA state.
