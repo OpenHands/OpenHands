@@ -1,3 +1,4 @@
+import { AutomationAgentProfileSelector } from "#/components/features/automations/agent-profile-selector";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
@@ -165,6 +166,13 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     () => collectFields(entry.setup, selectedTrigger, selectedAction),
     [entry, selectedTrigger, selectedAction],
   );
+  const visibleFields = values.agent_profile_id
+    ? Object.fromEntries(
+        Object.entries(fields).filter(
+          ([, field]) => field.type !== "llm-profile",
+        ),
+      )
+    : fields;
   const hasLlmProfileField = useMemo(
     () => Object.values(fields).some((field) => field.type === "llm-profile"),
     [fields],
@@ -531,7 +539,21 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
                   </p>
                 </div>
               )}
-              {Object.entries(fields).map(([name, field]) => (
+              {capabilities.capabilities?.features.includes(
+                "agentProfiles",
+              ) && (
+                <AutomationAgentProfileSelector
+                  value={
+                    typeof values.agent_profile_id === "string"
+                      ? values.agent_profile_id
+                      : null
+                  }
+                  onChange={(value) =>
+                    setFieldValue("agent_profile_id", value ?? "")
+                  }
+                />
+              )}
+              {Object.entries(visibleFields).map(([name, field]) => (
                 <SetupFormField
                   key={name}
                   name={name}

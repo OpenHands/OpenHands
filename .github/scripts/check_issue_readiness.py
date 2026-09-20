@@ -109,6 +109,7 @@ class ReadinessResult:
 
     ready: bool
     reasons: list[str] = field(default_factory=list)
+    issue_type: str | None = None
 
     def add(self, reason: str) -> None:
         self.reasons.append(reason)
@@ -184,7 +185,7 @@ def has_checklist_item(text: str) -> bool:
 
 
 def check_bug(sections: dict[str, str]) -> ReadinessResult:
-    result = ReadinessResult(ready=True)
+    result = ReadinessResult(ready=True, issue_type=BUG_LABEL)
 
     reproduction = visible_text(find_section(sections, "steps to reproduce", "reproduction"))
     if not reproduction:
@@ -220,7 +221,7 @@ def check_bug(sections: dict[str, str]) -> ReadinessResult:
 
 
 def check_enhancement(sections: dict[str, str]) -> ReadinessResult:
-    result = ReadinessResult(ready=True)
+    result = ReadinessResult(ready=True, issue_type=ENHANCEMENT_LABEL)
 
     desired = visible_text(find_section(sections, "desired behavior", "desired"))
     if not desired:
@@ -250,10 +251,22 @@ def evaluate_readiness(body: str, labels: list[str]) -> ReadinessResult:
     is accepted for backwards compatibility but is not consulted.
     """
     sections = extract_sections(body or "")
+    has_bug_sections = any(label in sections for label in BUG_SECTION_LABELS)
+    has_enhancement_sections = any(
+        label in sections for label in ENHANCEMENT_SECTION_LABELS
+    )
 
-    if any(label in sections for label in BUG_SECTION_LABELS):
+    if has_bug_sections and has_enhancement_sections:
+        return ReadinessResult(
+            ready=False,
+            reasons=[
+                "The issue contains both bug-report and feature-request sections, "
+                "so its type cannot be inferred. Use only one issue template."
+            ],
+        )
+    if has_bug_sections:
         return check_bug(sections)
-    if any(label in sections for label in ENHANCEMENT_SECTION_LABELS):
+    if has_enhancement_sections:
         return check_enhancement(sections)
 
     return ReadinessResult(
@@ -319,7 +332,15 @@ def main() -> int:
     result = evaluate_readiness(body, labels)
 
     if args.json:
-        print(json.dumps({"ready": result.ready, "reasons": result.reasons}))
+        print(
+            json.dumps(
+                {
+                    "ready": result.ready,
+                    "reasons": result.reasons,
+                    "issue_type": result.issue_type,
+                }
+            )
+        )
     else:
         if result.ready:
             print("Issue meets ready-for-dev criteria.")
