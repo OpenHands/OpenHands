@@ -14,7 +14,11 @@ import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 import { chatInputPillButtonClassName } from "#/utils/form-control-classes";
 import { useFreeModels } from "#/hooks/query/use-free-models";
-import { formatModelPillLabel } from "#/utils/format-model-name";
+import type { FreeModelSet } from "#/utils/format-model-name";
+import {
+  formatModelPillLabel,
+  formatNativeModelName,
+} from "#/utils/format-model-name";
 
 const PROFILE_LABEL_MAX_CHARS = 18;
 
@@ -22,6 +26,27 @@ function truncateLabel(label: string): string {
   return label.length <= PROFILE_LABEL_MAX_CHARS
     ? label
     : `${label.slice(0, PROFILE_LABEL_MAX_CHARS)}…`;
+}
+
+/**
+ * What a picker surface should name: the resolved profile, or — when the
+ * conversation reports a model no saved profile matches — that model itself.
+ * A failed or legacy conversation can carry a normalized, stale or otherwise
+ * unmatched `llm_model`, which used to collapse the surface to the "Select a
+ * model" placeholder even though the conversation plainly has a model
+ * (#16263). Naming the model keeps the pill in step with the conversation
+ * card chip, which formats the same value the same way. Returns null only
+ * when there is genuinely nothing to name, so the placeholder still covers
+ * that case.
+ */
+function resolveSurfaceLabel(
+  currentProfileName: string | null,
+  currentProfileModel: string | null,
+  freeModels: FreeModelSet,
+): string | null {
+  return (
+    currentProfileName ?? formatNativeModelName(currentProfileModel, freeModels)
+  );
 }
 
 interface ChatInputLlmProfileMenuContentProps {
@@ -56,7 +81,9 @@ export function ChatInputLlmProfileMenuContent({
   // still name the active profile — the same shape ChatInputModelMenuContent
   // uses when the ACP picker is gated off.
   const showProfileList = canSwitchProfile && profiles.length > 0;
-  const readOnlyProfileName = canSwitchProfile ? null : currentProfileName;
+  const readOnlyLabel = canSwitchProfile
+    ? null
+    : resolveSurfaceLabel(currentProfileName, currentProfileModel, freeModels);
 
   const handleSelect = (profileName: string) => {
     selectProfile(profileName);
@@ -124,13 +151,15 @@ export function ChatInputLlmProfileMenuContent({
           })}
         </>
       )}
-      {readOnlyProfileName && (
+      {readOnlyLabel && (
         <li className="text-sm" data-testid="chat-input-llm-profile-current">
           <div className="flex flex-col gap-0.5 p-2 leading-5 text-[var(--oh-foreground)]">
-            <span className="truncate" title={readOnlyProfileName}>
-              {readOnlyProfileName}
+            <span className="truncate" title={readOnlyLabel}>
+              {readOnlyLabel}
             </span>
-            {currentProfileModel && (
+            {/* The sub-line names the profile's model, so it is dropped when
+                the line above already is that model. */}
+            {currentProfileName && currentProfileModel && (
               <span className="truncate text-xs leading-4 text-[var(--oh-muted)]">
                 {formatModelPillLabel(currentProfileModel, freeModels)}
               </span>
@@ -138,9 +167,7 @@ export function ChatInputLlmProfileMenuContent({
           </div>
         </li>
       )}
-      {(showProfileList || readOnlyProfileName) && (
-        <Divider inset={dividerInset} />
-      )}
+      {(showProfileList || readOnlyLabel) && <Divider inset={dividerInset} />}
       <li className="text-sm">
         <NavigationLink
           to="/settings/llm"
@@ -165,8 +192,14 @@ export function ChatInputLlmProfileMenuContent({
 
 export function ChatInputLlmProfilePicker() {
   const { t } = useTranslation("openhands");
-  const { profiles, currentProfileName, isLoading, isSwitching } =
-    useChatInputLlmProfileState();
+  const {
+    profiles,
+    currentProfileName,
+    currentProfileModel,
+    isLoading,
+    isSwitching,
+  } = useChatInputLlmProfileState();
+  const freeModels = useFreeModels();
   const [isPopoverOpen, setIsPopoverOpen] = React.useState(false);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
   const popoverRef = useClickOutsideElement<HTMLUListElement>(
@@ -180,7 +213,12 @@ export function ChatInputLlmProfilePicker() {
     return null;
   }
 
-  const label = currentProfileName ?? t(I18nKey.LLM$SELECT_MODEL_PLACEHOLDER);
+  const currentLabel = resolveSurfaceLabel(
+    currentProfileName,
+    currentProfileModel,
+    freeModels,
+  );
+  const label = currentLabel ?? t(I18nKey.LLM$SELECT_MODEL_PLACEHOLDER);
 
   return (
     <div className="relative min-w-0">
@@ -188,7 +226,7 @@ export function ChatInputLlmProfilePicker() {
         ref={triggerRef}
         type="button"
         className={cn(chatInputPillButtonClassName, "max-w-[200px]")}
-        title={currentProfileName ?? undefined}
+        title={currentLabel ?? undefined}
         data-testid="chat-input-llm-profile"
         aria-expanded={isPopoverOpen}
         aria-haspopup="dialog"

@@ -111,6 +111,17 @@ describe("useChatInputLlmProfileState", () => {
     expect(result.current.currentProfileName).toBe("Smart");
   });
 
+  // The picker labels the pill with this model when no profile resolves, so a
+  // failed or legacy conversation still names what it is running (#16263).
+  it("keeps an unmatched conversation model as the current model", () => {
+    useActiveConversationMock.mockReturnValue({
+      data: { llm_model: "anthropic/claude-legacy" },
+    });
+    const { result } = renderState();
+    expect(result.current.currentProfileName).toBeNull();
+    expect(result.current.currentProfileModel).toBe("anthropic/claude-legacy");
+  });
+
   it("live-switches a different profile against the conversation id", () => {
     useActiveConversationMock.mockReturnValue({
       data: { active_profile: "Fast", llm_model: "gpt-4o-mini" },
