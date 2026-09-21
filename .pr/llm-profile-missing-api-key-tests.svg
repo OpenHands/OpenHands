@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="760" viewBox="0 0 1280 760" role="img" aria-labelledby="title desc">
+  <title id="title">OpenHands missing API key regression test evidence</title>
+  <desc id="desc">Terminal-style rendering of the local verification commands and their successful results for the active LLM profile missing API key change.</desc>
+  <rect width="1280" height="760" rx="18" fill="#10131a"/>
+  <rect x="28" y="28" width="1224" height="704" rx="12" fill="#171b24" stroke="#384152" stroke-width="2"/>
+  <circle cx="62" cy="64" r="8" fill="#ff5f57"/>
+  <circle cx="90" cy="64" r="8" fill="#febc2e"/>
+  <circle cx="118" cy="64" r="8" fill="#28c840"/>
+  <text x="154" y="71" fill="#aeb7c7" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="22">OpenHands / local verification</text>
+  <text x="64" y="132" fill="#8be9fd" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="22">$ npm run check-translation-completeness</text>
+  <text x="64" y="168" fill="#50fa7b" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="22">All translation keys have complete language coverage!</text>
+  <text x="64" y="226" fill="#8be9fd" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="22">$ npm run typecheck &amp;&amp; npm run lint</text>
+  <text x="64" y="262" fill="#50fa7b" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="22">completed successfully</text>
+  <text x="64" y="320" fill="#8be9fd" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="22">$ npx vitest run __tests__/components/home/llm-not-configured-banner.test.tsx</text>
+  <text x="64" y="356" fill="#8be9fd" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="22">  __tests__/hooks/use-llm-configured.test.tsx --reporter=dot</text>
+  <text x="64" y="410" fill="#50fa7b" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="22">✓ 2 test files passed</text>
+  <text x="64" y="446" fill="#50fa7b" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="22">✓ 14 tests passed</text>
+  <line x1="64" y1="492" x2="1216" y2="492" stroke="#384152" stroke-width="2"/>
+  <text x="64" y="548" fill="#f8f8f2" font-family="ui-sans-serif, system-ui, sans-serif" font-size="26">Regression scenario covered</text>
+  <text x="64" y="592" fill="#c7d0df" font-family="ui-sans-serif, system-ui, sans-serif" font-size="22">Active local profile: broken-profile</text>
+  <text x="64" y="628" fill="#c7d0df" font-family="ui-sans-serif, system-ui, sans-serif" font-size="22">api_key_set: false → profile-specific warning and edit action</text>
+  <text x="64" y="684" fill="#7f8ba3" font-family="ui-sans-serif, system-ui, sans-serif" font-size="18">Node 22.19.0 used locally; repository CI targets Node 24+</text>
+</svg>
