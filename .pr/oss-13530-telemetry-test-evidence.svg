@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="520" viewBox="0 0 1120 520">
+  <rect width="1120" height="520" fill="#0d1117"/>
+  <text x="32" y="48" fill="#c9d1d9" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="22" font-weight="700">OSS-13530 telemetry deployment_kind validation</text>
+  <text x="32" y="96" fill="#8b949e" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="18">Frontend behavior change: deployment_kind is derived from backend_kind only.</text>
+  <text x="32" y="144" fill="#58a6ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="18">$ npx vitest run __tests__/services/telemetry.test.ts</text>
+  <text x="32" y="184" fill="#3fb950" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="18">✓ Test Files  1 passed (1)</text>
+  <text x="32" y="216" fill="#3fb950" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="18">✓ Tests       44 passed (44)</text>
+  <text x="32" y="264" fill="#58a6ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="18">$ npm run typecheck:staged</text>
+  <text x="32" y="304" fill="#3fb950" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="18">✓ react-router typegen &amp;&amp; tsc --noEmit --skipLibCheck</text>
+  <text x="32" y="352" fill="#58a6ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="18">$ npx eslint ... &amp;&amp; npx prettier --check ...</text>
+  <text x="32" y="392" fill="#3fb950" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="18">✓ Targeted ESLint passed</text>
+  <text x="32" y="424" fill="#3fb950" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="18">✓ All matched files use Prettier code style</text>
+  <text x="32" y="472" fill="#8b949e" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="16">No UI screen changed; this image records terminal validation for the telemetry payload change.</text>
+</svg>
