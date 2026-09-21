@@ -108,7 +108,7 @@ function RunInspectionSummary({ run }: { run: AutomationRun | undefined }) {
   const hasSystemDetails = systemError || statusDetail;
 
   return (
-    <dl className="mt-4 grid gap-3 rounded-lg border border-[var(--oh-border)] bg-black/20 p-3 text-xs">
+    <dl className="mt-4 grid gap-3 rounded-lg border border-border bg-black/20 p-3 text-xs">
       <div className="grid gap-1 sm:grid-cols-[5rem_minmax(0,1fr)] sm:items-center">
         <dt className="text-muted">
           {t(I18nKey.AUTOMATIONS$DETAIL$RUN_LABEL)}
@@ -143,7 +143,7 @@ function RunInspectionSummary({ run }: { run: AutomationRun | undefined }) {
               </p>
               <pre
                 data-testid="automation-task-metadata"
-                className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-md border border-[var(--oh-border)] bg-black/30 p-2 font-mono text-[11px] leading-4 text-content"
+                className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-black/30 p-2 font-mono text-[11px] leading-4 text-content"
               >
                 {taskMetadataText}
               </pre>
@@ -259,7 +259,7 @@ export function RunLogsModal({
         }}
         role="presentation"
       />
-      <div className="relative flex max-h-[80vh] w-full max-w-3xl flex-col rounded-xl border border-[var(--oh-border)] bg-[var(--oh-surface)] p-6">
+      <div className="relative flex max-h-[80vh] w-full max-w-3xl flex-col rounded-xl border border-border bg-surface p-6">
         <button
           type="button"
           onClick={onClose}
@@ -278,7 +278,7 @@ export function RunLogsModal({
         <div
           role="tablist"
           aria-label={t(I18nKey.AUTOMATIONS$DETAIL$LOGS_TITLE)}
-          className="mt-4 flex gap-1 border-b border-[var(--oh-border)]"
+          className="mt-4 flex gap-1 border-b border-border"
         >
           <button
             type="button"
@@ -314,7 +314,7 @@ export function RunLogsModal({
           role="tabpanel"
           id={`run-logs-panel-${activeTab}`}
           aria-labelledby={`run-logs-tab-${activeTab}`}
-          className="mt-3 min-h-[12rem] flex-1 overflow-auto rounded-lg border border-[var(--oh-border)] bg-black/40 p-4 font-mono text-xs"
+          className="mt-3 min-h-[12rem] flex-1 overflow-auto rounded-lg border border-border bg-black/40 p-4 font-mono text-xs"
         >
           {noBashCommand && (
             <p className="text-muted italic">

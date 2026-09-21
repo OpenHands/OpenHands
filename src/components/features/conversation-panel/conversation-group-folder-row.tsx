@@ -87,7 +87,7 @@ export function ConversationGroupFolderRow({
           aria-hidden
           data-testid={`thread-folder-drop-indicator-${groupTestIdSuffix}`}
           className={cn(
-            "pointer-events-none absolute inset-x-0 z-10 h-0.5 rounded-full bg-[var(--oh-accent)]",
+            "pointer-events-none absolute inset-x-0 z-10 h-0.5 rounded-full bg-accent",
             dropIndicatorPosition === "before" ? "-top-0.5" : "-bottom-0.5",
           )}
         />
@@ -100,7 +100,7 @@ export function ConversationGroupFolderRow({
         <div
           className={cn(
             "flex h-8 w-full min-w-0 items-center gap-0.5 rounded-md pl-2 pr-1 text-sm font-normal",
-            "text-[var(--oh-muted)] transition-colors hover:bg-[var(--oh-surface-raised)] hover:text-white",
+            "text-muted transition-colors hover:bg-surface-raised hover:text-white",
           )}
         >
           <button
@@ -161,7 +161,7 @@ export function ConversationGroupFolderRow({
             }}
             className={cn(
               "group/folder flex min-h-8 min-w-0 flex-1 cursor-grab items-center gap-2 rounded-md py-1 text-left text-inherit outline-none active:cursor-grabbing",
-              "focus-visible:ring-1 focus-visible:ring-[var(--oh-border)]",
+              "focus-visible:ring-1 focus-visible:ring-border",
             )}
           >
             <Folder
@@ -190,7 +190,7 @@ export function ConversationGroupFolderRow({
               "inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md",
               "text-inherit transition-colors",
               "hover:bg-white/10 hover:text-white",
-              "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--oh-border)]",
+              "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border",
               "disabled:cursor-not-allowed disabled:opacity-50",
             )}
             disabled={isCreatingConversationFlow}
@@ -226,7 +226,7 @@ export function ConversationGroupFolderRow({
                   type="button"
                   data-testid={`thread-folder-view-more-${groupTestIdSuffix}`}
                   onClick={onTogglePreviewExpanded}
-                  className="cursor-pointer text-xs text-[var(--oh-text-dim)] hover:text-white"
+                  className="cursor-pointer text-xs text-text-dim hover:text-white"
                 >
                   {isShowingAll
                     ? t(I18nKey.CONVERSATION_PANEL$LESS)

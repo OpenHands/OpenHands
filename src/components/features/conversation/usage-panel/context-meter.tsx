@@ -70,7 +70,7 @@ export function ContextMeter({
               ? "text-red-500"
               : isWarning
                 ? "text-amber-500"
-                : "text-[var(--oh-muted)]",
+                : "text-muted",
           )}
         >
           {usagePercentLabel}
@@ -92,7 +92,7 @@ export function ContextMeter({
         />
       </div>
       <div className="flex justify-end">
-        <span className="text-xs text-[var(--oh-muted)]">
+        <span className="text-xs text-muted">
           {isWindowUnknown
             ? perTurnToken.toLocaleString()
             : `${perTurnToken.toLocaleString()} / ${contextWindow.toLocaleString()}`}

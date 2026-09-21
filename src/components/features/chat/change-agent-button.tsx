@@ -153,7 +153,7 @@ export function ChangeAgentButton() {
 
   const buttonIcon = useMemo(() => {
     if (isExecutionAgent) {
-      return <CodePillIcon className="h-[11px] w-[11px] shrink-0" />;
+      return <CodePillIcon className="h-2.75 w-2.75 shrink-0" />;
     }
     return <LessonPlanIcon width={18} height={18} color="currentColor" />;
   }, [isExecutionAgent]);
@@ -168,7 +168,7 @@ export function ChangeAgentButton() {
           "flex items-center rounded-[100px]",
           formControlTransitionClassName,
           isExecutionAgent
-            ? "border border-transparent text-[var(--oh-muted)]"
+            ? "border border-transparent text-muted"
             : "border border-[#597FF4] bg-[#4A67BD]",
           !isButtonDisabled &&
             isExecutionAgent &&

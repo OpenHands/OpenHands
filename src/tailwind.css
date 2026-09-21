@@ -13,6 +13,8 @@
   --color-primary: var(--oh-color-primary);
   --color-logo: var(--oh-color-logo);
   --color-base: var(--oh-color-base);
+  /* Avoid text-base: tailwind-merge interprets it as a font size. */
+  --color-on-primary: var(--oh-color-base);
   --color-base-secondary: var(--oh-color-base-secondary);
   --color-danger: var(--oh-color-danger);
   --color-success: var(--oh-color-success);
@@ -38,13 +40,24 @@
   --color-modal-title: var(--oh-modal-title-foreground);
 
   /* Semantic border aliases */
+  --color-border: var(--oh-border);
   --color-border-input: var(--oh-border-input);
   --color-border-subtle: var(--oh-border-subtle);
 
-  /* Interactive state aliases */
+  /* Focus / interactive state aliases */
+  --color-focus: var(--oh-focus);
   --color-interactive-hover: var(--oh-interactive-hover);
   --color-interactive-hover-low: var(--oh-interactive-hover-low);
   --color-interactive-active: var(--oh-interactive-active);
+  --color-interactive-selected: var(--oh-interactive-selected);
+
+  /* Status / accent / warning (danger & success already aliased above) */
+  --color-semantic-success: var(--oh-success);
+  --color-semantic-danger: var(--oh-danger);
+  --color-status-success: var(--oh-status-success);
+  --color-status-error: var(--oh-status-error);
+  --color-accent: var(--oh-accent);
+  --color-warning: var(--oh-warning);
 
   /* Cool Grey scale */
   --color-cool-grey-50:  var(--cool-grey-50);

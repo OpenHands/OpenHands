@@ -35,7 +35,7 @@ export function PluginLaunchPluginSection({
   }
 
   return (
-    <div className="rounded-lg border border-[var(--oh-border)] bg-tertiary">
+    <div className="rounded-lg border border-border bg-tertiary">
       <button
         type="button"
         onClick={onToggle}
@@ -53,7 +53,7 @@ export function PluginLaunchPluginSection({
       </button>
 
       {isExpanded && (
-        <div className="border-t border-[var(--oh-border-subtle)] px-4 pb-3">
+        <div className="border-t border-border-subtle px-4 pb-3">
           {plugin.ref && (
             <div className="mb-2 text-sm text-white">
               {t(I18nKey.LAUNCH$PLUGIN_REF)} {plugin.ref}
