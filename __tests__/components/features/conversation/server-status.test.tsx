@@ -291,7 +291,8 @@ describe("ServerStatusContextMenu", () => {
     );
   });
 
-  it("should call onClose when context menu is closed", () => {
+  it("should call onClose when clicking outside the context menu", async () => {
+    const user = userEvent.setup();
     const onClose = vi.fn();
     mockAgentStore(AgentState.RUNNING);
 
@@ -304,9 +305,11 @@ describe("ServerStatusContextMenu", () => {
       />,
     );
 
-    // The onClose is typically called by the parent component when clicking outside
-    // This test verifies the prop is properly passed
-    expect(onClose).toBeDefined();
+    await user.click(screen.getByTestId("server-status-context-menu"));
+    expect(onClose).not.toHaveBeenCalled();
+
+    await user.click(document.body);
+    expect(onClose).toHaveBeenCalledOnce();
   });
 
   it("should not render any buttons for other conversation statuses", () => {

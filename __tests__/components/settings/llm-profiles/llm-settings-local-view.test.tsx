@@ -716,17 +716,44 @@ describe("LlmSettingsLocalView", () => {
       });
     });
 
-    it("does not call rename when name is unchanged during edit", () => {
-      // The rename logic is:
-      // const isRename = viewMode === "edit" && originalName && originalName !== trimmedName;
-      //
-      // When the name is unchanged (originalName === trimmedName), isRename is false
-      // and ProfilesService.renameProfile is not called.
-      //
-      // This is implicitly tested by the existing "calls save mutation with correct
-      // payload and returns to list" test which edits without changing the name.
-      // The rename API mock would fail if unexpectedly called since it's not set up.
-      expect(true).toBe(true);
+    it("does not call rename when name is unchanged during edit", async () => {
+      const user = userEvent.setup();
+
+      vi.mocked(ProfilesService.getProfile).mockResolvedValue({
+        name: "gpt-4-profile",
+        api_key_set: true,
+        config: {
+          model: "openai/gpt-4",
+          api_key: "encrypted-key-123",
+          base_url: "https://api.openai.com/v1",
+        },
+      });
+
+      renderWithProviders(<LlmSettingsLocalView />);
+
+      const menuTriggers = screen.getAllByTestId("profile-menu-trigger");
+      await user.click(menuTriggers[0]);
+      await user.click(screen.getByTestId("profile-edit"));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("profile-name-input")).toHaveValue(
+          "gpt-4-profile",
+        );
+      });
+
+      // Save stays disabled in edit mode until something changes, so edit a
+      // non-name field and keep the profile name as-is.
+      const modelInput = await screen.findByTestId("mock-basic-model-input");
+      await user.clear(modelInput);
+      await user.type(modelInput, "openai/gpt-4o");
+      await user.click(screen.getByTestId("save-profile-btn"));
+
+      await waitFor(() => {
+        expect(mockSaveMutateAsync).toHaveBeenCalledWith(
+          expect.objectContaining({ name: "gpt-4-profile" }),
+        );
+      });
+      expect(ProfilesService.renameProfile).not.toHaveBeenCalled();
     });
   });
 

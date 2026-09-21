@@ -1,76 +1,42 @@
-import { describe, expect, it } from 'vitest';
-import fs from 'fs';
-import path from 'path';
+import { describe, expect, it } from "vitest";
+import fs from "fs";
+import path from "path";
 
-describe('translation.json', () => {
-  it('should not have duplicate translation keys', () => {
-    // Read the translation.json file
-    const translationPath = path.join(__dirname, '../../src/i18n/translation.json');
-    const translationContent = fs.readFileSync(translationPath, 'utf-8');
+// Keys are collected from the raw file text: JSON.parse keeps only the last
+// occurrence of a duplicate key, so a duplicate is invisible once parsed.
+const KEY_DEFINITION_REGEX = /"((?:[^"\\]|\\.)+)"\s*:\s*\{/g;
 
-    // First, let's check for exact string matches of key definitions
-    const keyRegex = /"([^"]+)": {/g;
-    const matches = translationContent.matchAll(keyRegex);
-    const keyOccurrences = new Map<string, number>();
-    const duplicateKeys: string[] = [];
+function findDuplicateKeys(rawJson: string): Map<string, number> {
+  const occurrences = new Map<string, number>();
+  for (const [, key] of rawJson.matchAll(KEY_DEFINITION_REGEX)) {
+    occurrences.set(key, (occurrences.get(key) ?? 0) + 1);
+  }
+  return new Map([...occurrences].filter(([, count]) => count > 1));
+}
 
-    for (const match of matches) {
-      const key = match[1];
-      const count = (keyOccurrences.get(key) || 0) + 1;
-      keyOccurrences.set(key, count);
-      if (count > 1) {
-        duplicateKeys.push(key);
-      }
-    }
+describe("translation.json", () => {
+  it("detects duplicate keys that JSON.parse would silently drop", () => {
+    const rawJson = `{
+  "COMMON$SAVE": { "en": "Save" },
+  "COMMON$CANCEL":{ "en": "Cancel" },
+  "COMMON$SAVE": { "en": "Store" }
+}`;
 
-    // Remove duplicates from duplicateKeys array
-    const uniqueDuplicates = [...new Set(duplicateKeys)];
-
-    // If there are duplicates, create a helpful error message
-    if (uniqueDuplicates.length > 0) {
-      const errorMessage = `Found duplicate translation keys:\n${uniqueDuplicates
-        .map((key) => `  - "${key}" appears ${keyOccurrences.get(key)} times`)
-        .join('\n')}`;
-      throw new Error(errorMessage);
-    }
-
-    // Expect no duplicates (this will pass if we reach here)
-    expect(uniqueDuplicates).toHaveLength(0);
+    expect(Object.keys(JSON.parse(rawJson))).toHaveLength(2);
+    expect(findDuplicateKeys(rawJson)).toEqual(new Map([["COMMON$SAVE", 2]]));
   });
 
-  it('should have consistent translations for each key', () => {
-    // Read the translation.json file
-    const translationPath = path.join(__dirname, '../../src/i18n/translation.json');
-    const translationContent = fs.readFileSync(translationPath, 'utf-8');
-    const translations = JSON.parse(translationContent);
+  it("should not have duplicate translation keys", () => {
+    const translationPath = path.join(
+      __dirname,
+      "../../src/i18n/translation.json",
+    );
+    const translationContent = fs.readFileSync(translationPath, "utf-8");
 
-    // Create a map to store English translations for each key
-    const englishTranslations = new Map<string, string>();
-    const inconsistentKeys: string[] = [];
+    const duplicates = [...findDuplicateKeys(translationContent)].map(
+      ([key, count]) => `"${key}" appears ${count} times`,
+    );
 
-    // Check each key's English translation
-    Object.entries(translations).forEach(([key, value]: [string, any]) => {
-      if (typeof value === 'object' && value.en !== undefined) {
-        const currentEn = value.en.toLowerCase();
-        const existingEn = englishTranslations.get(key)?.toLowerCase();
-
-        if (existingEn !== undefined && existingEn !== currentEn) {
-          inconsistentKeys.push(key);
-        } else {
-          englishTranslations.set(key, value.en);
-        }
-      }
-    });
-
-    // If there are inconsistencies, create a helpful error message
-    if (inconsistentKeys.length > 0) {
-      const errorMessage = `Found inconsistent translations for keys:\n${inconsistentKeys
-        .map((key) => `  - "${key}" has multiple different English translations`)
-        .join('\n')}`;
-      throw new Error(errorMessage);
-    }
-
-    // Expect no inconsistencies
-    expect(inconsistentKeys).toHaveLength(0);
+    expect(duplicates).toEqual([]);
   });
 });
