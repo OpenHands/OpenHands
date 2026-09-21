@@ -9,7 +9,7 @@ import {
   useAutomationPermissions,
   useIsAutomationOwner,
 } from "#/hooks/use-automation-permissions";
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 import PlayIcon from "#/icons/play.svg?react";
 import { SkillCardPillRow } from "#/components/features/skills/skill-card-pill-row";
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
