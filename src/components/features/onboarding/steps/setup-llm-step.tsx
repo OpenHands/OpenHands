@@ -14,6 +14,8 @@ import {
 } from "#/hooks/query/use-free-models";
 import { LlmSettingsInputsSkeleton } from "#/components/features/settings/llm-settings/llm-settings-inputs-skeleton";
 import { deriveProfileNameFromModel } from "#/utils/derive-profile-name";
+import type { SaveProfileRequest } from "#/api/profiles-service/profiles-service.api";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 interface SetupLlmStepProps {
   onBack: () => void;
@@ -57,6 +59,9 @@ export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
   const [saveControl, setSaveControl] =
     React.useState<SdkSectionSaveControl | null>(null);
   const [isFinalizing, setIsFinalizing] = React.useState(false);
+  const pendingProfileLlm = React.useRef<SaveProfileRequest["llm"] | null>(
+    null,
+  );
 
   // On local backends the LLM profiles list is the user-facing source of
   // truth; without this step the form save only updates agent_settings and
@@ -68,21 +73,14 @@ export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
     string | null
   > => {
     if (!isLocalBackend || !saveControl) return null;
-    const values = saveControl.values;
-    const model =
-      typeof values["llm.model"] === "string" ? values["llm.model"] : "";
-    if (!model) return null;
-    const apiKey =
-      typeof values["llm.api_key"] === "string" ? values["llm.api_key"] : "";
-    const baseUrl =
-      typeof values["llm.base_url"] === "string" ? values["llm.base_url"] : "";
-
-    const name = deriveProfileNameFromModel(model);
-    const llmConfig: { model: string; api_key?: string; base_url?: string } = {
-      model,
-    };
-    if (apiKey) llmConfig.api_key = apiKey;
-    if (baseUrl) llmConfig.base_url = baseUrl;
+    const llmConfig = pendingProfileLlm.current;
+    if (
+      !llmConfig ||
+      typeof llmConfig.model !== "string" ||
+      !llmConfig.model.trim()
+    )
+      return null;
+    const name = deriveProfileNameFromModel(llmConfig.model);
 
     try {
       await saveProfile.mutateAsync({
@@ -128,6 +126,22 @@ export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
   }, [persistAsProfile, applyAgentProfile, onNext]);
 
   const handleNext = () => {
+    if (isLocalBackend && saveControl) {
+      try {
+        const llm = saveControl.getFullPayload()
+          .llm as SaveProfileRequest["llm"];
+        pendingProfileLlm.current = { ...llm };
+        if (llm.provider_connection_id || llm.auth_type === "subscription") {
+          delete pendingProfileLlm.current.api_key;
+          delete pendingProfileLlm.current.base_url;
+        }
+      } catch (error) {
+        displayErrorToast(
+          error instanceof Error ? error.message : t(I18nKey.ERROR$GENERIC),
+        );
+        return;
+      }
+    }
     if (saveControl?.isDirty) {
       saveControl.save();
       // `onSaveSuccess` (wired to `handleSaveSuccess` below) will advance

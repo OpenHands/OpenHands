@@ -155,6 +155,7 @@ export function LlmSettingsScreen({
     enableSubscriptionModels &&
     !subscriptionModels &&
     (isSubscriptionModelsLoading || isSubscriptionModelsFetching);
+  const customModelEditedRef = React.useRef(false);
   const lastApiKeyModelRef = React.useRef<string | null>(null);
   const lastSubscriptionModelRef = React.useRef<string | null>(null);
 
@@ -237,6 +238,9 @@ export function LlmSettingsScreen({
           ? values[LLM_PROVIDER_CONNECTION_KEY]
           : "";
       const isLinkedToConnection = Boolean(connectionValue);
+      const selectedConnection = connectionOptions.find(
+        (connection) => connection.id === connectionValue,
+      );
       // Show the selector whenever connections can be linked here. Include the
       // linked case so a profile pointing at an orphaned connection (its only
       // connection deleted, or the list still loading) still exposes a control
@@ -280,6 +284,15 @@ export function LlmSettingsScreen({
                 ? selectedKey
                 : "";
             onChange(LLM_PROVIDER_CONNECTION_KEY, next);
+            const connection = connectionOptions.find(
+              (candidate) => candidate.id === next,
+            );
+            if (
+              connection &&
+              !modelValue.startsWith(`${connection.provider}/`)
+            ) {
+              onChange("llm.model", "");
+            }
           }}
         />
       );
@@ -425,6 +438,7 @@ export function LlmSettingsScreen({
                 <>
                   <ModelSelector
                     currentModel={modelValue || undefined}
+                    fixedProvider={selectedConnection?.provider}
                     onChange={(provider, model) => {
                       const nextModel = buildModelId(provider, model);
                       onChange("llm.model", nextModel ?? "");
@@ -466,7 +480,26 @@ export function LlmSettingsScreen({
                     className="w-full"
                     value={modelValue}
                     placeholder={defaultModel}
-                    onChange={(value) => onChange("llm.model", value)}
+                    onChange={(value) => {
+                      customModelEditedRef.current = true;
+                      onChange("llm.model", value);
+                    }}
+                    onBlur={() => {
+                      const wasEdited = customModelEditedRef.current;
+                      customModelEditedRef.current = false;
+                      if (
+                        wasEdited &&
+                        selectedConnection?.provider === "openrouter"
+                      ) {
+                        onChange(
+                          "llm.model",
+                          buildModelId(
+                            selectedConnection.provider,
+                            modelValue,
+                          ) ?? "",
+                        );
+                      }
+                    }}
                     isDisabled={isDisabled}
                   />
 

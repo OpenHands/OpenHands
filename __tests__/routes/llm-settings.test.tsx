@@ -464,6 +464,96 @@ describe("LlmSettingsScreen - provider connection selector", () => {
     );
   });
 
+  it("switches model transport to a selected OpenRouter connection and clears an incompatible model", async () => {
+    const user = userEvent.setup();
+    let values: Record<string, string | boolean> = {};
+    vi.spyOn(ProviderConnectionsService, "list").mockResolvedValue([
+      { ...connection, provider: "openrouter", display_name: "My OpenRouter" },
+    ]);
+    server.use(
+      http.get("https://openrouter.ai/api/v1/models", () =>
+        HttpResponse.json({ data: [{ id: "vendor/model" }] }),
+      ),
+    );
+    renderLlmSettingsScreen({
+      embedded: true,
+      showProviderConnection: true,
+      initialValueOverrides: {
+        "llm.model": "openai/gpt-4o",
+        "llm.provider_connection_id": "",
+      },
+      onSaveControlChange: (control) => {
+        values = control.values;
+      },
+    });
+    await user.click(
+      await screen.findByTestId("llm-provider-connection-input"),
+    );
+    await user.click(await screen.findByText("My OpenRouter"));
+    await waitFor(() => expect(values["llm.model"]).toBe(""));
+    expect(screen.getByTestId("llm-provider-input")).toHaveValue("OpenRouter");
+    expect(screen.getByTestId("llm-provider-input")).toBeDisabled();
+    await user.click(screen.getByTestId("llm-model-input"));
+    await user.click(await screen.findByText("vendor/model"));
+    await waitFor(() =>
+      expect(values["llm.model"]).toBe("openrouter/vendor/model"),
+    );
+  });
+
+  it("does not rewrite an untouched Advanced model when its input loses focus", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(ProviderConnectionsService, "list").mockResolvedValue([
+      { ...connection, provider: "openrouter" },
+    ]);
+    renderLlmSettingsScreen({
+      showProviderConnection: true,
+      initialValueOverrides: {
+        "llm.model": "anthropic/legacy-model",
+        "llm.provider_connection_id": "conn-1",
+      },
+    });
+    await screen.findByTestId("llm-provider-connection-input");
+    await user.click(screen.getByTestId("sdk-section-all-toggle"));
+    const input = screen.getByTestId("llm-custom-model-input");
+    await user.click(input);
+    await user.tab();
+    expect(input).toHaveValue("anthropic/legacy-model");
+  });
+
+  it("qualifies a native model entered in Advanced using its linked OpenRouter connection", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(ProviderConnectionsService, "list").mockResolvedValue([
+      { ...connection, provider: "openrouter", display_name: "My OpenRouter" },
+    ]);
+    const save = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+    renderLlmSettingsScreen({
+      showProviderConnection: true,
+      initialValueOverrides: {
+        "llm.model": "openrouter/vendor/old-model",
+        "llm.provider_connection_id": "conn-1",
+      },
+    });
+    await screen.findByTestId("llm-provider-connection-input");
+    await user.click(screen.getByTestId("sdk-section-all-toggle"));
+    const input = screen.getByTestId("llm-custom-model-input");
+    fireEvent.change(input, { target: { value: "vendor/new-model:nitro" } });
+    fireEvent.blur(input);
+    await user.click(screen.getByTestId("save-button"));
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agent_settings_diff: expect.objectContaining({
+            llm: expect.objectContaining({
+              model: "openrouter/vendor/new-model:nitro",
+            }),
+          }),
+        }),
+      ),
+    );
+  });
+
   it("hides the selector on cloud even when a connection is linked", async () => {
     vi.spyOn(activeBackendContext, "useActiveBackend").mockReturnValue({
       backend: mockCloudBackend,
