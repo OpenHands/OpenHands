@@ -381,7 +381,7 @@ export function ModelSelector({
               onChange={handleChangeCustomModel}
               isDisabled={isDisabled}
             />
-            <Typography.Text className="text-xs text-[var(--oh-muted)]">
+            <Typography.Text className="text-xs text-muted">
               {t(I18nKey.MODEL_SELECTOR$CUSTOM_MODEL_HINT)}
             </Typography.Text>
           </div>
