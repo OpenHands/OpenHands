@@ -12,6 +12,7 @@ import { formatModelNameForDisplay } from "#/utils/format-model-name";
 import {
   settingsListIconActionButtonClassName,
   settingsListRowClassName,
+  settingsListWarningBadgeClassName,
 } from "#/utils/settings-list-classes";
 
 interface ProfileRowProps {
@@ -77,7 +78,7 @@ export function ProfileRow({
         )}
         {profile.provider_connection_broken && (
           <span
-            className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-[var(--oh-warning,#f59e0b)] px-2 py-0.5 text-xs font-medium text-black"
+            className={settingsListWarningBadgeClassName}
             title={t(I18nKey.SETTINGS$PROFILE_BROKEN_CONNECTION_TOOLTIP)}
             data-testid="profile-broken-connection-badge"
           >

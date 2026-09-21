@@ -63,3 +63,7 @@ export const settingsListIconActionButtonClassName = cn(
   formControlTransitionClassName,
   "hover:bg-[var(--oh-interactive-hover-low)] hover:text-white",
 );
+
+/** Amber warning pill shown inline in a settings list row (profile rows). */
+export const settingsListWarningBadgeClassName =
+  "flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-[var(--oh-warning,#f59e0b)] px-2 py-0.5 text-xs font-medium text-black";

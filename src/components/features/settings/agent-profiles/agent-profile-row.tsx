@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { AlertTriangle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { AgentProfileActionsMenu } from "./agent-profile-actions-menu";
 import { type AgentProfileSummary } from "#/api/agent-profiles-service/agent-profiles-service.api";
@@ -9,6 +10,7 @@ import { cn } from "#/utils/utils";
 import {
   settingsListIconActionButtonClassName,
   settingsListRowClassName,
+  settingsListWarningBadgeClassName,
 } from "#/utils/settings-list-classes";
 
 interface AgentProfileRowProps {
@@ -16,6 +18,12 @@ interface AgentProfileRowProps {
   isActive: boolean;
   /** When false, the row is read-only and the actions menu is hidden. */
   canManage: boolean;
+  /**
+   * The LLM profile a launch from this profile will really use, when it has
+   * drifted from `llm_profile_ref` — see {@link getAgentProfileLlmDrift}.
+   * `null` (the common case) hides the warning badge.
+   */
+  driftLlmProfile: string | null;
   onActivate: (profile: AgentProfileSummary) => void;
   onEdit: (profile: AgentProfileSummary) => void;
   onDelete: (profile: AgentProfileSummary) => void;
@@ -26,6 +34,7 @@ export function AgentProfileRow({
   profile,
   isActive,
   canManage,
+  driftLlmProfile,
   onActivate,
   onEdit,
   onDelete,
@@ -68,6 +77,19 @@ export function AgentProfileRow({
           >
             {t(I18nKey.SETTINGS$PROFILE_DEFAULT)}
           </BrandBadge>
+        )}
+        {driftLlmProfile && (
+          <span
+            className={settingsListWarningBadgeClassName}
+            title={t(I18nKey.SETTINGS$AGENT_PROFILE_LLM_DRIFT_TOOLTIP, {
+              active: driftLlmProfile,
+              pinned: profile.llm_profile_ref,
+            })}
+            data-testid="agent-profile-llm-drift-badge"
+          >
+            <AlertTriangle className="h-3 w-3" aria-hidden />
+            {t(I18nKey.SETTINGS$AGENT_PROFILE_LLM_DRIFT)}
+          </span>
         )}
       </div>
       {canManage && (

@@ -6,6 +6,7 @@ import { AgentProfilesManager } from "#/components/features/settings/agent-profi
 import AgentProfilesService, {
   type AgentProfileSummary,
 } from "#/api/agent-profiles-service/agent-profiles-service.api";
+import ProfilesService from "#/api/profiles-service/profiles-service.api";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -22,6 +23,8 @@ vi.mock("react-i18next", () => ({
         SETTINGS$PROFILE_SET_ACTIVE: "Set as active",
         SETTINGS$PROFILE_DELETE_TITLE: "Delete Profile",
         SETTINGS$AGENT_TYPE_ACP: "ACP",
+        SETTINGS$AGENT_PROFILE_LLM_DRIFT: "LLM out of sync",
+        SETTINGS$AGENT_PROFILE_LLM_DRIFT_TOOLTIP: `Runs on "${params?.active}", not "${params?.pinned}".`,
         SETTINGS$PROFILE_DELETE_CONFIRMATION: params?.name
           ? `Are you sure you want to delete "${params.name}"?`
           : "Are you sure you want to delete this profile?",
@@ -38,6 +41,7 @@ vi.mock("react-i18next", () => ({
 }));
 
 vi.mock("#/api/agent-profiles-service/agent-profiles-service.api");
+vi.mock("#/api/profiles-service/profiles-service.api");
 vi.mock("#/utils/custom-toast-handlers");
 vi.mock("#/contexts/active-backend-context", () => ({
   useActiveBackend: () => ({
@@ -89,6 +93,12 @@ describe("AgentProfilesManager", () => {
 
   beforeEach(() => {
     canManage.value = true;
+    // The active LLM profile matches the OpenHands row's `llm_profile_ref`, so
+    // no drift badge renders unless a test overrides it.
+    vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
+      profiles: [],
+      active_profile: "default",
+    });
     queryClient = new QueryClient({
       defaultOptions: {
         queries: { retry: false },
@@ -241,5 +251,42 @@ describe("AgentProfilesManager", () => {
     expect(
       screen.getByText('Are you sure you want to delete "my-claude"?'),
     ).toBeInTheDocument();
+  });
+
+  it("warns on the active profile when a launch will not use its pinned LLM profile", async () => {
+    vi.mocked(AgentProfilesService.listProfiles).mockResolvedValue({
+      profiles: mockProfiles,
+      active_agent_profile_id: "id-oh",
+    });
+    vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
+      profiles: [],
+      active_profile: "other-llm",
+    });
+
+    renderManager();
+
+    const badge = await screen.findByTestId("agent-profile-llm-drift-badge");
+    expect(badge).toHaveAttribute(
+      "title",
+      'Runs on "other-llm", not "default".',
+    );
+  });
+
+  it("does not warn on an inactive profile whose pinned LLM profile still applies", async () => {
+    vi.mocked(AgentProfilesService.listProfiles).mockResolvedValue({
+      profiles: mockProfiles,
+      active_agent_profile_id: "id-acp",
+    });
+    vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
+      profiles: [],
+      active_profile: "other-llm",
+    });
+
+    renderManager();
+
+    await screen.findByText("my-openhands");
+    expect(
+      screen.queryByTestId("agent-profile-llm-drift-badge"),
+    ).not.toBeInTheDocument();
   });
 });

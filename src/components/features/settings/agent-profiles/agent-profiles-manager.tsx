@@ -5,6 +5,8 @@ import { AgentProfilesBody } from "./agent-profiles-body";
 import { DeleteAgentProfileModal } from "./delete-agent-profile-modal";
 import { type AgentProfileSummary } from "#/api/agent-profiles-service/agent-profiles-service.api";
 import { useAgentProfiles } from "#/hooks/query/use-agent-profiles";
+import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useActivateAgentProfile } from "#/hooks/mutation/use-activate-agent-profile";
 import { useCanManageOrgProfiles } from "#/hooks/use-can-manage-org-profiles";
 import { displaySuccessToast } from "#/utils/custom-toast-handlers";
@@ -21,6 +23,12 @@ export function AgentProfilesManager({
 }: AgentProfilesManagerProps) {
   const { t } = useTranslation("openhands");
   const { data, isLoading, error } = useAgentProfiles();
+  const { backend } = useActiveBackend();
+  // A home launch only ignores the active profile's pinned `llm_profile_ref`
+  // on local backends (#16193/#16539), so only local rows can drift — skip the
+  // fetch entirely on cloud, where the ref is what launches.
+  const isLocal = backend.kind === "local";
+  const { data: llmProfilesData } = useLlmProfiles({ enabled: isLocal });
   const activateProfile = useActivateAgentProfile();
   // Cloud members are view-only; only owners/admins (and all local users) may
   // add, edit, delete, or activate agent profiles (org-scoped, same permission
@@ -31,6 +39,9 @@ export function AgentProfilesManager({
 
   const profiles = data?.profiles ?? [];
   const activeId = data?.active_agent_profile_id ?? null;
+  const activeLlmProfile = isLocal
+    ? (llmProfilesData?.active_profile ?? null)
+    : null;
 
   const handleActivate = async (profile: AgentProfileSummary) => {
     if (!profile.id) return;
@@ -70,6 +81,7 @@ export function AgentProfilesManager({
           loadError={error ?? null}
           profiles={profiles}
           activeId={activeId}
+          activeLlmProfile={activeLlmProfile}
           canManage={canManage}
           onActivate={handleActivate}
           onEdit={(profile) => onEditProfile?.(profile)}

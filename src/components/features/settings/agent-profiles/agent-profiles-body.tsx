@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { AgentProfileRow } from "./agent-profile-row";
+import { getAgentProfileLlmDrift } from "./agent-profile-llm-drift";
 import { type AgentProfileSummary } from "#/api/agent-profiles-service/agent-profiles-service.api";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
@@ -15,6 +16,12 @@ interface AgentProfilesBodyProps {
   loadError: Error | null;
   profiles: AgentProfileSummary[];
   activeId: string | null;
+  /**
+   * The account-wide active LLM profile on local backends, which is what a
+   * home launch really runs — `null` on cloud (and while the list loads), where
+   * the pinned `llm_profile_ref` is authoritative and cannot drift.
+   */
+  activeLlmProfile: string | null;
   /** When false, rows are read-only and the actions menu is hidden. */
   canManage: boolean;
   onActivate: (profile: AgentProfileSummary) => void;
@@ -28,6 +35,7 @@ export function AgentProfilesBody({
   loadError,
   profiles,
   activeId,
+  activeLlmProfile,
   canManage,
   onActivate,
   onEdit,
@@ -77,18 +85,26 @@ export function AgentProfilesBody({
         settingsListDividerClassName,
       )}
     >
-      {profiles.map((profile) => (
-        <AgentProfileRow
-          key={profile.name}
-          profile={profile}
-          isActive={!!profile.id && profile.id === activeId}
-          canManage={canManage}
-          onActivate={onActivate}
-          onEdit={onEdit}
-          onDelete={onDelete}
-          isActivating={isActivating}
-        />
-      ))}
+      {profiles.map((profile) => {
+        const isActive = !!profile.id && profile.id === activeId;
+        return (
+          <AgentProfileRow
+            key={profile.name}
+            profile={profile}
+            isActive={isActive}
+            canManage={canManage}
+            driftLlmProfile={getAgentProfileLlmDrift(
+              profile,
+              isActive,
+              activeLlmProfile,
+            )}
+            onActivate={onActivate}
+            onEdit={onEdit}
+            onDelete={onDelete}
+            isActivating={isActivating}
+          />
+        );
+      })}
     </div>
   );
 }
