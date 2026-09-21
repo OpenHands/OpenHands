@@ -13,6 +13,7 @@ let mockIsMobile = false;
 let mockIsRightPanelShown = false;
 let mockLeftWidth = 50;
 let mockAutomationSetupDraft: AutomationSetupDraft | null = null;
+let mockActiveConversationTags: Record<string, string> | null = null;
 
 const mockNavigate = vi.fn();
 const mockSetHasRightPanelToggled = vi.fn();
@@ -58,7 +59,7 @@ vi.mock("#/api/automation-setup-draft-store", () => ({
 
 vi.mock("#/hooks/query/use-active-conversation", () => ({
   useActiveConversation: () => ({
-    data: { title: "Daily Morning Haiku" },
+    data: { title: "Daily Morning Haiku", tags: mockActiveConversationTags },
   }),
 }));
 
@@ -71,7 +72,7 @@ vi.mock("#/components/features/chat/chat-interface", () => {
       React.useEffect(() => {
         return () => chatInterfaceUnmount();
       }, []);
-      return <div data-testid="chat-interface">Chat Interface</div>;
+      return <div data-testid="chat-interface" />;
     },
   };
 });
@@ -116,9 +117,7 @@ vi.mock(
         <>
           {toolbarPortal
             ? createPortal(
-                <button type="button" data-testid="automation-setup-create">
-                  Create automation
-                </button>,
+                <button type="button" data-testid="automation-setup-create" />,
                 toolbarPortal,
               )
             : null}
@@ -154,11 +153,24 @@ describe("ConversationMain - Layout Transition Stability", () => {
     mockIsRightPanelShown = false;
     mockLeftWidth = 50;
     mockAutomationSetupDraft = null;
+    mockActiveConversationTags = null;
     chatInterfaceUnmount.mockClear();
     mockNavigate.mockClear();
     mockSetHasRightPanelToggled.mockClear();
     mockSetIsRightPanelShown.mockClear();
     mockClearAutomationSetupDraft.mockClear();
+  });
+
+  it("opens automation setup mode when the conversation has a draft tag", async () => {
+    mockActiveConversationTags = { automationdraftid: "draft-1" };
+
+    renderConversationMain();
+
+    expect(
+      await screen.findByTestId("automation-setup-panel"),
+    ).toBeInTheDocument();
+    expect(mockSetHasRightPanelToggled).toHaveBeenCalledWith(true);
+    expect(mockSetIsRightPanelShown).toHaveBeenCalledWith(true);
   });
 
   it("renders ChatInterface at desktop width", () => {
