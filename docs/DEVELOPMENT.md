@@ -87,7 +87,14 @@ OH_AGENT_SERVER_VERSION=1.18.0 npm run dev
 - `OH_CANVAS_SAFE_BACKEND_PORT` — backend port for the isolated server (default `18000`)
 - `OH_CANVAS_SAFE_VSCODE_PORT` — VS Code sidecar port (default `backend port + 1`)
 - `OH_CANVAS_SAFE_STATE_DIR` — base directory for isolated server state
+- `OH_CANVAS_SAFE_VITE_PORT` — frontend (Vite/static) service port (default `3001`). If busy, the launcher falls back to a free port instead of exiting.
 - `VITE_WORKING_DIR` — repo root used for new conversations (defaults to the current checkout)
+
+> **Ports:** `--port`/`PORT` controls only the ingress port — the single URL you
+> visit (`http://localhost:8000` by default). The frontend serves on an internal
+> port (`3001` by default) that is automatically selected from a free port when
+> busy; pin it explicitly with `--frontend-port <port>` or
+> `OH_CANVAS_SAFE_VITE_PORT` if needed.
 
 ## Alternative development workflows
 
@@ -201,5 +208,5 @@ You can create a `.env` file in the project directory with these variables based
 | `VITE_BASE_PATH`            | Build/serve the SPA under a subpath such as `/canvas`                                     | `/`                    |
 | `VITE_MOCK_API`             | Enable/disable API mocking with MSW                                                       | `false`                |
 | `VITE_USE_TLS`              | Use HTTPS/WSS for the Vite proxy target                                                   | `false`                |
-| `VITE_FRONTEND_PORT`        | Port to run the frontend application                                                      | `3001`                 |
+| `VITE_FRONTEND_PORT`        | Port to run the frontend application (launchers pick a free port when busy)                | `3001`                 |
 | `VITE_INSECURE_SKIP_VERIFY` | Skip TLS certificate verification for proxied backend requests                            | `false`                |

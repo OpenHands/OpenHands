@@ -28,6 +28,8 @@
  *
  * Environment variables:
  *   - PORT: Ingress port (default: 8000)
+ *   - OH_CANVAS_SAFE_VITE_PORT: Frontend (Vite/static) service port (default:
+ *       3001). Falls back to a free port when busy; `--frontend-port` overrides it.
  *   - OH_AUTOMATION_GIT_REF: Git ref for automation (overrides default version)
  *   - OH_AGENT_SERVER_LOCAL_PATH: Absolute path to a local software-agent-sdk
  *     checkout. Highest precedence for agent-server source selection: rebuilds
@@ -59,6 +61,7 @@ import {
   buildAgentServerEnv,
   buildNpmScriptCommand,
   buildRuntimeServicesInfo,
+  findFreePort,
   formatMissingUvxGuidance,
   validateFrontendDependencies,
   validateLocalAgentServerPath,
@@ -172,6 +175,7 @@ function parseArgs() {
     static: false,
     dynamic: false,
     staticDir: null,
+    frontendPort: null,
     skipBuild: false,
     public: false,
     frontendOnly: false,
@@ -202,6 +206,9 @@ function parseArgs() {
         break;
       case "--static-dir":
         config.staticDir = args[++i];
+        break;
+      case "--frontend-port":
+        config.frontendPort = parseInt(args[++i], 10);
         break;
       case "--skip-build":
         config.skipBuild = true;
@@ -237,6 +244,8 @@ USAGE:
 
 OPTIONS:
   -p, --port <port>           Ingress port (default: 8000)
+  --frontend-port <port>      Frontend service port (default: 3001; falls back
+                              to a free port when 3001 is already in use)
   --automation-ref <ref>      Git ref for automation (branch/tag/SHA)
   --automation-repo <url>     Git repo URL (default: ${DEFAULT_AUTOMATION_REPO})
   --static                    Serve an existing production build instead of Vite
@@ -249,7 +258,8 @@ OPTIONS:
   -h, --help                  Show this help
 
 ENVIRONMENT VARIABLES:
-  PORT                        Alternative to --port
+  PORT                        Alternative to --port (ingress only)
+  OH_CANVAS_SAFE_VITE_PORT    Frontend service port (default: 3001)
   OH_AUTOMATION_GIT_REF       Git ref for automation (overrides default version)
   OH_AUTOMATION_VERSION       Specific PyPI version for automation (default: ${DEFAULT_AUTOMATION_VERSION})
   OH_AUTOMATION_LOCAL_PATH    Absolute path to a local automation checkout (overridden only by --automation-git-ref)
@@ -423,14 +433,22 @@ async function buildConfig(args, env = process.env) {
   // OH_CANVAS_SAFE_BACKEND_PORT / OH_CANVAS_SAFE_AUTOMATION_PORT /
   // OH_CANVAS_SAFE_VITE_PORT allow tests (and advanced users) to redirect
   // internal service ports without affecting the production default.
+  // `--port` takes precedence over PORT, and `--frontend-port` over
+  // OH_CANVAS_SAFE_VITE_PORT.
   const preferredIngressPort = args.port || parseInt(env.PORT, 10) || 8000;
   const preferredBackendPort =
     parseInt(env.OH_CANVAS_SAFE_BACKEND_PORT, 10) || DEFAULT_BACKEND_PORT;
   const preferredAutomationPort =
     parseInt(env.OH_CANVAS_SAFE_AUTOMATION_PORT, 10) || DEFAULT_AUTOMATION_PORT;
-  const preferredVitePort = parseInt(env.OH_CANVAS_SAFE_VITE_PORT, 10) || 3001;
+  const preferredVitePort =
+    args.frontendPort || parseInt(env.OH_CANVAS_SAFE_VITE_PORT, 10) || 3001;
 
-  // Fail fast if any preferred port for a service in this mode is already in use.
+  // Fail fast if any of the required (non-frontend) ports is already in use.
+  // A concurrent agent-canvas instance is detected immediately instead of
+  // silently starting on a different ingress. The frontend port is NOT part of
+  // this hard check: users commonly run other apps on 3001, so the launcher
+  // falls back to a free port for the internal Vite/static server instead of
+  // aborting (the ingress port still detects a second instance).
   const requiredPorts = [{ name: "ingress", port: preferredIngressPort }];
   if (launchAgentServer) {
     requiredPorts.push({ name: "agent-server", port: preferredBackendPort });
@@ -438,12 +456,24 @@ async function buildConfig(args, env = process.env) {
   if (launchAutomation) {
     requiredPorts.push({ name: "automation", port: preferredAutomationPort });
   }
-  if (launchFrontend) {
-    requiredPorts.push({ name: "frontend", port: preferredVitePort });
-  }
 
   logStep("ports", "Checking ports...");
   await assertPortsFree(requiredPorts);
+
+  // Resolve the frontend port: prefer the requested port, fall back to a free
+  // one when it is already in use. The chosen port is propagated everywhere it
+  // is referenced (ingress default route, AUTOMATION_CORS_ORIGINS, and the
+  // /server_info runtime_services frontend entry) via config.vitePort.
+  const vitePort = launchFrontend
+    ? await findFreePort(preferredVitePort)
+    : preferredVitePort;
+  if (launchFrontend && vitePort !== preferredVitePort) {
+    logService(
+      "vite",
+      `Port ${preferredVitePort} is in use — using free port ${vitePort}`,
+      c.yellow,
+    );
+  }
 
   const vscodePort = preferredBackendPort + 1000;
 
@@ -483,7 +513,7 @@ async function buildConfig(args, env = process.env) {
     // Service ports (internal)
     agentServerPort: preferredBackendPort,
     autoBackendPort: preferredAutomationPort,
-    vitePort: preferredVitePort,
+    vitePort,
     vscodePort,
     // Prefix the editor is served under on the ingress origin. Carried on the
     // config so the route table and the agent-server env are built from one
@@ -885,6 +915,22 @@ function buildAgentServerAutomationEnv(config) {
   };
 }
 
+/**
+ * Build the CORS origin list for the automation backend.
+ *
+ * The frontend must be reachable from both the ingress origin (what the
+ * browser normally loads) and its own direct origin (Vite dev server / static
+ * server), so both are always allowed. The frontend port is `config.vitePort`
+ * — the resolved port after free-port fallback, never a hardcoded 3001.
+ *
+ * @param {object} config - Launcher config with `ingressPort` and `vitePort`
+ * @returns {string} Comma-separated CORS origin list
+ */
+function buildAutomationCorsOrigins(config) {
+  const frontendPort = config.vitePort ?? 3001;
+  return `http://localhost:${config.ingressPort},http://127.0.0.1:${config.ingressPort},http://localhost:${frontendPort},http://127.0.0.1:${frontendPort}`;
+}
+
 function buildAutomationTelemetryEnv(env = process.env) {
   const telemetryDisabled = env.VITE_DO_NOT_TRACK === "1";
   const apiKey =
@@ -1051,7 +1097,7 @@ function startAutomationBackend(config) {
         // CORS: allow localhost origins for dev, unless explicitly overridden.
         AUTOMATION_CORS_ORIGINS:
           process.env.AUTOMATION_CORS_ORIGINS ||
-          `http://localhost:${config.ingressPort},http://127.0.0.1:${config.ingressPort},http://localhost:3001,http://127.0.0.1:3001`,
+          buildAutomationCorsOrigins(config),
         FILE_STORE: "local",
         LOCAL_STORAGE_PATH: join(config.stateDir, "storage"),
         OPENHANDS_SUPPRESS_BANNER: "1",
@@ -1667,6 +1713,7 @@ function startStaticFrontend(config, staticDir) {
 export {
   buildAgentServerAutomationEnv,
   buildAutomationCommand,
+  buildAutomationCorsOrigins,
   buildAutomationTelemetryEnv,
   buildConfig,
   buildRouteArgs,

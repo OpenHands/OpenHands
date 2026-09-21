@@ -40,4 +40,24 @@ describe("dev-static", () => {
     expect(args).toContain("/server_info=http://127.0.0.1:18000");
     expect(args.filter((arg: string) => arg.includes("localhost"))).toEqual([]);
   });
+
+  it("allows the resolved frontend port (not a hardcoded 3001) in automation CORS origins", () => {
+    // After free-port fallback the frontend may serve on a non-default port;
+    // the automation backend must be told about the actually-chosen one.
+    const env = buildAutomationBackendEnv(
+      {
+        agentServerPort: 18000,
+        ingressPort: 8000,
+        vitePort: 4321,
+        sessionApiKey: "shared-session-key",
+        stateDir: "/tmp/agent-canvas-state",
+      },
+      {},
+    );
+
+    expect(env.AUTOMATION_CORS_ORIGINS).toBe(
+      "http://localhost:8000,http://127.0.0.1:8000,http://localhost:4321,http://127.0.0.1:4321",
+    );
+    expect(env.AUTOMATION_CORS_ORIGINS).not.toContain(":3001");
+  });
 });
