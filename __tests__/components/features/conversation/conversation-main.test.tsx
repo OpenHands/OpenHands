@@ -162,7 +162,7 @@ describe("ConversationMain - Layout Transition Stability", () => {
   });
 
   it("opens automation setup mode when the conversation has a draft tag", async () => {
-    mockActiveConversationTags = { automationdraftid: "draft-1" };
+    mockActiveConversationTags = { automationsetup: "draft" };
 
     renderConversationMain();
 

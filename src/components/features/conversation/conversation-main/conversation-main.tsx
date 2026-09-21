@@ -28,7 +28,10 @@ import { useNavigation } from "#/context/navigation-context";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { I18nKey } from "#/i18n/declaration";
 import { formControlTransitionClassName } from "#/utils/form-control-classes";
-import { getAutomationDraftIdFromTags } from "#/utils/automation-draft-tags";
+import {
+  getAutomationDraftIdFromTags,
+  hasAutomationSetupModeTag,
+} from "#/utils/automation-draft-tags";
 
 const SPLASH_ROUTE = "/";
 const TAGGED_AUTOMATION_SETUP_DRAFT: AutomationSetupDraft = {
@@ -64,6 +67,9 @@ export function ConversationMain() {
   const overviewDrawer = useConversationOverviewDrawerOptional();
   const isSecondaryDrawerOpen = Boolean(overviewDrawer?.section);
   const taggedDraftId = getAutomationDraftIdFromTags(conversation?.tags);
+  const hasTaggedAutomationSetupMode = hasAutomationSetupModeTag(
+    conversation?.tags,
+  );
   const isAutomationSetupMode = Boolean(automationSetupDraft) && !isMobile;
 
   const { leftWidth, rightWidth, isDragging, containerRef, handleMouseDown } =
@@ -87,13 +93,18 @@ export function ConversationMain() {
   useEffect(() => {
     if (
       automationSetupDraft ||
-      !taggedDraftId ||
-      taggedDraftId === dismissedTaggedDraftId
+      !hasTaggedAutomationSetupMode ||
+      (taggedDraftId && taggedDraftId === dismissedTaggedDraftId)
     ) {
       return;
     }
     setAutomationSetupDraftState(TAGGED_AUTOMATION_SETUP_DRAFT);
-  }, [automationSetupDraft, dismissedTaggedDraftId, taggedDraftId]);
+  }, [
+    automationSetupDraft,
+    dismissedTaggedDraftId,
+    hasTaggedAutomationSetupMode,
+    taggedDraftId,
+  ]);
 
   useEffect(() => {
     if (!automationSetupDraft) return;
