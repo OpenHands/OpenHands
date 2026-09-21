@@ -44,7 +44,7 @@ function ReadonlyTextArea({
         value={value}
         rows={Math.min(12, Math.max(4, value.split("\n").length))}
         className={cn(
-          "bg-[var(--oh-surface-raised)] border border-[var(--oh-border-subtle)] w-full min-w-0 rounded-sm p-2 text-sm",
+          "bg-surface-raised border border-border-subtle w-full min-w-0 rounded-sm p-2 text-sm",
           "cursor-not-allowed resize-none custom-scrollbar",
         )}
       />
@@ -100,7 +100,7 @@ export function SkillDetailModal({
       <div
         data-testid="skill-detail-modal"
         data-skill-name={skill.name}
-        className="relative flex w-[520px] max-w-[90vw] max-h-[85vh] flex-col overflow-hidden rounded-xl border border-[var(--oh-border)] bg-base-secondary"
+        className="relative flex w-130 max-w-[90vw] max-h-[85vh] flex-col overflow-hidden rounded-xl border border-border bg-base-secondary"
       >
         <ModalCloseButton onClose={onClose} testId="skill-detail-modal-close" />
         <header className="flex flex-shrink-0 items-start gap-3 pb-4 pl-6 pr-12 pt-6">
@@ -152,7 +152,7 @@ export function SkillDetailModal({
         >
           <div
             data-testid={`skill-modal-enable-row-${skill.name}`}
-            className="flex w-full items-center rounded-lg border border-[var(--oh-border)] bg-[rgba(255,255,255,0.04)] px-3 py-2.5"
+            className="flex w-full items-center rounded-lg border border-border bg-[rgba(255,255,255,0.04)] px-3 py-2.5"
           >
             <SettingsSwitch
               testId={`skill-modal-toggle-${skill.name}`}

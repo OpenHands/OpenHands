@@ -10,6 +10,23 @@ const customAutomation = AUTOMATION_CATALOG.find(
 ) as SetupEntry | undefined;
 
 describe("custom automation setup actions", () => {
+  it("uses the selected agent profile instead of a second model authority", () => {
+    const scenario = customAutomationFixture.scenarios[0];
+    const values = {
+      ...scenario.formValues,
+      model: "other-model",
+      agent_profile_id: "11111111-1111-4111-8111-111111111111",
+    } as unknown as SetupFormValues;
+    const payload = buildCreatePayload(
+      customAutomation!,
+      values,
+      undefined,
+      scenario.selectedTrigger,
+      scenario.selectedAction,
+    );
+    expect(payload?.agent_profile_id).toBe(values.agent_profile_id);
+    expect(payload).not.toHaveProperty("model");
+  });
   it("admits the custom automation action manifest", () => {
     expect(customAutomation).toBeDefined();
     expect(validateSetupEntry(customAutomation).errors).toEqual([]);

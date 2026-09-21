@@ -108,7 +108,7 @@ export function CanvasExtensionCard({
         </section>
       ) : null}
 
-      <footer className="flex justify-end gap-2 border-t border-[var(--oh-border)] pt-3">
+      <footer className="flex justify-end gap-2 border-t border-border pt-3">
         <BrandButton
           type="button"
           variant="ghost-danger"

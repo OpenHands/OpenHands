@@ -51,7 +51,7 @@ function SidebarSection({
   if (entries.length === 0) return null;
   return (
     <div className="px-2 pb-3">
-      <div className="px-2 pb-1 text-[11px] uppercase tracking-wide text-[var(--oh-muted)] font-semibold">
+      <div className="px-2 pb-1 text-[11px] uppercase tracking-wide text-muted font-semibold">
         {label}
       </div>
       <ul>
@@ -67,7 +67,7 @@ function SidebarSection({
                   "flex items-center gap-2 w-full px-2 py-1 rounded text-sm cursor-pointer",
                   isActive
                     ? "bg-tertiary text-white"
-                    : "text-[var(--oh-text-tertiary)] hover:bg-[var(--oh-surface-raised)]",
+                    : "text-text-tertiary hover:bg-surface-raised",
                 )}
               >
                 <FolderIcon width={14} height={14} className="shrink-0" />
@@ -232,14 +232,14 @@ export function FolderBrowserModal({
       <div
         data-testid="folder-browser-modal"
         className={cn(
-          "flex flex-col bg-[var(--oh-surface)] border border-[var(--oh-border-input)] rounded-xl",
+          "flex flex-col bg-surface border border-border-input rounded-xl",
           modalWidthClassName("xl"),
           MODAL_MAX_WIDTH_VIEWPORT,
-          "h-[480px]",
+          "h-120",
         )}
       >
         {/* Title bar */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--oh-border-input)]">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-border-input">
           <BaseModalTitle
             className={modalTitleSmClassName}
             title={t(I18nKey.HOME$ADD_WORKSPACES_TITLE)}
@@ -251,7 +251,7 @@ export function FolderBrowserModal({
           {/* Sidebar */}
           <aside
             data-testid="folder-browser-sidebar"
-            className="w-[180px] shrink-0 border-r border-[var(--oh-border-input)] bg-[var(--oh-surface)] py-3 overflow-y-auto"
+            className="w-45 shrink-0 border-r border-border-input bg-surface py-3 overflow-y-auto"
           >
             <SidebarSection
               label={t(I18nKey.HOME$FAVORITES)}
@@ -270,19 +270,19 @@ export function FolderBrowserModal({
           {/* Main */}
           <div className="flex-1 flex flex-col min-w-0">
             {/* Nav row */}
-            <div className="flex items-center gap-2 px-4 py-2 border-b border-[var(--oh-border-input)]">
+            <div className="flex items-center gap-2 px-4 py-2 border-b border-border-input">
               <button
                 type="button"
                 data-testid="folder-browser-up"
                 onClick={() => parent && setCurrentPath(parent)}
                 disabled={!parent}
                 aria-label={t(I18nKey.COMMON$UP)}
-                className="p-1 rounded hover:bg-[var(--oh-interactive-hover)] text-white disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                className="p-1 rounded hover:bg-interactive-hover text-white disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
               >
                 <ChevronLeft width={16} height={16} />
               </button>
               <span
-                className="text-xs text-[var(--oh-muted)] truncate"
+                className="text-xs text-muted truncate"
                 data-testid="folder-browser-current-path"
               >
                 {currentPath ?? ""}
@@ -290,7 +290,7 @@ export function FolderBrowserModal({
             </div>
 
             {/* Column headers */}
-            <div className="grid grid-cols-[1fr_120px] px-4 py-1 border-b border-[var(--oh-border-input)] text-xs text-[var(--oh-text-secondary)] font-semibold">
+            <div className="grid grid-cols-[1fr_120px] px-4 py-1 border-b border-border-input text-xs text-text-secondary font-semibold">
               <span>{t(I18nKey.HOME$NAME)}</span>
               <span>{t(I18nKey.HOME$KIND)}</span>
             </div>
@@ -301,7 +301,7 @@ export function FolderBrowserModal({
               data-testid="folder-browser-list"
             >
               {isLoading && (
-                <li className="px-4 py-2 text-sm text-[var(--oh-text-secondary)]">
+                <li className="px-4 py-2 text-sm text-text-secondary">
                   {t(I18nKey.HOME$LOADING)}
                 </li>
               )}
@@ -316,7 +316,7 @@ export function FolderBrowserModal({
               )}
               {!isLoading && !isError && subdirs.length === 0 && (
                 <li
-                  className="px-4 py-2 text-sm text-[var(--oh-text-secondary)]"
+                  className="px-4 py-2 text-sm text-text-secondary"
                   data-testid={
                     showHostHomeHint
                       ? "folder-browser-host-home-hint"
@@ -333,14 +333,14 @@ export function FolderBrowserModal({
                   <button
                     type="button"
                     onClick={() => setCurrentPath(entry.path)}
-                    className="grid grid-cols-[1fr_120px] items-center w-full text-left px-4 py-1.5 text-sm text-white hover:bg-[var(--oh-interactive-hover)] cursor-pointer"
+                    className="grid grid-cols-[1fr_120px] items-center w-full text-left px-4 py-1.5 text-sm text-white hover:bg-interactive-hover cursor-pointer"
                     data-testid={`folder-browser-entry-${entry.name}`}
                   >
                     <span className="flex items-center gap-2 min-w-0">
                       <FolderIcon width={16} height={16} className="shrink-0" />
                       <span className="truncate">{entry.name}</span>
                     </span>
-                    <span className="text-[var(--oh-text-secondary)] text-xs">
+                    <span className="text-text-secondary text-xs">
                       {t(I18nKey.HOME$FOLDER)}
                     </span>
                   </button>
@@ -351,7 +351,7 @@ export function FolderBrowserModal({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-[var(--oh-border-input)]">
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border-input">
           <BrandButton
             type="button"
             variant="secondary"

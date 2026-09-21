@@ -58,7 +58,7 @@ export function AgentOptionIcon({ id, muted }: { id: string; muted: boolean }) {
     <AgentBrandIcon
       kind={icon}
       size={18}
-      className={muted ? "text-[var(--oh-muted)]" : "text-white"}
+      className={muted ? "text-muted" : "text-white"}
       data-testid={`onboarding-agent-icon-${icon}`}
     />
   );
@@ -141,7 +141,7 @@ export function ChooseAgentStep({
         <h2 className="text-2xl font-medium text-white">
           {t(I18nKey.ONBOARDING$AGENT_TITLE)}
         </h2>
-        <p className="text-sm text-[var(--oh-muted)]">
+        <p className="text-sm text-muted">
           {t(I18nKey.ONBOARDING$AGENT_SUBTITLE)}
         </p>
       </header>
@@ -176,7 +176,7 @@ export function ChooseAgentStep({
                     {option.label}
                   </span>
                 </div>
-                <span className="text-xs text-[var(--oh-muted)]">
+                <span className="text-xs text-muted">
                   {t(option.descriptionKey)}
                 </span>
               </div>

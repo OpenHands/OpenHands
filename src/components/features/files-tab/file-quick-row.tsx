@@ -39,7 +39,7 @@ export function FileQuickRow({
 
   return (
     <div
-      className="flex h-[34px] shrink-0 items-stretch gap-1.5 overflow-y-hidden border-b border-[var(--oh-border)] px-2"
+      className="flex h-8.5 shrink-0 items-stretch gap-1.5 overflow-y-hidden border-b border-border px-2"
       data-testid="file-quick-row"
     >
       <button
@@ -59,8 +59,8 @@ export function FileQuickRow({
         )}
         className={cn(
           "shrink-0 self-center inline-flex items-center justify-center w-6 h-6 rounded-md cursor-pointer",
-          "text-[var(--oh-text-tertiary)] hover:bg-tertiary",
-          isTreeVisible && "bg-[var(--oh-surface-raised)]",
+          "text-text-tertiary hover:bg-tertiary",
+          isTreeVisible && "bg-surface-raised",
         )}
       >
         <ListTree className="w-3 h-3" aria-hidden strokeWidth={2} />
@@ -84,12 +84,12 @@ export function FileQuickRow({
                 className={cn(
                   "group/file-tab relative flex shrink-0 items-stretch",
                   // Vertical edges on every tab (left on the first, right on all).
-                  "border-r border-r-[var(--oh-border)]",
-                  index === 0 && "border-l border-l-[var(--oh-border)]",
+                  "border-r border-r-border",
+                  index === 0 && "border-l border-l-border",
                   "border-b-2 -mb-px transition-colors",
                   isSelected
                     ? "border-b-white text-white"
-                    : "border-b-transparent text-[var(--oh-muted)] hover:text-white hover:border-b-white/25",
+                    : "border-b-transparent text-muted hover:text-white hover:border-b-white/25",
                 )}
               >
                 <button
@@ -99,7 +99,7 @@ export function FileQuickRow({
                   onClick={() => onSelectFile(path)}
                   title={path}
                   data-testid={`file-quick-row-item-${path}`}
-                  className="flex min-w-0 max-w-[160px] items-center pl-2.5 pr-1 text-xs cursor-pointer text-inherit"
+                  className="flex min-w-0 max-w-40 items-center pl-2.5 pr-1 text-xs cursor-pointer text-inherit"
                 >
                   <span className="truncate">{fileName}</span>
                 </button>

@@ -6,6 +6,7 @@ import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import { ModalCloseButton } from "#/components/shared/modals/modal-close-button";
 import { useInstallCanvasExtension } from "#/hooks/mutation/use-manage-canvas-extensions";
 import { I18nKey } from "#/i18n/declaration";
+import { parseGitTreeUrl } from "#/utils/parse-git-tree-url";
 import { cn } from "#/utils/utils";
 import { modalTitleLgClassName } from "#/utils/modal-classes";
 
@@ -28,11 +29,12 @@ export function AddCanvasExtensionModal({
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     if (!canSubmit) return;
+    const treeUrl = parseGitTreeUrl(trimmedSource);
     install.mutate(
       {
-        source: trimmedSource,
-        ref: ref.trim() || null,
-        repo_path: repoPath.trim() || null,
+        source: treeUrl?.source ?? trimmedSource,
+        ref: ref.trim() || treeUrl?.ref || null,
+        repo_path: repoPath.trim() || treeUrl?.repoPath || null,
       },
       { onSuccess: onClose },
     );
@@ -46,7 +48,7 @@ export function AddCanvasExtensionModal({
       <form
         onSubmit={handleSubmit}
         data-testid="add-canvas-extension-modal"
-        className="relative flex w-[520px] max-w-[90vw] max-h-[85vh] flex-col rounded-xl border border-[var(--oh-border)] bg-base-secondary"
+        className="relative flex w-130 max-w-[90vw] max-h-[85vh] flex-col rounded-xl border border-border bg-base-secondary"
       >
         <ModalCloseButton
           onClose={onClose}

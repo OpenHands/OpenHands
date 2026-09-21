@@ -55,7 +55,7 @@ export function GitControlBarRepoButton({
         rel="noopener noreferrer"
         className={cn(
           "group flex flex-row items-center justify-between gap-2 pl-2.5 pr-2.5 py-1 rounded-[100px] flex-1 truncate relative",
-          "border border-[var(--oh-border)] bg-transparent hover:border-[var(--oh-border-subtle)] cursor-pointer",
+          "border border-border bg-transparent hover:border-border-subtle cursor-pointer",
         )}
       >
         <div className="w-3 h-3 flex items-center justify-center flex-shrink-0">
@@ -85,7 +85,7 @@ export function GitControlBarRepoButton({
         "border border-[rgba(71,74,84,0.50)] bg-transparent",
         disabled
           ? "cursor-not-allowed opacity-50"
-          : "cursor-pointer hover:border-[var(--oh-border-subtle)]",
+          : "cursor-pointer hover:border-border-subtle",
       )}
     >
       <div className="w-3 h-3 flex items-center justify-center flex-shrink-0 text-white">

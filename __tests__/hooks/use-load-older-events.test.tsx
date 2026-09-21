@@ -50,11 +50,55 @@ function makeEvent(id: string, timestamp: string): OpenHandsEvent {
   return { id, timestamp } as unknown as OpenHandsEvent;
 }
 
+function makeUserMessage(id: string, timestamp: string): OpenHandsEvent {
+  return {
+    id,
+    timestamp,
+    source: "user",
+    llm_message: { role: "user", content: [{ type: "text", text: "hi" }] },
+    activated_skills: [],
+    extended_content: [],
+  } as unknown as OpenHandsEvent;
+}
+
+function makeModelSwitchObservation(
+  id: string,
+  timestamp: string,
+): OpenHandsEvent {
+  return {
+    id,
+    timestamp,
+    source: "environment",
+    action_id: `action-${id}`,
+    tool_name: "switch_llm",
+    tool_call_id: `call-${id}`,
+    observation: {
+      kind: "SwitchLLMObservation",
+      content: [{ type: "text", text: "Switched to fast-opus" }],
+      is_error: false,
+      profile_name: "fast-opus",
+      reason: null,
+      active_model: null,
+    },
+  } as unknown as OpenHandsEvent;
+}
+
 function makePage(
   items: OpenHandsEvent[],
   nextPageId: string | null = null,
 ): EventSearchPage<OpenHandsEvent> {
   return { items, next_page_id: nextPageId };
+}
+
+function makeDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+
+  return { promise, resolve, reject };
 }
 
 describe("useLoadOlderEvents", () => {
@@ -64,6 +108,30 @@ describe("useLoadOlderEvents", () => {
   }: {
     children: React.ReactNode;
   }) => React.ReactElement;
+
+  const setConversationEvents = (
+    conversationId: string,
+    events: OpenHandsEvent[] = [],
+  ) => {
+    act(() => {
+      useEventStore.getState().clearEventsForConversation(conversationId);
+      useEventStore.getState().addEvents(events);
+    });
+  };
+
+  const renderConversationHook = (conversationId: string) =>
+    renderHook(({ id }) => useLoadOlderEvents(id), {
+      initialProps: { id: conversationId },
+      wrapper,
+    });
+
+  const startLoad = (loadOlder: () => Promise<void>) => {
+    let load!: Promise<void>;
+    act(() => {
+      load = loadOlder();
+    });
+    return load;
+  };
 
   beforeEach(() => {
     queryClient = new QueryClient({
@@ -78,7 +146,7 @@ describe("useLoadOlderEvents", () => {
 
     // Reset event store between tests so prior tests don't leak state.
     act(() => {
-      useEventStore.getState().clearEvents();
+      useEventStore.getState().clearEventsForConversation("conv-1");
       useModelStore.getState().clearAll();
     });
 
@@ -175,30 +243,11 @@ describe("useLoadOlderEvents", () => {
 
     // Older page (server returns TIMESTAMP_DESC; the hook reverses it): a user
     // message followed by the agent's successful model switch.
-    const userMsg = {
-      id: "evt-user-old",
-      timestamp: "2024-05-01T00:00:00Z",
-      source: "user",
-      llm_message: { role: "user", content: [{ type: "text", text: "hi" }] },
-      activated_skills: [],
-      extended_content: [],
-    } as unknown as OpenHandsEvent;
-    const switchObs = {
-      id: "evt-switch-old",
-      timestamp: "2024-05-02T00:00:00Z",
-      source: "environment",
-      action_id: "action-switch-old",
-      tool_name: "switch_llm",
-      tool_call_id: "call-switch-old",
-      observation: {
-        kind: "SwitchLLMObservation",
-        content: [{ type: "text", text: "Switched to fast-opus" }],
-        is_error: false,
-        profile_name: "fast-opus",
-        reason: null,
-        active_model: null,
-      },
-    } as unknown as OpenHandsEvent;
+    const userMsg = makeUserMessage("evt-user-old", "2024-05-01T00:00:00Z");
+    const switchObs = makeModelSwitchObservation(
+      "evt-switch-old",
+      "2024-05-02T00:00:00Z",
+    );
 
     vi.spyOn(EventService, "searchEvents").mockResolvedValue(
       // Descending order, as the server returns it.
@@ -265,16 +314,11 @@ describe("useLoadOlderEvents", () => {
         .addEvent(makeEvent("evt-recent", "2024-06-01T00:00:00Z"));
     });
 
-    let resolvePage!: (page: EventSearchPage<OpenHandsEvent>) => void;
-    const pendingPage = new Promise<EventSearchPage<OpenHandsEvent>>(
-      (resolve) => {
-        resolvePage = resolve;
-      },
-    );
+    const pendingPage = makeDeferred<EventSearchPage<OpenHandsEvent>>();
 
     const spy = vi
       .spyOn(EventService, "searchEvents")
-      .mockReturnValue(pendingPage);
+      .mockReturnValue(pendingPage.promise);
 
     const { result } = renderHook(() => useLoadOlderEvents("conv-1"), {
       wrapper,
@@ -291,11 +335,164 @@ describe("useLoadOlderEvents", () => {
     expect(result.current.isLoading).toBe(true);
 
     await act(async () => {
-      resolvePage(makePage([makeEvent("evt-older", "2024-05-01T00:00:00Z")], null));
+      pendingPage.resolve(
+        makePage([makeEvent("evt-older", "2024-05-01T00:00:00Z")], null),
+      );
       await Promise.all([firstLoad, secondLoad]);
     });
 
     expect(result.current.isLoading).toBe(false);
+  });
+
+  it("discards an older-events page after switching conversations", async () => {
+    setConversationEvents("conv-a", [
+      makeEvent("evt-a-recent", "2024-06-01T00:00:00Z"),
+    ]);
+
+    const pendingPage = makeDeferred<EventSearchPage<OpenHandsEvent>>();
+    vi.spyOn(EventService, "searchEvents").mockReturnValue(pendingPage.promise);
+
+    const { result, rerender } = renderConversationHook("conv-a");
+    const load = startLoad(result.current.loadOlder);
+
+    rerender({ id: "conv-b" });
+    setConversationEvents("conv-b", [
+      makeEvent("evt-b-recent", "2024-07-01T00:00:00Z"),
+    ]);
+
+    await act(async () => {
+      pendingPage.resolve(
+        makePage([
+          makeModelSwitchObservation("evt-a-switch", "2024-05-02T00:00:00Z"),
+          makeUserMessage("evt-a-user", "2024-05-01T00:00:00Z"),
+        ]),
+      );
+      await load;
+    });
+
+    expect(useEventStore.getState().events.map((event) => event.id)).toEqual([
+      "evt-b-recent",
+    ]);
+    expect(result.current.hasMore).toBe(true);
+    expect(
+      useModelStore.getState().entriesByConversation["conv-a"],
+    ).toBeUndefined();
+  });
+
+  it("discards a stale page after switching away and back", async () => {
+    setConversationEvents("conv-a", [
+      makeEvent("evt-a-first-visit", "2024-06-01T00:00:00Z"),
+    ]);
+
+    const pendingPage = makeDeferred<EventSearchPage<OpenHandsEvent>>();
+    vi.spyOn(EventService, "searchEvents").mockReturnValue(pendingPage.promise);
+
+    const { result, rerender } = renderConversationHook("conv-a");
+    const load = startLoad(result.current.loadOlder);
+
+    rerender({ id: "conv-b" });
+    setConversationEvents("conv-b");
+    rerender({ id: "conv-a" });
+    setConversationEvents("conv-a", [
+      makeEvent("evt-a-second-visit", "2024-07-01T00:00:00Z"),
+    ]);
+
+    await act(async () => {
+      pendingPage.resolve(
+        makePage([makeEvent("evt-a-stale", "2024-05-01T00:00:00Z")]),
+      );
+      await load;
+    });
+
+    expect(useEventStore.getState().events.map((event) => event.id)).toEqual([
+      "evt-a-second-visit",
+    ]);
+  });
+
+  it("ignores a request failure after switching conversations", async () => {
+    setConversationEvents("conv-a", [
+      makeEvent("evt-a-recent", "2024-06-01T00:00:00Z"),
+    ]);
+
+    const pendingPage = makeDeferred<EventSearchPage<OpenHandsEvent>>();
+    vi.spyOn(EventService, "searchEvents").mockReturnValue(pendingPage.promise);
+
+    const { result, rerender } = renderConversationHook("conv-a");
+    const load = startLoad(result.current.loadOlder);
+
+    rerender({ id: "conv-b" });
+    setConversationEvents("conv-b");
+
+    await act(async () => {
+      pendingPage.reject(new Error("stale request failed"));
+      await load;
+    });
+
+    expect(result.current.isLoading).toBe(false);
+  });
+
+  it("does not let an older request clear a newer request's loading state", async () => {
+    setConversationEvents("conv-a", [
+      makeEvent("evt-a-recent", "2024-06-01T00:00:00Z"),
+    ]);
+
+    const pageA = makeDeferred<EventSearchPage<OpenHandsEvent>>();
+    const pageB = makeDeferred<EventSearchPage<OpenHandsEvent>>();
+    vi.spyOn(EventService, "searchEvents")
+      .mockReturnValueOnce(pageA.promise)
+      .mockReturnValueOnce(pageB.promise);
+
+    const { result, rerender } = renderConversationHook("conv-a");
+    const loadA = startLoad(result.current.loadOlder);
+
+    rerender({ id: "conv-b" });
+    setConversationEvents("conv-b", [
+      makeEvent("evt-b-recent", "2024-07-01T00:00:00Z"),
+    ]);
+
+    const loadB = startLoad(result.current.loadOlder);
+    expect(result.current.isLoading).toBe(true);
+
+    await act(async () => {
+      pageA.resolve(
+        makePage([makeEvent("evt-a-older", "2024-05-01T00:00:00Z")]),
+      );
+      await loadA;
+    });
+    expect(result.current.isLoading).toBe(true);
+
+    await act(async () => {
+      pageB.resolve(
+        makePage([makeEvent("evt-b-older", "2024-06-01T00:00:00Z")]),
+      );
+      await loadB;
+    });
+    expect(result.current.isLoading).toBe(false);
+  });
+
+  it("does not merge a pending page after the hook unmounts", async () => {
+    setConversationEvents("conv-1", [
+      makeEvent("evt-recent", "2024-06-01T00:00:00Z"),
+    ]);
+
+    const pendingPage = makeDeferred<EventSearchPage<OpenHandsEvent>>();
+    vi.spyOn(EventService, "searchEvents").mockReturnValue(pendingPage.promise);
+
+    const { result, unmount } = renderConversationHook("conv-1");
+    const load = startLoad(result.current.loadOlder);
+
+    unmount();
+
+    await act(async () => {
+      pendingPage.resolve(
+        makePage([makeEvent("evt-older", "2024-05-01T00:00:00Z")]),
+      );
+      await load;
+    });
+
+    expect(useEventStore.getState().events.map((event) => event.id)).toEqual([
+      "evt-recent",
+    ]);
   });
 
   it("cleans up loading state and rethrows when the page request fails", async () => {

@@ -244,7 +244,7 @@ describe("ChangeAgentButton mode selection", () => {
       "rounded-[100px]",
       "border",
       "border-transparent",
-      "text-[var(--oh-muted)]",
+      "text-muted",
       "cursor-pointer",
       "hover:text-white",
       "hover:bg-white/10",

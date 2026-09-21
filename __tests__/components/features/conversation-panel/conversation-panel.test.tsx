@@ -1863,7 +1863,7 @@ describe("ConversationPanel", () => {
       const deleteAllRow = screen.getByTestId("delete-all-conversations");
       expect(deleteAllRow.querySelector("svg")).toBeInTheDocument();
       expect(deleteAllRow).toHaveClass("text-danger");
-      expect(deleteAllRow).not.toHaveClass("text-[var(--oh-foreground)]");
+      expect(deleteAllRow).not.toHaveClass("text-foreground");
 
       // The older-conversations toggle lives in the Advanced options modal.
       await user.click(screen.getByTestId("advanced-options-row"));

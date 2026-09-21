@@ -24,6 +24,7 @@ import {
 } from "#/manifests/automation-interface";
 import { BackLink } from "#/components/features/automations/detail/back-link";
 import { DetailHeader } from "#/components/features/automations/detail/detail-header";
+import { DisabledReasonBanner } from "#/components/features/automations/detail/disabled-reason-banner";
 import { PromptSection } from "#/components/features/automations/detail/prompt-section";
 import { ConfigurationSection } from "#/components/features/automations/detail/configuration-section";
 import { PluginsSection } from "#/components/features/automations/detail/plugins-section";
@@ -255,6 +256,7 @@ export default function AutomationDetail() {
             canManage={canManage}
             canToggle={canToggle}
           />
+          <DisabledReasonBanner automation={automation} />
           {automation.prompt && <PromptSection prompt={automation.prompt} />}
           <ConfigurationSection automation={automation} runsAs={runsAs} />
           {automation.plugins && automation.plugins.length > 0 && (
