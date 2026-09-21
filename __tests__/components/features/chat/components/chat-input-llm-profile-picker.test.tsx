@@ -9,13 +9,7 @@ vi.mock("#/hooks/use-chat-input-llm-profile-state", () => ({
 }));
 
 import { useFreeModelsStore } from "#/stores/free-models-store";
-import { I18nKey } from "#/i18n/declaration";
 import { ChatInputLlmProfilePicker } from "#/components/features/chat/components/chat-input-llm-profile-picker";
-
-// The test harness renders raw i18n keys and the pill truncates its label, so
-// match on the leading slice of the placeholder key rather than its English
-// text.
-const PLACEHOLDER = I18nKey.LLM$SELECT_MODEL_PLACEHOLDER.slice(0, 18);
 
 const PROFILES = [
   {
@@ -152,53 +146,6 @@ describe("ChatInputLlmProfilePicker", () => {
     expect(
       screen.getByTestId("chat-input-llm-profile-current"),
     ).toHaveTextContent("OpenHands DeepSeek V4 Flash (free)");
-  });
-
-  // A failed or legacy conversation can report an `llm_model` that matches no
-  // saved profile; the pill used to collapse to the placeholder even though
-  // the conversation plainly has a model (#16263).
-  it("names the conversation model when no saved profile matches it", () => {
-    useChatInputLlmProfileStateMock.mockReturnValue(
-      state({
-        currentProfileName: null,
-        currentProfileModel: "anthropic/claude-legacy",
-      }),
-    );
-
-    renderWithProviders(<ChatInputLlmProfilePicker />);
-
-    const pill = screen.getByTestId("chat-input-llm-profile");
-    expect(pill).toHaveTextContent("claude-legacy");
-    expect(pill).not.toHaveTextContent(PLACEHOLDER);
-  });
-
-  it("names the conversation model in the read-only profile menu", () => {
-    useChatInputLlmProfileStateMock.mockReturnValue(
-      state({
-        canSwitchProfile: false,
-        currentProfileName: null,
-        currentProfileModel: "anthropic/claude-legacy",
-      }),
-    );
-
-    renderWithProviders(<ChatInputLlmProfilePicker />);
-    fireEvent.click(screen.getByTestId("chat-input-llm-profile"));
-
-    expect(
-      screen.getByTestId("chat-input-llm-profile-current"),
-    ).toHaveTextContent("claude-legacy");
-  });
-
-  it("keeps the placeholder when there is neither a profile nor a model", () => {
-    useChatInputLlmProfileStateMock.mockReturnValue(
-      state({ currentProfileName: null, currentProfileModel: null }),
-    );
-
-    renderWithProviders(<ChatInputLlmProfilePicker />);
-
-    expect(screen.getByTestId("chat-input-llm-profile")).toHaveTextContent(
-      PLACEHOLDER,
-    );
   });
 
   it("links to the LLM profiles settings page", () => {

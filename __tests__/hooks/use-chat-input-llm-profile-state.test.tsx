@@ -111,15 +111,15 @@ describe("useChatInputLlmProfileState", () => {
     expect(result.current.currentProfileName).toBe("Smart");
   });
 
-  // The picker labels the pill with this model when no profile resolves, so a
-  // failed or legacy conversation still names what it is running (#16263).
-  it("keeps an unmatched conversation model as the current model", () => {
+  // A conversation the server returns without agent LLM metadata reports no
+  // model at all, so the picker must still name a profile rather than fall
+  // back to the "Select a model" placeholder (#16263).
+  it("names the account active profile when the conversation has no model", () => {
     useActiveConversationMock.mockReturnValue({
-      data: { llm_model: "anthropic/claude-legacy" },
+      data: { active_profile: null, llm_model: null },
     });
     const { result } = renderState();
-    expect(result.current.currentProfileName).toBeNull();
-    expect(result.current.currentProfileModel).toBe("anthropic/claude-legacy");
+    expect(result.current.currentProfileName).toBe("Fast");
   });
 
   it("live-switches a different profile against the conversation id", () => {
