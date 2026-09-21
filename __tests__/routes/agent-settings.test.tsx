@@ -1631,6 +1631,31 @@ describe("AgentSettingsScreen — tool selection", () => {
     ).toBe(true);
   });
 
+  it("does not refill a deliberately empty selection on a mode round-trip", async () => {
+    // `tools: []` is a bare agent the user asked for, not "nothing chosen yet".
+    // Toggling to Standard and back must leave it bare.
+    const { control } = renderEditor({ tools: [] });
+    await screen.findByTestId("agent-settings-screen");
+
+    const user = userEvent.setup();
+    const mode = () => screen.getByTestId("agent-settings-tools-mode");
+    await user.click(mode());
+    await user.click(
+      await screen.findByRole("option", {
+        name: "SETTINGS$AGENT_PROFILE_TOOLS_STANDARD",
+      }),
+    );
+    await user.click(mode());
+    await user.click(
+      await screen.findByRole("option", {
+        name: "SETTINGS$AGENT_PROFILE_TOOLS_CHOOSE",
+      }),
+    );
+
+    const fields = control().buildAgentProfileFields();
+    expect(fields.agent_kind === "openhands" && fields.tools).toEqual([]);
+  });
+
   it("seeds the custom selection once the standard set resolves", async () => {
     const { control } = renderEditor({ tools: null });
     await screen.findByTestId("agent-settings-screen");

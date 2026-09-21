@@ -359,6 +359,11 @@ export function AgentSettingsScreen({
   const [selectedTools, setSelectedTools] = useState<string[]>(
     initialTools.selected,
   );
+  // Whether this selection is the user's rather than an unfilled default. A
+  // stored list is theirs even when empty, so `[]` cannot stand in for "not
+  // chosen yet" — seeding off its length would refill a deliberately bare
+  // agent the first time the mode is toggled.
+  const toolsChosenRef = useRef(initialTools.mode === "custom");
   const { data: toolCatalog } = useToolCatalog({
     enabled: embedded && toolCatalogSupported,
   });
@@ -634,6 +639,7 @@ export function AgentSettingsScreen({
   useEffect(() => {
     setToolsMode(initialTools.mode);
     setSelectedTools(initialTools.selected);
+    toolsChosenRef.current = initialTools.mode === "custom";
   }, [initialTools]);
 
   // Sync the secret scope when settings reload
@@ -1033,9 +1039,10 @@ export function AgentSettingsScreen({
               if (!key) return;
               const mode = key as ProfileScopeMode;
               setToolsMode(mode);
-              // Start a custom selection from what the server says the standard
-              // set is, so switching mode never silently drops tools.
-              if (mode === "custom" && selectedTools.length === 0) {
+              // Start an unchosen selection from what the server says the
+              // standard set is, so switching mode never silently drops tools.
+              if (mode === "custom" && !toolsChosenRef.current) {
+                toolsChosenRef.current = true;
                 setSelectedTools(
                   (standardToolNames ?? []).filter((name) =>
                     toolPickerCatalog.some((entry) => entry.name === name),
@@ -1061,13 +1068,14 @@ export function AgentSettingsScreen({
               items={toolPickerCatalog}
               selected={orderedSelectedTools}
               isDisabled={isSavingAny}
-              onToggle={(name, checked) =>
+              onToggle={(name, checked) => {
+                toolsChosenRef.current = true;
                 setSelectedTools((prev) =>
                   checked
                     ? [...prev, name]
                     : prev.filter((entry) => entry !== name),
-                )
-              }
+                );
+              }}
             />
           )}
           <Typography.Text className="text-xs text-tertiary-alt">
