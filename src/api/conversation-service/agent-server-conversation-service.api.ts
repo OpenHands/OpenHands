@@ -43,6 +43,7 @@ import {
   buildStartConversationRequestWithEncryptedSettings,
   buildStartPlanningConversationRequestWithEncryptedSettings,
   emptyHooksResponse,
+  fetchBackendExecutionRuntime,
   getDefaultConversationTitle,
   toAppConversation,
   toConversationPage,
@@ -151,6 +152,27 @@ function normalizeStats(value: unknown): RuntimeConversationStats | null {
   return isRecord(value)
     ? (value as unknown as RuntimeConversationStats)
     : null;
+}
+
+function normalizeRuntimeInfo(
+  value: unknown,
+): DirectConversationInfo["runtime_info"] {
+  if (!isRecord(value)) return null;
+  const runtimeStatus = value.runtime_status;
+  if (
+    runtimeStatus !== "available" &&
+    runtimeStatus !== "starting" &&
+    runtimeStatus !== "missing" &&
+    runtimeStatus !== "ownership_lost" &&
+    runtimeStatus !== "error"
+  ) {
+    return null;
+  }
+
+  return {
+    runtime_status: runtimeStatus,
+    can_resume: value.can_resume === true,
+  };
 }
 
 function normalizeAgent(value: unknown): DirectConversationInfo["agent"] {
@@ -274,6 +296,7 @@ function requireDirectConversationInfo(item: unknown): DirectConversationInfo {
     updated_at: readTimestamp(item, "updated_at", "updatedAt"),
     execution_status: stringOrNull(item.execution_status),
     sandbox_status: stringOrNull(item.sandbox_status),
+    runtime_info: normalizeRuntimeInfo(item.runtime_info),
     metrics: normalizeMetrics(item.metrics),
     stats: normalizeStats(item.stats),
     agent: normalizeAgent(item.agent),
@@ -592,10 +615,17 @@ class AgentServerConversationService {
     const workingDir =
       parent?.workspace?.working_dir ?? getAgentServerWorkingDir();
 
+    // The planner must use the same workspace variety as the parent
+    // conversation's server. A Docker execution server enforces one workspace
+    // variety per server, so requesting LocalWorkspace for the planner would
+    // be rejected.
+    const executionRuntime = await fetchBackendExecutionRuntime();
+
     const payload =
       await buildStartPlanningConversationRequestWithEncryptedSettings({
         workingDir,
         parentConversationId,
+        executionRuntime,
         // Pin the planner to the parent's own current model. Only meaningful
         // for "openhands"-kind parents: an ACP parent's active_profile is a
         // stale launch-time snapshot (/model is a no-op for ACP), not a live

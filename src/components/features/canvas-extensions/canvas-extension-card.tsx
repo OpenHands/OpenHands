@@ -68,7 +68,7 @@ export function CanvasExtensionCard({
         </span>
         {pages.length ? (
           <span className={extensionModuleCardPillClassName}>
-            {t(I18nKey.SETTINGS$CANVAS_EXTENSIONS_PAGES)}: {pages.length}
+            {t(I18nKey.SETTINGS$APPS_PAGES)}: {pages.length}
           </span>
         ) : null}
       </div>

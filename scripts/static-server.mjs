@@ -34,10 +34,7 @@ import process from "node:process";
 import { pathToFileURL } from "node:url";
 import sirv from "sirv";
 
-import {
-  applySessionKeyPolicy,
-  DEFAULT_BIND_HOST,
-} from "./bind-host.mjs";
+import { applySessionKeyPolicy, DEFAULT_BIND_HOST } from "./bind-host.mjs";
 import {
   createProxyHandlers,
   createRouter,
@@ -358,6 +355,14 @@ ROUTING:
  *   `isDoNotTrackEnabled()` in `#/services/telemetry`. Enabled by
  *   AGENT_CANVAS_DISABLE_TELEMETRY=1 or the --disable-telemetry flag.
  */
+export function serializeForInlineScript(value) {
+  return JSON.stringify(value)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
+}
+
 function makeConfigInjectionScript(
   sessionApiKey,
   authRequired,
@@ -370,7 +375,7 @@ function makeConfigInjectionScript(
   const parts = [];
 
   if (sessionApiKey) {
-    const keyLiteral = JSON.stringify(sessionApiKey);
+    const keyLiteral = serializeForInlineScript(sessionApiKey);
     // Window global — read at module init by getBakedSessionApiKey().
     // Set first so it's available even if the localStorage write throws.
     parts.push(`window.__AGENT_CANVAS_SESSION_API_KEY__=${keyLiteral};`);
@@ -399,25 +404,25 @@ function makeConfigInjectionScript(
     // VITE_RUNTIME_SERVICES_INFO env var. JSON.stringify produces a safe JS
     // string literal for the inline <script>.
     parts.push(
-      `window.__AGENT_CANVAS_RUNTIME_SERVICES_INFO__=${JSON.stringify(runtimeServicesInfo)};`,
+      `window.__AGENT_CANVAS_RUNTIME_SERVICES_INFO__=${serializeForInlineScript(runtimeServicesInfo)};`,
     );
   }
 
   if (lockToCloud) {
     parts.push(
-      `window.__AGENT_CANVAS_LOCK_TO_CLOUD__=${JSON.stringify(lockToCloud)};`,
+      `window.__AGENT_CANVAS_LOCK_TO_CLOUD__=${serializeForInlineScript(lockToCloud)};`,
     );
   }
 
   if (basePath && basePath !== "/") {
     parts.push(
-      `window.__AGENT_CANVAS_BASE_PATH__=${JSON.stringify(basePath)};`,
+      `window.__AGENT_CANVAS_BASE_PATH__=${serializeForInlineScript(basePath)};`,
     );
   }
 
   if (vscodeBasePath) {
     parts.push(
-      `window.__AGENT_CANVAS_VSCODE_BASE_PATH__=${JSON.stringify(vscodeBasePath)};`,
+      `window.__AGENT_CANVAS_VSCODE_BASE_PATH__=${serializeForInlineScript(vscodeBasePath)};`,
     );
   }
 
@@ -476,7 +481,7 @@ async function serveInjectedIndexHtml(
   res.writeHead(200, {
     "Content-Type": "text/html; charset=utf-8",
     "Content-Length": buf.length,
-    "Cache-Control": "no-store",
+    "Cache-Control": sessionApiKey ? "no-store" : "no-cache",
   });
   if (req.method === "HEAD") {
     res.end();
@@ -581,6 +586,8 @@ function setStaticHeaders(res, pathname) {
 
 function createStaticMiddleware(dirAbs) {
   return sirv(dirAbs, {
+    // Builds replace hashed assets while the local server is running.
+    dev: true,
     etag: true,
     single: false,
     setHeaders: setStaticHeaders,

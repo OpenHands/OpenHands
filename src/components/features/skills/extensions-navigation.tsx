@@ -16,7 +16,7 @@ import { isNoBackend } from "#/api/backend-registry/active-store";
 /** Only the Skills item points to a cloud-hosted page today. */
 const CLOUD_LINKED_EXTENSION_PATH = "/skills";
 /** Backend-installed artifacts are not available on Cloud backends yet. */
-const CLOUD_HIDDEN_EXTENSION_PATHS = new Set(["/plugins", "/extensions"]);
+const CLOUD_HIDDEN_EXTENSION_PATHS = new Set(["/plugins", "/apps"]);
 
 interface ExtensionNavItem {
   to: string;
@@ -63,8 +63,8 @@ export const EXTENSIONS_NAV_ITEMS: ExtensionNavItem[] = [
     end: true,
   },
   {
-    to: "/extensions",
-    label: "Extensions",
+    to: "/apps",
+    label: "Apps",
     icon: <Blocks width={16} height={16} aria-hidden="true" />,
     end: true,
   },

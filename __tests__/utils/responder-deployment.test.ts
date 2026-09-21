@@ -12,7 +12,7 @@ const automationById = (id: string) =>
 describe("isResponderAutomation", () => {
   it("matches pure GitHub/Slack automations and excludes multi-tool or other integrations", () => {
     // Arrange / Act / Assert — representative pure GitHub/Slack responders.
-    expect(isResponderAutomation(automationById("github-pr-reviewer"))).toBe(
+    expect(isResponderAutomation(automationById("github-repo-monitor"))).toBe(
       true,
     );
     expect(isResponderAutomation(automationById("slack-channel-monitor"))).toBe(

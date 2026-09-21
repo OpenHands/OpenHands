@@ -8,7 +8,7 @@ vi.mock("#/hooks/use-chat-input-llm-profile-state", () => ({
   useChatInputLlmProfileState: () => useChatInputLlmProfileStateMock(),
 }));
 
-// eslint-disable-next-line import/first
+import { useFreeModelsStore } from "#/stores/free-models-store";
 import { ChatInputLlmProfilePicker } from "#/components/features/chat/components/chat-input-llm-profile-picker";
 
 const PROFILES = [
@@ -46,6 +46,11 @@ describe("ChatInputLlmProfilePicker", () => {
     selectProfile.mockReset();
     useChatInputLlmProfileStateMock.mockReset();
     useChatInputLlmProfileStateMock.mockReturnValue(state());
+    useFreeModelsStore.setState({
+      freeModels: new Set(),
+      defaultModel: null,
+      defaultModelReady: false,
+    });
   });
 
   it("renders nothing while loading or when there are no profiles", () => {
@@ -95,7 +100,11 @@ describe("ChatInputLlmProfilePicker", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("labels a free OpenHands route in the profile menu", () => {
+  it("labels a backend-flagged free OpenHands route in the profile menu", () => {
+    useFreeModelsStore.getState().setFlags({
+      freeModels: new Set(["openhands/deepseek-v4-flash"]),
+      defaultModel: null,
+    });
     useChatInputLlmProfileStateMock.mockReturnValue(
       state({
         profiles: [
@@ -119,7 +128,11 @@ describe("ChatInputLlmProfilePicker", () => {
     ).toBeInTheDocument();
   });
 
-  it("labels a free OpenHands route in the read-only profile menu", () => {
+  it("labels a backend-flagged free OpenHands route in the read-only profile menu", () => {
+    useFreeModelsStore.getState().setFlags({
+      freeModels: new Set(["openhands/deepseek-v4-flash"]),
+      defaultModel: null,
+    });
     useChatInputLlmProfileStateMock.mockReturnValue(
       state({
         canSwitchProfile: false,
