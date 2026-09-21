@@ -219,7 +219,7 @@ export function ConversationCard({
       onClick={handleTogglePin}
       className={cn(
         "flex shrink-0 cursor-pointer items-center justify-center rounded-md p-1",
-        "text-[var(--oh-muted)] hover:bg-white/10 hover:text-white",
+        "text-muted hover:bg-white/10 hover:text-white",
       )}
     >
       <Pin
@@ -253,8 +253,8 @@ export function ConversationCard({
       onClick={onClick}
       className={cn(
         "group relative h-auto w-full cursor-pointer rounded-md py-1 pl-2 pr-1 transition-colors",
-        !contextMenuOpen && "hover:bg-[var(--oh-surface)]",
-        (isActive || contextMenuOpen) && "bg-[var(--oh-surface)]",
+        !contextMenuOpen && "hover:bg-surface",
+        (isActive || contextMenuOpen) && "bg-surface",
       )}
     >
       <div className="flex items-center w-full min-w-0">
@@ -287,7 +287,7 @@ export function ConversationCard({
           {!showPersistentPinIcon && (createdAt ?? lastUpdatedAt) && (
             <p
               className={cn(
-                "text-xs text-[var(--oh-muted)] text-right whitespace-nowrap transition-opacity -translate-x-1.5",
+                "text-xs text-muted text-right whitespace-nowrap transition-opacity -translate-x-1.5",
                 hasHoverActions && hoverRevealYieldClassName(contextMenuOpen),
               )}
             >
@@ -330,7 +330,7 @@ export function ConversationCard({
                   <p
                     className={cn(
                       "pointer-events-none absolute inset-0 items-center justify-end",
-                      "text-xs text-[var(--oh-muted)] whitespace-nowrap -translate-x-1.5",
+                      "text-xs text-muted whitespace-nowrap -translate-x-1.5",
                       hoverRevealPinnedTimestampClassName(contextMenuOpen),
                     )}
                   >

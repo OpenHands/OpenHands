@@ -35,8 +35,8 @@ function InlineCodeChip({ children }: { children?: React.ReactNode }) {
   return (
     <code
       className={cn(
-        "mx-0.5 inline-block rounded-sm border border-[var(--oh-border-subtle)]",
-        "bg-[var(--oh-surface-raised)] px-1.5 py-0.5 align-baseline font-mono text-[11px] text-white",
+        "mx-0.5 inline-block rounded-sm border border-border-subtle",
+        "bg-surface-raised px-1.5 py-0.5 align-baseline font-mono text-[11px] text-white",
       )}
     >
       {children}
@@ -64,8 +64,8 @@ function AddSkillExampleBlock() {
       <pre
         data-testid="add-skill-modal-example"
         className={cn(
-          "overflow-x-auto rounded-sm border border-[var(--oh-border-subtle)]",
-          "bg-[var(--oh-surface-raised)] p-2 pr-10 text-xs text-white",
+          "overflow-x-auto rounded-sm border border-border-subtle",
+          "bg-surface-raised p-2 pr-10 text-xs text-white",
         )}
       >
         {ADD_SKILL_EXAMPLE_COMMAND}
@@ -77,9 +77,9 @@ function AddSkillExampleBlock() {
         disabled={copied}
         onClick={handleCopy}
         className={cn(
-          "absolute right-2 top-2 cursor-pointer rounded-sm border border-[var(--oh-border-subtle)]",
+          "absolute right-2 top-2 cursor-pointer rounded-sm border border-border-subtle",
           "bg-base-secondary p-1 text-tertiary-alt transition-colors",
-          "hover:bg-[var(--oh-surface)] hover:text-white disabled:cursor-default [&_path]:fill-current",
+          "hover:bg-surface hover:text-white disabled:cursor-default [&_path]:fill-current",
         )}
       >
         {copied ? (
@@ -121,7 +121,7 @@ export function AddSkillModal({ onClose }: AddSkillModalProps) {
     >
       <div
         data-testid="add-skill-modal"
-        className="relative flex w-[520px] max-w-[90vw] max-h-[85vh] flex-col rounded-xl border border-[var(--oh-border)] bg-base-secondary"
+        className="relative flex w-130 max-w-[90vw] max-h-[85vh] flex-col rounded-xl border border-border bg-base-secondary"
       >
         <ModalCloseButton onClose={onClose} testId="add-skill-modal-close" />
         <header className="flex-shrink-0 px-6 pb-4 pt-6">
@@ -189,7 +189,7 @@ export function AddSkillModal({ onClose }: AddSkillModalProps) {
             target="_blank"
             rel="noreferrer"
             data-testid="add-skill-modal-docs-link"
-            className="self-start text-xs text-[var(--oh-muted)] transition-colors hover:text-white hover:underline"
+            className="self-start text-xs text-muted transition-colors hover:text-white hover:underline"
           >
             {t(I18nKey.SETTINGS$SKILLS_ADD_MODAL_VIEW_DOCS)}
           </a>

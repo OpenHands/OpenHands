@@ -154,7 +154,7 @@ export function EditConversationTagsModal({
   return (
     <ModalBackdrop onClose={onCancel}>
       <ModalBody
-        className="items-start border border-[var(--oh-border)]"
+        className="items-start border border-border"
         testID="edit-conversation-tags-modal"
       >
         <div className="flex flex-col gap-2">
@@ -176,7 +176,7 @@ export function EditConversationTagsModal({
               {rows.map((row) => (
                 <li
                   key={row.key}
-                  className="flex items-center gap-2 rounded-md border border-[var(--oh-border)] px-2 py-1"
+                  className="flex items-center gap-2 rounded-md border border-border px-2 py-1"
                   data-testid={`edit-tag-row-${row.key}`}
                 >
                   <span className="min-w-0 flex-1 truncate text-xs text-white">
@@ -187,7 +187,7 @@ export function EditConversationTagsModal({
                     aria-label={t(I18nKey.CONVERSATION$REMOVE_TAG)}
                     data-testid={`remove-tag-${row.key}`}
                     onClick={() => handleRemove(row.key)}
-                    className="shrink-0 text-[var(--oh-muted)] hover:text-white"
+                    className="shrink-0 text-muted hover:text-white"
                   >
                     <X className="h-3.5 w-3.5" aria-hidden />
                   </button>
@@ -206,7 +206,7 @@ export function EditConversationTagsModal({
               ref={keyInputRef}
               onChange={(event) => setNewKey(event.target.value)}
               onKeyDown={handleInputKeyDown}
-              className="w-28 shrink-0 rounded-md border border-[var(--oh-border)] bg-base-secondary px-2 py-1 text-xs text-white placeholder:text-[var(--oh-muted)]"
+              className="w-28 shrink-0 rounded-md border border-border bg-base-secondary px-2 py-1 text-xs text-white placeholder:text-muted"
             />
             <input
               type="text"
@@ -216,7 +216,7 @@ export function EditConversationTagsModal({
               data-testid="new-tag-value-input"
               onChange={(event) => setNewValue(event.target.value)}
               onKeyDown={handleInputKeyDown}
-              className="min-w-0 flex-1 rounded-md border border-[var(--oh-border)] bg-base-secondary px-2 py-1 text-xs text-white placeholder:text-[var(--oh-muted)]"
+              className="min-w-0 flex-1 rounded-md border border-border bg-base-secondary px-2 py-1 text-xs text-white placeholder:text-muted"
             />
             <BrandButton
               type="button"

@@ -366,8 +366,8 @@ export default function AutomationsList() {
   return renderShell(
     <>
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 flex-1 basis-64">
           <h1 className="text-xl font-semibold text-content">
             {interfaceCopy.listTitle}
           </h1>
@@ -492,7 +492,7 @@ export default function AutomationsList() {
                 <button
                   type="button"
                   onClick={() => setLimit((prev) => prev + PAGE_SIZE)}
-                  className="self-center rounded-lg border border-[var(--oh-border)] px-6 py-2 text-sm text-white hover:bg-surface-raised"
+                  className="self-center rounded-lg border border-border px-6 py-2 text-sm text-white hover:bg-surface-raised"
                 >
                   {t(I18nKey.AUTOMATIONS$LOAD_MORE)}
                 </button>

@@ -97,7 +97,7 @@ export function OpenRepositoryModal({
     <ModalBackdrop onClose={handleClose}>
       <ModalBody
         width="sm"
-        className="relative items-start border border-[var(--oh-border)] !gap-4"
+        className="relative items-start border border-border !gap-4"
       >
         <ModalCloseButton
           onClose={handleClose}
@@ -109,7 +109,7 @@ export function OpenRepositoryModal({
 
         <div className="flex flex-col gap-4 w-full">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-white font-normal leading-[22px]">
+            <span className="text-sm text-white font-normal leading-5.5">
               {t(I18nKey.CONVERSATION$SELECT_OR_INSERT_LINK)}
             </span>
             {providers.length > 1 && (
@@ -121,7 +121,7 @@ export function OpenRepositoryModal({
             )}
           </div>
 
-          <div className="flex flex-col gap-[10px] w-full">
+          <div className="flex flex-col gap-2.5 w-full">
             <GitRepoDropdown
               provider={activeProvider}
               value={selectedRepository?.id || null}
