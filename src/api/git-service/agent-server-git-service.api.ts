@@ -109,17 +109,28 @@ function isEndpointMissingError(error: unknown): boolean {
 }
 
 class AgentServerGitService {
+  /**
+   * @param ref Optional git ref to diff against. Omit to let the server
+   *   auto-detect the base (origin branch / merge-base), so changes the
+   *   agent has already committed still show up — the right default for a
+   *   "what has this conversation changed" view. Pass `"HEAD"` for
+   *   `git status`-style results (working tree + index only); that goes
+   *   blank after every `git commit`, so only ask for it where the caller
+   *   actually means "uncommitted", not "this branch's work".
+   */
   static async getGitChanges(
     conversationId: string,
     conversationUrl: string | null | undefined,
     sessionApiKey: string | null | undefined,
     path: string,
+    ref?: string,
   ): Promise<GitChange[]> {
     const active = getActiveBackend().backend;
 
     if (active.kind === "cloud" && conversationId) {
       const params = new URLSearchParams();
       params.set("path", toAbsoluteRuntimePath(path));
+      if (ref) params.set("ref", ref);
       const data = await callCloudProxy<AgentServerGitChange[]>({
         backend: active,
         method: "GET",
@@ -140,13 +151,14 @@ class AgentServerGitService {
       }));
     }
 
-    // No `ref`: let the server auto-detect the base (origin branch /
-    // merge-base), so changes the agent has already committed still show
-    // up. `ref: "HEAD"` would go blank after every `git commit` — and the
-    // cloud-proxy branch above already omits `ref`.
-    const changes = await new RemoteWorkspace(
+    // Two call shapes, not one with an explicit `undefined` options arg, so
+    // the common (no-ref) call keeps its original single-argument shape.
+    const workspace = new RemoteWorkspace(
       getAgentServerClientOptions({ conversationUrl, sessionApiKey }),
-    ).gitChanges(path);
+    );
+    const changes = ref
+      ? await workspace.gitChanges(path, { ref })
+      : await workspace.gitChanges(path);
 
     if (!Array.isArray(changes)) {
       throw new Error(
@@ -228,12 +240,20 @@ class AgentServerGitService {
     }));
   }
 
+  /**
+   * @param ref Same contract as {@link getGitChangeDiff}'s caller intent
+   *   in {@link getGitChanges} — must match whatever base the change list
+   *   this file came from was computed against, or the two disagree about
+   *   what's a "change". Ignored when `commit` is set (both sides of a
+   *   per-commit diff come from git objects, not a base ref).
+   */
   static async getGitChangeDiff(
     conversationId: string,
     conversationUrl: string | null | undefined,
     sessionApiKey: string | null | undefined,
     path: string,
     commit?: string,
+    ref?: string,
   ): Promise<GitChangeDiff> {
     if (commit) {
       // Per-commit diff: both sides come from git objects on the server,
@@ -253,6 +273,7 @@ class AgentServerGitService {
     if (active.kind === "cloud" && conversationId) {
       const params = new URLSearchParams();
       params.set("path", toAbsoluteRuntimePath(path));
+      if (ref) params.set("ref", ref);
       const diff = await callCloudProxy<GitChangeDiff & { diff?: string }>({
         backend: active,
         method: "GET",
@@ -265,11 +286,18 @@ class AgentServerGitService {
       } as GitChangeDiff;
     }
 
-    // No `ref` for the same reason as getGitChanges: the base must match
-    // the one the change list was computed against.
-    const diff = (await new RemoteWorkspace(
+    // Same shape as getGitChanges above: avoid an explicit `undefined`
+    // options arg on the common (no-ref) call.
+    const workspace = new RemoteWorkspace(
       getAgentServerClientOptions({ conversationUrl, sessionApiKey }),
-    ).gitDiff(path)) as GitChangeDiff & { diff?: string };
+    );
+    const diff = (
+      ref
+        ? await workspace.gitDiff(path, { ref })
+        : await workspace.gitDiff(path)
+    ) as GitChangeDiff & {
+      diff?: string;
+    };
 
     return {
       modified: diff.modified ?? "",

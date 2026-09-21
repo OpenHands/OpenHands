@@ -87,6 +87,11 @@ export interface FileDiffViewerProps {
    */
   commit?: string;
   /**
+   * Git ref the working-tree diff is computed against — see
+   * {@link DiffChangeListProps.diffRef}. Ignored when `commit` is set.
+   */
+  diffRef?: string;
+  /**
    * Controlled accordion open state. When omitted, the row manages its own
    * expand/collapse (used by unit tests and standalone embeds).
    */
@@ -99,6 +104,7 @@ export function FileDiffViewer({
   path,
   type,
   commit,
+  diffRef,
   isExpanded: controlledExpanded,
   onToggle,
 }: FileDiffViewerProps) {
@@ -142,6 +148,7 @@ export function FileDiffViewer({
     type,
     enabled: !isCollapsed,
     commit,
+    ref: diffRef,
   });
 
   const updateEditorHeight = React.useCallback(() => {

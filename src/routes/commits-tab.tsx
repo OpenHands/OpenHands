@@ -27,7 +27,7 @@ function GitCommits() {
     data: uncommittedChanges,
     isSuccess: uncommittedSuccess,
     isLoading: uncommittedLoading,
-  } = useUnifiedGetGitChanges();
+  } = useUnifiedGetGitChanges({ ref: "HEAD" });
   const commitsAutoExpandSection = useConversationStore(
     (state) => state.commitsAutoExpandSection,
   );

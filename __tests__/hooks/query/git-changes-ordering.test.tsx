@@ -129,6 +129,7 @@ describe("git change loading and ordering", () => {
       "https://runtime.example.test/conversations/conversation-1",
       "session-key",
       "/workspace/agent-canvas",
+      undefined,
     );
   });
 
@@ -151,6 +152,7 @@ describe("git change loading and ordering", () => {
       expect.any(String),
       "session-key",
       "workspace/project/software-agent-sdk",
+      undefined,
     );
     expect(result.current.data).toEqual([]);
   });
@@ -169,6 +171,7 @@ describe("git change loading and ordering", () => {
       undefined,
       undefined,
       "workspace/project",
+      undefined,
     );
   });
 
@@ -191,6 +194,7 @@ describe("git change loading and ordering", () => {
       expect.any(String),
       "session-key",
       "workspace/project/openhands",
+      undefined,
     );
   });
 
@@ -326,6 +330,7 @@ describe("git change loading and ordering", () => {
         "https://runtime.example.test/conversations/conversation-1",
         "session-key",
         "/workspace/agent-canvas",
+        undefined,
       ],
     });
     expect(query?.options).toMatchObject({
@@ -418,6 +423,7 @@ describe("git change loading and ordering", () => {
         "https://runtime.example.test/conversations/conversation-1",
         "session-key",
         "/workspace/agent-canvas",
+        undefined,
       ])?.status,
     ).toBe("success");
   });
