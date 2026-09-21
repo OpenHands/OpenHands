@@ -29,9 +29,14 @@ Submit exactly one review:
   unmet checkpoint or acceptance criterion, and the smallest viable correction.
 - Never use **REQUEST_CHANGES**. A human maintainer owns the blocking decision.
 
-Do not approve changes that can affect agent or benchmark behavior—prompts, tool
-selection, conversation payloads, terminal behavior, planning, memory, or
-evaluation paths—without human review and appropriate lightweight evals.
+For changes that can affect agent or benchmark behavior—prompts, tool selection,
+conversation payloads, terminal behavior, planning, memory, or evaluation
+paths—state the eval risk in the review. Missing optional eval evidence is not a
+material code finding: when the current head otherwise passes review, APPROVE so
+the automation can request a human maintainer to choose the appropriate
+lightweight evaluation. Use COMMENT when an acceptance criterion or required
+check calls for specific eval evidence and that evidence is missing or failing,
+or when available results show a regression.
 
 Include a compact checklist for every linked acceptance criterion. Meeting the
 checklist is necessary but does not replace review for regressions, security, or
