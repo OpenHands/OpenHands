@@ -136,33 +136,17 @@ const CANVAS_EVENT_PROPERTIES = Object.freeze({
   package_version: packageJson.version,
 });
 
-const REMOTE_FRONTEND_HOSTS = new Set([
-  "app.all-hands.dev",
-  "app.beta.staging.all-hands-testing.dev",
-  "canvas.openhands.dev",
-]);
-
-function getDeploymentKindForOrigin(): DeploymentKind {
-  if (typeof window === "undefined") return "local";
-
-  return REMOTE_FRONTEND_HOSTS.has(window.location.hostname)
-    ? "remote"
-    : "local";
-}
-
 function getExplicitDeploymentKind(value: unknown): DeploymentKind | null {
   return value === "remote" || value === "local" ? value : null;
 }
 
 function getEventDeploymentKind(
   properties: Record<string, unknown>,
-): DeploymentKind {
+): DeploymentKind | null {
   return (
     getDeploymentKindForBackend(
       properties.backend_kind as BackendKind | null,
-    ) ??
-    getExplicitDeploymentKind(properties.deployment_kind) ??
-    getDeploymentKindForOrigin()
+    ) ?? getExplicitDeploymentKind(properties.deployment_kind)
   );
 }
 
