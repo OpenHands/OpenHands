@@ -771,13 +771,14 @@ class AutomationService {
     };
 
     if (active.kind === "cloud") {
-      return callCloudProxy<AutomationDraftApiResponse>({
+      const data = await callCloudProxy<AutomationDraftApiResponse>({
         backend: active,
         method: "POST",
         path,
         body: requestBody,
         headers: await buildAutomationRequestHeaders(),
       });
+      return normalizeDraftResponse(data);
     }
 
     const { data } =
@@ -795,12 +796,13 @@ class AutomationService {
     const path = `${AUTOMATION_BASE_PATH}/v1/drafts/${encodeURIComponent(draftId)}`;
 
     if (active.kind === "cloud") {
-      return callCloudProxy<AutomationDraftApiResponse>({
+      const data = await callCloudProxy<AutomationDraftApiResponse>({
         backend: active,
         method: "GET",
         path,
         headers: await buildAutomationRequestHeaders(),
       });
+      return normalizeDraftResponse(data);
     }
 
     const { data } =
@@ -820,13 +822,14 @@ class AutomationService {
     if (body.name !== undefined) requestBody.name = body.name;
 
     if (active.kind === "cloud") {
-      return callCloudProxy<AutomationDraftApiResponse>({
+      const data = await callCloudProxy<AutomationDraftApiResponse>({
         backend: active,
         method: "PATCH",
         path,
         body: requestBody,
         headers: await buildAutomationRequestHeaders(),
       });
+      return normalizeDraftResponse(data);
     }
 
     const { data } =

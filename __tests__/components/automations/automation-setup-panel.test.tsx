@@ -29,7 +29,10 @@ vi.mock("react-hot-toast", () => ({
 }));
 
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({
+    t: (key: string) => key,
+    i18n: { language: "en" },
+  }),
 }));
 
 vi.mock("#/utils/custom-toast-handlers", () => ({
@@ -153,7 +156,10 @@ describe("AutomationSetupPanel", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("validates the prompt draft against the automation service", async () => {
+  it("falls back to validation when draft endpoints are unavailable", async () => {
+    vi.mocked(AutomationService.createServerDraft).mockRejectedValue({
+      response: { status: 404 },
+    });
     vi.mocked(AutomationService.validateDraft).mockResolvedValue({
       valid: true,
       errors: [],
@@ -165,19 +171,28 @@ describe("AutomationSetupPanel", () => {
     await user.click(screen.getByTestId("automation-setup-test"));
 
     await waitFor(() =>
-      expect(AutomationService.validateDraft).toHaveBeenCalledWith({
-        endpoint: "/v1/preset/prompt",
-        draft: expect.objectContaining({
-          enabled: false,
-          prompt: "Review every pull request",
-          trigger: {
-            type: "cron",
-            schedule: "0 9 * * *",
-            timezone: "America/New_York",
-          },
+      expect(AutomationService.createServerDraft).toHaveBeenCalledWith(
+        expect.objectContaining({
+          endpoint: "/v1/preset/prompt",
+          draft: expect.objectContaining({
+            enabled: false,
+            prompt: "Review every pull request",
+          }),
         }),
-      }),
+      ),
     );
+    expect(AutomationService.validateDraft).toHaveBeenCalledWith({
+      endpoint: "/v1/preset/prompt",
+      draft: expect.objectContaining({
+        enabled: false,
+        prompt: "Review every pull request",
+        trigger: {
+          type: "cron",
+          schedule: "0 9 * * *",
+          timezone: "America/New_York",
+        },
+      }),
+    });
     expect(screen.getByTestId("automation-setup-status")).toHaveTextContent(
       "AUTOMATION_SETUP$TEST_PASSED",
     );
@@ -436,6 +451,12 @@ describe("AutomationSetupPanel", () => {
       expect(screen.getByTestId("automation-setup-status")).toHaveTextContent(
         "AUTOMATION_SETUP$DRAFT_SAVED",
       );
+      expect(
+        screen.getByTestId("automation-setup-draft-details"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId("automation-setup-draft-validity"),
+      ).toHaveTextContent("AUTOMATION_SETUP$TEST_PASSED");
 
       // Second save reuses the persisted id rather than creating again.
       await user.click(screen.getByTestId("automation-setup-save-draft"));
@@ -479,7 +500,12 @@ describe("AutomationSetupPanel", () => {
       expect(screen.getByTestId("automation-setup-status")).toHaveTextContent(
         "AUTOMATION_SETUP$TEST_DISPATCHED",
       );
-      expect(mockNavigate).toHaveBeenCalledWith("/conversations/conv-run-1");
+      expect(
+        screen.getByTestId("automation-setup-draft-run"),
+      ).toHaveTextContent("AUTOMATIONS$DETAIL$PENDING");
+      expect(mockNavigate).not.toHaveBeenCalledWith(
+        "/conversations/conv-run-1",
+      );
     });
 
     it("surfaces validation errors when the draft is not dispatchable", async () => {
