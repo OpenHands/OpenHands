@@ -28,14 +28,16 @@ jobs:
               env:
                   GH_TOKEN: ${{ github.token }}
                   ACTOR: ${{ github.event.sender.login }}
+                  REPOSITORY: ${{ github.repository }}
+                  ISSUE_NUMBER: ${{ github.event.issue.number }}
               run: |
                   set -euo pipefail
 
-                  permission="$(gh api                     "repos/${{ github.repository }}/collaborators/$ACTOR/permission"                     --jq .permission 2>/dev/null || true)"
+                  permission="$(gh api "repos/$REPOSITORY/collaborators/$ACTOR/permission" --jq .permission 2>/dev/null || true)"
                   case "$permission" in
                     write|maintain|admin)
                       ;;
                     *)
-                      gh issue edit "${{ github.event.issue.number }}"                         --repo "${{ github.repository }}"                         --remove-label ready-for-dev
+                      gh issue edit "$ISSUE_NUMBER" --repo "$REPOSITORY" --remove-label ready-for-dev
                       ;;
                   esac
