@@ -438,6 +438,19 @@ describe("AutomationSetupPanel", () => {
       } as never);
     });
 
+    it("tags the conversation as automation setup mode when opened", async () => {
+      renderPanel();
+
+      await waitFor(() =>
+        expect(
+          AgentServerConversationService.updateConversationTags,
+        ).toHaveBeenCalledWith(
+          "conv-1",
+          expect.objectContaining({ automationsetup: "draft" }),
+        ),
+      );
+    });
+
     it("creates a server draft on Save draft and updates it on the next save", async () => {
       vi.mocked(AutomationService.createServerDraft).mockResolvedValue({
         ...dispatchableDraft,

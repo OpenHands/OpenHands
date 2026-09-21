@@ -56,7 +56,9 @@ import { formatRelativeTime } from "#/utils/format-relative-time";
 import { ActivityLogItem } from "../detail/activity-log-item";
 import {
   buildAutomationDraftTags,
+  buildAutomationSetupModeTags,
   getAutomationDraftIdFromTags,
+  hasAutomationSetupModeTag,
   removeAutomationDraftTags,
 } from "#/utils/automation-draft-tags";
 
@@ -536,6 +538,16 @@ export function AutomationSetupPanel({
   useEffect(() => {
     setCurrentTaggedServerDraftId(propTaggedServerDraftId);
   }, [propTaggedServerDraftId]);
+
+  useEffect(() => {
+    if (!conversationId || hasAutomationSetupModeTag(conversationTags)) return;
+    AgentServerConversationService.updateConversationTags(
+      conversationId,
+      buildAutomationSetupModeTags(conversationTags),
+    ).catch((error: unknown) => {
+      displayErrorToast(error instanceof Error ? error.message : null);
+    });
+  }, [conversationId, conversationTags]);
 
   const updateConversationDraftTags = useCallback(
     async (draftId: string | null) => {

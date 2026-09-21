@@ -9,13 +9,27 @@ export function getAutomationDraftIdFromTags(
   return draftId || null;
 }
 
+export function hasAutomationSetupModeTag(
+  tags: Record<string, string> | null | undefined,
+): boolean {
+  return tags?.[AUTOMATION_SETUP_TAG_KEY] === AUTOMATION_SETUP_TAG_VALUE;
+}
+
+export function buildAutomationSetupModeTags(
+  tags: Record<string, string> | null | undefined,
+): Record<string, string> {
+  return {
+    ...(tags ?? {}),
+    [AUTOMATION_SETUP_TAG_KEY]: AUTOMATION_SETUP_TAG_VALUE,
+  };
+}
+
 export function buildAutomationDraftTags(
   tags: Record<string, string> | null | undefined,
   draftId: string,
 ): Record<string, string> {
   return {
-    ...(tags ?? {}),
-    [AUTOMATION_SETUP_TAG_KEY]: AUTOMATION_SETUP_TAG_VALUE,
+    ...buildAutomationSetupModeTags(tags),
     [AUTOMATION_DRAFT_ID_TAG_KEY]: draftId,
   };
 }
