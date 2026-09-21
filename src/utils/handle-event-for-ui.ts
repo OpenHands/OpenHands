@@ -26,6 +26,11 @@ export interface StreamingSlotMeta {
 
 const attemptOf = (slot: StreamingDeltaEvent): number => slot.attempt ?? 1;
 
+/** Slots and events belong to one socket; `seq` only means anything within it. */
+const isSameSocket = (event: UIEvent, isFromPlanningAgent: boolean): boolean =>
+  Boolean(event.isFromPlanningAgent) === isFromPlanningAgent;
+
+// `item_id` is a uuid, so the slot lookup needs no socket scoping.
 const findSlotIndex = (uiEvents: UIEvent[], itemId: string): number =>
   uiEvents.findIndex(
     (event) => isStreamingDeltaEvent(event) && event.id === itemId,
@@ -51,7 +56,7 @@ const slotInsertIndex = (
   const index = uiEvents.findIndex(
     (event) =>
       event.seq !== undefined &&
-      Boolean(event.isFromPlanningAgent) === isFromPlanningAgent &&
+      isSameSocket(event, isFromPlanningAgent) &&
       event.seq > anchorSeq,
   );
   return index === -1 ? uiEvents.length : index;
@@ -67,15 +72,15 @@ const findAnchor = (
   if (anchorSeq !== null && anchorSeq !== undefined) {
     const exact = uiEvents.find(
       (event) =>
-        event.seq === anchorSeq &&
-        Boolean(event.isFromPlanningAgent) === isFromPlanningAgent,
+        event.seq === anchorSeq && isSameSocket(event, isFromPlanningAgent),
     );
     if (exact) {
       return exact;
     }
   }
+  // No `findLast` under lib es2022.
   for (let i = insertIndex - 1; i >= 0; i -= 1) {
-    if (Boolean(uiEvents[i].isFromPlanningAgent) === isFromPlanningAgent) {
+    if (isSameSocket(uiEvents[i], isFromPlanningAgent)) {
       return uiEvents[i];
     }
   }
@@ -248,7 +253,7 @@ export const clearStreamingSlots = (
   const next = uiEvents.filter(
     (event) =>
       !isStreamingDeltaEvent(event) ||
-      Boolean((event as UIEvent).isFromPlanningAgent) !== isFromPlanningAgent,
+      !isSameSocket(event as UIEvent, isFromPlanningAgent),
   );
   return next.length === uiEvents.length ? uiEvents : next;
 };
