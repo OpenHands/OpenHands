@@ -14,7 +14,6 @@ This repository contains the Agent Canvas frontend and local-stack orchestration
 
 - [`OpenHands/software-agent-sdk`](https://github.com/OpenHands/software-agent-sdk) owns the Python SDK, Agent Server, agent/tool behavior, conversations, workspaces, events, and server API.
 - [`OpenHands/typescript-client`](https://github.com/OpenHands/typescript-client) owns browser-compatible typed access to that Agent Server API. Add client methods there rather than reimplementing API calls in Canvas.
-- [`OpenHands/extensions`](https://github.com/OpenHands/extensions) owns reusable skills, plugins, automations, and integrations.
 - [`OpenHands/extensions`](https://github.com/OpenHands/extensions) owns reusable skills, plugins, automations, and integrations; [`OpenHands/automation`](https://github.com/OpenHands/automation) owns automation definitions, scheduling, webhooks, run history, and dispatching; Agent Server/SDK code executes the dispatched conversations.
 
 When a feature crosses repositories, implement the backend contract in the SDK first, expose it through `typescript-client`, and consume it in Canvas. Coordinate automation lifecycle changes in `automation`. See the repository [contributor notes](../AGENTS.md) and follow the [custom code-review guide](../.agents/skills/custom-codereview-guide.md) for every pull request.
@@ -51,8 +50,8 @@ it instead.
 | Variable                  | Description                    | Default |
 | ------------------------- | ------------------------------ | ------- |
 | `PORT`                    | Ingress port                   | `8000`  |
-| `OH_AUTOMATION_GIT_REF`   | Git ref for automation backend | `main`  |
-| `OH_AGENT_SERVER_GIT_REF` | Git ref for agent-server       | `main`  |
+| `OH_AUTOMATION_GIT_REF`   | Git ref for automation backend (overrides the pinned default version) | *(unset)* |
+| `OH_AGENT_SERVER_GIT_REF` | Git ref for agent-server (overrides the pinned default version) | *(unset)* |
 
 ### Alternative: Minimal Mode (without Automation)
 

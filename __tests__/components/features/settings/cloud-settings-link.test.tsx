@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -47,6 +47,7 @@ beforeEach(() => {
 afterEach(() => {
   window.localStorage.clear();
   __resetActiveStoreForTests();
+  vi.unstubAllEnvs();
 });
 
 describe("CloudSettingsLink", () => {
@@ -76,6 +77,35 @@ describe("CloudSettingsLink", () => {
     expect(screen.getByTestId("settings-cloud-link")).toHaveAttribute(
       "href",
       "https://app.all-hands.dev/settings",
+    );
+  });
+
+  it("opens in the same tab without the external-link icon when locked to Cloud", () => {
+    // Arrange: an OHE/SaaS-hosted canvas locked to the active cloud host
+    vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://app.all-hands.dev");
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+
+    // Act
+    renderWithProviders();
+
+    // Assert: same tab (Back returns to the canvas) and no "new tab" hint
+    const link = screen.getByTestId("settings-cloud-link");
+    expect(link).toHaveAttribute("href", "https://app.all-hands.dev/settings");
+    expect(link).not.toHaveAttribute("target");
+    expect(link).not.toHaveAttribute("rel");
+    expect(link.querySelector("svg.lucide-external-link")).toBeNull();
+  });
+
+  it("appends the active org so cloud settings open on the same organization", () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-123" });
+
+    renderWithProviders();
+
+    expect(screen.getByTestId("settings-cloud-link")).toHaveAttribute(
+      "href",
+      "https://app.all-hands.dev/settings?org=org-123",
     );
   });
 

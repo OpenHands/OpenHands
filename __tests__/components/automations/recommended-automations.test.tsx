@@ -154,7 +154,7 @@ function settingsWithGithubMcp() {
 
 function continueGithubResponderLocally() {
   fireEvent.click(
-    screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
+    screen.getByTestId("recommended-automation-card-github-repo-monitor"),
   );
   const continueButton = screen.getByTestId(
     "responder-deployment-continue-local",
@@ -206,6 +206,7 @@ describe("recommended automations", () => {
 
     expect(cardIds).toEqual([
       "github-pr-reviewer",
+      "custom-automation",
       "github-issue-to-pr",
       "slack-channel-monitor",
       "github-agents-md-maintainer",
@@ -213,8 +214,17 @@ describe("recommended automations", () => {
       "github-repo-monitor",
       "slack-standup-digest",
       "linear-triage-assistant",
+      "linear-issue-to-github-pr",
+      "gitlab-issue-to-mr",
+      "linear-issue-to-gitlab-mr",
+      "linear-issue-to-bitbucket-pr",
       "jira-issue-to-pr",
+      "qa-changes",
+      "jira-issue-to-gitlab-mr",
       "research-brief-writer",
+      "jira-issue-to-bitbucket-pr",
+      "github-delivery-watchdog",
+      "github-issue-triage",
       "upstream-fork-sync",
       "incident-retrospective-drafter",
     ]);
@@ -232,7 +242,7 @@ describe("recommended automations", () => {
     const provenHeading = screen.getByText(
       I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_TITLE,
     ).parentElement!;
-    expect(within(provenHeading).getByText("5")).toBeInTheDocument();
+    expect(within(provenHeading).getByText("6")).toBeInTheDocument();
 
     const betaHeading = screen.getByTestId(
       "recommended-automations-beta-heading",
@@ -240,7 +250,7 @@ describe("recommended automations", () => {
     expect(betaHeading).toHaveTextContent(
       I18nKey.RECOMMENDED_AUTOMATIONS$BETA_LABEL,
     );
-    expect(within(betaHeading).getByText("7")).toBeInTheDocument();
+    expect(within(betaHeading).getByText("16")).toBeInTheDocument();
 
     const betaSection = screen.getByTestId(
       "recommended-automations-beta-section",
@@ -623,7 +633,7 @@ describe("recommended automations", () => {
     renderLauncher();
 
     fireEvent.click(
-      screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
+      screen.getByTestId("recommended-automation-card-github-repo-monitor"),
     );
     fireEvent.click(screen.getByTestId("responder-deployment-continue-local"));
 
@@ -673,7 +683,7 @@ describe("recommended automations", () => {
 
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith(
-        "/automations/new/github-pr-reviewer",
+        "/automations/new/github-repo-monitor",
       ),
     );
     expect(mockCreateSecret).not.toHaveBeenCalled();
@@ -857,7 +867,7 @@ describe("recommended automations", () => {
     renderLauncher();
 
     fireEvent.click(
-      screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
+      screen.getByTestId("recommended-automation-card-github-repo-monitor"),
     );
     fireEvent.click(screen.getByTestId("responder-deployment-continue-local"));
 
@@ -873,12 +883,12 @@ describe("recommended automations", () => {
     renderLauncher();
 
     fireEvent.click(
-      screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
+      screen.getByTestId("recommended-automation-card-github-repo-monitor"),
     );
     fireEvent.click(screen.getByTestId("responder-deployment-continue-local"));
     // The launch is now in flight; re-selecting the card must not launch again.
     fireEvent.click(
-      screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
+      screen.getByTestId("recommended-automation-card-github-repo-monitor"),
     );
 
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledTimes(1));
@@ -912,7 +922,7 @@ describe("recommended automations", () => {
       automations: [
         {
           id: "installed-1",
-          name: "GitHub Code Review Agent",
+          name: "GitHub code review",
           trigger: { type: "cron", schedule: "0 9 * * *" },
           enabled: true,
           prompt: "Review PRs",
@@ -951,7 +961,7 @@ describe("recommended automations", () => {
     renderLauncher();
 
     fireEvent.click(
-      screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
+      screen.getByTestId("recommended-automation-card-github-repo-monitor"),
     );
     fireEvent.click(screen.getByTestId("responder-deployment-continue-local"));
     await screen.findByTestId("mcp-install-modal");
@@ -964,7 +974,7 @@ describe("recommended automations", () => {
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith(
-        "/automations/new/github-pr-reviewer",
+        "/automations/new/github-repo-monitor",
       ),
     );
   });
@@ -975,7 +985,7 @@ describe("recommended automations", () => {
     renderLauncher();
 
     fireEvent.click(
-      screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
+      screen.getByTestId("recommended-automation-card-github-repo-monitor"),
     );
     fireEvent.click(
       screen.getByTestId("responder-deployment-open-openhands-cloud"),

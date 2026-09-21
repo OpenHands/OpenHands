@@ -53,6 +53,7 @@ vi.mock("#/api/agent-server-config", () => ({
   getBakedSessionApiKey: vi.fn(() => "test-session-key"),
   getAgentServerSessionApiKey: vi.fn(() => "test-session-key"),
   getAgentServerWorkingDir: vi.fn(() => "/workspace/project/agent-canvas"),
+  getWorkspaceRootForBackend: vi.fn(() => "/workspace/project/agent-canvas"),
   buildConversationWorkingDirForBackend: vi.fn(
     (id: string) => `/state/workspaces/${id.replace(/-/g, "")}`,
   ),

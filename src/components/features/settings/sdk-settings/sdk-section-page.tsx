@@ -10,7 +10,12 @@ import {
 } from "#/hooks/query/use-agent-settings-schema";
 import { useSettings } from "#/hooks/query/use-settings";
 import { I18nKey } from "#/i18n/declaration";
-import { Settings, SettingsSchema, SettingsScope } from "#/types/settings";
+import {
+  Settings,
+  SettingsFieldSchema,
+  SettingsSchema,
+  SettingsScope,
+} from "#/types/settings";
 import { extensionModuleEmptyStateClassName } from "#/utils/extension-module-card-classes";
 import {
   displayErrorToast,
@@ -27,6 +32,7 @@ import {
   hasMinorSettings,
   inferInitialView,
   isValidSettingsSchema,
+  normalizeComparableValue,
   SettingsDirtyState,
   SettingsFormValues,
   type SettingsValueSource,
@@ -188,6 +194,7 @@ export function SdkSectionPage({
   forceShowAdvancedView = false,
   allowAllView = true,
   initialValueOverrides,
+  markInitialOverridesDirty = true,
   embedded = false,
   hideSaveButton = false,
   suppressSuccessToast = false,
@@ -220,14 +227,15 @@ export function SdkSectionPage({
   forceShowAdvancedView?: boolean;
   allowAllView?: boolean;
   /**
-   * Per-field initial value overrides that win over the values
-   * derived from `useSettings`. The keys of each override are also
-   * marked dirty on hydration so the user can save the form without
-   * having to touch the prefilled fields. Useful when the page is
-   * embedded in a flow that wants to nudge brand-new users toward a
-   * particular default (e.g. onboarding pre-filling OpenHands/Opus).
+   * Per-field initial value overrides that win over the values derived from
+   * `useSettings`. When {@link markInitialOverridesDirty} is true (default),
+   * override keys also start dirty so onboarding can save a prefill without
+   * a touch. Profile editors should pass `false` so Save stays off until the
+   * user changes something.
    */
   initialValueOverrides?: SettingsFormValues;
+  /** @default true */
+  markInitialOverridesDirty?: boolean;
   embedded?: boolean;
   hideSaveButton?: boolean;
   /** Suppress the default success toast after save completes. */
@@ -355,6 +363,7 @@ export function SdkSectionPage({
     () => (initialValueOverrides ? JSON.stringify(initialValueOverrides) : ""),
     [initialValueOverrides],
   );
+  const firstSettingsSource = resolvedSources[0]?.settingsSource;
 
   const [view, setView] = React.useState<SettingsView>("basic");
   const [valuesBySource, setValuesBySource] = React.useState<
@@ -423,10 +432,13 @@ export function SdkSectionPage({
 
   React.useEffect(() => {
     if (!initialValuesBySource || !initialView) return;
+    if (hideSaveButton && hasHydratedViewRef.current) {
+      return;
+    }
 
     setValuesBySource(initialValuesBySource);
-    if (initialValueOverrides) {
-      const firstSource = resolvedSources[0]?.settingsSource;
+    if (initialValueOverrides && markInitialOverridesDirty) {
+      const firstSource = firstSettingsSource;
       if (firstSource) {
         const overrideDirty: SettingsDirtyState = Object.fromEntries(
           Object.keys(initialValueOverrides).map((key) => [key, true]),
@@ -447,7 +459,14 @@ export function SdkSectionPage({
     } else {
       setView((currentView) => getLessDetailedView(currentView, initialView));
     }
-  }, [initialValuesBySource, initialView]);
+  }, [
+    initialValuesBySource,
+    initialView,
+    overridesSignature,
+    markInitialOverridesDirty,
+    firstSettingsSource,
+    hideSaveButton,
+  ]);
 
   const fieldKeyToSource = React.useMemo(() => {
     const map = new Map<string, SettingsValueSource>();
@@ -481,9 +500,34 @@ export function SdkSectionPage({
     return merged;
   }, [resolvedSources, dirtyBySource]);
 
+  const fieldsByKey = React.useMemo(() => {
+    const map = new Map<string, SettingsFieldSchema>();
+    for (const src of resolvedSources) {
+      if (!src.filteredSchema) continue;
+      for (const section of src.filteredSchema.sections) {
+        for (const field of section.fields) {
+          if (!map.has(field.key)) {
+            map.set(field.key, field);
+          }
+        }
+      }
+    }
+    return map;
+  }, [resolvedSources]);
+
+  const initialValuesBySourceRef = React.useRef(initialValuesBySource);
+  initialValuesBySourceRef.current = initialValuesBySource;
+  const initialValueOverridesRef = React.useRef(initialValueOverrides);
+  initialValueOverridesRef.current = initialValueOverrides;
+  const markInitialOverridesDirtyRef = React.useRef(markInitialOverridesDirty);
+  markInitialOverridesDirtyRef.current = markInitialOverridesDirty;
+  const fieldsByKeyRef = React.useRef(fieldsByKey);
+  fieldsByKeyRef.current = fieldsByKey;
+
   const handleFieldChange = React.useCallback(
     (fieldKey: string, nextValue: string | boolean) => {
-      const sourceKey = fieldKeyToSource.get(fieldKey);
+      const sourceKey =
+        fieldKeyToSource.get(fieldKey) ?? resolvedSources[0]?.settingsSource;
       if (!sourceKey) return;
       setValuesBySource((prev) => ({
         ...prev,
@@ -492,15 +536,34 @@ export function SdkSectionPage({
           [fieldKey]: nextValue,
         },
       }));
-      setDirtyBySource((prev) => ({
-        ...prev,
-        [sourceKey]: {
-          ...(prev[sourceKey] ?? {}),
-          [fieldKey]: true,
-        },
-      }));
+      setDirtyBySource((prev) => {
+        const initialVal =
+          initialValuesBySourceRef.current?.[sourceKey]?.[fieldKey];
+        const stickyOverride =
+          markInitialOverridesDirtyRef.current &&
+          !!initialValueOverridesRef.current &&
+          fieldKey in initialValueOverridesRef.current;
+        const field = fieldsByKeyRef.current.get(fieldKey);
+        const valuesMatch = field
+          ? normalizeComparableValue(field, nextValue) ===
+            normalizeComparableValue(field, initialVal)
+          : nextValue === initialVal;
+
+        if (valuesMatch && !stickyOverride) {
+          if (!prev[sourceKey]?.[fieldKey]) return prev;
+          const sourceDirty = { ...(prev[sourceKey] ?? {}) };
+          delete sourceDirty[fieldKey];
+          return { ...prev, [sourceKey]: sourceDirty };
+        }
+
+        if (prev[sourceKey]?.[fieldKey]) return prev;
+        return {
+          ...prev,
+          [sourceKey]: { ...(prev[sourceKey] ?? {}), [fieldKey]: true },
+        };
+      });
     },
-    [fieldKeyToSource],
+    [fieldKeyToSource, resolvedSources],
   );
 
   const handleError = React.useCallback(

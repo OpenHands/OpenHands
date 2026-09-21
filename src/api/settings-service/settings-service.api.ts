@@ -7,6 +7,7 @@ import type {
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import { Settings, SettingsSchema, SettingsValue } from "#/types/settings";
 import { stringRecord } from "#/utils/mcp-config";
+import type { SkillEnablement } from "#/utils/skill-enablement";
 import { getActiveBackend } from "../backend-registry/active-store";
 import {
   fetchCloudConversationSettingsSchema,
@@ -30,6 +31,7 @@ export const APP_PREFERENCE_FIELDS = [
   "git_user_email",
   "title_llm_profile",
   "disabled_skills",
+  "enabled_skills",
 ] as const;
 
 export type AppPreferenceField = (typeof APP_PREFERENCE_FIELDS)[number];
@@ -72,7 +74,8 @@ export interface SettingsApiResponse {
  * `conversation_settings_diff`. A partial diff like
  * `{ app_preferences: { language: "fr" } }` updates only `language` and
  * leaves every other `app_preferences` field alone. Lists
- * (`disabled_skills`) are replaced wholesale rather than merged.
+ * (`disabled_skills`, `enabled_skills`) are replaced wholesale rather than
+ * merged.
  */
 export interface SettingsUpdateRequest {
   agent_settings_diff?: Record<string, SettingsValue>;
@@ -316,6 +319,25 @@ const cloudCompatibleMcpConfig = async (value: unknown): Promise<unknown> => {
 };
 
 /**
+ * Read the skill allow-/deny-lists off a raw API response — for
+ * `getSettingsForConversation`, which returns the encrypted dump as-is rather
+ * than a normalized `Settings` object (so `toSkillEnablement` can't be used).
+ *
+ * `enabledSkills` stays `undefined` when absent: that is the "never migrated"
+ * signal `resolveEnabledCatalogSkills` reads, and an empty array would instead
+ * mean "every catalog skill off".
+ */
+const getSkillEnablement = (response: SettingsApiResponse): SkillEnablement => {
+  const prefs = response.misc_settings?.app_preferences;
+  const disabled = prefs?.disabled_skills;
+  const enabled = prefs?.enabled_skills;
+  return {
+    disabledSkills: Array.isArray(disabled) ? disabled : [],
+    enabledSkills: Array.isArray(enabled) ? enabled : undefined,
+  };
+};
+
+/**
  * Transform API response into Settings object with derived fields.
  */
 const transformApiResponse = (
@@ -487,6 +509,7 @@ class SettingsService {
     agentSettings: Record<string, SettingsValue>;
     conversationSettings: Record<string, SettingsValue>;
     secretsEncrypted: boolean;
+    skillEnablement: SkillEnablement;
   }> {
     // Check cache first
     if (isCacheValid() && settingsCache.encrypted) {
@@ -494,6 +517,7 @@ class SettingsService {
         agentSettings: settingsCache.encrypted.agent_settings,
         conversationSettings: settingsCache.encrypted.conversation_settings,
         secretsEncrypted: true,
+        skillEnablement: getSkillEnablement(settingsCache.encrypted),
       };
     }
 
@@ -508,6 +532,7 @@ class SettingsService {
       agentSettings: response.agent_settings,
       conversationSettings: response.conversation_settings,
       secretsEncrypted: true,
+      skillEnablement: getSkillEnablement(response),
     };
   }
 

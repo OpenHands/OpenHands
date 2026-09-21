@@ -50,16 +50,18 @@ describe("OpenHands extensions catalogs", () => {
     expect(linear.docsUrl).toBe("https://linear.app/docs/mcp");
     expect(mcpOption.auth.strategy).toBe("bearer");
     expect(
-      linear.connectionOptions.some((option) => option.transport?.kind === "sse"),
+      linear.connectionOptions.some(
+        (option) => option.transport?.kind === "sse",
+      ),
     ).toBe(false);
   });
 
-  it("drops deprecated MCP entries that no longer have maintained replacements", () => {
+  it("keeps maintained MCP entries and drops deprecated ones", () => {
     const catalogIds = new Set(
       getMcpMarketplaceCatalog(INTEGRATION_CATALOG).map((entry) => entry.id),
     );
 
-    expect(catalogIds.has("gitlab")).toBe(false);
+    expect(catalogIds.has("gitlab")).toBe(true);
     expect(catalogIds.has("google-maps")).toBe(false);
     expect(catalogIds.has("postgres")).toBe(false);
     expect(catalogIds.has("puppeteer")).toBe(false);

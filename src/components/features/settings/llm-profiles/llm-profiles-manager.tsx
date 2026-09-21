@@ -37,9 +37,12 @@ export function LlmProfilesManager({
   // Cloud members are view-only; only owners/admins (and all local users) may
   // add, edit, rename, duplicate, delete, or activate profiles.
   const canManage = useCanManageOrgProfiles();
-  // Provider connections exist only on the local agent-server.
-  const { backend } = useActiveBackend();
-  const isLocal = backend.kind === "local";
+  // Provider connections exist on the local agent-server and on cloud when an
+  // org is bound (the org-scoped CRUD routes). A cloud backend without an org
+  // (legacy API keys) cannot address them, so the manager stays hidden there.
+  const { backend, orgId } = useActiveBackend();
+  const supportsConnections =
+    backend.kind === "local" || (backend.kind === "cloud" && !!orgId);
   const {
     data: connections,
     isLoading: isLoadingConnections,
@@ -155,7 +158,7 @@ export function LlmProfilesManager({
           />
         </div>
 
-        {isLocal && canManage ? (
+        {supportsConnections && canManage ? (
           <ProviderConnectionsManager
             connections={connectionList}
             linkedCountById={linkedCountById}

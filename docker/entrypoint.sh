@@ -42,6 +42,8 @@
 #                          Setting this enables local-mode auth so the session
 #                          API key is validated internally instead of against the
 #                          OpenHands cloud API.
+#   AUTOMATION_KV_SECRET  – Signing key for scoped automation KV tokens
+#                          (defaults to the shared session API key).
 #   FILE_STORE             – Storage backend for automation tarballs (default: local).
 #                          Without this the automation backend may fall back to
 #                          S3/GCS which fails without cloud credentials.
@@ -219,6 +221,7 @@ fi
 export OPENHANDS_AUTOMATION_API_KEY="${OPENHANDS_AUTOMATION_API_KEY:-${EFFECTIVE_SESSION_KEY}}"
 export AUTOMATION_LOCAL_API_KEY="${AUTOMATION_LOCAL_API_KEY:-${EFFECTIVE_SESSION_KEY}}"
 export AUTOMATION_AGENT_SERVER_API_KEY="${AUTOMATION_AGENT_SERVER_API_KEY:-${EFFECTIVE_SESSION_KEY}}"
+export AUTOMATION_KV_SECRET="${AUTOMATION_KV_SECRET:-${EFFECTIVE_SESSION_KEY}}"
 export OPENHANDS_REMOTE_WS_READY_REQUIRED="${OPENHANDS_REMOTE_WS_READY_REQUIRED:-false}"
 if [ -z "${AUTOMATION_POSTHOG_API_KEY:-}" ]; then
   if [ -n "${VITE_POSTHOG_API_KEY:-}" ]; then
@@ -268,7 +271,11 @@ export AUTOMATION_AGENT_SERVER_URL="${AUTOMATION_AGENT_SERVER_URL:-http://127.0.
 
 # Keep the legacy canvas_ui_tool module importable when the agent-server restores
 # conversations whose persisted metadata still references its module qualname.
+# It is also imported at startup below (--import-modules) so its builtin
+# FinishTool registration lets automation runs resolve the tool on their
+# remote conversations (see the note at the bottom of tools/canvas_ui_tool.py).
 export OH_EXTRA_PYTHON_PATH="${OH_EXTRA_PYTHON_PATH:-/opt/agent-canvas/tools}"
+AGENT_SERVER_IMPORT_MODULES="canvas_ui_tool"
 
 # Track child PIDs so we can clean up on exit.
 PIDS=()
@@ -288,10 +295,12 @@ log "Starting agent-server on port $AGENT_SERVER_PORT..."
 
 if command -v openhands-agent-server >/dev/null 2>&1; then
   # Binary build (production image)
-  openhands-agent-server --port "$AGENT_SERVER_PORT" &
+  openhands-agent-server --port "$AGENT_SERVER_PORT" \
+    --import-modules "$AGENT_SERVER_IMPORT_MODULES" &
 elif [ -x /agent-server/.venv/bin/python ]; then
   # Source build (development image)
-  /agent-server/.venv/bin/python -m openhands.agent_server --port "$AGENT_SERVER_PORT" &
+  /agent-server/.venv/bin/python -m openhands.agent_server --port "$AGENT_SERVER_PORT" \
+    --import-modules "$AGENT_SERVER_IMPORT_MODULES" &
 else
   log_error "Cannot find agent-server binary or source venv."
   exit 1

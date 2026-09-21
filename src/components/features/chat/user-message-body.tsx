@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { cn } from "#/utils/utils";
 import { I18nKey } from "#/i18n/declaration";
 import { MarkdownRenderer } from "../markdown/markdown-renderer";
+import { ChatAnchor, ChatCode, ChatStrong } from "./chat-markdown-path-code";
 
 const USER_MESSAGE_MAX_LINES = 5;
 const USER_MESSAGE_LENGTH_THRESHOLD = 360;
@@ -12,6 +13,9 @@ export const chatBubbleMarkdownComponents = {
   p: ({ children }: React.ComponentProps<"p">) => (
     <p className="m-0 leading-6">{children}</p>
   ),
+  code: ChatCode,
+  a: ChatAnchor,
+  strong: ChatStrong,
 };
 
 export function UserMessageBody({

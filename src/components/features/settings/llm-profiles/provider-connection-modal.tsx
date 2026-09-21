@@ -79,8 +79,16 @@ export function ProviderConnectionModal({
     Boolean(provider?.trim()) &&
     (!isCreate || Boolean(trimmedKey));
 
-  const verifiedProviders = providers.filter((candidate) => candidate.verified);
-  const unverifiedProviders = providers.filter(
+  const selectedProviderMissing = Boolean(
+    provider && !providers.some((candidate) => candidate.name === provider),
+  );
+  const providerOptions = selectedProviderMissing
+    ? [...providers, { name: provider ?? DEFAULT_PROVIDER, verified: false }]
+    : providers;
+  const verifiedProviders = providerOptions.filter(
+    (candidate) => candidate.verified,
+  );
+  const unverifiedProviders = providerOptions.filter(
     (candidate) => !candidate.verified,
   );
 
@@ -181,39 +189,52 @@ export function ProviderConnectionModal({
           onChange={setDisplayName}
           required
         />
-        {isCreate ? (
-          <fieldset className="flex flex-col gap-2.5 w-full">
-            <label className="text-sm">
-              {t(I18nKey.SETTINGS$PROVIDER_CONNECTION_PROVIDER)}
-            </label>
-            <Autocomplete
-              data-testid="provider-connection-provider-input"
-              isRequired
-              isVirtualized={false}
-              name="provider-connection-provider-input"
-              aria-label={t(I18nKey.SETTINGS$PROVIDER_CONNECTION_PROVIDER)}
-              isClearable={false}
-              selectedKey={provider}
-              onSelectionChange={(key) => setProvider(key?.toString() ?? null)}
-              classNames={{
-                popoverContent:
-                  "bg-content1 rounded-xl border border-[var(--oh-border)]",
-                selectorButton: heroUiAutocompleteSelectorButtonClassName,
-              }}
-              selectorButtonProps={{ disableRipple: true }}
-              inputProps={{
-                classNames: {
-                  inputWrapper: formControlSettingsFieldClassName,
-                },
-              }}
+        <fieldset className="flex flex-col gap-2.5 w-full">
+          <label className="text-sm">
+            {t(I18nKey.SETTINGS$PROVIDER_CONNECTION_PROVIDER)}
+          </label>
+          <Autocomplete
+            data-testid="provider-connection-provider-input"
+            isRequired
+            isVirtualized={false}
+            name="provider-connection-provider-input"
+            aria-label={t(I18nKey.SETTINGS$PROVIDER_CONNECTION_PROVIDER)}
+            isClearable={false}
+            selectedKey={provider}
+            onSelectionChange={(key) => setProvider(key?.toString() ?? null)}
+            classNames={{
+              popoverContent:
+                "bg-content1 rounded-xl border border-[var(--oh-border)]",
+              selectorButton: heroUiAutocompleteSelectorButtonClassName,
+            }}
+            selectorButtonProps={{ disableRipple: true }}
+            inputProps={{
+              classNames: {
+                inputWrapper: formControlSettingsFieldClassName,
+              },
+            }}
+          >
+            <AutocompleteSection
+              title={t(I18nKey.MODEL_SELECTOR$VERIFIED)}
+              classNames={{ heading: "text-[var(--oh-muted)]" }}
             >
+              {verifiedProviders.map((candidate) => (
+                <AutocompleteItem
+                  data-testid={`provider-item-${candidate.name}`}
+                  key={candidate.name}
+                  textValue={mapProvider(candidate.name)}
+                >
+                  {mapProvider(candidate.name)}
+                </AutocompleteItem>
+              ))}
+            </AutocompleteSection>
+            {unverifiedProviders.length > 0 ? (
               <AutocompleteSection
-                title={t(I18nKey.MODEL_SELECTOR$VERIFIED)}
+                title={t(I18nKey.MODEL_SELECTOR$OTHERS)}
                 classNames={{ heading: "text-[var(--oh-muted)]" }}
               >
-                {verifiedProviders.map((candidate) => (
+                {unverifiedProviders.map((candidate) => (
                   <AutocompleteItem
-                    data-testid={`provider-item-${candidate.name}`}
                     key={candidate.name}
                     textValue={mapProvider(candidate.name)}
                   >
@@ -221,33 +242,9 @@ export function ProviderConnectionModal({
                   </AutocompleteItem>
                 ))}
               </AutocompleteSection>
-              {unverifiedProviders.length > 0 ? (
-                <AutocompleteSection
-                  title={t(I18nKey.MODEL_SELECTOR$OTHERS)}
-                  classNames={{ heading: "text-[var(--oh-muted)]" }}
-                >
-                  {unverifiedProviders.map((candidate) => (
-                    <AutocompleteItem
-                      key={candidate.name}
-                      textValue={mapProvider(candidate.name)}
-                    >
-                      {mapProvider(candidate.name)}
-                    </AutocompleteItem>
-                  ))}
-                </AutocompleteSection>
-              ) : null}
-            </Autocomplete>
-          </fieldset>
-        ) : (
-          <SettingsInput
-            testId="provider-connection-provider-input"
-            label={t(I18nKey.SETTINGS$PROVIDER_CONNECTION_PROVIDER)}
-            type="text"
-            className="w-full"
-            value={provider ?? ""}
-            onChange={setProvider}
-          />
-        )}
+            ) : null}
+          </Autocomplete>
+        </fieldset>
         <SettingsInput
           testId="provider-connection-api-key-input"
           label={t(I18nKey.SETTINGS_FORM$API_KEY)}

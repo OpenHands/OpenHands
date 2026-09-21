@@ -7,11 +7,10 @@ import {
   SETTINGS_QUERY_KEYS,
 } from "#/hooks/query/query-keys";
 import { getLastRenderableEventId } from "#/hooks/chat/model-command-event-anchor";
-import { recordModelSwitchMessage } from "#/hooks/chat/record-model-switch-message";
 import {
-  getStoredConversationMetadata,
-  setStoredConversationMetadata,
-} from "#/api/conversation-metadata-store";
+  recordModelSwitchMessage,
+  stampActiveLlmProfile,
+} from "#/hooks/chat/record-model-switch-message";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
 import { I18nKey } from "#/i18n/declaration";
@@ -80,15 +79,7 @@ export const useSwitchLlmProfile = () => {
         // Keep the per-conversation profile identity fresh so the chat-header
         // switcher shows the right name after a reload (the agent-server only
         // round-trips the model string). #1082
-        const prev = getStoredConversationMetadata(conversationId);
-        setStoredConversationMetadata(conversationId, {
-          selected_repository: prev?.selected_repository ?? null,
-          selected_branch: prev?.selected_branch ?? null,
-          git_provider: prev?.git_provider ?? null,
-          selected_workspace: prev?.selected_workspace ?? null,
-          active_profile: profileName,
-          plugins: prev?.plugins ?? null,
-        });
+        stampActiveLlmProfile(conversationId, profileName);
       } else {
         // Home-page activate path (same server endpoint as
         // useActivateLlmProfile): clear the SettingsService cache so the next
