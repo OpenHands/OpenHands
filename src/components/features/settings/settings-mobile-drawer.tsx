@@ -5,8 +5,6 @@ import { I18nKey } from "#/i18n/declaration";
 import SettingsIcon from "#/icons/settings-gear.svg?react";
 import CloseIcon from "#/icons/close.svg?react";
 import { SettingsNavRenderedItem } from "#/hooks/use-settings-nav-items";
-import { SettingsNavHeader } from "./settings-nav-header";
-import { SettingsNavDivider } from "./settings-nav-divider";
 import { SettingsNavLink } from "./settings-nav-link";
 import { navInteractiveTransitionClassName } from "#/components/features/sidebar/sidebar-layout";
 import { AgentCanvasUpdateCard } from "#/components/features/settings/agent-canvas-update-card";
@@ -69,15 +67,21 @@ export function SettingsMobileDrawer({
           {navigationItems.map((renderedItem, index) => {
             if (renderedItem.type === "header") {
               return (
-                <SettingsNavHeader
-                  key={`header-${renderedItem.text}`}
-                  text={renderedItem.text}
-                />
+                <div key={`header-${renderedItem.text}`} className="px-3.5">
+                  <Typography.Text className="text-[11px] font-medium text-[var(--oh-text-dim)] uppercase tracking-wide leading-5">
+                    {t(renderedItem.text)}
+                  </Typography.Text>
+                </div>
               );
             }
 
             if (renderedItem.type === "divider") {
-              return <SettingsNavDivider key={`divider-${index}`} />;
+              return (
+                <div
+                  key={`divider-${index}`}
+                  className="border-t border-[var(--oh-border-subtle)] w-full"
+                />
+              );
             }
 
             return (
