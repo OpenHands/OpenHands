@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>LlmNotConfiguredBanner — before / after</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 28px 32px 20px;
+    background: #f9fafb;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #111827;
+    width: 900px;
+  }
+  .caption {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: #6b7280;
+    margin: 0 0 14px;
+  }
+  .state-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: #9ca3af;
+    margin: 0 0 6px 2px;
+  }
+  .state-sub {
+    font-size: 11px;
+    color: #9ca3af;
+    margin: 6px 0 0 2px;
+  }
+  /* Rebuilt from src/components/features/home/llm-not-configured-banner.tsx
+     (className mirrors the component; Tailwind utilities are inlined here). */
+  .banner {
+    margin-top: 3px;
+    display: flex;
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border-radius: 12px;
+    border: 1px solid #e5e7eb;
+    background: #ffffff;
+    padding: 16px;
+    color: #111827;
+  }
+  .banner-left {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+  }
+  .icon-wrap { flex-shrink: 0; display: flex; align-items: center; }
+  .icon-wrap svg { vertical-align: middle; color: #facc15; }
+  .banner-text {
+    margin-left: 12px;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.45;
+  }
+  .banner-text strong { font-weight: 700; }
+  .btn {
+    flex-shrink: 0;
+    align-self: center;
+    white-space: nowrap;
+    width: fit-content;
+    border: 0;
+    border-radius: 8px;
+    background: #111827;
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 9px 16px;
+  }
+  .divider { height: 1px; background: #e5e7eb; margin: 22px 0; }
+  .footnote {
+    margin-top: 16px;
+    font-size: 11px;
+    line-height: 1.5;
+    color: #6b7280;
+    border-top: 1px dashed #d1d5db;
+    padding-top: 10px;
+  }
+</style>
+</head>
+<body>
+
+<p class="caption">LlmNotConfiguredBanner — PR #17509</p>
+
+<!-- BEFORE: no active profile (state unchanged by this PR) -->
+<p class="state-label">Before &nbsp;·&nbsp; no active profile</p>
+<div class="banner" data-testid="home-llm-not-configured-banner" role="alert">
+  <div class="banner-left">
+    <div class="icon-wrap">
+      <svg width="16" height="16" viewBox="0 0 512 512" fill="currentColor" aria-hidden="true">
+        <path d="M256 32c14.3 0 27.3 7.9 33.8 20.5l199.5 356.5c6.6 12.8 5.4 28.1-3.2 39.6S465 472 450 472H62c-15 0-28.9-7.9-36.1-23.4s-9.8-26.8-3.2-39.6L222.2 52.5C228.7 39.9 241.7 32 256 32zm0 128c-13.3 0-24 10.7-24 24v112c0 13.3 10.7 24 24 24s24-10.7 24-24V184c0-13.3-10.7-24-24-24zm0 208a32 32 0 1 0 0-64 32 32 0 1 0 0 64z"/>
+      </svg>
+    </div>
+    <span class="banner-text">Your LLM isn't set up yet, so conversations won't run. Finish setup to get started.</span>
+  </div>
+  <button class="btn">Set up LLM</button>
+</div>
+<p class="state-sub">HOME$LLM_NOT_CONFIGURED_MESSAGE / HOME$LLM_NOT_CONFIGURED_ACTION</p>
+
+<div class="divider"></div>
+
+<!-- AFTER: active local profile whose api_key_set is false (new in this PR) -->
+<p class="state-label">After &nbsp;·&nbsp; active local profile &ldquo;local-ollama&rdquo; with api_key_set = false</p>
+<div class="banner" data-testid="home-llm-not-configured-banner" role="alert">
+  <div class="banner-left">
+    <div class="icon-wrap">
+      <svg width="16" height="16" viewBox="0 0 512 512" fill="currentColor" aria-hidden="true">
+        <path d="M256 32c14.3 0 27.3 7.9 33.8 20.5l199.5 356.5c6.6 12.8 5.4 28.1-3.2 39.6S465 472 450 472H62c-15 0-28.9-7.9-36.1-23.4s-9.8-26.8-3.2-39.6L222.2 52.5C228.7 39.9 241.7 32 256 32zm0 128c-13.3 0-24 10.7-24 24v112c0 13.3 10.7 24 24 24s24-10.7 24-24V184c-13.3 0-24-10.7-24-24zm0 208a32 32 0 1 0 0-64 32 32 0 1 0 0 64z"/>
+      </svg>
+    </div>
+    <span class="banner-text">Your LLM profile <strong>&ldquo;local-ollama&rdquo;</strong> is missing its API key. Edit the profile and re-enter the key before starting a conversation.</span>
+  </div>
+  <button class="btn">Edit LLM profile</button>
+</div>
+<p class="state-sub">HOME$LLM_PROFILE_MISSING_KEY_MESSAGE / HOME$LLM_PROFILE_MISSING_KEY_ACTION</p>
+
+<p class="footnote">
+  Statically reconstructed for review, not a live application capture: the two strings above are read
+  verbatim from this branch's <code>src/i18n/translation.json</code> (en), and the markup mirrors
+  <code>llm-not-configured-banner.tsx</code> on the branch. Tailwind utilities are inlined.
+  &ldquo;local-ollama&rdquo; is a sample profile name standing in for the interpolated
+  <code>{{profile}}</code> value. The top state is unchanged by this PR and is shown only as the
+  before/after baseline.
+</p>
+
+</body>
+</html>
