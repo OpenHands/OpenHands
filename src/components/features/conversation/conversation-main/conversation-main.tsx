@@ -28,8 +28,13 @@ import { useNavigation } from "#/context/navigation-context";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { I18nKey } from "#/i18n/declaration";
 import { formControlTransitionClassName } from "#/utils/form-control-classes";
+import { getAutomationDraftIdFromTags } from "#/utils/automation-draft-tags";
 
 const SPLASH_ROUTE = "/";
+const TAGGED_AUTOMATION_SETUP_DRAFT: AutomationSetupDraft = {
+  prompt: "",
+  kind: "prompt",
+};
 
 function getDesktopTabPanelClass(isRightPanelShown: boolean) {
   return isRightPanelShown
@@ -53,8 +58,12 @@ export function ConversationMain() {
   const [automationToolbarElement, setAutomationToolbarElement] =
     useState<HTMLDivElement | null>(null);
   const [isAutomationAgentHidden, setIsAutomationAgentHidden] = useState(false);
+  const [dismissedTaggedDraftId, setDismissedTaggedDraftId] = useState<
+    string | null
+  >(null);
   const overviewDrawer = useConversationOverviewDrawerOptional();
   const isSecondaryDrawerOpen = Boolean(overviewDrawer?.section);
+  const taggedDraftId = getAutomationDraftIdFromTags(conversation?.tags);
   const isAutomationSetupMode = Boolean(automationSetupDraft) && !isMobile;
 
   const { leftWidth, rightWidth, isDragging, containerRef, handleMouseDown } =
@@ -66,6 +75,7 @@ export function ConversationMain() {
     });
 
   useEffect(() => {
+    setDismissedTaggedDraftId(null);
     setAutomationSetupDraftState(getAutomationSetupDraft(conversationId));
     if (!conversationId) return undefined;
     return subscribeAutomationSetupDraft(
@@ -73,6 +83,17 @@ export function ConversationMain() {
       setAutomationSetupDraftState,
     );
   }, [conversationId]);
+
+  useEffect(() => {
+    if (
+      automationSetupDraft ||
+      !taggedDraftId ||
+      taggedDraftId === dismissedTaggedDraftId
+    ) {
+      return;
+    }
+    setAutomationSetupDraftState(TAGGED_AUTOMATION_SETUP_DRAFT);
+  }, [automationSetupDraft, dismissedTaggedDraftId, taggedDraftId]);
 
   useEffect(() => {
     if (!automationSetupDraft) return;
@@ -88,6 +109,7 @@ export function ConversationMain() {
 
   const closeAutomationSetup = () => {
     if (conversationId) clearAutomationSetupDraft(conversationId);
+    setDismissedTaggedDraftId(taggedDraftId ?? null);
     setAutomationSetupDraftState(null);
     setIsRightPanelShown(false);
   };
@@ -270,6 +292,7 @@ export function ConversationMain() {
                   <AutomationSetupPanel
                     draft={automationSetupDraft}
                     conversationId={conversationId}
+                    conversationTags={conversation?.tags}
                     toolbarPortal={automationToolbarElement}
                     showInlineHeader={false}
                     onClose={closeAutomationSetup}
