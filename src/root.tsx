@@ -53,9 +53,9 @@ import {
   readPersistedColorTheme,
 } from "#/themes/color-themes";
 
-/** Applies the persisted color-theme palette to document.body on mount. */
+/** Applies the persisted palette before paint; useEffect lands a frame late. */
 function ColorThemeApplier() {
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     applyColorTheme(readPersistedColorTheme());
   }, []);
   return null;

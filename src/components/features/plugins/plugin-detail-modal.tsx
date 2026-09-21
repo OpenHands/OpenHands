@@ -116,7 +116,7 @@ export function PluginDetailModal({
                   <li
                     key={skill.name}
                     data-testid={`plugin-bundled-skill-${skill.name}`}
-                    className="flex items-start gap-3 rounded-lg border border-[var(--oh-border)] bg-[rgba(255,255,255,0.04)] px-3 py-2.5"
+                    className="flex items-start gap-3 rounded-lg border border-[var(--oh-border)] bg-contrast/[0.04] px-3 py-2.5"
                   >
                     <SkillIconBadge skillName={skill.name} />
                     <div className="min-w-0 flex-1">

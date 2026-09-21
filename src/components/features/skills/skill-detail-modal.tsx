@@ -152,7 +152,7 @@ export function SkillDetailModal({
         >
           <div
             data-testid={`skill-modal-enable-row-${skill.name}`}
-            className="flex w-full items-center rounded-lg border border-[var(--oh-border)] bg-[rgba(255,255,255,0.04)] px-3 py-2.5"
+            className="flex w-full items-center rounded-lg border border-[var(--oh-border)] bg-contrast/[0.04] px-3 py-2.5"
           >
             <SettingsSwitch
               testId={`skill-modal-toggle-${skill.name}`}

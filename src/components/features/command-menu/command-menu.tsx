@@ -293,7 +293,7 @@ export function CommandMenu() {
                       const optionClassName = cn(
                         "group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors duration-150",
                         isActive
-                          ? "bg-contrast/[0.09] text-contrast shadow-[0_0_0_1px_rgba(255,255,255,0.08)_inset]"
+                          ? "bg-contrast/[0.09] text-contrast shadow-[0_0_0_1px_color-mix(in_srgb,var(--oh-contrast)_8%,transparent)_inset]"
                           : "text-[var(--oh-muted)] hover:bg-contrast/[0.05] hover:text-contrast",
                       );
 

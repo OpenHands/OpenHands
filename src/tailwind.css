@@ -347,7 +347,7 @@ button.extension-module-card-interactive {
 /* Drag and drop styles */
 .drag-over {
   backdrop-filter: blur(2px);
-  background: rgba(255, 255, 255, 0.5);
+  background: color-mix(in srgb, var(--oh-contrast) 50%, transparent);
   border-radius: 15px;
   height: 100%;
   left: 0;
