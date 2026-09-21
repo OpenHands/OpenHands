@@ -87,6 +87,13 @@ export const CONVERSATION_QUERY_KEYS = {
   subConversations: ["v1", "sub-conversations"] as const,
 } as const;
 
+export const START_TASKS_QUERY_KEYS = {
+  all: ["start-tasks"] as const,
+  /** Batch lookup of the start task ids this browser is still waiting on. */
+  byIds: (backendId: string, taskIds: readonly string[]) =>
+    ["start-tasks", backendId, taskIds] as const,
+} as const;
+
 export const LOCAL_PLANNER_MUTATION_KEYS = {
   create: ["create-local-planning-conversation"] as const,
 } as const;

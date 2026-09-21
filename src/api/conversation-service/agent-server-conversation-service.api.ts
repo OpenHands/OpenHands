@@ -27,6 +27,7 @@ import {
 import { callCloudProxy } from "../cloud/proxy";
 import ProfilesService from "../profiles-service/profiles-service.api";
 import {
+  batchGetCloudAppConversationStartTasks,
   batchGetCloudConversations,
   createCloudAppConversation,
   deleteCloudConversation,
@@ -715,6 +716,26 @@ class AgentServerConversationService {
     // local "task" is already READY when createConversation returns, so
     // there's nothing to poll for.
     return null;
+  }
+
+  /**
+   * Batch-read start tasks by id, dropping ids the backend no longer knows.
+   * Callers supply the ids because the app-server has no start-task search
+   * endpoint; see `in-flight-start-tasks-store`.
+   */
+  static async getStartTasks(
+    taskIds: readonly string[],
+  ): Promise<AppConversationStartTask[]> {
+    if (taskIds.length === 0) {
+      return [];
+    }
+    if (getActiveBackend().backend.kind !== "cloud") {
+      // Same reasoning as `getStartTask`: local conversations are never
+      // in-flight by the time they reach the caller.
+      return [];
+    }
+    const tasks = await batchGetCloudAppConversationStartTasks(taskIds);
+    return tasks.filter((task): task is AppConversationStartTask => !!task);
   }
 
   static async getVSCodeUrl(

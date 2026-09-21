@@ -27,6 +27,7 @@ import { ConversationPanel } from "#/components/features/conversation-panel/conv
 import { useConversationPanelPreferencesStore } from "#/stores/conversation-panel-preferences-store";
 import { useArchivedConversationsStore } from "#/stores/archived-conversations-store";
 import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store";
+import { useInFlightStartTasksStore } from "#/stores/in-flight-start-tasks-store";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { ExecutionStatus } from "#/types/agent-server/core";
@@ -148,6 +149,7 @@ describe("ConversationPanel", () => {
     _mockConversationCounter = 0;
     usePinnedConversationsStore.setState({ pinsByBackendId: {} });
     useArchivedConversationsStore.setState({ archivesByBackendId: {} });
+    useInFlightStartTasksStore.setState({ taskIdsByBackendId: {} });
     useConversationPanelPreferencesStore.setState({
       showOlderConversations: true,
       olderConversationCutoff: "7d",
@@ -236,6 +238,57 @@ describe("ConversationPanel", () => {
     expect(title.closest("a")).toHaveAttribute(
       "href",
       "/conversations/1?backend=cloud-prod&org=org-2",
+    );
+  });
+
+  it("renders a card for a start task that is still provisioning", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: null });
+    useInFlightStartTasksStore.setState({
+      taskIdsByBackendId: { [cloudBackend.id]: ["task-42"] },
+    });
+    vi.spyOn(AgentServerConversationService, "getStartTasks").mockResolvedValue(
+      [
+        {
+          id: "task-42",
+          created_by_user_id: "user1",
+          status: "WAITING_FOR_SANDBOX",
+          detail: null,
+          app_conversation_id: null,
+          agent_server_url: null,
+          request: {},
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      ],
+    );
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <I18nextProvider i18n={i18n}>
+          <ActiveBackendProvider>
+            <NavigationProvider
+              value={{
+                currentPath: "/",
+                conversationId: null,
+                isNavigating: false,
+                navigate: vi.fn(),
+              }}
+            >
+              <RouterStub />
+            </NavigationProvider>
+          </ActiveBackendProvider>
+        </I18nextProvider>
+      </QueryClientProvider>,
+    );
+
+    const card = await screen.findByTestId("start-task-card");
+    expect(card.closest("a")).toHaveAttribute(
+      "href",
+      "/conversations/task-task-42?backend=cloud-prod",
     );
   });
 

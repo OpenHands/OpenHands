@@ -316,21 +316,39 @@ export async function listCloudConversationFiles(
 }
 
 /**
+ * Batch-fetch v1 app-conversation start tasks by id. The app-server has no
+ * search endpoint for start tasks, so this batch lookup is the only read —
+ * callers keep the ids they care about themselves. Entries stay positional:
+ * an id the backend doesn't know comes back as `null`.
+ */
+export async function batchGetCloudAppConversationStartTasks(
+  taskIds: readonly string[],
+  backendOverride?: Backend,
+): Promise<(AppConversationStartTask | null)[]> {
+  if (taskIds.length === 0) return [];
+  const backend = backendOverride ?? getActiveCloudBackend();
+  const params = new URLSearchParams();
+  for (const id of taskIds) params.append("ids", id);
+  const data = await callCloudProxy<(AppConversationStartTask | null)[]>({
+    backend,
+    method: "GET",
+    path: `/api/v1/app-conversations/start-tasks?${params.toString()}`,
+  });
+  return data ?? [];
+}
+
+/**
  * Fetch a single v1 app-conversation start task. Mirrors OpenHands'
- * `AgentServerConversationService.getStartTask` — uses the batch search endpoint
+ * `AgentServerConversationService.getStartTask` — uses the batch endpoint
  * with a single id and unwraps the first result.
  */
 export async function getCloudAppConversationStartTask(
   taskId: string,
   backendOverride?: Backend,
 ): Promise<AppConversationStartTask | null> {
-  const backend = backendOverride ?? getActiveCloudBackend();
-  const params = new URLSearchParams();
-  params.set("ids", taskId);
-  const data = await callCloudProxy<(AppConversationStartTask | null)[]>({
-    backend,
-    method: "GET",
-    path: `/api/v1/app-conversations/start-tasks?${params.toString()}`,
-  });
-  return data?.[0] ?? null;
+  const tasks = await batchGetCloudAppConversationStartTasks(
+    [taskId],
+    backendOverride,
+  );
+  return tasks[0] ?? null;
 }

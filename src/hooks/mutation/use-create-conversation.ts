@@ -20,7 +20,9 @@ import {
   LLM_PROFILES_QUERY_KEYS,
   AGENT_PROFILES_QUERY_KEYS,
   AGENT_PROFILES_RETRY_OPTIONS,
+  START_TASKS_QUERY_KEYS,
 } from "#/hooks/query/query-keys";
+import { trackStartTask } from "#/stores/in-flight-start-tasks-store";
 import { pluginReferenceKey } from "#/utils/plugin-display";
 import {
   getStoredConversationMetadata,
@@ -354,6 +356,13 @@ export const useCreateConversation = () => {
         ? conversation.app_conversation_id
         : `task-${conversation.id}`;
 
+      if (!conversation.app_conversation_id) {
+        // Remember the still-provisioning task so the sidebar can batch-poll
+        // it into a StartTaskCard. The app-server has no start-task search
+        // endpoint, so this is the only way `useStartTasks` learns about it.
+        trackStartTask(backend.id, conversation.id);
+      }
+
       return {
         conversation_id: conversationId,
         session_api_key: null,
@@ -382,12 +391,12 @@ export const useCreateConversation = () => {
       queryClient.invalidateQueries({
         queryKey: ["user", "conversations"],
       });
-      // The cloud path returns a start task (no app_conversation_id
-      // yet); the sidebar surfaces those via `useStartTasks` which doesn't
-      // poll, so invalidate it explicitly so the in-flight task shows up
-      // in the conversation list immediately.
+      // The cloud path returns a start task (no app_conversation_id yet); the
+      // sidebar surfaces those via `useStartTasks`, whose polling only starts
+      // once a task is in its cache, so invalidate explicitly to show the
+      // in-flight task in the conversation list immediately.
       queryClient.invalidateQueries({
-        queryKey: ["start-tasks"],
+        queryKey: START_TASKS_QUERY_KEYS.all,
       });
     },
   });
