@@ -15,9 +15,24 @@ export interface SeqCursor {
   clear: () => void;
 }
 
+/**
+ * How far past a gap to wait before stepping over it. The server skips events
+ * it cannot read, and that seq never arrives — on this connection or any
+ * later one — so an unbounded wait would freeze the cursor at the hole and
+ * replay from it on every reconnect.
+ */
+const MAX_AHEAD = 1024;
+
 export function createSeqCursor(): SeqCursor {
   let value: number | null = null;
   let ahead = new Set<number>();
+
+  const drain = () => {
+    while (value !== null && ahead.has(value + 1)) {
+      value += 1;
+      ahead.delete(value);
+    }
+  };
 
   return {
     get value() {
@@ -33,9 +48,11 @@ export function createSeqCursor(): SeqCursor {
         return;
       }
       ahead.add(seq);
-      while (ahead.has(value + 1)) {
-        value += 1;
-        ahead.delete(value);
+      drain();
+      if (ahead.size > MAX_AHEAD) {
+        // Step over the hole: the skipped event is unreadable on replay too.
+        value = Math.min(...ahead) - 1;
+        drain();
       }
     },
     clear: () => {

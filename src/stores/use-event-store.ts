@@ -105,7 +105,7 @@ export interface EventState {
     frames: DeltaFrame[],
     meta?: StreamingSlotMeta,
   ) => void;
-  abortStreamingSlot: (itemId: string) => void;
+  abortStreamingSlot: (itemId: string, attempt?: number) => void;
   /** Discard every open slot for one socket (on connect and disconnect). */
   clearStreamingSlots: (isFromPlanningAgent?: boolean) => void;
 }
@@ -209,6 +209,13 @@ export const useEventStore = create<EventState>()((set) => ({
     })),
   openStreamingSlot: (frame: ItemStartedFrame, meta: StreamingSlotMeta = {}) =>
     set((state) => {
+      // Symmetric with `appendStreamingDeltas`: the durable event being in
+      // the store means the stream is over, and a slot opened now could never
+      // be retired — `appendEvent` dedupes the durable frame before
+      // `handleEventForUI` could replace it.
+      if (state.eventIds.has(frame.item_id)) {
+        return state;
+      }
       const uiEvents = openStreamingSlot(frame, state.uiEvents, meta);
       return uiEvents === state.uiEvents ? state : { ...state, uiEvents };
     }),
@@ -222,9 +229,9 @@ export const useEventStore = create<EventState>()((set) => ({
       });
       return uiEvents === state.uiEvents ? state : { ...state, uiEvents };
     }),
-  abortStreamingSlot: (itemId: string) =>
+  abortStreamingSlot: (itemId: string, attempt?: number) =>
     set((state) => {
-      const uiEvents = abortStreamingSlot(itemId, state.uiEvents);
+      const uiEvents = abortStreamingSlot(itemId, state.uiEvents, attempt);
       return uiEvents === state.uiEvents ? state : { ...state, uiEvents };
     }),
   clearStreamingSlots: (isFromPlanningAgent = false) =>

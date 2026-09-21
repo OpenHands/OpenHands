@@ -160,16 +160,23 @@ const routeSessionFrame = (
       return null;
     case "item_aborted":
       // Nothing durable is coming to supersede the provisional text.
-      useEventStore.getState().abortStreamingSlot(frame.item_id);
+      useEventStore.getState().abortStreamingSlot(frame.item_id, frame.attempt);
       return null;
     case "durable":
       advanceCursor(frame.seq);
       return { ...frame.event, seq: frame.seq };
     case "transient":
       return frame.event;
+    case "error":
+      // The server answers a rejected inbound message with an ErrorFrame and
+      // keeps the socket open ("not worth dropping over"), so there is no
+      // reconnect and nothing else will ever surface this to the user.
+      useErrorMessageStore
+        .getState()
+        .setErrorMessage(frame.detail, "conversation", frame.code);
+      return null;
     default:
-      // `sync` needs nothing (the cursor advances on durable frames) and
-      // `error` is a socket-level fault the reconnect path already handles.
+      // `sync` needs nothing: the cursor advances on durable frames.
       return null;
   }
 };

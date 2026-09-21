@@ -35,18 +35,51 @@ const findSlotIndex = (uiEvents: UIEvent[], itemId: string): number =>
  * Where a slot anchored after `anchorSeq` belongs: before the first event the
  * server sequenced after it. This is what keeps a user message that lands
  * mid-stream *below* the bubble instead of splitting it (#15433).
+ *
+ * `seq` is an index into *one* conversation's log, and the main and planning
+ * sockets are different conversations whose logs both start at 0, so the scan
+ * must stay inside the slot's own socket or it lands in the other's history.
  */
 const slotInsertIndex = (
   uiEvents: UIEvent[],
   anchorSeq: number | null | undefined,
+  isFromPlanningAgent: boolean,
 ): number => {
   if (anchorSeq === null || anchorSeq === undefined) {
     return uiEvents.length;
   }
   const index = uiEvents.findIndex(
-    (event) => event.seq !== undefined && event.seq > anchorSeq,
+    (event) =>
+      event.seq !== undefined &&
+      Boolean(event.isFromPlanningAgent) === isFromPlanningAgent &&
+      event.seq > anchorSeq,
   );
   return index === -1 ? uiEvents.length : index;
+};
+
+/** The anchor event itself, or the nearest earlier event from the same socket. */
+const findAnchor = (
+  uiEvents: UIEvent[],
+  anchorSeq: number | null | undefined,
+  isFromPlanningAgent: boolean,
+  insertIndex: number,
+): UIEvent | undefined => {
+  if (anchorSeq !== null && anchorSeq !== undefined) {
+    const exact = uiEvents.find(
+      (event) =>
+        event.seq === anchorSeq &&
+        Boolean(event.isFromPlanningAgent) === isFromPlanningAgent,
+    );
+    if (exact) {
+      return exact;
+    }
+  }
+  for (let i = insertIndex - 1; i >= 0; i -= 1) {
+    if (Boolean(uiEvents[i].isFromPlanningAgent) === isFromPlanningAgent) {
+      return uiEvents[i];
+    }
+  }
+  return undefined;
 };
 
 /**
@@ -77,18 +110,22 @@ export const openStreamingSlot = (
     return next;
   }
 
-  const insertIndex = slotInsertIndex(uiEvents, frame.anchor_seq);
+  const isFromPlanningAgent = Boolean(meta.isFromPlanningAgent);
+  const insertIndex = slotInsertIndex(
+    uiEvents,
+    frame.anchor_seq,
+    isFromPlanningAgent,
+  );
   // Borrow the anchor's timestamp so the store's timestamp sort — which fires
   // whenever durable frames arrive out of order, as they routinely do — keeps
   // the slot right after it. Prefer the anchor event itself: a neighbour may be
   // a client-stamped event whose clock does not match the server's.
-  const anchor =
-    uiEvents.find(
-      (event) =>
-        frame.anchor_seq !== null &&
-        frame.anchor_seq !== undefined &&
-        event.seq === frame.anchor_seq,
-    ) ?? uiEvents[insertIndex - 1];
+  const anchor = findAnchor(
+    uiEvents,
+    frame.anchor_seq,
+    isFromPlanningAgent,
+    insertIndex,
+  );
   const slot: StreamingDeltaEvent & StreamingSlotMeta = {
     kind: "StreamingDeltaEvent",
     id: frame.item_id,
@@ -183,9 +220,17 @@ export const appendStreamingDeltas = (
 export const abortStreamingSlot = (
   itemId: string,
   uiEvents: UIEvent[],
+  attempt?: number,
 ): UIEvent[] => {
   const index = findSlotIndex(uiEvents, itemId);
   if (index === -1) {
+    return uiEvents;
+  }
+  // An abort for a superseded attempt must not delete the live retry's slot.
+  if (
+    attempt !== undefined &&
+    attempt < attemptOf(uiEvents[index] as StreamingDeltaEvent)
+  ) {
     return uiEvents;
   }
   return uiEvents.filter((_, position) => position !== index);
