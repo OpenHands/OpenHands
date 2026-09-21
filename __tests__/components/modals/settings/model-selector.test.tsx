@@ -210,4 +210,48 @@ describe("ModelSelector", () => {
 
     expect(screen.queryByTestId("custom-model-input")).not.toBeInTheDocument();
   });
+
+  it("should reset the model when the provider changes after a custom entry", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+
+    renderWithQuery(<ModelSelector onChange={onChange} />);
+
+    await user.click(screen.getByLabelText("LLM Provider"));
+    await user.click(screen.getByText("OpenRouter"));
+    await user.click(screen.getByLabelText("LLM Model"));
+    await user.click(screen.getByTestId("model-item-custom"));
+    await user.type(
+      await screen.findByTestId("custom-model-input"),
+      "thinkingmachines/inkling-small:free",
+    );
+
+    await user.click(screen.getByLabelText("LLM Provider"));
+    await user.click(screen.getByText("Azure"));
+
+    // The previous provider's model must not carry into the new provider.
+    expect(onChange).toHaveBeenLastCalledWith("azure", null);
+    expect(screen.queryByTestId("custom-model-input")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("LLM Model")).toHaveValue("");
+  });
+
+  it("should report an emptied custom model as empty rather than as no change", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+
+    renderWithQuery(<ModelSelector onChange={onChange} />);
+
+    await user.click(screen.getByLabelText("LLM Provider"));
+    await user.click(screen.getByText("Azure"));
+    await user.click(screen.getByLabelText("LLM Model"));
+    await user.click(screen.getByText("ada"));
+
+    await user.click(screen.getByLabelText("LLM Model"));
+    await user.click(screen.getByTestId("model-item-custom"));
+    await user.clear(await screen.findByTestId("custom-model-input"));
+
+    // "" (not null) so the caller can tell a cleared field from a provider
+    // change and apply its model-required check.
+    expect(onChange).toHaveBeenLastCalledWith("azure", "");
+  });
 });

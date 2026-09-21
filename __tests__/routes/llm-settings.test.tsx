@@ -779,4 +779,33 @@ describe("LlmSettingsScreen - custom model for a provider", () => {
       "openrouter/thinkingmachines/inkling-small:free",
     );
   });
+
+  it("clears the model when the custom field is emptied rather than keeping the previous one", async () => {
+    const user = userEvent.setup();
+    const saveSettingsSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+
+    renderLlmSettingsScreen();
+
+    await screen.findByTestId("llm-settings-screen");
+    await screen.findByTestId("llm-settings-form-basic");
+
+    await user.click(screen.getByTestId("llm-model-input"));
+    await user.click(await screen.findByTestId("model-item-custom"));
+    await user.clear(await screen.findByTestId("custom-model-input"));
+
+    fireEvent.click(screen.getByTestId("save-button"));
+
+    await waitFor(() => expect(saveSettingsSpy).toHaveBeenCalled());
+    const payload = saveSettingsSpy.mock.calls[0][0] as Record<string, unknown>;
+    const llmPayload = (payload.agent_settings_diff as Record<string, unknown>)
+      .llm as Record<string, unknown>;
+    // The model the user can no longer see must not be what gets saved; the
+    // profile save path turns this empty value into a model-required error.
+    expect(llmPayload.model).not.toBe("openrouter/anthropic/claude-3.5");
+    // The schema normalizes the empty string away; either form reads as
+    // "no model" to the profile save path's required-field check.
+    expect(llmPayload.model ?? "").toBe("");
+  });
 });

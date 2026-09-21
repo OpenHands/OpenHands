@@ -114,9 +114,12 @@ export function ModelSelector({
 
   const handleChangeModel = (model: string) => {
     // Switching to free text keeps the current model as the starting point, so
-    // the form never holds a model the user can no longer see.
+    // the form never holds a model the user can no longer see. With no model to
+    // carry over, the empty string clears the form's value rather than leaving
+    // the previously selected model behind an empty-looking field.
     if (model === CUSTOM_MODEL_KEY) {
       setIsCustomModel(true);
+      onChange?.(selectedProvider, selectedModel ?? "");
       return;
     }
 
@@ -133,7 +136,10 @@ export function ModelSelector({
   const handleChangeCustomModel = (model: string) => {
     setSelectedModel(model || null);
     setLitellmId(model ? `${selectedProvider}/${model}` : null);
-    onChange?.(selectedProvider, model || null);
+    // Report the empty string rather than null: null means "no model chosen
+    // yet" (a provider change), while an emptied custom field must clear the
+    // model so the caller's required-field check sees it.
+    onChange?.(selectedProvider, model);
   };
 
   const clear = () => {
