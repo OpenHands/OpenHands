@@ -43535,5 +43535,22 @@
     "uk": "Тестові запуски",
     "zh-CN": "测试运行",
     "zh-TW": "測試執行"
+  },
+  "AUTOMATIONS$DETAIL$DRAFT": {
+    "ar": "مسودة",
+    "ca": "Esborrany",
+    "de": "Entwurf",
+    "en": "Draft",
+    "es": "Borrador",
+    "fr": "Brouillon",
+    "it": "Bozza",
+    "ja": "下書き",
+    "ko-KR": "초안",
+    "no": "Utkast",
+    "pt": "Rascunho",
+    "tr": "Taslak",
+    "uk": "Чернетка",
+    "zh-CN": "草稿",
+    "zh-TW": "草稿"
   }
 }

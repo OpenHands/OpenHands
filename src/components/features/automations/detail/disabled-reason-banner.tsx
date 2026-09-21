@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import type { Automation } from "#/types/automation";
+import { isDraftAutomation } from "#/utils/automation-state";
 import { getDisablementReasonDisplay } from "#/utils/automation-disabled-reason";
 import {
   formatRelativeTime,
@@ -26,6 +27,8 @@ export function DisabledReasonBanner({
   automation,
 }: DisabledReasonBannerProps) {
   const { t, i18n } = useTranslation("openhands");
+
+  if (isDraftAutomation(automation)) return null;
 
   const display = getDisablementReasonDisplay(automation, t);
   if (!display) return null;
