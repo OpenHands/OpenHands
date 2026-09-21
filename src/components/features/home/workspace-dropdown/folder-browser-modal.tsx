@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { BaseModalTitle } from "#/components/shared/modals/confirmation-modals/base-modal";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
@@ -12,6 +13,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { LocalWorkspace, LocalWorkspaceParent } from "#/types/workspace";
 import {
   type HomeDirectoryResponse,
+  createDirectory,
   useHomeDirectory,
   useSearchSubdirs,
 } from "#/hooks/query/use-search-subdirs";
@@ -20,6 +22,7 @@ import { cn } from "#/utils/utils";
 import { modalTitleSmClassName } from "#/utils/modal-classes";
 import FolderIcon from "#/icons/folder.svg?react";
 import ChevronLeft from "#/icons/chevron-left-small.svg?react";
+import PlusIcon from "#/icons/plus.svg?react";
 
 const PROJECTS_PATH = "/projects";
 
@@ -124,7 +127,11 @@ export function FolderBrowserModal({
 }: FolderBrowserModalProps) {
   const { t } = useTranslation("openhands");
   const [currentPath, setCurrentPath] = useState<string | null>(null);
+  const [isCreatingFolder, setIsCreatingFolder] = useState(false);
+  const [folderName, setFolderName] = useState("");
+  const [createError, setCreateError] = useState<string | null>(null);
   const active = useActiveBackend();
+  const queryClient = useQueryClient();
 
   const { data: homeData } = useHomeDirectory();
 
@@ -222,6 +229,38 @@ export function FolderBrowserModal({
       },
     ]);
     onClose();
+  };
+
+  const joinPath = (parent: string, name: string): string => {
+    if (parent === "/") return `/${name}`;
+    if (isWindowsDriveRoot(parent)) return `${parent}${name}`;
+    return `${trimTrailingSeparators(parent)}${parent.includes("\\") ? "\\" : "/"}${name}`;
+  };
+
+  const handleCreateDirectory = async () => {
+    const name = folderName.trim();
+    if (!currentPath || !name) return;
+    try {
+      setCreateError(null);
+      await createDirectory(joinPath(currentPath, name));
+      setIsCreatingFolder(false);
+      setFolderName("");
+      // Refresh the listing so the new folder appears in the current view.
+      queryClient.invalidateQueries({
+        queryKey: [
+          "file",
+          "search_subdirs",
+          currentPath,
+          active.backend.id,
+          active.orgId,
+        ],
+      });
+    } catch (err) {
+      setCreateError(
+        (err as Error | undefined)?.message ??
+          t(I18nKey.COMMON$FAILED_TO_LOAD),
+      );
+    }
   };
 
   return (
@@ -351,35 +390,97 @@ export function FolderBrowserModal({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-[var(--oh-border-input)]">
-          <BrandButton
-            type="button"
-            variant="secondary"
-            onClick={onClose}
-            testId="folder-browser-cancel"
-          >
-            {t(I18nKey.HOME$CANCEL)}
-          </BrandButton>
-          {onAddParent && (
+        <div className="flex flex-col">
+          {isCreatingFolder && (
+            <div className="px-5 py-2 border-t border-[var(--oh-border-input)]">
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={folderName}
+                  onChange={(e) => setFolderName(e.target.value)}
+                  placeholder={t("HOME$FOLDER_NAME_PLACEHOLDER")}
+                  className="flex-1 px-2 py-1 text-sm bg-[var(--oh-surface)] border border-[var(--oh-border-input)] rounded text-white placeholder-[var(--oh-muted)] outline-none focus:border-[var(--oh-accent)]"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleCreateDirectory();
+                    if (e.key === "Escape") {
+                      setIsCreatingFolder(false);
+                      setFolderName("");
+                      setCreateError(null);
+                    }
+                  }}
+                />
+                <BrandButton
+                  type="button"
+                  variant="primary"
+                  onClick={handleCreateDirectory}
+                  isDisabled={!folderName.trim()}
+                  testId="folder-browser-create-submit"
+                >
+                  {t("HOME$CREATE")}
+                </BrandButton>
+                <BrandButton
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    setIsCreatingFolder(false);
+                    setFolderName("");
+                    setCreateError(null);
+                  }}
+                  testId="folder-browser-create-cancel"
+                >
+                  {t(I18nKey.HOME$CANCEL)}
+                </BrandButton>
+              </div>
+              {createError && (
+                <p className="text-xs text-red-400 mt-1">{createError}</p>
+              )}
+            </div>
+          )}
+          <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-[var(--oh-border-input)]">
             <BrandButton
               type="button"
               variant="secondary"
-              onClick={handleAddAllSubdirectories}
-              isDisabled={!currentPath || isLoading}
-              testId="folder-browser-add-all-subdirs"
+              onClick={onClose}
+              testId="folder-browser-cancel"
             >
-              {t(I18nKey.HOME$ADD_ALL_SUBDIRECTORIES)}
+              {t(I18nKey.HOME$CANCEL)}
             </BrandButton>
-          )}
-          <BrandButton
-            type="button"
-            variant="primary"
-            onClick={handleAddDirectory}
-            isDisabled={!currentPath || isLoading}
-            testId="folder-browser-use"
-          >
-            {t(I18nKey.HOME$ADD_THIS_DIRECTORY)}
-          </BrandButton>
+            <BrandButton
+              type="button"
+              variant="tertiary"
+              onClick={() => {
+                setIsCreatingFolder(true);
+                setFolderName("");
+                setCreateError(null);
+              }}
+              isDisabled={!currentPath || isLoading}
+              startContent={<PlusIcon width={14} height={14} />}
+              testId="folder-browser-new-folder"
+            >
+              {t("HOME$NEW_FOLDER")}
+            </BrandButton>
+            {onAddParent && (
+              <BrandButton
+                type="button"
+                variant="secondary"
+                onClick={handleAddAllSubdirectories}
+                isDisabled={!currentPath || isLoading}
+                testId="folder-browser-add-all-subdirs"
+              >
+                {t(I18nKey.HOME$ADD_ALL_SUBDIRECTORIES)}
+              </BrandButton>
+            )}
+            <BrandButton
+              type="button"
+              variant="primary"
+              onClick={handleAddDirectory}
+              isDisabled={!currentPath || isLoading}
+              testId="folder-browser-use"
+            >
+              {t(I18nKey.HOME$ADD_THIS_DIRECTORY)}
+            </BrandButton>
+          </div>
         </div>
       </div>
     </ModalBackdrop>
