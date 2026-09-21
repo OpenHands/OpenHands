@@ -356,14 +356,9 @@ export function AgentSettingsScreen({
   const [toolsMode, setToolsMode] = useState<ProfileScopeMode>(
     initialTools.mode,
   );
-  const [selectedTools, setSelectedTools] = useState<string[]>(
-    initialTools.selected,
+  const [selectedTools, setSelectedTools] = useState<string[] | null>(
+    initialTools.mode === "custom" ? initialTools.selected : null,
   );
-  // Whether this selection is the user's rather than an unfilled default. A
-  // stored list is theirs even when empty, so `[]` cannot stand in for "not
-  // chosen yet" — seeding off its length would refill a deliberately bare
-  // agent the first time the mode is toggled.
-  const toolsChosenRef = useRef(initialTools.mode === "custom");
   const { data: toolCatalog } = useToolCatalog({
     enabled: embedded && toolCatalogSupported,
   });
@@ -415,7 +410,7 @@ export function AgentSettingsScreen({
     () =>
       toolPickerCatalog
         .map(({ name }) => name)
-        .filter((name) => selectedTools.includes(name)),
+        .filter((name) => selectedTools?.includes(name)),
     [toolPickerCatalog, selectedTools],
   );
 
@@ -635,11 +630,31 @@ export function AgentSettingsScreen({
     setSelectedMcpServers(initialMcpRefs.selected);
   }, [initialMcpRefs]);
 
+  // A new, unnamed profile cannot resolve its standard tools yet. Initialize
+  // when the server answers, without replacing edits made while it was pending.
+  useEffect(() => {
+    if (
+      toolsMode !== "custom" ||
+      !standardToolNames?.length ||
+      toolCatalog === undefined
+    ) {
+      return;
+    }
+    setSelectedTools(
+      (previous) =>
+        previous ??
+        standardToolNames.filter((name) =>
+          toolPickerCatalog.some((entry) => entry.name === name),
+        ),
+    );
+  }, [toolsMode, standardToolNames, toolCatalog, toolPickerCatalog]);
+
   // Sync the tool selection when settings reload
   useEffect(() => {
     setToolsMode(initialTools.mode);
-    setSelectedTools(initialTools.selected);
-    toolsChosenRef.current = initialTools.mode === "custom";
+    setSelectedTools(
+      initialTools.mode === "custom" ? initialTools.selected : null,
+    );
   }, [initialTools]);
 
   // Sync the secret scope when settings reload
@@ -694,11 +709,16 @@ export function AgentSettingsScreen({
       : toolConcurrency !== initialToolConcurrency);
   const credentialsDirty = acpCredentialForm.isDirty;
   const isAnyDirty = settingsDirty || credentialsDirty;
+  const customToolsUninitialized =
+    toolCatalogSupported &&
+    agentType === "openhands" &&
+    toolsMode === "custom" &&
+    selectedTools === null;
   useEffect(() => {
     if (!embedded || !onSaveControlChange) return;
     onSaveControlChange({
       agentType,
-      isValid: !acpCommandEmpty,
+      isValid: !acpCommandEmpty && !customToolsUninitialized,
       isDirty: isAnyDirty,
       buildAgentProfileFields: stableBuildFields,
       credentials: {
@@ -712,6 +732,7 @@ export function AgentSettingsScreen({
     onSaveControlChange,
     agentType,
     acpCommandEmpty,
+    customToolsUninitialized,
     isAnyDirty,
     credentialsDirty,
     stableBuildFields,
@@ -1037,18 +1058,7 @@ export function AgentSettingsScreen({
             isDisabled={isSavingAny || standardToolsUnresolved}
             onSelectionChange={(key) => {
               if (!key) return;
-              const mode = key as ProfileScopeMode;
-              setToolsMode(mode);
-              // Start an unchosen selection from what the server says the
-              // standard set is, so switching mode never silently drops tools.
-              if (mode === "custom" && !toolsChosenRef.current) {
-                toolsChosenRef.current = true;
-                setSelectedTools(
-                  (standardToolNames ?? []).filter((name) =>
-                    toolPickerCatalog.some((entry) => entry.name === name),
-                  ),
-                );
-              }
+              setToolsMode(key as ProfileScopeMode);
             }}
           />
           {toolsMode === "standard" ? (
@@ -1068,14 +1078,13 @@ export function AgentSettingsScreen({
               items={toolPickerCatalog}
               selected={orderedSelectedTools}
               isDisabled={isSavingAny}
-              onToggle={(name, checked) => {
-                toolsChosenRef.current = true;
+              onToggle={(name, checked) =>
                 setSelectedTools((prev) =>
                   checked
-                    ? [...prev, name]
-                    : prev.filter((entry) => entry !== name),
-                );
-              }}
+                    ? [...(prev ?? []), name]
+                    : (prev ?? []).filter((entry) => entry !== name),
+                )
+              }
             />
           )}
           <Typography.Text className="text-xs text-tertiary-alt">
