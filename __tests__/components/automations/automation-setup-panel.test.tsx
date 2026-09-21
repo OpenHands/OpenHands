@@ -11,6 +11,7 @@ import {
   AutomationSetupPanel,
 } from "#/components/features/automations/setup/automation-setup-panel";
 import AutomationService from "#/api/automation-service/automation-service.api";
+import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import {
   setAutomationSetupDraft,
   type AutomationSetupDraft,
@@ -38,6 +39,15 @@ vi.mock("react-i18next", () => ({
 vi.mock("#/utils/custom-toast-handlers", () => ({
   displayErrorToast: vi.fn(),
 }));
+
+vi.mock(
+  "#/api/conversation-service/agent-server-conversation-service.api",
+  () => ({
+    default: {
+      updateConversationTags: vi.fn().mockResolvedValue({ tags: {} }),
+    },
+  }),
+);
 
 vi.mock("#/api/automation-service/automation-service.api", () => ({
   default: {
@@ -78,6 +88,7 @@ function renderPanel(
     kind: "prompt",
   },
   conversationId = "conv-1",
+  conversationTags: Record<string, string> | null = null,
 ) {
   const value: NavigationContextValue = {
     currentPath: `/conversations/${conversationId}`,
@@ -91,6 +102,7 @@ function renderPanel(
       <AutomationSetupPanel
         draft={draft}
         conversationId={conversationId}
+        conversationTags={conversationTags}
         onClose={vi.fn()}
       />
     </NavigationProvider>,
@@ -111,6 +123,9 @@ describe("AutomationSetupPanel", () => {
     vi.mocked(AutomationService.supportsAutomationDrafts).mockReturnValue(
       false,
     );
+    vi.mocked(
+      AgentServerConversationService.updateConversationTags,
+    ).mockResolvedValue({ tags: {} } as never);
   });
 
   afterEach(() => {
@@ -469,6 +484,98 @@ describe("AutomationSetupPanel", () => {
       expect(AutomationService.createServerDraft).toHaveBeenCalledTimes(1);
     });
 
+    it("tags the conversation with the server draft id after saving", async () => {
+      vi.mocked(AutomationService.createServerDraft).mockResolvedValue(
+        dispatchableDraft,
+      );
+
+      const user = userEvent.setup();
+      renderPanel(undefined, "conv-1", { existing: "tag" });
+
+      await user.click(screen.getByTestId("automation-setup-save-draft"));
+
+      await waitFor(() =>
+        expect(
+          AgentServerConversationService.updateConversationTags,
+        ).toHaveBeenCalledWith(
+          "conv-1",
+          expect.objectContaining({
+            existing: "tag",
+            automationsetup: "draft",
+            automationdraftid: "draft-1",
+          }),
+        ),
+      );
+    });
+
+    it("hydrates a tagged server draft when the panel opens", async () => {
+      vi.mocked(AutomationService.getServerDraft).mockResolvedValue({
+        ...dispatchableDraft,
+        name: "Saved Tagged Draft",
+        draft: {
+          prompt: "Use the persisted draft body",
+          trigger: {
+            type: "cron",
+            schedule: "0 12 * * *",
+            timezone: "UTC",
+          },
+        },
+      });
+
+      renderPanel({ prompt: "", kind: "prompt" }, "conv-1", {
+        automationdraftid: "draft-1",
+      });
+
+      await waitFor(() =>
+        expect(AutomationService.getServerDraft).toHaveBeenCalledWith(
+          "draft-1",
+        ),
+      );
+      expect(screen.getByTestId("automation-setup-name")).toHaveValue(
+        "Saved Tagged Draft",
+      );
+      expect(screen.getByTestId("automation-setup-prompt")).toHaveValue(
+        "Use the persisted draft body",
+      );
+      expect(
+        screen.getByTestId("automation-setup-draft-details"),
+      ).toBeInTheDocument();
+    });
+
+    it("shows a missing-draft message and creates a fresh draft after a tagged draft was deleted", async () => {
+      vi.mocked(AutomationService.getServerDraft).mockRejectedValue({
+        response: { status: 404 },
+      });
+      vi.mocked(AutomationService.createServerDraft).mockResolvedValue({
+        ...dispatchableDraft,
+        id: "draft-2",
+      });
+
+      const user = userEvent.setup();
+      renderPanel(
+        { prompt: "Recreate the automation", kind: "prompt" },
+        "conv-1",
+        { automationdraftid: "draft-missing" },
+      );
+
+      await screen.findByTestId("automation-setup-draft-missing");
+      await user.click(screen.getByTestId("automation-setup-save-draft"));
+
+      await waitFor(() =>
+        expect(AutomationService.createServerDraft).toHaveBeenCalled(),
+      );
+      expect(AutomationService.updateServerDraft).not.toHaveBeenCalledWith(
+        "draft-missing",
+        expect.anything(),
+      );
+      expect(
+        AgentServerConversationService.updateConversationTags,
+      ).toHaveBeenCalledWith(
+        "conv-1",
+        expect.objectContaining({ automationdraftid: "draft-2" }),
+      );
+    });
+
     it("persists then dispatches the draft on Test", async () => {
       vi.mocked(AutomationService.createServerDraft).mockResolvedValue(
         dispatchableDraft,
@@ -558,6 +665,12 @@ describe("AutomationSetupPanel", () => {
         expect(AutomationService.deleteServerDraft).toHaveBeenCalledWith(
           "draft-1",
         ),
+      );
+      expect(
+        AgentServerConversationService.updateConversationTags,
+      ).toHaveBeenCalledWith(
+        "conv-1",
+        expect.not.objectContaining({ automationdraftid: expect.any(String) }),
       );
       expect(mockNavigate).toHaveBeenCalledWith(
         "/automations/automation-final",

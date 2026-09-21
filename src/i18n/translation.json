@@ -43161,5 +43161,39 @@
     "uk": "Чернетка",
     "zh-CN": "草稿",
     "zh-TW": "草稿"
+  },
+  "AUTOMATION_SETUP$LOADING_DRAFT": {
+    "ar": "جارٍ تحميل المسودة…",
+    "ca": "S’està carregant l’esborrany…",
+    "de": "Entwurf wird geladen…",
+    "en": "Loading saved draft…",
+    "es": "Cargando borrador guardado…",
+    "fr": "Chargement du brouillon enregistré…",
+    "it": "Caricamento della bozza salvata…",
+    "ja": "保存済みの下書きを読み込んでいます…",
+    "ko-KR": "저장된 초안을 불러오는 중…",
+    "no": "Laster lagret utkast…",
+    "pt": "Carregando rascunho salvo…",
+    "tr": "Kaydedilmiş taslak yükleniyor…",
+    "uk": "Завантаження збереженої чернетки…",
+    "zh-CN": "正在加载已保存的草稿…",
+    "zh-TW": "正在載入已儲存的草稿…"
+  },
+  "AUTOMATION_SETUP$DRAFT_MISSING": {
+    "ar": "لم تعد المسودة موجودة كجزء من هذه المحادثة. يمكنك متابعة الحديث مع الوكيل لإنشاء نموذج أتمتة جديد.",
+    "ca": "L’esborrany ja no existeix com a part d’aquesta conversa. Pots continuar conversant amb l’agent per crear un formulari d’automatització nou.",
+    "de": "Der Entwurf existiert nicht mehr als Teil dieser Unterhaltung. Du kannst weiter mit dem Agenten sprechen, um ein neues Automatisierungsformular zu erstellen.",
+    "en": "The draft no longer exists as part of this conversation. Continue chatting with the agent to create a fresh automation form.",
+    "es": "El borrador ya no existe como parte de esta conversación. Puedes seguir conversando con el agente para crear un nuevo formulario de automatización.",
+    "fr": "Le brouillon n’existe plus dans cette conversation. Continuez à discuter avec l’agent pour créer un nouveau formulaire d’automatisation.",
+    "it": "La bozza non esiste più come parte di questa conversazione. Continua a parlare con l’agente per creare un nuovo modulo di automazione.",
+    "ja": "この会話に関連付けられていた下書きは存在しなくなりました。エージェントとの会話を続けて、新しい自動化フォームを作成できます。",
+    "ko-KR": "이 대화에 연결된 초안이 더 이상 존재하지 않습니다. 에이전트와 계속 대화하여 새 자동화 양식을 만들 수 있습니다.",
+    "no": "Utkastet finnes ikke lenger som en del av denne samtalen. Fortsett å chatte med agenten for å opprette et nytt automatiseringsskjema.",
+    "pt": "O rascunho não existe mais como parte desta conversa. Continue conversando com o agente para criar um novo formulário de automação.",
+    "tr": "Taslak artık bu konuşmanın parçası olarak mevcut değil. Yeni bir otomasyon formu oluşturmak için ajanla sohbet etmeye devam edebilirsiniz.",
+    "uk": "Чернетка більше не існує як частина цієї розмови. Продовжуйте спілкуватися з агентом, щоб створити нову форму автоматизації.",
+    "zh-CN": "该草稿已不再属于此对话。你可以继续与智能体对话以创建新的自动化表单。",
+    "zh-TW": "該草稿已不再屬於此對話。你可以繼續與代理對話以建立新的自動化表單。"
   }
 }

@@ -19,6 +19,7 @@ import {
   Zap,
 } from "lucide-react";
 import AutomationService from "#/api/automation-service/automation-service.api";
+import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import {
   patchAutomationSetupDraft,
   subscribeAutomationSetupDraft,
@@ -53,6 +54,11 @@ import type {
 import type { AutomationRun } from "#/types/automation";
 import { formatRelativeTime } from "#/utils/format-relative-time";
 import { ActivityLogItem } from "../detail/activity-log-item";
+import {
+  buildAutomationDraftTags,
+  getAutomationDraftIdFromTags,
+  removeAutomationDraftTags,
+} from "#/utils/automation-draft-tags";
 
 const DEFAULT_TIMEZONE = "America/New_York";
 const DEFAULT_TIME = "09:00";
@@ -133,6 +139,7 @@ type StatusMessage = { kind: "success" | "error"; text: string } | null;
 interface AutomationSetupPanelProps {
   draft: AutomationSetupDraft;
   conversationId?: string | null;
+  conversationTags?: Record<string, string> | null;
   toolbarPortal?: HTMLElement | null;
   showInlineHeader?: boolean;
   onClose: () => void;
@@ -223,6 +230,80 @@ function buildInitialForm(
     eventFilter: form.eventFilter ?? "",
     showTimeout: form.showTimeout ?? false,
     timeoutSeconds: form.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS,
+  };
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function getStringField(
+  value: Record<string, unknown>,
+  key: string,
+): string | undefined {
+  const field = value[key];
+  return typeof field === "string" ? field : undefined;
+}
+
+function getFirstObject(
+  value: Record<string, unknown>,
+  key: string,
+): Record<string, unknown> | null {
+  const field = value[key];
+  return Array.isArray(field) ? asRecord(field[0]) : null;
+}
+
+function formFromServerDraft(
+  saved: AutomationDraftApiResponse,
+  fallback: AutomationSetupDraft,
+): AutomationSetupFormValues {
+  const base = buildInitialForm(fallback);
+  const body = saved.draft as Record<string, unknown>;
+  const trigger = asRecord(body.trigger);
+  const plugin = getFirstObject(body, "plugins");
+  const repo = getFirstObject(body, "repos");
+  const endpointKind: AutomationSetupKind =
+    saved.endpoint === "/v1"
+      ? "custom"
+      : saved.endpoint === "/v1/preset/plugin"
+        ? "plugin"
+        : "prompt";
+
+  return {
+    ...base,
+    kind: endpointKind,
+    name: saved.name ?? getStringField(body, "name") ?? base.name,
+    prompt: getStringField(body, "prompt") ?? base.prompt,
+    repository:
+      getStringField(repo ?? {}, "url") ??
+      (typeof body.repository === "string" ? body.repository : base.repository),
+    pluginSource: getStringField(plugin ?? {}, "source") ?? base.pluginSource,
+    pluginRef: getStringField(plugin ?? {}, "ref") ?? base.pluginRef,
+    entrypoint: getStringField(body, "entrypoint") ?? base.entrypoint,
+    setupScriptPath:
+      getStringField(body, "setup_script_path") ?? base.setupScriptPath,
+    triggerKind:
+      getStringField(trigger ?? {}, "type") === "event" ? "event" : "cron",
+    frequency: getStringField(trigger ?? {}, "schedule")
+      ? "custom"
+      : base.frequency,
+    customSchedule:
+      getStringField(trigger ?? {}, "schedule") ?? base.customSchedule,
+    timezone: getStringField(trigger ?? {}, "timezone") ?? base.timezone,
+    eventSource: getStringField(trigger ?? {}, "source") ?? base.eventSource,
+    eventKey:
+      getStringField(trigger ?? {}, "on") ??
+      (Array.isArray(trigger?.on) && typeof trigger.on[0] === "string"
+        ? trigger.on[0]
+        : base.eventKey),
+    eventFilter: getStringField(trigger ?? {}, "filter") ?? base.eventFilter,
+    showTimeout: typeof body.timeout === "number" || base.showTimeout,
+    timeoutSeconds:
+      typeof body.timeout === "number"
+        ? String(body.timeout)
+        : base.timeoutSeconds,
   };
 }
 
@@ -407,6 +488,7 @@ function frequencyLabelKey(frequency: Frequency): I18nKey {
 export function AutomationSetupPanel({
   draft,
   conversationId,
+  conversationTags,
   toolbarPortal,
   showInlineHeader = true,
   onClose,
@@ -427,7 +509,16 @@ export function AutomationSetupPanel({
   const [serverDraft, setServerDraft] =
     useState<AutomationDraftApiResponse | null>(null);
   const [draftRuns, setDraftRuns] = useState<AutomationRun[]>([]);
-  const serverDraftId = serverDraft?.id ?? null;
+  const [isHydratingServerDraft, setIsHydratingServerDraft] = useState(false);
+  const [isTaggedDraftMissing, setIsTaggedDraftMissing] = useState(false);
+  const propTaggedServerDraftId =
+    getAutomationDraftIdFromTags(conversationTags);
+  const [currentTaggedServerDraftId, setCurrentTaggedServerDraftId] = useState(
+    propTaggedServerDraftId,
+  );
+  const taggedServerDraftId = currentTaggedServerDraftId;
+  const serverDraftId =
+    serverDraft?.id ?? (isTaggedDraftMissing ? null : taggedServerDraftId);
   const streamQueueRef = useRef<
     {
       field: AutomationSetupField;
@@ -441,6 +532,59 @@ export function AutomationSetupPanel({
   const streamGenerationRef = useRef(0);
   const streamTimeoutsRef = useRef<number[]>([]);
   const processQueuedStreamsRef = useRef<() => void>(() => {});
+
+  useEffect(() => {
+    setCurrentTaggedServerDraftId(propTaggedServerDraftId);
+  }, [propTaggedServerDraftId]);
+
+  const updateConversationDraftTags = useCallback(
+    async (draftId: string | null) => {
+      if (!conversationId) return;
+      const nextTags = draftId
+        ? buildAutomationDraftTags(conversationTags, draftId)
+        : removeAutomationDraftTags(conversationTags);
+      await AgentServerConversationService.updateConversationTags(
+        conversationId,
+        nextTags,
+      );
+      setCurrentTaggedServerDraftId(draftId);
+    },
+    [conversationId, conversationTags],
+  );
+
+  useEffect(() => {
+    if (!taggedServerDraftId || serverDraft?.id === taggedServerDraftId) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    setIsHydratingServerDraft(true);
+    setIsTaggedDraftMissing(false);
+
+    AutomationService.getServerDraft(taggedServerDraftId)
+      .then((saved) => {
+        if (cancelled) return;
+        setServerDraft(saved);
+        setDraftRuns([]);
+        setForm(formFromServerDraft(saved, draft));
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        if (getResponseStatus(error) === 404) {
+          setServerDraft(null);
+          setIsTaggedDraftMissing(true);
+          return;
+        }
+        displayErrorToast(error instanceof Error ? error.message : null);
+      })
+      .finally(() => {
+        if (!cancelled) setIsHydratingServerDraft(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [draft, serverDraft?.id, taggedServerDraftId]);
 
   const {
     kind,
@@ -728,6 +872,8 @@ export function AutomationSetupPanel({
       ? await AutomationService.updateServerDraft(serverDraftId, request)
       : await AutomationService.createServerDraft(request);
     setServerDraft(saved);
+    setIsTaggedDraftMissing(false);
+    await updateConversationDraftTags(saved.id);
     return saved;
   };
   const runPreflightValidation = async () => {
@@ -898,6 +1044,11 @@ export function AutomationSetupPanel({
         } catch {
           // Cleanup is best-effort; the automation was created either way.
         }
+        try {
+          await updateConversationDraftTags(null);
+        } catch {
+          // Tag cleanup is best-effort once the automation exists.
+        }
       }
       if (typeof created.id === "string")
         navigate(automationDetailPath(created.id));
@@ -1023,6 +1174,24 @@ export function AutomationSetupPanel({
                 className={formControlFieldClassName}
               />
             </Field>
+
+            {isHydratingServerDraft ? (
+              <p
+                data-testid="automation-setup-draft-loading"
+                className="rounded-2xl border border-[var(--oh-border)] bg-[var(--oh-surface)] px-5 py-4 text-sm text-muted"
+              >
+                {t(I18nKey.AUTOMATION_SETUP$LOADING_DRAFT)}
+              </p>
+            ) : null}
+
+            {isTaggedDraftMissing ? (
+              <p
+                data-testid="automation-setup-draft-missing"
+                className="rounded-2xl border border-[var(--oh-warning)]/40 bg-[var(--oh-warning)]/10 px-5 py-4 text-sm text-[var(--oh-warning)]"
+              >
+                {t(I18nKey.AUTOMATION_SETUP$DRAFT_MISSING)}
+              </p>
+            ) : null}
 
             {serverDraft ? (
               <DraftRunDetailsCard draft={serverDraft} runs={draftRuns} />
