@@ -5,7 +5,11 @@ import {
   getActiveBackend,
   getRegisteredBackends,
 } from "../backend-registry/active-store";
-import { testCloudMcpServer } from "../cloud/mcp-service.api";
+import {
+  getCloudMcpOAuthStatus,
+  startCloudMcpOAuth,
+  testCloudMcpServer,
+} from "../cloud/mcp-service.api";
 import { headersFromMcpAuth } from "../settings-service/settings-service.api";
 import {
   getCredentialValidationForServer,
@@ -153,6 +157,17 @@ function createMcpProbeClient(): MCPClient {
   });
 }
 
+/**
+ * OAuth probes run on the local agent-server (`/api/mcp/oauth/*`) or, for
+ * cloud backends, on the app server (`/api/v1/mcp/oauth/*`). Both share the
+ * start/status contract, so callers only differ in transport.
+ */
+interface McpOAuthTransport {
+  start(server: MCPServerConfig): Promise<MCPOAuthStartResponse>;
+  status(jobId: string): Promise<MCPOAuthStatusResponse>;
+  close(): void;
+}
+
 function oauthStatusToTestResponse(
   status: MCPOAuthStatusResponse,
 ): ExtendedMCPTestResponse {
@@ -252,23 +267,28 @@ class McpService {
   static async startOAuth(
     server: MCPServerConfig,
   ): Promise<MCPOAuthStartResponse> {
-    const client = createMcpProbeClient();
+    const transport = McpService.createOAuthTransport();
     try {
-      return await McpService.startOAuthWithClient(client, server);
+      return await transport.start(server);
     } finally {
-      client.close();
+      transport.close();
     }
   }
 
   static async getOAuthStatus(jobId: string): Promise<MCPOAuthStatusResponse> {
-    const client = createMcpProbeClient();
+    const transport = McpService.createOAuthTransport();
     try {
-      return await McpService.getOAuthStatusWithClient(client, jobId);
+      return await transport.status(jobId);
     } finally {
-      client.close();
+      transport.close();
     }
   }
 
+  /**
+   * Local agent-server only: hands a captured loopback callback URL to the
+   * probe. On cloud backends the provider redirects straight to the app
+   * server's callback route, so there is nothing to submit.
+   */
   static async submitOAuthCallback(
     jobId: string,
     callbackUrl: string,
@@ -291,10 +311,13 @@ class McpService {
     const validation = getCredentialValidationForServer(server);
     const finalize = (result: ExtendedMCPTestResponse) =>
       finalizeMcpTestResponse(result, validation, [server]);
+    // Opened synchronously inside the click handler so popup blockers allow
+    // it; every failure path below closes it again.
     const popup = window.open("about:blank", "_blank");
-    const client = createMcpProbeClient();
+    let transport: McpOAuthTransport | null = null;
     try {
-      const start = await McpService.startOAuthWithClient(client, server);
+      transport = McpService.createOAuthTransport();
+      const start = await transport.start(server);
       if (!start.ok || !start.job_id || !start.authorization_url) {
         popup?.close();
         return finalize({
@@ -304,10 +327,7 @@ class McpService {
         });
       }
 
-      let status = await McpService.getOAuthStatusWithClient(
-        client,
-        start.job_id,
-      );
+      let status = await transport.status(start.job_id);
       for (let attempt = 0; attempt < 20; attempt += 1) {
         if (status.status === "succeeded" || status.status === "failed") {
           popup?.close();
@@ -315,10 +335,7 @@ class McpService {
         }
         if (status.callback_ready) break;
         await sleep(250);
-        status = await McpService.getOAuthStatusWithClient(
-          client,
-          start.job_id,
-        );
+        status = await transport.status(start.job_id);
       }
 
       if (popup) {
@@ -331,10 +348,7 @@ class McpService {
         attempt += 1
       ) {
         await sleep(1000);
-        status = await McpService.getOAuthStatusWithClient(
-          client,
-          start.job_id,
-        );
+        status = await transport.status(start.job_id);
         if (status.status === "succeeded" || status.status === "failed") {
           popup?.close();
           return finalize(oauthStatusToTestResponse(status));
@@ -346,9 +360,44 @@ class McpService {
         error: "OAuth authorization timed out",
         error_kind: "timeout",
       };
+    } catch (err) {
+      popup?.close();
+      throw err;
     } finally {
-      client.close();
+      transport?.close();
     }
+  }
+
+  /**
+   * The cloud request is built like the cloud connection test: unchanged
+   * (redacted) credentials are restored server-side from the stored server of
+   * the same settings key (hence `name`), and `auth` stays the `oauth2`
+   * credential so the app server runs the OAuth flow rather than flattening
+   * it to headers.
+   */
+  private static createOAuthTransport(): McpOAuthTransport {
+    if (getActiveBackend().backend.kind === "cloud") {
+      return {
+        start: (server) => {
+          const validation = getCredentialValidationForServer(server);
+          const name = server.id || server.name;
+          return startCloudMcpOAuth({
+            server: toMcpServer(server),
+            ...(name ? { name } : {}),
+            timeout: OAUTH_MCP_TEST_TIMEOUT_SECONDS,
+            ...(validation ? { tool_call: validation.toolCall } : {}),
+          });
+        },
+        status: getCloudMcpOAuthStatus,
+        close: () => {},
+      };
+    }
+    const client = createMcpProbeClient();
+    return {
+      start: (server) => McpService.startOAuthWithClient(client, server),
+      status: (jobId) => McpService.getOAuthStatusWithClient(client, jobId),
+      close: () => client.close(),
+    };
   }
 
   private static async startOAuthWithClient(

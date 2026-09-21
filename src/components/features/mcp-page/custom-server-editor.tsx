@@ -191,7 +191,7 @@ export function CustomServerEditor({
 
   const handleTestClick = (payload: MCPServerConfig) => {
     setOauthTestResult(null);
-    if (payload.auth?.strategy === "oauth2" && !isCloudBackend) {
+    if (payload.auth?.strategy === "oauth2") {
       setIsOauthTesting(true);
       void McpService.authorizeOAuth(payload)
         .then(setOauthTestResult)
