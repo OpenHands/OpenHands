@@ -116,6 +116,25 @@ describe("AutomationCard", () => {
     expect(card.className).not.toContain("border-border");
   });
 
+  it("marks draft automations without labeling them inactive", () => {
+    render(
+      <AutomationCard
+        automation={{ ...automation, enabled: false, state: "DRAFT" }}
+        onToggle={vi.fn()}
+        onRunNow={vi.fn()}
+        onExport={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("active-status-badge-draft")).toHaveTextContent(
+      I18nKey.AUTOMATIONS$DETAIL$DRAFT,
+    );
+    expect(
+      screen.queryByTestId("active-status-badge-inactive"),
+    ).not.toBeInTheDocument();
+  });
+
   it("renders title, description, and overflow pills", () => {
     render(
       <AutomationCard
