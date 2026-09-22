@@ -72,7 +72,7 @@ vi.mock("#/hooks/use-automation-permissions", () => ({
   useAutomationPermissions: () => ({ canManage: mocks.canManage }),
 }));
 
-vi.mock("#/context/navigation-context", () => ({
+vi.mock("#/contexts/navigation-context", () => ({
   useNavigation: () => ({ navigate: mocks.navigate }),
 }));
 
