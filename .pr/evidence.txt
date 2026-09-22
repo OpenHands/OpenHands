@@ -1,0 +1,51 @@
+# OSS-13667 end-to-end evidence
+
+## Setup
+```
+cd /workspace/repos/openhands
+VITE_BASE_PATH=/canvas VITE_MOCK_API=true npm run build:mock
+# serve each build on a shared origin: enterprise app owns /, Canvas at /canvas
+node .pr/shared-origin-server.mjs --port 13001 --dir build-fixed
+node .pr/shared-origin-server.mjs --port 13002 --dir build-prefix
+```
+
+## verify-base-path.mjs
+```
+
+=== PRE-FIX  (port 13002) ===
+in-app hrefs sampled: 54
+hrefs MISSING the /canvas prefix: 54
+   BUG  href="/conversations"  ()
+   BUG  href="/conversations"  (New Chat)
+   BUG  href="/customize"  (Customize)
+   BUG  href="/automations"  (Automate)
+   BUG  href="/conversations/1?backend=default-local"  (My New Project5svaultworkvau)
+   BUG  href="/conversations/canvas-demo?backend=default-local"  (Generated canvas demo12h)
+   BUG  href="/conversations/table-demo?backend=default-local"  (Wide table demo1d)
+   BUG  href="/conversations/2?backend=default-local"  (Repo Testing2d)
+   -> bug link resolves to http://localhost:13002/conversations (leaves /canvas)
+
+=== POST-FIX (port 13001) ===
+in-app hrefs sampled: 54
+hrefs MISSING the /canvas prefix: 0
+   OK   href="/canvas/conversations"  ()
+   OK   href="/canvas/conversations"  (New Chat)
+   OK   href="/canvas/customize"  (Customize)
+   OK   href="/canvas/automations"  (Automate)
+```
+
+## verify-cmd-click.mjs
+```
+
+=== PRE-FIX  (port 13002) ===
+New Chat href           : /conversations
+resolves to             : http://localhost:13002/conversations
+cmd/ctrl+click new tab  : http://localhost:13002/conversations
+landed on               : ENTERPRISE APP
+
+=== POST-FIX (port 13001) ===
+New Chat href           : /canvas/conversations
+resolves to             : http://localhost:13001/canvas/conversations
+cmd/ctrl+click new tab  : http://localhost:13001/canvas/conversations
+landed on               : Canvas
+```
