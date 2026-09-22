@@ -47,17 +47,14 @@ export function ConversationActiveTagFilters({
   }
 
   const chipClassName =
-    "flex min-w-0 max-w-full cursor-pointer items-center gap-1 rounded-full bg-[var(--oh-surface)] px-2 py-0.5 text-[10px] leading-4 text-white hover:bg-white/10";
+    "flex min-w-0 max-w-full cursor-pointer items-center gap-1 rounded-full bg-surface px-2 py-0.5 text-[10px] leading-4 text-white hover:bg-white/10";
 
   return (
     <div
       data-testid="conversation-active-tag-filters"
-      className="flex min-w-0 items-start gap-1.5 border-b border-[var(--oh-border)] px-4 py-1.5"
+      className="flex min-w-0 items-start gap-1.5 border-b border-border px-4 py-1.5"
     >
-      <Tag
-        className="mt-1 h-3 w-3 shrink-0 text-[var(--oh-muted)]"
-        aria-hidden
-      />
+      <Tag className="mt-1 h-3 w-3 shrink-0 text-muted" aria-hidden />
 
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
         {selectedFacets.map((facet) => (
@@ -96,7 +93,7 @@ export function ConversationActiveTagFilters({
         type="button"
         data-testid="clear-tag-filters"
         onClick={onClearAll}
-        className="shrink-0 cursor-pointer text-[10px] leading-5 text-[var(--oh-muted)] hover:text-white"
+        className="shrink-0 cursor-pointer text-[10px] leading-5 text-muted hover:text-white"
       >
         {t(I18nKey.CONVERSATION_PANEL$CLEAR_FILTERS)}
       </button>

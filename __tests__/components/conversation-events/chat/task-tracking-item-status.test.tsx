@@ -54,15 +54,15 @@ describe("conversation task status display", () => {
       const icon = screen.getByTestId(iconTestId);
       expect(icon).toBeInTheDocument();
       const title = screen.getByText(`${status} task`);
-      expect(title).toHaveClass("text-[12px]");
+      expect(title).toHaveClass("text-xs");
 
       if (isMuted) {
-        expect(icon).toHaveClass("text-[var(--oh-muted)]");
-        expect(title).toHaveClass("text-[var(--oh-muted)]");
+        expect(icon).toHaveClass("text-muted");
+        expect(title).toHaveClass("text-muted");
       } else {
         expect(icon).toHaveClass("text-[#ffffff]");
         expect(title).toHaveClass("text-white");
-        expect(title).not.toHaveClass("text-[var(--oh-muted)]");
+        expect(title).not.toHaveClass("text-muted");
       }
     },
   );
@@ -104,7 +104,7 @@ describe("conversation task status display", () => {
 
     expect(screen.getByTestId("todo-icon")).toHaveClass("text-[#ffffff]");
     expect(screen.getByText("Review the implementation")).not.toHaveClass(
-      "text-[var(--oh-muted)]",
+      "text-muted",
     );
   });
 

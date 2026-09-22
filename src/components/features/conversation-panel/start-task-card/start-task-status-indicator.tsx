@@ -23,7 +23,7 @@ export function StartTaskStatusIndicator({
       case "STARTING_CONVERSATION":
         return "bg-yellow-500 animate-pulse";
       default:
-        return "bg-[var(--oh-interactive-selected)]";
+        return "bg-interactive-selected";
     }
   };
 

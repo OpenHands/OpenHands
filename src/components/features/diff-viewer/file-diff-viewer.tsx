@@ -253,7 +253,7 @@ export function FileDiffViewer({
     if (isMarkdownFile) {
       return (
         <div
-          className="w-full border-b border-[var(--oh-border)] overflow-auto p-4 bg-base prose prose-invert max-w-none"
+          className="w-full border-b border-border overflow-auto p-4 bg-base prose prose-invert max-w-none"
           data-testid="markdown-preview"
           style={{ maxHeight: MAX_DIFF_EDITOR_HEIGHT_PX }}
         >
@@ -283,7 +283,7 @@ export function FileDiffViewer({
   return (
     <div data-testid="file-diff-viewer-outer" className="w-full flex flex-col">
       <div
-        className="flex h-10 items-center px-3 border-b border-[var(--oh-border)] hover:cursor-pointer"
+        className="flex h-10 items-center px-3 border-b border-border hover:cursor-pointer"
         onClick={handleToggle}
       >
         <span className="text-sm w-full text-content flex items-center gap-2 min-w-0">
@@ -317,8 +317,8 @@ export function FileDiffViewer({
                   className={cn(
                     "p-1 rounded transition-colors cursor-pointer",
                     viewMode === mode
-                      ? "bg-[var(--oh-interactive-hover)] text-white"
-                      : "text-[var(--oh-muted)] hover:bg-[var(--oh-interactive-hover)] hover:text-white",
+                      ? "bg-interactive-hover text-white"
+                      : "text-muted hover:bg-interactive-hover hover:text-white",
                   )}
                 >
                   <Icon className="w-4 h-4" />
@@ -329,7 +329,7 @@ export function FileDiffViewer({
           <button
             data-testid="collapse"
             type="button"
-            className="shrink-0 text-[var(--oh-muted)]"
+            className="shrink-0 text-muted"
           >
             {isCollapsed ? (
               <ChevronRight className="w-4 h-4" aria-hidden />
@@ -344,7 +344,7 @@ export function FileDiffViewer({
         {isDeleted && !commit ? (
           <div
             data-testid="file-deleted-message"
-            className="w-full border-b border-[var(--oh-border)] p-4 bg-base text-[var(--oh-text-dim)] text-sm"
+            className="w-full border-b border-border p-4 bg-base text-text-dim text-sm"
           >
             {t(I18nKey.DIFF_VIEWER$FILE_DELETED)}
           </div>
