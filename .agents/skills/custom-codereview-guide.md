@@ -11,48 +11,34 @@ This guide supplements the public `code-review` skill with rules specific to
 `OpenHands/OpenHands`, the Agent Canvas frontend. Read `AGENTS.md` first; it is
 the detailed source of truth for current architecture and test conventions.
 
-## Scope Gate: Repository and Product Fit
+## Repository and Product Scope
 
-Apply this gate to the PR head before any detailed code inspection or tests. It
-answers one question first: is this the right change for this repository, and has
-a maintainer already confirmed the direction? Match the first category that
-applies and produce the outcome it requires. Do not audit component-level changes
-first and decide scope afterward.
+Confirm scope before detailed inspection. This repository owns the Agent Canvas
+product: its UI, product behavior, and Canvas-specific integration of existing
+SDK and automation capabilities.
 
-| Category                                                                                     | Reviewer outcome                                                                                       |
-| -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| **Wrong repository** — work owned by another OpenHands repository                            | Name the likely owning repository when the evidence is sufficient, then ask a maintainer to confirm.    |
-| **Unconfirmed product or architecture direction** — a feature or design maintainers have not decided to build | State the decision needed and ask a maintainer to confirm.                                             |
-| **Obsolete or duplicate work** — superseded, already implemented, or redundant               | Recommend closure with evidence and ask a maintainer to confirm.                                        |
-| **Contrary to documented current direction** — conflicts with `AGENTS.md`, docs, or this guide | Recommend closure with evidence and ask a maintainer to confirm.                                       |
-| **Clearly in-scope work** — owned here and directionally confirmed                           | Continue to the normal technical review checkpoints below.                                              |
+Out of scope here, because another repository owns it:
 
-The ownership table and dependency direction below are the evidence source for
-the first category. Use the linked issue and `AGENTS.md` for the direction
-categories.
+- reusable agent-server, runtime, SDK, and client contracts
+  (`OpenHands/software-agent-sdk`);
+- generic automation scheduling, state, dispatch, and profile machinery
+  (`OpenHands/automation`); and
+- reusable extensions, skills, plugins, and automation bundles
+  (`OpenHands/extensions`).
 
-A scope outcome is a handoff, not a verdict:
-
-- Submit it as a single **COMMENT** review that names the category, the concrete
-  evidence, and the specific decision or confirmation a maintainer must make.
-- A scope outcome never **APPROVEs** the PR and does not assert the change is
-  correct, secure, or complete.
-- A scope outcome does not continue into an exhaustive implementation audit
-  (security, correctness, architecture, evidence, or test checkpoints). Enough
-  inspection to identify the category and collect evidence is sufficient.
-- Only clearly in-scope changes proceed through the existing security,
-  correctness, architecture, evidence, and test checkpoints.
+Cross-repository work is acceptable when the PR contains only the Canvas-owned
+integration and depends on public interfaces from the owning repository. When a
+change belongs in one of the repositories above, say so and ask a maintainer to
+confirm before reviewing the rest.
 
 ## Review Sequence and Decision
 
 Review the current PR head in this order:
 
 1. Read the linked issue, its acceptance criteria, and unresolved review threads.
-2. Apply the scope gate above. When a scope category matches, produce its
-   maintainer handoff and stop before detailed inspection; do not continue into
-   the checkpoints below.
-3. For clearly in-scope work, confirm the dependency direction and apply every
-   relevant blocking checkpoint in this guide.
+2. Confirm that the change belongs in this repository and follows the dependency
+   direction below.
+3. Apply every relevant blocking checkpoint in this guide.
 4. Inspect tests and production-facing evidence for the behavior changed.
 
 Submit exactly one review:
