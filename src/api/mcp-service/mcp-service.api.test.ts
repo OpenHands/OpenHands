@@ -7,6 +7,7 @@ import {
 import {
   getCloudMcpOAuthStatus,
   startCloudMcpOAuth,
+  testCloudMcpServer,
 } from "../cloud/mcp-service.api";
 import SettingsService from "../settings-service/settings-service.api";
 import McpService from "./mcp-service.api";
@@ -97,7 +98,7 @@ describe("McpService.testServer", () => {
     vi.restoreAllMocks();
   });
 
-  it("allows Cloud configuration without calling the local probe or reading local secrets", async () => {
+  it("probes Cloud configuration through the app server without calling the local probe or reading local secrets", async () => {
     setRegisteredBackends([
       {
         id: "cloud",
@@ -109,10 +110,15 @@ describe("McpService.testServer", () => {
     ]);
     setActiveSelection({ backendId: "cloud", orgId: null });
     const fetchSettings = vi.spyOn(SettingsService, "fetchSettingsFromApi");
+    vi.mocked(testCloudMcpServer).mockResolvedValueOnce({
+      ok: true,
+      tools: [],
+    });
     await expect(McpService.testServer(oauthServer())).resolves.toEqual({
       ok: true,
       tools: [],
     });
+    expect(testCloudMcpServer).toHaveBeenCalledOnce();
     expect(MCPClient).not.toHaveBeenCalled();
     expect(fetchSettings).not.toHaveBeenCalled();
   });
@@ -596,7 +602,7 @@ describe("McpService.testServer", () => {
     });
   });
 
-  it("uses a registered local backend when OAuth starts from a cloud session", async () => {
+  it("starts OAuth through the app server, not a registered local backend, from a cloud session", async () => {
     setRegisteredBackends([
       {
         id: "cloud",
@@ -614,17 +620,23 @@ describe("McpService.testServer", () => {
       },
     ]);
     setActiveSelection({ backendId: "cloud", orgId: "org-1" });
-
-    await McpService.startOAuth(oauthServer());
-
-    expect(MCPClient).toHaveBeenCalledWith({
-      host: "http://127.0.0.1:8001",
-      apiKey: "local-key",
-      timeout: 125_000,
+    vi.mocked(startCloudMcpOAuth).mockResolvedValueOnce({
+      ok: true,
+      job_id: "job-1",
+      authorization_url: "https://auth.example/authorize",
     });
+
+    await expect(McpService.startOAuth(oauthServer())).resolves.toEqual({
+      ok: true,
+      job_id: "job-1",
+      authorization_url: "https://auth.example/authorize",
+    });
+
+    expect(startCloudMcpOAuth).toHaveBeenCalledOnce();
+    expect(MCPClient).not.toHaveBeenCalled();
   });
 
-  it("omits an empty fallback API key when probing OAuth from the cloud", async () => {
+  it("polls OAuth status through the app server from a cloud session", async () => {
     setRegisteredBackends([
       {
         id: "cloud",
@@ -642,16 +654,20 @@ describe("McpService.testServer", () => {
       },
     ]);
     setActiveSelection({ backendId: "cloud", orgId: "org-1" });
-
-    await McpService.getOAuthStatus("job-with-fallback");
-
-    expect(MCPClient).toHaveBeenCalledWith({
-      host: "http://127.0.0.1:8001",
-      timeout: 125_000,
+    vi.mocked(getCloudMcpOAuthStatus).mockResolvedValueOnce({
+      ok: true,
+      status: "pending",
+      job_id: "job-on-cloud",
+      callback_ready: false,
     });
+
+    await McpService.getOAuthStatus("job-on-cloud");
+
+    expect(getCloudMcpOAuthStatus).toHaveBeenCalledWith("job-on-cloud");
+    expect(MCPClient).not.toHaveBeenCalled();
   });
 
-  it("rejects OAuth when no registered local backend is reachable", async () => {
+  it("starts OAuth from a cloud session without a reachable local backend", async () => {
     setRegisteredBackends([
       {
         id: "cloud",
@@ -669,10 +685,17 @@ describe("McpService.testServer", () => {
       },
     ]);
     setActiveSelection({ backendId: "cloud", orgId: "org-1" });
+    vi.mocked(startCloudMcpOAuth).mockResolvedValueOnce({
+      ok: true,
+      job_id: "job-1",
+      authorization_url: "https://auth.example/authorize",
+    });
 
-    await expect(McpService.startOAuth(oauthServer())).rejects.toThrow(
-      "OAuth authorization requires a reachable local backend.",
-    );
+    await expect(McpService.startOAuth(oauthServer())).resolves.toMatchObject({
+      ok: true,
+      job_id: "job-1",
+    });
+    expect(startCloudMcpOAuth).toHaveBeenCalledOnce();
     expect(MCPClient).not.toHaveBeenCalled();
   });
 
