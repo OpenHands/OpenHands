@@ -226,7 +226,7 @@ describe("loadBoundedTranscriptEvents", () => {
     expect(truncation).toBeUndefined();
   });
 
-  it("preserves events without IDs in the head, tail, and live store", async () => {
+  it("preserves id-less head and tail events within the tail bound", async () => {
     const all = Array.from({ length: 8 }, (_, index) => ({
       ...makeMessage(index),
       id: undefined,
@@ -234,6 +234,8 @@ describe("loadBoundedTranscriptEvents", () => {
       code: "error",
       detail: "Conversation error",
     }));
+    // all[4] sits in the omitted middle of the live store and must not expand
+    // the partial result past headMax + tailMax.
     const result = await loadBoundedTranscriptEvents(
       [all[4]],
       makeBoundedSearch(all),
@@ -241,8 +243,8 @@ describe("loadBoundedTranscriptEvents", () => {
       2,
       2,
     );
-    expect(result.events).toEqual([all[0], all[1], all[4], all[6], all[7]]);
-    expect(result.truncation).toEqual({ omittedCount: 3, headEventCount: 2 });
+    expect(result.events).toEqual([all[0], all[1], all[6], all[7]]);
+    expect(result.truncation).toEqual({ omittedCount: 4, headEventCount: 2 });
   });
 
   it("merges live store events into the newest tail without duplicating", async () => {

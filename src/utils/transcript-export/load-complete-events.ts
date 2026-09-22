@@ -263,10 +263,12 @@ const fetchBoundedTranscriptEvents = async (
 
 /**
  * Loads a bounded head+tail window for very large conversations: the oldest
- * TRANSCRIPT_HEAD_EVENTS and newest TRANSCRIPT_TAIL_EVENTS, plus any live store
- * events, without ever paging the omitted middle. Returns the merged, ordered
- * events and a `truncation` descriptor the renderer uses to place the omission
- * notice. When nothing was actually omitted, `truncation` is left undefined.
+ * TRANSCRIPT_HEAD_EVENTS and newest TRANSCRIPT_TAIL_EVENTS. Live store events
+ * are folded into the tail and capped there, so the result never exceeds
+ * head+tail and the omitted middle is never paged in. Returns the merged,
+ * ordered events and a `truncation` descriptor the renderer uses to place the
+ * omission notice. When nothing was actually omitted, `truncation` is left
+ * undefined.
  */
 export const loadBoundedTranscriptEvents = async (
   loadedEvents: OpenHandsEvent[],
@@ -286,15 +288,23 @@ export const loadBoundedTranscriptEvents = async (
     headMax,
   );
 
+  // Merge the fetched tail with the live store, then keep only the newest
+  // tailMax. A live store that already holds the full history must not expand
+  // the partial export past headMax + tailMax.
+  const tailByKey = new Map<string | OpenHandsEvent, OpenHandsEvent>();
+  for (const event of tail) tailByKey.set(event.id ?? event, event);
+  for (const event of loadedEvents) {
+    const key = event.id ?? event;
+    if (!tailByKey.has(key)) tailByKey.set(key, event);
+  }
+  const boundedTail = [...tailByKey.values()]
+    .sort(compareEventTimestamps)
+    .slice(Math.max(0, tailByKey.size - tailMax));
+
   const headIds = new Set(head.map((event) => event.id ?? event));
   const eventsById = new Map<string | OpenHandsEvent, OpenHandsEvent>();
   for (const event of head) eventsById.set(event.id ?? event, event);
-  for (const event of tail) {
-    if (!eventsById.has(event.id ?? event))
-      eventsById.set(event.id ?? event, event);
-  }
-  // Live store events are the newest; keep any not already fetched.
-  for (const event of loadedEvents) {
+  for (const event of boundedTail) {
     if (!eventsById.has(event.id ?? event))
       eventsById.set(event.id ?? event, event);
   }
