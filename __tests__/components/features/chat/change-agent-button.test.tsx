@@ -264,6 +264,14 @@ describe("ChangeAgentButton mode selection", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("sizes the mode label at the intended 11px", () => {
+    renderButton();
+
+    const label = screen.getByText("COMMON$CODE");
+    expect(label).toHaveClass("text-[11px]");
+    expect(label).not.toHaveClass("text-2.75");
+  });
+
   it("selects plan and code modes from the menu", async () => {
     const user = userEvent.setup();
     renderButton();

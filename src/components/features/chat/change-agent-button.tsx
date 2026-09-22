@@ -185,7 +185,7 @@ export function ChangeAgentButton() {
       >
         <div className="flex items-center gap-1 pl-1.5">
           {buttonIcon}
-          <Typography.Text className="text-2.75 not-italic font-normal leading-5">
+          <Typography.Text className="text-[11px] not-italic font-normal leading-5">
             {buttonLabel}
           </Typography.Text>
         </div>
