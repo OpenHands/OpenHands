@@ -1,18 +1,6 @@
 // @vitest-environment node
-// Importing the module must not trigger a download: main() only runs when
-// the script is executed directly (`node scripts/download-node.mjs`). If
-// that main-guard regressed, this import would kick off a real network
-// download (and its failure handler calls process.exit(1)), killing the
-// worker loudly.
 import { describe, expect, it } from "vitest";
-import { getPlatformSpec, resolveVersion } from "../../scripts/download-node.mjs";
-
-describe("download-node module import", () => {
-  it("imports as a module without starting a download", () => {
-    expect(typeof getPlatformSpec).toBe("function");
-    expect(typeof resolveVersion).toBe("function");
-  });
-});
+import { getPlatformSpec } from "../../scripts/download-node.mjs";
 
 describe("download-node getPlatformSpec", () => {
   it("maps explicit darwin arches to the matching distribution", () => {

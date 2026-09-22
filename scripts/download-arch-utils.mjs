@@ -16,14 +16,14 @@
  */
 
 /** ELECTRON_ARCH value that selects a macOS universal (dual-arch) download. */
-export const UNIVERSAL_ARCH = "universal";
+const UNIVERSAL_ARCH = "universal";
 
 /**
  * The two darwin slices a macOS universal build bundles, in the order the
  * download scripts iterate them. macOS is the only platform Electron
  * supports universal binaries for.
  */
-export const DARWIN_UNIVERSAL_ARCHES = ["arm64", "x64"];
+const DARWIN_UNIVERSAL_ARCHES = ["arm64", "x64"];
 
 /**
  * Resolve the list of runtime architectures to download.

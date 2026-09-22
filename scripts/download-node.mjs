@@ -36,10 +36,8 @@
  *   Windows: resources/node/{node.exe,npm.cmd,npx.cmd} + resources/node/node_modules/npm/...
  *
  * With ELECTRON_ARCH=universal on macOS, both darwin slices are downloaded
- * into resources/node-arm64/ and resources/node-x64/ so an electron-builder
- * universal build can bundle a real Node per arch. A universal .app that
- * only carries the host-arch Node would silently break npx-spawned stdio
- * MCP servers on the other arch.
+ * into per-arch directories — the multi-arch layout is canonical in
+ * scripts/download-arch-utils.mjs.
  */
 
 import {
@@ -111,7 +109,7 @@ export function getPlatformSpec(version, platform = PLATFORM, arch = ARCH) {
 
 // ── Version resolution ───────────────────────────────────────────────────────
 
-export function resolveVersion() {
+function resolveVersion() {
   const requested = process.env.NODE_VERSION?.replace(/^v/, "");
   return requested || NODE_BUNDLE_VERSION;
 }
@@ -406,7 +404,7 @@ async function main() {
 
 // Run only when executed directly (`node scripts/download-node.mjs`), not
 // when imported — __tests__/scripts/download-node.test.ts imports this
-// module to exercise getPlatformSpec/resolveVersion with zero network I/O.
+// module to exercise getPlatformSpec with zero network I/O.
 // process.argv[1] is undefined when the module is plain-imported (vitest),
 // and pathToFileURL(undefined) would throw, so guard on it first.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

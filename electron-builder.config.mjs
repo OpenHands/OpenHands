@@ -43,18 +43,12 @@
  *   build/          ← static frontend (npm run build:app output)
  *
  * The bundled uv / Node.js runtimes land in <Resources>/ via extraResources
- * so Electron can inject them into PATH on startup. Two layouts:
- *
- *   Single-arch (default):
- *     resources/bin/  → <Resources>/bin/    (uv + uvx)
- *     resources/node/ → <Resources>/node/   (Node + bundled npm/npx)
- *
- *   Universal (ELECTRON_ARCH=universal, macOS): both runtime arches are
- *   downloaded into per-arch dirs and packaged side by side —
- *     resources/{bin,node}-arm64/ → <Resources>/{bin,node}-arm64/
- *     resources/{bin,node}-x64/   → <Resources>/{bin,node}-x64/
- *   — and electron/main.mjs selects <Resources>/{bin,node}-<process.arch>
- *   at runtime (falling back to the flat dirs).
+ * so Electron can inject them into PATH on startup. The per-arch repo layout
+ * (single-arch resources/{bin,node}/ vs universal
+ * resources/{bin,node}-{arm64,x64}/) is canonical in
+ * scripts/download-arch-utils.mjs; electron/main.mjs selects
+ * <Resources>/{bin,node}-<process.arch> at runtime (falling back to the flat
+ * dirs).
  *
  * The bundled Node distribution's root-level node_modules (npm itself) is
  * dropped by electron-builder's copy filter in both layouts; the afterPack
@@ -72,11 +66,9 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// Arch the desktop runtimes are bundled for. "universal" (macOS) packages a
-// dual-arch artifact: the download scripts fetch BOTH runtime arches into
-// per-arch dirs (resources/{bin,node}-{arm64,x64}/) and extraResources ships
-// them side by side. Unset (or a single arch like "arm64"/"x64") keeps the
-// legacy flat runtime dirs (resources/{bin,node}/).
+// Arch the desktop runtimes are bundled for — "universal" (macOS) or a
+// single arch. The per-arch layouts live in scripts/download-arch-utils.mjs;
+// extraResources below maps them onto <Resources>/.
 const ELECTRON_ARCH = process.env.ELECTRON_ARCH;
 const isUniversal = ELECTRON_ARCH === "universal";
 
@@ -392,18 +384,17 @@ const config = {
   // `from` is relative to the project root (not directories.app).
   // build:desktop calls both download scripts before invoking electron-builder.
   //
-  // Universal builds (ELECTRON_ARCH=universal) download BOTH runtime arches
-  // into per-arch dirs and package them side by side into BOTH packaging
-  // passes. @electron/universal then merges the x64 and arm64 pass trees:
-  // it lipos files that differ (the Electron framework) and rejects thin
-  // Mach-O files that are byte-identical in both trees unless they match
-  // mac.x64ArchFiles below — which is exactly what our per-arch runtime
+  // Universal (ELECTRON_ARCH=universal): both runtime arches (per-arch
+  // layout canonical in scripts/download-arch-utils.mjs) ship in BOTH
+  // packaging passes. @electron/universal then merges the x64 and arm64 pass
+  // trees: it lipos files that differ (the Electron framework) and rejects
+  // thin Mach-O files that are byte-identical in both trees unless they
+  // match mac.x64ArchFiles below — which is exactly what our per-arch runtime
   // binaries are (identical arm64/x64 binaries copied into both passes).
   // Bundling only the pass's own arch (e.g. via the ${arch} macro) does NOT
   // work: the merger requires both trees to carry the same Mach-O file list.
-  // electron/main.mjs selects <Resources>/{bin,node}-<process.arch> at
-  // runtime (falling back to the flat dirs). Missing `from` dirs fail the
-  // build, so each mode lists exactly the dirs its download scripts populate.
+  // Missing `from` dirs fail the build, so each mode lists exactly the dirs
+  // its download scripts populate.
   extraResources: isUniversal
     ? [
         { from: "resources/bin-arm64/", to: "bin-arm64/", filter: ["**/*"] },
@@ -427,11 +418,9 @@ const config = {
   // Or use the dedicated script:
   //   npm run build:desktop:universal
   //
-  // Universal builds download both runtime arches via scripts/download-uv.mjs
-  // and download-node.mjs into per-arch dirs (resources/{bin,node}-{arm64,x64}/),
-  // which the conditional extraResources above packages side by side;
-  // electron/main.mjs selects <Resources>/{bin,node}-<process.arch> at runtime.
-  // Single-arch builds keep the legacy flat resources/{bin,node}/ dirs.
+  // Universal builds download both runtime arches (layout canonical in
+  // scripts/download-arch-utils.mjs) which the conditional extraResources
+  // above packages side by side.
   //
   mac: {
     category: "public.app-category.developer-tools",

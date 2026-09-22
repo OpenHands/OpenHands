@@ -1,8 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import {
-  DARWIN_UNIVERSAL_ARCHES,
-  UNIVERSAL_ARCH,
   resolveDownloadArches,
   resourceDirName,
 } from "../../scripts/download-arch-utils.mjs";
@@ -22,6 +20,7 @@ describe("resolveDownloadArches", () => {
   });
 
   it("returns both darwin arches for ELECTRON_ARCH=universal on darwin", () => {
+    // Order is load-bearing (maps onto resources/{node,bin}-<arch> dirs).
     expect(
       resolveDownloadArches({
         platform: "darwin",
@@ -29,10 +28,6 @@ describe("resolveDownloadArches", () => {
         electronArch: "universal",
       }),
     ).toEqual(["arm64", "x64"]);
-    // Order is load-bearing: electron-builder.config.mjs maps these onto
-    // resources/{node,bin}-<arch> directories.
-    expect(DARWIN_UNIVERSAL_ARCHES).toEqual(["arm64", "x64"]);
-    expect(UNIVERSAL_ARCH).toBe("universal");
   });
 
   it("throws for ELECTRON_ARCH=universal on linux", () => {

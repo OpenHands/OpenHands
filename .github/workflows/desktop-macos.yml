@@ -13,7 +13,11 @@ name: Desktop (macOS)
 #                      selected at runtime by process.arch) and attaches the
 #                      .dmg to the GitHub Release created by release-please.
 #                      Intel Macs are supported by the release DMG.
-#   workflow_dispatch: manual escape hatch for any ref (both arches).
+#   workflow_dispatch: manual escape hatch for any ref — the native per-arch
+#                      builds above AND the universal build, so the universal
+#                      merge can be validated from a branch before a release
+#                      (the first release build is the worst time to find a
+#                      merger failure).
 # The app is only ad-hoc signed (no signing certs exist for any platform);
 # a downloaded DMG is quarantined by Gatekeeper, which reports the app as
 # "damaged" until the attribute is cleared:
@@ -132,10 +136,16 @@ jobs:
           # manual QA without hoarding storage.
           retention-days: 14
 
-  # Release builds: one universal (merged arm64+x64) DMG on an arm64 runner.
+  # Universal builds: one merged (arm64+x64) DMG on an arm64 runner.
   build-universal-dmg:
     name: Build universal macOS DMG
-    if: github.event_name == 'release'
+    # Not on pull_request: the two-leg native matrix already proves the
+    # per-arch download/packaging path cheaply, and a full universal merge
+    # (two Electron zips + Node dists + lipo) is too heavy for every PR.
+    # Keeping it off pull_request also lets a maintainer run the universal
+    # build from a branch via workflow_dispatch, so the merger gets CI
+    # evidence before the first release exercises it.
+    if: github.event_name != 'pull_request'
     runs-on: macos-latest
     # Two Electron zips + two Node dists + lipo merge; 40 min leaves headroom
     # over the observed ~25 min.
@@ -157,8 +167,9 @@ jobs:
       - name: Build universal macOS DMG
         env:
           # Production analytics key only for release builds (same split as
-          # docker.yml); both are public client-side keys stored as repo vars.
-          VITE_POSTHOG_API_KEY: ${{ vars.POSTHOG_PROD_KEY }}
+          # docker.yml); workflow_dispatch runs get the staging key. Both are
+          # public client-side keys stored as repo vars.
+          VITE_POSTHOG_API_KEY: ${{ github.event_name == 'release' && vars.POSTHOG_PROD_KEY || vars.POSTHOG_STAGING_KEY }}
           # Authenticates download-uv.mjs's GitHub API version lookup so it
           # doesn't hit the unauthenticated per-IP rate limit on shared runners.
           GITHUB_TOKEN: ${{ github.token }}
@@ -181,6 +192,9 @@ jobs:
           fi
 
       - name: Attach DMG to GitHub release
+        # Only release events have a tag to attach to; workflow_dispatch
+        # runs only build and verify the universal DMG.
+        if: github.event_name == 'release'
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}

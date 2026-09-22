@@ -16,9 +16,8 @@
  *   resources/bin/uv.exe + resources/bin/uvx.exe (Windows)
  *
  * With ELECTRON_ARCH=universal on macOS, both darwin slices are downloaded
- * into resources/bin-arm64/ and resources/bin-x64/ so an electron-builder
- * universal build can bundle the matching uv for each arch (a single
- * host-arch uv inside a universal .app would fail on the other arch).
+ * into per-arch directories — the multi-arch layout is canonical in
+ * scripts/download-arch-utils.mjs.
  */
 
 import {
