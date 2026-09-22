@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { AcpConflictWarnings } from "#/components/features/settings/acp-conflict-warnings";
 import { AcpAuthStatusBanner } from "#/components/features/settings/acp-auth-status-banner";
-import { AcpSecretField } from "#/components/features/settings/acp-secret-field";
+import { AcpCredentialFields } from "#/components/features/settings/acp-credential-fields";
 import { I18nKey } from "#/i18n/declaration";
 import { useAcpAuthStatus } from "#/hooks/query/use-acp-auth-status";
 import { useAcpCredentialForm } from "#/hooks/use-acp-credential-form";
@@ -70,18 +70,16 @@ export function SetupAcpSecretsStep({
     { enabled: isActive },
   );
 
+  const form = useAcpCredentialForm(providerKey);
   const {
     fields,
-    values,
-    setValue,
-    secretExists,
     hasValueFor,
     conflicts,
     credentialsConfigured,
     consumesFileCredentials,
     save,
     isSaving,
-  } = useAcpCredentialForm(providerKey);
+  } = form;
 
   const applyAgentProfile = useApplyOnboardingAgentProfile();
   const providerName = getAcpProviderDisplayName(providerKey) ?? providerKey;
@@ -159,8 +157,9 @@ export function SetupAcpSecretsStep({
           </p>
         ) : (
           authStatus !== "authenticated" && (
-            // When already signed in, the success banner below already says to
-            // leave the fields blank, so this general reminder would be redundant.
+            // When already signed in, the success banner below already says no
+            // key is needed (and the fields are collapsed), so this general
+            // reminder would be redundant.
             <p className="text-sm text-muted">
               {t(I18nKey.ONBOARDING$ACP_SECRETS_SUBSCRIPTION_NOTE)}
             </p>
@@ -176,19 +175,11 @@ export function SetupAcpSecretsStep({
         testIdPrefix="onboarding-acp-auth"
       />
 
-      <div className="flex flex-col gap-5">
-        {fields.map((field) => (
-          <AcpSecretField
-            key={field.name}
-            field={field}
-            value={values[field.name] ?? ""}
-            onChange={(value) => setValue(field.name, value)}
-            alreadySet={secretExists(field.name)}
-            testId={`onboarding-acp-secret-${field.name}`}
-            showOptionalTag
-          />
-        ))}
-      </div>
+      <AcpCredentialFields
+        form={form}
+        isAuthenticated={isAuthenticated}
+        testIdPrefix="onboarding-acp"
+      />
 
       <AcpConflictWarnings conflicts={conflicts} />
 

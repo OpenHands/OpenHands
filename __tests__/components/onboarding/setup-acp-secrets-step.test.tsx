@@ -225,27 +225,32 @@ describe("SetupAcpSecretsStep", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows the 'already signed in' banner when authenticated, keeping the key fields", () => {
+  it("collapses the key fields behind the Advanced toggle when already signed in", async () => {
+    // #16296: an empty column of API-key fields under the green banner reads as
+    // "something is still missing". They stay one click away.
     acpAuthStatusMock.mockReturnValue({
       status: "authenticated",
       isChecking: false,
       isSupported: true,
     });
-    renderStep("claude-code");
+    const { user } = renderStep("claude-code");
 
     expect(
       screen.getByTestId("onboarding-acp-auth-detected"),
     ).toBeInTheDocument();
-    // The fields stay visible (now optional) even when already logged in.
+    expect(
+      screen.queryByTestId("onboarding-acp-secret-ANTHROPIC_API_KEY"),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("onboarding-acp-advanced-toggle"));
     expect(
       screen.getByTestId("onboarding-acp-secret-ANTHROPIC_API_KEY"),
     ).toBeInTheDocument();
   });
 
-  it("renders Gemini's credential fields and the 'signed in' banner together", () => {
-    // Gemini's key/base-URL come from the SDK registry like the others, so the
-    // step shows the GEMINI_API_KEY field AND the detection banner (its Google
-    // login takes precedence, but a key can still be entered).
+  it("collapses Gemini's credential fields too, not just Claude's", () => {
+    // The rule is provider-generic: every ACP harness with a detected login
+    // gets the same treatment (issue #16296 review note).
     acpAuthStatusMock.mockReturnValue({
       status: "authenticated",
       isChecking: false,
@@ -257,8 +262,11 @@ describe("SetupAcpSecretsStep", () => {
       screen.getByTestId("onboarding-acp-auth-detected"),
     ).toBeInTheDocument();
     expect(
-      screen.getByTestId("onboarding-acp-secret-GEMINI_API_KEY"),
+      screen.getByTestId("onboarding-acp-advanced-toggle"),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("onboarding-acp-secret-GEMINI_API_KEY"),
+    ).not.toBeInTheDocument();
   });
 
   it("shows no banner when the provider is not authenticated", () => {
