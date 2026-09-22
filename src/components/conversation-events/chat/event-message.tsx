@@ -182,7 +182,7 @@ function EventMessageComponent({
   suppressThought = false,
 }: EventMessageProps) {
   const { data: config } = useConfig();
-  const { planContent } = useConversationStore();
+  const planContent = useConversationStore((state) => state.planContent);
   const { curAgentState } = useAgentState();
 
   // Planner-running state is folded in by PlanningObservationPreview below,
