@@ -8,6 +8,7 @@ import { useAgentSettingsSchema } from "#/hooks/query/use-agent-settings-schema"
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
 import { SettingsInput } from "#/components/features/settings/settings-input";
 import { SettingsSwitch } from "#/components/features/settings/settings-switch";
+import { OptionalTag } from "#/components/features/settings/optional-tag";
 import { SchemaField } from "#/components/features/settings/sdk-settings/schema-field";
 import { AcpCredentialsSection } from "#/components/features/settings/acp-credentials-section";
 import { useAcpCredentialForm } from "#/hooks/use-acp-credential-form";
@@ -15,7 +16,10 @@ import { BrandButton } from "#/components/features/settings/brand-button";
 import { ProfileScopeList } from "#/components/features/settings/agent-profiles/profile-scope-list";
 import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
-import { formControlSwitchDescriptionClassName } from "#/utils/form-control-classes";
+import {
+  formControlMultilineFieldClassName,
+  formControlSwitchDescriptionClassName,
+} from "#/utils/form-control-classes";
 import { cn } from "#/utils/utils";
 import { SettingsFieldSchema, SettingsValue } from "#/types/settings";
 import {
@@ -70,6 +74,7 @@ const ENABLE_SWITCH_LLM_TOOL_FIELD_KEY = "enable_switch_llm_tool";
 const TOOL_CONCURRENCY_FIELD_KEY = "tool_concurrency_limit";
 const MCP_SERVER_REFS_KEY = "mcp_server_refs";
 const SECRET_REFS_KEY = "secret_refs";
+const SYSTEM_MESSAGE_SUFFIX_KEY = "system_message_suffix";
 const COMMAND_PLACEHOLDER_FALLBACK = "npx -y <package-name>";
 const ACP_CUSTOM_MODEL_KEY = "__custom_model__";
 const EMPTY_AGENT_SETTINGS_SNAPSHOT: AgentSettingsSnapshot = {
@@ -141,6 +146,8 @@ export type AgentProfileFieldsDraft =
       enable_switch_llm_tool?: boolean;
       tool_concurrency_limit?: number;
       secret_refs?: string[] | null;
+      /** Empty / whitespace persists `null` so the merge can actually clear. */
+      system_message_suffix?: string | null;
     }
   | {
       agent_kind: "acp";
@@ -179,6 +186,11 @@ export interface AgentProfileFieldsInput {
   selectedSecrets: string[];
   /** Whether the backend's *profile* model accepts `secret_refs`. */
   secretRefsSupportedOnProfile: boolean;
+  /**
+   * OpenHands-only custom system instructions. Empty / whitespace persist as
+   * `null` (`system_message_suffix` is omitted on the ACP variant).
+   */
+  instructions?: string;
 }
 
 /**
@@ -219,6 +231,7 @@ export function buildAgentProfileFields(
     secretsMode,
     selectedSecrets,
     secretRefsSupportedOnProfile,
+    instructions,
   } = input;
   // Both are base-model fields, so they ride both variants. `mcp_server_refs`
   // needs no version gate — it has existed since agent profiles shipped, below
@@ -250,6 +263,10 @@ export function buildAgentProfileFields(
       ...mcpRefs,
       enable_sub_agents: subAgentsEnabled,
       ...secretRefs,
+      // Empty clears the field: `""` would append a blank line to every system
+      // prompt, and omitting the key would let the whole-profile merge keep a
+      // previously saved suffix. The backend field is unconstrained `str | None`.
+      system_message_suffix: (instructions ?? "").trim() || null,
     };
   if (switchLlmToolField && switchLlmToolSupportedOnProfile) {
     // Two conditions, two different questions. The schema tells us the field
@@ -390,6 +407,16 @@ export function AgentSettingsScreen({
   const [toolConcurrency, setToolConcurrency] = useState<string | boolean>(
     initialToolConcurrency,
   );
+
+  // --- Custom instructions (OpenHands profiles only) ---
+  // `system_message_suffix` lives on `OpenHandsAgentProfile`, not the global
+  // agent-settings shape (that path uses `agent_context`), so the field is
+  // profile-editor only. ACP profiles reject the key (`extra="forbid"`).
+  const initialInstructions = React.useMemo(() => {
+    const raw = agentSettingsSource?.[SYSTEM_MESSAGE_SUFFIX_KEY];
+    return typeof raw === "string" ? raw : "";
+  }, [agentSettingsSource]);
+  const [instructions, setInstructions] = useState(initialInstructions);
 
   // --- MCP servers (both variants; a base-model field) ---
   // Only the profile editor shows this: the global agent-settings page saves
@@ -611,6 +638,11 @@ export function AgentSettingsScreen({
     setToolConcurrency(initialToolConcurrency);
   }, [initialToolConcurrency]);
 
+  // Sync custom instructions when settings reload
+  useEffect(() => {
+    setInstructions(initialInstructions);
+  }, [initialInstructions]);
+
   // Sync the MCP scope when settings reload
   useEffect(() => {
     setMcpMode(initialMcpRefs.mode);
@@ -664,7 +696,8 @@ export function AgentSettingsScreen({
         isCustomAcpModel !== loadedSnapshot.isCustomAcpModel
       : subAgentsEnabled !== initialSubAgentsEnabled ||
         switchLlmToolEnabled !== initialSwitchLlmToolEnabled ||
-        toolConcurrency !== initialToolConcurrency);
+        toolConcurrency !== initialToolConcurrency ||
+        instructions !== initialInstructions);
   const credentialsDirty = acpCredentialForm.isDirty;
   const isAnyDirty = settingsDirty || credentialsDirty;
   useEffect(() => {
@@ -735,6 +768,7 @@ export function AgentSettingsScreen({
       secretsMode,
       selectedSecrets: orderedSelectedSecrets,
       secretRefsSupportedOnProfile,
+      instructions,
     });
 
   const isSavingAny = isSaving || acpCredentialForm.isSaving;
@@ -992,6 +1026,31 @@ export function AgentSettingsScreen({
           isDisabled={isSavingAny}
           onChange={setToolConcurrency}
         />
+      ) : null}
+
+      {!isAcp && showProfileScopeFields ? (
+        <label className="flex flex-col gap-2.5 w-full">
+          <div className="flex items-center gap-2">
+            <span className="text-sm">
+              {t(I18nKey.SETTINGS$AGENT_PROFILE_INSTRUCTIONS)}
+            </span>
+            <OptionalTag />
+          </div>
+          <textarea
+            data-testid="agent-settings-instructions"
+            name={SYSTEM_MESSAGE_SUFFIX_KEY}
+            value={instructions}
+            disabled={isSavingAny}
+            placeholder={t(
+              I18nKey.SETTINGS$AGENT_PROFILE_INSTRUCTIONS_PLACEHOLDER,
+            )}
+            onChange={(event) => setInstructions(event.target.value)}
+            className={cn(formControlMultilineFieldClassName, "min-h-24")}
+          />
+          <Typography.Text className="text-xs text-tertiary-alt">
+            {t(I18nKey.SETTINGS$AGENT_PROFILE_INSTRUCTIONS_HINT)}
+          </Typography.Text>
+        </label>
       ) : null}
 
       {showProfileScopeFields ? (
