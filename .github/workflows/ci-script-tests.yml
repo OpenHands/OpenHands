@@ -1,19 +1,22 @@
 ---
 name: CI Script Tests
 
-# Runs the pytest suite for .github/scripts/ — the Python checkers that power
-# the issue-readiness and PR-description gates. This catches regressions in the
-# checking logic whenever those scripts are modified.
+# Runs the pytest suites for `.github/scripts/` (the Python checkers that power
+# the issue-readiness and PR-description gates) and for `tools/` (the modules the
+# agent-server imports at startup). This catches regressions in that logic
+# whenever those scripts are modified.
 
 on:
     pull_request:
         paths:
             - ".github/scripts/**"
+            - "tools/**"
             - ".github/workflows/ci-script-tests.yml"
     push:
         branches: [main]
         paths:
             - ".github/scripts/**"
+            - "tools/**"
             - ".github/workflows/ci-script-tests.yml"
 
 permissions:
@@ -22,7 +25,7 @@ permissions:
 jobs:
     test:
         runs-on: ubuntu-24.04
-        timeout-minutes: 5
+        timeout-minutes: 10
         steps:
             - uses: actions/checkout@v7
 
@@ -35,3 +38,15 @@ jobs:
 
             - name: Run script tests
               run: python -m pytest .github/scripts/tests/ -v
+
+            # tools/mcp_legacy_schema_compat.py depends on pydantic and mcp, and
+            # its SDK round-trip case needs openhands-sdk. Read the pin from
+            # config/defaults.json so this job tracks the agent-server the
+            # launchers actually install — the compat module only matters while
+            # that version resolves the strict `mcp` 1.x reader.
+            - name: Install agent-server test dependencies
+              run: |
+                  pip install pytest "openhands-sdk==$(python -c 'import json;print(json.load(open("config/defaults.json"))["versions"]["agentServer"])')"
+
+            - name: Run tools tests
+              run: python -m pytest tools/tests/ -v

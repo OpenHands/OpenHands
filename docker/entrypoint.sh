@@ -274,8 +274,11 @@ export AUTOMATION_AGENT_SERVER_URL="${AUTOMATION_AGENT_SERVER_URL:-http://127.0.
 # It is also imported at startup below (--import-modules) so its builtin
 # FinishTool registration lets automation runs resolve the tool on their
 # remote conversations (see the note at the bottom of tools/canvas_ui_tool.py).
+# mcp_legacy_schema_compat makes the pinned mcp 1.x reader accept the snake_case
+# MCP tool fields that mcp 2.x wrote into persisted events, so conversations
+# created while agent-server resolved 2.x still load (OpenHands/OpenHands#17615).
 export OH_EXTRA_PYTHON_PATH="${OH_EXTRA_PYTHON_PATH:-/opt/agent-canvas/tools}"
-AGENT_SERVER_IMPORT_MODULES="canvas_ui_tool"
+AGENT_SERVER_IMPORT_MODULES="mcp_legacy_schema_compat,canvas_ui_tool"
 
 # Track child PIDs so we can clean up on exit.
 PIDS=()

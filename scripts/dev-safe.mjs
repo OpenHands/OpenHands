@@ -404,12 +404,22 @@ export function validateFrontendDependencies(
 /**
  * Modules the agent-server imports at startup (`--import-modules`). They are
  * resolved from `tools/`, which `buildAgentServerEnv` exposes through
- * OH_EXTRA_PYTHON_PATH. Importing `canvas_ui_tool` eagerly registers the SDK's
- * builtin FinishTool so automation presets (openhands-automation >= 1.9.0) can
- * resolve it on the remote conversations they dispatch — see the note at the
- * bottom of tools/canvas_ui_tool.py.
+ * OH_EXTRA_PYTHON_PATH.
+ *
+ * - `canvas_ui_tool` eagerly registers the SDK's builtin FinishTool so
+ *   automation presets (openhands-automation >= 1.9.0) can resolve it on the
+ *   remote conversations they dispatch — see the note at the bottom of
+ *   tools/canvas_ui_tool.py.
+ * - `mcp_legacy_schema_compat` makes the pinned `mcp` 1.x reader accept the
+ *   snake_case MCP tool fields that `mcp` 2.x wrote into persisted events, so
+ *   conversations created while the agent-server resolved 2.x still load after
+ *   the `fastmcp<4` downgrade — see tools/mcp_legacy_schema_compat.py and
+ *   OpenHands/OpenHands#17615. It runs first so any SDK model not yet imported
+ *   is built against the patched `mcp` fields; already-imported models are
+ *   recompiled in place.
  */
-export const AGENT_SERVER_IMPORT_MODULES = "canvas_ui_tool";
+export const AGENT_SERVER_IMPORT_MODULES =
+  "mcp_legacy_schema_compat,canvas_ui_tool";
 
 /**
  * Build the uvx command and arguments for running agent-server.

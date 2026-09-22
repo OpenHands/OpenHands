@@ -505,7 +505,7 @@ describe("buildAgentServerCommand", () => {
       "posthog>=6,<7",
       "agent-server",
       "--import-modules",
-      "canvas_ui_tool",
+      "mcp_legacy_schema_compat,canvas_ui_tool",
     ]);
     expect(cmd.source).toBe("PyPI (1.49.3, default)");
   });
@@ -531,7 +531,7 @@ describe("buildAgentServerCommand", () => {
       "posthog>=6,<7",
       "agent-server",
       "--import-modules",
-      "canvas_ui_tool",
+      "mcp_legacy_schema_compat,canvas_ui_tool",
     ]);
     expect(cmd.source).toBe("PyPI (1.18.0)");
   });
@@ -556,7 +556,7 @@ describe("buildAgentServerCommand", () => {
       "posthog>=6,<7",
       "agent-server",
       "--import-modules",
-      "canvas_ui_tool",
+      "mcp_legacy_schema_compat,canvas_ui_tool",
     ]);
     expect(cmd.source).toBe("git (feature-branch)");
   });
@@ -579,7 +579,7 @@ describe("buildAgentServerCommand", () => {
       "posthog>=6,<7",
       "agent-server",
       "--import-modules",
-      "canvas_ui_tool",
+      "mcp_legacy_schema_compat,canvas_ui_tool",
     ]);
     expect(cmd.source).toBe("git (abc1234)");
   });
@@ -617,7 +617,7 @@ describe("buildAgentServerCommand", () => {
       "posthog>=6,<7",
       "agent-server",
       "--import-modules",
-      "canvas_ui_tool",
+      "mcp_legacy_schema_compat,canvas_ui_tool",
     ]);
     expect(cmd.source).toBe(`local (${sdk})`);
   });
@@ -654,7 +654,7 @@ describe("buildAgentServerCommand", () => {
       expect(executable).toBeGreaterThan(-1);
       expect(args.slice(executable + 1)).toEqual([
         "--import-modules",
-        "canvas_ui_tool",
+        "mcp_legacy_schema_compat,canvas_ui_tool",
       ]);
     }
   });
