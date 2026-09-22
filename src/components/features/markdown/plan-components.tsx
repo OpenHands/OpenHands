@@ -78,7 +78,7 @@ export function createPlanComponents(extraClassName?: string) {
     h6: ({ children, className }: ElementProps) => (
       <h6
         className={cn(
-          "text-xs font-medium text-[var(--oh-text-tertiary)] mb-0.5 mt-1.5 first:mt-0",
+          "text-xs font-medium text-text-tertiary mb-0.5 mt-1.5 first:mt-0",
           className,
           extraClassName,
         )}
@@ -136,7 +136,7 @@ export function createPlanComponents(extraClassName?: string) {
     code: ({ children, className }: ElementProps) => (
       <code
         className={cn(
-          "bg-[var(--oh-surface-raised)] px-1.5 py-0.5 rounded text-[var(--oh-foreground)] border border-[var(--oh-border-subtle)]",
+          "bg-surface-raised px-1.5 py-0.5 rounded text-foreground border border-border-subtle",
           className,
           extraClassName,
         )}

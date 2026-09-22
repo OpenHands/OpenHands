@@ -134,14 +134,14 @@ export function AgentStatus({
       )}
     >
       <span
-        className="text-[11px] text-[var(--oh-muted)] font-normal leading-5 min-w-0 max-w-full truncate"
+        className="text-[11px] text-muted font-normal leading-5 min-w-0 max-w-full truncate"
         title={t(statusCode)}
       >
         {t(statusCode)}
       </span>
       <div
         className={cn(
-          "box-border content-stretch flex flex-row gap-[3px] items-center justify-center overflow-clip px-0.5 py-1 relative rounded-[100px] shrink-0 size-6 transition-all duration-200 active:scale-95 bg-transparent text-[var(--oh-muted)] hover:bg-white/10 hover:text-white",
+          "box-border content-stretch flex flex-row gap-0.75 items-center justify-center overflow-clip px-0.5 py-1 relative rounded-[100px] shrink-0 size-6 transition-all duration-200 active:scale-95 bg-transparent text-muted hover:bg-white/10 hover:text-white",
           isInteractive ? "cursor-pointer" : "cursor-default",
         )}
       >

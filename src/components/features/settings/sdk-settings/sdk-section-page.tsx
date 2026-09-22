@@ -698,9 +698,7 @@ export function SdkSectionPage({
         data-testid="sdk-schema-unavailable"
         className={extensionModuleEmptyStateClassName}
       >
-        <p className="text-sm text-[var(--oh-muted)]">
-          {schemaUnavailableMessage}
-        </p>
+        <p className="text-sm text-muted">{schemaUnavailableMessage}</p>
       </div>
     );
   }

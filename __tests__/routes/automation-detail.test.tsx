@@ -345,3 +345,49 @@ describe("AutomationDetail — Automation Runs As", () => {
     expect(getCloudOrganizationMember).not.toHaveBeenCalled();
   });
 });
+
+describe("AutomationDetail — disabled reason banner", () => {
+  it("surfaces the latest disablement reason on an inactive automation", async () => {
+    // Arrange — an automation paused automatically for a permanent config fault.
+    const reason =
+      "Paused automatically: auth — Invalid API key. This failed the last 3 runs and needs a configuration fix.";
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+      ...automation,
+      enabled: false,
+      disabled_reason: reason,
+      disabled_detail: {
+        reason: "consecutive_permanent_failures",
+        source: "consecutive_permanent_failures",
+      },
+      disabled_at: "2026-09-14T10:00:00Z",
+    });
+
+    // Act
+    renderDetail();
+    await waitFor(() => {
+      expect(AutomationService.getAutomation).toHaveBeenCalledTimes(1);
+    });
+
+    // Assert — the banner renders the backend's human-readable reason.
+    expect(
+      await screen.findByTestId("automation-disabled-reason-banner"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("automation-disabled-reason-text"),
+    ).toHaveTextContent(reason);
+  });
+
+  it("does not render the banner for an enabled automation", async () => {
+    // Arrange — default beforeEach returns the enabled automation fixture.
+    renderDetail();
+    await waitFor(() => {
+      expect(AutomationService.getAutomation).toHaveBeenCalledTimes(1);
+    });
+    await screen.findByText(automation.name);
+
+    // Assert
+    expect(
+      screen.queryByTestId("automation-disabled-reason-banner"),
+    ).not.toBeInTheDocument();
+  });
+});

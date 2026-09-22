@@ -67,7 +67,7 @@ export function SkillsModal({ onClose }: SkillsModalProps) {
     <ModalBackdrop onClose={onClose}>
       <ModalBody
         width="lg"
-        className="relative max-h-[80vh] flex flex-col items-start border border-[var(--oh-border)]"
+        className="relative max-h-[80vh] flex flex-col items-start border border-border"
         testID="skills-modal"
       >
         <SkillsModalHeader
@@ -77,14 +77,14 @@ export function SkillsModal({ onClose }: SkillsModalProps) {
           onClose={onClose}
         />
 
-        <div className="w-full h-[60vh] overflow-auto rounded-md border border-[var(--oh-border)] bg-surface-raised custom-scrollbar-always">
+        <div className="w-full h-[60vh] overflow-auto rounded-md border border-border bg-surface-raised custom-scrollbar-always">
           {isLoading ? (
             <SkillsLoadingState />
           ) : isError || !skills || visibleSkills.length === 0 ? (
             <SkillsEmptyState isError={isError} />
           ) : (
             groupedSkills && (
-              <div className="divide-y divide-[var(--oh-border)]">
+              <div className="divide-y divide-border">
                 {SKILL_SCOPE_ORDER.map((scope) => {
                   const scopedSkills = groupedSkills[scope];
                   if (scopedSkills.length === 0) {

@@ -36,7 +36,7 @@ export function ConfirmArchiveModal({
 
   return (
     <ModalBackdrop onClose={onCancel}>
-      <ModalBody className="items-start border border-[var(--oh-border)]">
+      <ModalBody className="items-start border border-border">
         <div className="flex flex-col gap-2">
           <BaseModalTitle title={t(I18nKey.CONVERSATION$CONFIRM_ARCHIVE)} />
           <BaseModalDescription>{confirmationMessage}</BaseModalDescription>

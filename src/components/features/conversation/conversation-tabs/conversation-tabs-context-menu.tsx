@@ -173,9 +173,8 @@ export function ConversationTabsContextMenu({
             <ArchivedDisabledTooltip isDisabled={isArchivedConversation}>
               <div
                 className={cn(
-                  "group flex h-[30px] w-full min-w-0 items-stretch rounded",
-                  !isArchivedConversation &&
-                    "hover:bg-[var(--oh-interactive-hover)]",
+                  "group flex h-7.5 w-full min-w-0 items-stretch rounded",
+                  !isArchivedConversation && "hover:bg-interactive-hover",
                   isArchivedConversation && "opacity-50",
                 )}
               >
@@ -222,7 +221,7 @@ export function ConversationTabsContextMenu({
                   {pinned ? (
                     <span
                       className={cn(
-                        "-mr-[5px] ml-auto",
+                        "-mr-1.25 ml-auto",
                         dropdownMenuRowIconWrapperClassName,
                       )}
                       aria-hidden

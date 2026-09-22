@@ -6,6 +6,23 @@ import { BrandButton } from "#/components/features/settings/brand-button";
 describe("BrandButton", () => {
   const onClickMock = vi.fn();
 
+  it.each([undefined, "text-xs"])(
+    "preserves primary foreground and font size when merging %s",
+    (className) => {
+      render(
+        <BrandButton type="button" variant="primary" className={className}>
+          Save
+        </BrandButton>,
+      );
+      // A color named text-base is misclassified as a font size by
+      // tailwind-merge, dropping text-sm or being dropped by a size override.
+      expect(screen.getByRole("button", { name: "Save" })).toHaveClass(
+        className ?? "text-sm",
+        "text-on-primary",
+      );
+    },
+  );
+
   it("should set a test id", () => {
     render(
       <BrandButton testId="brand-button" type="button" variant="primary">
