@@ -138,7 +138,7 @@ async function runFixture(
           longTasks.push(Number(entry.duration.toFixed(1)));
         }
       });
-      observer.observe({ type: "longtask" });
+      observer.observe({ type: "longtask", buffered: true });
 
       const probe = (event: Record<string, unknown>) => {
         const started = performance.now();
@@ -193,6 +193,9 @@ async function runFixture(
       }
 
       await raf();
+      // longtask entries are delivered in a later task than the work that
+      // produced them, and disconnect() drops whatever is still queued.
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       observer.disconnect();
       const lastLine =
         "const item_" + String(fixtureLineCount - 1).padStart(4, "0");
