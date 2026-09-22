@@ -9,8 +9,9 @@
     "minimumAgentServer": "1.28.0"
   },
   "constraints": {
-    "_comment": "Temporary upper bound on the agent-client-protocol (acp) transitive dependency. openhands-sdk 1.35.0 requires agent-client-protocol>=0.10.1 with no upper bound, but acp 0.11.0 reordered the ACP prompt() arguments and breaks the SDK's ACP client (a PromptRequest validation error surfaces as 'ACP error: 2 validation errors for PromptRequest'). Pin acp <0.11 until a fixed openhands-sdk ships. Consumed by scripts/dev-safe.mjs (agent-server uvx install) and .github/workflows/mock-llm-e2e.yml (mock ACP server venv).",
-    "agentClientProtocol": "agent-client-protocol<0.11"
+    "_comment": "Temporary transitive-dep pins applied when uvx installs agent-server. agentClientProtocol: openhands-sdk leaves agent-client-protocol unbounded (>=0.10.1), but acp 0.11.0 reordered prompt() args and breaks the SDK ACP client. Hold acp <0.11 until a fixed SDK ships. Consumed by scripts/dev-safe.mjs and .github/workflows/mock-llm-e2e.yml. mcp: uvx has no lockfile, so it resolves latest browser-use (0.13.10+ requires mcp==2.1.1). mcp 2.x changed the Server API that browser-use's MCP server and openhands-tools CustomBrowserUseServer expect. browser-use 0.12.0–0.13.8 pin mcp==1.26.0; pinning the same version restores browser tooling (OpenHands/OpenHands#17383). Docker/agent-server images already lock mcp via uv.lock; this pin is for the npm/uvx launch path.",
+    "agentClientProtocol": "agent-client-protocol<0.11",
+    "mcp": "mcp==1.26.0"
   },
   "images": {
     "agentServer": "ghcr.io/openhands/agent-server",
