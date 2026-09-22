@@ -284,3 +284,77 @@ as an additional backend and switch between local and remote from the UI.
    - **Session API key** — the `LOCAL_BACKEND_API_KEY` you chose in step 3.
 2. Save. The new backend should show as "Connected". Pick it from the
    backend switcher to talk to the remote machine.
+
+## 6. Rotating `LOCAL_BACKEND_API_KEY`
+
+The key is a credential, so rotate it whenever it may have leaked — and on a
+schedule if your policy says so. One key authenticates the whole stack: the
+agent server, the automation backend, and every browser or script that talks
+to them.
+
+Rotate it by stopping the stack, changing the value, and starting it again:
+
+```bash
+NEW_KEY=$(openssl rand -base64 32)
+echo "$NEW_KEY"          # store this somewhere safe before continuing
+sudo systemctl stop agent-canvas
+sudo sed -i "s|^Environment=LOCAL_BACKEND_API_KEY=.*|Environment=LOCAL_BACKEND_API_KEY=$NEW_KEY|" \
+  /etc/systemd/system/agent-canvas.service
+sudo systemctl daemon-reload
+sudo systemctl start agent-canvas
+```
+
+### What picks up the new key on its own
+
+- **The agent server and the automation backend.** Both read the key at
+  startup, so a restart is all they need.
+- **`OPENHANDS_AUTOMATION_API_KEY` in Settings → Secrets.** The launcher
+  re-seeds this secret on every start, so automations that `curl` the
+  automation API with it keep working.
+- **Automation KV state.** The KV store encrypts its data with
+  `AUTOMATION_KV_SECRET`, which is persisted to
+  `~/.openhands/agent-canvas/automation-kv-secret.txt` and is deliberately
+  _not_ derived from `LOCAL_BACKEND_API_KEY`. Rotating the API key leaves
+  stored KV values readable.
+- **`OH_SECRET_KEY`.** The key that encrypts saved settings and secrets lives
+  in `~/.openhands/agent-canvas/secret-key.txt` and is unrelated to the API
+  key. Rotating the API key does not touch it.
+- **Browsers on a non-public stack.** Without `--public` the launcher injects
+  the live key into the page, and the frontend rewrites the stale key on the
+  default local backend entry it had stored.
+
+### What you have to update yourself
+
+- **Every browser on a `--public` stack.** The stored key is now wrong, so the
+  next request returns 401 and the API key entry screen asks for the new one.
+  Enter it once per browser.
+- **Other machines that registered this host as a backend.** Open **Manage
+  backends**, pick the entry for this host, and replace its session API key.
+- **Anything that copied the key into a file.** A key pasted into a `.env`, a
+  systemd unit, a CI secret, or a script an agent wrote during a conversation
+  does not follow a rotation. Search for the old value and replace it:
+
+  ```bash
+  grep -rIl --exclude-dir=.git "<old-key>" ~/ 2>/dev/null
+  ```
+
+  Prefer reading the key from the environment over hard-coding it, so the next
+  rotation is a restart instead of a search.
+
+### Recovering KV state rotated by an older release
+
+Older releases derived `AUTOMATION_KV_SECRET` from `LOCAL_BACKEND_API_KEY`, so
+a rotation left previously stored KV values encrypted under the old key and KV
+reads failed with a 500. If that happened, write the old key into the KV secret
+file once, before the next start:
+
+```bash
+printf '%s' '<old-api-key>' > ~/.openhands/agent-canvas/automation-kv-secret.txt
+chmod 600 ~/.openhands/agent-canvas/automation-kv-secret.txt
+```
+
+Setting `AUTOMATION_KV_SECRET` in the environment works too, but it is read
+without being written to that file, so it has to stay set on every start.
+
+If the old key is gone, delete the affected automations' KV state and let them
+repopulate it.

@@ -42,8 +42,9 @@
 #                          Setting this enables local-mode auth so the session
 #                          API key is validated internally instead of against the
 #                          OpenHands cloud API.
-#   AUTOMATION_KV_SECRET  – Signing key for scoped automation KV tokens
-#                          (defaults to the shared session API key).
+#   AUTOMATION_KV_SECRET  – Signing key for scoped automation KV tokens and the
+#                          encryption key for automation KV state at rest
+#                          (auto-generated and persisted if not provided).
 #   FILE_STORE             – Storage backend for automation tarballs (default: local).
 #                          Without this the automation backend may fall back to
 #                          S3/GCS which fails without cloud credentials.
@@ -221,7 +222,29 @@ fi
 export OPENHANDS_AUTOMATION_API_KEY="${OPENHANDS_AUTOMATION_API_KEY:-${EFFECTIVE_SESSION_KEY}}"
 export AUTOMATION_LOCAL_API_KEY="${AUTOMATION_LOCAL_API_KEY:-${EFFECTIVE_SESSION_KEY}}"
 export AUTOMATION_AGENT_SERVER_API_KEY="${AUTOMATION_AGENT_SERVER_API_KEY:-${EFFECTIVE_SESSION_KEY}}"
-export AUTOMATION_KV_SECRET="${AUTOMATION_KV_SECRET:-${EFFECTIVE_SESSION_KEY}}"
+# >>> automation-kv-secret
+# KV store secret — signs the per-run KV tokens and encrypts automation KV
+# state (and the repository-sync secret store, which shares it) at rest.
+# Persisted in its own file rather than derived from the session key: rotating
+# LOCAL_BACKEND_API_KEY would otherwise change the encryption key and leave
+# every stored KV document undecryptable. Seeded from the effective session key
+# on first run so images that already hold KV state encrypted under the old
+# default keep reading it.
+KV_SECRET_FILE="${STATE_DIR}/automation-kv-secret.txt"
+if [ -z "${AUTOMATION_KV_SECRET:-}" ]; then
+  if [ -s "$KV_SECRET_FILE" ]; then
+    AUTOMATION_KV_SECRET="$(cat "$KV_SECRET_FILE")"
+  else
+    AUTOMATION_KV_SECRET="$EFFECTIVE_SESSION_KEY"
+    mkdir -p "$(dirname "$KV_SECRET_FILE")"
+    printf '%s' "$AUTOMATION_KV_SECRET" > "$KV_SECRET_FILE"
+    chmod 600 "$KV_SECRET_FILE"
+    log "Persisted automation KV secret to $KV_SECRET_FILE"
+  fi
+fi
+export AUTOMATION_KV_SECRET
+# <<< automation-kv-secret
+
 export OPENHANDS_REMOTE_WS_READY_REQUIRED="${OPENHANDS_REMOTE_WS_READY_REQUIRED:-false}"
 if [ -z "${AUTOMATION_POSTHOG_API_KEY:-}" ]; then
   if [ -n "${VITE_POSTHOG_API_KEY:-}" ]; then
