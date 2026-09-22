@@ -15449,7 +15449,7 @@
     "es": "Marketplace",
     "ar": "السوق",
     "fr": "Marketplace",
-    "tr": "Pazar Yeri",
+    "tr": "Marketplace",
     "de": "Marketplace",
     "uk": "Маркетплейс",
     "ca": "Marketplace"
@@ -35373,7 +35373,7 @@
     "ko-KR": "home conversation task prompt launch",
     "no": "home conversation task prompt launch",
     "pt": "home conversation task prompt launch",
-    "tr": "ana sayfa sohbet görev istem başlat",
+    "tr": "home conversation task prompt launch ana sayfa sohbet görev istem başlat",
     "uk": "home conversation task prompt launch",
     "zh-CN": "home conversation task prompt launch",
     "zh-TW": "home conversation task prompt launch"
@@ -35424,7 +35424,7 @@
     "ko-KR": "skills extensions plugins customize marketplace",
     "no": "skills extensions plugins customize marketplace",
     "pt": "skills extensions plugins customize marketplace",
-    "tr": "beceriler uzantılar eklentiler özelleştir pazar yeri",
+    "tr": "skills extensions plugins customize marketplace beceriler uzantılar eklentiler özelleştir pazar yeri",
     "uk": "skills extensions plugins customize marketplace",
     "zh-CN": "skills extensions plugins customize marketplace",
     "zh-TW": "skills extensions plugins customize marketplace"
@@ -35475,7 +35475,7 @@
     "ko-KR": "mcp tools integrations servers context protocol",
     "no": "mcp tools integrations servers context protocol",
     "pt": "mcp tools integrations servers context protocol",
-    "tr": "mcp araçlar entegrasyonlar sunucular bağlam protokol",
+    "tr": "mcp tools integrations servers context protocol araçlar entegrasyonlar sunucular bağlam protokol",
     "uk": "mcp tools integrations servers context protocol",
     "zh-CN": "mcp tools integrations servers context protocol",
     "zh-TW": "mcp tools integrations servers context protocol"
@@ -35526,7 +35526,7 @@
     "ko-KR": "preferences configuration options",
     "no": "preferences configuration options",
     "pt": "preferences configuration options",
-    "tr": "tercihler yapılandırma seçenekler",
+    "tr": "preferences configuration options tercihler yapılandırma seçenekler",
     "uk": "preferences configuration options",
     "zh-CN": "preferences configuration options",
     "zh-TW": "preferences configuration options"
@@ -35577,7 +35577,7 @@
     "ko-KR": "agent openhands acp sub agents delegation",
     "no": "agent openhands acp sub agents delegation",
     "pt": "agent openhands acp sub agents delegation",
-    "tr": "ajan openhands acp alt ajanlar görev devri",
+    "tr": "agent openhands acp sub agents delegation ajan alt ajanlar görev devri",
     "uk": "agent openhands acp sub agents delegation",
     "zh-CN": "agent openhands acp sub agents delegation",
     "zh-TW": "agent openhands acp sub agents delegation"
@@ -35628,7 +35628,7 @@
     "ko-KR": "llm model provider api key profile inference",
     "no": "llm model provider api key profile inference",
     "pt": "llm model provider api key profile inference",
-    "tr": "llm model sağlayıcı api anahtarı profil çıkarım",
+    "tr": "llm model provider api key profile inference sağlayıcı anahtarı profil çıkarım",
     "uk": "llm model provider api key profile inference",
     "zh-CN": "llm model provider api key profile inference",
     "zh-TW": "llm model provider api key profile inference"
@@ -35679,7 +35679,7 @@
     "ko-KR": "condenser context memory summary",
     "no": "condenser context memory summary",
     "pt": "condenser context memory summary",
-    "tr": "yoğunlaştırıcı bağlam bellek özet",
+    "tr": "condenser context memory summary yoğunlaştırıcı bağlam bellek özet",
     "uk": "condenser context memory summary",
     "zh-CN": "condenser context memory summary",
     "zh-TW": "condenser context memory summary"
@@ -35730,7 +35730,7 @@
     "ko-KR": "verification security risk confirmation guardrails",
     "no": "verification security risk confirmation guardrails",
     "pt": "verification security risk confirmation guardrails",
-    "tr": "doğrulama güvenlik risk onay koruyucu önlemler",
+    "tr": "verification security risk confirmation guardrails doğrulama güvenlik onay koruyucu önlemler",
     "uk": "verification security risk confirmation guardrails",
     "zh-CN": "verification security risk confirmation guardrails",
     "zh-TW": "verification security risk confirmation guardrails"
@@ -35781,7 +35781,7 @@
     "ko-KR": "app application language theme analytics preferences",
     "no": "app application language theme analytics preferences",
     "pt": "app application language theme analytics preferences",
-    "tr": "uygulama dil tema analiz tercihleri",
+    "tr": "app application language theme analytics preferences uygulama dil tema analiz tercihleri",
     "uk": "app application language theme analytics preferences",
     "zh-CN": "app application language theme analytics preferences",
     "zh-TW": "app application language theme analytics preferences"
@@ -35832,7 +35832,7 @@
     "ko-KR": "secrets environment variables credentials tokens",
     "no": "secrets environment variables credentials tokens",
     "pt": "secrets environment variables credentials tokens",
-    "tr": "gizli değerler ortam değişkenleri kimlik bilgileri jetonlar",
+    "tr": "secrets environment variables credentials tokens gizli değerler ortam değişkenleri kimlik bilgileri jetonlar",
     "uk": "secrets environment variables credentials tokens",
     "zh-CN": "secrets environment variables credentials tokens",
     "zh-TW": "secrets environment variables credentials tokens"
@@ -35883,7 +35883,7 @@
     "ko-KR": "sidebar collapse expand navigation rail",
     "no": "sidebar collapse expand navigation rail",
     "pt": "sidebar collapse expand navigation rail",
-    "tr": "kenar çubuğu daralt genişlet gezinme çubuğu",
+    "tr": "sidebar collapse expand navigation rail kenar çubuğu daralt genişlet gezinme çubuğu",
     "uk": "sidebar collapse expand navigation rail",
     "zh-CN": "sidebar collapse expand navigation rail",
     "zh-TW": "sidebar collapse expand navigation rail"
@@ -36342,7 +36342,7 @@
     "es": "Configura automatizaciones que se ejecuten según un horario o cuando ocurran eventos.",
     "ar": "Set up automations to run on a schedule or when events happen.",
     "fr": "Configurez des automatisations planifiées ou déclenchées par des événements.",
-    "tr": "Otomasyonları zamanlandığında veya olaylar gerçekleştiğinde çalışacak şekilde ayarlayın.",
+    "tr": "Otomasyonları bir zamanlamaya göre veya olaylar gerçekleştiğinde çalışacak şekilde ayarlayın.",
     "de": "Richten Sie Automatisierungen ein, die nach Zeitplan oder bei Ereignissen laufen.",
     "uk": "Set up automations to run on a schedule or when events happen.",
     "ca": "Set up automations to run on a schedule or when events happen."
