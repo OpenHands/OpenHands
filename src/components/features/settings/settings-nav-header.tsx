@@ -13,7 +13,7 @@ export function SettingsNavHeader({ text, className }: SettingsNavHeaderProps) {
 
   return (
     <div className={cn("px-3.5", className)}>
-      <Typography.Text className="text-[11px] font-medium text-[var(--oh-text-dim)] uppercase tracking-wide leading-5">
+      <Typography.Text className="text-[11px] font-medium text-text-dim uppercase tracking-wide leading-5">
         {t(text)}
       </Typography.Text>
     </div>

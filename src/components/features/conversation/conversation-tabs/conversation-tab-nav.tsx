@@ -40,14 +40,12 @@ export function ConversationTabNav({
   const buttonClassName = cn(
     "flex items-center rounded-md cursor-pointer",
     "pl-1.5 pr-2 py-1 lg:py-1.5",
-    "text-[var(--oh-muted)] bg-transparent",
-    isActive && "bg-[var(--oh-interactive-active)] text-white",
+    "text-muted bg-transparent",
+    isActive && "bg-interactive-active text-white",
     isActive
-      ? "hover:text-white hover:bg-[var(--oh-interactive-hover)]"
+      ? "hover:text-white hover:bg-interactive-hover"
       : "hover:text-white hover:bg-white/5",
-    isActive
-      ? "focus-within:text-white"
-      : "focus-within:text-[var(--oh-muted)]",
+    isActive ? "focus-within:text-white" : "focus-within:text-muted",
     className,
   );
 

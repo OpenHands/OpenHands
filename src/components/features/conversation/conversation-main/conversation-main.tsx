@@ -118,10 +118,10 @@ export function ConversationMain() {
             }}
           >
             <div className="flex h-full w-full flex-col">
-              <div className="flex flex-col flex-1 min-h-0 bg-[var(--oh-surface)] border-l border-[var(--oh-border)] overflow-hidden">
+              <div className="flex flex-col flex-1 min-h-0 bg-surface border-l border-border overflow-hidden">
                 <div
                   data-testid="tabs-pane-header"
-                  className="flex shrink-0 flex-col border-b border-[var(--oh-border)]"
+                  className="flex shrink-0 flex-col border-b border-border"
                 >
                   <ConversationTabs isPanelResizing={isDragging} />
                 </div>

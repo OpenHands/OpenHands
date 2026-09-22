@@ -159,13 +159,13 @@ export function GitProviderDropdown({
 
   return (
     <div className={cn("relative", className)}>
-      <div className="group relative text-[var(--oh-muted)] hover:text-white">
+      <div className="group relative text-muted hover:text-white">
         {/* Provider icon */}
         {selectedItem && (
           <div className="absolute left-2 top-1/2 transform -translate-y-1/2 z-10">
             <GitProviderIcon
               gitProvider={selectedItem}
-              className="min-w-[14px] min-h-[14px] w-[14px] h-[14px]"
+              className="min-w-3.5 min-h-3.5 w-3.5 h-3.5"
             />
           </div>
         )}
@@ -177,11 +177,11 @@ export function GitProviderDropdown({
               placeholder ?? t(I18nKey.COMMON$SELECT_PROVIDER_PLACEHOLDER),
             readOnly: true, // Make it non-searchable like the original
             className: cn(
-              "w-29.5 h-6 py-0 border border-[var(--oh-border-input)] rounded shadow-none h-6 min-h-6 max-h-6 ",
-              "text-inherit bg-tertiary placeholder:text-[var(--oh-muted)]",
-              "focus:outline-none focus:ring-0 focus:border-[var(--oh-border-input)]",
+              "w-29.5 h-6 py-0 border border-border-input rounded shadow-none h-6 min-h-6 max-h-6 ",
+              "text-inherit bg-tertiary placeholder:text-muted",
+              "focus:outline-none focus:ring-0 focus:border-border-input",
               "disabled:bg-tertiary disabled:cursor-not-allowed disabled:opacity-60",
-              "pl-1.5 pr-[1px] cursor-pointer text-xs font-normal leading-5", // Space for toggle button and pointer cursor
+              "pl-1.5 pr-px cursor-pointer text-xs font-normal leading-5", // Space for toggle button and pointer cursor
               selectedItem && "pl-6",
               inputClassName,
             ),

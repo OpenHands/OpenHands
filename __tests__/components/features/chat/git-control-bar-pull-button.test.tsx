@@ -33,7 +33,7 @@ describe("GitControlBarPullButton", () => {
 
     const button = screen.getByRole("button");
     expect(button).toBeDisabled();
-    expect(button.className).toContain("text-[var(--oh-muted)]");
+    expect(button.className).toContain("text-muted");
     expect(button.className).toContain("opacity-50");
     expect(button.className).not.toContain("hover:bg-tertiary");
     expect(screen.getByTestId("pull-icon")).toHaveAttribute(

@@ -60,7 +60,7 @@ export function CompactConversationRow({
   const disableAnimation = import.meta.env.MODE === "test";
 
   const preview = (
-    <div className="w-[260px] p-3">
+    <div className="w-65 p-3">
       <div className="flex items-center gap-2 mb-1">
         <ConversationStatusDot
           executionStatus={executionStatus}
@@ -93,7 +93,7 @@ export function CompactConversationRow({
       content={preview}
       placement="right"
       closeDelay={100}
-      className="bg-[var(--oh-surface)] text-white border border-[var(--oh-border-subtle)] shadow-xl p-0"
+      className="bg-surface text-white border border-border-subtle shadow-xl p-0"
       disableAnimation={disableAnimation}
     >
       <NavigationLink
@@ -106,9 +106,7 @@ export function CompactConversationRow({
           cn(
             "flex items-center justify-center w-10 h-9 mx-auto rounded-md",
             "transition-colors cursor-pointer",
-            navActive || isActive
-              ? "bg-tertiary"
-              : "hover:bg-[var(--oh-surface-raised)]",
+            navActive || isActive ? "bg-tertiary" : "hover:bg-surface-raised",
           )
         }
       >

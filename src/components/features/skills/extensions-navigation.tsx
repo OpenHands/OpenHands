@@ -79,7 +79,7 @@ export function ExtensionsNavigation() {
   return (
     <aside
       data-testid="extensions-navbar-desktop"
-      className="hidden md:flex md:w-[260px] md:shrink-0 md:flex-col md:gap-2 md:sticky md:top-8 md:self-start"
+      className="hidden md:flex md:w-65 md:shrink-0 md:flex-col md:gap-2 md:sticky md:top-8 md:self-start"
     >
       <span className="px-2 text-sm font-normal text-white">
         {t(I18nKey.NAV$CUSTOMIZE)}
@@ -104,7 +104,7 @@ export function ExtensionsNavigation() {
             </span>
           );
           const comingSoonBadge = item.comingSoon && (
-            <span className="ml-auto shrink-0 rounded-full border border-white/20 bg-white/5 px-1.5 py-0.5 text-[10px] font-medium text-[var(--oh-text-dim)]">
+            <span className="ml-auto shrink-0 rounded-full border border-white/20 bg-white/5 px-1.5 py-0.5 text-[10px] font-medium text-text-dim">
               {t(I18nKey.NAV$COMING_SOON)}
             </span>
           );
@@ -127,7 +127,7 @@ export function ExtensionsNavigation() {
                 {baseRow}
                 {label}
                 <ExternalLink
-                  className="ml-auto size-4 shrink-0 text-[var(--oh-muted)]"
+                  className="ml-auto size-4 shrink-0 text-muted"
                   aria-hidden
                 />
               </a>

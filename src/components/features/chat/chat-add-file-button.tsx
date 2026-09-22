@@ -73,9 +73,7 @@ export function ChatAddFileButton({
         className={cn(
           chatInputIconButtonClassName,
           "relative shrink-0 size-6",
-          disabled
-            ? "cursor-not-allowed text-[var(--oh-text-subtle)]"
-            : undefined,
+          disabled ? "cursor-not-allowed text-text-subtle" : undefined,
           menuOpen && !disabled && "text-white bg-white/10",
         )}
         aria-label={t(I18nKey.CHAT_INTERFACE$PLUS_MENU)}
@@ -86,7 +84,7 @@ export function ChatAddFileButton({
         disabled={disabled}
       >
         <span className="flex h-full w-full items-center justify-center">
-          <Plus className="h-[13px] w-[13px] shrink-0" strokeWidth={2} />
+          <Plus className="h-3.25 w-3.25 shrink-0" strokeWidth={2} />
         </span>
       </button>
 

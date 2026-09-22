@@ -30,7 +30,7 @@ export function DeleteConfirmationModal({
         }}
         role="presentation"
       />
-      <div className="relative w-full max-w-sm rounded-xl border border-[var(--oh-border)] bg-[var(--oh-surface)] p-6">
+      <div className="relative w-full max-w-sm rounded-xl border border-border bg-surface p-6">
         <button
           type="button"
           onClick={onCancel}
@@ -53,7 +53,7 @@ export function DeleteConfirmationModal({
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-lg border border-[var(--oh-border)] px-4 py-2 text-sm text-white hover:bg-surface-raised"
+            className="rounded-lg border border-border px-4 py-2 text-sm text-white hover:bg-surface-raised"
           >
             {t(I18nKey.AUTOMATIONS$CANCEL)}
           </button>

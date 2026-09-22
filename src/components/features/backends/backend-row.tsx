@@ -57,7 +57,7 @@ export function BackendRow({
       ? "text-green-300"
       : health?.isConnected === false
         ? "text-red-300"
-        : "text-[var(--oh-muted)]";
+        : "text-muted";
   const dotStatus = isInvalidApiKey ? false : (health?.isConnected ?? null);
   const canSelect = health?.isConnected === true && !isInvalidApiKey;
   const lockedCloudHost = getLockedCloudHost();
@@ -87,14 +87,12 @@ export function BackendRow({
           {orgLabel ? (
             <span
               data-testid={`manage-backends-org-${backend.name}`}
-              className="truncate text-xs text-[var(--oh-text-secondary)]"
+              className="truncate text-xs text-text-secondary"
             >
               {orgLabel}
             </span>
           ) : null}
-          <span className="truncate text-xs text-[var(--oh-muted)]">
-            {backend.host}
-          </span>
+          <span className="truncate text-xs text-muted">{backend.host}</span>
           <span
             data-testid={`manage-backends-status-${backend.name}`}
             className={cn("truncate text-xs", statusClassName)}
@@ -111,7 +109,7 @@ export function BackendRow({
             </span>
           ) : null}
         </div>
-        <span className="px-2 py-1 rounded-full text-[11px] uppercase tracking-wide text-[var(--oh-text-tertiary)] bg-[var(--oh-surface)] border border-[var(--oh-border)]">
+        <span className="px-2 py-1 rounded-full text-[11px] uppercase tracking-wide text-text-tertiary bg-surface border border-border">
           {backend.kind === "cloud"
             ? t(I18nKey.BACKEND$KIND_CLOUD)
             : t(I18nKey.BACKEND$KIND_LOCAL)}
