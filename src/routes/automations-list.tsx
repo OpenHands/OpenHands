@@ -38,6 +38,7 @@ import { ImportAutomationModal } from "#/components/features/automations/import-
 import { RecommendedAutomationsLauncher } from "#/components/features/automations/recommended-automations-launcher";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { useTracking } from "#/hooks/use-tracking";
+import { useAutomationPermissions } from "#/hooks/use-automation-permissions";
 import type { Automation, AutomationSpec } from "#/types/automation";
 import {
   getAutomationExportFilename,
@@ -118,8 +119,9 @@ export default function AutomationsList() {
 
   const active = useActiveBackend();
   const { navigate } = useNavigation();
-  // Git Sync is only available on local backends.
-  const isLocalBackend = active.backend.kind === "local";
+  // Git Sync is org-level config, so its entry point requires
+  // manage_automations (admins/owners) on every backend kind.
+  const { canManage } = useAutomationPermissions();
 
   const {
     data: healthData,
@@ -372,7 +374,10 @@ export default function AutomationsList() {
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap justify-end gap-2">
-          {isLocalBackend && (
+          {/* Git sync is org-level config, so it follows manage_automations
+              (admins/owners) on every backend kind, not the local-only edit
+              gate. */}
+          {canManage && (
             <BrandButton
               type="button"
               variant="secondary"

@@ -9,6 +9,7 @@ import { HttpError } from "@openhands/typescript-client";
 import { I18nKey } from "#/i18n/declaration";
 
 import AutomationService from "#/api/automation-service/automation-service.api";
+import { getCloudOrganizationMe } from "#/api/cloud/organization-service.api";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
 import {
   __resetActiveStoreForTests,
@@ -47,15 +48,26 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
   displayErrorToast: vi.fn(),
 }));
 
-// Mock permission hooks so cloud-backend tests don't need a real /me endpoint.
-vi.mock("#/hooks/use-automation-permissions", () => ({
-  useAutomationPermissions: () => ({
-    canView: true,
-    canManage: true,
-    isLoading: false,
-  }),
-  useIsAutomationOwner: () => true,
+// Permissions come from the org's /me endpoint on cloud backends, so mock that
+// service rather than the hooks that read it; local backends never call it.
+vi.mock("#/api/cloud/organization-service.api", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("#/api/cloud/organization-service.api")
+  >()),
+  getCloudOrganizationMe: vi.fn(),
 }));
+
+const orgAdmin = {
+  orgId: "org-1",
+  userId: "user-1",
+  role: "admin",
+  permissions: ["view_automations", "manage_automations"],
+};
+const orgMember = {
+  ...orgAdmin,
+  role: "member",
+  permissions: ["view_automations"],
+};
 
 const localBackend: Backend = {
   id: "local-1",
@@ -94,7 +106,10 @@ function renderList(queryClient?: QueryClient) {
   const client =
     queryClient ??
     new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
     });
   return render(
     <QueryClientProvider client={client}>
@@ -121,6 +136,8 @@ beforeEach(() => {
     profiles: [],
     active_profile: null,
   });
+  vi.mocked(getCloudOrganizationMe).mockReset();
+  vi.mocked(getCloudOrganizationMe).mockResolvedValue(orgAdmin);
   setRegisteredBackends([localBackend, cloudBackend]);
   setActiveSelection({ backendId: localBackend.id });
 });
@@ -158,9 +175,10 @@ describe("AutomationsList — Edit from the row kebab", () => {
   });
 
   it("opens the Edit modal pre-filled from the row kebab when the active backend is cloud", async () => {
-    // Arrange — switch to the cloud backend before mounting so the page sees
-    // it as the active backend on first render.
-    setActiveSelection({ backendId: cloudBackend.id });
+    // Arrange — switch to the cloud backend (with its org, which is what the
+    // permissions come from) before mounting so the page sees it as the
+    // active backend on first render.
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
     const user = userEvent.setup();
     renderList();
     await waitFor(() => {
@@ -176,7 +194,7 @@ describe("AutomationsList — Edit from the row kebab", () => {
     );
 
     // Assert — the same Edit modal mounts on cloud, wired to this row; the
-    // permission model (mocked to canManage above) decides, not the backend.
+    // permission model decides, not the backend kind.
     const nameInput = (await screen.findByTestId(
       "edit-automation-name",
     )) as HTMLInputElement;
@@ -184,15 +202,23 @@ describe("AutomationsList — Edit from the row kebab", () => {
   });
 });
 
-describe("AutomationsList — Git Sync entry point", () => {
-  it("hides the Git Sync button when the active backend is cloud", async () => {
-    // Arrange — Git Sync is a local-only operator feature that used to share
-    // Edit's backend gate; it must not follow Edit onto cloud.
-    setActiveSelection({ backendId: cloudBackend.id });
+describe("AutomationsList — Git Sync entry point follows manage_automations", () => {
+  it("shows the Git Sync button to an org admin on a cloud backend", async () => {
+    // Git sync is org-level config, not a local-only feature: an admin of the
+    // active org reaches it on any backend kind.
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
     renderList();
     await screen.findByText(automation.name);
 
-    // Assert
+    expect(screen.getByTestId("automations-git-sync")).toBeInTheDocument();
+  });
+
+  it("hides the Git Sync button from a member", async () => {
+    vi.mocked(getCloudOrganizationMe).mockResolvedValue(orgMember);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
+    renderList();
+    await screen.findByText(automation.name);
+
     expect(
       screen.queryByTestId("automations-git-sync"),
     ).not.toBeInTheDocument();
@@ -338,9 +364,7 @@ describe("AutomationsList — Run now toasts", () => {
     });
     const user = userEvent.setup();
     renderList();
-    await screen.findByTestId(
-      `automation-list-row-${disabledAutomation.id}`,
-    );
+    await screen.findByTestId(`automation-list-row-${disabledAutomation.id}`);
     const button = screen.getByTestId(
       `automation-run-now-${disabledAutomation.id}`,
     );
@@ -410,9 +434,9 @@ describe("AutomationsList — add automation menu", () => {
     ).not.toBeInTheDocument();
 
     await user.click(addTrigger);
-    expect(screen.getByTestId("automations-add-automation-menu")).not.toHaveClass(
-      "mt-2",
-    );
+    expect(
+      screen.getByTestId("automations-add-automation-menu"),
+    ).not.toHaveClass("mt-2");
     expect(
       screen.getByTestId("automations-import-automation"),
     ).toBeInTheDocument();
@@ -461,7 +485,10 @@ describe("AutomationsList — list freshness on remount", () => {
         total: 2,
       });
     const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
     });
 
     // Act — first mount lands on the original list, then unmount and remount
