@@ -4,8 +4,9 @@ import type {
   ExtendedMCPTestResponse,
   MCPServerConfig,
 } from "#/types/mcp-server";
-import { getCredentialValidationForServer } from "#/utils/mcp-credential-validation";
+import type { McpServerHealthScope } from "#/utils/mcp-server-health-key";
 import { getMcpServerHealthKey } from "#/utils/mcp-server-health-key";
+import { getCredentialValidationForServer } from "#/utils/mcp-credential-validation";
 import { redactMcpSecrets } from "#/utils/redact-mcp-secrets";
 import {
   beginMcpHealthCheck,
@@ -73,9 +74,10 @@ export function interpretMcpTestResponse(
 
 /** Run the non-mutating connection probe and publish the result. */
 export async function probeMcpServerHealth(
+  scope: McpServerHealthScope,
   server: MCPServerConfig,
 ): Promise<void> {
-  const key = getMcpServerHealthKey(server);
+  const key = getMcpServerHealthKey(scope, server);
   const checkId = beginMcpHealthCheck(key);
   let health: McpServerHealth;
   try {
@@ -93,9 +95,10 @@ export async function probeMcpServerHealth(
  * persist a refreshed `oauth_state`.
  */
 export async function reauthorizeMcpServerHealth(
+  scope: McpServerHealthScope,
   server: MCPServerConfig,
 ): Promise<ExtendedMCPTestResponse | null> {
-  const key = getMcpServerHealthKey(server);
+  const key = getMcpServerHealthKey(scope, server);
   const checkId = beginMcpHealthCheck(key);
   try {
     const response = await McpService.authorizeOAuth(server);
@@ -123,12 +126,15 @@ export async function reauthorizeMcpServerHealth(
  * name), the seed is skipped and the new card simply starts "unchecked".
  */
 export function seedMcpServerHealth(
+  scope: McpServerHealthScope,
   server: MCPServerConfig,
   response: ExtendedMCPTestResponse,
   otherServers: MCPServerConfig[],
 ): void {
-  const key = getMcpServerHealthKey(server);
-  if (otherServers.some((other) => getMcpServerHealthKey(other) === key)) {
+  const key = getMcpServerHealthKey(scope, server);
+  if (
+    otherServers.some((other) => getMcpServerHealthKey(scope, other) === key)
+  ) {
     return;
   }
   setMcpServerHealth(key, interpretMcpTestResponse(server, response));
