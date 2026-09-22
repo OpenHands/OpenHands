@@ -61,9 +61,9 @@ const FIELD_METADATA: Record<string, SettingsFieldMetadata> = {
       step: 0.1,
     },
   },
-  "condenser.condenser_max_size": {
+  "condenser.max_size": {
     constraints: {
-      min: 0,
+      min: 20,
       step: 1,
     },
   },

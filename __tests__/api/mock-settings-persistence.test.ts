@@ -206,12 +206,7 @@ describe("mock settings schemas and state", () => {
         "critical",
         { required: true },
       ),
-      "condenser.condenser_max_size": contract(
-        "condenser",
-        "integer",
-        null,
-        "major",
-      ),
+      "condenser.max_size": contract("condenser", "integer", null, "major"),
       "agent_context.load_memory": contract(
         "agent_context",
         "boolean",
@@ -323,7 +318,7 @@ describe("mock settings schemas and state", () => {
     expect(modern.body).toMatchObject({
       agent_settings: {
         llm: { model: "openai/gpt-5.6-sol" },
-        condenser: { enable_default_condenser: true, condenser_max_size: null },
+        condenser: { enable_default_condenser: true, max_size: null },
         enable_sub_agents: false,
         tool_concurrency_limit: 1,
       },

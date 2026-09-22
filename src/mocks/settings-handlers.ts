@@ -346,7 +346,7 @@ const MOCK_AGENT_SETTINGS_SCHEMA: NonNullable<
         {
           description:
             "Maximum number of tokens the condenser keeps after summarization. Leave blank for unlimited.",
-          key: "condenser.condenser_max_size",
+          key: "condenser.max_size",
           label: "Condenser max size",
           section: "condenser",
           section_label: "Condenser",
@@ -476,7 +476,7 @@ export const MOCK_DEFAULT_USER_SETTINGS: Settings = {
     },
     condenser: {
       enable_default_condenser: true,
-      condenser_max_size: null,
+      max_size: null,
     },
     enable_sub_agents: false,
     tool_concurrency_limit: 1,

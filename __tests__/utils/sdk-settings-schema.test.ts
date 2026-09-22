@@ -1052,7 +1052,7 @@ describe("sdk settings schema helpers", () => {
         value_type: "number",
       });
       const condenserMaxSizeField = getMockField({
-        key: "condenser.condenser_max_size",
+        key: "condenser.max_size",
         label: "Condenser max size",
         value_type: "integer",
       });
@@ -1064,9 +1064,12 @@ describe("sdk settings schema helpers", () => {
       expect(coerceFieldValue(temperatureField, "0")).toBe(0);
       expect(coerceFieldValue(temperatureField, "2")).toBe(2);
       expect(() => coerceFieldValue(condenserMaxSizeField, "-1")).toThrow(
-        "Condenser max size must be at least 0",
+        "Condenser max size must be at least 20",
       );
-      expect(coerceFieldValue(condenserMaxSizeField, "0")).toBe(0);
+      expect(() => coerceFieldValue(condenserMaxSizeField, "19")).toThrow(
+        "Condenser max size must be at least 20",
+      );
+      expect(coerceFieldValue(condenserMaxSizeField, "20")).toBe(20);
       expect(() => coerceFieldValue(temperatureField, "2.1")).toThrow(
         "Temperature must be at most 2",
       );

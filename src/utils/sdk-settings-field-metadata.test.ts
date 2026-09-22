@@ -246,9 +246,9 @@ describe("getSettingsFieldConstraints", () => {
     });
   });
 
-  it("enforces a non-negative integer for condenser max size", () => {
-    expect(getSettingsFieldConstraints("condenser.condenser_max_size")).toEqual({
-      min: 0,
+  it("enforces the agent-server minimum for condenser max size", () => {
+    expect(getSettingsFieldConstraints("condenser.max_size")).toEqual({
+      min: 20,
       step: 1,
     });
   });
