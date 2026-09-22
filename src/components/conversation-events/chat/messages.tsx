@@ -8,6 +8,7 @@ import { ThoughtEventMessage } from "./event-message-components/thought-event-me
 import { useModelStore } from "#/stores/model-store";
 import { ModelMessages } from "#/components/features/chat/model-messages";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
+import { ConversationConfirmationButtons } from "#/components/shared/buttons/conversation-confirmation-buttons";
 
 interface MessagesProps {
   messages: OpenHandsEvent[]; // UI events (actions replaced by observations)
@@ -124,6 +125,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
             </React.Fragment>
           );
         })}
+        <ConversationConfirmationButtons />
       </>
     );
   },

@@ -76,13 +76,13 @@ export function ManageWorkspacesModal({
         <div
           data-testid="manage-workspaces-modal"
           className={cn(
-            "flex flex-col bg-[var(--oh-surface)] border border-[var(--oh-border-input)] rounded-xl",
+            "flex flex-col bg-surface border border-border-input rounded-xl",
             modalWidthClassName("lg"),
             MODAL_MAX_WIDTH_VIEWPORT,
             "max-h-[70vh]",
           )}
         >
-          <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--oh-border-input)]">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-border-input">
             <BaseModalTitle
               className={modalTitleSmClassName}
               title={t(I18nKey.HOME$MANAGE_WORKSPACES)}
@@ -94,7 +94,7 @@ export function ManageWorkspacesModal({
             data-testid="manage-workspaces-list"
           >
             {!hasContent && (
-              <p className="px-5 py-6 text-sm text-[var(--oh-text-secondary)] text-center">
+              <p className="px-5 py-6 text-sm text-text-secondary text-center">
                 {t(I18nKey.HOME$MANAGE_WORKSPACES_EMPTY)}
               </p>
             )}
@@ -104,7 +104,7 @@ export function ManageWorkspacesModal({
                 {staticWorkspaces.map((workspace) => (
                   <li
                     key={workspace.id}
-                    className="flex items-center gap-3 px-5 py-2 border-b border-[var(--oh-border-subtle)] last:border-b-0"
+                    className="flex items-center gap-3 px-5 py-2 border-b border-border-subtle last:border-b-0"
                     data-testid={`manage-workspaces-row-${workspace.name}`}
                   >
                     <FolderIcon width={16} height={16} className="shrink-0" />
@@ -112,7 +112,7 @@ export function ManageWorkspacesModal({
                       <span className="text-sm text-white truncate">
                         {workspace.name}
                       </span>
-                      <span className="text-xs text-[var(--oh-muted)] truncate">
+                      <span className="text-xs text-muted truncate">
                         {workspace.path}
                       </span>
                     </div>
@@ -129,7 +129,7 @@ export function ManageWorkspacesModal({
                       }
                       aria-label={t(I18nKey.HOME$REMOVE_WORKSPACE)}
                       data-testid={`manage-workspaces-remove-${workspace.name}`}
-                      className="flex items-center gap-1 px-2 py-1 rounded text-xs text-[var(--oh-text-tertiary)] hover:bg-[var(--oh-interactive-hover)] hover:text-white cursor-pointer"
+                      className="flex items-center gap-1 px-2 py-1 rounded text-xs text-text-tertiary hover:bg-interactive-hover hover:text-white cursor-pointer"
                     >
                       <CloseIcon width={12} height={12} />
                       <span>{t(I18nKey.HOME$REMOVE_WORKSPACE)}</span>
@@ -141,7 +141,7 @@ export function ManageWorkspacesModal({
 
             {workspaceParents.length > 0 && (
               <div data-testid="manage-workspaces-parents-section">
-                <div className="px-5 pt-3 pb-1 text-[11px] uppercase tracking-wide text-[var(--oh-muted)] font-semibold">
+                <div className="px-5 pt-3 pb-1 text-[11px] uppercase tracking-wide text-muted font-semibold">
                   {t(I18nKey.HOME$WORKSPACE_PARENTS)}
                 </div>
                 <ul>
@@ -151,7 +151,7 @@ export function ManageWorkspacesModal({
                     return (
                       <li
                         key={parent.id}
-                        className="border-b border-[var(--oh-border-subtle)] last:border-b-0"
+                        className="border-b border-border-subtle last:border-b-0"
                         data-testid={`manage-workspaces-parent-row-${parent.name}`}
                       >
                         <div className="flex items-center gap-3 px-5 py-2">
@@ -164,7 +164,7 @@ export function ManageWorkspacesModal({
                             <span className="text-sm text-white truncate">
                               {parent.name}
                             </span>
-                            <span className="text-xs text-[var(--oh-muted)] truncate">
+                            <span className="text-xs text-muted truncate">
                               {parent.path}
                             </span>
                           </div>
@@ -188,7 +188,7 @@ export function ManageWorkspacesModal({
                                 I18nKey.HOME$REMOVE_WORKSPACE_PARENT,
                               )}
                               data-testid={`manage-workspaces-remove-parent-${parent.name}`}
-                              className="flex items-center gap-1 px-2 py-1 rounded text-xs text-[var(--oh-text-tertiary)] hover:bg-[var(--oh-interactive-hover)] hover:text-white cursor-pointer"
+                              className="flex items-center gap-1 px-2 py-1 rounded text-xs text-text-tertiary hover:bg-interactive-hover hover:text-white cursor-pointer"
                             >
                               <CloseIcon width={12} height={12} />
                               <span>
@@ -202,7 +202,7 @@ export function ManageWorkspacesModal({
                             {children.map((child) => (
                               <li
                                 key={child.id}
-                                className="flex items-center gap-3 px-5 pl-10 py-1 text-xs text-[var(--oh-text-secondary)]"
+                                className="flex items-center gap-3 px-5 pl-10 py-1 text-xs text-text-secondary"
                                 data-testid={`manage-workspaces-child-${child.name}`}
                               >
                                 <FolderIcon
@@ -223,7 +223,7 @@ export function ManageWorkspacesModal({
             )}
           </div>
 
-          <div className="flex justify-end gap-2 px-5 py-3 border-t border-[var(--oh-border-input)]">
+          <div className="flex justify-end gap-2 px-5 py-3 border-t border-border-input">
             <BrandButton
               type="button"
               variant="primary"

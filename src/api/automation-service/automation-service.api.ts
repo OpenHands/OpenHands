@@ -589,11 +589,15 @@ class AutomationService {
    */
   static async createAutomationDraft(
     body: SetupRequestBody,
-    /** The entry the draft came from, which decides the create endpoint. */
+    /** The entry and selected action decide the create endpoint. */
     entry?: SetupEntry,
+    selectedAction?: string | null,
   ): Promise<Record<string, unknown>> {
     const active = getActiveBackend().backend;
-    const path = `${AUTOMATION_BASE_PATH}${automationCreateEndpoint(entry)}`;
+    const path = `${AUTOMATION_BASE_PATH}${automationCreateEndpoint(
+      entry,
+      selectedAction,
+    )}`;
 
     if (active.kind === "cloud") {
       return callCloudProxy<Record<string, unknown>>({

@@ -38,7 +38,7 @@ export function SidebarOnboardingChecklistItemPreview({
 
   return (
     <div
-      className="flex w-[280px] flex-col gap-2.5 p-3"
+      className="flex w-70 flex-col gap-2.5 p-3"
       data-testid={`sidebar-onboarding-checklist-preview-${id}`}
     >
       <div className="flex items-start gap-2">
@@ -49,16 +49,14 @@ export function SidebarOnboardingChecklistItemPreview({
           {t(titleKey)}
         </span>
       </div>
-      <p className="text-xs leading-relaxed text-[var(--oh-muted)]">
-        {t(descriptionKey)}
-      </p>
+      <p className="text-xs leading-relaxed text-muted">{t(descriptionKey)}</p>
       <div className="flex items-center justify-between gap-3">
         <a
           href={docsUrl}
           target="_blank"
           rel="noreferrer"
           data-testid={`sidebar-onboarding-checklist-preview-docs-${id}`}
-          className="inline-flex min-w-0 items-center gap-2 text-xs text-[var(--oh-muted)] transition-colors hover:text-white hover:underline"
+          className="inline-flex min-w-0 items-center gap-2 text-xs text-muted transition-colors hover:text-white hover:underline"
           onClick={onDocsClick}
         >
           <BookOpen className="size-3.5 shrink-0" aria-hidden />

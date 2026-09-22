@@ -40,12 +40,10 @@ export function ConversationPanelPinnedSection({
       data-testid="conversation-panel-pinned-section"
       className={cn(
         "pt-1",
-        showDivider
-          ? "mb-2 border-b border-[var(--oh-border-subtle)] pb-2"
-          : "pb-2",
+        showDivider ? "mb-2 border-b border-border-subtle pb-2" : "pb-2",
       )}
     >
-      <h3 className="flex items-center gap-1.5 py-1.5 pl-2 text-sm font-normal text-[var(--oh-muted)]">
+      <h3 className="flex items-center gap-1.5 py-1.5 pl-2 text-sm font-normal text-muted">
         <Pin className="h-3.5 w-3.5 shrink-0" aria-hidden />
         {t(I18nKey.CONVERSATION_PANEL$PINNED)}
       </h3>
@@ -58,7 +56,7 @@ export function ConversationPanelPinnedSection({
             type="button"
             data-testid="conversation-panel-pinned-view-more"
             onClick={onTogglePreviewExpanded}
-            className="cursor-pointer text-xs text-[var(--oh-text-dim)] hover:text-white"
+            className="cursor-pointer text-xs text-text-dim hover:text-white"
           >
             {isShowingAll
               ? t(I18nKey.CONVERSATION_PANEL$LESS)

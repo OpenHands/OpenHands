@@ -5,7 +5,7 @@ const CUSTOMIZE_HUB = "/customize";
 const EXTENSIONS_DETAIL_PATHS = ["/skills", "/mcp", "/plugins"] as const;
 // Exact match only: /extensions/:name/* routes are extension pages, which are
 // rail-level destinations rather than Customize details.
-const CANVAS_EXTENSIONS_MANAGEMENT_PATH = "/extensions";
+const APPS_MANAGEMENT_PATH = "/apps";
 
 export type MobileTopBarMode = "menu" | "back";
 
@@ -36,7 +36,7 @@ export function getMobileTopBarState(pathname: string): MobileTopBarState {
   }
 
   if (
-    pathname === CANVAS_EXTENSIONS_MANAGEMENT_PATH ||
+    pathname === APPS_MANAGEMENT_PATH ||
     EXTENSIONS_DETAIL_PATHS.some(
       (path) => pathname === path || pathname.startsWith(`${path}/`),
     )
@@ -54,7 +54,7 @@ export function getMobileTopBarState(pathname: string): MobileTopBarState {
 export function isExtensionsSectionPath(pathname: string): boolean {
   return (
     pathname === CUSTOMIZE_HUB ||
-    pathname === CANVAS_EXTENSIONS_MANAGEMENT_PATH ||
+    pathname === APPS_MANAGEMENT_PATH ||
     EXTENSIONS_DETAIL_PATHS.some(
       (path) => pathname === path || pathname.startsWith(`${path}/`),
     )

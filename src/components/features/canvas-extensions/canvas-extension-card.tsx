@@ -68,7 +68,7 @@ export function CanvasExtensionCard({
         </span>
         {pages.length ? (
           <span className={extensionModuleCardPillClassName}>
-            {t(I18nKey.SETTINGS$CANVAS_EXTENSIONS_PAGES)}: {pages.length}
+            {t(I18nKey.SETTINGS$APPS_PAGES)}: {pages.length}
           </span>
         ) : null}
       </div>
@@ -108,7 +108,7 @@ export function CanvasExtensionCard({
         </section>
       ) : null}
 
-      <footer className="flex justify-end gap-2 border-t border-[var(--oh-border)] pt-3">
+      <footer className="flex justify-end gap-2 border-t border-border pt-3">
         <BrandButton
           type="button"
           variant="ghost-danger"

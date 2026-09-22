@@ -7,6 +7,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { EllipsisButton } from "#/components/features/conversation-panel/ellipsis-button";
 import { BrandBadge } from "#/components/shared/badge";
 import { cn } from "#/utils/utils";
+import { useFreeModels } from "#/hooks/query/use-free-models";
 import { formatModelNameForDisplay } from "#/utils/format-model-name";
 import {
   settingsListIconActionButtonClassName,
@@ -40,7 +41,8 @@ export function ProfileRow({
   const { t } = useTranslation("openhands");
   const [menuOpen, setMenuOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const displayModel = formatModelNameForDisplay(profile.model);
+  const freeModels = useFreeModels();
+  const displayModel = formatModelNameForDisplay(profile.model, freeModels);
 
   return (
     <div
@@ -56,7 +58,7 @@ export function ProfileRow({
         </span>
         {displayModel ? (
           <span
-            className="min-w-0 max-w-full truncate text-sm text-[var(--oh-muted)]"
+            className="min-w-0 max-w-full truncate text-sm text-muted"
             title={profile.model ?? undefined}
           >
             {displayModel}
@@ -75,7 +77,7 @@ export function ProfileRow({
         )}
         {profile.provider_connection_broken && (
           <span
-            className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-[var(--oh-warning,#f59e0b)] px-2 py-0.5 text-xs font-medium text-black"
+            className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-warning px-2 py-0.5 text-xs font-medium text-black"
             title={t(I18nKey.SETTINGS$PROFILE_BROKEN_CONNECTION_TOOLTIP)}
             data-testid="profile-broken-connection-badge"
           >

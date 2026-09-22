@@ -541,7 +541,7 @@ export function MCPServerForm({
                 className={cn(
                   formControlMultilineFieldClassName,
                   "resize-none placeholder:italic",
-                  "disabled:bg-[var(--oh-surface-raised)] disabled:border-[var(--oh-border-subtle)]",
+                  "disabled:bg-surface-raised disabled:border-border-subtle",
                 )}
               />
             </label>
@@ -665,7 +665,7 @@ export function MCPServerForm({
               className={cn(
                 formControlMultilineFieldClassName,
                 "resize-none placeholder:italic",
-                "disabled:bg-[var(--oh-surface-raised)] disabled:border-[var(--oh-border-subtle)]",
+                "disabled:bg-surface-raised disabled:border-border-subtle",
               )}
             />
             <p className="text-xs text-tertiary-alt">
@@ -690,7 +690,7 @@ export function MCPServerForm({
               className={cn(
                 formControlMultilineFieldClassName,
                 "resize-none placeholder:italic",
-                "disabled:bg-[var(--oh-surface-raised)] disabled:border-[var(--oh-border-subtle)]",
+                "disabled:bg-surface-raised disabled:border-border-subtle",
               )}
             />
           </label>
@@ -712,7 +712,7 @@ export function MCPServerForm({
 
       <div
         className={cn(
-          "flex w-full items-center gap-2",
+          "flex w-full flex-wrap items-center gap-2",
           onDelete ? "justify-between" : "justify-end",
         )}
       >
@@ -730,7 +730,7 @@ export function MCPServerForm({
             {t(I18nKey.BUTTON$DELETE)}
           </BrandButton>
         ) : null}
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 [&_button]:whitespace-nowrap">
           <BrandButton
             testId="cancel-button"
             type="button"

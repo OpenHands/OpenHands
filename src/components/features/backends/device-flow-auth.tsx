@@ -232,7 +232,7 @@ export function DeviceFlowAuth({
           <ModalBody
             testID={`${testIdRoot}-auth-modal`}
             width="sm"
-            className="items-stretch border border-[var(--oh-border)]"
+            className="items-stretch border border-border"
           >
             {statusContent}
           </ModalBody>
@@ -272,7 +272,7 @@ function DeviceFlowStatusContent({
         aria-live="polite"
       >
         <LoadingSpinner />
-        <span className="text-sm text-[var(--oh-text-tertiary)]">
+        <span className="text-sm text-text-tertiary">
           {t(I18nKey.BACKEND$AUTH_STARTING)}
         </span>
       </div>
@@ -299,7 +299,7 @@ function DeviceFlowStatusContent({
           </span>
         </div>
         <div className="flex flex-col gap-1">
-          <p className="text-center text-sm leading-5 text-[var(--oh-text-tertiary)]">
+          <p className="text-center text-sm leading-5 text-text-tertiary">
             {validVerificationUrl
               ? `${t(I18nKey.BACKEND$AUTH_BROWSER_OPENED)} ${t(I18nKey.BACKEND$AUTH_OPEN_MANUALLY)}`
               : t(I18nKey.BACKEND$AUTH_BROWSER_OPENED)}

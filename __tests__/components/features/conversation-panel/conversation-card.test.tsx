@@ -23,6 +23,7 @@ import {
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import { useFreeModelsStore } from "#/stores/free-models-store";
 
 // We'll use the actual i18next implementation but override the translation function
 
@@ -152,9 +153,9 @@ describe("ConversationCard", () => {
     const branch = screen.getByTestId("conversation-card-selected-branch");
     const tag = screen.getByTestId("conversation-card-tag-chip");
 
-    expect(repo).toHaveClass("bg-[var(--oh-surface-raised)]");
-    expect(branch).toHaveClass("bg-[var(--oh-surface-raised)]");
-    expect(tag).toHaveClass("bg-[var(--oh-surface-raised)]");
+    expect(repo).toHaveClass("bg-surface-raised");
+    expect(branch).toHaveClass("bg-surface-raised");
+    expect(tag).toHaveClass("bg-surface-raised");
 
     // Identical pill look. The one intentional difference is flex-shrink:
     // repo and branch share a single overflow-hidden row, so they must shrink
@@ -1122,7 +1123,11 @@ describe("ConversationCard", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("labels a free OpenHands route on native conversation chips", () => {
+    it("labels a DB-flagged free OpenHands route on native conversation chips", () => {
+      useFreeModelsStore.getState().setFlags({
+        freeModels: new Set(["openhands/glm-5.2"]),
+        defaultModel: "openhands/glm-5.2",
+      });
       renderWithProviders(
         <ConversationCard
           title="Conversation 1"
@@ -1135,8 +1140,13 @@ describe("ConversationCard", () => {
       );
 
       const chip = screen.getByTestId("conversation-card-agent-chip");
-      expect(chip).toHaveTextContent("glm-5.2");
+      expect(chip).toHaveTextContent("glm-5.2 (free)");
       expect(chip).toHaveAttribute("title", "openhands/glm-5.2");
+
+      useFreeModelsStore.getState().setFlags({
+        freeModels: new Set(),
+        defaultModel: null,
+      });
     });
 
     it("hides the chip for OpenHands conversations with no model", () => {
