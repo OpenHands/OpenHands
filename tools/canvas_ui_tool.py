@@ -15,8 +15,8 @@ legacy ``canvas_ui`` and current ``canvas_ui_control`` ActionEvents and dispatch
 the command.
 
 The launchers also import this module at agent-server startup
-(``--import-modules canvas_ui_tool``) so the builtin ``FinishTool`` registration
-at the bottom runs before any conversation is created.
+(``--import-modules canvas_ui_tool``) so the ``FinishTool`` factory
+registration at the bottom runs before any conversation is created.
 """
 
 from collections.abc import Sequence
@@ -149,10 +149,50 @@ register_tool("canvas_ui", CanvasUITool)
 # get_default_agent(finish_tool_response_schema=TaskOutcome). That registers the
 # SDK's builtin FinishTool only inside the entrypoint's own process and
 # advertises it to the agent-server as `openhands.sdk.tool.builtins.finish` — a
-# module that does not self-register — so the remote conversation every Agent
-# Canvas automation run dispatches fails with "ToolDefinition 'FinishTool' is
-# not registered". Registering the plain builtin here is enough: resolve_tool()
-# strips `response_schema` before FinishTool.create() and re-applies it. Drop
-# this once the SDK registers its builtins for remote conversations.
+# module that does not self-register. Current SDK resolve_tool() can fall back
+# to BUILT_IN_TOOL_CLASSES and strips `response_schema` before create(), but:
+#
+# 1. Older / PYTHONPATH-patched agent-server processes still look the tool up
+#    in the process registry and pass leftover params into create().
+# 2. Builtin FinishTool.create() raises ``ValueError: FinishTool doesn't accept
+#    parameters`` when any kwargs remain.
+#
+# That 500s POST /api/conversations/{id}/events after the other executors
+# initialize (OpenHands/OpenHands#17436). Register a factory that pops
+# ``response_schema`` and forwards any other leftover kwargs to
+# ``FinishTool.create()`` so malformed non-preset specs still raise. Drop
+# this once remote conversations always resolve builtins without create()
+# kwargs.
+
+
+class _RemoteConversationFinishTool(FinishTool):
+    """FinishTool factory that accepts leftover create() params from presets."""
+
+    @classmethod
+    def create(
+        cls,
+        conv_state=None,  # noqa: ARG003
+        **params,
+    ) -> Sequence[FinishTool]:
+        params = dict(params)
+        response_schema = params.pop("response_schema", None)
+        # Remaining kwargs are forwarded so malformed non-preset tool specs
+        # still raise from FinishTool.create() instead of being dropped.
+        tools = FinishTool.create(conv_state=conv_state, **params)
+        if response_schema is not None:
+            tool = tools[0]
+            # Current SDK (frozen ToolDefinition) returns a copy. Older or
+            # PYTHONPATH-patched SDKs may mutate in place and return None —
+            # keep the original instance then, never wrap None.
+            updated = tool.set_response_schema(response_schema)
+            tools = [updated if updated is not None else tool]
+        return tools
+
+
+# Safe re-register: overwrite any prior FinishTool factory. The previous
+# skip-if-present guard (FinishTool.__name__ not in list_registered_tools())
+# would leave a pre-registered builtin in place. Current SDK warns on
+# duplicate names rather than raising; that overwrite is intentional.
+register_tool(FinishTool.__name__, _RemoteConversationFinishTool)
 if FinishTool.__name__ not in list_registered_tools():
-    register_tool(FinishTool.__name__, FinishTool)
+    raise RuntimeError("FinishTool factory failed to register")

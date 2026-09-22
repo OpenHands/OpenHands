@@ -18,6 +18,31 @@ This repository contains the Agent Canvas frontend and local-stack orchestration
 
 When a feature crosses repositories, implement the backend contract in the SDK first, expose it through `typescript-client`, and consume it in Canvas. Coordinate automation lifecycle changes in `automation`. See the repository [contributor notes](../AGENTS.md) and follow the [custom code-review guide](../.agents/skills/custom-codereview-guide.md) for every pull request.
 
+## Prompt-preset automations and version pins
+
+Prompt-preset automations (`POST /api/automation/v1/preset/prompt`) take their
+template from the pinned `openhands-automation` package
+(`versions.automation` in `config/defaults.json`). Since automation 1.9.0 that
+template wires `finish_tool_response_schema=TaskOutcome`, so the agent-server
+process must resolve `FinishTool` on `POST /api/conversations/{id}/events`.
+Use the same Canvas release's `versions.agentServer` pin; do not mix a newer
+preset template with an agent-server started outside the launcher.
+
+Canvas launchers import `tools/canvas_ui_tool.py` at agent-server startup
+(`--import-modules canvas_ui_tool` and `OH_EXTRA_PYTHON_PATH`) so that
+resolution works. The imported module registers a `FinishTool` factory that
+pops leftover `response_schema` create() params, applies the schema even when
+`set_response_schema` returns `None`, and forwards any other leftover kwargs
+to `FinishTool.create()` so malformed non-preset specs still raise. Starting
+agent-server yourself must replicate both settings.
+
+`presets/*/setup.sh` is **not** in this repository. It lives in
+[`OpenHands/automation`](https://github.com/OpenHands/automation) and is copied
+into each automation tarball at creation time. That script should pin
+`openhands-agent-server==${SDK_VERSION}` next to sdk/tools/workspace; leaving
+it unpinned lets uv resolve a newer agent-server into the run venv
+([OpenHands/OpenHands#17436](https://github.com/OpenHands/OpenHands/issues/17436)).
+
 
 For a static frontend build (better for slow networks, remote access, tunnels):
 
