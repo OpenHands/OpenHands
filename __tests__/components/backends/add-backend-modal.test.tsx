@@ -9,7 +9,7 @@ import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import {
   NavigationProvider,
   type NavigationContextValue,
-} from "#/context/navigation-context";
+} from "#/contexts/navigation-context";
 import { AddBackendModal } from "#/components/features/backends/add-backend-modal";
 import * as telemetry from "#/services/telemetry";
 
