@@ -1,16 +1,12 @@
 {
   "_comment": "Single source of truth for version pins, ports, paths, and defaults shared across the npm and Docker install paths. Read by scripts/dev-safe.mjs, scripts/dev-with-automation.mjs, docker/entrypoint.sh (via generated defaults.env), and .github/workflows/docker.yml.",
   "versions": {
-    "agentServer": "1.49.3",
+    "agentServer": "1.49.4",
     "agentCanvas": "1.21.0",
-    "automation": "1.13.3"
+    "automation": "1.14.0"
   },
   "compatibility": {
     "minimumAgentServer": "1.28.0"
-  },
-  "constraints": {
-    "_comment": "Temporary upper bound on the agent-client-protocol (acp) transitive dependency. openhands-sdk 1.35.0 requires agent-client-protocol>=0.10.1 with no upper bound, but acp 0.11.0 reordered the ACP prompt() arguments and breaks the SDK's ACP client (a PromptRequest validation error surfaces as 'ACP error: 2 validation errors for PromptRequest'). Pin acp <0.11 until a fixed openhands-sdk ships. Consumed by scripts/dev-safe.mjs (agent-server uvx install) and .github/workflows/mock-llm-e2e.yml (mock ACP server venv).",
-    "agentClientProtocol": "agent-client-protocol<0.11"
   },
   "images": {
     "agentServer": "ghcr.io/openhands/agent-server",
