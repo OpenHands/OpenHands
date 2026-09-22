@@ -24,31 +24,28 @@
  * stack's session API key.
  */
 
-import { test, expect } from "@playwright/test";
+import { expect } from "@playwright/test";
+import { test } from "../utils/atomic-journey";
 import {
   BACKEND_URL,
   SESSION_API_KEY,
-  seedLocalStorage,
   routeSessionApiKey,
   dismissAnalyticsModal,
   waitForTestId,
   waitForPath,
   getConversationIdFromURL,
   waitForNonUserMessageText,
-  deleteConversation,
   registerTrajectory,
   activateTrajectory,
-  resetMockLLM,
   ensureMockLLMProfile,
   getMockLLMRequests,
 } from "../utils/mock-llm-helpers";
 
-// Token the test asserts on in the agent's text reply (step 2).
+// Token the test asserts on in the agent's text reply (conversation step).
 // The terminal printf breadcrumbs below are NOT asserted — they exist
 // purely for log readability when debugging failures.
 const AUTOMATION_REPLY_TOKEN = "MOCK_AUTOMATION_REPLY_OK";
 
-const AUTOMATION_NAME = "Hello World Cron";
 const CRON_SCHEDULE = "0 9 * * *";
 
 // The ingress URL reachable from the agent's terminal. The agent-server
@@ -212,13 +209,13 @@ async function waitForRunStatus(
 }
 
 /**
- * Delete an automation (best-effort cleanup).
+ * Delete an automation and surface cleanup failures.
  */
 async function deleteAutomation(
   request: import("@playwright/test").APIRequestContext,
   automationId: string,
 ) {
-  await request.delete(
+  const response = await request.delete(
     `${AUTOMATION_API_BASE}/${encodeURIComponent(automationId)}`,
     {
       headers: {
@@ -226,85 +223,42 @@ async function deleteAutomation(
       },
     },
   );
+  expect(
+    response.ok() || response.status() === 404,
+    `Delete automation: ${response.status()}`,
+  ).toBe(true);
 }
 
-/** Remove stale automations with the test's fixed name before a retry. */
-async function deleteAutomationsByName(
-  request: import("@playwright/test").APIRequestContext,
-  name: string,
-) {
-  const data = await listAutomations(request);
-  const automations = data.automations ?? data.items ?? [];
-  for (const automation of automations.filter(
-    (candidate: { name: string }) => candidate.name === name,
-  )) {
-    await deleteAutomation(request, automation.id);
-  }
-}
-
-test.describe.configure({ mode: "serial" });
-
-test.describe("mock-LLM automation lifecycle", () => {
-  const conversationIds = new Set<string>();
-  const automationIds = new Set<string>();
-  /** IDs carried between the serial lifecycle steps. */
-  let createdAutomationId: string | null = null;
+test("create an automation, dispatch a run and open its conversation", async ({
+  page,
+  request,
+  journey,
+}) => {
+  test.setTimeout(300_000);
+  const AUTOMATION_NAME = `Atomic automation ${journey.profileName}`;
+  let createdAutomationId = "";
   let runConversationId: string | null = null;
-
-  test.beforeEach(async ({ page }) => {
-    await seedLocalStorage(page);
-  });
-
-  test.afterEach(async ({ page, request }) => {
-    // Collect conversation IDs from the URL for cleanup
-    const match = page.url().match(/\/conversations\/([^/?#]+)/);
-    if (match?.[1]) conversationIds.add(decodeURIComponent(match[1]));
-
-    // Clean up conversations but NOT automations — step 3 needs the
-    // automation created in step 2 to verify it appears on the page.
-    for (const id of Array.from(conversationIds)) {
-      try {
-        await deleteConversation(request, id);
-        conversationIds.delete(id);
-      } catch {
-        // best-effort cleanup
+  // Discover by this attempt's unique name even if creation succeeded but
+  // the UI/event assertion failed before returning the automation ID.
+  journey.cleanup(
+    "automation and spawned conversations",
+    async () => {
+      const data = await listAutomations(request);
+      for (const automation of data.automations ?? data.items ?? []) {
+        if (automation.name !== AUTOMATION_NAME) continue;
+        const data = await listAutomationRuns(request, automation.id);
+        for (const run of data.runs ?? data.items ?? []) {
+          if (run.conversation_id)
+            journey.conversationIds.add(run.conversation_id);
+        }
+        await deleteAutomation(request, automation.id);
       }
-    }
-  });
-
-  // Safety net: delete any leftover automations and reset the mock LLM.
-  // Resetting here (instead of afterEach) preserves named trajectories
-  // registered in step 1 for activation in step 2.
-  test.afterAll(async ({ request }) => {
-    for (const id of Array.from(automationIds)) {
-      try {
-        await deleteAutomation(request, id);
-      } catch {
-        // best-effort
-      }
-    }
-    automationIds.clear();
-
-    // Reset mock LLM so subsequent test suites start fresh.
-    try {
-      await resetMockLLM(request);
-    } catch {
-      // best-effort — the mock server may have already shut down
-    }
-  });
-
-  // ── Step 1: Ensure LLM profile + register the automation trajectory ─
-
-  test("step 1: setup LLM profile and register automation trajectory", async ({
-    page,
-    request,
-  }) => {
-    // Retries reuse the same Docker backend, so remove any automation left by
-    // an earlier attempt before creating the fixed-name test resource.
-    await deleteAutomationsByName(request, AUTOMATION_NAME);
-
+    },
+    "before-conversations",
+  );
+  await test.step("setup LLM profile and register automation trajectory", async () => {
     // Ensure the mock LLM profile is configured via the Settings UI
-    await ensureMockLLMProfile(page);
+    await ensureMockLLMProfile(page, { profileName: journey.profileName });
 
     // Build the terminal commands the mock LLM will return.
     // The curl commands hit the REAL automation backend through the ingress.
@@ -335,51 +289,28 @@ test.describe("mock-LLM automation lifecycle", () => {
         prompt: "echo hello world",
         trigger: { type: "cron", schedule: CRON_SCHEDULE, timezone: "UTC" },
       })}'`,
-      `-o /tmp/auto_result.json`,
+      `-o .atomic-automation-result.json`,
       `-w '\\nHTTP_CODE:%{http_code}\\n'`,
-      `&& cat /tmp/auto_result.json`,
+      `&& cat .atomic-automation-result.json`,
       `&& printf 'AUTOMATION_CREATED\\n'`,
     ].join(" ");
 
     const dispatchCmd = [
-      `AID=$(python3 -c "import json; print(json.load(open('/tmp/auto_result.json'))['id'])")`,
+      `AID=$(python3 -c "import json; print(json.load(open('.atomic-automation-result.json'))['id'])")`,
       `&& curl --fail-with-body -sS -X POST "${AUTOMATION_API_BASE}/$AID/dispatch"`,
       authHeader,
       `-H 'Content-Type: application/json'`,
       `-w '\\nHTTP_CODE:%{http_code}\\n'`,
+      `&& rm .atomic-automation-result.json`,
       `&& printf 'AUTOMATION_DISPATCHED\\n'`,
     ].join(" ");
 
-    // ⚠️  Padding response (index 0):
-    // Public skills are bundled from @openhands/extensions at build time.
-    // The agent-server's skill-activation pipeline makes one internal LLM
-    // call to decide which skills to inject before the agent loop starts.
-    // Our user message mentions "automation", which matches the
-    // openhands-automation skill, triggering this internal call.
-    // The conversation test does NOT need padding because its prompt
-    // ("run this bash command") does not match any skill trigger.
-    //
-    // If the padding ever becomes misaligned (e.g. the agent-server stops
-    // making this call or starts making two), step 2's
-    // waitForNonUserMessageText(AUTOMATION_REPLY_TOKEN) will time out
-    // quickly, making the failure obvious. See the "Padding response for
-    // internal LLM call" section in the E2E testing skill reference.
-    //
-    // After the main conversation finishes (responses 0-3),the dispatched
-    // automation run spawns a NEW conversation on the same agent-server.
-
-    // That conversation also calls the mock LLM. Recent openhands-automation
-    // versions (>= 1.10.0, PR openhands/automation#405) require
-    // preset automation conversations to call the `finish` tool before the
-    // run reaches COMPLETED — so we script one blank internal call followed
-    // by the required finish-tool turn (and one trailing blank safety) below.
-    // If this ever drifts again, step 2's run-status timeout will surface it,
-    // and the mock server log shows "Mock LLM exhausted after N calls"
-    // pinpointing the exact count.
+    // Title generation has its own mock response. The main conversation
+    // creates and dispatches the automation; the spawned conversation then
+    // calls finish, as required by openhands-automation >= 1.10.0.
 
     await registerTrajectory(request, "automation-lifecycle", [
-      // ── Main conversation (responses 0-3) ──
-      { text: "" }, // 0: consumed by skill-activation LLM call (see above)
+      // ── Main conversation ──
       {
         // 1: create the automation via curl
         tool_call: {
@@ -396,12 +327,9 @@ test.describe("mock-LLM automation lifecycle", () => {
       },
       { text: AUTOMATION_REPLY_TOKEN }, // 3: finish main conversation
 
-      // ── Automation run's conversation (responses 4+) ──
+      // ── Automation run's conversation ──
       // The run starts a fresh conversation with the automation prompt.
-      // Script one internal padding call +the required `finish` tool turn,
-      // followed by a final text reply (+ one trailing safety blank** so the
-      // run reaches COMPLETED.
-      { text: "" }, // 4: possible internal/condenser call
+      // Script the required finish tool turn, followed by a final reply.
       {
         // 5: openhands-automation >= 1.10.0 (openhands/automation#405)
         // requires preset automation conversations to finish via the
@@ -423,31 +351,18 @@ test.describe("mock-LLM automation lifecycle", () => {
           },
         },
       },
-      // 6: after the finish tool executes, the agent still needs one more
+      // After the finish tool executes, the agent still needs one more
       // non-empty LLM turn to end the conversation — a blank here would
       // make the harness nag ("no function call") and loop on the exhausted
       // trajectory, so reply with the final text.
       { text: "Done. Hello world echoed successfully." },
-      { text: "" }, // 7: safety buffer for any follow-up internal call after finish
     ]);
 
     // Activate it so the mock LLM uses this trajectory for the next conversation
     await activateTrajectory(request, "automation-lifecycle");
   });
 
-  // ── Step 2: Create automation via conversation ─────────────────────
-
-  test("step 2: create automation and dispatch run via the UI", async ({
-    page,
-    request,
-  }) => {
-    // Budget: ~150 s for the two dominant waits (waitForNonUserMessageText 60 s
-    // + waitForRunStatus 90 s), plus ~30 s margin for navigation/page loads.
-    // If CI proves flaky, bump to 240_000.
-    test.setTimeout(180_000);
-    // Re-activate in case the mock-LLM server restarted between steps (belt-and-suspenders)
-    await activateTrajectory(request, "automation-lifecycle");
-
+  await test.step("create automation and dispatch run via the UI", async () => {
     await routeSessionApiKey(page);
 
     // Navigate to the home page and type a prompt to create the automation.
@@ -489,7 +404,7 @@ test.describe("mock-LLM automation lifecycle", () => {
     });
 
     const conversationId = getConversationIdFromURL(page);
-    conversationIds.add(conversationId);
+    journey.conversationIds.add(conversationId);
 
     // ── Verify: the LLM reply token appears in the chat UI ──
 
@@ -505,7 +420,6 @@ test.describe("mock-LLM automation lifecycle", () => {
         conversationId,
       );
       const created = await getAutomation(request, createdAutomationId);
-      automationIds.add(created.id);
       expect(created.name).toBe(AUTOMATION_NAME);
       expect(created.trigger?.schedule).toBe(CRON_SCHEDULE);
       expect(created.enabled).toBe(true);
@@ -516,10 +430,9 @@ test.describe("mock-LLM automation lifecycle", () => {
     await test.step("verify run completed with conversation link", async () => {
       expect(createdAutomationId).toBeTruthy();
       const automation = await getAutomation(request, createdAutomationId!);
-      automationIds.add(automation.id);
 
       // Wait for the run to reach COMPLETED. The trajectory scripts the required
-      // `finish` tool turn (plus padding) for the automation run's spawned
+      // `finish` tool turn for the automation run's spawned
       // conversation so it can finish and fire the completion callback.
       const run = await waitForRunStatus(
         request,
@@ -528,7 +441,7 @@ test.describe("mock-LLM automation lifecycle", () => {
         90_000,
       );
       expect(run.conversation_id).toBeTruthy();
-      // Store the conversation ID for the click-through verification in step 3
+      // Store the conversation ID for the click-through verification in the final UI step
       runConversationId = run.conversation_id;
     });
 
@@ -591,13 +504,7 @@ test.describe("mock-LLM automation lifecycle", () => {
     });
   });
 
-  // ── Step 3: Verify automation on list page, click through to detail, verify run link ─
-
-  test("step 3: verify automation and run on the automations page", async ({
-    page,
-    request,
-  }) => {
-    test.setTimeout(60_000);
+  await test.step("verify automation and run on the automations page", async () => {
     await routeSessionApiKey(page);
     await page.goto("/automations", { waitUntil: "domcontentloaded" });
     await dismissAnalyticsModal(page);
@@ -643,11 +550,11 @@ test.describe("mock-LLM automation lifecycle", () => {
       const completedIcon = page.getByTestId("run-status-icon-completed");
       await expect(completedIcon).toBeVisible({ timeout: 15_000 });
 
-      // Verify step 2 populated runConversationId — without it the
+      // Verify the completed run supplied runConversationId — without it the
       // click-through assertion below would silently pass.
       expect(
         runConversationId,
-        "step 2 must set runConversationId before step 3 can verify the link",
+        "The completed run must have a conversation ID for link verification",
       ).toBeTruthy();
       if (runConversationId) {
         const runLinks = page.locator(
@@ -661,18 +568,6 @@ test.describe("mock-LLM automation lifecycle", () => {
         await runLinks.first().click();
         await waitForPath(page, /\/conversations\/.+/, 10_000);
         expect(page.url()).toContain(runConversationId);
-      }
-    });
-
-    // Clean up automations at the end of the last test
-    await test.step("cleanup automations", async () => {
-      for (const id of Array.from(automationIds)) {
-        try {
-          await deleteAutomation(request, id);
-          automationIds.delete(id);
-        } catch {
-          // best-effort
-        }
       }
     });
   });
