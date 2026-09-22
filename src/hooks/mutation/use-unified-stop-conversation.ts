@@ -5,7 +5,7 @@ import {
   TOAST_OPTIONS,
   displayErrorToast,
 } from "#/utils/custom-toast-handlers";
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 import { I18nKey } from "#/i18n/declaration";
 import { ExecutionStatus } from "#/types/agent-server/core";
 import {
