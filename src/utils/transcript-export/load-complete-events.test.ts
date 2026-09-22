@@ -264,4 +264,28 @@ describe("loadBoundedTranscriptEvents", () => {
     expect(ids).toContain("event-019");
     expect(truncation?.headEventCount).toBe(3);
   });
+
+  it("keeps the result bounded when the live store contains the full history", async () => {
+    const all = Array.from({ length: 20 }, (_, index) => makeMessage(index));
+
+    const { events, truncation } = await loadBoundedTranscriptEvents(
+      all,
+      makeBoundedSearch(all),
+      all.length,
+      3,
+      5,
+    );
+
+    expect(events.map((event) => event.id)).toEqual([
+      "event-000",
+      "event-001",
+      "event-002",
+      "event-015",
+      "event-016",
+      "event-017",
+      "event-018",
+      "event-019",
+    ]);
+    expect(truncation).toEqual({ omittedCount: 12, headEventCount: 3 });
+  });
 });
