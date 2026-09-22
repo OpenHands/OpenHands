@@ -7,6 +7,7 @@ import { useNavigation } from "#/context/navigation-context";
 import { useCommandMenuStore } from "#/stores/command-menu-store";
 import { useSidebarStore } from "#/stores/sidebar-store";
 import { cn } from "#/utils/utils";
+import { buildAgentCanvasPath } from "#/utils/base-path";
 import {
   COMMAND_MENU_GROUP_LABELS,
   COMMAND_MENU_GROUP_ORDER,
@@ -340,7 +341,7 @@ export function CommandMenu() {
                             key={item.id}
                             ref={assignRef}
                             id={getOptionId(item)}
-                            href={to}
+                            href={buildAgentCanvasPath(to)}
                             role="option"
                             aria-selected={isActive}
                             onMouseEnter={() => setActiveIndex(itemIndex)}

@@ -437,6 +437,23 @@ describe("useConversationNameContextMenu", () => {
     );
   });
 
+  it("keeps the Canvas base path on share links", () => {
+    // A bare `/shared/conversations/...` link resolves against the origin root,
+    // which on the cloud host serves the enterprise app and reports the
+    // conversation as missing.
+    vi.stubEnv("VITE_BASE_PATH", "/canvas");
+
+    const { result } = renderHook(() =>
+      useConversationNameContextMenu({ conversationId: "conv-shared" }),
+    );
+
+    expect(result.current.shareUrl).toBe(
+      `${window.location.origin}/canvas/shared/conversations/conv-shared`,
+    );
+
+    vi.unstubAllEnvs();
+  });
+
   it("keeps populated agent metadata hidden while options are closed", () => {
     harness.systemMessage = {
       content: "system",

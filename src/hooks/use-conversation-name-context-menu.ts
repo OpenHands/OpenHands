@@ -10,6 +10,7 @@ import { useEventStore } from "#/stores/use-event-store";
 import { displaySuccessToast } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
 import { getStoredConversationMetadata } from "#/api/conversation-metadata-store";
+import { buildAgentCanvasUrl } from "#/utils/base-path";
 
 import { useDownloadConversation } from "./use-download-conversation";
 import {
@@ -159,7 +160,13 @@ export function useConversationNameContextMenu({
       backend.kind === "cloud"
         ? backend.host.replace(/\/+$/, "")
         : window.location.origin;
-    return `${origin}/shared/conversations/${conversationId}`;
+    // The base path matters here for the same reason it does on anchors: on a
+    // host that also serves the enterprise app, a bare `/shared/conversations`
+    // link resolves against that app and reports the conversation missing.
+    return buildAgentCanvasUrl(
+      `/shared/conversations/${conversationId}`,
+      origin,
+    );
   }, [conversationId, backend.kind, backend.host]);
 
   const handleCopyShareLink = (event: React.MouseEvent<HTMLButtonElement>) => {

@@ -12,6 +12,7 @@ import { getAutomationRunDisplay } from "#/utils/automation-run-display";
 import { RunStatusBadge } from "./run-status-badge";
 import { RunPhase, shouldShowRunPhase } from "./run-phase";
 import { RunLogsModal } from "./run-logs-modal";
+import { buildAgentCanvasPath } from "#/utils/base-path";
 
 interface ActivityLogItemProps {
   run: AutomationRun;
@@ -31,8 +32,9 @@ function formatRunTimestamp(dateStr: string, locale: string): string {
 }
 
 function getConversationUrl(conversationId: string): string {
-  // In agent-canvas, conversations are at /conversations/:id
-  return `/conversations/${conversationId}`;
+  // In agent-canvas, conversations are at /conversations/:id, under the base
+  // path when Canvas is mounted on a subpath.
+  return buildAgentCanvasPath(`/conversations/${conversationId}`);
 }
 
 /**
