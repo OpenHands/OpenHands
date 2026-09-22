@@ -14,7 +14,7 @@ import {
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
-import { NavigationProvider } from "#/context/navigation-context";
+import { NavigationProvider } from "#/contexts/navigation-context";
 
 // We don't need to exercise the modal's internals here; just verify
 // whether OnboardingHost mounts it at all.

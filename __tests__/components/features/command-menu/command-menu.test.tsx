@@ -11,7 +11,7 @@ import { getInterfaceCopy } from "#/manifests/automation-interface";
 import {
   NavigationProvider,
   type NavigationContextValue,
-} from "#/context/navigation-context";
+} from "#/contexts/navigation-context";
 import { useCommandMenuStore } from "#/stores/command-menu-store";
 import { useSidebarStore } from "#/stores/sidebar-store";
 import { renderWithProviders } from "../../../../test-utils";
