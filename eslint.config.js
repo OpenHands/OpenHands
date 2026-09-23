@@ -395,7 +395,8 @@ export default [
   // Rules: https://github.com/shadcn-ui/lint#rules
   // `no-arbitrary-values` stays at "warn": the remaining hits are one-offs
   // (raw hex, vh/vw, calc(), grid templates) with no theme-scale equivalent.
-  // The other rules need per-component contracts before they are useful here.
+  // Class existence does not need component contracts. Start at "warn" while
+  // genuine unknown utilities are reviewed; styling policy remains opt-in.
   {
     files: ["src/**/*.{ts,tsx}"],
     plugins: { shadcn: shadcnPlugin },
@@ -405,7 +406,17 @@ export default [
       "shadcn/no-raw-colors": "off",
       "shadcn/no-inline-styles": "off",
       "shadcn/require-static-classes": "off",
-      "shadcn/no-unknown-classes": "off",
+      "shadcn/no-unknown-classes": [
+        "warn",
+        {
+          allow: [
+            // src/index.css owns the overlay animation outside the theme graph.
+            "environment-switch-overlay",
+            // Selector target for has-[.conversation-overview-diffs-git-action:hover].
+            "conversation-overview-diffs-git-action",
+          ],
+        },
+      ],
     },
   },
 ];
