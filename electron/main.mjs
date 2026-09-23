@@ -55,6 +55,7 @@ import { spawnSync } from "node:child_process";
 
 import { isExternalBrowsableUrl, isLoopbackAppUrl } from "./lib/window-url-policy.mjs";
 import { resolveBundledRuntimeDir } from "./lib/bundled-runtime-dir.mjs";
+import { SECURE_WEB_PREFERENCES } from "./lib/window-security.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -351,8 +352,7 @@ function createLoadingWindow() {
     backgroundColor: "#0b0e14",
     icon: appIconPath,
     webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
+      ...SECURE_WEB_PREFERENCES,
       // Bridges the startup-log console over IPC (see preload.cjs).
       preload: join(__dirname, "preload.cjs"),
     },
@@ -391,8 +391,7 @@ function createMainWindow() {
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     icon: appIconPath,
     webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
+      ...SECURE_WEB_PREFERENCES,
     },
   });
 
