@@ -1,6 +1,7 @@
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import React from "react";
+import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { Command, useCommandStore } from "#/stores/command-store";
 import { parseTerminalOutput } from "#/utils/parse-terminal-output";
 
@@ -85,16 +86,32 @@ function resolveTerminalForeground(host: HTMLElement): string {
   return getComputedStyle(host).color;
 }
 
-// Create a persistent reference that survives component unmounts
-// This ensures terminal history is preserved when navigating away and back
-const persistentLastCommandIndex = { current: 0 };
+// Create persistent references that survive component unmounts, keyed per
+// conversation id, so terminal history-position tracking is per conversation
+// and sibling terminal instances for different conversations don't corrupt
+// each other's state.
+const persistentLastCommandIndexes = new Map<string, { current: number }>();
+
+const FALLBACK_COMMAND_INDEX_KEY = "__no-conversation__";
+
+function getPersistentLastCommandIndex(key: string) {
+  let entry = persistentLastCommandIndexes.get(key);
+  if (!entry) {
+    entry = { current: 0 };
+    persistentLastCommandIndexes.set(key, entry);
+  }
+  return entry;
+}
 
 export const useTerminal = () => {
   const commands = useCommandStore((state) => state.commands);
   const terminal = React.useRef<Terminal | null>(null);
   const fitAddon = React.useRef<FitAddon | null>(null);
   const ref = React.useRef<HTMLDivElement>(null);
-  const lastCommandIndex = persistentLastCommandIndex; // Use the persistent reference
+  const { conversationId } = useOptionalConversationId();
+  const lastCommandIndex = getPersistentLastCommandIndex(
+    conversationId ?? FALLBACK_COMMAND_INDEX_KEY,
+  );
   const isDisposed = React.useRef(false);
 
   const createTerminal = (host: HTMLDivElement) =>
@@ -159,19 +176,27 @@ export const useTerminal = () => {
           // and need to show all previous commands
           renderCommand(commands[i], terminal.current, false);
         }
-        lastCommandIndex.current = commands.length;
       }
+      // Always sync the entry to the replayed history length (0 when empty).
+      // This self-heals stale entries left over from a prior mount whose
+      // commands were cleared while unmounted.
+      lastCommandIndex.current = commands.length;
       // Don't show prompt in read-only terminal
     }
 
     return () => {
       isDisposed.current = true;
       terminal.current?.dispose();
-      lastCommandIndex.current = 0;
     };
   }, []);
 
   React.useEffect(() => {
+    // The command store only appends or clears, so a shrink means the store
+    // was cleared (e.g. on conversation switch); reset so re-streamed history
+    // renders from scratch.
+    if (lastCommandIndex.current > commands.length) {
+      lastCommandIndex.current = 0;
+    }
     if (
       terminal.current &&
       commands.length > 0 &&
