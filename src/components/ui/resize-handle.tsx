@@ -25,7 +25,7 @@ export function ResizeHandle({
       aria-hidden
     >
       <div
-        className="absolute inset-y-0 left-1/2 w-3 min-w-[12px] -translate-x-1/2 cursor-ew-resize"
+        className="absolute inset-y-0 left-1/2 w-3 min-w-3 -translate-x-1/2 cursor-ew-resize"
         onMouseDown={onMouseDown}
         onMouseEnter={() => setIsHovering(true)}
         onMouseLeave={() => setIsHovering(false)}

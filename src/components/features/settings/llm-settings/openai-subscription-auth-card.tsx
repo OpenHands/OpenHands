@@ -152,7 +152,7 @@ export function OpenAISubscriptionAuthCard({
   return (
     <section
       data-testid="openai-subscription-auth-card"
-      className="flex flex-col gap-4 rounded-xl border border-[var(--oh-border)] bg-[var(--oh-surface-raised)] p-4"
+      className="flex flex-col gap-4 rounded-xl border border-border bg-surface-raised p-4"
     >
       <div className="flex flex-col gap-2">
         <Typography.H3>
@@ -198,10 +198,10 @@ export function OpenAISubscriptionAuthCard({
       {challenge ? (
         <div
           data-testid="subscription-device-challenge"
-          className="flex flex-col gap-2 rounded-lg border border-[var(--oh-border-subtle)] p-3 text-sm"
+          className="flex flex-col gap-2 rounded-lg border border-border-subtle p-3 text-sm"
         >
           <span>{t(I18nKey.SETTINGS$SUBSCRIPTION_DEVICE_INSTRUCTIONS)}</span>
-          <div className="flex items-center gap-2 rounded-lg bg-[var(--oh-surface-deep)] px-3 py-2 font-mono text-base font-semibold text-white">
+          <div className="flex items-center gap-2 rounded-lg bg-surface-deep px-3 py-2 font-mono text-base font-semibold text-white">
             <span
               data-testid="subscription-user-code"
               className="flex-1 select-all tracking-[0.08em]"
@@ -221,7 +221,7 @@ export function OpenAISubscriptionAuthCard({
             }
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-1 text-sm text-[var(--oh-accent)] underline"
+            className="inline-flex items-center gap-1 text-sm text-accent underline"
           >
             {t(I18nKey.SETTINGS$SUBSCRIPTION_OPEN_LOGIN)}
             <ExternalLink size={14} aria-hidden />

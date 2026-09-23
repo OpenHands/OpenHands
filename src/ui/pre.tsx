@@ -21,7 +21,7 @@ const preVariants = cva("whitespace-pre-wrap", {
     },
     textColor: {
       default: "",
-      light: "text-[var(--oh-text-tertiary)]",
+      light: "text-text-tertiary",
     },
     padding: {
       default: "",
@@ -38,7 +38,7 @@ const preVariants = cva("whitespace-pre-wrap", {
     },
     maxHeight: {
       default: "",
-      small: "max-h-[400px]",
+      small: "max-h-100",
       large: "max-h-[60vh]",
     },
     overflow: {

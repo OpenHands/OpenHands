@@ -98,7 +98,7 @@ export function PluginPicker({
       <div
         className={cn(
           "relative flex min-w-0 items-center",
-          "rounded-lg border border-[var(--oh-border)] bg-base-secondary",
+          "rounded-lg border border-border bg-base-secondary",
           "transition-colors focus-within:border-white/40 focus-within:ring-1 focus-within:ring-white/20",
         )}
       >
