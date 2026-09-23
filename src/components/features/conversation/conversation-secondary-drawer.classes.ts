@@ -3,7 +3,7 @@ import { cn } from "#/utils/utils";
 /** Matches conversation tabs chrome height; right inset aligns with drawer body `px-4`. */
 export const CONVERSATION_SECONDARY_DRAWER_HEADER_CLASSNAME = cn(
   "flex h-10 min-h-10 shrink-0 items-center gap-1.5",
-  "border-b border-[var(--oh-border)] py-1 pl-1 pr-4",
+  "border-b border-border py-1 pl-1 pr-4",
 );
 
 export const CONVERSATION_SECONDARY_DRAWER_HEADER_ACTION_CLASSNAME = cn(

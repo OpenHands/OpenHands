@@ -32,7 +32,7 @@ export function HooksModalHeader({
       <div className="flex w-full items-start justify-between gap-4 pr-10">
         <div className="flex min-w-0 flex-1 flex-col gap-2">
           <BaseModalTitle title={t(I18nKey.HOOKS_MODAL$TITLE)} />
-          <Typography.Text className="text-sm text-[var(--oh-muted)]">
+          <Typography.Text className="text-sm text-muted">
             {t(I18nKey.HOOKS_MODAL$WARNING)}
           </Typography.Text>
         </div>

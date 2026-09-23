@@ -371,7 +371,7 @@ export function ConversationTabs({
       {isTabActive("planner") && (
         <div
           className={cn(
-            "flex h-10 min-h-10 shrink-0 items-center border-t border-[var(--oh-border)] pl-[10px] pr-1",
+            "flex h-10 min-h-10 shrink-0 items-center border-t border-border pl-2.5 pr-1",
           )}
         >
           <button

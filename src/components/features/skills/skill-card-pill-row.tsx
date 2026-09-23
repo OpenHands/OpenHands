@@ -189,7 +189,7 @@ export function SkillCardPillRow({ pills, testId }: SkillCardPillRowProps) {
       <div
         ref={measureRef}
         aria-hidden
-        className="pointer-events-none fixed top-0 -left-[10000px] z-[-1] flex flex-nowrap items-center gap-1.5 opacity-0"
+        className="pointer-events-none fixed top-0 -left-2500 z-[-1] flex flex-nowrap items-center gap-1.5 opacity-0"
       >
         {pills.map((pill) => (
           <span key={pill.id} className="inline-flex shrink-0">
@@ -242,8 +242,8 @@ export function SkillCardPillRow({ pills, testId }: SkillCardPillRowProps) {
             data-testid={`${testId}-overflow-popover`}
             className={cn(
               "z-[9999] flex w-max max-w-[20rem] flex-col gap-1.5",
-              "rounded-md border border-[var(--oh-border-subtle)]",
-              "bg-[var(--oh-surface)] p-2 shadow-lg",
+              "rounded-md border border-border-subtle",
+              "bg-surface p-2 shadow-lg",
             )}
             style={{
               position: "fixed",

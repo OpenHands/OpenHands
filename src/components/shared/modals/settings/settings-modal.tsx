@@ -23,7 +23,7 @@ export function SettingsModal({ onClose, settings }: SettingsModalProps) {
       <div
         data-testid="ai-config-modal"
         className={cn(
-          "bg-[var(--oh-surface)] m-4 p-6 rounded-xl flex flex-col gap-[17px] border border-[var(--oh-border)] api-configuration-modal",
+          "bg-surface m-4 p-6 rounded-xl flex flex-col gap-4.25 border border-border api-configuration-modal",
           modalWidthClassName("md"),
           MODAL_MAX_WIDTH_VIEWPORT,
         )}

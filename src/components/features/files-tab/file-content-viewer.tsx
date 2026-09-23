@@ -48,7 +48,7 @@ function UnpreviewableFallback({ path }: { path: string }) {
   const documentLabel = OFFICE_DOCUMENT_LABELS[getExtension(path)];
   return (
     <div
-      className="flex h-full w-full items-center justify-center text-sm text-[var(--oh-muted)]"
+      className="flex h-full w-full items-center justify-center text-sm text-muted"
       data-testid={
         documentLabel
           ? "file-content-viewer-unsupported-document"
@@ -82,7 +82,7 @@ export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
 
   if (query.isLoading) {
     return (
-      <div className="flex h-full w-full items-center justify-center text-sm text-[var(--oh-muted)]">
+      <div className="flex h-full w-full items-center justify-center text-sm text-muted">
         {t(I18nKey.FILES$LOADING_FILES)}
       </div>
     );
@@ -97,7 +97,7 @@ export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
     // we have one; fall back to the generic translated string otherwise.
     return (
       <div
-        className="flex h-full w-full items-center justify-center text-sm text-[var(--oh-muted)]"
+        className="flex h-full w-full items-center justify-center text-sm text-muted"
         data-testid="file-content-viewer-error"
       >
         {(query.error as Error | undefined)?.message ??
@@ -130,7 +130,7 @@ export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
   if (kind === "image") {
     return (
       <div
-        className="flex h-full w-full items-center justify-center bg-[var(--oh-surface)] p-4"
+        className="flex h-full w-full items-center justify-center bg-surface p-4"
         data-testid="file-content-viewer-image"
       >
         <img
@@ -194,7 +194,7 @@ export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
     return (
       <div
         data-testid="file-content-viewer-markdown"
-        className="h-full w-full overflow-auto bg-[var(--oh-surface)] text-foreground custom-scrollbar-always [--oh-scroll-fade-from:var(--oh-surface)]"
+        className="h-full w-full overflow-auto bg-surface text-foreground custom-scrollbar-always [--oh-scroll-fade-from:var(--oh-surface)]"
       >
         <div
           className={cn(

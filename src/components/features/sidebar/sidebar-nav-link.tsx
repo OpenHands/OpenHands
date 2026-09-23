@@ -134,7 +134,7 @@ export function SidebarNavLink({
           className={cn(
             "absolute right-1.5 top-1/2 -translate-y-1/2",
             "flex shrink-0 cursor-pointer items-center justify-center rounded-md p-1",
-            "text-[var(--oh-muted)] hover:bg-contrast/10 hover:text-contrast",
+            "text-muted hover:bg-contrast/10 hover:text-contrast",
             hoverRevealActionClassName(pinAction.pinned),
           )}
         >

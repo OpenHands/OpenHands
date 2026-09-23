@@ -38,10 +38,10 @@ export function ProviderConnectionRow({
         >
           {connection.display_name}
         </span>
-        <span className="min-w-0 max-w-full truncate text-sm text-[var(--oh-muted)]">
+        <span className="min-w-0 max-w-full truncate text-sm text-muted">
           {connection.provider}
         </span>
-        <span className="shrink-0 text-sm text-[var(--oh-muted)]">
+        <span className="shrink-0 text-sm text-muted">
           {t(I18nKey.SETTINGS$PROVIDER_CONNECTION_MODEL_COUNT, {
             count: linkedProfileCount,
           })}

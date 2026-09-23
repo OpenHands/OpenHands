@@ -58,7 +58,7 @@ export function ProfileRow({
         </span>
         {displayModel ? (
           <span
-            className="min-w-0 max-w-full truncate text-sm text-[var(--oh-muted)]"
+            className="min-w-0 max-w-full truncate text-sm text-muted"
             title={profile.model ?? undefined}
           >
             {displayModel}
@@ -77,7 +77,7 @@ export function ProfileRow({
         )}
         {profile.provider_connection_broken && (
           <span
-            className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-[var(--oh-warning,#f59e0b)] px-2 py-0.5 text-xs font-medium text-black"
+            className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-warning px-2 py-0.5 text-xs font-medium text-black"
             title={t(I18nKey.SETTINGS$PROFILE_BROKEN_CONNECTION_TOOLTIP)}
             data-testid="profile-broken-connection-badge"
           >

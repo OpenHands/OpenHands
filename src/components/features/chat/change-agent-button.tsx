@@ -153,7 +153,7 @@ export function ChangeAgentButton() {
 
   const buttonIcon = useMemo(() => {
     if (isExecutionAgent) {
-      return <CodePillIcon className="h-[11px] w-[11px] shrink-0" />;
+      return <CodePillIcon className="h-2.75 w-2.75 shrink-0" />;
     }
     return <LessonPlanIcon width={18} height={18} color="currentColor" />;
   }, [isExecutionAgent]);
@@ -168,7 +168,7 @@ export function ChangeAgentButton() {
           "flex items-center rounded-[100px]",
           formControlTransitionClassName,
           isExecutionAgent
-            ? "border border-transparent text-[var(--oh-muted)]"
+            ? "border border-transparent text-muted"
             : "border border-[#597FF4] bg-[#4A67BD] text-white",
           !isButtonDisabled &&
             isExecutionAgent &&
@@ -185,7 +185,7 @@ export function ChangeAgentButton() {
       >
         <div className="flex items-center gap-1 pl-1.5">
           {buttonIcon}
-          <Typography.Text className="text-inherit not-italic font-normal leading-5">
+          <Typography.Text className="text-[11px] text-inherit not-italic font-normal leading-5">
             {buttonLabel}
           </Typography.Text>
         </div>

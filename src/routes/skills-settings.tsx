@@ -133,7 +133,7 @@ function SkillsSettingsScreen() {
       <main className={cn(settingsLikeMainScrollClassName, "h-full")}>
         <div
           data-testid="skills-page"
-          className="mx-auto flex w-full min-w-0 max-w-[1100px] flex-col gap-6"
+          className="mx-auto flex w-full min-w-0 max-w-275 flex-col gap-6"
         >
           <div className="flex min-w-0 items-start justify-between gap-4">
             <div className="min-w-0 space-y-1">
@@ -201,7 +201,7 @@ function SkillsSettingsScreen() {
                 <SkillFacetRail
                   groups={groups}
                   onToggle={handleToggleFacet}
-                  className="hidden w-[240px] shrink-0 self-start md:flex"
+                  className="hidden w-60 shrink-0 self-start md:flex"
                 />
 
                 <section className="flex min-w-0 flex-1 flex-col gap-3">

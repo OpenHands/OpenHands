@@ -63,7 +63,7 @@ export function AgentProfilesBody({
         data-testid="agent-profiles-empty"
         className={extensionModuleEmptyStateClassName}
       >
-        <p className="text-sm text-[var(--oh-muted)]">
+        <p className="text-sm text-muted">
           {t(I18nKey.SETTINGS$PROFILES_EMPTY)}
         </p>
       </div>

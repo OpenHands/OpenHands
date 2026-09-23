@@ -32,26 +32,26 @@ export function PluginsModal({ onClose }: PluginsModalProps) {
     <ModalBackdrop onClose={onClose}>
       <ModalBody
         width="lg"
-        className="relative flex max-h-[80vh] flex-col items-start border border-[var(--oh-border)]"
+        className="relative flex max-h-[80vh] flex-col items-start border border-border"
         testID="plugins-modal"
       >
         <ModalCloseButton onClose={onClose} testId="close-plugins-modal" />
         <div className="flex w-full flex-col gap-2 pr-10">
           <BaseModalTitle title={t(I18nKey.PLUGINS_MODAL$TITLE)} />
-          <Typography.Text className="text-sm text-[var(--oh-muted)]">
+          <Typography.Text className="text-sm text-muted">
             {t(I18nKey.PLUGINS_MODAL$DESCRIPTION)}
           </Typography.Text>
         </div>
 
-        <div className="w-full overflow-auto rounded-md border border-[var(--oh-border)] bg-surface-raised custom-scrollbar-always">
+        <div className="w-full overflow-auto rounded-md border border-border bg-surface-raised custom-scrollbar-always">
           {plugins.length === 0 ? (
             <div className="flex items-center justify-center p-6">
-              <Typography.Text className="text-[var(--oh-muted)]">
+              <Typography.Text className="text-muted">
                 {t(I18nKey.PLUGINS_MODAL$EMPTY)}
               </Typography.Text>
             </div>
           ) : (
-            <ul className="divide-y divide-[var(--oh-border)]">
+            <ul className="divide-y divide-border">
               {plugins.map((plugin) => (
                 <li
                   key={pluginReferenceKey(plugin)}

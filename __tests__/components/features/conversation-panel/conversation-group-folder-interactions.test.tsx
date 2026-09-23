@@ -181,7 +181,7 @@ describe("conversation group folder interactions", () => {
       "thread-folder-content-ws--workspace-alpha",
     );
     expect(section).toHaveTextContent("Workspace Alpha");
-    expect(row).toHaveClass("flex", "text-[var(--oh-muted)]");
+    expect(row).toHaveClass("flex", "text-muted");
     expect(heading).toHaveClass("cursor-grab", "focus-visible:ring-1");
     expect(folder).toHaveClass("h-4", "block", "group-hover/folder:hidden");
     expect(folderOpen).toHaveClass("h-4", "hidden", "group-hover/folder:block");

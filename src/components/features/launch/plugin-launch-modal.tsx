@@ -131,7 +131,7 @@ export function PluginLaunchModal({
       <div
         data-testid="plugin-launch-modal"
         className={cn(
-          "relative bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-[var(--oh-border)] max-h-[80vh]",
+          "relative bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-border max-h-[80vh]",
           modalWidthClassName("md"),
           MODAL_MAX_WIDTH_VIEWPORT,
         )}
@@ -192,7 +192,7 @@ export function PluginLaunchModal({
           )}
         </div>
 
-        <div className="pt-4 border-t border-[var(--oh-border-subtle)]">
+        <div className="pt-4 border-t border-border-subtle">
           <div className="flex items-start gap-3 mb-4">
             <input
               id="trust-checkbox"

@@ -47,8 +47,8 @@ export function DropdownItem<T>({
       "text-contrast focus:outline-none font-normal",
       dropdownInstantColorClassName,
       {
-        "bg-[var(--oh-interactive-selected)] text-contrast": isSelected,
-        "hover:bg-[var(--oh-interactive-hover)]": !isSelected,
+        "bg-interactive-selected text-contrast": isSelected,
+        "hover:bg-interactive-hover": !isSelected,
       },
       itemClassName,
     ),

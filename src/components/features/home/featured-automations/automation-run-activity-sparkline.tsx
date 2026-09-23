@@ -35,7 +35,7 @@ function TooltipRow({
 }) {
   return (
     <div className="flex items-start gap-2 text-xs">
-      <span className="w-16 shrink-0 text-[var(--oh-muted)]">{label}</span>
+      <span className="w-16 shrink-0 text-muted">{label}</span>
       <span className="min-w-0 flex-1 break-words text-contrast">
         {children}
       </span>
@@ -61,7 +61,7 @@ function RunActivityBarTooltip({
   const statusLabel = t(getAutomationRunStatusLabelKey(display.badgeStatus));
 
   return (
-    <div className="flex w-[220px] flex-col gap-2 p-3">
+    <div className="flex w-55 flex-col gap-2 p-3">
       <div className="flex items-center gap-2">
         <span
           aria-hidden="true"
@@ -87,7 +87,7 @@ function RunActivityBarTooltip({
       </div>
 
       {display.summary ? (
-        <p className="line-clamp-3 text-xs text-[var(--oh-text-secondary)]">
+        <p className="line-clamp-3 text-xs text-text-secondary">
           {display.summary}
         </p>
       ) : null}
@@ -118,13 +118,13 @@ function RunActivityBar({
       closeDelay={80}
       delay={200}
       disableAnimation={disableAnimation}
-      className="rounded-xl border border-[var(--oh-border)] bg-base-secondary p-0 text-contrast shadow-xl"
+      className="rounded-xl border border-border bg-base-secondary p-0 text-contrast shadow-xl"
     >
       {/* Wider hit target than the 4px bar so cancelled/skipped greys are easy to inspect. */}
       <NavigationLink
         to={href}
         aria-label={statusLabel}
-        className="group/spark-bar inline-flex h-full cursor-pointer items-end px-[2px] focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--oh-focus)]"
+        className="group/spark-bar inline-flex h-full cursor-pointer items-end px-0.5 focus:outline-none focus-visible:ring-1 focus-visible:ring-focus"
         onMouseDown={(event) => event.stopPropagation()}
         onClick={(event) => event.stopPropagation()}
       >
