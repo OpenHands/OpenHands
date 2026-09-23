@@ -66,7 +66,7 @@ function SidebarSection({
                 className={cn(
                   "flex items-center gap-2 w-full px-2 py-1 rounded text-sm cursor-pointer",
                   isActive
-                    ? "bg-tertiary text-white"
+                    ? "bg-tertiary text-contrast"
                     : "text-text-tertiary hover:bg-surface-raised",
                 )}
               >
@@ -277,7 +277,7 @@ export function FolderBrowserModal({
                 onClick={() => parent && setCurrentPath(parent)}
                 disabled={!parent}
                 aria-label={t(I18nKey.COMMON$UP)}
-                className="p-1 rounded hover:bg-interactive-hover text-white disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                className="p-1 rounded hover:bg-interactive-hover text-contrast disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
               >
                 <ChevronLeft width={16} height={16} />
               </button>
@@ -333,7 +333,7 @@ export function FolderBrowserModal({
                   <button
                     type="button"
                     onClick={() => setCurrentPath(entry.path)}
-                    className="grid grid-cols-[1fr_120px] items-center w-full text-left px-4 py-1.5 text-sm text-white hover:bg-interactive-hover cursor-pointer"
+                    className="grid grid-cols-[1fr_120px] items-center w-full text-left px-4 py-1.5 text-sm text-contrast hover:bg-interactive-hover cursor-pointer"
                     data-testid={`folder-browser-entry-${entry.name}`}
                   >
                     <span className="flex items-center gap-2 min-w-0">

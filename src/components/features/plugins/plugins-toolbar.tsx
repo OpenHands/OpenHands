@@ -35,7 +35,7 @@ export function PluginsToolbar({
         className={cn(
           "relative flex flex-1 min-w-0 items-center",
           "rounded-lg border border-border bg-base-secondary",
-          "focus-within:border-white/40 focus-within:ring-1 focus-within:ring-white/20",
+          "focus-within:border-contrast/40 focus-within:ring-1 focus-within:ring-contrast/20",
           "transition-colors",
         )}
       >
@@ -61,7 +61,7 @@ export function PluginsToolbar({
             type="button"
             onClick={() => onSearchChange("")}
             aria-label={t(I18nKey.MCP$SEARCH_CLEAR)}
-            className="mr-2 p-1 rounded text-tertiary-alt hover:text-white cursor-pointer"
+            className="mr-2 p-1 rounded text-tertiary-alt hover:text-contrast cursor-pointer"
           >
             <X className="h-4 w-4" aria-hidden />
           </button>
@@ -82,8 +82,8 @@ export function PluginsToolbar({
             className={cn(
               "cursor-pointer rounded-md px-3 py-1 text-xs transition-colors",
               statusFilter === filter.value
-                ? "bg-surface-raised text-white"
-                : "text-tertiary-alt hover:text-white",
+                ? "bg-surface-raised text-contrast"
+                : "text-tertiary-alt hover:text-contrast",
             )}
           >
             {t(filter.labelKey)}

@@ -79,7 +79,7 @@ export function EnumFilterDropdown<T extends string>({
           emphasizeNonDefault &&
             defaultOption &&
             value !== defaultOption &&
-            "border-white/60 bg-white/10",
+            "border-contrast/60 bg-contrast/10",
           triggerClassName,
         )}
       >

@@ -9,13 +9,12 @@ import {
   useTriggerGitSync,
 } from "#/hooks/query/use-git-sync";
 import { useAutomationHealth } from "#/hooks/query/use-automation-health";
-import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useAutomationPermissions } from "#/hooks/use-automation-permissions";
 import { BackLink } from "#/components/features/automations/detail/back-link";
 import { ErrorState } from "#/components/features/automations/error-state";
 import { BackendNotConfigured } from "#/components/features/automations/backend-not-configured";
 import { GitSyncSkeleton } from "#/components/features/automations/git-sync/git-sync-skeleton";
-import { GitSyncNotLocalState } from "#/components/features/automations/git-sync/git-sync-not-local-state";
+import { GitSyncNoAccessState } from "#/components/features/automations/git-sync/git-sync-no-access-state";
 import { GitSyncUnsupportedState } from "#/components/features/automations/git-sync/git-sync-unsupported-state";
 import { GitSyncErrorBanner } from "#/components/features/automations/git-sync/git-sync-error-banner";
 import { GitSyncOverviewSection } from "#/components/features/automations/git-sync/git-sync-overview-section";
@@ -52,13 +51,12 @@ const runningSince = (status: GitSyncStatus): SyncActivity => ({
 
 export default function AutomationGitSync() {
   const { t } = useTranslation("openhands");
-  const active = useActiveBackend();
   // Git sync is an org-level operation (not per-automation), so there is no
-  // creator escape hatch — only users with manage_automations may configure,
-  // check, or trigger a sync. The status read requires view_automations, but
-  // since the page is local-only and local users always have manage, the
-  // distinction only matters for cloud deployments that don't reach this page.
-  const { canManage } = useAutomationPermissions();
+  // creator escape hatch: only users with manage_automations (org admins and
+  // owners) may see, configure, check, or trigger a sync. Local backends
+  // always grant it; on cloud it comes from the org's /me permissions.
+  const { canManage, isLoading: isPermissionsLoading } =
+    useAutomationPermissions();
   const [activity, setActivity] = useState<SyncActivity>({ state: "idle" });
   const isRunning = activity.state === "running";
 
@@ -69,15 +67,13 @@ export default function AutomationGitSync() {
   } = useAutomationHealth();
   const isBackendHealthy = healthData?.status === "ok";
 
-  const isLocalBackend = active.backend.kind === "local";
-
   const {
     data: status,
     isLoading,
     error,
     refetch,
   } = useGitSyncStatus({
-    enabled: isBackendHealthy && isLocalBackend,
+    enabled: isBackendHealthy && canManage,
     refetchInterval: isRunning ? POLL_INTERVAL_MS : IDLE_POLL_INTERVAL_MS,
   });
 
@@ -119,21 +115,21 @@ export default function AutomationGitSync() {
 
   const triggerMutation = useTriggerGitSync();
 
-  if (!isLocalBackend) {
+  if (isHealthLoading || isPermissionsLoading) {
     return (
       <div className="min-h-full">
         <div className="p-6 max-w-4xl mx-auto">
-          <GitSyncNotLocalState />
+          <GitSyncSkeleton />
         </div>
       </div>
     );
   }
 
-  if (isHealthLoading) {
+  if (!canManage) {
     return (
       <div className="min-h-full">
         <div className="p-6 max-w-4xl mx-auto">
-          <GitSyncSkeleton />
+          <GitSyncNoAccessState />
         </div>
       </div>
     );

@@ -178,7 +178,7 @@ export function SidebarRailBody({
             className={cn(
               "hidden md:inline-flex ml-auto",
               SIDEBAR_ICON_BUTTON_CLASS,
-              "text-muted hover:text-white hover:bg-surface-raised",
+              "text-muted hover:text-contrast hover:bg-surface-raised",
             )}
           >
             <ChevronLeft width={14} height={14} />
@@ -193,7 +193,7 @@ export function SidebarRailBody({
             className={cn(
               "inline-flex ml-auto",
               SIDEBAR_ICON_BUTTON_CLASS,
-              "text-muted hover:text-white hover:bg-surface-raised",
+              "text-muted hover:text-contrast hover:bg-surface-raised",
             )}
           >
             <ChevronLeft width={14} height={14} />

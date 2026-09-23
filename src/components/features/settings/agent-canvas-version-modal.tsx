@@ -116,7 +116,7 @@ export function AgentCanvasVersionModal({
               aria-hidden
             />
           )}
-          <h2 className="text-base font-semibold leading-6 text-white">
+          <h2 className="text-base font-semibold leading-6 text-contrast">
             {t(
               updateAvailable
                 ? I18nKey.SETTINGS$VERSION_UPDATE_AVAILABLE
@@ -141,7 +141,7 @@ export function AgentCanvasVersionModal({
                 href={AGENT_CANVAS_RELEASE_NOTES_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 whitespace-nowrap font-medium text-white hover:text-[var(--oh-text)]"
+                className="inline-flex items-center gap-1.5 whitespace-nowrap font-medium text-contrast hover:text-[var(--oh-text)]"
               >
                 {t(I18nKey.SETTINGS$VERSION_RELEASE_NOTES)}
                 <ExternalLink className="size-4 shrink-0" aria-hidden />
@@ -161,7 +161,7 @@ export function AgentCanvasVersionModal({
                     href={AGENT_CANVAS_RELEASE_NOTES_URL}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 font-medium text-white hover:text-[var(--oh-text)]"
+                    className="inline-flex items-center gap-1.5 font-medium text-contrast hover:text-[var(--oh-text)]"
                   >
                     {t(I18nKey.SETTINGS$VERSION_RELEASE_NOTES)}
                     <ExternalLink className="size-4 shrink-0" aria-hidden />
@@ -187,8 +187,8 @@ export function AgentCanvasVersionModal({
                   className={cn(
                     "inline-flex items-center gap-1.5 px-3 pb-2 text-sm font-medium",
                     selectedTab === tab
-                      ? "border-b border-white text-white"
-                      : "text-muted hover:text-white",
+                      ? "border-b border-contrast text-contrast"
+                      : "text-muted hover:text-contrast",
                   )}
                 >
                   <UpdateCommandTabIcon tab={tab} />
@@ -197,7 +197,7 @@ export function AgentCanvasVersionModal({
               ))}
             </div>
             <div className="flex items-center gap-3 rounded-lg border border-border bg-surface-deep px-4 py-3">
-              <code className="min-w-0 flex-1 overflow-visible whitespace-nowrap font-mono text-sm text-white">
+              <code className="min-w-0 flex-1 overflow-visible whitespace-nowrap font-mono text-sm text-contrast">
                 {command}
               </code>
               <button
@@ -209,7 +209,7 @@ export function AgentCanvasVersionModal({
                     : I18nKey.SETTINGS$VERSION_COPY_COMMAND,
                 )}
                 disabled={copied}
-                className="shrink-0 text-muted hover:text-white disabled:hover:text-muted"
+                className="shrink-0 text-muted hover:text-contrast disabled:hover:text-muted"
               >
                 {copied ? (
                   <Check className="size-4 text-status-success" aria-hidden />
@@ -226,7 +226,7 @@ export function AgentCanvasVersionModal({
             <button
               type="button"
               onClick={onCheckForUpdates}
-              className="inline-flex items-center gap-2 text-sm font-medium text-white hover:text-[var(--oh-text)] disabled:cursor-wait disabled:text-muted"
+              className="inline-flex items-center gap-2 text-sm font-medium text-contrast hover:text-[var(--oh-text)] disabled:cursor-wait disabled:text-muted"
               disabled={isChecking}
             >
               {t(I18nKey.SETTINGS$VERSION_CHECK_FOR_UPDATES)}

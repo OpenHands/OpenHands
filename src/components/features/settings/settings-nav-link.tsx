@@ -25,17 +25,17 @@ export function SettingsNavLink({ item, onClick }: SettingsNavLinkProps) {
           "group flex items-center gap-3 p-1 sm:px-3.5 sm:py-2 rounded",
           navInteractiveTransitionClassName,
           isActive ? "bg-tertiary" : "hover:bg-surface-raised",
-          isActive ? "[&_*]:text-white" : "",
+          isActive ? "[&_*]:text-contrast" : "",
         )
       }
     >
-      <Typography.Text className="flex h-5 w-5 shrink-0 items-center justify-center text-muted group-hover:text-white">
+      <Typography.Text className="flex h-5 w-5 shrink-0 items-center justify-center text-muted group-hover:text-contrast">
         {icon}
       </Typography.Text>
       <div className="min-w-0 flex-1 overflow-hidden">
         <Typography.Text
           className={cn(
-            "block truncate whitespace-nowrap text-muted group-hover:text-white",
+            "block truncate whitespace-nowrap text-muted group-hover:text-contrast",
             "transition-transform duration-300 motion-reduce:transition-none group-hover:translate-x-1",
           )}
         >

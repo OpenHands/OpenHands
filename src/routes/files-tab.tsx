@@ -231,7 +231,7 @@ function FilesTab() {
                         aria-label={t(I18nKey.FILES$OPEN_IN_NEW_WINDOW)}
                         title={t(I18nKey.FILES$OPEN_IN_NEW_WINDOW)}
                         data-testid="files-tab-open-in-new-window"
-                        className="ml-auto flex items-center justify-center w-6.5 py-1 rounded-[7px] hover:bg-interactive-hover cursor-pointer text-white"
+                        className="ml-auto flex items-center justify-center w-6.5 py-1 rounded-[7px] hover:bg-interactive-hover cursor-pointer text-contrast"
                       >
                         <LinkExternalIcon width={14} height={14} />
                       </a>

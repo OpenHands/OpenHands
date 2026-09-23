@@ -35,7 +35,7 @@ export function SettingsDesktopSidebar({
         "md:sticky md:top-8 md:self-start md:pl-8",
       )}
     >
-      <Typography.Text className="px-2 text-sm font-normal text-white">
+      <Typography.Text className="px-2 text-sm font-normal text-contrast">
         {t(I18nKey.SETTINGS$TITLE)}
       </Typography.Text>
       <div className="flex flex-col gap-0.5 pt-0.5">

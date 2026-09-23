@@ -159,7 +159,7 @@ export function GitProviderDropdown({
 
   return (
     <div className={cn("relative", className)}>
-      <div className="group relative text-muted hover:text-white">
+      <div className="group relative text-muted hover:text-contrast">
         {/* Provider icon */}
         {selectedItem && (
           <div className="absolute left-2 top-1/2 transform -translate-y-1/2 z-10">

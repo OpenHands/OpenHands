@@ -47,7 +47,7 @@ export function AgentOptionIcon({ id, muted }: { id: string; muted: boolean }) {
       <AgentBrandIcon
         kind="openhands"
         size={16}
-        className={cn("text-white", muted && "opacity-55")}
+        className={cn("text-contrast", muted && "opacity-55")}
         data-testid="onboarding-agent-icon-openhands"
       />
     );
@@ -57,7 +57,7 @@ export function AgentOptionIcon({ id, muted }: { id: string; muted: boolean }) {
     <AgentBrandIcon
       kind={icon}
       size={18}
-      className={muted ? "text-muted" : "text-white"}
+      className={muted ? "text-muted" : "text-contrast"}
       data-testid={`onboarding-agent-icon-${icon}`}
     />
   );
@@ -137,7 +137,7 @@ export function ChooseAgentStep({
       className="flex flex-col gap-6"
     >
       <header className="flex flex-col gap-2">
-        <h2 className="text-2xl font-medium text-white">
+        <h2 className="text-2xl font-medium text-contrast">
           {t(I18nKey.ONBOARDING$AGENT_TITLE)}
         </h2>
         <p className="text-sm text-muted">
@@ -164,14 +164,14 @@ export function ChooseAgentStep({
               className={cn(
                 "flex items-start justify-between gap-4 rounded-xl border px-4 py-3 text-left transition-colors cursor-pointer",
                 isSelected
-                  ? "border-white/45 bg-white/[0.09] shadow-none hover:border-white/45 hover:bg-white/[0.09]"
-                  : "border-white/30 bg-white/5 hover:border-white/40 hover:bg-white/[0.08]",
+                  ? "border-contrast/45 bg-contrast/[0.09] shadow-none hover:border-contrast/45 hover:bg-contrast/[0.09]"
+                  : "border-contrast/30 bg-contrast/5 hover:border-contrast/40 hover:bg-contrast/[0.08]",
               )}
             >
               <div className="flex min-w-0 flex-1 flex-col gap-1">
                 <div className="flex min-w-0 items-center gap-2">
                   <AgentOptionIcon id={option.id} muted={false} />
-                  <span className="truncate text-base font-normal text-white">
+                  <span className="truncate text-base font-normal text-contrast">
                     {option.label}
                   </span>
                 </div>
@@ -184,7 +184,7 @@ export function ChooseAgentStep({
                   <Check
                     width={18}
                     height={18}
-                    className="mt-1 shrink-0 text-white"
+                    className="mt-1 shrink-0 text-contrast"
                     aria-hidden
                   />
                 ) : null}

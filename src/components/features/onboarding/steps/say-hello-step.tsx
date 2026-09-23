@@ -78,7 +78,7 @@ export function SayHelloStep({
       className="flex max-h-[calc(90vh-7rem)] flex-col"
     >
       <header className="flex shrink-0 flex-col gap-2">
-        <h2 className="text-2xl font-medium text-white">
+        <h2 className="text-2xl font-medium text-contrast">
           {t(I18nKey.ONBOARDING$HELLO_TITLE)}
         </h2>
         <p className="text-sm text-muted">
@@ -109,7 +109,7 @@ export function SayHelloStep({
               disabled={isLaunching}
               // `text-base` is a color utility in this theme (--color-base), not 16px.
               // eslint-disable-next-line shadcn/no-arbitrary-values
-              className="min-h-5 w-full flex-1 bg-transparent text-[16px] font-normal leading-5 text-white outline-none placeholder:text-text-tertiary disabled:cursor-not-allowed disabled:opacity-50"
+              className="min-h-5 w-full flex-1 bg-transparent text-[16px] font-normal leading-5 text-contrast outline-none placeholder:text-text-tertiary disabled:cursor-not-allowed disabled:opacity-50"
             />
           </div>
         </div>

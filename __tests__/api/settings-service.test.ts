@@ -656,13 +656,30 @@ describe("SettingsService", () => {
     setRegisteredBackends([cloudBackend]);
     setActiveSelection({ backendId: cloudBackend.id });
 
+    mockFetchCloudSettings.mockResolvedValue({
+      agent_settings: {
+        mcp_config: {
+          github: {
+            url: "https://github.example/mcp",
+            headers: { Authorization: "**********" },
+          },
+        },
+      },
+    });
+
     await SettingsService.patchMcpServer("github", { auth: null });
 
     expect(mockSaveCloudSettings).toHaveBeenCalledTimes(1);
+    // `auth: null` is explicit: an omitted `auth` makes the cloud restore the
+    // stored credential next to the cleared headers.
     expect(mockSaveCloudSettings).toHaveBeenCalledWith({
       agent_settings_diff: {
         mcp_config: {
-          github: { headers: null },
+          github: {
+            url: "https://github.example/mcp",
+            headers: null,
+            auth: null,
+          },
         },
       },
     });
@@ -673,10 +690,12 @@ describe("SettingsService", () => {
     setActiveSelection({ backendId: cloudBackend.id });
 
     mockFetchCloudSettings.mockResolvedValue({
-      mcp_config: {
-        github: {
-          url: "https://github.example/mcp",
-          headers: { "X-API-Key": "stale-custom-header-secret" },
+      agent_settings: {
+        mcp_config: {
+          github: {
+            url: "https://github.example/mcp",
+            headers: { "X-API-Key": "stale-custom-header-secret" },
+          },
         },
       },
     });
@@ -685,15 +704,17 @@ describe("SettingsService", () => {
       auth: { strategy: "bearer", value: "new-bearer-token" },
     });
 
+    expect(mockFetchCloudSettings).toHaveBeenCalledTimes(1);
     expect(mockSaveCloudSettings).toHaveBeenCalledTimes(1);
+    // The stale header tombstone is resolved client-side: the cloud replaces
+    // the catalog for this map and rejects `null` header values.
     expect(mockSaveCloudSettings).toHaveBeenCalledWith({
       agent_settings_diff: {
         mcp_config: {
           github: {
-            headers: {
-              Authorization: "Bearer new-bearer-token",
-              "X-API-Key": null,
-            },
+            url: "https://github.example/mcp",
+            headers: { Authorization: "Bearer new-bearer-token" },
+            auth: null,
           },
         },
       },
@@ -705,12 +726,14 @@ describe("SettingsService", () => {
     setActiveSelection({ backendId: cloudBackend.id });
 
     mockFetchCloudSettings.mockResolvedValue({
-      mcp_config: {
-        github: {
-          url: "https://github.example/mcp",
-          headers: {
-            "X-API-Key": "stale-custom-header-secret",
-            "X-Trace": "on",
+      agent_settings: {
+        mcp_config: {
+          github: {
+            url: "https://github.example/mcp",
+            headers: {
+              "X-API-Key": "stale-custom-header-secret",
+              "X-Trace": "on",
+            },
           },
         },
       },
@@ -726,29 +749,135 @@ describe("SettingsService", () => {
       agent_settings_diff: {
         mcp_config: {
           github: {
+            url: "https://github.example/mcp",
             headers: {
-              Authorization: "Bearer new-bearer-token",
               "X-Trace": "on",
-              "X-API-Key": null,
+              Authorization: "Bearer new-bearer-token",
             },
+            auth: null,
           },
         },
       },
     });
   });
 
-  it("does not fetch stored cloud settings for a patch with no auth credential", async () => {
+  it("resends the stored cloud catalog when adding a server so siblings survive", async () => {
+    // OHE-3248: the cloud replaces the whole catalog for an `mcp_config` map
+    // without a `null` entry, so a one-key add would erase every other server.
     setRegisteredBackends([cloudBackend]);
     setActiveSelection({ backendId: cloudBackend.id });
+
+    mockFetchCloudSettings.mockResolvedValue({
+      agent_settings: {
+        mcp_config: {
+          github: {
+            url: "https://github.example/mcp",
+            headers: { Authorization: "**********" },
+          },
+        },
+      },
+    });
 
     await SettingsService.patchMcpConfig({
       only: { url: "https://x.example" },
     });
 
-    expect(mockFetchCloudSettings).not.toHaveBeenCalled();
+    expect(mockFetchCloudSettings).toHaveBeenCalledTimes(1);
+    // The untouched sibling is resent verbatim, redaction included: the cloud
+    // restores its secret by key.
     expect(mockSaveCloudSettings).toHaveBeenCalledWith({
       agent_settings_diff: {
-        mcp_config: { only: { url: "https://x.example" } },
+        mcp_config: {
+          github: {
+            url: "https://github.example/mcp",
+            headers: { Authorization: "**********" },
+          },
+          only: { url: "https://x.example" },
+        },
+      },
+    });
+  });
+
+  it("merges a sparse cloud update onto the stored server and keeps its siblings", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+
+    mockFetchCloudSettings.mockResolvedValue({
+      agent_settings: {
+        mcp_config: {
+          github: {
+            url: "https://github.example/mcp",
+            auth: { strategy: "bearer", value: "**********" },
+          },
+          linear: {
+            url: "https://mcp.linear.app/mcp",
+            auth: { strategy: "bearer", value: "**********" },
+          },
+        },
+      },
+    });
+
+    await SettingsService.patchMcpServer("github", {
+      transport: "http",
+      url: "https://github.example/mcp",
+      enabled: false,
+    } as Parameters<typeof SettingsService.patchMcpServer>[1]);
+
+    expect(mockSaveCloudSettings).toHaveBeenCalledWith({
+      agent_settings_diff: {
+        mcp_config: {
+          github: {
+            url: "https://github.example/mcp",
+            auth: { strategy: "bearer", value: "**********" },
+            transport: "http",
+            enabled: false,
+          },
+          linear: {
+            url: "https://mcp.linear.app/mcp",
+            auth: { strategy: "bearer", value: "**********" },
+          },
+        },
+      },
+    });
+  });
+
+  it("fails a cloud add without saving when the stored catalog cannot be read", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+
+    mockFetchCloudSettings.mockRejectedValue(new Error("catalog unavailable"));
+
+    await expect(
+      SettingsService.createMcpServer("only", {
+        transport: "http",
+        url: "https://x.example",
+      }),
+    ).rejects.toThrow("catalog unavailable");
+
+    // Falling back to the one-key map would wipe the siblings.
+    expect(mockSaveCloudSettings).not.toHaveBeenCalled();
+  });
+
+  it("sends a sparse map without reading the catalog for a cloud delete or rename", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+
+    await SettingsService.deleteMcpServer("github");
+    await SettingsService.patchMcpConfig({
+      github: null,
+      hub: { transport: "http", url: "https://github.example/mcp" },
+    });
+
+    expect(mockFetchCloudSettings).not.toHaveBeenCalled();
+    expect(mockSaveCloudSettings).toHaveBeenNthCalledWith(1, {
+      agent_settings_diff: { mcp_config: { github: null } },
+    });
+    expect(mockSaveCloudSettings).toHaveBeenNthCalledWith(2, {
+      agent_settings_diff: {
+        mcp_config: {
+          github: null,
+          hub: { transport: "http", url: "https://github.example/mcp" },
+        },
       },
     });
   });
@@ -758,10 +887,12 @@ describe("SettingsService", () => {
     setActiveSelection({ backendId: cloudBackend.id });
 
     mockFetchCloudSettings.mockResolvedValue({
-      mcp_config: {
-        github: {
-          url: "https://github.example/mcp",
-          headers: { Authorization: "Bearer stale-token" },
+      agent_settings: {
+        mcp_config: {
+          github: {
+            url: "https://github.example/mcp",
+            headers: { Authorization: "Bearer stale-token" },
+          },
         },
       },
     });
@@ -771,11 +902,15 @@ describe("SettingsService", () => {
     });
 
     expect(mockSaveCloudSettings).toHaveBeenCalledTimes(1);
+    // `headers: {}` is required, not cosmetic: an omitted `headers` makes the
+    // cloud carry the stale Authorization header back.
     expect(mockSaveCloudSettings).toHaveBeenCalledWith({
       agent_settings_diff: {
         mcp_config: {
           github: {
-            headers: { Authorization: null },
+            url: "https://github.example/mcp",
+            headers: {},
+            auth: null,
           },
         },
       },
