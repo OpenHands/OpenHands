@@ -47,6 +47,14 @@ const FIELD_METADATA: Record<string, SettingsFieldMetadata> = {
       step: 1,
     },
   },
+  // A negative cap is meaningless; blank means unlimited (the field is
+  // nullable), so the floor is 0 rather than 1 (#15813).
+  "condenser.condenser_max_size": {
+    constraints: {
+      min: 0,
+      step: 1,
+    },
+  },
   "llm.top_p": {
     constraints: {
       min: 0,
