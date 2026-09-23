@@ -1,3 +1,4 @@
+import { SKILL_CATEGORY_IDS } from "@openhands/extensions/skills";
 import { describe, expect, it } from "vitest";
 import type { SkillInfo } from "#/types/settings";
 import {
@@ -27,7 +28,7 @@ describe("skill-category", () => {
   });
 
   it("covers every catalog category in the rail order, labels, and icons", () => {
-    const ids = [...SKILL_CATEGORY_ORDER].sort();
+    const ids = [...SKILL_CATEGORY_IDS].sort();
     expect([...SKILL_CATEGORY_ORDER].sort()).toEqual(ids);
     expect(Object.keys(SKILL_CATEGORY_LABEL_KEYS).sort()).toEqual(ids);
     expect(Object.keys(SKILL_CATEGORY_ICONS).sort()).toEqual(ids);

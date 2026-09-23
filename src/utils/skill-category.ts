@@ -1,4 +1,8 @@
 import {
+  SKILL_CATEGORY_IDS,
+  type SkillCategoryId,
+} from "@openhands/extensions/skills";
+import {
   Bot,
   GitPullRequest,
   Package,
@@ -13,28 +17,11 @@ import {
 import { I18nKey } from "#/i18n/declaration";
 import type { SkillInfo } from "#/types/settings";
 
-export type SkillCategoryId =
-  | "automations"
-  | "environment"
-  | "code-hosting"
-  | "agent-authoring"
-  | "code-quality"
-  | "integrations"
-  | "writing"
-  | "design"
-  | "other";
+export type { SkillCategoryId };
 
-/** Display order in the facet rail. `other` last. */
+/** Display order in the facet rail. `other` last. Derived from the catalog so a new category surfaces here automatically. */
 export const SKILL_CATEGORY_ORDER: readonly SkillCategoryId[] = [
-  "automations",
-  "environment",
-  "code-hosting",
-  "agent-authoring",
-  "code-quality",
-  "integrations",
-  "writing",
-  "design",
-  "other",
+  ...SKILL_CATEGORY_IDS,
 ];
 
 export const SKILL_CATEGORY_LABEL_KEYS: Record<SkillCategoryId, I18nKey> = {
