@@ -190,13 +190,27 @@ when cleanup and dependencies are explicit.
 
 ## Testing and Production Evidence
 
-- Require evidence proportional to the behavior changed. UI changes need a
-  screenshot or video from the real app; CLI, API, and script changes need the
-  exact runtime command and observed result.
+- Every PR that touches frontend code needs an authentic screenshot or video
+  captured while exercising the PR code. This includes non-visual frontend logic
+  whose effect appears in a generated or downloaded user-facing artifact.
+- Authentic evidence comes from the real Agent Canvas app, browser, OS dialog,
+  generated or downloaded artifact, or actual terminal/runtime output. It must
+  include enough surrounding context and reproduction steps to establish what
+  produced it. Mockups, Figma or design images, diagrams, manually recreated
+  terminal output, synthetic before/after cards, and other illustrative graphics
+  do not prove that the code ran.
 - Runtime and user-visible bug fixes require the same production-facing setup
   before and after the change. The base or released version must reproduce the
-  bug; the PR head must show the corrected behavior.
-- Lifecycle fixes must also verify resulting process or resource state, such as
+  bug; the PR head must show the corrected behavior. If the claimed state cannot
+  be produced through the real product, require the issue and PR to say so and
+  describe the change as defensive handling rather than a reproduced production
+  bug.
+- When unsure what genuine product evidence looks like, compare it with these
+  official OpenHands documentation captures: [first-time setup](https://github.com/OpenHands/docs/blob/2409e927af05a40acc27190383a424615fc0f807/openhands/static/img/agent-canvas-setup-step-1.png),
+  [LLM profiles manager](https://github.com/OpenHands/docs/blob/2409e927af05a40acc27190383a424615fc0f807/openhands/static/img/agent-canvas-llm-profiles-manager.png),
+  and [`/model` interaction](https://github.com/OpenHands/docs/blob/2409e927af05a40acc27190383a424615fc0f807/openhands/static/img/model-command-agent-canvas.png).
+- CLI, API, and script changes need the exact runtime command and observed result.
+  Lifecycle fixes must also verify resulting process or resource state, such as
   the parent exit code and remaining child services or listening ports.
 - Tests must exercise real logic and observable state. A claimed regression test
   must reach the target behavior and fail when that behavior regresses; mocks
@@ -204,8 +218,8 @@ when cleanup and dependencies are explicit.
 - Do not duplicate library behavior or add brittle presentation-only snapshots.
 
 Tests are regression proof, not a substitute for required live evidence. Submit
-**COMMENT** when production-facing evidence is required but absent, and name the
-exact verification still needed.
+**COMMENT** when authentic production-facing evidence is missing or ambiguous,
+and name the exact capture or verification still needed before approval.
 
 Follow the test routing in `AGENTS.md`. Mock-LLM, Docker mock-LLM, and live
 LLM-backed E2E suites run after changes reach `main`, not from PR labels. For
