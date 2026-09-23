@@ -108,7 +108,7 @@ function SlashCommandMenuItem({
       className={cn(
         "w-full px-3 py-2.5 text-left",
         dropdownInstantColorClassName,
-        isSelected ? "bg-tertiary" : "hover:bg-[var(--oh-surface-raised)]",
+        isSelected ? "bg-tertiary" : "hover:bg-surface-raised",
       )}
       onMouseDown={(e) => {
         // Use mouseDown instead of click to fire before input blur
@@ -118,7 +118,7 @@ function SlashCommandMenuItem({
     >
       <Text className="font-normal">{item.command}</Text>
       {description && (
-        <Text className="text-xs text-[var(--oh-muted)] mt-0.5 truncate block">
+        <Text className="text-xs text-muted mt-0.5 truncate block">
           {description}
         </Text>
       )}
@@ -159,10 +159,10 @@ export function SlashCommandMenu({
     <div
       role="listbox"
       aria-label={t(I18nKey.CHAT_INTERFACE$COMMANDS)}
-      className="absolute bottom-full left-0 w-full mb-1 bg-[var(--oh-surface)] border border-[var(--oh-border-subtle)] rounded-lg shadow-lg max-h-[300px] overflow-y-auto custom-scrollbar z-50"
+      className="absolute bottom-full left-0 w-full mb-1 bg-surface border border-border-subtle rounded-lg shadow-lg max-h-75 overflow-y-auto custom-scrollbar z-50"
       data-testid="slash-command-menu"
     >
-      <div className="px-3 py-2 text-xs text-[var(--oh-muted)] border-b border-[var(--oh-border-subtle)]">
+      <div className="px-3 py-2 text-xs text-muted border-b border-border-subtle">
         {t(I18nKey.CHAT_INTERFACE$COMMANDS)}
       </div>
       <div className={dropdownMenuListClassName}>

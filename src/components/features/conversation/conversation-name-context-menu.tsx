@@ -273,11 +273,8 @@ export function ConversationNameContextMenu({
       )}
 
       {shouldShowPublicSharing && onTogglePublic && (
-        <li className="flex w-full items-center gap-2 rounded px-2 py-2 hover:bg-[var(--oh-interactive-hover)]">
-          <span
-            className="flex shrink-0 items-center text-[var(--oh-muted)]"
-            aria-hidden
-          >
+        <li className="flex w-full items-center gap-2 rounded px-2 py-2 hover:bg-interactive-hover">
+          <span className="flex shrink-0 items-center text-muted" aria-hidden>
             <Share2 size={16} />
           </span>
           <span className="min-w-0 flex-1 truncate text-sm">
@@ -290,7 +287,7 @@ export function ConversationNameContextMenu({
                   type="button"
                   data-testid="copy-share-link-button"
                   onClick={onCopyShareLink}
-                  className="rounded p-0.5 text-[var(--oh-muted)] hover:bg-[var(--oh-interactive-selected)] hover:text-[var(--oh-foreground)] cursor-pointer [&_svg]:text-current"
+                  className="rounded p-0.5 text-muted hover:bg-interactive-selected hover:text-foreground cursor-pointer [&_svg]:text-current"
                   title={t(I18nKey.BUTTON$COPY_TO_CLIPBOARD)}
                 >
                   <CopyIcon width={14} height={14} />
@@ -301,7 +298,7 @@ export function ConversationNameContextMenu({
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(event) => event.stopPropagation()}
-                  className="rounded p-0.5 text-[var(--oh-muted)] no-underline visited:text-[var(--oh-muted)] hover:bg-[var(--oh-interactive-selected)] hover:text-[var(--oh-foreground)] cursor-pointer [&_svg]:text-current"
+                  className="rounded p-0.5 text-muted no-underline visited:text-muted hover:bg-interactive-selected hover:text-foreground cursor-pointer [&_svg]:text-current"
                   title={t(I18nKey.BUTTON$OPEN_IN_NEW_TAB)}
                 >
                   <ExternalLink size={14} aria-hidden />

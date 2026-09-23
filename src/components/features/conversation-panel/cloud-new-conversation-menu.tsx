@@ -267,8 +267,8 @@ export function CloudNewConversationMenu({
                       "flex items-center gap-1 rounded border px-2 py-1 text-xs",
                       dropdownInstantColorClassName,
                       isActive
-                        ? "border-[var(--oh-border-subtle)] bg-[var(--oh-interactive-hover)] text-white"
-                        : "border-transparent text-[var(--oh-text-secondary)] hover:text-white",
+                        ? "border-border-subtle bg-interactive-hover text-white"
+                        : "border-transparent text-text-secondary hover:text-white",
                     )}
                   >
                     <GitProviderIcon gitProvider={provider} />
@@ -285,7 +285,7 @@ export function CloudNewConversationMenu({
                 width={16}
                 height={16}
                 aria-hidden
-                className="pointer-events-none absolute left-0 top-1/2 -translate-y-1/2 text-[var(--oh-muted)]"
+                className="pointer-events-none absolute left-0 top-1/2 -translate-y-1/2 text-muted"
               />
               <input
                 type="text"
@@ -296,7 +296,7 @@ export function CloudNewConversationMenu({
                 disabled={!selectedProvider}
                 className={cn(
                   "w-full border-0 bg-transparent py-1.5 pl-6 pr-0 text-sm text-white",
-                  "outline-none placeholder:text-[var(--oh-muted)]",
+                  "outline-none placeholder:text-muted",
                   "focus:outline-none focus:ring-0",
                   "disabled:cursor-not-allowed disabled:opacity-60",
                 )}
@@ -308,13 +308,13 @@ export function CloudNewConversationMenu({
 
           <ul
             className={cn(
-              "max-h-[40vh] overflow-y-auto custom-scrollbar-always sm:max-h-[280px]",
+              "max-h-[40vh] overflow-y-auto custom-scrollbar-always sm:max-h-70",
               dropdownMenuListClassName,
             )}
           >
             {isListLoading && repositories.length === 0 && (
               <li
-                className="px-2 py-2 text-sm text-[var(--oh-muted)] italic"
+                className="px-2 py-2 text-sm text-muted italic"
                 data-testid="cloud-repo-loading"
               >
                 {t(I18nKey.HOME$LOADING_REPOSITORIES)}
@@ -333,7 +333,7 @@ export function CloudNewConversationMenu({
               repositories.length === 0 &&
               !!selectedProvider && (
                 <li
-                  className="px-2 py-2 text-sm text-[var(--oh-muted)] italic"
+                  className="px-2 py-2 text-sm text-muted italic"
                   data-testid="cloud-repo-empty"
                 >
                   {t(I18nKey.GITHUB$NO_RESULTS)}
@@ -357,7 +357,7 @@ export function CloudNewConversationMenu({
                   onClick={() => fetchNextPage()}
                   className={itemClass}
                 >
-                  <span className="text-[var(--oh-text-secondary)]">
+                  <span className="text-text-secondary">
                     {isFetchingNextPage
                       ? t(I18nKey.HOME$LOADING_MORE_REPOSITORIES)
                       : t(I18nKey.CONVERSATION$LOAD_MORE)}

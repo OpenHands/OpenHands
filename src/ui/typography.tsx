@@ -6,11 +6,11 @@ const typographyVariants = cva("", {
     variant: {
       h1: "text-[32px] text-white font-medium leading-5",
       h2: "text-xl font-medium leading-6 -tracking-[0.02em] text-white",
-      h3: "text-sm font-medium text-[var(--oh-text-tertiary)]",
+      h3: "text-sm font-medium text-text-tertiary",
       span: "text-sm font-normal text-white leading-5.5",
       p: "text-sm font-normal text-white leading-5.5",
       codeBlock:
-        "font-mono text-sm leading-relaxed text-[var(--oh-text-tertiary)] whitespace-pre-wrap",
+        "font-mono text-sm leading-relaxed text-text-tertiary whitespace-pre-wrap",
     },
   },
   defaultVariants: {

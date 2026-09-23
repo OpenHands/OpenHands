@@ -33,7 +33,7 @@ export function CompactContextButton({
   return (
     <div
       data-testid="compact-context-section"
-      className="flex flex-col gap-2 border-t border-[var(--oh-border-subtle)] pt-3"
+      className="flex flex-col gap-2 border-t border-border-subtle pt-3"
     >
       {isHighFill && (
         <span className="text-xs text-amber-500">
@@ -62,13 +62,13 @@ export function CompactContextButton({
         <StyledTooltip
           content={description}
           placement="top"
-          tooltipClassName="max-w-[220px] text-xs font-normal leading-relaxed whitespace-normal"
+          tooltipClassName="max-w-55 text-xs font-normal leading-relaxed whitespace-normal"
         >
           <button
             type="button"
             data-testid="compact-context-info"
             aria-label={description}
-            className="flex size-5 shrink-0 items-center justify-center rounded-full text-[var(--oh-muted)] hover:text-[var(--oh-foreground)] transition-colors cursor-help"
+            className="flex size-5 shrink-0 items-center justify-center rounded-full text-muted hover:text-foreground transition-colors cursor-help"
           >
             <Info className="size-3.5" aria-hidden />
           </button>

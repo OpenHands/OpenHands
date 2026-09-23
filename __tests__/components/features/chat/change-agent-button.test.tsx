@@ -244,7 +244,7 @@ describe("ChangeAgentButton mode selection", () => {
       "rounded-[100px]",
       "border",
       "border-transparent",
-      "text-[var(--oh-muted)]",
+      "text-muted",
       "cursor-pointer",
       "hover:text-white",
       "hover:bg-white/10",
@@ -262,6 +262,15 @@ describe("ChangeAgentButton mode selection", () => {
     expect(
       screen.queryByTestId("change-agent-context-menu"),
     ).not.toBeInTheDocument();
+  });
+
+  it("sizes the mode label at the intended 11px", () => {
+    renderButton();
+
+    const label = screen.getByText("COMMON$CODE");
+    expect(label).toHaveClass("text-[11px]");
+    expect(label).toHaveClass("text-white");
+    expect(label).not.toHaveClass("text-2.75");
   });
 
   it("selects plan and code modes from the menu", async () => {

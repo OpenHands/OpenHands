@@ -317,7 +317,7 @@ export function WorkspaceDropdown({
 
   const control = (
     <div className={cn("relative", className)}>
-      <div className="group relative text-[var(--oh-muted)] hover:text-white">
+      <div className="group relative text-muted hover:text-white">
         <div className="absolute left-2 top-1/2 transform -translate-y-1/2 z-10">
           <RepoIcon width={16} height={16} />
         </div>
@@ -331,7 +331,7 @@ export function WorkspaceDropdown({
             className: cn(
               formControlFieldClassName,
               "text-inherit shadow-none pl-7 pr-16 text-sm font-normal leading-5",
-              "placeholder:text-[var(--oh-muted)]",
+              "placeholder:text-muted",
               "disabled:cursor-not-allowed disabled:opacity-60",
             ),
             onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -371,7 +371,7 @@ export function WorkspaceDropdown({
                     role="presentation"
                     aria-hidden="true"
                     data-testid="workspace-group-header"
-                    className="px-2 pt-2 pb-1 text-xs font-medium text-[var(--oh-muted)] select-none"
+                    className="px-2 pt-2 pb-1 text-xs font-medium text-muted select-none"
                   >
                     {label}
                   </li>
