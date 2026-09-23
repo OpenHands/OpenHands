@@ -5,12 +5,31 @@ import userEvent from "@testing-library/user-event";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 
 describe("ModalBackdrop", () => {
+  it("locks body scrolling while open and restores the previous overflow after unmount", () => {
+    document.body.style.overflow = "auto";
+
+    const { unmount } = render(
+      <ModalBackdrop>
+        <div />
+      </ModalBackdrop>,
+    );
+
+    expect(document.body.style.overflow).toBe("hidden");
+
+    unmount();
+
+    expect(document.body.style.overflow).toBe("auto");
+  });
+
   it("portals out of a transformed ancestor so position: fixed resolves against the viewport", () => {
     // Arrange: a transformed ancestor would otherwise become the
     // containing block for `position: fixed` descendants and trap the
     // modal inside it (the OnboardingModal / InstallServerModal bug).
     render(
-      <div data-testid="transformed-ancestor" style={{ transform: "translateX(0)" }}>
+      <div
+        data-testid="transformed-ancestor"
+        style={{ transform: "translateX(0)" }}
+      >
         <ModalBackdrop onClose={vi.fn()}>
           <p>modal content</p>
         </ModalBackdrop>
