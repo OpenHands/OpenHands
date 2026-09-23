@@ -131,9 +131,7 @@ export default function DeviceVerify() {
         <div className="max-w-md w-full mx-auto p-6 bg-surface-raised rounded-lg shadow-lg">
           <div className="text-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-contrast mx-auto mb-4" />
-            <p className="text-muted">
-              {t(I18nKey.DEVICE$PROCESSING)}
-            </p>
+            <p className="text-muted">{t(I18nKey.DEVICE$PROCESSING)}</p>
           </div>
         </div>
       </div>
@@ -233,9 +231,7 @@ export default function DeviceVerify() {
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-contrast mx-auto mb-4" />
-          <p className="text-muted">
-            {t(I18nKey.DEVICE$PROCESSING)}
-          </p>
+          <p className="text-muted">{t(I18nKey.DEVICE$PROCESSING)}</p>
         </div>
       </div>
     );
@@ -245,9 +241,7 @@ export default function DeviceVerify() {
     <div className="min-h-screen flex items-center justify-center bg-background">
       <div className="max-w-md w-full mx-auto p-6 bg-surface-raised rounded-lg shadow-lg text-center">
         <H1 className="text-2xl mb-4">{t(I18nKey.DEVICE$AUTH_REQUIRED)}</H1>
-        <p className="text-muted">
-          {t(I18nKey.DEVICE$SIGN_IN_PROMPT)}
-        </p>
+        <p className="text-muted">{t(I18nKey.DEVICE$SIGN_IN_PROMPT)}</p>
       </div>
     </div>
   );
