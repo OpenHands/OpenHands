@@ -134,6 +134,9 @@ export function ModelSelector({
   };
 
   const handleChangeCustomModel = (model: string) => {
+    // Editing the field is itself a choice of free text, so keep it open even
+    // when it was opened for an unlisted saved model and is now empty.
+    setIsCustomModel(true);
     setSelectedModel(model || null);
     setLitellmId(model ? `${selectedProvider}/${model}` : null);
     // Report the empty string rather than null: null means "no model chosen

@@ -185,16 +185,32 @@ describe("ModelSelector", () => {
   });
 
   it("should edit a saved model the provider catalog does not list", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
     renderWithQuery(
-      <ModelSelector currentModel="openrouter/thinkingmachines/inkling-small:free" />,
+      <ModelSelector
+        currentModel="openrouter/thinkingmachines/inkling-small:free"
+        onChange={onChange}
+      />,
     );
 
     await waitFor(() => {
       expect(screen.getByLabelText("LLM Provider")).toHaveValue("OpenRouter");
     });
 
-    expect(await screen.findByTestId("custom-model-input")).toHaveValue(
-      "thinkingmachines/inkling-small:free",
+    const customInput = await screen.findByTestId("custom-model-input");
+    expect(customInput).toHaveValue("thinkingmachines/inkling-small:free");
+
+    // Replacing the saved ID empties the field first; it must stay editable.
+    await user.clear(customInput);
+    await user.type(
+      screen.getByTestId("custom-model-input"),
+      "openai/gpt-oss-120b:free",
+    );
+
+    expect(onChange).toHaveBeenLastCalledWith(
+      "openrouter",
+      "openai/gpt-oss-120b:free",
     );
   });
 
