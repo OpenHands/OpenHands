@@ -12,8 +12,8 @@
 @theme inline {
   --color-primary: var(--oh-color-primary);
   --color-logo: var(--oh-color-logo);
-  --color-base: var(--oh-color-base);
-  /* Avoid text-base: tailwind-merge interprets it as a font size. */
+  --color-canvas-base: var(--oh-color-base);
+  /* Keep color names distinct from font sizes such as text-base. */
   --color-on-primary: var(--oh-color-base);
   --color-base-secondary: var(--oh-color-base-secondary);
   --color-danger: var(--oh-color-danger);

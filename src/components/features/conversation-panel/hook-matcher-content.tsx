@@ -37,7 +37,7 @@ export function HookMatcherContent({ matcher }: HookMatcherContentProps) {
               borderRadius="medium"
               maxHeight="small"
               overflow="auto"
-              className="border border-border bg-base text-text-tertiary"
+              className="border border-border bg-canvas-base text-text-tertiary"
             >
               {hook.command}
             </Pre>

@@ -45,7 +45,7 @@ export function ChatInputField({
       className="box-border content-stretch flex flex-row items-center justify-start min-h-6 p-0 relative shrink-0 flex-1"
       data-name="Text & caret"
     >
-      {/* `text-base` is a color utility in this theme (--color-base), not 16px. */}
+      {/* Keep a fixed 16px input size; text-base scales with the host root font size. */}
       {/* eslint-disable-next-line shadcn/no-arbitrary-values */}
       <div className="basis-0 flex flex-col font-normal grow justify-center leading-[0] min-h-px min-w-px overflow-ellipsis overflow-hidden relative shrink-0 text-text-tertiary text-[16px] text-left">
         <div

@@ -107,7 +107,7 @@ export function SayHelloStep({
               }}
               placeholder={defaultMessage}
               disabled={isLaunching}
-              // `text-base` is a color utility in this theme (--color-base), not 16px.
+              // Keep a fixed 16px input size; text-base scales with the host root font size.
               // eslint-disable-next-line shadcn/no-arbitrary-values
               className="min-h-5 w-full flex-1 bg-transparent text-[16px] font-normal leading-5 text-contrast outline-none placeholder:text-text-tertiary disabled:cursor-not-allowed disabled:opacity-50"
             />
