@@ -38,7 +38,7 @@ export function SystemMessageModal({
       <ModalBackdrop onClose={onClose}>
         <ModalBody
           width="lg"
-          className="relative max-h-[80vh] flex flex-col items-start border border-[var(--oh-border)]"
+          className="relative max-h-[80vh] flex flex-col items-start border border-border"
           testID="system-message-modal"
         >
           <SystemMessageHeader
@@ -56,7 +56,7 @@ export function SystemMessageModal({
               }
             />
 
-            <div className="h-[60vh] overflow-auto rounded-md border border-[var(--oh-border)] bg-surface-raised custom-scrollbar-always">
+            <div className="h-[60vh] overflow-auto rounded-md border border-border bg-surface-raised custom-scrollbar-always">
               <TabContent
                 activeTab={activeTab}
                 systemMessage={systemMessage}

@@ -116,7 +116,7 @@ export function AlertBanner({
     <div
       data-testid="alert-banner"
       className={cn(
-        "bg-base border border-primary text-white p-4 rounded",
+        "bg-base border border-primary text-contrast p-4 rounded",
         "flex flex-row items-center justify-between m-1",
         currentPath === "/" && "mt-3 mr-3",
       )}

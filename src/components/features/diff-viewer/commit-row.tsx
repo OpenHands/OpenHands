@@ -43,32 +43,26 @@ export function CommitRow({
         onClick={onToggle}
         aria-expanded={isExpanded}
         data-testid="commit-row-toggle"
-        className="w-full flex h-10 items-center gap-2 px-3 border-b border-[var(--oh-border)] text-sm text-content text-left hover:cursor-pointer"
+        className="w-full flex h-10 items-center gap-2 px-3 border-b border-border text-sm text-content text-left hover:cursor-pointer"
       >
-        <code className="w-[7ch] flex-shrink-0 text-center font-mono text-xs text-[var(--oh-muted)]">
+        <code className="w-[7ch] flex-shrink-0 text-center font-mono text-xs text-muted">
           {commit.shortSha}
         </code>
         <strong className="flex-1 truncate font-medium">
           {commit.subject}
         </strong>
         {showAuthor && (
-          <span className="text-xs text-[var(--oh-muted)] truncate max-w-32 flex-shrink-0">
+          <span className="text-xs text-muted truncate max-w-32 flex-shrink-0">
             {commit.author}
           </span>
         )}
-        <span className="text-xs text-[var(--oh-muted)] flex-shrink-0">
+        <span className="text-xs text-muted flex-shrink-0">
           {`${formatTimeDelta(commit.timestamp)} ${t(I18nKey.CONVERSATION$AGO)}`}
         </span>
         {isExpanded ? (
-          <ChevronDown
-            className="w-4 h-4 shrink-0 text-[var(--oh-muted)]"
-            aria-hidden
-          />
+          <ChevronDown className="w-4 h-4 shrink-0 text-muted" aria-hidden />
         ) : (
-          <ChevronRight
-            className="w-4 h-4 shrink-0 text-[var(--oh-muted)]"
-            aria-hidden
-          />
+          <ChevronRight className="w-4 h-4 shrink-0 text-muted" aria-hidden />
         )}
       </button>
 

@@ -371,7 +371,7 @@ export function ConversationTabs({
       {isTabActive("planner") && (
         <div
           className={cn(
-            "flex h-10 min-h-10 shrink-0 items-center border-t border-[var(--oh-border)] pl-[10px] pr-1",
+            "flex h-10 min-h-10 shrink-0 items-center border-t border-border pl-2.5 pr-1",
           )}
         >
           <button
@@ -379,14 +379,14 @@ export function ConversationTabs({
             onClick={handleBuildPlanClick}
             disabled={isBuildDisabled}
             className={cn(
-              "flex h-5 min-w-17 items-center justify-center rounded bg-white px-2 transition-opacity",
+              "flex h-5 min-w-17 items-center justify-center rounded bg-contrast px-2 transition-opacity",
               isBuildDisabled
                 ? "cursor-not-allowed opacity-50"
                 : "cursor-pointer hover:opacity-90",
             )}
             data-testid="planner-tab-build-button"
           >
-            <Typography.Text className="text-[11px] font-normal leading-5 text-black">
+            <Typography.Text className="text-[11px] font-normal leading-5 text-contrast-foreground">
               {/* eslint-disable-next-line i18next/no-literal-string */}
               {t(I18nKey.COMMON$BUILD)} ⌘↩
             </Typography.Text>

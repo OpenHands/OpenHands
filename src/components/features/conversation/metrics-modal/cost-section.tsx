@@ -17,7 +17,7 @@ export function CostSection({ cost, maxBudgetPerTask }: CostSectionProps) {
   return (
     <>
       <BudgetDisplay cost={cost} maxBudgetPerTask={maxBudgetPerTask} />
-      <div className="flex justify-between items-center border-t border-[var(--oh-border-subtle)] pt-2">
+      <div className="flex justify-between items-center border-t border-border-subtle pt-2">
         <span className="font-semibold">
           {t(I18nKey.CONVERSATION$TOTAL_COST)}
         </span>
