@@ -348,6 +348,7 @@ export function ConversationWebSocketProvider({
           consumeMatchingPendingMessage(
             conversationId,
             extractMessageEventText(event),
+            event,
           );
         }
       }
@@ -621,15 +622,13 @@ export function ConversationWebSocketProvider({
           }
 
           // Clear optimistic user message when a user message is confirmed.
-          // We match by the echoed text content (with FIFO fallback inside the
-          // store), so an echo for "second" pops "second" — not whichever
-          // pending entry happens to be oldest — protecting against any
-          // out-of-order delivery between conversations or sub-agents.
+          // History and live delivery share the same timestamp/identity checks.
           if (isUserMessageEvent(event)) {
             if (conversationId) {
               consumeMatchingPendingMessage(
                 conversationId,
                 extractMessageEventText(event),
+                event,
               );
               // Clear draft from localStorage - message was successfully delivered
               setConversationState(conversationId, { draftMessage: null });
@@ -864,6 +863,7 @@ export function ConversationWebSocketProvider({
               consumeMatchingPendingMessage(
                 conversationId,
                 extractMessageEventText(event),
+                event,
               );
               setConversationState(conversationId, { draftMessage: null });
             }

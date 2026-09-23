@@ -337,7 +337,7 @@ describe("Conversation websocket behavior", () => {
       loadedConversationId: null,
     });
     useErrorMessageStore.getState().removeErrorMessage();
-    useOptimisticUserMessageStore.setState({ pendingMessages: [] });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
     useConversationStateStore.getState().reset();
     useConversationStore.setState({
       conversationMode: "code",
@@ -361,6 +361,24 @@ describe("Conversation websocket behavior", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     window.localStorage.clear();
+  });
+
+  it("retains a newer failed identical prompt when old history reloads", () => {
+    const store = useOptimisticUserMessageStore.getState();
+    const failedId = store.enqueuePendingMessage({
+      conversationId: "conv-main",
+      text: "continue",
+      timestamp: "2026-09-23T12:00:00.000Z",
+    });
+    store.markPendingMessageError(failedId, "Request rejected before delivery");
+    const oldDeliveredMessage = makeMessageEvent("01", "user", ["continue"]);
+    historyCapture.result.data = { events: [oldDeliveredMessage] };
+
+    renderProvider();
+
+    expect(useOptimisticUserMessageStore.getState().pendingMessages).toEqual([
+      expect.objectContaining({ id: failedId, status: "error" }),
+    ]);
   });
 
   it("returns no websocket API outside the provider", () => {
@@ -414,6 +432,10 @@ describe("Conversation websocket behavior", () => {
     expect(consumeMatchingPendingMessage).toHaveBeenCalledWith(
       "conv-main",
       "hello world",
+      expect.objectContaining({
+        id: expect.any(String),
+        timestamp: expect.any(String),
+      }),
     );
     expect(socketCapture.mainUrl).toContain("/sockets/events/conv-main");
     // The session key is now passed via the dedicated `sessionApiKey` option
@@ -1091,6 +1113,10 @@ describe("Conversation websocket behavior", () => {
     expect(consumeMatchingPendingMessage).toHaveBeenCalledWith(
       "conv-main",
       "hello world",
+      expect.objectContaining({
+        id: expect.any(String),
+        timestamp: expect.any(String),
+      }),
     );
     expect(getConversationState("conv-main").draftMessage).toBeNull();
 
@@ -1986,6 +2012,10 @@ describe("Conversation websocket behavior", () => {
     expect(consumeMatchingPendingMessage).toHaveBeenCalledWith(
       "conv-main",
       "plan this",
+      expect.objectContaining({
+        id: expect.any(String),
+        timestamp: expect.any(String),
+      }),
     );
     expect(getConversationState("conv-main").draftMessage).toBeNull();
 
