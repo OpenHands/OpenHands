@@ -197,7 +197,12 @@ describe("RepositorySelectionForm", () => {
     });
 
     renderForm();
-    expect(await screen.findByTestId("git-repo-dropdown")).toBeInTheDocument();
+    const repositoryInput = await screen.findByTestId("git-repo-dropdown");
+    expect(repositoryInput).toBeInTheDocument();
+    expect(repositoryInput).toHaveAttribute(
+      "placeholder",
+      "COMMON$SELECT_REPOSITORY_PLACEHOLDER",
+    );
   });
 
   it("shows error message when repository fetch fails", async () => {
