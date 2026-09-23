@@ -116,17 +116,24 @@ function markHandoffNonceConsumed(nonce: string): void {
   }
 }
 
-function removeHandoffFromUrl(params: URLSearchParams): void {
-  params.delete(POSTHOG_HANDOFF_PARAM);
-  params.delete("distinct_id");
-  params.delete("session_id");
-  const nextHash = params.toString();
+function removeHandoffFromUrl(
+  searchParams: URLSearchParams,
+  hashParams: URLSearchParams,
+): void {
+  for (const params of [searchParams, hashParams]) {
+    params.delete(POSTHOG_HANDOFF_PARAM);
+    params.delete("distinct_id");
+    params.delete("session_id");
+  }
+
+  const nextSearch = searchParams.toString();
+  const nextHash = hashParams.toString();
 
   try {
     window.history.replaceState(
       null,
       "",
-      `${window.location.pathname}${window.location.search}${nextHash ? `#${nextHash}` : ""}`,
+      `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${nextHash ? `#${nextHash}` : ""}`,
     );
   } catch {
     // Telemetry must never prevent the application from rendering.
@@ -167,10 +174,15 @@ function parseStructuredHandoff(encoded: string): StoredHandoff | undefined {
 }
 
 function readHandoffFromUrl(): PostHogHandoff | null | undefined {
-  const params = new URLSearchParams(window.location.hash.slice(1));
-  const structured = params.get(POSTHOG_HANDOFF_PARAM);
-  const distinctID = params.get("distinct_id");
-  const sessionID = params.get("session_id");
+  const hashParams = new URLSearchParams(window.location.hash.slice(1));
+  const searchParams = new URLSearchParams(window.location.search);
+  const structured =
+    hashParams.get(POSTHOG_HANDOFF_PARAM) ??
+    searchParams.get(POSTHOG_HANDOFF_PARAM);
+  const distinctID =
+    hashParams.get("distinct_id") ?? searchParams.get("distinct_id");
+  const sessionID =
+    hashParams.get("session_id") ?? searchParams.get("session_id");
   if (!structured && !(distinctID && sessionID)) return undefined;
 
   const handoff = structured
@@ -190,7 +202,7 @@ function readHandoffFromUrl(): PostHogHandoff | null | undefined {
     }
   }
 
-  removeHandoffFromUrl(params);
+  removeHandoffFromUrl(searchParams, hashParams);
   return handoff ?? null;
 }
 

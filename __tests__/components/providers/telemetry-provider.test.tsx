@@ -141,6 +141,38 @@ describe("TelemetryProvider", () => {
     expect(window.location.hash).toBe("");
   });
 
+  it("consumes structured website handoff IDs from query params", () => {
+    const encoded = encodeHandoff({
+      v: 1,
+      exp: Date.now() + 60_000,
+      nonce: "nonce-query",
+      distinct_id: "docs-anon-id",
+      session_id: "docs-session-id",
+      attribution: { cta_surface: "docs_link" },
+    });
+    window.history.replaceState(
+      null,
+      "",
+      `/canvas?keep=1&oh_ph_handoff=${encoded}#section=top`,
+    );
+
+    render(
+      <TelemetryProvider config={runtimeConfig}>
+        <div />
+      </TelemetryProvider>,
+    );
+
+    expect(configureBootstrapMock).toHaveBeenCalledWith({
+      distinctID: "docs-anon-id",
+      sessionID: "docs-session-id",
+    });
+    expect(setWebsiteAttributionMock).toHaveBeenCalledWith({
+      cta_surface: "docs_link",
+    });
+    expect(window.location.search).toBe("?keep=1");
+    expect(window.location.hash).toBe("#section=top");
+  });
+
   it("drops malformed or expired handoffs and removes them from the URL", () => {
     window.location.hash = `oh_ph_handoff=${encodeHandoff({
       v: 1,
