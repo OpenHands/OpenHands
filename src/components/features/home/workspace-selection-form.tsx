@@ -199,7 +199,6 @@ export function WorkspaceSelectionForm({
           onChange={handleWorkspaceChange}
           onAddClick={() => setIsBrowserOpen(true)}
           onManageClick={() => setIsManageOpen(true)}
-          className="max-w-auto"
           key={selectedWorkspace?.path ?? "empty-workspace-selection"}
         />
 

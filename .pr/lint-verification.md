@@ -2,7 +2,7 @@
 
 Base: `a3cfe98267c52937dc4e91a55644a6131c6c01bc`. Pinned linter: `@shadcn/lint@0.1.0`.
 
-The only production change is ESLint configuration. Runtime code and generated CSS are unchanged.
+The rule is enabled at warning level. Four inert class usages are also removed; generated styling and the DOM structure are preserved.
 
 ## Inventory
 
@@ -13,16 +13,18 @@ Two exact exceptions are supported by code:
 - `environment-switch-overlay`: `src/index.css:134` uses it to animate child elements; that stylesheet is outside the Tailwind theme import graph.
 - `conversation-overview-diffs-git-action`: a selector target in `src/components/features/conversation/conversation-overview-diffs-row.tsx:40` for clearing row hover while the action is hovered.
 
-The resulting **4 genuine findings remain warnings**, for a separate cleanup after checking intended behavior:
+All **4 genuine findings are fixed** by removing inert classes:
 
-| File | Finding |
+| File | Finding and correction |
 | --- | --- |
-| `src/components/features/chat/drag-over.tsx:24` | `drag-over-content`, no stylesheet/selector consumer found |
-| `src/components/features/home/repo-selection-form.tsx:154` | `max-w-auto`, no emitted CSS |
-| `src/components/features/home/workspace-selection-form.tsx:202` | `max-w-auto`, no emitted CSS |
-| `src/utils/form-control-classes.ts:39` | `ease`, no emitted CSS |
+| `src/components/features/chat/drag-over.tsx` | Remove `drag-over-content`, which has no stylesheet or selector consumer; retain the wrapper element. |
+| `src/components/features/home/repo-selection-form.tsx` | Remove `max-w-auto`, which emits no CSS. |
+| `src/components/features/home/workspace-selection-form.tsx` | Remove the same unsupported width class. |
+| `src/utils/form-control-classes.ts` | Remove unsupported `ease`; retain the existing transform transition, duration, reduced-motion handling, and default timing. |
 
-Do not blindly accept the linter's `min-w-auto` suggestion: minimum width is a different property. Adoption leaves existing UI behavior alone.
+The dropdowns pass the optional class to `cn("relative", className)`; removing it does not reveal a previously overridden maximum width. Do not substitute `min-w-auto`: minimum width is a different property. Likewise, connecting the drag overlay to the similarly named `.drag-over-ui-content` rule would newly force white text and fixed typography. That is a separate visual decision, not necessary to remove an unused marker.
+
+`node .pr/verify-inert-classes.mjs` verifies identical compiled CSS before/after removal with the actual Tailwind theme/plugins and checks that class merging preserves all valid utilities. A repository search found no CSS/JS/test consumers of the removed marker or utilities. The transition helper is shared by caret controls in both standalone and embedded Canvas, independent of backend/agent type; it retains its existing behavior in all consumers.
 
 ## Reproduction
 
@@ -39,7 +41,7 @@ PASS: real theme/plugins accepted; typos reported; exceptions stay exact.
 
 Accepted: Canvas surface/border/focus tokens, `prose`, `scrollbar-hide`, a HeroUI color with a data variant, and the two documented markers. This also detects the documented fallback mode that incorrectly accepts `hovr:flex`.
 
-## Checks
+## Original adoption checks
 
 Executed with Node 22.23.2, npm 10.9.8 on macOS (CI's supported Node environment should also run its normal checks):
 
@@ -52,3 +54,13 @@ Executed with Node 22.23.2, npm 10.9.8 on macOS (CI's supported Node environment
 The pinned rule delegates some missing color-token diagnostics to `no-raw-colors`; it is not a complete missing-token guard, nor does it detect the semantic `text-base` collision. Other rules retain their original settings.
 
 This directory is PR-only evidence. Fork PRs require manual `.pr/` cleanup before merge.
+
+## Warning cleanup checks
+
+- `node .pr/verify-inert-classes.mjs`: passed; merged valid classes and compiled CSS are identical for all removals.
+- `node .pr/verify-unknown-classes.mjs`: passed; valid theme/plugin utilities and exact selector exceptions accepted while typos remain reported.
+- `npm run lint`: passed, **0 unknown-class warnings / 347 existing arbitrary-value warnings / 0 errors**; formatting and TypeScript checks passed.
+- `npx vitest run __tests__/components/features/home/repo-selection-form.test.tsx __tests__/components/features/home/workspace-selection-form.test.tsx __tests__/components/features/home/git-repo-dropdown.test.tsx __tests__/components/features/home/workspace-dropdown.test.tsx __tests__/utils/form-control-classes.test.ts --maxWorkers=2`: **5 files / 69 tests passed**.
+- `npm run build` and `npm run build:lib`: passed.
+- No visual change is claimed: the removed classes have no styling or selector consumers, and the compiled CSS comparison above is identical. No new screenshot is needed to demonstrate a visual repair.
+- The original PR head passed Ubuntu and Windows test/build CI. The checks above disclose the earlier local full-suite flake; no new tests or weakened assertions were introduced for inert class removal.
