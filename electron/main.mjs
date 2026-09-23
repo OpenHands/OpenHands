@@ -47,7 +47,11 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 
-import { isExternalBrowsableUrl, isLoopbackAppUrl } from "./lib/window-url-policy.mjs";
+import {
+  attachNavigationGuard,
+  attachPopupPolicy,
+  mainWindowOpenHandler,
+} from "./lib/navigation-policy.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -380,49 +384,34 @@ function createMainWindow() {
     mainWin?.maximize();
   });
 
-  // Route window.open() calls appropriately.
-  mainWin.webContents.setWindowOpenHandler(({ url }) => {
-    // The "Login with OpenHands Cloud" device-flow opens about:blank immediately
-    // on the user's click (to beat popup blockers), then navigates the popup to
-    // the OAuth verification URL once it has one.  We must allow about:blank
-    // through so window.open() returns a non-null WindowProxy; the did-create-window
-    // handler below redirects the popup to the system browser when it navigates.
-    if (url === "about:blank") {
-      return {
-        action: "allow",
-        overrideBrowserWindowOptions: { width: 800, height: 700 },
-      };
-    }
-    // All other URLs open directly in the system browser. The loopback test
-    // goes through URL parsing: prefix matching would also accept
-    // attacker-controlled hosts like http://localhost.evil.com (or
-    // http://localhost@evil.com) and render them in a chromeless native
-    // window. Schemes outside the openExternal allowlist are denied
-    // outright — shell.openExternal would forward them to OS protocol
-    // handlers.
-    if (isLoopbackAppUrl(url)) {
-      return { action: "allow" };
-    }
-    if (isExternalBrowsableUrl(url)) {
-      shell.openExternal(url);
-    }
-    return { action: "deny" };
-  });
+  // Top-level navigation away from the loopback app is never legitimate: the
+  // renderer only ever navigates within its own SPA. Without this guard, any
+  // `location = "https://…"` reachable from untrusted agent/chat content
+  // replaces the app with remote content inside the app's own frameless
+  // window — the same "remote page wearing the app's chrome" problem the
+  // window-open handler below exists to prevent. External URLs still reach the
+  // user, via the system browser.
+  // Wrapped rather than passed as `shell.openExternal` so the method keeps
+  // its receiver.
+  const openExternal = (url) => shell.openExternal(url);
 
-  // When the renderer opens a popup (the about:blank above), watch for its
-  // first navigation away from about:blank.  That navigation will be to the
-  // OAuth verification URL — open it in the system browser and close the
-  // now-unneeded Electron popup.
+  attachNavigationGuard(mainWin.webContents, openExternal);
+
+  // Route window.open() calls appropriately. `about:blank` is allowed so the
+  // "Login with OpenHands Cloud" device flow can open its popup on the user's
+  // click; everything else is classified by mainWindowOpenHandler.
+  mainWin.webContents.setWindowOpenHandler(({ url }) =>
+    mainWindowOpenHandler(url, openExternal),
+  );
+
+  // When the renderer opens a popup (the about:blank above), the popup is
+  // same-origin with the app and can reach remote content three ways:
+  // navigating itself, being redirected, and calling window.open(). The OAuth
+  // verification URL arrives via the first of those; attachPopupPolicy hands
+  // it to the system browser and closes the popup, and answers the other two
+  // the same way.
   mainWin.webContents.on("did-create-window", (popupWin) => {
-    popupWin.webContents.on("will-navigate", (_event, url) => {
-      if (url !== "about:blank" && !isLoopbackAppUrl(url)) {
-        _event.preventDefault();
-        if (isExternalBrowsableUrl(url)) {
-          shell.openExternal(url);
-        }
-        popupWin.close();
-      }
-    });
+    attachPopupPolicy(popupWin, openExternal);
   });
 
   mainWin.on("closed", () => {
