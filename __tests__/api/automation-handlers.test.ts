@@ -81,7 +81,13 @@ describe("Automation MSW Handlers", () => {
       // Assert
       expect({ status: res.status, body: data }).toEqual({
         status: 200,
-        body: capabilitiesFixture.responses.supported.body,
+        body: {
+          ...capabilitiesFixture.responses.supported.body,
+          features: [
+            ...(capabilitiesFixture.responses.supported.body.features ?? []),
+            "automationDrafts",
+          ],
+        },
       });
     });
   });
