@@ -21261,7 +21261,7 @@
     "es": "Token de Bitbucket",
     "ar": "رمز Bitbucket",
     "fr": "Jeton Bitbucket",
-    "tr": "Bitbucket Token",
+    "tr": "Bitbucket Jetonu",
     "de": "Bitbucket-Token",
     "uk": "Токен Bitbucket",
     "ca": "Token de Bitbucket"
@@ -21364,7 +21364,7 @@
     "it": "Token Bitbucket Data Center",
     "pt": "Token do Bitbucket Data Center",
     "es": "Token de Bitbucket Data Center",
-    "tr": "Bitbucket Data Center Token",
+    "tr": "Bitbucket Data Center Jetonu",
     "uk": "Токен Bitbucket Data Center",
     "ca": "Token de Bitbucket Data Center"
   },
@@ -24763,7 +24763,7 @@
     "es": "Token bearer",
     "ar": "رمز حامل",
     "fr": "Jeton bearer",
-    "tr": "Bearer token",
+    "tr": "Bearer jetonu",
     "de": "Bearer-Token",
     "uk": "Токен носія",
     "ca": "Token bearer"
@@ -25086,7 +25086,7 @@
     "es": "A server with this URL already exists for the selected type",
     "ar": "A server with this URL already exists for the selected type",
     "fr": "A server with this URL already exists for the selected type",
-    "tr": "A server with this URL already exists for the selected type",
+    "tr": "Ortam değişkenleri KEY=value biçiminde olmalıdır",
     "de": "A server with this URL already exists for the selected type",
     "uk": "A server with this URL already exists for the selected type",
     "ca": "Les variables d'entorn han de seguir el format CLAU=valor"
@@ -35796,7 +35796,7 @@
     "ko-KR": "Command menu",
     "no": "Command menu",
     "pt": "Command menu",
-    "tr": "Command menu",
+    "tr": "Komut menüsü",
     "uk": "Command menu",
     "zh-CN": "Command menu",
     "zh-TW": "Command menu"
@@ -35813,7 +35813,7 @@
     "ko-KR": "Search commands",
     "no": "Search commands",
     "pt": "Search commands",
-    "tr": "Search commands",
+    "tr": "Komutlarda ara",
     "uk": "Search commands",
     "zh-CN": "Search commands",
     "zh-TW": "Search commands"
@@ -35830,7 +35830,7 @@
     "ko-KR": "Close command menu",
     "no": "Close command menu",
     "pt": "Close command menu",
-    "tr": "Close command menu",
+    "tr": "Komut menüsünü kapat",
     "uk": "Close command menu",
     "zh-CN": "Close command menu",
     "zh-TW": "Close command menu"
@@ -35847,7 +35847,7 @@
     "ko-KR": "Clear search",
     "no": "Clear search",
     "pt": "Clear search",
-    "tr": "Clear search",
+    "tr": "Aramayı temizle",
     "uk": "Clear search",
     "zh-CN": "Clear search",
     "zh-TW": "Clear search"
@@ -35864,7 +35864,7 @@
     "ko-KR": "Search actions, pages, and settings...",
     "no": "Search actions, pages, and settings...",
     "pt": "Search actions, pages, and settings...",
-    "tr": "Search actions, pages, and settings...",
+    "tr": "Eylemlerde, sayfalarda ve ayarlarda ara...",
     "uk": "Search actions, pages, and settings...",
     "zh-CN": "Search actions, pages, and settings...",
     "zh-TW": "Search actions, pages, and settings..."
@@ -35881,7 +35881,7 @@
     "ko-KR": "Search commands",
     "no": "Search commands",
     "pt": "Search commands",
-    "tr": "Search commands",
+    "tr": "Komutlarda ara",
     "uk": "Search commands",
     "zh-CN": "Search commands",
     "zh-TW": "Search commands"
@@ -35915,7 +35915,7 @@
     "ko-KR": "Navigation",
     "no": "Navigation",
     "pt": "Navigation",
-    "tr": "Navigation",
+    "tr": "Gezinme",
     "uk": "Navigation",
     "zh-CN": "Navigation",
     "zh-TW": "Navigation"
@@ -35932,7 +35932,7 @@
     "ko-KR": "Settings",
     "no": "Settings",
     "pt": "Settings",
-    "tr": "Settings",
+    "tr": "Ayarlar",
     "uk": "Settings",
     "zh-CN": "Settings",
     "zh-TW": "Settings"
@@ -35949,7 +35949,7 @@
     "ko-KR": "Actions",
     "no": "Actions",
     "pt": "Actions",
-    "tr": "Actions",
+    "tr": "Eylemler",
     "uk": "Actions",
     "zh-CN": "Actions",
     "zh-TW": "Actions"
@@ -35966,7 +35966,7 @@
     "ko-KR": "No commands found",
     "no": "No commands found",
     "pt": "No commands found",
-    "tr": "No commands found",
+    "tr": "Komut bulunamadı",
     "uk": "No commands found",
     "zh-CN": "No commands found",
     "zh-TW": "No commands found"
@@ -35983,7 +35983,7 @@
     "ko-KR": "Try a page, action, or setting name.",
     "no": "Try a page, action, or setting name.",
     "pt": "Try a page, action, or setting name.",
-    "tr": "Try a page, action, or setting name.",
+    "tr": "Bir sayfa, eylem veya ayar adı deneyin.",
     "uk": "Try a page, action, or setting name.",
     "zh-CN": "Try a page, action, or setting name.",
     "zh-TW": "Try a page, action, or setting name."
@@ -36000,7 +36000,7 @@
     "ko-KR": "↑↓ select · Enter run · Esc close",
     "no": "↑↓ select · Enter run · Esc close",
     "pt": "↑↓ select · Enter run · Esc close",
-    "tr": "↑↓ select · Enter run · Esc close",
+    "tr": "↑↓ seç · Enter çalıştır · Esc kapat",
     "uk": "↑↓ select · Enter run · Esc close",
     "zh-CN": "↑↓ select · Enter run · Esc close",
     "zh-TW": "↑↓ select · Enter run · Esc close"
@@ -36017,7 +36017,7 @@
     "ko-KR": "Go",
     "no": "Go",
     "pt": "Go",
-    "tr": "Go",
+    "tr": "Aç",
     "uk": "Go",
     "zh-CN": "Go",
     "zh-TW": "Go"
@@ -36034,7 +36034,7 @@
     "ko-KR": "Run",
     "no": "Run",
     "pt": "Run",
-    "tr": "Run",
+    "tr": "Çalıştır",
     "uk": "Run",
     "zh-CN": "Run",
     "zh-TW": "Run"
@@ -36051,7 +36051,7 @@
     "ko-KR": "New chat",
     "no": "New chat",
     "pt": "New chat",
-    "tr": "New chat",
+    "tr": "Yeni sohbet",
     "uk": "New chat",
     "zh-CN": "New chat",
     "zh-TW": "New chat"
@@ -36068,7 +36068,7 @@
     "ko-KR": "Start a fresh OpenHands conversation.",
     "no": "Start a fresh OpenHands conversation.",
     "pt": "Start a fresh OpenHands conversation.",
-    "tr": "Start a fresh OpenHands conversation.",
+    "tr": "Yeni bir OpenHands sohbeti başlatın.",
     "uk": "Start a fresh OpenHands conversation.",
     "zh-CN": "Start a fresh OpenHands conversation.",
     "zh-TW": "Start a fresh OpenHands conversation."
@@ -36085,7 +36085,7 @@
     "ko-KR": "home conversation task prompt launch",
     "no": "home conversation task prompt launch",
     "pt": "home conversation task prompt launch",
-    "tr": "home conversation task prompt launch",
+    "tr": "home conversation task prompt launch ana sayfa sohbet görev istem başlat",
     "uk": "home conversation task prompt launch",
     "zh-CN": "home conversation task prompt launch",
     "zh-TW": "home conversation task prompt launch"
@@ -36102,7 +36102,7 @@
     "ko-KR": "Customize",
     "no": "Customize",
     "pt": "Customize",
-    "tr": "Customize",
+    "tr": "Özelleştir",
     "uk": "Customize",
     "zh-CN": "Customize",
     "zh-TW": "Customize"
@@ -36119,7 +36119,7 @@
     "ko-KR": "Browse skills, plugins, and integrations.",
     "no": "Browse skills, plugins, and integrations.",
     "pt": "Browse skills, plugins, and integrations.",
-    "tr": "Browse skills, plugins, and integrations.",
+    "tr": "Becerilere, eklentilere ve entegrasyonlara göz atın.",
     "uk": "Browse skills, plugins, and integrations.",
     "zh-CN": "Browse skills, plugins, and integrations.",
     "zh-TW": "Browse skills, plugins, and integrations."
@@ -36136,7 +36136,7 @@
     "ko-KR": "skills extensions plugins customize marketplace",
     "no": "skills extensions plugins customize marketplace",
     "pt": "skills extensions plugins customize marketplace",
-    "tr": "skills extensions plugins customize marketplace",
+    "tr": "skills extensions plugins customize marketplace beceriler uzantılar eklentiler özelleştir pazar yeri",
     "uk": "skills extensions plugins customize marketplace",
     "zh-CN": "skills extensions plugins customize marketplace",
     "zh-TW": "skills extensions plugins customize marketplace"
@@ -36153,7 +36153,7 @@
     "ko-KR": "MCP servers",
     "no": "MCP servers",
     "pt": "MCP servers",
-    "tr": "MCP servers",
+    "tr": "MCP sunucuları",
     "uk": "MCP servers",
     "zh-CN": "MCP servers",
     "zh-TW": "MCP servers"
@@ -36170,7 +36170,7 @@
     "ko-KR": "Manage Model Context Protocol integrations.",
     "no": "Manage Model Context Protocol integrations.",
     "pt": "Manage Model Context Protocol integrations.",
-    "tr": "Manage Model Context Protocol integrations.",
+    "tr": "Model Context Protocol entegrasyonlarını yönetin.",
     "uk": "Manage Model Context Protocol integrations.",
     "zh-CN": "Manage Model Context Protocol integrations.",
     "zh-TW": "Manage Model Context Protocol integrations."
@@ -36187,7 +36187,7 @@
     "ko-KR": "mcp tools integrations servers context protocol",
     "no": "mcp tools integrations servers context protocol",
     "pt": "mcp tools integrations servers context protocol",
-    "tr": "mcp tools integrations servers context protocol",
+    "tr": "mcp tools integrations servers context protocol araçlar entegrasyonlar sunucular bağlam protokol",
     "uk": "mcp tools integrations servers context protocol",
     "zh-CN": "mcp tools integrations servers context protocol",
     "zh-TW": "mcp tools integrations servers context protocol"
@@ -36204,7 +36204,7 @@
     "ko-KR": "Settings",
     "no": "Settings",
     "pt": "Settings",
-    "tr": "Settings",
+    "tr": "Ayarlar",
     "uk": "Settings",
     "zh-CN": "Settings",
     "zh-TW": "Settings"
@@ -36221,7 +36221,7 @@
     "ko-KR": "Open the settings overview.",
     "no": "Open the settings overview.",
     "pt": "Open the settings overview.",
-    "tr": "Open the settings overview.",
+    "tr": "Ayarlar genel görünümünü açın.",
     "uk": "Open the settings overview.",
     "zh-CN": "Open the settings overview.",
     "zh-TW": "Open the settings overview."
@@ -36238,7 +36238,7 @@
     "ko-KR": "preferences configuration options",
     "no": "preferences configuration options",
     "pt": "preferences configuration options",
-    "tr": "preferences configuration options",
+    "tr": "preferences configuration options tercihler yapılandırma seçenekler",
     "uk": "preferences configuration options",
     "zh-CN": "preferences configuration options",
     "zh-TW": "preferences configuration options"
@@ -36255,7 +36255,7 @@
     "ko-KR": "Agent settings",
     "no": "Agent settings",
     "pt": "Agent settings",
-    "tr": "Agent settings",
+    "tr": "Ajan ayarları",
     "uk": "Agent settings",
     "zh-CN": "Agent settings",
     "zh-TW": "Agent settings"
@@ -36272,7 +36272,7 @@
     "ko-KR": "Configure agent type and delegation.",
     "no": "Configure agent type and delegation.",
     "pt": "Configure agent type and delegation.",
-    "tr": "Configure agent type and delegation.",
+    "tr": "Ajan türünü ve görev devrini yapılandırın.",
     "uk": "Configure agent type and delegation.",
     "zh-CN": "Configure agent type and delegation.",
     "zh-TW": "Configure agent type and delegation."
@@ -36289,7 +36289,7 @@
     "ko-KR": "agent openhands acp sub agents delegation",
     "no": "agent openhands acp sub agents delegation",
     "pt": "agent openhands acp sub agents delegation",
-    "tr": "agent openhands acp sub agents delegation",
+    "tr": "agent openhands acp sub agents delegation ajan alt ajanlar görev devri",
     "uk": "agent openhands acp sub agents delegation",
     "zh-CN": "agent openhands acp sub agents delegation",
     "zh-TW": "agent openhands acp sub agents delegation"
@@ -36306,7 +36306,7 @@
     "ko-KR": "LLM profiles",
     "no": "LLM profiles",
     "pt": "LLM profiles",
-    "tr": "LLM profiles",
+    "tr": "LLM profilleri",
     "uk": "LLM profiles",
     "zh-CN": "LLM profiles",
     "zh-TW": "LLM profiles"
@@ -36323,7 +36323,7 @@
     "ko-KR": "Manage models, providers, and API keys.",
     "no": "Manage models, providers, and API keys.",
     "pt": "Manage models, providers, and API keys.",
-    "tr": "Manage models, providers, and API keys.",
+    "tr": "Modelleri, sağlayıcıları ve API anahtarlarını yönetin.",
     "uk": "Manage models, providers, and API keys.",
     "zh-CN": "Manage models, providers, and API keys.",
     "zh-TW": "Manage models, providers, and API keys."
@@ -36340,7 +36340,7 @@
     "ko-KR": "llm model provider api key profile inference",
     "no": "llm model provider api key profile inference",
     "pt": "llm model provider api key profile inference",
-    "tr": "llm model provider api key profile inference",
+    "tr": "llm model provider api key profile inference sağlayıcı anahtarı profil çıkarım",
     "uk": "llm model provider api key profile inference",
     "zh-CN": "llm model provider api key profile inference",
     "zh-TW": "llm model provider api key profile inference"
@@ -36357,7 +36357,7 @@
     "ko-KR": "Condenser settings",
     "no": "Condenser settings",
     "pt": "Condenser settings",
-    "tr": "Condenser settings",
+    "tr": "Bağlam yoğunlaştırıcı ayarları",
     "uk": "Condenser settings",
     "zh-CN": "Condenser settings",
     "zh-TW": "Condenser settings"
@@ -36374,7 +36374,7 @@
     "ko-KR": "Tune context condensation behavior.",
     "no": "Tune context condensation behavior.",
     "pt": "Tune context condensation behavior.",
-    "tr": "Tune context condensation behavior.",
+    "tr": "Bağlam yoğunlaştırma davranışını ayarlayın.",
     "uk": "Tune context condensation behavior.",
     "zh-CN": "Tune context condensation behavior.",
     "zh-TW": "Tune context condensation behavior."
@@ -36391,7 +36391,7 @@
     "ko-KR": "condenser context memory summary",
     "no": "condenser context memory summary",
     "pt": "condenser context memory summary",
-    "tr": "condenser context memory summary",
+    "tr": "condenser context memory summary yoğunlaştırıcı bağlam bellek özet",
     "uk": "condenser context memory summary",
     "zh-CN": "condenser context memory summary",
     "zh-TW": "condenser context memory summary"
@@ -36408,7 +36408,7 @@
     "ko-KR": "Verification settings",
     "no": "Verification settings",
     "pt": "Verification settings",
-    "tr": "Verification settings",
+    "tr": "Doğrulama ayarları",
     "uk": "Verification settings",
     "zh-CN": "Verification settings",
     "zh-TW": "Verification settings"
@@ -36425,7 +36425,7 @@
     "ko-KR": "Adjust risk and confirmation controls.",
     "no": "Adjust risk and confirmation controls.",
     "pt": "Adjust risk and confirmation controls.",
-    "tr": "Adjust risk and confirmation controls.",
+    "tr": "Risk ve onay denetimlerini ayarlayın.",
     "uk": "Adjust risk and confirmation controls.",
     "zh-CN": "Adjust risk and confirmation controls.",
     "zh-TW": "Adjust risk and confirmation controls."
@@ -36442,7 +36442,7 @@
     "ko-KR": "verification security risk confirmation guardrails",
     "no": "verification security risk confirmation guardrails",
     "pt": "verification security risk confirmation guardrails",
-    "tr": "verification security risk confirmation guardrails",
+    "tr": "verification security risk confirmation guardrails doğrulama güvenlik onay koruyucu önlemler",
     "uk": "verification security risk confirmation guardrails",
     "zh-CN": "verification security risk confirmation guardrails",
     "zh-TW": "verification security risk confirmation guardrails"
@@ -36459,7 +36459,7 @@
     "ko-KR": "Application settings",
     "no": "Application settings",
     "pt": "Application settings",
-    "tr": "Application settings",
+    "tr": "Uygulama ayarları",
     "uk": "Application settings",
     "zh-CN": "Application settings",
     "zh-TW": "Application settings"
@@ -36476,7 +36476,7 @@
     "ko-KR": "Change app language, theme, and preferences.",
     "no": "Change app language, theme, and preferences.",
     "pt": "Change app language, theme, and preferences.",
-    "tr": "Change app language, theme, and preferences.",
+    "tr": "Uygulama dilini, temasını ve tercihlerini değiştirin.",
     "uk": "Change app language, theme, and preferences.",
     "zh-CN": "Change app language, theme, and preferences.",
     "zh-TW": "Change app language, theme, and preferences."
@@ -36493,7 +36493,7 @@
     "ko-KR": "app application language theme analytics preferences",
     "no": "app application language theme analytics preferences",
     "pt": "app application language theme analytics preferences",
-    "tr": "app application language theme analytics preferences",
+    "tr": "app application language theme analytics preferences uygulama dil tema analiz tercihleri",
     "uk": "app application language theme analytics preferences",
     "zh-CN": "app application language theme analytics preferences",
     "zh-TW": "app application language theme analytics preferences"
@@ -36510,7 +36510,7 @@
     "ko-KR": "Secrets settings",
     "no": "Secrets settings",
     "pt": "Secrets settings",
-    "tr": "Secrets settings",
+    "tr": "Gizli değer ayarları",
     "uk": "Secrets settings",
     "zh-CN": "Secrets settings",
     "zh-TW": "Secrets settings"
@@ -36527,7 +36527,7 @@
     "ko-KR": "Create and edit saved runtime secrets.",
     "no": "Create and edit saved runtime secrets.",
     "pt": "Create and edit saved runtime secrets.",
-    "tr": "Create and edit saved runtime secrets.",
+    "tr": "Kayıtlı çalışma zamanı gizli değerlerini oluşturun ve düzenleyin.",
     "uk": "Create and edit saved runtime secrets.",
     "zh-CN": "Create and edit saved runtime secrets.",
     "zh-TW": "Create and edit saved runtime secrets."
@@ -36544,7 +36544,7 @@
     "ko-KR": "secrets environment variables credentials tokens",
     "no": "secrets environment variables credentials tokens",
     "pt": "secrets environment variables credentials tokens",
-    "tr": "secrets environment variables credentials tokens",
+    "tr": "secrets environment variables credentials tokens gizli değerler ortam değişkenleri kimlik bilgileri jetonlar",
     "uk": "secrets environment variables credentials tokens",
     "zh-CN": "secrets environment variables credentials tokens",
     "zh-TW": "secrets environment variables credentials tokens"
@@ -36561,7 +36561,7 @@
     "ko-KR": "Toggle sidebar",
     "no": "Toggle sidebar",
     "pt": "Toggle sidebar",
-    "tr": "Toggle sidebar",
+    "tr": "Kenar çubuğunu aç/kapat",
     "uk": "Toggle sidebar",
     "zh-CN": "Toggle sidebar",
     "zh-TW": "Toggle sidebar"
@@ -36578,7 +36578,7 @@
     "ko-KR": "Collapse or expand the navigation rail.",
     "no": "Collapse or expand the navigation rail.",
     "pt": "Collapse or expand the navigation rail.",
-    "tr": "Collapse or expand the navigation rail.",
+    "tr": "Gezinme çubuğunu daraltın veya genişletin.",
     "uk": "Collapse or expand the navigation rail.",
     "zh-CN": "Collapse or expand the navigation rail.",
     "zh-TW": "Collapse or expand the navigation rail."
@@ -36595,7 +36595,7 @@
     "ko-KR": "sidebar collapse expand navigation rail",
     "no": "sidebar collapse expand navigation rail",
     "pt": "sidebar collapse expand navigation rail",
-    "tr": "sidebar collapse expand navigation rail",
+    "tr": "sidebar collapse expand navigation rail kenar çubuğu daralt genişlet gezinme çubuğu",
     "uk": "sidebar collapse expand navigation rail",
     "zh-CN": "sidebar collapse expand navigation rail",
     "zh-TW": "sidebar collapse expand navigation rail"
@@ -37037,7 +37037,7 @@
     "es": "Automatiza el trabajo repetitivo",
     "ar": "Automate repetitive work",
     "fr": "Automatisez le travail répétitif",
-    "tr": "Automate repetitive work",
+    "tr": "Tekrarlanan işleri otomatikleştirin",
     "de": "Wiederkehrende Arbeit automatisieren",
     "uk": "Automate repetitive work",
     "ca": "Automate repetitive work"
@@ -37054,7 +37054,7 @@
     "es": "Configura automatizaciones que se ejecuten según un horario o cuando ocurran eventos.",
     "ar": "Set up automations to run on a schedule or when events happen.",
     "fr": "Configurez des automatisations planifiées ou déclenchées par des événements.",
-    "tr": "Set up automations to run on a schedule or when events happen.",
+    "tr": "Otomasyonları bir zamanlamaya göre veya olaylar gerçekleştiğinde çalışacak şekilde ayarlayın.",
     "de": "Richten Sie Automatisierungen ein, die nach Zeitplan oder bei Ereignissen laufen.",
     "uk": "Set up automations to run on a schedule or when events happen.",
     "ca": "Set up automations to run on a schedule or when events happen."
@@ -37173,7 +37173,7 @@
     "es": "Automatizaciones en ejecución y finalizadas recientemente",
     "ar": "Running and recently finished automations",
     "fr": "Automatisations en cours et récemment terminées",
-    "tr": "Running and recently finished automations",
+    "tr": "Çalışan ve yakın zamanda tamamlanan otomasyonlar",
     "de": "Laufende und kürzlich beendete Automatisierungen",
     "uk": "Running and recently finished automations",
     "ca": "Running and recently finished automations"
@@ -37258,7 +37258,7 @@
     "es": "Automatizaciones recomendadas",
     "ar": "Recommended automations",
     "fr": "Automatisations recommandées",
-    "tr": "Recommended automations",
+    "tr": "Önerilen otomasyonlar",
     "de": "Empfohlene Automatisierungen",
     "uk": "Recommended automations",
     "ca": "Recommended automations"
@@ -37275,7 +37275,7 @@
     "es": "Revisar PRs y publicar feedback de IA",
     "ar": "Review pull requests and post AI feedback",
     "fr": "Relire les PR et publier un avis IA",
-    "tr": "Review pull requests and post AI feedback",
+    "tr": "Pull request'leri incele ve yapay zekâ geri bildirimi gönder",
     "de": "Pull Requests prüfen und KI-Feedback posten",
     "uk": "Review pull requests and post AI feedback",
     "ca": "Review pull requests and post AI feedback"
@@ -37292,7 +37292,7 @@
     "es": "Responder a menciones @OpenHands en GitHub",
     "ar": "Reply to @OpenHands mentions on GitHub",
     "fr": "Répondre aux mentions @OpenHands sur GitHub",
-    "tr": "Reply to @OpenHands mentions on GitHub",
+    "tr": "GitHub'daki @OpenHands bahsetmelerini yanıtla",
     "de": "Auf @OpenHands-Erwähnungen auf GitHub antworten",
     "uk": "Reply to @OpenHands mentions on GitHub",
     "ca": "Reply to @OpenHands mentions on GitHub"
@@ -37309,7 +37309,7 @@
     "es": "Convertir la actividad de Slack en un standup diario",
     "ar": "Turn Slack activity into a daily standup",
     "fr": "Transformer l’activité Slack en standup quotidien",
-    "tr": "Turn Slack activity into a daily standup",
+    "tr": "Slack etkinliğini günlük durum raporuna dönüştür",
     "de": "Slack-Aktivität in ein tägliches Standup verwandeln",
     "uk": "Turn Slack activity into a daily standup",
     "ca": "Turn Slack activity into a daily standup"
@@ -37326,7 +37326,7 @@
     "es": "Clasificar nuevos issues de Linear al llegar",
     "ar": "Triage new Linear issues as they arrive",
     "fr": "Trier les nouvelles issues Linear à leur arrivée",
-    "tr": "Triage new Linear issues as they arrive",
+    "tr": "Yeni Linear sorunlarını geldikçe sınıflandır",
     "de": "Neue Linear-Issues bei Eingang triagieren",
     "uk": "Triage new Linear issues as they arrive",
     "ca": "Triage new Linear issues as they arrive"
@@ -37530,7 +37530,7 @@
     "es": "Fijar como página de inicio",
     "ar": "Pin as home page",
     "fr": "Épingler comme page d'accueil",
-    "tr": "Pin as home page",
+    "tr": "Ana sayfa olarak sabitle",
     "ja": "ホームページとしてピン留め",
     "uk": "Pin as home page",
     "ca": "Pin as home page"
@@ -37547,7 +37547,7 @@
     "es": "Quitar como página de inicio",
     "ar": "Unpin as home page",
     "fr": "Désépingler comme page d'accueil",
-    "tr": "Unpin as home page",
+    "tr": "Ana sayfa sabitlemesini kaldır",
     "ja": "ホームページのピン留め解除",
     "uk": "Unpin as home page",
     "ca": "Unpin as home page"
@@ -39655,7 +39655,7 @@
     "es": "Fijar en el panel",
     "ar": "Pin to dashboard",
     "fr": "Épingler au tableau de bord",
-    "tr": "Pin to dashboard",
+    "tr": "Kontrol paneline sabitle",
     "de": "Am Dashboard anheften",
     "uk": "Pin to dashboard",
     "ca": "Pin to dashboard"
@@ -39672,7 +39672,7 @@
     "es": "Quitar del panel",
     "ar": "Unpin from dashboard",
     "fr": "Désépingler du tableau de bord",
-    "tr": "Unpin from dashboard",
+    "tr": "Kontrol panelinden kaldır",
     "de": "Vom Dashboard lösen",
     "uk": "Unpin from dashboard",
     "ca": "Unpin from dashboard"
@@ -39689,7 +39689,7 @@
     "es": "Acciones para {{name}}",
     "ar": "Actions for {{name}}",
     "fr": "Actions pour {{name}}",
-    "tr": "Actions for {{name}}",
+    "tr": "{{name}} için eylemler",
     "de": "Aktionen für {{name}}",
     "uk": "Actions for {{name}}",
     "ca": "Actions for {{name}}"
@@ -39706,7 +39706,7 @@
     "es": "Automatizaciones fijadas",
     "ar": "Pinned automations",
     "fr": "Automatisations épinglées",
-    "tr": "Pinned automations",
+    "tr": "Sabitlenmiş otomasyonlar",
     "de": "Angeheftete Automatisierungen",
     "uk": "Pinned automations",
     "ca": "Pinned automations"
@@ -39723,7 +39723,7 @@
     "es": "Panel de automatizaciones fijadas",
     "ar": "Pinned automation dashboard",
     "fr": "Tableau de bord des automatisations épinglées",
-    "tr": "Pinned automation dashboard",
+    "tr": "Sabitlenmiş otomasyon kontrol paneli",
     "de": "Dashboard angehefteter Automatisierungen",
     "uk": "Pinned automation dashboard",
     "ca": "Pinned automation dashboard"
@@ -39740,7 +39740,7 @@
     "es": "Cancelar ejecución",
     "ar": "Cancel run",
     "fr": "Annuler l'exécution",
-    "tr": "Cancel run",
+    "tr": "Çalıştırmayı iptal et",
     "de": "Ausführung abbrechen",
     "uk": "Cancel run",
     "ca": "Cancel run"
@@ -39791,7 +39791,7 @@
     "es": "Desactivar automatización",
     "ar": "Turn off automation",
     "fr": "Désactiver l'automatisation",
-    "tr": "Turn off automation",
+    "tr": "Otomasyonu kapat",
     "de": "Automatisierung ausschalten",
     "uk": "Turn off automation",
     "ca": "Turn off automation"
@@ -39842,7 +39842,7 @@
     "es": "Subir",
     "ar": "Move up",
     "fr": "Monter",
-    "tr": "Move up",
+    "tr": "Yukarı taşı",
     "de": "Nach oben",
     "uk": "Move up",
     "ca": "Move up"
@@ -39859,7 +39859,7 @@
     "es": "Bajar",
     "ar": "Move down",
     "fr": "Descendre",
-    "tr": "Move down",
+    "tr": "Aşağı taşı",
     "de": "Nach unten",
     "uk": "Move down",
     "ca": "Move down"
@@ -42142,56 +42142,39 @@
     "tr": "Yukarıdaki ayarları düzeltin veya yine de kaydetmek için Kaydet'e tekrar basın.",
     "uk": "Виправте налаштування вище або натисніть «Зберегти» ще раз, щоб зберегти їх попри це."
   },
-  "AUTOMATIONS$GIT_SYNC$ENABLE_BLOCKED_ERROR": {
-    "en": "Git Sync must be enabled in the automation backend's environment, and the service restarted, before it can be turned on here.",
-    "ja": "Git 同期を有効にするには、オートメーションバックエンドの環境で有効化し、サービスを再起動する必要があります。",
-    "zh-CN": "必须先在自动化后端的环境中启用 Git 同步并重启服务，才能在此处开启。",
-    "zh-TW": "必須先在自動化後端的環境中啟用 Git 同步並重新啟動服務，才能在此處開啟。",
-    "ko-KR": "여기서 켜려면 먼저 자동화 백엔드 환경에서 Git 동기화를 활성화하고 서비스를 다시 시작해야 합니다.",
-    "no": "Git-synkronisering må aktiveres i automatiserings-backendens miljø, og tjenesten må startes på nytt, før den kan slås på her.",
-    "ar": "يجب تفعيل مزامنة Git في بيئة الخدمة الخلفية للأتمتة وإعادة تشغيل الخدمة قبل تفعيلها هنا.",
-    "de": "Die Git-Synchronisierung muss in der Umgebung des Automatisierungs-Backends aktiviert und der Dienst neu gestartet werden, bevor sie hier eingeschaltet werden kann.",
-    "fr": "La synchronisation Git doit être activée dans l'environnement du backend d'automatisation et le service redémarré avant de pouvoir l'activer ici.",
-    "it": "La sincronizzazione Git deve essere abilitata nell'ambiente del backend di automazione e il servizio riavviato prima di poterla attivare qui.",
-    "pt": "A sincronização do Git precisa ser ativada no ambiente do backend de automação, e o serviço reiniciado, antes de poder ser ligada aqui.",
-    "es": "La sincronización de Git debe habilitarse en el entorno del backend de automatización y reiniciar el servicio antes de poder activarla aquí.",
-    "ca": "La sincronització de Git s'ha d'habilitar a l'entorn del backend d'automatització i cal reiniciar el servei abans de poder activar-la aquí.",
-    "tr": "Git eşitlemesi burada açılabilmesi için önce otomasyon arka ucunun ortamında etkinleştirilmeli ve hizmet yeniden başlatılmalıdır.",
-    "uk": "Щоб увімкнути синхронізацію Git тут, її потрібно спершу активувати в середовищі бекенда автоматизації та перезапустити службу."
+  "AUTOMATIONS$GIT_SYNC$NO_ACCESS_TITLE": {
+    "en": "Git Sync is managed by organization admins",
+    "ja": "Git同期は組織の管理者が管理します",
+    "zh-CN": "Git 同步由组织管理员管理",
+    "zh-TW": "Git 同步由組織管理員管理",
+    "ko-KR": "Git 동기화는 조직 관리자가 관리합니다",
+    "no": "Git-synkronisering administreres av organisasjonsadministratorer",
+    "ar": "تتم إدارة مزامنة Git بواسطة مسؤولي المؤسسة",
+    "de": "Git-Synchronisierung wird von Organisationsadministratoren verwaltet",
+    "fr": "La synchronisation Git est gérée par les administrateurs de l'organisation",
+    "it": "La sincronizzazione Git è gestita dagli amministratori dell'organizzazione",
+    "pt": "A sincronização Git é gerida pelos administradores da organização",
+    "es": "La sincronización de Git la gestionan los administradores de la organización",
+    "ca": "La sincronització de Git la gestionen els administradors de l'organització",
+    "tr": "Git Senkronizasyonu kuruluş yöneticileri tarafından yönetilir",
+    "uk": "Git-синхронізацією керують адміністратори організації"
   },
-  "AUTOMATIONS$GIT_SYNC$NOT_LOCAL_TITLE": {
-    "en": "Git Sync isn't available",
-    "ja": "Git同期は利用できません",
-    "zh-CN": "Git 同步不可用",
-    "zh-TW": "Git 同步無法使用",
-    "ko-KR": "Git 동기화를 사용할 수 없습니다",
-    "no": "Git-synkronisering er ikke tilgjengelig",
-    "ar": "مزامنة Git غير متاحة",
-    "de": "Git-Synchronisierung ist nicht verfügbar",
-    "fr": "La synchronisation Git n'est pas disponible",
-    "it": "La sincronizzazione Git non è disponibile",
-    "pt": "A sincronização Git não está disponível",
-    "es": "La sincronización de Git no está disponible",
-    "ca": "La sincronització de Git no està disponible",
-    "tr": "Git Senkronizasyonu kullanılamıyor",
-    "uk": "Git-синхронізація недоступна"
-  },
-  "AUTOMATIONS$GIT_SYNC$NOT_LOCAL_MESSAGE": {
-    "en": "Git Sync is only available when connected to a local OpenHands backend.",
-    "ja": "Git同期はローカルのOpenHandsバックエンドに接続している場合のみ利用できます。",
-    "zh-CN": "只有连接到本地 OpenHands 后端时才能使用 Git 同步。",
-    "zh-TW": "只有連線到本機 OpenHands 後端時才能使用 Git 同步。",
-    "ko-KR": "Git 동기화는 로컬 OpenHands 백엔드에 연결된 경우에만 사용할 수 있습니다.",
-    "no": "Git-synkronisering er kun tilgjengelig når du er koblet til en lokal OpenHands-backend.",
-    "ar": "تتوفر مزامنة Git فقط عند الاتصال بخلفية OpenHands محلية.",
-    "de": "Git-Synchronisierung ist nur verfügbar, wenn eine Verbindung zu einem lokalen OpenHands-Backend besteht.",
-    "fr": "La synchronisation Git n'est disponible que lorsque vous êtes connecté à un backend OpenHands local.",
-    "it": "La sincronizzazione Git è disponibile solo quando sei connesso a un backend OpenHands locale.",
-    "pt": "A sincronização Git só está disponível quando conectado a um backend OpenHands local.",
-    "es": "La sincronización de Git solo está disponible al conectarse a un backend local de OpenHands.",
-    "ca": "La sincronització de Git només està disponible en connectar-se a un backend local d'OpenHands.",
-    "tr": "Git Senkronizasyonu yalnızca yerel bir OpenHands arka ucuna bağlıyken kullanılabilir.",
-    "uk": "Git-синхронізація доступна лише при підключенні до локального бекенду OpenHands."
+  "AUTOMATIONS$GIT_SYNC$NO_ACCESS_MESSAGE": {
+    "en": "Only organization admins and owners can view and configure Git Sync.",
+    "ja": "組織の管理者とオーナーのみがGit同期を表示・設定できます。",
+    "zh-CN": "只有组织管理员和所有者可以查看和配置 Git 同步。",
+    "zh-TW": "只有組織管理員和擁有者可以檢視和設定 Git 同步。",
+    "ko-KR": "조직 관리자와 소유자만 Git 동기화를 보고 구성할 수 있습니다.",
+    "no": "Bare organisasjonsadministratorer og eiere kan se og konfigurere Git-synkronisering.",
+    "ar": "يمكن فقط لمسؤولي المؤسسة ومالكيها عرض مزامنة Git وتكوينها.",
+    "de": "Nur Organisationsadministratoren und -inhaber können die Git-Synchronisierung anzeigen und konfigurieren.",
+    "fr": "Seuls les administrateurs et propriétaires de l'organisation peuvent consulter et configurer la synchronisation Git.",
+    "it": "Solo gli amministratori e i proprietari dell'organizzazione possono visualizzare e configurare la sincronizzazione Git.",
+    "pt": "Apenas administradores e proprietários da organização podem ver e configurar a sincronização Git.",
+    "es": "Solo los administradores y propietarios de la organización pueden ver y configurar la sincronización de Git.",
+    "ca": "Només els administradors i propietaris de l'organització poden veure i configurar la sincronització de Git.",
+    "tr": "Yalnızca kuruluş yöneticileri ve sahipleri Git Senkronizasyonunu görüntüleyebilir ve yapılandırabilir.",
+    "uk": "Лише адміністратори та власники організації можуть переглядати й налаштовувати Git-синхронізацію."
   },
   "AUTOMATIONS$GIT_SYNC$UNSUPPORTED_TITLE": {
     "en": "Git Sync is not available on this backend",

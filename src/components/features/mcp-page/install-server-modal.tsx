@@ -156,8 +156,6 @@ export function InstallServerModal({
   const { mutate: addMcpServer, isPending: isAdding } = useAddMcpServer();
   const { mutate: testMcpServer, isPending: isTesting } = useTestMcpServer();
   const saveFieldsAsSecrets = useSaveFieldsAsSecrets();
-  // Cloud backends get a synthetic test success (no local test endpoint);
-  // never seed card health from it.
   const { backend } = useActiveBackend();
   const isCloudBackend = backend.kind === "cloud";
 
@@ -174,6 +172,9 @@ export function InstallServerModal({
   const [isAuthorizingOAuth, setIsAuthorizingOAuth] = React.useState(false);
   const option = getInstallableMcpConnectionOption(entry);
   const template = option?.transport;
+  // stdio servers on cloud backends get a synthetic test success (they only
+  // run inside the sandbox); never seed card health from it.
+  const isSyntheticTest = isCloudBackend && template?.kind === "stdio";
 
   const isPending =
     isTesting || isAuthorizingOAuth || isAdding || isFinalizingInstall;
@@ -254,7 +255,7 @@ export function InstallServerModal({
             : payload;
           addMcpServer(serverToSave, {
             onSuccess: () => {
-              if (!isCloudBackend) {
+              if (!isSyntheticTest) {
                 seedMcpServerHealth(serverToSave, result, existingServers);
               }
               displaySuccessToast(t(I18nKey.MCP$INSTALL_SUCCESS));
@@ -299,7 +300,7 @@ export function InstallServerModal({
             : payload;
         addMcpServer(serverToSave, {
           onSuccess: () => {
-            if (!isCloudBackend) {
+            if (!isSyntheticTest) {
               seedMcpServerHealth(serverToSave, result, existingServers);
             }
             displaySuccessToast(t(I18nKey.MCP$INSTALL_SUCCESS));
