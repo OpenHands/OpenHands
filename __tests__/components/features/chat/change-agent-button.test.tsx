@@ -269,6 +269,7 @@ describe("ChangeAgentButton mode selection", () => {
 
     const label = screen.getByText("COMMON$CODE");
     expect(label).toHaveClass("text-[11px]");
+    expect(label).toHaveClass("text-white");
     expect(label).not.toHaveClass("text-2.75");
   });
 
