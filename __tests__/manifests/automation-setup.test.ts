@@ -418,6 +418,7 @@ describe("deriveErrorMap", () => {
       "trigger.schedule": ["schedule"],
       "trigger.timezone": ["timezone"],
       "template.config.repos": ["repositories"],
+      "template.config.github_token_secret": ["githubTokenSecret"],
       "template.config.trigger_label": ["triggerLabel"],
       "template.config.review_tone": ["reviewTone"],
     });

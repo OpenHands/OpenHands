@@ -1,4 +1,4 @@
-import { fireEvent, screen } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderWithProviders } from "test-utils";
 
@@ -8,7 +8,7 @@ vi.mock("#/hooks/use-chat-input-llm-profile-state", () => ({
   useChatInputLlmProfileState: () => useChatInputLlmProfileStateMock(),
 }));
 
-// eslint-disable-next-line import/first
+import { useFreeModelsStore } from "#/stores/free-models-store";
 import { ChatInputLlmProfilePicker } from "#/components/features/chat/components/chat-input-llm-profile-picker";
 
 const PROFILES = [
@@ -46,6 +46,11 @@ describe("ChatInputLlmProfilePicker", () => {
     selectProfile.mockReset();
     useChatInputLlmProfileStateMock.mockReset();
     useChatInputLlmProfileStateMock.mockReturnValue(state());
+    useFreeModelsStore.setState({
+      freeModels: new Set(),
+      defaultModel: null,
+      defaultModelReady: false,
+    });
   });
 
   it("renders nothing while loading or when there are no profiles", () => {
@@ -61,6 +66,21 @@ describe("ChatInputLlmProfilePicker", () => {
     expect(screen.getByTestId("chat-input-llm-profile")).toHaveTextContent(
       "Fast",
     );
+  });
+
+  it("fits the upward menu above its trigger and follows scrolling", () => {
+    renderWithProviders(<ChatInputLlmProfilePicker />);
+    const trigger = screen.getByTestId("chat-input-llm-profile");
+    const rect = vi.spyOn(trigger, "getBoundingClientRect");
+    rect.mockReturnValue({ top: 200 } as DOMRect);
+    fireEvent.click(trigger);
+    const menu = screen.getByTestId("chat-input-llm-profile-popover");
+    expect(menu).toHaveStyle({ maxHeight: "184px" });
+
+    rect.mockReturnValue({ top: 100 } as DOMRect);
+    act(() => window.dispatchEvent(new Event("scroll")));
+    expect(menu).toHaveStyle({ maxHeight: "84px" });
+    rect.mockRestore();
   });
 
   it("live-switches to the picked profile", () => {
@@ -95,7 +115,11 @@ describe("ChatInputLlmProfilePicker", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("labels a free OpenHands route in the profile menu", () => {
+  it("labels a backend-flagged free OpenHands route in the profile menu", () => {
+    useFreeModelsStore.getState().setFlags({
+      freeModels: new Set(["openhands/deepseek-v4-flash"]),
+      defaultModel: null,
+    });
     useChatInputLlmProfileStateMock.mockReturnValue(
       state({
         profiles: [
@@ -119,7 +143,11 @@ describe("ChatInputLlmProfilePicker", () => {
     ).toBeInTheDocument();
   });
 
-  it("labels a free OpenHands route in the read-only profile menu", () => {
+  it("labels a backend-flagged free OpenHands route in the read-only profile menu", () => {
+    useFreeModelsStore.getState().setFlags({
+      freeModels: new Set(["openhands/deepseek-v4-flash"]),
+      defaultModel: null,
+    });
     useChatInputLlmProfileStateMock.mockReturnValue(
       state({
         canSwitchProfile: false,

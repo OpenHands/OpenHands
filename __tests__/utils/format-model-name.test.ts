@@ -1,11 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
-  FREE_OPENHANDS_MODELS,
+  FREE_MODEL_SUFFIX,
   formatModelNameForDisplay,
   formatNativeModelName,
   formatProviderModelNameForDisplay,
   isFreeOpenHandsModel,
 } from "#/utils/format-model-name";
+
+// DB-driven free set (sourced from the backend model list), replacing the
+// previously-hardcoded free-model map.
+const FREE_MODELS = new Set([
+  "openhands/glm-5.2",
+  "openhands/deepseek-v4-flash",
+  "openhands/minimax-m2.7",
+]);
 
 describe("formatNativeModelName", () => {
   it("strips the provider route prefix", () => {
@@ -15,31 +23,41 @@ describe("formatNativeModelName", () => {
     expect(formatNativeModelName("openai/gpt-4o")).toBe("gpt-4o");
   });
 
-  it("labels only configured OpenHands free-model routes as free", () => {
-    expect(Object.keys(FREE_OPENHANDS_MODELS)).toEqual([
-      "openhands/deepseek-v4-flash",
-    ]);
-
-    for (const [model, label] of Object.entries(FREE_OPENHANDS_MODELS)) {
-      expect(formatModelNameForDisplay(model)).toBe(label);
-      expect(
-        formatProviderModelNameForDisplay("openhands", model.slice(10)),
-      ).toBe(label);
-      expect(isFreeOpenHandsModel(model)).toBe(true);
-    }
-
-    expect(formatModelNameForDisplay("openai/glm-5.2")).toBe("openai/glm-5.2");
-    expect(formatProviderModelNameForDisplay("openai", "glm-5.2")).toBe(
-      "glm-5.2",
+  it("treats no model as free without a free-models set", () => {
+    expect(formatModelNameForDisplay("openhands/glm-5.2")).toBe(
+      "openhands/glm-5.2",
     );
-    expect(isFreeOpenHandsModel("openai/glm-5.2")).toBe(false);
+    expect(isFreeOpenHandsModel("openhands/glm-5.2")).toBe(false);
   });
 
-  it("keeps free OpenHands labels on native conversation chips", () => {
-    expect(formatNativeModelName("openhands/glm-5.2")).toBe("glm-5.2");
-    expect(formatNativeModelName("openhands/deepseek-v4-flash")).toBe(
-      FREE_OPENHANDS_MODELS["openhands/deepseek-v4-flash"],
+  it("labels only DB-flagged OpenHands free-model routes as free", () => {
+    for (const fullModel of FREE_MODELS) {
+      const name = fullModel.slice("openhands/".length);
+      expect(formatModelNameForDisplay(fullModel, FREE_MODELS)).toBe(
+        `${fullModel}${FREE_MODEL_SUFFIX}`,
+      );
+      expect(
+        formatProviderModelNameForDisplay("openhands", name, FREE_MODELS),
+      ).toBe(`${name}${FREE_MODEL_SUFFIX}`);
+      expect(isFreeOpenHandsModel(fullModel, FREE_MODELS)).toBe(true);
+    }
+
+    expect(formatModelNameForDisplay("openai/glm-5.2", FREE_MODELS)).toBe(
+      "openai/glm-5.2",
     );
+    expect(
+      formatProviderModelNameForDisplay("openai", "glm-5.2", FREE_MODELS),
+    ).toBe("glm-5.2");
+    expect(isFreeOpenHandsModel("openai/glm-5.2", FREE_MODELS)).toBe(false);
+  });
+
+  it("keeps the free suffix on native conversation chips", () => {
+    expect(formatNativeModelName("openhands/glm-5.2", FREE_MODELS)).toBe(
+      `glm-5.2${FREE_MODEL_SUFFIX}`,
+    );
+    expect(
+      formatNativeModelName("openhands/deepseek-v4-flash", FREE_MODELS),
+    ).toBe(`deepseek-v4-flash${FREE_MODEL_SUFFIX}`);
   });
 
   it("strips nested routing prefixes to the last segment", () => {

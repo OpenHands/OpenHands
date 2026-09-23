@@ -1,8 +1,4 @@
-import {
-  render,
-  screen,
-  fireEvent,
-} from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Sidebar } from "#/components/features/sidebar/sidebar";
@@ -43,7 +39,7 @@ const cloudBackendMock = {
     host: "https://cloud.example.com",
     apiKey: "test-key",
   },
-  orgId: "org-1",
+  orgId: "org-1" as string | null,
 };
 
 vi.mock("#/hooks/query/use-config", () => ({
@@ -230,6 +226,8 @@ describe("Sidebar with Cloud Backend", () => {
   afterEach(() => {
     window.localStorage.clear();
     useSidebarStore.setState({ collapsed: false });
+    cloudBackendMock.orgId = "org-1";
+    vi.unstubAllEnvs();
   });
 
   it("opens cloud settings in new tab when connected to cloud backend", () => {
@@ -241,6 +239,17 @@ describe("Sidebar with Cloud Backend", () => {
     expect(settingsLink).toHaveAttribute("target", "_blank");
     expect(settingsLink).toHaveAttribute(
       "href",
+      "https://cloud.example.com/settings?org=org-1",
+    );
+  });
+
+  it("omits the org param from the cloud settings link when no org is active", () => {
+    cloudBackendMock.orgId = null;
+    useSidebarStore.setState({ collapsed: true });
+    renderSidebar("/conversations");
+
+    expect(screen.getByTestId("collapsed-settings-link")).toHaveAttribute(
+      "href",
       "https://cloud.example.com/settings",
     );
   });
@@ -251,5 +260,23 @@ describe("Sidebar with Cloud Backend", () => {
 
     const settingsLink = screen.getByTestId("collapsed-settings-link");
     expect(settingsLink).toHaveAttribute("rel", "noopener noreferrer");
+  });
+
+  it("opens cloud settings in the same tab when locked to Cloud", () => {
+    // Arrange: an OHE/SaaS-hosted canvas locked to the active cloud host
+    vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://cloud.example.com");
+    useSidebarStore.setState({ collapsed: true });
+
+    // Act
+    renderSidebar("/conversations");
+
+    // Assert: same tab, so browser Back returns to the canvas
+    const settingsLink = screen.getByTestId("collapsed-settings-link");
+    expect(settingsLink).toHaveAttribute(
+      "href",
+      "https://cloud.example.com/settings?org=org-1",
+    );
+    expect(settingsLink).not.toHaveAttribute("target");
+    expect(settingsLink).not.toHaveAttribute("rel");
   });
 });

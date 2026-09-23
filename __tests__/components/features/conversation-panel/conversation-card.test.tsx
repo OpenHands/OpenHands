@@ -23,6 +23,7 @@ import {
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import { useFreeModelsStore } from "#/stores/free-models-store";
 
 // We'll use the actual i18next implementation but override the translation function
 
@@ -152,9 +153,9 @@ describe("ConversationCard", () => {
     const branch = screen.getByTestId("conversation-card-selected-branch");
     const tag = screen.getByTestId("conversation-card-tag-chip");
 
-    expect(repo).toHaveClass("bg-[var(--oh-surface-raised)]");
-    expect(branch).toHaveClass("bg-[var(--oh-surface-raised)]");
-    expect(tag).toHaveClass("bg-[var(--oh-surface-raised)]");
+    expect(repo).toHaveClass("bg-surface-raised");
+    expect(branch).toHaveClass("bg-surface-raised");
+    expect(tag).toHaveClass("bg-surface-raised");
 
     // Identical pill look. The one intentional difference is flex-shrink:
     // repo and branch share a single overflow-hidden row, so they must shrink
@@ -753,9 +754,9 @@ describe("ConversationCard", () => {
   describe("Tag chips", () => {
     // Tag chips surface the agent-server's server-side conversation tags
     // (e.g. ``origin=slack`` stamped by an automation) and are gated by the
-    // conversation panel's "Tags" toggle (``showTags``). Chip labels are
-    // value-only; the full ``key: value`` lives in the chip tooltip.
-    it("renders non-reserved tags as value-only chips when showTags is on", () => {
+    // conversation panel's "Tags" toggle (``showTags``). Chips show a friendly
+    // ``key: value`` pair, with the full pair retained in the tooltip.
+    it("renders friendly key/value chips in priority and alphabetical order", () => {
       renderWithProviders(
         <ConversationCard
           title="Conversation 1"
@@ -769,10 +770,9 @@ describe("ConversationCard", () => {
       const chips = screen.getAllByTestId("conversation-card-tag-chip");
       // ``origin`` is a priority key, so it leads; remaining keys sort A–Z.
       expect(chips).toHaveLength(2);
-      expect(chips[0]).toHaveTextContent("slack");
-      expect(chips[0].getAttribute("title")).toMatch(/: slack$/);
-      expect(chips[0].getAttribute("title")).not.toContain("origin");
-      expect(chips[1]).toHaveTextContent("alice");
+      expect(chips[0]).toHaveTextContent("Origin: slack");
+      expect(chips[0]).toHaveAttribute("title", "Origin: slack");
+      expect(chips[1]).toHaveTextContent("Owner: alice");
       expect(chips[1]).toHaveAttribute("title", "Owner: alice");
       expect(
         within(chips[0]).getByTestId("conversation-card-tag-chip-icon"),
@@ -808,9 +808,8 @@ describe("ConversationCard", () => {
 
       const chips = screen.getAllByTestId("conversation-card-tag-chip");
       expect(chips).toHaveLength(1);
-      expect(chips[0]).toHaveTextContent("review");
-      expect(chips[0].getAttribute("title")).toMatch(/: review$/);
-      expect(chips[0].getAttribute("title")).not.toContain("origin");
+      expect(chips[0]).toHaveTextContent("Origin: review");
+      expect(chips[0]).toHaveAttribute("title", "Origin: review");
     });
 
     it("hides every automation provenance chip", () => {
@@ -921,7 +920,7 @@ describe("ConversationCard", () => {
       );
 
       const chip = screen.getByTestId("conversation-card-tag-chip");
-      expect(chip).toHaveTextContent("abcdefghijklm…");
+      expect(chip).toHaveTextContent("Token: abcdefghijklm…");
       expect(chip).toHaveAttribute("title", `Token: ${longValue}`);
     });
 
@@ -1122,7 +1121,11 @@ describe("ConversationCard", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("labels a free OpenHands route on native conversation chips", () => {
+    it("labels a DB-flagged free OpenHands route on native conversation chips", () => {
+      useFreeModelsStore.getState().setFlags({
+        freeModels: new Set(["openhands/glm-5.2"]),
+        defaultModel: "openhands/glm-5.2",
+      });
       renderWithProviders(
         <ConversationCard
           title="Conversation 1"
@@ -1135,8 +1138,13 @@ describe("ConversationCard", () => {
       );
 
       const chip = screen.getByTestId("conversation-card-agent-chip");
-      expect(chip).toHaveTextContent("glm-5.2");
+      expect(chip).toHaveTextContent("glm-5.2 (free)");
       expect(chip).toHaveAttribute("title", "openhands/glm-5.2");
+
+      useFreeModelsStore.getState().setFlags({
+        freeModels: new Set(),
+        defaultModel: null,
+      });
     });
 
     it("hides the chip for OpenHands conversations with no model", () => {

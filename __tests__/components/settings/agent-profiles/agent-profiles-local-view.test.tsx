@@ -10,6 +10,8 @@ import { displayErrorToast } from "#/utils/custom-toast-handlers";
 // The embedded Agent settings form is stubbed to emit a caller-provided
 // control, so the tests exercise the view's mapping to AgentProfileSaveInput.
 let emitControl: AgentSettingsSaveControl | null = null;
+const ADD_PROFILE_LABEL = "add";
+const EDIT_PROFILE_LABEL = "edit";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -60,13 +62,13 @@ vi.mock(
           type="button"
           data-testid="add-agent-profile"
           onClick={onAddProfile}
-          aria-label="add"
+          aria-label={ADD_PROFILE_LABEL}
         />
         <button
           type="button"
           data-testid="edit-agent-profile"
           onClick={() => onEditProfile?.({ name: "default" })}
-          aria-label="edit"
+          aria-label={EDIT_PROFILE_LABEL}
         />
       </>
     ),
@@ -134,6 +136,7 @@ describe("AgentProfilesLocalView save mapping", () => {
       isDirty: true,
       buildAgentProfileFields: () => ({
         agent_kind: "openhands",
+        mcp_server_refs: null,
         enable_sub_agents: true,
       }),
       credentials: { isDirty: false, save: vi.fn(), reset: vi.fn() },
@@ -148,6 +151,7 @@ describe("AgentProfilesLocalView save mapping", () => {
       name: "my-oh",
       profile: {
         agent_kind: "openhands",
+        mcp_server_refs: null,
         enable_sub_agents: true,
         llm_profile_ref: "default",
       },
@@ -161,6 +165,7 @@ describe("AgentProfilesLocalView save mapping", () => {
       isDirty: true,
       buildAgentProfileFields: () => ({
         agent_kind: "acp",
+        mcp_server_refs: null,
         acp_server: "claude-code",
         acp_model: "claude-opus-4-8",
         acp_command: null,
@@ -178,6 +183,7 @@ describe("AgentProfilesLocalView save mapping", () => {
       name: "my-claude",
       profile: {
         agent_kind: "acp",
+        mcp_server_refs: null,
         acp_server: "claude-code",
         acp_model: "claude-opus-4-8",
         acp_command: null,
@@ -215,8 +221,11 @@ describe("AgentProfilesLocalView save mapping", () => {
       agentType: "openhands",
       isValid: true,
       isDirty: true,
+      // The editor models `mcp_server_refs`, so it re-emits what it was seeded
+      // with; `disabled_skills` it does not, and survives via the merge.
       buildAgentProfileFields: () => ({
         agent_kind: "openhands",
+        mcp_server_refs: ["github"],
         enable_sub_agents: true,
       }),
       credentials: { isDirty: false, save: vi.fn(), reset: vi.fn() },
@@ -240,6 +249,10 @@ describe("AgentProfilesLocalView save mapping", () => {
       enable_sub_agents: false,
       enable_switch_llm_tool: false,
       tool_concurrency_limit: 4,
+      // Without this the picker opens on "all servers" and the save widens the
+      // profile's scope back to every configured server.
+      mcp_server_refs: ["github"],
+      secret_refs: null,
     });
 
     await user.click(screen.getByTestId("save-agent-profile-btn"));
@@ -269,6 +282,83 @@ describe("AgentProfilesLocalView save mapping", () => {
     expect(profile).not.toHaveProperty("revision");
   });
 
+  it("seeds the editor with a stored secret scope", async () => {
+    vi.mocked(AgentProfilesService.getProfile).mockResolvedValue({
+      name: "default",
+      profile: {
+        schema_version: 2,
+        id: "p-1",
+        name: "default",
+        revision: 3,
+        agent_kind: "openhands",
+        llm_profile_ref: "default",
+        enable_sub_agents: false,
+        secret_refs: ["DATADOG_API_KEY"],
+      },
+    } as never);
+    emitControl = {
+      agentType: "openhands",
+      isValid: true,
+      isDirty: true,
+      buildAgentProfileFields: () => ({
+        agent_kind: "openhands",
+        mcp_server_refs: null,
+        enable_sub_agents: false,
+      }),
+      credentials: { isDirty: false, save: vi.fn(), reset: vi.fn() },
+    };
+
+    render(<AgentProfilesLocalView />);
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("edit-agent-profile"));
+    await screen.findByTestId("mock-agent-settings");
+
+    const seededOverride = JSON.parse(
+      screen
+        .getByTestId("mock-agent-settings")
+        .getAttribute("data-override") as string,
+    );
+    expect(seededOverride.secret_refs).toEqual(["DATADOG_API_KEY"]);
+  });
+
+  it("edit-save persists an edited secret scope over the stored value", async () => {
+    vi.mocked(AgentProfilesService.getProfile).mockResolvedValue({
+      name: "default",
+      profile: {
+        schema_version: 2,
+        id: "p-1",
+        name: "default",
+        revision: 3,
+        agent_kind: "openhands",
+        llm_profile_ref: "default",
+        enable_sub_agents: false,
+        secret_refs: null,
+      },
+    } as never);
+    emitControl = {
+      agentType: "openhands",
+      isValid: true,
+      isDirty: true,
+      buildAgentProfileFields: () => ({
+        agent_kind: "openhands",
+        mcp_server_refs: null,
+        enable_sub_agents: false,
+        secret_refs: ["DATADOG_API_KEY"],
+      }),
+      credentials: { isDirty: false, save: vi.fn(), reset: vi.fn() },
+    };
+
+    render(<AgentProfilesLocalView />);
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("edit-agent-profile"));
+    await screen.findByTestId("mock-agent-settings");
+    await user.click(screen.getByTestId("save-agent-profile-btn"));
+
+    await waitFor(() => expect(saveMutate).toHaveBeenCalledTimes(1));
+    const { profile } = saveMutate.mock.calls[0][0];
+    expect(profile.secret_refs).toEqual(["DATADOG_API_KEY"]);
+  });
+
   it("edit-save persists an edited enable_switch_llm_tool over the stored value", async () => {
     // The stored profile has the tool disabled; the embedded form's builder
     // emits the edited value, which must win over the stored one in the
@@ -292,6 +382,7 @@ describe("AgentProfilesLocalView save mapping", () => {
       isDirty: true,
       buildAgentProfileFields: () => ({
         agent_kind: "openhands",
+        mcp_server_refs: null,
         enable_sub_agents: false,
         enable_switch_llm_tool: true,
       }),
@@ -329,6 +420,7 @@ describe("AgentProfilesLocalView save mapping", () => {
       isDirty: true,
       buildAgentProfileFields: () => ({
         agent_kind: "acp",
+        mcp_server_refs: null,
         acp_server: "claude-code",
         acp_model: "claude-opus-4-8",
         acp_command: null,
@@ -350,6 +442,7 @@ describe("AgentProfilesLocalView save mapping", () => {
       name: "default",
       profile: {
         agent_kind: "acp",
+        mcp_server_refs: null,
         acp_server: "claude-code",
         acp_model: "claude-opus-4-8",
         acp_command: null,
@@ -380,6 +473,7 @@ describe("AgentProfilesLocalView save mapping", () => {
       isDirty: false,
       buildAgentProfileFields: () => ({
         agent_kind: "openhands",
+        mcp_server_refs: null,
         enable_sub_agents: false,
       }),
       credentials: { isDirty: false, save: vi.fn(), reset: vi.fn() },
@@ -418,6 +512,7 @@ describe("AgentProfilesLocalView save mapping", () => {
       isDirty: false,
       buildAgentProfileFields: () => ({
         agent_kind: "openhands",
+        mcp_server_refs: null,
         enable_sub_agents: false,
       }),
       credentials: { isDirty: false, save: vi.fn(), reset: vi.fn() },
@@ -438,6 +533,7 @@ describe("AgentProfilesLocalView save mapping", () => {
       isDirty: true,
       buildAgentProfileFields: () => ({
         agent_kind: "openhands",
+        mcp_server_refs: null,
         enable_sub_agents: false,
       }),
       credentials: { isDirty: false, save: vi.fn(), reset: vi.fn() },

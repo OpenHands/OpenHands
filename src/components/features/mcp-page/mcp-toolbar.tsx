@@ -30,8 +30,8 @@ export function McpToolbar({
         data-testid="mcp-search"
         className={cn(
           "relative flex flex-1 min-w-0 items-center",
-          "rounded-lg border border-[var(--oh-border)] bg-base-secondary",
-          "focus-within:border-white/40 focus-within:ring-1 focus-within:ring-white/20",
+          "rounded-lg border border-border bg-base-secondary",
+          "focus-within:border-contrast/40 focus-within:ring-1 focus-within:ring-contrast/20",
           "transition-colors",
         )}
       >

@@ -19,8 +19,13 @@ jobs:
         # Run on drafts too so contributors can iterate on a passing description
         # before requesting review. Bots (dependabot, release-please) write their
         # own bodies and can't follow the HUMAN/AGENT template, so exempt them
-        # rather than failing every such PR.
-        if: github.event.pull_request.user.type != 'Bot'
+        # rather than failing every such PR. The artifact-cleanup PR is generated
+        # by a trusted workflow without the human-authored template, so exempt it too.
+        if: >-
+            github.event.pull_request.user.type != 'Bot' &&
+            !(github.event.pull_request.head.repo.full_name == github.repository &&
+            github.event.pull_request.base.ref == 'main' &&
+            github.event.pull_request.head.ref == 'automation/remove-pr-artifacts')
         runs-on: ubuntu-24.04
         steps:
             - name: Checkout trusted workflow scripts
