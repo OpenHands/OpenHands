@@ -97,9 +97,28 @@ USER root
 
 # Install system deps required by automation's transitive dependencies
 # (asyncpg needs libpq, which the agent-server base image may not include).
+# Refresh inherited packages after adding dependencies so the final image
+# includes available security fixes.
+ARG DEBIAN_SNAPSHOT=20260913T000000Z
 RUN if command -v apt-get >/dev/null 2>&1; then \
+      printf '%s\n' \
+        'Types: deb' \
+        "URIs: http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}/" \
+        'Suites: trixie' \
+        'Components: main' \
+        'Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg' \
+        'Check-Valid-Until: no' \
+        '' \
+        'Types: deb' \
+        "URIs: http://snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT}/" \
+        'Suites: trixie-security' \
+        'Components: main' \
+        'Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg' \
+        'Check-Valid-Until: no' \
+        > /etc/apt/sources.list.d/debian.sources && \
       apt-get update && \
       apt-get install -y --no-install-recommends libpq-dev && \
+      apt-get upgrade -y --no-install-recommends && \
       rm -rf /var/lib/apt/lists/*; \
     fi
 

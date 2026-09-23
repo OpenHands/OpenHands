@@ -28,7 +28,7 @@ const PANEL_CLASSNAME = cn(
 
 const ROW_CLASSNAME = cn(
   "flex items-center gap-2 rounded-md px-2 py-1.5",
-  "transition-colors hover:bg-white/5",
+  "transition-colors hover:bg-contrast/5",
 );
 
 const ROW_ICON_CLASSNAME = "size-4 shrink-0 text-muted";

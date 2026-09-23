@@ -114,7 +114,7 @@ export function ConversationNameWithStatus() {
             onClick={handleStatusClick}
             className={cn(
               "flex items-center justify-center rounded-md",
-              "text-muted hover:bg-white/10",
+              "text-muted hover:bg-contrast/10",
             )}
           >
             <DebugStackframeDot

@@ -56,7 +56,7 @@ export function ConversationPanelPinnedSection({
             type="button"
             data-testid="conversation-panel-pinned-view-more"
             onClick={onTogglePreviewExpanded}
-            className="cursor-pointer text-xs text-text-dim hover:text-white"
+            className="cursor-pointer text-xs text-text-dim hover:text-contrast"
           >
             {isShowingAll
               ? t(I18nKey.CONVERSATION_PANEL$LESS)

@@ -31,7 +31,7 @@ export function th({
   React.ThHTMLAttributes<HTMLTableCellElement> &
   ExtraProps) {
   return (
-    <th className="whitespace-nowrap border-border bg-surface px-3 py-2 text-left font-semibold text-white">
+    <th className="whitespace-nowrap border-border bg-surface px-3 py-2 text-left font-semibold text-contrast">
       {children}
     </th>
   );

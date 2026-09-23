@@ -56,7 +56,7 @@ export function AgentCanvasVersionTile({
         )}
       >
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-semibold leading-5 text-white">
+          <span className="block truncate text-sm font-semibold leading-5 text-contrast">
             {updateAvailable
               ? t(I18nKey.SETTINGS$VERSION_TILE_NEW_VERSION)
               : t(I18nKey.SETTINGS$VERSION_PRODUCT_NAME)}
@@ -65,7 +65,7 @@ export function AgentCanvasVersionTile({
             <span className="text-muted">
               {t(I18nKey.SETTINGS$APP_UPDATE_VERSION_LABEL)}
             </span>
-            <span className="truncate text-white">
+            <span className="truncate text-contrast">
               {updateAvailable && latestVersion
                 ? latestVersion
                 : installedVersion}

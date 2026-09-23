@@ -31,7 +31,7 @@ export function TreeNode({
           aria-expanded={isOpen}
           data-testid={`file-tree-dir-${node.path}`}
           className={cn(
-            "flex w-full items-center gap-1.5 py-1 pr-2 text-left text-sm text-white",
+            "flex w-full items-center gap-1.5 py-1 pr-2 text-left text-sm text-contrast",
             "hover:bg-tertiary cursor-pointer",
           )}
           // per-row indentation computed from tree depth at runtime
@@ -77,7 +77,9 @@ export function TreeNode({
         className={cn(
           "flex w-full items-center gap-1.5 py-1 pr-2 text-left text-sm",
           "hover:bg-tertiary cursor-pointer",
-          isSelected ? "bg-interactive-hover text-white" : "text-text-tertiary",
+          isSelected
+            ? "bg-interactive-hover text-contrast"
+            : "text-text-tertiary",
         )}
         // per-row indentation computed from tree depth at runtime
         style={{ paddingLeft: `${indentPx + 16}px` }}

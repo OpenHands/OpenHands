@@ -71,7 +71,9 @@ describe("ConversationOverviewDiffsRow", () => {
     await user.click(
       screen.getByTestId("conversation-overview-diffs-git-action"),
     );
-    await user.click(screen.getByTestId("conversation-overview-diffs-git-pull"));
+    await user.click(
+      screen.getByTestId("conversation-overview-diffs-git-pull"),
+    );
     expect(useConversationStore.getState().messageToSend?.text).toContain(
       "pull",
     );
@@ -79,7 +81,9 @@ describe("ConversationOverviewDiffsRow", () => {
     await user.click(
       screen.getByTestId("conversation-overview-diffs-git-action"),
     );
-    await user.click(screen.getByTestId("conversation-overview-diffs-git-push"));
+    await user.click(
+      screen.getByTestId("conversation-overview-diffs-git-push"),
+    );
     expect(useConversationStore.getState().messageToSend?.text).toContain(
       "push",
     );
@@ -130,11 +134,11 @@ describe("ConversationOverviewDiffsRow", () => {
       "conversation-overview-diffs-git-action",
     );
 
-    expect(row).toHaveClass("hover:bg-white/5");
+    expect(row).toHaveClass("hover:bg-contrast/5");
     expect(row?.className).toContain(
       "has-[.conversation-overview-diffs-git-action:hover]:bg-transparent",
     );
-    expect(changesButton).not.toHaveClass("hover:bg-white/5");
-    expect(gitAction).toHaveClass("hover:bg-white/10");
+    expect(changesButton).not.toHaveClass("hover:bg-contrast/5");
+    expect(gitAction).toHaveClass("hover:bg-contrast/10");
   });
 });

@@ -36,7 +36,7 @@ function InlineCodeChip({ children }: { children?: React.ReactNode }) {
     <code
       className={cn(
         "mx-0.5 inline-block rounded-sm border border-border-subtle",
-        "bg-surface-raised px-1.5 py-0.5 align-baseline font-mono text-[11px] text-white",
+        "bg-surface-raised px-1.5 py-0.5 align-baseline font-mono text-[11px] text-contrast",
       )}
     >
       {children}
@@ -65,7 +65,7 @@ function AddSkillExampleBlock() {
         data-testid="add-skill-modal-example"
         className={cn(
           "overflow-x-auto rounded-sm border border-border-subtle",
-          "bg-surface-raised p-2 pr-10 text-xs text-white",
+          "bg-surface-raised p-2 pr-10 text-xs text-contrast",
         )}
       >
         {ADD_SKILL_EXAMPLE_COMMAND}
@@ -79,7 +79,7 @@ function AddSkillExampleBlock() {
         className={cn(
           "absolute right-2 top-2 cursor-pointer rounded-sm border border-border-subtle",
           "bg-base-secondary p-1 text-tertiary-alt transition-colors",
-          "hover:bg-surface hover:text-white disabled:cursor-default [&_path]:fill-current",
+          "hover:bg-surface hover:text-contrast disabled:cursor-default [&_path]:fill-current",
         )}
       >
         {copied ? (
@@ -189,7 +189,7 @@ export function AddSkillModal({ onClose }: AddSkillModalProps) {
             target="_blank"
             rel="noreferrer"
             data-testid="add-skill-modal-docs-link"
-            className="self-start text-xs text-muted transition-colors hover:text-white hover:underline"
+            className="self-start text-xs text-muted transition-colors hover:text-contrast hover:underline"
           >
             {t(I18nKey.SETTINGS$SKILLS_ADD_MODAL_VIEW_DOCS)}
           </a>

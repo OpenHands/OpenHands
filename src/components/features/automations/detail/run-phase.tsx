@@ -185,7 +185,7 @@ export function RunPhase({
       disableAnimation={import.meta.env.MODE === "test"}
       classNames={{
         content:
-          "max-w-xs whitespace-pre-wrap break-words rounded-xl border border-border bg-base-secondary px-3 py-2 text-left text-xs text-white shadow-xl",
+          "max-w-xs whitespace-pre-wrap break-words rounded-xl border border-border bg-base-secondary px-3 py-2 text-left text-xs text-contrast shadow-xl",
       }}
     >
       <span className="flex min-w-0 cursor-default items-center gap-1">

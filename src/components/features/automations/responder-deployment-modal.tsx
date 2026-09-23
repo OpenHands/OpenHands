@@ -66,7 +66,7 @@ export function ResponderDeploymentModal({
                 className="flex flex-1 flex-col gap-3 rounded-xl border border-border bg-surface-raised p-4"
               >
                 <div className="flex flex-col gap-1">
-                  <h3 className="text-sm font-semibold text-white">
+                  <h3 className="text-sm font-semibold text-contrast">
                     {t(option.titleKey)}
                   </h3>
                   <p className="text-xs leading-relaxed text-tertiary-light">

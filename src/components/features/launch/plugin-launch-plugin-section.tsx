@@ -46,21 +46,21 @@ export function PluginLaunchPluginSection({
           {getPluginDisplayName(plugin)}
         </Typography.Text>
         {isExpanded ? (
-          <IoChevronDown className="h-5 w-5 text-white" />
+          <IoChevronDown className="h-5 w-5 text-contrast" />
         ) : (
-          <IoChevronForward className="h-5 w-5 text-white" />
+          <IoChevronForward className="h-5 w-5 text-contrast" />
         )}
       </button>
 
       {isExpanded && (
         <div className="border-t border-border-subtle px-4 pb-3">
           {plugin.ref && (
-            <div className="mb-2 text-sm text-white">
+            <div className="mb-2 text-sm text-contrast">
               {t(I18nKey.LAUNCH$PLUGIN_REF)} {plugin.ref}
             </div>
           )}
           {plugin.repo_path && (
-            <div className="mb-2 text-sm text-white">
+            <div className="mb-2 text-sm text-contrast">
               {t(I18nKey.LAUNCH$PLUGIN_PATH)} {plugin.repo_path}
             </div>
           )}

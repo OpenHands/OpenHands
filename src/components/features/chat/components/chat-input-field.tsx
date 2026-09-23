@@ -52,7 +52,7 @@ export function ChatInputField({
           ref={chatInputRef}
           className={cn(
             // eslint-disable-next-line shadcn/no-arbitrary-values
-            "chat-input bg-transparent text-white text-[16px] font-normal leading-5 outline-none resize-none custom-scrollbar min-h-5 max-h-100 [text-overflow:inherit] [text-wrap-mode:inherit] [white-space-collapse:inherit] block whitespace-pre-wrap",
+            "chat-input bg-transparent text-contrast text-[16px] font-normal leading-5 outline-none resize-none custom-scrollbar min-h-5 max-h-100 [text-overflow:inherit] [text-wrap-mode:inherit] [white-space-collapse:inherit] block whitespace-pre-wrap",
             disabled && "cursor-not-allowed opacity-50",
           )}
           contentEditable={!disabled}

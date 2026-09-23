@@ -52,15 +52,25 @@ function TagIconSlot({
   );
 }
 
+function formatTagChipLabel(
+  key: string,
+  value: string,
+  t: (key: I18nKey) => string,
+): string {
+  // Same string as the tooltip, with the value hard-truncated so long chips
+  // still fit. Bare tags (empty value) show the humanized key once.
+  return formatConversationTagTooltip(key, truncateTagChipValue(value), t);
+}
+
 function TagChipContent({
   icon,
   keyName,
-  value,
+  chipLabel,
   iconTestId,
 }: {
   icon: ConversationTagIcon;
   keyName: string;
-  value: string;
+  chipLabel: string;
   /**
    * Only the visible row passes this. The off-screen measure row renders the
    * same chips, so tagging both would emit every chip test id twice and break
@@ -71,26 +81,22 @@ function TagChipContent({
   return (
     <>
       <TagIconSlot icon={icon} keyName={keyName} testId={iconTestId} />
-      {/* Bare tags (empty value) fall back to the key so the chip is never
-          an empty pill. */}
-      <span className="truncate leading-4">
-        {truncateTagChipValue(value || keyName)}
-      </span>
+      <span className="truncate leading-4">{chipLabel}</span>
     </>
   );
 }
 
 /**
- * Single-row tag chips for a conversation card. Chip labels are value-only
- * (bare tags with an empty value show the key; the full ``key: value`` pair
- * lives in the tooltip); chips that do not fit fold behind a ``+N``
+ * Single-row tag chips for a conversation card. Chip labels show the same
+ * humanized ``key: value`` pair as the tooltip (bare tags with an empty
+ * value show the key once); chips that do not fit fold behind a ``+N``
  * button that opens a key/value popover.
  *
  * The overflow popover is portaled with ``position: fixed`` so it is not
  * clipped by the chip row's ``overflow-hidden`` or the sidebar scroller.
  */
 export function ConversationTagChips({ tags }: ConversationTagChipsProps) {
-  const { t } = useTranslation("openhands");
+  const { t, i18n } = useTranslation("openhands");
   const containerRef = React.useRef<HTMLDivElement>(null);
   const measureRef = React.useRef<HTMLDivElement>(null);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
@@ -145,6 +151,13 @@ export function ConversationTagChips({ tags }: ConversationTagChipsProps) {
     setIsOverflowOpen(false);
     recomputeVisibleCount();
   }, [tagsKey, recomputeVisibleCount]);
+
+  // Localized key labels change chip width (e.g. "Git" vs a longer
+  // translation), so overflow must be remeasured when the language changes.
+  const language = i18n.resolvedLanguage ?? i18n.language;
+  React.useLayoutEffect(() => {
+    recomputeVisibleCount();
+  }, [language, recomputeVisibleCount]);
 
   React.useEffect(() => {
     const container = containerRef.current;
@@ -235,7 +248,7 @@ export function ConversationTagChips({ tags }: ConversationTagChipsProps) {
             <TagChipContent
               icon={getConversationTagIcon(key, value)}
               keyName={key}
-              value={value}
+              chipLabel={formatTagChipLabel(key, value, t)}
             />
           </span>
         ))}
@@ -256,7 +269,7 @@ export function ConversationTagChips({ tags }: ConversationTagChipsProps) {
             <TagChipContent
               icon={getConversationTagIcon(key, value)}
               keyName={key}
-              value={value}
+              chipLabel={formatTagChipLabel(key, value, t)}
               iconTestId="conversation-card-tag-chip-icon"
             />
           </span>

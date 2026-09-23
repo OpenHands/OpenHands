@@ -29,7 +29,7 @@ const DOT_CLASS_BY_STATUS: Record<McpServerHealth["status"], string> = {
 };
 
 const actionClassName =
-  "text-xs text-muted underline transition-colors hover:text-white disabled:cursor-not-allowed disabled:opacity-60";
+  "text-xs text-muted underline transition-colors hover:text-contrast disabled:cursor-not-allowed disabled:opacity-60";
 
 function getDotStatus(health: McpServerHealth): string {
   if (health.status === "healthy") {
