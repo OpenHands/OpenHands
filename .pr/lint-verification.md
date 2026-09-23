@@ -62,5 +62,11 @@ This directory is PR-only evidence. Fork PRs require manual `.pr/` cleanup befor
 - `npm run lint`: passed, **0 unknown-class warnings / 347 existing arbitrary-value warnings / 0 errors**; formatting and TypeScript checks passed.
 - `npx vitest run __tests__/components/features/home/repo-selection-form.test.tsx __tests__/components/features/home/workspace-selection-form.test.tsx __tests__/components/features/home/git-repo-dropdown.test.tsx __tests__/components/features/home/workspace-dropdown.test.tsx __tests__/utils/form-control-classes.test.ts --maxWorkers=2`: **5 files / 69 tests passed**.
 - `npm run build` and `npm run build:lib`: passed.
-- No visual change is claimed: the removed classes have no styling or selector consumers, and the compiled CSS comparison above is identical. No new screenshot is needed to demonstrate a visual repair.
+- No visual change is claimed: the removed classes have no styling or selector consumers, and the compiled CSS comparison above is identical. The PR also includes real-app workspace screenshots to satisfy frontend evidence CI; they are a smoke comparison, not pixel-diff coverage of every component.
 - The original PR head passed Ubuntu and Windows test/build CI. The checks above disclose the earlier local full-suite flake; no new tests or weakened assertions were introduced for inert class removal.
+
+### Real-app screenshot setup
+
+`PATH=/opt/homebrew/opt/node@22/bin:$PATH VITE_DO_NOT_TRACK=1 npm run dev:mock -- --host 127.0.0.1 --port 3196 --strictPort`
+
+Open Workspace in the real Canvas UI using MSW data. `workspace-before.png` uses the four affected source files from `0bfdebb`; `workspace-after.png` uses `a35e74e`. The same running app applied the revisions through Vite HMR. No live LLM or credentials were used. The workspace field and its shared caret retain their appearance; compiler/merge parity covers all four removals.
