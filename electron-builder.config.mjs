@@ -61,15 +61,20 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// npm packages the packaged app's child-process scripts import at runtime:
+// npm packages imported at runtime by code that isn't bundled through Vite
+// (main.mjs itself, and the child-process scripts it spawns):
 //   scripts/static-server.mjs  → sirv
 //   scripts/proxy-utils.mjs    → httpxy   (imported by ingress.mjs)
+//   scripts/tunnel-client.mjs  → ws       (imported directly by main.mjs,
+//                                          not spawned — the MARS
+//                                          port-forward tunnel client)
 // Their dependency closure is copied back into Resources/app/node_modules
-// after the strip below. If a spawned script gains a new bare import, add
-// the package here — a missing one crashes that service in the installed
-// app with ERR_MODULE_NOT_FOUND (invisible under Finder, where stdout goes
-// to /dev/null) and the splash times out waiting for port 8000.
-const RUNTIME_PACKAGES = ["sirv", "httpxy"];
+// after the strip below. If a spawned script (or main.mjs itself) gains a
+// new bare import, add the package here — a missing one crashes that
+// service in the installed app with ERR_MODULE_NOT_FOUND (invisible under
+// Finder, where stdout goes to /dev/null) and the splash times out waiting
+// for port 8000.
+const RUNTIME_PACKAGES = ["sirv", "httpxy", "ws"];
 
 const repoRoot = dirname(fileURLToPath(import.meta.url));
 
