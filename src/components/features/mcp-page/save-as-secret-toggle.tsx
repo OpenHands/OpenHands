@@ -23,7 +23,7 @@ export function SaveAsSecretToggle({
         "flex items-center gap-2 px-3 py-2 mt-0.5 rounded-lg border cursor-pointer transition-colors",
         checked
           ? "border-green-500/35 bg-green-500/10"
-          : "border-border bg-transparent hover:bg-white/[0.03]",
+          : "border-border bg-transparent hover:bg-contrast/[0.03]",
       )}
     >
       {/* sr-only keeps the real checkbox in the accessibility tree so AT
@@ -57,7 +57,7 @@ export function SaveAsSecretToggle({
         className={cn(
           "ml-auto text-[11px] font-mono tracking-tight border rounded px-1.5 py-0.5",
           checked
-            ? "text-green-500 border-green-500/35 bg-white/[0.04]"
+            ? "text-green-500 border-green-500/35 bg-contrast/[0.04]"
             : "text-tertiary-alt border-border",
         )}
       >

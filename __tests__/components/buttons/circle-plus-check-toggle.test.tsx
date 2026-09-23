@@ -8,9 +8,7 @@ import {
 
 describe("CirclePlusBadge", () => {
   it("renders a decorative plus with hover styles and tooltip", () => {
-    render(
-      <CirclePlusBadge testId="automation-plus" />,
-    );
+    render(<CirclePlusBadge testId="automation-plus" />);
 
     const plusBadge = screen.getByTestId("automation-plus");
     expect(plusBadge.tagName).toBe("SPAN");
@@ -74,8 +72,8 @@ describe("CirclePlusCheckToggle", () => {
 
     const toggle = screen.getByTestId("skill-toggle");
     expect(toggle).toHaveAttribute("data-showing-remove", "false");
-    expect(toggle.className).toContain("border-white");
-    expect(toggle.className).not.toContain("bg-white");
+    expect(toggle.className).toContain("border-contrast");
+    expect(toggle.className).not.toContain("bg-contrast");
 
     await user.hover(toggle);
     expect(toggle).toHaveAttribute("data-showing-remove", "true");

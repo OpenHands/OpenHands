@@ -51,7 +51,7 @@ function renderHelperText(text: string): React.ReactNode {
         href={/^https?:\/\//i.test(match[2]) ? match[2] : "#"}
         target="_blank"
         rel="noreferrer"
-        className="underline hover:text-white transition-colors"
+        className="underline hover:text-contrast transition-colors"
       >
         {match[1]}
       </a>,
@@ -690,7 +690,7 @@ export function InstallServerModal({
             href={entry.docsUrl}
             target="_blank"
             rel="noreferrer"
-            className="text-xs text-muted hover:text-white hover:underline self-start transition-colors"
+            className="text-xs text-muted hover:text-contrast hover:underline self-start transition-colors"
           >
             {t(I18nKey.MCP$VIEW_DOCS)}
           </a>

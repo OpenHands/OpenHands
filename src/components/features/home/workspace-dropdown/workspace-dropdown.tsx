@@ -317,7 +317,7 @@ export function WorkspaceDropdown({
 
   const control = (
     <div className={cn("relative", className)}>
-      <div className="group relative text-muted hover:text-white">
+      <div className="group relative text-muted hover:text-contrast">
         <div className="absolute left-2 top-1/2 transform -translate-y-1/2 z-10">
           <RepoIcon width={16} height={16} />
         </div>

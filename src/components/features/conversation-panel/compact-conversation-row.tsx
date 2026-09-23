@@ -67,7 +67,10 @@ export function CompactConversationRow({
           sandboxStatus={sandboxStatus}
           showTooltip={false}
         />
-        <span className="text-sm font-medium text-white truncate" title={title}>
+        <span
+          className="text-sm font-medium text-contrast truncate"
+          title={title}
+        >
           {title || t(I18nKey.CONVERSATION$UNTITLED)}
         </span>
       </div>
@@ -93,7 +96,7 @@ export function CompactConversationRow({
       content={preview}
       placement="right"
       closeDelay={100}
-      className="bg-surface text-white border border-border-subtle shadow-xl p-0"
+      className="bg-surface text-contrast border border-border-subtle shadow-xl p-0"
       disableAnimation={disableAnimation}
     >
       <NavigationLink

@@ -73,7 +73,7 @@ export function WorkspaceModeSelector({
         onClick={() => setOpen((next) => !next)}
         className={cn(
           "group flex flex-row items-center justify-between gap-2 pl-2.5 pr-2 py-1 rounded-[100px] truncate relative",
-          "border border-[rgba(71,74,84,0.50)] bg-transparent text-white",
+          "border border-[rgba(71,74,84,0.50)] bg-transparent text-contrast",
           disabled
             ? "cursor-not-allowed opacity-50"
             : "cursor-pointer hover:border-border-subtle",
@@ -85,7 +85,7 @@ export function WorkspaceModeSelector({
         <span className="min-w-0 flex-1 truncate text-sm font-normal leading-5">
           {label}
         </span>
-        <ChevronDown className="size-3 shrink-0 text-white" aria-hidden />
+        <ChevronDown className="size-3 shrink-0 text-contrast" aria-hidden />
       </button>
 
       {open ? (

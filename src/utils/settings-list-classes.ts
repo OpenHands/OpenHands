@@ -59,5 +59,5 @@ export const settingsListTableCellClassName = cn(
 export const settingsListIconActionButtonClassName = cn(
   "inline-flex cursor-pointer items-center justify-center rounded-md p-1 text-muted",
   formControlTransitionClassName,
-  "hover:bg-interactive-hover-low hover:text-white",
+  "hover:bg-interactive-hover-low hover:text-contrast",
 );

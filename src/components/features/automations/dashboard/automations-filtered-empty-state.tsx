@@ -25,7 +25,7 @@ export function AutomationsFilteredEmptyState({
         type="button"
         data-testid="automations-clear-filters"
         onClick={onClear}
-        className="mt-2 text-sm text-white underline-offset-2 hover:underline"
+        className="mt-2 text-sm text-contrast underline-offset-2 hover:underline"
       >
         {t(I18nKey.AUTOMATIONS$CLEAR_FILTERS)}
       </button>

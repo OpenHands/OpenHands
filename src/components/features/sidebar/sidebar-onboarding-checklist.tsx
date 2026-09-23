@@ -17,7 +17,7 @@ import { SidebarOnboardingChecklistItemPreview } from "./sidebar-onboarding-chec
 import { useSidebarOnboardingChecklist } from "./use-sidebar-onboarding-checklist";
 
 const CHECKLIST_ITEM_TOOLTIP_CLASS =
-  "rounded-xl border border-border bg-base-secondary p-0 text-white shadow-xl";
+  "rounded-xl border border-border bg-base-secondary p-0 text-contrast shadow-xl";
 
 const CHECKLIST_ITEM_CLASS = cn(
   "flex min-w-0 w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm",

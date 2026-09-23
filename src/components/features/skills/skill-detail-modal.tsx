@@ -132,7 +132,7 @@ export function SkillDetailModal({
                     )}
                     disabled={sourceCopied}
                     onClick={handleCopySource}
-                    className="shrink-0 cursor-pointer border-0 bg-transparent p-0.5 text-tertiary-alt hover:text-white disabled:cursor-default [&_path]:fill-current"
+                    className="shrink-0 cursor-pointer border-0 bg-transparent p-0.5 text-tertiary-alt hover:text-contrast disabled:cursor-default [&_path]:fill-current"
                   >
                     {sourceCopied ? (
                       <CheckmarkIcon width={12} height={12} />
@@ -152,7 +152,7 @@ export function SkillDetailModal({
         >
           <div
             data-testid={`skill-modal-enable-row-${skill.name}`}
-            className="flex w-full items-center rounded-lg border border-border bg-[rgba(255,255,255,0.04)] px-3 py-2.5"
+            className="flex w-full items-center rounded-lg border border-border bg-contrast/[0.04] px-3 py-2.5"
           >
             <SettingsSwitch
               testId={`skill-modal-toggle-${skill.name}`}

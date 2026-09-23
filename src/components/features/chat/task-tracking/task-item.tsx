@@ -39,7 +39,10 @@ export function TaskItem({ task }: TaskItemProps) {
       <div className="shrink-0">{icon}</div>
       <div className="flex flex-col items-start justify-center leading-4 text-nowrap whitespace-pre font-normal">
         <Typography.Text
-          className={cn("text-xs", isDoneStatus ? "text-muted" : "text-white")}
+          className={cn(
+            "text-xs",
+            isDoneStatus ? "text-muted" : "text-contrast",
+          )}
         >
           {task.title}
         </Typography.Text>

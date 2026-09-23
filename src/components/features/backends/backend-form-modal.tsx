@@ -238,7 +238,10 @@ function BackendStatusBadge({
         className="flex items-center gap-3 text-sm"
       >
         <BackendStatusDot isConnected={isConnected} />
-        <span className="text-white" data-testid={`${testIdRoot}-status-label`}>
+        <span
+          className="text-contrast"
+          data-testid={`${testIdRoot}-status-label`}
+        >
           {statusLabel}
         </span>
         <span className="text-tertiary-alt">·</span>
@@ -998,7 +1001,12 @@ function CloudLoginColumn({
     <div className="flex w-full min-w-0 flex-col items-center gap-3">
       {showBranding ? (
         <div className="flex flex-col items-center gap-1">
-          <OpenHandsLogoWhite width={56} height={56} aria-hidden />
+          <OpenHandsLogoWhite
+            width={56}
+            height={56}
+            className="text-contrast [&_path:not([fill=transparent])]:fill-current"
+            aria-hidden
+          />
 
           <h4
             className={modalTitleLgMediumClassName}
@@ -1138,8 +1146,8 @@ function BackendOptionTab({
         "first:border-r first:border-r-border",
         "focus-visible:z-10 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-300",
         isSelected
-          ? "bg-surface-raised text-white after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-primary"
-          : "text-muted hover:bg-surface-raised hover:text-white",
+          ? "bg-surface-raised text-contrast after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-primary"
+          : "text-muted hover:bg-surface-raised hover:text-contrast",
       )}
     >
       <span
@@ -1245,7 +1253,7 @@ function AgentServerGuidance({ location }: { location: AgentServerLocation }) {
     >
       {/* Heading wraps the button so the accordion keeps a real heading in the
           document outline while the whole row stays clickable. */}
-      <h4 className="text-white">
+      <h4 className="text-contrast">
         <button
           id={toggleId}
           type="button"
@@ -1300,7 +1308,7 @@ function AgentServerGuidance({ location }: { location: AgentServerLocation }) {
 
             {isRemote ? (
               <div>
-                <h5 className="font-medium text-white">
+                <h5 className="font-medium text-contrast">
                   {t(I18nKey.BACKEND$REMOTE_CONNECTION_TITLE)}
                 </h5>
                 <p className="mt-1 leading-5">
@@ -1308,7 +1316,7 @@ function AgentServerGuidance({ location }: { location: AgentServerLocation }) {
                 </p>
               </div>
             ) : (
-              <code className="block break-words font-mono text-xs text-white">
+              <code className="block break-words font-mono text-xs text-contrast">
                 {LOCAL_BACKEND_COMMAND}
               </code>
             )}
@@ -1368,6 +1376,7 @@ function AddBackendChooser({
               width={32}
               height={32}
               data-testid="add-backend-option-cloud-logo"
+              className="text-contrast [&_path:not([fill=transparent])]:fill-current"
             />
           }
           onSelect={setSelectedOption}

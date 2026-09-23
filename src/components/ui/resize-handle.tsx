@@ -33,7 +33,7 @@ export function ResizeHandle({
       <div
         className={cn(
           "pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 transition-colors",
-          lineActive ? "bg-white" : "bg-transparent",
+          lineActive ? "bg-contrast" : "bg-transparent",
         )}
         aria-hidden
       />

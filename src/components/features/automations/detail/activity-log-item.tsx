@@ -116,7 +116,13 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
           <span className="text-sm text-content">{formattedTimestamp}</span>
           {showNoConversationLabel && (
             <span className="text-xs text-muted">
-              {t(I18nKey.AUTOMATIONS$DETAIL$NO_CONVERSATION)}
+              {t(
+                hasBashCommand
+                  ? // A command ran but no agent did: a script automation.
+                    // Point at the logs button, the only place its output is.
+                    I18nKey.AUTOMATIONS$DETAIL$SCRIPT_RUN_NO_CONVERSATION
+                  : I18nKey.AUTOMATIONS$DETAIL$NO_CONVERSATION,
+              )}
             </span>
           )}
         </div>
@@ -170,6 +176,7 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
       {hasBashCommand && (
         <RunLogsModal
           conversationId={run.conversation_id}
+          sandboxId={run.sandbox_id ?? null}
           bashCommandId={run.bash_command_id}
           isOpen={logsOpen}
           onClose={() => setLogsOpen(false)}
