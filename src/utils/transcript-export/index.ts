@@ -37,11 +37,23 @@ import { I18nKey } from "#/i18n/declaration";
 
 export type TranscriptExportFormat = "markdown" | "html";
 
+/**
+ * Describes a head+tail export where the middle of a very large conversation
+ * was intentionally not loaded. `headEventCount` is the number of leading
+ * (oldest) events in the rendered list; the omission notice is placed after
+ * them, before the tail (newest) events.
+ */
+export interface TranscriptTruncation {
+  omittedCount: number;
+  headEventCount: number;
+}
+
 export interface TranscriptExportOptions {
   includeToolDetails: boolean;
   includeTimestamps: boolean;
   title?: string | null;
   model?: string | null;
+  truncation?: TranscriptTruncation;
 }
 
 type TranscriptEntry =
@@ -494,6 +506,43 @@ const buildTranscriptEntries = (
   return entries;
 };
 
+/**
+ * Builds the transcript entries and, when the export was truncated to a
+ * head+tail window, inserts a single omission notice between the oldest
+ * (head) and newest (tail) events. Head and tail are rendered independently:
+ * the omitted middle is genuinely absent, so no action/observation pair can
+ * span the boundary.
+ */
+const buildTranscriptEntriesWithTruncation = (
+  events: OpenHandsEvent[],
+  includeToolDetails: boolean,
+  truncation?: TranscriptTruncation,
+): TranscriptEntry[] => {
+  if (!truncation || truncation.omittedCount <= 0) {
+    return buildTranscriptEntries(events, includeToolDetails);
+  }
+
+  const headEvents = events.slice(0, truncation.headEventCount);
+  const tailEvents = events.slice(truncation.headEventCount);
+  const boundaryTimestamp =
+    tailEvents[0]?.timestamp ??
+    headEvents[headEvents.length - 1]?.timestamp ??
+    "";
+
+  return [
+    ...buildTranscriptEntries(headEvents, includeToolDetails),
+    {
+      kind: "note",
+      summary: translatePlain(I18nKey.TRANSCRIPT_EXPORT$TRUNCATION_NOTICE, {
+        count: truncation.omittedCount,
+      }),
+      content: "",
+      timestamp: boundaryTimestamp,
+    },
+    ...buildTranscriptEntries(tailEvents, includeToolDetails),
+  ];
+};
+
 const markdownTimestamp = (
   entry: TranscriptEntry,
   options: TranscriptExportOptions,
@@ -524,9 +573,10 @@ export const eventsToMarkdown = (
     );
   }
 
-  for (const entry of buildTranscriptEntries(
+  for (const entry of buildTranscriptEntriesWithTruncation(
     events,
     options.includeToolDetails,
+    options.truncation,
   )) {
     const timestamp = markdownTimestamp(entry, options);
     if (entry.kind === "message") {
@@ -594,7 +644,11 @@ export const eventsToHtml = (
   options: TranscriptExportOptions,
 ): string => {
   const title = safeTitle(options.title);
-  const body = buildTranscriptEntries(events, options.includeToolDetails)
+  const body = buildTranscriptEntriesWithTruncation(
+    events,
+    options.includeToolDetails,
+    options.truncation,
+  )
     .map((entry) => {
       const timestamp = htmlTimestamp(entry, options);
       if (entry.kind === "message") {
