@@ -43,6 +43,8 @@ export {
   CANVAS_EXTENSION_HOST_API_VERSION,
   CANVAS_EXTENSION_MANIFEST_SCHEMA_VERSION,
   type CanvasExtensionAgentServerRequest,
+  type CanvasExtensionAppBackendViewHost,
+  type CanvasExtensionAppBackendViewMountOptions,
   type CanvasExtensionContributions,
   type CanvasExtensionDispose,
   type CanvasExtensionHost,
