@@ -21,6 +21,7 @@ import AutomationDetail from "#/routes/automation-detail";
 import type { Backend } from "#/api/backend-registry/types";
 import { AutomationRunStatus } from "#/types/automation";
 import type { Automation, AutomationRunsResponse } from "#/types/automation";
+import { packTarGzip } from "#/utils/tar-gzip";
 
 vi.mock("#/api/automation-service/automation-service.api", () => ({
   default: {
@@ -29,6 +30,7 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
     toggleAutomation: vi.fn(),
     deleteAutomation: vi.fn(),
     dispatchAutomation: vi.fn(),
+    fetchTarballBytes: vi.fn(),
     checkHealth: vi.fn(),
   },
 }));
@@ -388,6 +390,35 @@ describe("AutomationDetail — disabled reason banner", () => {
     // Assert
     expect(
       screen.queryByTestId("automation-disabled-reason-banner"),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("AutomationDetail — script automations", () => {
+  it("shows the bundle's script in place of the prompt for an automation without a prompt", async () => {
+    // Arrange
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+      ...automation,
+      prompt: null,
+      entrypoint: "python main.py",
+    });
+    vi.mocked(AutomationService.fetchTarballBytes).mockResolvedValue(
+      new Uint8Array(
+        await packTarGzip([{ name: "main.py", content: "print('hi')\n" }]),
+      ),
+    );
+
+    // Act
+    renderDetail();
+
+    // Assert
+    expect(
+      await screen.findByTestId("automation-script-file"),
+    ).toHaveTextContent("main.py");
+    expect(
+      screen.queryByTestId("automation-prompt-content"),
     ).not.toBeInTheDocument();
   });
 });

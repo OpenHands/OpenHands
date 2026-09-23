@@ -223,9 +223,8 @@ describe("conversation name status controls", () => {
 
   it("opens on mouse hover and closes when the pointer leaves", () => {
     renderSubject();
-    const container = screen.getByTestId(
-      "server-status-menu-trigger",
-    ).parentElement as HTMLElement;
+    const container = screen.getByTestId("server-status-menu-trigger")
+      .parentElement as HTMLElement;
 
     expect(
       screen.queryByTestId("server-status-context-menu"),
@@ -250,9 +249,8 @@ describe("conversation name status controls", () => {
 
   it("ignores hover from non-mouse pointers", () => {
     renderSubject();
-    const container = screen.getByTestId(
-      "server-status-menu-trigger",
-    ).parentElement as HTMLElement;
+    const container = screen.getByTestId("server-status-menu-trigger")
+      .parentElement as HTMLElement;
 
     fireEvent.pointerEnter(container, { pointerType: "touch" });
 
@@ -264,7 +262,7 @@ describe("conversation name status controls", () => {
   it("toggles the menu closed and reflects aria-expanded when clicked twice", () => {
     renderSubject();
     const trigger = screen.getByTestId("server-status-menu-trigger");
-    expect(trigger).toHaveClass("rounded-md", "hover:bg-white/10");
+    expect(trigger).toHaveClass("rounded-md", "hover:bg-contrast/10");
     expect(trigger).toHaveAttribute("aria-expanded", "false");
 
     fireEvent.click(trigger);

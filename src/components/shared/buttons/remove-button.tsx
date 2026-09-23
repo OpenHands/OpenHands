@@ -18,7 +18,7 @@ export function RemoveButton({
       onClick={onClick}
       aria-label={ariaLabel}
       className={cn(
-        "bg-[var(--oh-muted)] rounded-full w-5 h-5 flex items-center justify-center cursor-pointer",
+        "bg-muted rounded-full w-5 h-5 flex items-center justify-center cursor-pointer",
         className,
       )}
     >

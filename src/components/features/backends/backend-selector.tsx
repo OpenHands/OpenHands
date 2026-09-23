@@ -414,7 +414,7 @@ export function BackendSelector({
             }
             loading={someCloudLoading}
             options={options}
-            className="h-10 px-2 py-0 bg-transparent border-transparent hover:bg-[var(--oh-surface-raised)] focus-within:bg-[var(--oh-surface-raised)] focus-within:border-transparent focus-within:ring-0"
+            className="h-10 px-2 py-0 bg-transparent border-transparent hover:bg-surface-raised focus-within:bg-surface-raised focus-within:border-transparent focus-within:ring-0"
           />
         </div>
         {!hideTrigger ? (
@@ -431,7 +431,7 @@ export function BackendSelector({
                 data-testid="backend-selector-settings-link"
                 aria-label={settingsLabel}
                 className={cn(
-                  "inline-flex items-center justify-center shrink-0 w-9 h-9 rounded-md text-[var(--oh-muted)] hover:text-white hover:bg-[var(--oh-surface-raised)] cursor-pointer",
+                  "inline-flex items-center justify-center shrink-0 w-9 h-9 rounded-md text-muted hover:text-contrast hover:bg-surface-raised cursor-pointer",
                   formControlTransitionClassName,
                 )}
               >
@@ -446,11 +446,11 @@ export function BackendSelector({
                 className={
                   isSettingsActive
                     ? cn(
-                        "inline-flex items-center justify-center shrink-0 w-9 h-9 rounded-md bg-tertiary text-white font-normal cursor-pointer",
+                        "inline-flex items-center justify-center shrink-0 w-9 h-9 rounded-md bg-tertiary text-contrast font-normal cursor-pointer",
                         formControlTransitionClassName,
                       )
                     : cn(
-                        "inline-flex items-center justify-center shrink-0 w-9 h-9 rounded-md text-[var(--oh-muted)] hover:text-white hover:bg-[var(--oh-surface-raised)] cursor-pointer",
+                        "inline-flex items-center justify-center shrink-0 w-9 h-9 rounded-md text-muted hover:text-contrast hover:bg-surface-raised cursor-pointer",
                         formControlTransitionClassName,
                       )
                 }

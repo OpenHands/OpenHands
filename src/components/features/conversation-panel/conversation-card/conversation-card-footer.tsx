@@ -131,7 +131,7 @@ export function ConversationCardFooter({
 
   // Match title text start: 18px status column + gap-2 (8px).
   const metadataIndentClass =
-    executionStatus !== undefined ? "pl-[26px]" : undefined;
+    executionStatus !== undefined ? "pl-6.5" : undefined;
 
   const displayTags = showTags ? getDisplayConversationTags(tags) : [];
 
@@ -156,7 +156,7 @@ export function ConversationCardFooter({
           ))}
         <div className="flex items-center gap-2 shrink-0 ml-auto">
           {showTimestamp && (createdAt ?? lastUpdatedAt) && (
-            <p className="text-xs text-[var(--oh-muted)] text-right">
+            <p className="text-xs text-muted text-right">
               <time>
                 {`${formatTimeDelta(lastUpdatedAt ?? createdAt)} ${t(I18nKey.CONVERSATION$AGO)}`}
               </time>
