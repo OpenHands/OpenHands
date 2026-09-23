@@ -1,5 +1,6 @@
 import React from "react";
 import { createPortal } from "react-dom";
+import { useModalPortalHost } from "#/contexts/modal-portal-host-context";
 
 interface ModalBackdropProps {
   children: React.ReactNode;
@@ -23,28 +24,32 @@ export function ModalBackdrop({
   elevated = false,
   "aria-label": ariaLabel,
 }: ModalBackdropProps) {
+  const configuredPortalHost = useModalPortalHost();
+  const portalHost =
+    configuredPortalHost === undefined && typeof document !== "undefined"
+      ? document.body
+      : configuredPortalHost;
+
   React.useEffect(() => {
-    if (!closeOnEscape) return undefined;
+    if (!portalHost || !closeOnEscape) return undefined;
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose?.();
     };
 
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
-  }, [closeOnEscape, onClose]);
+  }, [closeOnEscape, onClose, portalHost]);
 
   const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!closeOnBackdropClick) return;
     if (e.target === e.currentTarget) onClose?.(); // only close if the click was on the backdrop
   };
 
-  if (typeof document === "undefined") return null;
+  if (!portalHost) return null;
 
-  // Portal to document.body so the modal's `position: fixed` resolves
-  // against the viewport. Otherwise a transformed ancestor (e.g. the
-  // onboarding slide rail) would become the containing block and the
-  // modal would render trapped inside it instead of overlapping its
-  // parent modal.
+  // Portal to the owning root's body-level host so scoped styles are retained
+  // while `position: fixed` still resolves against the viewport. Standalone
+  // callers without a root keep the historical document.body fallback.
   return createPortal(
     <div
       role="dialog"
@@ -60,6 +65,6 @@ export function ModalBackdrop({
       />
       <div className="relative">{children}</div>
     </div>,
-    document.body,
+    portalHost,
   );
 }

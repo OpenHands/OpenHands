@@ -1,5 +1,10 @@
 import React from "react";
+import { createPortal } from "react-dom";
 import { cn } from "#/utils/utils";
+import {
+  MODAL_PORTAL_HOST_ATTRIBUTE,
+  ModalPortalHostContext,
+} from "#/contexts/modal-portal-host-context";
 import {
   type AgentServerUIStyleOverrides,
   type AgentServerUITheme,
@@ -29,6 +34,9 @@ export function AgentServerUIRoot({
 }: AgentServerUIRootProps) {
   const colorTheme = useColorTheme();
   const appearance = theme ?? COLOR_THEMES[colorTheme].appearance;
+  const [canUseDOM, setCanUseDOM] = React.useState(false);
+  const [modalPortalHost, setModalPortalHost] =
+    React.useState<HTMLDivElement | null>(null);
   const scopedStyle = React.useMemo(
     () =>
       ({
@@ -37,23 +45,50 @@ export function AgentServerUIRoot({
       }) as React.CSSProperties,
     [style, styleOverrides],
   );
+  const portalScopedStyle = React.useMemo(
+    () =>
+      ({
+        ...styleOverrides,
+      }) as React.CSSProperties,
+    [styleOverrides],
+  );
+
+  React.useEffect(() => {
+    setCanUseDOM(true);
+  }, []);
 
   return (
-    <div
-      data-agent-server-ui=""
-      data-color-theme={colorTheme}
-      data-color-scheme={appearance}
-      {...divProps}
-      className={className}
-      // Only consumer overrides are inline; theme defaults belong to CSS.
-      style={scopedStyle}
-    >
+    <ModalPortalHostContext.Provider value={modalPortalHost}>
       <div
-        className={cn(appearance, contentClassName, "text-foreground")}
-        data-theme={appearance}
+        data-agent-server-ui=""
+        data-color-theme={colorTheme}
+        data-color-scheme={appearance}
+        {...divProps}
+        className={className}
+        // Only consumer overrides are inline; theme defaults belong to CSS.
+        style={scopedStyle}
       >
-        {children}
+        <div
+          className={cn(appearance, contentClassName, "text-foreground")}
+          data-theme={appearance}
+        >
+          {children}
+        </div>
       </div>
-    </div>
+      {canUseDOM &&
+        createPortal(
+          <div
+            ref={setModalPortalHost}
+            data-agent-server-ui=""
+            data-color-theme={colorTheme}
+            data-color-scheme={appearance}
+            {...{ [MODAL_PORTAL_HOST_ATTRIBUTE]: "" }}
+            className={cn(appearance, "text-foreground")}
+            data-theme={appearance}
+            style={portalScopedStyle}
+          />,
+          document.body,
+        )}
+    </ModalPortalHostContext.Provider>
   );
 }
