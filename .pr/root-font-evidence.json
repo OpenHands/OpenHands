@@ -1,0 +1,24 @@
+[
+  {
+    "label": "before",
+    "rootFontSize": "20px",
+    "styles": [
+      {
+        "color": "rgb(255, 255, 255)",
+        "fontSize": "16px",
+        "lineHeight": "25px"
+      }
+    ]
+  },
+  {
+    "label": "after",
+    "rootFontSize": "20px",
+    "styles": [
+      {
+        "color": "rgb(255, 255, 255)",
+        "fontSize": "16px",
+        "lineHeight": "25px"
+      }
+    ]
+  }
+]
