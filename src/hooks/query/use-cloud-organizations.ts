@@ -64,6 +64,8 @@ export function useAllCloudOrganizations() {
     {
       backend: Backend;
       isLoading: boolean;
+      isSuccess: boolean;
+      isFetching: boolean;
       orgs: { id: string; name: string; is_personal?: boolean }[];
       currentOrgId: string | null;
     }
@@ -73,6 +75,8 @@ export function useAllCloudOrganizations() {
     byBackendId[backend.id] = {
       backend,
       isLoading: q.isLoading,
+      isSuccess: q.isSuccess,
+      isFetching: q.isFetching,
       orgs: q.data?.items ?? [],
       currentOrgId: q.data?.currentOrgId ?? null,
     };

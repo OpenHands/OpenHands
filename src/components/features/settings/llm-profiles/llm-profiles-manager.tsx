@@ -10,6 +10,7 @@ import ProfilesService, {
   type SaveProfileRequest,
 } from "#/api/profiles-service/profiles-service.api";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
+import { useModelCatalogWarning } from "#/hooks/use-model-catalog-warning";
 import { useProviderConnections } from "#/hooks/query/use-provider-connections";
 import { useActivateLlmProfile } from "#/hooks/mutation/use-activate-llm-profile";
 import { useSaveLlmProfile } from "#/hooks/mutation/use-save-llm-profile";
@@ -32,6 +33,7 @@ export function LlmProfilesManager({
 }: LlmProfilesManagerProps) {
   const { t } = useTranslation("openhands");
   const { data, isLoading, error } = useLlmProfiles();
+  const isModelUnlisted = useModelCatalogWarning();
   const activateProfile = useActivateLlmProfile();
   const saveProfile = useSaveLlmProfile();
   // Cloud members are view-only; only owners/admins (and all local users) may
@@ -155,6 +157,7 @@ export function LlmProfilesManager({
             onDuplicate={handleDuplicate}
             onDelete={setProfileToDelete}
             isActivating={activateProfile.isPending}
+            isModelUnlisted={isModelUnlisted}
           />
         </div>
 
