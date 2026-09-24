@@ -67,19 +67,42 @@ export OH_CONVERSATIONS_PATH="${OH_CONVERSATIONS_PATH:-${OPENHANDS_DIR}/${CONFIG
 export OH_BASH_EVENTS_DIR="${OH_BASH_EVENTS_DIR:-${OPENHANDS_DIR}/${CONFIG_BASH_EVENTS:-agent-canvas/bash_events}}"
 
 # ── Preflight: persistence dirs must be writable ───────────────────────────
-# The image runs as uid 10001 (openhands); a host bind mount that isn't
-# writable by that uid leaves the backend half-dead (frontend serves,
-# APIs 502). Fail fast with an actionable message.
+# A host bind mount the container cannot write to leaves the backend
+# half-dead (frontend serves, APIs 502). Fail fast with an actionable message.
+# Report a preflight failure from the *actual* OS error instead of always
+# assuming a uid mismatch. The cause can also be a read-only mount, a full
+# disk, or a quota, none of which a chmod would fix.
+report_unwritable() {
+  local label="$1" dir="$2" err="$3" host_hint="$4"
+  log_error "$label is not writable: $dir"
+  if [ -n "$err" ]; then
+    log_error "Underlying error: $err"
+  fi
+  case "$err" in
+    *"Permission denied"*|*"permission denied"*|*"Operation not permitted"*|*"operation not permitted"*)
+      log_error "The container runs as uid $(id -u); the bind-mounted host dir"
+      log_error "must be writable by that uid. Fix with either:"
+      log_error "  1) rerun with --user \"\$(id -u):\$(id -g)\" (add -e HOME=/home/openhands)"
+      log_error "  2) find $host_hint -type d -exec chmod a+rwX {} +  # host shell; dirs only"
+      ;;
+    *"Read-only file system"*|*"read-only file system"*)
+      log_error "The mount is read-only. Drop the ':ro' suffix from its -v flag"
+      log_error "(or remount it read-write), then retry."
+      ;;
+    *)
+      log_error "Resolve the filesystem error above, then retry."
+      ;;
+  esac
+}
+
 # Probe the effective paths (not just $OPENHANDS_DIR): OH_PERSISTENCE_DIR /
 # OH_CONVERSATIONS_PATH / OH_BASH_EVENTS_DIR can be overridden by the user,
 # and $OPENHANDS_DIR itself still hosts the persisted secret-key/api-key files.
 for dir in "$OPENHANDS_DIR" "$OH_PERSISTENCE_DIR" "$OH_CONVERSATIONS_PATH" "$OH_BASH_EVENTS_DIR"; do
-  if ! (mkdir -p "$dir" && touch "$dir/.write-test" 2>/dev/null); then
-    log_error "Persistence directory is not writable: $dir"
-    log_error "The container runs as uid $(id -u); the bind-mounted host dir"
-    log_error "must be writable by that uid. Fix with either:"
-    log_error "  1) rerun with --user \"\$(id -u):\$(id -g)\" (add -e HOME=/home/openhands)"
-    log_error "  2) find ~/.openhands -type d -exec chmod a+rwX {} +  # host shell; dirs only"
+  # Capture stderr from *both* commands: if `mkdir -p` fails the touch never
+  # runs, and without this its raw, unprefixed error would leak to the console.
+  if ! err=$(mkdir -p "$dir" 2>&1 && touch "$dir/.write-test" 2>&1); then
+    report_unwritable "Persistence directory" "$dir" "$err" "~/.openhands"
     exit 1
   fi
   rm -f "$dir/.write-test"
@@ -91,12 +114,8 @@ done
 # here breaks the agent's file access the same way, so fail fast too. We
 # deliberately don't mkdir: an absent /projects just means no workspace mount.
 if [ -d /projects ]; then
-  if ! touch /projects/.write-test 2>/dev/null; then
-    log_error "Workspace directory is not writable: /projects"
-    log_error "The container runs as uid $(id -u); the bind-mounted host dir"
-    log_error "must be writable by that uid. Fix with either:"
-    log_error "  1) rerun with --user \"\$(id -u):\$(id -g)\""
-    log_error "  2) find ~/projects -type d -exec chmod a+rwX {} +  # host shell; dirs only"
+  if ! err=$(touch /projects/.write-test 2>&1); then
+    report_unwritable "Workspace directory" "/projects" "$err" "~/projects"
     exit 1
   fi
   rm -f /projects/.write-test
