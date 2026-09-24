@@ -34,6 +34,7 @@ import {
   getRequiredIntegrationIds,
 } from "#/utils/automation-catalog";
 import { isResponderAutomation } from "#/utils/responder-deployment";
+import { useAutomationHealth } from "#/hooks/query/use-automation-health";
 import { useAutomations } from "#/hooks/query/use-automations";
 import { RecommendedAutomationsRail } from "./recommended-automations-rail";
 import { RecommendedAutomationsSection } from "./recommended-automations-section";
@@ -97,9 +98,14 @@ export function RecommendedAutomationsLauncher({
   const [isPreparingLocalResponder, setIsPreparingLocalResponder] =
     useState(false);
   const isRail = variant === "rail";
+  const { data: healthData } = useAutomationHealth();
+  const isAutomationBackendHealthy = healthData?.status === "ok";
   const { data: automationsData, isLoading: isAutomationsLoading } =
     useAutomations({
-      enabled: isRail && activeBackend.backend.kind === "local",
+      enabled:
+        isRail &&
+        activeBackend.backend.kind === "local" &&
+        isAutomationBackendHealthy,
     });
 
   const installedMcpConfig = useMemo(
