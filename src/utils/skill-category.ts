@@ -10,19 +10,11 @@ import {
   Wrench,
   type LucideIcon,
 } from "lucide-react";
+import type { SkillCategoryId } from "@openhands/extensions/skills";
 import { I18nKey } from "#/i18n/declaration";
 import type { SkillInfo } from "#/types/settings";
 
-export type SkillCategoryId =
-  | "automations"
-  | "environment"
-  | "code-hosting"
-  | "agent-authoring"
-  | "code-quality"
-  | "integrations"
-  | "writing"
-  | "design"
-  | "other";
+export type { SkillCategoryId };
 
 /** Display order in the facet rail. `other` last. */
 export const SKILL_CATEGORY_ORDER: readonly SkillCategoryId[] = [
