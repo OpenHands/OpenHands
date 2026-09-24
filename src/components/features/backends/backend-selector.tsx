@@ -225,15 +225,12 @@ export function BackendSelector({
     const currentOrg = entry.currentOrgId
       ? entry.orgs.find((o) => o.id === entry.currentOrgId)
       : undefined;
-    const userId = currentUserIds[backend.id]?.userId ?? null;
-    const personal = userId
-      ? entry.orgs.find((o) => o.id === userId)
-      : undefined;
+    const personal = entry.orgs.find((org) => org.is_personal === true);
     const target = currentOrg ?? personal ?? entry.orgs[0];
     if (target) {
       setActive(backend.id, target.id);
     }
-  }, [active, cloudOrgs, currentUserIds, setActive, noBackendSelected]);
+  }, [active, cloudOrgs, setActive, noBackendSelected]);
 
   const openAddBackendModal = React.useCallback(() => {
     if (onOpenAddBackend) {

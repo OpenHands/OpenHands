@@ -462,6 +462,31 @@ describe("BackendSelector", () => {
     },
   );
 
+  it.each(["cookie", "api-key"] as const)(
+    "prefers a visible personal workspace before identity resolves with %s auth",
+    async (authMode) => {
+      const backend = { ...SEED_CLOUD_PRODUCTION, id: "cloud", authMode };
+      setRegisteredBackends([backend]);
+      setActiveSelection({ backendId: backend.id, orgId: "removed-org" });
+      vi.mocked(getCloudOrganizations).mockResolvedValue({
+        items: [
+          { id: "team-org", name: "Team" },
+          { id: "personal-org", name: "Personal", is_personal: true },
+        ],
+        currentOrgId: "removed-org",
+      });
+      vi.mocked(getCloudOrganizationMe).mockReturnValue(new Promise(() => {}));
+      renderWithProviders(<BackendSelector />);
+      await waitFor(() =>
+        expect(getActiveSelection()?.orgId).toBe("personal-org"),
+      );
+      expect(getCloudOrganizationMe).not.toHaveBeenCalledWith(
+        "removed-org",
+        expect.anything(),
+      );
+    },
+  );
+
   it("keeps a valid persisted choice when the server current org differs", async () => {
     const backend = { ...SEED_CLOUD_PRODUCTION, id: "cloud" };
     setRegisteredBackends([backend]);
