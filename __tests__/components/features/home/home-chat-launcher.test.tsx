@@ -402,13 +402,7 @@ describe("HomeChatLauncher", () => {
     await user.click(screen.getByTestId("stub-chat-submit"));
 
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
-    await waitFor(() =>
-      expect(mockSetAutomationSetupDraft).toHaveBeenCalledWith("conv-abc", {
-        prompt: "hello world",
-        kind: "prompt",
-        plugins: [],
-      }),
-    );
+    expect(mockSetAutomationSetupDraft).not.toHaveBeenCalled();
 
     expect(createSpy).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -725,6 +719,7 @@ describe("HomeChatLauncher", () => {
     renderLauncher();
     const user = userEvent.setup();
 
+    await user.click(screen.getByTestId("home-launcher-mode-automate"));
     await user.click(screen.getByTestId("open-plugin-picker"));
     await user.click(await screen.findByTestId("stub-plugin-pick"));
     await user.click(screen.getByTestId("stub-chat-submit"));
