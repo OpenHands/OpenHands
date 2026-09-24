@@ -206,6 +206,19 @@ const clearCache = () => {
   };
 };
 
+/**
+ * Whether a response requested from `requestedKey` may be cached: only while
+ * that backend is still the active one, so a switch during the request does
+ * not file the old backend's answer under the new one. An entry from another
+ * backend is dropped first, so the two are never mixed.
+ */
+const prepareCacheFor = (requestedKey: string): boolean => {
+  if (activeBackendKey() !== requestedKey) return false;
+  if (settingsCache.backendKey !== requestedKey) clearCache();
+  settingsCache.backendKey = requestedKey;
+  return true;
+};
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === "object" && !Array.isArray(value);
 
@@ -508,14 +521,13 @@ class SettingsService {
       return syncDerivedSettings(transformApiResponse(settingsCache.redacted));
     }
 
+    const requestedKey = activeBackendKey();
     try {
       const response = await this.fetchSettingsFromApi();
-      if (settingsCache.backendKey !== activeBackendKey()) {
-        clearCache();
+      if (prepareCacheFor(requestedKey)) {
+        settingsCache.redacted = response;
+        settingsCache.timestamp = Date.now();
       }
-      settingsCache.redacted = response;
-      settingsCache.timestamp = Date.now();
-      settingsCache.backendKey = activeBackendKey();
       return syncDerivedSettings(transformApiResponse(response));
     } catch (error) {
       // If API fails, return defaults
@@ -550,15 +562,14 @@ class SettingsService {
 
     // Fetch encrypted settings - this MUST succeed for conversations to work.
     // Do not fall back to redacted settings as that would cause auth failures.
+    const requestedKey = activeBackendKey();
     const response = await this.fetchSettingsFromApi("encrypted");
-    if (settingsCache.backendKey !== activeBackendKey()) {
-      clearCache();
+    if (prepareCacheFor(requestedKey)) {
+      settingsCache.encrypted = response;
+      if (!settingsCache.timestamp) {
+        settingsCache.timestamp = Date.now();
+      }
     }
-    settingsCache.encrypted = response;
-    if (!settingsCache.timestamp) {
-      settingsCache.timestamp = Date.now();
-    }
-    settingsCache.backendKey = activeBackendKey();
     return {
       agentSettings: response.agent_settings,
       conversationSettings: response.conversation_settings,
