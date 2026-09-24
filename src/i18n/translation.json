@@ -42143,5 +42143,39 @@
     "de": "Sie haben noch keine Geheimnisse gespeichert.",
     "uk": "Ви ще не зберегли жодного секрету.",
     "ca": "Encara no has desat cap secret."
+  },
+  "BACKEND$ORGANIZATIONS_LOAD_FAILED": {
+    "en": "Could not load your workspaces. Check your connection and try again.",
+    "ja": "ワークスペースを読み込めませんでした。接続を確認して、もう一度お試しください。",
+    "zh-CN": "无法加载您的工作区。请检查连接后重试。",
+    "zh-TW": "無法載入您的工作區。請檢查連線後再試一次。",
+    "ko-KR": "작업 공간을 불러올 수 없습니다. 연결을 확인하고 다시 시도하세요.",
+    "no": "Kunne ikke laste arbeidsområdene dine. Kontroller tilkoblingen og prøv igjen.",
+    "ar": "تعذر تحميل مساحات العمل. تحقق من الاتصال وحاول مرة أخرى.",
+    "de": "Ihre Arbeitsbereiche konnten nicht geladen werden. Prüfen Sie die Verbindung und versuchen Sie es erneut.",
+    "fr": "Impossible de charger vos espaces de travail. Vérifiez votre connexion et réessayez.",
+    "it": "Impossibile caricare gli spazi di lavoro. Controlla la connessione e riprova.",
+    "pt": "Não foi possível carregar seus espaços de trabalho. Verifique a conexão e tente novamente.",
+    "es": "No se pudieron cargar tus espacios de trabajo. Comprueba la conexión e inténtalo de nuevo.",
+    "ca": "No s’han pogut carregar els espais de treball. Comprova la connexió i torna-ho a provar.",
+    "tr": "Çalışma alanlarınız yüklenemedi. Bağlantınızı kontrol edip tekrar deneyin.",
+    "uk": "Не вдалося завантажити робочі простори. Перевірте з’єднання та спробуйте ще раз."
+  },
+  "BACKEND$ORGANIZATIONS_EMPTY": {
+    "en": "No accessible workspaces are available. Ask your administrator to check your access.",
+    "ja": "アクセスできるワークスペースがありません。管理者にアクセス権の確認を依頼してください。",
+    "zh-CN": "没有可访问的工作区。请联系管理员检查您的访问权限。",
+    "zh-TW": "沒有可存取的工作區。請聯絡管理員檢查您的存取權限。",
+    "ko-KR": "접근 가능한 작업 공간이 없습니다. 관리자에게 접근 권한을 확인해 달라고 요청하세요.",
+    "no": "Ingen tilgjengelige arbeidsområder. Be administratoren kontrollere tilgangen din.",
+    "ar": "لا توجد مساحات عمل يمكنك الوصول إليها. اطلب من المسؤول التحقق من صلاحياتك.",
+    "de": "Es sind keine zugänglichen Arbeitsbereiche verfügbar. Bitten Sie Ihren Administrator, Ihren Zugriff zu prüfen.",
+    "fr": "Aucun espace de travail accessible. Demandez à votre administrateur de vérifier vos droits d’accès.",
+    "it": "Non ci sono spazi di lavoro accessibili. Chiedi all’amministratore di verificare i tuoi permessi.",
+    "pt": "Não há espaços de trabalho acessíveis. Peça ao administrador para verificar seu acesso.",
+    "es": "No hay espacios de trabajo accesibles. Pide a tu administrador que compruebe tus permisos.",
+    "ca": "No hi ha espais de treball accessibles. Demana a l’administrador que comprovi els teus permisos.",
+    "tr": "Erişilebilir çalışma alanı yok. Yöneticinizden erişim izinlerinizi kontrol etmesini isteyin.",
+    "uk": "Немає доступних робочих просторів. Попросіть адміністратора перевірити ваші права доступу."
   }
 }
