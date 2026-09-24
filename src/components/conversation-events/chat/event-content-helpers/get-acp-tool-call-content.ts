@@ -2,6 +2,7 @@ import { ACPToolCallEvent } from "#/types/agent-server/core/events/acp-tool-call
 import i18n from "#/i18n";
 import { MAX_CONTENT_LENGTH } from "./shared";
 import { I18nKey } from "#/i18n/declaration";
+import { markdownFence, markdownInlineCode } from "#/utils/markdown-fence";
 
 /**
  * Pick the translation key used for the ACP tool call title row. Mirrors
@@ -86,16 +87,100 @@ const truncate = (content: string): string =>
     ? `${content.slice(0, MAX_CONTENT_LENGTH)}...`
     : content;
 
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  value !== null && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : null;
+
+type ACPDisplayBlock =
+  | { type: "text"; text: string; language: string }
+  | { type: "diff"; path: string; oldText: string | null; newText: string };
+
+// A text block that is exactly one fenced code block (claude-agent-acp
+// markdown-escapes file reads and shell output this way). Captures the fence,
+// its language and the body so the body can be re-fenced after truncation
+// without leaving an unterminated fence behind.
+const WHOLLY_FENCED_RE = /^(`{3,})([^`\n]*)\n([\s\S]*?)\n?\1[ \t]*$/;
+
+const toTextBlock = (text: string): ACPDisplayBlock | null => {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  const fenced = WHOLLY_FENCED_RE.exec(trimmed);
+  return fenced
+    ? { type: "text", text: fenced[3], language: fenced[2].trim() }
+    : { type: "text", text: trimmed, language: "" };
+};
+
+/**
+ * Normalize ``event.content`` — the client-facing view of an ACP tool call —
+ * into the blocks the card can display. The SDK persists blocks as snake_case
+ * (``old_text``) while the ACP wire uses camelCase (``oldText``); both are
+ * accepted. ``terminal`` blocks and non-text media carry nothing renderable
+ * here and are skipped.
+ */
+const getACPDisplayBlocks = (event: ACPToolCallEvent): ACPDisplayBlock[] => {
+  const blocks: ACPDisplayBlock[] = [];
+  for (const block of event.content ?? []) {
+    if (block.type === "diff") {
+      const path = block.path;
+      const newText = block.new_text ?? block.newText;
+      const oldText = block.old_text ?? block.oldText ?? null;
+      if (
+        typeof path === "string" &&
+        typeof newText === "string" &&
+        (oldText === null || typeof oldText === "string")
+      ) {
+        blocks.push({ type: "diff", path, oldText, newText });
+      }
+    } else if (block.type === "content") {
+      const inner = asRecord(block.content);
+      let text: unknown;
+      if (inner?.type === "text") {
+        text = inner.text;
+      } else if (inner?.type === "resource") {
+        text = asRecord(inner.resource)?.text;
+      }
+      const textBlock = typeof text === "string" ? toTextBlock(text) : null;
+      if (textBlock) blocks.push(textBlock);
+    }
+  }
+  return blocks;
+};
+
+const diffLines = (text: string | null, prefix: string): string[] =>
+  text
+    ? text
+        .replace(/\n$/, "")
+        .split("\n")
+        .map((line) => prefix + line)
+    : [];
+
+const formatDiffBlock = (
+  block: Extract<ACPDisplayBlock, { type: "diff" }>,
+): string => {
+  const body = [
+    ...diffLines(block.oldText, "- "),
+    ...diffLines(block.newText, "+ "),
+  ].join("\n");
+  return `${markdownInlineCode(block.path)}\n${markdownFence(truncate(body), "diff")}`;
+};
+
 /**
  * Build the markdown-flavored body for an ACP tool call card. Mirrors the
  * shape of ``getTerminalObservationContent`` (``Command:`` + ``Output:``
  * fenced blocks) so the rendered card lines up with regular OpenHands
  * observations.
  *
+ * The body prefers ``content``, the ACP field meant for display: ``diff``
+ * blocks render as a diff under the file path, and text blocks as the output.
+ * ``raw_output`` is provider-defined — absent for Gemini CLI, the model-facing
+ * tool result for Claude Code — so it is only used when ``content`` has
+ * nothing displayable, with the same "(no output)" fallback copy used by the
+ * bash observation renderer.
+ *
  * For ``tool_kind === "execute"`` we surface ``raw_input.command`` as the
  * command line; for others we fall back to a pretty-printed JSON dump of
- * the input. Output is always dumped as a fenced block, with the same
- * "(no output)" fallback copy used by the bash observation renderer.
+ * the input, unless a diff already shows what the call changed.
  */
 export const getACPToolCallContent = (event: ACPToolCallEvent): string => {
   const toolKind = event.tool_kind;
@@ -103,7 +188,11 @@ export const getACPToolCallContent = (event: ACPToolCallEvent): string => {
   const rawOutput = event.raw_output;
   const isError = event.is_error;
 
-  let output = "";
+  const blocks = getACPDisplayBlocks(event);
+  const diffBlocks = blocks.filter((block) => block.type === "diff");
+  const textBlocks = blocks.filter((block) => block.type === "text");
+
+  const sections: string[] = [];
 
   // Input block — command for execute, JSON dump otherwise.
   if (
@@ -114,19 +203,40 @@ export const getACPToolCallContent = (event: ACPToolCallEvent): string => {
     typeof (rawInput as { command: unknown }).command === "string"
   ) {
     const { command } = rawInput as { command: string };
-    output += `Command: \`${command}\`\n\n`;
-  } else if (rawInput !== null && rawInput !== undefined && rawInput !== "") {
+    sections.push(`Command: \`${command}\``);
+  } else if (
+    diffBlocks.length === 0 &&
+    rawInput !== null &&
+    rawInput !== undefined &&
+    rawInput !== ""
+  ) {
     const inputStr = stringifyPayload(rawInput);
     if (inputStr.trim()) {
-      output += `Input:\n\`\`\`json\n${inputStr}\n\`\`\`\n\n`;
+      sections.push(`Input:\n${markdownFence(inputStr, "json")}`);
     }
   }
 
-  // Output block — matches the bash observation layout exactly.
-  const outputStr = truncate(stringifyPayload(rawOutput).trim());
-  const outputLabel = isError ? "**Error:**" : "Output:";
-  const outputBody = outputStr || i18n.t(I18nKey.OBSERVATION$COMMAND_NO_OUTPUT);
-  output += `${outputLabel}\n\`\`\`\n${outputBody}\n\`\`\``;
+  sections.push(...diffBlocks.map(formatDiffBlock));
 
-  return output;
+  const outputLabel = isError ? "**Error:**" : "Output:";
+  if (textBlocks.length > 0) {
+    const outputs = textBlocks.map((block) =>
+      markdownFence(truncate(block.text), block.language),
+    );
+    sections.push(`${outputLabel}\n${outputs.join("\n\n")}`);
+  } else {
+    // Output block — matches the bash observation layout exactly. A diff
+    // already shows what the call did, so raw_output is skipped alongside
+    // one — except on failure, where it may be the only place the error lives.
+    const outputStr = truncate(stringifyPayload(rawOutput).trim());
+    if (diffBlocks.length === 0) {
+      const outputBody =
+        outputStr || i18n.t(I18nKey.OBSERVATION$COMMAND_NO_OUTPUT);
+      sections.push(`${outputLabel}\n${markdownFence(outputBody)}`);
+    } else if (isError && outputStr) {
+      sections.push(`${outputLabel}\n${markdownFence(outputStr)}`);
+    }
+  }
+
+  return sections.join("\n\n");
 };
