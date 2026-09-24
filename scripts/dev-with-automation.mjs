@@ -40,8 +40,9 @@
  *   as OPENHANDS_AUTOMATION_API_KEY, making it available to agents in conversations.
  *   Both the agent-server and automation backend use the same key value
  *   and the same `X-Session-API-Key` header for authentication.
- *   AUTOMATION_KV_SECRET is derived from the session key if not set explicitly,
- *   enabling the KV store out of the box for local development.
+ *   AUTOMATION_KV_SECRET is persisted to <stateDir>/automation-kv-secret.txt if
+ *   not set explicitly, enabling the KV store out of the box for local
+ *   development without tying KV encryption to the rotatable session key.
  */
 
 import { spawn, spawnSync } from "node:child_process";
@@ -60,6 +61,7 @@ import {
   buildNpmScriptCommand,
   buildRuntimeServicesInfo,
   formatMissingUvxGuidance,
+  getOrCreatePersistedApiKey,
   validateFrontendDependencies,
   validateLocalAgentServerPath,
 } from "./dev-safe.mjs";
@@ -88,6 +90,9 @@ const DEFAULT_BACKEND_PORT = SHARED_DEFAULTS.ports.agentServer;
 const DEFAULT_AUTOMATION_PORT = SHARED_DEFAULTS.ports.automation;
 const DEFAULT_POSTHOG_API_KEY = SHARED_DEFAULTS.telemetry.posthogApiKey;
 const DEFAULT_POSTHOG_HOST = SHARED_DEFAULTS.telemetry.posthogHost;
+// Sits next to api-key.txt / secret-key.txt in the state dir; docker/entrypoint.sh
+// reads and writes the same file so both install paths share one KV secret.
+const AUTOMATION_KV_SECRET_FILENAME = "automation-kv-secret.txt";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Terminal Styling
@@ -262,8 +267,9 @@ SECRETS:
   The session API key is automatically seeded into agent-server secrets
   as OPENHANDS_AUTOMATION_API_KEY, making it available to agents in conversations.
   Both backends (agent-server and automation) share the same key value.
-  AUTOMATION_KV_SECRET defaults to the session key so the KV store works
-  out of the box; override with an explicit value for stronger isolation.
+  AUTOMATION_KV_SECRET is persisted to <stateDir>/automation-kv-secret.txt so
+  the KV store works out of the box and survives API key rotation; override
+  with an explicit value for stronger isolation.
 
 ACCESS POINTS:
   Main UI:      http://localhost:PORT/
@@ -903,6 +909,43 @@ function buildAutomationTelemetryEnv(env = process.env) {
   };
 }
 
+/**
+ * Resolve the secret the automation backend uses to sign KV tokens and to
+ * encrypt automation KV state at rest.
+ *
+ * This used to default to the session API key, which made the at-rest
+ * encryption key follow a rotatable credential: changing
+ * LOCAL_BACKEND_API_KEY left every previously stored KV document (and the
+ * repository-sync secret store, which shares this secret) undecryptable, so
+ * every KV read answered with a 500. Persisting the secret in its own file
+ * decouples the two — the API key can be rotated freely and the KV store
+ * keeps reading its own data.
+ *
+ * Precedence:
+ *   1. AUTOMATION_KV_SECRET explicitly set in the user's env
+ *   2. the persisted <stateDir>/automation-kv-secret.txt
+ *   3. the current session API key, persisted to that file
+ *
+ * Step 3 seeds rather than generates so stacks that already hold KV state
+ * encrypted under the old session-key default keep reading it: the first
+ * launch after this change pins exactly the value that was in use before.
+ *
+ * @param {object} config - Config with `stateDir` and `sessionApiKey`.
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {string} The KV secret.
+ */
+function resolveAutomationKvSecret(config, env = process.env) {
+  if (env.AUTOMATION_KV_SECRET) return env.AUTOMATION_KV_SECRET;
+
+  const secretPath =
+    env.OH_AUTOMATION_KV_SECRET_PATH ||
+    join(config.stateDir, AUTOMATION_KV_SECRET_FILENAME);
+
+  return getOrCreatePersistedApiKey(secretPath, "automation KV", {
+    seed: config.sessionApiKey,
+  });
+}
+
 function startAgentServer(config) {
   logService(
     "agent-server",
@@ -1042,12 +1085,9 @@ function startAutomationBackend(config) {
         ...buildAutomationTelemetryEnv(),
         // KV store secret — required for automations to use the built-in
         // key-value store for state persistence between runs. Used for JWT
-        // signing and value encryption.
-        // Priority:
-        //   1. AUTOMATION_KV_SECRET explicitly set in the user's env
-        //   2. sessionApiKey — convenient zero-config default for local dev
-        AUTOMATION_KV_SECRET:
-          process.env.AUTOMATION_KV_SECRET || config.sessionApiKey,
+        // signing and value encryption; see resolveAutomationKvSecret for why
+        // it must not follow the rotatable session API key.
+        AUTOMATION_KV_SECRET: resolveAutomationKvSecret(config),
         // CORS: allow localhost origins for dev, unless explicitly overridden.
         AUTOMATION_CORS_ORIGINS:
           process.env.AUTOMATION_CORS_ORIGINS ||
@@ -1689,6 +1729,7 @@ export {
   getVSCodeAdvertiseArgs,
   main,
   registerShutdownHook,
+  resolveAutomationKvSecret,
   spawnService,
   commandExists,
   validateLocalAutomationPath,

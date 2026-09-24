@@ -138,9 +138,14 @@ export function getOrCreatePersistedSessionApiKey(
  *
  * @param {string} filePath - Where to read/write the key.
  * @param {string} label - Human-readable key label for warning messages.
+ * @param {object} [options]
+ * @param {string} [options.seed] - Value to persist instead of a fresh random
+ *   key when the file doesn't exist yet. Used to adopt a value that was
+ *   previously derived on every boot, so data encrypted under it stays
+ *   readable once the value becomes file-backed.
  * @returns {string} The (hex) API key.
  */
-export function getOrCreatePersistedApiKey(filePath, label = "API") {
+export function getOrCreatePersistedApiKey(filePath, label = "API", options) {
   const cached = persistedApiKeyCache.get(filePath);
   if (cached) return cached;
 
@@ -161,7 +166,7 @@ export function getOrCreatePersistedApiKey(filePath, label = "API") {
   }
 
   // Generate and persist a new key.
-  const newKey = generateRandomApiKey();
+  const newKey = options?.seed || generateRandomApiKey();
   try {
     mkdirSync(path.dirname(filePath), { recursive: true });
     writeFileSync(filePath, `${newKey}\n`, { mode: 0o600 });

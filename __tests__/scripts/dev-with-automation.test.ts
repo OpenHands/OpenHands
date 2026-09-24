@@ -8,7 +8,13 @@
 import net from "node:net";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -26,6 +32,7 @@ import {
   getFrontendBackend,
   getLocalServiceRoutes,
   getRejectPrefixes,
+  resolveAutomationKvSecret,
   setServiceLogListener,
   spawnService,
   validateLocalAutomationPath,
@@ -244,6 +251,87 @@ describe("buildAgentServerAutomationEnv", () => {
     ).toEqual({
       OPENHANDS_AUTOMATION_API_KEY: "shared-session-key",
     });
+  });
+});
+
+describe("resolveAutomationKvSecret", () => {
+  const dirs: string[] = [];
+
+  afterEach(() => {
+    while (dirs.length > 0) {
+      const dir = dirs.pop();
+      if (dir) rmSync(dir, { recursive: true, force: true });
+    }
+    resetPersistedSessionApiKeyCache();
+  });
+
+  function makeStateDir(): string {
+    const dir = mkdtempSync(path.join(tmpdir(), "automation-kv-secret-"));
+    dirs.push(dir);
+    return dir;
+  }
+
+  function secretPath(stateDir: string): string {
+    return path.join(stateDir, "automation-kv-secret.txt");
+  }
+
+  // The KV secret encrypts automation KV state at rest, so it must not follow
+  // the rotatable session API key: a rotation used to leave every stored KV
+  // document undecryptable. See OpenHands#17424.
+  it("keeps the KV secret stable when the session API key is rotated", () => {
+    const stateDir = makeStateDir();
+
+    const before = resolveAutomationKvSecret(
+      { stateDir, sessionApiKey: "key-a" },
+      {},
+    );
+
+    // Simulate a restart with a rotated LOCAL_BACKEND_API_KEY: a fresh
+    // process re-reads the persisted file rather than the new session key.
+    resetPersistedSessionApiKeyCache();
+
+    const after = resolveAutomationKvSecret(
+      { stateDir, sessionApiKey: "key-b" },
+      {},
+    );
+
+    expect(after).toBe(before);
+  });
+
+  // Stacks upgrading from the old session-key default already hold KV state
+  // encrypted under the session key in use at that moment; seeding the file
+  // with it keeps that state readable.
+  it("seeds the persisted file with the current session API key", () => {
+    const stateDir = makeStateDir();
+
+    const secret = resolveAutomationKvSecret(
+      { stateDir, sessionApiKey: "key-a" },
+      {},
+    );
+
+    expect(secret).toBe("key-a");
+    expect(readFileSync(secretPath(stateDir), "utf8").trim()).toBe("key-a");
+  });
+
+  it("prefers an explicit AUTOMATION_KV_SECRET and leaves the file alone", () => {
+    const stateDir = makeStateDir();
+
+    const secret = resolveAutomationKvSecret(
+      { stateDir, sessionApiKey: "key-a" },
+      { AUTOMATION_KV_SECRET: "explicit-kv-secret" },
+    );
+
+    expect(secret).toBe("explicit-kv-secret");
+    expect(existsSync(secretPath(stateDir))).toBe(false);
+  });
+
+  it("reuses an already persisted secret instead of the session API key", () => {
+    const stateDir = makeStateDir();
+    writeFileSync(secretPath(stateDir), "previously-persisted\n");
+
+    expect(
+      resolveAutomationKvSecret({ stateDir, sessionApiKey: "key-a" }, {}),
+    ).toBe("previously-persisted");
   });
 });
 
