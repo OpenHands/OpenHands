@@ -158,6 +158,37 @@ describe("AgentProfilesLocalView save mapping", () => {
     });
   });
 
+  it("saves custom instructions when creating an OpenHands profile", async () => {
+    emitControl = {
+      agentType: "openhands",
+      isValid: true,
+      isDirty: true,
+      buildAgentProfileFields: () => ({
+        agent_kind: "openhands",
+        mcp_server_refs: null,
+        enable_sub_agents: true,
+        system_message_suffix: "Always respond in English.",
+      }),
+      credentials: { isDirty: false, save: vi.fn(), reset: vi.fn() },
+    };
+
+    render(<AgentProfilesLocalView />);
+    const user = await openCreateAndName("english-agent");
+    await user.click(screen.getByTestId("save-agent-profile-btn"));
+
+    await waitFor(() => expect(saveMutate).toHaveBeenCalledTimes(1));
+    expect(saveMutate).toHaveBeenCalledWith({
+      name: "english-agent",
+      profile: {
+        agent_kind: "openhands",
+        mcp_server_refs: null,
+        enable_sub_agents: true,
+        system_message_suffix: "Always respond in English.",
+        llm_profile_ref: "default",
+      },
+    });
+  });
+
   it("saves an ACP profile without an llm_profile_ref", async () => {
     emitControl = {
       agentType: "acp",
@@ -221,12 +252,14 @@ describe("AgentProfilesLocalView save mapping", () => {
       agentType: "openhands",
       isValid: true,
       isDirty: true,
-      // The editor models `mcp_server_refs`, so it re-emits what it was seeded
-      // with; `disabled_skills` it does not, and survives via the merge.
+      // The editor models `mcp_server_refs` and `system_message_suffix`, so it
+      // re-emits what it was seeded with; `disabled_skills` it does not, and
+      // survives via the merge.
       buildAgentProfileFields: () => ({
         agent_kind: "openhands",
         mcp_server_refs: ["github"],
         enable_sub_agents: true,
+        system_message_suffix: "Be terse.",
       }),
       credentials: { isDirty: false, save: vi.fn(), reset: vi.fn() },
     };
@@ -253,6 +286,7 @@ describe("AgentProfilesLocalView save mapping", () => {
       // profile's scope back to every configured server.
       mcp_server_refs: ["github"],
       secret_refs: null,
+      system_message_suffix: "Be terse.",
     });
 
     await user.click(screen.getByTestId("save-agent-profile-btn"));
@@ -398,6 +432,44 @@ describe("AgentProfilesLocalView save mapping", () => {
     await waitFor(() => expect(saveMutate).toHaveBeenCalledTimes(1));
     const { profile } = saveMutate.mock.calls[0][0];
     expect(profile.enable_switch_llm_tool).toBe(true);
+  });
+
+  it("edit-save clears stored custom instructions when the field is emptied", async () => {
+    vi.mocked(AgentProfilesService.getProfile).mockResolvedValue({
+      name: "default",
+      profile: {
+        schema_version: 1,
+        id: "p-1",
+        name: "default",
+        revision: 3,
+        agent_kind: "openhands",
+        llm_profile_ref: "default",
+        enable_sub_agents: false,
+        system_message_suffix: "Be terse.",
+      },
+    } as never);
+    emitControl = {
+      agentType: "openhands",
+      isValid: true,
+      isDirty: true,
+      buildAgentProfileFields: () => ({
+        agent_kind: "openhands",
+        mcp_server_refs: null,
+        enable_sub_agents: false,
+        system_message_suffix: null,
+      }),
+      credentials: { isDirty: false, save: vi.fn(), reset: vi.fn() },
+    };
+
+    render(<AgentProfilesLocalView />);
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("edit-agent-profile"));
+    await screen.findByTestId("mock-agent-settings");
+    await user.click(screen.getByTestId("save-agent-profile-btn"));
+
+    await waitFor(() => expect(saveMutate).toHaveBeenCalledTimes(1));
+    const { profile } = saveMutate.mock.calls[0][0];
+    expect(profile.system_message_suffix).toBeNull();
   });
 
   it("kind-switch edit-save sends a clean variant payload", async () => {
