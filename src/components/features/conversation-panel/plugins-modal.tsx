@@ -1,6 +1,9 @@
 import { useTranslation } from "react-i18next";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
-import { ModalBody } from "#/components/shared/modals/modal-body";
+import {
+  MODAL_MAX_WIDTH_VIEWPORT,
+  ModalBody,
+} from "#/components/shared/modals/modal-body";
 import { ModalCloseButton } from "#/components/shared/modals/modal-close-button";
 import { BaseModalTitle } from "#/components/shared/modals/confirmation-modals/base-modal";
 import { I18nKey } from "#/i18n/declaration";
@@ -12,6 +15,7 @@ import {
   isLocalPluginSource,
   pluginReferenceKey,
 } from "#/utils/plugin-display";
+import { cn } from "#/utils/utils";
 
 interface PluginsModalProps {
   onClose: () => void;
@@ -32,33 +36,36 @@ export function PluginsModal({ onClose }: PluginsModalProps) {
     <ModalBackdrop onClose={onClose}>
       <ModalBody
         width="lg"
-        className="relative flex max-h-[80vh] flex-col items-start border border-[var(--oh-border)]"
+        className={cn(
+          "relative flex max-h-[80vh] flex-col items-start border border-border",
+          MODAL_MAX_WIDTH_VIEWPORT,
+        )}
         testID="plugins-modal"
       >
         <ModalCloseButton onClose={onClose} testId="close-plugins-modal" />
         <div className="flex w-full flex-col gap-2 pr-10">
           <BaseModalTitle title={t(I18nKey.PLUGINS_MODAL$TITLE)} />
-          <Typography.Text className="text-sm text-[var(--oh-muted)]">
+          <Typography.Text className="text-sm text-muted">
             {t(I18nKey.PLUGINS_MODAL$DESCRIPTION)}
           </Typography.Text>
         </div>
 
-        <div className="w-full overflow-auto rounded-md border border-[var(--oh-border)] bg-surface-raised custom-scrollbar-always">
+        <div className="w-full overflow-auto rounded-md border border-border bg-surface-raised custom-scrollbar-always">
           {plugins.length === 0 ? (
             <div className="flex items-center justify-center p-6">
-              <Typography.Text className="text-[var(--oh-muted)]">
+              <Typography.Text className="text-muted">
                 {t(I18nKey.PLUGINS_MODAL$EMPTY)}
               </Typography.Text>
             </div>
           ) : (
-            <ul className="divide-y divide-[var(--oh-border)]">
+            <ul className="divide-y divide-border">
               {plugins.map((plugin) => (
                 <li
                   key={pluginReferenceKey(plugin)}
                   data-testid={`active-plugin-${getPluginDisplayName(plugin)}`}
                   className="flex flex-col gap-1 p-4"
                 >
-                  <Typography.Text className="font-semibold text-white">
+                  <Typography.Text className="font-semibold text-contrast">
                     {getPluginDisplayName(plugin)}
                   </Typography.Text>
                   <Typography.Text className="text-xs text-tertiary-alt">

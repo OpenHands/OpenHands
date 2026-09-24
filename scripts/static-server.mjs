@@ -585,6 +585,8 @@ function setStaticHeaders(res, pathname) {
 
 function createStaticMiddleware(dirAbs) {
   return sirv(dirAbs, {
+    // Builds replace hashed assets while the local server is running.
+    dev: true,
     etag: true,
     single: false,
     setHeaders: setStaticHeaders,

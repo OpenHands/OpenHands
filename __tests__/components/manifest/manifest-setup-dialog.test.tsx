@@ -54,6 +54,13 @@ vi.mock("#/hooks/query/use-manifest-prerequisites", () => ({
   useSetupPrerequisites: () => mocks.prerequisites(),
 }));
 
+vi.mock("#/hooks/query/use-agent-profiles", () => ({
+  useAgentProfiles: () => ({
+    data: { profiles: [{ id: "review-profile", name: "Reviewer" }] },
+    isLoading: false,
+  }),
+}));
+
 vi.mock("#/hooks/query/use-llm-profiles", () => ({
   useLlmProfiles: (options: { enabled?: boolean } = {}) =>
     mocks.llmProfiles(options),
@@ -508,5 +515,36 @@ describe("SetupDialog", () => {
     );
     expect(screen.queryByTestId("setup-review")).toBeNull();
     expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+});
+
+it("creates a bundle with an optional selected agent profile", async () => {
+  mocks.capabilities.mockReturnValue({
+    capabilities: {
+      ...CRON_ONLY_CAPABILITIES,
+      features: ["agentProfiles", "customTarball"],
+    },
+    supported: true,
+    unmet: [],
+    isLoading: false,
+  });
+  const entry = {
+    ...BUNDLE_ENTRY,
+    requires: {
+      ...BUNDLE_ENTRY.requires,
+      features: ["agentProfiles", "customTarball"],
+    },
+  };
+  const { user } = renderDialog(entry);
+  await fillForm(user);
+  await user.click(screen.getByTestId("automation-agent-profile"));
+  await user.click(await screen.findByRole("option", { name: "Reviewer" }));
+  await user.click(screen.getByTestId("setup-continue-button"));
+  await waitFor(() =>
+    expect(screen.getByTestId("setup-review")).toBeInTheDocument(),
+  );
+  await user.click(screen.getByTestId("setup-continue-button"));
+  expect(mocks.runAction.mock.calls[0][1]).toMatchObject({
+    agent_profile_id: "review-profile",
   });
 });

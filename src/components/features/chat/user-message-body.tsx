@@ -102,7 +102,7 @@ export function UserMessageBody({
           <span
             data-testid="chat-message-view-more"
             className={cn(
-              "pointer-events-none absolute bottom-1 left-1/2 z-10 inline-flex -translate-x-1/2 items-center rounded-full border border-[var(--oh-border-subtle)] bg-[var(--oh-surface-raised)] px-2.5 py-0.5 text-xs font-normal text-[var(--oh-foreground)] transition-opacity duration-150",
+              "pointer-events-none absolute bottom-1 left-1/2 z-10 inline-flex -translate-x-1/2 items-center rounded-full border border-border-subtle bg-surface-raised px-2.5 py-0.5 text-xs font-normal text-foreground transition-opacity duration-150",
               isHovering ? "opacity-100" : "opacity-0",
             )}
           >
