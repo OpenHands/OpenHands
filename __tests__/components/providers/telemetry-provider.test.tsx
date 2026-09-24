@@ -257,6 +257,7 @@ describe("TelemetryProvider", () => {
     firstView.unmount();
     configureBootstrapMock.mockClear();
     setWebsiteAttributionMock.mockClear();
+    sessionStorage.clear();
     window.location.hash = `oh_ph_handoff=${encoded}`;
 
     render(
