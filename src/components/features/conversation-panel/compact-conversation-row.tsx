@@ -10,6 +10,8 @@ import { ConversationStatusDot } from "./conversation-status-dot";
 import { ConversationCardFooter } from "./conversation-card/conversation-card-footer";
 import { I18nKey } from "#/i18n/declaration";
 import { useBackendScopedPath } from "#/hooks/use-backend-scoped-path";
+import { InsiderCatBadge } from "../conversation/insider-cat-badge";
+import { isInsiderConversation } from "#/utils/insider-cat";
 
 interface CompactConversationRowProps {
   conversationId: string;
@@ -28,6 +30,7 @@ interface CompactConversationRowProps {
   agentKind?: "openhands" | "acp" | null;
   acpServer?: string | null;
   tags?: Record<string, string> | null;
+  parentConversationId?: string | null;
   showTags?: boolean;
 }
 
@@ -53,6 +56,7 @@ export function CompactConversationRow({
   agentKind = null,
   acpServer = null,
   tags = null,
+  parentConversationId,
   showTags = false,
 }: CompactConversationRowProps) {
   const { t } = useTranslation("openhands");
@@ -62,6 +66,11 @@ export function CompactConversationRow({
   const preview = (
     <div className="w-65 p-3">
       <div className="flex items-center gap-2 mb-1">
+        <InsiderCatBadge
+          tags={tags}
+          parentConversationId={parentConversationId}
+          compact
+        />
         <ConversationStatusDot
           executionStatus={executionStatus}
           sandboxStatus={sandboxStatus}
@@ -87,6 +96,7 @@ export function CompactConversationRow({
         acpServer={acpServer}
         tags={tags}
         showTags={showTags}
+        parentConversationId={parentConversationId}
       />
     </div>
   );
@@ -113,11 +123,29 @@ export function CompactConversationRow({
           )
         }
       >
-        <ConversationStatusDot
-          executionStatus={executionStatus}
-          sandboxStatus={sandboxStatus}
-          showTooltip={false}
-        />
+        <span className="relative inline-flex items-center justify-center">
+          <InsiderCatBadge
+            tags={tags}
+            parentConversationId={parentConversationId}
+            compact
+          />
+          <span
+            className={
+              isInsiderConversation({
+                tags,
+                parent_conversation_id: parentConversationId,
+              })
+                ? "absolute -bottom-1 -right-1 rounded-full bg-[var(--oh-surface)] p-0.5"
+                : undefined
+            }
+          >
+            <ConversationStatusDot
+              executionStatus={executionStatus}
+              sandboxStatus={sandboxStatus}
+              showTooltip={false}
+            />
+          </span>
+        </span>
       </NavigationLink>
     </Tooltip>
   );

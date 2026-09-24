@@ -1101,8 +1101,9 @@ async function main() {
       // dev:minimal deliberately does NOT supply runtime-services info (the
       // frontend here talks straight to the agent-server over
       // VITE_BACKEND_BASE_URL — there is no ingress or static-server in front
-      // of it to append `runtime_services` to `/server_info`, and the
-      // frontend's own VITE_RUNTIME_SERVICES_INFO env var is no longer read).
+      // of it to append `runtime_services` to `/server_info`). Vite can enrich
+      // responses when another launcher explicitly supplies
+      // VITE_RUNTIME_SERVICES_INFO and uses the frontend's proxy origin.
       // It is a bare agent-server + Vite stack with no companion services to
       // advertise, so `fetchBackendRuntimeServicesInfo()` correctly returns
       // null and conversations simply omit the <RUNTIME_SERVICES> block.

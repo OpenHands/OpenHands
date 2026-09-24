@@ -179,6 +179,8 @@ export interface AppConversation {
    * or it will silently drop every other tag (including ``acpserver``).
    */
   tags?: Record<string, string> | null;
+  /** Server-owned relationship; inherited tags do not make a child a controller. */
+  parent_conversation_id?: string | null;
   llm_model: string | null;
   metrics: MetricsSnapshot | null;
   created_at: string;

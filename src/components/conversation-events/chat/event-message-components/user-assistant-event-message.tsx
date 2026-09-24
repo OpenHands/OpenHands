@@ -16,6 +16,9 @@ import { useForkConversation } from "#/hooks/mutation/use-fork-conversation";
 import { useConversationStore } from "#/stores/conversation-store";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import { isInsiderConversation } from "#/utils/insider-cat";
+import { insiderUserMessageForDisplay } from "#/utils/insider-message";
+import { useUserConversation } from "#/hooks/query/use-user-conversation";
 
 interface UserAssistantEventMessageProps {
   event: MessageEvent;
@@ -46,6 +49,17 @@ function UserAssistantEventMessageComponent({
     event.source === "agent"
       ? splitInlineThink(parsed)
       : { reasoning: "", message: parsed };
+  // Subscribe to the backend/org-scoped query so late metadata and backend
+  // changes cannot leave the message classified by a stale global snapshot.
+  const { data: currentConversation } = useUserConversation(
+    conversationId ?? null,
+  );
+  const displayMessage =
+    event.source === "user" &&
+    currentConversation?.id === conversationId &&
+    isInsiderConversation(currentConversation)
+      ? insiderUserMessageForDisplay(message)
+      : message;
 
   const imageUrls: string[] = [];
   if (Array.isArray(event.llm_message.content)) {
@@ -115,7 +129,7 @@ function UserAssistantEventMessageComponent({
       {reasoning && <CollapsibleThinking content={reasoning} />}
       <ChatMessage
         type={event.source}
-        message={message}
+        message={displayMessage}
         isFromPlanningAgent={isFromPlanningAgent}
         actions={actions}
         timestamp={event.timestamp}

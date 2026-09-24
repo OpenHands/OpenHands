@@ -4,8 +4,10 @@ import CanvasExtensionsService from "#/api/canvas-extensions-service";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { loadCanvasExtensionModule } from "#/extensions/canvas-extension-module-loader";
 import { useCanvasExtensions } from "#/hooks/query/use-canvas-extensions";
+import { subscribeConversationContextChangeRequested } from "#/services/conversation-context-events";
 import {
   CANVAS_EXTENSION_HOST_API_VERSION,
+  type CanvasExtensionCompanion,
   type CanvasExtensionDispose,
   type CanvasExtensionHost,
   type CanvasExtensionModule,
@@ -19,16 +21,25 @@ export interface RegisteredCanvasExtensionPage {
   contribution: CanvasExtensionPageContribution;
   mount: CanvasExtensionPageMount;
   href: string;
+  icon?: "cat";
+}
+
+export interface RegisteredCanvasExtensionCompanion extends CanvasExtensionCompanion {
+  extensionName: string;
+  scope: string;
+  navigate: (path: string) => void;
 }
 
 interface CanvasExtensionsRuntimeValue {
   pages: RegisteredCanvasExtensionPage[];
+  companions: RegisteredCanvasExtensionCompanion[];
   activating: boolean;
   errors: ReadonlyMap<string, string>;
 }
 
 const EMPTY_RUNTIME: CanvasExtensionsRuntimeValue = {
   pages: [],
+  companions: [],
   activating: false,
   errors: new Map(),
 };
@@ -97,8 +108,13 @@ export function CanvasExtensionsRuntimeProvider({
 }: CanvasExtensionsRuntimeProviderProps) {
   const active = useActiveBackend();
   const navigate = useNavigate();
+  const navigateRef = React.useRef(navigate);
+  navigateRef.current = navigate;
   const query = useCanvasExtensions();
   const [pages, setPages] = React.useState<RegisteredCanvasExtensionPage[]>([]);
+  const [companions, setCompanions] = React.useState<
+    RegisteredCanvasExtensionCompanion[]
+  >([]);
   const [errors, setErrors] = React.useState<ReadonlyMap<string, string>>(
     new Map(),
   );
@@ -148,6 +164,7 @@ export function CanvasExtensionsRuntimeProvider({
     const { backend, orgId } = activeRef.current;
     const extensionsToActivate = enabledExtensionsRef.current;
     setPages([]);
+    setCompanions([]);
     setErrors(new Map());
     setActivating(extensionsToActivate.length > 0);
 
@@ -155,7 +172,15 @@ export function CanvasExtensionsRuntimeProvider({
       extension: InstalledCanvasExtensionInfo,
     ) => {
       const registeredPages = new Map<string, RegisteredCanvasExtensionPage>();
+      const registeredCompanions = new Map<
+        string,
+        RegisteredCanvasExtensionCompanion
+      >();
       const registrationDisposers: CanvasExtensionDispose[] = [];
+      let activated = false;
+      const navigateTo = (path: string) => {
+        if (!cancelled) navigateRef.current(path);
+      };
       try {
         const source = await CanvasExtensionsService.fetchBundle(
           extension.name,
@@ -177,7 +202,8 @@ export function CanvasExtensionsRuntimeProvider({
             kind: backend.kind,
             orgId,
           }),
-          registerPage: (contributionId, mount) => {
+          registerPage: (contributionId, mount, options) => {
+            if (cancelled) throw new Error("App activation has ended.");
             if (registeredPages.has(contributionId)) {
               throw new Error(
                 `Extension ${extension.name} registered page "${contributionId}" more than once.`,
@@ -188,35 +214,100 @@ export function CanvasExtensionsRuntimeProvider({
               extension,
               contribution,
               mount,
+              icon: options?.icon,
               href: buildCanvasExtensionPageHref(
                 extension.name,
                 contribution.path,
               ),
             };
             registeredPages.set(contributionId, page);
-            const unregister = () => registeredPages.delete(contributionId);
+            if (activated) setPages((current) => [...current, page]);
+            const unregister = () => {
+              if (registeredPages.get(contributionId) !== page) return;
+              registeredPages.delete(contributionId);
+              if (activated && !cancelled) {
+                setPages((current) => current.filter((item) => item !== page));
+              }
+            };
             registrationDisposers.push(unregister);
             return unregister;
           },
-          navigate: (path) => navigate(path),
+          registerCompanion: ({ id, mount }) => {
+            if (cancelled) throw new Error("App activation has ended.");
+            if (!isValidSegment(id) || registeredCompanions.has(id)) {
+              throw new Error(
+                `App ${extension.name} registered an invalid or duplicate companion "${id}".`,
+              );
+            }
+            const companion = {
+              id,
+              mount,
+              extensionName: extension.name,
+              scope: activationSignature,
+              navigate: navigateTo,
+            };
+            registeredCompanions.set(id, companion);
+            if (activated) setCompanions((current) => [...current, companion]);
+            const unregister = () => {
+              if (registeredCompanions.get(id) !== companion) return;
+              registeredCompanions.delete(id);
+              if (activated && !cancelled) {
+                setCompanions((current) =>
+                  current.filter((item) => item !== companion),
+                );
+              }
+            };
+            registrationDisposers.push(unregister);
+            return unregister;
+          },
+          onConversationContextChangeRequested: (listener) => {
+            if (cancelled) throw new Error("App activation has ended.");
+            const unsubscribe = subscribeConversationContextChangeRequested(
+              {
+                backendId: backend.id,
+                orgId,
+                connectionRevision: backend.connectionRevision ?? 0,
+              },
+              (event) => {
+                if (!cancelled) listener(event);
+              },
+            );
+            registrationDisposers.push(unsubscribe);
+            return unsubscribe;
+          },
+          navigate: navigateTo,
           agentServer: {
-            request: (request) =>
-              CanvasExtensionsService.requestAgentServer(request, backend),
+            request: (request) => {
+              // Resource cleanup may settle after disposal. Always retain its
+              // owning backend rather than sending it to the newly active one.
+              return CanvasExtensionsService.requestAgentServer(
+                request,
+                backend,
+              );
+            },
           },
         };
 
         const disposeActivation = await extensionModule.activate(host);
         if (cancelled) {
           if (typeof disposeActivation === "function") disposeActivation();
+          registrationDisposers.forEach((dispose) => dispose());
           return;
         }
         if (typeof disposeActivation === "function") {
           disposers.push(disposeActivation);
         }
-        disposers.push(...registrationDisposers);
+        disposers.push(() => {
+          registrationDisposers.forEach((dispose) => dispose());
+        });
+        activated = true;
         setPages((current) => [
           ...current.filter((page) => page.extension.name !== extension.name),
           ...registeredPages.values(),
+        ]);
+        setCompanions((current) => [
+          ...current.filter((item) => item.extensionName !== extension.name),
+          ...registeredCompanions.values(),
         ]);
       } catch (error) {
         registrationDisposers.forEach((dispose) => dispose());
@@ -242,6 +333,7 @@ export function CanvasExtensionsRuntimeProvider({
     return () => {
       cancelled = true;
       setPages([]);
+      setCompanions([]);
       for (const dispose of disposers.reverse()) {
         try {
           dispose();
@@ -250,11 +342,15 @@ export function CanvasExtensionsRuntimeProvider({
         }
       }
     };
-  }, [activationSignature, moduleLoader, navigate]);
+  }, [activationSignature, moduleLoader]);
 
+  const scopedCompanions = React.useMemo(
+    () => companions.filter((item) => item.scope === activationSignature),
+    [companions, activationSignature],
+  );
   const value = React.useMemo(
-    () => ({ pages, activating, errors }),
-    [pages, activating, errors],
+    () => ({ pages, companions: scopedCompanions, activating, errors }),
+    [pages, scopedCompanions, activating, errors],
   );
 
   return (

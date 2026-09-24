@@ -53,6 +53,9 @@ import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { I18nKey } from "#/i18n/declaration";
 import { hasConversationStarted } from "./components/resolve-picker-kind";
+import { useCompactContextAction } from "#/hooks/use-compact-context-action";
+import { CONDENSE_COMMAND, NEW_CONVERSATION_COMMAND } from "#/utils/constants";
+import { isInsiderConversation } from "#/utils/insider-cat";
 
 function getEntryPoint(
   hasRepository: boolean | null,
@@ -113,6 +116,8 @@ export function ChatInterface() {
     mutate: newConversationCommand,
     isPending: isNewConversationPending,
   } = useNewConversationCommand();
+  const { handleCompact, isDisabled: isCompactionDisabled } =
+    useCompactContextAction();
 
   const { curAgentState } = useAgentState();
   const { isPlanningAgentRunning } = usePlanningAgentState();
@@ -315,12 +320,12 @@ export function ChatInterface() {
     originalFiles: File[],
   ) => {
     // Handle /new command for V1 conversations
-    if (content.trim() === "/new") {
+    if (content.trim() === NEW_CONVERSATION_COMMAND) {
       if (!conversationId) {
         displayErrorToast(t(I18nKey.CONVERSATION$CLEAR_NO_ID));
         return;
       }
-      if (totalEvents === 0) {
+      if (totalEvents === 0 && !isInsiderConversation(activeConversation)) {
         displayErrorToast(t(I18nKey.CONVERSATION$CLEAR_EMPTY));
         return;
       }
@@ -328,6 +333,15 @@ export function ChatInterface() {
         return;
       }
       newConversationCommand();
+      return;
+    }
+
+    if (content.trim() === CONDENSE_COMMAND) {
+      if (isCompactionDisabled) {
+        displayErrorToast(t(I18nKey.CONVERSATION$COMPACT_CONTEXT_FAILED));
+      } else {
+        handleCompact();
+      }
       return;
     }
 

@@ -10,6 +10,7 @@ import { reactRouter } from "@react-router/dev/vite";
 import { configDefaults } from "vitest/config";
 import tailwindcss from "@tailwindcss/vite";
 import prefixer from "postcss-prefix-selector";
+import { proxyServerInfoResponse } from "./scripts/proxy-utils.mjs";
 import {
   AGENT_SERVER_UI_SCOPE_SELECTOR,
   transformAgentServerUISelector,
@@ -97,11 +98,9 @@ export default defineConfig(({ mode }) => {
     VITE_BASE_PATH,
     VITE_VSCODE_BASE_PATH,
     VITE_VSCODE_TARGET,
-    // Runtime-services metadata for the dev server, passed by launchers that
-    // run the Vite dev server directly (e.g. dev:minimal). Unlike
-    // ingress/static-server, the Vite proxy cannot post-process the upstream
-    // /server_info response, so the launcher serializes the info here and the
-    // middleware below merges it into the proxied response.
+    // Optional metadata from launchers serving the backend through Vite.
+    // The /server_info proxy uses the same response helper as ingress/static-server
+    // to retain SDK fields and append the launcher-provided topology.
     VITE_RUNTIME_SERVICES_INFO,
   } = loadEnv(mode, process.cwd());
 
@@ -402,6 +401,18 @@ export default defineConfig(({ mode }) => {
           target: API_URL,
           changeOrigin: true,
           secure: !INSECURE_SKIP_VERIFY,
+          selfHandleResponse: Boolean(VITE_RUNTIME_SERVICES_INFO),
+          configure(proxy) {
+            if (!VITE_RUNTIME_SERVICES_INFO) return;
+            proxy.on("proxyRes", (proxyRes, req, res) => {
+              proxyServerInfoResponse(
+                proxyRes,
+                req,
+                res,
+                VITE_RUNTIME_SERVICES_INFO,
+              );
+            });
+          },
         },
         "/alive": {
           target: API_URL,

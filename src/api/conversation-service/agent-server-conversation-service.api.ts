@@ -302,6 +302,7 @@ function requireDirectConversationInfo(item: unknown): DirectConversationInfo {
     agent: normalizeAgent(item.agent),
     workspace: normalizeWorkspace(item.workspace),
     tags: normalizeTags(item.tags),
+    parent_conversation_id: stringOrNull(item.parent_conversation_id),
     launched_agent_profile: normalizeLaunchedAgentProfile(
       item.launched_agent_profile,
     ),

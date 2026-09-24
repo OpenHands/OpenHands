@@ -889,6 +889,7 @@ export function ConversationPanel({
             agentKind={conversation.agent_kind}
             acpServer={conversation.acp_server}
             tags={conversation.tags}
+            parentConversationId={conversation.parent_conversation_id}
             showTags={showTagsMetadata}
           />
         );
@@ -923,6 +924,7 @@ export function ConversationPanel({
               acpServer={conversation.acp_server}
               createdAt={conversation.created_at}
               tags={conversation.tags}
+              parentConversationId={conversation.parent_conversation_id}
             />
           }
         >
@@ -994,6 +996,7 @@ export function ConversationPanel({
               tags={conversation.tags}
               showTags={showTagsMetadata}
               isArchived={isArchived}
+              parentConversationId={conversation.parent_conversation_id}
               isPinned={isPinned}
               onTogglePin={() => togglePin(activeBackend.id, conversation.id)}
               alwaysShowPinIcon={isPinned && !options?.inPinnedSection}
@@ -1265,6 +1268,11 @@ export function ConversationPanel({
             allLoadedConversations.find(
               (conversation) => conversation.id === selectedConversationId,
             )?.tags
+          }
+          parentConversationId={
+            allLoadedConversations.find(
+              (conversation) => conversation.id === selectedConversationId,
+            )?.parent_conversation_id
           }
           onConfirm={(mergedTags) => {
             handleConfirmEditTags(mergedTags);

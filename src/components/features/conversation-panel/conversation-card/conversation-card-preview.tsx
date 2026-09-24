@@ -40,6 +40,7 @@ interface ConversationCardPreviewProps {
    * Sidebar card chips stay gated by the panel's Tags preference.
    */
   tags?: Record<string, string> | null;
+  parentConversationId?: string | null;
 }
 
 const providerIcon: Partial<Record<Provider, IconType>> = {
@@ -114,6 +115,7 @@ export function ConversationCardPreview({
   acpServer = null,
   createdAt,
   tags = null,
+  parentConversationId,
 }: ConversationCardPreviewProps) {
   const { t } = useTranslation("openhands");
 
@@ -129,7 +131,7 @@ export function ConversationCardPreview({
       })
     : null;
 
-  const previewTags = getDisplayConversationTags(tags);
+  const previewTags = getDisplayConversationTags(tags, parentConversationId);
 
   return (
     <div
