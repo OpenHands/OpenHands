@@ -131,7 +131,6 @@ export const useLocalGitInfo = () => {
   const runCommandRef = useRef(runCommand);
   runCommandRef.current = runCommand;
 
- (fix: satisfy linux typecheck env typings)
   return useQuery<LocalGitInfo>({
     queryKey: [
       "local-git-info",

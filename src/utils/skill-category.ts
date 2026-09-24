@@ -10,11 +10,12 @@ import {
   Wrench,
   type LucideIcon,
 } from "lucide-react";
-import type { SkillCategoryId } from "@openhands/extensions/skills";
+import {
+  SKILL_CATEGORY_IDS,
+  type SkillCategoryId,
+} from "@openhands/extensions/skills";
 import { I18nKey } from "#/i18n/declaration";
 import type { SkillInfo } from "#/types/settings";
-
-export type { SkillCategoryId };
 
 /** Display order in the facet rail. `other` last. */
 export const SKILL_CATEGORY_ORDER: readonly SkillCategoryId[] = [
@@ -56,7 +57,7 @@ export const SKILL_CATEGORY_ICONS: Record<SkillCategoryId, LucideIcon> = {
 /** The catalog uses `other` for a skill with no marketplace entry, so it means "uncategorized" there exactly as it does for a local skill. */
 export const UNCATEGORIZED_SKILL_CATEGORY: SkillCategoryId = "other";
 
-const KNOWN_CATEGORIES = new Set<string>(SKILL_CATEGORY_ORDER);
+const KNOWN_CATEGORIES = new Set<string>(SKILL_CATEGORY_IDS);
 
 /** Local skills carry no category and a stale bundled catalog could carry one this build does not know; both degrade to `other` rather than an unrenderable facet value. */
 export function getSkillCategory(skill: SkillInfo): SkillCategoryId {
