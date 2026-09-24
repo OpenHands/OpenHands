@@ -1,7 +1,6 @@
 export type AutomationSetupKind = "prompt" | "plugin" | "custom";
 export type AutomationSetupTriggerKind = "cron" | "event";
 export type AutomationSetupFrequency =
-  | "once"
   | "hourly"
   | "daily"
   | "weekdays"
@@ -71,7 +70,6 @@ const AUTOMATION_SETUP_TRIGGER_KINDS: AutomationSetupTriggerKind[] = [
   "event",
 ];
 const AUTOMATION_SETUP_FREQUENCIES: AutomationSetupFrequency[] = [
-  "once",
   "hourly",
   "daily",
   "weekdays",
