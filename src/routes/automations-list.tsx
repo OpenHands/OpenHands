@@ -235,7 +235,13 @@ function SavedDraftsGroup({
               className="rounded-2xl border border-[var(--oh-border)] bg-[var(--oh-surface)] p-4"
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
+                <button
+                  type="button"
+                  data-testid={`automation-setup-draft-open-${draft.id}`}
+                  className="min-w-0 flex-1 cursor-pointer text-left"
+                  disabled={isResuming || isDeleting || isTesting}
+                  onClick={() => onResume(draft)}
+                >
                   <div className="flex min-w-0 items-center gap-2">
                     <FileText
                       className="size-4 shrink-0 text-muted"
@@ -288,7 +294,7 @@ function SavedDraftsGroup({
                       </div>
                     ) : null}
                   </dl>
-                </div>
+                </button>
                 <div className="flex shrink-0 flex-wrap items-center gap-2">
                   <BrandButton
                     type="button"
