@@ -1,10 +1,22 @@
 import { useQueries } from "@tanstack/react-query";
+import { HttpError } from "@openhands/typescript-client";
+import axios from "axios";
 import { useActiveBackendContext } from "#/contexts/active-backend-context";
 import {
   getCloudOrganizations,
   getCurrentCloudApiKey,
 } from "#/api/cloud/organization-service.api";
 import type { Backend } from "#/api/backend-registry/types";
+
+function isAuthorizationError(error: unknown): boolean {
+  const status =
+    error instanceof HttpError
+      ? error.status
+      : axios.isAxiosError(error)
+        ? error.response?.status
+        : undefined;
+  return status === 401 || status === 403;
+}
 
 /**
  * Fetch organizations for every registered cloud backend in parallel.
@@ -53,7 +65,10 @@ export function useAllCloudOrganizations() {
         };
       },
       staleTime: 1000 * 60 * 5,
-      retry: false,
+      retry: (failureCount: number, error: unknown) =>
+        failureCount < 2 && !isAuthorizationError(error),
+      // Mounting workspace consumers must not restart a failed startup query.
+      retryOnMount: false,
       meta: { disableToast: true },
     })),
   });
@@ -67,6 +82,7 @@ export function useAllCloudOrganizations() {
       isSuccess: boolean;
       isFetching: boolean;
       isError: boolean;
+      isAuthorizationError: boolean;
       hasData: boolean;
       refetch: () => unknown;
       orgs: { id: string; name: string; is_personal?: boolean }[];
@@ -81,6 +97,7 @@ export function useAllCloudOrganizations() {
       isSuccess: q.isSuccess,
       isFetching: q.isFetching,
       isError: q.isError,
+      isAuthorizationError: isAuthorizationError(q.error),
       hasData: q.data !== undefined,
       refetch: q.refetch,
       orgs: q.data?.items ?? [],

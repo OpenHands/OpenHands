@@ -23,7 +23,7 @@ export function useCloudCurrentUserId(): Record<
   for (const backend of backends) {
     if (backend.kind === "cloud") {
       const entry = cloudOrgs[backend.id];
-      if (!entry?.isSuccess || entry.isFetching) continue;
+      if (!entry?.hasData || entry.isAuthorizationError) continue;
       const isActiveBackend = backend.id === active.backend.id;
       if (
         isActiveBackend &&

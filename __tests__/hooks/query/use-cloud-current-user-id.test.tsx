@@ -55,6 +55,7 @@ beforeEach(() => {
       backend: cloudBackend,
       isLoading: false,
       isSuccess: true,
+      hasData: true,
       isFetching: false,
       orgs: [
         { id: "org-personal", name: "Personal" },

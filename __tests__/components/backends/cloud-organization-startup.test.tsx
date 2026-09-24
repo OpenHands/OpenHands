@@ -1,4 +1,7 @@
 import React from "react";
+import { HttpError } from "@openhands/typescript-client";
+import { useCloudCurrentUserId } from "#/hooks/query/use-cloud-current-user-id";
+import { useAllCloudOrganizations } from "#/hooks/query/use-cloud-organizations";
 import {
   act,
   cleanup,
@@ -18,6 +21,7 @@ import {
 } from "#/api/backend-registry/active-store";
 import {
   getCloudOrganizations,
+  getCloudOrganizationMe,
   getCurrentCloudApiKey,
 } from "#/api/cloud/organization-service.api";
 import SettingsService from "#/api/settings-service/settings-service.api";
@@ -26,6 +30,7 @@ import { useSettings } from "#/hooks/query/use-settings";
 
 vi.mock("#/api/cloud/organization-service.api", () => ({
   getCloudOrganizations: vi.fn(),
+  getCloudOrganizationMe: vi.fn(),
   getCurrentCloudApiKey: vi.fn(),
 }));
 vi.mock("#/api/settings-service/settings-service.api", () => ({
@@ -47,11 +52,21 @@ const cloud = {
   apiKey: "",
 };
 
+function IdentityConsumer() {
+  const users = useCloudCurrentUserId();
+  return <span aria-label="Current user">{users.cloud?.userId}</span>;
+}
+
 function SettingsConsumer() {
   const settings = useSettings();
   return settings.isSuccess ? (
     <input aria-label="Draft" defaultValue="saved" />
   ) : null;
+}
+
+function OrganizationConsumer() {
+  const organizations = useAllCloudOrganizations();
+  return <span>{organizations.cloud.isFetching ? "Fetching" : "Settled"}</span>;
 }
 
 beforeEach(() => {
@@ -60,6 +75,11 @@ beforeEach(() => {
   __resetActiveStoreForTests();
   vi.mocked(getCloudOrganizations).mockReset();
   vi.mocked(getCurrentCloudApiKey).mockReset();
+  vi.mocked(getCloudOrganizationMe).mockResolvedValue({
+    orgId: "chosen-org",
+    userId: "test-user",
+    role: null,
+  });
   vi.mocked(SettingsService.getSettings).mockReset();
   vi.mocked(SettingsService.getSettings).mockResolvedValue(DEFAULT_SETTINGS);
   setRegisteredBackends([cloud]);
@@ -74,11 +94,12 @@ afterEach(() => {
 describe("Cloud organization startup", () => {
   function renderConsumer() {
     const client = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
+      defaultOptions: { queries: { retry: false, retryDelay: 0 } },
     });
     render(
-      <AgentServerUIProviders queryClient={client}>
+      <AgentServerUIProviders queryClient={client} resolveCloudOrganization>
         <SettingsConsumer />
+        <OrganizationConsumer />
       </AgentServerUIProviders>,
     );
     return client;
@@ -106,13 +127,21 @@ describe("Cloud organization startup", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  it("preserves the saved choice on an initial failure and recovers with Retry", async () => {
-    vi.mocked(getCloudOrganizations).mockRejectedValueOnce(
-      new Error("offline"),
-    );
+  it("keeps a saved selection usable after transient startup failures", async () => {
+    vi.mocked(getCloudOrganizations).mockRejectedValue(new Error("offline"));
+    renderConsumer();
+    await screen.findByLabelText("Draft");
+    expect(getActiveSelection()?.orgId).toBe("removed-org");
+    await screen.findByText("Settled");
+    expect(getCloudOrganizations).toHaveBeenCalledTimes(3);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("offers Retry when startup fails without a saved selection", async () => {
+    setActiveSelection({ backendId: cloud.id, orgId: null });
+    vi.mocked(getCloudOrganizations).mockRejectedValue(new Error("offline"));
     renderConsumer();
     await screen.findByRole("alert");
-    expect(getActiveSelection()?.orgId).toBe("removed-org");
     expect(SettingsService.getSettings).not.toHaveBeenCalled();
     vi.mocked(getCloudOrganizations).mockResolvedValue({
       items: [{ id: "restored-org", name: "Restored" }],
@@ -121,6 +150,71 @@ describe("Cloud organization startup", () => {
     fireEvent.click(screen.getByRole("button", { name: "BACKEND$AUTH_RETRY" }));
     await screen.findByLabelText("Draft");
     expect(getActiveSelection()?.orgId).toBe("restored-org");
+  });
+
+  it.each([401, 403])(
+    "does not bypass an HTTP %s authorization failure",
+    async (status) => {
+      vi.mocked(getCloudOrganizations).mockRejectedValue(
+        new HttpError(status, "Unauthorized"),
+      );
+      renderConsumer();
+      await screen.findByRole("alert");
+      expect(SettingsService.getSettings).not.toHaveBeenCalled();
+      expect(getCloudOrganizations).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("leaves an embedded host's login visible without opting into recovery", () => {
+    vi.mocked(getCloudOrganizations).mockReturnValue(new Promise(() => {}));
+    render(
+      <AgentServerUIProviders>
+        <button>Host login</button>
+      </AgentServerUIProviders>,
+    );
+    expect(
+      screen.getByRole("button", { name: "Host login" }),
+    ).toBeInTheDocument();
+    expect(getCloudOrganizations).not.toHaveBeenCalled();
+  });
+
+  it("keeps cached identity while memberships refetch or temporarily fail", async () => {
+    setActiveSelection({ backendId: cloud.id, orgId: "chosen-org" });
+    vi.mocked(getCloudOrganizations).mockResolvedValue({
+      items: [{ id: "chosen-org", name: "Chosen" }],
+      currentOrgId: "chosen-org",
+    });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retryDelay: 0 } },
+    });
+    render(
+      <AgentServerUIProviders queryClient={client} resolveCloudOrganization>
+        <IdentityConsumer />
+      </AgentServerUIProviders>,
+    );
+    await screen.findByText("test-user");
+    let reject!: (error: Error) => void;
+    vi.mocked(getCloudOrganizations).mockImplementation(
+      () =>
+        new Promise((_, fail) => {
+          reject = fail;
+        }),
+    );
+    let refetch!: Promise<void>;
+    await act(async () => {
+      refetch = client.refetchQueries({ queryKey: ["cloud-organizations"] });
+    });
+    expect(screen.getByLabelText("Current user")).toHaveTextContent(
+      "test-user",
+    );
+    vi.mocked(getCloudOrganizations).mockRejectedValue(new Error("offline"));
+    await act(async () => {
+      reject(new Error("offline"));
+      await refetch;
+    });
+    expect(screen.getByLabelText("Current user")).toHaveTextContent(
+      "test-user",
+    );
   });
 
   it("blocks org-scoped consumers when membership is empty and allows another backend", async () => {
@@ -247,10 +341,10 @@ describe("Cloud organization startup", () => {
       return DEFAULT_SETTINGS;
     });
     const client = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
+      defaultOptions: { queries: { retry: false, retryDelay: 0 } },
     });
     render(
-      <AgentServerUIProviders queryClient={client}>
+      <AgentServerUIProviders queryClient={client} resolveCloudOrganization>
         <SettingsConsumer />
       </AgentServerUIProviders>,
     );

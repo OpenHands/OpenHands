@@ -45,7 +45,7 @@ export interface AgentServerUIProvidersProps extends Pick<
   analytics?: AgentServerUIAnalyticsConfig;
   i18n?: I18nInstance;
   withStyleRoot?: boolean;
-  /** Disable only when the host mounts CloudOrganizationBoundary after authentication. */
+  /** Opt in only after authentication; otherwise mount CloudOrganizationBoundary after the host auth gate. */
   resolveCloudOrganization?: boolean;
 }
 
@@ -70,7 +70,7 @@ export function AgentServerUIProviders({
   styleOverrides,
   theme,
   withStyleRoot = true,
-  resolveCloudOrganization = true,
+  resolveCloudOrganization = false,
 }: AgentServerUIProvidersProps) {
   const resolvedQueryClient = React.useMemo(
     () => queryClient ?? getDefaultQueryClient(),

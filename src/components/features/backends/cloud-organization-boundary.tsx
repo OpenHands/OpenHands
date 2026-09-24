@@ -30,7 +30,13 @@ export function CloudOrganizationBoundary({
     }
   }, [active, entry, hasValidSelection, isCloud, setActive]);
 
-  if (!isCloud || hasValidSelection) return children;
+  const canUseSavedSelection = active.orgId && entry?.isError && !entry.hasData;
+  if (
+    !isCloud ||
+    (!entry?.isAuthorizationError &&
+      (hasValidSelection || canUseSavedSelection))
+  )
+    return children;
 
   if (
     entry &&
@@ -40,7 +46,7 @@ export function CloudOrganizationBoundary({
     return <CloudOrganizationRecovery entry={entry} />;
   }
   return (
-    <div className="min-h-screen flex items-center justify-center bg-base">
+    <div className="min-h-full flex items-center justify-center bg-base">
       <LoadingSpinner size="large" />
     </div>
   );
@@ -54,7 +60,7 @@ function CloudOrganizationRecovery({
   const { t } = useTranslation("openhands");
   const { active, backends, setActive } = useActiveBackendContext();
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-base px-6 text-contrast">
+    <div className="min-h-full flex flex-col items-center justify-center gap-4 bg-base px-6 text-contrast">
       <p role="alert">
         {t(
           entry.isError
