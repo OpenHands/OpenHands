@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { cn } from "#/utils/utils";
+import { BackNavButton } from "#/components/shared/buttons/back-nav-button";
+import { ChatActionTooltip } from "#/components/features/chat/chat-action-tooltip";
+import BlockDrawerLeftIcon from "#/icons/block-drawer-left.svg?react";
+import { mobileTopBarIconButtonClassName } from "#/utils/mobile-top-bar-icon-button-classes";
 import { ChatInterfaceWrapper } from "./chat-interface-wrapper";
 import { ConversationTabContent } from "../conversation-tabs/conversation-tab-content/conversation-tab-content";
 import { ConversationNameWithStatus } from "../conversation-name-with-status";
@@ -27,7 +30,6 @@ import { useConversationOverviewDrawerOptional } from "../conversation-overview-
 import { useNavigation } from "#/context/navigation-context";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { I18nKey } from "#/i18n/declaration";
-import { formControlTransitionClassName } from "#/utils/form-control-classes";
 import {
   getAutomationDraftIdFromTags,
   hasAutomationSetupModeTag,
@@ -132,6 +134,10 @@ export function ConversationMain() {
   const agentToggleLabel = isAutomationAgentHidden
     ? t(I18nKey.AUTOMATION_SETUP$SHOW_AGENT)
     : t(I18nKey.AUTOMATION_SETUP$HIDE_AGENT);
+  const setupTitle =
+    automationSetupDraft?.form?.name?.trim() ||
+    conversation?.title ||
+    t(I18nKey.AUTOMATION_SETUP$TITLE);
 
   return (
     <div
@@ -144,53 +150,50 @@ export function ConversationMain() {
       {isAutomationSetupMode ? (
         <header
           data-testid="automation-setup-topbar"
-          className="flex h-10 min-h-10 shrink-0 items-center gap-2 border-b border-[var(--oh-border)] bg-base px-3"
+          className="flex h-10 min-h-10 shrink-0 items-center justify-between gap-2 border-b border-[var(--oh-border)] bg-base px-3"
         >
-          {isSidebarRailHidden ? <SidebarMobileMenuToggle /> : null}
-          <button
-            type="button"
-            data-testid="automation-setup-back"
-            aria-label={t(I18nKey.AUTOMATION_SETUP$BACK_LABEL)}
-            onClick={handleBackToSplash}
-            className={cn(
-              "flex size-7 items-center justify-center rounded-lg text-[var(--oh-muted)] hover:bg-white/10 hover:text-white",
-              formControlTransitionClassName,
-            )}
-          >
-            <ArrowLeft className="size-4" aria-hidden />
-          </button>
-          <h1
-            data-testid="automation-setup-conversation-title"
-            className="min-w-0 truncate text-sm font-semibold text-white"
-          >
-            {conversation?.title || t(I18nKey.AUTOMATION_SETUP$TITLE)}
-          </h1>
-          <div className="ml-auto flex min-w-0 shrink-0 items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            {isSidebarRailHidden ? <SidebarMobileMenuToggle /> : null}
+            <BackNavButton
+              testId="automation-setup-back"
+              className="!p-1.5"
+              ariaLabel={t(I18nKey.BUTTON$BACK)}
+              onClick={handleBackToSplash}
+            />
+            <h2
+              data-testid="automation-setup-conversation-title"
+              className="min-w-0 truncate text-sm font-medium text-content"
+            >
+              {setupTitle}
+            </h2>
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
             <div
               ref={setAutomationToolbarElement}
               data-testid="automation-setup-toolbar"
-              className="flex min-w-0 shrink-0 items-center gap-2"
+              className="flex min-w-0 shrink-0 items-center gap-1.5"
             />
             {!isMobile ? (
-              <button
-                type="button"
-                data-testid="automation-setup-agent-toggle"
-                aria-label={agentToggleLabel}
-                title={agentToggleLabel}
-                onClick={() =>
-                  setIsAutomationAgentHidden((previous) => !previous)
-                }
-                className={cn(
-                  "flex size-7 items-center justify-center rounded-lg text-[var(--oh-muted)] hover:bg-white/10 hover:text-white",
-                  formControlTransitionClassName,
-                )}
+              <ChatActionTooltip
+                tooltip={agentToggleLabel}
+                ariaLabel={agentToggleLabel}
               >
-                {isAutomationAgentHidden ? (
-                  <PanelLeftOpen className="size-4" aria-hidden />
-                ) : (
-                  <PanelLeftClose className="size-4" aria-hidden />
-                )}
-              </button>
+                <button
+                  type="button"
+                  data-testid="automation-setup-agent-toggle"
+                  aria-label={agentToggleLabel}
+                  aria-pressed={!isAutomationAgentHidden}
+                  onClick={() =>
+                    setIsAutomationAgentHidden((previous) => !previous)
+                  }
+                  className={cn(
+                    mobileTopBarIconButtonClassName,
+                    "size-7 self-center",
+                  )}
+                >
+                  <BlockDrawerLeftIcon className="size-5 shrink-0" />
+                </button>
+              </ChatActionTooltip>
             ) : null}
           </div>
         </header>
