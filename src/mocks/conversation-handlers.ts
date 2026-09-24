@@ -477,8 +477,6 @@ export const CONVERSATION_HANDLERS = [
     HttpResponse.json({ response: "Mock agent response" }),
   ),
 
-  http.get("*/api/vscode/url", async () => HttpResponse.json({ url: null })),
-
   http.post("*/api/skills", async () => HttpResponse.json({ skills: [] })),
 
   http.post(

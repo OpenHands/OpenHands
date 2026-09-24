@@ -13,11 +13,14 @@ export interface CanvasExtensionAppViewLabels {
 
 export interface CanvasExtensionAppViewSessionContext {
   signal: AbortSignal;
+  query?: Record<string, string>;
 }
 
 export interface MountCanvasExtensionAppViewOptions {
   container: HTMLElement;
   labels: CanvasExtensionAppViewLabels;
+  /** Optional query values are applied by the trusted bridge before mounting. */
+  query?: Record<string, string>;
   createSession: (
     context: CanvasExtensionAppViewSessionContext,
   ) => Promise<CanvasExtensionAppViewSession>;
@@ -86,9 +89,11 @@ function createAction(label: string, onClick: () => void): HTMLButtonElement {
 export function mountCanvasExtensionAppView({
   container,
   labels,
+  query,
   createSession,
   revokeSession,
 }: MountCanvasExtensionAppViewOptions): MountedCanvasExtensionAppView {
+  container.classList.add("h-full", "min-h-0", "w-full");
   let disposed = false;
   let generation = 0;
   let controller: AbortController | null = null;
@@ -134,7 +139,10 @@ export function mountCanvasExtensionAppView({
     container.replaceChildren(createStatus(labels.loading));
 
     try {
-      const response = await createSession({ signal: controller.signal });
+      const response = await createSession({
+        signal: controller.signal,
+        query,
+      });
       hasSession = true;
       const created = validatedSession(response);
       if (disposed || currentGeneration !== generation) {

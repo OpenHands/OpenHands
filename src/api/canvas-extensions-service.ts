@@ -46,9 +46,25 @@ interface AppBackendSessionClientConstructor {
 }
 
 export interface CanvasExtensionAppBackendViewClient {
-  createSession: () => Promise<CanvasExtensionAppViewSession>;
+  createSession: (
+    query?: Record<string, string>,
+  ) => Promise<CanvasExtensionAppViewSession>;
   revokeSession: () => Promise<void>;
   dispose: () => void;
+}
+
+const APP_VIEW_QUERY_KEYS = new Set(["folder"]);
+
+function appendAppViewQuery(url: URL, query?: Record<string, string>): URL {
+  if (!query) return url;
+  for (const [key, value] of Object.entries(query)) {
+    if (!APP_VIEW_QUERY_KEYS.has(key) || key.toLowerCase().includes("token")) {
+      throw new Error(`Unsupported or sensitive App view query key: ${key}`);
+    }
+    if (!value) throw new Error(`App view query value is empty: ${key}`);
+    url.searchParams.set(key, value);
+  }
+  return url;
 }
 
 function parseHttpUrl(value: string): URL | null {
@@ -185,7 +201,7 @@ async function createAppBackendViewClient(
     }
   };
   return {
-    createSession: async () => {
+    createSession: async (query) => {
       if (disposed) throw new Error("Canvas App backend view is disposed");
       const session = await sessionClient.createAppBackendSession(name);
       hasSession = true;
@@ -194,8 +210,15 @@ async function createAppBackendViewClient(
         await revokeSession();
         throw new Error("Canvas App backend session URL is invalid");
       }
+      let viewUrl: URL;
+      try {
+        viewUrl = appendAppViewQuery(sessionUrl, query);
+      } catch (error) {
+        await revokeSession();
+        throw error;
+      }
       return {
-        url: sessionUrl.href,
+        url: viewUrl.href,
         expiresAt: session.expires_at,
         iframeSandbox: session.iframe_sandbox,
       };

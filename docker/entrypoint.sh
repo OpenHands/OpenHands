@@ -86,85 +86,89 @@ AUTOMATION_PORT="${AUTOMATION_PORT:-${CONFIG_AUTOMATION_PORT:-18001}}"
 # independently would let `OH_VSCODE_BASE_PATH=/editor` move the editor without
 # moving the route, leaving the button pointing at a path the proxy never
 # serves.
-# >>> vscode-config: this block is extracted and executed by
-# >>> __tests__/scripts/docker-vscode-route-sync.test.ts — keep the markers.
-# The canvas mount is resolved here rather than alongside the ports above
-# because the collision guard below compares the two prefixes: keeping both
-# inside the extracted block is what lets that comparison be tested against the
-# real defaults instead of only against values a test injects.
-AGENT_CANVAS_BASE_PATH="${AGENT_CANVAS_BASE_PATH:-${CONFIG_CANVAS_BASE_PATH:-/canvas}}"
-VSCODE_PORT="${OH_VSCODE_PORT:-${VSCODE_PORT:-${CONFIG_VSCODE_PORT:-8001}}}"
-VSCODE_BASE_PATH="${OH_VSCODE_BASE_PATH:-${VSCODE_BASE_PATH:-${CONFIG_VSCODE_BASE_PATH:-/vscode}}}"
+VSCODE_ROUTE_ARGS=()
+if [ "${OH_CANVAS_ENABLE_VSCODE:-false}" = "true" ]; then
+  # >>> vscode-config: this block is extracted and executed by
+  # >>> __tests__/scripts/docker-vscode-route-sync.test.ts — keep the markers.
+  # The canvas mount is resolved here rather than alongside the ports above
+  # because the collision guard below compares the two prefixes: keeping both
+  # inside the extracted block is what lets that comparison be tested against the
+  # real defaults instead of only against values a test injects.
+  AGENT_CANVAS_BASE_PATH="${AGENT_CANVAS_BASE_PATH:-${CONFIG_CANVAS_BASE_PATH:-/canvas}}"
+  VSCODE_PORT="${OH_VSCODE_PORT:-${VSCODE_PORT:-}}"
+  VSCODE_BASE_PATH="${OH_VSCODE_BASE_PATH:-${VSCODE_BASE_PATH:-/vscode}}"
 
-# Accept "editor", "/editor" and "/editor/" alike: agent-server strips the
-# slashes when it builds the advertised URL, the static-server route table
-# needs the leading one, so settle on one spelling rather than one per use site.
-normalize_base_path() {
-  local p="$1"
-  while [ "${p#/}" != "$p" ]; do p="${p#/}"; done
-  while [ "${p%/}" != "$p" ]; do p="${p%/}"; done
-  printf '/%s' "$p"
-}
-VSCODE_BASE_PATH="$(normalize_base_path "$VSCODE_BASE_PATH")"
-if [ "$VSCODE_BASE_PATH" = "/" ]; then
-  log_error "VSCODE_BASE_PATH resolved to the site root — that would route the whole origin to the editor instead of the canvas. Set a prefix such as /vscode."
-  exit 1
-fi
-
-# The canvas mount gets the same treatment, for the same reason and with the
-# same function. static-server normalizes whatever `--base-path` it is handed
-# (`canvas` and `/canvas/` both mount at `/canvas`), so comparing a normalized
-# editor prefix against a raw canvas one below would let `AGENT_CANVAS_BASE_PATH=canvas`
-# with `OH_VSCODE_BASE_PATH=/canvas` past the collision guard and then land both
-# on `/canvas` — where the editor route, registered after the SPA mount, takes
-# the application over. Normalizing here rather than at the comparison keeps the
-# value passed to `--base-path` further down identical to the one guarded.
-AGENT_CANVAS_BASE_PATH="$(normalize_base_path "$AGENT_CANVAS_BASE_PATH")"
-
-# static-server keys its route table by prefix and the editor route is
-# registered last, so a prefix that collides with an earlier route silently
-# replaces it rather than failing: OH_VSCODE_BASE_PATH=/api would send every
-# API call to the editor port. Reject collisions and anything that is not a
-# plain single-segment path — '=' would be mis-split by the --route parser
-# (it cuts at the first '='), and whitespace, '?', '#' or '..' have no
-# meaningful reading as a route prefix.
-VSCODE_PATH_SEGMENT="${VSCODE_BASE_PATH#/}"
-case "$VSCODE_PATH_SEGMENT" in
-  */*)
-    log_error "VSCODE_BASE_PATH must be a single path segment (got '$VSCODE_BASE_PATH'). Use a prefix such as /vscode."
-    exit 1
-    ;;
-  .|..)
-    log_error "VSCODE_BASE_PATH must not be a relative path segment (got '$VSCODE_BASE_PATH'). Use a prefix such as /vscode."
-    exit 1
-    ;;
-  *[!A-Za-z0-9._-]*)
-    log_error "VSCODE_BASE_PATH may only contain letters, digits, '.', '_' and '-' (got '$VSCODE_BASE_PATH'). Use a prefix such as /vscode."
-    exit 1
-    ;;
-esac
-for reserved in /api /sockets /server_info /alive /health /ready /docs /redoc /openapi.json "${AGENT_CANVAS_BASE_PATH:-}"; do
-  if [ -n "$reserved" ] && [ "$VSCODE_BASE_PATH" = "$reserved" ]; then
-    log_error "VSCODE_BASE_PATH '$VSCODE_BASE_PATH' collides with an existing route and would take it over. Set a different prefix, such as /vscode."
+  # Accept "editor", "/editor" and "/editor/" alike: agent-server strips the
+  # slashes when it builds the advertised URL, the static-server route table
+  # needs the leading one, so settle on one spelling rather than one per use site.
+  normalize_base_path() {
+    local p="$1"
+    while [ "${p#/}" != "$p" ]; do p="${p#/}"; done
+    while [ "${p%/}" != "$p" ]; do p="${p%/}"; done
+    printf '/%s' "$p"
+  }
+  VSCODE_BASE_PATH="$(normalize_base_path "$VSCODE_BASE_PATH")"
+  if [ "$VSCODE_BASE_PATH" = "/" ]; then
+    log_error "VSCODE_BASE_PATH resolved to the site root — that would route the whole origin to the editor instead of the canvas. Set a prefix such as /vscode."
     exit 1
   fi
-done
 
-# The port ends up in a proxy target URL, so a non-numeric value fails at the
-# first editor request instead of at startup. Catch it here.
-case "$VSCODE_PORT" in
-  ''|*[!0-9]*)
-    log_error "VSCODE_PORT must be a number (got '$VSCODE_PORT')."
-    exit 1
-    ;;
-esac
+  # The canvas mount gets the same treatment, for the same reason and with the
+  # same function. static-server normalizes whatever `--base-path` it is handed
+  # (`canvas` and `/canvas/` both mount at `/canvas`), so comparing a normalized
+  # editor prefix against a raw canvas one below would let `AGENT_CANVAS_BASE_PATH=canvas`
+  # with `OH_VSCODE_BASE_PATH=/canvas` past the collision guard and then land both
+  # on `/canvas` — where the editor route, registered after the SPA mount, takes
+  # the application over. Normalizing here rather than at the comparison keeps the
+  # value passed to `--base-path` further down identical to the one guarded.
+  AGENT_CANVAS_BASE_PATH="$(normalize_base_path "$AGENT_CANVAS_BASE_PATH")"
 
-export OH_VSCODE_PORT="$VSCODE_PORT"
-export OH_VSCODE_BASE_PATH="$VSCODE_BASE_PATH"
-# The single route string every static-server instance registers. Derived from
-# the exported pair above so the advertised URL and the route cannot diverge.
-VSCODE_ROUTE="${VSCODE_BASE_PATH}=http://127.0.0.1:${VSCODE_PORT}"
-# <<< vscode-config
+  # static-server keys its route table by prefix and the editor route is
+  # registered last, so a prefix that collides with an earlier route silently
+  # replaces it rather than failing: OH_VSCODE_BASE_PATH=/api would send every
+  # API call to the editor port. Reject collisions and anything that is not a
+  # plain single-segment path — '=' would be mis-split by the --route parser
+  # (it cuts at the first '='), and whitespace, '?', '#' or '..' have no
+  # meaningful reading as a route prefix.
+  VSCODE_PATH_SEGMENT="${VSCODE_BASE_PATH#/}"
+  case "$VSCODE_PATH_SEGMENT" in
+    */*)
+      log_error "VSCODE_BASE_PATH must be a single path segment (got '$VSCODE_BASE_PATH'). Use a prefix such as /vscode."
+      exit 1
+      ;;
+    .|..)
+      log_error "VSCODE_BASE_PATH must not be a relative path segment (got '$VSCODE_BASE_PATH'). Use a prefix such as /vscode."
+      exit 1
+      ;;
+    *[!A-Za-z0-9._-]*)
+      log_error "VSCODE_BASE_PATH may only contain letters, digits, '.', '_' and '-' (got '$VSCODE_BASE_PATH'). Use a prefix such as /vscode."
+      exit 1
+      ;;
+  esac
+  for reserved in /api /sockets /server_info /alive /health /ready /docs /redoc /openapi.json "${AGENT_CANVAS_BASE_PATH:-}"; do
+    if [ -n "$reserved" ] && [ "$VSCODE_BASE_PATH" = "$reserved" ]; then
+      log_error "VSCODE_BASE_PATH '$VSCODE_BASE_PATH' collides with an existing route and would take it over. Set a different prefix, such as /vscode."
+      exit 1
+    fi
+  done
+
+  # The port ends up in a proxy target URL, so a non-numeric value fails at the
+  # first editor request instead of at startup. Catch it here.
+  case "$VSCODE_PORT" in
+    ''|*[!0-9]*)
+      log_error "VSCODE_PORT must be a number (got '$VSCODE_PORT')."
+      exit 1
+      ;;
+  esac
+
+  export OH_VSCODE_PORT="$VSCODE_PORT"
+  export OH_VSCODE_BASE_PATH="$VSCODE_BASE_PATH"
+  # The single route string every static-server instance registers. Derived from
+  # the exported pair above so the advertised URL and the route cannot diverge.
+  VSCODE_ROUTE="${VSCODE_BASE_PATH}=http://127.0.0.1:${VSCODE_PORT}"
+  # <<< vscode-config
+  VSCODE_ROUTE_ARGS=(--route "$VSCODE_ROUTE" --vscode-base-path "$VSCODE_BASE_PATH" --no-referrer-prefix "$VSCODE_BASE_PATH")
+fi
 
 # Persistence paths — keep settings, conversations, bash history under a
 # single well-known directory that the VOLUME directive exposes.
@@ -407,9 +411,7 @@ node /opt/agent-canvas/static-server.mjs \
   --route "/docs=http://127.0.0.1:${AGENT_SERVER_PORT}" \
   --route "/redoc=http://127.0.0.1:${AGENT_SERVER_PORT}" \
   --route "/openapi.json=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-  --route "$VSCODE_ROUTE" \
-  --vscode-base-path "$VSCODE_BASE_PATH" \
-  --no-referrer-prefix "$VSCODE_BASE_PATH" &
+  "${VSCODE_ROUTE_ARGS[@]}" &
 STATIC_PID=$!
 PIDS+=("$STATIC_PID")
 
