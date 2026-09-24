@@ -275,6 +275,22 @@ describe("ConversationMain - Layout Transition Stability", () => {
     expect(mockNavigate).toHaveBeenCalledWith("/");
   });
 
+  it("suppresses automation setup chrome on mobile", () => {
+    mockIsMobile = true;
+    mockIsRightPanelShown = true;
+    mockAutomationSetupDraft = {
+      prompt: "Write a haiku each morning",
+      kind: "prompt",
+    };
+
+    renderConversationMain();
+
+    expect(screen.queryByTestId("automation-setup-topbar")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("automation-setup-panel")).not.toBeInTheDocument();
+    expect(screen.getByTestId("chat-pane-header")).toBeInTheDocument();
+    expect(screen.getByTestId("chat-interface")).toBeInTheDocument();
+  });
+
   it("expands the automation form to full width when hiding the agent", async () => {
     const user = userEvent.setup();
     mockIsRightPanelShown = true;
