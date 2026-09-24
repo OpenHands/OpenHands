@@ -50,6 +50,26 @@ import {
 
 const AUTOMATION_BASE_PATH = "/api/automation";
 
+type AutomationDraftCreateTarget = SetupEntry | "prompt" | "plugin" | "custom";
+
+function automationCreateEndpointForTarget(
+  target?: AutomationDraftCreateTarget,
+  selectedAction?: string | null,
+): string {
+  if (target === "plugin") return getAutomationEndpoint("createPlugin");
+  if (target === "custom") {
+    const endpoint = getAutomationEndpoint("createBundle");
+    if (!endpoint) {
+      throw new Error(
+        "This deployment does not support creating custom automation bundles.",
+      );
+    }
+    return endpoint;
+  }
+  if (!target || target === "prompt") return automationCreateEndpoint();
+  return automationCreateEndpoint(target, selectedAction);
+}
+
 export interface AutomationHealthResponse {
   status: "ok" | "error";
   message?: string;
@@ -592,13 +612,13 @@ class AutomationService {
    */
   static async createAutomationDraft(
     body: SetupRequestBody,
-    /** The entry and selected action decide the create endpoint. */
-    entry?: SetupEntry,
+    /** The entry/action or generic draft kind decides the create endpoint. */
+    target?: AutomationDraftCreateTarget,
     selectedAction?: string | null,
   ): Promise<Record<string, unknown>> {
     const active = getActiveBackend().backend;
-    const path = `${AUTOMATION_BASE_PATH}${automationCreateEndpoint(
-      entry,
+    const path = `${AUTOMATION_BASE_PATH}${automationCreateEndpointForTarget(
+      target,
       selectedAction,
     )}`;
 

@@ -30,6 +30,7 @@ import {
   writeStoredLocalWorkspaceMode,
 } from "#/utils/workspace-mode";
 import type { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
+import { setAutomationSetupDraft } from "#/api/automation-setup-draft-store";
 import { PluginPickerModal } from "#/components/features/plugins/plugin-picker-modal";
 import { PluginPickerTrigger } from "#/components/features/plugins/plugin-picker-trigger";
 import { RecommendedAutomationsLauncher } from "#/components/features/automations/recommended-automations-launcher";
@@ -141,6 +142,15 @@ export function HomeChatLauncher() {
       variables = { ...variables, plugins: selectedPlugins };
     }
 
+    const seedAutomationSetupDraft = (conversationId: string) => {
+      if (!isAutomateMode || !trimmed) return;
+      setAutomationSetupDraft(conversationId, {
+        prompt: trimmed,
+        kind: selectedPlugins.length > 0 ? "plugin" : "prompt",
+        plugins: selectedPlugins.map((plugin) => plugin.source),
+      });
+    };
+
     // Loading toast gives the user a clear signal that the request is in
     // flight; dismissed precisely once the mutation resolves.
     const toastId = toast.loading(
@@ -190,6 +200,7 @@ export function HomeChatLauncher() {
               images: attachmentSnapshot.images,
               imagesMarkedUploadAsFile,
             });
+            seedAutomationSetupDraft(targetConversationId);
             navigate(`/conversations/${targetConversationId}`);
             return;
           } else {
@@ -219,6 +230,7 @@ export function HomeChatLauncher() {
           });
         }
 
+        seedAutomationSetupDraft(targetConversationId);
         navigate(`/conversations/${targetConversationId}`);
       } catch (error) {
         toast.dismiss(toastId);
@@ -290,13 +302,11 @@ export function HomeChatLauncher() {
           />
         </div>
 
-        {isAutomateMode && (
-          <div className="mt-8 flex w-full flex-col gap-8">
-            <RecommendedAutomationsLauncher variant="rail" />
-            <PinnedAutomationsDashboard />
-            <RunningAutomationsList />
-          </div>
-        )}
+        <div className="mt-8 flex w-full flex-col gap-8">
+          <RecommendedAutomationsLauncher variant="rail" />
+          <PinnedAutomationsDashboard />
+          <RunningAutomationsList />
+        </div>
       </div>
 
       {isLocal ? (
