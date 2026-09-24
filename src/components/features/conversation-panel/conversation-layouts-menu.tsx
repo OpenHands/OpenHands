@@ -190,7 +190,7 @@ export function ConversationLayoutsMenu({
         aria-expanded={menuOpen}
         onClick={() => setMenuOpen(!menuOpen)}
         className={cn(
-          "relative inline-flex h-7 w-7 items-center justify-center rounded-md text-muted hover:text-white hover:bg-surface-raised",
+          "relative inline-flex h-7 w-7 items-center justify-center rounded-md text-muted hover:text-contrast hover:bg-surface-raised",
           dropdownInstantColorClassName,
         )}
       >

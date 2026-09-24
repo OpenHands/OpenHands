@@ -44,10 +44,10 @@ export function DropdownItem<T>({
       isProviderDropdown
         ? "group px-2 py-0 cursor-pointer text-xs rounded-md mx-0 my-0 h-6 flex items-center"
         : "group px-2 py-2 cursor-pointer text-sm rounded-md mx-0 my-0.5",
-      "text-white focus:outline-none font-normal",
+      "text-contrast focus:outline-none font-normal",
       dropdownInstantColorClassName,
       {
-        "bg-interactive-selected text-white": isSelected,
+        "bg-interactive-selected text-contrast": isSelected,
         "hover:bg-interactive-hover": !isSelected,
       },
       itemClassName,

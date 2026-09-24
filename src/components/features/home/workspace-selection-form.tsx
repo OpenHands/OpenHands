@@ -175,7 +175,7 @@ export function WorkspaceSelectionForm({
       {!onConfirm && (
         <div className="flex items-center gap-2.5 pb-4">
           <FolderIcon width={24} height={24} />
-          <span className="leading-5 font-bold text-base text-white">
+          <span className="leading-5 font-bold text-base text-contrast">
             {t(I18nKey.HOME$WORKSPACES_TAB)}
           </span>
         </div>

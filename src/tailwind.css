@@ -32,6 +32,8 @@
 
   /* Semantic text aliases */
   --color-foreground: var(--oh-foreground);
+  --color-contrast: var(--oh-contrast);
+  --color-contrast-foreground: var(--oh-contrast-foreground);
   --color-text-secondary: var(--oh-text-secondary);
   --color-text-tertiary: var(--oh-text-tertiary);
   --color-muted: var(--oh-muted);
@@ -90,6 +92,8 @@
   --oh-color-content-2: var(--cool-grey-50);
   --oh-background: var(--cool-grey-950);
   --oh-foreground: var(--cool-grey-100);
+  --oh-contrast: #ffffff;
+  --oh-contrast-foreground: #000000;
   --oh-surface: var(--cool-grey-925);
   --oh-surface-foreground: var(--cool-grey-100);
   --oh-surface-raised: var(--cool-grey-900);  /* elevated within a panel */
@@ -106,6 +110,8 @@
   --oh-interactive-hover-low: var(--cool-grey-900);  /* hover on dark base (950 bg) */
   --oh-interactive-active: var(--cool-grey-800);     /* selected/active on dark base */
   --oh-interactive-selected: var(--cool-grey-600);   /* selected within a panel (on 800/925 bg) */
+  --oh-context-window-foreground: var(--oh-foreground);
+  --oh-context-window-track-weight: 42%;
   --oh-scrollbar: color-mix(in srgb, var(--cool-grey-400) 30%, transparent);
   --oh-scrollbar-hover: color-mix(in srgb, var(--cool-grey-400) 50%, transparent);
   --oh-default: var(--cool-grey-800);
@@ -192,7 +198,7 @@ button.extension-module-card-interactive {
 }
 
 .extension-module-card-interactive:hover {
-  border-color: rgb(255 255 255 / 0.4);
+  border-color: color-mix(in srgb, var(--oh-foreground) 40%, transparent);
 }
 
 .extension-module-card-interactive:focus {
@@ -206,7 +212,7 @@ button.extension-module-card-interactive {
 
 .extension-module-card-interactive:focus-visible {
   outline: none;
-  border-color: rgb(255 255 255 / 0.4);
+  border-color: color-mix(in srgb, var(--oh-foreground) 40%, transparent);
 }
 
 .button-base {
@@ -354,7 +360,7 @@ button.extension-module-card-interactive {
 /* Drag and drop styles */
 .drag-over {
   backdrop-filter: blur(2px);
-  background: rgba(255, 255, 255, 0.5);
+  background: color-mix(in srgb, var(--oh-contrast) 50%, transparent);
   border-radius: 15px;
   height: 100%;
   left: 0;

@@ -11,6 +11,26 @@ This guide supplements the public `code-review` skill with rules specific to
 `OpenHands/OpenHands`, the Agent Canvas frontend. Read `AGENTS.md` first; it is
 the detailed source of truth for current architecture and test conventions.
 
+## Repository and Product Scope
+
+Confirm scope before detailed inspection. This repository owns the Agent Canvas
+product: its UI, product behavior, and Canvas-specific integration of existing
+SDK and automation capabilities.
+
+Out of scope here, because another repository owns it:
+
+- reusable agent-server, runtime, SDK, and client contracts
+  (`OpenHands/software-agent-sdk`);
+- generic automation scheduling, state, dispatch, and profile machinery
+  (`OpenHands/automation`); and
+- reusable extensions, skills, plugins, and automation bundles
+  (`OpenHands/extensions`).
+
+Cross-repository work is acceptable when the PR contains only the Canvas-owned
+integration and depends on public interfaces from the owning repository. When a
+change belongs in one of the repositories above, say so and ask a maintainer to
+confirm before reviewing the rest.
+
 ## Review Sequence and Decision
 
 Review the current PR head in this order:

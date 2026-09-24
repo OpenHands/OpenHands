@@ -61,7 +61,7 @@ describe("conversation task status display", () => {
         expect(title).toHaveClass("text-muted");
       } else {
         expect(icon).toHaveClass("text-[#ffffff]");
-        expect(title).toHaveClass("text-white");
+        expect(title).toHaveClass("text-contrast");
         expect(title).not.toHaveClass("text-muted");
       }
     },

@@ -69,7 +69,7 @@ export function PromptSection({ prompt }: PromptSectionProps) {
         {isOverflowing ? (
           <button
             type="button"
-            className="self-start cursor-pointer text-sm font-normal text-muted hover:text-white"
+            className="self-start cursor-pointer text-sm font-normal text-muted hover:text-contrast"
             onClick={() => setIsExpanded((expanded) => !expanded)}
             data-testid="automation-prompt-toggle"
           >

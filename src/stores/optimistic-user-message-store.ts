@@ -71,12 +71,14 @@ interface OptimisticUserMessageActions {
   /**
    * Remove the pending message that matches the given echoed `content` in
    * the given conversation. Matching is done by exact content equality on
-   * messages still in "sending" state; if no match exists we fall back to
-   * removing the oldest "sending" entry in that conversation so that an echo
-   * with a slightly munged body (e.g. trailing-whitespace stripped by the
-   * server) still clears its bubble. Scoping by `conversationId` ensures a
-   * stale ack for one conversation never pops a pending entry belonging to
-   * another.
+   * messages in either state: an echo with identical text proves the message
+   * was delivered, so it also clears an entry the watchdog already flipped to
+   * "error". If no exact match exists we fall back to removing the oldest
+   * "sending" entry in that conversation so that an echo with a slightly
+   * munged body (e.g. trailing-whitespace stripped by the server) still
+   * clears its bubble; the fallback never touches "error" entries. Scoping by
+   * `conversationId` ensures a stale ack for one conversation never pops a
+   * pending entry belonging to another.
    */
   consumeMatchingPendingMessage: (
     conversationId: string,
@@ -170,22 +172,25 @@ export const useOptimisticUserMessageStore = create<OptimisticUserMessageStore>(
       // Single atomic `set` so the find + filter can't observe an interleaved
       // mutation from another action. We prefer an exact content match (this
       // is what makes out-of-order echoes safe: an echo of "world" will pop
-      // the "world" bubble, not the older "hello" one). If no exact match
-      // exists — e.g. the server slightly munged the body — fall back to the
-      // oldest "sending" entry in this conversation so the user doesn't end
-      // up with a permanently-stuck bubble in the happy-path single-message
-      // case.
+      // the "world" bubble, not the older "hello" one). The exact match may
+      // hit an entry already in "error" state: the watchdog flips a bubble to
+      // "error" on a timer, so a late echo (reconnect replay, slow server-side
+      // accept, returning from another conversation) proves the message was
+      // delivered after all and must clear the stale failure. If no exact
+      // match exists — e.g. the server slightly munged the body — fall back
+      // to the oldest "sending" entry in this conversation so the user doesn't
+      // end up with a permanently-stuck bubble in the happy-path
+      // single-message case. The fallback deliberately skips "error" entries
+      // so an unrelated echo can never wipe a genuinely failed bubble.
       let consumed: PendingUserMessage | null = null;
       set((state) => {
-        const sending = state.pendingMessages
+        const inConversation = state.pendingMessages
           .map((m, i) => ({ m, i }))
-          .filter(
-            ({ m }) =>
-              m.status === "sending" && m.conversationId === conversationId,
-          );
-        if (sending.length === 0) return state;
-        const exact = sending.find(({ m }) => m.content === content);
-        const target = exact ?? sending[0];
+          .filter(({ m }) => m.conversationId === conversationId);
+        const exact = inConversation.find(({ m }) => m.content === content);
+        const target =
+          exact ?? inConversation.find(({ m }) => m.status === "sending");
+        if (!target) return state;
         consumed = target.m;
         return {
           pendingMessages: [

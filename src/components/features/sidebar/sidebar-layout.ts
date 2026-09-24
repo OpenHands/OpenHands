@@ -23,8 +23,8 @@ export function sidebarHeaderRowClassName(collapsed: boolean): string {
 }
 
 export const SIDEBAR_ROW_INTERACTIVE_CLASS = {
-  active: "bg-tertiary text-white font-normal",
-  idle: "text-muted hover:text-white hover:bg-surface-raised",
+  active: "bg-tertiary text-contrast font-normal",
+  idle: "text-muted hover:text-contrast hover:bg-surface-raised",
 } as const;
 
 export function sidebarNavListClassName(collapsed: boolean): string {
@@ -64,7 +64,9 @@ export function sidebarCollapsedIconGlyphClassName(active: boolean): string {
     // Full width inside the 36px-tall slot; `pl-2.5` aligns with expanded `px-2.5` rows.
     // Do not set a narrow `w-4.5` here — with horizontal padding it shrinks the glyph.
     "relative z-[1] flex h-full w-full items-center justify-start pl-2.5 [&_svg]:shrink-0",
-    active ? "text-white font-normal" : "text-muted group-hover:text-white",
+    active
+      ? "text-contrast font-normal"
+      : "text-muted group-hover:text-contrast",
   );
 }
 
@@ -92,5 +94,5 @@ export const SIDEBAR_COLLAPSE_TOGGLE_OVERLAY_CLASS = cn(
   "items-center justify-center rounded-md",
   navInteractiveTransitionClassName,
   "cursor-pointer",
-  "text-muted hover:text-white hover:bg-surface-raised",
+  "text-muted hover:text-contrast hover:bg-surface-raised",
 );

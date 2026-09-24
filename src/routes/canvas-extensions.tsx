@@ -128,7 +128,7 @@ export default function CanvasExtensionsScreen() {
 
           {unsupported ? (
             <div className={extensionModuleEmptyStateClassName}>
-              <h3 className="text-sm font-semibold text-white">
+              <h3 className="text-sm font-semibold text-contrast">
                 {t(I18nKey.SETUP$UNAVAILABLE_TITLE)}
               </h3>
               <p className="mt-2 text-sm text-tertiary-light">

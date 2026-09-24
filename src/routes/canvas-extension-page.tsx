@@ -87,7 +87,7 @@ export default function CanvasExtensionPage() {
     return (
       <main className="flex h-full items-center justify-center p-8">
         <div className="max-w-lg rounded-xl border border-border bg-base-secondary p-6 text-center">
-          <h1 className="text-lg font-semibold text-white">
+          <h1 className="text-lg font-semibold text-contrast">
             {t(I18nKey.SETUP$UNAVAILABLE_TITLE)}
           </h1>
           <p className="mt-2 text-sm text-tertiary-light">

@@ -56,7 +56,7 @@ export function GitControlBarBranchButton({
         <BranchIcon width={12} height={12} color="white" />
       </div>
       <div
-        className="font-normal text-white text-sm leading-5 truncate"
+        className="font-normal text-contrast text-sm leading-5 truncate"
         title={buttonText}
       >
         {buttonText}

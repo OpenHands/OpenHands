@@ -187,10 +187,10 @@ export function GitBranchDropdown({
 
   return (
     <div className={cn("relative", className)}>
-      <div className="group relative text-muted hover:text-white">
+      <div className="group relative text-muted hover:text-contrast">
         <div className="absolute left-2 top-1/2 transform -translate-y-1/2 z-10">
           {isLoadingState ? (
-            <div className="animate-spin h-4 w-4 border-2 border-transparent border-t-white rounded-full" />
+            <div className="animate-spin h-4 w-4 border-2 border-transparent border-t-contrast rounded-full" />
           ) : (
             <BranchIcon width={16} height={16} />
           )}

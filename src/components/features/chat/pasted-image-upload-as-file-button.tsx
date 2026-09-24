@@ -25,7 +25,7 @@ export function PastedImageUploadAsFileButton({
         placement="bottom"
         offset={10}
         shouldFlip={false}
-        tooltipClassName="bg-white text-black text-xs font-medium leading-5"
+        tooltipClassName="bg-contrast text-contrast-foreground text-xs font-medium leading-5"
       >
         <button
           type="button"
