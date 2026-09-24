@@ -6,7 +6,7 @@ description: |
   storage, ingress, and optional cluster RBAC.
 type: application
 # Chart-level version. Bump on chart changes.
-version: 0.1.0
+version: 0.1.1
 # Default appVersion pins the published agent-canvas image tag from
 # config/defaults.json (`versions.agentCanvas`). Override via
 # `--set image.tag=...` to pull a different build (e.g. `main`, `latest`,

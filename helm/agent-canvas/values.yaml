@@ -42,7 +42,12 @@ serviceAccount:
   create: true
   name: ""
   annotations: {}
-  automountServiceAccountToken: true
+  # Off by default: the agent executes arbitrary (LLM-directed) code inside the
+  # pod, and with rbac.enabled=false (the default) the mounted token grants it
+  # nothing it needs. Avoid handing agent-driven processes a cluster credential
+  # by default; set this back to true only when a deployment knowingly enables
+  # and relies on in-cluster API access.
+  automountServiceAccountToken: false
 
 rbac:
   # Master switch for creating any RoleBinding / ClusterRoleBinding.
