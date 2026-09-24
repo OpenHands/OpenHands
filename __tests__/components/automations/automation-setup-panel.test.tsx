@@ -137,6 +137,36 @@ describe("AutomationSetupPanel", () => {
     );
   });
 
+
+  it("sends each comma-separated repository to the automation service", async () => {
+    vi.mocked(AutomationService.validateDraft).mockResolvedValue({
+      valid: true,
+      errors: [],
+    });
+
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.type(
+      screen.getByTestId("automation-setup-repository"),
+      "OpenHands/OpenHands, OpenHands/software-agent-sdk",
+    );
+    await user.click(screen.getByTestId("automation-setup-test"));
+
+    await waitFor(() =>
+      expect(AutomationService.validateDraft).toHaveBeenCalledWith(
+        expect.objectContaining({
+          draft: expect.objectContaining({
+            repos: [
+              { url: "OpenHands/OpenHands", provider: "github" },
+              { url: "OpenHands/software-agent-sdk", provider: "github" },
+            ],
+          }),
+        }),
+      ),
+    );
+  });
+
   it("creates plugin drafts with the selected plugin source", async () => {
     vi.mocked(AutomationService.createAutomationDraft).mockResolvedValue({
       id: "automation-1",
