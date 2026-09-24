@@ -1,7 +1,6 @@
 export type AutomationSetupKind = "prompt" | "plugin" | "custom";
 export type AutomationSetupTriggerKind = "cron" | "event";
 export type AutomationSetupFrequency =
-  | "once"
   | "hourly"
   | "daily"
   | "weekdays"

@@ -22,7 +22,6 @@ const AUTOMATION_SETUP_TRIGGER_KINDS: AutomationSetupTriggerKind[] = [
   "event",
 ];
 const AUTOMATION_SETUP_FREQUENCIES: AutomationSetupFrequency[] = [
-  "once",
   "hourly",
   "daily",
   "weekdays",
