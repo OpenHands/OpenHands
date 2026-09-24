@@ -47,4 +47,55 @@ describe("combineUsageMetrics", () => {
     const combined = combineUsageMetrics(stats);
     expect(combined.accumulated_token_usage?.per_turn_token).toBe(2000);
   });
+
+  it("tracks the live entry after a profile switch, not the frozen pre-switch one", () => {
+    // switchProfile starts a new usage keyed `profile:<name>:<uuid>` and the
+    // old "default" entry freezes. The live context fill is the new entry's.
+    const stats = {
+      usage_to_metrics: {
+        default: metricsEntry(9000, 100),
+        "profile:fast:00000000-0000-0000-0000-000000000000": metricsEntry(
+          3000,
+          50,
+        ),
+        condenser: metricsEntry(8000, 400),
+      },
+    } as unknown as RuntimeConversationStats;
+    const combined = combineUsageMetrics(stats);
+    expect(combined.accumulated_token_usage?.per_turn_token).toBe(3000);
+  });
+
+  it("does not depend on the primary entry being keyed exactly 'default'", () => {
+    // The server documents arbitrary usage ids; fixtures from #13939 key the
+    // primary entry "agent".
+    const stats = {
+      usage_to_metrics: {
+        agent: metricsEntry(2500, 100),
+        condenser: metricsEntry(8000, 400),
+      },
+    } as unknown as RuntimeConversationStats;
+    const combined = combineUsageMetrics(stats);
+    expect(combined.accumulated_token_usage?.per_turn_token).toBe(2500);
+  });
+
+  it("excludes non-default condenser usages such as planning_condenser", () => {
+    const stats = {
+      usage_to_metrics: {
+        default: metricsEntry(2000, 100),
+        planning_condenser: metricsEntry(9500, 400),
+      },
+    } as unknown as RuntimeConversationStats;
+    const combined = combineUsageMetrics(stats);
+    expect(combined.accumulated_token_usage?.per_turn_token).toBe(2000);
+  });
+
+  it("falls back to the max when every entry is a condenser", () => {
+    const stats = {
+      usage_to_metrics: {
+        condenser: metricsEntry(8000, 400),
+      },
+    } as unknown as RuntimeConversationStats;
+    const combined = combineUsageMetrics(stats);
+    expect(combined.accumulated_token_usage?.per_turn_token).toBe(8000);
+  });
 });

@@ -25,12 +25,17 @@ export function combineUsageMetrics(
   let combinedTokenUsage: TokenUsage | null = null;
 
   // `per_turn_token` is the agent's current context fill: a property of the
-  // primary ("default") usage's last turn, not a total across services. A
-  // secondary usage such as the condenser keeps its own (typically larger)
-  // last-turn size after the agent compacts, so a max across entries would
-  // pin the context meter to that stale value and the compaction hook would
-  // never observe the drop. Prefer the primary entry; fall back to the max
-  // only when no "default" usage is present.
+  // primary agent usage's last turn, not a total across services. The server
+  // keys usage entries with arbitrary ids ("default", "profile:<name>:<uuid>",
+  // "condenser", "planning_condenser", ...), and a profile switch starts a
+  // NEW entry while the old one stays frozen (see switchProfile in
+  // agent-server-conversation-service.api.ts), so matching one exact key
+  // would pin the meter to a stale entry. Condenser usages keep their own
+  // (typically larger) last-turn size after the agent compacts, so a max
+  // across entries pins the meter too, and the compaction hook never
+  // observes the drop. Take the last entry whose id is not a condenser
+  // entry: insertion order tracks recency, so that is the live agent usage.
+  // Fall back to the max only when nothing qualifies.
   let primaryPerTurnToken: number | null = null;
 
   // Iterate through all metrics and combine them
@@ -45,7 +50,7 @@ export function combineUsageMetrics(
 
     // Combine token usage
     if (metrics.accumulated_token_usage) {
-      if (usageId === "default") {
+      if (!usageId.includes("condenser")) {
         primaryPerTurnToken = metrics.accumulated_token_usage.per_turn_token;
       }
       if (combinedTokenUsage === null) {
