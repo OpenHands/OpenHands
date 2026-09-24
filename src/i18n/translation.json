@@ -14279,7 +14279,6 @@
     "uk": "Повідомлено користувацькі метадані завдання.",
     "ca": "S'han informat metadades personalitzades de la tasca."
   },
-
   "AUTOMATIONS$DETAIL$VIEW_CONVERSATION_FOR_RUN": {
     "en": "View conversation for run at {{timestamp}}",
     "ja": "{{timestamp}} の実行の会話を表示",
@@ -14297,7 +14296,6 @@
     "uk": "Переглянути розмову для запуску о {{timestamp}}",
     "ca": "Mostra la conversa de l'execució a {{timestamp}}"
   },
-
   "AUTOMATIONS$DETAIL$PHASE": {
     "ar": "المرحلة",
     "ca": "Fase",
@@ -42143,5 +42141,22 @@
     "de": "Sie haben noch keine Geheimnisse gespeichert.",
     "uk": "Ви ще не зберегли жодного секрету.",
     "ca": "Encara no has desat cap secret."
+  },
+  "CONVERSATION$FAILED_TO_RESUME": {
+    "en": "Failed to resume the conversation. Please try again.",
+    "ja": "会話を再開できませんでした。もう一度お試しください。",
+    "zh-CN": "无法恢复对话，请重试。",
+    "zh-TW": "無法恢復對話，請再試一次。",
+    "ko-KR": "대화를 재개하지 못했습니다. 다시 시도해 주세요.",
+    "no": "Kunne ikke gjenoppta samtalen. Prøv igjen.",
+    "ar": "تعذّر استئناف المحادثة. يُرجى المحاولة مرة أخرى.",
+    "de": "Die Unterhaltung konnte nicht fortgesetzt werden. Bitte versuchen Sie es erneut.",
+    "fr": "Impossible de reprendre la conversation. Veuillez réessayer.",
+    "it": "Impossibile riprendere la conversazione. Riprova.",
+    "pt": "Não foi possível retomar a conversa. Tente novamente.",
+    "es": "No se pudo reanudar la conversación. Inténtalo de nuevo.",
+    "ca": "No s'ha pogut reprendre la conversa. Torna-ho a provar.",
+    "tr": "Konuşma sürdürülemedi. Lütfen tekrar deneyin.",
+    "uk": "Не вдалося відновити розмову. Спробуйте ще раз."
   }
 }
