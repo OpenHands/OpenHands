@@ -7,16 +7,18 @@ import { useSaveSettings } from "#/hooks/mutation/use-save-settings";
 import { useAgentSettingsSchema } from "#/hooks/query/use-agent-settings-schema";
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
 import { SettingsInput } from "#/components/features/settings/settings-input";
-import { SettingsSwitch } from "#/components/features/settings/settings-switch";
 import { SchemaField } from "#/components/features/settings/sdk-settings/schema-field";
 import { AcpCredentialsSection } from "#/components/features/settings/acp-credentials-section";
 import { useAcpCredentialForm } from "#/hooks/use-acp-credential-form";
 import { BrandButton } from "#/components/features/settings/brand-button";
+import {
+  buildProfileToolsValue,
+  readProfileTools,
+  type ProfileToolSpec,
+} from "#/constants/profile-tools";
 import { ProfileScopeList } from "#/components/features/settings/agent-profiles/profile-scope-list";
 import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
-import { formControlSwitchDescriptionClassName } from "#/utils/form-control-classes";
-import { cn } from "#/utils/utils";
 import { SettingsFieldSchema, SettingsValue } from "#/types/settings";
 import {
   coerceFieldValue,
@@ -27,10 +29,7 @@ import {
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
 import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
-import {
-  resolveSchemaFieldDescription,
-  resolveSchemaFieldLabel,
-} from "#/utils/sdk-settings-field-metadata";
+
 import {
   ACP_PROVIDERS,
   ACP_CUSTOM_PRESET_KEY,
@@ -46,11 +45,15 @@ import {
   sameScopeSelection,
   type ProfileScopeMode,
 } from "#/constants/profile-scope";
+import {
+  useResolvedProfileTools,
+  useToolCatalog,
+} from "#/hooks/query/use-tool-catalog";
 import { flattenMcpConfig } from "#/utils/mcp-installed-servers";
 import { parseMcpConfig } from "#/utils/mcp-config";
 import {
   agentProfileSupportsSecretRefs,
-  agentProfileSupportsSwitchLlmTool,
+  agentProfileSupportsToolCatalog,
 } from "#/api/agent-profiles-service/profile-field-support";
 import { useSearchSecrets } from "#/hooks/query/use-get-secrets";
 
@@ -65,11 +68,10 @@ type AgentSettingsSnapshot = {
   isCustomAcpModel: boolean;
 };
 
-const ENABLE_SUB_AGENTS_FIELD_KEY = "enable_sub_agents";
-const ENABLE_SWITCH_LLM_TOOL_FIELD_KEY = "enable_switch_llm_tool";
 const TOOL_CONCURRENCY_FIELD_KEY = "tool_concurrency_limit";
 const MCP_SERVER_REFS_KEY = "mcp_server_refs";
 const SECRET_REFS_KEY = "secret_refs";
+const TOOLS_KEY = "tools";
 const COMMAND_PLACEHOLDER_FALLBACK = "npx -y <package-name>";
 const ACP_CUSTOM_MODEL_KEY = "__custom_model__";
 const EMPTY_AGENT_SETTINGS_SNAPSHOT: AgentSettingsSnapshot = {
@@ -98,28 +100,6 @@ function detectPreset(
   return ACP_CUSTOM_PRESET_KEY;
 }
 
-function findEnableSubAgentsField(
-  fields: SettingsFieldSchema[] | undefined,
-): SettingsFieldSchema | undefined {
-  return fields?.find((field) => field.key === ENABLE_SUB_AGENTS_FIELD_KEY);
-}
-
-function getEnableSubAgentsValue(
-  settingsValue: unknown,
-  field: SettingsFieldSchema | undefined,
-) {
-  if (typeof settingsValue === "boolean") return settingsValue;
-  return field?.default === true;
-}
-
-function getEnableSwitchLlmToolValue(
-  settingsValue: unknown,
-  field: SettingsFieldSchema | undefined,
-) {
-  if (typeof settingsValue === "boolean") return settingsValue;
-  return field?.default === true;
-}
-
 function isKnownAcpModel(
   provider: ACPProviderConfig | undefined,
   model: string,
@@ -137,10 +117,9 @@ export type AgentProfileFieldsDraft =
   | {
       agent_kind: "openhands";
       mcp_server_refs: string[] | null;
-      enable_sub_agents: boolean;
-      enable_switch_llm_tool?: boolean;
       tool_concurrency_limit?: number;
       secret_refs?: string[] | null;
+      tools?: ProfileToolSpec[] | null;
     }
   | {
       agent_kind: "acp";
@@ -161,16 +140,6 @@ export interface AgentProfileFieldsInput {
   isDefaultProviderCommand: boolean;
   commandTokens: string[];
   acpModel: string;
-  subAgentsEnabled: boolean;
-  switchLlmToolField?: SettingsFieldSchema;
-  switchLlmToolEnabled: boolean;
-  /**
-   * Whether the backend's *profile* model accepts `enable_switch_llm_tool`.
-   * Tracked apart from {@link switchLlmToolField} because the settings schema
-   * and the profile model gained the field in different releases — see
-   * {@link agentProfileSupportsSwitchLlmTool}.
-   */
-  switchLlmToolSupportedOnProfile: boolean;
   toolConcurrencyField?: SettingsFieldSchema;
   toolConcurrency: string | boolean;
   mcpMode: ProfileScopeMode;
@@ -179,6 +148,16 @@ export interface AgentProfileFieldsInput {
   selectedSecrets: string[];
   /** Whether the backend's *profile* model accepts `secret_refs`. */
   secretRefsSupportedOnProfile: boolean;
+  toolsMode?: ProfileScopeMode;
+  selectedTools?: string[];
+  /** Stored params per tool, kept so the editor cannot drop what it ignores. */
+  toolParams?: Record<string, Record<string, SettingsValue>>;
+  /**
+   * Whether the backend serves the tool catalog (and so offers a picker).
+   * Defaults to false: a caller that knows nothing about tools must leave the
+   * stored selection alone rather than clear it.
+   */
+  toolCatalogSupported?: boolean;
 }
 
 /**
@@ -208,10 +187,6 @@ export function buildAgentProfileFields(
     isDefaultProviderCommand,
     commandTokens,
     acpModel,
-    subAgentsEnabled,
-    switchLlmToolField,
-    switchLlmToolEnabled,
-    switchLlmToolSupportedOnProfile,
     toolConcurrencyField,
     toolConcurrency,
     mcpMode,
@@ -219,6 +194,10 @@ export function buildAgentProfileFields(
     secretsMode,
     selectedSecrets,
     secretRefsSupportedOnProfile,
+    toolsMode = "standard",
+    selectedTools = [],
+    toolParams = {},
+    toolCatalogSupported = false,
   } = input;
   // Both are base-model fields, so they ride both variants. `mcp_server_refs`
   // needs no version gate — it has existed since agent profiles shipped, below
@@ -244,21 +223,25 @@ export function buildAgentProfileFields(
       acp_args: null,
     };
   }
+  // Omitted, not nulled, on a backend without the catalog: the save is a
+  // whole-profile overwrite, so emitting `null` would clear a selection made
+  // elsewhere against a picker this build never showed.
+  const toolSelection = toolCatalogSupported
+    ? {
+        tools: buildProfileToolsValue({
+          mode: toolsMode,
+          selected: selectedTools,
+          params: toolParams,
+        }),
+      }
+    : {};
   const fields: Extract<AgentProfileFieldsDraft, { agent_kind: "openhands" }> =
     {
       agent_kind: "openhands",
       ...mcpRefs,
-      enable_sub_agents: subAgentsEnabled,
       ...secretRefs,
+      ...toolSelection,
     };
-  if (switchLlmToolField && switchLlmToolSupportedOnProfile) {
-    // Two conditions, two different questions. The schema tells us the field
-    // is a real setting on this server; the version gate tells us its
-    // *profile* model will accept it. Between agent-server 1.29.0 and 1.30.x
-    // the first is true and the second is not, and the whole-profile
-    // overwrite is ``extra="forbid"`` — an unknown key 422s the entire save.
-    fields.enable_switch_llm_tool = switchLlmToolEnabled;
-  }
   if (toolConcurrencyField) {
     // Reuse the schema-driven coercion/validation; throws on bad input.
     const coerced = coerceFieldValue(toolConcurrencyField, toolConcurrency);
@@ -313,12 +296,21 @@ interface AgentSettingsScreenProps {
    * stored profile's fields.
    */
   agentSettingsOverride?: Record<string, SettingsValue> | null;
+  /**
+   * Identity of the profile being edited (embedded mode). The tool picker asks
+   * the server what a draft resolves to, and a draft is only resolvable with a
+   * name and an LLM reference.
+   */
+  profileName?: string;
+  llmProfileRef?: string | null;
   onSaveControlChange?: (control: AgentSettingsSaveControl) => void;
 }
 
 export function AgentSettingsScreen({
   embedded = false,
   agentSettingsOverride = null,
+  profileName,
+  llmProfileRef = null,
   onSaveControlChange,
 }: AgentSettingsScreenProps = {}) {
   const { t } = useTranslation("openhands");
@@ -332,49 +324,10 @@ export function AgentSettingsScreen({
     settings?.agent_settings_schema,
   );
 
-  // --- Sub-agents (OpenHands path) ---
   const fields = React.useMemo(
     () => schema?.sections.flatMap((section) => section.fields),
     [schema],
   );
-  const subAgentsField = findEnableSubAgentsField(fields);
-  const initialSubAgentsEnabled = React.useMemo(
-    () =>
-      getEnableSubAgentsValue(
-        agentSettingsSource?.[ENABLE_SUB_AGENTS_FIELD_KEY],
-        subAgentsField,
-      ),
-    [subAgentsField, agentSettingsSource],
-  );
-  const [subAgentsEnabled, setSubAgentsEnabled] = useState(
-    initialSubAgentsEnabled,
-  );
-
-  // --- LLM switching tool (OpenHands path) ---
-  // Surfaced only when the backend schema exposes the field, so older
-  // agent-servers that predate ``enable_switch_llm_tool`` hide it cleanly.
-  const switchLlmToolField = fields?.find(
-    (field) => field.key === ENABLE_SWITCH_LLM_TOOL_FIELD_KEY,
-  );
-  const initialSwitchLlmToolEnabled = React.useMemo(
-    () =>
-      getEnableSwitchLlmToolValue(
-        agentSettingsSource?.[ENABLE_SWITCH_LLM_TOOL_FIELD_KEY],
-        switchLlmToolField,
-      ),
-    [switchLlmToolField, agentSettingsSource],
-  );
-  const [switchLlmToolEnabled, setSwitchLlmToolEnabled] = useState(
-    initialSwitchLlmToolEnabled,
-  );
-  // Embedded mode saves an AgentProfile, not global settings, and the profile
-  // model gained this field four releases after the settings schema did. The
-  // global page is unaffected — that endpoint has accepted the key since
-  // 1.22.0 — so the extra gate applies to the profile editor alone.
-  const switchLlmToolSupportedOnProfile = agentProfileSupportsSwitchLlmTool();
-  const showSwitchLlmTool =
-    Boolean(switchLlmToolField) &&
-    (!embedded || switchLlmToolSupportedOnProfile);
 
   // --- Parallel tool calls (OpenHands path) ---
   // Surfaced only when the backend schema exposes the field, so older
@@ -389,6 +342,81 @@ export function AgentSettingsScreen({
   }, [toolConcurrencyField, agentSettingsSource]);
   const [toolConcurrency, setToolConcurrency] = useState<string | boolean>(
     initialToolConcurrency,
+  );
+
+  // --- Tools (OpenHands only) ---
+  // Offered only where the server serves its catalog: which tools a user may
+  // pick, and what a profile resolves to, are facts the server owns
+  // (software-agent-sdk#4958).
+  const toolCatalogSupported = agentProfileSupportsToolCatalog();
+  const initialTools = React.useMemo(
+    () => readProfileTools(agentSettingsSource?.[TOOLS_KEY]),
+    [agentSettingsSource],
+  );
+  const [toolsMode, setToolsMode] = useState<ProfileScopeMode>(
+    initialTools.mode,
+  );
+  const [selectedTools, setSelectedTools] = useState<string[]>(
+    initialTools.selected,
+  );
+  // Whether this selection is the user's rather than an unfilled default. A
+  // stored list is theirs even when empty, so `[]` cannot stand in for "not
+  // chosen yet" — seeding off its length would refill a deliberately bare
+  // agent the first time the mode is toggled.
+  const toolsChosenRef = useRef(initialTools.mode === "custom");
+  const { data: toolCatalog } = useToolCatalog({
+    enabled: embedded && toolCatalogSupported,
+  });
+  const standardToolsDraft = React.useMemo(
+    () =>
+      profileName && llmProfileRef
+        ? {
+            name: profileName,
+            agent_kind: "openhands",
+            llm_profile_ref: llmProfileRef,
+          }
+        : null,
+    [profileName, llmProfileRef],
+  );
+  const { data: standardToolNames } = useResolvedProfileTools({
+    draft: standardToolsDraft,
+    enabled: embedded && toolCatalogSupported,
+  });
+  // A draft the server has not usefully answered for yet: still in flight, or
+  // failed, or answered with nothing. Deliberately not the query's `isPending`,
+  // which is also true when there is no draft to ask about (a profile being
+  // named) — that would strand the create form. An empty answer counts as no
+  // answer because the standard set is never legitimately empty, and seeding a
+  // selection from it would save an agent with no tools at all.
+  const standardToolsUnresolved =
+    standardToolsDraft !== null && !standardToolNames?.length;
+  /** Pickable tools this runtime can run, plus anything the profile stores. */
+  const toolPickerCatalog = React.useMemo(() => {
+    const items = (toolCatalog ?? [])
+      .filter(({ user_selectable: selectable, usable }) => selectable && usable)
+      .map(({ name, description }) => ({ name, description }));
+    // A stored name outside the catalog rides along: the save overwrites the
+    // whole profile, so hiding it would silently drop the user's choice.
+    initialTools.selected.forEach((name) => {
+      if (!items.some((item) => item.name === name))
+        items.push({ name, description: undefined });
+    });
+    return items;
+  }, [toolCatalog, initialTools]);
+  /** The server's blurb for a tool, by name. */
+  const toolDescriptions = React.useMemo(
+    () =>
+      new Map(
+        (toolCatalog ?? []).map(({ name, description }) => [name, description]),
+      ),
+    [toolCatalog],
+  );
+  const orderedSelectedTools = React.useMemo(
+    () =>
+      toolPickerCatalog
+        .map(({ name }) => name)
+        .filter((name) => selectedTools.includes(name)),
+    [toolPickerCatalog, selectedTools],
   );
 
   // --- MCP servers (both variants; a base-model field) ---
@@ -596,16 +624,6 @@ export function AgentSettingsScreen({
     }
   }, [settings, agentSettingsOverride]);
 
-  // Sync the sub-agents toggle when settings reload
-  useEffect(() => {
-    setSubAgentsEnabled(initialSubAgentsEnabled);
-  }, [initialSubAgentsEnabled]);
-
-  // Sync the LLM-switching toggle when settings reload
-  useEffect(() => {
-    setSwitchLlmToolEnabled(initialSwitchLlmToolEnabled);
-  }, [initialSwitchLlmToolEnabled]);
-
   // Sync the parallel-tool-calls input when settings reload
   useEffect(() => {
     setToolConcurrency(initialToolConcurrency);
@@ -616,6 +634,13 @@ export function AgentSettingsScreen({
     setMcpMode(initialMcpRefs.mode);
     setSelectedMcpServers(initialMcpRefs.selected);
   }, [initialMcpRefs]);
+
+  // Sync the tool selection when settings reload
+  useEffect(() => {
+    setToolsMode(initialTools.mode);
+    setSelectedTools(initialTools.selected);
+    toolsChosenRef.current = initialTools.mode === "custom";
+  }, [initialTools]);
 
   // Sync the secret scope when settings reload
   useEffect(() => {
@@ -630,7 +655,6 @@ export function AgentSettingsScreen({
   const buildFieldsRef = useRef<() => AgentProfileFieldsDraft>(() => ({
     agent_kind: "openhands",
     mcp_server_refs: null,
-    enable_sub_agents: false,
   }));
   const stableBuildFields = useCallback(() => buildFieldsRef.current(), []);
   const credFormRef = useRef(acpCredentialForm);
@@ -654,17 +678,20 @@ export function AgentSettingsScreen({
   const secretScopeDirty =
     secretsMode !== initialSecretRefs.mode ||
     !sameScopeSelection(orderedSelectedSecrets, initialSecretRefs.selected);
+  // `tools` is OpenHands-only, but tracked here with the other profile fields.
+  const toolSelectionDirty =
+    toolsMode !== initialTools.mode ||
+    !sameScopeSelection(orderedSelectedTools, initialTools.selected);
   const settingsDirty =
     agentType !== loadedSnapshot.agentType ||
     mcpScopeDirty ||
     secretScopeDirty ||
+    toolSelectionDirty ||
     (agentType === "acp"
       ? commandText !== loadedSnapshot.commandText ||
         acpModel !== loadedSnapshot.acpModel ||
         isCustomAcpModel !== loadedSnapshot.isCustomAcpModel
-      : subAgentsEnabled !== initialSubAgentsEnabled ||
-        switchLlmToolEnabled !== initialSwitchLlmToolEnabled ||
-        toolConcurrency !== initialToolConcurrency);
+      : toolConcurrency !== initialToolConcurrency);
   const credentialsDirty = acpCredentialForm.isDirty;
   const isAnyDirty = settingsDirty || credentialsDirty;
   useEffect(() => {
@@ -724,10 +751,6 @@ export function AgentSettingsScreen({
       isDefaultProviderCommand,
       commandTokens,
       acpModel,
-      subAgentsEnabled,
-      switchLlmToolField,
-      switchLlmToolEnabled,
-      switchLlmToolSupportedOnProfile,
       toolConcurrencyField,
       toolConcurrency,
       mcpMode,
@@ -735,6 +758,10 @@ export function AgentSettingsScreen({
       secretsMode,
       selectedSecrets: orderedSelectedSecrets,
       secretRefsSupportedOnProfile,
+      toolsMode,
+      selectedTools: orderedSelectedTools,
+      toolParams: initialTools.params,
+      toolCatalogSupported,
     });
 
   const isSavingAny = isSaving || acpCredentialForm.isSaving;
@@ -801,19 +828,10 @@ export function AgentSettingsScreen({
         },
       );
     } else {
-      // OpenHands path: save agent_kind + sub-agents toggle + the LLM-switching
-      // toggle + parallel tool calls
+      // OpenHands path: save agent_kind + parallel tool calls
       const agentSettingsDiff: Record<string, SettingsValue> = {
         agent_kind: "openhands",
-        enable_sub_agents: subAgentsEnabled,
       };
-
-      if (switchLlmToolField) {
-        // Schema-guarded like ``tool_concurrency_limit`` — older agent-servers
-        // that predate the field never receive the key.
-        agentSettingsDiff[ENABLE_SWITCH_LLM_TOOL_FIELD_KEY] =
-          switchLlmToolEnabled;
-      }
 
       if (toolConcurrencyField) {
         let coerced: SettingsValue;
@@ -856,34 +874,6 @@ export function AgentSettingsScreen({
       );
     }
   };
-
-  // Sub-agents field metadata for OpenHands section
-  const subAgentsLabel = subAgentsField
-    ? resolveSchemaFieldLabel(t, subAgentsField.key, subAgentsField.label)
-    : t(I18nKey.SCHEMA$ENABLE_SUB_AGENTS$LABEL);
-  const subAgentsDescription = subAgentsField
-    ? resolveSchemaFieldDescription(
-        t,
-        subAgentsField.key,
-        subAgentsField.description,
-      )
-    : t(I18nKey.SCHEMA$ENABLE_SUB_AGENTS$DESCRIPTION);
-
-  // LLM-switching field metadata for OpenHands section
-  const switchLlmToolLabel = switchLlmToolField
-    ? resolveSchemaFieldLabel(
-        t,
-        switchLlmToolField.key,
-        switchLlmToolField.label,
-      )
-    : t(I18nKey.SCHEMA$ENABLE_SWITCH_LLM_TOOL$LABEL);
-  const switchLlmToolDescription = switchLlmToolField
-    ? resolveSchemaFieldDescription(
-        t,
-        switchLlmToolField.key,
-        switchLlmToolField.description,
-      )
-    : t(I18nKey.SCHEMA$ENABLE_SWITCH_LLM_TOOL$DESCRIPTION);
 
   return (
     <div
@@ -936,54 +926,6 @@ export function AgentSettingsScreen({
           }
         }}
       />
-
-      {!isAcp && (
-        <div className="flex flex-col gap-1.5">
-          <SettingsSwitch
-            testId="agent-settings-enable-sub-agents"
-            isToggled={subAgentsEnabled}
-            onToggle={(val) => {
-              setSubAgentsEnabled(val);
-            }}
-          >
-            {subAgentsLabel}
-          </SettingsSwitch>
-          {subAgentsDescription ? (
-            <Typography.Paragraph
-              className={cn(
-                formControlSwitchDescriptionClassName,
-                "text-tertiary-alt text-xs leading-5",
-              )}
-            >
-              {subAgentsDescription}
-            </Typography.Paragraph>
-          ) : null}
-        </div>
-      )}
-
-      {!isAcp && showSwitchLlmTool ? (
-        <div className="flex flex-col gap-1.5">
-          <SettingsSwitch
-            testId="agent-settings-enable-switch-llm-tool"
-            isToggled={switchLlmToolEnabled}
-            onToggle={(val) => {
-              setSwitchLlmToolEnabled(val);
-            }}
-          >
-            {switchLlmToolLabel}
-          </SettingsSwitch>
-          {switchLlmToolDescription ? (
-            <Typography.Paragraph
-              className={cn(
-                formControlSwitchDescriptionClassName,
-                "text-tertiary-alt text-xs leading-5",
-              )}
-            >
-              {switchLlmToolDescription}
-            </Typography.Paragraph>
-          ) : null}
-        </div>
-      ) : null}
 
       {!isAcp && toolConcurrencyField ? (
         <SchemaField
@@ -1067,6 +1009,80 @@ export function AgentSettingsScreen({
               mcpMode === "custom"
                 ? I18nKey.SETTINGS$AGENT_PROFILE_MCP_CHOOSE_HINT
                 : I18nKey.SETTINGS$AGENT_PROFILE_MCP_ALL_HINT,
+            )}
+          </Typography.Text>
+        </div>
+      ) : null}
+
+      {showProfileScopeFields && !isAcp && toolCatalogSupported ? (
+        <div className="flex flex-col gap-2.5">
+          <Typography.Text className="text-sm">
+            {t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS)}
+          </Typography.Text>
+          <SettingsDropdownInput
+            testId="agent-settings-tools-mode"
+            name="agent-tools-mode"
+            label=""
+            items={[
+              {
+                key: "standard",
+                label: t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_STANDARD),
+              },
+              {
+                key: "custom",
+                label: t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_CHOOSE),
+              },
+            ]}
+            selectedKey={toolsMode}
+            isDisabled={isSavingAny || standardToolsUnresolved}
+            onSelectionChange={(key) => {
+              if (!key) return;
+              const mode = key as ProfileScopeMode;
+              setToolsMode(mode);
+              // Start an unchosen selection from what the server says the
+              // standard set is, so switching mode never silently drops tools.
+              if (mode === "custom" && !toolsChosenRef.current) {
+                toolsChosenRef.current = true;
+                setSelectedTools(
+                  (standardToolNames ?? []).filter((name) =>
+                    toolPickerCatalog.some((entry) => entry.name === name),
+                  ),
+                );
+              }
+            }}
+          />
+          {toolsMode === "standard" ? (
+            <ProfileScopeList
+              testId="agent-settings-tool"
+              items={(standardToolNames ?? []).map((name) => ({
+                name,
+                description: toolDescriptions.get(name),
+              }))}
+              selected={standardToolNames ?? []}
+              isDisabled
+              onToggle={() => {}}
+            />
+          ) : (
+            <ProfileScopeList
+              testId="agent-settings-tool"
+              items={toolPickerCatalog}
+              selected={orderedSelectedTools}
+              isDisabled={isSavingAny}
+              onToggle={(name, checked) => {
+                toolsChosenRef.current = true;
+                setSelectedTools((prev) =>
+                  checked
+                    ? [...prev, name]
+                    : prev.filter((entry) => entry !== name),
+                );
+              }}
+            />
+          )}
+          <Typography.Text className="text-xs text-tertiary-alt">
+            {t(
+              toolsMode === "custom"
+                ? I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_CHOOSE_HINT
+                : I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_STANDARD_HINT,
             )}
           </Typography.Text>
         </div>
