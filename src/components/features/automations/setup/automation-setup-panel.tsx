@@ -19,6 +19,7 @@ import {
   Zap,
 } from "lucide-react";
 import AutomationService from "#/api/automation-service/automation-service.api";
+import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import {
   patchAutomationSetupDraft,
   subscribeAutomationSetupDraft,
@@ -33,6 +34,7 @@ import {
   getAutomationEndpoint,
 } from "#/manifests/automation-interface";
 import { packTarGzip } from "#/utils/tar-gzip";
+import { AvailableLanguages } from "#/i18n";
 import { I18nKey } from "#/i18n/declaration";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import {
@@ -44,9 +46,21 @@ import { cn } from "#/utils/utils";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { useNavigation } from "#/context/navigation-context";
 import type {
+  AutomationDraftApiResponse,
+  AutomationDraftEndpoint,
   InterfaceEndpointName,
   SetupRequestBody,
 } from "#/manifests/types";
+import type { AutomationRun } from "#/types/automation";
+import { formatRelativeTime } from "#/utils/format-relative-time";
+import { ActivityLogItem } from "../detail/activity-log-item";
+import {
+  buildAutomationDraftTags,
+  buildAutomationSetupModeTags,
+  getAutomationDraftIdFromTags,
+  hasAutomationSetupModeTag,
+  removeAutomationDraftTags,
+} from "#/utils/automation-draft-tags";
 
 const DEFAULT_TIMEZONE = "America/New_York";
 const DEFAULT_TIME = "09:00";
@@ -127,6 +141,7 @@ type StatusMessage = { kind: "success" | "error"; text: string } | null;
 interface AutomationSetupPanelProps {
   draft: AutomationSetupDraft;
   conversationId?: string | null;
+  conversationTags?: Record<string, string> | null;
   toolbarPortal?: HTMLElement | null;
   showInlineHeader?: boolean;
   onClose: () => void;
@@ -220,10 +235,235 @@ function buildInitialForm(
   };
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function getStringField(
+  value: Record<string, unknown>,
+  key: string,
+): string | undefined {
+  const field = value[key];
+  return typeof field === "string" ? field : undefined;
+}
+
+function getFirstObject(
+  value: Record<string, unknown>,
+  key: string,
+): Record<string, unknown> | null {
+  const field = value[key];
+  return Array.isArray(field) ? asRecord(field[0]) : null;
+}
+
+function formFromServerDraft(
+  saved: AutomationDraftApiResponse,
+  fallback: AutomationSetupDraft,
+): AutomationSetupFormValues {
+  const base = buildInitialForm(fallback);
+  const body = saved.draft as Record<string, unknown>;
+  const trigger = asRecord(body.trigger);
+  const plugin = getFirstObject(body, "plugins");
+  const repo = getFirstObject(body, "repos");
+  const endpointKind: AutomationSetupKind =
+    saved.endpoint === "/v1"
+      ? "custom"
+      : saved.endpoint === "/v1/preset/plugin"
+        ? "plugin"
+        : "prompt";
+
+  return {
+    ...base,
+    kind: endpointKind,
+    name: saved.name ?? getStringField(body, "name") ?? base.name,
+    prompt: getStringField(body, "prompt") ?? base.prompt,
+    repository:
+      getStringField(repo ?? {}, "url") ??
+      (typeof body.repository === "string" ? body.repository : base.repository),
+    pluginSource: getStringField(plugin ?? {}, "source") ?? base.pluginSource,
+    pluginRef: getStringField(plugin ?? {}, "ref") ?? base.pluginRef,
+    entrypoint: getStringField(body, "entrypoint") ?? base.entrypoint,
+    setupScriptPath:
+      getStringField(body, "setup_script_path") ?? base.setupScriptPath,
+    triggerKind:
+      getStringField(trigger ?? {}, "type") === "event" ? "event" : "cron",
+    frequency: getStringField(trigger ?? {}, "schedule")
+      ? "custom"
+      : base.frequency,
+    customSchedule:
+      getStringField(trigger ?? {}, "schedule") ?? base.customSchedule,
+    timezone: getStringField(trigger ?? {}, "timezone") ?? base.timezone,
+    eventSource: getStringField(trigger ?? {}, "source") ?? base.eventSource,
+    eventKey:
+      getStringField(trigger ?? {}, "on") ??
+      (Array.isArray(trigger?.on) && typeof trigger.on[0] === "string"
+        ? trigger.on[0]
+        : base.eventKey),
+    eventFilter: getStringField(trigger ?? {}, "filter") ?? base.eventFilter,
+    showTimeout: typeof body.timeout === "number" || base.showTimeout,
+    timeoutSeconds:
+      typeof body.timeout === "number"
+        ? String(body.timeout)
+        : base.timeoutSeconds,
+  };
+}
+
 function endpointName(kind: AutomationSetupKind): InterfaceEndpointName {
   if (kind === "plugin") return "createPlugin";
   if (kind === "custom") return "createBundle";
   return "createPrompt";
+}
+
+/**
+ * The server-backed draft endpoint the current kind posts to. Mirrors the
+ * service's `DraftEndpoint` literal: the raw `"/v1"` path for custom bundles
+ * (which ship their own tarball), and the preset paths otherwise.
+ */
+function draftEndpoint(kind: AutomationSetupKind): AutomationDraftEndpoint {
+  const path = getAutomationEndpoint(endpointName(kind));
+  if (
+    path === "/v1" ||
+    path === "/v1/preset/prompt" ||
+    path === "/v1/preset/plugin"
+  ) {
+    return path;
+  }
+  // A manifest that remaps the endpoint is not expected for the assisted
+  // flow; fall back to the preset prompt path so a draft can still be saved.
+  return kind === "plugin" ? "/v1/preset/plugin" : "/v1/preset/prompt";
+}
+
+/**
+ * Pull field-addressed validation errors out of a 422 dispatch response. The
+ * service answers an undispatchable draft with `{ message, errors }`; older
+ * transport errors surface as a thrown Error instead.
+ */
+function getResponseStatus(error: unknown): number | null {
+  if (!error || typeof error !== "object") return null;
+  const response = (error as Record<string, unknown>).response;
+  if (!response || typeof response !== "object") return null;
+  const status = (response as Record<string, unknown>).status;
+  return typeof status === "number" ? status : null;
+}
+
+function isDraftEndpointUnavailable(error: unknown): boolean {
+  const status = getResponseStatus(error);
+  return status === 404 || status === 405;
+}
+
+function extractDraftDispatchErrors(error: unknown): string | null {
+  if (error && typeof error === "object") {
+    const record = error as Record<string, unknown>;
+    const response = record.response;
+    if (response && typeof response === "object") {
+      const data = (response as Record<string, unknown>).data;
+      if (data && typeof data === "object") {
+        const errors = (data as Record<string, unknown>).errors;
+        if (Array.isArray(errors) && errors.length > 0) {
+          const first = errors[0] as Record<string, unknown> | undefined;
+          if (first && typeof first.message === "string") return first.message;
+        }
+        const message = (data as Record<string, unknown>).message;
+        if (typeof message === "string") return message;
+      }
+    }
+  }
+  return null;
+}
+
+function DraftRunDetailsCard({
+  draft,
+  runs,
+}: {
+  draft: AutomationDraftApiResponse;
+  runs: AutomationRun[];
+}) {
+  const { t, i18n } = useTranslation("openhands");
+  const validationMessage = draft.validationErrors?.[0]?.message ?? null;
+  const statusText =
+    validationMessage ?? t(I18nKey.AUTOMATION_SETUP$TEST_PASSED);
+
+  return (
+    <section
+      data-testid="automation-setup-draft-details"
+      className="rounded-2xl border border-[var(--oh-border)] bg-[var(--oh-surface)]"
+    >
+      <div className="border-b border-[var(--oh-border)] px-5 py-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-content">
+              {t(I18nKey.AUTOMATION_SETUP$DRAFT_STATUS_TITLE)}
+            </h3>
+            <p className="mt-1 text-sm text-muted">
+              {t(I18nKey.AUTOMATION_SETUP$DRAFT_STATUS_DESCRIPTION)}
+            </p>
+          </div>
+          <span
+            data-testid="automation-setup-draft-validity"
+            className={cn(
+              "rounded-full px-3 py-1 text-xs",
+              validationMessage
+                ? "bg-[var(--oh-warning)]/10 text-[var(--oh-warning)]"
+                : "bg-[var(--oh-success)]/10 text-[var(--oh-success)]",
+            )}
+          >
+            {statusText}
+          </span>
+        </div>
+        <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
+          <div>
+            <dt className="text-xs text-muted">
+              {t(I18nKey.AUTOMATION_SETUP$LAST_SAVED)}
+            </dt>
+            <dd className="mt-1 text-content">
+              {formatRelativeTime(
+                draft.updatedAt,
+                i18n?.language ?? AvailableLanguages[0].value,
+                t,
+              )}
+            </dd>
+          </div>
+          {draft.materializedAutomationId ? (
+            <div>
+              <dt className="text-xs text-muted">
+                {t(I18nKey.AUTOMATION_SETUP$TEST_AUTOMATION)}
+              </dt>
+              <dd className="mt-1 truncate font-mono text-xs text-content">
+                {draft.materializedAutomationId}
+              </dd>
+            </div>
+          ) : null}
+        </dl>
+      </div>
+
+      <div className="px-5 py-3">
+        <h4 className="text-sm font-medium text-content">
+          {t(I18nKey.AUTOMATION_SETUP$TEST_RUNS)}
+        </h4>
+      </div>
+      {runs.length > 0 ? (
+        <div>
+          {runs.map((run, index) => (
+            <div
+              key={run.id}
+              data-testid="automation-setup-draft-run"
+              className={cn(
+                "border-t border-[var(--oh-border)]",
+                index === 0 && "bg-[var(--oh-focus)]/10",
+              )}
+            >
+              <ActivityLogItem run={run} />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="border-t border-[var(--oh-border)] px-5 py-6 text-sm text-muted">
+          {t(I18nKey.AUTOMATIONS$DETAIL$NO_RUNS)}
+        </p>
+      )}
+    </section>
+  );
 }
 
 function kindLabelKey(kind: AutomationSetupKind): I18nKey {
@@ -250,6 +490,7 @@ function frequencyLabelKey(frequency: Frequency): I18nKey {
 export function AutomationSetupPanel({
   draft,
   conversationId,
+  conversationTags,
   toolbarPortal,
   showInlineHeader = true,
   onClose,
@@ -264,6 +505,22 @@ export function AutomationSetupPanel({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [streamingField, setStreamingField] =
     useState<AutomationSetupField | null>(null);
+  // Server-backed draft from OpenHands/automation PR #439. Null until the
+  // first save creates the draft row; the local store stays the reactive layer
+  // the agent streams into, and the server row is the persisted source of truth.
+  const [serverDraft, setServerDraft] =
+    useState<AutomationDraftApiResponse | null>(null);
+  const [draftRuns, setDraftRuns] = useState<AutomationRun[]>([]);
+  const [isHydratingServerDraft, setIsHydratingServerDraft] = useState(false);
+  const [isTaggedDraftMissing, setIsTaggedDraftMissing] = useState(false);
+  const propTaggedServerDraftId =
+    getAutomationDraftIdFromTags(conversationTags);
+  const [currentTaggedServerDraftId, setCurrentTaggedServerDraftId] = useState(
+    propTaggedServerDraftId,
+  );
+  const taggedServerDraftId = currentTaggedServerDraftId;
+  const serverDraftId =
+    serverDraft?.id ?? (isTaggedDraftMissing ? null : taggedServerDraftId);
   const streamQueueRef = useRef<
     {
       field: AutomationSetupField;
@@ -277,6 +534,69 @@ export function AutomationSetupPanel({
   const streamGenerationRef = useRef(0);
   const streamTimeoutsRef = useRef<number[]>([]);
   const processQueuedStreamsRef = useRef<() => void>(() => {});
+
+  useEffect(() => {
+    setCurrentTaggedServerDraftId(propTaggedServerDraftId);
+  }, [propTaggedServerDraftId]);
+
+  useEffect(() => {
+    if (!conversationId || hasAutomationSetupModeTag(conversationTags)) return;
+    AgentServerConversationService.updateConversationTags(
+      conversationId,
+      buildAutomationSetupModeTags(conversationTags),
+    ).catch((error: unknown) => {
+      displayErrorToast(error instanceof Error ? error.message : null);
+    });
+  }, [conversationId, conversationTags]);
+
+  const updateConversationDraftTags = useCallback(
+    async (draftId: string | null) => {
+      if (!conversationId) return;
+      const nextTags = draftId
+        ? buildAutomationDraftTags(conversationTags, draftId)
+        : removeAutomationDraftTags(conversationTags);
+      await AgentServerConversationService.updateConversationTags(
+        conversationId,
+        nextTags,
+      );
+      setCurrentTaggedServerDraftId(draftId);
+    },
+    [conversationId, conversationTags],
+  );
+
+  useEffect(() => {
+    if (!taggedServerDraftId || serverDraft?.id === taggedServerDraftId) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    setIsHydratingServerDraft(true);
+    setIsTaggedDraftMissing(false);
+
+    AutomationService.getServerDraft(taggedServerDraftId)
+      .then((saved) => {
+        if (cancelled) return;
+        setServerDraft(saved);
+        setDraftRuns([]);
+        setForm(formFromServerDraft(saved, draft));
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        if (getResponseStatus(error) === 404) {
+          setServerDraft(null);
+          setIsTaggedDraftMissing(true);
+          return;
+        }
+        displayErrorToast(error instanceof Error ? error.message : null);
+      })
+      .finally(() => {
+        if (!cancelled) setIsHydratingServerDraft(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [draft, serverDraft?.id, taggedServerDraftId]);
 
   const {
     kind,
@@ -530,6 +850,59 @@ export function AutomationSetupPanel({
         ? { timeout: Number(timeoutSeconds) }
         : {}),
     }) as SetupRequestBody;
+  /**
+   * The request body sent to a server-backed draft. Custom drafts reference a
+   * tarball path, but a draft is saved before the upload happens, so the
+   * preflight stand-in path stands in until dispatch. Preset drafts carry the
+   * same body the final create call would, minus the upload-only fields.
+   */
+  const draftRequestBody = (
+    tarballPath: string = PREFLIGHT_TARBALL_PATH,
+  ): SetupRequestBody =>
+    kind === "custom" ? buildCustomBody(tarballPath) : buildPresetBody();
+  const uploadCustomArchive = async (): Promise<string> => {
+    const archive = await packTarGzip([
+      { name: MAIN_PY_FILENAME, content: customCode, mode: 0o644 },
+      {
+        name: setupScriptPath.trim(),
+        content: setupScript,
+        mode: 0o755,
+      },
+    ]);
+    return AutomationService.uploadAutomationTarball(normalizedName(), archive);
+  };
+  const persistServerDraft = async (
+    tarballPath?: string,
+  ): Promise<AutomationDraftApiResponse> => {
+    const body = draftRequestBody(tarballPath);
+    const request = {
+      endpoint: draftEndpoint(kind),
+      draft: body,
+      name: normalizedName(),
+    };
+    const saved = serverDraftId
+      ? await AutomationService.updateServerDraft(serverDraftId, request)
+      : await AutomationService.createServerDraft(request);
+    setServerDraft(saved);
+    setIsTaggedDraftMissing(false);
+    await updateConversationDraftTags(saved.id);
+    return saved;
+  };
+  const runPreflightValidation = async () => {
+    const result = await AutomationService.validateDraft({
+      endpoint: getAutomationEndpoint(endpointName(kind)),
+      draft:
+        kind === "custom"
+          ? buildCustomBody(PREFLIGHT_TARBALL_PATH)
+          : buildPresetBody(),
+    });
+    setStatusMessage({
+      kind: result.valid ? "success" : "error",
+      text: result.valid
+        ? t(I18nKey.AUTOMATION_SETUP$TEST_PASSED)
+        : result.errors[0]?.message || t(I18nKey.SETUP$SUBMIT_FAILED),
+    });
+  };
   const validateRequiredFields = (): boolean => {
     if (!prompt.trim() && kind !== "custom") {
       setStatusMessage({
@@ -575,31 +948,84 @@ export function AutomationSetupPanel({
     }
     return true;
   };
-  const handleSaveDraft = () => {
-    setStatusMessage({
-      kind: "success",
-      text: t(I18nKey.AUTOMATION_SETUP$DRAFT_SAVED),
-    });
+  const handleSaveDraft = async () => {
+    setIsSubmitting(true);
+    try {
+      const saved = await persistServerDraft();
+      setStatusMessage({
+        kind: "success",
+        text:
+          saved.validationErrors?.[0]?.message ??
+          t(I18nKey.AUTOMATION_SETUP$DRAFT_SAVED),
+      });
+    } catch (error) {
+      if (isDraftEndpointUnavailable(error)) {
+        setStatusMessage({
+          kind: "success",
+          text: t(I18nKey.AUTOMATION_SETUP$DRAFT_SAVED),
+        });
+        return;
+      }
+      displayErrorToast(error instanceof Error ? error.message : null);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
   const handleTest = async () => {
     if (!validateRequiredFields()) return;
     setIsSubmitting(true);
     try {
-      const result = await AutomationService.validateDraft({
-        endpoint: getAutomationEndpoint(endpointName(kind)),
-        draft:
-          kind === "custom"
-            ? buildCustomBody(PREFLIGHT_TARBALL_PATH)
-            : buildPresetBody(),
+      // Persist the current form state as a draft first, then dispatch it.
+      // The service materializes the validated draft body into a disabled
+      // automation and starts a manual run; the draft row stays as source
+      // of truth for further edits.
+      const tarballPath =
+        kind === "custom" ? await uploadCustomArchive() : undefined;
+      const saved = await persistServerDraft(tarballPath);
+
+      if (!saved.dispatchable) {
+        setStatusMessage({
+          kind: "error",
+          text:
+            saved.validationErrors?.[0]?.message ??
+            t(I18nKey.SETUP$SUBMIT_FAILED),
+        });
+        return;
+      }
+
+      const run = await AutomationService.dispatchServerDraft(saved.id);
+      const materializedAutomationId =
+        typeof (run as unknown as Record<string, unknown>).automation_id ===
+        "string"
+          ? String((run as unknown as Record<string, unknown>).automation_id)
+          : saved.materializedAutomationId;
+      setServerDraft({
+        ...saved,
+        materializedAutomationId,
+        lastTestRunId: run.id,
       });
+      setDraftRuns((previous) => [
+        run,
+        ...previous.filter((existing) => existing.id !== run.id),
+      ]);
       setStatusMessage({
-        kind: result.valid ? "success" : "error",
-        text: result.valid
-          ? t(I18nKey.AUTOMATION_SETUP$TEST_PASSED)
-          : result.errors[0]?.message || t(I18nKey.SETUP$SUBMIT_FAILED),
+        kind: "success",
+        text: t(I18nKey.AUTOMATION_SETUP$TEST_DISPATCHED),
       });
     } catch (error) {
-      displayErrorToast(error instanceof Error ? error.message : null);
+      if (isDraftEndpointUnavailable(error)) {
+        await runPreflightValidation();
+        return;
+      }
+      const dispatchError = extractDraftDispatchErrors(error);
+      if (dispatchError) {
+        setStatusMessage({
+          kind: "error",
+          text: dispatchError,
+        });
+      } else {
+        displayErrorToast(error instanceof Error ? error.message : null);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -610,18 +1036,7 @@ export function AutomationSetupPanel({
     try {
       let created: Record<string, unknown>;
       if (kind === "custom") {
-        const archive = await packTarGzip([
-          { name: MAIN_PY_FILENAME, content: customCode, mode: 0o644 },
-          {
-            name: setupScriptPath.trim(),
-            content: setupScript,
-            mode: 0o755,
-          },
-        ]);
-        const tarballPath = await AutomationService.uploadAutomationTarball(
-          normalizedName(),
-          archive,
-        );
+        const tarballPath = await uploadCustomArchive();
         created = await AutomationService.createAutomationDraft(
           buildCustomBody(tarballPath),
           kind,
@@ -633,6 +1048,20 @@ export function AutomationSetupPanel({
         );
       }
       toast.success(t(I18nKey.AUTOMATION_SETUP$CREATED));
+      // The draft has been finalized into a real automation; drop the
+      // persisted draft row so it does not linger as an incomplete setup.
+      if (serverDraftId) {
+        try {
+          await AutomationService.deleteServerDraft(serverDraftId);
+        } catch {
+          // Cleanup is best-effort; the automation was created either way.
+        }
+        try {
+          await updateConversationDraftTags(null);
+        } catch {
+          // Tag cleanup is best-effort once the automation exists.
+        }
+      }
       if (typeof created.id === "string")
         navigate(automationDetailPath(created.id));
     } catch (error) {
@@ -757,6 +1186,28 @@ export function AutomationSetupPanel({
                 className={formControlFieldClassName}
               />
             </Field>
+
+            {isHydratingServerDraft ? (
+              <p
+                data-testid="automation-setup-draft-loading"
+                className="rounded-2xl border border-[var(--oh-border)] bg-[var(--oh-surface)] px-5 py-4 text-sm text-muted"
+              >
+                {t(I18nKey.AUTOMATION_SETUP$LOADING_DRAFT)}
+              </p>
+            ) : null}
+
+            {isTaggedDraftMissing ? (
+              <p
+                data-testid="automation-setup-draft-missing"
+                className="rounded-2xl border border-[var(--oh-warning)]/40 bg-[var(--oh-warning)]/10 px-5 py-4 text-sm text-[var(--oh-warning)]"
+              >
+                {t(I18nKey.AUTOMATION_SETUP$DRAFT_MISSING)}
+              </p>
+            ) : null}
+
+            {serverDraft ? (
+              <DraftRunDetailsCard draft={serverDraft} runs={draftRuns} />
+            ) : null}
 
             {kind !== "custom" ? (
               <PromptFields

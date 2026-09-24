@@ -21,6 +21,7 @@ import { automationIconActionButtonClassName } from "./automation-action-button-
 import { buildAutomationMenuItems } from "./build-automation-menu-items";
 import { automationActivityRowClassName } from "./automation-view-mode";
 import { RunStatusBadge } from "./detail/run-status-badge";
+import { ActiveStatusBadge } from "./detail/active-status-badge";
 import { AutomationRunActivitySparkline } from "#/components/features/home/featured-automations/automation-run-activity-sparkline";
 import { AutomationHealthIndicator } from "#/components/features/home/featured-automations/automation-health-indicator";
 import {
@@ -38,6 +39,7 @@ import {
 import type { AutomationInsightsProps } from "./automation-card";
 import { toLatestRunState } from "./to-latest-run-state";
 import { resolveAutomationImpactStatement } from "#/utils/automation-catalog";
+import { isDraftAutomation } from "#/utils/automation-state";
 
 interface AutomationListRowProps {
   automation: Automation;
@@ -66,8 +68,10 @@ export function AutomationListRow({
   const isOwner = useIsAutomationOwner(automation);
   // Write actions on a specific automation: manage OR creator (escape hatch).
   const canManage = hasManagePermission || isOwner;
-  // Non-creators may turn an automation off but not back on.
-  const canToggle = automation.enabled ? canManage : isOwner;
+  const isDraft = isDraftAutomation(automation);
+  // Non-creators may turn an automation off but not back on. Draft test
+  // artifacts are finalized through the draft setup flow, not this toggle.
+  const canToggle = isDraft ? false : automation.enabled ? canManage : isOwner;
 
   const handleView = () => {
     navigate?.(`/automations/${automation.id}`);
@@ -115,6 +119,7 @@ export function AutomationListRow({
   const detailHref = `/automations/${encodeURIComponent(automation.id)}`;
   const statusLabelKey = getRunStatusLabelKey(runState);
   const disableAnimation = import.meta.env.MODE === "test";
+  const showDraftBadge = isDraft;
 
   return (
     <li
@@ -145,8 +150,13 @@ export function AutomationListRow({
             >
               <AutomationHealthIndicator health={health} />
             </span>
-            <span className="truncate text-sm font-medium leading-5 text-foreground">
-              {automation.name}
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="truncate text-sm font-medium leading-5 text-foreground">
+                {automation.name}
+              </span>
+              {showDraftBadge ? (
+                <ActiveStatusBadge automation={automation} compact />
+              ) : null}
             </span>
             {hasMeta ? (
               <span className="col-start-2 mt-0.5 flex min-w-0 items-center gap-1.5 text-xs leading-4 text-text-secondary">

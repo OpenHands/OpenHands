@@ -95,7 +95,7 @@ export function DetailHeader({
           <h1 className="text-xl font-medium text-content">
             {automation.name}
           </h1>
-          <ActiveStatusBadge active={automation.enabled} />
+          <ActiveStatusBadge automation={automation} />
         </div>
         <div className="flex items-center gap-2">
           {canManage && onRunNow && (
