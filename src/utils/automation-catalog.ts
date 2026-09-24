@@ -36,7 +36,7 @@ const SKILL_BY_NAME = new Map<string, SkillCatalogEntry>(
  * nothing.
  */
 export function getAutomationIcon(
-  automation: RecommendedAutomation & { icon?: string },
+  automation: RecommendedAutomation,
 ): LucideIcon | null {
   const slug = automation.icon;
   if (!slug) return null;
