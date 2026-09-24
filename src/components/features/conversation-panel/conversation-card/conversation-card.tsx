@@ -1,11 +1,8 @@
 import React from "react";
 import { Pin } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useTracking } from "#/hooks/use-tracking";
 import { cn } from "#/utils/utils";
 import { I18nKey } from "#/i18n/declaration";
-import { transformVSCodeUrl } from "#/utils/vscode-url-helper";
-import ConversationService from "#/api/conversation-service/conversation-service.api";
 import { getDisplayConversationTags } from "#/api/agent-server-adapter";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
@@ -101,7 +98,6 @@ export function ConversationCard({
   alwaysShowPinIcon = false,
 }: ConversationCardProps) {
   const { t } = useTranslation("openhands");
-  const { trackDownloadVsCodeButtonClicked } = useTracking();
   const [titleMode, setTitleMode] = React.useState<"view" | "edit">("view");
   const { mutateAsync: downloadConversation } = useDownloadConversation();
 
@@ -155,32 +151,6 @@ export function ConversationCard({
     event.preventDefault();
     event.stopPropagation();
     onEditTags?.();
-    onContextMenuToggle?.(false);
-  };
-
-  const handleDownloadViaVSCode = async (
-    event: React.MouseEvent<HTMLButtonElement>,
-  ) => {
-    event.preventDefault();
-    event.stopPropagation();
-    trackDownloadVsCodeButtonClicked();
-
-    // Fetch the VS Code URL from the API
-    if (conversationId) {
-      try {
-        const data = await ConversationService.getVSCodeUrl(conversationId);
-        if (data.vscode_url) {
-          const transformedUrl = transformVSCodeUrl(data.vscode_url);
-          if (transformedUrl) {
-            window.open(transformedUrl, "_blank");
-          }
-        }
-        // VS Code URL not available
-      } catch {
-        // Failed to fetch VS Code URL
-      }
-    }
-
     onContextMenuToggle?.(false);
   };
 
@@ -320,7 +290,6 @@ export function ConversationCard({
                       onStop={onStop && handleStop}
                       onEdit={onChangeTitle && handleEdit}
                       onEditTags={onEditTags && handleEditTags}
-                      onDownloadViaVSCode={handleDownloadViaVSCode}
                       onDownloadConversation={handleDownloadConversation}
                       executionStatus={executionStatus}
                       conversationId={conversationId}
@@ -348,7 +317,6 @@ export function ConversationCard({
                   onStop={onStop && handleStop}
                   onEdit={onChangeTitle && handleEdit}
                   onEditTags={onEditTags && handleEditTags}
-                  onDownloadViaVSCode={handleDownloadViaVSCode}
                   onDownloadConversation={handleDownloadConversation}
                   executionStatus={executionStatus}
                   conversationId={conversationId}

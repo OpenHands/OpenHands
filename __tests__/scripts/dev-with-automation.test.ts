@@ -318,6 +318,7 @@ describe("buildConfig", () => {
     keyDirs.push(dir);
     return {
       OH_SESSION_API_KEY_PATH: path.join(dir, "session-api-key.txt"),
+      OH_CANVAS_ENABLE_VSCODE: "true",
       // High ports that are almost certainly free, so assertPortsFree passes.
       PORT: "19902",
       OH_CANVAS_SAFE_BACKEND_PORT: "19900",
@@ -532,6 +533,7 @@ describe("stack mode routing", () => {
     keyDirs.push(dir);
     return {
       OH_SESSION_API_KEY_PATH: path.join(dir, "session-api-key.txt"),
+      OH_CANVAS_ENABLE_VSCODE: "true",
       PORT: "19802",
       OH_CANVAS_SAFE_BACKEND_PORT: "19800",
       OH_CANVAS_SAFE_AUTOMATION_PORT: "19801",

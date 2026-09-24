@@ -199,6 +199,7 @@ describe("buildSafeDevConfigAsync", () => {
     // Use a high port so the assertPortsFree check passes even when a real
     // dev stack is running on the default port (18000).
     const config = await buildSafeDevConfigAsync(repoRoot, {
+      OH_CANVAS_ENABLE_VSCODE: "true",
       OH_CANVAS_SAFE_BACKEND_PORT: "19800",
       OH_SESSION_API_KEY_PATH: tempKeyPath(),
     });
@@ -730,6 +731,7 @@ describe("buildSafeDevConfig", () => {
     const cwd = "/workspace/project/agent-canvas";
 
     const config = buildSafeDevConfig(cwd, {
+      OH_CANVAS_ENABLE_VSCODE: "true",
       OH_SESSION_API_KEY_PATH: tempKeyPath(),
     });
 
@@ -757,6 +759,7 @@ describe("buildSafeDevConfig", () => {
     const cwd = "/workspace/project/agent-canvas";
 
     const config = buildSafeDevConfig(cwd, {
+      OH_CANVAS_ENABLE_VSCODE: "true",
       OH_CANVAS_SAFE_BACKEND_PORT: "19000",
       OH_CANVAS_SAFE_VSCODE_PORT: "19010",
       OH_CANVAS_SAFE_STATE_DIR: ".tmp/dev-safe",
