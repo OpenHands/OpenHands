@@ -13,7 +13,7 @@ import { defineConfig, devices } from "@playwright/test";
  */
 export default defineConfig({
   testDir: "./tests/e2e",
-  testIgnore: ["**/e2e/live/**", "**/e2e/mock-llm/**"],
+  testIgnore: ["**/e2e/live/**", "**/e2e/mock-llm/**", "**/e2e/bind-policy/**"],
   /* Run tests in files in parallel */
   fullyParallel: true,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
