@@ -66,6 +66,9 @@ export function useAllCloudOrganizations() {
       isLoading: boolean;
       isSuccess: boolean;
       isFetching: boolean;
+      isError: boolean;
+      hasData: boolean;
+      refetch: () => unknown;
       orgs: { id: string; name: string; is_personal?: boolean }[];
       currentOrgId: string | null;
     }
@@ -77,6 +80,9 @@ export function useAllCloudOrganizations() {
       isLoading: q.isLoading,
       isSuccess: q.isSuccess,
       isFetching: q.isFetching,
+      isError: q.isError,
+      hasData: q.data !== undefined,
+      refetch: q.refetch,
       orgs: q.data?.items ?? [],
       currentOrgId: q.data?.currentOrgId ?? null,
     };
