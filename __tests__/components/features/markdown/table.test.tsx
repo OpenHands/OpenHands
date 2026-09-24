@@ -67,6 +67,15 @@ describe("table (markdown)", () => {
     expect(headers[2]).toHaveTextContent("Claude Code");
   });
 
+  it("uses logical alignment for headers so RTL tables align correctly", () => {
+    render(<MarkdownRenderer>{GFM_TABLE}</MarkdownRenderer>);
+
+    for (const header of screen.getAllByRole("columnheader")) {
+      expect(header).toHaveClass("text-start");
+      expect(header).not.toHaveClass("text-left");
+    }
+  });
+
   it("should render body cells as <td> elements with correct content", () => {
     render(<MarkdownRenderer>{GFM_TABLE}</MarkdownRenderer>);
 
