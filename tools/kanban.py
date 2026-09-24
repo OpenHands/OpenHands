@@ -417,6 +417,16 @@ class KanbanRequestHandler(BaseHTTPRequestHandler):
 
 
 def create_server(host: str = "127.0.0.1", port: int = 8080, db_path: str = "kanban.db") -> HTTPServer:
+    """Create the local kanban REST API server.
+
+    This standalone surface is bound loopback-only (default ``127.0.0.1``)
+    and deliberately carries no session-key auth. Nothing wires it into the
+    production launchers yet, and it exists only as an interim store for the
+    upcoming kanban board UI. When that UI ships, the store should be
+    exposed through the agent-server's session-key-protected API
+    (``software-agent-sdk`` endpoint + ``@openhands/typescript-client``)
+    rather than this raw ``http.server``.
+    """
     KanbanRequestHandler.store = KanbanStore(db_path)
     return HTTPServer((host, port), KanbanRequestHandler)
 
