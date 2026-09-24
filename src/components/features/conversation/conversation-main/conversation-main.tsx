@@ -54,7 +54,7 @@ export function ConversationMain() {
   const [isAutomationAgentHidden, setIsAutomationAgentHidden] = useState(false);
   const overviewDrawer = useConversationOverviewDrawerOptional();
   const isSecondaryDrawerOpen = Boolean(overviewDrawer?.section);
-  const isAutomationSetupMode = Boolean(automationSetupDraft);
+  const isAutomationSetupMode = Boolean(automationSetupDraft) && !isMobile;
 
   const { leftWidth, rightWidth, isDragging, containerRef, handleMouseDown } =
     useResizablePanels({
