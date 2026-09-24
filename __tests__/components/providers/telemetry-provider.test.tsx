@@ -193,6 +193,47 @@ describe("TelemetryProvider", () => {
     expect(window.location.hash).toBe("");
   });
 
+  it("falls back to a stored handoff when a forwarded URL nonce was already consumed", () => {
+    const encoded = encodeHandoff({
+      v: 1,
+      exp: Date.now() + 60_000,
+      nonce: "nonce-forwarded",
+      distinct_id: "url-docs-id",
+      session_id: "url-docs-session",
+      attribution: { cta_surface: "docs_link" },
+    });
+    localStorage.setItem("posthog_bootstrap:nonce-forwarded", "consumed");
+    sessionStorage.setItem(
+      "posthog_bootstrap",
+      JSON.stringify({
+        bootstrap: { distinctID: "stored-docs-id", sessionID: "stored-session" },
+        exp: Date.now() + 60_000,
+        attribution: { cta_surface: "docs_link" },
+      }),
+    );
+    window.history.replaceState(
+      null,
+      "",
+      `/canvas?oh_ph_handoff=${encoded}`,
+    );
+
+    render(
+      <TelemetryProvider config={runtimeConfig}>
+        <div />
+      </TelemetryProvider>,
+    );
+
+    expect(configureBootstrapMock).toHaveBeenCalledWith({
+      distinctID: "stored-docs-id",
+      sessionID: "stored-session",
+    });
+    expect(setWebsiteAttributionMock).toHaveBeenCalledWith({
+      cta_surface: "docs_link",
+    });
+    expect(window.location.search).toBe("");
+    expect(sessionStorage.getItem("posthog_bootstrap")).toBeNull();
+  });
+
   it("prevents replay of a consumed structured handoff URL", () => {
     const encoded = encodeHandoff({
       v: 1,

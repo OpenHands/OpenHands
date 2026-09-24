@@ -245,9 +245,8 @@ function readStoredHandoff(): PostHogHandoff | undefined {
 function readPostHogHandoff(): PostHogHandoff | undefined {
   if (typeof window === "undefined") return undefined;
   const urlHandoff = readHandoffFromUrl();
-  return urlHandoff === undefined
-    ? readStoredHandoff()
-    : (urlHandoff ?? undefined);
+  if (urlHandoff) return urlHandoff;
+  return readStoredHandoff();
 }
 
 function TelemetryLifecycle() {
