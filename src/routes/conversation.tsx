@@ -17,6 +17,7 @@ import { AgentState } from "#/types/agent-state";
 import { EventHandler } from "../wrapper/event-handler";
 
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
+import { useSharedConversation } from "#/hooks/query/use-shared-conversation";
 import { useTaskPollingController } from "#/hooks/query/use-task-polling";
 
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
@@ -103,27 +104,47 @@ function AppContent() {
     }
   }, [isTask, taskStatus, taskDetail, t, navigate, location.state]);
 
-  React.useEffect(() => {
-    if (!isFetched || !isAuthed) return;
-    // The BackendSelector is in the middle of redirecting us away from
-    // this route — don't toast/navigate based on a 404 that's just
-    // "this id doesn't exist on the new backend".
-    if (backendChanged) return;
+  // The BackendSelector is in the middle of redirecting us away from
+  // this route — don't toast/navigate based on a 404 that's just
+  // "this id doesn't exist on the new backend".
+  const ownerLookupMissed =
+    isFetched && !!isAuthed && !backendChanged && !conversation;
 
-    if (!conversation) {
-      // Clear the per-backend "last selected" slot so the next switch
-      // to this backend doesn't try to revisit a stale id.
-      clearLastConversationId(active.backend.id, active.orgId);
-      displayErrorToast(t(I18nKey.CONVERSATION$NOT_EXIST_OR_NO_PERMISSION));
-      navigate("/conversations");
+  // On cloud, a conversation the owner lookup cannot see may still be shared
+  // with this user: public, or created by an automation in one of their orgs.
+  // Probe the shared lookup before giving up and send them to the read-only
+  // view when it resolves. Local backends have no sharing, and start-task ids
+  // are not conversations.
+  const shouldProbeShared =
+    ownerLookupMissed &&
+    active.backend.kind === "cloud" &&
+    !!conversationId &&
+    !conversationId.startsWith("task-");
+  const { data: sharedConversation, isFetched: isSharedProbeFetched } =
+    useSharedConversation(conversationId, { enabled: shouldProbeShared });
+
+  React.useEffect(() => {
+    if (!ownerLookupMissed) return;
+    if (shouldProbeShared) {
+      if (!isSharedProbeFetched) return;
+      if (sharedConversation) {
+        navigate(`/shared/conversations/${conversationId}`, { replace: true });
+        return;
+      }
     }
+    // Clear the per-backend "last selected" slot so the next switch
+    // to this backend doesn't try to revisit a stale id.
+    clearLastConversationId(active.backend.id, active.orgId);
+    displayErrorToast(t(I18nKey.CONVERSATION$NOT_EXIST_OR_NO_PERMISSION));
+    navigate("/conversations");
   }, [
-    conversation,
-    isFetched,
-    isAuthed,
+    ownerLookupMissed,
+    shouldProbeShared,
+    isSharedProbeFetched,
+    sharedConversation,
+    conversationId,
     navigate,
     t,
-    backendChanged,
     active.backend.id,
     active.orgId,
   ]);
