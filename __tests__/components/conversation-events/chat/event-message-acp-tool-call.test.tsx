@@ -60,6 +60,49 @@ describe("EventMessage - ACPToolCallEvent dispatch", () => {
     expect(screen.getByText("ACTION_MESSAGE$ACP_RUN")).toBeInTheDocument();
   });
 
+  it("shows the command event's recorded timestamp on hover", async () => {
+    const user = userEvent.setup();
+    const event = makeEvent();
+
+    renderWithProviders(
+      <EventMessage
+        event={event}
+        messages={[]}
+        isLastMessage={false}
+        isInLast10Actions={false}
+      />,
+    );
+
+    const title = screen.getByTestId("generic-event-message-title");
+    await user.hover(title);
+
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip.querySelector("time")).toHaveAttribute(
+      "datetime",
+      event.timestamp,
+    );
+  });
+
+  it("shows the timestamp when the existing expand control receives focus", async () => {
+    const user = userEvent.setup();
+    const event = makeEvent();
+
+    renderWithProviders(
+      <EventMessage
+        event={event}
+        messages={[]}
+        isLastMessage={false}
+        isInLast10Actions={false}
+      />,
+    );
+
+    await user.tab();
+    expect(screen.getByRole("button", { name: "BUTTON$EXPAND" })).toHaveFocus();
+    expect(
+      (await screen.findByRole("tooltip")).querySelector("time"),
+    ).toHaveAttribute("datetime", event.timestamp);
+  });
+
   it("does not show a success icon for completed tool calls", () => {
     renderWithProviders(
       <EventMessage
@@ -104,5 +147,66 @@ describe("EventMessage - ACPToolCallEvent dispatch", () => {
     // Markdown renderer wraps code blocks but the plain text survives.
     expect(screen.getByText(/gh pr diff 490/)).toBeInTheDocument();
     expect(screen.getByText(/diff output here/)).toBeInTheDocument();
+  });
+
+  it("shows the diff from content instead of the model-facing raw_output for an edit", async () => {
+    const user = userEvent.setup();
+    const { container } = renderWithProviders(
+      <EventMessage
+        event={makeEvent({
+          title: "Edit demo.py",
+          tool_kind: "edit",
+          raw_input: {
+            file_path: "/workspace/demo.py",
+            old_string: "port = 3000",
+            new_string: "port = 8080",
+          },
+          raw_output:
+            "The file /workspace/demo.py has been updated successfully. (file state is current in your context — no need to Read it back)",
+          content: [
+            {
+              type: "diff",
+              path: "/workspace/demo.py",
+              old_text: "port = 3000",
+              new_text: "port = 8080",
+            },
+          ],
+        })}
+        messages={[]}
+        isLastMessage={false}
+        isInLast10Actions={false}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "BUTTON$EXPAND" }));
+
+    // The diff is syntax-highlighted, which splits each line across token
+    // spans, so assert on the rendered text rather than a single element.
+    expect(container).toHaveTextContent(
+      "/workspace/demo.py - port = 3000 + port = 8080",
+    );
+    expect(container).not.toHaveTextContent("no need to Read it back");
+  });
+
+  it("dismisses the timestamp when details are expanded with a pointer", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <EventMessage
+        event={makeEvent()}
+        messages={[]}
+        isLastMessage={false}
+        isInLast10Actions={false}
+      />,
+    );
+
+    const title = screen.getByTestId("generic-event-message-title");
+    await user.hover(title);
+    expect(await screen.findByRole("tooltip")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "BUTTON$EXPAND" }));
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+
+    await user.hover(screen.getByText(/diff output here/));
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   });
 });

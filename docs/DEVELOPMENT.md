@@ -14,7 +14,6 @@ This repository contains the Agent Canvas frontend and local-stack orchestration
 
 - [`OpenHands/software-agent-sdk`](https://github.com/OpenHands/software-agent-sdk) owns the Python SDK, Agent Server, agent/tool behavior, conversations, workspaces, events, and server API.
 - [`OpenHands/typescript-client`](https://github.com/OpenHands/typescript-client) owns browser-compatible typed access to that Agent Server API. Add client methods there rather than reimplementing API calls in Canvas.
-- [`OpenHands/extensions`](https://github.com/OpenHands/extensions) owns reusable skills, plugins, automations, and integrations.
 - [`OpenHands/extensions`](https://github.com/OpenHands/extensions) owns reusable skills, plugins, automations, and integrations; [`OpenHands/automation`](https://github.com/OpenHands/automation) owns automation definitions, scheduling, webhooks, run history, and dispatching; Agent Server/SDK code executes the dispatched conversations.
 
 When a feature crosses repositories, implement the backend contract in the SDK first, expose it through `typescript-client`, and consume it in Canvas. Coordinate automation lifecycle changes in `automation`. See the repository [contributor notes](../AGENTS.md) and follow the [custom code-review guide](../.agents/skills/custom-codereview-guide.md) for every pull request.
@@ -51,8 +50,8 @@ it instead.
 | Variable                  | Description                    | Default |
 | ------------------------- | ------------------------------ | ------- |
 | `PORT`                    | Ingress port                   | `8000`  |
-| `OH_AUTOMATION_GIT_REF`   | Git ref for automation backend | `main`  |
-| `OH_AGENT_SERVER_GIT_REF` | Git ref for agent-server       | `main`  |
+| `OH_AUTOMATION_GIT_REF`   | Git ref for automation backend (overrides the pinned default version) | *(unset)* |
+| `OH_AGENT_SERVER_GIT_REF` | Git ref for agent-server (overrides the pinned default version) | *(unset)* |
 
 ### Alternative: Minimal Mode (without Automation)
 
@@ -204,3 +203,19 @@ You can create a `.env` file in the project directory with these variables based
 | `VITE_USE_TLS`              | Use HTTPS/WSS for the Vite proxy target                                                   | `false`                |
 | `VITE_FRONTEND_PORT`        | Port to run the frontend application                                                      | `3001`                 |
 | `VITE_INSECURE_SKIP_VERIFY` | Skip TLS certificate verification for proxied backend requests                            | `false`                |
+
+
+### Cloud organization recovery in embedded hosts
+
+`AgentServerUIProviders` leaves organization recovery off by default so the host's
+login and onboarding can render before authentication. Import the public
+`CloudOrganizationBoundary` and mount it inside the providers, after your auth
+gate, around consumers that send organization-scoped requests. If the entire
+provider subtree is already authenticated, use `resolveCloudOrganization` to
+apply the same boundary automatically. Recovery fills its containing panel.
+Standalone Canvas mounts the boundary after its own authentication gate.
+
+A successful membership response repairs an inaccessible saved selection. A
+transient lookup failure retains a saved selection; 401/403 responses and an
+empty membership list show recovery instead. Background refreshes retain cached
+membership and user identity while the saved selection remains accessible.

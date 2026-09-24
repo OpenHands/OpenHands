@@ -26,8 +26,39 @@ export interface Automation {
   name: string;
   trigger: AutomationTrigger;
   enabled: boolean;
+  /**
+   * Human-readable reason the automation was last disabled (the latest
+   * disablement event overwrites this). Mirrors the automation service's
+   * `AutomationResponse.disabled_reason`. `null`/absent for enabled automations
+   * or an automation service older than the release that started recording it.
+   */
+  disabled_reason?: string | null;
+  /**
+   * Structured disablement metadata from the automation service
+   * (`AutomationResponse.disabled_detail`): `{reason, source, run_id, ...}`
+   * plus rule-specific fields (threshold, consecutive counts, status_detail).
+   * Used to tell user-initiated ("manual") disables from automatic ones
+   * (consecutive failures, permanent config faults).
+   */
+  disabled_detail?: {
+    reason?: string;
+    source?: string;
+    run_id?: string | null;
+    [key: string]: unknown;
+  } | null;
+  /** UTC timestamp the automation was last disabled. */
+  disabled_at?: string | null;
+  /**
+   * UUID of the user who created this automation. The backend returns it in
+   * `AutomationResponse.user_id`; the frontend uses it to implement the
+   * "creator escape hatch" — a member (view-only) may still edit their own
+   * automations even without `manage_automations`.
+   */
+  user_id?: string;
   repository?: string;
-  /** LLM/model profile name used for automation runs. */
+  /** Saved agent profile controlling model, tools, and selected secrets. */
+  agent_profile_id?: string | null;
+  /** LLM/model profile name used when no agent profile is selected. */
   model?: string | null;
   /**
    * Maximum run time in seconds. `null`/omitted uses the server default
@@ -38,6 +69,12 @@ export interface Automation {
   created_at: string;
   updated_at: string;
   prompt: string | null;
+  /**
+   * Shell command the automation service runs in the unpacked bundle's root
+   * (e.g. `python main.py`). Mirrors `AutomationResponse.entrypoint`; the
+   * detail page uses it to point out which bundle file is the script.
+   */
+  entrypoint?: string;
   branch?: string;
   plugins?: string[];
   notification?: string;
@@ -54,7 +91,15 @@ export interface Automation {
 
 export type AutomationSpec = Omit<
   Automation,
-  "id" | "created_at" | "updated_at" | "last_triggered_at" | "preset_metadata"
+  | "id"
+  | "created_at"
+  | "updated_at"
+  | "last_triggered_at"
+  | "preset_metadata"
+  | "entrypoint"
+  | "disabled_reason"
+  | "disabled_detail"
+  | "disabled_at"
 >;
 
 /** The envelope constants come from the interface manifest's import/export spec. */
@@ -122,6 +167,14 @@ export interface AutomationRun {
    * dispatched (e.g. sandbox provisioning errors).
    */
   bash_command_id: string | null;
+  /**
+   * ID of the cloud sandbox that hosted the run. Script (deterministic)
+   * automations never create a conversation, so on cloud backends this is
+   * the only handle to the agent-server holding their logs. Null when the
+   * run failed before a sandbox was provisioned; absent entirely against an
+   * automation service that predates the field.
+   */
+  sandbox_id?: string | null;
   error_detail: string | null;
   status_detail?: AutomationRunStatusDetail | null;
   run_metadata?: AutomationRunMetadata | null;

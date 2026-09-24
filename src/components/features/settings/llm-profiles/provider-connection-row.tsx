@@ -33,15 +33,15 @@ export function ProviderConnectionRow({
     >
       <div className="flex min-w-0 flex-1 items-center gap-3">
         <span
-          className="min-w-0 max-w-full truncate text-sm font-medium text-white"
+          className="min-w-0 max-w-full truncate text-sm font-medium text-contrast"
           title={connection.display_name}
         >
           {connection.display_name}
         </span>
-        <span className="min-w-0 max-w-full truncate text-sm text-[var(--oh-muted)]">
+        <span className="min-w-0 max-w-full truncate text-sm text-muted">
           {connection.provider}
         </span>
-        <span className="shrink-0 text-sm text-[var(--oh-muted)]">
+        <span className="shrink-0 text-sm text-muted">
           {t(I18nKey.SETTINGS$PROVIDER_CONNECTION_MODEL_COUNT, {
             count: linkedProfileCount,
           })}

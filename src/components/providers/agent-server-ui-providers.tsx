@@ -14,6 +14,8 @@ import {
   setI18n,
 } from "#/i18n";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import { CloudOrganizationBoundary } from "#/components/features/backends/cloud-organization-boundary";
+import { useHydrateFreeModels } from "#/hooks/query/use-free-models";
 import type { TelemetryConfig } from "#/services/telemetry";
 import { TelemetryProvider } from "./telemetry-provider";
 import {
@@ -43,6 +45,18 @@ export interface AgentServerUIProvidersProps extends Pick<
   analytics?: AgentServerUIAnalyticsConfig;
   i18n?: I18nInstance;
   withStyleRoot?: boolean;
+  /** Opt in only after authentication; otherwise mount CloudOrganizationBoundary after the host auth gate. */
+  resolveCloudOrganization?: boolean;
+}
+
+/**
+ * Fetches the DB-driven free / default model flags once and mirrors them into
+ * the free-models store. Rendered inside the query provider so leaf components
+ * can read the flags synchronously without a QueryClientProvider in scope.
+ */
+function FreeModelsHydrator() {
+  useHydrateFreeModels();
+  return null;
 }
 
 export function AgentServerUIProviders({
@@ -56,6 +70,7 @@ export function AgentServerUIProviders({
   styleOverrides,
   theme,
   withStyleRoot = true,
+  resolveCloudOrganization = false,
 }: AgentServerUIProvidersProps) {
   const resolvedQueryClient = React.useMemo(
     () => queryClient ?? getDefaultQueryClient(),
@@ -96,7 +111,14 @@ export function AgentServerUIProviders({
         }
       : false;
   const content = (
-    <TelemetryProvider config={posthogConfig}>{children}</TelemetryProvider>
+    <TelemetryProvider config={posthogConfig}>
+      <FreeModelsHydrator />
+      {resolveCloudOrganization ? (
+        <CloudOrganizationBoundary>{children}</CloudOrganizationBoundary>
+      ) : (
+        children
+      )}
+    </TelemetryProvider>
   );
 
   const wrappedContent = withStyleRoot ? (

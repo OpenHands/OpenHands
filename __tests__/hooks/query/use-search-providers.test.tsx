@@ -5,11 +5,13 @@ import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   __resetActiveStoreForTests,
+  getActiveBackend,
   setActiveSelection,
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
 import { callCloudProxy } from "#/api/cloud/proxy";
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { useSearchProviders } from "#/hooks/query/use-search-providers";
 import { server } from "#/mocks/node";
 
@@ -158,6 +160,81 @@ describe("useSearchProviders — cloud backend pagination", () => {
     expect(result.current.error).toBeInstanceOf(Error);
     expect(String(result.current.error?.message)).toMatch(
       /Repeated page id|Too many pagination/,
+    );
+  });
+});
+
+describe("useSearchProviders — backend switch re-keying", () => {
+  const cloudBackendA: Backend = {
+    ...cloudBackend,
+    id: "cloud-a",
+  };
+  const cloudBackendB: Backend = {
+    ...cloudBackend,
+    id: "cloud-b",
+  };
+
+  // Wraps with ActiveBackendProvider so `useActiveBackend()` (used in the
+  // query key) follows `setActiveSelection` instead of falling back to the
+  // default local backend. Without the provider, the hook tests cannot
+  // exercise backend-switch re-keying at all.
+  const scopedWrapper = ({ children }: { children: React.ReactNode }) => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    return (
+      <QueryClientProvider client={client}>
+        <ActiveBackendProvider>{children}</ActiveBackendProvider>
+      </QueryClientProvider>
+    );
+  };
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    __resetActiveStoreForTests();
+    setRegisteredBackends([cloudBackendA, cloudBackendB]);
+    setActiveSelection({ backendId: cloudBackendA.id, orgId: null });
+    vi.mocked(callCloudProxy).mockReset();
+  });
+
+  afterEach(() => {
+    window.localStorage.clear();
+    __resetActiveStoreForTests();
+    vi.mocked(callCloudProxy).mockReset();
+  });
+
+  it("refetches instead of serving the previous backend's cached provider list after a switch", async () => {
+    // Backend A surfaces an "a-only" provider; backend B surfaces a
+    // "b-only" provider. If the query key were unscoped, React Query would
+    // serve A's cached page (within staleTime) after switching to B.
+    vi.mocked(callCloudProxy).mockImplementation((async () => {
+      const active = getActiveBackend();
+      const items =
+        active.backend.id === "cloud-a"
+          ? [{ name: "a-only-provider", verified: false }]
+          : [{ name: "b-only-provider", verified: false }];
+      return { items, next_page_id: null };
+    }) as never);
+
+    const { result, rerender } = renderHook(() => useSearchProviders(), {
+      wrapper: scopedWrapper,
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.map((p) => p.name) ?? []).toContain(
+      "a-only-provider",
+    );
+
+    // Switch to backend B inside the same session (no full reload).
+    setActiveSelection({ backendId: cloudBackendB.id, orgId: null });
+    rerender();
+
+    await waitFor(() =>
+      expect(result.current.data?.map((p) => p.name) ?? []).toContain(
+        "b-only-provider",
+      ),
+    );
+    expect(result.current.data?.map((p) => p.name) ?? []).not.toContain(
+      "a-only-provider",
     );
   });
 });

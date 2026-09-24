@@ -19,6 +19,7 @@ const dockerWorkflowPath = path.join(
   repoRoot,
   ".github/workflows/mock-llm-docker-e2e.yml",
 );
+const ciWorkflowPath = path.join(repoRoot, ".github/workflows/ci.yml");
 
 function resolveAffectedTests(files: string[]) {
   const output = execFileSync(
@@ -79,25 +80,39 @@ describe("mock-LLM E2E affected test resolver", () => {
     expect(resolveAffectedTests([file])).toEqual(["__ALL__"]);
   });
 
-  it("keeps resolver failures from becoming selective test paths", () => {
+  it("runs browser mock E2E after main updates or manual dispatch", () => {
     const workflow = readFileSync(workflowPath, "utf-8");
 
-    expect(workflow).toContain("if ! RESULT=$(node");
-    expect(workflow).toContain("Affected-test resolver failed");
-    expect(workflow).not.toContain("2>&1) || true");
+    expect(workflow).toContain("push:\n    branches: [main]");
+    expect(workflow).toContain("workflow_dispatch:");
+    expect(workflow).not.toContain("pull_request:");
+    expect(workflow).not.toContain("detect-pr-changes:");
+    expect(workflow).toContain("npm run test:e2e:mock-llm &");
   });
 
-  it("keeps E2E workflows from path-skipping required PR checks", () => {
-    const workflow = readFileSync(workflowPath, "utf-8");
+  it("runs Docker mock E2E after successful main builds or manual dispatch", () => {
     const dockerWorkflow = readFileSync(dockerWorkflowPath, "utf-8");
 
-    expect(workflow).not.toContain("\n    paths:\n");
-    expect(workflow).toContain("detect-pr-changes:");
-    expect(workflow).toContain("needs.detect-pr-changes.outputs.should_run");
-    expect(dockerWorkflow).not.toContain("\n    paths:\n");
-    expect(dockerWorkflow).toContain("detect-pr-changes:");
+    expect(dockerWorkflow).toContain('workflows: ["Docker"]');
+    expect(dockerWorkflow).toContain("branches: [main]");
+    expect(dockerWorkflow).toContain("workflow_dispatch:");
+    expect(dockerWorkflow).not.toContain("pull_request:");
     expect(dockerWorkflow).toContain(
-      "needs.detect-pr-changes.outputs.should_run",
+      "github.event.workflow_run.conclusion == 'success'",
+    );
+  });
+
+  it("runs live LLM E2E on main or by manual PR dispatch", () => {
+    const ciWorkflow = readFileSync(ciWorkflowPath, "utf-8");
+    const liveJob = ciWorkflow.slice(ciWorkflow.indexOf("  live-e2e:"));
+
+    expect(liveJob).toContain("github.event_name == 'workflow_dispatch'");
+    expect(liveJob).toContain(
+      "github.event_name == 'push' && github.ref == 'refs/heads/main'",
+    );
+    expect(liveJob).not.toContain("github.event_name == 'pull_request'");
+    expect(liveJob).toContain(
+      "LIVE_E2E_PR_NUMBER: ${{ inputs.pr_number || '' }}",
     );
   });
 });

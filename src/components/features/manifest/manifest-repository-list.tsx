@@ -66,7 +66,7 @@ export function SetupRepositoryList({
           {values.map((value) => (
             <li
               key={value}
-              className="flex items-center justify-between gap-2 rounded-md border border-[var(--oh-border)] px-3 py-1.5"
+              className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-1.5"
             >
               <span className="truncate text-sm">{value}</span>
               <BrandButton

@@ -22,7 +22,7 @@ import { ChatSuggestions } from "./chat-suggestions";
 import { ScrollProvider } from "#/context/scroll-context";
 import { useInitialQueryStore } from "#/stores/initial-query-store";
 import { useSendMessage } from "#/hooks/use-send-message";
-import { useAgentState } from "#/hooks/use-agent-state";
+import { useAgentState, usePlanningAgentState } from "#/hooks/use-agent-state";
 import { useIsArchivedConversation } from "#/hooks/use-is-archived-conversation";
 import { useHandleBuildPlanClick } from "#/hooks/use-handle-build-plan-click";
 
@@ -115,6 +115,7 @@ export function ChatInterface() {
   } = useNewConversationCommand();
 
   const { curAgentState } = useAgentState();
+  const { isPlanningAgentRunning } = usePlanningAgentState();
   const { handleBuildPlanClick } = useHandleBuildPlanClick();
 
   // Cloud conversations whose sandbox is MISSING or ERROR are read-only:
@@ -212,6 +213,14 @@ export function ChatInterface() {
     scrollHeight: number;
     scrollTop: number;
   } | null>(null);
+
+  React.useEffect(() => {
+    // A pending history load may be discarded during a conversation switch.
+    // Do not let the previous conversation's saved scroll geometry affect the
+    // next conversation's scroll restoration.
+    preserveScrollPosition.current = null;
+  }, [conversationId]);
+
   const maybeLoadOlder = React.useCallback(
     (target: HTMLElement) => {
       if (isProvisioningTask || isLoadingOlderEvents || !hasMoreOlderEvents) {
@@ -588,7 +597,7 @@ export function ChatInterface() {
             <GoalStatusBanner conversationId={conversationId} />
           </div>
 
-          <div className="flex shrink-0 flex-col gap-[6px] pb-4">
+          <div className="flex shrink-0 flex-col gap-1.5 pb-4">
             <SkillInstallRestartBanner conversationId={conversationId} />
             <BtwMessages conversationId={conversationId} />
             {errorMessage && (
@@ -619,14 +628,14 @@ export function ChatInterface() {
               // the chat input. The conversation history above is still visible.
               <div
                 data-testid="archived-conversation-banner"
-                className="mx-1 px-4 py-3 rounded-lg bg-[var(--oh-surface)] border border-[var(--oh-border-subtle)]"
+                className="mx-1 px-4 py-3 rounded-lg bg-surface border border-border-subtle"
               >
-                <p className="text-xs font-semibold text-[var(--oh-foreground)]">
+                <p className="text-xs font-semibold text-foreground">
                   {sandboxStatus === "ERROR"
                     ? t(I18nKey.CHAT_INTERFACE$ERROR_SANDBOX_TITLE)
                     : t(I18nKey.CHAT_INTERFACE$ARCHIVED_SANDBOX_TITLE)}
                 </p>
-                <p className="text-xs text-[var(--oh-muted)] mt-0.5">
+                <p className="text-xs text-muted mt-0.5">
                   {sandboxStatus === "ERROR"
                     ? t(I18nKey.CHAT_INTERFACE$ERROR_SANDBOX_DESCRIPTION)
                     : t(I18nKey.CHAT_INTERFACE$ARCHIVED_SANDBOX_DESCRIPTION)}
@@ -651,7 +660,8 @@ export function ChatInterface() {
                         <ScrollToBottomButton onClick={scrollDomToBottom} />
                       </div>
                     ) : (
-                      curAgentState === AgentState.RUNNING && (
+                      (curAgentState === AgentState.RUNNING ||
+                        isPlanningAgentRunning) && (
                         <div className="pointer-events-none absolute inset-x-9 bottom-0 flex justify-center">
                           <TypingIndicator events={allConversationEvents} />
                         </div>

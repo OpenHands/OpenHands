@@ -32,6 +32,14 @@ vi.mock("#/api/profiles-service/profiles-service.api", () => ({
   },
 }));
 
+vi.mock("#/hooks/query/use-agent-profiles", () => ({
+  useAgentProfiles: () => ({
+    data: { profiles: [{ id: "review-profile", name: "Reviewer" }] },
+    isLoading: false,
+    isError: false,
+  }),
+}));
+
 vi.mock("#/utils/custom-toast-handlers", () => ({
   displaySuccessToast: vi.fn(),
   displayErrorToast: vi.fn(),
@@ -692,5 +700,38 @@ describe("EditAutomationModal", () => {
       .calls[0];
     expect(body).toMatchObject({ name: "Renamed digest" });
     expect(body).not.toHaveProperty("timeout");
+  });
+
+  it("stores an optional agent profile instead of a competing model", async () => {
+    vi.mocked(AutomationService.getCapabilities).mockResolvedValue({
+      ready: true,
+      triggerKinds: ["cron"],
+      eventSources: [],
+      eventTypes: [],
+      triggers: {},
+      features: ["agentProfiles"],
+    });
+    vi.mocked(ProfilesService.listProfiles).mockResolvedValue(profilesResponse);
+    vi.mocked(AutomationService.updateAutomation).mockResolvedValue({
+      ...modeledAutomation,
+      agent_profile_id: "review-profile",
+      model: null,
+    });
+    const user = userEvent.setup();
+    renderModal(modeledAutomation);
+
+    await user.click(await screen.findByTestId("automation-agent-profile"));
+    await user.click(await screen.findByRole("option", { name: "Reviewer" }));
+    await user.click(screen.getByTestId("edit-automation-save"));
+
+    await waitFor(() =>
+      expect(AutomationService.updateAutomation).toHaveBeenCalledTimes(1),
+    );
+    expect(
+      vi.mocked(AutomationService.updateAutomation).mock.calls[0][1],
+    ).toMatchObject({
+      agent_profile_id: "review-profile",
+      model: null,
+    });
   });
 });
