@@ -20,6 +20,12 @@ const mocks = vi.hoisted(() => ({
     isError: false,
     refetch: vi.fn(),
   },
+  draftsState: {
+    data: { drafts: [], total: 0 },
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  },
   dispatchState: {
     isPending: false,
     variables: undefined as string | undefined,
@@ -28,12 +34,16 @@ const mocks = vi.hoisted(() => ({
   backendKind: "local" as "local" | "cloud",
   canManage: true,
   navigate: vi.fn(),
+  useAutomationDrafts: vi.fn(),
   useAutomations: vi.fn(),
   useAutomationRunSummaries: vi.fn(),
   toggle: vi.fn(),
   remove: vi.fn(),
+  removeDraft: vi.fn(),
   dispatch: vi.fn(),
+  dispatchDraft: vi.fn(),
   importAutomation: vi.fn(),
+  createConversation: vi.fn(),
   trackEnabled: vi.fn(),
   trackExported: vi.fn(),
   useTranslation: vi.fn(),
@@ -87,15 +97,31 @@ vi.mock("#/hooks/query/use-automation-health", () => ({
   useAutomationHealth: () => mocks.healthState,
 }));
 
+vi.mock("#/hooks/mutation/use-create-conversation", () => ({
+  useCreateConversation: () => ({
+    mutate: mocks.createConversation,
+    isPending: false,
+  }),
+}));
+
 vi.mock("#/hooks/query/use-automations", () => ({
+  useAutomationDrafts: (options: unknown) => {
+    mocks.useAutomationDrafts(options);
+    return mocks.draftsState;
+  },
   useAutomations: (options: unknown) => {
     mocks.useAutomations(options);
     return mocks.automationsState;
   },
   useToggleAutomation: () => ({ mutate: mocks.toggle }),
   useDeleteAutomation: () => ({ mutate: mocks.remove }),
+  useDeleteAutomationDraft: () => ({ mutate: mocks.removeDraft }),
   useDispatchAutomation: () => ({
     mutate: mocks.dispatch,
+    ...mocks.dispatchState,
+  }),
+  useDispatchAutomationDraft: () => ({
+    mutate: mocks.dispatchDraft,
     ...mocks.dispatchState,
   }),
   useImportAutomation: () => ({

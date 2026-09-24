@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -18,7 +19,9 @@ import {
   Puzzle,
   Zap,
 } from "lucide-react";
-import AutomationService from "#/api/automation-service/automation-service.api";
+import AutomationService, {
+  type CustomWebhookCreateResponse,
+} from "#/api/automation-service/automation-service.api";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import {
   patchAutomationSetupDraft,
@@ -44,6 +47,7 @@ import {
 } from "#/utils/form-control-classes";
 import { cn } from "#/utils/utils";
 import { isSdkHttpError } from "#/api/agent-server-compatibility";
+import { useDeploymentCapabilities } from "#/hooks/query/use-manifest-capabilities";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { useNavigation } from "#/context/navigation-context";
 import type {
@@ -115,6 +119,26 @@ const AUTOMATION_SETUP_FIELD_RENDER_ORDER: AutomationSetupField[] = [
   "showTimeout",
   "timeoutSeconds",
 ];
+
+type CustomWebhookSignatureScheme =
+  | "hmac_sha256_hex"
+  | "standard_webhooks"
+  | "slack_v0";
+
+interface CustomWebhookFormState {
+  enabled: boolean;
+  name: string;
+  eventKeyExpr: string;
+  signatureHeader: string;
+  signatureScheme: CustomWebhookSignatureScheme;
+  webhookSecret: string;
+}
+
+const DEFAULT_CUSTOM_WEBHOOK_EVENT_KEY_EXPR = "type";
+const DEFAULT_CUSTOM_WEBHOOK_SIGNATURE_HEADER = "X-Signature-256";
+const DEFAULT_CUSTOM_WEBHOOK_SIGNATURE_SCHEME: CustomWebhookSignatureScheme =
+  "hmac_sha256_hex";
+
 const NON_CHARACTER_STREAM_FIELDS = new Set<AutomationSetupField>([
   "kind",
   "triggerKind",
@@ -214,6 +238,35 @@ function shouldCharacterStreamField(
 
 function streamingHighlightClassName(isStreaming: boolean) {
   return isStreaming ? streamingFieldHighlightClassName : undefined;
+}
+
+function buildDefaultEventTestPayload(
+  eventSource: string = DEFAULT_EVENT_SOURCE,
+  eventKey: string = DEFAULT_EVENT_KEY,
+): string {
+  return `${JSON.stringify(
+    {
+      source: eventSource || DEFAULT_EVENT_SOURCE,
+      event: eventKey || DEFAULT_EVENT_KEY,
+      action: "test",
+    },
+    null,
+    2,
+  )}\n`;
+}
+
+function parseEventTestPayload(value: string): Record<string, unknown> | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return null;
+    }
+    return parsed as Record<string, unknown>;
+  } catch {
+    return null;
+  }
 }
 
 function buildInitialForm(
@@ -384,6 +437,36 @@ function extractDraftDispatchErrors(error: unknown): string | null {
   return null;
 }
 
+function draftRunFinishedSuccessfully(run: AutomationRun): boolean {
+  return String(run.status).toUpperCase() === "COMPLETED";
+}
+
+function draftRunFinishedWithFailure(run: AutomationRun): boolean {
+  const status = String(run.status).toUpperCase();
+  return status === "FAILED" || status === "CANCELLED" || status === "SKIPPED";
+}
+
+function getDraftExecutionStatusText(
+  draft: AutomationDraftApiResponse,
+  runs: AutomationRun[],
+  t: ReturnType<typeof useTranslation>["t"],
+): string {
+  const latestRun = runs[0];
+  if (latestRun) {
+    if (draftRunFinishedSuccessfully(latestRun)) {
+      return t(I18nKey.AUTOMATION_SETUP$LATEST_TEST_PASSED);
+    }
+    if (draftRunFinishedWithFailure(latestRun)) {
+      return t(I18nKey.AUTOMATION_SETUP$LATEST_TEST_FAILED);
+    }
+    return t(I18nKey.AUTOMATION_SETUP$LATEST_TEST_RUNNING);
+  }
+  return (
+    draft.validationErrors?.[0]?.message ??
+    t(I18nKey.AUTOMATION_SETUP$READY_TO_TEST)
+  );
+}
+
 function DraftRunDetailsCard({
   draft,
   runs,
@@ -393,8 +476,7 @@ function DraftRunDetailsCard({
 }) {
   const { t, i18n } = useTranslation("openhands");
   const validationMessage = draft.validationErrors?.[0]?.message ?? null;
-  const statusText =
-    validationMessage ?? t(I18nKey.AUTOMATION_SETUP$TEST_PASSED);
+  const statusText = getDraftExecutionStatusText(draft, runs, t);
 
   return (
     <section
@@ -513,7 +595,24 @@ export function AutomationSetupPanel({
   const serverDraftsSupported = AutomationService.supportsAutomationDrafts(
     deploymentCapabilities.data,
   );
+  const eventSourceOptions = deploymentCapabilities.data?.eventSources ?? [];
+  const eventTypeOptions = deploymentCapabilities.data?.eventTypes ?? [];
   const [form, setForm] = useState(() => buildInitialForm(draft));
+  const [eventTestPayload, setEventTestPayload] = useState(() =>
+    buildDefaultEventTestPayload(DEFAULT_EVENT_SOURCE, DEFAULT_EVENT_KEY),
+  );
+  const [isEventTestPayloadDirty, setIsEventTestPayloadDirty] = useState(false);
+  const [customWebhook, setCustomWebhook] = useState<CustomWebhookFormState>({
+    enabled: false,
+    name: "",
+    eventKeyExpr: DEFAULT_CUSTOM_WEBHOOK_EVENT_KEY_EXPR,
+    signatureHeader: DEFAULT_CUSTOM_WEBHOOK_SIGNATURE_HEADER,
+    signatureScheme: DEFAULT_CUSTOM_WEBHOOK_SIGNATURE_SCHEME,
+    webhookSecret: "",
+  });
+  const [customWebhookRegistration, setCustomWebhookRegistration] =
+    useState<CustomWebhookCreateResponse | null>(null);
+
   const [fieldMetadata, setFieldMetadata] = useState(
     () => draft.fieldMetadata ?? {},
   );
@@ -528,6 +627,9 @@ export function AutomationSetupPanel({
     useState<AutomationDraftApiResponse | null>(null);
   const [draftRuns, setDraftRuns] = useState<AutomationRun[]>([]);
   const [isHydratingServerDraft, setIsHydratingServerDraft] = useState(false);
+  const [saveState, setSaveState] = useState<
+    "idle" | "saving" | "saved" | "error"
+  >("idle");
   const [isTaggedDraftMissing, setIsTaggedDraftMissing] = useState(false);
   const propTaggedServerDraftId =
     getAutomationDraftIdFromTags(conversationTags);
@@ -640,6 +742,11 @@ export function AutomationSetupPanel({
     showTimeout,
     timeoutSeconds,
   } = form;
+
+  useEffect(() => {
+    if (isEventTestPayloadDirty) return;
+    setEventTestPayload(buildDefaultEventTestPayload(eventSource, eventKey));
+  }, [eventSource, eventKey, isEventTestPayloadDirty]);
 
   const clearQueuedStreams = useCallback(() => {
     streamGenerationRef.current += 1;
@@ -808,6 +915,7 @@ export function AutomationSetupPanel({
   ) => {
     clearQueuedStreams();
     setStatusMessage(null);
+    setSaveState("idle");
     setForm((previous) => ({ ...previous, [field]: value }));
     if (!conversationId) return;
     patchAutomationSetupDraft(
@@ -821,6 +929,16 @@ export function AutomationSetupPanel({
     fieldMetadata[field]?.updatedBy === "agent"
       ? t(I18nKey.AUTOMATION_SETUP$FILLED_BY_OPENHANDS)
       : undefined;
+
+  const updateCustomWebhook = <FieldName extends keyof CustomWebhookFormState>(
+    field: FieldName,
+    value: CustomWebhookFormState[FieldName],
+  ) => {
+    setStatusMessage(null);
+    setSaveState("idle");
+    setCustomWebhookRegistration(null);
+    setCustomWebhook((previous) => ({ ...previous, [field]: value }));
+  };
 
   const normalizedName = () => name.trim() || deriveName(prompt);
   const buildTrigger = () =>
@@ -881,6 +999,96 @@ export function AutomationSetupPanel({
     tarballPath: string = PREFLIGHT_TARBALL_PATH,
   ): SetupRequestBody =>
     kind === "custom" ? buildCustomBody(tarballPath) : buildPresetBody();
+  const draftValidationByField = useMemo(() => {
+    const byField = new Map<string, string>();
+    for (const error of serverDraft?.validationErrors ?? []) {
+      if (error.field && !byField.has(error.field)) {
+        byField.set(error.field, error.message);
+      }
+    }
+    return byField;
+  }, [serverDraft?.validationErrors]);
+  const fieldError = (field: string): string | undefined =>
+    draftValidationByField.get(field);
+  const isDraftDirty = useMemo(() => {
+    if (!serverDraft) return true;
+    return (
+      serverDraft.endpoint !== draftEndpoint(kind) ||
+      (serverDraft.name ?? "") !== normalizedName() ||
+      JSON.stringify(serverDraft.draft) !== JSON.stringify(draftRequestBody())
+    );
+  }, [
+    serverDraft,
+    kind,
+    name,
+    prompt,
+    repository,
+    pluginSource,
+    pluginRef,
+    customCode,
+    entrypoint,
+    setupScriptPath,
+    setupScript,
+    triggerKind,
+    frequency,
+    time,
+    timezone,
+    customSchedule,
+    eventSource,
+    eventKey,
+    eventFilter,
+    showTimeout,
+    timeoutSeconds,
+  ]);
+
+  const ensureCustomWebhookSource = async (): Promise<boolean> => {
+    if (triggerKind !== "event" || !customWebhook.enabled) return true;
+    const source = eventSource.trim();
+    if (!source) {
+      setSaveState("error");
+      setStatusMessage({
+        kind: "error",
+        text: t(I18nKey.AUTOMATION_SETUP$CUSTOM_WEBHOOK_SOURCE_REQUIRED),
+      });
+      return false;
+    }
+    if (customWebhookRegistration?.source === source) return true;
+
+    try {
+      const webhook = await AutomationService.createCustomWebhook({
+        name:
+          customWebhook.name.trim() ||
+          t(I18nKey.AUTOMATION_SETUP$CUSTOM_WEBHOOK_DEFAULT_NAME, { source }),
+        source,
+        event_key_expr:
+          customWebhook.eventKeyExpr.trim() ||
+          DEFAULT_CUSTOM_WEBHOOK_EVENT_KEY_EXPR,
+        signature_header:
+          customWebhook.signatureHeader.trim() ||
+          DEFAULT_CUSTOM_WEBHOOK_SIGNATURE_HEADER,
+        signature_scheme: customWebhook.signatureScheme,
+        ...(customWebhook.webhookSecret.trim()
+          ? { webhook_secret: customWebhook.webhookSecret.trim() }
+          : {}),
+      });
+      setCustomWebhookRegistration(webhook);
+      return true;
+    } catch (error) {
+      if (getResponseStatus(error) === 409) {
+        setStatusMessage({
+          kind: "success",
+          text: t(I18nKey.AUTOMATION_SETUP$CUSTOM_WEBHOOK_ALREADY_EXISTS, {
+            source,
+          }),
+        });
+        return true;
+      }
+      setSaveState("error");
+      displayErrorToast(error instanceof Error ? error.message : null);
+      return false;
+    }
+  };
+
   const uploadCustomArchive = async (): Promise<string> => {
     const archive = await packTarGzip([
       { name: MAIN_PY_FILENAME, content: customCode, mode: 0o644 },
@@ -920,7 +1128,7 @@ export function AutomationSetupPanel({
     setStatusMessage({
       kind: result.valid ? "success" : "error",
       text: result.valid
-        ? t(I18nKey.AUTOMATION_SETUP$TEST_PASSED)
+        ? t(I18nKey.AUTOMATION_SETUP$READY_TO_TEST)
         : result.errors[0]?.message || t(I18nKey.SETUP$SUBMIT_FAILED),
     });
   };
@@ -972,8 +1180,11 @@ export function AutomationSetupPanel({
   const handleSaveDraft = async () => {
     if (!serverDraftsSupported) return;
     setIsSubmitting(true);
+    setSaveState("saving");
     try {
+      if (!(await ensureCustomWebhookSource())) return;
       const saved = await persistServerDraft();
+      setSaveState("saved");
       setStatusMessage({
         kind: "success",
         text:
@@ -982,12 +1193,14 @@ export function AutomationSetupPanel({
       });
     } catch (error) {
       if (isDraftEndpointUnavailable(error)) {
+        setSaveState("saved");
         setStatusMessage({
           kind: "success",
           text: t(I18nKey.AUTOMATION_SETUP$DRAFT_SAVED),
         });
         return;
       }
+      setSaveState("error");
       displayErrorToast(error instanceof Error ? error.message : null);
     } finally {
       setIsSubmitting(false);
@@ -995,12 +1208,23 @@ export function AutomationSetupPanel({
   };
   const handleTest = async () => {
     if (!validateRequiredFields()) return;
+    const eventPayload =
+      triggerKind === "event" ? parseEventTestPayload(eventTestPayload) : null;
+    if (triggerKind === "event" && eventPayload === null) {
+      setStatusMessage({
+        kind: "error",
+        text: t(I18nKey.AUTOMATION_SETUP$TEST_EVENT_PAYLOAD_INVALID),
+      });
+      return;
+    }
     setIsSubmitting(true);
+    setSaveState("saving");
     try {
       if (!serverDraftsSupported) {
         await runPreflightValidation();
         return;
       }
+      if (!(await ensureCustomWebhookSource())) return;
       // Persist the current form state as a draft first, then dispatch it.
       // The service materializes the validated draft body into a disabled
       // automation and starts a manual run; the draft row stays as source
@@ -1008,6 +1232,7 @@ export function AutomationSetupPanel({
       const tarballPath =
         kind === "custom" ? await uploadCustomArchive() : undefined;
       const saved = await persistServerDraft(tarballPath);
+      setSaveState("saved");
 
       if (!saved.dispatchable) {
         setStatusMessage({
@@ -1019,7 +1244,11 @@ export function AutomationSetupPanel({
         return;
       }
 
-      const run = await AutomationService.dispatchServerDraft(saved.id);
+      const run = eventPayload
+        ? await AutomationService.dispatchServerDraft(saved.id, {
+            eventPayload,
+          })
+        : await AutomationService.dispatchServerDraft(saved.id);
       const materializedAutomationId =
         typeof (run as unknown as Record<string, unknown>).automation_id ===
         "string"
@@ -1040,9 +1269,11 @@ export function AutomationSetupPanel({
       });
     } catch (error) {
       if (isDraftEndpointUnavailable(error)) {
+        setSaveState("saved");
         await runPreflightValidation();
         return;
       }
+      setSaveState("error");
       const dispatchError = extractDraftDispatchErrors(error);
       if (dispatchError) {
         setStatusMessage({
@@ -1059,7 +1290,9 @@ export function AutomationSetupPanel({
   const handleCreate = async () => {
     if (!validateRequiredFields()) return;
     setIsSubmitting(true);
+    setSaveState(serverDraftId ? "saving" : saveState);
     try {
+      if (!(await ensureCustomWebhookSource())) return;
       let created: Record<string, unknown>;
       if (kind === "custom") {
         const tarballPath = await uploadCustomArchive();
@@ -1073,6 +1306,7 @@ export function AutomationSetupPanel({
           kind,
         );
       }
+      setSaveState("saved");
       toast.success(t(I18nKey.AUTOMATION_SETUP$CREATED));
       // The draft has been finalized into a real automation; drop the
       // persisted draft row so it does not linger as an incomplete setup.
@@ -1097,6 +1331,37 @@ export function AutomationSetupPanel({
     }
   };
 
+  useEffect(() => {
+    const automationId = serverDraft?.materializedAutomationId;
+    if (!automationId) {
+      setDraftRuns([]);
+      return undefined;
+    }
+
+    let cancelled = false;
+    AutomationService.listAutomationRuns(automationId, { limit: 10, offset: 0 })
+      .then((response) => {
+        if (!cancelled && response.runs.length > 0) setDraftRuns(response.runs);
+      })
+      .catch(() => {
+        if (!cancelled) setDraftRuns((previous) => previous);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [serverDraft?.materializedAutomationId]);
+
+  const saveStateLabel = () => {
+    if (saveState === "saving") return t(I18nKey.AUTOMATION_SETUP$SAVING);
+    if (saveState === "error") return t(I18nKey.AUTOMATION_SETUP$SAVE_FAILED);
+    if (serverDraft && !isDraftDirty) {
+      return t(I18nKey.AUTOMATION_SETUP$SAVED_JUST_NOW);
+    }
+    if (isDraftDirty) return t(I18nKey.AUTOMATION_SETUP$UNSAVED_CHANGES);
+    return null;
+  };
+
   const renderToolbarActions = () => (
     <div className="flex shrink-0 items-center gap-2">
       <BrandButton
@@ -1115,7 +1380,11 @@ export function AutomationSetupPanel({
         isDisabled={isSubmitting}
         onClick={handleTest}
       >
-        {t(I18nKey.AUTOMATION_SETUP$TEST)}
+        {isSubmitting
+          ? t(I18nKey.AUTOMATION_SETUP$STARTING_TEST)
+          : isDraftDirty
+            ? t(I18nKey.AUTOMATION_SETUP$SAVE_AND_TEST)
+            : t(I18nKey.AUTOMATION_SETUP$TEST_DRAFT)}
       </BrandButton>
       <BrandButton
         type="button"
@@ -1158,6 +1427,15 @@ export function AutomationSetupPanel({
             </div>
             {renderToolbarActions()}
           </header>
+        ) : null}
+
+        {saveStateLabel() ? (
+          <div
+            data-testid="automation-setup-save-state"
+            className="border-b border-[var(--oh-border)] px-5 py-2 text-xs text-[var(--oh-muted)]"
+          >
+            {saveStateLabel()}
+          </div>
         ) : null}
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6">
@@ -1203,6 +1481,7 @@ export function AutomationSetupPanel({
               label={t(I18nKey.AUTOMATIONS$NAME)}
               suffix={agentUpdatedSuffix("name")}
               isStreaming={streamingField === "name"}
+              errorText={fieldError("name")}
             >
               <input
                 data-testid="automation-setup-name"
@@ -1240,6 +1519,7 @@ export function AutomationSetupPanel({
                 prompt={prompt}
                 updatedSuffix={agentUpdatedSuffix("prompt")}
                 isStreaming={streamingField === "prompt"}
+                errorText={fieldError("prompt")}
                 onPromptChange={(value) => updateField("prompt", value)}
               />
             ) : (
@@ -1378,6 +1658,11 @@ export function AutomationSetupPanel({
                 eventSource={eventSource}
                 eventKey={eventKey}
                 eventFilter={eventFilter}
+                eventTestPayload={eventTestPayload}
+                eventSourceOptions={eventSourceOptions}
+                eventTypeOptions={eventTypeOptions}
+                customWebhook={customWebhook}
+                customWebhookRegistration={customWebhookRegistration}
                 updatedSuffixes={{
                   eventSource: agentUpdatedSuffix("eventSource"),
                   eventKey: agentUpdatedSuffix("eventKey"),
@@ -1387,6 +1672,11 @@ export function AutomationSetupPanel({
                 setEventSource={(value) => updateField("eventSource", value)}
                 setEventKey={(value) => updateField("eventKey", value)}
                 setEventFilter={(value) => updateField("eventFilter", value)}
+                setEventTestPayload={(value) => {
+                  setIsEventTestPayloadDirty(true);
+                  setEventTestPayload(value);
+                }}
+                setCustomWebhookField={updateCustomWebhook}
               />
             )}
 
@@ -1454,11 +1744,13 @@ function PromptFields({
   prompt,
   updatedSuffix,
   isStreaming,
+  errorText,
   onPromptChange,
 }: {
   prompt: string;
   updatedSuffix?: string;
   isStreaming: boolean;
+  errorText?: string;
   onPromptChange: (value: string) => void;
 }) {
   const { t } = useTranslation("openhands");
@@ -1467,6 +1759,7 @@ function PromptFields({
       label={t(I18nKey.AUTOMATIONS$PROMPT)}
       suffix={updatedSuffix}
       isStreaming={isStreaming}
+      errorText={errorText}
     >
       <div className="rounded-xl border border-[var(--oh-border)] bg-base-secondary">
         <textarea
@@ -1727,15 +2020,27 @@ function EventFields({
   eventSource,
   eventKey,
   eventFilter,
+  eventTestPayload,
+  eventSourceOptions,
+  eventTypeOptions,
+  customWebhook,
+  customWebhookRegistration,
   updatedSuffixes,
   streamingField,
   setEventSource,
   setEventKey,
   setEventFilter,
+  setEventTestPayload,
+  setCustomWebhookField,
 }: {
   eventSource: string;
   eventKey: string;
   eventFilter: string;
+  eventTestPayload: string;
+  eventSourceOptions: string[];
+  eventTypeOptions: string[];
+  customWebhook: CustomWebhookFormState;
+  customWebhookRegistration: CustomWebhookCreateResponse | null;
   updatedSuffixes: Partial<
     Record<"eventSource" | "eventKey" | "eventFilter", string | undefined>
   >;
@@ -1743,6 +2048,11 @@ function EventFields({
   setEventSource: (value: string) => void;
   setEventKey: (value: string) => void;
   setEventFilter: (value: string) => void;
+  setEventTestPayload: (value: string) => void;
+  setCustomWebhookField: <FieldName extends keyof CustomWebhookFormState>(
+    field: FieldName,
+    value: CustomWebhookFormState[FieldName],
+  ) => void;
 }) {
   const { t } = useTranslation("openhands");
   return (
@@ -1752,24 +2062,40 @@ function EventFields({
         suffix={updatedSuffixes.eventSource}
         isStreaming={streamingField === "eventSource"}
       >
-        <input
-          data-testid="automation-setup-event-source"
-          value={eventSource}
-          onChange={(event) => setEventSource(event.target.value)}
-          className={formControlFieldClassName}
-        />
+        <>
+          <input
+            data-testid="automation-setup-event-source"
+            value={eventSource}
+            list="automation-setup-event-source-options"
+            onChange={(event) => setEventSource(event.target.value)}
+            className={formControlFieldClassName}
+          />
+          <datalist id="automation-setup-event-source-options">
+            {eventSourceOptions.map((source) => (
+              <option key={source} value={source} />
+            ))}
+          </datalist>
+        </>
       </Field>
       <Field
         label={t(I18nKey.AUTOMATION_SETUP$EVENT_KEY)}
         suffix={updatedSuffixes.eventKey}
         isStreaming={streamingField === "eventKey"}
       >
-        <input
-          data-testid="automation-setup-event-key"
-          value={eventKey}
-          onChange={(event) => setEventKey(event.target.value)}
-          className={formControlFieldClassName}
-        />
+        <>
+          <input
+            data-testid="automation-setup-event-key"
+            value={eventKey}
+            list="automation-setup-event-key-options"
+            onChange={(event) => setEventKey(event.target.value)}
+            className={formControlFieldClassName}
+          />
+          <datalist id="automation-setup-event-key-options">
+            {eventTypeOptions.map((eventType) => (
+              <option key={eventType} value={eventType} />
+            ))}
+          </datalist>
+        </>
       </Field>
       <div className="md:col-span-2">
         <Field
@@ -1785,6 +2111,177 @@ function EventFields({
           />
         </Field>
       </div>
+      <div className="md:col-span-2">
+        <section className="rounded-xl border border-[var(--oh-border)] p-3">
+          <div className="flex items-start gap-3 text-sm font-medium text-white">
+            <input
+              id="automation-setup-custom-webhook-enabled"
+              type="checkbox"
+              data-testid="automation-setup-custom-webhook-enabled"
+              checked={customWebhook.enabled}
+              onChange={(event) =>
+                setCustomWebhookField("enabled", event.target.checked)
+              }
+              className="mt-1"
+            />
+            <label
+              htmlFor="automation-setup-custom-webhook-enabled"
+              className="flex flex-col gap-1"
+            >
+              <span>{t(I18nKey.AUTOMATION_SETUP$CUSTOM_WEBHOOK_TITLE)}</span>
+              <span className="text-xs font-normal leading-5 text-[var(--oh-muted)]">
+                {t(I18nKey.AUTOMATION_SETUP$CUSTOM_WEBHOOK_DESCRIPTION)}
+              </span>
+            </label>
+          </div>
+          {customWebhook.enabled && (
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <Field label={t(I18nKey.AUTOMATION_SETUP$CUSTOM_WEBHOOK_NAME)}>
+                <input
+                  data-testid="automation-setup-custom-webhook-name"
+                  value={customWebhook.name}
+                  onChange={(event) =>
+                    setCustomWebhookField("name", event.target.value)
+                  }
+                  className={formControlFieldClassName}
+                  placeholder={t(
+                    I18nKey.AUTOMATION_SETUP$CUSTOM_WEBHOOK_NAME_PLACEHOLDER,
+                  )}
+                />
+              </Field>
+              <Field
+                label={t(
+                  I18nKey.AUTOMATION_SETUP$CUSTOM_WEBHOOK_EVENT_KEY_EXPR,
+                )}
+              >
+                <input
+                  data-testid="automation-setup-custom-webhook-event-key-expr"
+                  value={customWebhook.eventKeyExpr}
+                  onChange={(event) =>
+                    setCustomWebhookField("eventKeyExpr", event.target.value)
+                  }
+                  className={formControlFieldClassName}
+                />
+              </Field>
+              <Field
+                label={t(
+                  I18nKey.AUTOMATION_SETUP$CUSTOM_WEBHOOK_SIGNATURE_HEADER,
+                )}
+              >
+                <input
+                  data-testid="automation-setup-custom-webhook-signature-header"
+                  value={customWebhook.signatureHeader}
+                  onChange={(event) =>
+                    setCustomWebhookField("signatureHeader", event.target.value)
+                  }
+                  className={formControlFieldClassName}
+                />
+              </Field>
+              <Field
+                label={t(
+                  I18nKey.AUTOMATION_SETUP$CUSTOM_WEBHOOK_SIGNATURE_SCHEME,
+                )}
+              >
+                <select
+                  data-testid="automation-setup-custom-webhook-signature-scheme"
+                  value={customWebhook.signatureScheme}
+                  onChange={(event) =>
+                    setCustomWebhookField(
+                      "signatureScheme",
+                      event.target.value as CustomWebhookSignatureScheme,
+                    )
+                  }
+                  className={formControlFieldClassName}
+                >
+                  <option value="hmac_sha256_hex">
+                    {t(
+                      I18nKey.AUTOMATION_SETUP$CUSTOM_WEBHOOK_SIGNATURE_SCHEME_HMAC,
+                    )}
+                  </option>
+                  <option value="standard_webhooks">
+                    {t(
+                      I18nKey.AUTOMATION_SETUP$CUSTOM_WEBHOOK_SIGNATURE_SCHEME_STANDARD,
+                    )}
+                  </option>
+                  <option value="slack_v0">
+                    {t(
+                      I18nKey.AUTOMATION_SETUP$CUSTOM_WEBHOOK_SIGNATURE_SCHEME_SLACK,
+                    )}
+                  </option>
+                </select>
+              </Field>
+              <div className="md:col-span-2">
+                <Field
+                  label={t(I18nKey.AUTOMATION_SETUP$CUSTOM_WEBHOOK_SECRET)}
+                  suffix={t(I18nKey.COMMON$OPTIONAL)}
+                >
+                  <input
+                    data-testid="automation-setup-custom-webhook-secret"
+                    type="password"
+                    value={customWebhook.webhookSecret}
+                    onChange={(event) =>
+                      setCustomWebhookField("webhookSecret", event.target.value)
+                    }
+                    className={formControlFieldClassName}
+                    placeholder={t(
+                      I18nKey.AUTOMATION_SETUP$CUSTOM_WEBHOOK_SECRET_PLACEHOLDER,
+                    )}
+                  />
+                </Field>
+                <p className="mt-2 text-xs leading-5 text-[var(--oh-muted)]">
+                  {t(I18nKey.AUTOMATION_SETUP$CUSTOM_WEBHOOK_SECRET_HELP)}
+                </p>
+              </div>
+              {customWebhookRegistration && (
+                <div
+                  data-testid="automation-setup-custom-webhook-result"
+                  className="md:col-span-2 rounded-lg border border-[var(--oh-success)]/40 bg-[var(--oh-success)]/10 p-3 text-xs leading-5 text-white"
+                >
+                  <p className="font-medium">
+                    {t(I18nKey.AUTOMATION_SETUP$CUSTOM_WEBHOOK_CREATED)}
+                  </p>
+                  <p className="break-all">
+                    {t(I18nKey.AUTOMATION_SETUP$CUSTOM_WEBHOOK_URL, {
+                      url: customWebhookRegistration.webhook_url,
+                    })}
+                  </p>
+                  {customWebhookRegistration.webhook_secret && (
+                    <p className="break-all">
+                      {t(
+                        I18nKey.AUTOMATION_SETUP$CUSTOM_WEBHOOK_GENERATED_SECRET,
+                        {
+                          secret: customWebhookRegistration.webhook_secret,
+                        },
+                      )}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      </div>
+      <div className="md:col-span-2">
+        <Field label={t(I18nKey.AUTOMATION_SETUP$TEST_EVENT_PAYLOAD)}>
+          <div className="flex flex-col gap-2">
+            <textarea
+              data-testid="automation-setup-event-test-payload"
+              value={eventTestPayload}
+              onChange={(event) => setEventTestPayload(event.target.value)}
+              className={cn(
+                formControlMultilineFieldClassName,
+                "min-h-44 font-mono",
+              )}
+              placeholder={t(
+                I18nKey.AUTOMATION_SETUP$TEST_EVENT_PAYLOAD_PLACEHOLDER,
+              )}
+            />
+            <p className="text-xs leading-5 text-[var(--oh-muted)]">
+              {t(I18nKey.AUTOMATION_SETUP$TEST_EVENT_PAYLOAD_DESCRIPTION)}
+            </p>
+          </div>
+        </Field>
+      </div>
     </section>
   );
 }
@@ -1794,12 +2291,14 @@ function Field({
   suffix,
   horizontal = false,
   isStreaming = false,
+  errorText,
   children,
 }: {
   label: string;
   suffix?: string;
   horizontal?: boolean;
   isStreaming?: boolean;
+  errorText?: string;
   children: ReactNode;
 }) {
   return (
@@ -1818,6 +2317,14 @@ function Field({
         )}
       </span>
       <div className="min-w-0 flex-1">{children}</div>
+      {errorText ? (
+        <span
+          role="alert"
+          className="text-xs leading-5 text-[var(--oh-warning)]"
+        >
+          {errorText}
+        </span>
+      ) : null}
     </label>
   );
 }

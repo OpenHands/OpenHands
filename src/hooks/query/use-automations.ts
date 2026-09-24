@@ -3,17 +3,57 @@ import AutomationService from "#/api/automation-service/automation-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useTracking } from "#/hooks/use-tracking";
 import type { Automation, AutomationSpec } from "#/types/automation";
+import type { AutomationDraftListResponse } from "#/manifests/types";
 import {
   AUTOMATION_DETAIL_QUERY_KEY,
   AUTOMATION_RUNS_QUERY_KEY,
 } from "./use-automation-detail";
 
 export const AUTOMATIONS_QUERY_KEY = ["automations"] as const;
+export const AUTOMATION_DRAFTS_QUERY_KEY = ["automation-drafts"] as const;
+
+function getResponseStatus(error: unknown): number | null {
+  if (!error || typeof error !== "object") return null;
+  const response = (error as Record<string, unknown>).response;
+  if (!response || typeof response !== "object") return null;
+  const status = (response as Record<string, unknown>).status;
+  return typeof status === "number" ? status : null;
+}
+
+function isDraftEndpointUnavailable(error: unknown): boolean {
+  const status = getResponseStatus(error);
+  return status === 404 || status === 405;
+}
 
 interface UseAutomationsOptions {
   limit?: number;
   offset?: number;
   enabled?: boolean;
+}
+
+export function useAutomationDrafts(options: UseAutomationsOptions = {}) {
+  const { limit = 50, offset = 0, enabled = true } = options;
+  const active = useActiveBackend();
+  return useQuery<AutomationDraftListResponse>({
+    queryKey: [
+      ...AUTOMATION_DRAFTS_QUERY_KEY,
+      { limit, offset },
+      active.backend.id,
+      active.orgId,
+    ],
+    queryFn: async () => {
+      try {
+        return await AutomationService.listServerDrafts({ limit, offset });
+      } catch (error) {
+        if (isDraftEndpointUnavailable(error)) {
+          return { drafts: [], total: 0 };
+        }
+        throw error;
+      }
+    },
+    staleTime: 0,
+    enabled,
+  });
 }
 
 export function useAutomations(options: UseAutomationsOptions = {}) {
@@ -41,10 +81,34 @@ export function useToggleAutomation() {
       AutomationService.toggleAutomation(id, enabled),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: AUTOMATIONS_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: AUTOMATION_DRAFTS_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: AUTOMATION_DETAIL_QUERY_KEY });
       if (!variables.enabled) {
         trackAutomationDisableButton({ backendKind: active.backend.kind });
       }
+    },
+  });
+}
+
+export function useDeleteAutomationDraft() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => AutomationService.deleteServerDraft(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: AUTOMATION_DRAFTS_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: AUTOMATIONS_QUERY_KEY });
+    },
+  });
+}
+
+export function useDispatchAutomationDraft() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => AutomationService.dispatchServerDraft(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: AUTOMATION_DRAFTS_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: AUTOMATIONS_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["user", "conversations"] });
     },
   });
 }
