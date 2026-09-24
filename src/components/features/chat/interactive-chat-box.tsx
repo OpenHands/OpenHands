@@ -18,12 +18,14 @@ interface InteractiveChatBoxProps {
   onSubmit: (message: string, images: File[], files: File[]) => void;
   disabled?: boolean;
   hasStartedConversation?: boolean;
+  showGitControlBar?: boolean;
 }
 
 export function InteractiveChatBox({
   onSubmit,
   disabled = false,
   hasStartedConversation,
+  showGitControlBar = true,
 }: InteractiveChatBoxProps) {
   const {
     images,
@@ -82,9 +84,11 @@ export function InteractiveChatBox({
         onSubmit={handleSubmit}
         onFilesPaste={handleUpload}
       />
-      <div className="mt-3 pb-3">
-        <GitControlBar onSuggestionsClick={handleSuggestionsClick} />
-      </div>
+      {showGitControlBar ? (
+        <div className="mt-3 pb-3" data-testid="chat-git-control-bar">
+          <GitControlBar onSuggestionsClick={handleSuggestionsClick} />
+        </div>
+      ) : null}
     </div>
   );
 }

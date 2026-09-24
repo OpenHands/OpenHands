@@ -63,7 +63,11 @@ function getEntryPoint(
   return "direct";
 }
 
-export function ChatInterface() {
+export function ChatInterface({
+  showGitControlBar = true,
+}: {
+  showGitControlBar?: boolean;
+} = {}) {
   useAutoRefreshFilesOnEdit();
 
   const { trackInitialQuerySubmitted, trackUserMessageSent } = useTracking();
@@ -674,6 +678,7 @@ export function ChatInterface() {
                   onSubmit={handleSendMessage}
                   disabled={isNewConversationPending || llmBlocked}
                   hasStartedConversation={hasStartedConversation}
+                  showGitControlBar={showGitControlBar}
                 />
               </div>
             )}

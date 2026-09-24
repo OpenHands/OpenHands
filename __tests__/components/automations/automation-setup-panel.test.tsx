@@ -76,6 +76,18 @@ vi.mock("#/hooks/query/use-manifest-capabilities", () => ({
   useDeploymentCapabilities: vi.fn(() => ({ data: null, isLoading: false })),
 }));
 
+vi.mock("#/hooks/use-chat-input-llm-profile-state", () => ({
+  useChatInputLlmProfileState: () => ({
+    profiles: [],
+    currentProfileName: null,
+    currentProfileModel: null,
+    isLoading: false,
+    isSwitching: false,
+    canSwitchProfile: false,
+    selectProfile: vi.fn(),
+  }),
+}));
+
 vi.mock("#/utils/tar-gzip", () => ({
   packTarGzip: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3])),
 }));
@@ -160,20 +172,33 @@ describe("AutomationSetupPanel", () => {
     );
   });
 
-  it("switches between prompt, plugin, and custom form types", async () => {
+  it("switches between prompt and custom, and reveals plugin fields on the prompt page", async () => {
     const user = userEvent.setup();
     renderPanel();
 
     expect(screen.getByTestId("automation-setup-prompt")).toHaveValue(
       "Review every pull request",
     );
+    expect(
+      screen.queryByTestId("automation-setup-kind-plugin"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automation-setup-plugin-source"),
+    ).not.toBeInTheDocument();
 
-    await user.click(screen.getByTestId("automation-setup-kind-plugin"));
+    await user.click(screen.getByTestId("automation-setup-add-plugin"));
     expect(
       screen.getByTestId("automation-setup-plugin-source"),
     ).toBeInTheDocument();
+    expect(screen.getByTestId("automation-setup-prompt")).toBeInTheDocument();
 
     await user.click(screen.getByTestId("automation-setup-kind-custom"));
+    expect(
+      screen.queryByTestId("automation-setup-plugin-source"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automation-setup-add-plugin"),
+    ).not.toBeInTheDocument();
     expect(screen.getByTestId("automation-setup-entrypoint")).toHaveValue(
       "python3 main.py",
     );
@@ -197,6 +222,31 @@ describe("AutomationSetupPanel", () => {
     expect(
       screen.queryByTestId("automation-setup-prompt"),
     ).not.toBeInTheDocument();
+  });
+
+  it("removes an opened timeout or plugin from additional options", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(screen.getByTestId("automation-setup-add-timeout"));
+    expect(screen.getByTestId("automation-setup-timeout")).toBeInTheDocument();
+    await user.click(screen.getByTestId("automation-setup-timeout-remove"));
+    expect(
+      screen.queryByTestId("automation-setup-timeout"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("automation-setup-add-timeout"),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("automation-setup-add-plugin"));
+    expect(
+      screen.getByTestId("automation-setup-plugin-source"),
+    ).toBeInTheDocument();
+    await user.click(screen.getByTestId("automation-setup-plugin-remove"));
+    expect(
+      screen.queryByTestId("automation-setup-plugin-source"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("automation-setup-add-plugin")).toBeInTheDocument();
   });
 
   it("falls back to validation when draft endpoints are unavailable", async () => {
@@ -242,6 +292,9 @@ describe("AutomationSetupPanel", () => {
   });
 
   it("sends each comma-separated repository to the automation service", async () => {
+    vi.mocked(AutomationService.createServerDraft).mockRejectedValue({
+      response: { status: 404 },
+    });
     vi.mocked(AutomationService.validateDraft).mockResolvedValue({
       valid: true,
       errors: [],
@@ -250,10 +303,26 @@ describe("AutomationSetupPanel", () => {
     const user = userEvent.setup();
     renderPanel();
 
+    await user.click(screen.getByTestId("automation-setup-repository-add"));
     await user.type(
-      screen.getByTestId("automation-setup-repository"),
-      "OpenHands/OpenHands, OpenHands/software-agent-sdk",
+      screen.getByTestId("automation-setup-repository-address"),
+      "OpenHands/OpenHands",
     );
+    await user.click(screen.getByTestId("automation-setup-repository-submit"));
+
+    const addButton = screen.getByTestId("automation-setup-repository-add");
+    const pill = screen.getByTestId("automation-setup-repository-value");
+    expect(
+      addButton.compareDocumentPosition(pill) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    await user.click(screen.getByTestId("automation-setup-repository-add"));
+    await user.type(
+      screen.getByTestId("automation-setup-repository-address"),
+      "OpenHands/software-agent-sdk",
+    );
+    await user.click(screen.getByTestId("automation-setup-repository-submit"));
     await user.click(screen.getByTestId("automation-setup-test"));
 
     await waitFor(() =>
@@ -477,6 +546,17 @@ describe("AutomationSetupPanel", () => {
           expect.objectContaining({ automationsetup: "draft" }),
         ),
       );
+    });
+
+    it("shows the save state beside Save draft instead of in its own bar", () => {
+      renderPanel();
+
+      const label = screen.getByTestId("automation-setup-save-state");
+      const save = screen.getByTestId("automation-setup-save-draft");
+
+      expect(label).toHaveTextContent("AUTOMATION_SETUP$UNSAVED_CHANGES");
+      expect(label.className).not.toContain("border-b");
+      expect(save.parentElement?.firstElementChild).toBe(label);
     });
 
     it("creates a server draft on Save draft and updates it on the next save", async () => {

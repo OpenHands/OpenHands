@@ -68,11 +68,20 @@ vi.mock("#/components/features/chat/chat-interface", () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const React = require("react");
   return {
-    ChatInterface: () => {
+    ChatInterface: ({
+      showGitControlBar = true,
+    }: {
+      showGitControlBar?: boolean;
+    }) => {
       React.useEffect(() => {
         return () => chatInterfaceUnmount();
       }, []);
-      return <div data-testid="chat-interface" />;
+      return (
+        <div
+          data-testid="chat-interface"
+          data-show-git-control-bar={showGitControlBar ? "true" : "false"}
+        />
+      );
     },
   };
 });
@@ -176,7 +185,10 @@ describe("ConversationMain - Layout Transition Stability", () => {
   it("renders ChatInterface at desktop width", () => {
     mockIsMobile = false;
     renderConversationMain();
-    expect(screen.getByTestId("chat-interface")).toBeInTheDocument();
+    expect(screen.getByTestId("chat-interface")).toHaveAttribute(
+      "data-show-git-control-bar",
+      "true",
+    );
   });
 
   it("renders ChatInterface at mobile width", () => {
@@ -282,6 +294,10 @@ describe("ConversationMain - Layout Transition Stability", () => {
       screen.getByTestId("automation-setup-conversation-title"),
     ).toHaveTextContent("Daily Morning Haiku");
     expect(screen.getByTestId("automation-setup-create")).toBeInTheDocument();
+    expect(screen.getByTestId("chat-interface")).toHaveAttribute(
+      "data-show-git-control-bar",
+      "false",
+    );
 
     await user.click(screen.getByTestId("automation-setup-back"));
 
