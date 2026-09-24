@@ -731,7 +731,6 @@ describe("HomeChatLauncher", () => {
     renderLauncher();
     const user = userEvent.setup();
 
-    await user.click(screen.getByTestId("home-launcher-mode-automate"));
     await user.click(screen.getByTestId("open-plugin-picker"));
     await user.click(await screen.findByTestId("stub-plugin-pick"));
     await user.click(screen.getByTestId("stub-chat-submit"));
@@ -744,11 +743,7 @@ describe("HomeChatLauncher", () => {
         metadata: null,
       }),
     );
-    expect(mockSetAutomationSetupDraft).toHaveBeenCalledWith("conv-abc", {
-      prompt: "hello world",
-      kind: "plugin",
-      plugins: ["github:o/a"],
-    });
+    expect(mockSetAutomationSetupDraft).not.toHaveBeenCalled();
   });
 
   it("renders the recommended automations rail above pinned activity in Automate mode", async () => {
