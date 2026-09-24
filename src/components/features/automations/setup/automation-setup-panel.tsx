@@ -59,7 +59,6 @@ const AUTOMATION_SETUP_KINDS: AutomationSetupKind[] = [
   "custom",
 ];
 const FREQUENCIES = [
-  "once",
   "hourly",
   "daily",
   "weekdays",
@@ -129,8 +128,6 @@ function kindLabelKey(kind: AutomationSetupKind): I18nKey {
 
 function frequencyLabelKey(frequency: Frequency): I18nKey {
   switch (frequency) {
-    case "once":
-      return I18nKey.AUTOMATION_SETUP$FREQUENCY_ONCE;
     case "hourly":
       return I18nKey.AUTOMATION_SETUP$FREQUENCY_HOURLY;
     case "daily":
