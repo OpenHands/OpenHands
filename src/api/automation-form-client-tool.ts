@@ -18,7 +18,7 @@ Useful fields:
 * pluginSource and pluginRef: plugin source and optional ref for plugin automations.
 * customCode, entrypoint, setupScriptPath, setupScript: custom Python bundle fields.
 * triggerKind: "cron" or "event".
-* frequency: "once", "hourly", "daily", "weekdays", "weekly", or "custom" for cron triggers.
+* frequency: "hourly", "daily", "weekdays", "weekly", or "custom" for cron triggers.
 * time, timezone, customSchedule: cron scheduling fields.
 * eventSource, eventKey, eventFilter: event trigger fields.
 * showTimeout and timeoutSeconds: optional timeout controls.
@@ -49,7 +49,7 @@ export const AUTOMATION_FORM_UPDATE_CLIENT_TOOL: ClientToolSpec = {
           triggerKind: { type: "string", enum: ["cron", "event"] },
           frequency: {
             type: "string",
-            enum: ["once", "hourly", "daily", "weekdays", "weekly", "custom"],
+            enum: ["hourly", "daily", "weekdays", "weekly", "custom"],
           },
           time: { type: "string", description: "24-hour HH:MM time." },
           timezone: { type: "string" },
