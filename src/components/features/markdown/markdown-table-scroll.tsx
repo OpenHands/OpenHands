@@ -1,27 +1,16 @@
 import React from "react";
 import { cn } from "#/utils/utils";
+import {
+  readScrollFadeState,
+  type ScrollFadeState,
+} from "#/utils/scroll-fade-state";
 
-const SCROLL_EDGE_THRESHOLD_PX = 1;
+export { readScrollFadeState };
+
 const FADE_WIDTH_CLASS = "w-10";
 
 interface MarkdownTableScrollProps {
   children: React.ReactNode;
-}
-
-interface ScrollFadeState {
-  left: boolean;
-  right: boolean;
-}
-
-export function readScrollFadeState(element: HTMLDivElement): ScrollFadeState {
-  const { scrollLeft, scrollWidth, clientWidth } = element;
-  const maxScroll = scrollWidth - clientWidth;
-  const hasOverflow = maxScroll > SCROLL_EDGE_THRESHOLD_PX;
-
-  return {
-    left: hasOverflow && scrollLeft > SCROLL_EDGE_THRESHOLD_PX,
-    right: hasOverflow && scrollLeft < maxScroll - SCROLL_EDGE_THRESHOLD_PX,
-  };
 }
 
 export function MarkdownTableScroll({ children }: MarkdownTableScrollProps) {

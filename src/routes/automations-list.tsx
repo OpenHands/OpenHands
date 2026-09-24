@@ -1,12 +1,5 @@
-import {
-  useState,
-  useMemo,
-  useCallback,
-  useRef,
-  type ChangeEvent,
-  type ReactNode,
-} from "react";
-import { FileUp, RefreshCw } from "lucide-react";
+import { useState, useMemo, useCallback, type ReactNode } from "react";
+import { RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import {
@@ -39,11 +32,13 @@ import { ErrorState } from "#/components/features/automations/error-state";
 import { BackendNotConfigured } from "#/components/features/automations/backend-not-configured";
 import { DeleteConfirmationModal } from "#/components/features/automations/delete-confirmation-modal";
 import { EditAutomationModal } from "#/components/features/automations/detail/edit-automation-modal";
+import { AddAutomationMenu } from "#/components/features/automations/add-automation-menu";
 import { AddAutomationModal } from "#/components/features/automations/add-automation-modal";
 import { ImportAutomationModal } from "#/components/features/automations/import-automation-modal";
 import { RecommendedAutomationsLauncher } from "#/components/features/automations/recommended-automations-launcher";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { useTracking } from "#/hooks/use-tracking";
+import { useAutomationPermissions } from "#/hooks/use-automation-permissions";
 import type { Automation, AutomationSpec } from "#/types/automation";
 import {
   getAutomationExportFilename,
@@ -120,13 +115,13 @@ export default function AutomationsList() {
   const [editTarget, setEditTarget] = useState<Automation | null>(null);
   const [isAddAutomationOpen, setIsAddAutomationOpen] = useState(false);
   const [importSpec, setImportSpec] = useState<AutomationSpec | null>(null);
-  const importInputRef = useRef<HTMLInputElement>(null);
+  const [isImportOpen, setIsImportOpen] = useState(false);
 
   const active = useActiveBackend();
   const { navigate } = useNavigation();
-  // Edit is a local-backend-only feature in MVP — cloud automations
-  // are managed elsewhere and we don't yet surface them here.
-  const canEdit = active.backend.kind === "local";
+  // Git Sync is org-level config, so its entry point requires
+  // manage_automations (admins/owners) on every backend kind.
+  const { canManage } = useAutomationPermissions();
 
   const {
     data: healthData,
@@ -234,12 +229,7 @@ export default function AutomationsList() {
     trackAutomationExported({ backendKind: active.backend.kind });
   };
 
-  const handleImportFile = async (event: ChangeEvent<HTMLInputElement>) => {
-    const input = event.currentTarget;
-    const file = input.files?.[0];
-    input.value = "";
-    if (!file) return;
-
+  const handleImportFile = async (file: File) => {
     try {
       let parsed: unknown;
       try {
@@ -263,6 +253,7 @@ export default function AutomationsList() {
       { ...importSpec, enabled: false },
       {
         onSuccess: (created) => {
+          setIsImportOpen(false);
           setImportSpec(null);
           displaySuccessToastWithLink(
             t(I18nKey.AUTOMATIONS$IMPORT_SUCCESS, { name: created.name }),
@@ -373,8 +364,8 @@ export default function AutomationsList() {
   return renderShell(
     <>
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 flex-1 basis-64">
           <h1 className="text-xl font-semibold text-content">
             {interfaceCopy.listTitle}
           </h1>
@@ -383,7 +374,10 @@ export default function AutomationsList() {
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap justify-end gap-2">
-          {canEdit && (
+          {/* Git sync is org-level config, so it follows manage_automations
+              (admins/owners) on every backend kind, not the local-only edit
+              gate. */}
+          {canManage && (
             <BrandButton
               type="button"
               variant="secondary"
@@ -395,33 +389,10 @@ export default function AutomationsList() {
               {t(I18nKey.AUTOMATIONS$GIT_SYNC$NAV_BUTTON)}
             </BrandButton>
           )}
-          <BrandButton
-            type="button"
-            variant="secondary"
-            testId="automations-import-automation"
-            className="whitespace-nowrap"
-            onClick={() => importInputRef.current?.click()}
-            startContent={<FileUp className="size-4" aria-hidden />}
-          >
-            {t(I18nKey.AUTOMATIONS$IMPORT)}
-          </BrandButton>
-          <input
-            ref={importInputRef}
-            type="file"
-            accept="application/json,.json"
-            className="hidden"
-            data-testid="automations-import-file"
-            onChange={handleImportFile}
+          <AddAutomationMenu
+            onAdd={() => setIsAddAutomationOpen(true)}
+            onImport={() => setIsImportOpen(true)}
           />
-          <BrandButton
-            type="button"
-            variant="secondary"
-            testId="automations-add-automation"
-            className="whitespace-nowrap"
-            onClick={() => setIsAddAutomationOpen(true)}
-          >
-            {t(I18nKey.AUTOMATIONS$ADD_AUTOMATION)}
-          </BrandButton>
         </div>
       </div>
 
@@ -495,7 +466,7 @@ export default function AutomationsList() {
                 }
                 onDelete={handleDeleteRequest}
                 onExport={handleExport}
-                onEdit={canEdit ? handleEditRequest : undefined}
+                onEdit={handleEditRequest}
                 insights={groupInsights}
               />
               <AutomationGroup
@@ -512,7 +483,7 @@ export default function AutomationsList() {
                 }
                 onDelete={handleDeleteRequest}
                 onExport={handleExport}
-                onEdit={canEdit ? handleEditRequest : undefined}
+                onEdit={handleEditRequest}
                 insights={groupInsights}
               />
 
@@ -520,7 +491,7 @@ export default function AutomationsList() {
                 <button
                   type="button"
                   onClick={() => setLimit((prev) => prev + PAGE_SIZE)}
-                  className="self-center rounded-lg border border-[var(--oh-border)] px-6 py-2 text-sm text-white hover:bg-surface-raised"
+                  className="self-center rounded-lg border border-border px-6 py-2 text-sm text-contrast hover:bg-surface-raised"
                 >
                   {t(I18nKey.AUTOMATIONS$LOAD_MORE)}
                 </button>
@@ -544,7 +515,7 @@ export default function AutomationsList() {
         onCancel={() => setDeleteTarget(null)}
       />
 
-      {/* Edit modal — local backends only */}
+      {/* Edit modal */}
       {editTarget && (
         <EditAutomationModal
           automation={editTarget}
@@ -559,11 +530,15 @@ export default function AutomationsList() {
       />
 
       <ImportAutomationModal
-        isOpen={importSpec !== null}
+        isOpen={isImportOpen}
         spec={importSpec}
         isImporting={importMutation.isPending}
-        onClose={() => setImportSpec(null)}
+        onClose={() => {
+          setIsImportOpen(false);
+          setImportSpec(null);
+        }}
         onImport={handleImportConfirm}
+        onFile={handleImportFile}
       />
     </>,
   );

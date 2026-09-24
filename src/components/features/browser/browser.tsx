@@ -12,9 +12,9 @@ export function BrowserPanel() {
     : `data:image/png;base64,${screenshotSrc ?? ""}`;
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col text-[var(--oh-muted)]">
+    <div className="flex h-full min-h-0 w-full flex-col text-muted">
       <BrowserChromeBar url={url} hasPage={hasPage} />
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto scrollbar-hide bg-[var(--oh-surface)]">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto scrollbar-hide bg-surface">
         {screenshotSrc ? (
           <BrowserSnapshot src={imgSrc} />
         ) : (

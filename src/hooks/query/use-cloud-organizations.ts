@@ -31,13 +31,25 @@ export function useAllCloudOrganizations() {
       // with no binding fall through unfiltered.
       queryFn: async () => {
         const orgs = await getCloudOrganizations(backend);
-        if (backend.authMode === "cookie") return orgs;
+        // Drop orgs the cloud marks invisible (`is_visible === false`, set
+        // from its `HIDE_PERSONAL_WORKSPACES` policy). Every consumer —
+        // the selector rows, the "Cloud Settings" deep link, the manage
+        // modal and the synced-settings badge — reads orgs from here, so
+        // filtering once keeps them from disagreeing about which orgs
+        // exist. Only an explicit `false` hides an org: an app-server that
+        // predates the field omits it, and those orgs stay visible.
+        const visible = orgs.items.filter((o) => o.is_visible !== false);
+        if (backend.authMode === "cookie") {
+          return { ...orgs, items: visible };
+        }
 
         const key = await getCurrentCloudApiKey(backend);
-        if (key.isLegacyKey || key.orgId === null) return orgs;
+        if (key.isLegacyKey || key.orgId === null) {
+          return { ...orgs, items: visible };
+        }
         return {
           ...orgs,
-          items: orgs.items.filter((o) => o.id === key.orgId),
+          items: visible.filter((o) => o.id === key.orgId),
         };
       },
       staleTime: 1000 * 60 * 5,

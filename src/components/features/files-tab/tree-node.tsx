@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 
 import FileIcon from "#/icons/file.svg?react";
 import FolderIcon from "#/icons/folder.svg?react";
@@ -30,7 +31,7 @@ export function TreeNode({
           aria-expanded={isOpen}
           data-testid={`file-tree-dir-${node.path}`}
           className={cn(
-            "flex w-full items-center gap-1.5 py-1 pr-2 text-left text-sm text-white",
+            "flex w-full items-center gap-1.5 py-1 pr-2 text-left text-sm text-contrast",
             "hover:bg-tertiary cursor-pointer",
           )}
           // per-row indentation computed from tree depth at runtime
@@ -38,12 +39,13 @@ export function TreeNode({
         >
           <span
             aria-hidden
-            className={cn(
-              "inline-block w-3 text-[10px] text-[var(--oh-muted)] transition-transform",
-              isOpen ? "rotate-90" : "rotate-0",
-            )}
+            className="inline-flex w-3.5 shrink-0 items-center justify-center text-muted"
           >
-            ▶
+            {isOpen ? (
+              <ChevronDown className="w-3.5 h-3.5" />
+            ) : (
+              <ChevronRight className="w-3.5 h-3.5" />
+            )}
           </span>
           <FolderIcon className="w-3.5 h-3.5 shrink-0" />
           <span className="truncate">{node.name}</span>
@@ -76,8 +78,8 @@ export function TreeNode({
           "flex w-full items-center gap-1.5 py-1 pr-2 text-left text-sm",
           "hover:bg-tertiary cursor-pointer",
           isSelected
-            ? "bg-[var(--oh-interactive-hover)] text-white"
-            : "text-[var(--oh-text-tertiary)]",
+            ? "bg-interactive-hover text-contrast"
+            : "text-text-tertiary",
         )}
         // per-row indentation computed from tree depth at runtime
         style={{ paddingLeft: `${indentPx + 16}px` }}

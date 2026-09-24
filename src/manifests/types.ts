@@ -18,9 +18,15 @@ export type SetupFieldType =
   | "text"
   | "textarea"
   | "select"
+  | "number"
   | "cron"
   | "timezone"
-  | "repo-picker";
+  | "repo-picker"
+  | "llm-profile"
+  | "event-source"
+  | "event-type"
+  | "plugin-sources"
+  | "tarball-upload";
 
 export type SetupGitProvider = "github" | "gitlab" | "bitbucket";
 
@@ -37,6 +43,8 @@ export interface SetupFieldOption {
 export interface SetupFieldConstraints {
   minLength?: number;
   maxLength?: number;
+  min?: number;
+  max?: number;
   /**
    * A host-implemented check named from a closed set. Entries supply no regex
    * of their own, so they cannot hand the host a pathological pattern.
@@ -49,7 +57,7 @@ export interface SetupFormField {
   label: string;
   help: string;
   placeholder?: string;
-  default?: string;
+  default?: string | number | boolean | null;
   required: boolean;
   provider?: SetupGitProvider;
   /**
@@ -67,7 +75,7 @@ export type SetupFormFields = Record<string, SetupFormField>;
 
 export interface SetupForm {
   note?: string;
-  /** Inputs that decide when the automation runs, keyed by trigger kind. */
+  /** Inputs that decide when the automation runs, keyed by trigger kind. Multiple keys are selectable variants. */
   triggers?: Partial<Record<SetupTriggerKind, SetupFormFields>>;
   /** Every other input: the arguments to the automation itself. */
   args: SetupFormFields;
@@ -112,6 +120,46 @@ export interface SetupBundle {
   config: Record<string, SetupBundleConfigValue>;
 }
 
+export type SetupActionKind = "prompt" | "plugin" | "upload";
+
+export interface SetupPromptAction {
+  label: string;
+  help: string;
+  features: string[];
+  args: SetupFormFields;
+  prompt: string;
+}
+
+export interface SetupPluginAction {
+  label: string;
+  help: string;
+  features: string[];
+  args: SetupFormFields;
+  prompt: string;
+  plugins: string;
+}
+
+export interface SetupUploadAction {
+  label: string;
+  help: string;
+  features: string[];
+  args: SetupFormFields;
+  tarballPath: string;
+  entrypoint: string;
+  setupScript?: string;
+}
+
+export interface SetupActions {
+  prompt?: SetupPromptAction;
+  plugin?: SetupPluginAction;
+  upload?: SetupUploadAction;
+}
+
+export type SetupAction =
+  | SetupPromptAction
+  | SetupPluginAction
+  | SetupUploadAction;
+
 export interface SetupBlock {
   version: typeof SETUP_VERSION;
   mode: SetupMode;
@@ -120,6 +168,8 @@ export interface SetupBlock {
   prompt?: string;
   /** direct only, and the alternative to `prompt`. Exactly one is present. */
   bundle?: SetupBundle;
+  /** direct only, and the alternative to `prompt` or `bundle`. */
+  actions?: SetupActions;
   /** direct only, event trigger only. Which delivered events belong to it. */
   filter?: string;
   /**
@@ -152,6 +202,13 @@ export interface SetupEntry {
   id: string;
   name: string;
   description: string;
+  /**
+   * Version of the template this entry publishes, sent with the create request
+   * as provenance. A bundle declares its own at `setup.bundle.version`; a
+   * prompt entry declares it here. Absent means the entry sends none, so the
+   * service records no template for what it creates.
+   */
+  version?: string;
   requires: SetupPrerequisites;
   /** The skill that owns the launch command. Defaults to `id`. */
   skill?: string;
@@ -177,7 +234,7 @@ export interface SetupRequestBody {
  * string, including fields whose value is a number to the service - the
  * payload mapping is where a value stops being what was typed.
  */
-export type SetupFormValue = string | string[];
+export type SetupFormValue = string | number | boolean | null | string[] | File;
 export type SetupFormValues = Record<string, SetupFormValue>;
 
 /** `GET /v1/capabilities` — what this deployment supports. */
@@ -313,6 +370,7 @@ export type InterfaceSubPageId = (typeof INTERFACE_SUB_PAGE_IDS)[number];
 export const INTERFACE_ICON_SLUGS = [
   "layout-dashboard",
   "sparkles",
+  "library",
   "bot",
   "circle-alert",
   "activity",

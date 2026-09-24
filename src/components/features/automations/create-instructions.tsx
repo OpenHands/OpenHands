@@ -19,8 +19,8 @@ function InlineCodeChip({ children }: { children?: ReactNode }) {
     <code
       data-testid="automations-create-instructions-example"
       className={cn(
-        "mx-0.5 inline-block rounded-sm border border-[var(--oh-border-subtle)]",
-        "bg-[var(--oh-surface-raised)] px-1.5 py-0.5 align-baseline font-mono text-[11px] text-white",
+        "mx-0.5 inline-block rounded-sm border border-border-subtle",
+        "bg-surface-raised px-1.5 py-0.5 align-baseline font-mono text-[11px] text-contrast",
       )}
     >
       {children}
@@ -68,18 +68,18 @@ export function CreateInstructionsContent({
           i18nKey={I18nKey.AUTOMATIONS$EMPTY_OPTION_CONVERSATION_DESC}
           components={CREATE_INSTRUCTIONS_INLINE_COMPONENTS}
         />{" "}
-        {t(I18nKey.AUTOMATIONS$CREATE_INSTRUCTIONS_GUIDANCE)}
-      </p>
-
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        {t(I18nKey.AUTOMATIONS$CREATE_INSTRUCTIONS_GUIDANCE)}{" "}
         <a
           href={getAutomationsDocsUrl()}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-sm text-muted underline transition-colors hover:text-foreground"
+          className="text-muted underline transition-colors hover:text-foreground"
         >
           {t(I18nKey.AUTOMATIONS$EMPTY_LEARN_MORE)}
         </a>
+      </p>
+
+      <div className="flex justify-center">
         <BrandButton
           type="button"
           variant="primary"
@@ -104,7 +104,7 @@ export function CreateInstructions({
 
   if (collapsible) {
     return (
-      <div className="w-full rounded-lg border border-[var(--oh-border)] bg-[var(--oh-surface)]">
+      <div className="w-full rounded-lg border border-border bg-surface">
         <button
           type="button"
           onClick={() => setIsExpanded(!isExpanded)}
@@ -132,12 +132,7 @@ export function CreateInstructions({
 
   return (
     <div className="w-full max-w-2xl">
-      <h3 className="text-center text-sm font-medium text-content">
-        {t(I18nKey.AUTOMATIONS$EMPTY_HOW_TO_CREATE_TITLE)}
-      </h3>
-      <div className="mt-4">
-        <CreateInstructionsContent />
-      </div>
+      <CreateInstructionsContent />
     </div>
   );
 }

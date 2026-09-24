@@ -1,8 +1,13 @@
+import React from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, waitFor, act } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createUserMessageEvent } from "test-utils";
-import { ConversationWebSocketProvider } from "#/contexts/conversation-websocket-context";
+import {
+  ConversationWebSocketProvider,
+  useConversationWebSocket,
+} from "#/contexts/conversation-websocket-context";
+import { useConversationStore } from "#/stores/conversation-store";
 import { useEventStore } from "#/stores/use-event-store";
 import useMetricsStore from "#/stores/metrics-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
@@ -10,6 +15,7 @@ import { useBrowserStore } from "#/stores/browser-store";
 import { useCommandStore } from "#/stores/command-store";
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useUserConversation } from "#/hooks/query/use-user-conversation";
+import { useWebSocket } from "#/hooks/use-websocket";
 import EventService from "#/api/event-service/event-service.api";
 import {
   getStoredConversationMetadata,
@@ -73,6 +79,19 @@ vi.mock("#/hooks/query/use-user-conversation", () => ({
 vi.mock("#/utils/error-handler", () => ({
   trackError: errorHandlerMocks.trackError,
 }));
+
+const sendEventMock = vi.hoisted(() => vi.fn());
+vi.mock("@openhands/typescript-client/clients", async () => {
+  const actual = await vi.importActual<
+    typeof import("@openhands/typescript-client/clients")
+  >("@openhands/typescript-client/clients");
+  return {
+    ...actual,
+    ConversationClient: vi.fn(function ConversationClientMock() {
+      return { sendEvent: sendEventMock };
+    }),
+  };
+});
 
 const AGENT_REPLY_ID = "evt-agent-reply";
 
@@ -218,6 +237,83 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     );
   });
 
+  it("keeps the events socket up, with its `since` anchor, across background history refetches", async () => {
+    // Arrange: the initial history load resolves; the background refetch stays
+    // in flight so the query sits in `isFetching` while the socket is already
+    // established — the state that used to tear the socket down and leave the
+    // conversation stuck at "Connecting".
+    const historyPage = () => ({
+      items: [createUserMessageEvent("user-msg-conv-refetch")],
+      next_page_id: null,
+    });
+    let resolveRefetch!: (
+      page: Awaited<ReturnType<typeof EventService.searchEvents>>,
+    ) => void;
+    vi.spyOn(EventService, "searchEvents")
+      .mockResolvedValueOnce(historyPage())
+      .mockImplementationOnce(
+        () =>
+          new Promise<Awaited<ReturnType<typeof EventService.searchEvents>>>(
+            (resolve) => {
+              resolveRefetch = resolve;
+            },
+          ),
+      );
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ConversationWebSocketProvider
+          conversationId="conv-refetch"
+          conversationUrl="http://localhost/api"
+        >
+          <div />
+        </ConversationWebSocketProvider>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(wsCapture.mainOptions).not.toBeNull());
+
+    // Every render's main-socket call (the one carrying `resend_mode`),
+    // including any teardown call with an empty URL.
+    const mainCalls = () =>
+      vi
+        .mocked(useWebSocket)
+        .mock.calls.filter(
+          ([, options]) =>
+            options?.queryParams && "resend_mode" in options.queryParams,
+        );
+    const connectedAt = mainCalls().length;
+    const anchor = wsCapture.mainOptions?.queryParams?.after_timestamp;
+    expect(anchor).toBeTruthy();
+
+    // Act: a background refetch starts (as `refetchOnMount: "always"` fires
+    // when returning to a conversation) and stays in flight.
+    act(() => {
+      void queryClient.refetchQueries({ queryKey: ["conversation-history"] });
+    });
+    await waitFor(() =>
+      expect(
+        queryClient.isFetching({ queryKey: ["conversation-history"] }),
+      ).toBe(1),
+    );
+
+    // Assert: since the socket connected, no render tore it down (empty URL)
+    // and none degraded the `since` anchor to a full resend.
+    for (const [url, options] of mainCalls().slice(connectedAt - 1)) {
+      expect(url).toContain("/sockets/events/conv-refetch");
+      expect(options?.queryParams).toMatchObject({
+        resend_mode: "since",
+        after_timestamp: anchor,
+      });
+    }
+
+    // The refetch settling must not churn the socket either.
+    await act(async () => {
+      resolveRefetch(historyPage());
+    });
+    const [urlAfterRefetch] = mainCalls().at(-1)!;
+    expect(urlAfterRefetch).toContain("/sockets/events/conv-refetch");
+  });
+
   it("uses the planning sub-conversation session key", async () => {
     const mainSessionApiKey = `sk-oh-main-${"m".repeat(48)}`;
     const planningSessionApiKey = `sk-oh-plan-${"p".repeat(48)}`;
@@ -276,6 +372,89 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     expect(planningCall?.options?.queryParams).not.toHaveProperty(
       "session_api_key",
     );
+  });
+
+  // The socket is never OPEN in these tests (the useWebSocket mock returns
+  // `socket: null`), so every send falls through to the REST queue — exactly
+  // the window this suite is about.
+  describe("plan-mode message routing before the planning socket opens", () => {
+    function SendMessageProbe({
+      onReady,
+    }: {
+      onReady: (send: ReturnType<typeof useConversationWebSocket>) => void;
+    }) {
+      const context = useConversationWebSocket();
+      React.useEffect(() => onReady(context), [context, onReady]);
+      return null;
+    }
+
+    const renderPlanMode = (subConversationIds?: string[]) => {
+      let context: ReturnType<typeof useConversationWebSocket> | null = null;
+      render(
+        <QueryClientProvider client={queryClient}>
+          <ConversationWebSocketProvider
+            conversationId="conv-parent"
+            conversationUrl="http://localhost/api"
+            subConversationIds={subConversationIds}
+            // The react-query lookup that resolves ids into conversations has
+            // not landed yet — this is the race the fix is about.
+            subConversations={undefined}
+          >
+            <SendMessageProbe
+              onReady={(value) => {
+                context = value;
+              }}
+            />
+          </ConversationWebSocketProvider>
+        </QueryClientProvider>,
+      );
+      return () => context!;
+    };
+
+    beforeEach(() => {
+      sendEventMock.mockReset().mockResolvedValue(undefined);
+      useConversationStore.setState({ conversationMode: "plan" });
+    });
+
+    afterEach(() => {
+      useConversationStore.setState({ conversationMode: "code" });
+    });
+
+    it("queues the first prompt to the planner, not the parent code agent", async () => {
+      const getContext = renderPlanMode(["planning-1"]);
+      await waitFor(() => expect(getContext()).not.toBeNull());
+
+      await act(async () => {
+        await getContext().sendMessage({
+          role: "user",
+          content: [{ type: "text", text: "plan this" }],
+        });
+      });
+
+      expect(sendEventMock).toHaveBeenCalledWith(
+        "planning-1",
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+
+    it("errors instead of falling back to the parent when no planner exists yet", async () => {
+      const getContext = renderPlanMode(undefined);
+      await waitFor(() => expect(getContext()).not.toBeNull());
+
+      await expect(
+        act(async () => {
+          await getContext().sendMessage({
+            role: "user",
+            content: [{ type: "text", text: "plan this" }],
+          });
+        }),
+      ).rejects.toThrow("Planning conversation is not ready yet");
+
+      // Falling back to `conv-parent` here would run a planning prompt in the
+      // code agent — the boundary plan mode exists to enforce.
+      expect(sendEventMock).not.toHaveBeenCalled();
+    });
   });
 
   it("preserves the conversation's attached plugins across an agent-triggered model switch", async () => {

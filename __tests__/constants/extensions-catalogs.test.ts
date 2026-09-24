@@ -50,16 +50,18 @@ describe("OpenHands extensions catalogs", () => {
     expect(linear.docsUrl).toBe("https://linear.app/docs/mcp");
     expect(mcpOption.auth.strategy).toBe("bearer");
     expect(
-      linear.connectionOptions.some((option) => option.transport?.kind === "sse"),
+      linear.connectionOptions.some(
+        (option) => option.transport?.kind === "sse",
+      ),
     ).toBe(false);
   });
 
-  it("drops deprecated MCP entries that no longer have maintained replacements", () => {
+  it("keeps maintained MCP entries and drops deprecated ones", () => {
     const catalogIds = new Set(
       getMcpMarketplaceCatalog(INTEGRATION_CATALOG).map((entry) => entry.id),
     );
 
-    expect(catalogIds.has("gitlab")).toBe(false);
+    expect(catalogIds.has("gitlab")).toBe(true);
     expect(catalogIds.has("google-maps")).toBe(false);
     expect(catalogIds.has("postgres")).toBe(false);
     expect(catalogIds.has("puppeteer")).toBe(false);
@@ -72,9 +74,17 @@ describe("OpenHands extensions catalogs", () => {
     const knownMcpIds = new Set(INTEGRATION_CATALOG.map((entry) => entry.id));
     for (const automation of AUTOMATION_CATALOG) {
       const integrationIds = getIntegrationIds(automation);
-      expect(integrationIds.length).toBeGreaterThan(0);
       expect(integrationIds.every((id) => knownMcpIds.has(id))).toBe(true);
     }
+
+    // Declaring none is legitimate — `news-digest` connects to nothing — so the
+    // resolution above is only worth asserting while some entry still declares
+    // one. Without this the loop above would pass over an empty catalog.
+    expect(
+      AUTOMATION_CATALOG.some(
+        (automation) => getIntegrationIds(automation).length > 0,
+      ),
+    ).toBe(true);
   });
 
   it("admits every setup experience the automation catalog ships", () => {

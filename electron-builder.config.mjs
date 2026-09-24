@@ -42,21 +42,35 @@
  *   config/         ← defaults.json
  *   build/          ← static frontend (npm run build:app output)
  *
- * The bundled uv binary (resources/bin/) lands in <Resources>/bin/ via
- * extraResources so Electron can inject it into PATH on startup.
+ * The bundled uv / Node.js runtimes land in <Resources>/ via extraResources
+ * so Electron can inject them into PATH on startup. The per-arch repo layout
+ * (single-arch resources/{bin,node}/ vs universal
+ * resources/{bin,node}-{arm64,x64}/) is canonical in
+ * scripts/download-arch-utils.mjs; electron/main.mjs selects
+ * <Resources>/{bin,node}-<process.arch> at runtime (falling back to the flat
+ * dirs).
  *
- * The bundled Node.js distribution (resources/node/) lands in
- * <Resources>/node/ via extraResources. Electron prepends its bin dir to
- * PATH at startup so backend scripts (`node scripts/ingress.mjs` etc.) and
- * stdio MCP servers spawned via `npx -y …` (Slack, GitHub, Figma, etc.)
- * can find a working node/npm/npx — the OS gives a Finder-launched .app
- * a minimal PATH (/usr/bin:/bin) that has none of those.
+ * The bundled Node distribution's root-level node_modules (npm itself) is
+ * dropped by electron-builder's copy filter in both layouts; the afterPack
+ * hook restores and verifies it per node dir; see restoreBundledNodeNpm
+ * below.
+ *
+ * Electron prepends its bin dir to PATH at startup so backend scripts (`node
+ * scripts/ingress.mjs` etc.) and stdio MCP servers spawned via `npx -y …`
+ * (Slack, GitHub, Figma, etc.) can find a working node/npm/npx — the OS gives
+ * a Finder-launched .app a minimal PATH (/usr/bin:/bin) that has none of those.
  */
 
 import { cp, rm } from "node:fs/promises";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+
+// Arch the desktop runtimes are bundled for — "universal" (macOS) or a
+// single arch. The per-arch layouts live in scripts/download-arch-utils.mjs;
+// extraResources below maps them onto <Resources>/.
+const ELECTRON_ARCH = process.env.ELECTRON_ARCH;
+const isUniversal = ELECTRON_ARCH === "universal";
 
 // npm packages the packaged app's child-process scripts import at runtime:
 //   scripts/static-server.mjs  → sirv
@@ -80,30 +94,38 @@ const rootPackageJson = JSON.parse(
 );
 
 /**
+ * Resolve the packaged app's Resources directory.
+ *
+ * On macOS it lives inside the `.app` bundle; on Linux/Windows it's a flat
+ * `resources/` subdirectory. We resolve both shapes from `context.appOutDir`
+ * + the productFilename.
+ */
+function packagedResourcesDir(context) {
+  const platform = context.electronPlatformName;
+  const productFilename = context.packager.appInfo.productFilename;
+  return platform === "darwin" || platform === "mas"
+    ? join(context.appOutDir, `${productFilename}.app`, "Contents", "Resources")
+    : join(context.appOutDir, "resources");
+}
+
+/**
+ * afterPack entry point. Invoked by electron-builder once per platform target
+ * after the unpacked directory has been populated but before installer-format
+ * packaging (DMG, NSIS, deb).
+ */
+async function afterPack(context) {
+  await stripBundledNodeModules(context);
+  await restoreBundledNodeNpm(context);
+}
+
+/**
  * Strip the auto-bundled node_modules from the packaged app, then restore
  * the small runtime closure of RUNTIME_PACKAGES.
  *
- * See the NODE_MODULES NOTE in the file header for the why. This is invoked
- * by electron-builder once per platform target after the unpacked directory
- * has been populated but before installer-format packaging (DMG, NSIS, deb).
- *
- * On macOS the app dir is inside a `.app` bundle; on Linux/Windows it's a
- * flat resources/ subdirectory. We resolve both shapes from
- * `context.appOutDir` + the productFilename.
+ * See the NODE_MODULES NOTE in the file header for the why.
  */
 async function stripBundledNodeModules(context) {
-  const platform = context.electronPlatformName;
-  const productFilename = context.packager.appInfo.productFilename;
-  const appDir =
-    platform === "darwin" || platform === "mas"
-      ? join(
-          context.appOutDir,
-          `${productFilename}.app`,
-          "Contents",
-          "Resources",
-          "app",
-        )
-      : join(context.appOutDir, "resources", "app");
+  const appDir = join(packagedResourcesDir(context), "app");
 
   const nm = join(appDir, "node_modules");
   if (existsSync(nm)) {
@@ -174,6 +196,91 @@ async function restoreRuntimeNodeModules(appDir) {
   );
 }
 
+/**
+ * Restore the bundled Node distribution's root-level `node_modules` (npm
+ * itself), which electron-builder silently refuses to copy, then verify the
+ * packed result — for every node dir the bundle ships: the per-arch
+ * node-arm64/ + node-x64/ dirs of a universal build and/or the legacy flat
+ * node/ dir of a single-arch build.
+ *
+ * electron-builder's afterPack fires once per arch pass on universal builds,
+ * so each dir's restore keeps the `!existsSync(destNodeModules)` guard to
+ * stay idempotent; the npm-cli.js verification is read-only.
+ *
+ * WHY THIS IS NEEDED — app-builder-lib's copy filter drops a `node_modules`
+ * directory sitting at the ROOT of a `from` dir, before any `filter` pattern
+ * is consulted (packages/app-builder-lib/src/util/filter.ts):
+ *
+ *     // filter the root node_modules, but not a subnode_modules
+ *     if (relative === "node_modules") {
+ *       return false
+ *     }
+ *
+ * That check is reached for extraResources too — `copyFiles()` builds the
+ * copy filter with the same `createFilter()`. Our extraResources entry copies
+ * `resources/node/` → `<Resources>/node/`, and the Windows Node zip puts npm
+ * at `<root>/node_modules/npm`, i.e. exactly `node_modules` relative to the
+ * copy root. So it is skipped, and no `filter` value can opt back in.
+ *
+ * POSIX tarballs put npm at `<root>/lib/node_modules/npm`, which is not the
+ * root entry and copies fine — which is why this only ever broke Windows and
+ * went unnoticed on macOS.
+ *
+ * Symptom when it goes wrong: `<Resources>/node/` ships a working `node.exe`
+ * next to `npm.cmd` / `npx.cmd` shims that exec
+ * `%~dp0\node_modules\npm\bin\npx-cli.js` — a file that isn't there. Every
+ * `npx -y <pkg>` spawn (stdio MCP servers, ACP servers) then dies with
+ * MODULE_NOT_FOUND, and because injectBundledNode() PREPENDS this directory
+ * to PATH it also shadows the user's own working npm installation.
+ */
+async function restoreBundledNodeNpm(context) {
+  const isWin = context.electronPlatformName === "win32";
+
+  // Universal builds ship one Node distribution per arch (node-arm64/,
+  // node-x64/); single-arch builds ship the legacy flat node/. Handle
+  // whichever of them made it into the packed output.
+  const nodeDirs = ["node-arm64", "node-x64", "node"]
+    .map((name) => join(packagedResourcesDir(context), name))
+    .filter((dir) => existsSync(dir));
+
+  // No bundled Node at all — `npm run download-node` was skipped. That is a
+  // different (and already loudly reported) situation; main.mjs warns at
+  // startup. Don't turn it into a build failure here.
+  if (nodeDirs.length === 0) return;
+
+  for (const nodeDir of nodeDirs) {
+    const srcNodeModules = join(
+      repoRoot,
+      "resources",
+      basename(nodeDir),
+      "node_modules",
+    );
+    const destNodeModules = join(nodeDir, "node_modules");
+    if (!existsSync(destNodeModules) && existsSync(srcNodeModules)) {
+      await cp(srcNodeModules, destNodeModules, { recursive: true });
+      const rel = relative(process.cwd(), destNodeModules);
+      // eslint-disable-next-line no-console -- electron-builder build log
+      console.log(
+        `[electron-builder] restored bundled Node node_modules: ${rel}`,
+      );
+    }
+
+    // Mirror the check scripts/download-node.mjs runs on the source tree, but
+    // against the packed output — the last point where a broken npm is still a
+    // build failure instead of a broken install.
+    const npmCli = isWin
+      ? join(nodeDir, "node_modules", "npm", "bin", "npm-cli.js")
+      : join(nodeDir, "lib", "node_modules", "npm", "bin", "npm-cli.js");
+    if (!existsSync(npmCli)) {
+      throw new Error(
+        `[electron-builder] packaged Node is missing npm-cli.js at ${npmCli} — ` +
+          "npm/npx would fail with MODULE_NOT_FOUND in the installed app. " +
+          "Run `npm run download-node` and rebuild.",
+      );
+    }
+  }
+}
+
 function getDirSizeBytes(dir) {
   // Synchronous walk so we can run it before the rm without async juggling
   // in the hook. The directory we're sizing is always small enough (<1 GB)
@@ -210,7 +317,7 @@ function getDirSizeBytes(dir) {
 const config = {
   appId: "dev.openhands.agent-canvas",
   productName: "OpenHands Agent Canvas",
-  copyright: "Copyright © 2025 All Hands AI",
+  copyright: "Copyright © 2025 OpenHands contributors",
 
   // Stamp the packaged app with the released version (see rootPackageJson
   // note above).
@@ -235,8 +342,10 @@ const config = {
   // Skip native-module rebuild — the app has no native deps.
   npmRebuild: false,
 
-  // Strip auto-bundled node_modules (see NODE_MODULES NOTE at top of file).
-  afterPack: stripBundledNodeModules,
+  // Strip auto-bundled node_modules (see NODE_MODULES NOTE at top of file),
+  // then restore the bundled Node distribution's own npm (see
+  // restoreBundledNodeNpm).
+  afterPack,
 
   // Files included in the packaged app.
   // Paths with `from` are relative to directories.app (electron/).
@@ -274,10 +383,29 @@ const config = {
   //            `npm run download-node`)
   // `from` is relative to the project root (not directories.app).
   // build:desktop calls both download scripts before invoking electron-builder.
-  extraResources: [
-    { from: "resources/bin/", to: "bin/", filter: ["**/*"] },
-    { from: "resources/node/", to: "node/", filter: ["**/*"] },
-  ],
+  //
+  // Universal (ELECTRON_ARCH=universal): both runtime arches (per-arch
+  // layout canonical in scripts/download-arch-utils.mjs) ship in BOTH
+  // packaging passes. @electron/universal then merges the x64 and arm64 pass
+  // trees: it lipos files that differ (the Electron framework) and rejects
+  // thin Mach-O files that are byte-identical in both trees unless they
+  // match mac.x64ArchFiles below — which is exactly what our per-arch runtime
+  // binaries are (identical arm64/x64 binaries copied into both passes).
+  // Bundling only the pass's own arch (e.g. via the ${arch} macro) does NOT
+  // work: the merger requires both trees to carry the same Mach-O file list.
+  // Missing `from` dirs fail the build, so each mode lists exactly the dirs
+  // its download scripts populate.
+  extraResources: isUniversal
+    ? [
+        { from: "resources/bin-arm64/", to: "bin-arm64/", filter: ["**/*"] },
+        { from: "resources/bin-x64/", to: "bin-x64/", filter: ["**/*"] },
+        { from: "resources/node-arm64/", to: "node-arm64/", filter: ["**/*"] },
+        { from: "resources/node-x64/", to: "node-x64/", filter: ["**/*"] },
+      ]
+    : [
+        { from: "resources/bin/", to: "bin/", filter: ["**/*"] },
+        { from: "resources/node/", to: "node/", filter: ["**/*"] },
+      ],
 
   // ── macOS ──────────────────────────────────────────────────────────────────
   //
@@ -290,11 +418,9 @@ const config = {
   // Or use the dedicated script:
   //   npm run build:desktop:universal
   //
-  // CAUTION: the bundled uv/node extraResources are downloaded for the
-  // BUILD HOST's architecture only (scripts/download-uv.mjs and
-  // download-node.mjs have no arch override), so a "universal" build still
-  // ships single-arch runtimes and breaks on the other architecture. Don't
-  // distribute universal DMGs until the download scripts support multi-arch.
+  // Universal builds download both runtime arches (layout canonical in
+  // scripts/download-arch-utils.mjs) which the conditional extraResources
+  // above packages side by side.
   //
   mac: {
     category: "public.app-category.developer-tools",
@@ -302,11 +428,18 @@ const config = {
       {
         target: "dmg",
         arch: [
-          process.env.ELECTRON_ARCH ??
-            (process.arch === "arm64" ? "arm64" : "x64"),
+          ELECTRON_ARCH ?? (process.arch === "arm64" ? "arm64" : "x64"),
         ],
       },
     ],
+    // Universal merge whitelist: the per-arch uv/node runtime binaries are
+    // thin single-arch Mach-O files that are intentionally byte-identical in
+    // both packaging passes (each pass bundles all four per-arch dirs — see
+    // extraResources above). Without this rule @electron/universal fails the
+    // merge with "same in both x64 and arm64 builds". Scoped to exactly our
+    // per-arch runtime dirs so any accidental duplicate elsewhere still
+    // fails the build loudly.
+    x64ArchFiles: "**/{bin,node}-{arm64,x64}/**",
     // Icon auto-discovered from directories.buildResources/icon.icns
     // (committed; regenerate with `npm run generate-icons`).
   },
@@ -352,6 +485,10 @@ const config = {
     ],
     category: "Development",
     // Icon auto-discovered from directories.buildResources/icon.png.
+    // fpm-backed targets (deb) require a maintainer with an email address;
+    // electron/package.json carries no author, so set it here. Without this
+    // the deb step fails with "Please specify author 'email'".
+    maintainer: "OpenHands <contact@all-hands.dev>",
   },
 };
 

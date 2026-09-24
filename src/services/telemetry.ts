@@ -24,6 +24,11 @@
  * Users can disable all telemetry (including install tracking) via:
  * - Setting VITE_DO_NOT_TRACK=1 environment variable
  * - Browser's Do Not Track setting
+ * - Injecting window.__AGENT_CANVAS_DO_NOT_TRACK__ = true at runtime, which the
+ *   static server does from AGENT_CANVAS_DISABLE_TELEMETRY=1 (or the equivalent
+ *   --disable-telemetry flag) so a precompiled bundle can opt out without
+ *   VITE_DO_NOT_TRACK baked into the image. Under this flag the PostHog client
+ *   is never initialized, so consent mirrored from a backend cannot opt it in.
  */
 
 import type { BootstrapConfig, CaptureResult, PostHog } from "posthog-js";
@@ -35,11 +40,14 @@ import {
   AGENT_CANVAS_CLIENT_SOURCE,
   AGENT_CANVAS_CLIENT_VERSION,
 } from "#/api/client-source";
+import type { BackendKind } from "#/api/backend-registry/types";
 import {
   getBackendTelemetryProperties,
   getCloudTelemetryProperties,
+  getDeploymentKindForBackend,
   type BackendTelemetryContextInput,
   type CloudTelemetryContextInput,
+  type DeploymentKind,
 } from "#/services/telemetry-context";
 
 const TELEMETRY_CONSENT_KEY = "openhands-telemetry-consent";
@@ -95,6 +103,20 @@ let pendingBootstrap: BootstrapConfig | undefined;
 let telemetryConfig: TelemetryConfig = {};
 let telemetryDisabled = false;
 
+/** Deployment-level opt-out injected by static-server.mjs (see file header). */
+function isRuntimeDoNotTrackEnabled(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    (window as unknown as Record<string, unknown>)
+      .__AGENT_CANVAS_DO_NOT_TRACK__ === true
+  );
+}
+
+/** True when telemetry must stay fully off: the SDK is never initialized. */
+function isTelemetryHardDisabled(): boolean {
+  return telemetryDisabled || isRuntimeDoNotTrackEnabled();
+}
+
 interface TelemetryIdentity {
   distinctId: string;
   properties: Record<string, unknown>;
@@ -113,6 +135,20 @@ const CANVAS_EVENT_PROPERTIES = Object.freeze({
   package_name: packageJson.name,
   package_version: packageJson.version,
 });
+
+function getExplicitDeploymentKind(value: unknown): DeploymentKind | null {
+  return value === "remote" || value === "local" ? value : null;
+}
+
+function getEventDeploymentKind(
+  properties: Record<string, unknown>,
+): DeploymentKind | null {
+  return (
+    getDeploymentKindForBackend(
+      properties.backend_kind as BackendKind | null,
+    ) ?? getExplicitDeploymentKind(properties.deployment_kind)
+  );
+}
 
 let telemetryBackendContext = getBackendTelemetryProperties({});
 let telemetryCloudContext = getCloudTelemetryProperties();
@@ -134,12 +170,17 @@ function addCanvasEventProperties(
 ): CaptureResult | null {
   if (!event) return null;
 
+  const properties = {
+    ...telemetryBackendContext,
+    ...telemetryCloudContext,
+    ...event.properties,
+  };
+
   return {
     ...event,
     properties: {
-      ...telemetryBackendContext,
-      ...telemetryCloudContext,
-      ...event.properties,
+      ...properties,
+      deployment_kind: getEventDeploymentKind(properties),
       ...CANVAS_EVENT_PROPERTIES,
     },
   };
@@ -231,7 +272,7 @@ export function configureTelemetry(config: TelemetryConfiguration): void {
 }
 
 function getResolvedTelemetryConfig(): Required<TelemetryConfig> | null {
-  if (telemetryDisabled) return null;
+  if (isTelemetryHardDisabled()) return null;
 
   return {
     apiKey: telemetryConfig.apiKey || DEFAULT_POSTHOG_API_KEY,
@@ -283,6 +324,11 @@ function isDoNotTrackEnabled(): boolean {
     typeof import.meta !== "undefined" &&
     import.meta.env?.VITE_DO_NOT_TRACK === "1"
   ) {
+    return true;
+  }
+
+  // Runtime-injected window global (see file header).
+  if (isRuntimeDoNotTrackEnabled()) {
     return true;
   }
 
@@ -353,7 +399,7 @@ export async function initializePostHogClient(
         consent_persistence_name: `${POSTHOG_INSTANCE_NAME}-consent`,
         person_profiles: "always",
         capture_pageview: POSTHOG_PAGEVIEW_CAPTURE_MODE,
-        autocapture: true,
+        autocapture: false,
         disable_session_recording: true,
         bootstrap: pendingBootstrap,
         before_send: addCanvasEventProperties,
@@ -546,7 +592,7 @@ export async function setTelemetryConsent(
     const previousConsent = getTelemetryConsent();
     const unchanged = previousConsent === consent;
     localStorage.setItem(TELEMETRY_CONSENT_KEY, consent);
-    if (telemetryDisabled) return;
+    if (isTelemetryHardDisabled()) return;
     if (unchanged) return;
 
     // Reuse an initialized client synchronously so a same-flush identify()

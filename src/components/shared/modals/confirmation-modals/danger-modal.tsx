@@ -32,7 +32,7 @@ export function DangerModal({
         {
           text: buttons.cancel.text,
           onClick: buttons.cancel.onClick,
-          className: "bg-[var(--oh-interactive-selected)]",
+          className: "bg-interactive-selected",
         },
       ]}
     />
