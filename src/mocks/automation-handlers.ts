@@ -269,6 +269,7 @@ export const AUTOMATION_HANDLERS = [
 
     automations.set(automation.id, automation);
     return HttpResponse.json(automation, { status: 201 });
+  }),
 
   // --- Server-backed automation drafts (OpenHands/automation PR #417) ---
 
