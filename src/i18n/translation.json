@@ -14279,7 +14279,6 @@
     "uk": "Повідомлено користувацькі метадані завдання.",
     "ca": "S'han informat metadades personalitzades de la tasca."
   },
-
   "AUTOMATIONS$DETAIL$VIEW_CONVERSATION_FOR_RUN": {
     "en": "View conversation for run at {{timestamp}}",
     "ja": "{{timestamp}} の実行の会話を表示",
@@ -14297,7 +14296,6 @@
     "uk": "Переглянути розмову для запуску о {{timestamp}}",
     "ca": "Mostra la conversa de l'execució a {{timestamp}}"
   },
-
   "AUTOMATIONS$DETAIL$PHASE": {
     "ar": "المرحلة",
     "ca": "Fase",
@@ -42143,5 +42141,73 @@
     "de": "Sie haben noch keine Geheimnisse gespeichert.",
     "uk": "Ви ще не зберегли жодного секрету.",
     "ca": "Encara no has desat cap secret."
+  },
+  "SETTINGS$APPS_VIEW_LOADING": {
+    "en": "Loading app view...",
+    "ja": "アプリビューを読み込み中...",
+    "zh-CN": "正在加载应用视图...",
+    "zh-TW": "正在載入應用程式檢視...",
+    "ko-KR": "앱 보기를 불러오는 중...",
+    "no": "Laster appvisning...",
+    "ar": "جارٍ تحميل عرض التطبيق...",
+    "de": "App-Ansicht wird geladen...",
+    "fr": "Chargement de la vue de l’application...",
+    "it": "Caricamento della vista dell’app...",
+    "pt": "Carregando a visualização do aplicativo...",
+    "es": "Cargando la vista de la aplicación...",
+    "ca": "S’està carregant la vista de l’aplicació...",
+    "tr": "Uygulama görünümü yükleniyor...",
+    "uk": "Завантаження подання застосунку..."
+  },
+  "SETTINGS$APPS_VIEW_RETRY": {
+    "en": "Retry",
+    "ja": "再試行",
+    "zh-CN": "重试",
+    "zh-TW": "重試",
+    "ko-KR": "다시 시도",
+    "no": "Prøv igjen",
+    "ar": "إعادة المحاولة",
+    "de": "Erneut versuchen",
+    "fr": "Réessayer",
+    "it": "Riprova",
+    "pt": "Tentar novamente",
+    "es": "Reintentar",
+    "ca": "Torna-ho a provar",
+    "tr": "Yeniden dene",
+    "uk": "Повторити"
+  },
+  "SETTINGS$APPS_VIEW_OPEN_NEW_TAB": {
+    "en": "Open in new tab",
+    "ja": "新しいタブで開く",
+    "zh-CN": "在新标签页中打开",
+    "zh-TW": "在新分頁中開啟",
+    "ko-KR": "새 탭에서 열기",
+    "no": "Åpne i ny fane",
+    "ar": "فتح في علامة تبويب جديدة",
+    "de": "In neuem Tab öffnen",
+    "fr": "Ouvrir dans un nouvel onglet",
+    "it": "Apri in una nuova scheda",
+    "pt": "Abrir em nova aba",
+    "es": "Abrir en una pestaña nueva",
+    "ca": "Obre en una pestanya nova",
+    "tr": "Yeni sekmede aç",
+    "uk": "Відкрити в новій вкладці"
+  },
+  "SETTINGS$APPS_VIEW_UNAVAILABLE": {
+    "en": "This app view is not available yet. Check that its backend is ready, then try again.",
+    "ja": "このアプリビューはまだ利用できません。バックエンドの準備ができていることを確認して、もう一度お試しください。",
+    "zh-CN": "此应用视图尚不可用。请确认其后端已就绪，然后重试。",
+    "zh-TW": "此應用程式檢視尚無法使用。請確認其後端已準備就緒，然後再試一次。",
+    "ko-KR": "이 앱 보기는 아직 사용할 수 없습니다. 백엔드가 준비되었는지 확인한 후 다시 시도하세요.",
+    "no": "Denne appvisningen er ikke tilgjengelig ennå. Kontroller at backend-en er klar, og prøv igjen.",
+    "ar": "عرض التطبيق هذا غير متاح بعد. تحقق من أن الواجهة الخلفية جاهزة، ثم حاول مرة أخرى.",
+    "de": "Diese App-Ansicht ist noch nicht verfügbar. Prüfe, ob das Backend bereit ist, und versuche es erneut.",
+    "fr": "Cette vue d’application n’est pas encore disponible. Vérifiez que son backend est prêt, puis réessayez.",
+    "it": "Questa vista dell’app non è ancora disponibile. Verifica che il backend sia pronto, quindi riprova.",
+    "pt": "Esta visualização do aplicativo ainda não está disponível. Verifique se o backend está pronto e tente novamente.",
+    "es": "Esta vista de la aplicación aún no está disponible. Comprueba que su backend esté listo e inténtalo de nuevo.",
+    "ca": "Aquesta vista de l’aplicació encara no està disponible. Comprova que el backend estigui preparat i torna-ho a provar.",
+    "tr": "Bu uygulama görünümü henüz kullanılamıyor. Arka ucun hazır olduğunu kontrol edip yeniden deneyin.",
+    "uk": "Це подання застосунку ще недоступне. Перевірте, чи готовий його бекенд, і повторіть спробу."
   }
 }

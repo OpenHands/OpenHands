@@ -127,19 +127,52 @@ temporary Blob URL. A direct `<script src>` or `import(backendUrl)` cannot carry
 `X-Session-API-Key`, so it is not the v1 loading path. Importing the bundle does
 not activate it; Canvas calls `activate` only for an enabled installation.
 
+### Optional app backend views
+
+Schema 1 routed pages may embed an app-owned HTTP UI through the optional
+`host.appBackendView` helper. The helper is present only when all parts of the
+Agent Server bridge contract are available:
+
+- `/server_info.capabilities` contains `canvas_app_backend_bridge_v1`;
+- `/server_info.app_backend_ingress_url` is a valid HTTP(S) URL; and
+- the installed `@openhands/typescript-client` exports
+  `CanvasExtensionsClient.createAppBackendSession()` and
+  `revokeAppBackendSession()`.
+
+Extensions call `host.appBackendView.mount({ container })`; they never receive
+an Agent Server session key, inspect local storage, construct an ingress origin,
+or derive one from `window.location`. Canvas requests a short-lived session from
+the discovered ingress, validates that the returned URL has the same origin,
+and renders it in an iframe using only the server-provided allowlisted sandbox
+tokens. `allow-same-origin` is required so authenticated fetch, WebSocket, and
+Worker APIs retain the app ingress origin and partitioned session cookie; the
+separate ingress origin is the authority boundary. Top-navigation, downloads,
+and storage-access tokens remain rejected. The host owns loading, safe errors,
+retry, a validated new-tab fallback, session revocation, and disposal on page
+unmount or backend switch.
+
+This remains additive to schema 1. Self-contained ESM loading, routed page
+registration, and the native editor are unchanged. There is no generic runtime,
+VS Code app, arbitrary URL proxy, mandatory sidecar, or frontend tarball loader.
+
+**HUMAN blocker:** SDK draft PR `OpenHands/software-agent-sdk#5272` defines the
+finalized client API, but no published TypeScript client release currently
+contains it. The frontend therefore feature-detects the client export and fails
+closed until a compatible release can be pinned.
+
 ## Agent Server API
 
 The API deliberately mirrors plugin distribution management while remaining a
 separate runtime:
 
-| Method   | Path                                              | Purpose                                                   |
-| -------- | ------------------------------------------------- | --------------------------------------------------------- |
-| `GET`    | `/api/canvas-extensions/installed`                | List installed extensions and parsed manifests            |
-| `POST`   | `/api/canvas-extensions/install`                  | Install from git or a backend-local path; always disabled |
-| `GET`    | `/api/canvas-extensions/installed/{name}`         | Read one installation                                     |
-| `PATCH`  | `/api/canvas-extensions/installed/{name}`         | Set enabled state                                         |
-| `DELETE` | `/api/canvas-extensions/installed/{name}`         | Uninstall                                                 |
-| `GET`    | `/api/canvas-extensions/installed/{name}/bundle`  | Return the entrypoint as JavaScript text                  |
+| Method   | Path                                             | Purpose                                                   |
+| -------- | ------------------------------------------------ | --------------------------------------------------------- |
+| `GET`    | `/api/canvas-extensions/installed`               | List installed extensions and parsed manifests            |
+| `POST`   | `/api/canvas-extensions/install`                 | Install from git or a backend-local path; always disabled |
+| `GET`    | `/api/canvas-extensions/installed/{name}`        | Read one installation                                     |
+| `PATCH`  | `/api/canvas-extensions/installed/{name}`        | Set enabled state                                         |
+| `DELETE` | `/api/canvas-extensions/installed/{name}`        | Uninstall                                                 |
+| `GET`    | `/api/canvas-extensions/installed/{name}/bundle` | Return the entrypoint as JavaScript text                  |
 
 A refresh endpoint (`POST /api/canvas-extensions/installed/{name}/refresh`) is
 planned but not part of the current router; the service-layer staged check/apply

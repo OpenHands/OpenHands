@@ -1,6 +1,8 @@
 import { AgentServerClient } from "@openhands/typescript-client/clients";
+import * as AgentServerClients from "@openhands/typescript-client/clients";
 import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
 import { isSdkHttpStatusError } from "#/api/agent-server-compatibility";
+import type { CanvasExtensionAppViewSession } from "#/extensions/canvas-extension-app-view";
 import {
   getActiveBackend,
   isNoBackend,
@@ -13,8 +15,50 @@ import type {
 } from "#/types/canvas-extension";
 
 const CANVAS_EXTENSIONS_BASE_PATH = "/api/canvas-extensions";
+const CANVAS_APP_BACKEND_BRIDGE_CAPABILITY = "canvas_app_backend_bridge_v1";
 const REMOTE_EXTENSION_SOURCE_PATTERN =
   /^(?:github:|https?:\/\/|git:\/\/|file:\/\/|[\w.-]+@[\w.-]+:)/i;
+
+interface AppBackendServerInfo {
+  capabilities?: string[];
+  app_backend_ingress_url?: string | null;
+}
+
+interface AppBackendSessionResponse {
+  ingress_url: string;
+  expires_at: string;
+  iframe_sandbox: string;
+}
+
+interface AppBackendSessionClient {
+  createAppBackendSession: (name: string) => Promise<AppBackendSessionResponse>;
+  revokeAppBackendSession: (name: string) => Promise<void>;
+  close: () => void;
+}
+
+interface AppBackendSessionClientConstructor {
+  new (options: {
+    host: string;
+    apiKey?: string;
+    timeout?: number;
+    appBackendIngressUrl: string;
+  }): AppBackendSessionClient;
+}
+
+export interface CanvasExtensionAppBackendViewClient {
+  createSession: () => Promise<CanvasExtensionAppViewSession>;
+  revokeSession: () => Promise<void>;
+  dispose: () => void;
+}
+
+function parseHttpUrl(value: string): URL | null {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:" ? url : null;
+  } catch {
+    return null;
+  }
+}
 
 export type CanvasExtensionsUnsupportedReason =
   | "no-backend"
@@ -87,6 +131,88 @@ async function mapUnsupported<T>(operation: () => Promise<T>): Promise<T> {
     }
     throw error;
   }
+}
+
+function getAppBackendSessionClientConstructor(): AppBackendSessionClientConstructor | null {
+  return (
+    (Reflect.get(AgentServerClients, "CanvasExtensionsClient") as
+      | AppBackendSessionClientConstructor
+      | undefined) ?? null
+  );
+}
+
+async function createAppBackendViewClient(
+  name: string,
+  backend: Backend,
+): Promise<CanvasExtensionAppBackendViewClient | null> {
+  const clientOptions = getAgentServerClientOptions({
+    host: backend.host,
+    apiKey: backend.apiKey,
+    timeout: 60000,
+  });
+  const serverClient = new AgentServerClient(clientOptions);
+  let info: AppBackendServerInfo;
+  try {
+    info = (await serverClient.server.getServerInfo()) as AppBackendServerInfo;
+  } finally {
+    serverClient.close();
+  }
+  const ingressUrl = info.app_backend_ingress_url
+    ? parseHttpUrl(info.app_backend_ingress_url)
+    : null;
+  if (
+    !Array.isArray(info.capabilities) ||
+    !info.capabilities.includes(CANVAS_APP_BACKEND_BRIDGE_CAPABILITY) ||
+    !ingressUrl
+  ) {
+    return null;
+  }
+
+  const Client = getAppBackendSessionClientConstructor();
+  if (!Client) return null;
+  const sessionClient = new Client({
+    ...clientOptions,
+    appBackendIngressUrl: ingressUrl.href,
+  });
+  let disposed = false;
+  let hasSession = false;
+  const revokeSession = async () => {
+    if (!hasSession) return;
+    try {
+      await sessionClient.revokeAppBackendSession(name);
+    } finally {
+      hasSession = false;
+    }
+  };
+  return {
+    createSession: async () => {
+      if (disposed) throw new Error("Canvas App backend view is disposed");
+      const session = await sessionClient.createAppBackendSession(name);
+      hasSession = true;
+      const sessionUrl = parseHttpUrl(session.ingress_url);
+      if (sessionUrl?.origin !== ingressUrl.origin) {
+        await revokeSession();
+        throw new Error("Canvas App backend session URL is invalid");
+      }
+      return {
+        url: sessionUrl.href,
+        expiresAt: session.expires_at,
+        iframeSandbox: session.iframe_sandbox,
+      };
+    },
+    revokeSession,
+    dispose: () => {
+      if (disposed) return;
+      disposed = true;
+      if (!hasSession) {
+        sessionClient.close();
+        return;
+      }
+      void revokeSession()
+        .catch(() => undefined)
+        .finally(() => sessionClient.close());
+    },
+  };
 }
 
 function installedExtensionPath(name: string): string {
@@ -168,6 +294,14 @@ class CanvasExtensionsService {
         responseType: "text",
       }),
     );
+  }
+
+  static async createAppBackendViewClient(
+    name: string,
+    backend: Backend,
+  ): Promise<CanvasExtensionAppBackendViewClient | null> {
+    if (isNoBackend(backend) || backend.kind === "cloud") return null;
+    return createAppBackendViewClient(name, backend);
   }
 
   static async requestAgentServer<T = unknown>(
