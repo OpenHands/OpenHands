@@ -10,9 +10,8 @@ import { createPortal } from "react-dom";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import {
-  ArrowLeft,
   CalendarDays,
-  Clock3,
+  ChevronDown,
   Code2,
   FileText,
   Globe2,
@@ -40,9 +39,14 @@ import { packTarGzip } from "#/utils/tar-gzip";
 import { AvailableLanguages } from "#/i18n";
 import { I18nKey } from "#/i18n/declaration";
 import { BrandButton } from "#/components/features/settings/brand-button";
+import { BackNavButton } from "#/components/shared/buttons/back-nav-button";
 import {
+  formControlBorderClassName,
   formControlFieldClassName,
+  formControlHeightClassName,
   formControlMultilineFieldClassName,
+  formControlRadiusClassName,
+  formControlSurfaceClassName,
   formControlTransitionClassName,
 } from "#/utils/form-control-classes";
 import { cn } from "#/utils/utils";
@@ -89,11 +93,27 @@ const AUTOMATION_SETUP_KINDS: AutomationSetupKind[] = [
   "custom",
 ];
 const FREQUENCIES = [
+  "once",
   "hourly",
   "daily",
   "weekdays",
   "weekly",
   "custom",
+] as const;
+const TIMEZONE_OPTIONS = [
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Los_Angeles",
+  "America/Sao_Paulo",
+  "Europe/London",
+  "Europe/Paris",
+  "Europe/Berlin",
+  "Asia/Tokyo",
+  "Asia/Shanghai",
+  "Asia/Kolkata",
+  "Australia/Sydney",
+  "UTC",
 ] as const;
 const AUTOMATION_SETUP_FIELD_RENDER_ORDER: AutomationSetupField[] = [
   "kind",
@@ -109,6 +129,7 @@ const AUTOMATION_SETUP_FIELD_RENDER_ORDER: AutomationSetupField[] = [
   "triggerKind",
   "frequency",
   "time",
+  "scheduleDateTime",
   "timezone",
   "customSchedule",
   "eventSource",
@@ -189,12 +210,38 @@ function deriveName(prompt: string): string {
   return name || "New Automation";
 }
 
+function defaultScheduleDateTimeLocal(): string {
+  const date = new Date();
+  date.setSeconds(0, 0);
+  date.setMinutes(0);
+  date.setHours(date.getHours() + 1);
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hour = String(date.getHours()).padStart(2, "0");
+  const minute = String(date.getMinutes()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}T${hour}:${minute}`;
+}
+
+function onceCron(scheduleDateTime: string): string {
+  const match = scheduleDateTime.match(
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/,
+  );
+  if (!match) return DEFAULT_CUSTOM_SCHEDULE;
+  const minute = Number(match[5]);
+  const hour = Number(match[4]);
+  const day = Number(match[3]);
+  const month = Number(match[2]);
+  return `${minute} ${hour} ${day} ${month} *`;
+}
+
 function toCron(
   time: string,
   frequency: Frequency,
   customSchedule: string,
+  scheduleDateTime: string,
 ): string {
   if (frequency === "custom") return customSchedule || DEFAULT_CUSTOM_SCHEDULE;
+  if (frequency === "once") return onceCron(scheduleDateTime);
   if (frequency === "hourly") return "0 * * * *";
 
   const [hour = "9", minute = "0"] = time.split(":");
@@ -278,6 +325,7 @@ function buildInitialForm(
     triggerKind: form.triggerKind ?? "cron",
     frequency: form.frequency ?? "daily",
     time: form.time ?? DEFAULT_TIME,
+    scheduleDateTime: form.scheduleDateTime ?? "",
     timezone: form.timezone ?? DEFAULT_TIMEZONE,
     customSchedule: form.customSchedule ?? DEFAULT_CUSTOM_SCHEDULE,
     eventSource: form.eventSource ?? DEFAULT_EVENT_SOURCE,
@@ -556,6 +604,8 @@ function kindLabelKey(kind: AutomationSetupKind): I18nKey {
 
 function frequencyLabelKey(frequency: Frequency): I18nKey {
   switch (frequency) {
+    case "once":
+      return I18nKey.AUTOMATION_SETUP$FREQUENCY_ONCE;
     case "hourly":
       return I18nKey.AUTOMATION_SETUP$FREQUENCY_HOURLY;
     case "daily":
@@ -715,6 +765,7 @@ export function AutomationSetupPanel({
     triggerKind,
     frequency,
     time,
+    scheduleDateTime,
     timezone,
     customSchedule,
     eventSource,
@@ -932,7 +983,12 @@ export function AutomationSetupPanel({
         }
       : {
           type: "cron",
-          schedule: toCron(time, frequency, customSchedule.trim()),
+          schedule: toCron(
+            time,
+            frequency,
+            customSchedule.trim(),
+            scheduleDateTime,
+          ),
           timezone: timezone.trim() || DEFAULT_TIMEZONE,
         };
   const buildPresetBody = (): SetupRequestBody => {
@@ -1012,6 +1068,7 @@ export function AutomationSetupPanel({
     triggerKind,
     frequency,
     time,
+    scheduleDateTime,
     timezone,
     customSchedule,
     eventSource,
@@ -1337,12 +1394,15 @@ export function AutomationSetupPanel({
     return null;
   };
 
+  const compactToolbarButtonClassName = "!h-7 !min-h-7 !px-2.5 !text-xs";
+
   const renderToolbarActions = () => (
-    <div className="flex shrink-0 items-center gap-2">
+    <div className="flex shrink-0 items-center gap-1.5">
       <BrandButton
         type="button"
         variant="secondary"
         testId="automation-setup-save-draft"
+        className={compactToolbarButtonClassName}
         isDisabled={isSubmitting}
         onClick={handleSaveDraft}
       >
@@ -1352,20 +1412,20 @@ export function AutomationSetupPanel({
         type="button"
         variant="secondary"
         testId="automation-setup-test"
+        className={compactToolbarButtonClassName}
         isDisabled={isSubmitting}
+        aria-busy={isSubmitting}
         onClick={handleTest}
       >
-        {isSubmitting
-          ? t(I18nKey.AUTOMATION_SETUP$STARTING_TEST)
-          : isDraftDirty
-            ? t(I18nKey.AUTOMATION_SETUP$SAVE_AND_TEST)
-            : t(I18nKey.AUTOMATION_SETUP$TEST_DRAFT)}
+        {t(I18nKey.AUTOMATION_SETUP$TEST)}
       </BrandButton>
       <BrandButton
         type="button"
         variant="primary"
         testId="automation-setup-create"
+        className={compactToolbarButtonClassName}
         isDisabled={isSubmitting}
+        aria-busy={isSubmitting}
         onClick={handleCreate}
       >
         {t(I18nKey.AUTOMATIONS$CREATE_AUTOMATION_BUTTON)}
@@ -1383,21 +1443,16 @@ export function AutomationSetupPanel({
         className="flex h-full min-h-0 flex-col bg-base"
       >
         {showInlineHeader ? (
-          <header className="flex h-10 min-h-10 items-center justify-between border-b border-[var(--oh-border)] px-3">
+          <header className="flex h-10 min-h-10 shrink-0 items-center justify-between gap-2 border-b border-[var(--oh-border)] bg-base px-3">
             <div className="flex min-w-0 items-center gap-2">
-              <button
-                type="button"
-                aria-label={t(I18nKey.AUTOMATION_SETUP$BACK_LABEL)}
+              <BackNavButton
+                testId="automation-setup-back"
+                className="!p-1.5"
+                ariaLabel={t(I18nKey.BUTTON$BACK)}
                 onClick={onClose}
-                className={cn(
-                  "flex size-7 items-center justify-center rounded-lg text-[var(--oh-muted)] hover:bg-white/10 hover:text-white",
-                  formControlTransitionClassName,
-                )}
-              >
-                <ArrowLeft className="size-4" aria-hidden />
-              </button>
-              <h2 className="truncate text-sm font-semibold text-white">
-                {t(I18nKey.AUTOMATION_SETUP$TITLE)}
+              />
+              <h2 className="min-w-0 truncate text-sm font-medium text-content">
+                {name.trim() || t(I18nKey.AUTOMATION_SETUP$TITLE)}
               </h2>
             </div>
             {renderToolbarActions()}
@@ -1581,13 +1636,15 @@ export function AutomationSetupPanel({
               </Field>
             )}
 
-            <section className="flex flex-col gap-3">
-              <h3 className="text-sm font-semibold text-white">
+            <section className="flex flex-col gap-2.5">
+              <span className="text-sm">
                 {t(I18nKey.AUTOMATIONS$DETAIL$TRIGGER)}
-              </h3>
+              </span>
               <div
+                role="radiogroup"
+                aria-label={t(I18nKey.AUTOMATIONS$DETAIL$TRIGGER)}
                 className={cn(
-                  "grid gap-3 md:grid-cols-2",
+                  "grid grid-cols-2 gap-2",
                   streamingHighlightClassName(streamingField === "triggerKind"),
                 )}
               >
@@ -1612,6 +1669,7 @@ export function AutomationSetupPanel({
               <ScheduleFields
                 frequency={frequency}
                 time={time}
+                scheduleDateTime={scheduleDateTime}
                 timezone={timezone}
                 customSchedule={customSchedule}
                 updatedSuffixes={{
@@ -1621,8 +1679,19 @@ export function AutomationSetupPanel({
                   customSchedule: agentUpdatedSuffix("customSchedule"),
                 }}
                 streamingField={streamingField}
-                setFrequency={(value) => updateField("frequency", value)}
+                setFrequency={(value) => {
+                  updateField("frequency", value);
+                  if (value === "once" && !scheduleDateTime.trim()) {
+                    updateField(
+                      "scheduleDateTime",
+                      defaultScheduleDateTimeLocal(),
+                    );
+                  }
+                }}
                 setTime={(value) => updateField("time", value)}
+                setScheduleDateTime={(value) =>
+                  updateField("scheduleDateTime", value)
+                }
                 setTimezone={(value) => updateField("timezone", value)}
                 setCustomSchedule={(value) =>
                   updateField("customSchedule", value)
@@ -1655,10 +1724,10 @@ export function AutomationSetupPanel({
               />
             )}
 
-            <section className="flex flex-col gap-3">
-              <h3 className="text-sm font-semibold text-white">
+            <section className="flex flex-col gap-2.5">
+              <span className="text-sm">
                 {t(I18nKey.AUTOMATION_SETUP$ADDITIONAL_OPTIONS)}
-              </h3>
+              </span>
               {showTimeout ? (
                 <Field
                   label={t(I18nKey.AUTOMATION_SETUP$TIMEOUT_SECONDS)}
@@ -1682,7 +1751,7 @@ export function AutomationSetupPanel({
                   data-testid="automation-setup-add-timeout"
                   onClick={() => updateField("showTimeout", true)}
                   className={cn(
-                    "w-fit rounded-full border border-[var(--oh-border)] px-4 py-2 text-sm text-[var(--oh-muted)] hover:bg-white/5 hover:text-white",
+                    "inline-flex w-fit shrink-0 cursor-pointer items-center rounded-full border border-[var(--oh-border)] px-3 py-1.5 text-sm text-[var(--oh-muted)] hover:border-[var(--oh-interactive-hover)] hover:bg-surface-raised hover:text-content",
                     formControlTransitionClassName,
                     streamingHighlightClassName(
                       streamingField === "showTimeout",
@@ -1851,49 +1920,82 @@ function CustomCodeFields({
   );
 }
 
+function frequencyTabClassName(selected: boolean) {
+  return cn(
+    "inline-flex h-full shrink-0 items-center rounded-md px-3 text-sm",
+    formControlTransitionClassName,
+    selected
+      ? cn(
+          formControlBorderClassName,
+          formControlSurfaceClassName,
+          "border-[var(--oh-interactive-hover)] text-content",
+        )
+      : "border border-transparent text-[var(--oh-muted)] hover:text-content",
+  );
+}
+
 function ScheduleFields({
   frequency,
   time,
+  scheduleDateTime,
   timezone,
   customSchedule,
   updatedSuffixes,
   streamingField,
   setFrequency,
   setTime,
+  setScheduleDateTime,
   setTimezone,
   setCustomSchedule,
 }: {
   frequency: Frequency;
   time: string;
+  scheduleDateTime: string;
   timezone: string;
   customSchedule: string;
   updatedSuffixes: Partial<
     Record<
-      "frequency" | "time" | "timezone" | "customSchedule",
+      "frequency" | "time" | "scheduleDateTime" | "timezone" | "customSchedule",
       string | undefined
     >
   >;
   streamingField: AutomationSetupField | null;
   setFrequency: (value: Frequency) => void;
   setTime: (value: string) => void;
+  setScheduleDateTime: (value: string) => void;
   setTimezone: (value: string) => void;
   setCustomSchedule: (value: string) => void;
 }) {
   const { t } = useTranslation("openhands");
-  const atUpdatedSuffix = updatedSuffixes.time ?? updatedSuffixes.timezone;
+  const atUpdatedSuffix =
+    updatedSuffixes.time ??
+    updatedSuffixes.scheduleDateTime ??
+    updatedSuffixes.timezone;
+  const showTime =
+    frequency === "daily" || frequency === "weekdays" || frequency === "weekly";
+  const timezoneChoices = TIMEZONE_OPTIONS.includes(
+    timezone as (typeof TIMEZONE_OPTIONS)[number],
+  )
+    ? TIMEZONE_OPTIONS
+    : [timezone, ...TIMEZONE_OPTIONS];
+
   return (
-    <section className="flex flex-col gap-3">
-      <h3 className="flex items-center gap-2 text-sm font-semibold text-white">
+    <section className="flex flex-col gap-2.5">
+      <span className="flex items-center gap-2 text-sm">
         <span>{t(I18nKey.AUTOMATION_SETUP$FREQUENCY)}</span>
         {updatedSuffixes.frequency && (
           <span className="text-xs font-normal text-[var(--oh-muted)]">
             {updatedSuffixes.frequency}
           </span>
         )}
-      </h3>
+      </span>
       <div
+        role="radiogroup"
+        aria-label={t(I18nKey.AUTOMATION_SETUP$FREQUENCY)}
         className={cn(
-          "grid grid-cols-2 gap-1 rounded-xl bg-base-secondary p-1 md:grid-cols-6",
+          formControlHeightClassName,
+          formControlRadiusClassName,
+          "inline-flex w-fit max-w-full min-w-0 items-center gap-0.5 overflow-x-auto bg-[var(--oh-surface-raised)] p-0.5",
           streamingHighlightClassName(streamingField === "frequency"),
         )}
       >
@@ -1901,92 +2003,103 @@ function ScheduleFields({
           <button
             key={item}
             type="button"
+            role="radio"
             data-testid={`automation-setup-frequency-${item}`}
-            aria-pressed={frequency === item}
+            aria-checked={frequency === item}
             onClick={() => setFrequency(item)}
-            className={cn(
-              "rounded-lg px-3 py-2 text-sm",
-              formControlTransitionClassName,
-              frequency === item
-                ? "bg-[var(--oh-interactive-hover)] text-white"
-                : "text-[var(--oh-muted)] hover:text-white",
-            )}
+            className={frequencyTabClassName(frequency === item)}
           >
             {t(frequencyLabelKey(item))}
           </button>
         ))}
       </div>
-      {frequency === "custom" ? (
-        <Field
-          label={t(I18nKey.AUTOMATION_SETUP$TYPE_CUSTOM)}
-          suffix={updatedSuffixes.customSchedule}
-          isStreaming={streamingField === "customSchedule"}
-        >
-          <input
-            data-testid="automation-setup-custom-schedule"
-            value={customSchedule}
-            onChange={(event) => setCustomSchedule(event.target.value)}
-            className={formControlFieldClassName}
-          />
-        </Field>
-      ) : (
-        <div
-          data-testid="automation-setup-at-row"
-          className="flex flex-col gap-2 md:flex-row md:items-center"
-        >
-          <span className="shrink-0 text-sm font-semibold text-white">
-            {t(I18nKey.AUTOMATION_SETUP$AT)}
-          </span>
-          <div
-            data-streaming-active={
-              streamingField === "time" ? "true" : undefined
-            }
-            className={cn(
-              "relative md:w-36",
-              streamingHighlightClassName(streamingField === "time"),
-            )}
-          >
+      <div
+        data-testid="automation-setup-at-row"
+        className="flex w-full min-w-0 items-center gap-4 overflow-x-auto"
+      >
+        {frequency === "custom" ? (
+          <label className="flex shrink-0 items-center gap-2.5">
+            <span className="shrink-0 text-sm text-content">
+              {t(I18nKey.AUTOMATION_SETUP$TYPE_CUSTOM)}
+            </span>
+            <input
+              data-testid="automation-setup-custom-schedule"
+              value={customSchedule}
+              onChange={(event) => setCustomSchedule(event.target.value)}
+              className={cn(formControlFieldClassName, "w-[14rem]")}
+            />
+          </label>
+        ) : null}
+        {frequency === "once" ? (
+          <div className="flex shrink-0 items-center gap-2.5">
+            <span className="shrink-0 text-sm text-content">
+              {t(I18nKey.AUTOMATION_SETUP$AT)}
+            </span>
+            <input
+              aria-label={t(I18nKey.AUTOMATION_SETUP$AT)}
+              data-testid="automation-setup-datetime"
+              type="datetime-local"
+              value={scheduleDateTime || defaultScheduleDateTimeLocal()}
+              onChange={(event) => setScheduleDateTime(event.target.value)}
+              className={cn(formControlFieldClassName, "w-[15rem]")}
+            />
+          </div>
+        ) : null}
+        {showTime ? (
+          <div className="flex shrink-0 items-center gap-2.5">
+            <span className="shrink-0 text-sm text-content">
+              {t(I18nKey.AUTOMATION_SETUP$AT)}
+            </span>
             <input
               aria-label={t(I18nKey.AUTOMATION_SETUP$AT)}
               data-testid="automation-setup-time"
               type="time"
               value={time}
               onChange={(event) => setTime(event.target.value)}
-              className={formControlFieldClassName}
-            />
-            <Clock3
-              className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-[var(--oh-muted)]"
-              aria-hidden
+              className={cn(formControlFieldClassName, "w-[9.5rem]")}
             />
           </div>
-          <div
-            data-streaming-active={
-              streamingField === "timezone" ? "true" : undefined
-            }
+        ) : null}
+        <div
+          data-streaming-active={
+            streamingField === "timezone" ? "true" : undefined
+          }
+          className={cn(
+            "relative w-[16rem] shrink-0",
+            streamingHighlightClassName(streamingField === "timezone"),
+          )}
+        >
+          <Globe2
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--oh-muted)]"
+            aria-hidden
+          />
+          <select
+            aria-label={t(I18nKey.AUTOMATIONS$TIMEZONE)}
+            data-testid="automation-setup-timezone"
+            value={timezone}
+            onChange={(event) => setTimezone(event.target.value)}
             className={cn(
-              "relative min-w-0 flex-1 md:max-w-96",
-              streamingHighlightClassName(streamingField === "timezone"),
+              formControlFieldClassName,
+              "appearance-none pl-9 pr-8",
             )}
           >
-            <input
-              aria-label={t(I18nKey.AUTOMATIONS$TIMEZONE)}
-              data-testid="automation-setup-timezone"
-              value={timezone}
-              onChange={(event) => setTimezone(event.target.value)}
-              className={cn(formControlFieldClassName, "pl-9")}
-            />
-            <Globe2
-              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--oh-muted)]"
-              aria-hidden
-            />
-          </div>
-          {atUpdatedSuffix && (
-            <span className="shrink-0 text-xs font-normal text-[var(--oh-muted)]">
-              {atUpdatedSuffix}
-            </span>
-          )}
+            {timezoneChoices.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+          <ChevronDown
+            className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-[var(--oh-muted)]"
+            aria-hidden
+          />
         </div>
-      )}
+        {atUpdatedSuffix && (
+          <span className="shrink-0 text-xs font-normal text-[var(--oh-muted)]">
+            {atUpdatedSuffix}
+          </span>
+        )}
+      </div>
     </section>
   );
 }
@@ -2320,21 +2433,24 @@ function TriggerCard({
   return (
     <button
       type="button"
-      aria-pressed={selected}
+      role="radio"
+      aria-checked={selected}
       onClick={onClick}
       className={cn(
-        "flex items-start gap-3 rounded-xl border p-4 text-left",
+        "rounded-lg border px-3 py-2.5 text-left",
         formControlTransitionClassName,
         selected
-          ? "border-white/20 bg-white/10 text-white"
-          : "border-[var(--oh-border)] bg-base-secondary text-[var(--oh-muted)] hover:bg-white/5 hover:text-white",
+          ? "border-[var(--oh-interactive-hover)] bg-surface-raised text-content"
+          : "border-[var(--oh-border)] bg-transparent text-content hover:border-[var(--oh-interactive-hover)] hover:bg-surface-raised",
       )}
     >
-      <span className="mt-0.5 text-[var(--oh-muted)]">{icon}</span>
-      <span className="flex flex-col gap-1">
-        <span className="text-sm font-semibold">{title}</span>
-        <span className="text-xs leading-5 text-[var(--oh-muted)]">
-          {description}
+      <span className="flex items-start gap-2">
+        <span className="mt-0.5 text-muted">{icon}</span>
+        <span className="min-w-0">
+          <span className="block text-sm font-medium">{title}</span>
+          <span className="mt-1 block text-xs text-[var(--oh-text-tertiary)]">
+            {description}
+          </span>
         </span>
       </span>
     </button>

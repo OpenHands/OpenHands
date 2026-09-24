@@ -1,6 +1,7 @@
 export type AutomationSetupKind = "prompt" | "plugin" | "custom";
 export type AutomationSetupTriggerKind = "cron" | "event";
 export type AutomationSetupFrequency =
+  | "once"
   | "hourly"
   | "daily"
   | "weekdays"
@@ -22,6 +23,7 @@ export interface AutomationSetupFormValues {
   triggerKind: AutomationSetupTriggerKind;
   frequency: AutomationSetupFrequency;
   time: string;
+  scheduleDateTime: string;
   timezone: string;
   customSchedule: string;
   eventSource: string;
@@ -70,6 +72,7 @@ const AUTOMATION_SETUP_TRIGGER_KINDS: AutomationSetupTriggerKind[] = [
   "event",
 ];
 const AUTOMATION_SETUP_FREQUENCIES: AutomationSetupFrequency[] = [
+  "once",
   "hourly",
   "daily",
   "weekdays",
@@ -87,6 +90,7 @@ const STRING_FIELDS = [
   "setupScriptPath",
   "setupScript",
   "time",
+  "scheduleDateTime",
   "timezone",
   "customSchedule",
   "eventSource",

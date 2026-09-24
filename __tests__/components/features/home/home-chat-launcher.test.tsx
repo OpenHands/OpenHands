@@ -365,9 +365,15 @@ describe("HomeChatLauncher", () => {
     const user = userEvent.setup();
 
     expect(screen.getByTestId("home-launcher-mode-code")).toHaveAttribute(
-      "aria-pressed",
+      "aria-checked",
       "true",
     );
+    expect(screen.getByTestId("home-composer-actions")).toHaveAttribute(
+      "aria-disabled",
+      "false",
+    );
+    expect(screen.getByTestId("open-workspace-button")).toBeEnabled();
+    expect(screen.getByTestId("open-plugin-picker")).toBeEnabled();
     expect(screen.getByTestId("stub-chat-submit")).toHaveAttribute(
       "data-placeholder",
       "SUGGESTIONS$WHAT_TO_BUILD",
@@ -379,9 +385,15 @@ describe("HomeChatLauncher", () => {
     await user.click(screen.getByTestId("home-launcher-mode-automate"));
 
     expect(screen.getByTestId("home-launcher-mode-automate")).toHaveAttribute(
-      "aria-pressed",
+      "aria-checked",
       "true",
     );
+    expect(screen.getByTestId("home-composer-actions")).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    expect(screen.getByTestId("open-workspace-button")).toBeDisabled();
+    expect(screen.getByTestId("open-plugin-picker")).toBeDisabled();
     expect(screen.getByTestId("stub-chat-submit")).toHaveAttribute(
       "data-placeholder",
       "HOME$AUTOMATE_PROMPT_PLACEHOLDER",
@@ -719,7 +731,6 @@ describe("HomeChatLauncher", () => {
     renderLauncher();
     const user = userEvent.setup();
 
-    await user.click(screen.getByTestId("home-launcher-mode-automate"));
     await user.click(screen.getByTestId("open-plugin-picker"));
     await user.click(await screen.findByTestId("stub-plugin-pick"));
     await user.click(screen.getByTestId("stub-chat-submit"));
@@ -732,11 +743,7 @@ describe("HomeChatLauncher", () => {
         metadata: null,
       }),
     );
-    expect(mockSetAutomationSetupDraft).toHaveBeenCalledWith("conv-abc", {
-      prompt: "hello world",
-      kind: "plugin",
-      plugins: ["github:o/a"],
-    });
+    expect(mockSetAutomationSetupDraft).not.toHaveBeenCalled();
   });
 
   it("renders the recommended automations rail above pinned activity in Automate mode", async () => {

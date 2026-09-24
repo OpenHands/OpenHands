@@ -140,6 +140,26 @@ describe("AutomationSetupPanel", () => {
     vi.useRealTimers();
   });
 
+  it("shows a one-time date when Once is selected and a time of day otherwise", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    expect(screen.getByTestId("automation-setup-frequency-daily")).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(screen.getByTestId("automation-setup-time")).toBeInTheDocument();
+    expect(screen.queryByTestId("automation-setup-datetime")).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("automation-setup-frequency-once"));
+
+    expect(screen.getByTestId("automation-setup-datetime")).toBeInTheDocument();
+    expect(screen.queryByTestId("automation-setup-time")).not.toBeInTheDocument();
+    expect(screen.getByTestId("automation-setup-timezone")).toHaveValue(
+      "America/New_York",
+    );
+  });
+
   it("switches between prompt, plugin, and custom form types", async () => {
     const user = userEvent.setup();
     renderPanel();
@@ -317,7 +337,7 @@ describe("AutomationSetupPanel", () => {
     );
     expect(
       screen.getByTestId("automation-setup-frequency-weekly"),
-    ).toHaveAttribute("aria-pressed", "true");
+    ).toHaveAttribute("aria-checked", "true");
     expect(screen.getByTestId("automation-setup-time")).toHaveValue("10:30");
     expect(screen.getByTestId("automation-setup-timezone")).toHaveValue("UTC");
     expect(screen.getByTestId("automation-setup-at-row")).toHaveTextContent(
