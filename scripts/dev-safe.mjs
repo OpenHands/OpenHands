@@ -399,10 +399,10 @@ export function validateFrontendDependencies(
 /**
  * Modules the agent-server imports at startup (`--import-modules`). They are
  * resolved from `tools/`, which `buildAgentServerEnv` exposes through
- * OH_EXTRA_PYTHON_PATH. Importing `canvas_ui_tool` eagerly registers the SDK's
- * builtin FinishTool so automation presets (openhands-automation >= 1.9.0) can
- * resolve it on the remote conversations they dispatch — see the note at the
- * bottom of tools/canvas_ui_tool.py.
+ * OH_EXTRA_PYTHON_PATH. Importing `canvas_ui_tool` eagerly registers a
+ * FinishTool factory so automation presets (openhands-automation >= 1.9.0) can
+ * resolve leftover response_schema params on the remote conversations they
+ * dispatch — see the note at the bottom of tools/canvas_ui_tool.py.
  */
 export const AGENT_SERVER_IMPORT_MODULES = "canvas_ui_tool";
 
