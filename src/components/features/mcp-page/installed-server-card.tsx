@@ -78,7 +78,7 @@ export function InstalledServerCard({
       onKeyDown={handleKeyDown}
       aria-label={t(I18nKey.MCP$EDIT_SERVER_ARIA, { name: title })}
       className={cn(
-        "flex min-h-[132px] flex-col overflow-hidden p-4 text-left",
+        "flex min-h-33 flex-col overflow-hidden p-4 text-left",
         extensionModuleCardSurfaceClassName,
         extensionModuleCardInteractiveClassName,
       )}

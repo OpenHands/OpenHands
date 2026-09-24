@@ -37,7 +37,7 @@ export function BackendSyncedSettingsBadge() {
       data-testid="backend-synced-settings-badge"
       className="flex items-center"
     >
-      <Typography.Text className="text-[11px] font-medium text-[var(--oh-text-dim)] leading-5">
+      <Typography.Text className="text-[11px] font-medium text-text-dim leading-5">
         {t(I18nKey.SETTINGS$BACKEND_SYNCED_BADGE, {
           name,
           host: active.backend.host,

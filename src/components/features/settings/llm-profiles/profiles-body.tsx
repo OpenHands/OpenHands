@@ -142,7 +142,7 @@ export function ProfilesBody({
         data-testid="profiles-empty"
         className={extensionModuleEmptyStateClassName}
       >
-        <p className="text-sm text-[var(--oh-muted)]">
+        <p className="text-sm text-muted">
           {t(I18nKey.SETTINGS$PROFILES_EMPTY)}
         </p>
       </div>
@@ -166,7 +166,7 @@ export function ProfilesBody({
         >
           <h3
             data-testid="profile-group-header"
-            className="text-xs font-medium uppercase tracking-wide text-[var(--oh-muted)]"
+            className="text-xs font-medium uppercase tracking-wide text-muted"
           >
             {group.label ?? t(I18nKey.SETTINGS$PROFILES_UNGROUPED)}
           </h3>

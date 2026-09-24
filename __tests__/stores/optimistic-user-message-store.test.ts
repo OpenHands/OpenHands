@@ -65,13 +65,21 @@ describe("optimistic-user-message-store", () => {
       conversationId: CONVO,
       text: "broken",
     });
+    const otherId = store.enqueuePendingMessage({
+      conversationId: CONVO,
+      text: "other",
+    });
     store.markPendingMessageError(id, "boom");
+    store.markPendingMessageError(otherId, "other boom");
 
     store.markPendingMessageSending(id);
 
-    const [entry] = useOptimisticUserMessageStore.getState().pendingMessages;
+    const [entry, other] =
+      useOptimisticUserMessageStore.getState().pendingMessages;
     expect(entry.status).toBe("sending");
     expect(entry.errorMessage).toBeUndefined();
+    expect(other.status).toBe("error");
+    expect(other.errorMessage).toBe("other boom");
   });
 
   it("enqueue stores `content` separately from `text` and defaults it to `text`", () => {
@@ -111,8 +119,7 @@ describe("optimistic-user-message-store", () => {
     const consumed = store.consumeMatchingPendingMessage(CONVO, "second");
 
     expect(consumed?.id).toBe(secondId);
-    const remaining =
-      useOptimisticUserMessageStore.getState().pendingMessages;
+    const remaining = useOptimisticUserMessageStore.getState().pendingMessages;
     expect(remaining).toHaveLength(1);
     expect(remaining[0].id).toBe(firstId);
   });
@@ -153,14 +160,13 @@ describe("optimistic-user-message-store", () => {
     const consumed = store.consumeMatchingPendingMessage(CONVO, "second");
 
     expect(consumed?.id).toBe(secondId);
-    const remaining =
-      useOptimisticUserMessageStore.getState().pendingMessages;
+    const remaining = useOptimisticUserMessageStore.getState().pendingMessages;
     expect(remaining).toHaveLength(1);
     expect(remaining[0].id).toBe(firstId);
     expect(remaining[0].status).toBe("error");
   });
 
-  it("consumeMatchingPendingMessage is a no-op when nothing is sending", () => {
+  it("consumeMatchingPendingMessage is a no-op when only errored entries exist and none match exactly", () => {
     const store = useOptimisticUserMessageStore.getState();
     const id = store.enqueuePendingMessage({
       conversationId: CONVO,
@@ -168,12 +174,32 @@ describe("optimistic-user-message-store", () => {
     });
     store.markPendingMessageError(id, "boom");
 
-    const consumed = store.consumeMatchingPendingMessage(CONVO, "broken");
+    const consumed = store.consumeMatchingPendingMessage(CONVO, "unrelated");
 
     expect(consumed).toBeNull();
     expect(
       useOptimisticUserMessageStore.getState().pendingMessages,
     ).toHaveLength(1);
+  });
+
+  it("consumeMatchingPendingMessage clears an errored entry when the echo matches its content exactly", () => {
+    const store = useOptimisticUserMessageStore.getState();
+    const id = store.enqueuePendingMessage({
+      conversationId: CONVO,
+      text: "late echo",
+    });
+    // The watchdog gives up before the server echoes the message back.
+    vi.advanceTimersByTime(PENDING_MESSAGE_TIMEOUT_MS);
+    expect(
+      useOptimisticUserMessageStore.getState().pendingMessages[0].status,
+    ).toBe("error");
+
+    const consumed = store.consumeMatchingPendingMessage(CONVO, "late echo");
+
+    expect(consumed?.id).toBe(id);
+    expect(
+      useOptimisticUserMessageStore.getState().pendingMessages,
+    ).toHaveLength(0);
   });
 
   it("consumeMatchingPendingMessage only consumes entries for the given conversation", () => {
@@ -192,8 +218,7 @@ describe("optimistic-user-message-store", () => {
     const consumed = store.consumeMatchingPendingMessage("conv-b", "shared");
 
     expect(consumed?.id).toBe(bId);
-    const remaining =
-      useOptimisticUserMessageStore.getState().pendingMessages;
+    const remaining = useOptimisticUserMessageStore.getState().pendingMessages;
     expect(remaining).toHaveLength(1);
     expect(remaining[0].id).toBe(aId);
   });
@@ -237,13 +262,21 @@ describe("optimistic-user-message-store", () => {
       conversationId: CONVO,
       text: "explicit-error",
     });
+    const waitingId = store.enqueuePendingMessage({
+      conversationId: CONVO,
+      text: "still-waiting",
+    });
     store.markPendingMessageError(id, "boom");
 
     vi.advanceTimersByTime(PENDING_MESSAGE_TIMEOUT_MS);
 
-    const [entry] = useOptimisticUserMessageStore.getState().pendingMessages;
+    const [entry, waiting] =
+      useOptimisticUserMessageStore.getState().pendingMessages;
     // Should keep the original error message, not get overwritten to "Send timed out".
     expect(entry.errorMessage).toBe("boom");
+    expect(waiting.id).toBe(waitingId);
+    expect(waiting.status).toBe("error");
+    expect(waiting.errorMessage).toBe("Send timed out");
   });
 
   it("removePendingMessage drops a specific entry by id", () => {
@@ -256,8 +289,7 @@ describe("optimistic-user-message-store", () => {
 
     store.removePendingMessage(firstId);
 
-    const remaining =
-      useOptimisticUserMessageStore.getState().pendingMessages;
+    const remaining = useOptimisticUserMessageStore.getState().pendingMessages;
     expect(remaining.map((m) => m.text)).toEqual(["second"]);
   });
 
@@ -291,5 +323,69 @@ describe("optimistic-user-message-store", () => {
       ["real-convo", "hello"],
       ["other-convo", "untouched"],
     ]);
+  });
+
+  it("creates a complete fresh store whose actions remain scoped", async () => {
+    const randomSpy = vi
+      .spyOn(Math, "random")
+      .mockReturnValueOnce(0.5)
+      .mockReturnValue(0.25);
+    vi.resetModules();
+
+    try {
+      const { useOptimisticUserMessageStore: freshStore } =
+        await import("#/stores/optimistic-user-message-store");
+      expect(freshStore.getState().pendingMessages).toEqual([]);
+
+      const firstId = freshStore.getState().enqueuePendingMessage({
+        conversationId: CONVO,
+        text: "first",
+      });
+      const secondId = freshStore.getState().enqueuePendingMessage({
+        conversationId: "conv-b",
+        text: "second",
+      });
+      expect(typeof firstId).toBe("string");
+      expect(typeof secondId).toBe("string");
+      expect(firstId).not.toBe(secondId);
+
+      freshStore.getState().markPendingMessageError(firstId, "failed");
+      expect(
+        freshStore
+          .getState()
+          .pendingMessages.map(({ text, status, errorMessage }) => [
+            text,
+            status,
+            errorMessage,
+          ]),
+      ).toEqual([
+        ["first", "error", "failed"],
+        ["second", "sending", undefined],
+      ]);
+
+      freshStore.getState().markPendingMessageSending(firstId);
+      expect(freshStore.getState().pendingMessages[0]).toMatchObject({
+        id: firstId,
+        status: "sending",
+        errorMessage: undefined,
+      });
+
+      freshStore.getState().reassignPendingMessages("conv-b", "moved");
+      expect(
+        freshStore
+          .getState()
+          .pendingMessages.map(({ conversationId }) => conversationId),
+      ).toEqual([CONVO, "moved"]);
+
+      freshStore.getState().removePendingMessage(firstId);
+      expect(freshStore.getState().pendingMessages).toHaveLength(1);
+      expect(freshStore.getState().pendingMessages[0].id).toBe(secondId);
+
+      freshStore.getState().clearPendingMessages();
+      expect(freshStore.getState().pendingMessages).toEqual([]);
+    } finally {
+      randomSpy.mockRestore();
+      vi.resetModules();
+    }
   });
 });

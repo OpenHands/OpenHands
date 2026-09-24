@@ -58,14 +58,14 @@ export function GenericEventMessage({
       {showDetails ? (
         <ArrowUp
           className={cn(
-            "h-4 w-4 inline fill-[var(--oh-muted)]",
+            "h-4 w-4 inline fill-muted",
             chevronPosition === "after" ? "ml-2" : "mr-2",
           )}
         />
       ) : (
         <ArrowDown
           className={cn(
-            "h-4 w-4 inline fill-[var(--oh-muted)]",
+            "h-4 w-4 inline fill-muted",
             chevronPosition === "after" ? "ml-2" : "mr-2",
           )}
         />
@@ -110,7 +110,7 @@ export function GenericEventMessage({
   );
 
   const titleRow = (
-    <div className="flex items-center justify-between font-normal text-[var(--oh-muted)]">
+    <div className="flex items-center justify-between font-normal text-muted">
       {titleContentWithTimestamp}
       <div className="flex items-center">
         {titleTrailing}

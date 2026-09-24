@@ -124,26 +124,26 @@ export function EventGroup({
         className="w-full flex items-center justify-between gap-2 text-left cursor-pointer"
       >
         {isFinalized ? (
-          <span className="flex items-center gap-2 min-w-0 font-normal text-[var(--oh-muted)]">
-            <Chevron className="h-4 w-4 fill-[var(--oh-muted)] flex-shrink-0" />
+          <span className="flex items-center gap-2 min-w-0 font-normal text-muted">
+            <Chevron className="h-4 w-4 fill-muted flex-shrink-0" />
             <span className="truncate">{countSummary}</span>
           </span>
         ) : (
           <>
-            <span className="flex items-center gap-2 min-w-0 font-normal text-[var(--oh-muted)]">
-              <Chevron className="h-4 w-4 fill-[var(--oh-muted)] flex-shrink-0" />
+            <span className="flex items-center gap-2 min-w-0 font-normal text-muted">
+              <Chevron className="h-4 w-4 fill-muted flex-shrink-0" />
               <span className="truncate">
                 <PathInteractiveContext.Provider value={false}>
                   {latestTitle ?? countSummary}
                 </PathInteractiveContext.Provider>
               </span>
             </span>
-            <span className="flex items-center flex-shrink-0 font-normal text-[var(--oh-muted)]">
+            <span className="flex items-center flex-shrink-0 font-normal text-muted">
               <span className="truncate">{countSummary}</span>
               {isRunning ? (
                 <LoaderCircle
                   data-testid="spinner-icon"
-                  className="h-4 w-4 ml-2 inline animate-spin text-[var(--oh-muted)]"
+                  className="h-4 w-4 ml-2 inline animate-spin text-muted"
                 />
               ) : null}
             </span>

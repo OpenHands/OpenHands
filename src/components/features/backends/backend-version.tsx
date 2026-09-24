@@ -30,7 +30,7 @@ export function BackendVersion({ backend }: { backend: Backend }) {
 
   return (
     <span
-      className="inline-flex shrink-0 items-center rounded-full border border-[var(--oh-border)] bg-[var(--oh-surface)] px-1.5 py-0.5 text-[10px] font-medium leading-none text-[var(--oh-text-dim)]"
+      className="inline-flex shrink-0 items-center rounded-full border border-border bg-surface px-1.5 py-0.5 text-[10px] font-medium leading-none text-text-dim"
       data-testid={`manage-backends-version-${backend.name}`}
     >
       {t(I18nKey.BACKEND$VERSION_LABEL, { version })}

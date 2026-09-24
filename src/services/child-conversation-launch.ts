@@ -27,7 +27,7 @@ import {
 } from "#/constants/child-conversation";
 import { useGoalStore } from "#/stores/goal-store";
 import type { LaunchChildConversationAction } from "#/types/agent-server/core";
-import { buildAgentCanvasPath } from "#/utils/base-path";
+import { buildAgentCanvasUrl } from "#/utils/base-path";
 import {
   displayErrorToast,
   displaySuccessToastWithLink,
@@ -227,9 +227,7 @@ function claimToolCall(parentConversationId: string, toolCallId: string) {
 }
 
 function absoluteCanvasUrl(path: string) {
-  const canvasPath = buildAgentCanvasPath(path);
-  if (typeof window === "undefined") return canvasPath;
-  return new URL(canvasPath, window.location.origin).toString();
+  return buildAgentCanvasUrl(path);
 }
 
 /**
