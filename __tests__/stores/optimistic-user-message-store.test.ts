@@ -8,13 +8,30 @@ import {
   resetPendingTaskMessageLinkState,
 } from "#/utils/pending-task-message-link";
 
+import { useEventStore } from "#/stores/use-event-store";
+
 const CONVO = "conv-a";
+
+function addServerMessage(id: string, timestamp: string) {
+  useEventStore.getState().addEvent({
+    id,
+    timestamp,
+    source: "user",
+    llm_message: {
+      role: "user",
+      content: [{ type: "text", text: "continue" }],
+    },
+    activated_skills: [],
+    extended_content: [],
+  });
+}
 
 describe("optimistic-user-message-store", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     useOptimisticUserMessageStore.getState().clearPendingMessages();
     resetPendingTaskMessageLinkState();
+    useEventStore.getState().clearEventsForConversation(CONVO);
   });
 
   afterEach(() => {
@@ -140,8 +157,6 @@ describe("optimistic-user-message-store", () => {
     });
     store.enqueuePendingMessage({ conversationId: CONVO, text: "world" });
 
-    // Server munged the echo (e.g., trimmed whitespace). FIFO fallback keeps
-    // the bubble from getting stuck.
     const consumed = store.consumeMatchingPendingMessage(CONVO, " hello ", {
       id: "confirmation",
       timestamp: new Date().toISOString(),
@@ -223,6 +238,8 @@ describe("optimistic-user-message-store", () => {
     "keeps a newer %s message when identical old history arrives",
     (status) => {
       const store = useOptimisticUserMessageStore.getState();
+      const oldTimestamp = new Date(Date.now() - 1000).toISOString();
+      addServerMessage("old", oldTimestamp);
       const id = store.enqueuePendingMessage({
         conversationId: CONVO,
         text: "continue",
@@ -231,7 +248,7 @@ describe("optimistic-user-message-store", () => {
 
       store.consumeMatchingPendingMessage(CONVO, "continue", {
         id: "old",
-        timestamp: new Date(Date.now() - 1000).toISOString(),
+        timestamp: oldTimestamp,
       });
 
       expect(useOptimisticUserMessageStore.getState().pendingMessages).toEqual([
@@ -239,6 +256,82 @@ describe("optimistic-user-message-store", () => {
       ]);
     },
   );
+
+  it.each([-60_000, 60_000])(
+    "uses server history when the browser clock differs by %d ms",
+    (clockOffset) => {
+      const serverTime = Date.parse("2026-09-24T12:00:00Z");
+      vi.setSystemTime(serverTime + clockOffset);
+      addServerMessage("old", new Date(serverTime - 1000).toISOString());
+      const store = useOptimisticUserMessageStore.getState();
+      const id = store.enqueuePendingMessage({
+        conversationId: CONVO,
+        text: "continue",
+      });
+
+      expect(
+        store.consumeMatchingPendingMessage(CONVO, "continue", {
+          id: "old",
+          timestamp: new Date(serverTime - 1000).toISOString(),
+        }),
+      ).toBeNull();
+      expect(
+        store.consumeMatchingPendingMessage(CONVO, "continue", {
+          id: "new",
+          timestamp: new Date(serverTime).toISOString(),
+        })?.id,
+      ).toBe(id);
+    },
+  );
+
+  it("confirms the sending attempt before an older identical failed attempt", () => {
+    const store = useOptimisticUserMessageStore.getState();
+    const failed = store.enqueuePendingMessage({
+      conversationId: CONVO,
+      text: "continue",
+    });
+    store.markPendingMessageError(failed, "Rejected");
+    const sending = store.enqueuePendingMessage({
+      conversationId: CONVO,
+      text: "continue",
+    });
+
+    const confirmed = store.consumeMatchingPendingMessage(CONVO, "continue", {
+      id: "accepted",
+      timestamp: new Date().toISOString(),
+    });
+
+    expect(confirmed?.id).toBe(sending);
+    expect(useOptimisticUserMessageStore.getState().pendingMessages).toEqual([
+      expect.objectContaining({ id: failed, status: "error" }),
+    ]);
+  });
+
+  it("refreshes the server history boundary when retrying a failed attempt", () => {
+    const store = useOptimisticUserMessageStore.getState();
+    const id = store.enqueuePendingMessage({
+      conversationId: CONVO,
+      text: "continue",
+    });
+    store.markPendingMessageError(id, "Rejected");
+    const oldTimestamp = new Date().toISOString();
+    addServerMessage("other-attempt", oldTimestamp);
+
+    store.markPendingMessageSending(id);
+
+    expect(
+      store.consumeMatchingPendingMessage(CONVO, "continue", {
+        id: "other-attempt",
+        timestamp: oldTimestamp,
+      }),
+    ).toBeNull();
+    expect(
+      store.consumeMatchingPendingMessage(CONVO, "continue", {
+        id: "retry-accepted",
+        timestamp: new Date(Date.now() + 1000).toISOString(),
+      })?.id,
+    ).toBe(id);
+  });
 
   it("does not confirm two identical attempts with a replayed event", () => {
     const store = useOptimisticUserMessageStore.getState();

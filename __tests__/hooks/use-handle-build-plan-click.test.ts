@@ -113,7 +113,7 @@ describe("useHandleBuildPlanClick", () => {
 
   it("should enqueue a pending user message when handleBuildPlanClick is called", () => {
     // Arrange
-    useOptimisticUserMessageStore.setState({ pendingMessages: [] });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
     const { result } = renderHook(() => useHandleBuildPlanClick());
     const expectedPrompt =
       "Execute the plan based on the .agents_tmp/PLAN.md file.";
@@ -152,7 +152,7 @@ describe("useHandleBuildPlanClick", () => {
   it("should handle call without event parameter", () => {
     // Arrange
     useConversationStore.setState({ conversationMode: "plan" });
-    useOptimisticUserMessageStore.setState({ pendingMessages: [] });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
     const { result } = renderHook(() => useHandleBuildPlanClick());
 
     // Act & Assert - should not throw

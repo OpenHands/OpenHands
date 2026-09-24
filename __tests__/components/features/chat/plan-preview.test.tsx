@@ -197,7 +197,7 @@ describe("PlanPreview", () => {
 
   it("should enqueue a pending user message when Build button is clicked", async () => {
     // Arrange
-    useOptimisticUserMessageStore.setState({ pendingMessages: [] });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
     const user = userEvent.setup();
     const expectedPrompt =
       "Execute the plan based on the .agents_tmp/PLAN.md file.";

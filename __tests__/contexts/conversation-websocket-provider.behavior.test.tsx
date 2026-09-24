@@ -364,6 +364,9 @@ describe("Conversation websocket behavior", () => {
   });
 
   it("retains a newer failed identical prompt when old history reloads", () => {
+    const oldDeliveredMessage = makeMessageEvent("01", "user", ["continue"]);
+    useEventStore.getState().clearEventsForConversation("conv-main");
+    useEventStore.getState().addEvent(oldDeliveredMessage);
     const store = useOptimisticUserMessageStore.getState();
     const failedId = store.enqueuePendingMessage({
       conversationId: "conv-main",
@@ -371,7 +374,6 @@ describe("Conversation websocket behavior", () => {
       timestamp: "2026-09-23T12:00:00.000Z",
     });
     store.markPendingMessageError(failedId, "Request rejected before delivery");
-    const oldDeliveredMessage = makeMessageEvent("01", "user", ["continue"]);
     historyCapture.result.data = { events: [oldDeliveredMessage] };
 
     renderProvider();

@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { useEventStore } from "#/stores/use-event-store";
 import { parseDateAsUTC } from "#/utils/format-time-delta";
 import { matchesPendingConversationId } from "#/utils/pending-task-message-link";
 import type { BaseEvent } from "#/types/agent-server/core/base/event";
@@ -36,6 +37,7 @@ export interface PendingUserMessage {
   imageUrls: string[];
   fileUrls: string[];
   timestamp: string;
+  afterTimestamp?: number;
   errorMessage?: string;
 }
 
@@ -72,7 +74,8 @@ interface OptimisticUserMessageActions {
   markPendingMessageSending: (id: string) => void;
   /** Drop a pending message from the queue (e.g., after success/cancellation). */
   removePendingMessage: (id: string) => void;
-  /** Match an unconsumed confirmation from this send's time window. */
+  /** Match conversation (including task links), server history and content once per event.
+   * Prefer a sending attempt; an errored attempt may still receive a late echo. */
   consumeMatchingPendingMessage: (
     conversationId: string,
     content: string,
@@ -105,6 +108,28 @@ const initialState: OptimisticUserMessageState = {
 const generatePendingId = (): string =>
   `pending-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
+const latestServerTimestamp = (conversationId: string): number | undefined => {
+  const { events, loadedConversationId } = useEventStore.getState();
+  if (
+    !loadedConversationId ||
+    !matchesPendingConversationId(loadedConversationId, conversationId)
+  )
+    return undefined;
+
+  let latest: number | undefined;
+  for (const event of events) {
+    if (!("timestamp" in event) || !event.timestamp) continue;
+    const timestamp = parseDateAsUTC(event.timestamp).getTime();
+    if (
+      Number.isFinite(timestamp) &&
+      (latest === undefined || timestamp > latest)
+    ) {
+      latest = timestamp;
+    }
+  }
+  return latest;
+};
+
 export const useOptimisticUserMessageStore = create<OptimisticUserMessageStore>(
   (set, get) => ({
     ...initialState,
@@ -120,6 +145,7 @@ export const useOptimisticUserMessageStore = create<OptimisticUserMessageStore>(
         imageUrls: payload.imageUrls ?? [],
         fileUrls: payload.fileUrls ?? [],
         timestamp: payload.timestamp ?? new Date().toISOString(),
+        afterTimestamp: latestServerTimestamp(payload.conversationId),
       };
       set((state) => ({
         pendingMessages: [...state.pendingMessages, message],
@@ -151,7 +177,12 @@ export const useOptimisticUserMessageStore = create<OptimisticUserMessageStore>(
       set((state) => ({
         pendingMessages: state.pendingMessages.map((message) =>
           message.id === id
-            ? { ...message, status: "sending", errorMessage: undefined }
+            ? {
+                ...message,
+                status: "sending",
+                errorMessage: undefined,
+                afterTimestamp: latestServerTimestamp(message.conversationId),
+              }
             : message,
         ),
       })),
@@ -169,15 +200,19 @@ export const useOptimisticUserMessageStore = create<OptimisticUserMessageStore>(
       const confirmedAt = parseDateAsUTC(event.timestamp).getTime();
       set((state) => {
         if (state.confirmedEventIds.has(confirmationId)) return state;
-        const target = state.pendingMessages.findIndex(
-          (message) =>
-            matchesPendingConversationId(
-              conversationId,
-              message.conversationId,
-            ) &&
-            parseDateAsUTC(message.timestamp).getTime() <= confirmedAt &&
-            message.content.trim() === content.trim(),
+        // Browser clocks cannot establish ordering against server event history.
+        const matches = (message: PendingUserMessage) =>
+          matchesPendingConversationId(
+            conversationId,
+            message.conversationId,
+          ) &&
+          (message.afterTimestamp === undefined ||
+            confirmedAt > message.afterTimestamp) &&
+          message.content.trim() === content.trim();
+        let target = state.pendingMessages.findIndex(
+          (message) => message.status === "sending" && matches(message),
         );
+        if (target === -1) target = state.pendingMessages.findIndex(matches);
         if (target === -1) return state;
         consumed = state.pendingMessages[target];
         return {

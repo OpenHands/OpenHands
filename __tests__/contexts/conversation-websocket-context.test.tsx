@@ -140,7 +140,7 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
       uiEvents: [],
       loadedConversationId: null,
     });
-    useOptimisticUserMessageStore.setState({ pendingMessages: [] });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
     useBrowserStore.getState().reset();
     useMetricsStore.getState().resetMetrics();
     useCommandStore.setState({ commands: [] });

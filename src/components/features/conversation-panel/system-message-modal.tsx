@@ -1,10 +1,14 @@
 import { useState } from "react";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
-import { ModalBody } from "#/components/shared/modals/modal-body";
+import {
+  MODAL_MAX_WIDTH_VIEWPORT,
+  ModalBody,
+} from "#/components/shared/modals/modal-body";
 import { SystemMessageHeader } from "./system-message-modal/system-message-header";
 import { TabNavigation } from "./system-message-modal/tab-navigation";
 import { TabContent } from "./system-message-modal/tab-content";
 import { SystemMessageForModal } from "#/utils/system-message-adapter";
+import { cn } from "#/utils/utils";
 
 interface SystemMessageModalProps {
   isOpen: boolean;
@@ -38,7 +42,10 @@ export function SystemMessageModal({
       <ModalBackdrop onClose={onClose}>
         <ModalBody
           width="lg"
-          className="relative max-h-[80vh] flex flex-col items-start border border-border"
+          className={cn(
+            "relative max-h-[80vh] flex flex-col items-start border border-border",
+            MODAL_MAX_WIDTH_VIEWPORT,
+          )}
           testID="system-message-modal"
         >
           <SystemMessageHeader
