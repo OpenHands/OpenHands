@@ -29,6 +29,10 @@ import { WebSocketProviderWrapper } from "#/contexts/websocket-provider-wrapper"
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { I18nKey } from "#/i18n/declaration";
 import { resumeCloudSandbox } from "#/api/cloud/conversation-service.api";
+import { consumeCloudAutoResumeSuppression } from "#/api/cloud/cloud-sandbox-resume-suppression";
+
+const CLOUD_RESUME_RETRY_DELAY_MS =
+  import.meta.env.MODE === "test" ? 10 : 10_000;
 
 function AppContent() {
   const { t } = useTranslation("openhands");
@@ -153,27 +157,69 @@ function AppContent() {
   // interval in useActiveConversation (active while conversation_url is null)
   // polls until conversation_url populates, then the WebSocket connects.
   //
-  // A ref guards against duplicate triggers per unique conversation.id within
-  // the same route-mount lifetime.
-  const resumeTriggeredForRef = React.useRef<string | null>(null);
+  const resumeAttemptRef = React.useRef<{
+    key: string;
+    state: "pending" | "succeeded" | "failed";
+  } | null>(null);
+  const resumeRetryTimerRef = React.useRef<number | null>(null);
+  const [resumeRetryTick, setResumeRetryTick] = React.useState(0);
+
+  React.useEffect(
+    () => () => {
+      if (resumeRetryTimerRef.current !== null) {
+        window.clearTimeout(resumeRetryTimerRef.current);
+      }
+    },
+    [],
+  );
+
   React.useEffect(() => {
     if (!isFetched || !conversation) return;
     if (active.backend.kind !== "cloud") return;
-    if (conversation.sandbox_status !== "PAUSED") return; // only resume PAUSED sandboxes
-    if (!conversation.sandbox_id) return; // no sandbox to resume
-    if (resumeTriggeredForRef.current === conversation.id) return; // already sent
+    if (conversation.sandbox_status !== "PAUSED") return;
+    if (!conversation.sandbox_id) return;
+    if (consumeCloudAutoResumeSuppression(conversation.id)) return;
 
-    resumeTriggeredForRef.current = conversation.id;
+    const resumeKey = `${conversation.id}:${conversation.sandbox_id}`;
+    const currentAttempt = resumeAttemptRef.current;
+    if (
+      currentAttempt?.key === resumeKey &&
+      (currentAttempt.state === "pending" ||
+        currentAttempt.state === "succeeded")
+    ) {
+      return;
+    }
 
-    resumeCloudSandbox(conversation.sandbox_id).catch(() => {
-      displayErrorToast(t(I18nKey.CONVERSATION$FAILED_TO_START_FROM_TASK));
-    });
+    if (resumeRetryTimerRef.current !== null) {
+      window.clearTimeout(resumeRetryTimerRef.current);
+      resumeRetryTimerRef.current = null;
+    }
+
+    resumeAttemptRef.current = { key: resumeKey, state: "pending" };
+
+    resumeCloudSandbox(conversation.sandbox_id)
+      .then(() => {
+        if (resumeAttemptRef.current?.key === resumeKey) {
+          resumeAttemptRef.current = { key: resumeKey, state: "succeeded" };
+        }
+      })
+      .catch(() => {
+        if (resumeAttemptRef.current?.key === resumeKey) {
+          resumeAttemptRef.current = { key: resumeKey, state: "failed" };
+          resumeRetryTimerRef.current = window.setTimeout(() => {
+            resumeRetryTimerRef.current = null;
+            setResumeRetryTick((tick) => tick + 1);
+          }, CLOUD_RESUME_RETRY_DELAY_MS);
+        }
+        displayErrorToast(t(I18nKey.CONVERSATION$FAILED_TO_START_FROM_TASK));
+      });
   }, [
     isFetched,
     conversation?.id,
     conversation?.sandbox_status,
     conversation?.sandbox_id,
     active.backend.kind,
+    resumeRetryTick,
     t,
   ]);
 

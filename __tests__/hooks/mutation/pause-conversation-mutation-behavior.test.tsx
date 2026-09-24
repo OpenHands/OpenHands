@@ -4,23 +4,50 @@ import { AxiosError } from "axios";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { usePauseConversation } from "#/hooks/mutation/use-pause-conversation";
+import { ExecutionStatus } from "#/types/agent-server/core";
 
-const { pauseConversationMock } = vi.hoisted(() => ({
+const {
+  activeBackendState,
+  patchConversationInCacheMock,
+  pauseConversationMock,
+  suppressNextCloudAutoResumeMock,
+} = vi.hoisted(() => ({
+  activeBackendState: { kind: "local" as "local" | "cloud" },
+  patchConversationInCacheMock: vi.fn(),
   pauseConversationMock: vi.fn(),
+  suppressNextCloudAutoResumeMock: vi.fn(),
+}));
+
+vi.mock("#/contexts/active-backend-context", () => ({
+  useActiveBackend: () => ({
+    backend: { id: "backend-1", kind: activeBackendState.kind },
+  }),
+}));
+
+vi.mock("#/api/cloud/cloud-sandbox-resume-suppression", () => ({
+  suppressNextCloudAutoResume: (...args: unknown[]) =>
+    suppressNextCloudAutoResumeMock(...args),
 }));
 
 vi.mock("#/hooks/mutation/conversation-mutation-utils", () => ({
+  patchConversationInCache: (...args: unknown[]) =>
+    patchConversationInCacheMock(...args),
   pauseConversation: (...args: unknown[]) => pauseConversationMock(...args),
 }));
 
 const CONVERSATIONS_QUERY_KEY = ["user", "conversations"] as const;
 
 interface SetupOptions {
+  backendKind?: "local" | "cloud";
   previousConversations?: unknown;
 }
 
-const setup = ({ previousConversations }: SetupOptions = {}) => {
+const setup = ({
+  backendKind = "local",
+  previousConversations,
+}: SetupOptions = {}) => {
   vi.clearAllMocks();
+  activeBackendState.kind = backendKind;
   pauseConversationMock.mockResolvedValue({ success: true });
 
   const queryClient = new QueryClient({
@@ -115,6 +142,28 @@ describe("pause conversation mutation behavior", () => {
     );
     expect(invalidateQueries.mock.calls).toEqual(
       expectedInvalidations("conversation-42"),
+    );
+  });
+
+  it("suppresses cloud auto-resume and clears the runtime URL after pausing", async () => {
+    const { queryClient, result } = setup({ backendKind: "cloud" });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        conversationId: "conversation-cloud",
+      });
+    });
+
+    expect(suppressNextCloudAutoResumeMock).toHaveBeenCalledWith(
+      "conversation-cloud",
+    );
+    expect(patchConversationInCacheMock).toHaveBeenCalledWith(
+      queryClient,
+      "conversation-cloud",
+      {
+        execution_status: ExecutionStatus.PAUSED,
+        conversation_url: null,
+      },
     );
   });
 
