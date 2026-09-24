@@ -33,6 +33,10 @@ import {
   getTriggerSource,
 } from "./automation-run-health";
 import {
+  automationActivityListClassName,
+  automationActivityRowClassName,
+} from "#/components/features/automations/automation-view-mode";
+import {
   buildHomeAutomationActivityItems,
   hrefForActivityItem,
   type HomeAutomationActivityItem,
@@ -75,7 +79,6 @@ function RunningAutomationRow({
     automation,
     t,
     canManage: actions.canManage,
-    canEdit: actions.canEdit,
     isRunPending: actions.isRunPending,
     isCancelPending: actions.isCancelPending,
     canCancel: actions.canCancel,
@@ -85,7 +88,7 @@ function RunningAutomationRow({
     onRunNow: actions.runNow,
     onCancelRun: actions.cancelRun,
     onView: actions.viewDetails,
-    onEdit: actions.canEdit ? actions.openEdit : undefined,
+    onEdit: actions.openEdit,
     onTurnOff: actions.requestTurnOff,
     onTogglePin: () => togglePin(item.id),
   });
@@ -93,7 +96,7 @@ function RunningAutomationRow({
   return (
     <li
       data-testid={`running-automation-row-${item.id}`}
-      className="group relative flex items-stretch transition-colors hover:bg-[var(--oh-interactive-hover)] has-[:focus-visible]:bg-[var(--oh-interactive-hover)]"
+      className={automationActivityRowClassName}
     >
       <Tooltip
         content={
@@ -105,22 +108,22 @@ function RunningAutomationRow({
         placement="top-start"
         closeDelay={100}
         disableAnimation={disableAnimation}
-        className="rounded-xl border border-[var(--oh-border)] bg-base-secondary p-0 text-white shadow-xl"
+        className="rounded-xl border border-border bg-base-secondary p-0 text-contrast shadow-xl"
       >
         <NavigationLink
           to={hrefForActivityItem(item)}
           aria-label={`${item.name} ${t(statusLabelKey)}`}
-          className="flex min-w-0 flex-1 items-center justify-between gap-3 px-3 py-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--oh-focus)]"
+          className="flex min-w-0 flex-1 items-center justify-between gap-3 px-3 py-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus"
         >
           <div className="grid min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)] gap-x-2">
             <span className="inline-flex h-5 w-2.5 shrink-0 items-center justify-center">
               <AutomationHealthIndicator health={health} />
             </span>
-            <span className="truncate text-sm font-medium leading-5 text-[var(--oh-foreground)]">
+            <span className="truncate text-sm font-medium leading-5 text-foreground">
               {item.name}
             </span>
             {hasMeta ? (
-              <span className="col-start-2 mt-0.5 flex min-w-0 items-center gap-1.5 text-xs leading-4 text-[var(--oh-text-secondary)]">
+              <span className="col-start-2 mt-0.5 flex min-w-0 items-center gap-1.5 text-xs leading-4 text-text-secondary">
                 <TriggerIcon className="size-3 shrink-0" aria-hidden="true" />
                 {triggerEventLabel ? (
                   <span className="truncate">{triggerEventLabel}</span>
@@ -132,7 +135,7 @@ function RunningAutomationRow({
                   <span
                     className={cn(
                       extensionModuleCardPillClassName,
-                      "shrink-0 px-1.5 py-0 text-[var(--oh-text-secondary)]",
+                      "shrink-0 px-1.5 py-0 text-text-secondary",
                     )}
                   >
                     {formatTriggerSourceLabel(triggerSource)}
@@ -256,12 +259,12 @@ export function RunningAutomationsList() {
     <section
       aria-labelledby="running-automations-heading"
       data-testid="running-automations-list"
-      className="mt-8 w-full"
+      className="w-full"
     >
       <div className="mb-2 flex items-center justify-between gap-2">
         <h2
           id="running-automations-heading"
-          className="text-sm font-medium text-[var(--oh-foreground)]"
+          className="text-sm font-medium text-foreground"
         >
           {t(I18nKey.FEATURED_AUTOMATIONS$SECTION_TITLE)}
         </h2>
@@ -273,7 +276,7 @@ export function RunningAutomationsList() {
             to="/automations"
             data-testid="home-automations-manage"
             aria-label={t(I18nKey.FEATURED_AUTOMATIONS$MANAGE)}
-            className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-[var(--oh-text-secondary)] transition-colors hover:bg-[var(--oh-interactive-hover)] hover:text-[var(--oh-foreground)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--oh-focus)]"
+            className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-text-secondary transition-colors hover:bg-interactive-hover hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
           >
             <Plus className="size-3" aria-hidden="true" />
             {t(I18nKey.BUTTON$ADD)}
@@ -284,14 +287,14 @@ export function RunningAutomationsList() {
       {isEmpty ? (
         <p
           data-testid="running-automations-empty-hint"
-          className="rounded-xl border border-[var(--oh-border-subtle)] bg-[var(--oh-surface)] px-4 py-3 text-xs text-[var(--oh-text-secondary)]"
+          className="rounded-xl border border-border-subtle bg-surface px-4 py-3 text-xs text-text-secondary"
         >
           {t(I18nKey.FEATURED_AUTOMATIONS$EMPTY_HINT)}
         </p>
       ) : (
         <ul
           aria-label={t(I18nKey.FEATURED_AUTOMATIONS$RECENT_GROUP_LABEL)}
-          className="divide-y divide-[var(--oh-border-subtle)] overflow-hidden rounded-xl border border-[var(--oh-border-subtle)] bg-[var(--oh-surface)]"
+          className={automationActivityListClassName}
         >
           {visibleItems.map((item) => {
             const automation = automationById.get(item.id);
@@ -314,7 +317,7 @@ export function RunningAutomationsList() {
             type="button"
             data-testid="home-automations-view-more"
             onClick={() => setIsExpanded(true)}
-            className="rounded-md px-1.5 py-0.5 text-xs font-medium text-[var(--oh-text-secondary)] transition-colors hover:bg-[var(--oh-interactive-hover)] hover:text-[var(--oh-foreground)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--oh-focus)]"
+            className="rounded-md px-1.5 py-0.5 text-xs font-medium text-text-secondary transition-colors hover:bg-interactive-hover hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
           >
             {t(I18nKey.COMMON$VIEW_MORE)}
           </button>
@@ -326,7 +329,7 @@ export function RunningAutomationsList() {
           <NavigationLink
             to="/automations"
             data-testid="home-automations-view-all"
-            className="rounded-md px-1.5 py-0.5 text-xs font-medium text-[var(--oh-text-secondary)] transition-colors hover:bg-[var(--oh-interactive-hover)] hover:text-[var(--oh-foreground)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--oh-focus)]"
+            className="rounded-md px-1.5 py-0.5 text-xs font-medium text-text-secondary transition-colors hover:bg-interactive-hover hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
           >
             {t(I18nKey.FEATURED_AUTOMATIONS$VIEW_ALL)}
           </NavigationLink>

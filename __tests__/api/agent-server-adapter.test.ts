@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { MockInstance } from "vitest";
+import { getAcpProvider as getClientAcpProvider } from "@openhands/typescript-client";
 import { CANVAS_UI_CLIENT_TOOL_NAME } from "#/constants/canvas-ui";
 import { LAUNCH_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversation";
 
@@ -8,18 +10,24 @@ import {
   CLIENT_SOURCE_TAG_KEY,
   buildRuntimeServicesSystemSuffix,
   buildStartConversationRequest,
+  buildStartConversationRequestWithEncryptedSettings,
   fetchBackendRuntimeServicesInfo,
   getDefaultConversationTitle,
   parseRuntimeServicesInfo,
   toAppConversation,
   type DirectConversationInfo,
 } from "#/api/agent-server-adapter";
+import SettingsService from "#/api/settings-service/settings-service.api";
+import { SecretsService } from "#/api/secrets-service";
 import {
   removeStoredConversationMetadata,
   setStoredConversationMetadata,
 } from "#/api/conversation-metadata-store";
+import { HookType } from "@openhands/typescript-client";
+import type { HookConfig } from "@openhands/typescript-client";
 import { ACP_VERTEX_SAFE_MODEL } from "#/constants/acp-providers";
 import { DEFAULT_SETTINGS } from "#/services/settings";
+import type { SettingsValue } from "#/types/settings";
 import {
   LLM_AUTH_TYPE_SUBSCRIPTION,
   OPENAI_SUBSCRIPTION_VENDOR,
@@ -31,6 +39,8 @@ const {
   mockGetEffectiveLocalBackend,
   mockGetCachedAgentServerInfo,
   mockGetServerInfo,
+  mockGetActiveBackend,
+  mockLoadHooks,
 } = vi.hoisted(() => ({
   mockGetAgentServerWorkingDir: vi.fn(() => "/workspace/project/agent-canvas"),
   mockIsAgentServerToolAvailable: vi.fn((_toolName: string) => true),
@@ -43,6 +53,16 @@ const {
   })),
   mockGetCachedAgentServerInfo: vi.fn<() => unknown>(() => null),
   mockGetServerInfo: vi.fn(),
+  mockGetActiveBackend: vi.fn(() => ({
+    backend: {
+      id: "default-local",
+      name: "Local backend",
+      host: "http://127.0.0.1:8000",
+      apiKey: "session-key",
+      kind: "local" as const,
+    },
+  })),
+  mockLoadHooks: vi.fn(),
 }));
 
 vi.mock("@openhands/typescript-client/clients", () => ({
@@ -50,6 +70,9 @@ vi.mock("@openhands/typescript-client/clients", () => ({
     return {
       getServerInfo: mockGetServerInfo,
     };
+  }),
+  HooksClient: vi.fn(function HooksClientMock() {
+    return { loadHooks: mockLoadHooks };
   }),
 }));
 
@@ -68,7 +91,38 @@ vi.mock("#/api/agent-server-compatibility", () => ({
 
 vi.mock("#/api/backend-registry/active-store", () => ({
   getEffectiveLocalBackend: mockGetEffectiveLocalBackend,
+  getActiveBackend: mockGetActiveBackend,
+  isNoBackend: (backend: { id: string }) => backend.id === "no-backend",
 }));
+
+// `HookConfig` requires every event key, so build fixtures from a complete base.
+const makeHookConfig = (overrides: Partial<HookConfig> = {}): HookConfig => ({
+  pre_tool_use: [],
+  post_tool_use: [],
+  user_prompt_submit: [],
+  session_start: [],
+  session_end: [],
+  stop: [],
+  ...overrides,
+});
+
+const WORKSPACE_HOOK_CONFIG = makeHookConfig({
+  session_start: [
+    {
+      matcher: "*",
+      hooks: [{ command: "cat AGENTS.md", type: HookType.COMMAND }],
+    },
+  ],
+});
+
+const EXPLICIT_HOOK_CONFIG = makeHookConfig({
+  session_start: [
+    {
+      matcher: "*",
+      hooks: [{ command: "echo explicit", type: HookType.COMMAND }],
+    },
+  ],
+});
 
 beforeEach(() => {
   mockIsAgentServerToolAvailable.mockReturnValue(true);
@@ -208,7 +262,7 @@ describe("buildStartConversationRequest", () => {
     expect(payload.initial_message.content[0]?.text).toBe("hello");
   });
 
-  it("uses subscription auth metadata without API credentials", () => {
+  it("preserves base_url for subscription auth while stripping api_key", () => {
     const payload = buildStartConversationRequest({
       settings: {
         ...DEFAULT_SETTINGS,
@@ -217,7 +271,7 @@ describe("buildStartConversationRequest", () => {
           llm: {
             model: "gpt-5.2-codex",
             api_key: "stale-api-key",
-            base_url: "https://api.openai.com/v1",
+            base_url: "https://chatgpt.com/backend-api/codex",
             auth_type: LLM_AUTH_TYPE_SUBSCRIPTION,
             subscription_vendor: OPENAI_SUBSCRIPTION_VENDOR,
           },
@@ -228,6 +282,7 @@ describe("buildStartConversationRequest", () => {
     expect(payload.agent_settings.llm).toEqual({
       model: "gpt-5.2-codex",
       stream: true,
+      base_url: "https://chatgpt.com/backend-api/codex",
       auth_type: LLM_AUTH_TYPE_SUBSCRIPTION,
       subscription_vendor: OPENAI_SUBSCRIPTION_VENDOR,
     });
@@ -468,6 +523,30 @@ describe("buildStartConversationRequest", () => {
       content: [{ type: "text", text: "Follow the repo conventions." }],
       run: true,
     });
+  });
+
+  it("uses workspaceHookConfig when conversation_settings.hook_config is omitted", () => {
+    const payload = buildStartConversationRequest({
+      settings: DEFAULT_SETTINGS,
+      workspaceHookConfig: WORKSPACE_HOOK_CONFIG,
+    }) as Record<string, unknown>;
+
+    expect(payload.hook_config).toEqual(WORKSPACE_HOOK_CONFIG);
+  });
+
+  it("prioritizes conversation_settings.hook_config over workspaceHookConfig", () => {
+    const payload = buildStartConversationRequest({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        conversation_settings: {
+          ...DEFAULT_SETTINGS.conversation_settings,
+          hook_config: EXPLICIT_HOOK_CONFIG as unknown as SettingsValue,
+        },
+      },
+      workspaceHookConfig: WORKSPACE_HOOK_CONFIG,
+    }) as Record<string, unknown>;
+
+    expect(payload.hook_config).toEqual(EXPLICIT_HOOK_CONFIG);
   });
 
   it("serializes custom secrets as host-relative LookupSecret entries", () => {
@@ -918,6 +997,117 @@ describe("toAppConversation", () => {
     updated_at: "2026-01-01T00:00:00Z",
   };
 
+  it("uses the archived status for a missing runtime that cannot resume", () => {
+    const result = toAppConversation({
+      ...baseInfo,
+      runtime_info: {
+        runtime_status: "missing",
+        can_resume: false,
+      },
+    });
+
+    expect(result.sandbox_status).toBe("MISSING");
+  });
+
+  it("does not archive a missing runtime that can resume", () => {
+    const result = toAppConversation({
+      ...baseInfo,
+      runtime_info: {
+        runtime_status: "missing",
+        can_resume: true,
+      },
+    });
+
+    expect(result.sandbox_status).toBeNull();
+  });
+
+  it("combines stats.usage_to_metrics into metrics when the backend doesn't set metrics directly (#16480)", () => {
+    const result = toAppConversation({
+      ...baseInfo,
+      stats: {
+        usage_to_metrics: {
+          agent: {
+            model_name: "agent-model",
+            accumulated_cost: 1.5,
+            max_budget_per_task: 10,
+            accumulated_token_usage: {
+              prompt_tokens: 100,
+              completion_tokens: 20,
+              cache_read_tokens: 5,
+              cache_write_tokens: 1,
+              context_window: 8000,
+              per_turn_token: 120,
+            },
+            costs: [],
+            response_latencies: [],
+            token_usages: [],
+          },
+          condenser: {
+            model_name: "condenser-model",
+            accumulated_cost: 0.5,
+            max_budget_per_task: null,
+            accumulated_token_usage: {
+              prompt_tokens: 40,
+              completion_tokens: 10,
+              cache_read_tokens: 0,
+              cache_write_tokens: 0,
+              context_window: 4000,
+              per_turn_token: 50,
+            },
+            costs: [],
+            response_latencies: [],
+            token_usages: [],
+          },
+        },
+      },
+    });
+
+    expect(result.metrics).toEqual({
+      accumulated_cost: 2,
+      max_budget_per_task: 10,
+      accumulated_token_usage: {
+        prompt_tokens: 140,
+        completion_tokens: 30,
+        cache_read_tokens: 5,
+        cache_write_tokens: 1,
+        context_window: 8000,
+        per_turn_token: 120,
+      },
+    });
+  });
+
+  it("prefers backend-provided metrics over stats.usage_to_metrics when both are present", () => {
+    const result = toAppConversation({
+      ...baseInfo,
+      metrics: { accumulated_cost: 3, max_budget_per_task: null },
+      stats: {
+        usage_to_metrics: {
+          agent: {
+            model_name: "agent-model",
+            accumulated_cost: 999,
+            max_budget_per_task: null,
+            accumulated_token_usage: null,
+            costs: [],
+            response_latencies: [],
+            token_usages: [],
+          },
+        },
+      },
+    });
+
+    expect(result.metrics?.accumulated_cost).toBe(3);
+  });
+
+  it("defaults metrics to a zero-cost snapshot when neither metrics nor stats are present", () => {
+    const result = toAppConversation({ ...baseInfo });
+
+    expect(result.metrics).toEqual({
+      accumulated_cost: 0,
+      max_budget_per_task: null,
+      accumulated_token_usage: null,
+    });
+  });
+
   it("falls back to the default title when the backend returns null", () => {
     const result = toAppConversation({ ...baseInfo, title: null });
     expect(result.title).toBe("Conversation 372eb");
@@ -1354,9 +1544,7 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     expect(payload.agent).toBeUndefined();
     expect(payload.agent_settings.agent_kind).toBe("acp");
     expect(payload.agent_settings.acp_command).toEqual([
-      "npx",
-      "-y",
-      "@agentclientprotocol/claude-agent-acp@0.63.0",
+      ...getClientAcpProvider("claude-code")!.default_command,
     ]);
     expect(payload.agent_settings.acp_model).toBe("claude-opus-4-5");
     // LLM-only fields must not leak into the ACP settings payload.
@@ -1506,9 +1694,7 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     };
 
     expect(payload.agent_settings.acp_command).toEqual([
-      "npx",
-      "-y",
-      "@agentclientprotocol/claude-agent-acp@0.63.0",
+      ...getClientAcpProvider("claude-code")!.default_command,
     ]);
   });
 
@@ -1528,9 +1714,7 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     };
 
     expect(payload.agent_settings.acp_command).toEqual([
-      "npx",
-      "-y",
-      "@agentclientprotocol/codex-acp@1.1.7",
+      ...getClientAcpProvider("codex")!.default_command,
     ]);
   });
 
@@ -1675,9 +1859,7 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
 
     expect(acpPayload.agent_settings.agent_kind).toBe("acp");
     expect(acpPayload.agent_settings.acp_command).toEqual([
-      "npx",
-      "-y",
-      "@agentclientprotocol/claude-agent-acp@0.63.0",
+      ...getClientAcpProvider("claude-code")!.default_command,
     ]);
     expect(acpPayload.agent_settings.acp_model).toBe("claude-opus-4-5");
     // acp_env is no longer a forwarded ACP setting — a stale value on saved
@@ -1685,5 +1867,85 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     expect(acpPayload.agent_settings.acp_env).toBeUndefined();
     expect(acpPayload.agent_settings.llm).toBeUndefined();
     expect(acpPayload.agent_settings.condenser).toBeUndefined();
+  });
+});
+
+describe("buildStartConversationRequestWithEncryptedSettings", () => {
+  let settingsSpy: MockInstance;
+  let secretsSpy: MockInstance;
+
+  beforeEach(() => {
+    mockLoadHooks.mockReset();
+    // Stub only the collaborators; the hooks lookup is what's under test.
+    settingsSpy = vi
+      .spyOn(SettingsService, "getSettingsForConversation")
+      .mockResolvedValue({
+        agentSettings: (DEFAULT_SETTINGS.agent_settings ?? {}) as Record<
+          string,
+          SettingsValue
+        >,
+        conversationSettings: (DEFAULT_SETTINGS.conversation_settings ??
+          {}) as Record<string, SettingsValue>,
+        secretsEncrypted: true,
+        skillEnablement: { disabledSkills: [] },
+      });
+    secretsSpy = vi.spyOn(SecretsService, "getSecrets").mockResolvedValue([]);
+  });
+
+  // vitest is not configured with `restoreMocks`, so restore explicitly.
+  afterEach(() => {
+    settingsSpy.mockRestore();
+    secretsSpy.mockRestore();
+  });
+
+  it("looks hooks up in hooksProjectDir, not the conversation working dir", async () => {
+    mockLoadHooks.mockResolvedValue({ hook_config: WORKSPACE_HOOK_CONFIG });
+
+    const payload = await buildStartConversationRequestWithEncryptedSettings({
+      settings: DEFAULT_SETTINGS,
+      workingDir: "/workspace/my-project/0f1e2d3c",
+      hooksProjectDir: "/workspace/my-project",
+    });
+
+    expect(mockLoadHooks).toHaveBeenCalledWith({
+      project_dir: "/workspace/my-project",
+    });
+    expect(payload.hook_config).toEqual(WORKSPACE_HOOK_CONFIG);
+  });
+
+  it("falls back to the configured working dir when no hooksProjectDir is given", async () => {
+    mockLoadHooks.mockResolvedValue({ hook_config: null });
+
+    await buildStartConversationRequestWithEncryptedSettings({
+      settings: DEFAULT_SETTINGS,
+      workingDir: "/workspace/my-project/0f1e2d3c",
+    });
+
+    expect(mockLoadHooks).toHaveBeenCalledWith({
+      project_dir: "/workspace/project/agent-canvas",
+    });
+  });
+
+  it("omits hook_config when the workspace has no hooks", async () => {
+    mockLoadHooks.mockResolvedValue({ hook_config: null });
+
+    const payload = await buildStartConversationRequestWithEncryptedSettings({
+      settings: DEFAULT_SETTINGS,
+      hooksProjectDir: "/workspace/my-project",
+    });
+
+    expect(payload.hook_config).toBeUndefined();
+  });
+
+  it("starts the conversation without hooks when the lookup fails", async () => {
+    mockLoadHooks.mockRejectedValue(new Error("500 Internal Server Error"));
+
+    const payload = await buildStartConversationRequestWithEncryptedSettings({
+      settings: DEFAULT_SETTINGS,
+      hooksProjectDir: "/workspace/my-project",
+    });
+
+    expect(payload.hook_config).toBeUndefined();
+    expect(payload.agent_settings).toBeDefined();
   });
 });

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import axios from "axios";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import { isSdkHttpStatusError } from "#/api/agent-server-compatibility";
@@ -154,11 +154,12 @@ export function useSetupPreflight(entry: SetupEntry) {
   ]);
   const currentTargetKeyRef = useRef(targetKey);
   currentTargetKeyRef.current = targetKey;
-  const errorMap = useMemo(() => deriveErrorMap(entry), [entry]);
 
   const runPreflight = useCallback(
     async (
       formValues: SetupFormValues,
+      selectedTrigger?: string | null,
+      selectedAction?: string | null,
     ): Promise<SetupPreflightOutcome | null> => {
       // Every invocation supersedes an earlier one, including an assisted
       // entry that has no draft to send. This closes the old request before
@@ -167,15 +168,22 @@ export function useSetupPreflight(entry: SetupEntry) {
       const requestId = latestRequestRef.current;
       const requestEntryKey = entryKey;
       const requestTargetKey = targetKey;
-      const body = buildPreflightBody(entry, formValues);
-      if (!body) return null;
-
       const isStale = () =>
         requestId !== latestRequestRef.current ||
         requestEntryKey !== currentEntryKeyRef.current ||
         requestTargetKey !== currentTargetKeyRef.current;
 
       try {
+        // Older interface manifests may not declare the selected endpoint.
+        // Treat derivation failures as unavailable, never as a passing draft.
+        const body = buildPreflightBody(
+          entry,
+          formValues,
+          selectedTrigger,
+          selectedAction,
+        );
+        if (!body) return null;
+
         const { result, usedLegacyContract } =
           await validateDraftWithCompatibility(body, isStale);
         if (isStale()) return { status: "stale" };
@@ -191,7 +199,7 @@ export function useSetupPreflight(entry: SetupEntry) {
 
         const errors = mapServiceErrors(
           normalizeServiceErrors(result, body.draft as SetupRequestBody),
-          errorMap,
+          deriveErrorMap(entry, selectedTrigger, selectedAction),
         );
         if (result?.valid === false && hasMappedErrors(errors)) {
           return { status: "failed", errors };
@@ -204,7 +212,7 @@ export function useSetupPreflight(entry: SetupEntry) {
           : { status: "unavailable" };
       }
     },
-    [entry, errorMap, targetKey],
+    [entry, entryKey, targetKey],
   );
 
   const invalidatePreflight = useCallback(() => {

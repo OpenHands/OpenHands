@@ -101,6 +101,11 @@ describe("useAcpAuthStatus", () => {
     await Promise.resolve();
     expect(result.current.status).toBe("unknown");
     expect(result.current.isSupported).toBe(false);
+    // The probe is gated off, so it never enters a "checking" state — the
+    // banner consumer (resolveAcpAuthDisplay) can fall straight through to the
+    // credentials-configured signal instead of spinning on a probe that will
+    // never run. This is the behaviour the Docker/cloud banner state relies on.
+    expect(result.current.isChecking).toBe(false);
     expect(getAuthStatus).not.toHaveBeenCalled();
   });
 

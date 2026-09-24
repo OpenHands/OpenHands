@@ -1,12 +1,17 @@
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
-import { collectFields } from "#/manifests/manifest-local-validation";
+import {
+  collectFields,
+  fieldValues,
+} from "#/manifests/manifest-local-validation";
 import type { SetupBlock, SetupFormValues } from "#/manifests/types";
 
 export interface SetupReviewStepProps {
   setup: SetupBlock;
   values: SetupFormValues;
   preflightStatus?: "passed" | "unsupported" | null;
+  selectedTrigger?: string | null;
+  selectedAction?: string | null;
 }
 
 /**
@@ -21,6 +26,8 @@ export function SetupReviewStep({
   setup,
   values,
   preflightStatus = null,
+  selectedTrigger,
+  selectedAction,
 }: SetupReviewStepProps) {
   const { t } = useTranslation("openhands");
 
@@ -43,11 +50,29 @@ export function SetupReviewStep({
         </p>
       )}
       <dl className="flex flex-col gap-3">
-        {Object.entries(collectFields(setup)).map(([name, field]) => (
+        {selectedAction &&
+          setup.actions?.[selectedAction as keyof typeof setup.actions] && (
+            <div className="flex flex-col gap-0.5">
+              <dt className="text-xs text-muted">
+                {t(I18nKey.SETUP$ACTION_LABEL)}
+              </dt>
+              <dd className="text-sm break-words">
+                {
+                  setup.actions[selectedAction as keyof typeof setup.actions]
+                    ?.label
+                }
+              </dd>
+            </div>
+          )}
+        {Object.entries(
+          collectFields(setup, selectedTrigger, selectedAction),
+        ).map(([name, field]) => (
           <div key={name} className="flex flex-col gap-0.5">
-            <dt className="text-xs text-[var(--oh-muted)]">{field.label}</dt>
+            <dt className="text-xs text-muted">{field.label}</dt>
             <dd className="text-sm break-words">
-              {(values[name] ?? "").trim() || t(I18nKey.SETUP$EMPTY_VALUE)}
+              {/* A field collecting several values reads as a list of them. */}
+              {fieldValues(values[name]).join(", ") ||
+                t(I18nKey.SETUP$EMPTY_VALUE)}
             </dd>
           </div>
         ))}

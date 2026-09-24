@@ -17,7 +17,7 @@ const mockUserMessageEvent: MessageEvent = {
     role: "user",
     content: [{ type: "text", text: "Hello, world!" }],
   },
-  activated_microagents: [],
+  activated_skills: [],
   extended_content: [],
 };
 
@@ -178,8 +178,10 @@ describe("useEventStore", () => {
         content: "hello world",
       },
     ]);
-    expect(result.current.eventIds.has("delta-1")).toBe(true);
-    expect(result.current.eventIds.has("delta-2")).toBe(true);
+    // Transient deltas are never tracked in `eventIds` — copying that Set once
+    // per token would otherwise be O(n^2).
+    expect(result.current.eventIds.has("delta-1")).toBe(false);
+    expect(result.current.eventIds.has("delta-2")).toBe(false);
   });
 
   it("should compact streaming deltas during bulk add", () => {
@@ -196,8 +198,30 @@ describe("useEventStore", () => {
       id: "delta-1",
       content: "hello world",
     });
-    expect(result.current.eventIds.has("delta-1")).toBe(true);
-    expect(result.current.eventIds.has("delta-2")).toBe(true);
+    // Transient deltas are never tracked in `eventIds`.
+    expect(result.current.eventIds.has("delta-1")).toBe(false);
+    expect(result.current.eventIds.has("delta-2")).toBe(false);
+  });
+
+  it("should not grow eventIds with the raw streaming-delta count", () => {
+    const { result } = renderHook(() => useEventStore());
+
+    act(() => {
+      result.current.addEvent(mockUserMessageEvent);
+      for (let i = 0; i < 1000; i += 1) {
+        result.current.addEvent(makeStreamingDeltaEvent(`delta-${i}`, "x"));
+      }
+    });
+
+    // 1000 deltas collapse to a single event alongside the user message, and
+    // eventIds tracks only the durable user message — not the deltas. This is
+    // what keeps the per-token Set copy from going quadratic.
+    expect(result.current.events).toHaveLength(2);
+    expect(result.current.eventIds.size).toBe(1);
+    expect(result.current.eventIds.has(mockUserMessageEvent.id)).toBe(true);
+    expect(
+      (result.current.events[1] as StreamingDeltaEvent).content,
+    ).toHaveLength(1000);
   });
 
   it("should not compact streaming deltas from different senders (#1656)", () => {

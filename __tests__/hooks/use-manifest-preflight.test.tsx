@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import { type ResolvedActiveBackend } from "#/api/backend-registry/types";
 import { useSetupPreflight } from "#/hooks/use-manifest-preflight";
-import { createSetupEntry } from "../manifests/manifest-test-data";
+import { getAutomationEndpoint } from "#/manifests/automation-interface";
+import { createSetup, createSetupEntry } from "../manifests/manifest-test-data";
 
 const activeBackendState = vi.hoisted((): { value: ResolvedActiveBackend } => ({
   value: {
@@ -25,6 +26,13 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
 
 vi.mock("#/contexts/active-backend-context", () => ({
   useActiveBackend: () => activeBackendState.value,
+}));
+
+vi.mock("#/manifests/automation-interface", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("#/manifests/automation-interface")
+  >()),
+  getAutomationEndpoint: vi.fn(),
 }));
 
 /** A local call's failure, which arrives as an `AxiosError`. */
@@ -91,6 +99,9 @@ let warn: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.mocked(getAutomationEndpoint).mockImplementation((name) =>
+    name === "createPrompt" ? "/v1/preset/prompt" : "",
+  );
   activeBackendState.value = {
     backend: {
       id: "local-test",
@@ -110,6 +121,117 @@ afterEach(() => {
 });
 
 describe("useSetupPreflight", () => {
+  it("fails closed when an older interface cannot derive the selected endpoint", async () => {
+    const entry = createSetupEntry({
+      setup: createSetup({
+        prompt: undefined,
+        actions: {
+          upload: {
+            label: "Upload",
+            help: "Run a bundle.",
+            features: [],
+            args: {},
+            tarballPath: "{{form.tarball}}",
+            entrypoint: "python main.py",
+          },
+        },
+      }),
+    });
+    const { result } = renderHook(() => useSetupPreflight(entry));
+
+    await expect(
+      result.current.runPreflight(VALUES, "cron", "upload"),
+    ).resolves.toEqual({ status: "unavailable" });
+    expect(AutomationService.validateDraft).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("maps errors against the selected action and trigger only", async () => {
+    const field = {
+      type: "text" as const,
+      label: "Input",
+      help: "Enter input.",
+      required: true,
+    };
+    const entry = createSetupEntry({
+      setup: createSetup({
+        prompt: undefined,
+        form: {
+          triggers: {
+            cron: { schedule: { ...field, type: "cron" } },
+            event: { source: field, on: field },
+          },
+          args: {},
+        },
+        actions: {
+          prompt: {
+            label: "Prompt",
+            help: "Run prompt.",
+            features: [],
+            args: { promptText: field },
+            prompt: "{{form.promptText}}",
+          },
+          plugin: {
+            label: "Plugin",
+            help: "Run plugin.",
+            features: [],
+            args: { pluginText: field },
+            prompt: "{{form.pluginText}}",
+            plugins: "https://github.com/OpenHands/extensions",
+          },
+        },
+      }),
+    });
+    vi.mocked(getAutomationEndpoint).mockReturnValue("/v1/preset/plugin");
+    vi.mocked(AutomationService.validateDraft).mockResolvedValue({
+      valid: false,
+      errors: [
+        {
+          field: "prompt",
+          code: "invalid_prompt",
+          message: "Choose a different prompt.",
+        },
+        {
+          field: "trigger.on",
+          code: "unsupported_event",
+          message: "Choose a supported event.",
+        },
+      ],
+    });
+    const { result } = renderHook(() => useSetupPreflight(entry));
+
+    const outcome = await result.current.runPreflight(
+      { pluginText: "Review", source: "github", on: "issue_comment.created" },
+      "event",
+      "plugin",
+    );
+
+    expect(outcome).toEqual({
+      status: "failed",
+      errors: {
+        fieldErrors: {
+          pluginText: "Choose a different prompt.",
+          on: "Choose a supported event.",
+        },
+        formErrors: [],
+        stepErrors: {},
+      },
+    });
+    expect(AutomationService.validateDraft).toHaveBeenCalledWith(
+      expect.objectContaining({
+        endpoint: "/v1/preset/plugin",
+        draft: expect.objectContaining({
+          prompt: "Review",
+          trigger: {
+            type: "event",
+            source: "github",
+            on: "issue_comment.created",
+          },
+        }),
+      }),
+    );
+  });
+
   it.each([
     ["a local deployment without the route", axiosFailure(404)],
     ["a cloud deployment that has not implemented it", httpFailure(501)],

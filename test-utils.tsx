@@ -227,6 +227,6 @@ export const createUserMessageEvent = (id: string): MessageEvent => ({
     role: "user",
     content: [{ type: "text", text: "User message" }],
   },
-  activated_microagents: [],
+  activated_skills: [],
   extended_content: [],
 });

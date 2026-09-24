@@ -1,6 +1,11 @@
 import type { LatestAutomationRunState } from "#/hooks/query/use-latest-automation-runs";
 import { I18nKey } from "#/i18n/declaration";
+import { automationDetailPath } from "#/manifests/automation-interface";
 import { AutomationRunStatus, type Automation } from "#/types/automation";
+import {
+  getAutomationRunDisplay,
+  type AutomationRunBadgeStatus,
+} from "#/utils/automation-run-display";
 import { formatRelativeTime } from "#/utils/format-relative-time";
 import {
   getLastRunTimestamp,
@@ -13,10 +18,9 @@ export interface HomeAutomationActivityItem {
   name: string;
   triggerSummary: string;
   /** Null when the automation has never run (or the run fetch failed). */
-  status: AutomationRunStatus | null;
+  status: AutomationRunBadgeStatus | null;
   /** Relative time label, or null when there is no usable timestamp. */
   whenLabel: string | null;
-  conversationId: string | null;
 }
 
 type Translate = (key: I18nKey, options?: Record<string, unknown>) => string;
@@ -29,14 +33,14 @@ export function buildHomeAutomationActivityItem(
 ): HomeAutomationActivityItem {
   const { latestRun } = runState;
   const timestamp = latestRun ? getLastRunTimestamp(latestRun) : null;
+  const display = latestRun ? getAutomationRunDisplay(latestRun) : null;
 
   return {
     id: automation.id,
     name: automation.name,
     triggerSummary: getTriggerSummary(automation),
-    status: latestRun?.status ?? null,
+    status: display?.badgeStatus ?? null,
     whenLabel: timestamp ? formatRelativeTime(timestamp, locale, t) : null,
-    conversationId: latestRun?.conversation_id ?? null,
   };
 }
 
@@ -84,8 +88,10 @@ export function buildHomeAutomationActivityItems(
     );
 }
 
+/**
+ * Home rows always open the automation view. Run conversations belong to the
+ * automation's creator, so linking to them 404s for other org members.
+ */
 export function hrefForActivityItem(item: HomeAutomationActivityItem): string {
-  return item.conversationId
-    ? `/conversations/${item.conversationId}`
-    : `/automations/${item.id}`;
+  return automationDetailPath(item.id);
 }

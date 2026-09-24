@@ -20,15 +20,15 @@ import {
   ProfilesClient,
   type GetProfileOptions,
 } from "@openhands/typescript-client/clients";
-import {
-  type ProfileInfo,
-  type ProfileListResponse,
-  type ProfileDetailResponse,
-  type ProfileMutationResponse,
-  type ActivateProfileResponse,
-  type SaveProfileRequest,
-  type ExposeSecretsMode,
-  type ValidateProfileResponse,
+import type {
+  ProfileInfo as ClientProfileInfo,
+  ProfileListResponse as ClientProfileListResponse,
+  ProfileDetailResponse,
+  ProfileMutationResponse,
+  ActivateProfileResponse,
+  SaveProfileRequest,
+  ExposeSecretsMode,
+  ValidateProfileResponse,
 } from "@openhands/typescript-client";
 import { getAgentServerClientOptions } from "../agent-server-client-options";
 import { getActiveBackend } from "../backend-registry/active-store";
@@ -41,10 +41,27 @@ import {
   saveCloudProfile,
 } from "../cloud/profiles-service.api";
 
+/**
+ * Profile summaries carry an optional `provider_connection_id` (the shared
+ * provider connection a profile links to), but `@openhands/typescript-client`
+ * predates that field. Widen the client types here so consumers can read it; it
+ * stays optional, so a client response without the field is still assignable.
+ */
+export interface ProfileInfo extends ClientProfileInfo {
+  provider_connection_id?: string | null;
+  /** True when provider_connection_id is set but the referenced connection no longer exists. */
+  provider_connection_broken?: boolean;
+}
+
+export interface ProfileListResponse extends Omit<
+  ClientProfileListResponse,
+  "profiles"
+> {
+  profiles: ProfileInfo[];
+}
+
 // Re-export SDK types for consumers
 export type {
-  ProfileInfo,
-  ProfileListResponse,
   ProfileDetailResponse,
   ProfileMutationResponse,
   ActivateProfileResponse,

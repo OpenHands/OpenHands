@@ -1,5 +1,4 @@
-/* eslint-disable react/jsx-props-no-spreading */
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -8,27 +7,15 @@ import { MemoryRouter } from "react-router";
 import FilesTab from "#/routes/files-tab";
 import { useFilesTabStore } from "#/stores/files-tab-store";
 import { NavigationProvider } from "#/context/navigation-context";
+import {
+  LOCAL_STORAGE_KEYS,
+  setConversationState,
+} from "#/utils/conversation-local-storage";
 
 // Mocks must be declared before the SUT is imported.
-const useHasAttachedSourceMock = vi.fn();
-const useHasGitCommitsMock = vi.fn();
-const useUnifiedGitCommitsMock = vi.fn();
 const useWorkspaceFilesMock = vi.fn();
 const useWorkspaceFileContentMock = vi.fn();
-const refetchGitChangesMock = vi.fn();
-
-vi.mock("#/hooks/use-has-attached-source", () => ({
-  useHasAttachedSource: () => useHasAttachedSourceMock(),
-}));
-
-vi.mock("#/hooks/query/use-has-git-commits", () => ({
-  useHasGitCommits: (opts?: { enabled?: boolean }) =>
-    useHasGitCommitsMock(opts),
-}));
-
-vi.mock("#/hooks/query/use-unified-git-commits", () => ({
-  useUnifiedGitCommits: () => useUnifiedGitCommitsMock(),
-}));
+const useActiveConversationMock = vi.fn();
 
 vi.mock("#/hooks/query/use-workspace-files", () => ({
   useWorkspaceFiles: () => useWorkspaceFilesMock(),
@@ -39,19 +26,8 @@ vi.mock("#/hooks/query/use-workspace-file-content", () => ({
     useWorkspaceFileContentMock(path),
 }));
 
-vi.mock("#/hooks/query/use-unified-get-git-changes", () => ({
-  useUnifiedGetGitChanges: () => ({
-    refetch: refetchGitChangesMock,
-    isFetching: false,
-  }),
-}));
-
-vi.mock("#/routes/changes-tab", () => ({
-  default: () => <div data-testid="changes-tab-content">Diff View</div>,
-}));
-
-vi.mock("#/routes/commits-tab", () => ({
-  default: () => <div data-testid="commits-tab-content">Commits View</div>,
+vi.mock("#/hooks/query/use-active-conversation", () => ({
+  useActiveConversation: () => useActiveConversationMock(),
 }));
 
 function renderTab(conversationId: string | null = null) {
@@ -76,42 +52,22 @@ function renderTab(conversationId: string | null = null) {
   );
 }
 
+function openFile(path: string, conversationId: string | null = null) {
+  useFilesTabStore.getState().setSelectedPath(path, conversationId);
+}
+
 describe("FilesTab", () => {
   beforeEach(() => {
-    // `selectedPath` lives in a global Zustand store (useFilesTabStore) and
-    // the auto-select effect re-fires when the store is reset between tests,
-    // which can race with the Zustand mock's afterEach reset and leave the
-    // store polluted with the previous test's path. Resetting here, after
-    // the previous test's cleanup() has unmounted any FilesTab, defeats
-    // that race so each test starts with a clean selection.
     useFilesTabStore.setState({
       selectedPath: null,
       selectedConversationId: null,
+      openPaths: [],
     });
+    localStorage.clear();
 
-    useHasAttachedSourceMock.mockReset();
-    useHasGitCommitsMock.mockReset();
-    useUnifiedGitCommitsMock.mockReset();
     useWorkspaceFilesMock.mockReset();
     useWorkspaceFileContentMock.mockReset();
-    refetchGitChangesMock.mockReset();
-    // Default: pretend the probe has already resolved with at least one
-    // commit. Individual tests can override this for "empty repo" cases.
-    useHasGitCommitsMock.mockReturnValue({
-      hasCommits: true,
-      isLoading: false,
-    });
-    // Default: the agent server supports the commits API (the third toggle
-    // segment is offered) but the conversation has no commits yet.
-    useUnifiedGitCommitsMock.mockReturnValue({
-      commits: [],
-      hasMore: false,
-      isUnsupported: false,
-      isLoading: false,
-      isFetching: false,
-      isSuccess: true,
-      isError: false,
-    });
+    useActiveConversationMock.mockReset();
 
     useWorkspaceFilesMock.mockReturnValue({
       data: ["index.html", "src/main.ts", "README.md"],
@@ -129,132 +85,87 @@ describe("FilesTab", () => {
       isLoading: false,
       isError: false,
     });
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        workspace: { working_dir: "/workspace/project" },
+      },
+    });
   });
 
-  it("defaults to diff view when the user attached a source (repo or workspace)", () => {
-    useHasAttachedSourceMock.mockReturnValue({
-      hasAttachedSource: true,
-      isLoading: false,
-    });
-
+  it("renders the file browser without a Diff/Commits toggle", () => {
     renderTab();
 
-    expect(screen.getByTestId("changes-tab-content")).toBeInTheDocument();
-    // The Rich/Plain toggle is hidden when diff view is active.
+    expect(screen.getByTestId("files-tab")).toBeInTheDocument();
     expect(
       screen.queryByTestId("files-tab-content-mode-toggle"),
     ).not.toBeInTheDocument();
-  });
-
-  it("defaults to files+rich view when the attached source has no commits (non-git workspace or unborn HEAD)", () => {
-    useHasAttachedSourceMock.mockReturnValue({
-      hasAttachedSource: true,
-      isLoading: false,
-    });
-    useHasGitCommitsMock.mockReturnValue({
-      hasCommits: false,
-      isLoading: false,
-    });
-
-    renderTab();
-
-    // Even though something is attached, the diff view is suppressed when
-    // there's nothing to diff against.
-    expect(screen.queryByTestId("changes-tab-content")).not.toBeInTheDocument();
     expect(
-      screen.getByTestId("files-tab-content-mode-toggle"),
-    ).toBeInTheDocument();
+      screen.queryByTestId("files-tab-diff-toggle"),
+    ).not.toBeInTheDocument();
   });
 
-  it("does NOT probe for commits when no source is attached", () => {
-    useHasAttachedSourceMock.mockReturnValue({
-      hasAttachedSource: false,
-      isLoading: false,
-    });
-
+  it("does not open file tabs until a file is selected", () => {
     renderTab();
 
-    // The hook is still called (so the diff toggle has a value), but it
-    // must be called with enabled: false so we don't shell out to the
-    // workspace pointlessly.
-    expect(useHasGitCommitsMock).toHaveBeenCalledWith({ enabled: false });
-  });
-
-  it("optimistically defaults to diff view while the attachment / has-commits probes are still loading", () => {
-    useHasAttachedSourceMock.mockReturnValue({
-      hasAttachedSource: true,
-      isLoading: false,
-    });
-    useHasGitCommitsMock.mockReturnValue({
-      hasCommits: null,
-      isLoading: true,
-    });
-
-    renderTab();
-
-    // The common case is a repo with commits, so to avoid a files→diff
-    // flash on initial mount we lean diff-view while loading.
-    expect(screen.getByTestId("changes-tab-content")).toBeInTheDocument();
-  });
-
-  it("defaults to plain file viewer when no source is attached", () => {
-    useHasAttachedSourceMock.mockReturnValue({
-      hasAttachedSource: false,
-      isLoading: false,
-    });
-
-    renderTab();
-
-    expect(screen.queryByTestId("changes-tab-content")).not.toBeInTheDocument();
-    // Tree is collapsed by default — user expands via the caret.
-    expect(screen.queryByTestId("files-tab-tree")).not.toBeInTheDocument();
-    expect(
-      screen.getByTestId("files-tab-content-mode-toggle"),
-    ).toBeInTheDocument();
-  });
-
-  it("lets users toggle diff view off even when a source is attached", async () => {
-    useHasAttachedSourceMock.mockReturnValue({
-      hasAttachedSource: true,
-      isLoading: false,
-    });
-    const user = userEvent.setup();
-
-    renderTab();
-
-    expect(screen.getByTestId("changes-tab-content")).toBeInTheDocument();
-
-    // Click the "Files" segment of the diff-view toggle.
-    await user.click(screen.getByTestId("files-tab-diff-toggle-option-off"));
-
-    await waitFor(() => {
-      expect(
-        screen.queryByTestId("changes-tab-content"),
-      ).not.toBeInTheDocument();
-    });
-    // Quick-row toggle exists and the file-viewer area is shown.
+    expect(useWorkspaceFileContentMock).toHaveBeenCalledWith(null);
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
     expect(
       screen.getByTestId("file-quick-row-tree-toggle"),
     ).toBeInTheDocument();
   });
 
-  it("auto-selects the highest-priority file on first render", () => {
-    useHasAttachedSourceMock.mockReturnValue({
-      hasAttachedSource: false,
-      isLoading: false,
+  it("shows the active conversation workspace path", () => {
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        workspace: { working_dir: "/workspace/project/worktree-123" },
+      },
     });
 
     renderTab();
 
-    // Either index.html (top-priority entrypoint) should be selected.
-    expect(useWorkspaceFileContentMock).toHaveBeenCalledWith("index.html");
+    expect(
+      screen.getByTestId("files-tab-workspace-path-value"),
+    ).toHaveTextContent("/workspace/project/worktree-123");
+  });
+
+  it("opens a tab when a file is selected and closes it from the tab strip", async () => {
+    const user = userEvent.setup();
+    openFile("src/main.ts");
+    renderTab();
+
+    expect(
+      screen.getByTestId("file-quick-row-item-src/main.ts"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("tab", { selected: true })).toHaveTextContent(
+      "main.ts",
+    );
+
+    await user.click(screen.getByTestId("file-quick-row-close-src/main.ts"));
+
+    expect(
+      screen.queryByTestId("file-quick-row-item-src/main.ts"),
+    ).not.toBeInTheDocument();
+    expect(useFilesTabStore.getState().selectedPath).toBeNull();
+    expect(useFilesTabStore.getState().openPaths).toEqual([]);
+  });
+
+  it("keeps vertical edges on every open tab", () => {
+    openFile("README.md");
+    openFile("src/main.ts");
+    renderTab();
+
+    const firstTab = screen.getByTestId(
+      "file-quick-row-item-README.md",
+    ).parentElement;
+    const secondTab = screen.getByTestId(
+      "file-quick-row-item-src/main.ts",
+    ).parentElement;
+    expect(firstTab).toHaveClass("border-l");
+    expect(firstTab).toHaveClass("border-r");
+    expect(secondTab).toHaveClass("border-r");
   });
 
   it("renders the binary fallback in plain mode for binary files", async () => {
-    useHasAttachedSourceMock.mockReturnValue({
-      hasAttachedSource: false,
-      isLoading: false,
-    });
     useWorkspaceFileContentMock.mockReturnValue({
       data: {
         path: "logo.png",
@@ -269,6 +180,7 @@ describe("FilesTab", () => {
     });
     const user = userEvent.setup();
 
+    openFile("logo.png");
     renderTab();
 
     await user.click(
@@ -280,45 +192,56 @@ describe("FilesTab", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows full file paths (not just basenames) as quick-row pills", () => {
-    useHasAttachedSourceMock.mockReturnValue({
-      hasAttachedSource: false,
-      isLoading: false,
-    });
-
+  it("shows the file name (not the full path) on quick-row tabs", () => {
+    openFile("src/main.ts");
     renderTab();
 
-    // The pill for src/main.ts should display the full relative path.
-    const pill = screen.getByTestId("file-quick-row-item-src/main.ts");
-    expect(pill).toHaveTextContent("src/main.ts");
+    const tab = screen.getByTestId("file-quick-row-item-src/main.ts");
+    expect(tab).toHaveTextContent("main.ts");
+    expect(tab).toHaveAttribute("title", "src/main.ts");
+    expect(tab).toHaveAttribute("role", "tab");
   });
 
-  it("collapses the file tree by default and expands it via the caret", async () => {
-    useHasAttachedSourceMock.mockReturnValue({
-      hasAttachedSource: false,
-      isLoading: false,
-    });
+  it("shows the file tree by default and collapses it via the caret", async () => {
     const user = userEvent.setup();
 
     renderTab();
 
-    // Hidden by default.
-    expect(screen.queryByTestId("files-tab-tree")).not.toBeInTheDocument();
-
-    await user.click(screen.getByTestId("file-quick-row-tree-toggle"));
     expect(screen.getByTestId("files-tab-tree")).toBeInTheDocument();
 
     await user.click(screen.getByTestId("file-quick-row-tree-toggle"));
     expect(screen.queryByTestId("files-tab-tree")).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("file-quick-row-tree-toggle"));
+    expect(screen.getByTestId("files-tab-tree")).toBeInTheDocument();
+  });
+
+  it("exposes a grippable resize handle on the tree's right edge when expanded", () => {
+    window.localStorage.clear();
+
+    renderTab();
+
+    expect(
+      screen.getByTestId("files-tab-tree-resize-handle"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("files-tab-tree")).toHaveStyle({
+      width: "224px",
+    });
+  });
+
+  it("opens a tab from the file tree when a file is clicked", async () => {
+    const user = userEvent.setup();
+    renderTab();
+
+    await user.click(screen.getByTestId("file-tree-file-README.md"));
+
+    expect(useFilesTabStore.getState().openPaths).toContain("README.md");
+    expect(
+      screen.getByTestId("file-quick-row-item-README.md"),
+    ).toBeInTheDocument();
   });
 
   it("renders markdown content via MarkdownRenderer in rich mode", async () => {
-    useHasAttachedSourceMock.mockReturnValue({
-      hasAttachedSource: false,
-      isLoading: false,
-    });
-    // Only expose a markdown file so it is auto-selected as the first
-    // priority entry.
     useWorkspaceFilesMock.mockReturnValue({
       data: ["README.md"],
       isLoading: false,
@@ -336,6 +259,7 @@ describe("FilesTab", () => {
       isError: false,
     });
 
+    openFile("README.md");
     renderTab();
 
     await waitFor(() => {
@@ -344,26 +268,13 @@ describe("FilesTab", () => {
       ).toBeInTheDocument();
     });
 
-    // react-markdown turns "# Hello" into an <h1>.
     expect(
       screen.getByRole("heading", { level: 1, name: "Hello" }),
     ).toBeInTheDocument();
     expect(screen.getByText("bold").tagName.toLowerCase()).toBe("strong");
-    // Markdown rendering uses MarkdownRenderer, not an iframe.
-    expect(
-      screen.queryByTestId("file-content-viewer-iframe"),
-    ).not.toBeInTheDocument();
-    // The rich-rendered markdown container is mounted.
-    expect(
-      screen.getByTestId("file-content-viewer-markdown"),
-    ).toBeInTheDocument();
   });
 
   it("shows highlighted source (not rich markdown) when toggled to plain on a .md", async () => {
-    useHasAttachedSourceMock.mockReturnValue({
-      hasAttachedSource: false,
-      isLoading: false,
-    });
     useWorkspaceFilesMock.mockReturnValue({
       data: ["README.md"],
       isLoading: false,
@@ -382,10 +293,9 @@ describe("FilesTab", () => {
     });
     const user = userEvent.setup();
 
+    openFile("README.md");
     renderTab();
 
-    // Toggle to plain — markdown source should now be syntax-highlighted
-    // as `markdown`, not rendered.
     await user.click(
       screen.getByTestId("files-tab-content-mode-toggle-option-plain"),
     );
@@ -394,17 +304,12 @@ describe("FilesTab", () => {
       "file-content-viewer-highlighted",
     );
     expect(highlighted.getAttribute("data-language")).toBe("markdown");
-    // Confirm the rich-rendered <h1> is gone.
     expect(
       screen.queryByRole("heading", { level: 1, name: "Hello" }),
     ).not.toBeInTheDocument();
   });
 
   it("uses the workspace fileserver URL as the iframe src for HTML files", async () => {
-    useHasAttachedSourceMock.mockReturnValue({
-      hasAttachedSource: false,
-      isLoading: false,
-    });
     useWorkspaceFilesMock.mockReturnValue({
       data: ["index.html"],
       isLoading: false,
@@ -423,31 +328,15 @@ describe("FilesTab", () => {
       isError: false,
     });
 
+    openFile("index.html");
     renderTab();
 
     const iframe = await screen.findByTestId("file-content-viewer-iframe");
-    expect(iframe).toBeInTheDocument();
-    // The iframe src points at the workspace fileserver so relative
-    // asset references (`<link href="style.css">` etc.) resolve to
-    // sibling files. The `?v=<mutation-counter>` suffix is the
-    // cache-buster appended by the viewer so the browser re-fetches
-    // after each agent-side edit.
     expect(iframe).toHaveAttribute("src", `${staticUrl}?v=0`);
-    // The iframe is sandboxed with `allow-same-origin` only: `<script>` /
-    // inline event handlers inside the previewed file are inert. We deliberately
-    // do NOT add `allow-scripts` — a workspace HTML file's scripts must not run
-    // in the canvas's context.
     expect(iframe).toHaveAttribute("sandbox", "allow-same-origin");
   });
 
   it("switches between rich and plain content modes", async () => {
-    useHasAttachedSourceMock.mockReturnValue({
-      hasAttachedSource: false,
-      isLoading: false,
-    });
-    // Only `src/main.ts` is exposed so it auto-selects (otherwise the
-    // priority sort picks `index.html` first and the assertion below
-    // would see the markup grammar instead).
     useWorkspaceFilesMock.mockReturnValue({
       data: ["src/main.ts"],
       isLoading: false,
@@ -466,15 +355,12 @@ describe("FilesTab", () => {
     });
     const user = userEvent.setup();
 
+    openFile("src/main.ts");
     renderTab();
 
     await user.click(
       screen.getByTestId("files-tab-content-mode-toggle-option-plain"),
     );
-    // `src/main.ts` resolves to a Prism grammar (`typescript`), so the
-    // plain view is a syntax-highlighted source view rather than a raw
-    // `<pre>`. We assert the highlighted container and its data-language
-    // attribute as a regression guard.
     const highlighted = await screen.findByTestId(
       "file-content-viewer-highlighted",
     );
@@ -482,45 +368,101 @@ describe("FilesTab", () => {
     expect(highlighted.getAttribute("data-language")).toBe("typescript");
   });
 
-  it("shows the refresh button inside the files-tab toolbar and triggers a refetch", async () => {
-    useHasAttachedSourceMock.mockReturnValue({
-      hasAttachedSource: false,
-      isLoading: false,
-    });
-    const user = userEvent.setup();
-
+  it("shows refresh on the file quick-row", () => {
+    openFile("index.html");
     renderTab();
 
+    const quickRow = screen.getByTestId("file-quick-row");
     const refresh = screen.getByTestId("files-tab-refresh");
-    expect(refresh).toBeInTheDocument();
-    // The button should describe its *action* (refresh), not the surrounding
-    // section name ("Files") — the old `COMMON$FILES` aria-label was
-    // ambiguous for screen-reader users who couldn't see the refresh icon.
+    expect(quickRow).toContainElement(refresh);
     expect(refresh).toHaveAttribute("aria-label", "FILES$REFRESH");
-    await user.click(refresh);
-    expect(refetchGitChangesMock).toHaveBeenCalledTimes(1);
   });
 
-  // Regression coverage for issue #1350: a file selected in one conversation
-  // must not survive into another. The selection is global (Zustand) but
-  // scoped to its conversation; the files tab ignores a path owned by a
-  // different conversation so it never tries to open a file that only exists
-  // in the previous conversation's workspace.
-  describe("conversation switching", () => {
-    beforeEach(() => {
-      useHasAttachedSourceMock.mockReturnValue({
-        hasAttachedSource: false,
-        isLoading: false,
-      });
+  it("persists and restores open files plus tree visibility across remount", async () => {
+    const conversationId = "persist-files-conv";
+    const user = userEvent.setup();
+    const { unmount } = renderTab(conversationId);
+
+    await user.click(screen.getByTestId("file-quick-row-tree-toggle"));
+    openFile("README.md", conversationId);
+    openFile("src/main.ts", conversationId);
+
+    await waitFor(() => {
+      const raw = localStorage.getItem(
+        `${LOCAL_STORAGE_KEYS.CONVERSATION_STATE}-${conversationId}`,
+      );
+      expect(raw).toBeTruthy();
+      const stored = JSON.parse(raw as string);
+      expect(stored.filesTabTreeVisible).toBe(false);
+      expect(stored.filesTabOpenPaths).toEqual(["README.md", "src/main.ts"]);
+      expect(stored.filesTabSelectedPath).toBe("src/main.ts");
     });
 
-    it("ignores a stale selection from another conversation and auto-selects this conversation's file", async () => {
-      // demo.html was opened in conversation A and only exists there.
+    // Simulate a full reload: empty in-memory store, remount the tab.
+    unmount();
+    useFilesTabStore.setState({
+      selectedPath: null,
+      selectedConversationId: null,
+      openPaths: [],
+    });
+    renderTab(conversationId);
+
+    await waitFor(() => {
+      expect(useFilesTabStore.getState().openPaths).toEqual([
+        "README.md",
+        "src/main.ts",
+      ]);
+    });
+    expect(screen.getByRole("tab", { selected: true })).toHaveTextContent(
+      "main.ts",
+    );
+    expect(screen.queryByTestId("files-tab-tree")).not.toBeInTheDocument();
+  });
+
+  it("hydrates open files from conversation localStorage on first mount", async () => {
+    const conversationId = "hydrate-files-conv";
+    setConversationState(conversationId, {
+      filesTabOpenPaths: ["README.md"],
+      filesTabSelectedPath: "README.md",
+      filesTabTreeVisible: true,
+    });
+
+    renderTab(conversationId);
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("file-quick-row-item-README.md"),
+      ).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("files-tab-tree")).toBeInTheDocument();
+  });
+
+  it("shows the Rich/Plain toggle only when a file is open", async () => {
+    renderTab();
+
+    expect(
+      screen.queryByTestId("files-tab-content-mode-toggle"),
+    ).not.toBeInTheDocument();
+
+    openFile("index.html");
+
+    const modeToggle = await screen.findByTestId(
+      "files-tab-content-mode-toggle",
+    );
+    const content = screen.getByTestId("files-tab-content");
+    expect(content).toContainElement(modeToggle);
+    expect(content).toContainElement(
+      screen.getByTestId("files-tab-open-in-new-window"),
+    );
+  });
+
+  describe("conversation switching", () => {
+    it("ignores a stale selection from another conversation", async () => {
       useFilesTabStore.setState({
         selectedPath: "demo.html",
         selectedConversationId: "conv-a",
+        openPaths: ["demo.html"],
       });
-      // Conversation B's workspace does not contain demo.html.
       useWorkspaceFilesMock.mockReturnValue({
         data: ["app.html"],
         isLoading: false,
@@ -528,25 +470,18 @@ describe("FilesTab", () => {
 
       renderTab("conv-b");
 
-      // The stale demo.html is never requested; B auto-selects its own file.
       await waitFor(() => {
-        expect(useWorkspaceFileContentMock).toHaveBeenCalledWith("app.html");
+        expect(useWorkspaceFileContentMock).toHaveBeenCalledWith(null);
       });
       expect(useWorkspaceFileContentMock).not.toHaveBeenCalledWith("demo.html");
-
-      // The store ownership flips to the active conversation.
-      await waitFor(() => {
-        const state = useFilesTabStore.getState();
-        expect(state.selectedPath).toBe("app.html");
-        expect(state.selectedConversationId).toBe("conv-b");
-      });
+      expect(screen.queryByRole("tab")).not.toBeInTheDocument();
     });
 
-    it("preserves a selection that belongs to the current conversation (explicit navigate_to_file)", async () => {
-      // canvas_ui navigated this conversation to report.html outside React.
+    it("preserves a selection that belongs to the current conversation", async () => {
       useFilesTabStore.setState({
         selectedPath: "report.html",
         selectedConversationId: "conv-b",
+        openPaths: ["report.html"],
       });
       useWorkspaceFilesMock.mockReturnValue({
         data: ["report.html", "app.html"],
@@ -555,14 +490,17 @@ describe("FilesTab", () => {
 
       renderTab("conv-b");
 
-      // The explicit selection is honored and auto-select does not override it.
       await waitFor(() => {
         expect(useWorkspaceFileContentMock).toHaveBeenCalledWith("report.html");
       });
       expect(useFilesTabStore.getState().selectedPath).toBe("report.html");
+      expect(
+        screen.getByTestId("file-quick-row-item-report.html"),
+      ).toBeInTheDocument();
     });
 
-    it("drops the selection when the tab switches to a different conversation", async () => {
+    it("clears open tabs when the tab switches to a different conversation", async () => {
+      openFile("demo.html", "conv-a");
       useWorkspaceFilesMock.mockReturnValue({
         data: ["demo.html"],
         isLoading: false,
@@ -570,13 +508,11 @@ describe("FilesTab", () => {
 
       const { rerender } = renderTab("conv-a");
 
-      // Conversation A auto-selects and owns demo.html.
       await waitFor(() => {
         expect(useFilesTabStore.getState().selectedPath).toBe("demo.html");
       });
-      expect(useFilesTabStore.getState().selectedConversationId).toBe("conv-a");
+      expect(useFilesTabStore.getState().openPaths).toEqual(["demo.html"]);
 
-      // Switch the mounted tab to conversation B, whose workspace has app.html.
       useWorkspaceFileContentMock.mockClear();
       useWorkspaceFilesMock.mockReturnValue({
         data: ["app.html"],
@@ -602,102 +538,43 @@ describe("FilesTab", () => {
         </MemoryRouter>,
       );
 
-      // After the switch the tab follows B and never re-requests demo.html.
       await waitFor(() => {
-        expect(useFilesTabStore.getState().selectedPath).toBe("app.html");
+        expect(useFilesTabStore.getState().selectedPath).toBeNull();
       });
+      expect(useFilesTabStore.getState().openPaths).toEqual([]);
       expect(useFilesTabStore.getState().selectedConversationId).toBe("conv-b");
       expect(useWorkspaceFileContentMock).not.toHaveBeenCalledWith("demo.html");
     });
   });
+});
 
-  describe("commits view", () => {
-    it("offers the Commits toggle option when the server supports the commits API", () => {
-      // Arrange — beforeEach default: commits supported.
-      useHasAttachedSourceMock.mockReturnValue({
-        hasAttachedSource: true,
-        isLoading: false,
-      });
-
-      // Act
-      renderTab();
-
-      // Assert
-      expect(
-        screen.getByTestId("files-tab-diff-toggle-option-commits"),
-      ).toBeInTheDocument();
+describe("useFilesTabStore open tabs", () => {
+  beforeEach(() => {
+    useFilesTabStore.setState({
+      selectedPath: null,
+      selectedConversationId: null,
+      openPaths: [],
     });
+  });
 
-    it("hides the Commits toggle option against an older agent server", () => {
-      // Arrange — the commits endpoint 404'd: server too old.
-      useHasAttachedSourceMock.mockReturnValue({
-        hasAttachedSource: true,
-        isLoading: false,
-      });
-      useUnifiedGitCommitsMock.mockReturnValue({
-        commits: [],
-        hasMore: false,
-        isUnsupported: true,
-        isLoading: false,
-        isFetching: false,
-        isSuccess: true,
-        isError: false,
-      });
+  it("appends newly opened paths and selects a neighbor on close", () => {
+    const { setSelectedPath, closeOpenPath } = useFilesTabStore.getState();
 
-      // Act
-      renderTab();
+    setSelectedPath("a.ts", "c1");
+    setSelectedPath("b.ts", "c1");
+    setSelectedPath("c.ts", "c1");
+    expect(useFilesTabStore.getState().openPaths).toEqual([
+      "a.ts",
+      "b.ts",
+      "c.ts",
+    ]);
 
-      // Assert
-      expect(
-        screen.queryByTestId("files-tab-diff-toggle-option-commits"),
-      ).not.toBeInTheDocument();
-    });
+    closeOpenPath("b.ts");
+    expect(useFilesTabStore.getState().openPaths).toEqual(["a.ts", "c.ts"]);
+    // Closing the active middle tab selects the right neighbor.
+    expect(useFilesTabStore.getState().selectedPath).toBe("c.ts");
 
-    it("renders the Commits option between Diff and Files", () => {
-      // Arrange — beforeEach default: commits supported.
-      useHasAttachedSourceMock.mockReturnValue({
-        hasAttachedSource: true,
-        isLoading: false,
-      });
-
-      // Act
-      renderTab();
-
-      // Assert — Commits sits beside Diff, ahead of Files: Diff → Commits → Files.
-      const toggle = screen.getByTestId("files-tab-diff-toggle");
-      const order = within(toggle)
-        .getAllByRole("radio")
-        .map((option) => option.getAttribute("data-testid"));
-      expect(order).toEqual([
-        "files-tab-diff-toggle-option-on",
-        "files-tab-diff-toggle-option-commits",
-        "files-tab-diff-toggle-option-off",
-      ]);
-    });
-
-    it("switches the panel to the commits view when the Commits option is selected", async () => {
-      // Arrange
-      const user = userEvent.setup();
-      useHasAttachedSourceMock.mockReturnValue({
-        hasAttachedSource: true,
-        isLoading: false,
-      });
-      renderTab();
-
-      // Act
-      await user.click(
-        screen.getByTestId("files-tab-diff-toggle-option-commits"),
-      );
-
-      // Assert — the commits view replaces the diff view; the file-browser
-      // controls (Rich/Plain) stay hidden.
-      expect(screen.getByTestId("commits-tab-content")).toBeInTheDocument();
-      expect(
-        screen.queryByTestId("changes-tab-content"),
-      ).not.toBeInTheDocument();
-      expect(
-        screen.queryByTestId("files-tab-content-mode-toggle"),
-      ).not.toBeInTheDocument();
-    });
+    closeOpenPath("c.ts");
+    expect(useFilesTabStore.getState().selectedPath).toBe("a.ts");
   });
 });

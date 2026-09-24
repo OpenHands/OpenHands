@@ -13,6 +13,8 @@
   --color-primary: var(--oh-color-primary);
   --color-logo: var(--oh-color-logo);
   --color-base: var(--oh-color-base);
+  /* Avoid text-base: tailwind-merge interprets it as a font size. */
+  --color-on-primary: var(--oh-color-base);
   --color-base-secondary: var(--oh-color-base-secondary);
   --color-danger: var(--oh-color-danger);
   --color-success: var(--oh-color-success);
@@ -30,6 +32,8 @@
 
   /* Semantic text aliases */
   --color-foreground: var(--oh-foreground);
+  --color-contrast: var(--oh-contrast);
+  --color-contrast-foreground: var(--oh-contrast-foreground);
   --color-text-secondary: var(--oh-text-secondary);
   --color-text-tertiary: var(--oh-text-tertiary);
   --color-muted: var(--oh-muted);
@@ -38,13 +42,24 @@
   --color-modal-title: var(--oh-modal-title-foreground);
 
   /* Semantic border aliases */
+  --color-border: var(--oh-border);
   --color-border-input: var(--oh-border-input);
   --color-border-subtle: var(--oh-border-subtle);
 
-  /* Interactive state aliases */
+  /* Focus / interactive state aliases */
+  --color-focus: var(--oh-focus);
   --color-interactive-hover: var(--oh-interactive-hover);
   --color-interactive-hover-low: var(--oh-interactive-hover-low);
   --color-interactive-active: var(--oh-interactive-active);
+  --color-interactive-selected: var(--oh-interactive-selected);
+
+  /* Status / accent / warning (danger & success already aliased above) */
+  --color-semantic-success: var(--oh-success);
+  --color-semantic-danger: var(--oh-danger);
+  --color-status-success: var(--oh-status-success);
+  --color-status-error: var(--oh-status-error);
+  --color-accent: var(--oh-accent);
+  --color-warning: var(--oh-warning);
 
   /* Cool Grey scale */
   --color-cool-grey-50:  var(--cool-grey-50);
@@ -77,6 +92,8 @@
   --oh-color-content-2: var(--cool-grey-50);
   --oh-background: var(--cool-grey-950);
   --oh-foreground: var(--cool-grey-100);
+  --oh-contrast: #ffffff;
+  --oh-contrast-foreground: #000000;
   --oh-surface: var(--cool-grey-925);
   --oh-surface-foreground: var(--cool-grey-100);
   --oh-surface-raised: var(--cool-grey-900);  /* elevated within a panel */
@@ -93,6 +110,8 @@
   --oh-interactive-hover-low: var(--cool-grey-900);  /* hover on dark base (950 bg) */
   --oh-interactive-active: var(--cool-grey-800);     /* selected/active on dark base */
   --oh-interactive-selected: var(--cool-grey-600);   /* selected within a panel (on 800/925 bg) */
+  --oh-context-window-foreground: var(--oh-foreground);
+  --oh-context-window-track-weight: 42%;
   --oh-scrollbar: color-mix(in srgb, var(--cool-grey-400) 30%, transparent);
   --oh-scrollbar-hover: color-mix(in srgb, var(--cool-grey-400) 50%, transparent);
   --oh-default: var(--cool-grey-800);
@@ -179,7 +198,7 @@ button.extension-module-card-interactive {
 }
 
 .extension-module-card-interactive:hover {
-  border-color: rgb(255 255 255 / 0.4);
+  border-color: color-mix(in srgb, var(--oh-foreground) 40%, transparent);
 }
 
 .extension-module-card-interactive:focus {
@@ -193,7 +212,7 @@ button.extension-module-card-interactive {
 
 .extension-module-card-interactive:focus-visible {
   outline: none;
-  border-color: rgb(255 255 255 / 0.4);
+  border-color: color-mix(in srgb, var(--oh-foreground) 40%, transparent);
 }
 
 .button-base {
@@ -341,7 +360,7 @@ button.extension-module-card-interactive {
 /* Drag and drop styles */
 .drag-over {
   backdrop-filter: blur(2px);
-  background: rgba(255, 255, 255, 0.5);
+  background: color-mix(in srgb, var(--oh-contrast) 50%, transparent);
   border-radius: 15px;
   height: 100%;
   left: 0;

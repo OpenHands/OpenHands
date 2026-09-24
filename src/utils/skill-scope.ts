@@ -8,6 +8,10 @@ export const SKILL_SCOPE_ORDER: SkillScope[] = [
   "public",
 ];
 
+// `.openhands/microagents/` is the pre-rename skills directory. The SDK still
+// loads skills from it for backward compatibility, so it keeps reporting those
+// paths as a skill's `source` — this marker is what maps them to a scope.
+// Dropping it would silently misfile legacy skills as "public".
 const USER_SKILL_DIR_MARKERS = [
   "/.agents/skills/",
   "/.openhands/skills/",

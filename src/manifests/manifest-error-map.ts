@@ -122,6 +122,22 @@ export function normalizeServiceErrors(
   return [];
 }
 
+/**
+ * The fields behind a payload path.
+ *
+ * The map is derived from a payload where every list holds a single entry, so
+ * a path addressing a later index names the same field the first one does.
+ * Reading every index as the first is what lets an error about the second
+ * repository of a multi-value field reach that field at all, rather than
+ * falling through to a form-level message that points at nothing.
+ */
+function fieldsAt(
+  path: string,
+  errorMap: Record<string, string[]>,
+): string[] | undefined {
+  return errorMap[path] ?? errorMap[path.replace(/\[\d+\]/g, "[0]")];
+}
+
 /** Apply the derived payload-path map, falling back to a form-level error. */
 export function mapServiceErrors(
   errors: readonly ManifestServiceError[],
@@ -134,7 +150,7 @@ export function mapServiceErrors(
   const stepErrors: Partial<Record<SetupValidationStep, string[]>> = {};
 
   errors.forEach(({ path, message, step }) => {
-    const fields = path ? errorMap[path] : undefined;
+    const fields = path ? fieldsAt(path, errorMap) : undefined;
     if (!fields?.length) {
       if (step) {
         stepErrors[step] = [...(stepErrors[step] ?? []), message];

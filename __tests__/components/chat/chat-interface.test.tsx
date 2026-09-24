@@ -79,6 +79,11 @@ vi.mock("#/hooks/use-agent-state", () => ({
   useAgentState: vi.fn(() => ({
     curAgentState: AgentState.AWAITING_USER_INPUT,
   })),
+  usePlanningAgentState: vi.fn(() => ({
+    localPlanningConversationId: null,
+    curPlanningAgentState: AgentState.AWAITING_USER_INPUT,
+    isPlanningAgentRunning: false,
+  })),
 }));
 
 const trackInitialQuerySubmittedMock = vi.fn();
@@ -207,7 +212,7 @@ describe("ChatInterface - Chat Suggestions", () => {
         role: "user",
         content: [{ type: "text", text: "Hello" }],
       },
-      activated_microagents: [],
+      activated_skills: [],
       extended_content: [],
     };
 
@@ -327,6 +332,7 @@ describe("ChatInterface - Scroll-up loads older events", () => {
       events: [],
       eventIds: new Set(),
       uiEvents: [],
+      loadedConversationId: null,
     });
     vi.clearAllMocks();
   });
@@ -348,13 +354,14 @@ describe("ChatInterface - Scroll-up loads older events", () => {
         role: "user",
         content: [{ type: "text", text: "Existing message" }],
       },
-      activated_microagents: [],
+      activated_skills: [],
       extended_content: [],
     };
     useEventStore.setState({
       events: [seedEvent],
       eventIds: new Set(["msg-seed"]),
       uiEvents: [seedEvent],
+      loadedConversationId: "test-conversation-id",
     });
     return loadOlder;
   };
@@ -414,6 +421,72 @@ describe("ChatInterface - Scroll-up loads older events", () => {
     });
 
     expect(loadOlder).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not restore scroll geometry saved by a previous conversation", async () => {
+    const loadOlder = setupPaginationTest();
+    const renderChat = () => (
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <ChatInterface />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+    const view = render(renderChat());
+
+    const scrollContainer = document.querySelector(
+      "[data-testid='chat-scroll-container']",
+    ) as HTMLElement;
+    setScrollMetrics(scrollContainer, {
+      scrollTop: 50,
+      scrollHeight: 5000,
+      clientHeight: 800,
+    });
+
+    await new Promise((resolve) => {
+      setTimeout(resolve, 0);
+    });
+    loadOlder.mockClear();
+    fireEvent.scroll(scrollContainer);
+    expect(loadOlder).toHaveBeenCalledTimes(1);
+
+    vi.mocked(useConversationId).mockReturnValue({
+      conversationId: "next-conversation-id",
+    });
+    vi.mocked(useOptionalConversationId).mockReturnValue({
+      conversationId: "next-conversation-id",
+    });
+    view.rerender(renderChat());
+
+    const setScrollTop = vi.fn();
+    Object.defineProperty(scrollContainer, "scrollTop", {
+      configurable: true,
+      get: () => 0,
+      set: setScrollTop,
+    });
+    Object.defineProperty(scrollContainer, "scrollHeight", {
+      configurable: true,
+      value: 6000,
+    });
+
+    const nextConversationEvent: MessageEvent = {
+      id: "msg-next-conversation",
+      timestamp: "2025-07-02T00:00:00Z",
+      source: "user",
+      llm_message: {
+        role: "user",
+        content: [{ type: "text", text: "Next conversation message" }],
+      },
+      activated_skills: [],
+      extended_content: [],
+    };
+    act(() => {
+      useEventStore.getState().addEvent(nextConversationEvent);
+    });
+
+    // Restoring the previous conversation's geometry would assign
+    // prevTop + (newHeight - prevHeight) = 50 + (6000 - 5000) = 1050.
+    expect(setScrollTop).not.toHaveBeenCalledWith(1050);
   });
 
   it("auto-loads older events when the chat content does not overflow the viewport", async () => {
@@ -485,13 +558,14 @@ describe("ChatInterface - Scroll-up loads older events", () => {
         role: "user",
         content: [{ type: "text", text: "Existing message" }],
       },
-      activated_microagents: [],
+      activated_skills: [],
       extended_content: [],
     };
     useEventStore.setState({
       events: [seedEvent],
       eventIds: new Set(["msg-seed"]),
       uiEvents: [seedEvent],
+      loadedConversationId: "test-conversation-id",
     });
 
     const useUserConversationModule =
@@ -1031,5 +1105,114 @@ describe("ChatInterface - Tracking", () => {
       );
     });
     expect(trackInitialQuerySubmittedMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("ChatInterface - Build plan keyboard shortcut", () => {
+  let queryClient: QueryClient;
+
+  const BUILD_PROMPT =
+    "Execute the plan based on the .agents_tmp/PLAN.md file.";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSend.mockResolvedValue({ queued: false });
+    queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    useOptimisticUserMessageStore.setState({ pendingMessages: [] });
+    useErrorMessageStore.setState({ errorMessage: null });
+    (useConfig as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      data: {},
+    });
+    (
+      useUnifiedUploadFiles as unknown as ReturnType<typeof vi.fn>
+    ).mockReturnValue({
+      mutateAsync: vi
+        .fn()
+        .mockResolvedValue({ skipped_files: [], uploaded_files: [] }),
+      isLoading: false,
+    });
+    useEventStore.setState({ events: [], eventIds: new Set(), uiEvents: [] });
+  });
+
+  function renderInterface() {
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={["/test-conversation-id"]}>
+          <Routes>
+            <Route path=":conversationId" element={<ChatInterface />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  }
+
+  const pressBuildShortcut = () => {
+    fireEvent.keyDown(document, { key: "Enter", metaKey: true });
+    fireEvent.keyDown(document, { key: "Enter", ctrlKey: true });
+  };
+
+  const sentBuildPrompt = () =>
+    mockSend.mock.calls.some(([message]) =>
+      JSON.stringify(message).includes(BUILD_PROMPT),
+    );
+
+  it("does not send the build prompt in code mode", () => {
+    act(() => {
+      useConversationStore.setState({
+        conversationMode: "code",
+        planContent: null,
+      });
+    });
+
+    renderInterface();
+    pressBuildShortcut();
+
+    expect(sentBuildPrompt()).toBe(false);
+  });
+
+  it("does not send the build prompt in code mode when a plan exists", () => {
+    act(() => {
+      useConversationStore.setState({
+        conversationMode: "code",
+        planContent: "# Plan\n\n- step one",
+      });
+    });
+
+    renderInterface();
+    pressBuildShortcut();
+
+    expect(sentBuildPrompt()).toBe(false);
+  });
+
+  it("does not send the build prompt in plan mode when no plan exists", () => {
+    act(() => {
+      useConversationStore.setState({
+        conversationMode: "plan",
+        planContent: null,
+      });
+    });
+
+    renderInterface();
+    pressBuildShortcut();
+
+    expect(sentBuildPrompt()).toBe(false);
+  });
+
+  it("sends the build prompt in plan mode when a plan exists", async () => {
+    act(() => {
+      useConversationStore.setState({
+        conversationMode: "plan",
+        planContent: "# Plan\n\n- step one",
+      });
+    });
+
+    renderInterface();
+    fireEvent.keyDown(document, { key: "Enter", metaKey: true });
+
+    await waitFor(() => {
+      expect(sentBuildPrompt()).toBe(true);
+    });
   });
 });

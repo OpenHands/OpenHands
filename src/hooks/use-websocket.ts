@@ -1,5 +1,6 @@
 import React from "react";
 import { sendWebSocketAuth } from "#/utils/websocket-auth";
+import { startHandshakeWatchdog } from "#/utils/websocket-handshake";
 
 export interface WebSocketHookOptions {
   queryParams?: Record<string, string | boolean>;
@@ -14,12 +15,12 @@ export interface WebSocketHookOptions {
   };
 }
 
-export const useWebSocket = <T = string>(
-  url: string,
-  options?: WebSocketHookOptions,
-) => {
+// Reconnect backoff bounds: 1s, 2s, 4s, … capped at 30s.
+const RECONNECT_BASE_DELAY_MS = 1_000;
+const RECONNECT_MAX_DELAY_MS = 30_000;
+
+export const useWebSocket = (url: string, options?: WebSocketHookOptions) => {
   const [isConnected, setIsConnected] = React.useState(false);
-  const [lastMessage, setLastMessage] = React.useState<T | null>(null);
   const [error, setError] = React.useState<Error | null>(null);
   const [isReconnecting, setIsReconnecting] = React.useState(false);
   const wsRef = React.useRef<WebSocket | null>(null);
@@ -57,7 +58,13 @@ export const useWebSocket = <T = string>(
     // Mark this WebSocket instance as allowed to reconnect
     allowedToReconnectRef.current.add(ws);
 
+    // Abort a socket stuck in CONNECTING so it can't hold Chrome's per-host
+    // handshake lock indefinitely; its close flows into the reconnect path
+    // below.
+    const cancelHandshakeWatchdog = startHandshakeWatchdog(ws);
+
     ws.onopen = (event) => {
+      cancelHandshakeWatchdog();
       sendWebSocketAuth(ws, optionsRef.current?.sessionApiKey);
       setIsConnected(true);
       setError(null); // Clear any previous errors
@@ -67,11 +74,14 @@ export const useWebSocket = <T = string>(
     };
 
     ws.onmessage = (event) => {
-      setLastMessage(event.data);
+      // Deliberately no `lastMessage` state here: nothing reads it, and a
+      // React state write per frame re-renders this hook's owner on every
+      // streamed token. Consumers subscribe via `onMessage`.
       optionsRef.current?.onMessage?.(event);
     };
 
     ws.onclose = (event) => {
+      cancelHandshakeWatchdog();
       // Check if this specific WebSocket instance is allowed to reconnect
       const canReconnect = allowedToReconnectRef.current.has(ws);
       setIsConnected(false);
@@ -88,7 +98,14 @@ export const useWebSocket = <T = string>(
           optionsRef.current?.onError?.(event);
         }
       }
-      optionsRef.current?.onClose?.(event);
+      // Notify the consumer unless this socket was deliberately replaced by a
+      // newer one — a replaced socket's close event arrives late and must not
+      // clobber the replacement's OPEN state in the consumer. Final closes
+      // (disconnect/unmount, nothing replacing the socket) still notify.
+      const wasReplaced = wsRef.current !== null && wsRef.current !== ws;
+      if (!wasReplaced) {
+        optionsRef.current?.onClose?.(event);
+      }
 
       // Attempt reconnection if enabled and allowed
       // IMPORTANT: Only reconnect if this specific instance is allowed to reconnect
@@ -105,15 +122,30 @@ export const useWebSocket = <T = string>(
         setIsReconnecting(true);
         attemptCountRef.current += 1;
 
+        // Exponential backoff with up to 30% random jitter so parallel
+        // sockets (main + planning) don't retry in lockstep and hammer an
+        // already-struggling server every few seconds forever.
+        const baseDelay = Math.min(
+          RECONNECT_BASE_DELAY_MS * 2 ** (attemptCountRef.current - 1),
+          RECONNECT_MAX_DELAY_MS,
+        );
+        const delay = baseDelay + Math.random() * baseDelay * 0.3;
+
         reconnectTimeoutRef.current = setTimeout(() => {
           connectWebSocket();
-        }, 3000); // 3 second delay
+        }, delay);
       } else {
         setIsReconnecting(false);
       }
     };
 
     ws.onerror = (event) => {
+      // Ignore errors from sockets we've deliberately replaced or closed —
+      // aborting a mid-handshake socket fires `error`, and it must not
+      // surface as a connection failure for the replacement socket.
+      if (!allowedToReconnectRef.current.has(ws)) {
+        return;
+      }
       setIsConnected(false);
       optionsRef.current?.onError?.(event);
     };
@@ -207,7 +239,6 @@ export const useWebSocket = <T = string>(
 
   return {
     isConnected,
-    lastMessage,
     error,
     socket: wsRef.current,
     sendMessage,

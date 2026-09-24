@@ -32,6 +32,8 @@ import re
 import sys
 from pathlib import Path
 
+from markdown_sections import find_headings, without_fenced_code_blocks
+
 
 # Reject placeholders while allowing a concise human-written sentence.
 MIN_HUMAN_NOTE_CHARS = 20
@@ -57,6 +59,8 @@ FRONTEND_FILE_EXTENSIONS: tuple[str, ...] = (
     ".sass",
     ".less",
 )
+# Docs carry no visual state, so a screenshot can't evidence a change to them.
+DOCUMENTATION_FILE_EXTENSIONS: tuple[str, ...] = (".md", ".mdx")
 FRONTEND_CONFIG_GLOBS: tuple[str, ...] = (
     "tailwind.config.*",
     "vite.config.*",
@@ -130,7 +134,7 @@ def first_visible_line(text: str) -> str:
 
 
 def extract_sections(body: str) -> dict[str, str]:
-    matches = list(HEADING_RE.finditer(body))
+    matches = find_headings(body, HEADING_RE)
     sections: dict[str, str] = {}
     for index, match in enumerate(matches):
         start = match.end()
@@ -140,12 +144,19 @@ def extract_sections(body: str) -> dict[str, str]:
 
 
 def extract_human_note(body: str) -> str:
-    """Return human-written text in the required location before `AGENT:`."""
-    human_match = HUMAN_HEADING_RE.search(body)
+    """Return human-written text in the required location before `AGENT:`.
+
+    The markers are located outside fenced code blocks so that quoting the
+    template does not stand in for filling it out. Offsets are preserved by the
+    masking, so the note itself is still read from the original body.
+    """
+    outside_fences = without_fenced_code_blocks(body)
+
+    human_match = HUMAN_HEADING_RE.search(outside_fences)
     if human_match is None:
         return ""
 
-    agent_match = AGENT_HEADING_RE.search(body, human_match.end())
+    agent_match = AGENT_HEADING_RE.search(outside_fences, human_match.end())
     if agent_match is None:
         return ""
 
@@ -155,9 +166,11 @@ def extract_human_note(body: str) -> str:
 def is_frontend_file(path: str) -> bool:
     """Return True if a changed file should be treated as frontend code."""
     normalized = path.lstrip("./")
+    lower = normalized.lower()
+    if lower.endswith(DOCUMENTATION_FILE_EXTENSIONS):
+        return False
     if any(normalized.startswith(prefix) for prefix in FRONTEND_PATH_PREFIXES):
         return True
-    lower = normalized.lower()
     if any(lower.endswith(ext) for ext in FRONTEND_FILE_EXTENSIONS):
         return True
     name = normalized.split("/")[-1]
@@ -383,7 +396,7 @@ def validate_pr_body(body: str, files: list[str] | None = None) -> list[str]:
     if len(human_note) < MIN_HUMAN_NOTE_CHARS:
         errors.append("Add a short human-written note between `HUMAN:` and `AGENT:`.")
 
-    if AGENT_HEADING_RE.search(body) is None:
+    if AGENT_HEADING_RE.search(without_fenced_code_blocks(body)) is None:
         errors.append("Keep the `AGENT:` marker from the PR template.")
 
     sections = extract_sections(body)

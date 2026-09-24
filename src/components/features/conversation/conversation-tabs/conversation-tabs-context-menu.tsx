@@ -11,12 +11,12 @@ import {
 } from "#/stores/conversation-store";
 import { I18nKey } from "#/i18n/declaration";
 import { Gauge, Globe, ListTodo, SquareChevronRight } from "lucide-react";
+import { LuFileDiff } from "react-icons/lu";
 import DocumentIcon from "#/icons/document.svg?react";
 import PillIcon from "#/icons/pill.svg?react";
 import PillFillIcon from "#/icons/pill-fill.svg?react";
 import DoubleCheckIcon from "#/icons/double-check.svg?react";
 import { useTaskList } from "#/hooks/use-task-list";
-import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useSelectConversationTab } from "#/hooks/use-select-conversation-tab";
 import { useIsArchivedConversation } from "#/hooks/use-is-archived-conversation";
 import { ArchivedDisabledTooltip } from "../../context-menu/archived-disabled-tooltip";
@@ -86,7 +86,6 @@ export function ConversationTabsContextMenu({
   const { navigateToTab } = useSelectConversationTab();
 
   const { hasTaskList } = useTaskList();
-  const { backend } = useActiveBackend();
   const isArchivedConversation = useIsArchivedConversation();
 
   const tabConfig = [
@@ -96,6 +95,11 @@ export function ConversationTabsContextMenu({
       i18nKey: I18nKey.COMMON$PLANNER,
     },
     { tab: "files", icon: DocumentIcon, i18nKey: I18nKey.COMMON$FILES },
+    {
+      tab: "commits",
+      icon: LuFileDiff,
+      i18nKey: I18nKey.DIFF_VIEWER$COMMITS,
+    },
     {
       tab: "terminal",
       icon: SquareChevronRight,
@@ -112,10 +116,6 @@ export function ConversationTabsContextMenu({
       i18nKey: I18nKey.COMMON$TASK_LIST,
     });
   }
-
-  const visibleTabConfig = tabConfig.filter(
-    ({ tab }) => tab !== "planner" || backend.kind === "cloud",
-  );
 
   const handleOpenTab = (tab: string) => {
     if (isArchivedConversation) {
@@ -140,7 +140,7 @@ export function ConversationTabsContextMenu({
       setUnpinnedTabs(newUnpinnedTabs);
 
       if (selectedTab === tab && isRightPanelShown) {
-        const nextPinnedTab = visibleTabConfig.find(
+        const nextPinnedTab = tabConfig.find(
           ({ tab: tabKey }) =>
             tabKey !== tab && !newUnpinnedTabs.includes(tabKey),
         );
@@ -166,16 +166,15 @@ export function ConversationTabsContextMenu({
       spacing={isPortaled ? "none" : "default"}
       className={cn("z-[9999] w-fit", isPortaled ? "mt-0" : "mt-2")}
     >
-      {visibleTabConfig.map(({ tab, icon: Icon, i18nKey }) => {
+      {tabConfig.map(({ tab, icon: Icon, i18nKey }) => {
         const pinned = !state.unpinnedTabs.includes(tab);
         return (
           <li key={tab} className="list-none">
             <ArchivedDisabledTooltip isDisabled={isArchivedConversation}>
               <div
                 className={cn(
-                  "group flex h-[30px] w-full min-w-0 items-stretch rounded",
-                  !isArchivedConversation &&
-                    "hover:bg-[var(--oh-interactive-hover)]",
+                  "group flex h-7.5 w-full min-w-0 items-stretch rounded",
+                  !isArchivedConversation && "hover:bg-interactive-hover",
                   isArchivedConversation && "opacity-50",
                 )}
               >
@@ -184,7 +183,7 @@ export function ConversationTabsContextMenu({
                   data-testid={`conversation-tabs-menu-open-${tab}`}
                   disabled={isArchivedConversation}
                   className={cn(
-                    "flex min-w-0 flex-1 items-center gap-2 rounded-l p-2 text-start text-white",
+                    "flex min-w-0 flex-1 items-center gap-2 rounded-l p-2 text-start text-contrast",
                     dropdownInstantColorClassName,
                     isArchivedConversation
                       ? "cursor-not-allowed"
@@ -205,11 +204,11 @@ export function ConversationTabsContextMenu({
                   data-testid={`conversation-tabs-menu-pin-${tab}`}
                   disabled={isArchivedConversation}
                   className={cn(
-                    "flex shrink-0 items-center justify-center rounded-r px-2 text-white",
+                    "flex shrink-0 items-center justify-center rounded-r px-2 text-contrast",
                     dropdownInstantColorClassName,
                     isArchivedConversation
                       ? "cursor-not-allowed"
-                      : "cursor-pointer hover:bg-white/10",
+                      : "cursor-pointer hover:bg-contrast/10",
                   )}
                   aria-pressed={pinned}
                   aria-label={
@@ -222,7 +221,7 @@ export function ConversationTabsContextMenu({
                   {pinned ? (
                     <span
                       className={cn(
-                        "-mr-[5px] ml-auto",
+                        "-mr-1.25 ml-auto",
                         dropdownMenuRowIconWrapperClassName,
                       )}
                       aria-hidden
