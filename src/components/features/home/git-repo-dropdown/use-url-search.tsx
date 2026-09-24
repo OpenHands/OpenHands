@@ -11,42 +11,59 @@ export function useUrlSearch(
   const [isUrlSearchLoading, setIsUrlSearchLoading] = useState(false);
 
   useEffect(() => {
+    let isCurrent = true;
+
     const handleUrlSearch = async () => {
       // Guard against null/undefined provider to prevent sending
       // requests via the cloud proxy before providers have loaded
       if (!provider) {
         setUrlSearchResults([]);
+        setIsUrlSearchLoading(false);
         return;
       }
 
-      if (inputValue.startsWith("https://")) {
-        const match = inputValue.match(/https:\/\/[^/]+\/([^/]+\/[^/]+)/);
-        if (match) {
-          const repoName = match[1];
+      if (!inputValue.startsWith("https://")) {
+        setUrlSearchResults([]);
+        setIsUrlSearchLoading(false);
+        return;
+      }
 
-          setIsUrlSearchLoading(true);
-          try {
-            const repositories = await GitService.searchGitRepositories(
-              repoName,
-              provider,
-              3,
-            );
+      const match = inputValue.match(/https:\/\/[^/]+\/([^/]+\/[^/]+)/);
+      if (!match) {
+        setUrlSearchResults([]);
+        setIsUrlSearchLoading(false);
+        return;
+      }
 
-            setUrlSearchResults(repositories.items);
-          } catch {
-            setUrlSearchResults([]);
-          } finally {
-            setIsUrlSearchLoading(false);
-          }
-        } else {
+      const repoName = match[1];
+
+      setIsUrlSearchLoading(true);
+      try {
+        const repositories = await GitService.searchGitRepositories(
+          repoName,
+          provider,
+          3,
+        );
+
+        if (isCurrent) {
+          setUrlSearchResults(repositories.items);
+        }
+      } catch {
+        if (isCurrent) {
           setUrlSearchResults([]);
         }
-      } else {
-        setUrlSearchResults([]);
+      } finally {
+        if (isCurrent) {
+          setIsUrlSearchLoading(false);
+        }
       }
     };
 
     handleUrlSearch();
+
+    return () => {
+      isCurrent = false;
+    };
   }, [inputValue, provider]);
 
   return { urlSearchResults, isUrlSearchLoading };
