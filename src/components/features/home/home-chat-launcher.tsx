@@ -65,8 +65,7 @@ export function HomeChatLauncher() {
   );
   const [selectedPlugins, setSelectedPlugins] = useState<PluginSpec[]>([]);
   const [isPluginPickerOpen, setIsPluginPickerOpen] = useState(false);
-  const [launcherMode, setLauncherMode] =
-    useState<HomeLauncherMode>("automate");
+  const [launcherMode, setLauncherMode] = useState<HomeLauncherMode>("code");
   const isAutomateMode = launcherMode === "automate";
   const isMountedRef = useRef(true);
 
