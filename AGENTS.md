@@ -429,44 +429,48 @@ const data = await fetch(`/api/conversations/${id}`);
 - `src/api/cloud/proxy.ts` -- the proxy envelope POST itself
 - `src/api/main-app-auth.ts` -- the local main-app authentication endpoint
 
-### Rule 2 -- Cloud backend routes must go through `callCloudProxy`
+### Rule 2 -- Cloud App-API routes must go through `callCloudProxy`
 
-Any call from the browser to the cloud backend (`app.all-hands.dev`) or a cloud
-runtime sandbox (`*.prod-runtime.all-hands.dev`) **must** go through `callCloudProxy()`
-in `src/api/cloud/proxy.ts`. These origins do not permit CORS from `localhost`;
-`callCloudProxy` POSTs the request envelope to `/api/cloud-proxy` on the local
-agent-server, which forwards it server-side.
+Calls from the browser to the **cloud App API** (`app.all-hands.dev`) -- the
+endpoints that live on the cloud backend host, not a per-conversation runtime
+sandbox -- **must** go through `callCloudProxy()` in `src/api/cloud/proxy.ts`.
+The SaaS now permits CORS for API-key-authenticated browser requests
+(`ApiKeyAwareCORSMiddleware`), so `callCloudProxy` issues these calls **directly**
+from the browser to `backend.host`; it no longer tunnels them through a
+server-side proxy.
 
 ```ts
 import { callCloudProxy } from "../cloud/proxy";
 
-// CORRECT -- cloud endpoint
+// CORRECT -- cloud App-API endpoint, called directly with bearer auth
 const result = await callCloudProxy<ResponseType>({
   backend,
   method: "GET",
   path: `/api/v1/app-conversations/search?${params}`,
 });
 
-// CORRECT -- cloud runtime sandbox, auth via session key
-const result = await callCloudProxy<ResponseType>({
-  backend,
-  method: "GET",
-  hostOverride: buildHttpBaseUrl(conversationUrl),
-  path: `/api/git/changes?path=${path}`,
-  authMode: "session-api-key",
-  sessionApiKey,
-});
-
-// WRONG -- direct fetch/axios to a cloud host is blocked by CORS in the browser
+// WRONG -- direct axios/fetch to a cloud host bypasses the typed cloud transport
 const result = await axios.get(`${backend.host}/api/v1/app-conversations`);
 ```
+
+**Runtime-sandbox calls are NOT proxied.** Per-conversation runtime hosts
+(`*.prod-runtime.all-hands.dev`) are reached **directly** with the typed client
+(`ConversationClient` / `BashClient` / `RemoteWorkspace` / `FileClient`, or a
+typed wrapper built via `getAgentServerHttpClientOptions`) pointed at the
+conversation's `conversation_url`, authenticated with its session API key -- the
+same path local mode uses. Do **not** route runtime calls through
+`callCloudProxy` with `hostOverride`: that used to POST an envelope to
+`/api/cloud-proxy` on the local agent-server, but that endpoint was **removed**
+from the agent-server (software-agent-sdk PR #3326) and is absent on the
+SaaS/enterprise backend, so such calls return **405**. If you find a cloud runtime
+branch still using `hostOverride`, migrate it to the direct typed-client path.
 
 `callCloudProxy` key options:
 
 - `backend` -- the cloud `Backend` object (provides host and bearer token)
-- `hostOverride` -- override for runtime-sandbox calls; replaces `backend.host`
-- `authMode` -- `"bearer"` (default, cloud) | `"session-api-key"` (runtime sandbox) | `"none"`
-- `sessionApiKey` -- required when `authMode === "session-api-key"`
+- `authMode` -- `"bearer"` (default, cloud App API) | `"none"`
+  (`hostOverride` / `"session-api-key"` is legacy; the `/api/cloud-proxy` envelope
+  it relied on no longer exists -- see above)
 
 Standard cloud/local branch pattern used throughout the service layer:
 
