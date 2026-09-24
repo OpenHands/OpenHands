@@ -4,6 +4,7 @@ import { type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createRoutesStub, data, Link } from "react-router";
 import MainApp, { ErrorBoundary } from "#/routes/root-layout";
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { I18nKey } from "#/i18n/declaration";
 
 const useConfigMock = vi.fn();
@@ -148,7 +149,9 @@ function renderMainApp(path = "/") {
   const queryClient = new QueryClient();
   return render(
     <QueryClientProvider client={queryClient}>
-      <RouterStub initialEntries={[path]} />
+      <ActiveBackendProvider>
+        <RouterStub initialEntries={[path]} />
+      </ActiveBackendProvider>
     </QueryClientProvider>,
   );
 }
@@ -193,7 +196,9 @@ describe("root layout", () => {
 
     render(
       <QueryClientProvider client={new QueryClient()}>
-        <RouterStub initialEntries={["/"]} />
+        <ActiveBackendProvider>
+          <RouterStub initialEntries={["/"]} />
+        </ActiveBackendProvider>
       </QueryClientProvider>,
     );
 
@@ -231,7 +236,9 @@ describe("root layout", () => {
     const classNames = paths.map((path) => {
       const { unmount } = render(
         <QueryClientProvider client={new QueryClient()}>
-          <RouterStub initialEntries={[path]} />
+          <ActiveBackendProvider>
+            <RouterStub initialEntries={[path]} />
+          </ActiveBackendProvider>
         </QueryClientProvider>,
       );
       const { className } = screen.getByTestId("root-layout");
