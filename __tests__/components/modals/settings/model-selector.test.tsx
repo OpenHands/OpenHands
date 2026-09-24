@@ -10,11 +10,14 @@ import type {
 
 const mockProviders: LLMProvider[] = [
   { name: "openai", verified: true },
+  { name: "oci_genai", verified: true },
   { name: "azure", verified: false },
   { name: "vertex_ai", verified: false },
 ];
 
-const model = (partial: Partial<LLMModel> & Pick<LLMModel, "name">): LLMModel => ({
+const model = (
+  partial: Partial<LLMModel> & Pick<LLMModel, "name">,
+): LLMModel => ({
   provider: null,
   verified: false,
   free: false,
@@ -155,4 +158,19 @@ describe("ModelSelector", () => {
     expect(modelInput.getAttribute("placeholder") ?? "").toBe("");
   });
 
+  it("accepts a manually entered OCI Generative AI model ID", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+
+    renderWithQuery(
+      <ModelSelector currentModel="oci_genai/" onChange={onChange} />,
+    );
+
+    const modelInput = await screen.findByTestId("llm-model-input");
+    expect(modelInput).toHaveValue("");
+
+    await user.type(modelInput, "xai.grok-4.6");
+
+    expect(onChange).toHaveBeenLastCalledWith("oci_genai", "xai.grok-4.6");
+  });
 });

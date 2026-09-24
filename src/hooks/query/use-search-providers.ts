@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import ConfigService from "#/api/config-service/config-service.api";
 import type { LLMProvider } from "#/api/config-service/config-service.types";
 import { useActiveBackend } from "#/contexts/active-backend-context";
+import { OCI_GENAI_PROVIDER } from "#/constants/oci-genai";
 import {
   VERIFIED_MODELS_GC_TIME,
   VERIFIED_MODELS_QUERY_KEY,
@@ -15,6 +16,13 @@ import {
 // in case the cursor ever drifts (e.g. the cloud service returns an unstable
 // `next_page_id` that loops back).
 const MAX_PAGINATION_DEPTH = 10;
+
+function withOciGenaiProvider(providers: LLMProvider[]): LLMProvider[] {
+  if (providers.some((provider) => provider.name === OCI_GENAI_PROVIDER)) {
+    return providers;
+  }
+  return [...providers, { name: OCI_GENAI_PROVIDER, verified: true }];
+}
 
 async function fetchAllProviders(
   verifiedByProvider: Record<string, string[]>,
@@ -79,7 +87,13 @@ export const useSearchProviders = () => {
       // The local backend returns a single page with `next_page_id: null`
       // so this loop is a no-op there; on the cloud backend it walks the
       // cursor to exhaustion.
-      return fetchAllProviders(verifiedByProvider, null, new Set(), 0);
+      const providers = await fetchAllProviders(
+        verifiedByProvider,
+        null,
+        new Set(),
+        0,
+      );
+      return withOciGenaiProvider(providers);
     },
     staleTime: VERIFIED_MODELS_STALE_TIME,
     gcTime: VERIFIED_MODELS_GC_TIME,

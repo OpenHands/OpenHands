@@ -23,6 +23,7 @@ export const MAP_PROVIDER = {
   replicate: "Replicate",
   voyage: "Voyage AI",
   openrouter: "OpenRouter",
+  oci_genai: "OCI Generative AI",
   openhands: "OpenHands",
   lemonade: "Lemonade",
   clarifai: "Clarifai",
