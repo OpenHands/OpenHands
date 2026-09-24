@@ -9,7 +9,6 @@ import {
   Code2,
   FileText,
   Globe2,
-  Plus,
   Puzzle,
   Zap,
 } from "lucide-react";
@@ -65,6 +64,18 @@ const FREQUENCIES = [
   "weekly",
   "custom",
 ] as const;
+
+export function parseAutomationSetupRepositories(value: string): string[] {
+  const seen = new Set<string>();
+  return value
+    .split(/[\n,]+/)
+    .map((entry) => entry.trim())
+    .filter((entry) => {
+      if (!entry || seen.has(entry)) return false;
+      seen.add(entry);
+      return true;
+    });
+}
 
 type Frequency = (typeof FREQUENCIES)[number];
 type TriggerKind = "cron" | "event";
@@ -197,8 +208,9 @@ export function AutomationSetupPanel({
       trigger: buildTrigger(),
       enabled: false,
     } as SetupRequestBody;
-    if (repository.trim()) {
-      body.repos = [{ url: repository.trim(), provider: "github" }];
+    const repositories = parseAutomationSetupRepositories(repository);
+    if (repositories.length > 0) {
+      body.repos = repositories.map((url) => ({ url, provider: "github" }));
     }
     if (showTimeout && timeoutSeconds.trim())
       body.timeout = Number(timeoutSeconds);
@@ -491,16 +503,14 @@ export function AutomationSetupPanel({
                 label={t(I18nKey.COMMON$REPOSITORIES)}
                 suffix={t(I18nKey.COMMON$OPTIONAL)}
               >
-                <div className="flex items-center gap-2 rounded-xl border border-[var(--oh-border)] bg-base-secondary p-3">
-                  <input
-                    data-testid="automation-setup-repository"
-                    value={repository}
-                    placeholder={t(I18nKey.SETUP$REPOSITORY_PLACEHOLDER)}
-                    onChange={(event) => setRepository(event.target.value)}
-                    className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-tertiary-alt"
-                  />
-                  <Plus className="size-4 text-[var(--oh-muted)]" aria-hidden />
-                </div>
+                <textarea
+                  data-testid="automation-setup-repository"
+                  value={repository}
+                  placeholder={t(I18nKey.SETUP$REPOSITORY_PLACEHOLDER)}
+                  onChange={(event) => setRepository(event.target.value)}
+                  className={formControlMultilineFieldClassName}
+                  rows={2}
+                />
               </Field>
             )}
 
