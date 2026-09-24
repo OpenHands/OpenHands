@@ -1132,10 +1132,12 @@ function startIngress(config) {
  * frontend connected to the backend can populate the agent's
  * `<RUNTIME_SERVICES>` system-prompt block.
  */
-export function buildAutomationRuntimeServicesInfo(config) {
+export function buildAutomationRuntimeServicesInfo(config, env = process.env) {
+  const dockerConversationRuntime = env.OH_CONVERSATION_RUNTIME === "docker";
+  const agentHostAlias = config.agentHostAlias ?? getAgentHostAlias(env);
   return buildRuntimeServicesInfo({
     mode: config.mode ?? "dev:automation",
-    agentHostAlias: config.agentHostAlias ?? "localhost",
+    agentHostAlias,
     agentServerPort: config.agentServerPort,
     ingressPort: config.ingressPort,
     frontendPort: config.launchFrontend ? config.vitePort : undefined,
@@ -1144,9 +1146,17 @@ export function buildAutomationRuntimeServicesInfo(config) {
     // description shown to the agent matches reality.
     frontendKind: config.frontendKind ?? "vite",
     automation: config.launchAutomation
-      ? { port: config.autoBackendPort }
+      ? dockerConversationRuntime
+        ? { url: `http://${agentHostAlias}:${config.ingressPort}` }
+        : { port: config.autoBackendPort }
       : undefined,
   });
+}
+
+export function getAgentHostAlias(env = process.env) {
+  return env.OH_CONVERSATION_RUNTIME === "docker"
+    ? "host.docker.internal"
+    : "localhost";
 }
 
 function startVite(config) {
@@ -1402,7 +1412,7 @@ async function main(options = {}) {
     buildStaticFrontend,
     staticDir: staticDirOverride,
     // Hostname the agent uses to reach services running on the host.
-    agentHostAlias = "localhost",
+    agentHostAlias = getAgentHostAlias(),
     // Human-readable label for the dev mode, surfaced in the agent's
     // <RUNTIME_SERVICES> system-prompt block.
     mode = "dev:automation",

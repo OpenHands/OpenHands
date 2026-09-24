@@ -516,12 +516,8 @@ describe("getStatusClassName", () => {
     expect(getStatusClassName("in_progress")).toBe(
       "bg-yellow-800 text-yellow-200",
     );
-    expect(getStatusClassName("todo")).toBe(
-      "bg-tertiary text-[var(--oh-text-tertiary)]",
-    );
-    expect(getStatusClassName("")).toBe(
-      "bg-tertiary text-[var(--oh-text-tertiary)]",
-    );
+    expect(getStatusClassName("todo")).toBe("bg-tertiary text-text-tertiary");
+    expect(getStatusClassName("")).toBe("bg-tertiary text-text-tertiary");
   });
 });
 

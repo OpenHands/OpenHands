@@ -232,7 +232,7 @@ export function DeviceFlowAuth({
           <ModalBody
             testID={`${testIdRoot}-auth-modal`}
             width="sm"
-            className="items-stretch border border-[var(--oh-border)]"
+            className="items-stretch border border-border"
           >
             {statusContent}
           </ModalBody>
@@ -272,7 +272,7 @@ function DeviceFlowStatusContent({
         aria-live="polite"
       >
         <LoadingSpinner />
-        <span className="text-sm text-[var(--oh-text-tertiary)]">
+        <span className="text-sm text-text-tertiary">
           {t(I18nKey.BACKEND$AUTH_STARTING)}
         </span>
       </div>
@@ -294,12 +294,12 @@ function DeviceFlowStatusContent({
       >
         <div className="flex items-center justify-center gap-2">
           <LoadingSpinner />
-          <span className="text-sm font-medium text-white">
+          <span className="text-sm font-medium text-contrast">
             {t(I18nKey.BACKEND$AUTH_AWAITING)}
           </span>
         </div>
         <div className="flex flex-col gap-1">
-          <p className="text-center text-sm leading-5 text-[var(--oh-text-tertiary)]">
+          <p className="text-center text-sm leading-5 text-text-tertiary">
             {validVerificationUrl
               ? `${t(I18nKey.BACKEND$AUTH_BROWSER_OPENED)} ${t(I18nKey.BACKEND$AUTH_OPEN_MANUALLY)}`
               : t(I18nKey.BACKEND$AUTH_BROWSER_OPENED)}
@@ -351,7 +351,7 @@ function DeviceFlowStatusContent({
 function LoadingSpinner() {
   return (
     <svg
-      className="animate-spin h-4 w-4 text-white"
+      className="animate-spin h-4 w-4 text-contrast"
       xmlns="http://www.w3.org/2000/svg"
       fill="none"
       viewBox="0 0 24 24"
