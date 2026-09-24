@@ -455,11 +455,12 @@ const result = await axios.get(`${backend.host}/api/v1/app-conversations`);
 
 **Runtime-sandbox calls are NOT proxied.** Per-conversation runtime hosts
 (`*.prod-runtime.all-hands.dev`) are reached **directly** with the typed client
-(`ConversationClient` / `BashClient` / `RemoteWorkspace` / `FileClient` /
-`HttpClient`) pointed at the conversation's `conversation_url`, authenticated
-with its session API key -- the same path local mode uses. Do **not** route runtime
-calls through `callCloudProxy` with `hostOverride`: that used to POST an envelope
-to `/api/cloud-proxy` on the local agent-server, but that endpoint was **removed**
+(`ConversationClient` / `BashClient` / `RemoteWorkspace` / `FileClient`, or a
+typed wrapper built via `getAgentServerHttpClientOptions`) pointed at the
+conversation's `conversation_url`, authenticated with its session API key -- the
+same path local mode uses. Do **not** route runtime calls through
+`callCloudProxy` with `hostOverride`: that used to POST an envelope to
+`/api/cloud-proxy` on the local agent-server, but that endpoint was **removed**
 from the agent-server (software-agent-sdk PR #3326) and is absent on the
 SaaS/enterprise backend, so such calls return **405**. If you find a cloud runtime
 branch still using `hostOverride`, migrate it to the direct typed-client path.
