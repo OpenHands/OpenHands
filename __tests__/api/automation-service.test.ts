@@ -754,6 +754,44 @@ describe("AutomationService", () => {
     });
   });
 
+  describe("createCustomWebhook", () => {
+    it("posts custom webhook configuration to the automation API", async () => {
+      const webhook = {
+        id: "webhook-1",
+        org_id: "org-1",
+        name: "Incident webhook",
+        source: "incident-alerts",
+        webhook_url:
+          "https://app.all-hands.dev/v1/events/org-1/incident-alerts",
+        event_key_expr: "event.type",
+        signature_header: "X-Incident-Signature",
+        signature_scheme: "hmac_sha256_hex",
+        enabled: true,
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+        webhook_secret: "generated-secret",
+      };
+      mockPost.mockResolvedValue({ data: webhook });
+
+      const result = await AutomationService.createCustomWebhook({
+        name: "Incident webhook",
+        source: "incident-alerts",
+        event_key_expr: "event.type",
+        signature_header: "X-Incident-Signature",
+        signature_scheme: "hmac_sha256_hex",
+      });
+
+      expect(mockPost).toHaveBeenCalledWith("/api/automation/v1/webhooks", {
+        name: "Incident webhook",
+        source: "incident-alerts",
+        event_key_expr: "event.type",
+        signature_header: "X-Incident-Signature",
+        signature_scheme: "hmac_sha256_hex",
+      });
+      expect(result).toEqual(webhook);
+    });
+  });
+
   describe("dispatchServerDraft", () => {
     it("posts to the dispatch endpoint and returns the run", async () => {
       mockPost.mockResolvedValue({ data: mockRun });
@@ -764,6 +802,19 @@ describe("AutomationService", () => {
         "/api/automation/v1/drafts/draft-1/dispatch",
       );
       expect(result).toEqual(mockRun);
+    });
+
+    it("sends a synthetic event payload when provided", async () => {
+      mockPost.mockResolvedValue({ data: mockRun });
+
+      await AutomationService.dispatchServerDraft("draft-1", {
+        eventPayload: { type: "issue.created", action: "opened" },
+      });
+
+      expect(mockPost).toHaveBeenCalledWith(
+        "/api/automation/v1/drafts/draft-1/dispatch",
+        { event_payload: { type: "issue.created", action: "opened" } },
+      );
     });
   });
 });

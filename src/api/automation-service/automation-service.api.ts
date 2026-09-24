@@ -59,6 +59,30 @@ const AUTOMATION_BASE_PATH = "/api/automation";
 
 type AutomationDraftCreateTarget = SetupEntry | "prompt" | "plugin" | "custom";
 
+export interface CustomWebhookCreateRequest {
+  name: string;
+  source: string;
+  event_key_expr?: string;
+  signature_header?: string;
+  signature_scheme?: string;
+  webhook_secret?: string;
+}
+
+export interface CustomWebhookCreateResponse {
+  id: string;
+  org_id: string;
+  name: string;
+  source: string;
+  webhook_url: string;
+  event_key_expr: string;
+  signature_header: string;
+  signature_scheme: string;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+  webhook_secret?: string | null;
+}
+
 function automationCreateEndpointForTarget(
   target?: AutomationDraftCreateTarget,
   selectedAction?: string | null,
@@ -675,6 +699,27 @@ class AutomationService {
     return data;
   }
 
+  static async createCustomWebhook(
+    body: CustomWebhookCreateRequest,
+  ): Promise<CustomWebhookCreateResponse> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}/v1/webhooks`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<CustomWebhookCreateResponse>({
+        backend: active,
+        method: "POST",
+        path,
+        headers: await buildAutomationRequestHeaders(),
+        body: body as unknown as Record<string, unknown>,
+      });
+    }
+
+    const { data } =
+      await localAutomationAxios.post<CustomWebhookCreateResponse>(path, body);
+    return data;
+  }
+
   /**
    * Whether the active deployment advertises server-backed automation drafts
    * (the `automationDrafts` feature from `OpenHands/automation` PR #417). The
@@ -887,9 +932,15 @@ class AutomationService {
    * An undispatchable draft answers 422 with `{ message, errors }`; callers
    * should surface those errors rather than treating them as transport errors.
    */
-  static async dispatchServerDraft(draftId: string): Promise<AutomationRun> {
+  static async dispatchServerDraft(
+    draftId: string,
+    options: { eventPayload?: Record<string, unknown> } = {},
+  ): Promise<AutomationRun> {
     const active = getActiveBackend().backend;
     const path = `${AUTOMATION_BASE_PATH}/v1/drafts/${encodeURIComponent(draftId)}/dispatch`;
+    const body = options.eventPayload
+      ? { event_payload: options.eventPayload }
+      : undefined;
 
     if (active.kind === "cloud") {
       return callCloudProxy<AutomationRun>({
@@ -897,10 +948,13 @@ class AutomationService {
         method: "POST",
         path,
         headers: await buildAutomationRequestHeaders(),
+        body,
       });
     }
 
-    const { data } = await localAutomationAxios.post<AutomationRun>(path);
+    const { data } = body
+      ? await localAutomationAxios.post<AutomationRun>(path, body)
+      : await localAutomationAxios.post<AutomationRun>(path);
     return data;
   }
 
