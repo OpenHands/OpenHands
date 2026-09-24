@@ -20,6 +20,7 @@ import {
   ActiveBackendProvider,
   useActiveBackendContext,
 } from "#/contexts/active-backend-context";
+import { CloudOrganizationBoundary } from "#/components/features/backends/cloud-organization-boundary";
 import { BackendSelector } from "#/components/features/backends/backend-selector";
 import {
   __resetEnvironmentSwitchOverlayForTests,
@@ -63,7 +64,24 @@ const SEED_CLOUD_PRODUCTION = {
   kind: "cloud" as const,
 };
 
-function renderWithProviders(ui: React.ReactElement) {
+function renderWithProviders(
+  ui: React.ReactElement,
+  resolveOrganization = false,
+) {
+  if (resolveOrganization) {
+    if (ui.type === TestSeed) {
+      const seeded = ui as React.ReactElement<{ children: React.ReactNode }>;
+      ui = React.cloneElement(
+        seeded,
+        {},
+        <CloudOrganizationBoundary>
+          {seeded.props.children}
+        </CloudOrganizationBoundary>,
+      );
+    } else {
+      ui = <CloudOrganizationBoundary>{ui}</CloudOrganizationBoundary>;
+    }
+  }
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -324,6 +342,7 @@ describe("BackendSelector", () => {
       >
         <BackendSelector />
       </TestSeed>,
+      true,
     );
 
     await waitFor(() => {
@@ -419,6 +438,7 @@ describe("BackendSelector", () => {
       >
         <BackendSelector />
       </TestSeed>,
+      true,
     );
 
     // After orgs resolve, the selector snaps the active selection onto the
@@ -447,7 +467,7 @@ describe("BackendSelector", () => {
         currentOrgId: "current-org",
       });
 
-      renderWithProviders(<BackendSelector />);
+      renderWithProviders(<BackendSelector />, true);
 
       await waitFor(() =>
         expect(getActiveSelection()?.orgId).toBe("current-org"),
@@ -476,7 +496,7 @@ describe("BackendSelector", () => {
         currentOrgId: "removed-org",
       });
       vi.mocked(getCloudOrganizationMe).mockReturnValue(new Promise(() => {}));
-      renderWithProviders(<BackendSelector />);
+      renderWithProviders(<BackendSelector />, true);
       await waitFor(() =>
         expect(getActiveSelection()?.orgId).toBe("personal-org"),
       );
@@ -498,7 +518,7 @@ describe("BackendSelector", () => {
       ],
       currentOrgId: "server-org",
     });
-    renderWithProviders(<BackendSelector />);
+    renderWithProviders(<BackendSelector />, true);
     await waitFor(() =>
       expect(getCloudOrganizationMe).toHaveBeenCalledWith(
         "chosen-org",
@@ -523,7 +543,7 @@ describe("BackendSelector", () => {
       orgId: "bound-org",
       isLegacyKey: false,
     });
-    renderWithProviders(<BackendSelector />);
+    renderWithProviders(<BackendSelector />, true);
     await waitFor(() => expect(getActiveSelection()?.orgId).toBe("bound-org"));
     expect(getCloudOrganizationMe).not.toHaveBeenCalledWith(
       "other-org",
@@ -546,7 +566,7 @@ describe("BackendSelector", () => {
       ],
       currentOrgId: "hidden-org",
     });
-    renderWithProviders(<BackendSelector />);
+    renderWithProviders(<BackendSelector />, true);
     await waitFor(() => expect(getActiveSelection()?.orgId).toBe("team-org"));
   });
 
@@ -562,7 +582,7 @@ describe("BackendSelector", () => {
         resolve = done;
       }),
     );
-    renderWithProviders(<BackendSelector />);
+    renderWithProviders(<BackendSelector />, true);
     expect(getActiveSelection()?.orgId).toBe("old-org");
     expect(getCloudOrganizationMe).not.toHaveBeenCalled();
     resolve({
@@ -579,7 +599,7 @@ describe("BackendSelector", () => {
     vi.mocked(getCloudOrganizations).mockRejectedValue(
       new Error("network unavailable"),
     );
-    renderWithProviders(<BackendSelector />);
+    renderWithProviders(<BackendSelector />, true);
     await waitFor(() => expect(getCloudOrganizations).toHaveBeenCalled());
     expect(getActiveSelection()?.orgId).toBe("saved-org");
     expect(getCloudOrganizationMe).not.toHaveBeenCalled();
@@ -589,7 +609,7 @@ describe("BackendSelector", () => {
     const backend = { ...SEED_CLOUD_PRODUCTION, id: "cloud" };
     setRegisteredBackends([backend]);
     setActiveSelection({ backendId: backend.id, orgId: "removed-org" });
-    renderWithProviders(<BackendSelector />);
+    renderWithProviders(<BackendSelector />, true);
     await waitFor(() =>
       expect(getActiveSelection()).toEqual({ backendId: "cloud", orgId: null }),
     );
@@ -820,6 +840,7 @@ describe("BackendSelector", () => {
       >
         <BackendSelector />
       </TestSeed>,
+      true,
     );
     await waitFor(() => {
       const wrapper = screen.getByTestId("backend-selector");

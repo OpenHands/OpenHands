@@ -209,29 +209,6 @@ export function BackendSelector({
 
   const someCloudLoading = Object.values(cloudOrgs).some((c) => c.isLoading);
 
-  // Reconcile persisted selection only after authorized memberships resolve.
-  // Keep valid choices; removed or hidden orgs fall back without a server switch.
-  React.useEffect(() => {
-    if (noBackendSelected || active.backend.kind !== "cloud") return;
-    const { backend } = active;
-    const entry = cloudOrgs[backend.id];
-    if (!entry?.isSuccess || entry.isFetching) return;
-    if (entry.orgs.some((org) => org.id === active.orgId)) return;
-    if (entry.orgs.length === 0) {
-      if (active.orgId) setActive(backend.id, null);
-      return;
-    }
-
-    const currentOrg = entry.currentOrgId
-      ? entry.orgs.find((o) => o.id === entry.currentOrgId)
-      : undefined;
-    const personal = entry.orgs.find((org) => org.is_personal === true);
-    const target = currentOrg ?? personal ?? entry.orgs[0];
-    if (target) {
-      setActive(backend.id, target.id);
-    }
-  }, [active, cloudOrgs, setActive, noBackendSelected]);
-
   const openAddBackendModal = React.useCallback(() => {
     if (onOpenAddBackend) {
       onOpenAddBackend();
