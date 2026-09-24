@@ -42143,5 +42143,39 @@
     "de": "Sie haben noch keine Geheimnisse gespeichert.",
     "uk": "Ви ще не зберегли жодного секрету.",
     "ca": "Encara no has desat cap secret."
+  },
+  "SETTINGS$MODEL_NOT_LISTED": {
+    "en": "Model not listed",
+    "ja": "モデルが一覧にありません",
+    "zh-CN": "模型未列出",
+    "zh-TW": "模型未列出",
+    "ko-KR": "모델이 목록에 없음",
+    "no": "Modellen er ikke oppført",
+    "it": "Modello non elencato",
+    "pt": "Modelo não listado",
+    "es": "Modelo no listado",
+    "ar": "النموذج غير مدرج",
+    "fr": "Modèle non répertorié",
+    "tr": "Model listelenmiyor",
+    "de": "Modell nicht aufgeführt",
+    "uk": "Модель відсутня в списку",
+    "ca": "Model no llistat"
+  },
+  "SETTINGS$MODEL_NOT_LISTED_HELP": {
+    "en": "This model is not listed by this backend. Edit the profile or ask an administrator to configure it.",
+    "ja": "このバックエンドの一覧にこのモデルはありません。プロファイルを編集するか、管理者に設定を依頼してください。",
+    "zh-CN": "此后端未列出该模型。请编辑配置或联系管理员进行配置。",
+    "zh-TW": "此後端未列出此模型。請編輯設定檔或聯絡管理員進行設定。",
+    "ko-KR": "이 백엔드의 목록에 이 모델이 없습니다. 프로필을 편집하거나 관리자에게 구성을 요청하세요.",
+    "no": "Denne modellen er ikke oppført av denne serveren. Rediger profilen eller be en administrator om å konfigurere den.",
+    "it": "Questo modello non è elencato dal backend. Modifica il profilo o chiedi a un amministratore di configurarlo.",
+    "pt": "Este modelo não está listado neste backend. Edite o perfil ou peça a um administrador para configurá-lo.",
+    "es": "Este modelo no está listado en este backend. Edita el perfil o pide a un administrador que lo configure.",
+    "ar": "هذا النموذج غير مدرج في هذه الخلفية. عدّل الملف الشخصي أو اطلب من المسؤول إعداده.",
+    "fr": "Ce modèle ne figure pas dans la liste de ce serveur. Modifiez le profil ou demandez à un administrateur de le configurer.",
+    "tr": "Bu model bu sunucuda listelenmiyor. Profili düzenleyin veya bir yöneticiden yapılandırmasını isteyin.",
+    "de": "Dieses Modell ist auf diesem Backend nicht aufgeführt. Bearbeiten Sie das Profil oder bitten Sie einen Administrator, es zu konfigurieren.",
+    "uk": "Цю модель не вказано на цьому сервері. Відредагуйте профіль або попросіть адміністратора налаштувати її.",
+    "ca": "Aquest model no està llistat en aquest backend. Editeu el perfil o demaneu a un administrador que el configuri."
   }
 }
