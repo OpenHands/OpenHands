@@ -49,16 +49,15 @@ describe("useModelCatalogWarning", () => {
     __resetActiveStoreForTests();
   });
 
-  it("warns for absent managed routes, including an empty successful catalog", async () => {
+  it("does not infer model removal from an empty successful catalog", async () => {
     vi.mocked(callCloudProxy).mockResolvedValue({
       items: [],
       next_page_id: null,
     });
     const { result } = renderHook(useModelCatalogWarning, { wrapper });
     expect(result.current("openhands/old-model")).toBe(false);
-    await waitFor(() =>
-      expect(result.current("openhands/old-model")).toBe(true),
-    );
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+    expect(result.current("openhands/old-model")).toBe(false);
     expect(result.current("openai/custom-model")).toBe(false);
     expect(result.current(null)).toBe(false);
   });
@@ -115,7 +114,7 @@ describe("useModelCatalogWarning", () => {
 
   it("does not reuse another organization's catalog while a new one is loading", async () => {
     vi.mocked(callCloudProxy).mockResolvedValueOnce({
-      items: [],
+      items: [{ provider: "openhands", name: "different-model" }],
       next_page_id: null,
     });
     const { result } = renderHook(useModelCatalogWarning, { wrapper });
@@ -136,7 +135,7 @@ describe("useModelCatalogWarning", () => {
 
   it("clears a warning when a refreshed catalog lists the model", async () => {
     vi.mocked(callCloudProxy).mockResolvedValueOnce({
-      items: [],
+      items: [{ provider: "openhands", name: "different-model" }],
       next_page_id: null,
     });
     const { result } = renderHook(useModelCatalogWarning, { wrapper });

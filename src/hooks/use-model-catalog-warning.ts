@@ -12,7 +12,8 @@ export function useModelCatalogWarning() {
       !isCloud ||
       !model?.startsWith("openhands/") ||
       !models.isSuccess ||
-      models.isFetching
+      models.isFetching ||
+      models.data.length === 0
     ) {
       return false;
     }
