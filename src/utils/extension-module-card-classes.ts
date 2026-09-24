@@ -11,7 +11,7 @@ export const extensionModuleCardInteractiveClassName =
 
 /** Shared pill chrome for Skills, automation cards, and related modals. */
 export const extensionModuleCardPillClassName =
-  "inline-flex max-w-full shrink-0 items-center whitespace-nowrap rounded-full border border-[var(--oh-border)] bg-[rgba(255,255,255,0.04)] px-2 py-0.5 text-[11px] leading-4 text-tertiary-light";
+  "inline-flex max-w-full shrink-0 items-center whitespace-nowrap rounded-full bg-[rgba(255,255,255,0.04)] px-2 py-0.5 text-[11px] leading-4 text-tertiary-light";
 
 /** Two-column card grids switch back to one column at or below this width (px). */
 export const EXTENSION_MODULE_CARD_GRID_SINGLE_COLUMN_MAX_PX = 599;
@@ -26,4 +26,4 @@ export const extensionModuleCardGridClassName =
 
 /** Bordered empty-state panel used on MCP Installed and Automations list pages. */
 export const extensionModuleEmptyStateClassName =
-  "rounded-xl border border-[var(--oh-border)] p-8 text-center";
+  "rounded-xl border border-border p-8 text-center";

@@ -39,7 +39,7 @@ function createUserMessage(id: string): MessageEvent {
       role: "user",
       content: [{ type: "text", text: "Hello" }],
     },
-    activated_microagents: [],
+    activated_skills: [],
     extended_content: [],
   };
 }

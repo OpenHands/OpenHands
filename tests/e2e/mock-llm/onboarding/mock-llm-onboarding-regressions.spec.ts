@@ -61,9 +61,9 @@ test.describe("onboarding recent regressions", () => {
   });
 
   // Regression coverage for #1077 / PR #1089: first-run LLM setup
-  // should not default users to the OpenHands provider.
+  // should default users to the configured default provider and model.
 
-  test("defaults the LLM setup step to OpenAI GPT-5.5", async ({
+  test("defaults the LLM setup step to OpenAI GPT-5.6 Sol", async ({
     page,
   }) => {
     await showOnboarding(page, {
@@ -100,13 +100,13 @@ test.describe("onboarding recent regressions", () => {
     // The model input displays the model ID without the provider prefix.
     await expect(
       modelInput,
-      "first-run onboarding should default to GPT-5.5",
-    ).toHaveValue("gpt-5.5", {
+      "first-run onboarding should default to GPT-5.6 Sol",
+    ).toHaveValue("gpt-5.6-sol", {
       timeout: 10_000,
     });
     await expect(
       page.getByTestId("openhands-account-help"),
-      "OpenHands account helper should stay hidden for OpenAI defaults",
-    ).toHaveCount(0);
+      "OpenHands account helper should be hidden for OpenAI defaults",
+    ).toBeHidden();
   });
 });

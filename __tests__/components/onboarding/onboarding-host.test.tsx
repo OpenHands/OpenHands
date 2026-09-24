@@ -208,14 +208,40 @@ describe("OnboardingHost", () => {
     ).toBeNull();
   });
 
-  it("shows the modal for a user-added Local backend that already has an LLM configured", async () => {
+  it("skips the modal for a user-added Local backend that already has an LLM configured", async () => {
+    seedUserAddedLocalBackend();
+    const getSettings = vi
+      .spyOn(SettingsService, "getSettings")
+      .mockResolvedValue({
+        ...DEFAULT_SETTINGS,
+        llm_api_key_set: true,
+        agent_settings: {
+          ...DEFAULT_SETTINGS.agent_settings,
+          llm: { model: "openai/zai-org/GLM-5.2", api_key: "**********" },
+        },
+      });
+
+    renderHost();
+
+    await waitFor(() => {
+      expect(getSettings).toHaveBeenCalledOnce();
+      expect(
+        screen.queryByTestId("onboarding-modal-stub"),
+      ).not.toBeInTheDocument();
+    });
+    expect(
+      window.localStorage.getItem(ONBOARDING_COMPLETED_STORAGE_KEY),
+    ).toBeNull();
+  });
+
+  it("still shows the modal for a user-added Local backend with a model but no API key", async () => {
     seedUserAddedLocalBackend();
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
       ...DEFAULT_SETTINGS,
-      llm_api_key_is_set: true,
+      llm_api_key_set: false,
       agent_settings: {
         ...DEFAULT_SETTINGS.agent_settings,
-        llm: { model: "openai/zai-org/GLM-5.2", api_key: "**********" },
+        llm: { model: "openai/zai-org/GLM-5.2", api_key: null },
       },
     });
 

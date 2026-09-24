@@ -12,6 +12,7 @@ import {
 
 interface ResponderDeploymentModalProps {
   isOpen: boolean;
+  isPending: boolean;
   onClose: () => void;
   /** Fired for the "Continue with local setup" action. */
   onContinueLocal: () => void;
@@ -21,6 +22,7 @@ interface ResponderDeploymentModalProps {
 
 export function ResponderDeploymentModal({
   isOpen,
+  isPending,
   onClose,
   onContinueLocal,
   onOpenUrl,
@@ -32,15 +34,18 @@ export function ResponderDeploymentModal({
   return (
     <ModalBackdrop
       onClose={onClose}
+      closeOnEscape={!isPending}
+      closeOnBackdropClick={!isPending}
       aria-label={t(I18nKey.RESPONDER_DEPLOYMENT$TITLE)}
     >
       <div
         data-testid="responder-deployment-modal"
-        className="relative flex w-full max-w-3xl flex-col rounded-xl border border-[var(--oh-border)] bg-base-secondary"
+        className="relative flex w-full max-w-3xl flex-col rounded-xl border border-border bg-base-secondary"
       >
         <ModalCloseButton
           onClose={onClose}
           testId="responder-deployment-modal-close"
+          disabled={isPending}
         />
         <header className="flex-shrink-0 px-6 pb-4 pt-6">
           <h2 className={cn("pr-6", modalTitleLgClassName)}>
@@ -58,10 +63,10 @@ export function ResponderDeploymentModal({
               <div
                 key={option.target}
                 data-testid={option.testId}
-                className="flex flex-1 flex-col gap-3 rounded-xl border border-[var(--oh-border)] bg-surface-raised p-4"
+                className="flex flex-1 flex-col gap-3 rounded-xl border border-border bg-surface-raised p-4"
               >
                 <div className="flex flex-col gap-1">
-                  <h3 className="text-sm font-semibold text-white">
+                  <h3 className="text-sm font-semibold text-contrast">
                     {t(option.titleKey)}
                   </h3>
                   <p className="text-xs leading-relaxed text-tertiary-light">
@@ -73,6 +78,12 @@ export function ResponderDeploymentModal({
                   variant="primary"
                   className="mt-auto"
                   testId={option.primaryActionTestId}
+                  isDisabled={isPending}
+                  aria-busy={
+                    isPending && action.kind === "launch-local"
+                      ? true
+                      : undefined
+                  }
                   onClick={() => {
                     if (action.kind === "launch-local") {
                       onContinueLocal();

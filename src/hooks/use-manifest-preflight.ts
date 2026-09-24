@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useRef } from "react";
 import axios from "axios";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import { isSdkHttpStatusError } from "#/api/agent-server-compatibility";
@@ -52,26 +52,38 @@ function isPreflightUnimplemented(error: unknown): boolean {
  */
 export function useSetupPreflight(entry: SetupEntry) {
   const latestRequestRef = useRef(0);
-  const errorMap = useMemo(() => deriveErrorMap(entry), [entry]);
 
   return useCallback(
     async (
       formValues: SetupFormValues,
+      selectedTrigger?: string | null,
+      selectedAction?: string | null,
     ): Promise<MappedManifestErrors | null> => {
-      const body = buildPreflightBody(entry, formValues);
-      if (!body) return null;
-
-      latestRequestRef.current += 1;
-      const requestId = latestRequestRef.current;
-
       try {
+        // Deriving the body is inside the guard too: a bundle entry resolves
+        // the create endpoint here, and an interface manifest published before
+        // bundles declares none. That is the same "cannot be checked" as a
+        // validator that will not answer, and left outside it rejected a
+        // promise no caller handles - which reads as a Continue button that
+        // does nothing at all.
+        const body = buildPreflightBody(
+          entry,
+          formValues,
+          selectedTrigger,
+          selectedAction,
+        );
+        if (!body) return null;
+
+        latestRequestRef.current += 1;
+        const requestId = latestRequestRef.current;
+
         const result = await AutomationService.validateDraft(body);
         if (requestId !== latestRequestRef.current) return null;
         if (result?.valid) return NO_ERRORS;
 
         return mapServiceErrors(
           normalizeServiceErrors(result, body.draft as SetupRequestBody),
-          errorMap,
+          deriveErrorMap(entry, selectedTrigger, selectedAction),
         );
       } catch (error) {
         // A broken validator and an unimplemented one degrade to the same
@@ -83,6 +95,6 @@ export function useSetupPreflight(entry: SetupEntry) {
         return null;
       }
     },
-    [entry, errorMap],
+    [entry],
   );
 }

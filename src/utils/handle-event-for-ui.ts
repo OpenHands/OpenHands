@@ -117,8 +117,18 @@ const getTrailingDeltas = (
   return deltas;
 };
 
-const getTrailingContentDeltas = (uiEvents: OpenHandsEvent[]) =>
-  getTrailingDeltas(uiEvents, (event) => (event.content?.length ?? 0) > 0);
+// Sender-scoped for the same reason as `getTrailingReasoningDeltas` (#1656):
+// a main-agent action must not strip the planning agent's live content.
+const getTrailingContentDeltas = (
+  uiEvents: OpenHandsEvent[],
+  finalEvent: OpenHandsEvent,
+) =>
+  getTrailingDeltas(
+    uiEvents,
+    (event) =>
+      (event.content?.length ?? 0) > 0 &&
+      isSameStreamingSender(finalEvent, event),
+  );
 
 // Sender-scoped: the main and planning sockets share this event store, so a
 // main-agent action must not strip the planning agent's live reasoning (#1656).
@@ -187,6 +197,12 @@ const matchStreamedSegments = (
   return findTextSegmentsInOrder(targetText, searchSegments);
 };
 
+// A `<function=` marker means the delta still holds the raw prompted-tool-call
+// XML the SDK strips only after the response completes, so the streamed text is
+// a superset of the action's `thought` that `matchStreamedSegments` can't match.
+const hasUnstrippedFunctionCallMarker = (segments: string[]): boolean =>
+  segments.some((segment) => segment.includes("<function="));
+
 // Whether the finalized event renders its own reasoning: an ActionEvent via
 // reasoning_content/thinking_blocks, an agent MessageEvent via an inline
 // <think> block in its content. Decides if a replaced delta's reasoning must
@@ -209,7 +225,7 @@ const eventRendersReasoning = (event: OpenHandsEvent): boolean => {
 // The final MessageEvent/FinishAction is authoritative for the turn's text. Drop
 // the provisional streamed deltas and render the canonical final event instead,
 // so the message is rendered exactly once (never holey or duplicated) and its
-// metadata — critic_result, activated_microagents — renders too. Stream-only
+// metadata — critic_result, activated_skills — renders too. Stream-only
 // reasoning is preserved. Returns null when there is no streamed content to
 // reconcile, leaving the caller to append the final event normally.
 const finalizeStreamingDeltasInPlace = (
@@ -257,7 +273,7 @@ const supersedeStreamedThoughtWithAction = (
     return null;
   }
 
-  const contentDeltas = getTrailingContentDeltas(uiEvents);
+  const contentDeltas = getTrailingContentDeltas(uiEvents, action);
   if (contentDeltas.length === 0) {
     return null;
   }
@@ -266,8 +282,13 @@ const supersedeStreamedThoughtWithAction = (
     ({ event }) => event.content ?? "",
   );
 
-  // Only strip when the streamed text is the action's rendered thought.
-  if (!matchStreamedSegments(thoughtText, streamingSegments).matched) {
+  // Strip on a thought match, or on an unstripped `<function=...>` marker whose
+  // streamed text is a superset of `thought` that the match can't reconcile.
+  const matchedThought = matchStreamedSegments(
+    thoughtText,
+    streamingSegments,
+  ).matched;
+  if (!matchedThought && !hasUnstrippedFunctionCallMarker(streamingSegments)) {
     return null;
   }
 

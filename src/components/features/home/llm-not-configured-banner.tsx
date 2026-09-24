@@ -29,7 +29,7 @@ export function LlmNotConfiguredBanner() {
     <div
       data-testid="home-llm-not-configured-banner"
       role="alert"
-      className="mt-3 flex w-full flex-col gap-3 rounded-xl border border-[var(--oh-border)] bg-[var(--oh-surface-raised)] px-4 py-3 text-[var(--oh-foreground)] sm:flex-row sm:items-center sm:justify-between sm:py-4"
+      className="mt-3 flex w-full flex-col gap-3 rounded-xl border border-border bg-surface-raised px-4 py-3 text-foreground sm:flex-row sm:items-center sm:justify-between sm:py-4"
     >
       <div className="flex min-w-0 items-start sm:items-center">
         <div className="flex-shrink-0">

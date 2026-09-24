@@ -83,13 +83,11 @@ jobs:
   live-e2e:
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' &&
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      contains(github.event.pull_request.labels.*.name, 'live-e2e'))
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     concurrency:
-      group: pr-artifacts-live-e2e-${{ github.event.pull_request.number || inputs.pr_number || github.ref }}
+      group: live-e2e-${{ inputs.pr_number || github.ref }}
       cancel-in-progress: false
     permissions:
       contents: write
@@ -98,14 +96,14 @@ jobs:
     env:
       LIVE_E2E_LLM_BASE_URL: ${{ vars.LIVE_E2E_LLM_BASE_URL || 'https://llm-proxy.app.all-hands.dev' }}
       LIVE_E2E_LLM_MODEL: ${{ vars.LIVE_E2E_LLM_MODEL || 'openhands/claude-haiku-4-5-20251001' }}
-      LIVE_E2E_PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number || '' }}
+      LIVE_E2E_PR_NUMBER: ${{ inputs.pr_number || '' }}
       LIVE_E2E_REPORT_PATH: live-e2e-report.md
       LIVE_E2E_RECORD_VIDEO: "on"
       LIVE_E2E_WORKFLOW_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       LIVE_E2E_PR_ARTIFACT_KEEP_RUNS: 3
 
     steps:
-      - name: Resolve live E2E PR context
+      - name: Resolve live E2E source context
         id: pr_context
         env:
           GH_TOKEN: ${{ github.token }}
@@ -113,8 +111,12 @@ jobs:
           set -euo pipefail
 
           if [ -z "$LIVE_E2E_PR_NUMBER" ]; then
-            echo "::error::Live E2E QA must run against a PR. Provide workflow_dispatch.pr_number or add the live-e2e label to a PR."
-            exit 1
+            echo "has_pr=false" >> "$GITHUB_OUTPUT"
+            echo "head_repo=$GITHUB_REPOSITORY" >> "$GITHUB_OUTPUT"
+            echo "head_ref=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+            echo "head_sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+            echo "is_fork=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
           case "$LIVE_E2E_PR_NUMBER" in
             *[!0-9]*)
@@ -160,25 +162,25 @@ jobs:
             echo "has_key=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Check out PR head
+      - name: Check out tested commit
         if: steps.pr_context.outputs.is_fork != 'true'
         env:
-          PR_HEAD_REPO: ${{ steps.pr_context.outputs.head_repo }}
-          PR_HEAD_SHA: ${{ steps.pr_context.outputs.head_sha }}
+          TEST_REPO: ${{ steps.pr_context.outputs.head_repo }}
+          TEST_SHA: ${{ steps.pr_context.outputs.head_sha }}
         run: |
           set -euo pipefail
           git init .
-          git remote remove pr-head >/dev/null 2>&1 || true
-          git remote add pr-head "https://github.com/$PR_HEAD_REPO.git"
-          git fetch pr-head "$PR_HEAD_SHA"
+          git remote remove test-source >/dev/null 2>&1 || true
+          git remote add test-source "https://github.com/$TEST_REPO.git"
+          git fetch test-source "$TEST_SHA"
           git checkout --detach FETCH_HEAD
           actual_sha="$(git rev-parse HEAD)"
-          if [ "$actual_sha" != "$PR_HEAD_SHA" ]; then
-            echo "::error::SHA mismatch: expected $PR_HEAD_SHA, got $actual_sha"
+          if [ "$actual_sha" != "$TEST_SHA" ]; then
+            echo "::error::SHA mismatch: expected $TEST_SHA, got $actual_sha"
             exit 1
           fi
 
-      - name: Detect PR artifact-only commit
+      - name: Detect artifact-only commit
         id: latest_commit
         if: steps.pr_context.outputs.is_fork != 'true'
         run: |
@@ -197,13 +199,13 @@ jobs:
             done < <(printf '%s\n' "$changed_files")
           fi
 
-          echo "pr_artifact_only=$artifact_only" >> "$GITHUB_OUTPUT"
+          echo "artifact_only=$artifact_only" >> "$GITHUB_OUTPUT"
           if [ "$artifact_only" = "true" ]; then
             echo "::notice::Skipping live E2E because the latest commit only changes .pr artifacts."
           fi
 
       - name: Set up Node.js
-        if: steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.pr_artifact_only != 'true'
+        if: steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.artifact_only != 'true'
         uses: actions/setup-node@v7
         with:
           # Pin to 24.15.x — Node 24.16.0 has a zip-extraction regression
@@ -213,7 +215,7 @@ jobs:
           cache: npm
 
       - name: Create live E2E PR comment
-        if: env.LIVE_E2E_PR_NUMBER != '' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.pr_artifact_only != 'true'
+        if: env.LIVE_E2E_PR_NUMBER != '' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.artifact_only != 'true'
         continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -230,22 +232,22 @@ jobs:
             --body-file "$LIVE_E2E_REPORT_PATH"
 
       - name: Install dependencies
-        if: steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.pr_artifact_only != 'true'
+        if: steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.artifact_only != 'true'
         run: npm ci
 
       - name: Install uv
-        if: steps.live_credential.outputs.has_key == 'true' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.pr_artifact_only != 'true'
+        if: steps.live_credential.outputs.has_key == 'true' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.artifact_only != 'true'
         run: |
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Get Playwright version
-        if: steps.live_credential.outputs.has_key == 'true' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.pr_artifact_only != 'true'
+        if: steps.live_credential.outputs.has_key == 'true' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.artifact_only != 'true'
         id: pw_version
         run: echo "version=$(npx playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
 
       - name: Cache Playwright browsers
-        if: steps.live_credential.outputs.has_key == 'true' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.pr_artifact_only != 'true'
+        if: steps.live_credential.outputs.has_key == 'true' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.artifact_only != 'true'
         id: pw_cache
         uses: actions/cache@v6
         with:
@@ -253,16 +255,16 @@ jobs:
           key: playwright-${{ runner.os }}-${{ steps.pw_version.outputs.version }}
 
       - name: Install Playwright Chromium
-        if: steps.live_credential.outputs.has_key == 'true' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.pr_artifact_only != 'true' && steps.pw_cache.outputs.cache-hit != 'true'
+        if: steps.live_credential.outputs.has_key == 'true' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.artifact_only != 'true' && steps.pw_cache.outputs.cache-hit != 'true'
         run: npx playwright install chromium
 
       - name: Install Playwright system deps
-        if: steps.live_credential.outputs.has_key == 'true' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.pr_artifact_only != 'true'
+        if: steps.live_credential.outputs.has_key == 'true' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.artifact_only != 'true'
         run: npx playwright install-deps chromium
 
       - name: Run live Agent Server E2E
         id: live_test
-        if: steps.live_credential.outputs.has_key == 'true' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.pr_artifact_only != 'true'
+        if: steps.live_credential.outputs.has_key == 'true' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.artifact_only != 'true'
         env:
           LIVE_E2E_LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
         run: |
@@ -273,12 +275,12 @@ jobs:
           exit 0
 
       - name: Skip live Agent Server E2E
-        if: steps.live_credential.outputs.has_key != 'true' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.pr_artifact_only != 'true'
+        if: steps.live_credential.outputs.has_key != 'true' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.artifact_only != 'true'
         run: echo "Skipping live Agent Server E2E because LLM_API_KEY is not configured."
 
       - name: Extract live E2E media
         id: live_media
-        if: always() && steps.live_credential.outputs.has_key == 'true' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.pr_artifact_only != 'true'
+        if: always() && steps.live_credential.outputs.has_key == 'true' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.artifact_only != 'true'
         run: |
           node tests/e2e/live/scripts/extract-live-e2e-media.mjs \
             --results "test-results-live/results.json" \
@@ -286,7 +288,7 @@ jobs:
 
       - name: Create live E2E video preview
         id: live_video_preview
-        if: always() && steps.live_media.outputs.video_path != '' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.pr_artifact_only != 'true'
+        if: always() && steps.live_media.outputs.video_path != '' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.artifact_only != 'true'
         continue-on-error: true
         env:
           VIDEO_PATH: ${{ steps.live_media.outputs.video_path }}
@@ -307,7 +309,7 @@ jobs:
 
       - name: Publish live E2E media
         id: publish_live_media
-        if: always() && steps.live_credential.outputs.has_key == 'true' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.pr_artifact_only != 'true'
+        if: always() && env.LIVE_E2E_PR_NUMBER != '' && steps.live_credential.outputs.has_key == 'true' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.artifact_only != 'true'
         env:
           MEDIA_KEEP_RUNS: ${{ env.LIVE_E2E_PR_ARTIFACT_KEEP_RUNS }}
           MEDIA_RUN_DIR: ${{ github.run_id }}
@@ -418,7 +420,7 @@ jobs:
 
       - name: Upload live E2E artifacts
         id: upload_live_artifacts
-        if: always() && steps.live_credential.outputs.has_key == 'true' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.pr_artifact_only != 'true'
+        if: always() && steps.live_credential.outputs.has_key == 'true' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.artifact_only != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: live-agent-server-e2e
@@ -429,7 +431,7 @@ jobs:
 
       - name: Determine live E2E result
         id: live_status
-        if: always() && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.pr_artifact_only != 'true'
+        if: always() && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.artifact_only != 'true'
         run: |
           if [ "${{ steps.live_credential.outputs.has_key }}" != "true" ]; then
             echo "status=skipped" >> "$GITHUB_OUTPUT"
@@ -452,7 +454,7 @@ jobs:
           echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"
 
       - name: Render live E2E report
-        if: always() && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.pr_artifact_only != 'true'
+        if: always() && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.artifact_only != 'true'
         env:
           LIVE_E2E_ARTIFACT_URL: ${{ steps.upload_live_artifacts.outputs.artifact-url || '' }}
           LIVE_E2E_SCREENSHOT_URL: ${{ steps.publish_live_media.outputs.screenshot_url || '' }}
@@ -477,7 +479,7 @@ jobs:
           cat "$LIVE_E2E_REPORT_PATH" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Update live E2E PR comment
-        if: always() && env.LIVE_E2E_PR_NUMBER != '' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.pr_artifact_only != 'true'
+        if: always() && env.LIVE_E2E_PR_NUMBER != '' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.artifact_only != 'true'
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
@@ -486,5 +488,5 @@ jobs:
             --body-file "$LIVE_E2E_REPORT_PATH"
 
       - name: Fail live E2E job when tests fail
-        if: always() && steps.live_credential.outputs.has_key == 'true' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.pr_artifact_only != 'true'
+        if: always() && steps.live_credential.outputs.has_key == 'true' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.artifact_only != 'true'
         run: exit "${{ steps.live_status.outputs.exit_code }}"

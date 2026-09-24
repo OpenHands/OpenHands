@@ -4,6 +4,12 @@ import type {
   ConversationMode,
 } from "#/stores/conversation-store";
 import type { ViewMode } from "#/components/features/files-tab/view-mode";
+import {
+  DEFAULT_UNPINNED_OVERVIEW_GIT_PARTS,
+  DEFAULT_UNPINNED_OVERVIEW_SECTIONS,
+  VALID_CONVERSATION_OVERVIEW_GIT_PARTS,
+  VALID_CONVERSATION_OVERVIEW_SECTIONS,
+} from "#/components/features/conversation/conversation-overview-sections";
 
 export const LOCAL_STORAGE_KEYS = {
   CONVERSATION_STATE: "conversation-state",
@@ -31,32 +37,47 @@ type ConversationStateUpdatedDetail = {
 export interface ConversationState {
   selectedTab: ConversationTab | null;
   unpinnedTabs: string[];
+  unpinnedOverviewSections?: string[];
+  unpinnedOverviewGitParts?: string[];
   conversationMode: ConversationMode;
   subConversationTaskId: string | null;
   draftMessage: string | null;
+  rightPanelShown?: boolean;
   /**
-   * User's persisted choice for the Files tab diff-vs-files toggle.
-   * `null` means "no explicit choice yet" — the Files tab then falls back
-   * to its repo-aware default (diff inside a git repo with commits, files
-   * otherwise).
+   * Legacy Files-tab Diff/Files toggle preference. Kept for blob
+   * compatibility; the Files surface no longer hosts Diff/Commits
+   * (those live in the sibling Commits conversation tab).
    */
   filesTabDiffView: boolean | null;
   /** User's persisted choice for the Files tab Rich/Plain content toggle. */
   filesTabContentViewMode: ViewMode;
+  /** Whether the left-hand file tree is visible in the Files tab. */
+  filesTabTreeVisible?: boolean;
+  /** Open file tabs in the Files quick-row (basenames, closable). */
+  filesTabOpenPaths?: string[];
+  /** Currently selected path among `filesTabOpenPaths`, if any. */
+  filesTabSelectedPath?: string | null;
 }
 
 const DEFAULT_CONVERSATION_STATE: ConversationState = {
   selectedTab: "files",
   unpinnedTabs: [],
+  unpinnedOverviewSections: [...DEFAULT_UNPINNED_OVERVIEW_SECTIONS],
+  unpinnedOverviewGitParts: [...DEFAULT_UNPINNED_OVERVIEW_GIT_PARTS],
   conversationMode: "code",
   subConversationTaskId: null,
   draftMessage: null,
+  rightPanelShown: false,
   filesTabDiffView: null,
   filesTabContentViewMode: "rich",
+  filesTabTreeVisible: true,
+  filesTabOpenPaths: [],
+  filesTabSelectedPath: null,
 };
 
 const VALID_CONVERSATION_TABS: ReadonlySet<ConversationTab> = new Set([
   "files",
+  "commits",
   "browser",
   "terminal",
   "planner",
@@ -76,7 +97,6 @@ const VALID_CONVERSATION_TABS: ReadonlySet<ConversationTab> = new Set([
 const REMOVED_CONVERSATION_TABS: ReadonlySet<string> = new Set([
   "editor",
   "served",
-  "changes",
   "app",
   "vscode",
 ]);
@@ -86,30 +106,47 @@ const VALID_VIEW_MODES: ReadonlySet<ViewMode> = new Set(["rich", "plain"]);
 function sanitizeStoredState(
   stored: Record<string, unknown>,
 ): Partial<ConversationState> {
-  // `rightPanelShown` is no longer part of the schema (the drawer's
-  // open state is session-only) but old persisted blobs still carry it.
-  // We just drop it on the way in — keeping it in `result` here would
-  // pollute the merged `ConversationState` shape that consumers receive.
-  const { rightPanelShown: _ignoredRightPanelShown, ...rest } = stored as {
-    rightPanelShown?: unknown;
-  } & Record<string, unknown>;
-  let result: Partial<ConversationState> = rest as Partial<ConversationState>;
+  let result: Partial<ConversationState> = stored as Partial<ConversationState>;
 
   if (
     result.selectedTab != null &&
     (REMOVED_CONVERSATION_TABS.has(result.selectedTab) ||
+      (result.selectedTab as string) === "changes" ||
       !VALID_CONVERSATION_TABS.has(result.selectedTab as ConversationTab))
   ) {
+    const selectedTab = result.selectedTab as string;
     result = { ...result };
-    delete result.selectedTab;
+    if (selectedTab === "changes") {
+      result.selectedTab = "commits";
+    } else {
+      delete result.selectedTab;
+    }
   }
 
   if (result.unpinnedTabs) {
     const filtered = result.unpinnedTabs.filter(
-      (tab) => !REMOVED_CONVERSATION_TABS.has(tab),
+      (tab) => tab !== "changes" && !REMOVED_CONVERSATION_TABS.has(tab),
     );
     if (filtered.length !== result.unpinnedTabs.length) {
       result = { ...result, unpinnedTabs: filtered };
+    }
+  }
+
+  if (result.unpinnedOverviewSections) {
+    const filtered = result.unpinnedOverviewSections.filter((section) =>
+      VALID_CONVERSATION_OVERVIEW_SECTIONS.has(section),
+    );
+    if (filtered.length !== result.unpinnedOverviewSections.length) {
+      result = { ...result, unpinnedOverviewSections: filtered };
+    }
+  }
+
+  if (result.unpinnedOverviewGitParts) {
+    const filtered = result.unpinnedOverviewGitParts.filter((part) =>
+      VALID_CONVERSATION_OVERVIEW_GIT_PARTS.has(part),
+    );
+    if (filtered.length !== result.unpinnedOverviewGitParts.length) {
+      result = { ...result, unpinnedOverviewGitParts: filtered };
     }
   }
 
@@ -124,6 +161,44 @@ function sanitizeStoredState(
   ) {
     result = { ...result };
     delete result.filesTabContentViewMode;
+  }
+
+  if (
+    result.rightPanelShown != null &&
+    typeof result.rightPanelShown !== "boolean"
+  ) {
+    result = { ...result };
+    delete result.rightPanelShown;
+  }
+
+  if (
+    result.filesTabTreeVisible != null &&
+    typeof result.filesTabTreeVisible !== "boolean"
+  ) {
+    result = { ...result };
+    delete result.filesTabTreeVisible;
+  }
+
+  if (result.filesTabOpenPaths != null) {
+    if (!Array.isArray(result.filesTabOpenPaths)) {
+      result = { ...result };
+      delete result.filesTabOpenPaths;
+    } else {
+      const filtered = result.filesTabOpenPaths.filter(
+        (path): path is string => typeof path === "string" && path.length > 0,
+      );
+      if (filtered.length !== result.filesTabOpenPaths.length) {
+        result = { ...result, filesTabOpenPaths: filtered };
+      }
+    }
+  }
+
+  if (
+    result.filesTabSelectedPath != null &&
+    typeof result.filesTabSelectedPath !== "string"
+  ) {
+    result = { ...result };
+    delete result.filesTabSelectedPath;
   }
 
   return result;
@@ -265,10 +340,18 @@ export function useConversationLocalStorageState(conversationId: string): {
   state: ConversationState;
   setSelectedTab: (tab: ConversationTab | null) => void;
   setUnpinnedTabs: (tabs: string[]) => void;
+  setUnpinnedOverviewSections?: (sections: string[]) => void;
+  setUnpinnedOverviewGitParts?: (parts: string[]) => void;
   setConversationMode: (mode: ConversationMode) => void;
   setDraftMessage: (message: string | null) => void;
+  setRightPanelShown?: (shown: boolean) => void;
   setFilesTabDiffView: (diffView: boolean | null) => void;
   setFilesTabContentViewMode: (mode: ViewMode) => void;
+  setFilesTabTreeVisible?: (visible: boolean) => void;
+  setFilesTabOpenState?: (
+    openPaths: string[],
+    selectedPath: string | null,
+  ) => void;
 } {
   const [state, setState] = useState<ConversationState>(() =>
     getConversationState(conversationId),
@@ -332,11 +415,23 @@ export function useConversationLocalStorageState(conversationId: string): {
     state,
     setSelectedTab: (tab) => updateState({ selectedTab: tab }),
     setUnpinnedTabs: (tabs) => updateState({ unpinnedTabs: tabs }),
+    setUnpinnedOverviewSections: (sections) =>
+      updateState({ unpinnedOverviewSections: sections }),
+    setUnpinnedOverviewGitParts: (parts) =>
+      updateState({ unpinnedOverviewGitParts: parts }),
     setConversationMode: (mode) => updateState({ conversationMode: mode }),
     setDraftMessage: (message) => updateState({ draftMessage: message }),
+    setRightPanelShown: (shown) => updateState({ rightPanelShown: shown }),
     setFilesTabDiffView: (diffView) =>
       updateState({ filesTabDiffView: diffView }),
     setFilesTabContentViewMode: (mode) =>
       updateState({ filesTabContentViewMode: mode }),
+    setFilesTabTreeVisible: (visible) =>
+      updateState({ filesTabTreeVisible: visible }),
+    setFilesTabOpenState: (openPaths, selectedPath) =>
+      updateState({
+        filesTabOpenPaths: openPaths,
+        filesTabSelectedPath: selectedPath,
+      }),
   };
 }

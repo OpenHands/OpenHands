@@ -100,6 +100,20 @@
         "src/mocks/mcp-handlers.ts"
       ],
       "tests": ["mcp"]
+    },
+    {
+      "comment": "Canvas Extensions install, enable, page render, disable, uninstall",
+      "sources": [
+        "src/components/features/canvas-extensions/**",
+        "src/routes/canvas-extension*.tsx",
+        "src/api/canvas-extensions-service.ts",
+        "src/extensions/**",
+        "src/hooks/mutation/use-manage-canvas-extensions.ts",
+        "src/types/canvas-extension.ts",
+        "src/fixtures/canvas-extensions/**",
+        "src/mocks/canvas-extensions-handlers.ts"
+      ],
+      "tests": ["canvas-extensions"]
     }
   ],
 

@@ -87,7 +87,7 @@ export default function ApiKeyEntryScreen() {
     >
       <div
         className={cn(
-          "relative rounded-xl border border-[var(--oh-border)] bg-base-secondary",
+          "relative rounded-xl border border-border bg-base-secondary",
           modalWidthClassName("md"),
           MODAL_MAX_WIDTH_VIEWPORT,
         )}

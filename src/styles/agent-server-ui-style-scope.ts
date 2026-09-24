@@ -14,6 +14,7 @@ export const AGENT_SERVER_UI_THEMEABLE_BRAND_VARIABLES = [
 export type AgentServerUIThemeableBrandVariable =
   (typeof AGENT_SERVER_UI_THEMEABLE_BRAND_VARIABLES)[number];
 
+/** Public token reference; defaults are applied by CSS, never inlined by the root. */
 export const AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES = {
   // Brand/button colors (--oh-color-primary, --oh-accent, --oh-warning) live in
   // tailwind.css and are overridden at runtime by applyColorTheme(); keep them
@@ -30,12 +31,15 @@ export const AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES = {
   "--oh-color-content-2": "var(--cool-grey-50)",
   "--oh-background": "var(--cool-grey-950)",
   "--oh-foreground": "var(--cool-grey-100)",
+  "--oh-contrast": "#ffffff",
+  "--oh-contrast-foreground": "#000000",
   "--oh-surface": "var(--cool-grey-925)",
   "--oh-surface-foreground": "var(--cool-grey-100)",
   "--oh-surface-raised": "var(--cool-grey-900)",
   "--oh-surface-deep": "var(--cool-grey-975)",
   "--oh-overlay": "var(--cool-grey-925)",
   "--oh-overlay-foreground": "var(--cool-grey-100)",
+  "--oh-modal-title-foreground": "#ffffff",
   "--oh-muted": "var(--cool-grey-400)",
   "--oh-text-secondary": "var(--cool-grey-300)",
   "--oh-text-tertiary": "var(--cool-grey-200)",
@@ -45,6 +49,8 @@ export const AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES = {
   "--oh-interactive-hover-low": "var(--cool-grey-900)",
   "--oh-interactive-active": "var(--cool-grey-800)",
   "--oh-interactive-selected": "var(--cool-grey-600)",
+  "--oh-context-window-foreground": "var(--oh-foreground)",
+  "--oh-context-window-track-weight": "42%",
   "--oh-scrollbar": "color-mix(in srgb, var(--cool-grey-400) 30%, transparent)",
   "--oh-scrollbar-hover":
     "color-mix(in srgb, var(--cool-grey-400) 50%, transparent)",

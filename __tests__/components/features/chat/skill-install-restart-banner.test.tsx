@@ -19,10 +19,14 @@ import type {
 
 // The restart mutation resolves the launch profile through these services
 // before creating the conversation; stub them so it deterministically takes
-// the legacy agent_settings path (their absence is a supported fallback).
+// the legacy agent_settings path (no active agent profile).
 vi.mock("#/api/agent-profiles-service/agent-profiles-service.api", () => ({
   __esModule: true,
-  default: { listProfiles: vi.fn().mockRejectedValue(new Error("n/a")) },
+  default: {
+    listProfiles: vi
+      .fn()
+      .mockResolvedValue({ profiles: [], active_agent_profile_id: null }),
+  },
   WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME: "default",
 }));
 vi.mock("#/api/profiles-service/profiles-service.api", () => ({

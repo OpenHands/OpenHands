@@ -5,7 +5,6 @@ import {
   ExecutionStatus,
   type OpenHandsEvent,
 } from "#/types/agent-server/core";
-import { GetMicroagentsResponse } from "#/api/open-hands.types";
 import {
   TABLE_DEMO_CONVERSATION_ID,
   TABLE_DEMO_EVENTS,
@@ -48,6 +47,9 @@ const conversations: MockConversation[] = [
     created_at: new Date(now).toISOString(),
     updated_at: new Date(now).toISOString(),
     execution_status: "waiting_for_confirmation",
+    // User-authored tags so the layouts menu's Tag Filters section and the
+    // card chips have something to show in mock mode.
+    tags: { project: "vault", work: "" },
   },
   {
     id: "2",
@@ -141,7 +143,7 @@ function createPaginationEvent(
       role: "assistant",
       content: [{ type: "text", text: `${messagePrefix} ${index}` }],
     },
-    activated_microagents: [],
+    activated_skills: [],
     extended_content: [],
   };
 }
@@ -160,12 +162,12 @@ function searchPaginationEvents(
   const timestampLt = searchParams.get("timestamp__lt");
   const sortOrder = searchParams.get("sort_order");
   const filtered = timestampLt
-    ? events.filter((event) => event.timestamp < timestampLt)
+    ? events.filter((event) => (event.timestamp ?? "") < timestampLt)
     : events;
   const sorted = [...filtered].sort((a, b) =>
     sortOrder === "TIMESTAMP_DESC"
-      ? b.timestamp.localeCompare(a.timestamp)
-      : a.timestamp.localeCompare(b.timestamp),
+      ? (b.timestamp ?? "").localeCompare(a.timestamp ?? "")
+      : (a.timestamp ?? "").localeCompare(b.timestamp ?? ""),
   );
 
   return {
@@ -228,6 +230,7 @@ function createConversationResponse(
     metrics: conversation.metrics ?? null,
     agent: conversation.agent ?? null,
     workspace: conversation.workspace ?? null,
+    tags: conversation.tags ?? null,
   };
 }
 
@@ -296,11 +299,17 @@ export const CONVERSATION_HANDLERS = [
       const conversation = CONVERSATIONS.get(conversationId);
 
       if (conversation) {
-        const body = (await request.json()) as { title?: string } | null;
-        if (body?.title) {
+        const body = (await request.json()) as {
+          title?: string;
+          tags?: Record<string, string>;
+        } | null;
+        // PATCH replaces the complete tags map (agent-server semantics);
+        // title-only and tags-only patches both persist.
+        if (body?.title || body?.tags) {
           CONVERSATIONS.set(conversationId, {
             ...conversation,
-            title: body.title,
+            ...(body.title ? { title: body.title } : {}),
+            ...(body.tags ? { tags: body.tags } : {}),
             updated_at: new Date().toISOString(),
           });
           return HttpResponse.json(null, { status: 200 });
@@ -476,54 +485,4 @@ export const CONVERSATION_HANDLERS = [
     "/api/v1/conversations/:conversationId/pending-messages",
     async () => HttpResponse.json({ id: "mock-pending-id", position: 0 }),
   ),
-
-  http.get("*/api/conversations/:conversationId/microagents", async () => {
-    const response: GetMicroagentsResponse = {
-      microagents: [
-        {
-          name: "init",
-          type: "agentskills",
-          content: "Initialize an AGENTS.md file for the repository",
-          triggers: ["/init"],
-        },
-        {
-          name: "releasenotes",
-          type: "agentskills",
-          content: "Generate a changelog from the most recent release",
-          triggers: ["/releasenotes"],
-        },
-        {
-          name: "test-runner",
-          type: "agentskills",
-          content: "Run the test suite and report results",
-          triggers: ["/test"],
-        },
-        {
-          name: "code-search",
-          type: "knowledge",
-          content: "Search the codebase semantically",
-          triggers: ["/search"],
-        },
-        {
-          name: "docker",
-          type: "agentskills",
-          content: "Docker usage guide for container environments",
-          triggers: ["docker", "container"],
-        },
-        {
-          name: "github",
-          type: "agentskills",
-          content: "GitHub API interaction guide",
-          triggers: ["github", "git"],
-        },
-        {
-          name: "work_hosts",
-          type: "repo",
-          content: "Available hosts for web applications",
-          triggers: [],
-        },
-      ],
-    };
-    return HttpResponse.json(response);
-  }),
 ];

@@ -11,6 +11,7 @@ import {
   SKILL_SCOPE_ORDER,
   type SkillScope,
 } from "#/utils/skill-scope";
+import { isRecommendedSkill } from "#/utils/skill-enablement";
 import { getSkillCardDescription } from "./get-skill-card-description";
 
 export const SKILL_FILTER_QUERY_PARAM = "q";
@@ -18,13 +19,24 @@ const SOURCE_PARAM = "source";
 const CATEGORY_PARAM = "category";
 const TYPE_PARAM = "type";
 const STATE_PARAM = "state";
+const RECOMMENDATION_PARAM = "recommendation";
 
 export type SkillEnabledState = "enabled" | "disabled";
-export type SkillFacetGroupId = "state" | "source" | "category" | "type";
+export type SkillRecommendation = "recommended" | "other";
+export type SkillFacetGroupId =
+  | "state"
+  | "recommendation"
+  | "source"
+  | "category"
+  | "type";
 
 const SKILL_ENABLED_STATE_ORDER: readonly SkillEnabledState[] = [
   "enabled",
   "disabled",
+];
+const SKILL_RECOMMENDATION_ORDER: readonly SkillRecommendation[] = [
+  "recommended",
+  "other",
 ];
 const SKILL_TYPE_ORDER: readonly SkillType[] = [
   "agentskills",
@@ -38,6 +50,7 @@ export interface SkillFilterState {
   categories: Set<SkillCategoryId>;
   types: Set<SkillType>;
   states: Set<SkillEnabledState>;
+  recommendations: Set<SkillRecommendation>;
 }
 
 export interface SkillFacetRowModel {
@@ -60,6 +73,7 @@ export const EMPTY_SKILL_FILTER_STATE: SkillFilterState = {
   categories: new Set(),
   types: new Set(),
   states: new Set(),
+  recommendations: new Set(),
 };
 
 /** Carrying `labelKey`s rather than translated strings keeps this module pure, so its tests need no i18n. */
@@ -75,13 +89,16 @@ function labelledValues<TValue extends string>(
   return order.map((value) => ({ value, labelKey: labelKeys[value] }));
 }
 
+/** Resolving the two lists behind enablement is the caller's job, not this module's. */
+type SkillEnabledPredicate = (skill: SkillInfo) => boolean;
+
 /** A new facet group is declared here and nowhere else: `selected` / `withSelected` are what keep every operation below driven by this table alone. */
 interface GroupDef {
   id: SkillFacetGroupId;
   labelKey: I18nKey;
   param: string;
   values: readonly GroupValue[];
-  valueOf: (skill: SkillInfo, disabledSet: Set<string>) => string;
+  valueOf: (skill: SkillInfo, isEnabled: SkillEnabledPredicate) => string;
   selected: (state: SkillFilterState) => Set<string>;
   withSelected: (
     state: SkillFilterState,
@@ -114,18 +131,38 @@ const STATE_LABEL_KEYS: Record<SkillEnabledState, I18nKey> = {
   disabled: I18nKey.SETTINGS$SKILLS_DISABLED,
 };
 
+const RECOMMENDATION_LABEL_KEYS: Record<SkillRecommendation, I18nKey> = {
+  recommended: I18nKey.SETTINGS$SKILLS_RECOMMENDED,
+  other: I18nKey.SETTINGS$SKILLS_RECOMMENDATION_OTHER,
+};
+
 const GROUP_DEFS: readonly GroupDef[] = [
   {
     id: "state",
     labelKey: I18nKey.SETTINGS$SKILLS_FACET_STATE,
     param: STATE_PARAM,
     values: labelledValues(SKILL_ENABLED_STATE_ORDER, STATE_LABEL_KEYS),
-    valueOf: (skill, disabledSet) =>
-      disabledSet.has(skill.name) ? "disabled" : "enabled",
+    valueOf: (skill, isEnabled) => (isEnabled(skill) ? "enabled" : "disabled"),
     selected: (state) => state.states,
     withSelected: (state, next) => ({
       ...state,
       states: narrowSet(SKILL_ENABLED_STATE_ORDER, next),
+    }),
+  },
+  {
+    id: "recommendation",
+    labelKey: I18nKey.SETTINGS$SKILLS_FACET_RECOMMENDATION,
+    param: RECOMMENDATION_PARAM,
+    values: labelledValues(
+      SKILL_RECOMMENDATION_ORDER,
+      RECOMMENDATION_LABEL_KEYS,
+    ),
+    valueOf: (skill) =>
+      isRecommendedSkill(skill.name) ? "recommended" : "other",
+    selected: (state) => state.recommendations,
+    withSelected: (state, next) => ({
+      ...state,
+      recommendations: narrowSet(SKILL_RECOMMENDATION_ORDER, next),
     }),
   },
   {
@@ -235,7 +272,7 @@ function matchesQuery(skill: SkillInfo, query: string): boolean {
  */
 function matchesFacets(
   skill: SkillInfo,
-  disabledSet: Set<string>,
+  isEnabled: SkillEnabledPredicate,
   state: SkillFilterState,
   exclude?: SkillFacetGroupId,
 ): boolean {
@@ -243,30 +280,30 @@ function matchesFacets(
     if (def.id === exclude) return true;
     const selected = def.selected(state);
     if (selected.size === 0) return true;
-    return selected.has(def.valueOf(skill, disabledSet));
+    return selected.has(def.valueOf(skill, isEnabled));
   });
 }
 
 export function applySkillFilters(
   skills: SkillInfo[],
-  disabledSet: Set<string>,
+  isEnabled: SkillEnabledPredicate,
   state: SkillFilterState,
 ): SkillInfo[] {
   return skills.filter(
     (skill) =>
       matchesQuery(skill, state.query) &&
-      matchesFacets(skill, disabledSet, state),
+      matchesFacets(skill, isEnabled, state),
   );
 }
 
 function countByValue(
   skills: SkillInfo[],
   def: GroupDef,
-  disabledSet: Set<string>,
+  isEnabled: SkillEnabledPredicate,
 ): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const skill of skills) {
-    const value = def.valueOf(skill, disabledSet);
+    const value = def.valueOf(skill, isEnabled);
     counts[value] = (counts[value] ?? 0) + 1;
   }
   return counts;
@@ -276,13 +313,13 @@ function buildGroup(
   def: GroupDef,
   allSkills: SkillInfo[],
   searched: SkillInfo[],
-  disabledSet: Set<string>,
+  isEnabled: SkillEnabledPredicate,
   state: SkillFilterState,
 ): SkillFacetGroup | null {
   // Visibility and the row set come from the raw list so the rail's shape
   // depends only on what the user has, never on the active filters. If they
   // tracked filtered counts, narrowing could make a group vanish mid-click.
-  const rawCounts = countByValue(allSkills, def, disabledSet);
+  const rawCounts = countByValue(allSkills, def, isEnabled);
   const discriminating = def.values.filter(
     ({ value }) => (rawCounts[value] ?? 0) > 0,
   );
@@ -298,9 +335,9 @@ function buildGroup(
   );
 
   const candidates = searched.filter((skill) =>
-    matchesFacets(skill, disabledSet, state, def.id),
+    matchesFacets(skill, isEnabled, state, def.id),
   );
-  const counts = countByValue(candidates, def, disabledSet);
+  const counts = countByValue(candidates, def, isEnabled);
 
   return {
     id: def.id,
@@ -321,13 +358,13 @@ function buildGroup(
 
 export function buildSkillFacetGroups(
   skills: SkillInfo[],
-  disabledSet: Set<string>,
+  isEnabled: SkillEnabledPredicate,
   state: SkillFilterState,
 ): SkillFacetGroup[] {
   const searched = skills.filter((skill) => matchesQuery(skill, state.query));
 
   return GROUP_DEFS.map((def) =>
-    buildGroup(def, skills, searched, disabledSet, state),
+    buildGroup(def, skills, searched, isEnabled, state),
   ).filter((group): group is SkillFacetGroup => group !== null);
 }
 

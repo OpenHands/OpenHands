@@ -34,6 +34,7 @@ export function ThoughtEventMessage({
       message={thoughtContent}
       actions={actions}
       isFromPlanningAgent={isFromPlanningAgent}
+      timestamp={event.timestamp}
     />
   );
 }

@@ -31,7 +31,7 @@ export function PluginPickerModal({
       <div
         data-testid="plugin-picker-modal"
         className={cn(
-          "relative flex max-h-[80vh] flex-col gap-4 rounded-xl border border-[var(--oh-border)] bg-base-secondary p-6",
+          "relative flex max-h-[80vh] flex-col gap-4 rounded-xl border border-border bg-base-secondary p-6",
           modalWidthClassName("lg"),
           MODAL_MAX_WIDTH_VIEWPORT,
         )}
@@ -48,7 +48,7 @@ export function PluginPickerModal({
           <PluginPicker selected={selected} onChange={onChange} />
         </div>
 
-        <div className="flex items-center justify-between border-t border-[var(--oh-border-subtle)] pt-4">
+        <div className="flex items-center justify-between border-t border-border-subtle pt-4">
           <Typography.Text className="text-sm text-tertiary-light">
             {t(I18nKey.PLUGINS$PICKER_SELECTED_COUNT, {
               count: selected.length,

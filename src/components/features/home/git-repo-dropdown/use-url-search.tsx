@@ -38,6 +38,8 @@ export function useUrlSearch(
           } finally {
             setIsUrlSearchLoading(false);
           }
+        } else {
+          setUrlSearchResults([]);
         }
       } else {
         setUrlSearchResults([]);

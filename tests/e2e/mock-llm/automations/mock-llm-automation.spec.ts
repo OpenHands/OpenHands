@@ -87,6 +87,48 @@ async function listAutomations(
   );
 }
 
+/** Poll the main conversation for the automation ID returned by the create command. */
+async function waitForCreatedAutomationId(
+  request: import("@playwright/test").APIRequestContext,
+  conversationId: string,
+  timeoutMs = 30_000,
+) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const response = await request.get(
+      `${BACKEND_URL}/api/conversations/${encodeURIComponent(conversationId)}/events/search`,
+      {
+        headers: { "X-Session-API-Key": SESSION_API_KEY },
+        params: { limit: "100", sort_order: "TIMESTAMP_DESC" },
+      },
+    );
+    if (response.ok()) {
+      const body = (await response.json()) as { items?: unknown[] };
+      const text = JSON.stringify(body.items ?? []);
+      const match = text.match(/automation_id\\?":\\?"([0-9a-f-]{36})/i);
+      if (match) return match[1];
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  throw new Error(
+    `Created automation ID was not reported after ${timeoutMs}ms`,
+  );
+}
+
+async function getAutomation(
+  request: import("@playwright/test").APIRequestContext,
+  automationId: string,
+) {
+  const response = await request.get(
+    `${AUTOMATION_API_BASE}/${encodeURIComponent(automationId)}`,
+    { headers: { "X-Session-API-Key": SESSION_API_KEY } },
+  );
+  expect(response.ok(), `GET automation returned ${response.status()}`).toBe(
+    true,
+  );
+  return response.json();
+}
+
 /**
  * List runs for a specific automation via the real automation backend.
  */
@@ -114,23 +156,54 @@ async function listAutomationRuns(
   return resp.json();
 }
 
+interface AutomationRunRecord {
+  id: string;
+  status: string;
+  conversation_id: string | null;
+  error_detail?: string | null;
+}
+
+/** Statuses a run never leaves (see RunStatus in openhands-automation). */
+const TERMINAL_RUN_STATUSES = new Set([
+  "COMPLETED",
+  "FAILED",
+  "CANCELLED",
+  "SKIPPED",
+]);
+
 /**
  * Poll until a run reaches the expected status or times out.
+ *
+ * Fails fast, quoting the backend's `error_detail`, once every run has ended
+ * in some other terminal status — polling on would only surface a timeout
+ * and hide why the run actually stopped.
  */
 async function waitForRunStatus(
   request: import("@playwright/test").APIRequestContext,
   automationId: string,
   expectedStatus: string,
   timeoutMs = 30_000,
-) {
+): Promise<AutomationRunRecord> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const data = await listAutomationRuns(request, automationId);
-    const runs = data.runs ?? data.items ?? [];
-    const match = runs.find(
-      (r: { status: string }) => r.status === expectedStatus,
-    );
+    const runs: AutomationRunRecord[] = data.runs ?? data.items ?? [];
+    const match = runs.find((r) => r.status === expectedStatus);
     if (match) return match;
+    if (
+      runs.length > 0 &&
+      runs.every((r) => TERMINAL_RUN_STATUSES.has(r.status))
+    ) {
+      const summary = runs
+        .map(
+          (r) =>
+            `${r.id}=${r.status}${r.error_detail ? ` (${r.error_detail})` : ""}`,
+        )
+        .join(", ");
+      throw new Error(
+        `No run reached "${expectedStatus}"; every run already ended: ${summary}`,
+      );
+    }
     await new Promise((r) => setTimeout(r, 1_000));
   }
   throw new Error(
@@ -155,12 +228,27 @@ async function deleteAutomation(
   );
 }
 
+/** Remove stale automations with the test's fixed name before a retry. */
+async function deleteAutomationsByName(
+  request: import("@playwright/test").APIRequestContext,
+  name: string,
+) {
+  const data = await listAutomations(request);
+  const automations = data.automations ?? data.items ?? [];
+  for (const automation of automations.filter(
+    (candidate: { name: string }) => candidate.name === name,
+  )) {
+    await deleteAutomation(request, automation.id);
+  }
+}
+
 test.describe.configure({ mode: "serial" });
 
 test.describe("mock-LLM automation lifecycle", () => {
   const conversationIds = new Set<string>();
   const automationIds = new Set<string>();
-  /** conversation_id from the completed automation run (set in step 2, verified in step 3) */
+  /** IDs carried between the serial lifecycle steps. */
+  let createdAutomationId: string | null = null;
   let runConversationId: string | null = null;
 
   test.beforeEach(async ({ page }) => {
@@ -211,6 +299,10 @@ test.describe("mock-LLM automation lifecycle", () => {
     page,
     request,
   }) => {
+    // Retries reuse the same Docker backend, so remove any automation left by
+    // an earlier attempt before creating the fixed-name test resource.
+    await deleteAutomationsByName(request, AUTOMATION_NAME);
+
     // Ensure the mock LLM profile is configured via the Settings UI
     await ensureMockLLMProfile(page);
 
@@ -230,7 +322,12 @@ test.describe("mock-LLM automation lifecycle", () => {
     const authHeader = `-H 'X-Session-API-Key: ${SESSION_API_KEY}'`;
 
     const createCmd = [
-      `curl -s -X POST '${AUTOMATION_API_BASE}/preset/prompt'`,
+      // --retry: the automation backend can still be settling right after
+      // startup in the uvx/bin dev paths; transient connect/reset/5xx
+      // failures should not abort the create (observed flake → assert then
+      // sees 0 automations).
+      `curl --fail-with-body -sS -X POST '${AUTOMATION_API_BASE}/preset/prompt'`,
+      `--retry 3 --retry-connrefused --retry-delay 1`,
       `-H 'Content-Type: application/json'`,
       authHeader,
       `-d '${JSON.stringify({
@@ -246,7 +343,7 @@ test.describe("mock-LLM automation lifecycle", () => {
 
     const dispatchCmd = [
       `AID=$(python3 -c "import json; print(json.load(open('/tmp/auto_result.json'))['id'])")`,
-      `&& curl -s -X POST "${AUTOMATION_API_BASE}/$AID/dispatch"`,
+      `&& curl --fail-with-body -sS -X POST "${AUTOMATION_API_BASE}/$AID/dispatch"`,
       authHeader,
       `-H 'Content-Type: application/json'`,
       `-w '\\nHTTP_CODE:%{http_code}\\n'`,
@@ -268,11 +365,18 @@ test.describe("mock-LLM automation lifecycle", () => {
     // quickly, making the failure obvious. See AGENTS.md → "Padding
     // response for internal LLM call" for more context.
     //
-    // After the main conversation finishes (responses 0-3), the dispatched
+    // After the main conversation finishes (responses 0-3),the dispatched
     // automation run spawns a NEW conversation on the same agent-server.
-    // That conversation also calls the mock LLM. We append extra text
-    // responses (4-6) so the run's conversation can finish normally, the
-    // script fires its completion callback, and the run reaches COMPLETED.
+
+    // That conversation also calls the mock LLM. Recent openhands-automation
+    // versions (>= 1.10.0, PR openhands/automation#405) require
+    // preset automation conversations to call the `finish` tool before the
+    // run reaches COMPLETED — so we script one blank internal call followed
+    // by the required finish-tool turn (and one trailing blank safety) below.
+    // If this ever drifts again, step 2's run-status timeout will surface it,
+    // and the mock server log shows "Mock LLM exhausted after N calls"
+    // pinpointing the exact count.
+
     await registerTrajectory(request, "automation-lifecycle", [
       // ── Main conversation (responses 0-3) ──
       { text: "" }, // 0: consumed by skill-activation LLM call (see above)
@@ -294,11 +398,37 @@ test.describe("mock-LLM automation lifecycle", () => {
 
       // ── Automation run's conversation (responses 4+) ──
       // The run starts a fresh conversation with the automation prompt.
-      // Provide enough responses for any internal LLM calls + the agent's
-      // turn so the conversation finishes and the completion callback fires.
+      // Script one internal padding call +the required `finish` tool turn,
+      // followed by a final text reply (+ one trailing safety blank** so the
+      // run reaches COMPLETED.
       { text: "" }, // 4: possible internal/condenser call
-      { text: "Done. Hello world echoed successfully." }, // 5: agent reply
-      { text: "" }, // 6: safety buffer for any follow-up internal call
+      {
+        // 5: openhands-automation >= 1.10.0 (openhands/automation#405)
+        // requires preset automation conversations to finish via the
+        // `finish` tool — a hook waits for `finish_tool_used` before the
+        // run reaches COMPLETED. Blank turns alone would just loop and exhaust
+        // the trajectory, so script the required finish-tool turn explicitly.
+
+        tool_call: {
+          // The agent-server registers the finish tool under its lowercase
+          // title (`finish`). The action schema requires `message`, while the
+          // attached response schema (TaskOutcome) validates the
+          // `status` + `outcome_summary` pair (that's the field alias, not
+          // `summary`); both layers must be satisfied in the same call.
+          name: "finish",
+          arguments: {
+            message: "Hello world echoed successfully.",
+            status: "success",
+            outcome_summary: "Hello world echoed successfully.",
+          },
+        },
+      },
+      // 6: after the finish tool executes, the agent still needs one more
+      // non-empty LLM turn to end the conversation — a blank here would
+      // make the harness nag ("no function call") and loop on the exhausted
+      // trajectory, so reply with the final text.
+      { text: "Done. Hello world echoed successfully." },
+      { text: "" }, // 7: safety buffer for any follow-up internal call after finish
     ]);
 
     // Activate it so the mock LLM uses this trajectory for the next conversation
@@ -370,18 +500,13 @@ test.describe("mock-LLM automation lifecycle", () => {
     // ── Verify: automation was created in the real automation backend ──
 
     await test.step("verify automation was created", async () => {
-      const data = await listAutomations(request);
-      const automations = data.automations ?? data.items ?? [];
-      expect(
-        automations.length,
-        `Expected at least 1 automation, got: ${JSON.stringify(data).slice(0, 500)}`,
-      ).toBeGreaterThanOrEqual(1);
-
-      const created = automations.find(
-        (a: { name: string }) => a.name === AUTOMATION_NAME,
+      createdAutomationId = await waitForCreatedAutomationId(
+        request,
+        conversationId,
       );
-      expect(created, `Automation "${AUTOMATION_NAME}" not found`).toBeTruthy();
+      const created = await getAutomation(request, createdAutomationId);
       automationIds.add(created.id);
+      expect(created.name).toBe(AUTOMATION_NAME);
       expect(created.trigger?.schedule).toBe(CRON_SCHEDULE);
       expect(created.enabled).toBe(true);
     });
@@ -389,17 +514,13 @@ test.describe("mock-LLM automation lifecycle", () => {
     // ── Verify: run completed successfully with a conversation link ──
 
     await test.step("verify run completed with conversation link", async () => {
-      const data = await listAutomations(request);
-      const automations = data.automations ?? data.items ?? [];
-      const automation = automations.find(
-        (a: { name: string }) => a.name === AUTOMATION_NAME,
-      );
-      expect(automation, "Automation should exist for run check").toBeTruthy();
+      expect(createdAutomationId).toBeTruthy();
+      const automation = await getAutomation(request, createdAutomationId!);
       automationIds.add(automation.id);
 
-      // Wait for the run to reach COMPLETED. The trajectory includes extra
-      // responses (indices 4-6) for the automation run's spawned conversation
-      // so it can finish and fire the completion callback.
+      // Wait for the run to reach COMPLETED. The trajectory scripts the required
+      // `finish` tool turn (plus padding) for the automation run's spawned
+      // conversation so it can finish and fire the completion callback.
       const run = await waitForRunStatus(
         request,
         automation.id,
@@ -445,7 +566,7 @@ test.describe("mock-LLM automation lifecycle", () => {
                 : Array.isArray(msg.content)
                   ? (msg.content as Array<{ type?: string; text?: string }>)
                       .filter((c) => c.type === "text" || typeof c === "string")
-                      .map((c) => (typeof c === "string" ? c : c.text ?? ""))
+                      .map((c) => (typeof c === "string" ? c : (c.text ?? "")))
                       .join("")
                   : "";
             if (text.includes("<RUNTIME_SERVICES>")) return text;
@@ -483,17 +604,22 @@ test.describe("mock-LLM automation lifecycle", () => {
 
     await test.step("automation card visible on list page", async () => {
       await waitForTestId(page, "automations-add-automation", 15_000);
+      expect(createdAutomationId).toBeTruthy();
 
-      // Wait for the automation name to appear on the page (the list
-      // may take a moment to load from the automation backend).
-      await expect(page.getByText(AUTOMATION_NAME)).toBeVisible({
-        timeout: 15_000,
-      });
+      const automationCard = page.locator(
+        `[data-testid="automation-card-${createdAutomationId}"]`,
+      );
+      await expect(automationCard).toBeVisible({ timeout: 15_000 });
+      await expect(automationCard).toContainText(AUTOMATION_NAME);
     });
 
     await test.step("click through to automation detail page", async () => {
-      // The automation name is a link — clicking it navigates to /automations/:id
-      await page.getByText(AUTOMATION_NAME).click();
+      // The automation card is a link — clicking it navigates to /automations/:id.
+      const automationCard = page.locator(
+        `[data-testid="automation-card-${createdAutomationId}"]`,
+      );
+
+      await automationCard.click();
       await waitForPath(page, /\/automations\/.+/, 10_000);
     });
 
@@ -507,7 +633,9 @@ test.describe("mock-LLM automation lifecycle", () => {
     // The ConfigurationSection renders schedule_human (e.g. "Every day at 9:00 AM")
     // or falls back to the raw cron expression.
     await test.step("verify cron schedule displayed on detail page", async () => {
-      await expect(page.getByText(CRON_SCHEDULE)).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByText(CRON_SCHEDULE)).toBeVisible({
+        timeout: 10_000,
+      });
     });
 
     await test.step("verify run shows COMPLETED with conversation link", async () => {
@@ -548,5 +676,4 @@ test.describe("mock-LLM automation lifecycle", () => {
       }
     });
   });
-
 });

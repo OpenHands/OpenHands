@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { ErrorClassification } from "@openhands/typescript-client";
 
 /**
  * "connection" errors auto-clear once connectivity recovers; "conversation"
@@ -16,6 +17,7 @@ interface ErrorMessageState {
    * null for errors that carry no code (connection errors, plain strings).
    */
   errorCode: string | null;
+  errorClassification: ErrorClassification | null;
 }
 
 interface ErrorMessageActions {
@@ -23,6 +25,7 @@ interface ErrorMessageActions {
     message: string,
     type?: ErrorMessageType,
     code?: string | null,
+    classification?: ErrorClassification | null,
   ) => void;
   removeErrorMessage: () => void;
   /** Clears the error only when it is a transient connection error. */
@@ -35,6 +38,7 @@ const initialState: ErrorMessageState = {
   errorMessage: null,
   errorType: null,
   errorCode: null,
+  errorClassification: null,
 };
 
 export const useErrorMessageStore = create<ErrorMessageStore>((set) => ({
@@ -44,11 +48,13 @@ export const useErrorMessageStore = create<ErrorMessageStore>((set) => ({
     message: string,
     type: ErrorMessageType = "conversation",
     code: string | null = null,
+    classification: ErrorClassification | null = null,
   ) =>
     set(() => ({
       errorMessage: message,
       errorType: type,
       errorCode: code,
+      errorClassification: classification,
     })),
 
   removeErrorMessage: () => set(() => ({ ...initialState })),

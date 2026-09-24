@@ -13,8 +13,11 @@ import {
   AutomationRunStatus,
   type Automation,
   type AutomationRun,
+  type AutomationRunStatusDetail,
 } from "#/types/automation";
+import { getAutomationRunDisplay } from "#/utils/automation-run-display";
 import { DebugAutomationButton } from "./debug-automation-button";
+import { RunStatusBadge } from "./run-status-badge";
 
 /**
  * Localized empty-state message key for each `SandboxIssue` reason.
@@ -33,6 +36,11 @@ type LogTab = "stdout" | "stderr";
 interface RunLogsModalProps {
   /** Conversation that owns the bash command. */
   conversationId: string | null;
+  /**
+   * Cloud sandbox that ran the command; the runtime handle for runs with
+   * no conversation (script automations).
+   */
+  sandboxId?: string | null;
   /** Bash command id to fetch logs for. */
   bashCommandId: string | null;
   isOpen: boolean;
@@ -57,8 +65,135 @@ function concatStream(outputs: BashOutput[], key: "stdout" | "stderr"): string {
     .join("");
 }
 
+function stringifyDetailValue(value: unknown): string | null {
+  if (typeof value === "string") return value.trim() || null;
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return null;
+}
+
+function formatStatusDetail(
+  statusDetail: AutomationRunStatusDetail | null | undefined,
+): string | null {
+  if (!statusDetail) return null;
+  const primary =
+    stringifyDetailValue(statusDetail.formatted_detail) ??
+    stringifyDetailValue(statusDetail.detail);
+  const context = [
+    stringifyDetailValue(statusDetail.phase),
+    stringifyDetailValue(statusDetail.kind),
+    stringifyDetailValue(statusDetail.source),
+    stringifyDetailValue(statusDetail.operation),
+    stringifyDetailValue(statusDetail.code),
+    stringifyDetailValue(statusDetail.status_code),
+  ].filter(Boolean);
+
+  if (primary && context.length > 0) {
+    return `${primary} (${context.join(" · ")})`;
+  }
+  if (primary) return primary;
+  if (context.length > 0) return context.join(" · ");
+  return JSON.stringify(statusDetail);
+}
+
+function RunInspectionSummary({ run }: { run: AutomationRun | undefined }) {
+  const { t } = useTranslation("openhands");
+  if (!run) return null;
+
+  const display = getAutomationRunDisplay(run);
+  const taskSummary = display.taskOutcome?.outcomeSummary ?? null;
+  const taskMetadataText = display.customTaskMetadataText;
+  const taskStatus =
+    run.status === AutomationRunStatus.COMPLETED || display.taskOutcome
+      ? display.badgeStatus
+      : null;
+  const systemError = run.error_detail?.trim() || null;
+  const statusDetail = formatStatusDetail(run.status_detail);
+  const hasSystemDetails = systemError || statusDetail;
+
+  return (
+    <dl className="mt-4 grid gap-3 rounded-lg border border-border bg-black/20 p-3 text-xs">
+      <div className="grid gap-1 sm:grid-cols-[5rem_minmax(0,1fr)] sm:items-center">
+        <dt className="text-muted">
+          {t(I18nKey.AUTOMATIONS$DETAIL$RUN_LABEL)}
+        </dt>
+        <dd>
+          <span className="inline-flex rounded-md bg-surface-raised px-2 py-0.5 font-mono text-[10px] font-medium text-muted">
+            {run.status}
+          </span>
+        </dd>
+      </div>
+      <div className="grid gap-1 sm:grid-cols-[5rem_minmax(0,1fr)] sm:items-start">
+        <dt className="pt-0.5 text-muted">
+          {t(I18nKey.AUTOMATIONS$DETAIL$TASK_LABEL)}
+        </dt>
+        <dd className="min-w-0 space-y-2">
+          {taskStatus ? <RunStatusBadge status={taskStatus} compact /> : null}
+          {taskSummary ? (
+            <p className="break-words text-content">{taskSummary}</p>
+          ) : taskMetadataText ? (
+            <p className="text-muted">
+              {t(I18nKey.AUTOMATIONS$DETAIL$CUSTOM_TASK_METADATA)}
+            </p>
+          ) : (
+            <p className="text-muted">
+              {t(I18nKey.AUTOMATIONS$DETAIL$NO_TASK_OUTCOME)}
+            </p>
+          )}
+          {taskMetadataText ? (
+            <div className="min-w-0 space-y-1">
+              <p className="text-muted">
+                {t(I18nKey.AUTOMATIONS$DETAIL$TASK_METADATA)}
+              </p>
+              <pre
+                data-testid="automation-task-metadata"
+                className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-black/30 p-2 font-mono text-[11px] leading-4 text-content"
+              >
+                {taskMetadataText}
+              </pre>
+            </div>
+          ) : null}
+        </dd>
+      </div>
+      <div className="grid gap-1 sm:grid-cols-[5rem_minmax(0,1fr)] sm:items-start">
+        <dt className="pt-0.5 text-muted">
+          {t(I18nKey.AUTOMATIONS$DETAIL$SYSTEM_LABEL)}
+        </dt>
+        <dd className="min-w-0 space-y-1 break-words text-content">
+          {hasSystemDetails ? (
+            <>
+              {systemError ? (
+                <p>
+                  <span className="text-muted">
+                    {t(I18nKey.COMMON$ERROR)}:{" "}
+                  </span>
+                  {systemError}
+                </p>
+              ) : null}
+              {statusDetail ? (
+                <p>
+                  <span className="text-muted">
+                    {t(I18nKey.AUTOMATIONS$DETAIL$STATUS_DETAIL)}:{" "}
+                  </span>
+                  {statusDetail}
+                </p>
+              ) : null}
+            </>
+          ) : (
+            <p className="text-muted">
+              {t(I18nKey.AUTOMATIONS$DETAIL$NO_SYSTEM_ISSUES)}
+            </p>
+          )}
+        </dd>
+      </div>
+    </dl>
+  );
+}
+
 export function RunLogsModal({
   conversationId,
+  sandboxId,
   bashCommandId,
   isOpen,
   onClose,
@@ -77,6 +212,7 @@ export function RunLogsModal({
     error,
   } = useBashCommandLogs({
     conversationId,
+    sandboxId,
     bashCommandId,
     enabled: isOpen,
   });
@@ -112,7 +248,7 @@ export function RunLogsModal({
 
   const tabBaseClass =
     "border-b-2 px-3 py-2 text-sm font-normal transition-colors focus:outline-none";
-  const tabActiveClass = "border-[var(--oh-primary)] text-white";
+  const tabActiveClass = "border-[var(--oh-primary)] text-contrast";
   const tabInactiveClass = "border-transparent text-muted hover:text-content";
 
   return (
@@ -130,7 +266,7 @@ export function RunLogsModal({
         }}
         role="presentation"
       />
-      <div className="relative flex max-h-[80vh] w-full max-w-3xl flex-col rounded-xl border border-[var(--oh-border)] bg-[var(--oh-surface)] p-6">
+      <div className="relative flex max-h-[80vh] w-full max-w-3xl flex-col rounded-xl border border-border bg-surface p-6">
         <button
           type="button"
           onClick={onClose}
@@ -144,10 +280,12 @@ export function RunLogsModal({
           {t(I18nKey.AUTOMATIONS$DETAIL$LOGS_TITLE)}
         </h2>
 
+        <RunInspectionSummary run={run} />
+
         <div
           role="tablist"
           aria-label={t(I18nKey.AUTOMATIONS$DETAIL$LOGS_TITLE)}
-          className="mt-4 flex gap-1 border-b border-[var(--oh-border)]"
+          className="mt-4 flex gap-1 border-b border-border"
         >
           <button
             type="button"
@@ -183,7 +321,7 @@ export function RunLogsModal({
           role="tabpanel"
           id={`run-logs-panel-${activeTab}`}
           aria-labelledby={`run-logs-tab-${activeTab}`}
-          className="mt-3 min-h-[12rem] flex-1 overflow-auto rounded-lg border border-[var(--oh-border)] bg-black/40 p-4 font-mono text-xs"
+          className="mt-3 min-h-[12rem] flex-1 overflow-auto rounded-lg border border-border bg-black/40 p-4 font-mono text-xs"
         >
           {noBashCommand && (
             <p className="text-muted italic">

@@ -22,6 +22,7 @@ import {
   linkPendingTaskMessages,
   schedulePendingTaskMessageReassign,
 } from "#/utils/pending-task-message-link";
+import { useBackendScopedPath } from "#/hooks/use-backend-scoped-path";
 
 const storeTaskPlugins = (
   task: AppConversationStartTask,
@@ -113,6 +114,7 @@ export const useTaskPollingController = () => {
   const { task, taskId } = polling;
   const { conversationId } = useOptionalConversationId();
   const { navigate } = useNavigation();
+  const backendScopedPath = useBackendScopedPath();
   const handledReadyTaskIdRef = useRef<string | null>(null);
 
   // Reassign optimistic pending messages before paint on the real conversation
@@ -168,9 +170,11 @@ export const useTaskPollingController = () => {
         });
       }
 
-      navigate(`/conversations/${appConversationId}`, { replace: true });
+      navigate(backendScopedPath(`/conversations/${appConversationId}`), {
+        replace: true,
+      });
     })();
-  }, [task, taskId, navigate]);
+  }, [backendScopedPath, task, taskId, navigate]);
 
   return polling;
 };

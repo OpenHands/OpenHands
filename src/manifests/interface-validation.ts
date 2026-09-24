@@ -65,6 +65,12 @@ const PLAIN_ENDPOINT_NAMES = [
   "createPrompt",
   "createPlugin",
 ] as const;
+// Endpoints added after the block shipped. A manifest published before them is
+// still admitted - requiring them would 404 the whole surface for anyone
+// pinning an older package - so they are checked only when present, and a
+// bundle entry, which is the only thing that needs them, fails on its own if
+// its manifest predates them.
+const OPTIONAL_PLAIN_ENDPOINT_NAMES = ["createBundle", "uploads"] as const;
 const ID_ENDPOINT_NAMES = ["detail", "dispatch", "runs", "tarball"] as const;
 
 export interface InterfaceValidationContext {
@@ -623,7 +629,11 @@ function checkImportExport(
 
 function checkEndpoints(check: InterfaceChecker, endpoints: unknown): void {
   if (!check.record(endpoints, "endpoints")) return;
-  const allowed = [...PLAIN_ENDPOINT_NAMES, ...ID_ENDPOINT_NAMES];
+  const allowed = [
+    ...PLAIN_ENDPOINT_NAMES,
+    ...OPTIONAL_PLAIN_ENDPOINT_NAMES,
+    ...ID_ENDPOINT_NAMES,
+  ];
   check.closed(endpoints, allowed, "endpoints");
 
   const endpointAt = (name: string): string | null => {
@@ -639,7 +649,11 @@ function checkEndpoints(check: InterfaceChecker, endpoints: unknown): void {
     return value;
   };
 
-  PLAIN_ENDPOINT_NAMES.forEach((name) => {
+  const plainNames = [
+    ...PLAIN_ENDPOINT_NAMES,
+    ...OPTIONAL_PLAIN_ENDPOINT_NAMES.filter((name) => name in endpoints),
+  ];
+  plainNames.forEach((name) => {
     const value = endpointAt(name);
     if (value !== null && /[{}]/.test(value)) {
       check.fail(`endpoints.${name}`, "must not carry a substitution");

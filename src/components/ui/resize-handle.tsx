@@ -6,23 +6,26 @@ interface ResizeHandleProps {
   className?: string;
   /** While the parent panel drag is active, keep the grip line highlighted. */
   isDragging?: boolean;
+  testId?: string;
 }
 
 export function ResizeHandle({
   onMouseDown,
   className,
   isDragging = false,
+  testId,
 }: ResizeHandleProps) {
   const [isHovering, setIsHovering] = useState(false);
   const lineActive = isDragging || isHovering;
 
   return (
     <div
+      data-testid={testId}
       className={cn("relative z-10 w-0 shrink-0 self-stretch", className)}
       aria-hidden
     >
       <div
-        className="absolute inset-y-0 left-1/2 w-3 min-w-[12px] -translate-x-1/2 cursor-ew-resize"
+        className="absolute inset-y-0 left-1/2 w-3 min-w-3 -translate-x-1/2 cursor-ew-resize"
         onMouseDown={onMouseDown}
         onMouseEnter={() => setIsHovering(true)}
         onMouseLeave={() => setIsHovering(false)}
@@ -30,7 +33,7 @@ export function ResizeHandle({
       <div
         className={cn(
           "pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 transition-colors",
-          lineActive ? "bg-white" : "bg-transparent",
+          lineActive ? "bg-contrast" : "bg-transparent",
         )}
         aria-hidden
       />

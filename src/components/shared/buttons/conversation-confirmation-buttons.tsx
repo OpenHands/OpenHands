@@ -42,7 +42,9 @@ export function ConversationConfirmationButtons() {
       }
 
       // Mark event as submitted to prevent duplicate submissions
-      addSubmittedEventId(awaitingAction.id);
+      if (awaitingAction.id) {
+        addSubmittedEventId(awaitingAction.id);
+      }
 
       // Call the agent-server API endpoint
       respondToConfirmation({
@@ -91,7 +93,8 @@ export function ConversationConfirmationButtons() {
   if (
     curAgentState !== AgentState.AWAITING_USER_CONFIRMATION ||
     !awaitingAction ||
-    submittedEventIds.includes(awaitingAction.id)
+    (awaitingAction.id !== undefined &&
+      submittedEventIds.includes(awaitingAction.id))
   ) {
     return null;
   }
@@ -114,7 +117,7 @@ export function ConversationConfirmationButtons() {
         />
       )}
       <div className="flex justify-between items-center">
-        <p className="text-sm font-normal text-white">
+        <p className="text-sm font-normal text-contrast">
           {t(I18nKey.CHAT_INTERFACE$USER_ASK_CONFIRMATION)}
         </p>
         <div className="flex items-center gap-3">

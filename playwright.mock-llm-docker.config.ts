@@ -202,7 +202,7 @@ export default defineConfig({
         // Stop any leftover container from a previous failed run
         `docker rm -f ${CONTAINER_NAME} 2>/dev/null;`,
         "exec docker run",
-        "--rm",
+        // Keep the container until the workflow captures its logs.
         `--name ${CONTAINER_NAME}`,
         "--network host",
         // Mount the mock ACP server script so the agent-server inside
