@@ -210,15 +210,13 @@ test.describe("Canvas Extensions lifecycle", () => {
     const sidebarItem = page.getByTestId(SIDEBAR_ITEM);
     await expect(sidebarItem).toBeVisible();
 
-    // The manifest-declared icon is served from the extension root and shown
-    // in the sidebar (not the generic default icon).
+    // The manifest-declared icon is fetched through the authenticated
+    // backend client and rendered as an object URL in the sidebar (not the
+    // generic default icon).
     if (manifest.icon) {
       const icon = sidebarItem.getByTestId("canvas-extension-icon");
       await expect(icon).toBeVisible();
-      await expect(icon).toHaveAttribute(
-        "src",
-        new RegExp(`/file\\?path=${encodeURIComponent(manifest.icon)}$`),
-      );
+      await expect(icon.getAttribute("src")).toMatch(/^blob:/);
     }
 
     await sidebarItem.click();

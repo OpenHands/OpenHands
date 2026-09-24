@@ -193,4 +193,48 @@ describe("CanvasExtensionsService", () => {
       ),
     ).toBeNull();
   });
+
+  it("fetches the declared icon as an authenticated blob from the typed client", async () => {
+    const blob = new Blob(["<svg/>"], { type: "image/svg+xml" });
+    get.mockResolvedValue(blob);
+
+    await expect(
+      CanvasExtensionsService.fetchIcon("demo-extension", "assets/pulse.svg"),
+    ).resolves.toBe(blob);
+
+    expect(AgentServerClient).toHaveBeenCalledWith(
+      expect.objectContaining({
+        host: localBackend.host,
+        apiKey: localBackend.apiKey,
+        workingDir: expect.any(String),
+      }),
+    );
+    expect(get).toHaveBeenCalledWith(
+      "/api/canvas-extensions/installed/demo-extension/file?path=assets%2Fpulse.svg",
+      { responseType: "blob" },
+    );
+  });
+
+  it("returns null and never hits the client for an unsafe icon path", async () => {
+    await expect(
+      CanvasExtensionsService.fetchIcon("demo-extension", "../../pulse.svg"),
+    ).resolves.toBeNull();
+    await expect(
+      CanvasExtensionsService.fetchIcon(
+        "demo-extension",
+        "https://example.com/pulse.svg",
+      ),
+    ).resolves.toBeNull();
+    expect(AgentServerClient).not.toHaveBeenCalled();
+  });
+
+  it("returns null when the backend cannot serve the icon", async () => {
+    get.mockRejectedValue(
+      Object.assign(new Error("not found"), { name: "HttpError", status: 404 }),
+    );
+
+    await expect(
+      CanvasExtensionsService.fetchIcon("demo-extension", "assets/pulse.svg"),
+    ).resolves.toBeNull();
+  });
 });

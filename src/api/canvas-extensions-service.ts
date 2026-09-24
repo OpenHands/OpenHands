@@ -136,20 +136,34 @@ class CanvasExtensionsService {
   }
 
   /**
-   * Build the URL that serves a manifest-declared SVG icon from the installed
+   * Build the path that serves a manifest-declared SVG icon from the installed
    * extension's root. Returns `null` for a missing or unsafe path so callers
    * degrade to the default icon instead of issuing a bogus request.
-   *
-   * The icon is loaded as an `<img>` source rather than injected as markup,
-   * so the SVG is rendered under the image sandbox and cannot execute
-   * scripts. The agent-server additionally re-validates the path and serves
-   * the file with an `image/svg+xml` content type.
    */
   static buildIconUrl(name: string, iconPath: string): string | null {
     if (!isValidCanvasExtensionIconPath(iconPath)) return null;
     return `${installedExtensionPath(name)}/file?path=${encodeURIComponent(
       iconPath.trim(),
     )}`;
+  }
+
+  /**
+   * Fetch a manifest-declared SVG icon through the active backend's typed
+   * client, so the request carries the session API key and targets the
+   * correct backend host (the same sanctioned path as every other extension
+   * API call). Returns `null` when the declared path is unsafe or the
+   * backend cannot serve the asset, so callers fall back to the default
+   * icon instead of breaking extension loading.
+   */
+  static async fetchIcon(name: string, iconPath: string): Promise<Blob | null> {
+    const url = this.buildIconUrl(name, iconPath);
+    if (!url) return null;
+    try {
+      const client = getClient();
+      return await client.get<Blob>(url, { responseType: "blob" });
+    } catch {
+      return null;
+    }
   }
 
   static async fetchBundle(name: string, backend?: Backend): Promise<string> {

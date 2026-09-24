@@ -16,10 +16,12 @@ interface CanvasExtensionIconProps {
  * manifest-declared SVG icon when one is present and loadable, and falls back
  * to the default extension icon otherwise.
  *
- * The custom icon is loaded as an `<img>` source (never inlined), so the SVG
- * runs under the browser's image sandbox and cannot execute scripts. Invalid,
- * missing, or failed icons degrade gracefully to the default without
- * affecting extension loading or the surrounding UI.
+ * The custom icon is fetched through the active backend's typed client
+ * (so it authenticates with the session API key and targets the selected
+ * backend host) and rendered as an `<img>` object-URL source (never inlined,
+ * so the SVG runs under the browser's image sandbox and cannot execute scripts.
+ * Invalid, missing, or failed icons degrade gracefully to the default
+ * without affecting extension loading or the surrounding UI.
  */
 export function CanvasExtensionIcon({
   extension,
@@ -27,17 +29,52 @@ export function CanvasExtensionIcon({
   className,
 }: CanvasExtensionIconProps) {
   const iconPath = getCanvasExtensionIconPath(extension.manifest);
-  const iconUrl = iconPath
-    ? CanvasExtensionsService.buildIconUrl(extension.name, iconPath)
-    : null;
+  const [iconUrl, setIconUrl] = React.useState<string | null>(null);
   const [failed, setFailed] = React.useState(false);
 
-  // A different extension or manifest change should re-arm the error retry.
   React.useEffect(() => {
-    setFailed(false);
-  }, [iconUrl]);
+    if (!iconPath) {
+      setFailed(false);
+      return;
+    }
 
-  if (!iconUrl || failed) {
+    let cancelled = false;
+    let objectUrl: string | null = null;
+
+    setFailed(false);
+    setIconUrl(null);
+
+    (async () => {
+      try {
+        const blob = await CanvasExtensionsService.fetchIcon(
+          extension.name,
+          iconPath,
+        );
+        if (cancelled) return;
+        if (!blob) throw new Error("Icon asset unavailable");
+        objectUrl = URL.createObjectURL(blob);
+        if (cancelled) {
+          URL.revokeObjectURL(objectUrl);
+          return;
+        }
+        setIconUrl(objectUrl);
+      } catch (error) {
+        if (cancelled) return;
+        console.warn(
+          `[canvas-extensions] Failed to load custom icon for ${extension.name}: ${iconPath}`,
+          error,
+        );
+        setFailed(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [extension.name, iconPath]);
+
+  if (!iconPath || failed) {
     return (
       <PanelsTopLeft
         width={size}
@@ -48,6 +85,8 @@ export function CanvasExtensionIcon({
       />
     );
   }
+
+  if (!iconUrl) return null;
 
   return (
     <img
@@ -60,7 +99,7 @@ export function CanvasExtensionIcon({
       data-testid="canvas-extension-icon"
       onError={() => {
         console.warn(
-          `[canvas-extensions] Failed to load custom icon for ${extension.name}: ${iconUrl}`,
+          `[canvas-extensions] Failed to load custom icon for ${extension.name}: ${iconPath}`,
         );
         setFailed(true);
       }}
