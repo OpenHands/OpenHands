@@ -40,6 +40,7 @@ prepareApp().then(() =>
         <AgentServerUIProviders
           analytics={DEFAULT_AGENT_SERVER_ANALYTICS}
           withStyleRoot={false}
+          resolveCloudOrganization={false}
         >
           <HydratedRouter />
         </AgentServerUIProviders>
