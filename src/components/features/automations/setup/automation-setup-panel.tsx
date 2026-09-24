@@ -15,7 +15,7 @@ import {
   Code2,
   FileText,
   Globe2,
-  Puzzle,
+  X,
   Zap,
 } from "lucide-react";
 import AutomationService, {
@@ -39,6 +39,8 @@ import { packTarGzip } from "#/utils/tar-gzip";
 import { AvailableLanguages } from "#/i18n";
 import { I18nKey } from "#/i18n/declaration";
 import { BrandButton } from "#/components/features/settings/brand-button";
+import { OptionalTag } from "#/components/features/settings/optional-tag";
+import { AutomationSetupPromptStack } from "#/components/features/automations/setup/automation-setup-prompt-stack";
 import { BackNavButton } from "#/components/shared/buttons/back-nav-button";
 import {
   formControlBorderClassName,
@@ -88,11 +90,7 @@ const PREFLIGHT_TARBALL_PATH =
 export const AGENT_FIELD_STREAM_CHARACTER_DELAY_MS = 12;
 export const AGENT_FIELD_STREAM_SETTLE_DELAY_MS = 160;
 
-const AUTOMATION_SETUP_KINDS: AutomationSetupKind[] = [
-  "prompt",
-  "plugin",
-  "custom",
-];
+const AUTOMATION_SETUP_KINDS: AutomationSetupKind[] = ["prompt", "custom"];
 const FREQUENCIES = [
   "once",
   "hourly",
@@ -426,13 +424,26 @@ function endpointName(kind: AutomationSetupKind): InterfaceEndpointName {
   return "createPrompt";
 }
 
+/** Plugin is an optional attachment on a prompt, not its own setup type. */
+function presetKindForEndpoint(
+  kind: AutomationSetupKind,
+  pluginSource: string,
+): AutomationSetupKind {
+  if (kind === "custom") return "custom";
+  return pluginSource.trim() ? "plugin" : "prompt";
+}
+
 /**
  * The server-backed draft endpoint the current kind posts to. Mirrors the
  * service's `DraftEndpoint` literal: the raw `"/v1"` path for custom bundles
  * (which ship their own tarball), and the preset paths otherwise.
  */
-function draftEndpoint(kind: AutomationSetupKind): AutomationDraftEndpoint {
-  const path = getAutomationEndpoint(endpointName(kind));
+function draftEndpoint(
+  kind: AutomationSetupKind,
+  pluginSource = "",
+): AutomationDraftEndpoint {
+  const resolved = presetKindForEndpoint(kind, pluginSource);
+  const path = getAutomationEndpoint(endpointName(resolved));
   if (
     path === "/v1" ||
     path === "/v1/preset/prompt" ||
@@ -442,7 +453,7 @@ function draftEndpoint(kind: AutomationSetupKind): AutomationDraftEndpoint {
   }
   // A manifest that remaps the endpoint is not expected for the assisted
   // flow; fall back to the preset prompt path so a draft can still be saved.
-  return kind === "plugin" ? "/v1/preset/plugin" : "/v1/preset/prompt";
+  return resolved === "plugin" ? "/v1/preset/plugin" : "/v1/preset/prompt";
 }
 
 /**
@@ -680,6 +691,7 @@ export function AutomationSetupPanel({
     "idle" | "saving" | "saved" | "error"
   >("idle");
   const [isTaggedDraftMissing, setIsTaggedDraftMissing] = useState(false);
+  const [pluginFieldsOpen, setPluginFieldsOpen] = useState(false);
   const propTaggedServerDraftId =
     getAutomationDraftIdFromTags(conversationTags);
   const [currentTaggedServerDraftId, setCurrentTaggedServerDraftId] = useState(
@@ -1022,7 +1034,7 @@ export function AutomationSetupPanel({
     }
     if (showTimeout && timeoutSeconds.trim())
       body.timeout = Number(timeoutSeconds);
-    if (kind === "plugin") {
+    if (pluginSource.trim()) {
       body.plugins = [
         {
           source: pluginSource.trim(),
@@ -1068,7 +1080,7 @@ export function AutomationSetupPanel({
   const isDraftDirty = useMemo(() => {
     if (!serverDraft) return true;
     return (
-      serverDraft.endpoint !== draftEndpoint(kind) ||
+      serverDraft.endpoint !== draftEndpoint(kind, pluginSource) ||
       (serverDraft.name ?? "") !== normalizedName() ||
       JSON.stringify(serverDraft.draft) !== JSON.stringify(draftRequestBody())
     );
@@ -1161,7 +1173,7 @@ export function AutomationSetupPanel({
   ): Promise<AutomationDraftApiResponse> => {
     const body = draftRequestBody(tarballPath);
     const request = {
-      endpoint: draftEndpoint(kind),
+      endpoint: draftEndpoint(kind, pluginSource),
       draft: body,
       name: normalizedName(),
     };
@@ -1175,7 +1187,9 @@ export function AutomationSetupPanel({
   };
   const runPreflightValidation = async () => {
     const result = await AutomationService.validateDraft({
-      endpoint: getAutomationEndpoint(endpointName(kind)),
+      endpoint: getAutomationEndpoint(
+        endpointName(presetKindForEndpoint(kind, pluginSource)),
+      ),
       draft:
         kind === "custom"
           ? buildCustomBody(PREFLIGHT_TARBALL_PATH)
@@ -1196,7 +1210,7 @@ export function AutomationSetupPanel({
       });
       return false;
     }
-    if (kind === "plugin" && !pluginSource.trim()) {
+    if (kind !== "custom" && pluginRef.trim() && !pluginSource.trim()) {
       setStatusMessage({
         kind: "error",
         text: t(I18nKey.AUTOMATION_SETUP$PLUGIN_REQUIRED),
@@ -1359,7 +1373,7 @@ export function AutomationSetupPanel({
       } else {
         created = await AutomationService.createAutomationDraft(
           buildPresetBody(),
-          kind,
+          presetKindForEndpoint(kind, pluginSource),
         );
       }
       setSaveState("saved");
@@ -1419,9 +1433,27 @@ export function AutomationSetupPanel({
   };
 
   const compactToolbarButtonClassName = "!h-7 !min-h-7 !px-2.5 !text-xs";
+  const showPluginFields =
+    kind !== "custom" &&
+    (pluginFieldsOpen ||
+      kind === "plugin" ||
+      Boolean(pluginSource.trim() || pluginRef.trim()));
+  const addOptionButtonClassName = cn(
+    "inline-flex w-fit shrink-0 cursor-pointer items-center rounded-full border border-[var(--oh-border)] px-3 py-1.5 text-sm text-[var(--oh-muted)] hover:border-[var(--oh-interactive-hover)] hover:bg-surface-raised hover:text-content",
+    formControlTransitionClassName,
+  );
+  const saveStateText = saveStateLabel();
 
   const renderToolbarActions = () => (
     <div className="flex shrink-0 items-center gap-1.5">
+      {saveStateText ? (
+        <span
+          data-testid="automation-setup-save-state"
+          className="shrink-0 text-xs text-[var(--oh-muted)]"
+        >
+          {saveStateText}
+        </span>
+      ) : null}
       <BrandButton
         type="button"
         variant="secondary"
@@ -1483,22 +1515,13 @@ export function AutomationSetupPanel({
           </header>
         ) : null}
 
-        {saveStateLabel() ? (
-          <div
-            data-testid="automation-setup-save-state"
-            className="border-b border-[var(--oh-border)] px-5 py-2 text-xs text-[var(--oh-muted)]"
-          >
-            {saveStateLabel()}
-          </div>
-        ) : null}
-
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6">
           <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
             <div
               role="group"
               aria-label={t(I18nKey.AUTOMATION_SETUP$TYPE_LABEL)}
               className={cn(
-                "grid grid-cols-3 gap-2 rounded-xl border border-[var(--oh-border)] bg-base-secondary p-1",
+                "grid grid-cols-2 gap-2 rounded-xl border border-[var(--oh-border)] bg-base-secondary p-1",
                 streamingHighlightClassName(streamingField === "kind"),
               )}
             >
@@ -1506,9 +1529,17 @@ export function AutomationSetupPanel({
                 <button
                   key={item}
                   type="button"
-                  aria-pressed={kind === item}
+                  aria-pressed={
+                    item === "prompt" ? kind !== "custom" : kind === item
+                  }
                   data-testid={`automation-setup-kind-${item}`}
-                  onClick={() => updateField("kind", item)}
+                  onClick={() => {
+                    if (item === "prompt") {
+                      if (kind === "custom") updateField("kind", "prompt");
+                      return;
+                    }
+                    updateField("kind", item);
+                  }}
                   className={cn(
                     "flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm",
                     formControlTransitionClassName,
@@ -1519,9 +1550,6 @@ export function AutomationSetupPanel({
                 >
                   {item === "prompt" && (
                     <FileText className="size-4" aria-hidden />
-                  )}
-                  {item === "plugin" && (
-                    <Puzzle className="size-4" aria-hidden />
                   )}
                   {item === "custom" && (
                     <Code2 className="size-4" aria-hidden />
@@ -1569,12 +1597,15 @@ export function AutomationSetupPanel({
             ) : null}
 
             {kind !== "custom" ? (
-              <PromptFields
+              <AutomationSetupPromptStack
                 prompt={prompt}
+                repository={repository}
                 updatedSuffix={agentUpdatedSuffix("prompt")}
+                repositorySuffix={agentUpdatedSuffix("repository")}
                 isStreaming={streamingField === "prompt"}
                 errorText={fieldError("prompt")}
                 onPromptChange={(value) => updateField("prompt", value)}
+                onRepositoryChange={(value) => updateField("repository", value)}
               />
             ) : (
               <CustomCodeFields
@@ -1598,66 +1629,6 @@ export function AutomationSetupPanel({
                   updateField("setupScript", value)
                 }
               />
-            )}
-
-            {kind === "plugin" && (
-              <div className="grid gap-3 rounded-xl border border-[var(--oh-border)] bg-base-secondary p-4 md:grid-cols-[2fr_1fr]">
-                <Field
-                  label={t(I18nKey.AUTOMATION_SETUP$PLUGIN_SOURCE)}
-                  suffix={agentUpdatedSuffix("pluginSource")}
-                  isStreaming={streamingField === "pluginSource"}
-                >
-                  <input
-                    data-testid="automation-setup-plugin-source"
-                    value={pluginSource}
-                    placeholder={t(
-                      I18nKey.AUTOMATION_SETUP$PLUGIN_SOURCE_PLACEHOLDER,
-                    )}
-                    onChange={(event) =>
-                      updateField("pluginSource", event.target.value)
-                    }
-                    className={formControlFieldClassName}
-                  />
-                </Field>
-                <Field
-                  label={t(I18nKey.AUTOMATION_SETUP$PLUGIN_REF)}
-                  suffix={agentUpdatedSuffix("pluginRef")}
-                  isStreaming={streamingField === "pluginRef"}
-                >
-                  <input
-                    data-testid="automation-setup-plugin-ref"
-                    value={pluginRef}
-                    placeholder={t(
-                      I18nKey.AUTOMATION_SETUP$PLUGIN_REF_PLACEHOLDER,
-                    )}
-                    onChange={(event) =>
-                      updateField("pluginRef", event.target.value)
-                    }
-                    className={formControlFieldClassName}
-                  />
-                </Field>
-              </div>
-            )}
-
-            {kind !== "custom" && (
-              <Field
-                label={t(I18nKey.COMMON$REPOSITORIES)}
-                suffix={
-                  agentUpdatedSuffix("repository") ?? t(I18nKey.COMMON$OPTIONAL)
-                }
-                isStreaming={streamingField === "repository"}
-              >
-                <textarea
-                  data-testid="automation-setup-repository"
-                  value={repository}
-                  placeholder={t(I18nKey.SETUP$REPOSITORY_PLACEHOLDER)}
-                  onChange={(event) =>
-                    updateField("repository", event.target.value)
-                  }
-                  className={formControlMultilineFieldClassName}
-                  rows={2}
-                />
-              </Field>
             )}
 
             <section className="flex flex-col gap-2.5">
@@ -1752,39 +1723,140 @@ export function AutomationSetupPanel({
               <span className="text-sm">
                 {t(I18nKey.AUTOMATION_SETUP$ADDITIONAL_OPTIONS)}
               </span>
+              {showPluginFields ? (
+                <div className="relative flex flex-col gap-3 rounded-xl border border-[var(--oh-border)] bg-base-secondary px-4 pb-4">
+                  <button
+                    type="button"
+                    data-testid="automation-setup-plugin-remove"
+                    aria-label={`${t(I18nKey.COMMON$REMOVE)} ${t(I18nKey.AUTOMATION_SETUP$TYPE_PLUGIN)}`}
+                    className="absolute right-3 top-3 inline-flex size-6 items-center justify-center rounded-md text-[var(--oh-muted)] hover:bg-white/10 hover:text-white"
+                    onClick={() => {
+                      setPluginFieldsOpen(false);
+                      updateField("pluginSource", "");
+                      updateField("pluginRef", "");
+                      if (kind === "plugin") updateField("kind", "prompt");
+                    }}
+                  >
+                    <X className="size-4" aria-hidden />
+                  </button>
+                  <div className="grid gap-3 pr-8 pt-3 md:grid-cols-[2fr_1fr]">
+                    <Field
+                      label={t(I18nKey.AUTOMATION_SETUP$PLUGIN_SOURCE)}
+                      labelClassName="font-normal text-content"
+                      suffix={agentUpdatedSuffix("pluginSource")}
+                      isStreaming={streamingField === "pluginSource"}
+                    >
+                      <input
+                        data-testid="automation-setup-plugin-source"
+                        value={pluginSource}
+                        placeholder={t(
+                          I18nKey.AUTOMATION_SETUP$PLUGIN_SOURCE_PLACEHOLDER,
+                        )}
+                        onChange={(event) =>
+                          updateField("pluginSource", event.target.value)
+                        }
+                        className={formControlFieldClassName}
+                      />
+                    </Field>
+                    <Field
+                      label={t(I18nKey.AUTOMATION_SETUP$PLUGIN_REF)}
+                      labelClassName="font-normal text-content"
+                      suffix={agentUpdatedSuffix("pluginRef")}
+                      isStreaming={streamingField === "pluginRef"}
+                    >
+                      <input
+                        data-testid="automation-setup-plugin-ref"
+                        value={pluginRef}
+                        placeholder={t(
+                          I18nKey.AUTOMATION_SETUP$PLUGIN_REF_PLACEHOLDER,
+                        )}
+                        onChange={(event) =>
+                          updateField("pluginRef", event.target.value)
+                        }
+                        className={formControlFieldClassName}
+                      />
+                    </Field>
+                  </div>
+                </div>
+              ) : null}
               {showTimeout ? (
-                <Field
-                  label={t(I18nKey.AUTOMATION_SETUP$TIMEOUT_SECONDS)}
-                  suffix={agentUpdatedSuffix("timeoutSeconds")}
-                  isStreaming={streamingField === "timeoutSeconds"}
-                >
+                <label className="flex w-full min-w-0 flex-col gap-2.5 rounded-xl border border-[var(--oh-border)] bg-base-secondary p-4">
+                  <div className="flex w-full items-center gap-2">
+                    <span className="text-sm font-normal text-content">
+                      {t(I18nKey.AUTOMATION_SETUP$TIMEOUT_SECONDS)}
+                    </span>
+                    <OptionalTag />
+                    {agentUpdatedSuffix("timeoutSeconds") ? (
+                      <span className="text-xs text-[var(--oh-muted)]">
+                        {agentUpdatedSuffix("timeoutSeconds")}
+                      </span>
+                    ) : null}
+                    <button
+                      type="button"
+                      data-testid="automation-setup-timeout-remove"
+                      aria-label={`${t(I18nKey.COMMON$REMOVE)} ${t(I18nKey.AUTOMATION_SETUP$TIMEOUT_SECONDS)}`}
+                      className="ml-auto inline-flex size-6 items-center justify-center rounded-md text-[var(--oh-muted)] hover:bg-white/10 hover:text-white"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => {
+                        updateField("showTimeout", false);
+                        updateField("timeoutSeconds", "");
+                      }}
+                    >
+                      <X className="size-4" aria-hidden />
+                    </button>
+                  </div>
                   <input
                     data-testid="automation-setup-timeout"
                     type="number"
                     min="1"
+                    name="timeout"
                     value={timeoutSeconds}
                     onChange={(event) =>
                       updateField("timeoutSeconds", event.target.value)
                     }
-                    className={formControlFieldClassName}
+                    className={cn(
+                      formControlFieldClassName,
+                      streamingHighlightClassName(
+                        streamingField === "timeoutSeconds",
+                      ),
+                    )}
                   />
-                </Field>
-              ) : (
-                <button
-                  type="button"
-                  data-testid="automation-setup-add-timeout"
-                  onClick={() => updateField("showTimeout", true)}
-                  className={cn(
-                    "inline-flex w-fit shrink-0 cursor-pointer items-center rounded-full border border-[var(--oh-border)] px-3 py-1.5 text-sm text-[var(--oh-muted)] hover:border-[var(--oh-interactive-hover)] hover:bg-surface-raised hover:text-content",
-                    formControlTransitionClassName,
-                    streamingHighlightClassName(
-                      streamingField === "showTimeout",
-                    ),
-                  )}
-                >
-                  {t(I18nKey.AUTOMATION_SETUP$ADD_TIMEOUT)}
-                </button>
-              )}
+                </label>
+              ) : null}
+              {!showPluginFields || !showTimeout ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  {!showPluginFields && kind !== "custom" ? (
+                    <button
+                      type="button"
+                      data-testid="automation-setup-add-plugin"
+                      onClick={() => setPluginFieldsOpen(true)}
+                      className={cn(
+                        addOptionButtonClassName,
+                        streamingHighlightClassName(
+                          streamingField === "pluginSource",
+                        ),
+                      )}
+                    >
+                      {`${t(I18nKey.BUTTON$ADD)} ${t(I18nKey.AUTOMATION_SETUP$TYPE_PLUGIN)}`}
+                    </button>
+                  ) : null}
+                  {!showTimeout ? (
+                    <button
+                      type="button"
+                      data-testid="automation-setup-add-timeout"
+                      onClick={() => updateField("showTimeout", true)}
+                      className={cn(
+                        addOptionButtonClassName,
+                        streamingHighlightClassName(
+                          streamingField === "showTimeout",
+                        ),
+                      )}
+                    >
+                      {t(I18nKey.AUTOMATION_SETUP$ADD_TIMEOUT)}
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
             </section>
 
             {statusMessage && (
@@ -1805,47 +1877,6 @@ export function AutomationSetupPanel({
         </div>
       </div>
     </>
-  );
-}
-
-function PromptFields({
-  prompt,
-  updatedSuffix,
-  isStreaming,
-  errorText,
-  onPromptChange,
-}: {
-  prompt: string;
-  updatedSuffix?: string;
-  isStreaming: boolean;
-  errorText?: string;
-  onPromptChange: (value: string) => void;
-}) {
-  const { t } = useTranslation("openhands");
-  return (
-    <Field
-      label={t(I18nKey.AUTOMATIONS$PROMPT)}
-      suffix={updatedSuffix}
-      isStreaming={isStreaming}
-      errorText={errorText}
-    >
-      <div className="rounded-xl border border-[var(--oh-border)] bg-base-secondary">
-        <textarea
-          data-testid="automation-setup-prompt"
-          rows={7}
-          value={prompt}
-          onChange={(event) => onPromptChange(event.target.value)}
-          className={cn(
-            formControlMultilineFieldClassName,
-            "min-h-44 resize-none border-0 bg-transparent p-4",
-          )}
-        />
-        <div className="flex items-center justify-between border-t border-[var(--oh-border)] px-4 py-3 text-xs text-[var(--oh-muted)]">
-          <span>{t(I18nKey.AUTOMATION_SETUP$MODEL_PLACEHOLDER)}</span>
-          <span>{t(I18nKey.AUTOMATION_SETUP$PROMPT_HINT)}</span>
-        </div>
-      </div>
-    </Field>
   );
 }
 
@@ -2400,6 +2431,7 @@ function EventFields({
 
 function Field({
   label,
+  labelClassName,
   suffix,
   horizontal = false,
   isStreaming = false,
@@ -2407,6 +2439,7 @@ function Field({
   children,
 }: {
   label: string;
+  labelClassName?: string;
   suffix?: string;
   horizontal?: boolean;
   isStreaming?: boolean;
@@ -2422,7 +2455,12 @@ function Field({
         streamingHighlightClassName(isStreaming),
       )}
     >
-      <span className="flex items-center gap-2 text-sm font-semibold text-white">
+      <span
+        className={cn(
+          "flex items-center gap-2 text-sm",
+          labelClassName ?? "font-semibold text-white",
+        )}
+      >
         {label}
         {suffix && (
           <span className="font-normal text-[var(--oh-muted)]">{suffix}</span>

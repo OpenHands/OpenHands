@@ -6,8 +6,8 @@ import {
   waitFor,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { HttpError } from "@openhands/typescript-client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { HttpError } from "@openhands/typescript-client";
 import {
   NavigationProvider,
   type NavigationContextValue,
@@ -75,6 +75,18 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
 
 vi.mock("#/hooks/query/use-manifest-capabilities", () => ({
   useDeploymentCapabilities: vi.fn(() => ({ data: null, isLoading: false })),
+}));
+
+vi.mock("#/hooks/use-chat-input-llm-profile-state", () => ({
+  useChatInputLlmProfileState: () => ({
+    profiles: [],
+    currentProfileName: null,
+    currentProfileModel: null,
+    isLoading: false,
+    isSwitching: false,
+    canSwitchProfile: false,
+    selectProfile: vi.fn(),
+  }),
 }));
 
 vi.mock("#/utils/tar-gzip", () => ({
@@ -145,37 +157,52 @@ describe("AutomationSetupPanel", () => {
     const user = userEvent.setup();
     renderPanel();
 
-    expect(screen.getByTestId("automation-setup-frequency-daily")).toHaveAttribute(
-      "aria-checked",
-      "true",
-    );
+    expect(
+      screen.getByTestId("automation-setup-frequency-daily"),
+    ).toHaveAttribute("aria-checked", "true");
     expect(screen.getByTestId("automation-setup-time")).toBeInTheDocument();
-    expect(screen.queryByTestId("automation-setup-datetime")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automation-setup-datetime"),
+    ).not.toBeInTheDocument();
 
     await user.click(screen.getByTestId("automation-setup-frequency-once"));
 
     expect(screen.getByTestId("automation-setup-datetime")).toBeInTheDocument();
-    expect(screen.queryByTestId("automation-setup-time")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automation-setup-time"),
+    ).not.toBeInTheDocument();
     expect(screen.getByTestId("automation-setup-timezone")).toHaveValue(
       "America/New_York",
     );
   });
 
-  it("switches between prompt, plugin, and custom form types", async () => {
+  it("switches between prompt and custom, and reveals plugin fields on the prompt page", async () => {
     const user = userEvent.setup();
     renderPanel();
 
     expect(screen.getByTestId("automation-setup-prompt")).toHaveValue(
       "Review every pull request",
     );
-    expect(screen.getByTestId("automation-setup-save-draft")).toBeDisabled();
+    expect(
+      screen.queryByTestId("automation-setup-kind-plugin"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automation-setup-plugin-source"),
+    ).not.toBeInTheDocument();
 
-    await user.click(screen.getByTestId("automation-setup-kind-plugin"));
+    await user.click(screen.getByTestId("automation-setup-add-plugin"));
     expect(
       screen.getByTestId("automation-setup-plugin-source"),
     ).toBeInTheDocument();
+    expect(screen.getByTestId("automation-setup-prompt")).toBeInTheDocument();
 
     await user.click(screen.getByTestId("automation-setup-kind-custom"));
+    expect(
+      screen.queryByTestId("automation-setup-plugin-source"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automation-setup-add-plugin"),
+    ).not.toBeInTheDocument();
     expect(screen.getByTestId("automation-setup-entrypoint")).toHaveValue(
       "python3 main.py",
     );
@@ -201,36 +228,89 @@ describe("AutomationSetupPanel", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("uses preflight validation without calling draft endpoints when unsupported", async () => {
-    vi.mocked(AutomationService.validateDraft).mockResolvedValue({
-      valid: true,
-      errors: [],
-    });
-
+  it("removes an opened timeout or plugin from additional options", async () => {
     const user = userEvent.setup();
     renderPanel();
 
-    await user.click(screen.getByTestId("automation-setup-test"));
+    await user.click(screen.getByTestId("automation-setup-add-timeout"));
+    expect(screen.getByTestId("automation-setup-timeout")).toBeInTheDocument();
+    await user.click(screen.getByTestId("automation-setup-timeout-remove"));
+    expect(
+      screen.queryByTestId("automation-setup-timeout"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("automation-setup-add-timeout"),
+    ).toBeInTheDocument();
 
-    await waitFor(() =>
-      expect(AutomationService.validateDraft).toHaveBeenCalled(),
-    );
-    expect(AutomationService.createServerDraft).not.toHaveBeenCalled();
-    expect(AutomationService.validateDraft).toHaveBeenCalledWith({
-      endpoint: "/v1/preset/prompt",
-      draft: expect.objectContaining({
-        enabled: false,
-        prompt: "Review every pull request",
-        trigger: {
-          type: "cron",
-          schedule: "0 9 * * *",
-          timezone: "America/New_York",
-        },
-      }),
-    });
+    await user.click(screen.getByTestId("automation-setup-add-plugin"));
+    expect(
+      screen.getByTestId("automation-setup-plugin-source"),
+    ).toBeInTheDocument();
+    await user.click(screen.getByTestId("automation-setup-plugin-remove"));
+    expect(
+      screen.queryByTestId("automation-setup-plugin-source"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("automation-setup-add-plugin"),
+    ).toBeInTheDocument();
   });
 
+  it.each([
+    {
+      label: "an axios-shaped 404 (local backend)",
+      error: { response: { status: 404 } },
+    },
+    {
+      label: "the shared client's HttpError 404 (cloud backend)",
+      error: new HttpError(404, "Not Found", { detail: "No such route" }),
+    },
+  ])(
+    "falls back to validation when draft endpoints are unavailable ($label)",
+    async ({ error }) => {
+      vi.mocked(AutomationService.createServerDraft).mockRejectedValue(error);
+      vi.mocked(AutomationService.validateDraft).mockResolvedValue({
+        valid: true,
+        errors: [],
+      });
+
+      const user = userEvent.setup();
+      renderPanel();
+
+      await user.click(screen.getByTestId("automation-setup-test"));
+
+      await waitFor(() =>
+        expect(AutomationService.createServerDraft).toHaveBeenCalledWith(
+          expect.objectContaining({
+            endpoint: "/v1/preset/prompt",
+            draft: expect.objectContaining({
+              enabled: false,
+              prompt: "Review every pull request",
+            }),
+          }),
+        ),
+      );
+      expect(AutomationService.validateDraft).toHaveBeenCalledWith({
+        endpoint: "/v1/preset/prompt",
+        draft: expect.objectContaining({
+          enabled: false,
+          prompt: "Review every pull request",
+          trigger: {
+            type: "cron",
+            schedule: "0 9 * * *",
+            timezone: "America/New_York",
+          },
+        }),
+      });
+      expect(screen.getByTestId("automation-setup-status")).toHaveTextContent(
+        "AUTOMATION_SETUP$READY_TO_TEST",
+      );
+    },
+  );
+
   it("sends each comma-separated repository to the automation service", async () => {
+    vi.mocked(AutomationService.createServerDraft).mockRejectedValue({
+      response: { status: 404 },
+    });
     vi.mocked(AutomationService.validateDraft).mockResolvedValue({
       valid: true,
       errors: [],
@@ -239,10 +319,26 @@ describe("AutomationSetupPanel", () => {
     const user = userEvent.setup();
     renderPanel();
 
+    await user.click(screen.getByTestId("automation-setup-repository-add"));
     await user.type(
-      screen.getByTestId("automation-setup-repository"),
-      "OpenHands/OpenHands, https://gitlab.com/acme/project",
+      screen.getByTestId("automation-setup-repository-address"),
+      "OpenHands/OpenHands",
     );
+    await user.click(screen.getByTestId("automation-setup-repository-submit"));
+
+    const addButton = screen.getByTestId("automation-setup-repository-add");
+    const pill = screen.getByTestId("automation-setup-repository-value");
+    expect(
+      addButton.compareDocumentPosition(pill) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    await user.click(screen.getByTestId("automation-setup-repository-add"));
+    await user.type(
+      screen.getByTestId("automation-setup-repository-address"),
+      "OpenHands/software-agent-sdk",
+    );
+    await user.click(screen.getByTestId("automation-setup-repository-submit"));
     await user.click(screen.getByTestId("automation-setup-test"));
 
     await waitFor(() =>
@@ -251,7 +347,7 @@ describe("AutomationSetupPanel", () => {
           draft: expect.objectContaining({
             repos: [
               { url: "OpenHands/OpenHands", provider: "github" },
-              { url: "https://gitlab.com/acme/project" },
+              { url: "OpenHands/software-agent-sdk", provider: "github" },
             ],
           }),
         }),
@@ -416,7 +512,6 @@ describe("AutomationSetupPanel", () => {
       expect.objectContaining({
         tarball_path: "oh-internal://uploads/custom-archive",
         entrypoint: "python3 main.py --once",
-        enabled: false,
         setup_script_path: "setup.sh",
       }),
       "custom",
@@ -456,55 +551,6 @@ describe("AutomationSetupPanel", () => {
       } as never);
     });
 
-    it.each([
-      {
-        label: "an axios-shaped 404 (local backend)",
-        error: { response: { status: 404 } },
-      },
-      {
-        label: "the shared client's HttpError 404 (cloud backend)",
-        error: new HttpError(404, "Not Found", { detail: "No such route" }),
-      },
-    ])(
-      "falls back to validation when draft endpoints are unavailable ($label)",
-      async ({ error }) => {
-        vi.mocked(AutomationService.createServerDraft).mockRejectedValue(error);
-        vi.mocked(AutomationService.validateDraft).mockResolvedValue({
-          valid: true,
-          errors: [],
-        });
-
-        const user = userEvent.setup();
-        renderPanel();
-
-        await user.click(screen.getByTestId("automation-setup-test"));
-
-        await waitFor(() =>
-          expect(AutomationService.createServerDraft).toHaveBeenCalledWith(
-            expect.objectContaining({
-              endpoint: "/v1/preset/prompt",
-              draft: expect.objectContaining({
-                enabled: false,
-                prompt: "Review every pull request",
-              }),
-            }),
-          ),
-        );
-        expect(AutomationService.validateDraft).toHaveBeenCalledWith({
-          endpoint: "/v1/preset/prompt",
-          draft: expect.objectContaining({
-            enabled: false,
-            prompt: "Review every pull request",
-            trigger: {
-              type: "cron",
-              schedule: "0 9 * * *",
-              timezone: "America/New_York",
-            },
-          }),
-        });
-      },
-    );
-
     it("tags the conversation as automation setup mode when opened", async () => {
       renderPanel();
 
@@ -516,6 +562,17 @@ describe("AutomationSetupPanel", () => {
           expect.objectContaining({ automationsetup: "draft" }),
         ),
       );
+    });
+
+    it("shows the save state beside Save draft instead of in its own bar", () => {
+      renderPanel();
+
+      const label = screen.getByTestId("automation-setup-save-state");
+      const save = screen.getByTestId("automation-setup-save-draft");
+
+      expect(label).toHaveTextContent("AUTOMATION_SETUP$UNSAVED_CHANGES");
+      expect(label.className).not.toContain("border-b");
+      expect(save.parentElement?.firstElementChild).toBe(label);
     });
 
     it("creates a server draft on Save draft and updates it on the next save", async () => {
@@ -549,6 +606,9 @@ describe("AutomationSetupPanel", () => {
       expect(
         screen.getByTestId("automation-setup-draft-details"),
       ).toBeInTheDocument();
+      expect(
+        screen.getByTestId("automation-setup-draft-validity"),
+      ).toHaveTextContent("AUTOMATION_SETUP$READY_TO_TEST");
 
       // Second save reuses the persisted id rather than creating again.
       await user.click(screen.getByTestId("automation-setup-save-draft"));
@@ -681,6 +741,9 @@ describe("AutomationSetupPanel", () => {
         ),
       );
       expect(AutomationService.validateDraft).not.toHaveBeenCalled();
+      expect(screen.getByTestId("automation-setup-status")).toHaveTextContent(
+        "AUTOMATION_SETUP$TEST_DISPATCHED",
+      );
       expect(mockNavigate).not.toHaveBeenCalledWith(
         "/conversations/conv-run-1",
       );
@@ -856,6 +919,9 @@ describe("AutomationSetupPanel", () => {
       fireEvent.change(payloadInput, { target: { value: "not json" } });
       await user.click(screen.getByTestId("automation-setup-test"));
 
+      expect(screen.getByTestId("automation-setup-status")).toHaveTextContent(
+        "AUTOMATION_SETUP$TEST_EVENT_PAYLOAD_INVALID",
+      );
       expect(AutomationService.createServerDraft).not.toHaveBeenCalled();
       expect(AutomationService.dispatchServerDraft).not.toHaveBeenCalled();
     });
