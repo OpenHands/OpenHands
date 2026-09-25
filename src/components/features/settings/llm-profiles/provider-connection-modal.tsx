@@ -26,6 +26,25 @@ import { heroUiAutocompleteSelectorButtonClassName } from "#/ui/combobox-caret";
 
 const DEFAULT_PROVIDER = "custom";
 
+/**
+ * A non-empty base URL must be a valid http or https URL with a hostname,
+ * mirroring `isValidHostUrl` in `backend-form-modal.tsx`. Invalid values are
+ * rejected at save time instead of failing later when the LLM is used
+ * (issue #15778).
+ */
+export function isValidBaseUrl(value: string): boolean {
+  if (value === "") return true; // optional field: empty is valid
+  try {
+    const url = new URL(value);
+    return (
+      (url.protocol === "http:" || url.protocol === "https:") &&
+      url.hostname.length > 0
+    );
+  } catch {
+    return false;
+  }
+}
+
 interface ProviderConnectionModalProps {
   /** When `null` the modal is closed; otherwise it edits that connection. */
   connection?: ProviderConnection | null;
@@ -59,7 +78,8 @@ export function ProviderConnectionModal({
   const [provider, setProvider] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
-
+  const trimmedBaseUrl = baseUrl.trim();
+  const baseUrlInvalid = !isValidBaseUrl(trimmedBaseUrl);
   const isOpen = isCreate || Boolean(connection);
   const keyAlreadySet = Boolean(connection?.api_key_set);
 
@@ -74,10 +94,12 @@ export function ProviderConnectionModal({
   const trimmedName = displayName.trim();
   const trimmedKey = apiKey.trim();
   // On create the key is required; on edit an empty key means "leave unchanged".
+  // A non-empty base URL must parse as an http(s) URL (#15778).
   const isValid =
     Boolean(trimmedName) &&
     Boolean(provider?.trim()) &&
-    (!isCreate || Boolean(trimmedKey));
+    (!isCreate || Boolean(trimmedKey)) &&
+    !baseUrlInvalid;
 
   const selectedProviderMissing = Boolean(
     provider && !providers.some((candidate) => candidate.name === provider),
@@ -100,7 +122,6 @@ export function ProviderConnectionModal({
 
   const handleSubmit = async () => {
     if (!isValid || isPending) return;
-    const trimmedBaseUrl = baseUrl.trim();
 
     try {
       if (isCreate) {
@@ -271,6 +292,11 @@ export function ProviderConnectionModal({
           // eslint-disable-next-line i18next/no-literal-string -- example value, not translatable
           placeholder="https://api.openai.com"
           onChange={setBaseUrl}
+          error={
+            baseUrlInvalid
+              ? t(I18nKey.SETTINGS$PROVIDER_CONNECTION_INVALID_BASE_URL)
+              : undefined
+          }
           showOptionalTag
         />
       </div>
