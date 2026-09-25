@@ -199,9 +199,35 @@ describe("AutomationSetupPanel", () => {
     expect(
       screen.queryByTestId("automation-setup-add-plugin"),
     ).not.toBeInTheDocument();
+    expect(
+      screen.getByText("AUTOMATION_SETUP$CUSTOM_PYTHON"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("AUTOMATION_SETUP$PYTHON_CODE"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automation-setup-model"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("automation-setup-custom-code-grip"),
+    ).toBeInTheDocument();
     expect(screen.getByTestId("automation-setup-entrypoint")).toHaveValue(
       "python3 main.py",
     );
+    expect(
+      screen
+        .getByTestId("automation-setup-custom-code")
+        .compareDocumentPosition(
+          screen.getByTestId("automation-setup-entrypoint"),
+        ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByTestId("automation-setup-entrypoint")
+        .compareDocumentPosition(
+          screen.getByTestId("automation-setup-setup-script"),
+        ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(
       screen.getByTestId("automation-setup-setup-script-path"),
     ).toHaveValue("setup.sh");
@@ -222,6 +248,21 @@ describe("AutomationSetupPanel", () => {
     expect(
       screen.queryByTestId("automation-setup-prompt"),
     ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automation-setup-repository"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("automation-setup-add-timeout"),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("automation-setup-kind-prompt"));
+    expect(screen.getByTestId("automation-setup-prompt")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automation-setup-entrypoint"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("automation-setup-plugin-source"),
+    ).toBeInTheDocument();
   });
 
   it("removes an opened timeout or plugin from additional options", async () => {

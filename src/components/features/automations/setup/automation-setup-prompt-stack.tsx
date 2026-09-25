@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Plus, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { BrandButton } from "#/components/features/settings/brand-button";
@@ -59,7 +59,7 @@ function SetupModelPill() {
       <button
         ref={triggerRef}
         type="button"
-        className={cn(chatInputPillButtonClassName, "max-w-[200px]")}
+        className={cn(chatInputPillButtonClassName, "max-w-[200px] rounded-lg")}
         title={displayName ?? undefined}
         data-testid="automation-setup-model"
         aria-expanded={isOpen}
@@ -202,6 +202,7 @@ export function AutomationSetupPromptStack({
   repositorySuffix,
   isStreaming,
   errorText,
+  titleAction,
   onPromptChange,
   onRepositoryChange,
 }: {
@@ -211,13 +212,15 @@ export function AutomationSetupPromptStack({
   repositorySuffix?: string;
   isStreaming: boolean;
   errorText?: string;
+  /** Sits on the Prompt title row, outside the field label. */
+  titleAction?: ReactNode;
   onPromptChange: (value: string) => void;
   onRepositoryChange: (value: string) => void;
 }) {
   const { t } = useTranslation("openhands");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { gripRef, isGripDragging, handleGripMouseDown, handleGripTouchStart } =
-    usePromptTextareaResize(textareaRef);
+    usePromptTextareaResize(textareaRef, { contentKey: prompt });
   const [isRepositoryModalOpen, setIsRepositoryModalOpen] = useState(false);
   const repositories = parseRepositories(repository);
   const addLabel = `${t(I18nKey.BUTTON$ADD)} ${t(I18nKey.AUTOMATIONS$DETAIL$REPOSITORIES)}`;
@@ -227,123 +230,130 @@ export function AutomationSetupPromptStack({
   };
 
   return (
-    <label
-      data-streaming-active={isStreaming ? "true" : undefined}
-      className="flex w-full min-w-0 flex-col gap-2.5"
-    >
-      <span className="flex items-center gap-2 text-sm">
-        {t(I18nKey.AUTOMATIONS$PROMPT)}
-        {updatedSuffix ? (
-          <span className="font-normal text-[var(--oh-muted)]">
-            {updatedSuffix}
-          </span>
+    <div className="flex w-full min-w-0 flex-col gap-2.5">
+      <div className="flex w-full items-center gap-2">
+        <span className="flex items-center gap-2 text-sm">
+          {t(I18nKey.AUTOMATIONS$PROMPT)}
+          {updatedSuffix ? (
+            <span className="font-normal text-[var(--oh-muted)]">
+              {updatedSuffix}
+            </span>
+          ) : null}
+        </span>
+        {titleAction ? (
+          <div className="ml-auto shrink-0">{titleAction}</div>
         ) : null}
-      </span>
-      <div
-        data-testid="automation-setup-prompt-stack"
-        className="relative w-full"
+      </div>
+      <label
+        data-streaming-active={isStreaming ? "true" : undefined}
+        className="flex w-full min-w-0 flex-col gap-2.5"
       >
         <div
-          data-testid="automation-setup-prompt-container"
-          className="relative z-10 -mb-[15px] flex flex-col rounded-[15px] border border-[var(--oh-border)] bg-[var(--oh-surface)] p-4"
-        >
-          <textarea
-            ref={textareaRef}
-            data-testid="automation-setup-prompt"
-            name="prompt"
-            value={prompt}
-            onChange={(event) => onPromptChange(event.target.value)}
-            placeholder={t(I18nKey.HOME$AUTOMATE_PROMPT_PLACEHOLDER)}
-            rows={5}
-            className="min-h-[120px] w-full resize-none border-0 bg-transparent p-0 text-sm text-content outline-none placeholder:text-tertiary-alt placeholder:italic"
-          />
-          <div className="flex min-w-0 items-center pt-2">
-            <SetupModelPill />
-          </div>
-          <div
-            data-testid="automation-setup-prompt-grip"
-            className="group absolute bottom-0 left-0 z-20 h-3 w-full"
-          >
-            <div
-              className="absolute inset-0 z-[1] cursor-ns-resize select-none"
-              onMouseDown={handleGripMouseDown}
-              onTouchStart={handleGripTouchStart}
-              aria-hidden
-            />
-            <div
-              ref={gripRef}
-              className={cn(
-                "pointer-events-none absolute bottom-0 left-0 z-[2] h-px w-full bg-white transition-opacity duration-200",
-                isGripDragging
-                  ? "opacity-100"
-                  : "opacity-0 group-hover:opacity-100",
-              )}
-            />
-          </div>
-        </div>
-        <div
-          data-testid="automation-setup-prompt-drawer"
-          className="flex min-h-9 items-center rounded-b-[15px] bg-[var(--oh-surface-raised)] px-4 pb-3 pt-[calc(15px+0.5rem)]"
+          data-testid="automation-setup-prompt-stack"
+          className="relative w-full"
         >
           <div
-            data-testid="automation-setup-repository"
-            className="flex w-full min-w-0 items-center gap-1 overflow-x-auto"
+            data-testid="automation-setup-prompt-container"
+            className="relative z-10 -mb-[15px] flex flex-col rounded-[15px] border border-[var(--oh-border)] bg-[var(--oh-surface)] p-4"
           >
-            <div className="flex shrink-0 items-center gap-2">
-              <span className="text-sm">
-                {t(I18nKey.AUTOMATIONS$DETAIL$REPOSITORIES)}
-              </span>
-              <OptionalTag />
-              {repositorySuffix ? (
-                <span className="text-xs text-[var(--oh-muted)]">
-                  {repositorySuffix}
-                </span>
-              ) : null}
-              <button
-                type="button"
-                data-testid="automation-setup-repository-add"
-                aria-label={addLabel}
-                className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-[var(--oh-muted)] hover:bg-white/10 hover:text-white"
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => setIsRepositoryModalOpen(true)}
-              >
-                <Plus className="size-4" aria-hidden />
-              </button>
+            <textarea
+              ref={textareaRef}
+              data-testid="automation-setup-prompt"
+              name="prompt"
+              value={prompt}
+              onChange={(event) => onPromptChange(event.target.value)}
+              placeholder={t(I18nKey.HOME$AUTOMATE_PROMPT_PLACEHOLDER)}
+              rows={5}
+              className="min-h-[120px] w-full resize-none border-0 bg-transparent p-0 text-sm text-content outline-none placeholder:text-tertiary-alt placeholder:italic"
+            />
+            <div className="flex min-w-0 items-center pt-2">
+              <SetupModelPill />
             </div>
-            {repositories.map((item) => (
-              <span
-                key={item}
-                data-testid="automation-setup-repository-value"
-                className={cn(extensionModuleCardPillClassName, "gap-1 pr-1")}
-              >
-                <span className="truncate">{item}</span>
+            <div
+              data-testid="automation-setup-prompt-grip"
+              className="group absolute bottom-0 left-0 z-20 h-3 w-full"
+            >
+              <div
+                className="absolute inset-0 z-[1] cursor-ns-resize select-none"
+                onMouseDown={handleGripMouseDown}
+                onTouchStart={handleGripTouchStart}
+                aria-hidden
+              />
+              <div
+                ref={gripRef}
+                className={cn(
+                  "pointer-events-none absolute bottom-0 left-0 z-[2] h-px w-full bg-white transition-opacity duration-200",
+                  isGripDragging
+                    ? "opacity-100"
+                    : "opacity-0 group-hover:opacity-100",
+                )}
+              />
+            </div>
+          </div>
+          <div
+            data-testid="automation-setup-prompt-drawer"
+            className="flex min-h-9 items-center rounded-b-[15px] bg-[var(--oh-surface-raised)] px-4 pb-3 pt-[calc(15px+0.5rem)]"
+          >
+            <div
+              data-testid="automation-setup-repository"
+              className="flex w-full min-w-0 items-center gap-1 overflow-x-auto"
+            >
+              <div className="flex shrink-0 items-center gap-2">
+                <span className="text-sm">
+                  {t(I18nKey.AUTOMATIONS$DETAIL$REPOSITORIES)}
+                </span>
+                <OptionalTag />
+                {repositorySuffix ? (
+                  <span className="text-xs text-[var(--oh-muted)]">
+                    {repositorySuffix}
+                  </span>
+                ) : null}
                 <button
                   type="button"
-                  data-testid="automation-setup-repository-remove"
-                  aria-label={`${t(I18nKey.COMMON$REMOVE)} ${item}`}
-                  className="inline-flex size-4 items-center justify-center rounded-full text-tertiary-light hover:bg-white/10 hover:text-white"
+                  data-testid="automation-setup-repository-add"
+                  aria-label={addLabel}
+                  className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-[var(--oh-muted)] hover:bg-white/10 hover:text-white"
                   onMouseDown={(event) => event.preventDefault()}
-                  onClick={() =>
-                    writeRepositories(
-                      repositories.filter((entry) => entry !== item),
-                    )
-                  }
+                  onClick={() => setIsRepositoryModalOpen(true)}
                 >
-                  <X className="size-3" aria-hidden />
+                  <Plus className="size-4" aria-hidden />
                 </button>
-              </span>
-            ))}
+              </div>
+              {repositories.map((item) => (
+                <span
+                  key={item}
+                  data-testid="automation-setup-repository-value"
+                  className={cn(extensionModuleCardPillClassName, "gap-1 pr-1")}
+                >
+                  <span className="truncate">{item}</span>
+                  <button
+                    type="button"
+                    data-testid="automation-setup-repository-remove"
+                    aria-label={`${t(I18nKey.COMMON$REMOVE)} ${item}`}
+                    className="inline-flex size-4 items-center justify-center rounded-full text-tertiary-light hover:bg-white/10 hover:text-white"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() =>
+                      writeRepositories(
+                        repositories.filter((entry) => entry !== item),
+                      )
+                    }
+                  >
+                    <X className="size-3" aria-hidden />
+                  </button>
+                </span>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
-      {errorText ? (
-        <span
-          role="alert"
-          className="text-xs leading-5 text-[var(--oh-warning)]"
-        >
-          {errorText}
-        </span>
-      ) : null}
+        {errorText ? (
+          <span
+            role="alert"
+            className="text-xs leading-5 text-[var(--oh-warning)]"
+          >
+            {errorText}
+          </span>
+        ) : null}
+      </label>
       <AddRepositoryModal
         isOpen={isRepositoryModalOpen}
         onClose={() => setIsRepositoryModalOpen(false)}
@@ -352,6 +362,6 @@ export function AutomationSetupPromptStack({
           writeRepositories([...repositories, address]);
         }}
       />
-    </label>
+    </div>
   );
 }

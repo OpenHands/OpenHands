@@ -41,6 +41,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { OptionalTag } from "#/components/features/settings/optional-tag";
 import { AutomationSetupPromptStack } from "#/components/features/automations/setup/automation-setup-prompt-stack";
+import { usePromptTextareaResize } from "#/hooks/use-prompt-textarea-resize";
 import { BackNavButton } from "#/components/shared/buttons/back-nav-button";
 import {
   formControlBorderClassName,
@@ -89,7 +90,6 @@ const PREFLIGHT_TARBALL_PATH =
 export const AGENT_FIELD_STREAM_CHARACTER_DELAY_MS = 12;
 export const AGENT_FIELD_STREAM_SETTLE_DELAY_MS = 160;
 
-const AUTOMATION_SETUP_KINDS: AutomationSetupKind[] = ["prompt", "custom"];
 const FREQUENCIES = [
   "once",
   "hourly",
@@ -605,12 +605,6 @@ function DraftRunDetailsCard({
       )}
     </section>
   );
-}
-
-function kindLabelKey(kind: AutomationSetupKind): I18nKey {
-  if (kind === "plugin") return I18nKey.AUTOMATION_SETUP$TYPE_PLUGIN;
-  if (kind === "custom") return I18nKey.AUTOMATION_SETUP$TYPE_CUSTOM;
-  return I18nKey.AUTOMATION_SETUP$TYPE_PROMPT;
 }
 
 function frequencyLabelKey(frequency: Frequency): I18nKey {
@@ -1415,7 +1409,7 @@ export function AutomationSetupPanel({
       kind === "plugin" ||
       Boolean(pluginSource.trim() || pluginRef.trim()));
   const addOptionButtonClassName = cn(
-    "inline-flex w-fit shrink-0 cursor-pointer items-center rounded-full border border-[var(--oh-border)] px-3 py-1.5 text-sm text-[var(--oh-muted)] hover:border-[var(--oh-interactive-hover)] hover:bg-surface-raised hover:text-content",
+    "inline-flex w-fit shrink-0 cursor-pointer items-center rounded-lg border border-[var(--oh-border)] px-3 py-1.5 text-sm text-[var(--oh-muted)] hover:border-[var(--oh-interactive-hover)] hover:bg-surface-raised hover:text-content",
     formControlTransitionClassName,
   );
   const saveStateText = saveStateLabel();
@@ -1491,50 +1485,8 @@ export function AutomationSetupPanel({
           </header>
         ) : null}
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6">
-          <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
-            <div
-              role="group"
-              aria-label={t(I18nKey.AUTOMATION_SETUP$TYPE_LABEL)}
-              className={cn(
-                "grid grid-cols-2 gap-2 rounded-xl border border-[var(--oh-border)] bg-base-secondary p-1",
-                streamingHighlightClassName(streamingField === "kind"),
-              )}
-            >
-              {AUTOMATION_SETUP_KINDS.map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  aria-pressed={
-                    item === "prompt" ? kind !== "custom" : kind === item
-                  }
-                  data-testid={`automation-setup-kind-${item}`}
-                  onClick={() => {
-                    if (item === "prompt") {
-                      if (kind === "custom") updateField("kind", "prompt");
-                      return;
-                    }
-                    updateField("kind", item);
-                  }}
-                  className={cn(
-                    "flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm",
-                    formControlTransitionClassName,
-                    kind === item
-                      ? "bg-white/10 text-white"
-                      : "text-[var(--oh-muted)] hover:bg-white/5 hover:text-white",
-                  )}
-                >
-                  {item === "prompt" && (
-                    <FileText className="size-4" aria-hidden />
-                  )}
-                  {item === "custom" && (
-                    <Code2 className="size-4" aria-hidden />
-                  )}
-                  <span>{t(kindLabelKey(item))}</span>
-                </button>
-              ))}
-            </div>
-
+        <div className="custom-scrollbar-always min-h-0 flex-1 overflow-y-auto px-5 pt-5 pb-5 [scrollbar-gutter:stable]">
+          <div className="mx-auto flex w-full min-w-0 max-w-[800px] flex-col gap-6">
             <Field
               label={t(I18nKey.AUTOMATIONS$NAME)}
               suffix={agentUpdatedSuffix("name")}
@@ -1580,31 +1532,73 @@ export function AutomationSetupPanel({
                 repositorySuffix={agentUpdatedSuffix("repository")}
                 isStreaming={streamingField === "prompt"}
                 errorText={fieldError("prompt")}
+                titleAction={
+                  <button
+                    type="button"
+                    data-testid="automation-setup-kind-custom"
+                    onClick={() => updateField("kind", "custom")}
+                    className={cn(
+                      addOptionButtonClassName,
+                      "gap-1.5",
+                      streamingHighlightClassName(streamingField === "kind"),
+                    )}
+                  >
+                    <Code2 className="size-4" aria-hidden />
+                    {t(I18nKey.AUTOMATION_SETUP$TYPE_CUSTOM)}
+                  </button>
+                }
                 onPromptChange={(value) => updateField("prompt", value)}
                 onRepositoryChange={(value) => updateField("repository", value)}
               />
             ) : (
-              <CustomCodeFields
-                code={customCode}
-                entrypoint={entrypoint}
-                setupScriptPath={setupScriptPath}
-                setupScript={setupScript}
-                updatedSuffixes={{
-                  customCode: agentUpdatedSuffix("customCode"),
-                  entrypoint: agentUpdatedSuffix("entrypoint"),
-                  setupScriptPath: agentUpdatedSuffix("setupScriptPath"),
-                  setupScript: agentUpdatedSuffix("setupScript"),
-                }}
-                streamingField={streamingField}
-                onCodeChange={(value) => updateField("customCode", value)}
-                onEntrypointChange={(value) => updateField("entrypoint", value)}
-                onSetupScriptPathChange={(value) =>
-                  updateField("setupScriptPath", value)
-                }
-                onSetupScriptChange={(value) =>
-                  updateField("setupScript", value)
-                }
-              />
+              <div className="flex flex-col gap-2.5">
+                <div className="flex w-full items-center gap-2">
+                  <span className="flex items-center gap-2 text-sm">
+                    {t(I18nKey.AUTOMATION_SETUP$CUSTOM_PYTHON)}
+                    {agentUpdatedSuffix("customCode") ? (
+                      <span className="font-normal text-[var(--oh-muted)]">
+                        {agentUpdatedSuffix("customCode")}
+                      </span>
+                    ) : null}
+                  </span>
+                  <button
+                    type="button"
+                    data-testid="automation-setup-kind-prompt"
+                    onClick={() => updateField("kind", "prompt")}
+                    className={cn(
+                      addOptionButtonClassName,
+                      "ml-auto gap-1.5",
+                      streamingHighlightClassName(streamingField === "kind"),
+                    )}
+                  >
+                    <FileText className="size-4" aria-hidden />
+                    {t(I18nKey.AUTOMATIONS$PROMPT)}
+                  </button>
+                </div>
+                <CustomCodeFields
+                  code={customCode}
+                  entrypoint={entrypoint}
+                  setupScriptPath={setupScriptPath}
+                  setupScript={setupScript}
+                  updatedSuffixes={{
+                    customCode: agentUpdatedSuffix("customCode"),
+                    entrypoint: agentUpdatedSuffix("entrypoint"),
+                    setupScriptPath: agentUpdatedSuffix("setupScriptPath"),
+                    setupScript: agentUpdatedSuffix("setupScript"),
+                  }}
+                  streamingField={streamingField}
+                  onCodeChange={(value) => updateField("customCode", value)}
+                  onEntrypointChange={(value) =>
+                    updateField("entrypoint", value)
+                  }
+                  onSetupScriptPathChange={(value) =>
+                    updateField("setupScriptPath", value)
+                  }
+                  onSetupScriptChange={(value) =>
+                    updateField("setupScript", value)
+                  }
+                />
+              </div>
             )}
 
             <section className="flex flex-col gap-2.5">
@@ -1856,6 +1850,12 @@ export function AutomationSetupPanel({
   );
 }
 
+const CUSTOM_CODE_LINE_HEIGHT_PX = 20;
+const CUSTOM_CODE_VISIBLE_LINES = 12;
+const CUSTOM_CODE_MIN_HEIGHT =
+  CUSTOM_CODE_VISIBLE_LINES * CUSTOM_CODE_LINE_HEIGHT_PX;
+const CUSTOM_CODE_MAX_HEIGHT = 28 * CUSTOM_CODE_LINE_HEIGHT_PX;
+
 function CustomCodeFields({
   code,
   entrypoint,
@@ -1885,8 +1885,56 @@ function CustomCodeFields({
   onSetupScriptChange: (value: string) => void;
 }) {
   const { t } = useTranslation("openhands");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { gripRef, isGripDragging, handleGripMouseDown, handleGripTouchStart } =
+    usePromptTextareaResize(textareaRef, {
+      minHeight: CUSTOM_CODE_MIN_HEIGHT,
+      maxHeight: CUSTOM_CODE_MAX_HEIGHT,
+      contentKey: code,
+    });
+
   return (
     <div className="flex flex-col gap-4">
+      <div
+        data-streaming-active={
+          streamingField === "customCode" ? "true" : undefined
+        }
+        className={cn(
+          "relative rounded-[15px] border border-[var(--oh-border)] bg-[var(--oh-surface)] p-4",
+          streamingHighlightClassName(streamingField === "customCode"),
+        )}
+      >
+        <textarea
+          ref={textareaRef}
+          data-testid="automation-setup-custom-code"
+          aria-label={t(I18nKey.AUTOMATION_SETUP$CUSTOM_PYTHON)}
+          rows={CUSTOM_CODE_VISIBLE_LINES}
+          value={code}
+          onChange={(event) => onCodeChange(event.target.value)}
+          spellCheck={false}
+          className="custom-scrollbar-always block w-full resize-none border-0 bg-transparent p-0 font-mono text-sm leading-5 text-content outline-none"
+        />
+        <div
+          data-testid="automation-setup-custom-code-grip"
+          className="group absolute bottom-0 left-0 z-20 h-3 w-full"
+        >
+          <div
+            className="absolute inset-0 z-[1] cursor-ns-resize select-none"
+            onMouseDown={handleGripMouseDown}
+            onTouchStart={handleGripTouchStart}
+            aria-hidden
+          />
+          <div
+            ref={gripRef}
+            className={cn(
+              "pointer-events-none absolute bottom-0 left-0 z-[2] h-px w-full bg-white transition-opacity duration-200",
+              isGripDragging
+                ? "opacity-100"
+                : "opacity-0 group-hover:opacity-100",
+            )}
+          />
+        </div>
+      </div>
       <div className="grid gap-3 md:grid-cols-[2fr_1fr]">
         <Field
           label={t(I18nKey.AUTOMATION_SETUP$ENTRYPOINT)}
@@ -1913,23 +1961,6 @@ function CustomCodeFields({
           />
         </Field>
       </div>
-      <Field
-        label={t(I18nKey.AUTOMATION_SETUP$PYTHON_CODE)}
-        suffix={updatedSuffixes.customCode}
-        isStreaming={streamingField === "customCode"}
-      >
-        <textarea
-          data-testid="automation-setup-custom-code"
-          rows={12}
-          value={code}
-          onChange={(event) => onCodeChange(event.target.value)}
-          spellCheck={false}
-          className={cn(
-            formControlMultilineFieldClassName,
-            "font-mono text-xs",
-          )}
-        />
-      </Field>
       <Field
         label={t(I18nKey.AUTOMATION_SETUP$SETUP_SCRIPT)}
         suffix={updatedSuffixes.setupScript}

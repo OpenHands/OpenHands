@@ -42380,6 +42380,23 @@
     "zh-CN": "Custom",
     "zh-TW": "Custom"
   },
+  "AUTOMATION_SETUP$CUSTOM_PYTHON": {
+    "ar": "Custom Python",
+    "ca": "Custom Python",
+    "de": "Benutzerdefiniertes Python",
+    "en": "Custom Python",
+    "es": "Python personalizado",
+    "fr": "Python personnalisé",
+    "it": "Custom Python",
+    "ja": "カスタム Python",
+    "ko-KR": "Custom Python",
+    "no": "Custom Python",
+    "pt": "Custom Python",
+    "tr": "Custom Python",
+    "uk": "Custom Python",
+    "zh-CN": "Custom Python",
+    "zh-TW": "Custom Python"
+  },
   "AUTOMATION_SETUP$NAME_PLACEHOLDER": {
     "ar": "Standup digest",
     "ca": "Standup digest",
