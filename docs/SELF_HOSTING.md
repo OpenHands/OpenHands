@@ -45,6 +45,13 @@ the agent server, and the automation backend, fronted by an ingress proxy on
 `127.0.0.1:8000` that routes by path. nginx only needs to know about that
 single ingress port.
 
+The static frontend server binds to `127.0.0.1:3001` by default; if that port
+is already in use, the launcher automatically picks a free port instead of
+aborting (the frontend is internal and reached through the ingress). To pin a
+specific frontend port, pass `--frontend-port <port>` or set
+`OH_CANVAS_SAFE_VITE_PORT=<port>`. `--port` / `PORT` only ever controls the
+ingress port — that is the only port you publish.
+
 The `--public` flag enables **public mode**: the API key is _not_ baked into
 the frontend. Instead, users see an API key entry screen when they first load
 the UI and must paste the `LOCAL_BACKEND_API_KEY` to proceed.

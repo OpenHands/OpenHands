@@ -45,11 +45,19 @@ domain sockets (some devcontainers, NFS/CIFS homes), set the standard
 `TMUX_TMPDIR` env var to a local path such as `/tmp` and the dev stack will use
 it instead.
 
-### Environment Variables
+### Ports
+
+`--port` / `PORT` controls **only** the ingress port (the origin you open in
+the browser). The frontend/Vite port (default `3001`) is internal: if the
+default is already taken � for example by an unrelated app on the machine �
+the launcher automatically picks a free port and serves the frontend there
+instead of aborting. Set it explicitly with `--frontend-port <port>` or
+`OH_CANVAS_SAFE_VITE_PORT=<port>` when you want a fixed value.
 
 | Variable                  | Description                    | Default |
 | ------------------------- | ------------------------------ | ------- |
 | `PORT`                    | Ingress port                   | `8000`  |
+| `OH_CANVAS_SAFE_VITE_PORT` | Frontend/Vite port (`--frontend-port`). Falls back to a free port if taken | `3001` |
 | `OH_AUTOMATION_GIT_REF`   | Git ref for automation backend (overrides the pinned default version) | *(unset)* |
 | `OH_AGENT_SERVER_GIT_REF` | Git ref for agent-server (overrides the pinned default version) | *(unset)* |
 
@@ -86,6 +94,7 @@ OH_AGENT_SERVER_VERSION=1.18.0 npm run dev
 
 - `OH_CANVAS_SAFE_BACKEND_PORT` — backend port for the isolated server (default `18000`)
 - `OH_CANVAS_SAFE_VSCODE_PORT` — VS Code sidecar port (default `backend port + 1`)
+- `OH_CANVAS_SAFE_VITE_PORT` — frontend/Vite port for `npm run dev` and `npm run dev:static` (default `3001`; falls back to a free port if taken). Alias: `--frontend-port`
 - `OH_CANVAS_SAFE_STATE_DIR` — base directory for isolated server state
 - `VITE_WORKING_DIR` — repo root used for new conversations (defaults to the current checkout)
 
@@ -270,7 +279,7 @@ You can create a `.env` file in the project directory with these variables based
 | `VITE_BASE_PATH`            | Build/serve the SPA under a subpath such as `/canvas`                                     | `/`                    |
 | `VITE_MOCK_API`             | Enable/disable API mocking with MSW                                                       | `false`                |
 | `VITE_USE_TLS`              | Use HTTPS/WSS for the Vite proxy target                                                   | `false`                |
-| `VITE_FRONTEND_PORT`        | Port to run the frontend application                                                      | `3001`                 |
+| `VITE_FRONTEND_PORT`        | Port for the bare `react-router dev` server; the stack launchers auto-fallback to a free port when `3001` is taken | `3001` |
 | `VITE_INSECURE_SKIP_VERIFY` | Skip TLS certificate verification for proxied backend requests                            | `false`                |
 
 
