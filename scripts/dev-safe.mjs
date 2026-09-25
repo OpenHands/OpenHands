@@ -42,7 +42,7 @@ const DEFAULT_BACKEND_PORT = SHARED_DEFAULTS.ports.agentServer;
 // --server-base-path and advertises the prefix) and the ingress route table,
 // or the advertised URL and the route that serves it disagree.
 export const VSCODE_BASE_PATH = SHARED_DEFAULTS.paths.vscodeBasePath;
-const DEFAULT_VITE_PORT = 3001;
+// const DEFAULT_VITE_PORT = 3001;
 const DEFAULT_WAIT_TIMEOUT_MS = 30_000;
 const DEFAULT_AGENT_SERVER_PACKAGE = SHARED_DEFAULTS.packages.agentServer;
 const AGENT_SERVER_GIT_REPO = "https://github.com/OpenHands/software-agent-sdk";
@@ -269,13 +269,34 @@ export async function assertPortsFree(portConfigs, host = "127.0.0.1") {
   const busy = results.filter(({ free }) => !free);
   if (busy.length === 0) return;
 
+  // Try to determine the running version of the busy ports
+  for (const b of busy) {
+    try {
+      const response = await fetch(`http://${host}:${b.port}/server_info`, {
+        signal: AbortSignal.timeout(1000),
+      });
+      if (response.ok) {
+        const json = await response.json();
+        const version = json?.runtime_services?.frontend?.version || "unknown";
+        b.runningVersion = version;
+      }
+    } catch (e) {
+      // Ignore
+    }
+  }
+
   const lines = busy
-    .map(({ name, port }) => `   • ${name}: port ${port}`)
+    .map(({ name, port, runningVersion }) => {
+      const versionSuffix = runningVersion
+        ? ` (running version: ${runningVersion})`
+        : "";
+      return `   • ${name}: port ${port}${versionSuffix}`;
+    })
     .join("\n");
   throw new Error(
     `Cannot start: the following ports are already in use:\n\n${lines}\n\n` +
       `Another agent-canvas instance may already be running.\n` +
-      `Stop it first, or override the port via environment variables (e.g. PORT=<other>).`,
+      `Stop it first (e.g., press Ctrl+C in its terminal, or run 'lsof -i :${busy[0].port}' to find the process), or override the port via environment variables (e.g. PORT=<other>).`,
   );
 }
 

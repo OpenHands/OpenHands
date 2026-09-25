@@ -23,6 +23,15 @@
 
 import process from "node:process";
 import { pathToFileURL } from "node:url";
+import { readFileSync } from "node:fs";
+
+let packageVersion = "unknown";
+try {
+  const pkgPath = new URL("../package.json", import.meta.url);
+  packageVersion = JSON.parse(readFileSync(pkgPath, "utf-8")).version;
+} catch (err) {
+  // Ignore
+}
 
 /**
  * @param {object} options
@@ -114,6 +123,7 @@ export function buildRuntimeServicesInfo(options) {
           ? "Static-file server hosting the agent-canvas production build."
           : "Vite dev server hosting the agent-canvas frontend.",
       url_from_agent: `http://${agentHostAlias}:${frontendPort}`,
+      version: packageVersion,
     };
   }
 
