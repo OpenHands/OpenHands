@@ -1,4 +1,5 @@
 import React from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router";
 import { useTracking } from "#/hooks/use-tracking";
 import { useTranslation } from "react-i18next";
@@ -53,6 +54,7 @@ import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { I18nKey } from "#/i18n/declaration";
 import { hasConversationStarted } from "./components/resolve-picker-kind";
+import { ComposerDockedProvider } from "#/context/composer-docked-context";
 
 function getEntryPoint(
   hasRepository: boolean | null,
@@ -65,8 +67,12 @@ function getEntryPoint(
 
 export function ChatInterface({
   showGitControlBar = true,
+  composerDockTarget = null,
+  onDockedComposerSubmit,
 }: {
   showGitControlBar?: boolean;
+  composerDockTarget?: HTMLElement | null;
+  onDockedComposerSubmit?: () => void;
 } = {}) {
   useAutoRefreshFilesOnEdit();
 
@@ -502,6 +508,32 @@ export function ChatInterface({
     t,
   });
 
+  const isComposerDocked = Boolean(composerDockTarget);
+  const composer = (
+    <ComposerDockedProvider
+      enabled={isComposerDocked}
+      minimal={isComposerDocked}
+    >
+      <InteractiveChatBox
+        onSubmit={(content, images, files) => {
+          if (isComposerDocked) onDockedComposerSubmit?.();
+          return handleSendMessage(content, images, files);
+        }}
+        disabled={isNewConversationPending || llmBlocked}
+        hasStartedConversation={hasStartedConversation}
+        showGitControlBar={showGitControlBar}
+        placeholder={
+          isComposerDocked
+            ? t(I18nKey.AUTOMATION_SETUP$DOCKED_COMPOSER_PLACEHOLDER)
+            : undefined
+        }
+      />
+    </ComposerDockedProvider>
+  );
+  const dockedOrInlineComposer = composerDockTarget
+    ? createPortal(composer, composerDockTarget)
+    : composer;
+
   return (
     <WorkspaceFilesForChatProvider>
       <ScrollProvider value={scrollProviderValue}>
@@ -674,12 +706,7 @@ export function ChatInterface({
                   </div>
                 </div>
 
-                <InteractiveChatBox
-                  onSubmit={handleSendMessage}
-                  disabled={isNewConversationPending || llmBlocked}
-                  hasStartedConversation={hasStartedConversation}
-                  showGitControlBar={showGitControlBar}
-                />
+                {dockedOrInlineComposer}
               </div>
             )}
           </div>
