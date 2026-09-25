@@ -5,7 +5,6 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
 import { HttpError } from "@openhands/typescript-client";
-
 import { I18nKey } from "#/i18n/declaration";
 import type { AutomationDraftListResponse } from "#/manifests/types";
 
@@ -264,6 +263,30 @@ describe("AutomationsList — draft sections", () => {
         "draft-1",
       ),
     );
+  });
+
+  it("treats a Cloud HttpError 404 from the drafts API as an empty drafts list", async () => {
+    // Cloud draft calls run through callCloudProxy, which throws the shared
+    // client's HttpError with `status` on the error itself (not under `response`).
+    // A drafts-less automation service answers those routes with 404; the page
+    // must degrade to an empty drafts list instead of the error banner.
+
+    vi.mocked(AutomationService.getAutomations).mockResolvedValue(listResponse);
+    vi.mocked(AutomationService.listServerDrafts).mockRejectedValue(
+      new HttpError(404, "Not Found", { detail: "No such route" }),
+    );
+
+    renderList();
+
+    await screen.findByText(automation.name);
+    await waitFor(() => {
+      expect(
+        screen.queryByText(I18nKey.AUTOMATIONS$SAVED_DRAFTS),
+      ).not.toBeInTheDocument();
+    });
+    expect(
+      screen.queryByText(I18nKey.AUTOMATIONS$ERROR_TITLE),
+    ).not.toBeInTheDocument();
   });
 });
 
