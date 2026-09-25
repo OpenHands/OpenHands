@@ -643,6 +643,114 @@ describe("LlmSettingsScreen - OpenHands provider on cloud", () => {
 
     expect(screen.getByTestId("llm-api-key-input")).toBeInTheDocument();
   });
+
+  describe("credential validation (#15774)", () => {
+    function mockCustomModelSettings() {
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+        buildSettings({
+          llm_model: "openai/gpt-4o",
+          agent_settings: {
+            ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+            llm: { model: "openai/gpt-4o", api_key: null, base_url: "" },
+          },
+        }),
+      );
+    }
+
+    async function renderAdvancedView() {
+      renderLlmSettingsScreen();
+      await screen.findByTestId("llm-settings-screen");
+      fireEvent.click(screen.getByTestId("sdk-section-advanced-toggle"));
+      await screen.findByTestId("base-url-input");
+    }
+
+    beforeEach(() => {
+      mockCustomModelSettings();
+    });
+
+    it.each([".", "localhost:11434"])(
+      "rejects the malformed base URL %s instead of persisting it",
+      async (badBaseUrl) => {
+        const saveSettingsSpy = vi
+          .spyOn(SettingsService, "saveSettings")
+          .mockResolvedValue(true);
+
+        await renderAdvancedView();
+        fireEvent.change(screen.getByTestId("base-url-input"), {
+          target: { value: badBaseUrl },
+        });
+
+        // The failure is visible before the user even reaches Save.
+        expect(screen.getByTestId("base-url-input-error")).toBeInTheDocument();
+
+        fireEvent.click(screen.getByTestId("save-button"));
+
+        await waitFor(() =>
+          expect(
+            screen.getByTestId("base-url-input-error"),
+          ).toBeInTheDocument(),
+        );
+        expect(saveSettingsSpy).not.toHaveBeenCalled();
+      },
+    );
+
+    it("rejects a single-character API key instead of persisting it", async () => {
+      const saveSettingsSpy = vi
+        .spyOn(SettingsService, "saveSettings")
+        .mockResolvedValue(true);
+
+      await renderAdvancedView();
+      fireEvent.change(screen.getByTestId("llm-api-key-input"), {
+        target: { value: "-" },
+      });
+
+      const error = screen.getByTestId("llm-api-key-input-error");
+      expect(error).toHaveTextContent("SETTINGS$LLM_API_KEY_TOO_SHORT");
+
+      fireEvent.click(screen.getByTestId("save-button"));
+
+      await waitFor(() =>
+        expect(
+          screen.getByTestId("llm-api-key-input-error"),
+        ).toBeInTheDocument(),
+      );
+      expect(saveSettingsSpy).not.toHaveBeenCalled();
+    });
+
+    it("saves a valid base URL and API key unchanged", async () => {
+      const saveSettingsSpy = vi
+        .spyOn(SettingsService, "saveSettings")
+        .mockResolvedValue(true);
+
+      await renderAdvancedView();
+      fireEvent.change(screen.getByTestId("base-url-input"), {
+        target: { value: "https://custom.example/v1" },
+      });
+      fireEvent.change(screen.getByTestId("llm-api-key-input"), {
+        target: { value: "sk-proj-abcdef0123456789" },
+      });
+
+      expect(
+        screen.queryByTestId("base-url-input-error"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("llm-api-key-input-error"),
+      ).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByTestId("save-button"));
+
+      await waitFor(() => expect(saveSettingsSpy).toHaveBeenCalled());
+      const payload = saveSettingsSpy.mock.calls[0][0] as Record<
+        string,
+        unknown
+      >;
+      const llmPayload = (
+        payload.agent_settings_diff as Record<string, unknown>
+      ).llm as Record<string, unknown>;
+      expect(llmPayload.base_url).toBe("https://custom.example/v1");
+      expect(llmPayload.api_key).toBe("sk-proj-abcdef0123456789");
+    });
+  });
 });
 
 describe("LlmSettingsRoute - backend mode rendering", () => {
