@@ -50,6 +50,7 @@ export function CustomChatInput({
     setSubmittedMessage,
     images,
     files,
+    pendingRcaContext,
   } = useConversationStore();
 
   // Note: we intentionally do NOT disable the input when the conversation is
@@ -91,9 +92,10 @@ export function CustomChatInput({
 
   const syncCanSubmit = React.useCallback(() => {
     const text = chatInputRef.current?.innerText ?? "";
-    const hasAttachments = images.length > 0 || files.length > 0;
+    const hasAttachments =
+      images.length > 0 || files.length > 0 || Boolean(pendingRcaContext);
     setCanSubmit(text.trim().length > 0 || hasAttachments);
-  }, [chatInputRef, images, files]);
+  }, [chatInputRef, images, files, pendingRcaContext]);
 
   const {
     fileInputRef,

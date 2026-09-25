@@ -5,12 +5,14 @@ import { PluginLaunchModal } from "#/components/features/launch/plugin-launch-mo
 import { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { I18nKey } from "#/i18n/declaration";
+import { decodeRcaParam, type RcaContext } from "#/utils/rca-context";
 
 type ErrorType = "no_plugins" | "invalid_format" | "creation_failed";
 
 interface ParseResult {
   plugins: PluginSpec[];
   message?: string;
+  rcaContext?: RcaContext;
   error?: ErrorType;
 }
 
@@ -22,6 +24,17 @@ function sanitizeMessage(message: string | null): string | undefined {
 }
 
 function parsePluginsFromUrl(searchParams: URLSearchParams): ParseResult {
+  // Optional structured RCA context from an external system (e.g. a HolmesGPT
+  // handoff). Undecodable input is a hard error — silently dropping it would
+  // launch a conversation missing the context the link promised.
+  const rcaParam = searchParams.get("rca");
+  const rcaContext = rcaParam
+    ? (decodeRcaParam(rcaParam) ?? undefined)
+    : undefined;
+  if (rcaParam && !rcaContext) {
+    return { plugins: [], error: "invalid_format" };
+  }
+
   // Try base64 encoded plugins parameter first (production format)
   const pluginsParam = searchParams.get("plugins");
   if (pluginsParam) {
@@ -58,6 +71,7 @@ function parsePluginsFromUrl(searchParams: URLSearchParams): ParseResult {
       return {
         plugins: validPlugins,
         message: sanitizeMessage(searchParams.get("message")),
+        rcaContext,
       };
     } catch {
       return { plugins: [], error: "invalid_format" };
@@ -76,6 +90,7 @@ function parsePluginsFromUrl(searchParams: URLSearchParams): ParseResult {
     return {
       plugins: [plugin],
       message: sanitizeMessage(searchParams.get("message")),
+      rcaContext,
     };
   }
 
@@ -156,6 +171,7 @@ export default function LaunchRoute() {
       const result = await createConversation.mutateAsync({
         plugins,
         query: initialMessage,
+        rcaContext: parseResult.rcaContext,
         entryPoint: "launch_deeplink",
       });
       navigate(`/conversations/${result.conversation_id}`);

@@ -20,9 +20,12 @@ const mockClearAllFiles = vi.fn();
 const enqueueHomeTaskPendingMessage = vi.fn();
 const mockDisplayErrorToast = vi.fn();
 const mockUseLlmConfigured = vi.fn();
+const mockSetPendingRcaContext = vi.fn();
 
 let mockImages: File[] = [];
 let mockFiles: File[] = [];
+let mockPendingRcaContext: import("#/utils/rca-context").RcaContext | null =
+  null;
 
 vi.mock("#/utils/send-message-with-attachments", () => ({
   sendMessageWithAttachments: (...args: unknown[]) =>
@@ -40,6 +43,8 @@ vi.mock("#/stores/conversation-store", () => ({
     files: mockFiles,
     imagesMarkedUploadAsFile: [],
     clearAllFiles: mockClearAllFiles,
+    pendingRcaContext: mockPendingRcaContext,
+    setPendingRcaContext: mockSetPendingRcaContext,
   }),
 }));
 
@@ -316,6 +321,7 @@ describe("HomeChatLauncher", () => {
     vi.clearAllMocks();
     mockImages = [];
     mockFiles = [];
+    mockPendingRcaContext = null;
     mockUseActiveBackend.mockReturnValue(localBackend);
     mockUseLlmConfigured.mockReturnValue({
       isConfigured: true,
@@ -675,5 +681,95 @@ describe("HomeChatLauncher", () => {
     expect(
       screen.getByTestId("recommended-automations-rail"),
     ).toBeInTheDocument();
+  });
+
+  it("passes attached RCA context through to conversation creation and clears it", async () => {
+    mockPendingRcaContext = {
+      summary: "Connection pool exhaustion",
+      evidence: ["pool max reached"],
+      suspectedComponents: ["db-pool"],
+      suspectedFiles: ["src/db/pool.ts"],
+      recommendedAction: "Raise the pool limit",
+      source: "holmesgpt",
+    };
+    const createSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue(makeConversationResponse());
+
+    renderLauncher();
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("stub-chat-submit"));
+
+    await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
+    expect(createSpy).toHaveBeenCalledWith({
+      initialUserMsg: "hello world",
+      rcaContext: mockPendingRcaContext,
+      metadata: null,
+    });
+    await waitFor(() =>
+      expect(mockSetPendingRcaContext).toHaveBeenCalledWith(null),
+    );
+  });
+
+  it("composes RCA context into the deferred pending message for cloud start tasks", async () => {
+    mockUseActiveBackend.mockReturnValue(cloudBackend);
+    mockPendingRcaContext = {
+      summary: "Pool exhausted",
+      evidence: [],
+      suspectedComponents: [],
+      suspectedFiles: ["src/db/pool.ts"],
+    };
+    const createSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue(
+        makeConversationResponse({
+          id: "start-task-rca",
+          app_conversation_id: null,
+        }),
+      );
+
+    renderLauncher();
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("stub-chat-submit"));
+
+    await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(enqueueHomeTaskPendingMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          conversationId: "task-start-task-rca",
+        }),
+      ),
+    );
+    const queuedText = enqueueHomeTaskPendingMessage.mock.calls[0][0].text;
+    expect(queuedText).toContain("## Root Cause Analysis Context");
+    expect(queuedText).toContain("Pool exhausted");
+    expect(queuedText).toContain("hello world");
+  });
+
+  it("does not send rcaContext on the create request when attachments carry it", async () => {
+    mockImages = [new File(["x"], "shot.png", { type: "image/png" })];
+    mockPendingRcaContext = {
+      summary: "Pool exhausted",
+      evidence: [],
+      suspectedComponents: [],
+      suspectedFiles: [],
+    };
+    const createSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue(makeConversationResponse());
+
+    renderLauncher();
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("stub-chat-submit"));
+
+    await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
+    expect(createSpy).toHaveBeenCalledWith({ metadata: null });
+    await waitFor(() =>
+      expect(sendMessageWithAttachments).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: expect.stringContaining("## Root Cause Analysis Context"),
+        }),
+      ),
+    );
   });
 });
