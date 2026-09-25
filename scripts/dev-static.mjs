@@ -59,6 +59,7 @@ import {
 } from "./dev-process-utils.mjs";
 import {
   buildAgentServerAutomationEnv,
+  buildAutomationCorsOrigins,
   buildAutomationCommand,
   buildAutomationTelemetryEnv,
   buildAutomationRuntimeServicesInfo,
@@ -113,6 +114,7 @@ function logError(message) {
 export function parseArgs(argv = process.argv.slice(2)) {
   const config = {
     port: null,
+    frontendPort: null,
     automationGitRef: null,
     automationRepo: null,
     skipBuild: false,
@@ -124,6 +126,9 @@ export function parseArgs(argv = process.argv.slice(2)) {
       case "-p":
       case "--port":
         config.port = parseInt(argv[++i], 10);
+        break;
+      case "--frontend-port":
+        config.frontendPort = parseInt(argv[++i], 10);
         break;
       case "--automation-ref":
         config.automationGitRef = argv[++i];
@@ -161,6 +166,7 @@ USAGE:
 
 OPTIONS:
   -p, --port <port>           Ingress port (default: 8000)
+  --frontend-port <port>      Frontend static-server port (default: 3001)
   --automation-ref <ref>      Git ref for automation backend (default: main)
   --automation-repo <url>     Git repo URL for automation
   --skip-build                Reuse existing build/ directory (faster restart)
@@ -168,7 +174,8 @@ OPTIONS:
   -h, --help                  Show this help
 
 ENVIRONMENT VARIABLES:
-  PORT                        Alternative to --port
+  PORT                        Alternative to --port (ingress only)
+  OH_CANVAS_SAFE_VITE_PORT    Frontend port override (default: 3001)
   OH_AUTOMATION_GIT_REF       Alternative to --automation-ref
   OH_AGENT_SERVER_GIT_REF     Git ref for agent-server SDK
   OH_SECRET_KEY               Secret key for sessions
@@ -366,7 +373,7 @@ function buildAutomationBackendEnv(config, env = process.env) {
     AUTOMATION_WORKSPACE_BASE: join(config.stateDir, "workspaces"),
     AUTOMATION_LOCAL_API_KEY: config.sessionApiKey,
     ...buildAutomationTelemetryEnv(env),
-    AUTOMATION_CORS_ORIGINS: `http://localhost:${config.ingressPort},http://127.0.0.1:${config.ingressPort},http://localhost:3001,http://127.0.0.1:3001`,
+    AUTOMATION_CORS_ORIGINS: buildAutomationCorsOrigins(config, env),
     FILE_STORE: "local",
     LOCAL_STORAGE_PATH: join(config.stateDir, "storage"),
     OPENHANDS_SUPPRESS_BANNER: "1",
