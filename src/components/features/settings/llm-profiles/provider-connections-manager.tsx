@@ -61,7 +61,7 @@ export function ProviderConnectionsManager({
           data-testid="provider-connections-empty"
           className={extensionModuleEmptyStateClassName}
         >
-          <p className="text-sm text-[var(--oh-muted)]">
+          <p className="text-sm text-muted">
             {t(I18nKey.SETTINGS$PROVIDER_CONNECTIONS_EMPTY)}
           </p>
         </div>
@@ -93,10 +93,10 @@ export function ProviderConnectionsManager({
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-col gap-1">
-            <h2 className="text-base font-medium text-white">
+            <h2 className="text-base font-medium text-contrast">
               {t(I18nKey.SETTINGS$PROVIDER_CONNECTIONS_TITLE)}
             </h2>
-            <p className="text-sm text-[var(--oh-muted)]">
+            <p className="text-sm text-muted">
               {t(I18nKey.SETTINGS$PROVIDER_CONNECTIONS_SUBLINE)}
             </p>
           </div>

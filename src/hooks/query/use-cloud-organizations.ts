@@ -1,10 +1,22 @@
 import { useQueries } from "@tanstack/react-query";
+import { HttpError } from "@openhands/typescript-client";
+import axios from "axios";
 import { useActiveBackendContext } from "#/contexts/active-backend-context";
 import {
   getCloudOrganizations,
   getCurrentCloudApiKey,
 } from "#/api/cloud/organization-service.api";
 import type { Backend } from "#/api/backend-registry/types";
+
+function isAuthorizationError(error: unknown): boolean {
+  const status =
+    error instanceof HttpError
+      ? error.status
+      : axios.isAxiosError(error)
+        ? error.response?.status
+        : undefined;
+  return status === 401 || status === 403;
+}
 
 /**
  * Fetch organizations for every registered cloud backend in parallel.
@@ -31,17 +43,32 @@ export function useAllCloudOrganizations() {
       // with no binding fall through unfiltered.
       queryFn: async () => {
         const orgs = await getCloudOrganizations(backend);
-        if (backend.authMode === "cookie") return orgs;
+        // Drop orgs the cloud marks invisible (`is_visible === false`, set
+        // from its `HIDE_PERSONAL_WORKSPACES` policy). Every consumer —
+        // the selector rows, the "Cloud Settings" deep link, the manage
+        // modal and the synced-settings badge — reads orgs from here, so
+        // filtering once keeps them from disagreeing about which orgs
+        // exist. Only an explicit `false` hides an org: an app-server that
+        // predates the field omits it, and those orgs stay visible.
+        const visible = orgs.items.filter((o) => o.is_visible !== false);
+        if (backend.authMode === "cookie") {
+          return { ...orgs, items: visible };
+        }
 
         const key = await getCurrentCloudApiKey(backend);
-        if (key.isLegacyKey || key.orgId === null) return orgs;
+        if (key.isLegacyKey || key.orgId === null) {
+          return { ...orgs, items: visible };
+        }
         return {
           ...orgs,
-          items: orgs.items.filter((o) => o.id === key.orgId),
+          items: visible.filter((o) => o.id === key.orgId),
         };
       },
       staleTime: 1000 * 60 * 5,
-      retry: false,
+      retry: (failureCount: number, error: unknown) =>
+        failureCount < 2 && !isAuthorizationError(error),
+      // Mounting workspace consumers must not restart a failed startup query.
+      retryOnMount: false,
       meta: { disableToast: true },
     })),
   });
@@ -52,6 +79,12 @@ export function useAllCloudOrganizations() {
     {
       backend: Backend;
       isLoading: boolean;
+      isSuccess: boolean;
+      isFetching: boolean;
+      isError: boolean;
+      isAuthorizationError: boolean;
+      hasData: boolean;
+      refetch: () => unknown;
       orgs: { id: string; name: string; is_personal?: boolean }[];
       currentOrgId: string | null;
     }
@@ -61,6 +94,12 @@ export function useAllCloudOrganizations() {
     byBackendId[backend.id] = {
       backend,
       isLoading: q.isLoading,
+      isSuccess: q.isSuccess,
+      isFetching: q.isFetching,
+      isError: q.isError,
+      isAuthorizationError: isAuthorizationError(q.error),
+      hasData: q.data !== undefined,
+      refetch: q.refetch,
       orgs: q.data?.items ?? [],
       currentOrgId: q.data?.currentOrgId ?? null,
     };

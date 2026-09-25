@@ -64,7 +64,7 @@ export default function DeviceVerify() {
   if (verificationResult) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="max-w-md w-full mx-auto p-6 bg-card rounded-lg shadow-lg">
+        <div className="max-w-md w-full mx-auto p-6 bg-surface-raised rounded-lg shadow-lg">
           <div className="text-center">
             <div
               className={cn(
@@ -107,7 +107,7 @@ export default function DeviceVerify() {
                 ? t(I18nKey.DEVICE$SUCCESS_TITLE)
                 : t(I18nKey.DEVICE$ERROR_TITLE)}
             </h2>
-            <p className="text-muted-foreground mb-4">
+            <p className="text-muted mb-4">
               {t(verificationResult.messageKey)}
             </p>
             {!verificationResult.success && (
@@ -128,12 +128,10 @@ export default function DeviceVerify() {
   if (isProcessing) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="max-w-md w-full mx-auto p-6 bg-card rounded-lg shadow-lg">
+        <div className="max-w-md w-full mx-auto p-6 bg-surface-raised rounded-lg shadow-lg">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-4" />
-            <p className="text-muted-foreground">
-              {t(I18nKey.DEVICE$PROCESSING)}
-            </p>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-contrast mx-auto mb-4" />
+            <p className="text-muted">{t(I18nKey.DEVICE$PROCESSING)}</p>
           </div>
         </div>
       </div>
@@ -144,12 +142,12 @@ export default function DeviceVerify() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <div className="flex flex-col items-center gap-6 w-full max-w-md">
-          <div className="flex-1 min-w-0 max-w-md w-full mx-auto p-6 bg-card rounded-2xl shadow-lg border border-[var(--oh-border-subtle)]">
+          <div className="flex-1 min-w-0 max-w-md w-full mx-auto p-6 bg-surface-raised rounded-2xl shadow-lg border border-border-subtle">
             <H1 className="text-2xl mb-4 text-center">
               {t(I18nKey.DEVICE$AUTHORIZATION_REQUEST)}
             </H1>
-            <div className="mb-6 p-4 bg-base rounded-lg border border-[var(--oh-border-subtle)]">
-              <p className="text-xs text-[var(--oh-text-subtle)] mb-2 text-center uppercase tracking-wider">
+            <div className="mb-6 p-4 bg-base rounded-lg border border-border-subtle">
+              <p className="text-xs text-text-subtle mb-2 text-center uppercase tracking-wider">
                 {t(I18nKey.DEVICE$CODE_LABEL)}
               </p>
               <p className="text-xl font-mono font-semibold text-center tracking-[0.3em]">
@@ -160,18 +158,18 @@ export default function DeviceVerify() {
               <p className="text-sm font-medium text-amber-500 mb-1">
                 {t(I18nKey.DEVICE$SECURITY_NOTICE)}
               </p>
-              <p className="text-sm text-[var(--oh-muted)]">
+              <p className="text-sm text-muted">
                 {t(I18nKey.DEVICE$SECURITY_WARNING)}
               </p>
             </div>
-            <p className="text-muted-foreground mb-6 text-center">
+            <p className="text-muted mb-6 text-center">
               {t(I18nKey.DEVICE$CONFIRM_PROMPT)}
             </p>
             <div className="flex gap-3">
               <button
                 type="button"
                 onClick={() => window.close()}
-                className="flex-1 px-4 py-2 border border-[var(--oh-border)] rounded-md hover:bg-muted text-[var(--oh-text-tertiary)]"
+                className="flex-1 px-4 py-2 border border-border rounded-md hover:bg-muted text-text-tertiary"
               >
                 {t(I18nKey.DEVICE$CANCEL)}
               </button>
@@ -192,11 +190,11 @@ export default function DeviceVerify() {
   if (isAuthed && !userCode) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="max-w-md w-full mx-auto p-6 bg-card rounded-lg shadow-lg">
+        <div className="max-w-md w-full mx-auto p-6 bg-surface-raised rounded-lg shadow-lg">
           <H1 className="text-2xl mb-4 text-center">
             {t(I18nKey.DEVICE$AUTHORIZATION_TITLE)}
           </H1>
-          <p className="text-muted-foreground mb-6 text-center">
+          <p className="text-muted mb-6 text-center">
             {t(I18nKey.DEVICE$ENTER_CODE_PROMPT)}
           </p>
           <form onSubmit={handleManualSubmit}>
@@ -212,7 +210,7 @@ export default function DeviceVerify() {
                 id="user_code"
                 name="user_code"
                 required
-                className="w-full px-3 py-2 border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full px-3 py-2 border border-border-input rounded-md focus:outline-none focus:ring-2 focus:ring-focus"
                 placeholder={t(I18nKey.DEVICE$CODE_PLACEHOLDER)}
               />
             </div>
@@ -232,10 +230,8 @@ export default function DeviceVerify() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-4" />
-          <p className="text-muted-foreground">
-            {t(I18nKey.DEVICE$PROCESSING)}
-          </p>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-contrast mx-auto mb-4" />
+          <p className="text-muted">{t(I18nKey.DEVICE$PROCESSING)}</p>
         </div>
       </div>
     );
@@ -243,11 +239,9 @@ export default function DeviceVerify() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
-      <div className="max-w-md w-full mx-auto p-6 bg-card rounded-lg shadow-lg text-center">
+      <div className="max-w-md w-full mx-auto p-6 bg-surface-raised rounded-lg shadow-lg text-center">
         <H1 className="text-2xl mb-4">{t(I18nKey.DEVICE$AUTH_REQUIRED)}</H1>
-        <p className="text-muted-foreground">
-          {t(I18nKey.DEVICE$SIGN_IN_PROMPT)}
-        </p>
+        <p className="text-muted">{t(I18nKey.DEVICE$SIGN_IN_PROMPT)}</p>
       </div>
     </div>
   );

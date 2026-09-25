@@ -166,7 +166,7 @@ describe("optimistic-user-message-store", () => {
     expect(remaining[0].status).toBe("error");
   });
 
-  it("consumeMatchingPendingMessage is a no-op when nothing is sending", () => {
+  it("consumeMatchingPendingMessage is a no-op when only errored entries exist and none match exactly", () => {
     const store = useOptimisticUserMessageStore.getState();
     const id = store.enqueuePendingMessage({
       conversationId: CONVO,
@@ -174,12 +174,32 @@ describe("optimistic-user-message-store", () => {
     });
     store.markPendingMessageError(id, "boom");
 
-    const consumed = store.consumeMatchingPendingMessage(CONVO, "broken");
+    const consumed = store.consumeMatchingPendingMessage(CONVO, "unrelated");
 
     expect(consumed).toBeNull();
     expect(
       useOptimisticUserMessageStore.getState().pendingMessages,
     ).toHaveLength(1);
+  });
+
+  it("consumeMatchingPendingMessage clears an errored entry when the echo matches its content exactly", () => {
+    const store = useOptimisticUserMessageStore.getState();
+    const id = store.enqueuePendingMessage({
+      conversationId: CONVO,
+      text: "late echo",
+    });
+    // The watchdog gives up before the server echoes the message back.
+    vi.advanceTimersByTime(PENDING_MESSAGE_TIMEOUT_MS);
+    expect(
+      useOptimisticUserMessageStore.getState().pendingMessages[0].status,
+    ).toBe("error");
+
+    const consumed = store.consumeMatchingPendingMessage(CONVO, "late echo");
+
+    expect(consumed?.id).toBe(id);
+    expect(
+      useOptimisticUserMessageStore.getState().pendingMessages,
+    ).toHaveLength(0);
   });
 
   it("consumeMatchingPendingMessage only consumes entries for the given conversation", () => {

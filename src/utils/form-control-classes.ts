@@ -5,7 +5,7 @@ export const formControlHeightClassName = "h-9 min-h-9";
 
 export const formControlRadiusClassName = "rounded-lg";
 
-export const formControlBorderClassName = "border border-[var(--oh-border)]";
+export const formControlBorderClassName = "border border-border";
 
 export const formControlSurfaceClassName = "bg-base-secondary";
 
@@ -43,28 +43,28 @@ export const formControlTransformTransitionClassName = cn(
 
 /** Muted icon/pill controls: instant foreground, fading shell on hover. */
 export const formControlMutedHoverClassName =
-  "hover:text-white hover:bg-white/10";
+  "hover:text-contrast hover:bg-contrast/10";
 
 /** Text/icon pill triggers in the chat input actions row. */
 export const chatInputPillButtonClassName = cn(
   "inline-flex items-center gap-1 rounded-[100px] border border-transparent px-1.5",
-  "text-sm font-normal leading-5 text-[var(--oh-muted)] whitespace-nowrap min-w-0 cursor-pointer",
+  "text-sm font-normal leading-5 text-muted whitespace-nowrap min-w-0 cursor-pointer",
   formControlTransitionClassName,
   formControlMutedHoverClassName,
 );
 
 /** Circular icon triggers in the chat input actions row. */
 export const chatInputIconButtonClassName = cn(
-  "flex items-center justify-center rounded-full text-[var(--oh-muted)] cursor-pointer",
+  "flex items-center justify-center rounded-full text-muted cursor-pointer",
   formControlTransitionClassName,
   formControlMutedHoverClassName,
 );
 
 export const formControlFocusClassName =
-  "focus:border-white/40 focus:ring-1 focus:ring-white/20 focus:outline-none";
+  "focus:border-contrast/40 focus:ring-1 focus:ring-contrast/20 focus:outline-none";
 
 export const formControlFocusWithinClassName =
-  "focus-within:border-white/40 focus-within:ring-1 focus-within:ring-white/20";
+  "focus-within:border-contrast/40 focus-within:ring-1 focus-within:ring-contrast/20";
 
 export const formControlDisabledClassName =
   "disabled:cursor-not-allowed disabled:opacity-60";
@@ -78,7 +78,7 @@ export const formControlFieldClassName = cn(
   formControlTransitionClassName,
   formControlFocusClassName,
   formControlDisabledClassName,
-  "w-full min-w-0 px-3 text-sm text-white placeholder:text-tertiary-alt",
+  "w-full min-w-0 px-3 text-sm text-contrast placeholder:text-tertiary-alt",
 );
 
 /** Settings screens keep italic placeholders on form controls. */
@@ -96,7 +96,7 @@ export const formControlMultilineFieldClassName = cn(
   formControlTransitionClassName,
   formControlFocusClassName,
   formControlDisabledClassName,
-  "w-full min-w-0 px-3 py-2 text-sm text-white placeholder:text-tertiary-alt",
+  "w-full min-w-0 px-3 py-2 text-sm text-contrast placeholder:text-tertiary-alt",
 );
 
 /** Combobox / search shell (icon + input), e.g. skills toolbar. */
@@ -134,13 +134,13 @@ export const formControlFilterTriggerClassName = cn(
   formControlButtonClassName,
   formControlBorderClassName,
   formControlSurfaceClassName,
-  "shrink-0 text-white",
+  "shrink-0 text-contrast",
 );
 
 /** Muted back navigation control with tertiary hover fill (settings sub-pages, detail views). */
 export const formControlBackNavButtonClassName = cn(
   "inline-flex items-center gap-2 self-start rounded-lg p-2",
-  "text-sm font-normal leading-5 text-[var(--oh-muted)] cursor-pointer",
+  "text-sm font-normal leading-5 text-muted cursor-pointer",
   formControlTransitionClassName,
-  "hover:bg-tertiary hover:text-white",
+  "hover:bg-tertiary hover:text-contrast",
 );
