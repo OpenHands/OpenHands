@@ -70,9 +70,12 @@ function validateDraftTrigger(
     }
   }
 
+  // "*" subscribes to every event the source delivers, so it never names an
+  // unregistered type.
   if (
     trigger.type === "event" &&
     trigger.on &&
+    trigger.on !== "*" &&
     !REGISTERED_EVENT_TYPES.includes(trigger.on)
   ) {
     const source = trigger.source === "github" ? "GitHub" : trigger.source;
