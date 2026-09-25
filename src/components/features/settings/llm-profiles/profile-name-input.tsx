@@ -71,10 +71,7 @@ export const ProfileNameInput = forwardRef<
       <p
         id={describedById}
         data-testid={ruleTestId}
-        className={cn(
-          "text-xs",
-          inputIsValid ? "text-muted" : "text-red-400",
-        )}
+        className={cn("text-xs", inputIsValid ? "text-muted" : "text-red-400")}
       >
         {isReservedName
           ? t(I18nKey.SETTINGS$PROFILE_RESERVED_NAME)
