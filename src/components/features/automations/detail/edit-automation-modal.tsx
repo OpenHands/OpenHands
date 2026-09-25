@@ -1,3 +1,4 @@
+import { AutomationAgentProfileSelector } from "../agent-profile-selector";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
@@ -64,6 +65,7 @@ const WEEKDAY_KEYS: I18nKey[] = [
 ];
 
 interface FormState {
+  agentProfileId: string | null;
   name: string;
   prompt: string;
   model: string;
@@ -81,6 +83,7 @@ function buildInitialState(automation: Automation): FormState {
     return {
       name: automation.name,
       prompt: automation.prompt ?? "",
+      agentProfileId: automation.agent_profile_id ?? null,
       model: automation.model ?? "",
       frequency: "custom",
       weekday: 1,
@@ -95,6 +98,7 @@ function buildInitialState(automation: Automation): FormState {
     return {
       name: automation.name,
       prompt: automation.prompt ?? "",
+      agentProfileId: automation.agent_profile_id ?? null,
       model: automation.model ?? "",
       frequency: "custom",
       weekday: 1,
@@ -110,6 +114,7 @@ function buildInitialState(automation: Automation): FormState {
   return {
     name: automation.name,
     prompt: automation.prompt ?? "",
+    agentProfileId: automation.agent_profile_id ?? null,
     model: automation.model ?? "",
     frequency: parsed.kind,
     weekday: parsed.kind === "weekly" ? (parsed.weekday ?? 1) : 1,
@@ -224,7 +229,10 @@ export function EditAutomationModal({
       body.prompt = trimmedPrompt.length === 0 ? null : trimmedPrompt;
     }
 
-    const selectedModel = form.model.trim();
+    if (form.agentProfileId !== (automation.agent_profile_id ?? null)) {
+      body.agent_profile_id = form.agentProfileId;
+    }
+    const selectedModel = form.agentProfileId ? "" : form.model.trim();
     const initialModel = automation.model ?? "";
     if (selectedModel !== initialModel) {
       body.model = selectedModel === "" ? null : selectedModel;
@@ -298,7 +306,7 @@ export function EditAutomationModal({
         }}
         role="presentation"
       />
-      <div className="relative w-full max-w-md rounded-xl border border-[var(--oh-border)] bg-[var(--oh-surface)] p-6">
+      <div className="relative w-full max-w-md rounded-xl border border-border bg-surface p-6">
         <button
           type="button"
           onClick={onClose}
@@ -351,23 +359,33 @@ export function EditAutomationModal({
             </label>
           )}
 
-          {modelSpec.present && (isLoadingProfiles || profiles.length > 0) && (
-            <SettingsDropdownInput
-              testId="edit-automation-model"
-              name="model"
-              label={modelSpec.label}
-              items={modelItems}
-              selectedKey={form.model || ACTIVE_PROFILE_KEY}
-              isLoading={isLoadingProfiles}
-              placeholder={t(I18nKey.COMMON$ACTIVE_PROFILE)}
-              onSelectionChange={(key) =>
-                setForm((f) => ({
-                  ...f,
-                  model: key && key !== ACTIVE_PROFILE_KEY ? String(key) : "",
-                }))
+          {capabilities?.features.includes("agentProfiles") && (
+            <AutomationAgentProfileSelector
+              value={form.agentProfileId}
+              onChange={(agentProfileId) =>
+                setForm((current) => ({ ...current, agentProfileId }))
               }
             />
           )}
+          {!form.agentProfileId &&
+            modelSpec.present &&
+            (isLoadingProfiles || profiles.length > 0) && (
+              <SettingsDropdownInput
+                testId="edit-automation-model"
+                name="model"
+                label={modelSpec.label}
+                items={modelItems}
+                selectedKey={form.model || ACTIVE_PROFILE_KEY}
+                isLoading={isLoadingProfiles}
+                placeholder={t(I18nKey.COMMON$ACTIVE_PROFILE)}
+                onSelectionChange={(key) =>
+                  setForm((f) => ({
+                    ...f,
+                    model: key && key !== ACTIVE_PROFILE_KEY ? String(key) : "",
+                  }))
+                }
+              />
+            )}
 
           {timeoutSpec.present && (
             <div className="flex flex-col gap-2.5 w-full min-w-0">
@@ -397,7 +415,7 @@ export function EditAutomationModal({
           )}
 
           {automation.trigger.type === "event" ? (
-            <div className="flex flex-col gap-3 rounded-lg bg-[var(--oh-surface-raised)] p-3">
+            <div className="flex flex-col gap-3 rounded-lg bg-surface-raised p-3">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-medium text-muted">
                   {t(I18nKey.AUTOMATIONS$DETAIL$TRIGGER)}
@@ -481,7 +499,7 @@ export function EditAutomationModal({
                   disabled={form.isCustomSchedule}
                   className={cn(
                     formControlSettingsFieldClassName,
-                    "disabled:bg-[var(--oh-surface-raised)]",
+                    "disabled:bg-surface-raised",
                   )}
                 />
                 {automation.timezone && (

@@ -78,7 +78,15 @@ describe("ConversationTagChips", () => {
       );
     });
     const visibleChip = screen.getByTestId("conversation-card-tag-chip");
-    expect(visibleChip).toHaveTextContent("slack");
+    expect(visibleChip).toHaveTextContent("Origin: slack");
+    // The visible and off-screen copies must use the same wider key/value
+    // content so the overflow calculation measures what users actually see.
+    const measureRow = visibleChip
+      .closest('[data-testid="conversation-card-tag-chips"]')
+      ?.querySelector('[aria-hidden="true"]') as HTMLElement;
+    expect(
+      Array.from(measureRow.children).map((chip) => chip.textContent),
+    ).toEqual(["Origin: slack", "Env: prod", "Owner: alice"]);
     // Tooltip uses the humanized label — "Origin", not the wire key and not
     // "Git" (origin names the source of the conversation, not a git fact).
     expect(visibleChip).toHaveAttribute("title", "Origin: slack");
@@ -180,9 +188,29 @@ describe("ConversationTagChips", () => {
         2,
       );
     });
+    const chips = screen.getAllByTestId("conversation-card-tag-chip");
+    expect(chips[0]).toHaveTextContent("Origin: slack");
+    expect(chips[1]).toHaveTextContent("Owner: alice");
     expect(
       screen.getAllByTestId("conversation-card-tag-chip-icon"),
     ).toHaveLength(2);
+  });
+
+  it("shows the humanized key once for bare tags with an empty value", () => {
+    renderWithProviders(<ConversationTagChips tags={[["work", ""]]} />);
+
+    const chip = screen.getByTestId("conversation-card-tag-chip");
+    expect(chip.textContent).toBe("Work");
+    expect(chip).toHaveAttribute("title", "Work");
+  });
+
+  it("safely truncates emoji values while preserving the full tooltip", () => {
+    const longValue = "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀";
+    renderWithProviders(<ConversationTagChips tags={[["mood", longValue]]} />);
+
+    const chip = screen.getByTestId("conversation-card-tag-chip");
+    expect(chip).toHaveTextContent(`Mood: ${"😀".repeat(13)}…`);
+    expect(chip).toHaveAttribute("title", `Mood: ${longValue}`);
   });
 
   it("keeps the overflow popover open across re-renders with unchanged tags", async () => {

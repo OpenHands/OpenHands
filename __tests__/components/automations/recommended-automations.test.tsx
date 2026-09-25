@@ -154,7 +154,7 @@ function settingsWithGithubMcp() {
 
 function continueGithubResponderLocally() {
   fireEvent.click(
-    screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
+    screen.getByTestId("recommended-automation-card-github-repo-monitor"),
   );
   const continueButton = screen.getByTestId(
     "responder-deployment-continue-local",
@@ -215,6 +215,7 @@ describe("recommended automations", () => {
       "slack-standup-digest",
       "linear-triage-assistant",
       "linear-issue-to-github-pr",
+      "gitlab-issue-to-mr",
       "linear-issue-to-gitlab-mr",
       "linear-issue-to-bitbucket-pr",
       "jira-issue-to-pr",
@@ -222,6 +223,8 @@ describe("recommended automations", () => {
       "jira-issue-to-gitlab-mr",
       "research-brief-writer",
       "jira-issue-to-bitbucket-pr",
+      "github-delivery-watchdog",
+      "github-issue-triage",
       "upstream-fork-sync",
       "incident-retrospective-drafter",
     ]);
@@ -247,7 +250,7 @@ describe("recommended automations", () => {
     expect(betaHeading).toHaveTextContent(
       I18nKey.RECOMMENDED_AUTOMATIONS$BETA_LABEL,
     );
-    expect(within(betaHeading).getByText("13")).toBeInTheDocument();
+    expect(within(betaHeading).getByText("16")).toBeInTheDocument();
 
     const betaSection = screen.getByTestId(
       "recommended-automations-beta-section",
@@ -600,9 +603,7 @@ describe("recommended automations", () => {
     );
     expect(plusBadge.tagName).toBe("SPAN");
     expect(plusBadge).toHaveAttribute("aria-hidden", "true");
-    expect(plusBadge.className).toContain(
-      "hover:bg-[var(--oh-interactive-hover)]",
-    );
+    expect(plusBadge.className).toContain("hover:bg-interactive-hover");
     expect(plusBadge.querySelector('[role="switch"]')).not.toBeInTheDocument();
   });
 
@@ -630,7 +631,7 @@ describe("recommended automations", () => {
     renderLauncher();
 
     fireEvent.click(
-      screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
+      screen.getByTestId("recommended-automation-card-github-repo-monitor"),
     );
     fireEvent.click(screen.getByTestId("responder-deployment-continue-local"));
 
@@ -680,7 +681,7 @@ describe("recommended automations", () => {
 
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith(
-        "/automations/new/github-pr-reviewer",
+        "/automations/new/github-repo-monitor",
       ),
     );
     expect(mockCreateSecret).not.toHaveBeenCalled();
@@ -864,7 +865,7 @@ describe("recommended automations", () => {
     renderLauncher();
 
     fireEvent.click(
-      screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
+      screen.getByTestId("recommended-automation-card-github-repo-monitor"),
     );
     fireEvent.click(screen.getByTestId("responder-deployment-continue-local"));
 
@@ -880,12 +881,12 @@ describe("recommended automations", () => {
     renderLauncher();
 
     fireEvent.click(
-      screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
+      screen.getByTestId("recommended-automation-card-github-repo-monitor"),
     );
     fireEvent.click(screen.getByTestId("responder-deployment-continue-local"));
     // The launch is now in flight; re-selecting the card must not launch again.
     fireEvent.click(
-      screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
+      screen.getByTestId("recommended-automation-card-github-repo-monitor"),
     );
 
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledTimes(1));
@@ -958,7 +959,7 @@ describe("recommended automations", () => {
     renderLauncher();
 
     fireEvent.click(
-      screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
+      screen.getByTestId("recommended-automation-card-github-repo-monitor"),
     );
     fireEvent.click(screen.getByTestId("responder-deployment-continue-local"));
     await screen.findByTestId("mcp-install-modal");
@@ -971,7 +972,7 @@ describe("recommended automations", () => {
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith(
-        "/automations/new/github-pr-reviewer",
+        "/automations/new/github-repo-monitor",
       ),
     );
   });
@@ -982,7 +983,7 @@ describe("recommended automations", () => {
     renderLauncher();
 
     fireEvent.click(
-      screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
+      screen.getByTestId("recommended-automation-card-github-repo-monitor"),
     );
     fireEvent.click(
       screen.getByTestId("responder-deployment-open-openhands-cloud"),

@@ -30,7 +30,7 @@ export function ToggleButton({
           {title}
         </Typography.Text>
       </div>
-      <Typography.Text className="text-[var(--oh-text-tertiary)]">
+      <Typography.Text className="text-text-tertiary">
         {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
       </Typography.Text>
     </button>

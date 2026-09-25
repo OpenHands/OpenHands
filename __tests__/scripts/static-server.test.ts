@@ -807,6 +807,33 @@ describe("static-server.mjs", () => {
     await expect(response.text()).resolves.toContain("loaded = true");
   });
 
+  it("serves the current build after assets are replaced", async () => {
+    const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+    tempDirs.push(buildDir);
+    mkdirSync(path.join(buildDir, "assets"));
+    writeFileSync(path.join(buildDir, "index.html"), "<main>app</main>");
+    const oldAsset = path.join(buildDir, "assets", "old.js");
+    writeFileSync(oldAsset, "old build");
+    const origin = await startServer(buildDir);
+
+    rmSync(oldAsset);
+    writeFileSync(path.join(buildDir, "assets", "new.js"), "new build");
+
+    const removed = await fetch(`${origin}/assets/old.js`);
+    expect(removed.status).toBe(404);
+    await removed.text();
+    const replacement = await fetch(`${origin}/assets/new.js`);
+    expect(replacement.status).toBe(200);
+    expect(replacement.headers.get("cache-control")).toBe(
+      "public, max-age=31536000, immutable",
+    );
+    await expect(replacement.text()).resolves.toBe("new build");
+    const navigation = await fetch(`${origin}/conversations`, {
+      headers: { Accept: "text/html" },
+    });
+    await expect(navigation.text()).resolves.toContain("<main>app</main>");
+  });
+
   describe("base path mounting", () => {
     it("serves index.html and injects the base path under the mount", async () => {
       const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));

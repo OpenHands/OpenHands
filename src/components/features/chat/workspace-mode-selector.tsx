@@ -73,10 +73,10 @@ export function WorkspaceModeSelector({
         onClick={() => setOpen((next) => !next)}
         className={cn(
           "group flex flex-row items-center justify-between gap-2 pl-2.5 pr-2 py-1 rounded-[100px] truncate relative",
-          "border border-[rgba(71,74,84,0.50)] bg-transparent text-white",
+          "border border-[rgba(71,74,84,0.50)] bg-transparent text-contrast",
           disabled
             ? "cursor-not-allowed opacity-50"
-            : "cursor-pointer hover:border-[var(--oh-border-subtle)]",
+            : "cursor-pointer hover:border-border-subtle",
         )}
       >
         <span className="flex size-3 shrink-0 items-center justify-center">
@@ -85,7 +85,7 @@ export function WorkspaceModeSelector({
         <span className="min-w-0 flex-1 truncate text-sm font-normal leading-5">
           {label}
         </span>
-        <ChevronDown className="size-3 shrink-0 text-white" aria-hidden />
+        <ChevronDown className="size-3 shrink-0 text-contrast" aria-hidden />
       </button>
 
       {open ? (
@@ -93,7 +93,7 @@ export function WorkspaceModeSelector({
           role="menu"
           data-testid={`${testId}-menu`}
           className={cn(
-            "absolute left-0 top-full z-50 mt-1 min-w-[180px] rounded-lg border border-[var(--oh-border)] bg-[var(--oh-surface)] p-1 shadow-lg",
+            "absolute left-0 top-full z-50 mt-1 min-w-45 rounded-lg border border-border bg-surface p-1 shadow-lg",
             dropdownMenuListClassName,
           )}
         >

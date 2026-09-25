@@ -182,9 +182,7 @@ describe("ChatInterface - Chat Suggestions", () => {
       },
     });
 
-    useOptimisticUserMessageStore.setState({
-      pendingMessages: [],
-    });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
 
     useErrorMessageStore.setState({
       errorMessage: null,
@@ -313,7 +311,7 @@ describe("ChatInterface - Scroll-up loads older events", () => {
       defaultOptions: { queries: { retry: false } },
     });
 
-    useOptimisticUserMessageStore.setState({ pendingMessages: [] });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
     useErrorMessageStore.setState({ errorMessage: null });
 
     (useConfig as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
@@ -332,6 +330,7 @@ describe("ChatInterface - Scroll-up loads older events", () => {
       events: [],
       eventIds: new Set(),
       uiEvents: [],
+      loadedConversationId: null,
     });
     vi.clearAllMocks();
   });
@@ -360,6 +359,7 @@ describe("ChatInterface - Scroll-up loads older events", () => {
       events: [seedEvent],
       eventIds: new Set(["msg-seed"]),
       uiEvents: [seedEvent],
+      loadedConversationId: "test-conversation-id",
     });
     return loadOlder;
   };
@@ -419,6 +419,72 @@ describe("ChatInterface - Scroll-up loads older events", () => {
     });
 
     expect(loadOlder).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not restore scroll geometry saved by a previous conversation", async () => {
+    const loadOlder = setupPaginationTest();
+    const renderChat = () => (
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <ChatInterface />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+    const view = render(renderChat());
+
+    const scrollContainer = document.querySelector(
+      "[data-testid='chat-scroll-container']",
+    ) as HTMLElement;
+    setScrollMetrics(scrollContainer, {
+      scrollTop: 50,
+      scrollHeight: 5000,
+      clientHeight: 800,
+    });
+
+    await new Promise((resolve) => {
+      setTimeout(resolve, 0);
+    });
+    loadOlder.mockClear();
+    fireEvent.scroll(scrollContainer);
+    expect(loadOlder).toHaveBeenCalledTimes(1);
+
+    vi.mocked(useConversationId).mockReturnValue({
+      conversationId: "next-conversation-id",
+    });
+    vi.mocked(useOptionalConversationId).mockReturnValue({
+      conversationId: "next-conversation-id",
+    });
+    view.rerender(renderChat());
+
+    const setScrollTop = vi.fn();
+    Object.defineProperty(scrollContainer, "scrollTop", {
+      configurable: true,
+      get: () => 0,
+      set: setScrollTop,
+    });
+    Object.defineProperty(scrollContainer, "scrollHeight", {
+      configurable: true,
+      value: 6000,
+    });
+
+    const nextConversationEvent: MessageEvent = {
+      id: "msg-next-conversation",
+      timestamp: "2025-07-02T00:00:00Z",
+      source: "user",
+      llm_message: {
+        role: "user",
+        content: [{ type: "text", text: "Next conversation message" }],
+      },
+      activated_skills: [],
+      extended_content: [],
+    };
+    act(() => {
+      useEventStore.getState().addEvent(nextConversationEvent);
+    });
+
+    // Restoring the previous conversation's geometry would assign
+    // prevTop + (newHeight - prevHeight) = 50 + (6000 - 5000) = 1050.
+    expect(setScrollTop).not.toHaveBeenCalledWith(1050);
   });
 
   it("auto-loads older events when the chat content does not overflow the viewport", async () => {
@@ -497,6 +563,7 @@ describe("ChatInterface - Scroll-up loads older events", () => {
       events: [seedEvent],
       eventIds: new Set(["msg-seed"]),
       uiEvents: [seedEvent],
+      loadedConversationId: "test-conversation-id",
     });
 
     const useUserConversationModule =
@@ -608,7 +675,7 @@ describe("ChatInterface - Pending message queue", () => {
     queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    useOptimisticUserMessageStore.setState({ pendingMessages: [] });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
     useErrorMessageStore.setState({ errorMessage: null });
     (useConfig as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       data: {},
@@ -629,7 +696,7 @@ describe("ChatInterface - Pending message queue", () => {
   });
 
   afterEach(() => {
-    useOptimisticUserMessageStore.setState({ pendingMessages: [] });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
   });
 
   function submitMessage(text: string) {
@@ -716,7 +783,7 @@ describe("ChatInterface - Auto-scroll on submit (issue #817)", () => {
     queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    useOptimisticUserMessageStore.setState({ pendingMessages: [] });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
     useErrorMessageStore.setState({ errorMessage: null });
     (useConfig as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       data: {},
@@ -737,7 +804,7 @@ describe("ChatInterface - Auto-scroll on submit (issue #817)", () => {
   });
 
   afterEach(() => {
-    useOptimisticUserMessageStore.setState({ pendingMessages: [] });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
   });
 
   it("scrolls to bottom when a new prompt is submitted while the user is scrolled up", async () => {
@@ -962,7 +1029,7 @@ describe("ChatInterface - Tracking", () => {
     queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    useOptimisticUserMessageStore.setState({ pendingMessages: [] });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
     useErrorMessageStore.setState({ errorMessage: null });
     (useConfig as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       data: {},
@@ -1051,7 +1118,7 @@ describe("ChatInterface - Build plan keyboard shortcut", () => {
     queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    useOptimisticUserMessageStore.setState({ pendingMessages: [] });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
     useErrorMessageStore.setState({ errorMessage: null });
     (useConfig as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       data: {},
