@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { FileText, MessageSquare } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "#/utils/utils";
 import { ChatActionTooltip } from "#/components/features/chat/chat-action-tooltip";
@@ -35,6 +36,43 @@ const TAGGED_AUTOMATION_SETUP_DRAFT: AutomationSetupDraft = {
   kind: "prompt",
 };
 
+type MobileAutomationView = "form" | "conversation";
+
+const MOBILE_AUTOMATION_VIEW_OPTIONS: {
+  view: MobileAutomationView;
+  labelKey: I18nKey;
+  Icon: typeof FileText;
+}[] = [
+  {
+    view: "form",
+    labelKey: I18nKey.AUTOMATION_SETUP$VIEW_FORM,
+    Icon: FileText,
+  },
+  {
+    view: "conversation",
+    labelKey: I18nKey.AUTOMATION_SETUP$VIEW_CONVERSATION,
+    Icon: MessageSquare,
+  },
+];
+
+function AutomationSetupDockedComposer({
+  onTarget,
+}: {
+  onTarget: (element: HTMLDivElement | null) => void;
+}) {
+  return (
+    <div className="custom-scrollbar-always pointer-events-none absolute inset-0 z-20 overflow-y-scroll px-5 [scrollbar-gutter:stable] [&::-webkit-scrollbar-thumb]:bg-transparent">
+      <div className="relative mx-auto h-full w-full min-w-0 max-w-[800px]">
+        <div
+          ref={onTarget}
+          data-testid="automation-setup-docked-composer"
+          className="pointer-events-auto absolute inset-x-0 bottom-5 overflow-visible rounded-[15px] shadow-[0_12px_40px_rgba(0,0,0,0.55)]"
+        />
+      </div>
+    </div>
+  );
+}
+
 function getDesktopTabPanelClass(isRightPanelShown: boolean) {
   return isRightPanelShown
     ? "translate-x-0 opacity-100"
@@ -56,6 +94,8 @@ export function ConversationMain() {
   const [automationToolbarElement, setAutomationToolbarElement] =
     useState<HTMLDivElement | null>(null);
   const [isAutomationAgentHidden, setIsAutomationAgentHidden] = useState(false);
+  const [mobileAutomationView, setMobileAutomationView] =
+    useState<MobileAutomationView>("form");
   const [composerDockTarget, setComposerDockTarget] =
     useState<HTMLDivElement | null>(null);
   const overviewDrawer = useConversationOverviewDrawerOptional();
@@ -63,7 +103,9 @@ export function ConversationMain() {
   const hasTaggedAutomationSetupMode = hasAutomationSetupModeTag(
     conversation?.tags,
   );
-  const isAutomationSetupMode = Boolean(automationSetupDraft) && !isMobile;
+  const isAutomationSetupMode = Boolean(automationSetupDraft);
+  const showMobileAutomationForm =
+    isMobile && isAutomationSetupMode && mobileAutomationView === "form";
 
   const { leftWidth, rightWidth, isDragging, containerRef, handleMouseDown } =
     useResizablePanels({
@@ -102,7 +144,10 @@ export function ConversationMain() {
   }, [automationSetupDraft]);
 
   useEffect(() => {
-    const showAgent = () => setIsAutomationAgentHidden(false);
+    const showAgent = () => {
+      setIsAutomationAgentHidden(false);
+      setMobileAutomationView("conversation");
+    };
     window.addEventListener(AUTOMATION_SETUP_SHOW_AGENT_EVENT, showAgent);
     return () =>
       window.removeEventListener(AUTOMATION_SETUP_SHOW_AGENT_EVENT, showAgent);
@@ -128,18 +173,68 @@ export function ConversationMain() {
       {isAutomationSetupMode ? (
         <header
           data-testid="automation-setup-topbar"
-          className="flex h-10 min-h-10 shrink-0 items-center justify-between gap-2 border-b border-[var(--oh-border)] bg-base px-3"
+          className={cn(
+            "flex shrink-0 border-b border-[var(--oh-border)] bg-base",
+            isMobile
+              ? "flex-col"
+              : "h-10 min-h-10 items-center justify-between gap-2 px-3",
+          )}
         >
-          <div className="flex min-w-0 items-center gap-2">
-            {isSidebarRailHidden ? <SidebarMobileMenuToggle /> : null}
-            <h2
-              data-testid="automation-setup-conversation-title"
-              className="min-w-0 truncate text-sm font-medium text-content"
-            >
-              {setupTitle}
-            </h2>
+          <div
+            className={cn(
+              "flex min-w-0 items-center gap-2",
+              isMobile && "h-10 justify-between px-3",
+            )}
+          >
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              {isSidebarRailHidden ? <SidebarMobileMenuToggle /> : null}
+              <h2
+                data-testid="automation-setup-conversation-title"
+                className="min-w-0 truncate text-sm font-medium text-content"
+              >
+                {setupTitle}
+              </h2>
+            </div>
+            {isMobile ? (
+              <div
+                role="group"
+                aria-label={`${t(I18nKey.AUTOMATION_SETUP$VIEW_FORM)} / ${t(I18nKey.AUTOMATION_SETUP$VIEW_CONVERSATION)}`}
+                className="flex shrink-0 overflow-hidden rounded-lg border border-[var(--oh-border)]"
+              >
+                {MOBILE_AUTOMATION_VIEW_OPTIONS.map(
+                  ({ view, labelKey, Icon }) => {
+                    const label = t(labelKey);
+                    return (
+                      <button
+                        key={view}
+                        type="button"
+                        data-testid={`automation-setup-mobile-view-${view}`}
+                        aria-label={label}
+                        aria-pressed={mobileAutomationView === view}
+                        title={label}
+                        onClick={() => setMobileAutomationView(view)}
+                        className={cn(
+                          "inline-flex size-7 items-center justify-center",
+                          mobileAutomationView === view
+                            ? "bg-tertiary text-content"
+                            : "text-[var(--oh-muted)]",
+                        )}
+                      >
+                        <Icon className="size-4" aria-hidden />
+                      </button>
+                    );
+                  },
+                )}
+              </div>
+            ) : null}
           </div>
-          <div className="flex shrink-0 items-center gap-1.5">
+          <div
+            className={cn(
+              "flex min-w-0 items-center gap-1.5",
+              isMobile ? "overflow-x-auto px-3 pb-2" : "shrink-0",
+              isMobile && mobileAutomationView === "conversation" && "hidden",
+            )}
+          >
             <div
               ref={setAutomationToolbarElement}
               data-testid="automation-setup-toolbar"
@@ -192,7 +287,7 @@ export function ConversationMain() {
           className={cn(
             "flex flex-col bg-base overflow-hidden",
             isMobile
-              ? "flex-1"
+              ? cn("flex-1", showMobileAutomationForm && "hidden")
               : cn(
                   "min-w-0",
                   isAutomationSetupMode &&
@@ -238,7 +333,18 @@ export function ConversationMain() {
               showGitControlBar={!isAutomationSetupMode}
               showEmptyStateSuggestions={!isAutomationSetupMode}
               composerDockTarget={composerDockTarget}
-              onDockedComposerSubmit={() => setIsAutomationAgentHidden(false)}
+              minimalComposer={isMobile && isAutomationSetupMode}
+              composerPlaceholder={
+                isAutomationSetupMode
+                  ? t(
+                      I18nKey.AUTOMATION_SETUP$CONVERSATION_COMPOSER_PLACEHOLDER,
+                    )
+                  : undefined
+              }
+              onDockedComposerSubmit={() => {
+                setIsAutomationAgentHidden(false);
+                setMobileAutomationView("conversation");
+              }}
             />
           </div>
         </div>
@@ -252,6 +358,23 @@ export function ConversationMain() {
               isDragging={isDragging}
             />
           )}
+
+        {showMobileAutomationForm && automationSetupDraft ? (
+          <div
+            data-testid="automation-setup-mobile-form"
+            className="relative flex min-h-0 flex-1 flex-col overflow-hidden"
+          >
+            <AutomationSetupPanel
+              draft={automationSetupDraft}
+              conversationId={conversationId}
+              conversationTags={conversation?.tags}
+              toolbarPortal={automationToolbarElement}
+              showInlineHeader={false}
+              reserveComposerSpace
+            />
+            <AutomationSetupDockedComposer onTarget={setComposerDockTarget} />
+          </div>
+        ) : null}
 
         {/* Right panel: desktop side drawer. Mobile opens Files/Tools via /panel route. */}
         {!isMobile && (
@@ -305,15 +428,9 @@ export function ConversationMain() {
                   // scrollbar gutter. This overlay has to be a scroll container
                   // with the same gutter, or the composer centers in a wider
                   // box and sits off the fields.
-                  <div className="custom-scrollbar-always pointer-events-none absolute inset-0 z-20 overflow-y-scroll px-5 [scrollbar-gutter:stable] [&::-webkit-scrollbar-thumb]:bg-transparent">
-                    <div className="relative mx-auto h-full w-full min-w-0 max-w-[800px]">
-                      <div
-                        ref={setComposerDockTarget}
-                        data-testid="automation-setup-docked-composer"
-                        className="pointer-events-auto absolute inset-x-0 bottom-5 overflow-visible rounded-[15px] shadow-[0_12px_40px_rgba(0,0,0,0.55)]"
-                      />
-                    </div>
-                  </div>
+                  <AutomationSetupDockedComposer
+                    onTarget={setComposerDockTarget}
+                  />
                 ) : null}
               </div>
             </div>
