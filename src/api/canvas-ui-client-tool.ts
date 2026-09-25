@@ -19,7 +19,7 @@ export interface ClientToolSpec {
   };
 }
 
-const CANVAS_UI_DESCRIPTION = `The user is interacting with you inside Agent Canvas — a web UI with a chat panel on the left and a tabbed right-side panel (files, terminal, browser, vscode, planner, tasklist). This tool lets you drive that right-side panel so the user sees what you just produced.
+const CANVAS_UI_DESCRIPTION = `The user is interacting with you inside Agent Canvas — a web UI with a chat panel on the left and a tabbed right-side panel (files, preview, terminal, browser, vscode, planner, tasklist). This tool lets you drive that right-side panel so the user sees what you just produced.
 
 They will NOT see the files you wrote, the terminal output, or the browser
 unless you call this tool to switch the right-side panel to the relevant
@@ -31,6 +31,11 @@ When to call (pick the most specific option that matches your last action):
 * You wrote or modified a single file (ANY language, ANY size — including
   small scripts like a hello-world bash file) →
     command="navigate_to_file", path=<workspace-relative path of that file>
+
+* You generated or modified a runnable web application →
+    command="open_tab", tab="preview"
+    (The Live Preview loads the real workspace entrypoint and refreshes after
+    agent-side file mutations.)
 
 * You generated an HTML page, image, SVG, PDF, markdown report, or other
   previewable artifact →
@@ -72,11 +77,19 @@ export const CANVAS_UI_CLIENT_TOOL: ClientToolSpec = {
       path: {
         type: "string",
         description:
-          "Workspace-relative file path. Required for navigate_to_file and show_preview; ignored otherwise.",
+          "Workspace-relative entrypoint path. Required for navigate_to_file and show_preview; optional for open_tab with tab=preview; ignored otherwise.",
       },
       tab: {
         type: "string",
-        enum: ["files", "browser", "vscode", "terminal", "planner", "tasklist"],
+        enum: [
+          "files",
+          "preview",
+          "browser",
+          "vscode",
+          "terminal",
+          "planner",
+          "tasklist",
+        ],
         description: "Tab to open. Required for open_tab; ignored otherwise.",
       },
     },
