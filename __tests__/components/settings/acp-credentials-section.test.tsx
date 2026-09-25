@@ -112,6 +112,51 @@ describe("AcpCredentialsSection", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("collapses the credential fields behind the Advanced toggle when signed in", async () => {
+    // #16296: the fields are redundant next to a confirmed host login, but must
+    // stay reachable for adding or rotating a key.
+    acpAuthStatusMock.mockReturnValue({
+      status: "authenticated",
+      isChecking: false,
+      isSupported: true,
+    });
+    const { user } = renderSection("claude-code");
+
+    expect(
+      screen.queryByTestId("settings-acp-secret-ANTHROPIC_API_KEY"),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("settings-acp-advanced-toggle"));
+    expect(
+      screen.getByTestId("settings-acp-secret-ANTHROPIC_API_KEY"),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the fields expanded while a conflict warning points at them", async () => {
+    // A conflict names two of the collapsed fields, so hiding them would leave
+    // the user nothing to act on.
+    acpAuthStatusMock.mockReturnValue({
+      status: "authenticated",
+      isChecking: false,
+      isSupported: true,
+    });
+    vi.spyOn(SecretsService, "getSecrets").mockResolvedValue([
+      { name: "CLAUDE_CODE_OAUTH_TOKEN" },
+      { name: "ANTHROPIC_BASE_URL" },
+    ]);
+    renderSection("claude-code");
+
+    expect(
+      await screen.findByTestId("acp-credential-conflict-warning"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("settings-acp-secret-CLAUDE_CODE_OAUTH_TOKEN"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("settings-acp-advanced-toggle"),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows the checking spinner while the login probe is in flight", () => {
     acpAuthStatusMock.mockReturnValue({
       status: "unknown",

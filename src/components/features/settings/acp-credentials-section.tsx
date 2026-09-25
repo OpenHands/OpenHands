@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { AcpConflictWarnings } from "#/components/features/settings/acp-conflict-warnings";
 import { AcpAuthStatusBanner } from "#/components/features/settings/acp-auth-status-banner";
-import { AcpSecretField } from "#/components/features/settings/acp-secret-field";
+import { AcpCredentialFields } from "#/components/features/settings/acp-credential-fields";
 import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
 import { useAcpAuthStatus } from "#/hooks/query/use-acp-auth-status";
@@ -24,14 +24,7 @@ export function AcpCredentialsSection({
   providerKey: string;
 }) {
   const { t } = useTranslation("openhands");
-  const {
-    fields,
-    values,
-    setValue,
-    secretExists,
-    conflicts,
-    credentialsConfigured,
-  } = form;
+  const { fields, conflicts, credentialsConfigured } = form;
   const { status: authStatus, isChecking } = useAcpAuthStatus(providerKey);
   const providerName = getAcpProviderDisplayName(providerKey) ?? providerKey;
 
@@ -56,19 +49,11 @@ export function AcpCredentialsSection({
         testIdPrefix="settings-acp-auth"
       />
 
-      <div className="flex flex-col gap-5">
-        {fields.map((field) => (
-          <AcpSecretField
-            key={field.name}
-            field={field}
-            value={values[field.name] ?? ""}
-            onChange={(value) => setValue(field.name, value)}
-            alreadySet={secretExists(field.name)}
-            testId={`settings-acp-secret-${field.name}`}
-            showOptionalTag
-          />
-        ))}
-      </div>
+      <AcpCredentialFields
+        form={form}
+        isAuthenticated={authStatus === "authenticated"}
+        testIdPrefix="settings-acp"
+      />
 
       <AcpConflictWarnings conflicts={conflicts} />
     </div>
