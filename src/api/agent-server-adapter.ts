@@ -909,8 +909,16 @@ function buildAgentContext(
     // prompt too. The allow-list has no counterpart to send: the backend
     // loads no catalog skills of its own (`load_public_skills` is false).
     disabled_skills: disabledSkills,
+    // Preserve a saved user suffix (settings → agent_context.system_message_suffix):
+    // the runtime-services block is prepended, not a replacement (#17716).
     ...(runtimeServicesSuffix
-      ? { system_message_suffix: runtimeServicesSuffix }
+      ? {
+          system_message_suffix:
+            typeof existingContext.system_message_suffix === "string" &&
+            existingContext.system_message_suffix.length > 0
+              ? `${runtimeServicesSuffix}\n\n${existingContext.system_message_suffix}`
+              : runtimeServicesSuffix,
+        }
       : {}),
   };
 }

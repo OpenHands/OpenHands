@@ -1510,6 +1510,40 @@ describe("agent_settings runtime services suffix", () => {
       payload.agent_settings.agent_context.system_message_suffix as string,
     ).toContain("<RUNTIME_SERVICES>");
   });
+
+  it("preserves a saved system_message_suffix when runtime services are advertised", () => {
+    const payload = buildStartConversationRequest({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        agent_settings: {
+          ...DEFAULT_SETTINGS.agent_settings,
+          agent_context: {
+            system_message_suffix: "MARKER-GLOBAL-RULES",
+          },
+        },
+      },
+      query: "hello",
+      runtimeServicesInfo: {
+        mode: "dev:automation",
+        services: {
+          agent_server: { url_from_agent: "http://localhost:18000" },
+          automation: {
+            url_from_agent: "http://localhost:18001",
+          },
+        },
+      },
+    }) as {
+      agent_settings: { agent_context: Record<string, unknown> };
+    };
+    const suffix = payload.agent_settings.agent_context
+      .system_message_suffix as string;
+    expect(suffix).toContain("<RUNTIME_SERVICES>");
+    expect(suffix).toContain("MARKER-GLOBAL-RULES");
+    // Runtime-services block comes first; the user's saved suffix is kept after it.
+    expect(suffix.indexOf("<RUNTIME_SERVICES>")).toBeLessThan(
+      suffix.indexOf("MARKER-GLOBAL-RULES"),
+    );
+  });
 });
 
 describe("buildStartConversationRequest — ACP discriminator", () => {
