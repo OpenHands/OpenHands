@@ -863,6 +863,16 @@ function buildAgentContext(
   const runtimeServicesSuffix =
     buildRuntimeServicesSystemSuffix(runtimeServicesInfo);
   const existingContext = toRecord(agentSettings.agent_context);
+  const savedSuffix =
+    typeof existingContext.system_message_suffix === "string" &&
+    existingContext.system_message_suffix.trim()
+      ? existingContext.system_message_suffix
+      : "";
+  // The saved global suffix is user-authored; the runtime-services block must
+  // extend it, never replace it (#17716).
+  const systemMessageSuffix = [savedSuffix, runtimeServicesSuffix]
+    .filter((part): part is string => Boolean(part))
+    .join("\n\n");
 
   // Merge bundled public skills with any skills already present in the
   // agent context (e.g. user-defined skills set via the settings API).
@@ -909,8 +919,8 @@ function buildAgentContext(
     // prompt too. The allow-list has no counterpart to send: the backend
     // loads no catalog skills of its own (`load_public_skills` is false).
     disabled_skills: disabledSkills,
-    ...(runtimeServicesSuffix
-      ? { system_message_suffix: runtimeServicesSuffix }
+    ...(systemMessageSuffix
+      ? { system_message_suffix: systemMessageSuffix }
       : {}),
   };
 }

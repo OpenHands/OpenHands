@@ -1510,6 +1510,67 @@ describe("agent_settings runtime services suffix", () => {
       payload.agent_settings.agent_context.system_message_suffix as string,
     ).toContain("<RUNTIME_SERVICES>");
   });
+
+  const runtimeServicesInfo = {
+    mode: "dev:automation",
+    services: {
+      agent_server: { url_from_agent: "http://localhost:18000" },
+      automation: { url_from_agent: "http://localhost:18001" },
+    },
+  };
+  const withSavedSuffix = (suffix: string) => ({
+    ...DEFAULT_SETTINGS,
+    agent_settings: {
+      ...DEFAULT_SETTINGS.agent_settings,
+      agent_context: { system_message_suffix: suffix },
+    },
+  });
+
+  it("keeps a saved system_message_suffix ahead of the runtime services block", () => {
+    const payload = buildStartConversationRequest({
+      settings: withSavedSuffix("Always run the linters."),
+      query: "hello",
+      runtimeServicesInfo,
+    }) as {
+      agent_settings: { agent_context: Record<string, unknown> };
+    };
+    const suffix = payload.agent_settings.agent_context
+      .system_message_suffix as string;
+
+    expect(
+      suffix.startsWith("Always run the linters.\n\n<RUNTIME_SERVICES>"),
+    ).toBe(true);
+    expect(suffix).toContain("</RUNTIME_SERVICES>");
+  });
+
+  it("passes a saved system_message_suffix through unchanged without runtime info", () => {
+    const payload = buildStartConversationRequest({
+      settings: withSavedSuffix("Always run the linters."),
+      query: "hello",
+    }) as {
+      agent_settings: { agent_context: Record<string, unknown> };
+    };
+
+    expect(payload.agent_settings.agent_context.system_message_suffix).toBe(
+      "Always run the linters.",
+    );
+  });
+
+  it("sends only the runtime services block when the saved suffix is blank", () => {
+    const payload = buildStartConversationRequest({
+      settings: withSavedSuffix("   "),
+      query: "hello",
+      runtimeServicesInfo,
+    }) as {
+      agent_settings: { agent_context: Record<string, unknown> };
+    };
+
+    expect(
+      (
+        payload.agent_settings.agent_context.system_message_suffix as string
+      ).startsWith("<RUNTIME_SERVICES>"),
+    ).toBe(true);
+  });
 });
 
 describe("buildStartConversationRequest — ACP discriminator", () => {
