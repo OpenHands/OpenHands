@@ -8,8 +8,10 @@ import { ModalCloseButton } from "#/components/shared/modals/modal-close-button"
 import { ContextMenuListItem } from "#/components/features/context-menu/context-menu-list-item";
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { useAgentProfiles } from "#/hooks/query/use-agent-profiles";
+import { useGitRepositories } from "#/hooks/query/use-git-repositories";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import { useUserProviders } from "#/hooks/use-user-providers";
 import { usePromptTextareaResize } from "#/hooks/use-prompt-textarea-resize";
 import { I18nKey } from "#/i18n/declaration";
 import CheckIcon from "#/icons/checkmark.svg?react";
@@ -20,6 +22,7 @@ import { chatInputPillButtonClassName } from "#/utils/form-control-classes";
 import { modalTitleLgClassName } from "#/utils/modal-classes";
 import { cn } from "#/utils/utils";
 import { formatModelNameForDisplay } from "#/utils/format-model-name";
+import type { Provider } from "#/types/settings";
 
 const PROFILE_LABEL_MAX_CHARS = 18;
 
@@ -379,7 +382,29 @@ export function AutomationSetupPromptStack({
   const { gripRef, isGripDragging, handleGripMouseDown, handleGripTouchStart } =
     usePromptTextareaResize(textareaRef, { contentKey: prompt });
   const [isRepositoryModalOpen, setIsRepositoryModalOpen] = useState(false);
+  const [isRepositoryMenuOpen, setIsRepositoryMenuOpen] = useState(false);
+  const repositoryAddRef = useRef<HTMLButtonElement>(null);
+  const repositoryMenuRef = useClickOutsideElement<HTMLDivElement>(
+    () => setIsRepositoryMenuOpen(false),
+    repositoryAddRef,
+  );
+  const { providers } = useUserProviders();
+  const repositoryProvider: Provider | null = providers.includes("github")
+    ? "github"
+    : (providers[0] ?? null);
+  const repositoryQuery = useGitRepositories({
+    provider: repositoryProvider,
+    enabled: isRepositoryMenuOpen && repositoryProvider !== null,
+  });
   const repositories = parseRepositories(repository);
+  const listedRepositories = (repositoryQuery.data?.pages ?? [])
+    .flatMap((page) => page.items)
+    .filter(
+      (repo, index, repos) =>
+        !repositories.includes(repo.full_name) &&
+        repos.findIndex((entry) => entry.full_name === repo.full_name) ===
+          index,
+    );
   const addLabel = `${t(I18nKey.BUTTON$ADD)} ${t(I18nKey.AUTOMATIONS$DETAIL$REPOSITORIES)}`;
 
   const writeRepositories = (next: string[]) => {
@@ -457,9 +482,9 @@ export function AutomationSetupPromptStack({
           >
             <div
               data-testid="automation-setup-repository"
-              className="flex w-full min-w-0 items-center gap-1 overflow-x-auto"
+              className="flex w-full min-w-0 items-center gap-1"
             >
-              <div className="flex shrink-0 items-center gap-2">
+              <div className="relative flex shrink-0 items-center gap-2">
                 <span className="text-sm">
                   {t(I18nKey.AUTOMATIONS$DETAIL$REPOSITORIES)}
                 </span>
@@ -469,39 +494,103 @@ export function AutomationSetupPromptStack({
                   </span>
                 ) : null}
                 <button
+                  ref={repositoryAddRef}
                   type="button"
                   data-testid="automation-setup-repository-add"
                   aria-label={addLabel}
+                  aria-haspopup="menu"
+                  aria-expanded={isRepositoryMenuOpen}
                   className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-[var(--oh-muted)] hover:bg-white/10 hover:text-white"
                   onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => setIsRepositoryModalOpen(true)}
+                  onClick={() => setIsRepositoryMenuOpen((open) => !open)}
                 >
                   <Plus className="size-4" aria-hidden />
                 </button>
-              </div>
-              {repositories.map((item) => (
-                <span
-                  key={item}
-                  data-testid="automation-setup-repository-value"
-                  className={cn(extensionModuleCardPillClassName, "gap-1 pr-1")}
-                >
-                  <span className="truncate">{item}</span>
-                  <button
-                    type="button"
-                    data-testid="automation-setup-repository-remove"
-                    aria-label={`${t(I18nKey.COMMON$REMOVE)} ${item}`}
-                    className="inline-flex size-4 items-center justify-center rounded-full text-tertiary-light hover:bg-white/10 hover:text-white"
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() =>
-                      writeRepositories(
-                        repositories.filter((entry) => entry !== item),
-                      )
-                    }
+                {isRepositoryMenuOpen ? (
+                  <div
+                    ref={repositoryMenuRef}
+                    role="menu"
+                    data-testid="automation-setup-repository-menu"
+                    className="absolute bottom-full left-0 z-[60] mb-2 flex max-h-60 w-[260px] flex-col overflow-hidden rounded-md border border-border-subtle bg-tertiary py-1 shadow-lg"
                   >
-                    <X className="size-3" aria-hidden />
-                  </button>
-                </span>
-              ))}
+                    <div
+                      className="min-h-0 flex-1 overflow-y-auto px-1"
+                      onScroll={(event) => {
+                        const list = event.currentTarget;
+                        if (
+                          list.scrollTop + list.clientHeight >=
+                          list.scrollHeight - 24
+                        ) {
+                          repositoryQuery.onLoadMore();
+                        }
+                      }}
+                    >
+                      {listedRepositories.map((repo) => (
+                        <ContextMenuListItem
+                          key={`${repo.git_provider}:${repo.full_name}`}
+                          testId={`automation-setup-repository-option-${repo.full_name}`}
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            writeRepositories([
+                              ...repositories,
+                              repo.full_name,
+                            ]);
+                            setIsRepositoryMenuOpen(false);
+                          }}
+                          className="flex w-full items-center"
+                        >
+                          <span className="truncate">{repo.full_name}</span>
+                        </ContextMenuListItem>
+                      ))}
+                    </div>
+                    <div className="shrink-0 border-t border-border-subtle px-1 pt-1">
+                      <ContextMenuListItem
+                        testId="automation-setup-repository-custom"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          setIsRepositoryMenuOpen(false);
+                          setIsRepositoryModalOpen(true);
+                        }}
+                        className="flex w-full items-center"
+                      >
+                        <span className="truncate">
+                          {t(I18nKey.AUTOMATION_SETUP$TYPE_CUSTOM)}
+                        </span>
+                      </ContextMenuListItem>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+              <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
+                {repositories.map((item) => (
+                  <span
+                    key={item}
+                    data-testid="automation-setup-repository-value"
+                    className={cn(
+                      extensionModuleCardPillClassName,
+                      "gap-1 pr-1",
+                    )}
+                  >
+                    <span className="truncate">{item}</span>
+                    <button
+                      type="button"
+                      data-testid="automation-setup-repository-remove"
+                      aria-label={`${t(I18nKey.COMMON$REMOVE)} ${item}`}
+                      className="inline-flex size-4 items-center justify-center rounded-full text-tertiary-light hover:bg-white/10 hover:text-white"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() =>
+                        writeRepositories(
+                          repositories.filter((entry) => entry !== item),
+                        )
+                      }
+                    >
+                      <X className="size-3" aria-hidden />
+                    </button>
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
         </div>

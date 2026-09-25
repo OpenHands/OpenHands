@@ -1969,6 +1969,7 @@ function CustomCodeFields({
   onSetupScriptChange: (value: string) => void;
 }) {
   const { t } = useTranslation("openhands");
+  const reduceMotion = useReducedMotion();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
   const [detailsOpen, setDetailsOpen] = useState(
@@ -1992,13 +1993,13 @@ function CustomCodeFields({
   }, [code]);
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="relative w-full">
       <div
         data-streaming-active={
           streamingField === "customCode" ? "true" : undefined
         }
         className={cn(
-          "relative overflow-hidden rounded-[15px] border border-[var(--oh-border)] bg-[var(--oh-surface)]",
+          "relative z-10 -mb-[15px] overflow-hidden rounded-[15px] border border-[var(--oh-border)] bg-[var(--oh-surface)]",
           streamingHighlightClassName(streamingField === "customCode"),
         )}
       >
@@ -2041,76 +2042,115 @@ function CustomCodeFields({
           />
         </div>
       </div>
-      <button
-        type="button"
-        data-testid="automation-setup-custom-details-toggle"
-        aria-expanded={detailsOpen}
-        aria-controls="automation-setup-custom-details"
-        onClick={() => setDetailsOpen((open) => !open)}
-        className={cn(addOptionButtonClassName, "gap-1.5")}
+      <div
+        data-testid="automation-setup-custom-details-drawer"
+        className="rounded-b-[15px] border-x border-b border-[var(--oh-border)] bg-[var(--oh-surface-raised)] px-4 pb-3 pt-[calc(15px+0.5rem)]"
       >
-        <ChevronDown
-          className={cn(
-            "size-4 transition-transform",
-            detailsOpen && "rotate-180",
-          )}
-          aria-hidden
-        />
-        {t(I18nKey.AUTOMATION_SETUP$SHOW_ENTRYPOINT_AND_SETUP)}
-      </button>
-      {detailsOpen ? (
-        <div
-          id="automation-setup-custom-details"
-          className="flex flex-col gap-4"
+        <button
+          type="button"
+          data-testid="automation-setup-custom-details-toggle"
+          aria-expanded={detailsOpen}
+          aria-controls="automation-setup-custom-details"
+          onClick={() => setDetailsOpen((open) => !open)}
+          className="flex w-full items-center gap-2 text-left text-sm"
         >
-          <div className="grid gap-3 md:grid-cols-[2fr_1fr]">
+          <ChevronDown
+            className={cn(
+              "size-4 shrink-0 text-[var(--oh-muted)] transition-transform duration-200 motion-reduce:transition-none",
+              detailsOpen && "rotate-180",
+            )}
+            aria-hidden
+          />
+          {t(I18nKey.AUTOMATION_SETUP$SHOW_ENTRYPOINT_AND_SETUP)}
+        </button>
+        <CustomDetailsReveal open={detailsOpen} instant={reduceMotion}>
+          <div className="flex flex-col gap-4 pt-3">
+            <div className="grid gap-3 md:grid-cols-[2fr_1fr]">
+              <Field
+                label={t(I18nKey.AUTOMATION_SETUP$ENTRYPOINT)}
+                suffix={updatedSuffixes.entrypoint}
+                isStreaming={streamingField === "entrypoint"}
+              >
+                <input
+                  data-testid="automation-setup-entrypoint"
+                  value={entrypoint}
+                  onChange={(event) => onEntrypointChange(event.target.value)}
+                  className={formControlFieldClassName}
+                />
+              </Field>
+              <Field
+                label={t(I18nKey.AUTOMATION_SETUP$SETUP_SCRIPT_PATH)}
+                suffix={updatedSuffixes.setupScriptPath}
+                isStreaming={streamingField === "setupScriptPath"}
+              >
+                <input
+                  data-testid="automation-setup-setup-script-path"
+                  value={setupScriptPath}
+                  onChange={(event) =>
+                    onSetupScriptPathChange(event.target.value)
+                  }
+                  className={formControlFieldClassName}
+                />
+              </Field>
+            </div>
             <Field
-              label={t(I18nKey.AUTOMATION_SETUP$ENTRYPOINT)}
-              suffix={updatedSuffixes.entrypoint}
-              isStreaming={streamingField === "entrypoint"}
+              label={t(I18nKey.AUTOMATION_SETUP$SETUP_SCRIPT)}
+              suffix={updatedSuffixes.setupScript}
+              isStreaming={streamingField === "setupScript"}
             >
-              <input
-                data-testid="automation-setup-entrypoint"
-                value={entrypoint}
-                onChange={(event) => onEntrypointChange(event.target.value)}
-                className={formControlFieldClassName}
-              />
-            </Field>
-            <Field
-              label={t(I18nKey.AUTOMATION_SETUP$SETUP_SCRIPT_PATH)}
-              suffix={updatedSuffixes.setupScriptPath}
-              isStreaming={streamingField === "setupScriptPath"}
-            >
-              <input
-                data-testid="automation-setup-setup-script-path"
-                value={setupScriptPath}
-                onChange={(event) =>
-                  onSetupScriptPathChange(event.target.value)
-                }
-                className={formControlFieldClassName}
+              <textarea
+                data-testid="automation-setup-setup-script"
+                rows={4}
+                value={setupScript}
+                onChange={(event) => onSetupScriptChange(event.target.value)}
+                spellCheck={false}
+                className={cn(
+                  formControlMultilineFieldClassName,
+                  "font-mono text-xs",
+                )}
               />
             </Field>
           </div>
-          <Field
-            label={t(I18nKey.AUTOMATION_SETUP$SETUP_SCRIPT)}
-            suffix={updatedSuffixes.setupScript}
-            isStreaming={streamingField === "setupScript"}
-          >
-            <textarea
-              data-testid="automation-setup-setup-script"
-              rows={4}
-              value={setupScript}
-              onChange={(event) => onSetupScriptChange(event.target.value)}
-              spellCheck={false}
-              className={cn(
-                formControlMultilineFieldClassName,
-                "font-mono text-xs",
-              )}
-            />
-          </Field>
-        </div>
-      ) : null}
+        </CustomDetailsReveal>
+      </div>
     </div>
+  );
+}
+
+const CUSTOM_DETAILS_REVEAL_SECONDS = 0.22;
+
+function CustomDetailsReveal({
+  open,
+  instant,
+  children,
+}: {
+  open: boolean;
+  instant: boolean | null;
+  children: ReactNode;
+}) {
+  if (instant || import.meta.env.MODE === "test") {
+    if (!open) return null;
+    return <div id="automation-setup-custom-details">{children}</div>;
+  }
+
+  return (
+    <AnimatePresence initial={false}>
+      {open ? (
+        <motion.div
+          id="automation-setup-custom-details"
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: "auto", opacity: 1 }}
+          exit={{ height: 0, opacity: 0 }}
+          transition={{
+            duration: CUSTOM_DETAILS_REVEAL_SECONDS,
+            ease: "easeInOut",
+          }}
+          className="overflow-hidden"
+        >
+          {children}
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
   );
 }
 

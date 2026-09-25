@@ -103,6 +103,45 @@ vi.mock("#/hooks/query/use-agent-profiles", () => ({
   }),
 }));
 
+vi.mock("#/hooks/use-user-providers", () => ({
+  useUserProviders: () => ({
+    providers: ["github"],
+    isLoadingSettings: false,
+  }),
+}));
+
+vi.mock("#/hooks/query/use-git-repositories", () => ({
+  useGitRepositories: () => ({
+    data: {
+      pages: [
+        {
+          items: [
+            {
+              id: "1",
+              full_name: "OpenHands/OpenHands",
+              git_provider: "github",
+              is_public: true,
+            },
+            {
+              id: "2",
+              full_name: "OpenHands/software-agent-sdk",
+              git_provider: "github",
+              is_public: true,
+            },
+          ],
+          next_page_id: null,
+        },
+      ],
+    },
+    isLoading: false,
+    isError: false,
+    hasNextPage: false,
+    isFetchingNextPage: false,
+    fetchNextPage: vi.fn(),
+    onLoadMore: vi.fn(),
+  }),
+}));
+
 vi.mock("#/hooks/query/use-llm-profiles", () => ({
   useLlmProfiles: () => ({
     data: {
@@ -253,9 +292,15 @@ describe("AutomationSetupPanel", () => {
     expect(
       screen.queryByTestId("automation-setup-entrypoint"),
     ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("automation-setup-custom-details-drawer"),
+    ).toHaveClass("border-x", "border-b", "rounded-b-[15px]");
     await user.click(
       screen.getByTestId("automation-setup-custom-details-toggle"),
     );
+    expect(
+      screen.getByTestId("automation-setup-custom-details-drawer"),
+    ).toContainElement(screen.getByTestId("automation-setup-entrypoint"));
     expect(screen.getByTestId("automation-setup-entrypoint")).toHaveValue(
       "python3 main.py",
     );
@@ -473,6 +518,7 @@ describe("AutomationSetupPanel", () => {
     renderPanel();
 
     await user.click(screen.getByTestId("automation-setup-repository-add"));
+    await user.click(screen.getByTestId("automation-setup-repository-custom"));
     await user.type(
       screen.getByTestId("automation-setup-repository-address"),
       "OpenHands/OpenHands",
@@ -487,6 +533,7 @@ describe("AutomationSetupPanel", () => {
     ).toBeTruthy();
 
     await user.click(screen.getByTestId("automation-setup-repository-add"));
+    await user.click(screen.getByTestId("automation-setup-repository-custom"));
     await user.type(
       screen.getByTestId("automation-setup-repository-address"),
       "OpenHands/software-agent-sdk",
@@ -506,6 +553,34 @@ describe("AutomationSetupPanel", () => {
         }),
       ),
     );
+  });
+
+  it("adds a listed repository and keeps custom pinned to the address modal", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(screen.getByTestId("automation-setup-repository-add"));
+    const menu = screen.getByTestId("automation-setup-repository-menu");
+    const custom = screen.getByTestId("automation-setup-repository-custom");
+    expect(menu.lastElementChild).toContainElement(custom);
+    expect(
+      screen.queryByTestId("automation-setup-add-repository-modal"),
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByTestId(
+        "automation-setup-repository-option-OpenHands/OpenHands",
+      ),
+    );
+    expect(
+      screen.getByTestId("automation-setup-repository-value"),
+    ).toHaveTextContent("OpenHands/OpenHands");
+
+    await user.click(screen.getByTestId("automation-setup-repository-add"));
+    await user.click(screen.getByTestId("automation-setup-repository-custom"));
+    expect(
+      screen.getByTestId("automation-setup-add-repository-modal"),
+    ).toBeInTheDocument();
   });
 
   it("streams agent form updates field by field without overwriting user edits", async () => {
@@ -600,7 +675,7 @@ describe("AutomationSetupPanel", () => {
       "2026-01-01T00:00:01.000Z",
     );
 
-    expect(nameInput).toHaveValue("Manual name"    );
+    expect(nameInput).toHaveValue("Manual name");
   });
 
   it("shows a weekday dropdown for a weekly schedule", async () => {
