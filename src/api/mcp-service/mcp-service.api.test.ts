@@ -736,19 +736,17 @@ describe("McpService.testServer", () => {
     expect(close).toHaveBeenCalledOnce();
   });
 
-  it("rejects an OAuth start response without an authorization URL", async () => {
+  it("polls the status route when OAuth starts without an authorization URL", async () => {
     const popup = popupWindow();
     vi.spyOn(window, "open").mockReturnValue(popup as unknown as Window);
     startOAuth.mockResolvedValueOnce({ ok: true, job_id: "job-1" });
 
     const result = await McpService.authorizeOAuth(oauthServer());
 
-    expect(result).toEqual({
-      ok: false,
-      error: "Could not start OAuth authorization",
-      error_kind: "unknown",
-    });
+    expect(result).toEqual({ ok: true, tools: ["search_mail"] });
+    expect(getOAuthStatus).toHaveBeenCalledWith("job-1");
     expect(popup.close).toHaveBeenCalledOnce();
+    expect(popup.location.href).toBe("about:blank");
   });
 
   it("returns an immediately completed OAuth result with optional state", async () => {

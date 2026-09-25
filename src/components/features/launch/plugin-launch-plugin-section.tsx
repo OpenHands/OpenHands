@@ -39,7 +39,7 @@ export function PluginLaunchPluginSection({
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-base-tertiary rounded-t-lg cursor-pointer"
+        className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-interactive-hover rounded-t-lg cursor-pointer"
         data-testid={`plugin-section-${originalIndex}`}
       >
         <Typography.Text className="text-base font-normal">
