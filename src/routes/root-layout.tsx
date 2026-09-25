@@ -24,6 +24,7 @@ import { CloudOrganizationBoundary } from "#/components/features/backends/cloud-
 import { useAppTitle } from "#/hooks/use-app-title";
 import { ReactRouterNavigationProvider } from "./react-router-navigation-provider";
 import { OnboardingHost } from "#/components/features/onboarding";
+import { FeedbackLauncher } from "#/components/features/feedback/feedback-launcher";
 import { isOnboardingPreviewActive } from "#/components/features/onboarding/onboarding-preview";
 import { CanvasExtensionsRuntimeProvider } from "#/components/features/canvas-extensions/canvas-extensions-runtime";
 
@@ -158,6 +159,9 @@ function MainAppContent() {
             <CommandMenu />
           </React.Suspense>
           {showOnboardingPreview ? <OnboardingHost /> : null}
+          {/* Inside ReactRouterNavigationProvider so the feedback event can
+              carry the conversation the user is actually in. */}
+          <FeedbackLauncher />
         </SidebarMobileNavProvider>
       </CanvasExtensionsRuntimeProvider>
     </ReactRouterNavigationProvider>
