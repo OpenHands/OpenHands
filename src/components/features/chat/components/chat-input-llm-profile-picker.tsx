@@ -15,6 +15,8 @@ import { cn } from "#/utils/utils";
 import { chatInputPillButtonClassName } from "#/utils/form-control-classes";
 import { useFreeModels } from "#/hooks/query/use-free-models";
 import { formatModelPillLabel } from "#/utils/format-model-name";
+import { useModelCatalogWarning } from "#/hooks/use-model-catalog-warning";
+import { ModelCatalogWarning } from "#/components/shared/model-catalog-warning";
 
 const PROFILE_LABEL_MAX_CHARS = 18;
 
@@ -45,6 +47,7 @@ export function ChatInputLlmProfileMenuContent({
 }: ChatInputLlmProfileMenuContentProps) {
   const { t } = useTranslation("openhands");
   const freeModels = useFreeModels();
+  const isModelUnlisted = useModelCatalogWarning();
   const {
     profiles,
     currentProfileName,
@@ -119,6 +122,7 @@ export function ChatInputLlmProfileMenuContent({
                     {displayModel}
                   </span>
                 )}
+                {isModelUnlisted(profile.model) && <ModelCatalogWarning />}
               </ContextMenuListItem>
             );
           })}
@@ -135,6 +139,7 @@ export function ChatInputLlmProfileMenuContent({
                 {formatModelPillLabel(currentProfileModel, freeModels)}
               </span>
             )}
+            {isModelUnlisted(currentProfileModel) && <ModelCatalogWarning />}
           </div>
         </li>
       )}
@@ -165,8 +170,14 @@ export function ChatInputLlmProfileMenuContent({
 
 export function ChatInputLlmProfilePicker() {
   const { t } = useTranslation("openhands");
-  const { profiles, currentProfileName, isLoading, isSwitching } =
-    useChatInputLlmProfileState();
+  const {
+    profiles,
+    currentProfileName,
+    currentProfileModel,
+    isLoading,
+    isSwitching,
+  } = useChatInputLlmProfileState();
+  const isModelUnlisted = useModelCatalogWarning();
   const [isPopoverOpen, setIsPopoverOpen] = React.useState(false);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
   const [popoverMaxHeight, setPopoverMaxHeight] = React.useState<number>();
@@ -228,6 +239,9 @@ export function ChatInputLlmProfilePicker() {
         }}
       >
         <span className="truncate">{truncateLabel(label)}</span>
+        {isModelUnlisted(currentProfileModel) && (
+          <ModelCatalogWarning compact />
+        )}
         <ComboboxCaretInline isOpen={isPopoverOpen} />
       </button>
 
