@@ -24,9 +24,7 @@ export function ComposerDockedProvider({
   children: React.ReactNode;
 }) {
   return (
-    <ComposerDockedContext.Provider
-      value={{ enabled, minimal: enabled && minimal }}
-    >
+    <ComposerDockedContext.Provider value={{ enabled, minimal }}>
       {children}
     </ComposerDockedContext.Provider>
   );
