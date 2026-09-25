@@ -1,0 +1,2595 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Mock-LLM journeys: one test owns one lifecycle</title><style>*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:#faf9f6;color:#242932;font:16px/1.55 system-ui,sans-serif}a{color:#246456}a:hover{text-decoration-thickness:2px}.wrap{max-width:1320px;margin:0 auto;display:grid;grid-template-columns:255px 1fr;gap:38px;padding:42px 24px}nav{position:sticky;top:20px;align-self:start;max-height:93vh;overflow:auto;font-size:12px;overflow-wrap:anywhere}nav ol{padding-left:19px}nav li{margin:12px 0}small{display:block;color:#777}main{min-width:0}.eyebrow{color:#aa5725;text-transform:uppercase;font-weight:700;letter-spacing:.09em;font-size:11px;overflow-wrap:anywhere}h1{font-size:42px;line-height:1.13;letter-spacing:-.035em;margin:12px 0 20px}h2{font-size:25px;line-height:1.25;margin:10px 0 15px}p{max-width:80ch}.lead{font-size:19px;color:#4c5660}.notice{padding:15px 18px;border-left:4px solid #c46b2f;background:#fff0e3}.sources{font:12px monospace;overflow-wrap:anywhere}article,section{margin-top:42px;padding-top:28px;border-top:1px solid #dcded8;scroll-margin-top:20px}svg{display:block;width:100%;margin:18px 0}svg text{font:15px system-ui;fill:#242932}svg .label{font-size:10px;font-weight:700;letter-spacing:1px}details{border:1px solid #dbded6;margin:15px 0;border-radius:5px}summary{cursor:pointer;padding:10px 14px;color:#51625d}pre{font:12px/1.55 monospace;white-space:pre;overflow:auto;background:#eef0eb;padding:17px;margin:0}.receipt{background:#192822;color:#daefe2;white-space:pre-wrap}.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;vertical-align:top;padding:10px;border-bottom:1px solid #dbded8}th{background:#eef0eb}.passed{color:#247453;font-weight:700}.skipped{color:#a5572a;font-weight:700}footer{margin:48px 0;color:#68716d;font-size:12px}@media(max-width:850px){.wrap{display:block;padding:22px}nav{position:static;max-height:220px}h1{font-size:32px}svg text{font-size:14px}}</style></head><body><div class="wrap"><nav><strong>REVIEW MAP · #15481</strong><ol><li><a href="#decision">Decision and boundaries</a></li><li><a href="#evidence">Observed test results</a></li><li><a href="#f0">.github/workflows/mock-llm-docker-e2e.yml</a><small>+3 / −0</small></li><li><a href="#f1">.github/workflows/mock-llm-e2e.yml</a><small>+3 / −0</small></li><li><a href="#f2">e2e-testing/references/guide.md</a><small>+3 / −1</small></li><li><a href="#f3">automations/mock-llm-automation.spec.ts</a><small>+54 / −159</small></li><li><a href="#f4">conversations/mock-llm-conversation.spec.ts</a><small>+45 / −91</small></li><li><a href="#f5">files/mock-llm-files-and-git.spec.ts</a><small>+263 / −311</small></li><li><a href="#f6">scripts/mock-llm-server.py</a><small>+43 / −0</small></li><li><a href="#f7">scripts/test_mock_llm_server.py</a><small>+68 / −0</small></li><li><a href="#f8">settings/mock-llm-acp-agent.spec.ts</a><small>+28 / −80</small></li><li><a href="#f9">settings/mock-llm-model-switch.spec.ts</a><small>+15 / −75</small></li><li><a href="#f10">skills/mock-llm-skills.spec.ts</a><small>+226 / −272</small></li><li><a href="#f11">utils/atomic-journey.ts</a><small>+187 / −0</small></li><li><a href="#f12">utils/mock-llm-helpers.ts</a><small>+2 / −1</small></li><li><a href="#f13">utils/skill-test-helpers.ts</a><small>+4 / −3</small></li></ol></nav><main><header id="decision"><div class="eyebrow">OpenHands · test infrastructure · #15481</div><h1>One test owns<br>one complete journey.</h1><p class="lead">Convert 22 state-dependent tests into 11 independently selectable tests across six specs. A shared fixture owns resource cleanup; titles receive a separate mock response so concurrent housekeeping cannot consume an agent reply.</p><p class="notice">★ Selecting a resume test previously returned <strong>skipped</strong>. The replacement executes profile setup, conversation and resume in one invocation. The scope is test reliability; production app code is unchanged.</p><p class="sources">Base e4197c043f8a → implementation b90a9a752c75 · <a href="https://github.com/OpenHands/OpenHands/blob/e4197c043f8a1c4937ec5402449d47efff7ca0d1/tests/e2e/mock-llm/conversations/mock-llm-conversation.spec.ts#L405">Before resume guard</a> · <a href="https://github.com/fancive/OpenHands/blob/25cca529c87934d6a99cd204dab60734af2fe8b9/tests/e2e/mock-llm/conversations/mock-llm-conversation.spec.ts#L45">After complete journey</a></p><svg viewBox="0 0 870 158" role="img" aria-label="Before and after behavior"><a href="https://github.com/OpenHands/OpenHands/blob/e4197c043f8a1c4937ec5402449d47efff7ca0d1/tests/e2e/mock-llm/conversations/mock-llm-conversation.spec.ts#L405"><rect x="16" y="8" width="838" height="62" rx="5" fill="#ecebe7"/><text x="32" y="31" class="label">BEFORE</text><text x="32" y="54">step 1 → step 2 → step 3 → shared ID → step 4 / skip</text></a><a href="https://github.com/fancive/OpenHands/blob/25cca529c87934d6a99cd204dab60734af2fe8b9/tests/e2e/mock-llm/conversations/mock-llm-conversation.spec.ts#L45"><rect x="16" y="86" width="838" height="62" rx="5" fill="#ffe5ce"/><text x="32" y="109" class="label">AFTER</text><text x="32" y="132">test: profile → activate → conversation → resume → teardown</text></a></svg></header><section id="evidence"><h2>Observed execution, with limits kept visible</h2><p class="notice"><strong>Current rebase check (2026-09-25):</strong> against upstream main 92d5ceff, Agent Server 1.49.5 and automation 1.15.0, 10 of the 11 selected mock-LLM tests passed. The automation test failed because four captured LLM requests contained no &lt;RUNTIME_SERVICES&gt; block. The profile-launch path currently omits inline agent settings, where Canvas adds that suffix (<a href="https://github.com/fancive/OpenHands/blob/25cca529c87934d6a99cd204dab60734af2fe8b9/src/api/agent-server-adapter.ts#L1260">adapter:1260</a>). On the unmodified upstream main, the automation spec also failed, earlier at automation-ID discovery; this does not establish whether the missing block is caused by this PR. The rows below are the original pre-rebase verification on Agent Server 1.49.3.</p><p>Each row below is a separate Playwright invocation against the static production launcher, real Agent Server and real automation backend. Each invocation starts a fresh stack; the mock LLM is local and scripted.</p><div class="table-wrap"><table><thead><tr><th>Run</th><th>Selected title</th><th>Result</th><th>Test duration</th></tr></thead><tbody><tr><td>Base reproduction</td><td>step 4: resume conversation from sidebar after navigating away</td><td class="skipped">skipped</td><td>0.2s</td></tr><tr><td>1</td><td>create and activate an LLM profile, run and resume a conversation</td><td class="passed">passed</td><td>30.9s</td></tr><tr><td>2</td><td>configure ACP, verify persistence, run and resume a conversation</td><td class="passed">passed</td><td>28.4s</td></tr><tr><td>3</td><td>create profiles and switch model during a conversation</td><td class="passed">passed</td><td>19.7s</td></tr><tr><td>4</td><td>create an automation, dispatch a run and open its conversation</td><td class="passed">passed</td><td>65.8s</td></tr><tr><td>5</td><td>conversation overview shows workspace and git identity</td><td class="passed">passed</td><td>31.9s</td></tr><tr><td>6</td><td>commits tab opens for attached workspace</td><td class="passed">passed</td><td>30.9s</td></tr><tr><td>7</td><td>browser tab shows empty state</td><td class="passed">passed</td><td>31.8s</td></tr><tr><td>8</td><td>files tab defaults to file-tree view without attached workspace</td><td class="passed">passed</td><td>20.1s</td></tr><tr><td>9</td><td>project skill in workspace/.agents/skills/ triggers on matching keyword</td><td class="passed">passed</td><td>19.4s</td></tr><tr><td>10</td><td>user skill in ~/.openhands/skills/ triggers on matching keyword</td><td class="passed">passed</td><td>14.2s</td></tr><tr><td>11</td><td>deleting a user skill removes it from subsequent conversations</td><td class="passed">passed</td><td>15.4s</td></tr></tbody></table></div><pre class="receipt">combined: passed, passed, passed, passed, passed, passed, passed, passed, passed, passed, passed
+failure-probe: failed, passed
+image-regression: passed</pre><p>The failure probe intentionally fails the overview test after owned setup. Its next commits test verifies no conversation or atomic profile remains, then runs its own setup and assertions. The probe and copied baseline spec are temporary validation files; neither is part of this PR.</p><details><summary>Reproduction commands and environment</summary><pre>npm ci
+VITE_DO_NOT_TRACK=1 npm run build
+npm run build:lib
+npm run lint
+npm test
+# Each individual title:
+npm run test:e2e:mock-llm -- &lt;spec&gt; --grep '&lt;title&gt;'
+# Combined:
+npm run test:e2e:mock-llm -- conversations/mock-llm-conversation.spec.ts settings/mock-llm-acp-agent.spec.ts settings/mock-llm-model-switch.spec.ts automations/mock-llm-automation.spec.ts files/mock-llm-files-and-git.spec.ts skills/mock-llm-skills.spec.ts
+.mock-llm-venv/bin/python3 -m unittest discover -s tests/e2e/mock-llm/scripts -p 'test_*.py'</pre><p>Local validation: macOS, Node 25.6.0, Python 3.12, Agent Server 1.49.3. MOCK_LLM_PORT=29999, MOCK_LLM_INGRESS_PORT=28300, MOCK_LLM_PUBLIC_MODE_PORT=28301, MOCK_LLM_PYTHON=.mock-llm-venv/bin/python3, LITELLM_LOCAL_MODEL_COST_MAP=True. No real LLM credentials. The host’s .bashrc/.profile source each other recursively; a local, uncommitted tmux wrapper starts bash with --noprofile --norc. SDK and launcher sources were unchanged.</p><p>Unit suite: 723 files passed, one port-selection test failed because the then-running mock occupied port 9999; after moving the mock to 29999, all 60 tests in that file passed. Repository lint, app/library builds, TypeScript and scoped ESLint/ruff checks passed. The two-line shared helper edit retains four existing ESLint errors at identical base/head locations; no new diagnostics were introduced. Title HTTP regression passed; disabling title detection produced the expected failure.</p></details><p class="notice">Docker E2E has not run locally. The fixture still relies on one worker and shared stack state; #15485 owns runner-wide isolation. The existing bash observation oracle remains unchanged; #15482 owns its hardening. No production app API or behavior is changed.</p></section><article id="f0"><div class="eyebrow">.github/workflows/mock-llm-docker-e2e.yml · +3 / −0</div><h2>Run title isolation in CI</h2><p>SDK installation → HTTP title regression → mock startup → E2E.</p><a href="https://github.com/fancive/OpenHands/blob/25cca529c87934d6a99cd204dab60734af2fe8b9/.github/workflows/mock-llm-docker-e2e.yml#L154">.github/workflows/mock-llm-docker-e2e.yml:154</a><details><summary>Exact source diff</summary><pre>diff --git a/.github/workflows/mock-llm-docker-e2e.yml b/.github/workflows/mock-llm-docker-e2e.yml
+index 6533a1d6..d9770266 100644
+--- a/.github/workflows/mock-llm-docker-e2e.yml
++++ b/.github/workflows/mock-llm-docker-e2e.yml
+@@ -151,6 +151,9 @@ jobs:
+           uv venv .mock-llm-venv
+           uv pip install -p .mock-llm-venv &quot;openhands-sdk==$AGENT_SERVER_VERSION&quot;
+&#32;
++      - name: Test mock LLM title isolation
++        run: .mock-llm-venv/bin/python3 -m unittest discover -s tests/e2e/mock-llm/scripts -p &#x27;test_*.py&#x27;
++
+       - name: Verify mock LLM server starts
+         run: |
+           .mock-llm-venv/bin/python3 tests/e2e/mock-llm/scripts/mock-llm-server.py --port 9998 &amp;</pre></details></article><article id="f1"><div class="eyebrow">.github/workflows/mock-llm-e2e.yml · +3 / −0</div><h2>Run title isolation in CI</h2><p>SDK installation → HTTP title regression → mock startup → E2E.</p><a href="https://github.com/fancive/OpenHands/blob/25cca529c87934d6a99cd204dab60734af2fe8b9/.github/workflows/mock-llm-e2e.yml#L96">.github/workflows/mock-llm-e2e.yml:96</a><details><summary>Exact source diff</summary><pre>diff --git a/.github/workflows/mock-llm-e2e.yml b/.github/workflows/mock-llm-e2e.yml
+index f79d5097..9f978b94 100644
+--- a/.github/workflows/mock-llm-e2e.yml
++++ b/.github/workflows/mock-llm-e2e.yml
+@@ -93,6 +93,9 @@ jobs:
+           # before the automation backend finishes installing (~60-90s).
+           uvx --from &quot;openhands-automation==$AUTOMATION_VERSION&quot; python -c &quot;from openhands.automation.app import app; print(&#x27;automation package cached&#x27;)&quot;
+&#32;
++      - name: Test mock LLM title isolation
++        run: .mock-llm-venv/bin/python3 -m unittest discover -s tests/e2e/mock-llm/scripts -p &#x27;test_*.py&#x27;
++
+       - name: Verify mock LLM server starts
+         run: |
+           .mock-llm-venv/bin/python3 tests/e2e/mock-llm/scripts/mock-llm-server.py --port 9998 &amp;</pre></details></article><article id="f2"><div class="eyebrow">.agents/skills/e2e-testing/references/guide.md · +3 / −1</div><h2>Document the atomic-journey contract</h2><p>The guide now owns the test isolation, cleanup, title routing and trajectory guidance moved from AGENTS.md on upstream main.</p><a href="https://github.com/fancive/OpenHands/blob/25cca529c87934d6a99cd204dab60734af2fe8b9/.agents/skills/e2e-testing/references/guide.md#L24">.agents/skills/e2e-testing/references/guide.md:24</a><details><summary>Exact source diff</summary><pre>diff --git a/.agents/skills/e2e-testing/references/guide.md b/.agents/skills/e2e-testing/references/guide.md
+index 97038a40..ad36ea60 100644
+--- a/.agents/skills/e2e-testing/references/guide.md
++++ b/.agents/skills/e2e-testing/references/guide.md
+@@ -21,6 +21,7 @@
+ ## Mock-LLM E2E Test Framework
+&#32;
+ - Mock-LLM tests live under `tests/e2e/mock-llm/` and exercise the complete stack — from the browser through the real agent-server to a scripted mock LLM server — without any real LLM credentials. Run locally with `npm run test:e2e:mock-llm`.
++- **Atomic journeys**: The conversation, ACP, model-switch, and automation lifecycle specs each use one `test()` with named `test.step()` phases. Files/git panel checks and project/user/skill-deletion checks remain independently runnable tests. These six specs use `utils/atomic-journey.ts` for test-scoped profile names, conversation tracking, restoration of the default agent and active profiles, resource cleanup, and mock trajectory reset. They do not use `serial` dependencies or predecessor-ID skips; `workers: 1` still protects the shared backend/trajectory. Register cleanup before creating resources so partial failures are covered. Cleanup errors fail the owning test while all remaining cleanup actions are attempted. Skill deletion creates and verifies its own fixture before removing it. The npm user-skill fixture path follows the launcher&#x27;s `OH_PERSISTENCE_DIR` (`dirname(STATE_DIR)/skills`); Docker retains its mounted fixture override. Runner-wide isolation is tracked separately in #15485.
+ - **Production-fidelity launch**: The Playwright config (`playwright.mock-llm.config.ts`) starts the full `agent-canvas` stack via `bin/agent-canvas.mjs` — the same binary that `npx @openhands/agent-canvas` executes when users install the npm package. This means mock-LLM tests exercise the actual production path: pre-built static frontend + static-server.mjs + agent-server via uvx + automation backend via uvx + ingress proxy, all behind a single port.
+ - A pre-built `build/` directory is required. The Playwright webServer command runs `npm run build:app` when `build/index.html` is absent, but CI should run the build step explicitly for caching (`npm run build:app` in `.github/workflows/mock-llm-e2e.yml`).
+ - **Single ingress URL**: Tests use one URL for both the browser (`baseURL`) and backend API assertions (`BACKEND_URL`). The ingress proxy routes `/api/*` to the agent-server, `/api/automation/*` to the automation backend, and `/*` to the static frontend. Default ingress port for tests is `18300` (override via `MOCK_LLM_INGRESS_PORT` env var).
+@@ -31,10 +32,11 @@
+   - `POST /admin/trajectory/register` — register a named trajectory (JSON body: `{name, turns}` where each turn is `{tool_call: {name, arguments}}` or `{text: &quot;...&quot;}`)
+   - `POST /admin/trajectory/activate` — activate a previously registered trajectory
+   - `GET /admin/requests` — return the list of all `/v1/chat/completions` request bodies captured since the last reset (used by the image-upload test to verify the image was forwarded to the LLM)
++  - Automatic titles: requests matching the SDK title-generation system/user prompt (without tools) receive a static title, without consuming a scripted turn or appearing in `/admin/requests`. Title generation runs concurrently with the agent loop, so padding a trajectory cannot reliably reserve a response for it. A standard-library HTTP regression test lives in `scripts/test_mock_llm_server.py` and runs in both mock-LLM workflows.
+   - Profile pre-flight ping: agent-server ≥ 1.43 sends a 1-token `ping` completion whenever an LLM profile is saved (`POST /api/profiles/{name}/validate`, 30 s budget in the canvas). The mock answers it with a canned `pong` instead of feeding it to `TestLLM`, so it neither consumes a scripted turn nor 500s-and-retries past the canvas timeout when the trajectory is exhausted; it is also left out of the `/admin/requests` history.
+ - **Real automation backend**: The automation test uses the production automation backend (started by `bin/agent-canvas.mjs`), NOT a mock server. Terminal `curl` commands from the agent hit the automation API through the ingress proxy at the test&#x27;s `BACKEND_URL` (default `http://localhost:18300`). Auth uses the `X-Session-API-Key` header matching the stack&#x27;s session key.
+ - **Test helpers** (`tests/e2e/mock-llm/utils/mock-llm-helpers.ts`): Exports `registerTrajectory()`, `activateTrajectory()`, `resetMockLLM()`, `ensureMockLLMProfile()`, `getMockLLMRequests()` (fetches captured completion bodies from `GET /admin/requests`), `IMAGE_REPLY_TOKEN` + `MINIMAL_PNG_BASE64` (constants for the image-upload spec), ACP helpers (`configureAcpAgent()`, `verifyAcpAgentSettings()`, `resetToOpenHandsAgent()`, `ACP_REPLY_TOKEN`, `MOCK_ACP_SERVER_PATH`), and more.
+-- **Padding response for internal LLM call**: The agent-server makes an internal LLM call (condenser/skill-analysis) before the agent&#x27;s main loop starts when skills are activated. This consumes one trajectory response. Automation tests prepend a throwaway `{ text: &quot;&quot; }` response as padding. The conversation test does NOT need this because its user message doesn&#x27;t trigger skill activation. Since `openhands-automation==1.10.0` (openhands/automation#405), the automation lifecycle spec scripts the required `finish` tool turn in its run-conversation budget — that release requires preset automation conversations to callthe `finish` tool before the run reaches COMPLETED; blank turns alone would loop and exhaust the trajectory. The mock server logs &quot;Mock LLM exhausted after N calls&quot; pinpoint the exact count if it drifts again.
++- **Trajectory ownership**: The six atomic journeys script only agent turns; profile-validation pings and automatic-title calls receive separate canned replies. Do not add blank padding to guess when a concurrent title request will arrive. If a new internal LLM operation consumes a trajectory, identify it from the captured request before changing the budget. Since `openhands-automation==1.10.0` (openhands/automation#405), the automation lifecycle scripts the required `finish` tool turn and final text reply for its run conversation. The mock server&#x27;s &quot;Mock LLM exhausted after N calls&quot; diagnostics identify budget drift.
+ - **Mock ACP server** (`tests/e2e/mock-llm/scripts/mock-acp-server.py`): A minimal stdio-based ACP agent that speaks JSON-RPC using the `acp` Python library (installed as a dependency of `openhands-sdk`). Handles `initialize`, `session/new`, and `session/prompt`; sends a scripted `session/update` notification with `ACP_REPLY_TOKEN` in a text content block, then returns `stop_reason: &quot;end_turn&quot;`. The agent-server spawns it as a subprocess via `acp_command`. Accepts `--reply-token TOKEN` to customize the reply token.
+ - **Test directory layout**: Specs are organized into feature subdirectories that mirror the source code structure, enabling selective test execution based on which source files changed:
+   - `settings/` — LLM profile management, ACP agent config, model switching (`mock-llm-acp-agent.spec.ts`, `mock-llm-profile-management.spec.ts`, `mock-llm-model-switch.spec.ts`)
+</pre></details></article><article id="f3"><div class="eyebrow">tests/e2e/mock-llm/automations/mock-llm-automation.spec.ts · +54 / −159</div><h2>Automation creation, dispatch and UI lookup stay together</h2><p>Teardown discovers resources by this test’s unique automation name, tracks spawned conversations and deletes the automation before conversation cleanup.</p><p class="sources"><a href="https://github.com/OpenHands/OpenHands/blob/e4197c043f8a1c4937ec5402449d47efff7ca0d1/tests/e2e/mock-llm/automations/mock-llm-automation.spec.ts#L298">Before · 298</a> · <a href="https://github.com/fancive/OpenHands/blob/25cca529c87934d6a99cd204dab60734af2fe8b9/tests/e2e/mock-llm/automations/mock-llm-automation.spec.ts#L232">After · 232</a></p><svg viewBox="0 0 870 158" role="img" aria-label="Before and after behavior"><a href="https://github.com/OpenHands/OpenHands/blob/e4197c043f8a1c4937ec5402449d47efff7ca0d1/tests/e2e/mock-llm/automations/mock-llm-automation.spec.ts#L298"><rect x="16" y="8" width="838" height="62" rx="5" fill="#ecebe7"/><text x="32" y="31" class="label">BEFORE</text><text x="32" y="54">Three tests pass automation and run IDs forward</text></a><a href="https://github.com/fancive/OpenHands/blob/25cca529c87934d6a99cd204dab60734af2fe8b9/tests/e2e/mock-llm/automations/mock-llm-automation.spec.ts#L232"><rect x="16" y="86" width="838" height="62" rx="5" fill="#ffe5ce"/><text x="32" y="109" class="label">AFTER</text><text x="32" y="132">One test: configure → create → dispatch → open</text></a></svg><details><summary>Exact source diff</summary><pre>diff --git a/tests/e2e/mock-llm/automations/mock-llm-automation.spec.ts b/tests/e2e/mock-llm/automations/mock-llm-automation.spec.ts
+index dcae2c93..44630084 100644
+--- a/tests/e2e/mock-llm/automations/mock-llm-automation.spec.ts
++++ b/tests/e2e/mock-llm/automations/mock-llm-automation.spec.ts
+@@ -24,31 +24,28 @@
+  * stack&#x27;s session API key.
+  */
+&#32;
+-import { test, expect } from &quot;@playwright/test&quot;;
++import { expect } from &quot;@playwright/test&quot;;
++import { test } from &quot;../utils/atomic-journey&quot;;
+ import {
+   BACKEND_URL,
+   SESSION_API_KEY,
+-  seedLocalStorage,
+   routeSessionApiKey,
+   dismissAnalyticsModal,
+   waitForTestId,
+   waitForPath,
+   getConversationIdFromURL,
+   waitForNonUserMessageText,
+-  deleteConversation,
+   registerTrajectory,
+   activateTrajectory,
+-  resetMockLLM,
+   ensureMockLLMProfile,
+   getMockLLMRequests,
+ } from &quot;../utils/mock-llm-helpers&quot;;
+&#32;
+-// Token the test asserts on in the agent&#x27;s text reply (step 2).
++// Token the test asserts on in the agent&#x27;s text reply (conversation step).
+ // The terminal printf breadcrumbs below are NOT asserted — they exist
+ // purely for log readability when debugging failures.
+ const AUTOMATION_REPLY_TOKEN = &quot;MOCK_AUTOMATION_REPLY_OK&quot;;
+&#32;
+-const AUTOMATION_NAME = &quot;Hello World Cron&quot;;
+ const CRON_SCHEDULE = &quot;0 9 * * *&quot;;
+&#32;
+ // The ingress URL reachable from the agent&#x27;s terminal. The agent-server
+@@ -212,13 +209,13 @@ async function waitForRunStatus(
+ }
+&#32;
+ /**
+- * Delete an automation (best-effort cleanup).
++ * Delete an automation and surface cleanup failures.
+  */
+ async function deleteAutomation(
+   request: import(&quot;@playwright/test&quot;).APIRequestContext,
+   automationId: string,
+ ) {
+-  await request.delete(
++  const response = await request.delete(
+     `${AUTOMATION_API_BASE}/${encodeURIComponent(automationId)}`,
+     {
+       headers: {
+@@ -226,85 +223,42 @@ async function deleteAutomation(
+       },
+     },
+   );
++  expect(
++    response.ok() || response.status() === 404,
++    `Delete automation: ${response.status()}`,
++  ).toBe(true);
+ }
+&#32;
+-/** Remove stale automations with the test&#x27;s fixed name before a retry. */
+-async function deleteAutomationsByName(
+-  request: import(&quot;@playwright/test&quot;).APIRequestContext,
+-  name: string,
+-) {
+-  const data = await listAutomations(request);
+-  const automations = data.automations ?? data.items ?? [];
+-  for (const automation of automations.filter(
+-    (candidate: { name: string }) =&gt; candidate.name === name,
+-  )) {
+-    await deleteAutomation(request, automation.id);
+-  }
+-}
+-
+-test.describe.configure({ mode: &quot;serial&quot; });
+-
+-test.describe(&quot;mock-LLM automation lifecycle&quot;, () =&gt; {
+-  const conversationIds = new Set&lt;string&gt;();
+-  const automationIds = new Set&lt;string&gt;();
+-  /** IDs carried between the serial lifecycle steps. */
+-  let createdAutomationId: string | null = null;
++test(&quot;create an automation, dispatch a run and open its conversation&quot;, async ({
++  page,
++  request,
++  journey,
++}) =&gt; {
++  test.setTimeout(300_000);
++  const AUTOMATION_NAME = `Atomic automation ${journey.profileName}`;
++  let createdAutomationId = &quot;&quot;;
+   let runConversationId: string | null = null;
+-
+-  test.beforeEach(async ({ page }) =&gt; {
+-    await seedLocalStorage(page);
+-  });
+-
+-  test.afterEach(async ({ page, request }) =&gt; {
+-    // Collect conversation IDs from the URL for cleanup
+-    const match = page.url().match(/\/conversations\/([^/?#]+)/);
+-    if (match?.[1]) conversationIds.add(decodeURIComponent(match[1]));
+-
+-    // Clean up conversations but NOT automations — step 3 needs the
+-    // automation created in step 2 to verify it appears on the page.
+-    for (const id of Array.from(conversationIds)) {
+-      try {
+-        await deleteConversation(request, id);
+-        conversationIds.delete(id);
+-      } catch {
+-        // best-effort cleanup
+-      }
+-    }
+-  });
+-
+-  // Safety net: delete any leftover automations and reset the mock LLM.
+-  // Resetting here (instead of afterEach) preserves named trajectories
+-  // registered in step 1 for activation in step 2.
+-  test.afterAll(async ({ request }) =&gt; {
+-    for (const id of Array.from(automationIds)) {
+-      try {
+-        await deleteAutomation(request, id);
+-      } catch {
+-        // best-effort
++  // Discover by this attempt&#x27;s unique name even if creation succeeded but
++  // the UI/event assertion failed before returning the automation ID.
++  journey.cleanup(
++    &quot;automation and spawned conversations&quot;,
++    async () =&gt; {
++      const data = await listAutomations(request);
++      for (const automation of data.automations ?? data.items ?? []) {
++        if (automation.name !== AUTOMATION_NAME) continue;
++        const data = await listAutomationRuns(request, automation.id);
++        for (const run of data.runs ?? data.items ?? []) {
++          if (run.conversation_id)
++            journey.conversationIds.add(run.conversation_id);
++        }
++        await deleteAutomation(request, automation.id);
+       }
+-    }
+-    automationIds.clear();
+-
+-    // Reset mock LLM so subsequent test suites start fresh.
+-    try {
+-      await resetMockLLM(request);
+-    } catch {
+-      // best-effort — the mock server may have already shut down
+-    }
+-  });
+-
+-  // ── Step 1: Ensure LLM profile + register the automation trajectory ─
+-
+-  test(&quot;step 1: setup LLM profile and register automation trajectory&quot;, async ({
+-    page,
+-    request,
+-  }) =&gt; {
+-    // Retries reuse the same Docker backend, so remove any automation left by
+-    // an earlier attempt before creating the fixed-name test resource.
+-    await deleteAutomationsByName(request, AUTOMATION_NAME);
+-
++    },
++    &quot;before-conversations&quot;,
++  );
++  await test.step(&quot;setup LLM profile and register automation trajectory&quot;, async () =&gt; {
+     // Ensure the mock LLM profile is configured via the Settings UI
+-    await ensureMockLLMProfile(page);
++    await ensureMockLLMProfile(page, { profileName: journey.profileName });
+&#32;
+     // Build the terminal commands the mock LLM will return.
+     // The curl commands hit the REAL automation backend through the ingress.
+@@ -335,51 +289,28 @@ test.describe(&quot;mock-LLM automation lifecycle&quot;, () =&gt; {
+         prompt: &quot;echo hello world&quot;,
+         trigger: { type: &quot;cron&quot;, schedule: CRON_SCHEDULE, timezone: &quot;UTC&quot; },
+       })}&#x27;`,
+-      `-o /tmp/auto_result.json`,
++      `-o .atomic-automation-result.json`,
+       `-w &#x27;\\nHTTP_CODE:%{http_code}\\n&#x27;`,
+-      `&amp;&amp; cat /tmp/auto_result.json`,
++      `&amp;&amp; cat .atomic-automation-result.json`,
+       `&amp;&amp; printf &#x27;AUTOMATION_CREATED\\n&#x27;`,
+     ].join(&quot; &quot;);
+&#32;
+     const dispatchCmd = [
+-      `AID=$(python3 -c &quot;import json; print(json.load(open(&#x27;/tmp/auto_result.json&#x27;))[&#x27;id&#x27;])&quot;)`,
++      `AID=$(python3 -c &quot;import json; print(json.load(open(&#x27;.atomic-automation-result.json&#x27;))[&#x27;id&#x27;])&quot;)`,
+       `&amp;&amp; curl --fail-with-body -sS -X POST &quot;${AUTOMATION_API_BASE}/$AID/dispatch&quot;`,
+       authHeader,
+       `-H &#x27;Content-Type: application/json&#x27;`,
+       `-w &#x27;\\nHTTP_CODE:%{http_code}\\n&#x27;`,
++      `&amp;&amp; rm .atomic-automation-result.json`,
+       `&amp;&amp; printf &#x27;AUTOMATION_DISPATCHED\\n&#x27;`,
+     ].join(&quot; &quot;);
+&#32;
+-    // ⚠️  Padding response (index 0):
+-    // Public skills are bundled from @openhands/extensions at build time.
+-    // The agent-server&#x27;s skill-activation pipeline makes one internal LLM
+-    // call to decide which skills to inject before the agent loop starts.
+-    // Our user message mentions &quot;automation&quot;, which matches the
+-    // openhands-automation skill, triggering this internal call.
+-    // The conversation test does NOT need padding because its prompt
+-    // (&quot;run this bash command&quot;) does not match any skill trigger.
+-    //
+-    // If the padding ever becomes misaligned (e.g. the agent-server stops
+-    // making this call or starts making two), step 2&#x27;s
+-    // waitForNonUserMessageText(AUTOMATION_REPLY_TOKEN) will time out
+-    // quickly, making the failure obvious. See AGENTS.md → &quot;Padding
+-    // response for internal LLM call&quot; for more context.
+-    //
+-    // After the main conversation finishes (responses 0-3),the dispatched
+-    // automation run spawns a NEW conversation on the same agent-server.
+-
+-    // That conversation also calls the mock LLM. Recent openhands-automation
+-    // versions (&gt;= 1.10.0, PR openhands/automation#405) require
+-    // preset automation conversations to call the `finish` tool before the
+-    // run reaches COMPLETED — so we script one blank internal call followed
+-    // by the required finish-tool turn (and one trailing blank safety) below.
+-    // If this ever drifts again, step 2&#x27;s run-status timeout will surface it,
+-    // and the mock server log shows &quot;Mock LLM exhausted after N calls&quot;
+-    // pinpointing the exact count.
++    // Title generation has its own mock response. The main conversation
++    // creates and dispatches the automation; the spawned conversation then
++    // calls finish, as required by openhands-automation &gt;= 1.10.0.
+&#32;
+     await registerTrajectory(request, &quot;automation-lifecycle&quot;, [
+-      // ── Main conversation (responses 0-3) ──
+-      { text: &quot;&quot; }, // 0: consumed by skill-activation LLM call (see above)
++      // ── Main conversation ──
+       {
+         // 1: create the automation via curl
+         tool_call: {
+@@ -396,12 +327,9 @@ test.describe(&quot;mock-LLM automation lifecycle&quot;, () =&gt; {
+       },
+       { text: AUTOMATION_REPLY_TOKEN }, // 3: finish main conversation
+&#32;
+-      // ── Automation run&#x27;s conversation (responses 4+) ──
++      // ── Automation run&#x27;s conversation ──
+       // The run starts a fresh conversation with the automation prompt.
+-      // Script one internal padding call +the required `finish` tool turn,
+-      // followed by a final text reply (+ one trailing safety blank** so the
+-      // run reaches COMPLETED.
+-      { text: &quot;&quot; }, // 4: possible internal/condenser call
++      // Script the required finish tool turn, followed by a final reply.
+       {
+         // 5: openhands-automation &gt;= 1.10.0 (openhands/automation#405)
+         // requires preset automation conversations to finish via the
+@@ -423,31 +351,18 @@ test.describe(&quot;mock-LLM automation lifecycle&quot;, () =&gt; {
+           },
+         },
+       },
+-      // 6: after the finish tool executes, the agent still needs one more
++      // After the finish tool executes, the agent still needs one more
+       // non-empty LLM turn to end the conversation — a blank here would
+       // make the harness nag (&quot;no function call&quot;) and loop on the exhausted
+       // trajectory, so reply with the final text.
+       { text: &quot;Done. Hello world echoed successfully.&quot; },
+-      { text: &quot;&quot; }, // 7: safety buffer for any follow-up internal call after finish
+     ]);
+&#32;
+     // Activate it so the mock LLM uses this trajectory for the next conversation
+     await activateTrajectory(request, &quot;automation-lifecycle&quot;);
+   });
+&#32;
+-  // ── Step 2: Create automation via conversation ─────────────────────
+-
+-  test(&quot;step 2: create automation and dispatch run via the UI&quot;, async ({
+-    page,
+-    request,
+-  }) =&gt; {
+-    // Budget: ~150 s for the two dominant waits (waitForNonUserMessageText 60 s
+-    // + waitForRunStatus 90 s), plus ~30 s margin for navigation/page loads.
+-    // If CI proves flaky, bump to 240_000.
+-    test.setTimeout(180_000);
+-    // Re-activate in case the mock-LLM server restarted between steps (belt-and-suspenders)
+-    await activateTrajectory(request, &quot;automation-lifecycle&quot;);
+-
++  await test.step(&quot;create automation and dispatch run via the UI&quot;, async () =&gt; {
+     await routeSessionApiKey(page);
+&#32;
+     // Navigate to the home page and type a prompt to create the automation.
+@@ -489,7 +404,7 @@ test.describe(&quot;mock-LLM automation lifecycle&quot;, () =&gt; {
+     });
+&#32;
+     const conversationId = getConversationIdFromURL(page);
+-    conversationIds.add(conversationId);
++    journey.conversationIds.add(conversationId);
+&#32;
+     // ── Verify: the LLM reply token appears in the chat UI ──
+&#32;
+@@ -505,7 +420,6 @@ test.describe(&quot;mock-LLM automation lifecycle&quot;, () =&gt; {
+         conversationId,
+       );
+       const created = await getAutomation(request, createdAutomationId);
+-      automationIds.add(created.id);
+       expect(created.name).toBe(AUTOMATION_NAME);
+       expect(created.trigger?.schedule).toBe(CRON_SCHEDULE);
+       expect(created.enabled).toBe(true);
+@@ -516,10 +430,9 @@ test.describe(&quot;mock-LLM automation lifecycle&quot;, () =&gt; {
+     await test.step(&quot;verify run completed with conversation link&quot;, async () =&gt; {
+       expect(createdAutomationId).toBeTruthy();
+       const automation = await getAutomation(request, createdAutomationId!);
+-      automationIds.add(automation.id);
+&#32;
+       // Wait for the run to reach COMPLETED. The trajectory scripts the required
+-      // `finish` tool turn (plus padding) for the automation run&#x27;s spawned
++      // `finish` tool turn for the automation run&#x27;s spawned
+       // conversation so it can finish and fire the completion callback.
+       const run = await waitForRunStatus(
+         request,
+@@ -528,7 +441,7 @@ test.describe(&quot;mock-LLM automation lifecycle&quot;, () =&gt; {
+         90_000,
+       );
+       expect(run.conversation_id).toBeTruthy();
+-      // Store the conversation ID for the click-through verification in step 3
++      // Store the conversation ID for the click-through verification in the final UI step
+       runConversationId = run.conversation_id;
+     });
+&#32;
+@@ -591,13 +504,7 @@ test.describe(&quot;mock-LLM automation lifecycle&quot;, () =&gt; {
+     });
+   });
+&#32;
+-  // ── Step 3: Verify automation on list page, click through to detail, verify run link ─
+-
+-  test(&quot;step 3: verify automation and run on the automations page&quot;, async ({
+-    page,
+-    request,
+-  }) =&gt; {
+-    test.setTimeout(60_000);
++  await test.step(&quot;verify automation and run on the automations page&quot;, async () =&gt; {
+     await routeSessionApiKey(page);
+     await page.goto(&quot;/automations&quot;, { waitUntil: &quot;domcontentloaded&quot; });
+     await dismissAnalyticsModal(page);
+@@ -643,11 +550,11 @@ test.describe(&quot;mock-LLM automation lifecycle&quot;, () =&gt; {
+       const completedIcon = page.getByTestId(&quot;run-status-icon-completed&quot;);
+       await expect(completedIcon).toBeVisible({ timeout: 15_000 });
+&#32;
+-      // Verify step 2 populated runConversationId — without it the
++      // Verify the completed run supplied runConversationId — without it the
+       // click-through assertion below would silently pass.
+       expect(
+         runConversationId,
+-        &quot;step 2 must set runConversationId before step 3 can verify the link&quot;,
++        &quot;The completed run must have a conversation ID for link verification&quot;,
+       ).toBeTruthy();
+       if (runConversationId) {
+         const runLinks = page.locator(
+@@ -663,17 +570,5 @@ test.describe(&quot;mock-LLM automation lifecycle&quot;, () =&gt; {
+         expect(page.url()).toContain(runConversationId);
+       }
+     });
+-
+-    // Clean up automations at the end of the last test
+-    await test.step(&quot;cleanup automations&quot;, async () =&gt; {
+-      for (const id of Array.from(automationIds)) {
+-        try {
+-          await deleteAutomation(request, id);
+-          automationIds.delete(id);
+-        } catch {
+-          // best-effort
+-        }
+-      }
+-    });
+   });
+ });</pre></details></article><article id="f4"><div class="eyebrow">tests/e2e/mock-llm/conversations/mock-llm-conversation.spec.ts · +45 / −91</div><h2>Conversation resume owns its setup</h2><p>The sidebar resume assertion uses the conversation created inside the same test. Existing UI, event and worktree checks remain.</p><p class="sources"><a href="https://github.com/OpenHands/OpenHands/blob/e4197c043f8a1c4937ec5402449d47efff7ca0d1/tests/e2e/mock-llm/conversations/mock-llm-conversation.spec.ts#L90">Before · 90</a> · <a href="https://github.com/fancive/OpenHands/blob/25cca529c87934d6a99cd204dab60734af2fe8b9/tests/e2e/mock-llm/conversations/mock-llm-conversation.spec.ts#L45">After · 45</a></p><svg viewBox="0 0 870 158" role="img" aria-label="Before and after behavior"><a href="https://github.com/OpenHands/OpenHands/blob/e4197c043f8a1c4937ec5402449d47efff7ca0d1/tests/e2e/mock-llm/conversations/mock-llm-conversation.spec.ts#L90"><rect x="16" y="8" width="838" height="62" rx="5" fill="#ecebe7"/><text x="32" y="31" class="label">BEFORE</text><text x="32" y="54">Four tests pass step3ConversationId forward</text></a><a href="https://github.com/fancive/OpenHands/blob/25cca529c87934d6a99cd204dab60734af2fe8b9/tests/e2e/mock-llm/conversations/mock-llm-conversation.spec.ts#L45"><rect x="16" y="86" width="838" height="62" rx="5" fill="#ffe5ce"/><text x="32" y="109" class="label">AFTER</text><text x="32" y="132">One test: profile → activate → chat → resume</text></a></svg><details><summary>Exact source diff</summary><pre>diff --git a/tests/e2e/mock-llm/conversations/mock-llm-conversation.spec.ts b/tests/e2e/mock-llm/conversations/mock-llm-conversation.spec.ts
+index 3b9f0e22..d78b49f5 100644
+--- a/tests/e2e/mock-llm/conversations/mock-llm-conversation.spec.ts
++++ b/tests/e2e/mock-llm/conversations/mock-llm-conversation.spec.ts
+@@ -19,15 +19,14 @@
+  *  10. Resume the conversation from the sidebar after navigating away
+  */
+&#32;
+-import { test, expect } from &quot;@playwright/test&quot;;
++import { expect } from &quot;@playwright/test&quot;;
++import { test } from &quot;../utils/atomic-journey&quot;;
+ import {
+-  BASH_TOKEN,
+   REPLY_TOKEN,
+   waitForAgentMessageContaining,
+   MOCK_LLM_AGENT_URL,
+   BACKEND_URL,
+   SESSION_API_KEY,
+-  seedLocalStorage,
+   routeSessionApiKey,
+   dismissAnalyticsModal,
+   waitForTestId,
+@@ -35,61 +34,23 @@ import {
+   getConversationIdFromURL,
+   waitForNonUserMessageText,
+   waitForSuccessfulBashObservation,
+-  deleteConversation,
+   resetMockLLM,
+   setChatInput,
+   ensureMockLLMAgentProfile,
+ } from &quot;../utils/mock-llm-helpers&quot;;
+&#32;
+-const PROFILE_NAME = &quot;mock-llm-e2e&quot;;
+ const MOCK_MODEL = &quot;openai/mock-test-model&quot;;
+ const USER_MESSAGE = &quot;Please run a quick terminal command and then reply.&quot;;
+&#32;
+-test.describe.configure({ mode: &quot;serial&quot; });
+-
+-test.describe(&quot;mock-LLM agent-server conversation&quot;, () =&gt; {
+-  const conversationIds = new Set&lt;string&gt;();
+-  /** Conversation ID from step 3, used by step 4 for resume verification. */
+-  let step3ConversationId: string | null = null;
+-
+-  test.beforeEach(async ({ page }) =&gt; {
+-    await seedLocalStorage(page);
+-  });
+-
+-  test.afterEach(async ({ page, request }) =&gt; {
+-    // Track any conversation we landed on
+-    const match = page.url().match(/\/conversations\/([^/?#]+)/);
+-    if (match?.[1]) conversationIds.add(decodeURIComponent(match[1]));
+-
+-    // Clean up conversations — but skip step3ConversationId because step 4
+-    // needs it to verify conversation resume from the sidebar.
+-    for (const id of Array.from(conversationIds)) {
+-      if (id === step3ConversationId) continue;
+-      try {
+-        await deleteConversation(request, id);
+-        conversationIds.delete(id);
+-      } catch {
+-        // best-effort cleanup
+-      }
+-    }
+-  });
+-
+-  // Safety net: delete the shared step3 conversation after all tests complete.
+-  test.afterAll(async ({ request }) =&gt; {
+-    if (step3ConversationId) {
+-      try {
+-        await deleteConversation(request, step3ConversationId);
+-      } catch {
+-        // best-effort
+-      }
+-    }
+-  });
+-
+-  // ── Step 1: Create LLM profile via the Settings UI ──────────────────
+-
+-  test(&quot;step 1: create an LLM profile pointing at the mock LLM server&quot;, async ({
+-    page,
+-  }) =&gt; {
++test(&quot;create and activate an LLM profile, run and resume a conversation&quot;, async ({
++  page,
++  request,
++  journey,
++}) =&gt; {
++  test.setTimeout(180_000);
++  const PROFILE_NAME = journey.profileName;
++  let createdConversationId = &quot;&quot;;
++  await test.step(&quot;create an LLM profile pointing at the mock LLM server&quot;, async () =&gt; {
+     await routeSessionApiKey(page);
+     await page.goto(&quot;/settings/llm&quot;, { waitUntil: &quot;domcontentloaded&quot; });
+     await dismissAnalyticsModal(page);
+@@ -140,18 +101,14 @@ test.describe(&quot;mock-LLM agent-server conversation&quot;, () =&gt; {
+     // Verify the profile appears in the list
+     const profileRows = page.getByTestId(&quot;profile-row&quot;);
+     const profileTexts = await profileRows.allTextContents();
+-    const hasProfile = profileTexts.some((text) =&gt;
+-      text.includes(PROFILE_NAME),
+-    );
+-    expect(hasProfile, `Profile &quot;${PROFILE_NAME}&quot; should appear in the list`).toBe(true);
++    const hasProfile = profileTexts.some((text) =&gt; text.includes(PROFILE_NAME));
++    expect(
++      hasProfile,
++      `Profile &quot;${PROFILE_NAME}&quot; should appear in the list`,
++    ).toBe(true);
+   });
+&#32;
+-  // ── Step 2: Set the profile as active ───────────────────────────────
+-
+-  test(&quot;step 2: activate the mock-llm profile and verify settings API&quot;, async ({
+-    page,
+-    request,
+-  }) =&gt; {
++  await test.step(&quot;activate the mock-llm profile and verify settings API&quot;, async () =&gt; {
+     await routeSessionApiKey(page);
+     await page.goto(&quot;/settings/llm&quot;, { waitUntil: &quot;domcontentloaded&quot; });
+     await dismissAnalyticsModal(page);
+@@ -170,7 +127,10 @@ test.describe(&quot;mock-LLM agent-server conversation&quot;, () =&gt; {
+         break;
+       }
+     }
+-    expect(targetRow, `Could not find profile row for &quot;${PROFILE_NAME}&quot;`).not.toBeNull();
++    expect(
++      targetRow,
++      `Could not find profile row for &quot;${PROFILE_NAME}&quot;`,
++    ).not.toBeNull();
+&#32;
+     // Open the actions menu for this profile
+     await targetRow!.getByTestId(&quot;profile-menu-trigger&quot;).click();
+@@ -205,9 +165,7 @@ test.describe(&quot;mock-LLM agent-server conversation&quot;, () =&gt; {
+             const row = rows.nth(i);
+             const text = await row.textContent();
+             if (text?.includes(PROFILE_NAME)) {
+-              if (
+-                (await row.getByTestId(&quot;profile-active-badge&quot;).count()) &gt; 0
+-              ) {
++              if ((await row.getByTestId(&quot;profile-active-badge&quot;).count()) &gt; 0) {
+                 return true;
+               }
+               // Badge absent — re-attempt activation before the next poll.
+@@ -240,7 +198,10 @@ test.describe(&quot;mock-LLM agent-server conversation&quot;, () =&gt; {
+           &quot;X-Expose-Secrets&quot;: &quot;encrypted&quot;,
+         },
+       });
+-      expect(settingsResp.ok(), `GET /api/settings returned ${settingsResp.status()}`).toBe(true);
++      expect(
++        settingsResp.ok(),
++        `GET /api/settings returned ${settingsResp.status()}`,
++      ).toBe(true);
+       const settings = await settingsResp.json();
+       const llmModel = settings?.agent_settings?.llm?.model;
+       expect(
+@@ -256,19 +217,14 @@ test.describe(&quot;mock-LLM agent-server conversation&quot;, () =&gt; {
+     });
+&#32;
+     // Point the active agent profile at this LLM profile so the home composer
+-    // is unblocked in step 3. Conversations launch from the active AGENT
++    // is unblocked before starting the conversation. Conversations launch from the active AGENT
+     // profile (#1571), whose `llm_profile_ref` — not the active LLM profile —
+     // gates the composer; onboarding does this for real users, but this spec
+     // seeds `openhands-onboarded` and configures the LLM directly.
+     await ensureMockLLMAgentProfile(request, PROFILE_NAME);
+   });
+&#32;
+-  // ── Step 3: Start a conversation and verify the mock agent responds ─
+-
+-  test(&quot;step 3: run a conversation with the mock LLM&quot;, async ({
+-    page,
+-    request,
+-  }) =&gt; {
++  await test.step(&quot;run a conversation with the mock LLM&quot;, async () =&gt; {
+     // Reset the mock LLM to its default trajectory. Other test suites
+     // (e.g. automation tests) may have activated a different trajectory
+     // that wasn&#x27;t fully consumed due to earlier failures.
+@@ -282,7 +238,9 @@ test.describe(&quot;mock-LLM agent-server conversation&quot;, () =&gt; {
+     // the routeSessionApiKey interceptor (Playwright routes are LIFO and only
+     // one handler can call continue/fulfill per request).
+     let capturedConversationPayload: Record&lt;string, unknown&gt; | null = null;
+-    const captureConversationPayload = (req: import(&quot;@playwright/test&quot;).Request) =&gt; {
++    const captureConversationPayload = (
++      req: import(&quot;@playwright/test&quot;).Request,
++    ) =&gt; {
+       if (
+         req.method() === &quot;POST&quot; &amp;&amp;
+         new URL(req.url()).pathname === &quot;/api/conversations&quot;
+@@ -321,8 +279,8 @@ test.describe(&quot;mock-LLM agent-server conversation&quot;, () =&gt; {
+     await waitForPath(page, /\/conversations\/.+/, 30_000);
+     page.off(&quot;request&quot;, captureConversationPayload);
+     const conversationId = getConversationIdFromURL(page);
+-    conversationIds.add(conversationId);
+-    step3ConversationId = conversationId;
++    journey.conversationIds.add(conversationId);
++    createdConversationId = conversationId;
+&#32;
+     // ── Verify: POST /api/conversations payload contained worktree: true ──
+&#32;
+@@ -330,7 +288,7 @@ test.describe(&quot;mock-LLM agent-server conversation&quot;, () =&gt; {
+       expect(
+         capturedConversationPayload,
+         &quot;POST /api/conversations payload was not captured — &quot; +
+-        &quot;the page.on(&#x27;request&#x27;) listener may have missed the request&quot;,
++          &quot;the page.on(&#x27;request&#x27;) listener may have missed the request&quot;,
+       ).not.toBeNull();
+       expect(
+         capturedConversationPayload?.worktree,
+@@ -348,7 +306,10 @@ test.describe(&quot;mock-LLM agent-server conversation&quot;, () =&gt; {
+&#32;
+     await test.step(&quot;verify agent reply via conversation events API&quot;, async () =&gt; {
+       await waitForAgentMessageContaining(
+-        request, conversationId, REPLY_TOKEN, 30_000,
++        request,
++        conversationId,
++        REPLY_TOKEN,
++        30_000,
+       );
+     });
+&#32;
+@@ -370,7 +331,7 @@ test.describe(&quot;mock-LLM agent-server conversation&quot;, () =&gt; {
+       expect(
+         hasUserMessage,
+         `User message &quot;${USER_MESSAGE}&quot; should be visible in a user-message element. ` +
+-        `Found: ${allUserText.map((t) =&gt; t.slice(0, 80)).join(&quot; | &quot;)}`,
++          `Found: ${allUserText.map((t) =&gt; t.slice(0, 80)).join(&quot; | &quot;)}`,
+       ).toBe(true);
+     });
+&#32;
+@@ -397,18 +358,9 @@ test.describe(&quot;mock-LLM agent-server conversation&quot;, () =&gt; {
+       // No .catch() — if the banner IS visible, this step must fail the test.
+       await expect(errorBanner).not.toBeVisible({ timeout: 2_000 });
+     });
+-
+   });
+&#32;
+-  // ── Step 4: Resume the conversation from the sidebar ────────────────
+-
+-  test(&quot;step 4: resume conversation from sidebar after navigating away&quot;, async ({
+-    page,
+-  }) =&gt; {
+-    // This step depends on the conversation created in step 3.
+-    // If step 3 failed, skip this test instead of failing with a confusing error.
+-    test.skip(!step3ConversationId, &quot;step 3 must complete first&quot;);
+-
++  await test.step(&quot;resume conversation from sidebar after navigating away&quot;, async () =&gt; {
+     await routeSessionApiKey(page);
+&#32;
+     // Navigate away to the home page
+@@ -421,14 +373,14 @@ test.describe(&quot;mock-LLM agent-server conversation&quot;, () =&gt; {
+&#32;
+     // Find the sidebar link to our conversation and click it
+     const conversationLink = page.locator(
+-      `a[href*=&quot;/conversations/${step3ConversationId}&quot;]`,
++      `a[href*=&quot;/conversations/${createdConversationId}&quot;]`,
+     );
+     await expect(conversationLink.first()).toBeVisible({ timeout: 10_000 });
+     await conversationLink.first().click();
+&#32;
+     // Wait for navigation back to the conversation page
+     await waitForPath(page, /\/conversations\/.+/, 15_000);
+-    expect(page.url()).toContain(step3ConversationId);
++    expect(page.url()).toContain(createdConversationId);
+&#32;
+     // Verify the agent&#x27;s reply token is still visible after resume
+     await test.step(&quot;verify agent reply is still visible after resume&quot;, async () =&gt; {
+@@ -438,7 +390,9 @@ test.describe(&quot;mock-LLM agent-server conversation&quot;, () =&gt; {
+     // Verify the user&#x27;s original message is still visible
+     await test.step(&quot;verify user message is still visible after resume&quot;, async () =&gt; {
+       await expect(
+-        page.locator(&#x27;[data-testid=&quot;user-message&quot;]&#x27;).filter({ hasText: USER_MESSAGE }),
++        page
++          .locator(&#x27;[data-testid=&quot;user-message&quot;]&#x27;)
++          .filter({ hasText: USER_MESSAGE }),
+       ).toBeVisible({ timeout: 10_000 });
+     });</pre></details></article><article id="f5"><div class="eyebrow">tests/e2e/mock-llm/files/mock-llm-files-and-git.spec.ts · +263 / −311</div><h2>Each panel test prepares a fresh conversation</h2><p>prepareAttachedConversation is called inside each attached-panel test. The no-workspace test prepares its own LLM profile. The stale absent-Git-rail assertion now checks Pull/Push visibility, matching InteractiveChatBox.</p><p class="sources"><a href="https://github.com/OpenHands/OpenHands/blob/e4197c043f8a1c4937ec5402449d47efff7ca0d1/tests/e2e/mock-llm/files/mock-llm-files-and-git.spec.ts#L101">Before · 101</a> · <a href="https://github.com/fancive/OpenHands/blob/25cca529c87934d6a99cd204dab60734af2fe8b9/tests/e2e/mock-llm/files/mock-llm-files-and-git.spec.ts#L66">After · 66</a></p><svg viewBox="0 0 870 158" role="img" aria-label="Before and after behavior"><a href="https://github.com/OpenHands/OpenHands/blob/e4197c043f8a1c4937ec5402449d47efff7ca0d1/tests/e2e/mock-llm/files/mock-llm-files-and-git.spec.ts#L101"><rect x="16" y="8" width="838" height="62" rx="5" fill="#ecebe7"/><text x="32" y="31" class="label">BEFORE</text><text x="32" y="54">Six tests reuse attachedConversationId and profile</text></a><a href="https://github.com/fancive/OpenHands/blob/25cca529c87934d6a99cd204dab60734af2fe8b9/tests/e2e/mock-llm/files/mock-llm-files-and-git.spec.ts#L66"><rect x="16" y="86" width="838" height="62" rx="5" fill="#ffe5ce"/><text x="32" y="109" class="label">AFTER</text><text x="32" y="132">Four tests, each with its own profile and chat</text></a></svg><details><summary>Exact source diff</summary><pre>diff --git a/tests/e2e/mock-llm/files/mock-llm-files-and-git.spec.ts b/tests/e2e/mock-llm/files/mock-llm-files-and-git.spec.ts
+index c9473778..b69b5f67 100644
+--- a/tests/e2e/mock-llm/files/mock-llm-files-and-git.spec.ts
++++ b/tests/e2e/mock-llm/files/mock-llm-files-and-git.spec.ts
+@@ -6,31 +6,29 @@
+  *
+  * Coverage (issue #511):
+  *   - Files tab diff view can be enabled when a workspace is attached
+- *   - Conversation overview shows workspace / git identity (composer rail removed)
++ *   - Conversation overview shows workspace / git identity
+  *   - Browser tab renders empty state when no page has been browsed
+  *   - Files tab defaults to file-tree view when NO workspace is attached
+  */
+&#32;
+-import { test, expect } from &quot;@playwright/test&quot;;
++import { expect } from &quot;@playwright/test&quot;;
++import { test, type AtomicJourney } from &quot;../utils/atomic-journey&quot;;
+ import {
+   REPLY_TOKEN,
+-  seedLocalStorage,
+   routeSessionApiKey,
+   dismissAnalyticsModal,
+   waitForTestId,
+   waitForPath,
+   getConversationIdFromURL,
+   waitForNonUserMessageText,
+-  deleteConversation,
+   ensureMockLLMProfile,
+   registerTrajectory,
+   activateTrajectory,
+-  resetMockLLM,
+ } from &quot;../utils/mock-llm-helpers&quot;;
+&#32;
+ const USER_MESSAGE = &quot;Hello, please respond.&quot;;
+ const WORKSPACE_PATH = &quot;/tmp/e2e-test-project/my-app&quot;;
+-// The git remote the step-2 trajectory configures for the workspace. Kept as a
++// The git remote the setup trajectory configures for the workspace. Kept as a
+ // shared constant so the `git remote add` command and the overview git
+ // assertion below can never drift apart.
+ const EXPECTED_REPO_SLUG = &quot;test-org/test-repo&quot;;
+@@ -65,343 +63,297 @@ async function seedWorkspaceMetadata(
+   );
+ }
+&#32;
+-test.describe.configure({ mode: &quot;serial&quot; });
+-
+-test.describe(&quot;files tab, conversation overview git, and browser tab&quot;, () =&gt; {
+-  const conversationIds = new Set&lt;string&gt;();
+-  /** Conversation ID from the workspace-attached test, reused across steps. */
+-  let attachedConversationId: string | null = null;
+-
+-  test.beforeEach(async ({ page }) =&gt; {
+-    await seedLocalStorage(page);
+-  });
+-
+-  test.afterEach(async ({ page, request }) =&gt; {
+-    const match = page.url().match(/\/conversations\/([^/?#]+)/);
+-    if (match?.[1]) conversationIds.add(decodeURIComponent(match[1]));
+-  });
+-
+-  test.afterAll(async ({ request }) =&gt; {
+-    for (const id of Array.from(conversationIds)) {
+-      try {
+-        await deleteConversation(request, id);
+-      } catch {
+-        // best-effort
+-      }
+-    }
+-    try {
+-      await resetMockLLM(request);
+-    } catch {
+-      // best-effort
+-    }
+-  });
+-
+-  // ── Step 1: Setup LLM profile ──────────────────────────────────────
+-
+-  test(&quot;step 1: ensure mock LLM profile is configured&quot;, async ({
+-    page,
+-    request,
+-  }) =&gt; {
+-    // Create AND activate a real LLM profile through the Settings UI.
+-    // In local mode the home launcher gates sending on an active LLM profile
+-    // (profiles are the source of truth — see `useLlmConfigured`), so the
+-    // settings-only `ensureMockLLMProfileViaAPI` path leaves the chat input
+-    // and submit button disabled and step 2 can never submit. Other
+-    // conversation-starting mock-LLM specs create a profile for this reason;
+-    // under selective E2E runs no earlier spec leaves an active profile behind.
+-    await ensureMockLLMProfile(page);
+-
+-    // Register a trajectory that ensures the workspace has a git remote.
+-    // The npm path inherits the host repo; the Docker path bootstraps one.
+-    const gitBootstrap = [
+-      &quot;git rev-parse --is-inside-work-tree &gt;/dev/null 2&gt;&amp;1 || git init&quot;,
+-      // Must configure user.name/email — Docker containers may not have them.
+-      &quot;git config user.email test@test.com&quot;,
+-      &quot;git config user.name test&quot;,
+-      `git remote get-url origin &gt;/dev/null 2&gt;&amp;1 || git remote add origin https://github.com/${EXPECTED_REPO_SLUG}.git`,
+-      &quot;git rev-parse --verify HEAD &gt;/dev/null 2&gt;&amp;1 || git commit --allow-empty -m init&quot;,
+-    ].join(&quot; &amp;&amp; &quot;);
+-    await registerTrajectory(request, &quot;files-and-git&quot;, [
+-      {
+-        tool_call: {
+-          name: &quot;terminal&quot;,
+-          arguments: {
+-            command: `${gitBootstrap}; printf &#x27;MOCK_LLM_E2E_BASH_OK\\n&#x27;`,
+-          },
++async function prepareAttachedConversation(
++  page: import(&quot;@playwright/test&quot;).Page,
++  request: import(&quot;@playwright/test&quot;).APIRequestContext,
++  journey: AtomicJourney,
++) {
++  // Each panel test creates and activates its own profile before launching.
++  await ensureMockLLMProfile(page, { profileName: journey.profileName });
++
++  // Register a trajectory that ensures the workspace has a git remote.
++  // The npm path inherits the host repo; the Docker path bootstraps one.
++  const gitBootstrap = [
++    &quot;git rev-parse --is-inside-work-tree &gt;/dev/null 2&gt;&amp;1 || git init&quot;,
++    // Must configure user.name/email — Docker containers may not have them.
++    &quot;git config user.email test@test.com&quot;,
++    &quot;git config user.name test&quot;,
++    `git remote get-url origin &gt;/dev/null 2&gt;&amp;1 || git remote add origin https://github.com/${EXPECTED_REPO_SLUG}.git`,
++    &quot;git rev-parse --verify HEAD &gt;/dev/null 2&gt;&amp;1 || git commit --allow-empty -m init&quot;,
++  ].join(&quot; &amp;&amp; &quot;);
++  await registerTrajectory(request, &quot;files-and-git&quot;, [
++    {
++      tool_call: {
++        name: &quot;terminal&quot;,
++        arguments: {
++          command: `${gitBootstrap}; printf &#x27;MOCK_LLM_E2E_BASH_OK\\n&#x27;`,
+         },
+       },
+-      { text: REPLY_TOKEN },
+-    ]);
+-    await activateTrajectory(request, &quot;files-and-git&quot;);
+-  });
++    },
++    { text: REPLY_TOKEN },
++  ]);
++  await activateTrajectory(request, &quot;files-and-git&quot;);
++
++  await routeSessionApiKey(page);
++  await page.goto(&quot;/&quot;, { waitUntil: &quot;domcontentloaded&quot; });
++  await dismissAnalyticsModal(page);
++  await waitForTestId(page, &quot;home-chat-launcher&quot;);
++
++  // Type and send a message from the home page launcher
++  await page.evaluate(
++    ({ testId, text }) =&gt; {
++      const el = document.querySelector(`[data-testid=&quot;${testId}&quot;]`);
++      if (!(el instanceof HTMLElement)) throw new Error(&quot;Chat input not found&quot;);
++      el.focus();
++      el.textContent = text;
++      el.dispatchEvent(
++        new InputEvent(&quot;input&quot;, {
++          bubbles: true,
++          data: text,
++          inputType: &quot;insertText&quot;,
++        }),
++      );
++    },
++    { testId: &quot;chat-input&quot;, text: USER_MESSAGE },
++  );
++  await page.getByTestId(&quot;submit-button&quot;).click();
+&#32;
+-  // ── Step 2: Start a conversation and seed workspace attachment ──────
+-
+-  test(&quot;step 2: start conversation and attach workspace metadata&quot;, async ({
+-    page,
+-    request,
+-  }) =&gt; {
+-    test.setTimeout(120_000);
+-
+-    await routeSessionApiKey(page);
+-    await page.goto(&quot;/&quot;, { waitUntil: &quot;domcontentloaded&quot; });
+-    await dismissAnalyticsModal(page);
+-    await waitForTestId(page, &quot;home-chat-launcher&quot;);
+-
+-    // Type and send a message from the home page launcher
+-    await page.evaluate(
+-      ({ testId, text }) =&gt; {
+-        const el = document.querySelector(`[data-testid=&quot;${testId}&quot;]`);
+-        if (!(el instanceof HTMLElement))
+-          throw new Error(&quot;Chat input not found&quot;);
+-        el.focus();
+-        el.textContent = text;
+-        el.dispatchEvent(
+-          new InputEvent(&quot;input&quot;, {
+-            bubbles: true,
+-            data: text,
+-            inputType: &quot;insertText&quot;,
+-          }),
+-        );
+-      },
+-      { testId: &quot;chat-input&quot;, text: USER_MESSAGE },
+-    );
+-    await page.getByTestId(&quot;submit-button&quot;).click();
++  // Wait for navigation to the conversation page
++  await waitForPath(page, /\/conversations\/.+/, 30_000);
++  const conversationId = getConversationIdFromURL(page);
++  journey.conversationIds.add(conversationId);
+&#32;
+-    // Wait for navigation to the conversation page
+-    await waitForPath(page, /\/conversations\/.+/, 30_000);
+-    const conversationId = getConversationIdFromURL(page);
+-    conversationIds.add(conversationId);
+-    attachedConversationId = conversationId;
++  // Wait for the agent to finish replying so the conversation is fully
++  // initialized (WebSocket connected, runtime ready).
++  await waitForNonUserMessageText(page, REPLY_TOKEN, 60_000);
+&#32;
+-    // Wait for the agent to finish replying so the conversation is fully
+-    // initialized (WebSocket connected, runtime ready).
+-    await waitForNonUserMessageText(page, REPLY_TOKEN, 60_000);
++  await seedWorkspaceMetadata(page, conversationId, WORKSPACE_PATH);
+&#32;
+-    await seedWorkspaceMetadata(page, conversationId, WORKSPACE_PATH);
++  // Reload so hooks re-read from localStorage
++  await page.reload({ waitUntil: &quot;domcontentloaded&quot; });
++  await dismissAnalyticsModal(page);
+&#32;
+-    // Reload so hooks re-read from localStorage
+-    await page.reload({ waitUntil: &quot;domcontentloaded&quot; });
+-    await dismissAnalyticsModal(page);
++  // Wait for the conversation to load again
++  await waitForTestId(page, &quot;chat-interface&quot;, 30_000);
++  return conversationId;
++}
+&#32;
+-    // Wait for the conversation to load again
+-    await waitForTestId(page, &quot;chat-interface&quot;, 30_000);
++test(&quot;conversation overview shows workspace and git identity&quot;, async ({
++  page,
++  request,
++  journey,
++}) =&gt; {
++  test.setTimeout(180_000);
++  const attachedConversationId =
++    await test.step(&quot;prepare a fresh attached conversation&quot;, () =&gt;
++      prepareAttachedConversation(page, request, journey));
++
++  await seedWorkspaceMetadata(page, attachedConversationId!, WORKSPACE_PATH);
++  await routeSessionApiKey(page);
++  await page.goto(`/conversations/${attachedConversationId}`, {
++    waitUntil: &quot;domcontentloaded&quot;,
++  });
++  await dismissAnalyticsModal(page);
++  await waitForTestId(page, &quot;chat-interface&quot;, 30_000);
++
++  const workspaceName = WORKSPACE_PATH.replace(/\/+$/, &quot;&quot;).split(&quot;/&quot;).pop()!;
++
++  await test.step(&quot;composer exposes repository actions&quot;, async () =&gt; {
++    const composer = page.getByTestId(&quot;interactive-chat-box&quot;);
++    await expect(
++      composer.getByRole(&quot;button&quot;, { name: &quot;Pull&quot;, exact: true }),
++    ).toBeVisible({ timeout: 20_000 });
++    await expect(
++      composer.getByRole(&quot;button&quot;, { name: &quot;Push&quot;, exact: true }),
++    ).toBeVisible();
+   });
+&#32;
+-  // ── Step 3: Verify overview shows workspace / git identity ─────────
+-
+-  test(&quot;step 3: conversation overview shows workspace and git identity&quot;, async ({
+-    page,
+-  }) =&gt; {
+-    test.skip(!attachedConversationId, &quot;step 2 must complete first&quot;);
+-    test.setTimeout(60_000);
+-
+-    await seedWorkspaceMetadata(page, attachedConversationId!, WORKSPACE_PATH);
+-    await routeSessionApiKey(page);
+-    await page.goto(`/conversations/${attachedConversationId}`, {
+-      waitUntil: &quot;domcontentloaded&quot;,
+-    });
+-    await dismissAnalyticsModal(page);
+-    await waitForTestId(page, &quot;chat-interface&quot;, 30_000);
++  await test.step(&quot;open conversation overview&quot;, async () =&gt; {
++    const toggle = page.getByTestId(&quot;conversation-overview-toggle&quot;);
++    await expect(toggle).toBeVisible({ timeout: 10_000 });
++    await toggle.click();
++    await waitForTestId(page, &quot;conversation-overview-panel&quot;, 10_000);
++  });
+&#32;
+-    const workspaceName = WORKSPACE_PATH.replace(/\/+$/, &quot;&quot;).split(&quot;/&quot;).pop()!;
++  await test.step(&quot;verify workspace row shows folder basename&quot;, async () =&gt; {
++    const workspaceRow = page.getByTestId(&quot;conversation-overview-workspace&quot;);
++    await expect(workspaceRow).toBeVisible({ timeout: 10_000 });
++    await expect(workspaceRow).toContainText(workspaceName);
++  });
+&#32;
+-    // Composer no longer hosts the git rail; identity lives in overview.
+-    await test.step(&quot;composer has no git control rail&quot;, async () =&gt; {
+-      await expect(
+-        page.getByTestId(&quot;interactive-chat-box&quot;).getByRole(&quot;button&quot;, {
+-          name: /^(Pull|Push|Create PR|Connect Repo)$/i,
+-        }),
+-      ).toHaveCount(0);
+-    });
++  // When useLocalGitInfo detects a remote (trajectory ran git init +
++  // remote add during setup), the overview git section surfaces the repo
++  // slug. In Docker the bash WebSocket probe may be slower — soft-check.
++  await test.step(&quot;check for overview git repo (git detection)&quot;, async () =&gt; {
++    const repoRow = page.getByTestId(&quot;conversation-overview-git-repo&quot;);
++    try {
++      await expect(repoRow).toBeVisible({ timeout: 20_000 });
++      await expect(repoRow).toContainText(EXPECTED_REPO_SLUG);
++    } catch {
++      console.log(
++        &quot;Overview git repo not visible — git probe likely still pending&quot;,
++      );
++    }
++  });
++});
+&#32;
+-    await test.step(&quot;open conversation overview&quot;, async () =&gt; {
+-      const toggle = page.getByTestId(&quot;conversation-overview-toggle&quot;);
+-      await expect(toggle).toBeVisible({ timeout: 10_000 });
+-      await toggle.click();
+-      await waitForTestId(page, &quot;conversation-overview-panel&quot;, 10_000);
++test(&quot;commits tab opens for attached workspace&quot;, async ({
++  page,
++  request,
++  journey,
++}) =&gt; {
++  test.setTimeout(180_000);
++  const attachedConversationId =
++    await test.step(&quot;prepare a fresh attached conversation&quot;, () =&gt;
++      prepareAttachedConversation(page, request, journey));
++
++  await seedWorkspaceMetadata(page, attachedConversationId!, WORKSPACE_PATH);
++  await routeSessionApiKey(page);
++  await page.goto(`/conversations/${attachedConversationId}`, {
++    waitUntil: &quot;domcontentloaded&quot;,
++  });
++  await dismissAnalyticsModal(page);
++  await waitForTestId(page, &quot;chat-interface&quot;, 30_000);
++
++  await test.step(&quot;open right panel and Commits tab&quot;, async () =&gt; {
++    const toggle = page.getByTestId(&quot;right-panel-toggle&quot;);
++    await expect(toggle).toBeVisible({ timeout: 10_000 });
++    await toggle.click({ force: true });
++    await expect(toggle).toHaveAttribute(&quot;aria-pressed&quot;, &quot;true&quot;, {
++      timeout: 10_000,
+     });
+&#32;
+-    await test.step(&quot;verify workspace row shows folder basename&quot;, async () =&gt; {
+-      const workspaceRow = page.getByTestId(&quot;conversation-overview-workspace&quot;);
+-      await expect(workspaceRow).toBeVisible({ timeout: 10_000 });
+-      await expect(workspaceRow).toContainText(workspaceName);
+-    });
++    const anyTab = page.locator(&#x27;[data-testid^=&quot;conversation-tab-&quot;]&#x27;).first();
++    await expect(anyTab).toBeVisible({ timeout: 10_000 });
+&#32;
+-    // When useLocalGitInfo detects a remote (trajectory ran git init +
+-    // remote add in step 2), the overview git section surfaces the repo
+-    // slug. In Docker the bash WebSocket probe may be slower — soft-check.
+-    await test.step(&quot;check for overview git repo (git detection)&quot;, async () =&gt; {
+-      const repoRow = page.getByTestId(&quot;conversation-overview-git-repo&quot;);
+-      try {
+-        await expect(repoRow).toBeVisible({ timeout: 20_000 });
+-        await expect(repoRow).toContainText(EXPECTED_REPO_SLUG);
+-      } catch {
+-        console.log(
+-          &quot;Overview git repo not visible — git probe likely still pending&quot;,
+-        );
+-      }
++    // Commits may be overflowed into the ⋯ menu on narrow viewports.
++    const commitsTab = page.getByTestId(&quot;conversation-tab-commits&quot;);
++    if (await commitsTab.isVisible().catch(() =&gt; false)) {
++      await commitsTab.click();
++    } else {
++      await page.getByTestId(&quot;ellipsis-button&quot;).click();
++      await page.getByTestId(&quot;conversation-tabs-menu-open-commits&quot;).click();
++    }
++    await expect(page.getByTestId(&quot;conversation-tab-commits&quot;)).toBeVisible({
++      timeout: 15_000,
+     });
+   });
++});
+&#32;
+-  // ── Step 4: Verify Commits tab is available for attached workspace ─
++test(&quot;browser tab shows empty state&quot;, async ({ page, request, journey }) =&gt; {
++  test.setTimeout(180_000);
++  const attachedConversationId =
++    await test.step(&quot;prepare a fresh attached conversation&quot;, () =&gt;
++      prepareAttachedConversation(page, request, journey));
+&#32;
+-  test(&quot;step 4: commits tab opens for attached workspace&quot;, async ({ page }) =&gt; {
+-    test.skip(!attachedConversationId, &quot;step 2 must complete first&quot;);
+-    test.setTimeout(60_000);
++  await routeSessionApiKey(page);
++  await page.goto(`/conversations/${attachedConversationId}`, {
++    waitUntil: &quot;domcontentloaded&quot;,
++  });
++  await dismissAnalyticsModal(page);
++  await waitForTestId(page, &quot;chat-interface&quot;, 30_000);
++
++  // Open the right panel and wait for the drawer animation to settle
++  await test.step(&quot;open right panel&quot;, async () =&gt; {
++    const toggle = page.getByTestId(&quot;right-panel-toggle&quot;);
++    await expect(toggle).toBeVisible({ timeout: 10_000 });
++    await toggle.click();
++    await page.waitForTimeout(500);
++  });
+&#32;
+-    await seedWorkspaceMetadata(page, attachedConversationId!, WORKSPACE_PATH);
+-    await routeSessionApiKey(page);
+-    await page.goto(`/conversations/${attachedConversationId}`, {
+-      waitUntil: &quot;domcontentloaded&quot;,
+-    });
+-    await dismissAnalyticsModal(page);
+-    await waitForTestId(page, &quot;chat-interface&quot;, 30_000);
+-
+-    await test.step(&quot;open right panel and Commits tab&quot;, async () =&gt; {
+-      const toggle = page.getByTestId(&quot;right-panel-toggle&quot;);
+-      await expect(toggle).toBeVisible({ timeout: 10_000 });
+-      await toggle.click({ force: true });
+-      await expect(toggle).toHaveAttribute(&quot;aria-pressed&quot;, &quot;true&quot;, {
+-        timeout: 10_000,
+-      });
+-
+-      const anyTab = page.locator(&#x27;[data-testid^=&quot;conversation-tab-&quot;]&#x27;).first();
+-      await expect(anyTab).toBeVisible({ timeout: 10_000 });
+-
+-      // Commits may be overflowed into the ⋯ menu on narrow viewports.
+-      const commitsTab = page.getByTestId(&quot;conversation-tab-commits&quot;);
+-      if (await commitsTab.isVisible().catch(() =&gt; false)) {
+-        await commitsTab.click();
+-      } else {
+-        await page.getByTestId(&quot;ellipsis-button&quot;).click();
+-        await page.getByTestId(&quot;conversation-tabs-menu-open-commits&quot;).click();
+-      }
+-      await expect(page.getByTestId(&quot;conversation-tab-commits&quot;)).toBeVisible({
+-        timeout: 15_000,
+-      });
+-    });
++  // Click the Browser tab
++  await test.step(&quot;click browser tab&quot;, async () =&gt; {
++    const browserTab = page.getByTestId(&quot;conversation-tab-browser&quot;);
++    await expect(browserTab).toBeVisible({ timeout: 10_000 });
++    await browserTab.click();
+   });
+&#32;
+-  // ── Step 5: Verify Browser tab shows empty state ───────────────────
++  await test.step(&quot;verify empty browser message&quot;, async () =&gt; {
++    // The EmptyBrowserMessage renders the &quot;No page loaded yet&quot; message.
++    // We assert on the text rather than a test-id since the component
++    // uses the shared ConversationTabEmptyState without its own id.
++    await expect(
++      page.getByText(&quot;No page loaded yet&quot;, { exact: false }),
++    ).toBeVisible({ timeout: 10_000 });
++  });
++});
+&#32;
+-  test(&quot;step 5: browser tab shows empty state&quot;, async ({ page }) =&gt; {
+-    test.skip(!attachedConversationId, &quot;step 2 must complete first&quot;);
+-    test.setTimeout(60_000);
++test(&quot;files tab defaults to file-tree view without attached workspace&quot;, async ({
++  page,
++  journey,
++}) =&gt; {
++  test.setTimeout(180_000);
++  await test.step(&quot;prepare LLM profile&quot;, () =&gt;
++    ensureMockLLMProfile(page, { profileName: journey.profileName }));
++
++  await routeSessionApiKey(page);
++  await page.goto(&quot;/&quot;, { waitUntil: &quot;domcontentloaded&quot; });
++  await dismissAnalyticsModal(page);
++  await waitForTestId(page, &quot;home-chat-launcher&quot;);
++
++  // Start a brand-new conversation WITHOUT seeding any workspace metadata
++  await page.evaluate(
++    ({ testId, text }) =&gt; {
++      const el = document.querySelector(`[data-testid=&quot;${testId}&quot;]`);
++      if (!(el instanceof HTMLElement)) throw new Error(&quot;Chat input not found&quot;);
++      el.focus();
++      el.textContent = text;
++      el.dispatchEvent(
++        new InputEvent(&quot;input&quot;, {
++          bubbles: true,
++          data: text,
++          inputType: &quot;insertText&quot;,
++        }),
++      );
++    },
++    { testId: &quot;chat-input&quot;, text: USER_MESSAGE },
++  );
++  await page.getByTestId(&quot;submit-button&quot;).click();
+&#32;
+-    await routeSessionApiKey(page);
+-    await page.goto(`/conversations/${attachedConversationId}`, {
+-      waitUntil: &quot;domcontentloaded&quot;,
+-    });
+-    await dismissAnalyticsModal(page);
+-    await waitForTestId(page, &quot;chat-interface&quot;, 30_000);
+-
+-    // Open the right panel and wait for the drawer animation to settle
+-    await test.step(&quot;open right panel&quot;, async () =&gt; {
+-      const toggle = page.getByTestId(&quot;right-panel-toggle&quot;);
+-      await expect(toggle).toBeVisible({ timeout: 10_000 });
+-      await toggle.click();
+-      await page.waitForTimeout(500);
+-    });
++  await waitForPath(page, /\/conversations\/.+/, 30_000);
++  const conversationId = getConversationIdFromURL(page);
++  journey.conversationIds.add(conversationId);
+&#32;
+-    // Click the Browser tab
+-    await test.step(&quot;click browser tab&quot;, async () =&gt; {
+-      const browserTab = page.getByTestId(&quot;conversation-tab-browser&quot;);
+-      await expect(browserTab).toBeVisible({ timeout: 10_000 });
+-      await browserTab.click();
+-    });
++  // Wait for the agent to reply
++  await waitForNonUserMessageText(page, REPLY_TOKEN, 60_000);
+&#32;
+-    await test.step(&quot;verify empty browser message&quot;, async () =&gt; {
+-      // The EmptyBrowserMessage renders the &quot;No page loaded yet&quot; message.
+-      // We assert on the text rather than a test-id since the component
+-      // uses the shared ConversationTabEmptyState without its own id.
+-      await expect(
+-        page.getByText(&quot;No page loaded yet&quot;, { exact: false }),
+-      ).toBeVisible({ timeout: 10_000 });
+-    });
++  // Open the right panel and wait for the drawer animation to settle
++  await test.step(&quot;open right panel&quot;, async () =&gt; {
++    const toggle = page.getByTestId(&quot;right-panel-toggle&quot;);
++    await expect(toggle).toBeVisible({ timeout: 10_000 });
++    await toggle.click();
++    await page.waitForTimeout(500);
+   });
+&#32;
+-  // ── Step 6: Verify Files tab defaults to file-tree when no workspace ─
+-
+-  test(&quot;step 6: files tab defaults to file-tree view without attached workspace&quot;, async ({
+-    page,
+-    request,
+-  }) =&gt; {
+-    test.setTimeout(120_000);
+-
+-    // Fresh trajectory — step 2&#x27;s conversation consumed the previous one.
+-    await resetMockLLM(request);
+-
+-    await routeSessionApiKey(page);
+-    await page.goto(&quot;/&quot;, { waitUntil: &quot;domcontentloaded&quot; });
+-    await dismissAnalyticsModal(page);
+-    await waitForTestId(page, &quot;home-chat-launcher&quot;);
+-
+-    // Start a brand-new conversation WITHOUT seeding any workspace metadata
+-    await page.evaluate(
+-      ({ testId, text }) =&gt; {
+-        const el = document.querySelector(`[data-testid=&quot;${testId}&quot;]`);
+-        if (!(el instanceof HTMLElement))
+-          throw new Error(&quot;Chat input not found&quot;);
+-        el.focus();
+-        el.textContent = text;
+-        el.dispatchEvent(
+-          new InputEvent(&quot;input&quot;, {
+-            bubbles: true,
+-            data: text,
+-            inputType: &quot;insertText&quot;,
+-          }),
+-        );
+-      },
+-      { testId: &quot;chat-input&quot;, text: USER_MESSAGE },
+-    );
+-    await page.getByTestId(&quot;submit-button&quot;).click();
+-
+-    await waitForPath(page, /\/conversations\/.+/, 30_000);
+-    const conversationId = getConversationIdFromURL(page);
+-    conversationIds.add(conversationId);
+-
+-    // Wait for the agent to reply
+-    await waitForNonUserMessageText(page, REPLY_TOKEN, 60_000);
++  // Ensure the Files surface is showing. Opening the drawer already
++  // defaults the selection to Files, and clicking the active tab again
++  // deliberately closes the drawer (see useSelectConversationTab), so only
++  // click when the Files panel is not already visible.
++  await test.step(&quot;ensure files tab is active&quot;, async () =&gt; {
++    const filesTab = page.getByTestId(&quot;conversation-tab-files&quot;);
++    await expect(filesTab).toBeVisible({ timeout: 10_000 });
++    if (!(await page.getByTestId(&quot;files-tab&quot;).isVisible())) {
++      await filesTab.click();
++      await page.waitForTimeout(300);
++    }
++  });
+&#32;
+-    // Open the right panel and wait for the drawer animation to settle
+-    await test.step(&quot;open right panel&quot;, async () =&gt; {
+-      const toggle = page.getByTestId(&quot;right-panel-toggle&quot;);
+-      await expect(toggle).toBeVisible({ timeout: 10_000 });
+-      await toggle.click();
+-      await page.waitForTimeout(500);
++  await test.step(&quot;verify files tab shows file browser (not diff)&quot;, async () =&gt; {
++    await expect(page.getByTestId(&quot;files-tab&quot;)).toBeVisible({
++      timeout: 15_000,
+     });
+-
+-    // Ensure the Files surface is showing. Opening the drawer already
+-    // defaults the selection to Files, and clicking the active tab again
+-    // deliberately closes the drawer (see useSelectConversationTab), so only
+-    // click when the Files panel is not already visible.
+-    await test.step(&quot;ensure files tab is active&quot;, async () =&gt; {
+-      const filesTab = page.getByTestId(&quot;conversation-tab-files&quot;);
+-      await expect(filesTab).toBeVisible({ timeout: 10_000 });
+-      if (!(await page.getByTestId(&quot;files-tab&quot;).isVisible())) {
+-        await filesTab.click();
+-        await page.waitForTimeout(300);
+-      }
++    // The file browser&#x27;s tab strip renders once loading settles; the
++    // content mode toggle only appears after a file is opened, and the
++    // legacy Diff/Commits toggle is gone from the Files surface.
++    await expect(page.getByTestId(&quot;file-quick-row&quot;)).toBeVisible({
++      timeout: 10_000,
+     });
+-
+-    await test.step(&quot;verify files tab shows file browser (not diff)&quot;, async () =&gt; {
+-      await expect(page.getByTestId(&quot;files-tab&quot;)).toBeVisible({
+-        timeout: 15_000,
+-      });
+-      // The file browser&#x27;s tab strip renders once loading settles; the
+-      // content mode toggle only appears after a file is opened, and the
+-      // legacy Diff/Commits toggle is gone from the Files surface.
+-      await expect(page.getByTestId(&quot;file-quick-row&quot;)).toBeVisible({
+-        timeout: 10_000,
+-      });
+-      await expect(page.getByTestId(&quot;files-tab-content&quot;)).toBeVisible({
+-        timeout: 10_000,
+-      });
+-      await expect(
+-        page.getByTestId(&quot;files-tab-content-mode-toggle&quot;),
+-      ).toHaveCount(0);
+-      await expect(page.getByTestId(&quot;files-tab-diff-toggle&quot;)).toHaveCount(0);
++    await expect(page.getByTestId(&quot;files-tab-content&quot;)).toBeVisible({
++      timeout: 10_000,
+     });
++    await expect(page.getByTestId(&quot;files-tab-content-mode-toggle&quot;)).toHaveCount(
++      0,
++    );
++    await expect(page.getByTestId(&quot;files-tab-diff-toggle&quot;)).toHaveCount(0);
+   });
+ });</pre></details></article><article id="f6"><div class="eyebrow">tests/e2e/mock-llm/scripts/mock-llm-server.py · +43 / −0</div><h2>Concurrent title calls cannot steal scripted replies</h2><p>Match the SDK’s two-message title prompt only when tools are absent. Title and profile-validation traffic bypass the agent trajectory and request history; streaming and non-streaming replies are supported.</p><p class="sources"><a href="https://github.com/OpenHands/OpenHands/blob/e4197c043f8a1c4937ec5402449d47efff7ca0d1/tests/e2e/mock-llm/scripts/mock-llm-server.py#L187">Before · 187</a> · <a href="https://github.com/fancive/OpenHands/blob/25cca529c87934d6a99cd204dab60734af2fe8b9/tests/e2e/mock-llm/scripts/mock-llm-server.py#L387">After · 387</a></p><svg viewBox="0 0 870 158" role="img" aria-label="Before and after behavior"><a href="https://github.com/OpenHands/OpenHands/blob/e4197c043f8a1c4937ec5402449d47efff7ca0d1/tests/e2e/mock-llm/scripts/mock-llm-server.py#L187"><rect x="16" y="8" width="838" height="62" rx="5" fill="#ecebe7"/><text x="32" y="31" class="label">BEFORE</text><text x="32" y="54">Titles and agent calls consume the same TestLLM</text></a><a href="https://github.com/fancive/OpenHands/blob/25cca529c87934d6a99cd204dab60734af2fe8b9/tests/e2e/mock-llm/scripts/mock-llm-server.py#L387"><rect x="16" y="86" width="838" height="62" rx="5" fill="#ffe5ce"/><text x="32" y="109" class="label">AFTER</text><text x="32" y="132">Title prompt → static title; agent call → TestLLM</text></a></svg><details><summary>Exact source diff</summary><pre>diff --git a/tests/e2e/mock-llm/scripts/mock-llm-server.py b/tests/e2e/mock-llm/scripts/mock-llm-server.py
+index 39f0f5df..7f53a188 100644
+--- a/tests/e2e/mock-llm/scripts/mock-llm-server.py
++++ b/tests/e2e/mock-llm/scripts/mock-llm-server.py
+@@ -184,6 +184,18 @@ class MockLLMHandler(BaseHTTPRequestHandler):
+                 self._send_json(200, raw)
+             return
+&#32;
++        # Automatic titles run concurrently with the agent loop. They must
++        # not consume that conversation&#x27;s scripted tool calls or reply tokens.
++        if _is_title_request(body):
++            raw = _preflight_pong(body.get(&quot;model&quot;))
++            raw[&quot;id&quot;] = &quot;chatcmpl-mock-title&quot;
++            raw[&quot;choices&quot;][0][&quot;message&quot;][&quot;content&quot;] = &quot;Mock conversation&quot;
++            if body.get(&quot;stream&quot;):
++                self._send_streaming(raw)
++            else:
++                self._send_json(200, raw)
++            return
++
+         # Append to request history for test verification.
+         # Tests can GET /admin/requests to confirm image content was included.
+         with self._lock:
+@@ -360,6 +372,37 @@ class MockLLMHandler(BaseHTTPRequestHandler):
+         print(f&quot;[mock-llm] {args[0]}&quot;, file=sys.stderr, flush=True)
+&#32;
+&#32;
++def _message_text(message: dict) -&gt; str:
++    content = message.get(&quot;content&quot;)
++    if isinstance(content, str):
++        return content
++    if isinstance(content, list):
++        return &quot;&quot;.join(
++            part.get(&quot;text&quot;, &quot;&quot;) for part in content
++            if isinstance(part, dict) and part.get(&quot;type&quot;) == &quot;text&quot;
++        )
++    return &quot;&quot;
++
++
++def _is_title_request(body: dict) -&gt; bool:
++    &quot;&quot;&quot;Match SDK conversation/title_utils.py, never an agent tool turn.&quot;&quot;&quot;
++    messages = body.get(&quot;messages&quot;)
++    if body.get(&quot;tools&quot;) or not isinstance(messages, list) or len(messages) != 2:
++        return False
++    system, user = messages
++    if not isinstance(system, dict) or not isinstance(user, dict):
++        return False
++    return (
++        system.get(&quot;role&quot;) == &quot;system&quot;
++        and _message_text(system).startswith(
++            &quot;You are a helpful assistant that generates concise, &quot;
++            &quot;descriptive titles for conversations with OpenHands.&quot;
++        )
++        and user.get(&quot;role&quot;) == &quot;user&quot;
++        and _message_text(user).startswith(&quot;Generate a title (maximum &quot;)
++    )
++
++
+ def _is_preflight_ping(body: dict) -&gt; bool:
+     &quot;&quot;&quot;Match the agent-server&#x27;s profile pre-flight check.</pre></details></article><article id="f7"><div class="eyebrow">tests/e2e/mock-llm/scripts/test_mock_llm_server.py · +68 / −0</div><h2>HTTP regression checks actual response ownership</h2><p>A real local HTTP server checks title handling, streaming, request history and a tool-bearing request with the same words. Disabling title recognition makes this test fail because the title receives FIRST_AGENT_REPLY.</p><p class="sources"><a href="https://github.com/fancive/OpenHands/blob/25cca529c87934d6a99cd204dab60734af2fe8b9/tests/e2e/mock-llm/scripts/test_mock_llm_server.py#L16">After · 16</a></p><svg viewBox="0 0 870 158" role="img" aria-label="Before and after behavior"><a href="https://github.com/fancive/OpenHands/blob/25cca529c87934d6a99cd204dab60734af2fe8b9/tests/e2e/mock-llm/scripts/test_mock_llm_server.py#L16"><rect x="16" y="8" width="838" height="62" rx="5" fill="#ecebe7"/><text x="32" y="31" class="label">NEW FIXTURE / TEST</text><text x="32" y="54">No previous module</text></a><a href="https://github.com/fancive/OpenHands/blob/25cca529c87934d6a99cd204dab60734af2fe8b9/tests/e2e/mock-llm/scripts/test_mock_llm_server.py#L16"><rect x="16" y="86" width="838" height="62" rx="5" fill="#ffe5ce"/><text x="32" y="109" class="label">AFTER</text><text x="32" y="132">Title → FIRST_AGENT_REPLY → title → SECOND_AGENT_REPLY</text></a></svg><details><summary>Exact source diff</summary><pre>diff --git a/tests/e2e/mock-llm/scripts/test_mock_llm_server.py b/tests/e2e/mock-llm/scripts/test_mock_llm_server.py
+new file mode 100644
+index 00000000..7c54cf94
+--- /dev/null
++++ b/tests/e2e/mock-llm/scripts/test_mock_llm_server.py
+@@ -0,0 +1,68 @@
++&quot;&quot;&quot;Run with: &lt;mock-LLM Python&gt; -m unittest discover -s tests/e2e/mock-llm/scripts -p &#x27;test_*.py&#x27;.&quot;&quot;&quot;
++
++import importlib.util
++import json
++from pathlib import Path
++import threading
++import unittest
++from urllib.request import Request, urlopen
++from http.server import HTTPServer
++
++spec = importlib.util.spec_from_file_location(&quot;mock_llm_server&quot;, Path(__file__).with_name(&quot;mock-llm-server.py&quot;))
++server_module = importlib.util.module_from_spec(spec)
++spec.loader.exec_module(server_module)
++
++
++class TitleIsolationTest(unittest.TestCase):
++    def test_titles_do_not_consume_conversation_trajectory(self):
++        server = HTTPServer((&quot;127.0.0.1&quot;, 0), server_module.MockLLMHandler)
++        thread = threading.Thread(target=server.serve_forever, daemon=True)
++        thread.start()
++        self.addCleanup(server.server_close)
++        self.addCleanup(thread.join)
++        self.addCleanup(server.shutdown)
++        url = f&quot;http://127.0.0.1:{server.server_port}&quot;
++
++        def post(path, body):
++            with urlopen(
++                Request(url + path, json.dumps(body).encode(), {&quot;Content-Type&quot;: &quot;application/json&quot;})
++            ) as response:
++                return response.read().decode()
++
++        post(&quot;/admin/reset&quot;, {})
++        post(
++            &quot;/admin/trajectory/register&quot;,
++            {&quot;name&quot;: &quot;owned&quot;, &quot;turns&quot;: [{&quot;text&quot;: &quot;FIRST_AGENT_REPLY&quot;}, {&quot;text&quot;: &quot;SECOND_AGENT_REPLY&quot;}]},
++        )
++        post(&quot;/admin/trajectory/activate&quot;, {&quot;name&quot;: &quot;owned&quot;})
++        title = {
++            &quot;model&quot;: &quot;mock&quot;,
++            &quot;messages&quot;: [
++                {
++                    &quot;role&quot;: &quot;system&quot;,
++                    &quot;content&quot;: [
++                        {
++                            &quot;type&quot;: &quot;text&quot;,
++                            &quot;text&quot;: &quot;You are a helpful assistant that generates concise, &quot;
++                            &quot;descriptive titles for conversations with OpenHands.&quot;,
++                        }
++                    ],
++                },
++                {&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: &quot;Generate a title (maximum 50 characters) for this message&quot;},
++            ],
++        }
++        self.assertEqual(
++            json.loads(post(&quot;/v1/chat/completions&quot;, title))[&quot;choices&quot;][0][&quot;message&quot;][&quot;content&quot;], &quot;Mock conversation&quot;
++        )
++        reply = json.loads(post(&quot;/v1/chat/completions&quot;, {&quot;messages&quot;: [{&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: &quot;Please respond&quot;}]}))
++        self.assertEqual(reply[&quot;choices&quot;][0][&quot;message&quot;][&quot;content&quot;], &quot;FIRST_AGENT_REPLY&quot;)
++        self.assertIn(&quot;Mock conversation&quot;, post(&quot;/v1/chat/completions&quot;, {**title, &quot;stream&quot;: True}))
++        # The same words inside a normal agent/tool request are not housekeeping.
++        reply = json.loads(post(&quot;/v1/chat/completions&quot;, {**title, &quot;tools&quot;: [{&quot;type&quot;: &quot;function&quot;}]}))
++        self.assertEqual(reply[&quot;choices&quot;][0][&quot;message&quot;][&quot;content&quot;], &quot;SECOND_AGENT_REPLY&quot;)
++        with urlopen(url + &quot;/admin/requests&quot;) as response:
++            self.assertEqual(len(json.load(response)[&quot;requests&quot;]), 2)
++
++
++if __name__ == &quot;__main__&quot;:
++    unittest.main()</pre></details></article><article id="f8"><div class="eyebrow">tests/e2e/mock-llm/settings/mock-llm-acp-agent.spec.ts · +28 / −80</div><h2>ACP setup and resume share one test</h2><p>Configuration, persistence and resumed messages belong to one journey. The fixture restores the original default agent and active selections.</p><p class="sources"><a href="https://github.com/OpenHands/OpenHands/blob/e4197c043f8a1c4937ec5402449d47efff7ca0d1/tests/e2e/mock-llm/settings/mock-llm-acp-agent.spec.ts#L96">Before · 96</a> · <a href="https://github.com/fancive/OpenHands/blob/25cca529c87934d6a99cd204dab60734af2fe8b9/tests/e2e/mock-llm/settings/mock-llm-acp-agent.spec.ts#L50">After · 50</a></p><svg viewBox="0 0 870 158" role="img" aria-label="Before and after behavior"><a href="https://github.com/OpenHands/OpenHands/blob/e4197c043f8a1c4937ec5402449d47efff7ca0d1/tests/e2e/mock-llm/settings/mock-llm-acp-agent.spec.ts#L96"><rect x="16" y="8" width="838" height="62" rx="5" fill="#ecebe7"/><text x="32" y="31" class="label">BEFORE</text><text x="32" y="54">Four tests pass conversationId forward</text></a><a href="https://github.com/fancive/OpenHands/blob/25cca529c87934d6a99cd204dab60734af2fe8b9/tests/e2e/mock-llm/settings/mock-llm-acp-agent.spec.ts#L50"><rect x="16" y="86" width="838" height="62" rx="5" fill="#ffe5ce"/><text x="32" y="109" class="label">AFTER</text><text x="32" y="132">One test: configure → persist → chat → resume</text></a></svg><details><summary>Exact source diff</summary><pre>diff --git a/tests/e2e/mock-llm/settings/mock-llm-acp-agent.spec.ts b/tests/e2e/mock-llm/settings/mock-llm-acp-agent.spec.ts
+index 63ed5635..93c3cf84 100644
+--- a/tests/e2e/mock-llm/settings/mock-llm-acp-agent.spec.ts
++++ b/tests/e2e/mock-llm/settings/mock-llm-acp-agent.spec.ts
+@@ -16,23 +16,19 @@
+  * round-trip without any real LLM.
+  */
+&#32;
+-import { test, expect } from &quot;@playwright/test&quot;;
++import { expect } from &quot;@playwright/test&quot;;
++import { test } from &quot;../utils/atomic-journey&quot;;
+ import {
+   ACP_REPLY_TOKEN,
+   MOCK_ACP_COMMAND_PYTHON,
+   MOCK_ACP_COMMAND_SCRIPT,
+-  seedLocalStorage,
+   routeSessionApiKey,
+   dismissAnalyticsModal,
+   waitForTestId,
+   waitForPath,
+   getConversationIdFromURL,
+   waitForNonUserMessageText,
+-  deleteConversation,
+-  resetToOpenHandsAgentViaUI,
+-  resetMockLLM,
+   ensureMockLLMProfile,
+-  ensureMockLLMAgentProfile,
+   openAgentProfileEditor,
+   selectDropdownOption,
+   setChatInput,
+@@ -51,56 +47,18 @@ const USER_MESSAGE = &quot;Hello ACP agent, please reply.&quot;;
+  */
+ const ACP_COMMAND_TEXT = `${MOCK_ACP_COMMAND_PYTHON} ${MOCK_ACP_COMMAND_SCRIPT}`;
+&#32;
+-test.describe.configure({ mode: &quot;serial&quot; });
+-
+-test.describe(&quot;mock-LLM ACP agent conversation&quot;, () =&gt; {
+-  let conversationId: string | null = null;
+-
+-  test.beforeEach(async ({ page }) =&gt; {
+-    await seedLocalStorage(page);
+-  });
+-
+-  test.afterAll(async ({ request, browser }) =&gt; {
+-    // Clean up the conversation
+-    if (conversationId) {
+-      try {
+-        await deleteConversation(request, conversationId);
+-      } catch {
+-        // best-effort
+-      }
+-    }
+-
+-    // Reset agent-server back to OpenHands via the Settings → Agent UI
+-    // + restore mock LLM profile so subsequent test suites (which expect
+-    // agent_kind=openhands) are not affected by our ACP configuration.
+-    const page = await browser.newPage();
+-    try {
+-      await seedLocalStorage(page);
+-      await ensureMockLLMAgentProfile(page.request);
+-      await resetToOpenHandsAgentViaUI(page);
+-      await ensureMockLLMProfile(page);
+-    } catch {
+-      // best-effort
+-    } finally {
+-      await page.close();
+-    }
+-    try {
+-      await resetMockLLM(request);
+-    } catch {
+-      // best-effort
+-    }
+-  });
+-
+-  // ── Step 1: Configure ACP agent through the Settings → Agent UI ─────
+-
+-  test(&quot;step 1: configure ACP agent via Settings → Agent UI&quot;, async ({
+-    page,
+-    request,
+-  }) =&gt; {
++test(&quot;configure ACP, verify persistence, run and resume a conversation&quot;, async ({
++  page,
++  request,
++  journey,
++}) =&gt; {
++  test.setTimeout(240_000);
++  let conversationId = &quot;&quot;;
++  await test.step(&quot;configure ACP agent via Settings → Agent UI&quot;, async () =&gt; {
+     // The agent-server may make internal LLM calls (condenser) even for
+     // ACP conversations. Ensure a mock LLM profile exists so those calls
+     // don&#x27;t fail. This UI flow is not what we&#x27;re testing — the ACP UI is.
+-    await ensureMockLLMProfile(page);
++    await ensureMockLLMProfile(page, { profileName: journey.profileName });
+&#32;
+     // Settings → Agent is the Agent Profile library (#1571); edit the
+     // seeded &quot;default&quot; profile through it rather than a standalone form.
+@@ -119,7 +77,11 @@ test.describe(&quot;mock-LLM ACP agent conversation&quot;, () =&gt; {
+       await waitForTestId(page, &quot;agent-preset-selector&quot;);
+&#32;
+       // Select &quot;Custom&quot; preset so we can enter our own command
+-      await selectDropdownOption(page, /Preset/, /Custom/);
++      const presetInput = page.getByRole(&quot;combobox&quot;, { name: /Preset/ });
++      await presetInput.click();
++      await presetInput.fill(&quot;Custom&quot;);
++      await presetInput.press(&quot;ArrowDown&quot;);
++      await presetInput.press(&quot;Enter&quot;);
+&#32;
+       // Fill in the ACP command pointing to our mock server
+       const commandInput = page.getByTestId(&quot;agent-command-input&quot;);
+@@ -167,11 +129,7 @@ test.describe(&quot;mock-LLM ACP agent conversation&quot;, () =&gt; {
+     });
+   });
+&#32;
+-  // ── Step 2: Reload and verify the UI reflects saved ACP config ──────
+-
+-  test(&quot;step 2: reload and verify ACP settings are persisted in UI&quot;, async ({
+-    page,
+-  }) =&gt; {
++  await test.step(&quot;reload and verify ACP settings are persisted in UI&quot;, async () =&gt; {
+     // Settings → Agent is the Agent Profile library (#1571); re-open the
+     // &quot;default&quot; profile&#x27;s editor rather than a standalone form.
+     await openAgentProfileEditor(page, &quot;default&quot;);
+@@ -192,14 +150,7 @@ test.describe(&quot;mock-LLM ACP agent conversation&quot;, () =&gt; {
+     await expect(presetSelector).toBeVisible({ timeout: 5_000 });
+   });
+&#32;
+-  // ── Step 3: Start an ACP conversation from the home page ────────────
+-
+-  test(&quot;step 3: start ACP conversation and verify agent reply&quot;, async ({
+-    page,
+-    request,
+-  }) =&gt; {
+-    test.setTimeout(120_000);
+-
++  await test.step(&quot;start ACP conversation and verify agent reply&quot;, async () =&gt; {
+     // Passively capture POST /api/conversations payload to verify ACP tags
+     let capturedPayload: Record&lt;string, unknown&gt; | null = null;
+     const capturePayload = (req: import(&quot;@playwright/test&quot;).Request) =&gt; {
+@@ -277,12 +228,15 @@ test.describe(&quot;mock-LLM ACP agent conversation&quot;, () =&gt; {
+             diag =
+               `Events API returned ${items.length} events:\n` +
+               items
+-                .map(
+-                  (e: any) =&gt;
+-                    `  [${e.kind ?? &quot;?&quot;}] source=${e.source ?? &quot;?&quot;} ${JSON.stringify(
+-                      e.llm_message?.content ?? e.content ?? e.message ?? &quot;&quot;,
+-                    ).slice(0, 120)}`,
+-                )
++                .map((item) =&gt; {
++                  const e = item as Record&lt;string, unknown&gt;;
++                  const message = e.llm_message as
++                    | { content?: unknown }
++                    | undefined;
++                  return `  [${e.kind ?? &quot;?&quot;}] source=${e.source ?? &quot;?&quot;} ${JSON.stringify(
++                    message?.content ?? e.content ?? e.message ?? &quot;&quot;,
++                  ).slice(0, 120)}`;
++                })
+                 .join(&quot;\n&quot;);
+           } else {
+             diag = `Events API returned ${eventsResp.status()}`;
+@@ -328,13 +282,7 @@ test.describe(&quot;mock-LLM ACP agent conversation&quot;, () =&gt; {
+     });
+   });
+&#32;
+-  // ── Step 4: Resume the ACP conversation from the sidebar ────────────
+-
+-  test(&quot;step 4: resume ACP conversation from sidebar after navigating away&quot;, async ({
+-    page,
+-  }) =&gt; {
+-    test.skip(!conversationId, &quot;step 3 must complete first&quot;);
+-
++  await test.step(&quot;resume ACP conversation from sidebar after navigating away&quot;, async () =&gt; {
+     await routeSessionApiKey(page);
+     await page.goto(&quot;/&quot;, { waitUntil: &quot;domcontentloaded&quot; });
+     await dismissAnalyticsModal(page);</pre></details></article><article id="f9"><div class="eyebrow">tests/e2e/mock-llm/settings/mock-llm-model-switch.spec.ts · +15 / −75</div><h2>The switch target is created by its conversation test</h2><p>Both LLM profiles receive attempt-specific names. The post-switch reply remains an observable check of continued conversation execution.</p><p class="sources"><a href="https://github.com/OpenHands/OpenHands/blob/e4197c043f8a1c4937ec5402449d47efff7ca0d1/tests/e2e/mock-llm/settings/mock-llm-model-switch.spec.ts#L92">Before · 92</a> · <a href="https://github.com/fancive/OpenHands/blob/25cca529c87934d6a99cd204dab60734af2fe8b9/tests/e2e/mock-llm/settings/mock-llm-model-switch.spec.ts#L44">After · 44</a></p><svg viewBox="0 0 870 158" role="img" aria-label="Before and after behavior"><a href="https://github.com/OpenHands/OpenHands/blob/e4197c043f8a1c4937ec5402449d47efff7ca0d1/tests/e2e/mock-llm/settings/mock-llm-model-switch.spec.ts#L92"><rect x="16" y="8" width="838" height="62" rx="5" fill="#ecebe7"/><text x="32" y="31" class="label">BEFORE</text><text x="32" y="54">Setup test prepares shared profile and trajectory</text></a><a href="https://github.com/fancive/OpenHands/blob/25cca529c87934d6a99cd204dab60734af2fe8b9/tests/e2e/mock-llm/settings/mock-llm-model-switch.spec.ts#L44"><rect x="16" y="86" width="838" height="62" rx="5" fill="#ffe5ce"/><text x="32" y="109" class="label">AFTER</text><text x="32" y="132">One test: two profiles → chat → switch → reply</text></a></svg><details><summary>Exact source diff</summary><pre>diff --git a/tests/e2e/mock-llm/settings/mock-llm-model-switch.spec.ts b/tests/e2e/mock-llm/settings/mock-llm-model-switch.spec.ts
+index 911da99a..f1cf0f6f 100644
+--- a/tests/e2e/mock-llm/settings/mock-llm-model-switch.spec.ts
++++ b/tests/e2e/mock-llm/settings/mock-llm-model-switch.spec.ts
+@@ -19,88 +19,43 @@
+  *      working under the new profile.
+  */
+&#32;
+-import { test, expect } from &quot;@playwright/test&quot;;
++import { expect } from &quot;@playwright/test&quot;;
++import { test } from &quot;../utils/atomic-journey&quot;;
+ import {
+-  seedLocalStorage,
+   routeSessionApiKey,
+   dismissAnalyticsModal,
+   waitForTestId,
+   waitForPath,
+   getConversationIdFromURL,
+   waitForNonUserMessageText,
+-  deleteConversation,
+   registerTrajectory,
+   activateTrajectory,
+-  resetMockLLM,
+   ensureMockLLMProfile,
+   createProfileViaUI,
+-  deleteProfileIfExists,
+   setChatInput,
+ } from &quot;../utils/mock-llm-helpers&quot;;
+&#32;
+ /** Profile B is the switch target — created via the Settings UI. */
+-const PROFILE_B_NAME = &quot;model-switch-profile-b&quot;;
+ const MODEL_B = &quot;openai/mock-model-beta&quot;;
+&#32;
+ const INITIAL_REPLY_TOKEN = &quot;MODEL_SWITCH_INITIAL_REPLY_OK&quot;;
+ const POST_SWITCH_REPLY_TOKEN = &quot;MODEL_SWITCH_POST_SWITCH_REPLY_OK&quot;;
+&#32;
+-test.describe.configure({ mode: &quot;serial&quot; });
+-
+-test.describe(&quot;mock-LLM /model slash command&quot;, () =&gt; {
+-  const conversationIds = new Set&lt;string&gt;();
+-
+-  test.beforeEach(async ({ page }) =&gt; {
+-    await seedLocalStorage(page);
+-  });
+-
+-  test.afterEach(async ({ request }) =&gt; {
+-    for (const id of Array.from(conversationIds)) {
+-      try {
+-        await deleteConversation(request, id);
+-        conversationIds.delete(id);
+-      } catch {
+-        // best-effort cleanup
+-      }
+-    }
+-  });
+-
+-  test.afterAll(async ({ request, browser }) =&gt; {
+-    // Best-effort cleanup via UI
+-    const page = await browser.newPage();
+-    try {
+-      await seedLocalStorage(page);
+-      await routeSessionApiKey(page);
+-      await page.goto(&quot;/settings/llm&quot;, { waitUntil: &quot;domcontentloaded&quot; });
+-      await dismissAnalyticsModal(page);
+-      await waitForTestId(page, &quot;add-llm-profile&quot;);
+-      await deleteProfileIfExists(page, PROFILE_B_NAME);
+-    } catch {
+-      // best-effort
+-    } finally {
+-      await page.close();
+-    }
+-    try {
+-      await resetMockLLM(request);
+-    } catch {
+-      // best-effort
+-    }
+-  });
+-
+-  // ── Step 1: Configure LLM + create switch-target profile + register trajectory
+-
+-  test(&quot;step 1: configure LLM, create switch-target profile, register trajectory&quot;, async ({
+-    page,
+-    request,
+-  }) =&gt; {
++test(&quot;create profiles and switch model during a conversation&quot;, async ({
++  page,
++  request,
++  journey,
++}) =&gt; {
++  test.setTimeout(180_000);
++  const PROFILE_B_NAME = journey.newProfileName(&quot;switch-target&quot;);
++  await test.step(&quot;configure LLM, create switch-target profile, register trajectory&quot;, async () =&gt; {
+     // Use the Settings UI to create + activate a mock LLM profile — the same
+     // flow used by mock-llm-conversation.spec.ts.
+-    await ensureMockLLMProfile(page);
++    await ensureMockLLMProfile(page, { profileName: journey.profileName });
+&#32;
+     // Create profile B as the switch target through the Settings UI — it has
+     // a different model name but the same mock LLM base_url so post-switch
+     // inference still works. ensureMockLLMProfile leaves this page ready.
+-    await deleteProfileIfExists(page, PROFILE_B_NAME);
+     await createProfileViaUI(page, {
+       profileName: PROFILE_B_NAME,
+       model: MODEL_B,
+@@ -114,31 +69,16 @@ test.describe(&quot;mock-LLM /model slash command&quot;, () =&gt; {
+       `Profile &quot;${PROFILE_B_NAME}&quot; should appear in the list`,
+     ).toBe(true);
+&#32;
+-    // Register a trajectory with THREE entries:
+-    //   Turn 0: padding — the agent-server makes an internal LLM call
+-    //           (condenser/skill-analysis) before the agent&#x27;s main loop.
+-    //           This consumes one trajectory response.  If the SDK removes
+-    //           that internal call, this padding entry will cause an
+-    //           off-by-one; delete it at that point.
+-    //           Ref: same pattern in mock-llm-automation.spec.ts;
+-    //           upstream SDK code: openhands-sdk CondensationMixin.
+-    //   Turn 1: actual reply to the initial user message
+-    //   Turn 2: reply to the post-switch follow-up message
++    // Title requests are handled separately by the mock server. These
++    // responses belong only to the initial and post-switch agent turns.
+     await registerTrajectory(request, &quot;model-switch&quot;, [
+-      { text: &quot;&quot; }, // padding for internal LLM call (see comment above)
+       { text: INITIAL_REPLY_TOKEN },
+       { text: POST_SWITCH_REPLY_TOKEN },
+     ]);
+     await activateTrajectory(request, &quot;model-switch&quot;);
+   });
+&#32;
+-  // ── Step 2: Conversation + /model switch + post-switch verification ─
+-
+-  test(&quot;step 2: start conversation, switch profile via /model, verify switch&quot;, async ({
+-    page,
+-  }) =&gt; {
+-    test.setTimeout(120_000);
+-
++  await test.step(&quot;start conversation, switch profile via /model, verify switch&quot;, async () =&gt; {
+     // Track whether the switch_llm POST was intercepted.
+     // The frontend calls POST /api/conversations/{id}/switch_llm with the full
+     // encrypted profile config (model + api_key + base_url) rather than calling
+@@ -174,7 +114,7 @@ test.describe(&quot;mock-LLM /model slash command&quot;, () =&gt; {
+     });
+&#32;
+     const conversationId = getConversationIdFromURL(page);
+-    conversationIds.add(conversationId);
++    journey.conversationIds.add(conversationId);
+&#32;
+     await test.step(&quot;wait for initial agent reply&quot;, async () =&gt; {
+       await waitForNonUserMessageText(page, INITIAL_REPLY_TOKEN, 30_000);</pre></details></article><article id="f10"><div class="eyebrow">tests/e2e/mock-llm/skills/mock-llm-skills.spec.ts · +226 / −272</div><h2>Deletion proves a present-to-absent transition</h2><p>The deletion test creates and verifies its own SKILL.md before removal, then checks a new conversation’s events for absence. Project workspace registration uses an attempt-specific name.</p><p class="sources"><a href="https://github.com/OpenHands/OpenHands/blob/e4197c043f8a1c4937ec5402449d47efff7ca0d1/tests/e2e/mock-llm/skills/mock-llm-skills.spec.ts#L324">Before · 324</a> · <a href="https://github.com/fancive/OpenHands/blob/25cca529c87934d6a99cd204dab60734af2fe8b9/tests/e2e/mock-llm/skills/mock-llm-skills.spec.ts#L273">After · 273</a></p><svg viewBox="0 0 870 158" role="img" aria-label="Before and after behavior"><a href="https://github.com/OpenHands/OpenHands/blob/e4197c043f8a1c4937ec5402449d47efff7ca0d1/tests/e2e/mock-llm/skills/mock-llm-skills.spec.ts#L324"><rect x="16" y="8" width="838" height="62" rx="5" fill="#ecebe7"/><text x="32" y="31" class="label">BEFORE</text><text x="32" y="54">Deletion depends on the previous user-skill test</text></a><a href="https://github.com/fancive/OpenHands/blob/25cca529c87934d6a99cd204dab60734af2fe8b9/tests/e2e/mock-llm/skills/mock-llm-skills.spec.ts#L273"><rect x="16" y="86" width="838" height="62" rx="5" fill="#ffe5ce"/><text x="32" y="109" class="label">AFTER</text><text x="32" y="132">Three tests own unique files, profiles and chats</text></a></svg><details><summary>Exact source diff</summary><pre>diff --git a/tests/e2e/mock-llm/skills/mock-llm-skills.spec.ts b/tests/e2e/mock-llm/skills/mock-llm-skills.spec.ts
+index a398fa51..2cb63ed5 100644
+--- a/tests/e2e/mock-llm/skills/mock-llm-skills.spec.ts
++++ b/tests/e2e/mock-llm/skills/mock-llm-skills.spec.ts
+@@ -11,7 +11,7 @@
+  *    agent-server creates a worktree from the repo, and since the skill
+  *    is committed, `load_project_skills` finds it in the worktree.
+  *
+- * 2. **User skills** from `~/.openhands/skills/` are loaded and trigger
++ * 2. **User skills** from the stack&#x27;s persistence directory are loaded and trigger
+  *    on matching keywords.
+  *
+  * 3. **Skill deletion**: removing a skill file means it is NOT loaded
+@@ -22,23 +22,16 @@
+  * appears in the conversation events API.
+  */
+&#32;
+-import {
+-  test,
+-  expect,
+-  type APIRequestContext,
+-  type Page,
+-} from &quot;@playwright/test&quot;;
++import { test } from &quot;../utils/atomic-journey&quot;;
++import { expect, type APIRequestContext, type Page } from &quot;@playwright/test&quot;;
+ import {
+   BACKEND_URL,
+   SESSION_API_KEY,
+-  seedLocalStorage,
+   routeSessionApiKey,
+   dismissAnalyticsModal,
+   waitForNonUserMessageText,
+-  deleteConversation,
+   registerTrajectory,
+   activateTrajectory,
+-  resetMockLLM,
+   ensureMockLLMProfile,
+   setChatInput,
+   waitForPath,
+@@ -83,10 +76,14 @@ async function removeWorkspaceFromServer(
+   request: APIRequestContext,
+   path: string,
+ ): Promise&lt;void&gt; {
+-  await request.delete(`${BACKEND_URL}/api/workspaces`, {
++  const response = await request.delete(`${BACKEND_URL}/api/workspaces`, {
+     headers: { &quot;X-Session-API-Key&quot;: SESSION_API_KEY },
+     params: { path },
+   });
++  expect(
++    response.ok() || response.status() === 404,
++    `Remove workspace: ${response.status()}`,
++  ).toBe(true);
+ }
+&#32;
+ async function navigateToNewChat(page: Page): Promise&lt;void&gt; {
+@@ -104,292 +101,249 @@ const REPLY_TOKEN = &quot;SKILLS_E2E_REPLY_OK&quot;;
+&#32;
+ // ── Tests ─────────────────────────────────────────────────────────────
+&#32;
+-test.describe.configure({ mode: &quot;serial&quot; });
+-
+-test.describe(&quot;skill loading: project, user, and deletion&quot;, () =&gt; {
+-  const conversationIds = new Set&lt;string&gt;();
+-
+-  // Unique skill names to avoid collisions with real skills
+-  const PROJECT_SKILL_NAME = &quot;e2e-test-project-skill&quot;;
++test(&quot;project skill in workspace/.agents/skills/ triggers on matching keyword&quot;, async ({
++  page,
++  request,
++  journey,
++}) =&gt; {
++  test.setTimeout(180_000);
++  const PROJECT_SKILL_NAME = journey.profileName + &quot;-project-skill&quot;;
+   const PROJECT_SKILL_TRIGGER = &quot;xyzzy-project-e2e-test&quot;;
+-
+-  const USER_SKILL_NAME = &quot;e2e-test-user-skill&quot;;
+-  const USER_SKILL_TRIGGER = &quot;xyzzy-user-e2e-test&quot;;
+-
+-  test.beforeEach(async ({ page }) =&gt; {
+-    await seedLocalStorage(page);
++  journey.cleanup(&quot;project skill files&quot;, () =&gt;
++    removeProjectSkillRepo(PROJECT_SKILL_NAME),
++  );
++  await ensureMockLLMProfile(page, { profileName: journey.profileName });
++
++  // Create a git repo with the skill committed
++  const { agentDir } =
++    await test.step(&quot;create git repo with project skill&quot;, () =&gt; {
++      return createProjectSkillRepo(PROJECT_SKILL_NAME, PROJECT_SKILL_TRIGGER);
++    });
++  journey.cleanup(&quot;registered workspace&quot;, () =&gt;
++    removeWorkspaceFromServer(request, agentDir),
++  );
++
++  // Register the workspace on the server using the agent-side path
++  // (same as hostDir in npm mode, container mount path in Docker mode)
++  await test.step(&quot;register workspace on server&quot;, async () =&gt; {
++    await addWorkspaceToServer(request, PROJECT_SKILL_NAME, agentDir);
+   });
+&#32;
+-  test.afterEach(async ({ page, request }) =&gt; {
+-    const match = page.url().match(/\/conversations\/([^/?#]+)/);
+-    if (match?.[1]) conversationIds.add(decodeURIComponent(match[1]));
+-
+-    for (const id of Array.from(conversationIds)) {
+-      try {
+-        await deleteConversation(request, id);
+-        conversationIds.delete(id);
+-      } catch {
+-        // best-effort cleanup
+-      }
+-    }
+-    await resetMockLLM(request).catch(() =&gt; {});
++  // Title generation does not consume the scripted agent reply.
++  await registerTrajectory(request, &quot;project-skill&quot;, [
++    { text: `Skill test complete. ${REPLY_TOKEN}` },
++  ]);
++  await activateTrajectory(request, &quot;project-skill&quot;);
++
++  await routeSessionApiKey(page);
++  await page.goto(&quot;/&quot;, { waitUntil: &quot;domcontentloaded&quot; });
++  await dismissAnalyticsModal(page);
++
++  // Select the workspace through the UI
++  await test.step(&quot;select workspace from UI&quot;, async () =&gt; {
++    // Click &quot;Open workspace&quot; to open the dialog
++    await page.getByTestId(&quot;open-workspace-button&quot;).click();
++
++    // Click the workspace dropdown and select our workspace
++    const dropdown = page.getByTestId(&quot;workspace-dropdown&quot;);
++    await dropdown.click();
++    // Select this test attempt&#x27;s registered workspace.
++    await page.getByText(PROJECT_SKILL_NAME, { exact: true }).click();
++
++    // Click the Confirm button to set the workspace
++    await page.getByTestId(&quot;workspace-launch-button&quot;).click();
+   });
+&#32;
+-  // Track the agent-side workspace path for cleanup (may differ from
+-  // the host path in Docker mode where volumes are mounted)
+-  let projectSkillAgentDir = &quot;&quot;;
+-
+-  test.afterAll(async ({ request }) =&gt; {
+-    removeProjectSkillRepo(PROJECT_SKILL_NAME);
+-    removeUserSkill(USER_SKILL_NAME);
+-    if (projectSkillAgentDir) {
+-      await removeWorkspaceFromServer(request, projectSkillAgentDir).catch(
+-        () =&gt; {},
+-      );
+-    }
++  await test.step(&quot;send message with project skill trigger&quot;, async () =&gt; {
++    await setChatInput(
++      page,
++      `Please help me with ${PROJECT_SKILL_TRIGGER} setup`,
++    );
++    await page.getByTestId(&quot;submit-button&quot;).click();
++    await waitForPath(page, /\/conversations\/.+/, 30_000);
+   });
+&#32;
+-  // ── Test 1: Project skill loaded from workspace ──────────────────
+-  //
+-  // Creates a standalone git repo with the skill committed, registers it
+-  // as a workspace on the agent-server, then uses the UI to select that
+-  // workspace and send a message. The agent-server creates a worktree
+-  // from the repo, and the committed skill file is present in it for
+-  // `load_project_skills` to discover.
+-
+-  test(&quot;project skill in workspace/.agents/skills/ triggers on matching keyword&quot;, async ({
+-    page,
+-    request,
+-  }) =&gt; {
+-    await ensureMockLLMProfile(page);
+-
+-    // Create a git repo with the skill committed
+-    const { agentDir } =
+-      await test.step(&quot;create git repo with project skill&quot;, () =&gt; {
+-        return createProjectSkillRepo(
+-          PROJECT_SKILL_NAME,
+-          PROJECT_SKILL_TRIGGER,
+-        );
+-      });
+-    projectSkillAgentDir = agentDir;
+-
+-    // Register the workspace on the server using the agent-side path
+-    // (same as hostDir in npm mode, container mount path in Docker mode)
+-    await test.step(&quot;register workspace on server&quot;, async () =&gt; {
+-      await addWorkspaceToServer(request, &quot;skill-test-repo&quot;, agentDir);
+-    });
++  const conversationId = getConversationIdFromURL(page);
++  journey.conversationIds.add(conversationId);
+&#32;
+-    // Trajectory: padding for skill-analysis + agent reply
+-    await registerTrajectory(request, &quot;project-skill&quot;, [
+-      { text: &quot;&quot; },
+-      { text: `Skill test complete. ${REPLY_TOKEN}` },
+-    ]);
+-    await activateTrajectory(request, &quot;project-skill&quot;);
+-
+-    await routeSessionApiKey(page);
+-    await page.goto(&quot;/&quot;, { waitUntil: &quot;domcontentloaded&quot; });
+-    await dismissAnalyticsModal(page);
+-
+-    // Select the workspace through the UI
+-    await test.step(&quot;select workspace from UI&quot;, async () =&gt; {
+-      // Click &quot;Open workspace&quot; to open the dialog
+-      await page.getByTestId(&quot;open-workspace-button&quot;).click();
+-
+-      // Click the workspace dropdown and select our workspace
+-      const dropdown = page.getByTestId(&quot;workspace-dropdown&quot;);
+-      await dropdown.click();
+-      // The workspace name is &quot;skill-test-repo&quot; — click the matching option
+-      await page.getByText(&quot;skill-test-repo&quot;).click();
+-
+-      // Click the Confirm button to set the workspace
+-      await page.getByTestId(&quot;workspace-launch-button&quot;).click();
+-    });
+-
+-    await test.step(&quot;send message with project skill trigger&quot;, async () =&gt; {
+-      await setChatInput(
+-        page,
+-        `Please help me with ${PROJECT_SKILL_TRIGGER} setup`,
+-      );
+-      await page.getByTestId(&quot;submit-button&quot;).click();
+-      await waitForPath(page, /\/conversations\/.+/, 30_000);
+-    });
++  await test.step(&quot;verify agent reply&quot;, async () =&gt; {
++    await waitForNonUserMessageText(page, REPLY_TOKEN, 45_000);
++  });
+&#32;
+-    const conversationId = getConversationIdFromURL(page);
+-    conversationIds.add(conversationId);
++  await test.step(&quot;verify project skill activated&quot;, async () =&gt; {
++    await expect
++      .poll(
++        async () =&gt; {
++          const resp = await request.get(
++            `${BACKEND_URL}/api/conversations/${encodeURIComponent(conversationId)}/events/search`,
++            {
++              headers: { &quot;X-Session-API-Key&quot;: SESSION_API_KEY },
++              params: { limit: &quot;50&quot; },
++            },
++          );
++          if (!resp.ok()) return `HTTP ${resp.status()}`;
++          const body = (await resp.json()) as { items?: unknown[] };
++          for (const item of body.items ?? []) {
++            const e = item as Record&lt;string, unknown&gt;;
++            const skills = e.activated_skills as string[] | undefined;
++            if (skills?.includes(PROJECT_SKILL_NAME)) return &quot;FOUND&quot;;
++          }
++          return &quot;NOT_FOUND&quot;;
++        },
++        {
++          message: `expected &quot;${PROJECT_SKILL_NAME}&quot; in activated_skills`,
++          intervals: [1_000, 2_000, 3_000, 5_000],
++          timeout: 25_000,
++        },
++      )
++      .toBe(&quot;FOUND&quot;);
++  });
++});
+&#32;
+-    await test.step(&quot;verify agent reply&quot;, async () =&gt; {
+-      await waitForNonUserMessageText(page, REPLY_TOKEN, 45_000);
+-    });
++test(&quot;user skill in ~/.openhands/skills/ triggers on matching keyword&quot;, async ({
++  page,
++  request,
++  journey,
++}) =&gt; {
++  test.setTimeout(180_000);
++  const USER_SKILL_NAME = journey.profileName + &quot;-user-skill&quot;;
++  const USER_SKILL_TRIGGER = &quot;xyzzy-user-e2e-test&quot;;
++  journey.cleanup(&quot;user skill files&quot;, () =&gt; removeUserSkill(USER_SKILL_NAME));
++  await ensureMockLLMProfile(page, { profileName: journey.profileName });
+&#32;
+-    await test.step(&quot;verify project skill activated&quot;, async () =&gt; {
+-      await expect
+-        .poll(
+-          async () =&gt; {
+-            const resp = await request.get(
+-              `${BACKEND_URL}/api/conversations/${encodeURIComponent(conversationId)}/events/search`,
+-              {
+-                headers: { &quot;X-Session-API-Key&quot;: SESSION_API_KEY },
+-                params: { limit: &quot;50&quot; },
+-              },
+-            );
+-            if (!resp.ok()) return `HTTP ${resp.status()}`;
+-            const body = (await resp.json()) as { items?: unknown[] };
+-            for (const item of body.items ?? []) {
+-              const e = item as Record&lt;string, unknown&gt;;
+-              const skills = e.activated_skills as string[] | undefined;
+-              if (skills?.includes(PROJECT_SKILL_NAME)) return &quot;FOUND&quot;;
+-            }
+-            return &quot;NOT_FOUND&quot;;
+-          },
+-          {
+-            message: `expected &quot;${PROJECT_SKILL_NAME}&quot; in activated_skills`,
+-            intervals: [1_000, 2_000, 3_000, 5_000],
+-            timeout: 25_000,
+-          },
+-        )
+-        .toBe(&quot;FOUND&quot;);
+-    });
++  await test.step(&quot;create user skill file&quot;, () =&gt; {
++    writeUserSkill(USER_SKILL_NAME, USER_SKILL_TRIGGER);
++    expect(userSkillExists(USER_SKILL_NAME)).toBe(true);
+   });
+&#32;
+-  // ── Test 2: User skill loaded from ~/.openhands/skills/ ──────────
++  await registerTrajectory(request, &quot;user-skill&quot;, [
++    { text: `Skill test complete. ${REPLY_TOKEN}` },
++  ]);
++  await activateTrajectory(request, &quot;user-skill&quot;);
++
++  await routeSessionApiKey(page);
++  await navigateToNewChat(page);
++
++  await test.step(&quot;send message with user skill trigger&quot;, async () =&gt; {
++    await setChatInput(
++      page,
++      `I need help with ${USER_SKILL_TRIGGER} configuration`,
++    );
++    await page.getByTestId(&quot;submit-button&quot;).click();
++    await waitForPath(page, /\/conversations\/.+/, 30_000);
++  });
+&#32;
+-  test(&quot;user skill in ~/.openhands/skills/ triggers on matching keyword&quot;, async ({
+-    page,
+-    request,
+-  }) =&gt; {
+-    await ensureMockLLMProfile(page);
++  const conversationId = getConversationIdFromURL(page);
++  journey.conversationIds.add(conversationId);
+&#32;
+-    await test.step(&quot;create user skill file&quot;, () =&gt; {
+-      writeUserSkill(USER_SKILL_NAME, USER_SKILL_TRIGGER);
+-      expect(userSkillExists(USER_SKILL_NAME)).toBe(true);
+-    });
+-
+-    await registerTrajectory(request, &quot;user-skill&quot;, [
+-      { text: &quot;&quot; },
+-      { text: `Skill test complete. ${REPLY_TOKEN}` },
+-    ]);
+-    await activateTrajectory(request, &quot;user-skill&quot;);
+-
+-    await routeSessionApiKey(page);
+-    await navigateToNewChat(page);
+-
+-    await test.step(&quot;send message with user skill trigger&quot;, async () =&gt; {
+-      await setChatInput(
+-        page,
+-        `I need help with ${USER_SKILL_TRIGGER} configuration`,
+-      );
+-      await page.getByTestId(&quot;submit-button&quot;).click();
+-      await waitForPath(page, /\/conversations\/.+/, 30_000);
+-    });
++  await test.step(&quot;verify agent reply&quot;, async () =&gt; {
++    await waitForNonUserMessageText(page, REPLY_TOKEN, 45_000);
++  });
+&#32;
+-    const conversationId = getConversationIdFromURL(page);
+-    conversationIds.add(conversationId);
++  await test.step(&quot;verify user skill activated&quot;, async () =&gt; {
++    await expect
++      .poll(
++        async () =&gt; {
++          const resp = await request.get(
++            `${BACKEND_URL}/api/conversations/${encodeURIComponent(conversationId)}/events/search`,
++            {
++              headers: { &quot;X-Session-API-Key&quot;: SESSION_API_KEY },
++              params: { limit: &quot;50&quot; },
++            },
++          );
++          if (!resp.ok()) return `HTTP ${resp.status()}`;
++          const body = (await resp.json()) as { items?: unknown[] };
++          for (const item of body.items ?? []) {
++            const e = item as Record&lt;string, unknown&gt;;
++            const skills = e.activated_skills as string[] | undefined;
++            if (skills?.includes(USER_SKILL_NAME)) return &quot;FOUND&quot;;
++          }
++          return &quot;NOT_FOUND&quot;;
++        },
++        {
++          message: `expected &quot;${USER_SKILL_NAME}&quot; in activated_skills`,
++          intervals: [1_000, 2_000, 3_000, 5_000],
++          timeout: 25_000,
++        },
++      )
++      .toBe(&quot;FOUND&quot;);
++  });
++});
+&#32;
+-    await test.step(&quot;verify agent reply&quot;, async () =&gt; {
+-      await waitForNonUserMessageText(page, REPLY_TOKEN, 45_000);
+-    });
++test(&quot;deleting a user skill removes it from subsequent conversations&quot;, async ({
++  page,
++  request,
++  journey,
++}) =&gt; {
++  test.setTimeout(180_000);
++  const USER_SKILL_NAME = journey.profileName + &quot;-user-skill&quot;;
++  const USER_SKILL_TRIGGER = &quot;xyzzy-user-e2e-test&quot;;
++  journey.cleanup(&quot;user skill files&quot;, () =&gt; removeUserSkill(USER_SKILL_NAME));
++  await ensureMockLLMProfile(page, { profileName: journey.profileName });
+&#32;
+-    await test.step(&quot;verify user skill activated&quot;, async () =&gt; {
+-      await expect
+-        .poll(
+-          async () =&gt; {
+-            const resp = await request.get(
+-              `${BACKEND_URL}/api/conversations/${encodeURIComponent(conversationId)}/events/search`,
+-              {
+-                headers: { &quot;X-Session-API-Key&quot;: SESSION_API_KEY },
+-                params: { limit: &quot;50&quot; },
+-              },
+-            );
+-            if (!resp.ok()) return `HTTP ${resp.status()}`;
+-            const body = (await resp.json()) as { items?: unknown[] };
+-            for (const item of body.items ?? []) {
+-              const e = item as Record&lt;string, unknown&gt;;
+-              const skills = e.activated_skills as string[] | undefined;
+-              if (skills?.includes(USER_SKILL_NAME)) return &quot;FOUND&quot;;
+-            }
+-            return &quot;NOT_FOUND&quot;;
+-          },
+-          {
+-            message: `expected &quot;${USER_SKILL_NAME}&quot; in activated_skills`,
+-            intervals: [1_000, 2_000, 3_000, 5_000],
+-            timeout: 25_000,
+-          },
+-        )
+-        .toBe(&quot;FOUND&quot;);
+-    });
++  await test.step(&quot;create and verify user skill before deletion&quot;, () =&gt; {
++    writeUserSkill(USER_SKILL_NAME, USER_SKILL_TRIGGER);
++    expect(userSkillExists(USER_SKILL_NAME)).toBe(true);
+   });
+&#32;
+-  // ── Test 3: Deleted user skill not loaded in new conversation ────
++  await test.step(&quot;delete user skill file&quot;, () =&gt; {
++    removeUserSkill(USER_SKILL_NAME);
++    expect(userSkillDirExists(USER_SKILL_NAME)).toBe(false);
++  });
+&#32;
+-  test(&quot;deleting a user skill removes it from subsequent conversations&quot;, async ({
+-    page,
+-    request,
+-  }) =&gt; {
+-    await ensureMockLLMProfile(page);
++  await registerTrajectory(request, &quot;deleted-skill&quot;, [
++    { text: `No skill triggered. ${REPLY_TOKEN}` },
++  ]);
++  await activateTrajectory(request, &quot;deleted-skill&quot;);
+&#32;
+-    await test.step(&quot;delete user skill file&quot;, () =&gt; {
+-      removeUserSkill(USER_SKILL_NAME);
+-      expect(userSkillDirExists(USER_SKILL_NAME)).toBe(false);
+-    });
++  await routeSessionApiKey(page);
++  await navigateToNewChat(page);
+&#32;
+-    // Padding for skill-analysis (public skills are still loaded from the npm
+-    // package, so the agent-server still makes a skill-analysis LLM call)
+-    await registerTrajectory(request, &quot;deleted-skill&quot;, [
+-      { text: &quot;&quot; },
+-      { text: `No skill triggered. ${REPLY_TOKEN}` },
+-    ]);
+-    await activateTrajectory(request, &quot;deleted-skill&quot;);
+-
+-    await routeSessionApiKey(page);
+-    await navigateToNewChat(page);
+-
+-    await test.step(&quot;send message with deleted skill trigger keyword&quot;, async () =&gt; {
+-      await setChatInput(page, `Help me with ${USER_SKILL_TRIGGER} please`);
+-      await page.getByTestId(&quot;submit-button&quot;).click();
+-      await waitForPath(page, /\/conversations\/.+/, 30_000);
+-    });
++  await test.step(&quot;send message with deleted skill trigger keyword&quot;, async () =&gt; {
++    await setChatInput(page, `Help me with ${USER_SKILL_TRIGGER} please`);
++    await page.getByTestId(&quot;submit-button&quot;).click();
++    await waitForPath(page, /\/conversations\/.+/, 30_000);
++  });
+&#32;
+-    const conversationId = getConversationIdFromURL(page);
+-    conversationIds.add(conversationId);
++  const conversationId = getConversationIdFromURL(page);
++  journey.conversationIds.add(conversationId);
+&#32;
+-    await test.step(&quot;verify agent reply&quot;, async () =&gt; {
+-      await waitForNonUserMessageText(page, REPLY_TOKEN, 45_000);
+-    });
++  await test.step(&quot;verify agent reply&quot;, async () =&gt; {
++    await waitForNonUserMessageText(page, REPLY_TOKEN, 45_000);
++  });
+&#32;
+-    await test.step(&quot;verify deleted skill NOT activated&quot;, async () =&gt; {
+-      // The agent reply already appeared in the UI (verified above), so the
+-      // conversation completed. Poll the events API and verify no event
+-      // contains the deleted skill in its activated_skills list.
+-      await expect
+-        .poll(
+-          async () =&gt; {
+-            const resp = await request.get(
+-              `${BACKEND_URL}/api/conversations/${encodeURIComponent(conversationId)}/events/search`,
+-              {
+-                headers: { &quot;X-Session-API-Key&quot;: SESSION_API_KEY },
+-                params: { limit: &quot;100&quot; },
+-              },
+-            );
+-            if (!resp.ok()) return `HTTP ${resp.status()}`;
+-            const body = (await resp.json()) as { items?: unknown[] };
+-            const items = body.items ?? [];
+-            if (items.length === 0) return &quot;NO_EVENTS&quot;;
+-
+-            for (const item of items) {
+-              const e = item as Record&lt;string, unknown&gt;;
+-              const skills = e.activated_skills as string[] | undefined;
+-              if (skills?.includes(USER_SKILL_NAME))
+-                return `UNEXPECTEDLY_FOUND`;
+-            }
+-            return &quot;VERIFIED&quot;;
+-          },
+-          {
+-            message: `verifying &quot;${USER_SKILL_NAME}&quot; NOT in activated_skills`,
+-            intervals: [1_000, 2_000, 3_000],
+-            timeout: 15_000,
+-          },
+-        )
+-        .toBe(&quot;VERIFIED&quot;);
+-    });
++  await test.step(&quot;verify deleted skill NOT activated&quot;, async () =&gt; {
++    // The agent reply already appeared in the UI (verified above), so the
++    // conversation completed. Poll the events API and verify no event
++    // contains the deleted skill in its activated_skills list.
++    await expect
++      .poll(
++        async () =&gt; {
++          const resp = await request.get(
++            `${BACKEND_URL}/api/conversations/${encodeURIComponent(conversationId)}/events/search`,
++            {
++              headers: { &quot;X-Session-API-Key&quot;: SESSION_API_KEY },
++              params: { limit: &quot;100&quot; },
++            },
++          );
++          if (!resp.ok()) return `HTTP ${resp.status()}`;
++          const body = (await resp.json()) as { items?: unknown[] };
++          const items = body.items ?? [];
++          if (items.length === 0) return &quot;NO_EVENTS&quot;;
++
++          for (const item of items) {
++            const e = item as Record&lt;string, unknown&gt;;
++            const skills = e.activated_skills as string[] | undefined;
++            if (skills?.includes(USER_SKILL_NAME)) return `UNEXPECTEDLY_FOUND`;
++          }
++          return &quot;VERIFIED&quot;;
++        },
++        {
++          message: `verifying &quot;${USER_SKILL_NAME}&quot; NOT in activated_skills`,
++          intervals: [1_000, 2_000, 3_000],
++          timeout: 15_000,
++        },
++      )
++      .toBe(&quot;VERIFIED&quot;);
+   });
+ });</pre></details></article><article id="f11"><div class="eyebrow">tests/e2e/mock-llm/utils/atomic-journey.ts · +187 / −0</div><h2>One fixture owns setup and teardown</h2><p>The automatic fixture creates unique profile names, captures successful browser conversation creates even before navigation, and restores settings after cleaning owned resources. Cleanup attempts continue after errors; AggregateError fails the owning test.</p><p class="sources"><a href="https://github.com/fancive/OpenHands/blob/25cca529c87934d6a99cd204dab60734af2fe8b9/tests/e2e/mock-llm/utils/atomic-journey.ts#L30">After · 30</a></p><svg viewBox="0 0 870 158" role="img" aria-label="Before and after behavior"><a href="https://github.com/fancive/OpenHands/blob/25cca529c87934d6a99cd204dab60734af2fe8b9/tests/e2e/mock-llm/utils/atomic-journey.ts#L30"><rect x="16" y="8" width="838" height="62" rx="5" fill="#ecebe7"/><text x="32" y="31" class="label">NEW FIXTURE / TEST</text><text x="32" y="54">No previous module</text></a><a href="https://github.com/fancive/OpenHands/blob/25cca529c87934d6a99cd204dab60734af2fe8b9/tests/e2e/mock-llm/utils/atomic-journey.ts#L30"><rect x="16" y="86" width="838" height="62" rx="5" fill="#ffe5ce"/><text x="32" y="109" class="label">AFTER</text><text x="32" y="132">AtomicJourney: snapshots → test → cleanup</text></a></svg><details><summary>Exact source diff</summary><pre>diff --git a/tests/e2e/mock-llm/utils/atomic-journey.ts b/tests/e2e/mock-llm/utils/atomic-journey.ts
+new file mode 100644
+index 00000000..c668bd95
+--- /dev/null
++++ b/tests/e2e/mock-llm/utils/atomic-journey.ts
+@@ -0,0 +1,187 @@
++/** Test-scoped ownership for the six atomic mock-LLM journeys (#15481).
++ * The runner still uses one worker: the backend and mock trajectory are shared.
++ * A new test owns its prerequisites and teardown, never a predecessor&#x27;s state.
++ */
++import { randomUUID } from &quot;node:crypto&quot;;
++import { test as base, expect, type Response } from &quot;@playwright/test&quot;;
++import {
++  AgentProfilesClient,
++  ProfilesClient,
++} from &quot;@openhands/typescript-client/clients&quot;;
++import {
++  BACKEND_URL,
++  SESSION_API_KEY,
++  deleteConversation,
++  resetMockLLM,
++  seedLocalStorage,
++} from &quot;./mock-llm-helpers&quot;;
++
++export interface AtomicJourney {
++  profileName: string;
++  newProfileName: (label: string) =&gt; string;
++  conversationIds: Set&lt;string&gt;;
++  cleanup: (
++    name: string,
++    action: () =&gt; void | Promise&lt;void&gt;,
++    phase?: &quot;before-conversations&quot; | &quot;after-conversations&quot;,
++  ) =&gt; void;
++}
++
++export const test = base.extend&lt;{ journey: AtomicJourney }&gt;({
++  journey: [
++    async ({ page, request }, runTest, testInfo) =&gt; {
++      const options = { host: BACKEND_URL, apiKey: SESSION_API_KEY };
++      const agents = new AgentProfilesClient(options);
++      const profiles = new ProfilesClient(options);
++      // ensureMockLLMProfile and the ACP editor change the seeded default
++      // agent. Restore it before deleting the LLM profiles it referenced.
++      // The runner probes automation readiness; the Agent Server may still
++      // be booting independently on a cold uvx cache.
++      await expect
++        .poll(
++          async () =&gt; {
++            const response = await request.get(`${BACKEND_URL}/server_info`, {
++              headers: { &quot;X-Session-API-Key&quot;: SESSION_API_KEY },
++            });
++            return response.status();
++          },
++          { timeout: 60_000, intervals: [500, 1_000, 2_000] },
++        )
++        .toBe(200);
++      const originalAgents = await agents.listAgentProfiles();
++      const originalDefault = await agents.getAgentProfile(&quot;default&quot;);
++      const originalProfiles = await profiles.listProfiles();
++      const profileNames = new Set&lt;string&gt;();
++      const conversationIds = new Set&lt;string&gt;();
++      const cleanups: Array&lt;{
++        name: string;
++        action: () =&gt; void | Promise&lt;void&gt;;
++        phase: &quot;before-conversations&quot; | &quot;after-conversations&quot;;
++      }&gt; = [];
++      const pendingResponses = new Set&lt;Promise&lt;void&gt;&gt;();
++      const errors: Error[] = [];
++      const prefix = `atomic-${randomUUID().slice(0, 8)}`;
++      const newProfileName = (label: string) =&gt; {
++        const name = `${prefix}-${label}`;
++        profileNames.add(name);
++        return name;
++      };
++      // Capture successful creates even when navigation/assertions fail before
++      // the test can obtain the ID from the URL.
++      const captureConversation = (response: Response) =&gt; {
++        if (
++          response.request().method() !== &quot;POST&quot; ||
++          new URL(response.url()).origin !== new URL(BACKEND_URL).origin ||
++          new URL(response.url()).pathname !== &quot;/api/conversations&quot; ||
++          !response.ok()
++        )
++          return;
++        const pending = response
++          .json()
++          .then((body) =&gt; {
++            const id = body.id ?? body.conversation_id;
++            if (typeof id === &quot;string&quot;) conversationIds.add(id);
++          })
++          .catch((cause: unknown) =&gt; {
++            errors.push(
++              new Error(&quot;Read created conversation for cleanup&quot;, { cause }),
++            );
++          });
++        pendingResponses.add(pending);
++        void pending.finally(() =&gt; pendingResponses.delete(pending));
++      };
++      page.on(&quot;response&quot;, captureConversation);
++      const attempt = async (
++        name: string,
++        action: () =&gt; void | Promise&lt;void&gt;,
++      ) =&gt; {
++        try {
++          await action();
++        } catch (cause) {
++          errors.push(new Error(`Journey cleanup failed: ${name}`, { cause }));
++        }
++      };
++      try {
++        await seedLocalStorage(page);
++        await resetMockLLM(request);
++        await runTest({
++          profileName: newProfileName(&quot;llm&quot;),
++          newProfileName,
++          conversationIds,
++          cleanup: (name, action, phase = &quot;after-conversations&quot;) =&gt;
++            cleanups.push({ name, action, phase }),
++        });
++      } catch (cause) {
++        errors.push(new Error(&quot;Journey setup or execution failed&quot;, { cause }));
++      } finally {
++        if (testInfo.status !== testInfo.expectedStatus &amp;&amp; !page.isClosed()) {
++          // Preserve the failing UI before navigation stops reconciliation.
++          try {
++            await testInfo.attach(&quot;before-journey-teardown&quot;, {
++              body: await page.screenshot({
++                mask: [page.locator(&#x27;input[type=&quot;password&quot;]&#x27;)],
++              }),
++              contentType: &quot;image/png&quot;,
++            });
++          } catch {
++            // Diagnostics must not prevent resource cleanup after a failure.
++          }
++        }
++        // Stop browser effects from reactivating profiles during teardown.
++        await attempt(&quot;stop page&quot;, async () =&gt; {
++          await page.goto(&quot;about:blank&quot;);
++        });
++        page.off(&quot;response&quot;, captureConversation);
++        await Promise.all(pendingResponses);
++        // Automation cleanup also discovers run-created conversations; execute
++        // it before deleting all the test&#x27;s conversations.
++        for (const { name, action, phase } of [...cleanups].reverse())
++          if (phase === &quot;before-conversations&quot;) await attempt(name, action);
++        for (const id of conversationIds) {
++          await attempt(`conversation ${id}`, () =&gt;
++            deleteConversation(request, id),
++          );
++        }
++        for (const { name, action, phase } of [...cleanups].reverse())
++          if (phase === &quot;after-conversations&quot;) await attempt(name, action);
++        await attempt(&quot;restore default agent&quot;, async () =&gt; {
++          await agents.saveAgentProfile(&quot;default&quot;, originalDefault.profile);
++          if (originalAgents.active_agent_profile_id) {
++            await agents.activateAgentProfile(
++              originalAgents.active_agent_profile_id,
++            );
++          }
++        });
++        for (const name of profileNames) {
++          await attempt(`LLM profile ${name}`, async () =&gt; {
++            try {
++              await profiles.deleteProfile(name);
++            } catch (error) {
++              // Setup may fail before this reserved name is actually saved.
++              if (
++                !(error instanceof Error) ||
++                !(&quot;status&quot; in error) ||
++                error.status !== 404
++              )
++                throw error;
++            }
++          });
++        }
++        if (originalProfiles.active_profile) {
++          await attempt(&quot;restore active LLM profile&quot;, async () =&gt; {
++            await profiles.activateProfile(originalProfiles.active_profile!);
++          });
++        }
++        await attempt(&quot;reset mock LLM&quot;, () =&gt; resetMockLLM(request));
++        agents.close();
++        profiles.close();
++      }
++      if (errors.length)
++        throw new AggregateError(
++          errors,
++          errors.map((error) =&gt; error.message).join(&quot;; &quot;),
++        );
++    },
++    { auto: true, timeout: 90_000 },
++  ],
++});</pre></details></article><article id="f12"><div class="eyebrow">tests/e2e/mock-llm/utils/mock-llm-helpers.ts · +2 / −1</div><h2>Open the profile editor through its keyboard action</h2><p>The combined run exposed an Edit click that closed the menu without opening the editor. The helper now uses the menu item’s native keyboard activation; the visible editor assertion is unchanged.</p><p class="sources"><a href="https://github.com/OpenHands/OpenHands/blob/e4197c043f8a1c4937ec5402449d47efff7ca0d1/tests/e2e/mock-llm/utils/mock-llm-helpers.ts#L800">Before · 800</a> · <a href="https://github.com/fancive/OpenHands/blob/25cca529c87934d6a99cd204dab60734af2fe8b9/tests/e2e/mock-llm/utils/mock-llm-helpers.ts#L800">After · 800</a></p><svg viewBox="0 0 870 158" role="img" aria-label="Before and after behavior"><a href="https://github.com/OpenHands/OpenHands/blob/e4197c043f8a1c4937ec5402449d47efff7ca0d1/tests/e2e/mock-llm/utils/mock-llm-helpers.ts#L800"><rect x="16" y="8" width="838" height="62" rx="5" fill="#ecebe7"/><text x="32" y="31" class="label">BEFORE</text><text x="32" y="54">Pointer click on the portaled Edit menu item</text></a><a href="https://github.com/fancive/OpenHands/blob/25cca529c87934d6a99cd204dab60734af2fe8b9/tests/e2e/mock-llm/utils/mock-llm-helpers.ts#L800"><rect x="16" y="86" width="838" height="62" rx="5" fill="#ffe5ce"/><text x="32" y="109" class="label">AFTER</text><text x="32" y="132">Enter on the same Edit item → existing editor assertion</text></a></svg><details><summary>Exact source diff</summary><pre>diff --git a/tests/e2e/mock-llm/utils/mock-llm-helpers.ts b/tests/e2e/mock-llm/utils/mock-llm-helpers.ts
+index fee68339..e53c8430 100644
+--- a/tests/e2e/mock-llm/utils/mock-llm-helpers.ts
++++ b/tests/e2e/mock-llm/utils/mock-llm-helpers.ts
+@@ -809,7 +809,8 @@ export async function openAgentProfileEditor(page: Page, profileName: string) {
+   await expect(row).toBeVisible({ timeout: 10_000 });
+   await row.getByTestId(&quot;agent-profile-menu-trigger&quot;).click();
+   await waitForTestId(page, &quot;agent-profile-actions-menu&quot;);
+-  await page.getByTestId(&quot;agent-profile-edit&quot;).click();
++  // Activate the focused menu item without a pointer hit during portal layout.
++  await page.getByTestId(&quot;agent-profile-edit&quot;).press(&quot;Enter&quot;);
+   await waitForTestId(page, &quot;agent-settings-screen&quot;);
+ }</pre></details></article><article id="f13"><div class="eyebrow">tests/e2e/mock-llm/utils/skill-test-helpers.ts · +4 / −3</div><h2>User skills follow the launcher’s persistence directory</h2><p>The npm launcher uses OH_PERSISTENCE_DIR derived from STATE_DIR. Writing fixtures to that same directory makes them visible to the real Agent Server and avoids touching personal skill files.</p><p class="sources"><a href="https://github.com/OpenHands/OpenHands/blob/e4197c043f8a1c4937ec5402449d47efff7ca0d1/tests/e2e/mock-llm/utils/skill-test-helpers.ts#L46">Before · 46</a> · <a href="https://github.com/fancive/OpenHands/blob/25cca529c87934d6a99cd204dab60734af2fe8b9/tests/e2e/mock-llm/utils/skill-test-helpers.ts#L47">After · 47</a></p><svg viewBox="0 0 870 158" role="img" aria-label="Before and after behavior"><a href="https://github.com/OpenHands/OpenHands/blob/e4197c043f8a1c4937ec5402449d47efff7ca0d1/tests/e2e/mock-llm/utils/skill-test-helpers.ts#L46"><rect x="16" y="8" width="838" height="62" rx="5" fill="#ecebe7"/><text x="32" y="31" class="label">BEFORE</text><text x="32" y="54">npm writes to the user home directory</text></a><a href="https://github.com/fancive/OpenHands/blob/25cca529c87934d6a99cd204dab60734af2fe8b9/tests/e2e/mock-llm/utils/skill-test-helpers.ts#L47"><rect x="16" y="86" width="838" height="62" rx="5" fill="#ffe5ce"/><text x="32" y="109" class="label">AFTER</text><text x="32" y="132">npm writes dirname(STATE_DIR)/skills; Docker override stays</text></a></svg><details><summary>Exact source diff</summary><pre>diff --git a/tests/e2e/mock-llm/utils/skill-test-helpers.ts b/tests/e2e/mock-llm/utils/skill-test-helpers.ts
+index 6a8d1d96..765eefbd 100644
+--- a/tests/e2e/mock-llm/utils/skill-test-helpers.ts
++++ b/tests/e2e/mock-llm/utils/skill-test-helpers.ts
+@@ -12,10 +12,9 @@
+  * with the agent-server while creating files on the host (volume-mounted).
+  */
+&#32;
+-import { resolve, join } from &quot;path&quot;;
++import { resolve, join, dirname } from &quot;path&quot;;
+ import { mkdirSync, writeFileSync, rmSync, existsSync } from &quot;fs&quot;;
+ import { execSync } from &quot;child_process&quot;;
+-import { homedir } from &quot;os&quot;;
+&#32;
+ // ── Paths ────────────────────────────────────────────────────────────
+&#32;
+@@ -40,12 +39,14 @@ export const SKILL_REPOS_AGENT_DIR =
+&#32;
+ /**
+  * User-level skills directory — HOST-side (for file creation/removal).
++ * npm launchers set OH_PERSISTENCE_DIR to dirname(STATE_DIR); mirror that
++ * here so the real Agent Server loads the fixture without touching user files.
+  * In Docker mode, we use a local temp dir that is volume-mounted into the
+  * container at the agent-server&#x27;s expected `~/.openhands/skills/` path.
+  */
+ export const USER_SKILLS_DIR = process.env.MOCK_LLM_USER_SKILLS_HOST_DIR
+   ? resolve(process.env.MOCK_LLM_USER_SKILLS_HOST_DIR)
+-  : join(homedir(), &quot;.openhands&quot;, &quot;skills&quot;);
++  : join(dirname(STATE_DIR), &quot;skills&quot;);
+&#32;
+ // ── Skill content builders ───────────────────────────────────────────</pre></details></article><footer>This self-contained review artifact is temporary. This is a fork contribution: remove .pr/ manually before merge. Source links are pinned to the base and implementation commits.</footer></main></div></body></html>

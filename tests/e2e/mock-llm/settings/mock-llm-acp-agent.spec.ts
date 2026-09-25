@@ -16,23 +16,19 @@
  * round-trip without any real LLM.
  */
 
-import { test, expect } from "@playwright/test";
+import { expect } from "@playwright/test";
+import { test } from "../utils/atomic-journey";
 import {
   ACP_REPLY_TOKEN,
   MOCK_ACP_COMMAND_PYTHON,
   MOCK_ACP_COMMAND_SCRIPT,
-  seedLocalStorage,
   routeSessionApiKey,
   dismissAnalyticsModal,
   waitForTestId,
   waitForPath,
   getConversationIdFromURL,
   waitForNonUserMessageText,
-  deleteConversation,
-  resetToOpenHandsAgentViaUI,
-  resetMockLLM,
   ensureMockLLMProfile,
-  ensureMockLLMAgentProfile,
   openAgentProfileEditor,
   selectDropdownOption,
   setChatInput,
@@ -51,56 +47,18 @@ const USER_MESSAGE = "Hello ACP agent, please reply.";
  */
 const ACP_COMMAND_TEXT = `${MOCK_ACP_COMMAND_PYTHON} ${MOCK_ACP_COMMAND_SCRIPT}`;
 
-test.describe.configure({ mode: "serial" });
-
-test.describe("mock-LLM ACP agent conversation", () => {
-  let conversationId: string | null = null;
-
-  test.beforeEach(async ({ page }) => {
-    await seedLocalStorage(page);
-  });
-
-  test.afterAll(async ({ request, browser }) => {
-    // Clean up the conversation
-    if (conversationId) {
-      try {
-        await deleteConversation(request, conversationId);
-      } catch {
-        // best-effort
-      }
-    }
-
-    // Reset agent-server back to OpenHands via the Settings → Agent UI
-    // + restore mock LLM profile so subsequent test suites (which expect
-    // agent_kind=openhands) are not affected by our ACP configuration.
-    const page = await browser.newPage();
-    try {
-      await seedLocalStorage(page);
-      await ensureMockLLMAgentProfile(page.request);
-      await resetToOpenHandsAgentViaUI(page);
-      await ensureMockLLMProfile(page);
-    } catch {
-      // best-effort
-    } finally {
-      await page.close();
-    }
-    try {
-      await resetMockLLM(request);
-    } catch {
-      // best-effort
-    }
-  });
-
-  // ── Step 1: Configure ACP agent through the Settings → Agent UI ─────
-
-  test("step 1: configure ACP agent via Settings → Agent UI", async ({
-    page,
-    request,
-  }) => {
+test("configure ACP, verify persistence, run and resume a conversation", async ({
+  page,
+  request,
+  journey,
+}) => {
+  test.setTimeout(240_000);
+  let conversationId = "";
+  await test.step("configure ACP agent via Settings → Agent UI", async () => {
     // The agent-server may make internal LLM calls (condenser) even for
     // ACP conversations. Ensure a mock LLM profile exists so those calls
     // don't fail. This UI flow is not what we're testing — the ACP UI is.
-    await ensureMockLLMProfile(page);
+    await ensureMockLLMProfile(page, { profileName: journey.profileName });
 
     // Settings → Agent is the Agent Profile library (#1571); edit the
     // seeded "default" profile through it rather than a standalone form.
@@ -119,7 +77,11 @@ test.describe("mock-LLM ACP agent conversation", () => {
       await waitForTestId(page, "agent-preset-selector");
 
       // Select "Custom" preset so we can enter our own command
-      await selectDropdownOption(page, /Preset/, /Custom/);
+      const presetInput = page.getByRole("combobox", { name: /Preset/ });
+      await presetInput.click();
+      await presetInput.fill("Custom");
+      await presetInput.press("ArrowDown");
+      await presetInput.press("Enter");
 
       // Fill in the ACP command pointing to our mock server
       const commandInput = page.getByTestId("agent-command-input");
@@ -167,11 +129,7 @@ test.describe("mock-LLM ACP agent conversation", () => {
     });
   });
 
-  // ── Step 2: Reload and verify the UI reflects saved ACP config ──────
-
-  test("step 2: reload and verify ACP settings are persisted in UI", async ({
-    page,
-  }) => {
+  await test.step("reload and verify ACP settings are persisted in UI", async () => {
     // Settings → Agent is the Agent Profile library (#1571); re-open the
     // "default" profile's editor rather than a standalone form.
     await openAgentProfileEditor(page, "default");
@@ -192,14 +150,7 @@ test.describe("mock-LLM ACP agent conversation", () => {
     await expect(presetSelector).toBeVisible({ timeout: 5_000 });
   });
 
-  // ── Step 3: Start an ACP conversation from the home page ────────────
-
-  test("step 3: start ACP conversation and verify agent reply", async ({
-    page,
-    request,
-  }) => {
-    test.setTimeout(120_000);
-
+  await test.step("start ACP conversation and verify agent reply", async () => {
     // Passively capture POST /api/conversations payload to verify ACP tags
     let capturedPayload: Record<string, unknown> | null = null;
     const capturePayload = (req: import("@playwright/test").Request) => {
@@ -277,12 +228,15 @@ test.describe("mock-LLM ACP agent conversation", () => {
             diag =
               `Events API returned ${items.length} events:\n` +
               items
-                .map(
-                  (e: any) =>
-                    `  [${e.kind ?? "?"}] source=${e.source ?? "?"} ${JSON.stringify(
-                      e.llm_message?.content ?? e.content ?? e.message ?? "",
-                    ).slice(0, 120)}`,
-                )
+                .map((item) => {
+                  const e = item as Record<string, unknown>;
+                  const message = e.llm_message as
+                    | { content?: unknown }
+                    | undefined;
+                  return `  [${e.kind ?? "?"}] source=${e.source ?? "?"} ${JSON.stringify(
+                    message?.content ?? e.content ?? e.message ?? "",
+                  ).slice(0, 120)}`;
+                })
                 .join("\n");
           } else {
             diag = `Events API returned ${eventsResp.status()}`;
@@ -328,13 +282,7 @@ test.describe("mock-LLM ACP agent conversation", () => {
     });
   });
 
-  // ── Step 4: Resume the ACP conversation from the sidebar ────────────
-
-  test("step 4: resume ACP conversation from sidebar after navigating away", async ({
-    page,
-  }) => {
-    test.skip(!conversationId, "step 3 must complete first");
-
+  await test.step("resume ACP conversation from sidebar after navigating away", async () => {
     await routeSessionApiKey(page);
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await dismissAnalyticsModal(page);
