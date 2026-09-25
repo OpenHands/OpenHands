@@ -91,13 +91,16 @@ vi.mock("#/components/features/chat/custom-chat-input", () => ({
   CustomChatInput: ({
     onSubmit,
     disabled,
+    placeholder,
   }: {
     onSubmit: (msg: string) => void;
     disabled?: boolean;
+    placeholder?: string;
   }) => (
     <button
       type="button"
       data-testid="stub-chat-submit"
+      data-placeholder={placeholder}
       disabled={disabled}
       onClick={() => onSubmit("hello world")}
     >
@@ -349,6 +352,37 @@ describe("HomeChatLauncher", () => {
   afterEach(() => {
     toast.remove();
     window.localStorage.removeItem(LAST_LOCAL_WORKSPACE_MODE_STORAGE_KEY);
+  });
+
+  it("defaults to Code mode and switches to Automate mode", async () => {
+    renderLauncher();
+    const user = userEvent.setup();
+
+    expect(screen.getByTestId("home-launcher-mode-code")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByTestId("stub-chat-submit")).toHaveAttribute(
+      "data-placeholder",
+      "SUGGESTIONS$WHAT_TO_BUILD",
+    );
+    expect(
+      screen.queryByTestId("recommended-automations-rail"),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("home-launcher-mode-automate"));
+
+    expect(screen.getByTestId("home-launcher-mode-automate")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByTestId("stub-chat-submit")).toHaveAttribute(
+      "data-placeholder",
+      "HOME$AUTOMATE_PROMPT_PLACEHOLDER",
+    );
+    expect(
+      screen.getByTestId("recommended-automations-rail"),
+    ).toBeInTheDocument();
   });
 
   it("creates a conversation with just the typed query and navigates when no workspace is selected", async () => {
@@ -657,8 +691,11 @@ describe("HomeChatLauncher", () => {
     });
   });
 
-  it("always renders the recommended automations rail above pinned activity", () => {
+  it("renders the recommended automations rail above pinned activity in Automate mode", async () => {
     renderLauncher();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId("home-launcher-mode-automate"));
 
     expect(
       screen.getByTestId("recommended-automations-rail"),
