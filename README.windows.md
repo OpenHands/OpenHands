@@ -24,6 +24,6 @@ docker run -it --rm `
   ghcr.io/openhands/agent-canvas:1.24.0 # x-release-please-version
 ```
 
-Open [http://localhost:8000/canvas](http://localhost:8000/canvas) in your browser.
+When the container logs report `All services started`, OpenHands is ready. Open [http://localhost:8000/canvas](http://localhost:8000/canvas) in your browser.
 
 The agent will be able to access any project under `PROJECTS_PATH`.
