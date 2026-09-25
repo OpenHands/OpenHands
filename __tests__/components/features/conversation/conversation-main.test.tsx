@@ -67,20 +67,38 @@ vi.mock("#/hooks/query/use-active-conversation", () => ({
 vi.mock("#/components/features/chat/chat-interface", () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const React = require("react");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { createPortal } = require("react-dom");
   return {
     ChatInterface: ({
       showGitControlBar = true,
+      composerDockTarget = null,
+      onDockedComposerSubmit,
     }: {
       showGitControlBar?: boolean;
+      composerDockTarget?: HTMLElement | null;
+      onDockedComposerSubmit?: () => void;
     }) => {
       React.useEffect(() => {
         return () => chatInterfaceUnmount();
       }, []);
       return (
-        <div
-          data-testid="chat-interface"
-          data-show-git-control-bar={showGitControlBar ? "true" : "false"}
-        />
+        <>
+          <div
+            data-testid="chat-interface"
+            data-show-git-control-bar={showGitControlBar ? "true" : "false"}
+          />
+          {composerDockTarget
+            ? createPortal(
+                <button
+                  type="button"
+                  data-testid="docked-composer-submit"
+                  onClick={() => onDockedComposerSubmit?.()}
+                />,
+                composerDockTarget,
+              )
+            : null}
+        </>
       );
     },
   };
@@ -278,8 +296,7 @@ describe("ConversationMain - Layout Transition Stability", () => {
     expect(screen.getByTestId("chat-interface")).toBeInTheDocument();
   });
 
-  it("uses a single automation setup top bar with splash back navigation", async () => {
-    const user = userEvent.setup();
+  it("uses a single automation setup top bar", () => {
     mockIsRightPanelShown = true;
     mockAutomationSetupDraft = {
       prompt: "Write a haiku each morning",
@@ -298,10 +315,9 @@ describe("ConversationMain - Layout Transition Stability", () => {
       "data-show-git-control-bar",
       "false",
     );
-
-    await user.click(screen.getByTestId("automation-setup-back"));
-
-    expect(mockNavigate).toHaveBeenCalledWith("/");
+    expect(
+      screen.queryByTestId("automation-setup-back"),
+    ).not.toBeInTheDocument();
   });
 
   it("suppresses automation setup chrome on mobile", () => {
@@ -336,6 +352,9 @@ describe("ConversationMain - Layout Transition Stability", () => {
     expect(screen.getByTestId("conversation-right-panel")).toHaveStyle({
       width: "50%",
     });
+    expect(
+      screen.queryByTestId("automation-setup-docked-composer"),
+    ).not.toBeInTheDocument();
 
     await user.click(screen.getByTestId("automation-setup-agent-toggle"));
 
@@ -345,5 +364,18 @@ describe("ConversationMain - Layout Transition Stability", () => {
     expect(screen.getByTestId("conversation-right-panel")).toHaveStyle({
       width: "100%",
     });
+    expect(
+      screen.getByTestId("automation-setup-docked-composer"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("docked-composer-submit")).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("docked-composer-submit"));
+
+    expect(screen.getByTestId("conversation-chat-panel")).toHaveStyle({
+      width: "50%",
+    });
+    expect(
+      screen.queryByTestId("automation-setup-docked-composer"),
+    ).not.toBeInTheDocument();
   });
 });

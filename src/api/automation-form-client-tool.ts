@@ -19,8 +19,10 @@ Useful fields:
 * customCode, entrypoint, setupScriptPath, setupScript: custom Python bundle fields.
 * triggerKind: "cron" or "event".
 * frequency: "once", "hourly", "daily", "weekdays", "weekly", or "custom" for cron triggers.
-* time, scheduleDateTime, timezone, customSchedule: cron scheduling fields. "scheduleDateTime" is a local "YYYY-MM-DDTHH:MM" value used when frequency is "once".
+* time, scheduleDateTime, timezone, weekday, customSchedule: cron scheduling fields. "scheduleDateTime" is a local "YYYY-MM-DDTHH:MM" value used when frequency is "once". "weekday" is "0" (Sunday) through "6" (Saturday) and applies when frequency is "weekly".
 * eventSource, eventKey, eventFilter: event trigger fields.
+* model: LLM profile name for this automation. Leave empty to use the active profile. This does not change the conversation composer.
+* agentProfileId: agent profile id for this automation. Leave empty to use the active agent profile. This does not change the conversation.
 * showTimeout and timeoutSeconds: optional timeout controls.
 
 Call this with only the fields you are changing. After calling it, briefly tell the user which fields you filled and ask them to review anything uncertain.`;
@@ -58,10 +60,26 @@ export const AUTOMATION_FORM_UPDATE_CLIENT_TOOL: ClientToolSpec = {
               "Local date and time, YYYY-MM-DDTHH:MM, for a one-time schedule.",
           },
           timezone: { type: "string" },
+          weekday: {
+            type: "string",
+            enum: ["0", "1", "2", "3", "4", "5", "6"],
+            description:
+              "Day of week for a weekly schedule. 0 is Sunday and 6 is Saturday.",
+          },
           customSchedule: { type: "string", description: "Cron expression." },
           eventSource: { type: "string" },
           eventKey: { type: "string" },
           eventFilter: { type: "string" },
+          model: {
+            type: "string",
+            description:
+              "LLM profile name for this automation. Empty uses the active profile and does not change the conversation.",
+          },
+          agentProfileId: {
+            type: "string",
+            description:
+              "Agent profile id for this automation. Empty uses the active agent profile and does not change the conversation.",
+          },
           showTimeout: { type: "boolean" },
           timeoutSeconds: { type: "string" },
         },
