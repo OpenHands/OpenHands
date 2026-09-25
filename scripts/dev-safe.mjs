@@ -42,7 +42,10 @@ const DEFAULT_BACKEND_PORT = SHARED_DEFAULTS.ports.agentServer;
 // --server-base-path and advertises the prefix) and the ingress route table,
 // or the advertised URL and the route that serves it disagree.
 export const VSCODE_BASE_PATH = SHARED_DEFAULTS.paths.vscodeBasePath;
-const DEFAULT_VITE_PORT = 3001;
+// Default port the internal frontend server (Vite dev server or static-server)
+// binds to. Launchers fall back to a free port when this one is occupied — the
+// ingress port is the single stable entry point.
+export const DEFAULT_VITE_PORT = 3001;
 const DEFAULT_WAIT_TIMEOUT_MS = 30_000;
 const DEFAULT_AGENT_SERVER_PACKAGE = SHARED_DEFAULTS.packages.agentServer;
 const AGENT_SERVER_GIT_REPO = "https://github.com/OpenHands/software-agent-sdk";
