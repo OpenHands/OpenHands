@@ -173,18 +173,54 @@ let settingsCache: {
   encrypted: SettingsApiResponse | null;
   /** Timestamp when the cache was last populated */
   timestamp: number;
+  /** Which backend answered. Settings from one are not settings from another. */
+  backendKey: string | null;
 } = {
   redacted: null,
   encrypted: null,
   timestamp: 0,
+  backendKey: null,
 };
 
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
-const isCacheValid = () => Date.now() - settingsCache.timestamp < CACHE_TTL_MS;
+/**
+ * Identity of the backend a cached response came from.
+ *
+ * `connectionRevision` is part of it because it changes whenever the
+ * connection credentials do, which is the same reason the query keys across
+ * the app already include it: the host can stay the same while what it
+ * answers with does not.
+ */
+const activeBackendKey = (): string => {
+  const { backend } = getActiveBackend();
+  return `${backend.id}:${backend.connectionRevision ?? 0}`;
+};
+
+const isCacheValid = () =>
+  settingsCache.backendKey === activeBackendKey() &&
+  Date.now() - settingsCache.timestamp < CACHE_TTL_MS;
 
 const clearCache = () => {
-  settingsCache = { redacted: null, encrypted: null, timestamp: 0 };
+  settingsCache = {
+    redacted: null,
+    encrypted: null,
+    timestamp: 0,
+    backendKey: null,
+  };
+};
+
+/**
+ * Whether a response requested from `requestedKey` may be cached: only while
+ * that backend is still the active one, so a switch during the request does
+ * not file the old backend's answer under the new one. An entry from another
+ * backend is dropped first, so the two are never mixed.
+ */
+const prepareCacheFor = (requestedKey: string): boolean => {
+  if (activeBackendKey() !== requestedKey) return false;
+  if (settingsCache.backendKey !== requestedKey) clearCache();
+  settingsCache.backendKey = requestedKey;
+  return true;
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -578,10 +614,13 @@ class SettingsService {
       return syncDerivedSettings(transformApiResponse(settingsCache.redacted));
     }
 
+    const requestedKey = activeBackendKey();
     try {
       const response = await this.fetchSettingsFromApi();
-      settingsCache.redacted = response;
-      settingsCache.timestamp = Date.now();
+      if (prepareCacheFor(requestedKey)) {
+        settingsCache.redacted = response;
+        settingsCache.timestamp = Date.now();
+      }
       return syncDerivedSettings(transformApiResponse(response));
     } catch (error) {
       // If API fails, return defaults
@@ -616,10 +655,13 @@ class SettingsService {
 
     // Fetch encrypted settings - this MUST succeed for conversations to work.
     // Do not fall back to redacted settings as that would cause auth failures.
+    const requestedKey = activeBackendKey();
     const response = await this.fetchSettingsFromApi("encrypted");
-    settingsCache.encrypted = response;
-    if (!settingsCache.timestamp) {
-      settingsCache.timestamp = Date.now();
+    if (prepareCacheFor(requestedKey)) {
+      settingsCache.encrypted = response;
+      if (!settingsCache.timestamp) {
+        settingsCache.timestamp = Date.now();
+      }
     }
     return {
       agentSettings: response.agent_settings,
