@@ -1,3 +1,8 @@
+import {
+  resolveAutomationSetupPlugins,
+  serializeAutomationSetupPluginList,
+} from "#/api/automation-setup-plugins";
+
 export type AutomationSetupKind = "prompt" | "plugin" | "custom";
 export type AutomationSetupTriggerKind = "cron" | "event";
 export type AutomationSetupFrequency =
@@ -16,6 +21,7 @@ export interface AutomationSetupFormValues {
   repository: string;
   pluginSource: string;
   pluginRef: string;
+  pluginList: string;
   customCode: string;
   entrypoint: string;
   setupScriptPath: string;
@@ -88,6 +94,7 @@ const STRING_FIELDS = [
   "repository",
   "pluginSource",
   "pluginRef",
+  "pluginList",
   "customCode",
   "entrypoint",
   "setupScriptPath",
@@ -221,14 +228,22 @@ function normalizeDraft(value: AutomationSetupDraft): AutomationSetupDraft {
         (plugin): plugin is string => typeof plugin === "string",
       )
     : [];
-  const pluginSource = form.pluginSource ?? plugins[0];
+  const pluginEntries = resolveAutomationSetupPlugins(form, plugins);
+  const pluginSources = pluginEntries
+    .map((entry) => entry.source.trim())
+    .filter(Boolean);
   const normalizedForm: AutomationSetupFormPatch = {
     ...form,
     prompt,
     kind,
-    ...(pluginSource ? { pluginSource } : {}),
+    pluginList:
+      pluginEntries.length > 0
+        ? serializeAutomationSetupPluginList(pluginEntries)
+        : "",
+    pluginSource: pluginEntries[0]?.source ?? "",
+    pluginRef: pluginEntries[0]?.ref ?? "",
   };
-  const normalizedPlugins = pluginSource ? [pluginSource] : plugins;
+  const normalizedPlugins = pluginSources;
   const fieldMetadata = normalizeFieldMetadata(value.fieldMetadata);
   const appliedAgentEventIds = Array.isArray(value.appliedAgentEventIds)
     ? [
@@ -378,10 +393,6 @@ export function patchAutomationSetupDraft(
     form: nextForm,
     prompt: nextForm.prompt ?? existing.prompt,
     kind: nextForm.kind ?? existing.kind,
-    plugins:
-      typeof nextForm.pluginSource === "string" && nextForm.pluginSource
-        ? [nextForm.pluginSource]
-        : existing.plugins,
     fieldMetadata: nextMetadata,
     appliedAgentEventIds:
       options.source === "agent" && options.eventId

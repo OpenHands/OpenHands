@@ -67,10 +67,12 @@ function getEntryPoint(
 
 export function ChatInterface({
   showGitControlBar = true,
+  showEmptyStateSuggestions = true,
   composerDockTarget = null,
   onDockedComposerSubmit,
 }: {
   showGitControlBar?: boolean;
+  showEmptyStateSuggestions?: boolean;
   composerDockTarget?: HTMLElement | null;
   onDockedComposerSubmit?: () => void;
 } = {}) {
@@ -553,7 +555,8 @@ export function ChatInterface({
             // disabled). They're also a `pointer-events-auto` overlay that would
             // sit over the LlmNotConfiguredBanner below and swallow clicks on its
             // setup button — so hide them and let the banner be the lone CTA.
-            !llmBlocked && (
+            !llmBlocked &&
+            showEmptyStateSuggestions && (
               <ChatSuggestions
                 onSuggestionsClick={(message) => setMessageToSend(message)}
               />

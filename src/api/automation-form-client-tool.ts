@@ -15,7 +15,7 @@ Useful fields:
 * name: short automation name.
 * prompt: natural-language instruction for prompt/plugin automations.
 * repository: optional GitHub repository URL or owner/repo for prompt/plugin automations.
-* pluginSource and pluginRef: plugin source and optional ref for plugin automations.
+* pluginSource and pluginRef: source and optional ref for the first plugin. The form can hold more than one plugin; these fields only change the first.
 * customCode, entrypoint, setupScriptPath, setupScript: custom Python bundle fields.
 * triggerKind: "cron" or "event".
 * frequency: "once", "hourly", "daily", "weekdays", "weekly", or "custom" for cron triggers.
