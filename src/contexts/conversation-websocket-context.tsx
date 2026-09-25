@@ -58,6 +58,7 @@ import type {
   AppConversation,
   SendMessageRequest,
 } from "#/api/conversation-service/agent-server-conversation-service.types";
+import { shadowLogTurn } from "#/superfast/decision-gate";
 import EventService from "#/api/event-service/event-service.api";
 import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
 import { useConversationStore } from "#/stores/conversation-store";
@@ -1122,6 +1123,10 @@ export function ConversationWebSocketProvider({
   // Falls back to REST API queue when WebSocket is not connected
   const sendMessage = useCallback(
     async (message: SendMessageRequest): Promise<SendMessageResult> => {
+      // Superfast Decision Gate (shadow mode, off by default). Classifies the
+      // outgoing user turn and logs the recommendation without changing routing.
+      shadowLogTurn(message);
+
       const currentMode = useConversationStore.getState().conversationMode;
       const currentSocket =
         currentMode === "plan" ? planningAgentSocket : mainSocket;
