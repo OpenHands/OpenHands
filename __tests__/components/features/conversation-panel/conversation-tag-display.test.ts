@@ -103,6 +103,9 @@ describe("getDisplayConversationTags", () => {
         automationid: "3f2b6c1e-1111-4222-8333-abcdefabcdef",
         automationname: "Nightly Audit",
         automationrunid: "run-0001",
+        automationsetup: "draft",
+        automationdraftid: "draft-1",
+        automationmaterializeddraftid: "auto-draft-1",
       }),
     ).toEqual([
       ["origin", "slack"],

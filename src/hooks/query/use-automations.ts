@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import AutomationService from "#/api/automation-service/automation-service.api";
+import { isSdkHttpStatusError } from "#/api/agent-server-compatibility";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useTracking } from "#/hooks/use-tracking";
 import type { Automation, AutomationSpec } from "#/types/automation";
@@ -22,7 +23,12 @@ function getResponseStatus(error: unknown): number | null {
 
 function isDraftEndpointUnavailable(error: unknown): boolean {
   const status = getResponseStatus(error);
-  return status === 404 || status === 405;
+  return (
+    status === 404 ||
+    status === 405 ||
+    isSdkHttpStatusError(error, 404) ||
+    isSdkHttpStatusError(error, 405)
+  );
 }
 
 interface UseAutomationsOptions {

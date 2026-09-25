@@ -752,6 +752,28 @@ describe("AutomationService", () => {
       expect(result.total).toBe(1);
       expect(result.drafts[0].id).toBe("d1");
     });
+
+    it("routes to callCloudProxy for cloud backends", async () => {
+      mockGetActive.mockReturnValue({ backend: cloudBackend, orgId: "org-1" });
+      mockCallCloudProxy.mockResolvedValue({
+        drafts: [],
+        total: 0,
+      });
+
+      const result = await AutomationService.listServerDrafts({
+        limit: 10,
+        offset: 5,
+      });
+
+      expect(mockCallCloudProxy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          backend: cloudBackend,
+          method: "GET",
+          path: "/api/automation/v1/drafts?limit=10&offset=5",
+        }),
+      );
+      expect(result).toEqual({ drafts: [], total: 0 });
+    });
   });
 
   describe("createCustomWebhook", () => {
