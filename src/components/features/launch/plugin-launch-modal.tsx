@@ -106,8 +106,19 @@ export function PluginLaunchModal({
     if (source.startsWith("github:")) {
       return source.replace("github:", "");
     }
-    if (source.includes("github.com/")) {
-      return source.split("github.com/")[1]?.replace(".git", "") || source;
+    // Only extract the owner/repo coordinate from a genuine github.com URL.
+    // A bare substring check on "github.com/" is unsafe: an attacker can
+    // embed it in the path of a host they control
+    // (e.g. https://evil.example/github.com/owner/repo) to make the trust
+    // prompt display a misleading repo coordinate (#17162).
+    try {
+      const url = new URL(source);
+      if (url.hostname === "github.com") {
+        const path = url.pathname.replace(/^\//, "").replace(/\.git$/, "");
+        return path || source;
+      }
+    } catch {
+      // source is not a URL — fall through to returning it verbatim
     }
     return source;
   };
