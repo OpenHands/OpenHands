@@ -10879,6 +10879,23 @@
     "uk": "Створено",
     "ca": "Creat"
   },
+  "CONVERSATION$CREATED_BY": {
+    "en": "Created by",
+    "ja": "作成者",
+    "zh-CN": "创建者",
+    "zh-TW": "建立者",
+    "ko-KR": "작성자",
+    "de": "Erstellt von",
+    "no": "Opprettet av",
+    "it": "Creato da",
+    "pt": "Criado por",
+    "es": "Creado por",
+    "ar": "أنشأها",
+    "fr": "Créé par",
+    "tr": "Oluşturan",
+    "uk": "Створив",
+    "ca": "Creat per"
+  },
   "CONVERSATION$AGO": {
     "en": "ago",
     "ja": "前",
