@@ -128,11 +128,22 @@ const appendEvent = (state: EventState, event: OHEvent): EventState => {
   };
 };
 
-const sortEventState = (state: EventState): EventState => ({
-  ...state,
-  events: [...state.events].sort(compareEventsByTimestamp),
-  uiEvents: [...state.uiEvents].sort(compareEventsByTimestamp),
-});
+const projectUiEvents = (events: OHEvent[]): OHEvent[] =>
+  events.reduce<OHEvent[]>(
+    (uiEvents, event) => handleEventForUI(event, uiEvents),
+    [],
+  );
+
+const sortEventState = (state: EventState): EventState => {
+  const events = [...state.events].sort(compareEventsByTimestamp);
+  return {
+    ...state,
+    events,
+    // Sorting the projection cannot replay action→observation (or ACP
+    // started→terminal) replacement. Rebuild from the canonical log.
+    uiEvents: projectUiEvents(events),
+  };
+};
 
 const applyAddEvent = (state: EventState, event: OHEvent): EventState => {
   const next = appendEvent(state, event);
