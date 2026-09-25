@@ -9,16 +9,18 @@
  * ``ProfilesService`` uses ``ProfilesClient``), creating a client per call so
  * it picks up the current backend configuration.
  *
- * The local ``MetaProfile`` type is intentionally wider than the SDK's: this
- * UI writes direct-prompt profiles, so it carries ``prompt_template`` /
- * ``model_table`` (and treats ``classes`` as optional) which the SDK's
- * ``MetaProfile`` type does not declare yet. ``MetaProfilesClient`` forwards
- * the config to the server unchanged, so we cast the local config to the SDK
- * type on save and the extra fields still reach the backend. Once the SDK type
- * is widened, the cast can be dropped.
+ * Types are re-exported from the SDK for consumer convenience.
  */
 import { MetaProfilesClient } from "@openhands/typescript-client/clients";
-import type { MetaProfile as SdkMetaProfile } from "@openhands/typescript-client";
+import type {
+  ActivateMetaProfileResponse,
+  MetaProfile,
+  MetaProfileClass,
+  MetaProfileDetailResponse,
+  MetaProfileInfo,
+  MetaProfileListResponse,
+  MetaProfileMutationResponse,
+} from "@openhands/typescript-client";
 import { getAgentServerClientOptions } from "../agent-server-client-options";
 import { getActiveBackend } from "../backend-registry/active-store";
 import {
@@ -29,48 +31,16 @@ import {
   saveCloudMetaProfile,
 } from "../cloud/meta-profiles-service.api";
 
-export interface MetaProfileClass {
-  description: string;
-  /** Name of the saved LLM profile to switch to for this class. */
-  model: string;
-}
-
-export interface MetaProfile {
-  /** Name of the saved LLM profile used to classify the task. */
-  classifier_model: string;
-  /** Structured classes are kept for backend compatibility, but this UI writes direct prompt profiles. */
-  classes?: MetaProfileClass[];
-  /** Direct-routing prompt template. Must include ``{{ instance_text }}`` when set. */
-  prompt_template: string | null;
-  /** Optional text inserted into ``{{ model_table }}`` by the backend. */
-  model_table: string | null;
-}
-
-export interface MetaProfileInfo {
-  name: string;
-  classifier_model: string | null;
-  num_classes: number;
-}
-
-export interface MetaProfileListResponse {
-  meta_profiles: MetaProfileInfo[];
-  active_meta_profile: string | null;
-}
-
-export interface MetaProfileDetailResponse {
-  name: string;
-  config: MetaProfile;
-}
-
-export interface MetaProfileMutationResponse {
-  name: string;
-  message: string;
-}
-
-export interface ActivateMetaProfileResponse {
-  name: string;
-  message: string;
-}
+// Re-export SDK types for consumers
+export type {
+  ActivateMetaProfileResponse,
+  MetaProfile,
+  MetaProfileClass,
+  MetaProfileDetailResponse,
+  MetaProfileInfo,
+  MetaProfileListResponse,
+  MetaProfileMutationResponse,
+};
 
 class MetaProfilesService {
   static async listMetaProfiles(): Promise<MetaProfileListResponse> {
@@ -88,12 +58,9 @@ class MetaProfilesService {
     if (getActiveBackend().backend.kind === "cloud") {
       return fetchCloudMetaProfile(name);
     }
-    // The server returns the full direct-prompt config (including
-    // ``prompt_template`` / ``model_table``); the SDK's ``MetaProfile`` type
-    // just does not declare those fields yet, so widen the typed result.
     return new MetaProfilesClient(getAgentServerClientOptions()).getMetaProfile(
       name,
-    ) as unknown as Promise<MetaProfileDetailResponse>;
+    );
   }
 
   static async saveMetaProfile(
@@ -105,7 +72,7 @@ class MetaProfilesService {
     }
     return new MetaProfilesClient(
       getAgentServerClientOptions(),
-    ).saveMetaProfile(name, config as unknown as SdkMetaProfile);
+    ).saveMetaProfile(name, config);
   }
 
   static async deleteMetaProfile(
