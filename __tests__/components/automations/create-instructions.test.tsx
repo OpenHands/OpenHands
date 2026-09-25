@@ -1,15 +1,41 @@
 import React from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   NavigationProvider,
   type NavigationContextValue,
 } from "#/context/navigation-context";
 import { CreateInstructions } from "#/components/features/automations/create-instructions";
 import { I18nKey } from "#/i18n/declaration";
-import { useConversationStore } from "#/stores/conversation-store";
-import * as telemetry from "#/services/telemetry";
+
+const mocks = vi.hoisted(() => ({
+  createConversationMutate: vi.fn(),
+  setAutomationSetupDraft: vi.fn(),
+  trackAutomationCreatedButton: vi.fn(),
+}));
+
+vi.mock("#/hooks/mutation/use-create-conversation", () => ({
+  useCreateConversation: () => ({
+    mutate: mocks.createConversationMutate,
+    isPending: false,
+  }),
+}));
+
+vi.mock("#/api/automation-setup-draft-store", () => ({
+  setAutomationSetupDraft: (...args: unknown[]) =>
+    mocks.setAutomationSetupDraft(...args),
+}));
+
+vi.mock("#/contexts/active-backend-context", () => ({
+  useActiveBackend: () => ({ backend: { kind: "local" } }),
+}));
+
+vi.mock("#/hooks/use-tracking", () => ({
+  useTracking: () => ({
+    trackAutomationCreatedButton: mocks.trackAutomationCreatedButton,
+  }),
+}));
 
 vi.mock("#/hooks/query/use-settings", () => ({
   useSettings: () => ({ data: { user_consents_to_analytics: true } }),
@@ -82,17 +108,13 @@ function renderCreateInstructions() {
 }
 
 describe("CreateInstructions", () => {
-  let captureMock: ReturnType<typeof vi.spyOn>;
-
   beforeEach(() => {
-    captureMock = vi
-      .spyOn(telemetry, "trackEvent")
-      .mockResolvedValue(undefined);
-    useConversationStore.setState({ messageToSend: null });
-  });
-
-  afterEach(() => {
-    captureMock.mockRestore();
+    mocks.createConversationMutate.mockReset();
+    mocks.setAutomationSetupDraft.mockReset();
+    mocks.trackAutomationCreatedButton.mockReset();
+    mocks.createConversationMutate.mockImplementation((_payload, options) => {
+      options?.onSuccess?.({ conversation_id: "conv-new" });
+    });
   });
 
   it("captures automation_created_button with the active backend kind when Create Automation is clicked", async () => {
@@ -101,23 +123,31 @@ describe("CreateInstructions", () => {
 
     await user.click(screen.getByTestId("automations-create-automation"));
 
-    expect(captureMock).toHaveBeenCalledWith(
-      "automation_created_button",
-      expect.objectContaining({ backend_kind: "local" }),
-    );
+    expect(mocks.trackAutomationCreatedButton).toHaveBeenCalledWith({
+      backendKind: "local",
+    });
   });
 
-  it("navigates to conversations with a prefilled prompt when Create Automation is clicked", async () => {
+  it("creates an automation setup conversation when Create Automation is clicked", async () => {
     const user = userEvent.setup();
-    const setMessageToSend = vi.fn();
-    useConversationStore.setState({ setMessageToSend });
     const { navigate } = renderCreateInstructions();
 
     await user.click(screen.getByTestId("automations-create-automation"));
 
-    expect(navigate).toHaveBeenCalledWith("/conversations");
+    expect(mocks.createConversationMutate).toHaveBeenCalledWith(
+      {
+        query: "Create an automation",
+        automationSetup: true,
+        entryPoint: "automations_add",
+      },
+      expect.any(Object),
+    );
     await waitFor(() => {
-      expect(setMessageToSend).toHaveBeenCalledWith("Create an automation");
+      expect(mocks.setAutomationSetupDraft).toHaveBeenCalledWith("conv-new", {
+        prompt: "",
+        kind: "prompt",
+      });
+      expect(navigate).toHaveBeenCalledWith("/conversations/conv-new");
     });
   });
 });

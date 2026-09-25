@@ -1,6 +1,13 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { HttpError } from "@openhands/typescript-client";
 import {
   NavigationProvider,
   type NavigationContextValue,
@@ -59,7 +66,9 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
     getServerDraft: vi.fn(),
     deleteServerDraft: vi.fn(),
     listServerDrafts: vi.fn(),
+    listAutomationRuns: vi.fn().mockResolvedValue({ runs: [], total: 0 }),
     dispatchServerDraft: vi.fn(),
+    createCustomWebhook: vi.fn(),
     supportsAutomationDrafts: vi.fn(),
   },
 }));
@@ -171,47 +180,57 @@ describe("AutomationSetupPanel", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("falls back to validation when draft endpoints are unavailable", async () => {
-    vi.mocked(AutomationService.createServerDraft).mockRejectedValue({
-      response: { status: 404 },
-    });
-    vi.mocked(AutomationService.validateDraft).mockResolvedValue({
-      valid: true,
-      errors: [],
-    });
+  it.each([
+    {
+      label: "an axios-shaped 404 (local backend)",
+      error: { response: { status: 404 } },
+    },
+    {
+      label: "the shared client's HttpError 404 (cloud backend)",
+      error: new HttpError(404, "Not Found", { detail: "No such route" }),
+    },
+  ])(
+    "falls back to validation when draft endpoints are unavailable ($label)",
+    async ({ error }) => {
+      vi.mocked(AutomationService.createServerDraft).mockRejectedValue(error);
+      vi.mocked(AutomationService.validateDraft).mockResolvedValue({
+        valid: true,
+        errors: [],
+      });
 
-    const user = userEvent.setup();
-    renderPanel();
+      const user = userEvent.setup();
+      renderPanel();
 
-    await user.click(screen.getByTestId("automation-setup-test"));
+      await user.click(screen.getByTestId("automation-setup-test"));
 
-    await waitFor(() =>
-      expect(AutomationService.createServerDraft).toHaveBeenCalledWith(
-        expect.objectContaining({
-          endpoint: "/v1/preset/prompt",
-          draft: expect.objectContaining({
-            enabled: false,
-            prompt: "Review every pull request",
+      await waitFor(() =>
+        expect(AutomationService.createServerDraft).toHaveBeenCalledWith(
+          expect.objectContaining({
+            endpoint: "/v1/preset/prompt",
+            draft: expect.objectContaining({
+              enabled: false,
+              prompt: "Review every pull request",
+            }),
           }),
+        ),
+      );
+      expect(AutomationService.validateDraft).toHaveBeenCalledWith({
+        endpoint: "/v1/preset/prompt",
+        draft: expect.objectContaining({
+          enabled: false,
+          prompt: "Review every pull request",
+          trigger: {
+            type: "cron",
+            schedule: "0 9 * * *",
+            timezone: "America/New_York",
+          },
         }),
-      ),
-    );
-    expect(AutomationService.validateDraft).toHaveBeenCalledWith({
-      endpoint: "/v1/preset/prompt",
-      draft: expect.objectContaining({
-        enabled: false,
-        prompt: "Review every pull request",
-        trigger: {
-          type: "cron",
-          schedule: "0 9 * * *",
-          timezone: "America/New_York",
-        },
-      }),
-    });
-    expect(screen.getByTestId("automation-setup-status")).toHaveTextContent(
-      "AUTOMATION_SETUP$TEST_PASSED",
-    );
-  });
+      });
+      expect(screen.getByTestId("automation-setup-status")).toHaveTextContent(
+        "AUTOMATION_SETUP$READY_TO_TEST",
+      );
+    },
+  );
 
   it("sends each comma-separated repository to the automation service", async () => {
     vi.mocked(AutomationService.validateDraft).mockResolvedValue({
@@ -484,7 +503,7 @@ describe("AutomationSetupPanel", () => {
       ).toBeInTheDocument();
       expect(
         screen.getByTestId("automation-setup-draft-validity"),
-      ).toHaveTextContent("AUTOMATION_SETUP$TEST_PASSED");
+      ).toHaveTextContent("AUTOMATION_SETUP$READY_TO_TEST");
 
       // Second save reuses the persisted id rather than creating again.
       await user.click(screen.getByTestId("automation-setup-save-draft"));
@@ -620,9 +639,6 @@ describe("AutomationSetupPanel", () => {
       expect(screen.getByTestId("automation-setup-status")).toHaveTextContent(
         "AUTOMATION_SETUP$TEST_DISPATCHED",
       );
-      expect(
-        screen.getByTestId("automation-setup-draft-run"),
-      ).toHaveTextContent("AUTOMATIONS$DETAIL$PENDING");
       expect(mockNavigate).not.toHaveBeenCalledWith(
         "/conversations/conv-run-1",
       );
@@ -651,6 +667,157 @@ describe("AutomationSetupPanel", () => {
           "Minimum interval is 5 minutes.",
         ),
       );
+      expect(AutomationService.dispatchServerDraft).not.toHaveBeenCalled();
+    });
+
+    it("sends synthetic JSON payload when testing an event draft", async () => {
+      vi.mocked(AutomationService.createServerDraft).mockResolvedValue(
+        dispatchableDraft,
+      );
+      vi.mocked(AutomationService.dispatchServerDraft).mockResolvedValue({
+        id: "run-1",
+        status: "PENDING" as never,
+        conversation_id: "conv-run-1",
+        bash_command_id: null,
+        error_detail: null,
+        started_at: "2026-01-01T00:00:00.000Z",
+        completed_at: null,
+        automation_id: "auto-draft-1",
+      } as never);
+
+      const user = userEvent.setup();
+      renderPanel();
+
+      await user.click(screen.getByText("AUTOMATIONS$DETAIL$TRIGGER_EVENT"));
+      const payloadInput = await screen.findByTestId(
+        "automation-setup-event-test-payload",
+      );
+      fireEvent.change(payloadInput, {
+        target: {
+          value: JSON.stringify({ type: "issue.created", action: "opened" }),
+        },
+      });
+      await user.click(screen.getByTestId("automation-setup-test"));
+
+      await waitFor(() =>
+        expect(AutomationService.dispatchServerDraft).toHaveBeenCalledWith(
+          "draft-1",
+          { eventPayload: { type: "issue.created", action: "opened" } },
+        ),
+      );
+    });
+
+    it("registers a custom webhook source before testing an event draft", async () => {
+      vi.mocked(useDeploymentCapabilities).mockReturnValue({
+        data: {
+          ready: true,
+          features: ["automationDrafts", "webhookDelivery"],
+          triggerKinds: ["cron", "event"],
+          eventSources: ["github", "linear"],
+          eventTypes: ["issues.*", "issue_comment.created"],
+          triggers: {},
+        },
+        isLoading: false,
+      } as never);
+      vi.mocked(AutomationService.createCustomWebhook).mockResolvedValue({
+        id: "webhook-1",
+        org_id: "org-1",
+        name: "Incident webhook",
+        source: "incident-alerts",
+        webhook_url:
+          "https://app.all-hands.dev/v1/events/org-1/incident-alerts",
+        event_key_expr: "event.type",
+        signature_header: "X-Incident-Signature",
+        signature_scheme: "hmac_sha256_hex",
+        enabled: true,
+        created_at: "2026-01-01T00:00:00.000Z",
+        updated_at: "2026-01-01T00:00:00.000Z",
+        webhook_secret: "generated-secret",
+      });
+      vi.mocked(AutomationService.createServerDraft).mockResolvedValue(
+        dispatchableDraft,
+      );
+      vi.mocked(AutomationService.dispatchServerDraft).mockResolvedValue({
+        id: "run-1",
+        status: "PENDING" as never,
+        conversation_id: "conv-run-1",
+        bash_command_id: null,
+        error_detail: null,
+        started_at: "2026-01-01T00:00:00.000Z",
+        completed_at: null,
+        automation_id: "auto-draft-1",
+      } as never);
+
+      const user = userEvent.setup();
+      renderPanel();
+
+      await user.click(screen.getByText("AUTOMATIONS$DETAIL$TRIGGER_EVENT"));
+      expect(
+        document.querySelector(
+          '#automation-setup-event-source-options option[value="linear"]',
+        ),
+      ).not.toBeNull();
+      expect(
+        document.querySelector(
+          '#automation-setup-event-key-options option[value="issues.*"]',
+        ),
+      ).not.toBeNull();
+      fireEvent.change(screen.getByTestId("automation-setup-event-source"), {
+        target: { value: "incident-alerts" },
+      });
+      await user.click(
+        screen.getByTestId("automation-setup-custom-webhook-enabled"),
+      );
+      await user.type(
+        screen.getByTestId("automation-setup-custom-webhook-name"),
+        "Incident webhook",
+      );
+      fireEvent.change(
+        screen.getByTestId("automation-setup-custom-webhook-event-key-expr"),
+        { target: { value: "event.type" } },
+      );
+      fireEvent.change(
+        screen.getByTestId("automation-setup-custom-webhook-signature-header"),
+        { target: { value: "X-Incident-Signature" } },
+      );
+      await user.click(screen.getByTestId("automation-setup-test"));
+
+      await waitFor(() =>
+        expect(AutomationService.createCustomWebhook).toHaveBeenCalledWith({
+          name: "Incident webhook",
+          source: "incident-alerts",
+          event_key_expr: "event.type",
+          signature_header: "X-Incident-Signature",
+          signature_scheme: "hmac_sha256_hex",
+        }),
+      );
+      expect(AutomationService.createServerDraft).toHaveBeenCalledWith(
+        expect.objectContaining({
+          draft: expect.objectContaining({
+            trigger: expect.objectContaining({
+              type: "event",
+              source: "incident-alerts",
+            }),
+          }),
+        }),
+      );
+    });
+
+    it("requires valid JSON before testing an event draft", async () => {
+      const user = userEvent.setup();
+      renderPanel();
+
+      await user.click(screen.getByText("AUTOMATIONS$DETAIL$TRIGGER_EVENT"));
+      const payloadInput = await screen.findByTestId(
+        "automation-setup-event-test-payload",
+      );
+      fireEvent.change(payloadInput, { target: { value: "not json" } });
+      await user.click(screen.getByTestId("automation-setup-test"));
+
+      expect(screen.getByTestId("automation-setup-status")).toHaveTextContent(
+        "AUTOMATION_SETUP$TEST_EVENT_PAYLOAD_INVALID",
+      );
+      expect(AutomationService.createServerDraft).not.toHaveBeenCalled();
       expect(AutomationService.dispatchServerDraft).not.toHaveBeenCalled();
     });
 

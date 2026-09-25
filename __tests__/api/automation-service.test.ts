@@ -752,6 +752,66 @@ describe("AutomationService", () => {
       expect(result.total).toBe(1);
       expect(result.drafts[0].id).toBe("d1");
     });
+
+    it("routes to callCloudProxy for cloud backends", async () => {
+      mockGetActive.mockReturnValue({ backend: cloudBackend, orgId: "org-1" });
+      mockCallCloudProxy.mockResolvedValue({
+        drafts: [],
+        total: 0,
+      });
+
+      const result = await AutomationService.listServerDrafts({
+        limit: 10,
+        offset: 5,
+      });
+
+      expect(mockCallCloudProxy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          backend: cloudBackend,
+          method: "GET",
+          path: "/api/automation/v1/drafts?limit=10&offset=5",
+        }),
+      );
+      expect(result).toEqual({ drafts: [], total: 0 });
+    });
+  });
+
+  describe("createCustomWebhook", () => {
+    it("posts custom webhook configuration to the automation API", async () => {
+      const webhook = {
+        id: "webhook-1",
+        org_id: "org-1",
+        name: "Incident webhook",
+        source: "incident-alerts",
+        webhook_url:
+          "https://app.all-hands.dev/v1/events/org-1/incident-alerts",
+        event_key_expr: "event.type",
+        signature_header: "X-Incident-Signature",
+        signature_scheme: "hmac_sha256_hex",
+        enabled: true,
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+        webhook_secret: "generated-secret",
+      };
+      mockPost.mockResolvedValue({ data: webhook });
+
+      const result = await AutomationService.createCustomWebhook({
+        name: "Incident webhook",
+        source: "incident-alerts",
+        event_key_expr: "event.type",
+        signature_header: "X-Incident-Signature",
+        signature_scheme: "hmac_sha256_hex",
+      });
+
+      expect(mockPost).toHaveBeenCalledWith("/api/automation/v1/webhooks", {
+        name: "Incident webhook",
+        source: "incident-alerts",
+        event_key_expr: "event.type",
+        signature_header: "X-Incident-Signature",
+        signature_scheme: "hmac_sha256_hex",
+      });
+      expect(result).toEqual(webhook);
+    });
   });
 
   describe("dispatchServerDraft", () => {
@@ -764,6 +824,19 @@ describe("AutomationService", () => {
         "/api/automation/v1/drafts/draft-1/dispatch",
       );
       expect(result).toEqual(mockRun);
+    });
+
+    it("sends a synthetic event payload when provided", async () => {
+      mockPost.mockResolvedValue({ data: mockRun });
+
+      await AutomationService.dispatchServerDraft("draft-1", {
+        eventPayload: { type: "issue.created", action: "opened" },
+      });
+
+      expect(mockPost).toHaveBeenCalledWith(
+        "/api/automation/v1/drafts/draft-1/dispatch",
+        { event_payload: { type: "issue.created", action: "opened" } },
+      );
     });
   });
 });

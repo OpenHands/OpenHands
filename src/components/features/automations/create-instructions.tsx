@@ -5,9 +5,13 @@ import ChevronDownIcon from "#/icons/chevron-down.svg?react";
 import MessageSquareShareIcon from "#/icons/message-square-share.svg?react";
 import { cn } from "#/utils/utils";
 import { BrandButton } from "#/components/features/settings/brand-button";
-import { useLaunchSkillInChat } from "#/hooks/use-launch-skill-in-chat";
+import { setAutomationSetupDraft } from "#/api/automation-setup-draft-store";
 import { useActiveBackend } from "#/contexts/active-backend-context";
+import { useNavigation } from "#/context/navigation-context";
+import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { useTracking } from "#/hooks/use-tracking";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import { getApiErrorMessage } from "#/utils/api-error-message";
 import { getAutomationsDocsUrl } from "#/manifests/automation-interface";
 
 function InlineExampleWrap({ children }: { children?: ReactNode }) {
@@ -51,13 +55,35 @@ export function CreateInstructionsContent({
   onLaunch,
 }: CreateInstructionsContentProps = {}) {
   const { t } = useTranslation("openhands");
-  const launchInChat = useLaunchSkillInChat();
   const active = useActiveBackend();
+  const { navigate } = useNavigation();
+  const createConversation = useCreateConversation();
   const { trackAutomationCreatedButton } = useTracking();
 
   const handleCreateAutomation = () => {
     trackAutomationCreatedButton({ backendKind: active.backend.kind });
-    launchInChat(t(I18nKey.AUTOMATIONS$CREATE_AUTOMATION_PROMPT), onLaunch);
+    createConversation.mutate(
+      {
+        query: t(I18nKey.AUTOMATIONS$CREATE_AUTOMATION_PROMPT),
+        automationSetup: true,
+        entryPoint: "automations_add",
+      },
+      {
+        onSuccess: (conversation) => {
+          onLaunch?.();
+          setAutomationSetupDraft(conversation.conversation_id, {
+            prompt: "",
+            kind: "prompt",
+          });
+          navigate(`/conversations/${conversation.conversation_id}`);
+        },
+        onError: (error) => {
+          displayErrorToast(
+            getApiErrorMessage(error, t(I18nKey.ERROR$GENERIC)),
+          );
+        },
+      },
+    );
   };
 
   return (
@@ -84,6 +110,7 @@ export function CreateInstructionsContent({
           type="button"
           variant="primary"
           testId="automations-create-automation"
+          isDisabled={createConversation.isPending}
           onClick={handleCreateAutomation}
           startContent={
             <MessageSquareShareIcon className="size-4" aria-hidden />

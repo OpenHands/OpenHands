@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, type ReactNode } from "react";
-import { RefreshCw } from "lucide-react";
+import { FileText, Play, RefreshCw, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { I18nKey } from "#/i18n/declaration";
 import {
   displaySuccessToast,
@@ -9,13 +10,22 @@ import {
 } from "#/utils/custom-toast-handlers";
 import { getApiErrorMessage } from "#/utils/api-error-message";
 import {
+  useAutomationDrafts,
   useAutomations,
   useToggleAutomation,
   useDeleteAutomation,
+  useDeleteAutomationDraft,
   useDispatchAutomation,
+  useDispatchAutomationDraft,
   useImportAutomation,
 } from "#/hooks/query/use-automations";
 import { useAutomationHealth } from "#/hooks/query/use-automation-health";
+import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import {
+  setAutomationSetupDraft,
+  type AutomationSetupKind,
+} from "#/api/automation-setup-draft-store";
+import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useNavigation } from "#/context/navigation-context";
 import { SearchInput } from "#/components/features/automations/search-input";
@@ -58,6 +68,7 @@ import {
 } from "#/manifests/automation-insights";
 import { interpolateValues } from "#/manifests/manifest-template";
 import type {
+  AutomationDraftApiResponse,
   DashboardSortValue,
   DashboardStatusValue,
   DashboardTriggerValue,
@@ -70,6 +81,10 @@ import { MANIFEST_ICON_BY_SLUG } from "#/components/features/manifest/manifest-i
 import { ManifestOverviewTiles } from "#/components/features/manifest/manifest-overview-tiles";
 import { ManifestSubpageLayout } from "#/components/features/manifest/manifest-subpage-layout";
 import { cn, downloadBlob } from "#/utils/utils";
+import { formatRelativeTime } from "#/utils/format-relative-time";
+import { isDraftAutomation } from "#/utils/automation-state";
+import { buildAutomationDraftTags } from "#/utils/automation-draft-tags";
+import { StatusBadge } from "#/components/features/automations/status-badge";
 
 const PAGE_SIZE = 50;
 
@@ -84,6 +99,247 @@ export const clientLoader = () => {
   }
   return null;
 };
+
+function getDraftKind(draft: AutomationDraftApiResponse): AutomationSetupKind {
+  if (draft.endpoint === "/v1") return "custom";
+  if (draft.endpoint === "/v1/preset/plugin") return "plugin";
+  return "prompt";
+}
+
+function getDraftKindLabel(draft: AutomationDraftApiResponse, t: TFunction) {
+  const kind = getDraftKind(draft);
+  if (kind === "custom") return t(I18nKey.AUTOMATION_SETUP$TYPE_CUSTOM);
+  if (kind === "plugin") return t(I18nKey.AUTOMATION_SETUP$TYPE_PLUGIN);
+  return t(I18nKey.AUTOMATION_SETUP$TYPE_PROMPT);
+}
+
+function getDraftTriggerSummary(
+  draft: AutomationDraftApiResponse,
+  t: TFunction,
+) {
+  const trigger = draft.draft.trigger as Record<string, unknown> | undefined;
+  if (!trigger || typeof trigger !== "object") return null;
+  if (trigger.type === "event") {
+    const source = typeof trigger.source === "string" ? trigger.source : null;
+    const event = Array.isArray(trigger.on)
+      ? trigger.on
+          .filter((item): item is string => typeof item === "string")
+          .join(", ")
+      : typeof trigger.on === "string"
+        ? trigger.on
+        : null;
+    return (
+      [source, event].filter(Boolean).join(" · ") ||
+      t(I18nKey.AUTOMATIONS$DETAIL$TRIGGER_EVENT)
+    );
+  }
+  const schedule =
+    typeof trigger.schedule === "string" ? trigger.schedule : null;
+  return schedule ?? t(I18nKey.AUTOMATIONS$DETAIL$TRIGGER_SCHEDULE);
+}
+
+function isEventTriggeredDraft(draft: AutomationDraftApiResponse): boolean {
+  const trigger = draft.draft.trigger as Record<string, unknown> | undefined;
+  return Boolean(
+    trigger && typeof trigger === "object" && trigger.type === "event",
+  );
+}
+
+function getDraftValidationLabel(
+  draft: AutomationDraftApiResponse,
+  t: TFunction,
+) {
+  return draft.validationErrors?.length
+    ? t(I18nKey.AUTOMATION_SETUP$NEEDS_CHANGES)
+    : t(I18nKey.AUTOMATION_SETUP$READY_TO_TEST);
+}
+
+function setupDraftFromServerDraft(draft: AutomationDraftApiResponse) {
+  const body = draft.draft as Record<string, unknown>;
+  const plugins = Array.isArray(body.plugins)
+    ? body.plugins
+        .map((plugin) =>
+          plugin && typeof plugin === "object"
+            ? (plugin as Record<string, unknown>).source
+            : null,
+        )
+        .filter((source): source is string => typeof source === "string")
+    : [];
+  return {
+    prompt: typeof body.prompt === "string" ? body.prompt : "",
+    kind: getDraftKind(draft),
+    ...(plugins.length > 0 ? { plugins } : {}),
+  };
+}
+
+function matchesSavedDraftSearch(
+  draft: AutomationDraftApiResponse,
+  searchQuery: string,
+): boolean {
+  const normalized = searchQuery.trim().toLowerCase();
+  if (!normalized) return true;
+  return [
+    draft.name ?? draft.id,
+    String(draft.draft.prompt ?? ""),
+    getDraftKind(draft),
+    getDraftTriggerSummary(draft, ((key: string) => key) as TFunction) ?? "",
+  ]
+    .join("\n")
+    .toLowerCase()
+    .includes(normalized);
+}
+
+interface SavedDraftsGroupProps {
+  drafts: AutomationDraftApiResponse[];
+  onResume: (draft: AutomationDraftApiResponse) => void;
+  onDelete: (draft: AutomationDraftApiResponse) => void;
+  onTest: (draft: AutomationDraftApiResponse) => void;
+  resumingDraftId: string | null;
+  deletingDraftId: string | null;
+  testingDraftId: string | null;
+}
+
+function SavedDraftsGroup({
+  drafts,
+  onResume,
+  onDelete,
+  onTest,
+  resumingDraftId,
+  deletingDraftId,
+  testingDraftId,
+}: SavedDraftsGroupProps) {
+  const { t, i18n } = useTranslation("openhands");
+  if (drafts.length === 0) return null;
+
+  return (
+    <section>
+      <div className="flex items-center">
+        <h2 className="text-base font-semibold text-foreground">
+          {t(I18nKey.AUTOMATIONS$SAVED_DRAFTS)}
+        </h2>
+        <StatusBadge count={drafts.length} />
+      </div>
+      <ul className="mt-3 flex flex-col gap-3">
+        {drafts.map((draft) => {
+          const title = draft.name ?? t(I18nKey.AUTOMATIONS$UNTITLED_DRAFT);
+          const isResuming = resumingDraftId === draft.id;
+          const isDeleting = deletingDraftId === draft.id;
+          const isTesting = testingDraftId === draft.id;
+          const canTestDirectly =
+            draft.dispatchable && !isEventTriggeredDraft(draft);
+          const canTest = canTestDirectly && !isTesting;
+          return (
+            <li
+              key={draft.id}
+              data-testid={`automation-setup-draft-${draft.id}`}
+              className="rounded-2xl border border-[var(--oh-border)] bg-[var(--oh-surface)] p-4"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <button
+                  type="button"
+                  data-testid={`automation-setup-draft-open-${draft.id}`}
+                  className="min-w-0 flex-1 cursor-pointer text-left"
+                  disabled={isResuming || isDeleting || isTesting}
+                  onClick={() => onResume(draft)}
+                >
+                  <div className="flex min-w-0 items-center gap-2">
+                    <FileText
+                      className="size-4 shrink-0 text-muted"
+                      aria-hidden
+                    />
+                    <h3 className="truncate text-sm font-semibold text-content">
+                      {title}
+                    </h3>
+                    <span className="rounded-full bg-[var(--oh-warning)]/10 px-2.5 py-0.5 text-xs font-medium text-[var(--oh-warning)]">
+                      {t(I18nKey.AUTOMATIONS$DETAIL$DRAFT)}
+                    </span>
+                  </div>
+                  <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+                    <div className="flex gap-1">
+                      <dt>{t(I18nKey.AUTOMATION_SETUP$DRAFT_TYPE)}</dt>
+                      <dd className="text-text-secondary">
+                        {getDraftKindLabel(draft, t)}
+                      </dd>
+                    </div>
+                    <div className="flex gap-1">
+                      <dt>{t(I18nKey.AUTOMATION_SETUP$DRAFT_TRIGGER)}</dt>
+                      <dd className="text-text-secondary">
+                        {getDraftTriggerSummary(draft, t)}
+                      </dd>
+                    </div>
+                    <div className="flex gap-1">
+                      <dt>{t(I18nKey.AUTOMATION_SETUP$LAST_SAVED)}</dt>
+                      <dd className="text-text-secondary">
+                        {formatRelativeTime(draft.updatedAt, i18n.language, t)}
+                      </dd>
+                    </div>
+                    <div className="flex gap-1">
+                      <dt>{t(I18nKey.AUTOMATION_SETUP$DRAFT_VALIDATION)}</dt>
+                      <dd
+                        className={
+                          draft.validationErrors?.length
+                            ? "text-[var(--oh-warning)]"
+                            : "text-[var(--oh-success)]"
+                        }
+                      >
+                        {getDraftValidationLabel(draft, t)}
+                      </dd>
+                    </div>
+                    {draft.lastTestRunId ? (
+                      <div className="flex gap-1">
+                        <dt>{t(I18nKey.AUTOMATION_SETUP$LATEST_TEST)}</dt>
+                        <dd className="font-mono text-text-secondary">
+                          {draft.lastTestRunId}
+                        </dd>
+                      </div>
+                    ) : null}
+                  </dl>
+                </button>
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
+                  <BrandButton
+                    type="button"
+                    variant="primary"
+                    testId={`automation-setup-draft-resume-${draft.id}`}
+                    isDisabled={isResuming || isDeleting || isTesting}
+                    onClick={() => onResume(draft)}
+                  >
+                    {isResuming
+                      ? t(I18nKey.AUTOMATION_SETUP$RESUMING_DRAFT)
+                      : t(I18nKey.AUTOMATION_SETUP$RESUME_DRAFT)}
+                  </BrandButton>
+                  {canTestDirectly ? (
+                    <BrandButton
+                      type="button"
+                      variant="secondary"
+                      testId={`automation-setup-draft-test-${draft.id}`}
+                      isDisabled={!canTest || isResuming || isDeleting}
+                      onClick={() => onTest(draft)}
+                      startContent={<Play className="size-4" aria-hidden />}
+                    >
+                      {isTesting
+                        ? t(I18nKey.AUTOMATION_SETUP$STARTING_TEST)
+                        : t(I18nKey.AUTOMATION_SETUP$TEST_DRAFT)}
+                    </BrandButton>
+                  ) : null}
+                  <button
+                    type="button"
+                    data-testid={`automation-setup-draft-delete-${draft.id}`}
+                    aria-label={t(I18nKey.AUTOMATION_SETUP$DELETE_DRAFT)}
+                    disabled={isDeleting || isResuming || isTesting}
+                    onClick={() => onDelete(draft)}
+                    className="inline-flex size-9 items-center justify-center rounded-lg border border-border text-muted transition-colors hover:bg-surface-raised hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Trash2 className="size-4" aria-hidden />
+                  </button>
+                </div>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
 
 export default function AutomationsList() {
   const { t } = useTranslation("openhands");
@@ -112,6 +368,9 @@ export default function AutomationsList() {
     id: string;
     name: string;
   } | null>(null);
+  const [deleteDraftTarget, setDeleteDraftTarget] =
+    useState<AutomationDraftApiResponse | null>(null);
+  const [resumingDraftId, setResumingDraftId] = useState<string | null>(null);
   const [editTarget, setEditTarget] = useState<Automation | null>(null);
   const [isAddAutomationOpen, setIsAddAutomationOpen] = useState(false);
   const [importSpec, setImportSpec] = useState<AutomationSpec | null>(null);
@@ -137,6 +396,16 @@ export default function AutomationsList() {
     offset: 0,
     enabled: isBackendHealthy,
   });
+  const {
+    data: draftsData,
+    isLoading: isDraftsLoading,
+    isError: isDraftsError,
+    refetch: refetchDrafts,
+  } = useAutomationDrafts({
+    limit,
+    offset: 0,
+    enabled: isBackendHealthy,
+  });
   // One runs query per listed automation — dashboard mode only.
   const runSummaries = useAutomationRunSummaries(data?.automations ?? [], {
     enabled: isBackendHealthy && dashboard !== null,
@@ -145,8 +414,11 @@ export default function AutomationsList() {
     useTracking();
   const toggleMutation = useToggleAutomation();
   const deleteMutation = useDeleteAutomation();
+  const deleteDraftMutation = useDeleteAutomationDraft();
   const dispatchMutation = useDispatchAutomation();
+  const dispatchDraftMutation = useDispatchAutomationDraft();
   const importMutation = useImportAutomation();
+  const createConversationMutation = useCreateConversation();
 
   const visible = useMemo(() => {
     if (!data?.automations) return [];
@@ -175,11 +447,21 @@ export default function AutomationsList() {
     runSummaries,
   ]);
 
+  const visibleSavedDrafts = useMemo(
+    () =>
+      (draftsData?.drafts ?? []).filter((draft) =>
+        matchesSavedDraftSearch(draft, searchQuery),
+      ),
+    [draftsData?.drafts, searchQuery],
+  );
   const activeAutomations = useMemo(
-    () => visible.filter((a) => a.enabled),
+    () => visible.filter((a) => a.enabled && !isDraftAutomation(a)),
     [visible],
   );
-  const inactive = useMemo(() => visible.filter((a) => !a.enabled), [visible]);
+  const inactive = useMemo(
+    () => visible.filter((a) => !a.enabled && !isDraftAutomation(a)),
+    [visible],
+  );
 
   const handleToggle = (id: string, currentEnabled: boolean) => {
     const willEnable = !currentEnabled;
@@ -204,6 +486,64 @@ export default function AutomationsList() {
         );
       },
     });
+  };
+
+  const handleResumeDraft = (draft: AutomationDraftApiResponse) => {
+    if (resumingDraftId) return;
+    setResumingDraftId(draft.id);
+    createConversationMutation.mutate(
+      {
+        query: t(I18nKey.AUTOMATIONS$CREATE_AUTOMATION_PROMPT),
+        automationSetup: true,
+        entryPoint: "automation_draft_resume",
+      },
+      {
+        onSuccess: async (conversation) => {
+          const conversationId = conversation.conversation_id;
+          setAutomationSetupDraft(
+            conversationId,
+            setupDraftFromServerDraft(draft),
+          );
+          try {
+            await AgentServerConversationService.updateConversationTags(
+              conversationId,
+              buildAutomationDraftTags(
+                null,
+                draft.id,
+                draft.materializedAutomationId,
+              ),
+            );
+          } catch {
+            // Best-effort: the local setup draft still opens the form, and the
+            // panel can save tags again after the next draft write.
+          }
+          navigate?.(`/conversations/${conversationId}`);
+        },
+        onError: (error) => {
+          displayErrorToast(
+            getApiErrorMessage(error, t(I18nKey.ERROR$GENERIC)),
+          );
+        },
+        onSettled: () => setResumingDraftId(null),
+      },
+    );
+  };
+
+  const handleTestDraft = (draft: AutomationDraftApiResponse) => {
+    dispatchDraftMutation.mutate(draft.id, {
+      onSuccess: () => {
+        displaySuccessToast(t(I18nKey.AUTOMATION_SETUP$TEST_DISPATCHED));
+      },
+      onError: (error) => {
+        displayErrorToast(
+          getApiErrorMessage(error, t(I18nKey.AUTOMATIONS$RUN_NOW_ERROR)),
+        );
+      },
+    });
+  };
+
+  const handleDeleteDraftRequest = (draft: AutomationDraftApiResponse) => {
+    setDeleteDraftTarget(draft);
   };
 
   const handleDeleteRequest = (id: string) => {
@@ -277,6 +617,19 @@ export default function AutomationsList() {
     }
   };
 
+  const handleDeleteDraftConfirm = () => {
+    if (!deleteDraftTarget) return;
+    deleteDraftMutation.mutate(deleteDraftTarget.id, {
+      onSuccess: () => {
+        displaySuccessToast(t(I18nKey.AUTOMATION_SETUP$DRAFT_DELETED));
+      },
+      onError: (error) => {
+        displayErrorToast(getApiErrorMessage(error, t(I18nKey.ERROR$GENERIC)));
+      },
+      onSettled: () => setDeleteDraftTarget(null),
+    });
+  };
+
   const handleViewModeChange = useCallback((view: AutomationViewMode) => {
     setViewMode(view);
     writeStoredAutomationViewMode(view);
@@ -329,7 +682,12 @@ export default function AutomationsList() {
 
   const hasMore = data ? data.total > data.automations.length : false;
   const hasNoAutomations =
-    !isLoading && !isError && data?.automations.length === 0;
+    !isLoading &&
+    !isDraftsLoading &&
+    !isError &&
+    !isDraftsError &&
+    data?.automations.length === 0 &&
+    draftsData?.drafts.length === 0;
 
   // Show loading state while checking health
   if (isHealthLoading) {
@@ -432,7 +790,7 @@ export default function AutomationsList() {
 
       {/* Content */}
       <div className={cn("flex flex-col gap-6", !dashboard && "mt-6")}>
-        {isLoading && (
+        {(isLoading || isDraftsLoading) && (
           <div className="flex flex-col gap-3">
             {Array.from({ length: 3 }).map((_, i) => (
               <AutomationCardSkeleton key={`skeleton-${String(i)}`} />
@@ -440,18 +798,46 @@ export default function AutomationsList() {
           </div>
         )}
 
-        {isError && !isLoading && <ErrorState onRetry={refetch} />}
+        {(isError || isDraftsError) && !(isLoading || isDraftsLoading) && (
+          <ErrorState
+            onRetry={() => {
+              void refetch();
+              void refetchDrafts();
+            }}
+          />
+        )}
 
         {hasNoAutomations && <EmptyState />}
 
         {!isLoading &&
           !isError &&
+          !isDraftsError &&
           data &&
-          data.automations.length > 0 &&
-          (dashboard && visible.length === 0 ? (
+          draftsData &&
+          (data.automations.length > 0 || draftsData.drafts.length > 0) &&
+          (dashboard &&
+          visible.length === 0 &&
+          visibleSavedDrafts.length === 0 ? (
             <AutomationsFilteredEmptyState onClear={handleClearFilters} />
           ) : (
             <>
+              <SavedDraftsGroup
+                drafts={visibleSavedDrafts}
+                onResume={handleResumeDraft}
+                onDelete={handleDeleteDraftRequest}
+                onTest={handleTestDraft}
+                resumingDraftId={resumingDraftId}
+                deletingDraftId={
+                  deleteDraftMutation.isPending
+                    ? (deleteDraftMutation.variables ?? null)
+                    : null
+                }
+                testingDraftId={
+                  dispatchDraftMutation.isPending
+                    ? (dispatchDraftMutation.variables ?? null)
+                    : null
+                }
+              />
               <AutomationGroup
                 title={t(I18nKey.AUTOMATIONS$ACTIVE)}
                 count={activeAutomations.length}
@@ -514,6 +900,47 @@ export default function AutomationsList() {
         onConfirm={handleDeleteConfirm}
         onCancel={() => setDeleteTarget(null)}
       />
+
+      {deleteDraftTarget ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/60"
+            aria-label={t(I18nKey.BUTTON$CLOSE)}
+            onClick={() => setDeleteDraftTarget(null)}
+          />
+          <div className="relative w-full max-w-sm rounded-xl border border-border bg-surface p-6">
+            <h2 className="text-lg font-semibold text-content">
+              {t(I18nKey.AUTOMATION_SETUP$DELETE_DRAFT_TITLE)}
+            </h2>
+            <p className="mt-2 text-sm text-muted">
+              {t(I18nKey.AUTOMATION_SETUP$DELETE_DRAFT_MESSAGE, {
+                name:
+                  deleteDraftTarget.name ??
+                  t(I18nKey.AUTOMATIONS$UNTITLED_DRAFT),
+              })}
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setDeleteDraftTarget(null)}
+                className="rounded-lg border border-border px-4 py-2 text-sm text-contrast hover:bg-surface-raised"
+              >
+                {t(I18nKey.AUTOMATIONS$CANCEL)}
+              </button>
+              <button
+                type="button"
+                data-testid="automation-setup-draft-delete-confirm"
+                onClick={handleDeleteDraftConfirm}
+                disabled={deleteDraftMutation.isPending}
+                className="rounded-lg bg-danger px-4 py-2 text-sm text-white hover:bg-danger/80 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {t(I18nKey.AUTOMATION_SETUP$DELETE_DRAFT)}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {/* Edit modal */}
       {editTarget && (

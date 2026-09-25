@@ -9,6 +9,28 @@ import {
 import { AddAutomationModal } from "#/components/features/automations/add-automation-modal";
 import { I18nKey } from "#/i18n/declaration";
 
+const mocks = vi.hoisted(() => ({
+  createConversation: vi.fn(),
+  trackAutomationCreatedButton: vi.fn(),
+}));
+
+vi.mock("#/hooks/mutation/use-create-conversation", () => ({
+  useCreateConversation: () => ({
+    mutate: mocks.createConversation,
+    isPending: false,
+  }),
+}));
+
+vi.mock("#/contexts/active-backend-context", () => ({
+  useActiveBackend: () => ({ backend: { kind: "local" } }),
+}));
+
+vi.mock("#/hooks/use-tracking", () => ({
+  useTracking: () => ({
+    trackAutomationCreatedButton: mocks.trackAutomationCreatedButton,
+  }),
+}));
+
 vi.mock("#/hooks/query/use-settings", () => ({
   useSettings: () => ({ data: { user_consents_to_analytics: true } }),
 }));
