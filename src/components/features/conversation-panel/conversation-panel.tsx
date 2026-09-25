@@ -903,7 +903,7 @@ export function ConversationPanel({
             !showHoverMetadata || openContextMenuId === conversation.id
           }
           disableAnimation={import.meta.env.MODE === "test"}
-          className="max-w-none overflow-visible rounded-xl border border-[var(--oh-border)] bg-base-secondary p-0 text-white shadow-xl"
+          className="max-w-none overflow-visible rounded-xl border border-border bg-base-secondary p-0 text-contrast shadow-xl"
           content={
             <ConversationCardPreview
               title={conversation.title ?? ""}
@@ -931,11 +931,10 @@ export function ConversationPanel({
             onClick={onClose}
             className={cn(
               "block rounded-md transition-colors",
-              openContextMenuId !== conversation.id &&
-                "hover:bg-[var(--oh-surface)]",
+              openContextMenuId !== conversation.id && "hover:bg-surface",
               (conversation.id === currentConversationId ||
                 openContextMenuId === conversation.id) &&
-                "bg-[var(--oh-surface)]",
+                "bg-surface",
             )}
           >
             <ConversationCard
@@ -1050,6 +1049,32 @@ export function ConversationPanel({
     !startTasks?.length &&
     !hasVisibleGroups;
 
+  // The Conversations header doubles as a bulk control for the grouped view:
+  // collapse every visible folder while any is expanded, expand them all once
+  // none is. Folders outside the current view keep their own state.
+  const allGroupsCollapsed =
+    hasVisibleGroups &&
+    (orderedConversationGroups ?? []).every((group) =>
+      collapsedGroupIds.has(group.id),
+    );
+
+  const toggleAllGroupsCollapsed = React.useCallback(() => {
+    setCollapsedGroupIds((prev) => {
+      const groupIds =
+        orderedConversationGroups?.map((group) => group.id) ?? [];
+      if (groupIds.length === 0) {
+        return prev;
+      }
+      const next = new Set(prev);
+      if (groupIds.every((groupId) => prev.has(groupId))) {
+        groupIds.forEach((groupId) => next.delete(groupId));
+      } else {
+        groupIds.forEach((groupId) => next.add(groupId));
+      }
+      return next;
+    });
+  }, [orderedConversationGroups]);
+
   const showConversationHeader = !compact;
 
   return (
@@ -1064,16 +1089,32 @@ export function ConversationPanel({
             // Pull flush to the sidebar edges: `-ml-2.5` matches aside `pl-2.5`;
             // width extends by that inset on the right now that aside is `pr-0`.
             "-ml-2.5 w-[calc(100%+0.625rem)] max-w-none box-border border-b",
-            isListScrolled ? "border-[var(--oh-border)]" : "border-transparent",
+            isListScrolled ? "border-border" : "border-transparent",
           )}
         >
           <div
             data-testid="older-conversations-summary"
-            className="flex min-w-0 flex-nowrap items-center gap-x-2 py-2 pl-4 pr-2.5 text-[var(--oh-muted)]"
+            className="flex min-w-0 flex-nowrap items-center gap-x-2 py-2 pl-4 pr-2.5 text-muted"
           >
-            <span className="min-w-0 truncate text-sm font-medium text-[var(--oh-muted)]">
-              {t(I18nKey.SIDEBAR$CONVERSATIONS)}
-            </span>
+            {hasVisibleGroups ? (
+              <button
+                type="button"
+                data-testid="conversations-header-toggle"
+                aria-expanded={!allGroupsCollapsed}
+                onClick={toggleAllGroupsCollapsed}
+                className={cn(
+                  "min-w-0 cursor-pointer truncate text-left text-sm font-medium",
+                  "text-muted transition-colors hover:text-white",
+                  "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border",
+                )}
+              >
+                {t(I18nKey.SIDEBAR$CONVERSATIONS)}
+              </button>
+            ) : (
+              <span className="min-w-0 truncate text-sm font-medium text-muted">
+                {t(I18nKey.SIDEBAR$CONVERSATIONS)}
+              </span>
+            )}
             <div className="ml-auto flex shrink-0 items-center gap-0.5">
               <ConversationPanelNewThreadPicker
                 backendKind={activeBackend.kind}
@@ -1123,7 +1164,7 @@ export function ConversationPanel({
             data-testid="conversation-panel-empty-state"
             className="flex min-h-0 flex-1 flex-col items-center justify-center px-4 py-8"
           >
-            <p className="text-xs text-[var(--oh-muted)]">
+            <p className="text-xs text-muted">
               {t(
                 emptyDueToAutomationFilter
                   ? I18nKey.CONVERSATION_PANEL$NO_AUTOMATION_MATCHES
@@ -1219,7 +1260,7 @@ export function ConversationPanel({
                 type="button"
                 data-testid="load-more-conversations"
                 onClick={requestLoadMore}
-                className="text-xs text-[var(--oh-muted)] hover:text-white"
+                className="text-xs text-muted hover:text-contrast"
               >
                 {t(I18nKey.CONVERSATION$LOAD_MORE)}
               </button>
