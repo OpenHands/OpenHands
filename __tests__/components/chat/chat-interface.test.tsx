@@ -303,6 +303,16 @@ describe("ChatInterface - Empty state", () => {
       expect(repoSuggestions).toContain(suggestion.textContent);
     });
   });
+
+  it("hides the empty-state suggestions in an automation thread", () => {
+    renderWithProviders(
+      <MemoryRouter>
+        <ChatInterface showEmptyStateSuggestions={false} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByTestId("chat-suggestions")).not.toBeInTheDocument();
+  });
 });
 
 describe("ChatInterface - Scroll-up loads older events", () => {

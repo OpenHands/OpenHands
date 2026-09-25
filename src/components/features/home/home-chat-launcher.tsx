@@ -20,6 +20,7 @@ import { Branch, GitRepository } from "#/types/git";
 import { Provider } from "#/types/settings";
 import { LocalWorkspace } from "#/types/workspace";
 import { I18nKey } from "#/i18n/declaration";
+import { cn } from "#/utils/utils";
 import {
   displayErrorToast,
   TOAST_OPTIONS,
@@ -276,7 +277,14 @@ export function HomeChatLauncher() {
           />
         </div>
 
-        <div className="flex items-center justify-start gap-2">
+        <div
+          data-testid="home-composer-actions"
+          aria-disabled={isAutomateMode}
+          className={cn(
+            "flex items-center justify-start gap-2",
+            isAutomateMode && "pointer-events-none opacity-40",
+          )}
+        >
           {hasSelection ? (
             <HomeGitControlBarPreview
               workspace={pendingWorkspace}
@@ -292,14 +300,18 @@ export function HomeChatLauncher() {
             <OpenLauncherButton
               kind={isLocal ? "local" : "cloud"}
               onClick={() => setIsDialogOpen(true)}
-              disabled={isCreating || Boolean(workspacesUnsupportedMessage)}
+              disabled={
+                isCreating ||
+                isAutomateMode ||
+                Boolean(workspacesUnsupportedMessage)
+              }
               disabledTooltip={workspacesUnsupportedMessage}
             />
           )}
           <PluginPickerTrigger
             count={selectedPlugins.length}
             onClick={() => setIsPluginPickerOpen(true)}
-            disabled={isCreating}
+            disabled={isCreating || isAutomateMode}
           />
         </div>
 
