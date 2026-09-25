@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, type ReactNode } from "react";
-import { FileText, Play, RefreshCw, Trash2 } from "lucide-react";
+import { RefreshCw, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { I18nKey } from "#/i18n/declaration";
@@ -32,6 +32,8 @@ import { SearchInput } from "#/components/features/automations/search-input";
 import { AutomationGroup } from "#/components/features/automations/automation-group";
 import { AutomationViewToggle } from "#/components/features/automations/automation-view-toggle";
 import {
+  automationActivityListClassName,
+  automationActivityRowClassName,
   readStoredAutomationViewMode,
   writeStoredAutomationViewMode,
   type AutomationViewMode,
@@ -47,6 +49,7 @@ import { AddAutomationModal } from "#/components/features/automations/add-automa
 import { ImportAutomationModal } from "#/components/features/automations/import-automation-modal";
 import { RecommendedAutomationsLauncher } from "#/components/features/automations/recommended-automations-launcher";
 import { BrandButton } from "#/components/features/settings/brand-button";
+import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { useTracking } from "#/hooks/use-tracking";
 import { useAutomationPermissions } from "#/hooks/use-automation-permissions";
 import type { Automation, AutomationSpec } from "#/types/automation";
@@ -81,8 +84,9 @@ import { MANIFEST_ICON_BY_SLUG } from "#/components/features/manifest/manifest-i
 import { ManifestOverviewTiles } from "#/components/features/manifest/manifest-overview-tiles";
 import { ManifestSubpageLayout } from "#/components/features/manifest/manifest-subpage-layout";
 import { cn, downloadBlob } from "#/utils/utils";
-import { formatRelativeTime } from "#/utils/format-relative-time";
 import { isDraftAutomation } from "#/utils/automation-state";
+import { automationIconActionButtonClassName } from "#/components/features/automations/automation-action-button-classes";
+import PlayIcon from "#/icons/play.svg?react";
 import { buildAutomationDraftTags } from "#/utils/automation-draft-tags";
 import { StatusBadge } from "#/components/features/automations/status-badge";
 
@@ -104,13 +108,6 @@ function getDraftKind(draft: AutomationDraftApiResponse): AutomationSetupKind {
   if (draft.endpoint === "/v1") return "custom";
   if (draft.endpoint === "/v1/preset/plugin") return "plugin";
   return "prompt";
-}
-
-function getDraftKindLabel(draft: AutomationDraftApiResponse, t: TFunction) {
-  const kind = getDraftKind(draft);
-  if (kind === "custom") return t(I18nKey.AUTOMATION_SETUP$TYPE_CUSTOM);
-  if (kind === "plugin") return t(I18nKey.AUTOMATION_SETUP$TYPE_PLUGIN);
-  return t(I18nKey.AUTOMATION_SETUP$TYPE_PROMPT);
 }
 
 function getDraftTriggerSummary(
@@ -143,15 +140,6 @@ function isEventTriggeredDraft(draft: AutomationDraftApiResponse): boolean {
   return Boolean(
     trigger && typeof trigger === "object" && trigger.type === "event",
   );
-}
-
-function getDraftValidationLabel(
-  draft: AutomationDraftApiResponse,
-  t: TFunction,
-) {
-  return draft.validationErrors?.length
-    ? t(I18nKey.AUTOMATION_SETUP$NEEDS_CHANGES)
-    : t(I18nKey.AUTOMATION_SETUP$READY_TO_TEST);
 }
 
 function setupDraftFromServerDraft(draft: AutomationDraftApiResponse) {
@@ -208,7 +196,7 @@ function SavedDraftsGroup({
   deletingDraftId,
   testingDraftId,
 }: SavedDraftsGroupProps) {
-  const { t, i18n } = useTranslation("openhands");
+  const { t } = useTranslation("openhands");
   if (drafts.length === 0) return null;
 
   return (
@@ -219,7 +207,7 @@ function SavedDraftsGroup({
         </h2>
         <StatusBadge count={drafts.length} />
       </div>
-      <ul className="mt-3 flex flex-col gap-3">
+      <ul className={cn(automationActivityListClassName, "mt-3")}>
         {drafts.map((draft) => {
           const title = draft.name ?? t(I18nKey.AUTOMATIONS$UNTITLED_DRAFT);
           const isResuming = resumingDraftId === draft.id;
@@ -227,111 +215,74 @@ function SavedDraftsGroup({
           const isTesting = testingDraftId === draft.id;
           const canTestDirectly =
             draft.dispatchable && !isEventTriggeredDraft(draft);
-          const canTest = canTestDirectly && !isTesting;
+          const isBusy = isResuming || isDeleting || isTesting;
           return (
             <li
               key={draft.id}
               data-testid={`automation-setup-draft-${draft.id}`}
-              className="rounded-2xl border border-[var(--oh-border)] bg-[var(--oh-surface)] p-4"
+              className={automationActivityRowClassName}
             >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <button
-                  type="button"
+              <button
+                type="button"
+                data-testid={`automation-setup-draft-resume-${draft.id}`}
+                className="flex min-w-0 flex-1 items-center px-3 py-2.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus"
+                disabled={isBusy}
+                aria-label={
+                  isResuming
+                    ? t(I18nKey.AUTOMATION_SETUP$RESUMING_DRAFT)
+                    : title
+                }
+                onClick={() => onResume(draft)}
+              >
+                <span
                   data-testid={`automation-setup-draft-open-${draft.id}`}
-                  className="min-w-0 flex-1 cursor-pointer text-left"
-                  disabled={isResuming || isDeleting || isTesting}
-                  onClick={() => onResume(draft)}
+                  className="block min-w-0 truncate text-sm font-medium leading-5 text-foreground"
                 >
-                  <div className="flex min-w-0 items-center gap-2">
-                    <FileText
-                      className="size-4 shrink-0 text-muted"
-                      aria-hidden
-                    />
-                    <h3 className="truncate text-sm font-semibold text-content">
-                      {title}
-                    </h3>
-                    <span className="rounded-full bg-[var(--oh-warning)]/10 px-2.5 py-0.5 text-xs font-medium text-[var(--oh-warning)]">
-                      {t(I18nKey.AUTOMATIONS$DETAIL$DRAFT)}
-                    </span>
-                  </div>
-                  <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
-                    <div className="flex gap-1">
-                      <dt>{t(I18nKey.AUTOMATION_SETUP$DRAFT_TYPE)}</dt>
-                      <dd className="text-text-secondary">
-                        {getDraftKindLabel(draft, t)}
-                      </dd>
-                    </div>
-                    <div className="flex gap-1">
-                      <dt>{t(I18nKey.AUTOMATION_SETUP$DRAFT_TRIGGER)}</dt>
-                      <dd className="text-text-secondary">
-                        {getDraftTriggerSummary(draft, t)}
-                      </dd>
-                    </div>
-                    <div className="flex gap-1">
-                      <dt>{t(I18nKey.AUTOMATION_SETUP$LAST_SAVED)}</dt>
-                      <dd className="text-text-secondary">
-                        {formatRelativeTime(draft.updatedAt, i18n.language, t)}
-                      </dd>
-                    </div>
-                    <div className="flex gap-1">
-                      <dt>{t(I18nKey.AUTOMATION_SETUP$DRAFT_VALIDATION)}</dt>
-                      <dd
-                        className={
-                          draft.validationErrors?.length
-                            ? "text-[var(--oh-warning)]"
-                            : "text-[var(--oh-success)]"
-                        }
-                      >
-                        {getDraftValidationLabel(draft, t)}
-                      </dd>
-                    </div>
-                    {draft.lastTestRunId ? (
-                      <div className="flex gap-1">
-                        <dt>{t(I18nKey.AUTOMATION_SETUP$LATEST_TEST)}</dt>
-                        <dd className="font-mono text-text-secondary">
-                          {draft.lastTestRunId}
-                        </dd>
-                      </div>
-                    ) : null}
-                  </dl>
-                </button>
-                <div className="flex shrink-0 flex-wrap items-center gap-2">
-                  <BrandButton
-                    type="button"
-                    variant="primary"
-                    testId={`automation-setup-draft-resume-${draft.id}`}
-                    isDisabled={isResuming || isDeleting || isTesting}
-                    onClick={() => onResume(draft)}
+                  {title}
+                </span>
+              </button>
+              <div className="flex shrink-0 items-center gap-1.5 pr-1.5">
+                {canTestDirectly && !isBusy ? (
+                  <StyledTooltip
+                    content={t(I18nKey.AUTOMATION_SETUP$TEST_RUN)}
+                    placement="top"
                   >
-                    {isResuming
-                      ? t(I18nKey.AUTOMATION_SETUP$RESUMING_DRAFT)
-                      : t(I18nKey.AUTOMATION_SETUP$RESUME_DRAFT)}
-                  </BrandButton>
-                  {canTestDirectly ? (
-                    <BrandButton
+                    <button
                       type="button"
-                      variant="secondary"
-                      testId={`automation-setup-draft-test-${draft.id}`}
-                      isDisabled={!canTest || isResuming || isDeleting}
+                      data-testid={`automation-setup-draft-test-${draft.id}`}
+                      aria-label={t(I18nKey.AUTOMATION_SETUP$TEST_DRAFT)}
                       onClick={() => onTest(draft)}
-                      startContent={<Play className="size-4" aria-hidden />}
+                      className={automationIconActionButtonClassName}
                     >
-                      {isTesting
-                        ? t(I18nKey.AUTOMATION_SETUP$STARTING_TEST)
-                        : t(I18nKey.AUTOMATION_SETUP$TEST_DRAFT)}
-                    </BrandButton>
-                  ) : null}
+                      <PlayIcon className="size-4 shrink-0" aria-hidden />
+                    </button>
+                  </StyledTooltip>
+                ) : (
                   <button
                     type="button"
-                    data-testid={`automation-setup-draft-delete-${draft.id}`}
-                    aria-label={t(I18nKey.AUTOMATION_SETUP$DELETE_DRAFT)}
-                    disabled={isDeleting || isResuming || isTesting}
-                    onClick={() => onDelete(draft)}
-                    className="inline-flex size-9 items-center justify-center rounded-lg border border-border text-muted transition-colors hover:bg-surface-raised hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                    data-testid={`automation-setup-draft-test-${draft.id}`}
+                    aria-label={
+                      isTesting
+                        ? t(I18nKey.AUTOMATION_SETUP$STARTING_TEST)
+                        : t(I18nKey.AUTOMATION_SETUP$TEST_DRAFT)
+                    }
+                    disabled
+                    onClick={() => onTest(draft)}
+                    className={automationIconActionButtonClassName}
                   >
-                    <Trash2 className="size-4" aria-hidden />
+                    <PlayIcon className="size-4 shrink-0" aria-hidden />
                   </button>
-                </div>
+                )}
+                <button
+                  type="button"
+                  data-testid={`automation-setup-draft-delete-${draft.id}`}
+                  aria-label={t(I18nKey.AUTOMATION_SETUP$DELETE_DRAFT)}
+                  disabled={isDeleting || isResuming || isTesting}
+                  onClick={() => onDelete(draft)}
+                  className={automationIconActionButtonClassName}
+                >
+                  <Trash2 className="size-4" aria-hidden />
+                </button>
               </div>
             </li>
           );
