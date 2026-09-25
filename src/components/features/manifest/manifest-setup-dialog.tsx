@@ -14,8 +14,11 @@ import { getApiErrorBody } from "#/utils/api-error-message";
 import { useTracking } from "#/hooks/use-tracking";
 import { useSetupCapabilities } from "#/hooks/query/use-manifest-capabilities";
 import { useSetupPrerequisites } from "#/hooks/query/use-manifest-prerequisites";
+import {
+  useSetupPreflight,
+  type SetupPreflightOutcome,
+} from "#/hooks/use-manifest-preflight";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
-import { useSetupPreflight } from "#/hooks/use-manifest-preflight";
 import { useSetupAction } from "#/manifests/manifest-actions";
 import {
   supportedActionKinds,
@@ -66,11 +69,14 @@ const PREFLIGHT_DEBOUNCE_MS = 400;
 const NO_SERVICE_ERRORS: MappedManifestErrors = {
   fieldErrors: {},
   formErrors: [],
+  stepErrors: {},
 };
 
 function hasAnyError(errors: MappedManifestErrors): boolean {
   return (
-    errors.formErrors.length > 0 || Object.keys(errors.fieldErrors).length > 0
+    errors.formErrors.length > 0 ||
+    Object.keys(errors.fieldErrors).length > 0 ||
+    Object.values(errors.stepErrors).some((messages) => messages?.length)
   );
 }
 
@@ -102,7 +108,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
 
   const capabilities = useSetupCapabilities(entry);
   const prerequisites = useSetupPrerequisites(entry);
-  const runPreflight = useSetupPreflight(entry);
+  const { runPreflight, invalidatePreflight } = useSetupPreflight(entry);
   const runAction = useSetupAction();
   const {
     trackAutomationSetupOpened,
@@ -140,6 +146,10 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   const [serviceErrors, setServiceErrors] =
     useState<MappedManifestErrors>(NO_SERVICE_ERRORS);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isPreflighting, setIsPreflighting] = useState(false);
+  const [preflightStatus, setPreflightStatus] = useState<
+    "passed" | "unsupported" | null
+  >(null);
 
   // Blur-triggered preflight reads the values as they are when the field is
   // left, which can be the same tick as the change that caused it.
@@ -147,9 +157,12 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   const blurTimerRef = useRef<number | null>(null);
   useEffect(
     () => () => {
-      if (blurTimerRef.current) window.clearTimeout(blurTimerRef.current);
+      if (blurTimerRef.current !== null) {
+        window.clearTimeout(blurTimerRef.current);
+      }
+      invalidatePreflight();
     },
-    [],
+    [invalidatePreflight],
   );
 
   const actionOptions = useMemo(() => {
@@ -251,13 +264,24 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   const unmet = [...capabilities.unmet, ...missingEndpoints];
   const showPrerequisites =
     prerequisites.blockingIntegrations.length > 0 ||
-    prerequisites.warningIntegrations.length > 0;
+    prerequisites.warningIntegrations.length > 0 ||
+    (serviceErrors.stepErrors.prerequisites?.length ?? 0) > 0;
   // Prerequisites resolve asynchronously; deriving the step keeps an entry with
   // nothing to check from flashing an empty first screen.
   const currentStep: SetupStep =
     step === "prerequisites" && !showPrerequisites ? "form" : step;
 
+  const resetPreflight = () => {
+    invalidatePreflight();
+    if (blurTimerRef.current !== null) {
+      window.clearTimeout(blurTimerRef.current);
+      blurTimerRef.current = null;
+    }
+    setPreflightStatus(null);
+  };
+
   const setTriggerValue = (kind: string) => {
+    resetPreflight();
     setSelectedTrigger(kind);
     const defaults = getInitialFormValues(entry.setup, kind, selectedAction);
     valuesRef.current = { ...defaults, ...valuesRef.current };
@@ -267,6 +291,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   };
 
   const setActionValue = (kind: string) => {
+    resetPreflight();
     setSelectedAction(kind);
     const defaults = getInitialFormValues(entry.setup, selectedTrigger, kind);
     valuesRef.current = { ...defaults, ...valuesRef.current };
@@ -303,25 +328,73 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   ]);
 
   const setFieldValue = (name: string, value: SetupFormValue) => {
+    resetPreflight();
     valuesRef.current = { ...valuesRef.current, [name]: value };
     setValues(valuesRef.current);
     setLocalErrors(({ [name]: _removed, ...rest }) => rest);
-    setServiceErrors((current) => {
-      if (!(name in current.fieldErrors)) return current;
-      const { [name]: _cleared, ...fieldErrors } = current.fieldErrors;
-      return { ...current, fieldErrors };
-    });
+    setServiceErrors(NO_SERVICE_ERRORS);
+  };
+
+  const applyPreflightOutcome = (
+    outcome: SetupPreflightOutcome | null,
+    routeToErroredStep: boolean,
+  ): boolean => {
+    if (!outcome) {
+      // Assisted setup has no service draft to validate.
+      setPreflightStatus(null);
+      return true;
+    }
+
+    switch (outcome.status) {
+      case "passed":
+        setServiceErrors(NO_SERVICE_ERRORS);
+        setPreflightStatus("passed");
+        return true;
+      case "unsupported":
+        setServiceErrors(NO_SERVICE_ERRORS);
+        setPreflightStatus("unsupported");
+        return true;
+      case "failed":
+        setServiceErrors(outcome.errors);
+        setPreflightStatus(null);
+        if (routeToErroredStep) {
+          setStep(
+            (outcome.errors.stepErrors.prerequisites?.length ?? 0) > 0
+              ? "prerequisites"
+              : "form",
+          );
+        }
+        return false;
+      case "unavailable":
+        setServiceErrors({
+          fieldErrors: {},
+          formErrors: [t(I18nKey.SETUP$PREFLIGHT_UNAVAILABLE)],
+          stepErrors: {},
+        });
+        setPreflightStatus(null);
+        if (routeToErroredStep) setStep("form");
+        return false;
+      case "stale":
+        return false;
+      default: {
+        const exhaustive: never = outcome;
+        return exhaustive;
+      }
+    }
   };
 
   const handleFieldBlur = () => {
-    if (blurTimerRef.current) window.clearTimeout(blurTimerRef.current);
+    if (blurTimerRef.current !== null) {
+      window.clearTimeout(blurTimerRef.current);
+    }
     blurTimerRef.current = window.setTimeout(() => {
+      blurTimerRef.current = null;
       void runPreflight(
         valuesRef.current,
         selectedTrigger,
         selectedAction,
-      ).then((result) => {
-        if (result) setServiceErrors(result);
+      ).then((outcome) => {
+        applyPreflightOutcome(outcome, false);
       });
     }, PREFLIGHT_DEBOUNCE_MS);
   };
@@ -330,6 +403,13 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     if (currentStep === "prerequisites") {
       setStep("form");
       return;
+    }
+
+    // An explicit Continue owns the verdict. A scheduled blur run must not
+    // start afterward and overwrite it with an older snapshot.
+    if (blurTimerRef.current !== null) {
+      window.clearTimeout(blurTimerRef.current);
+      blurTimerRef.current = null;
     }
 
     const failures = validateFormValues(
@@ -345,15 +425,20 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     }
     setLocalErrors({});
 
-    const result = await runPreflight(values, selectedTrigger, selectedAction);
-    if (result && hasAnyError(result)) {
-      setServiceErrors(result);
-      return;
-    }
+    setIsPreflighting(true);
+    try {
+      const outcome = await runPreflight(
+        values,
+        selectedTrigger,
+        selectedAction,
+      );
+      if (!applyPreflightOutcome(outcome, true)) return;
 
-    setServiceErrors(NO_SERVICE_ERRORS);
-    trackAutomationSetupValidated({ automationId: entry.id });
-    setStep("review");
+      trackAutomationSetupValidated({ automationId: entry.id });
+      setStep("review");
+    } finally {
+      setIsPreflighting(false);
+    }
   };
 
   const submitAction = async (
@@ -385,21 +470,38 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
         normalizeServiceErrors(getApiErrorBody(error), actionPayload),
         errorMap,
       );
-      setServiceErrors(
-        hasAnyError(mapped)
-          ? mapped
-          : {
-              fieldErrors: {},
-              formErrors: [t(I18nKey.SETUP$SUBMIT_FAILED)],
-            },
+      const nextErrors = hasAnyError(mapped)
+        ? mapped
+        : {
+            fieldErrors: {},
+            formErrors: [t(I18nKey.SETUP$SUBMIT_FAILED)],
+            stepErrors: {},
+          };
+      setServiceErrors(nextErrors);
+      setStep(
+        (nextErrors.stepErrors.prerequisites?.length ?? 0) > 0
+          ? "prerequisites"
+          : "form",
       );
-      setStep("form");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleConfirm = () => submitAction(payload, entry.setup.mode);
+  const handleConfirm = async () => {
+    setIsPreflighting(true);
+    try {
+      const outcome = await runPreflight(
+        values,
+        selectedTrigger,
+        selectedAction,
+      );
+      if (!applyPreflightOutcome(outcome, true)) return;
+      await submitAction(payload, entry.setup.mode);
+    } finally {
+      setIsPreflighting(false);
+    }
+  };
 
   // A direct entry whose deployment cannot run the direct path degrades to the
   // assisted outcome: the skill command and the entry's fallback message seed
@@ -470,7 +572,10 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
           )}
 
           {!isLoading && !isUnsupported && currentStep === "prerequisites" && (
-            <SetupPrerequisitesStep prerequisites={prerequisites} />
+            <SetupPrerequisitesStep
+              prerequisites={prerequisites}
+              errors={serviceErrors.stepErrors.prerequisites}
+            />
           )}
 
           {!isLoading && !isUnsupported && currentStep === "form" && (
@@ -479,6 +584,16 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
               {entry.setup.form.note && (
                 <p className="text-sm text-muted">{entry.setup.form.note}</p>
               )}
+              {serviceErrors.stepErrors.form?.map((message) => (
+                <p
+                  key={message}
+                  role="alert"
+                  data-testid="setup-step-error"
+                  className="text-sm text-red-400"
+                >
+                  {message}
+                </p>
+              ))}
               {allActionOptions.length > 1 && actionOptions.length > 1 && (
                 <div className="flex w-full flex-col gap-2.5">
                   <SettingsDropdownInput
@@ -579,6 +694,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
             <SetupReviewStep
               setup={entry.setup}
               values={values}
+              preflightStatus={preflightStatus}
               selectedTrigger={selectedTrigger}
               selectedAction={selectedAction}
             />
@@ -602,7 +718,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
               testId="setup-back-button"
               type="button"
               variant="secondary"
-              isDisabled={isSubmitting}
+              isDisabled={isSubmitting || isPreflighting}
               onClick={() => setStep("form")}
             >
               {t(I18nKey.BUTTON$BACK)}
@@ -640,6 +756,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
                 isLoading ||
                 isLoadingLlmProfileOptions ||
                 isSubmitting ||
+                isPreflighting ||
                 (currentStep === "prerequisites" && prerequisites.isBlocked)
               }
               onClick={

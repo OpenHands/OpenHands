@@ -95,6 +95,27 @@ const BUNDLES = [
   incidentFixture,
 ] as FixtureBundle[];
 
+const GITHUB_PREFLIGHT_REQUIREMENTS = {
+  integrations: [
+    {
+      id: "github",
+      alternatives: [
+        {
+          transport: "shttp",
+          locator: "https://api.githubcopilot.com/mcp/",
+          authStrategy: "oauth2",
+        },
+        {
+          transport: "shttp",
+          locator: "https://api.githubcopilot.com/mcp/",
+          authStrategy: "api_key",
+          secretNames: ["GITHUB_PERSONAL_ACCESS_TOKEN"],
+        },
+      ],
+    },
+  ],
+};
+
 function requireEntry(automationId: string): SetupEntry {
   const entry = SETUP_REGISTRY.findById(automationId);
   if (!entry) throw new Error(`The registry did not admit ${automationId}`);
@@ -341,9 +362,59 @@ describe("buildPreflightBody", () => {
       const envelope = buildPreflightBody(entry, formValues);
 
       // Assert
-      expect(envelope).toEqual(body);
+      expect(envelope).toEqual({
+        ...body,
+        // The reviewer now ships a bundle using an agent profile; its
+        // published contract no longer requires a GitHub MCP integration.
+        requirements:
+          automationId === "github-pr-reviewer"
+            ? { integrations: [] }
+            : GITHUB_PREFLIGHT_REQUIREMENTS,
+      });
     },
   );
+
+  it("derives required secret references from each catalog alternative", () => {
+    // Arrange — the plain Slack team id configures the server but is not a
+    // secret reference; the required bot token is. Optional integrations are
+    // not promoted into blocking preflight requirements.
+    const entry = createSetupEntry({
+      requires: {
+        integrations: {
+          slack: { message: "Posts the report." },
+          notion: { message: "Optionally archives it.", required: false },
+        },
+      },
+    });
+
+    // Act
+    const envelope = buildPreflightBody(entry, {
+      repository: "OpenHands/OpenHands",
+      widgetName: "Widgets",
+    });
+
+    // Assert
+    expect(envelope?.requirements).toEqual({
+      integrations: [
+        {
+          id: "slack",
+          alternatives: [
+            {
+              transport: "shttp",
+              locator: "https://mcp.slack.com/mcp",
+              authStrategy: "oauth2",
+            },
+            {
+              transport: "stdio",
+              locator: "slack",
+              authStrategy: "api_key",
+              secretNames: ["SLACK_BOT_TOKEN"],
+            },
+          ],
+        },
+      ],
+    });
+  });
 });
 
 describe("buildAssistedMessage", () => {
@@ -380,6 +451,7 @@ describe("service rejections mapped back to fields", () => {
       expect(mapped).toEqual({
         fieldErrors: expectedFieldErrors,
         formErrors: [],
+        stepErrors: {},
       });
     },
   );

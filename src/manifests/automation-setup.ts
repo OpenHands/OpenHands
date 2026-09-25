@@ -13,9 +13,14 @@
  * so any divergence is a hard 422 rather than a dropped field.
  */
 
+import {
+  getIntegrationCatalogEntry,
+  type MarketplaceField,
+} from "@openhands/extensions/integrations";
 import i18n from "#/i18n";
 import { I18nKey } from "#/i18n/declaration";
 import { findAutomationCommand } from "#/utils/automation-catalog";
+import { getMcpConnectionOptions } from "#/utils/mcp-marketplace-utils";
 import { getAutomationEndpoint } from "./automation-interface";
 import {
   actionKinds,
@@ -31,6 +36,7 @@ import type {
   SetupEntry,
   SetupFormValues,
   SetupRequestBody,
+  SetupPreflightRequirements,
   SetupTriggerKind,
 } from "./types";
 
@@ -183,6 +189,65 @@ const OPTIONAL_CREATE_PROPERTIES = [
 const REPO_PROPERTIES: readonly string[] = ["ref"];
 
 const FORM_PLACEHOLDER_PATTERN = /\{\{form\.([A-Za-z0-9_.]+)\}\}/g;
+
+function requiredSecretFields(
+  fields: readonly MarketplaceField[] | undefined,
+): string[] {
+  return (fields ?? [])
+    .filter((field) => field.required && field.type === "password")
+    .map((field) => field.key);
+}
+
+/**
+ * Deployment-checkable integration requirements derived only from public
+ * catalog metadata. The request carries stable locators and secret *names*;
+ * resolving or testing a secret value remains entirely server-side.
+ */
+export function buildPreflightRequirements(
+  entry: SetupEntry,
+): SetupPreflightRequirements {
+  const integrations = Object.entries(entry.requires.integrations)
+    .filter(([, requirement]) => requirement.required !== false)
+    .map(([id]) => {
+      const catalogEntry = getIntegrationCatalogEntry(id);
+      const alternatives = catalogEntry
+        ? getMcpConnectionOptions(catalogEntry).map((option) => {
+            const { transport, auth } = option;
+            const locator =
+              transport.kind === "stdio" ? transport.serverName : transport.url;
+            const authCredentialIsOptional =
+              auth.apiKeyOptional === true ||
+              (transport.kind !== "stdio" && transport.apiKeyOptional === true);
+            const transportSecretNames =
+              transport.kind === "stdio"
+                ? [
+                    ...requiredSecretFields(transport.envFields),
+                    ...requiredSecretFields(transport.argFields),
+                  ]
+                : requiredSecretFields(transport.headerFields);
+            const secretNames = Array.from(
+              new Set([
+                ...(!authCredentialIsOptional && auth.credentialSecretName
+                  ? [auth.credentialSecretName]
+                  : []),
+                ...transportSecretNames,
+              ]),
+            );
+
+            return {
+              transport: transport.kind,
+              locator,
+              authStrategy: auth.strategy,
+              ...(secretNames.length > 0 && { secretNames }),
+            };
+          })
+        : [];
+
+      return { id, alternatives };
+    });
+
+  return { integrations };
+}
 
 /** The repository input, which supplies `repos` and an event trigger's source. */
 function findRepoPickerField(
@@ -608,6 +673,7 @@ export function buildPreflightBody(
     automationId: entry.id,
     endpoint: automationCreateEndpoint(entry, selectedAction),
     draft,
+    requirements: buildPreflightRequirements(entry),
   };
 }
 

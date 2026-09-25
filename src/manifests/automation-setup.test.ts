@@ -51,7 +51,10 @@ describe("custom automation setup actions", () => {
           scenario.selectedTrigger,
           scenario.selectedAction,
         ),
-      ).toEqual(scenario.preflight.request.body);
+      ).toEqual({
+        ...scenario.preflight.request.body,
+        requirements: { integrations: [] },
+      });
       expect(
         buildCreatePayload(
           customAutomation!,
