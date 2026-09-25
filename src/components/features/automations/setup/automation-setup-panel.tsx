@@ -1648,66 +1648,72 @@ export function AutomationSetupPanel({
               <DraftRunDetailsCard draft={serverDraft} runs={draftRuns} />
             ) : null}
 
-            <SetupKindCrossfade view={kind === "custom" ? "custom" : "prompt"}>
-              {kind !== "custom" ? (
-                <AutomationSetupPromptStack
-                  prompt={prompt}
-                  repository={repository}
-                  updatedSuffix={agentUpdatedSuffix("prompt")}
-                  repositorySuffix={agentUpdatedSuffix("repository")}
-                  isStreaming={streamingField === "prompt"}
-                  errorText={fieldError("prompt")}
-                  titleAction={
-                    <button
-                      type="button"
-                      data-testid="automation-setup-kind-custom"
-                      onClick={() => updateField("kind", "custom")}
-                      className={cn(
-                        addOptionButtonClassName,
-                        "gap-1.5",
-                        streamingHighlightClassName(streamingField === "kind"),
+            <div className="flex flex-col gap-2.5">
+              <div className="flex w-full items-center gap-2">
+                <span className="flex items-center gap-2 text-sm">
+                  {kind === "custom"
+                    ? t(I18nKey.AUTOMATION_SETUP$CUSTOM_PYTHON)
+                    : t(I18nKey.AUTOMATIONS$PROMPT)}
+                  {agentUpdatedSuffix(
+                    kind === "custom" ? "customCode" : "prompt",
+                  ) ? (
+                    <span className="font-normal text-[var(--oh-muted)]">
+                      {agentUpdatedSuffix(
+                        kind === "custom" ? "customCode" : "prompt",
                       )}
-                    >
-                      <Code2 className="size-4" aria-hidden />
-                      {t(I18nKey.AUTOMATION_SETUP$TYPE_CUSTOM)}
-                    </button>
-                  }
-                  onPromptChange={(value) => updateField("prompt", value)}
-                  onRepositoryChange={(value) =>
-                    updateField("repository", value)
-                  }
-                  model={model}
-                  onModelChange={(value) => updateField("model", value)}
-                  agentProfileId={agentProfileId}
-                  onAgentProfileChange={(value) =>
-                    updateField("agentProfileId", value)
-                  }
-                />
-              ) : (
-                <div className="flex flex-col gap-2.5">
-                  <div className="flex w-full items-center gap-2">
-                    <span className="flex items-center gap-2 text-sm">
-                      {t(I18nKey.AUTOMATION_SETUP$CUSTOM_PYTHON)}
-                      {agentUpdatedSuffix("customCode") ? (
-                        <span className="font-normal text-[var(--oh-muted)]">
-                          {agentUpdatedSuffix("customCode")}
-                        </span>
-                      ) : null}
                     </span>
-                    <button
-                      type="button"
-                      data-testid="automation-setup-kind-prompt"
-                      onClick={() => updateField("kind", "prompt")}
-                      className={cn(
-                        addOptionButtonClassName,
-                        "ml-auto gap-1.5",
-                        streamingHighlightClassName(streamingField === "kind"),
-                      )}
-                    >
-                      <FileText className="size-4" aria-hidden />
-                      {t(I18nKey.AUTOMATIONS$PROMPT)}
-                    </button>
-                  </div>
+                  ) : null}
+                </span>
+                <button
+                  type="button"
+                  data-testid={
+                    kind === "custom"
+                      ? "automation-setup-kind-prompt"
+                      : "automation-setup-kind-custom"
+                  }
+                  onClick={() =>
+                    updateField("kind", kind === "custom" ? "prompt" : "custom")
+                  }
+                  className={cn(
+                    addOptionButtonClassName,
+                    "ml-auto gap-1.5",
+                    streamingHighlightClassName(streamingField === "kind"),
+                  )}
+                >
+                  {kind === "custom" ? (
+                    <FileText className="size-4" aria-hidden />
+                  ) : (
+                    <Code2 className="size-4" aria-hidden />
+                  )}
+                  {kind === "custom"
+                    ? t(I18nKey.AUTOMATIONS$PROMPT)
+                    : t(I18nKey.AUTOMATION_SETUP$TYPE_CUSTOM)}
+                </button>
+              </div>
+              <SetupKindCrossfade
+                view={kind === "custom" ? "custom" : "prompt"}
+              >
+                {kind !== "custom" ? (
+                  <AutomationSetupPromptStack
+                    prompt={prompt}
+                    repository={repository}
+                    updatedSuffix={agentUpdatedSuffix("prompt")}
+                    repositorySuffix={agentUpdatedSuffix("repository")}
+                    isStreaming={streamingField === "prompt"}
+                    errorText={fieldError("prompt")}
+                    showTitle={false}
+                    onPromptChange={(value) => updateField("prompt", value)}
+                    onRepositoryChange={(value) =>
+                      updateField("repository", value)
+                    }
+                    model={model}
+                    onModelChange={(value) => updateField("model", value)}
+                    agentProfileId={agentProfileId}
+                    onAgentProfileChange={(value) =>
+                      updateField("agentProfileId", value)
+                    }
+                  />
+                ) : (
                   <CustomCodeFields
                     code={customCode}
                     entrypoint={entrypoint}
@@ -1731,9 +1737,9 @@ export function AutomationSetupPanel({
                       updateField("setupScript", value)
                     }
                   />
-                </div>
-              )}
-            </SetupKindCrossfade>
+                )}
+              </SetupKindCrossfade>
+            </div>
 
             <section className="flex flex-col gap-2.5">
               <div
@@ -1843,7 +1849,6 @@ export function AutomationSetupPanel({
                         <Field
                           label={t(I18nKey.AUTOMATION_SETUP$PLUGIN_SOURCE)}
                           showLabel={index === 0}
-                          labelClassName="font-normal text-content"
                           suffix={
                             index === 0
                               ? agentUpdatedSuffix("pluginSource")
@@ -1883,7 +1888,6 @@ export function AutomationSetupPanel({
                         <Field
                           label={t(I18nKey.AUTOMATION_SETUP$PLUGIN_REF)}
                           showLabel={index === 0}
-                          labelClassName="font-normal text-content"
                           suffix={
                             index === 0
                               ? agentUpdatedSuffix("pluginRef")
@@ -1921,28 +1925,35 @@ export function AutomationSetupPanel({
                           />
                         </Field>
                       </div>
-                      <button
-                        type="button"
-                        data-testid={
-                          index === 0
-                            ? "automation-setup-plugin-remove"
-                            : `automation-setup-plugin-remove-${index}`
-                        }
-                        aria-label={`${t(I18nKey.COMMON$REMOVE)} ${t(I18nKey.AUTOMATION_SETUP$TYPE_PLUGIN)}`}
-                        className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-[var(--oh-muted)] hover:bg-white/10 hover:text-white"
-                        onMouseDown={(event) => event.preventDefault()}
-                        onClick={() => {
-                          const nextEntries = pluginEntries.filter(
-                            (_, entryIndex) => entryIndex !== index,
-                          );
-                          writePlugins(nextEntries);
-                          if (nextEntries.length === 0 && kind === "plugin") {
-                            updateField("kind", "prompt");
-                          }
-                        }}
+                      <div
+                        className={cn(
+                          "flex shrink-0 items-center",
+                          index === 0 && formControlHeightClassName,
+                        )}
                       >
-                        <X className="size-4" aria-hidden />
-                      </button>
+                        <button
+                          type="button"
+                          data-testid={
+                            index === 0
+                              ? "automation-setup-plugin-remove"
+                              : `automation-setup-plugin-remove-${index}`
+                          }
+                          aria-label={`${t(I18nKey.COMMON$REMOVE)} ${t(I18nKey.AUTOMATION_SETUP$TYPE_PLUGIN)}`}
+                          className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-[var(--oh-muted)] hover:bg-white/10 hover:text-white"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => {
+                            const nextEntries = pluginEntries.filter(
+                              (_, entryIndex) => entryIndex !== index,
+                            );
+                            writePlugins(nextEntries);
+                            if (nextEntries.length === 0 && kind === "plugin") {
+                              updateField("kind", "prompt");
+                            }
+                          }}
+                        >
+                          <X className="size-4" aria-hidden />
+                        </button>
+                      </div>
                     </div>
                   ))}
                   <button
@@ -2061,7 +2072,7 @@ export function AutomationSetupPanel({
   );
 }
 
-const SETUP_KIND_CROSSFADE_SECONDS = 0.3;
+const SETUP_KIND_CROSSFADE_SECONDS = 0.15;
 
 function SetupKindCrossfade({
   view,
@@ -2218,7 +2229,7 @@ function CustomCodeFields({
       </div>
       <div
         data-testid="automation-setup-custom-details-drawer"
-        className="rounded-b-[15px] border-x border-b border-[var(--oh-border)] bg-[var(--oh-surface-raised)] px-4 pb-3 pt-[calc(15px+0.5rem)]"
+        className="rounded-b-[15px] border-x border-b border-[var(--oh-border)] bg-[var(--oh-surface-raised)] px-4 pb-2 pt-[calc(15px+0.5rem)]"
       >
         <button
           type="button"
@@ -2758,7 +2769,7 @@ function EventFields({
           >
             <label
               htmlFor="automation-setup-event-key"
-              className="flex items-center gap-2 text-sm font-semibold text-white"
+              className="flex shrink-0 items-center gap-2 text-sm"
             >
               {t(I18nKey.AUTOMATION_SETUP$EVENT_KEY)}
               {updatedSuffixes.eventKey ? (
@@ -2862,7 +2873,7 @@ function EventFields({
         ).includes(eventSource.trim()) ? (
           <div className="@min-[640px]:col-span-2">
             <section className="rounded-xl border border-[var(--oh-border)] p-3">
-              <div className="flex items-start gap-3 text-sm font-medium text-white">
+              <div className="flex items-start gap-3 text-sm">
                 <input
                   id="automation-setup-custom-webhook-enabled"
                   type="checkbox"
@@ -3031,7 +3042,7 @@ function EventFields({
             aria-expanded={isTestPayloadOpen}
             aria-controls="automation-setup-event-test-payload-panel"
             onClick={() => setIsTestPayloadOpen((open) => !open)}
-            className="flex w-full items-center gap-2 text-left text-sm font-semibold text-white"
+            className="flex w-full items-center gap-2 text-left text-sm"
           >
             <ChevronDown
               className={cn(
@@ -3101,11 +3112,11 @@ function Field({
       {showLabel ? (
         <span
           className={cn(
-            "flex items-center gap-2 text-sm",
-            labelClassName ?? "font-semibold text-white",
+            "flex shrink-0 items-center gap-2 text-sm",
+            labelClassName,
           )}
         >
-          {label}
+          <span>{label}</span>
           {suffix && (
             <span className="font-normal text-[var(--oh-muted)]">{suffix}</span>
           )}

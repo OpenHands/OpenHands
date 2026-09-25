@@ -70,11 +70,15 @@ export function ChatInterface({
   showEmptyStateSuggestions = true,
   composerDockTarget = null,
   onDockedComposerSubmit,
+  minimalComposer = false,
+  composerPlaceholder,
 }: {
   showGitControlBar?: boolean;
   showEmptyStateSuggestions?: boolean;
   composerDockTarget?: HTMLElement | null;
   onDockedComposerSubmit?: () => void;
+  minimalComposer?: boolean;
+  composerPlaceholder?: string;
 } = {}) {
   useAutoRefreshFilesOnEdit();
 
@@ -511,10 +515,11 @@ export function ChatInterface({
   });
 
   const isComposerDocked = Boolean(composerDockTarget);
+  const isMinimalComposer = isComposerDocked || minimalComposer;
   const composer = (
     <ComposerDockedProvider
       enabled={isComposerDocked}
-      minimal={isComposerDocked}
+      minimal={isMinimalComposer}
     >
       <InteractiveChatBox
         onSubmit={(content, images, files) => {
@@ -525,9 +530,9 @@ export function ChatInterface({
         hasStartedConversation={hasStartedConversation}
         showGitControlBar={showGitControlBar}
         placeholder={
-          isComposerDocked
+          isMinimalComposer
             ? t(I18nKey.AUTOMATION_SETUP$DOCKED_COMPOSER_PLACEHOLDER)
-            : undefined
+            : composerPlaceholder
         }
       />
     </ComposerDockedProvider>

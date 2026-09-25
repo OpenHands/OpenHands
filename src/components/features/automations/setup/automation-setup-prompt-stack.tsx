@@ -360,6 +360,7 @@ export function AutomationSetupPromptStack({
   isStreaming,
   errorText,
   titleAction,
+  showTitle = true,
   model,
   agentProfileId,
   onPromptChange,
@@ -375,6 +376,8 @@ export function AutomationSetupPromptStack({
   errorText?: string;
   /** Sits on the Prompt title row, outside the field label. */
   titleAction?: ReactNode;
+  /** The setup form owns the title when the kind toggle stays outside the crossfade. */
+  showTitle?: boolean;
   model: string;
   agentProfileId: string;
   onPromptChange: (value: string) => void;
@@ -458,19 +461,21 @@ export function AutomationSetupPromptStack({
         isRepositoryMenuOpen && "relative z-30",
       )}
     >
-      <div className="flex w-full items-center gap-2">
-        <span className="flex items-center gap-2 text-sm">
-          {t(I18nKey.AUTOMATIONS$PROMPT)}
-          {updatedSuffix ? (
-            <span className="font-normal text-[var(--oh-muted)]">
-              {updatedSuffix}
-            </span>
+      {showTitle ? (
+        <div className="flex w-full items-center gap-2">
+          <span className="flex items-center gap-2 text-sm">
+            {t(I18nKey.AUTOMATIONS$PROMPT)}
+            {updatedSuffix ? (
+              <span className="font-normal text-[var(--oh-muted)]">
+                {updatedSuffix}
+              </span>
+            ) : null}
+          </span>
+          {titleAction ? (
+            <div className="ml-auto shrink-0">{titleAction}</div>
           ) : null}
-        </span>
-        {titleAction ? (
-          <div className="ml-auto shrink-0">{titleAction}</div>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
       <label
         data-streaming-active={isStreaming ? "true" : undefined}
         className="flex w-full min-w-0 flex-col gap-2.5"
@@ -491,7 +496,7 @@ export function AutomationSetupPromptStack({
               onChange={(event) => onPromptChange(event.target.value)}
               placeholder={t(I18nKey.HOME$AUTOMATE_PROMPT_PLACEHOLDER)}
               rows={5}
-              className="min-h-[120px] w-full resize-none border-0 bg-transparent p-0 text-sm text-content outline-none placeholder:text-tertiary-alt placeholder:italic"
+              className="min-h-[120px] w-full resize-none border-0 bg-transparent p-0 text-sm text-content outline-none placeholder:text-tertiary-alt"
             />
             <div className="flex min-w-0 items-center gap-2 pt-2">
               <SetupModelPill value={model} onChange={onModelChange} />
@@ -523,7 +528,7 @@ export function AutomationSetupPromptStack({
           </div>
           <div
             data-testid="automation-setup-prompt-drawer"
-            className="flex min-h-9 items-center rounded-b-[15px] border-x border-b border-[var(--oh-border)] bg-[var(--oh-surface-raised)] px-4 pb-3 pt-[calc(15px+0.5rem)]"
+            className="flex min-h-9 items-center rounded-b-[15px] border-x border-b border-[var(--oh-border)] bg-[var(--oh-surface-raised)] px-4 pb-2 pt-[calc(15px+0.5rem)]"
           >
             <div
               data-testid="automation-setup-repository"

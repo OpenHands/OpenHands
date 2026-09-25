@@ -76,11 +76,15 @@ vi.mock("#/components/features/chat/chat-interface", () => {
       showEmptyStateSuggestions = true,
       composerDockTarget = null,
       onDockedComposerSubmit,
+      minimalComposer = false,
+      composerPlaceholder,
     }: {
       showGitControlBar?: boolean;
       showEmptyStateSuggestions?: boolean;
       composerDockTarget?: HTMLElement | null;
       onDockedComposerSubmit?: () => void;
+      minimalComposer?: boolean;
+      composerPlaceholder?: string;
     }) => {
       React.useEffect(() => {
         return () => chatInterfaceUnmount();
@@ -93,6 +97,8 @@ vi.mock("#/components/features/chat/chat-interface", () => {
             data-show-empty-state-suggestions={
               showEmptyStateSuggestions ? "true" : "false"
             }
+            data-minimal-composer={minimalComposer ? "true" : "false"}
+            data-composer-placeholder={composerPlaceholder}
           />
           {composerDockTarget
             ? createPortal(
@@ -325,12 +331,17 @@ describe("ConversationMain - Layout Transition Stability", () => {
       "data-show-empty-state-suggestions",
       "false",
     );
+    expect(screen.getByTestId("chat-interface")).toHaveAttribute(
+      "data-composer-placeholder",
+      "AUTOMATION_SETUP$CONVERSATION_COMPOSER_PLACEHOLDER",
+    );
     expect(
       screen.queryByTestId("automation-setup-back"),
     ).not.toBeInTheDocument();
   });
 
-  it("suppresses automation setup chrome on mobile", () => {
+  it("keeps the automation form on a narrow window and toggles to the styled conversation", async () => {
+    const user = userEvent.setup();
     mockIsMobile = true;
     mockIsRightPanelShown = true;
     mockAutomationSetupDraft = {
@@ -340,14 +351,77 @@ describe("ConversationMain - Layout Transition Stability", () => {
 
     renderConversationMain();
 
+    expect(screen.getByTestId("automation-setup-topbar")).toBeInTheDocument();
+    expect(screen.getByTestId("automation-setup-panel")).toBeInTheDocument();
     expect(
-      screen.queryByTestId("automation-setup-topbar"),
+      screen.getByTestId("automation-setup-docked-composer"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("automation-setup-mobile-view-form"),
+    ).toHaveAttribute("aria-label", "AUTOMATION_SETUP$VIEW_FORM");
+    expect(
+      screen.getByTestId("automation-setup-mobile-view-conversation"),
+    ).toHaveAttribute("aria-label", "AUTOMATION_SETUP$VIEW_CONVERSATION");
+    expect(screen.queryByTestId("chat-pane-header")).not.toBeInTheDocument();
+    expect(screen.getByTestId("conversation-chat-panel")).toHaveClass("hidden");
+
+    await user.click(
+      screen.getByTestId("automation-setup-mobile-view-conversation"),
+    );
+
+    expect(
+      screen.queryByTestId("automation-setup-mobile-form"),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByTestId("automation-setup-panel"),
+      screen.queryByTestId("automation-setup-docked-composer"),
     ).not.toBeInTheDocument();
-    expect(screen.getByTestId("chat-pane-header")).toBeInTheDocument();
-    expect(screen.getByTestId("chat-interface")).toBeInTheDocument();
+    expect(screen.queryByTestId("chat-pane-header")).not.toBeInTheDocument();
+    expect(screen.getByTestId("conversation-chat-panel")).not.toHaveClass(
+      "hidden",
+    );
+    expect(screen.getByTestId("chat-interface")).toHaveAttribute(
+      "data-show-git-control-bar",
+      "false",
+    );
+    expect(screen.getByTestId("chat-interface")).toHaveAttribute(
+      "data-show-empty-state-suggestions",
+      "false",
+    );
+    expect(screen.getByTestId("chat-interface")).toHaveAttribute(
+      "data-minimal-composer",
+      "true",
+    );
+    expect(screen.getByTestId("automation-setup-topbar")).toHaveClass(
+      "flex-col",
+    );
+
+    await user.click(screen.getByTestId("automation-setup-mobile-view-form"));
+
+    expect(
+      screen.getByTestId("automation-setup-mobile-form"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("automation-setup-docked-composer"),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("docked-composer-submit"));
+
+    expect(
+      screen.queryByTestId("automation-setup-mobile-form"),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("automation-setup-mobile-view-form"));
+
+    act(() => {
+      requestAutomationSetupAgent();
+    });
+
+    expect(
+      screen.queryByTestId("automation-setup-mobile-form"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("conversation-chat-panel")).not.toHaveClass(
+      "hidden",
+    );
   });
 
   it("expands the automation form to full width when hiding the agent", async () => {

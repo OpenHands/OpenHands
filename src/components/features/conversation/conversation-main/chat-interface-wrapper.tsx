@@ -16,6 +16,8 @@ interface ChatInterfaceWrapperProps {
   showEmptyStateSuggestions?: boolean;
   composerDockTarget?: HTMLElement | null;
   onDockedComposerSubmit?: () => void;
+  minimalComposer?: boolean;
+  composerPlaceholder?: string;
 }
 
 const THREAD_CLASSNAME =
@@ -27,6 +29,8 @@ export function ChatInterfaceWrapper({
   showEmptyStateSuggestions = true,
   composerDockTarget = null,
   onDockedComposerSubmit,
+  minimalComposer = false,
+  composerPlaceholder,
 }: ChatInterfaceWrapperProps) {
   const isMobile = useBreakpoint();
   const reduceMotion = useReducedMotion();
@@ -54,6 +58,8 @@ export function ChatInterfaceWrapper({
             showEmptyStateSuggestions={showEmptyStateSuggestions}
             composerDockTarget={composerDockTarget}
             onDockedComposerSubmit={onDockedComposerSubmit}
+            minimalComposer={minimalComposer}
+            composerPlaceholder={composerPlaceholder}
           />
         </div>
       </div>
