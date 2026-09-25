@@ -145,9 +145,8 @@ When the startup summary shows `Main UI: http://localhost:8000/`, open [http://l
 
 ### Next steps
 
-1. [Configure an LLM profile](https://docs.openhands.dev/openhands/usage/settings/llm-settings#llm-profiles) for your backend.
-2. Choose a workspace in the UI and start a conversation.
-3. Optionally [add another backend](https://docs.openhands.dev/openhands/usage/agent-canvas/backends), such as a remote Agent Server or OpenHands Cloud.
+1. Follow the [First Time Setup guide](https://docs.openhands.dev/openhands/usage/agent-canvas/first-time-setup) to choose an agent, verify your backend, configure an LLM, and start working.
+2. Optionally [configure additional LLM profiles](https://docs.openhands.dev/openhands/usage/settings/llm-settings#llm-profiles) or [add another backend](https://docs.openhands.dev/openhands/usage/agent-canvas/backends), such as a remote Agent Server or OpenHands Cloud.
 
 Local (`npx` / `npm run dev`) listeners bind **loopback only** (`127.0.0.1`) so the auto-injected session key is not reachable from other machines on the network. To listen on all interfaces, pass `--host 0.0.0.0` (or set `OH_BIND_HOST`); the session key is then **not** injected and the UI uses the same API-key entry screen as `--public`.
 
