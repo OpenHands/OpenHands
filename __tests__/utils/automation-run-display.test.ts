@@ -89,12 +89,34 @@ describe("automation run display", () => {
       status: "unknown",
       outcomeSummary: "Finished but could not classify the task.",
     });
-    expect(getAutomationRunDisplay(run).customTaskMetadataText).toContain(
+    const display = getAutomationRunDisplay(run);
+    expect(display.badgeStatus).toBe("unknown");
+    expect(display.summary).toBe(
+      "Finished but could not classify the task.",
+    );
+    expect(display.customTaskMetadataText).toContain(
       '"status": "unexpected_status"',
     );
   });
 
-  it("marks completed runs with arbitrary finish metadata as needs review", () => {
+  it("treats a completed run with an outcome summary but no status as successful", () => {
+    const run = makeRun({
+      run_metadata: {
+        finish_tool_response: {
+          outcome_summary: "Created and published the weekly report.",
+        },
+      },
+    });
+
+    expect(getAutomationRunTaskOutcome(run)).toBeNull();
+    expect(getAutomationRunDisplay(run)).toMatchObject({
+      badgeStatus: "success",
+      summary: "Created and published the weekly report.",
+      taskOutcome: null,
+    });
+  });
+
+  it("treats completed runs with arbitrary finish metadata as successful", () => {
     const display = getAutomationRunDisplay(
       makeRun({
         run_metadata: {
@@ -107,7 +129,7 @@ describe("automation run display", () => {
       }),
     );
 
-    expect(display.badgeStatus).toBe("unknown");
+    expect(display.badgeStatus).toBe("success");
     expect(display.summary).toBeNull();
     expect(display.taskOutcome).toBeNull();
     expect(display.customTaskMetadataText).toContain(
@@ -115,6 +137,23 @@ describe("automation run display", () => {
     );
     expect(display.customTaskMetadataText).toContain(
       '"next_action": "Ask user to pick a contact."',
+    );
+  });
+
+  it("treats a completed run with a non-object finish response as successful", () => {
+    const display = getAutomationRunDisplay(
+      makeRun({
+        run_metadata: {
+          finish_tool_response: "Report created and published.",
+        },
+      }),
+    );
+
+    expect(display.badgeStatus).toBe("success");
+    expect(display.summary).toBeNull();
+    expect(display.taskOutcome).toBeNull();
+    expect(display.customTaskMetadataText).toBe(
+      "Report created and published.",
     );
   });
 

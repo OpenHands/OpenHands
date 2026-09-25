@@ -102,7 +102,10 @@ function RunInspectionSummary({ run }: { run: AutomationRun | undefined }) {
   if (!run) return null;
 
   const display = getAutomationRunDisplay(run);
-  const taskSummary = display.taskOutcome?.outcomeSummary ?? null;
+  const taskSummary =
+    run.status === AutomationRunStatus.COMPLETED
+      ? display.summary
+      : (display.taskOutcome?.outcomeSummary ?? null);
   const taskMetadataText = display.customTaskMetadataText;
   const taskStatus =
     run.status === AutomationRunStatus.COMPLETED || display.taskOutcome
