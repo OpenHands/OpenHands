@@ -9,6 +9,20 @@ import {
 } from "#/components/features/markdown/markdown-renderer";
 
 describe("MarkdownRenderer", () => {
+  it("renders inline and block LaTeX math", () => {
+    const md = [
+      "Euler: $e^{i\\pi} + 1 = 0$",
+      "",
+      "$$",
+      "x^2 + y^2 = z^2",
+      "$$",
+    ].join("\n");
+    const { container } = render(<MarkdownRenderer>{md}</MarkdownRenderer>);
+
+    expect(container.querySelectorAll(".katex")).toHaveLength(2);
+    expect(container.querySelector(".katex-display")).not.toBeNull();
+  });
+
   it("renders GFM tables (a GFM-only feature)", () => {
     const md = [
       "| Col A | Col B |",
