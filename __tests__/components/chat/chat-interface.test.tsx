@@ -182,9 +182,7 @@ describe("ChatInterface - Chat Suggestions", () => {
       },
     });
 
-    useOptimisticUserMessageStore.setState({
-      pendingMessages: [],
-    });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
 
     useErrorMessageStore.setState({
       errorMessage: null,
