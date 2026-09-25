@@ -16,6 +16,13 @@ export interface ConversationHistoryPage {
   hasMore: boolean;
   /** Optional `next_page_id` from the server for keyset pagination. */
   nextPageId: string | null;
+  /**
+   * Session-socket resume cursor for the first connect: the last `seq` on
+   * disk *before* this page was read, so nothing appended in between is
+   * missed and nothing older than the page is replayed. `null` when the count
+   * could not be read.
+   */
+  afterSeq: number | null;
 }
 
 /**
@@ -24,8 +31,8 @@ export interface ConversationHistoryPage {
  * we reverse the result to chronological order before handing it to callers.
  *
  * Older events are loaded on demand by `useLoadOlderEvents` once the user
- * scrolls up. The WebSocket then connects with `resend_mode='since'` using
- * the latest event's timestamp so we don't re-receive history we already have.
+ * scrolls up. The session socket then resumes from `afterSeq`, so it neither
+ * re-receives the history we already have nor misses what landed meanwhile.
  */
 export const useConversationHistory = (conversationId?: string) => {
   const { data: conversation } = useUserConversation(conversationId ?? null);
@@ -42,7 +49,25 @@ export const useConversationHistory = (conversationId?: string) => {
     enabled: !!conversationId && !!conversation,
     queryFn: async () => {
       if (!conversationId) {
-        return { events: [], hasMore: false, nextPageId: null };
+        return { events: [], hasMore: false, nextPageId: null, afterSeq: null };
+      }
+
+      // Read the count first: an unfiltered count is the log length, so every
+      // event appended after it has `seq >= count` and is replayed (and
+      // deduped against this page) rather than lost.
+      const conversationUrl = conversation?.conversation_url ?? null;
+      let count: number | null = null;
+      if (conversationUrl) {
+        try {
+          count = await EventService.getEventCount(
+            conversationId,
+            conversationUrl,
+            conversation?.session_api_key ?? null,
+          );
+        } catch {
+          // Not fatal: without a cursor the socket replays the whole log.
+          count = null;
+        }
       }
 
       const page = await EventService.searchEvents(
@@ -68,6 +93,7 @@ export const useConversationHistory = (conversationId?: string) => {
         hasMore:
           !!page.next_page_id || page.items.length >= INITIAL_HISTORY_PAGE_SIZE,
         nextPageId: page.next_page_id ?? null,
+        afterSeq: typeof count === "number" ? count - 1 : null,
       };
     },
     // Keep the cached page so returning to a conversation renders the
@@ -86,8 +112,8 @@ export const useConversationHistory = (conversationId?: string) => {
     // WebSocket `since` replay on reconnect anyway. retry is capped at 1 so a
     // slow or failing initial load (60s HTTP timeout per attempt) can't hold
     // the initial WebSocket gate (see conversation-websocket-context.tsx)
-    // closed for minutes — on failure the socket connects with
-    // `resend_mode='all'` instead.
+    // closed for minutes — on failure the socket replays the whole log
+    // (`after_seq=-1`) instead.
     staleTime: 0,
     gcTime: 30 * 60 * 1000, // 30 minutes — keep cached data to render instantly on return
     refetchOnMount: "always",
