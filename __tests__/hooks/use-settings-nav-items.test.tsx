@@ -132,6 +132,7 @@ describe("useSettingsNavItems", () => {
     expect(paths).not.toContain("/settings/llm");
     expect(paths).toContain("/settings/app");
     expect(paths).toContain("/settings/secrets");
+    expect(paths).toContain("/settings/macros");
   });
 
   it("never lists removed settings sub-pages", () => {
