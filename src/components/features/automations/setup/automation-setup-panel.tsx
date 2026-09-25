@@ -1,12 +1,14 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import {
@@ -42,7 +44,6 @@ import { BrandButton } from "#/components/features/settings/brand-button";
 import { OptionalTag } from "#/components/features/settings/optional-tag";
 import { AutomationSetupPromptStack } from "#/components/features/automations/setup/automation-setup-prompt-stack";
 import { usePromptTextareaResize } from "#/hooks/use-prompt-textarea-resize";
-import { BackNavButton } from "#/components/shared/buttons/back-nav-button";
 import {
   formControlBorderClassName,
   formControlFieldClassName,
@@ -84,6 +85,10 @@ const DEFAULT_CUSTOM_SETUP_SCRIPT_PATH = "setup.sh";
 const DEFAULT_CUSTOM_SETUP_SCRIPT = `#!/usr/bin/env bash
 :
 `;
+const addOptionButtonClassName = cn(
+  "inline-flex w-fit shrink-0 cursor-pointer items-center rounded-lg border border-[var(--oh-border)] px-3 py-1.5 text-sm text-[var(--oh-muted)] hover:border-[var(--oh-interactive-hover)] hover:bg-surface-raised hover:text-content",
+  formControlTransitionClassName,
+);
 const DEFAULT_TIMEOUT_SECONDS = "600";
 const PREFLIGHT_TARBALL_PATH =
   "oh-internal://uploads/00000000-0000-0000-0000-000000000000";
@@ -127,12 +132,15 @@ const AUTOMATION_SETUP_FIELD_RENDER_ORDER: AutomationSetupField[] = [
   "triggerKind",
   "frequency",
   "time",
+  "weekday",
   "scheduleDateTime",
   "timezone",
   "customSchedule",
   "eventSource",
   "eventKey",
   "eventFilter",
+  "model",
+  "agentProfileId",
   "showTimeout",
   "timeoutSeconds",
 ];
@@ -160,6 +168,9 @@ const NON_CHARACTER_STREAM_FIELDS = new Set<AutomationSetupField>([
   "kind",
   "triggerKind",
   "frequency",
+  "weekday",
+  "model",
+  "agentProfileId",
   "showTimeout",
   "time",
 ]);
@@ -187,7 +198,7 @@ interface AutomationSetupPanelProps {
   conversationTags?: Record<string, string> | null;
   toolbarPortal?: HTMLElement | null;
   showInlineHeader?: boolean;
-  onClose: () => void;
+  reserveComposerSpace?: boolean;
 }
 
 function titleCase(value: string): string {
@@ -232,11 +243,18 @@ function onceCron(scheduleDateTime: string): string {
   return `${minute} ${hour} ${day} ${month} *`;
 }
 
+function cronWeekday(weekday: string): number {
+  const value = Number(weekday);
+  if (!Number.isInteger(value) || value < 0 || value > 6) return 1;
+  return value;
+}
+
 function toCron(
   time: string,
   frequency: Frequency,
   customSchedule: string,
   scheduleDateTime: string,
+  weekday: string,
 ): string {
   if (frequency === "custom") return customSchedule || DEFAULT_CUSTOM_SCHEDULE;
   if (frequency === "once") return onceCron(scheduleDateTime);
@@ -245,7 +263,7 @@ function toCron(
   const [hour = "9", minute = "0"] = time.split(":");
   const cronTime = `${Number(minute)} ${Number(hour)}`;
   if (frequency === "weekdays") return `${cronTime} * * 1-5`;
-  if (frequency === "weekly") return `${cronTime} * * 1`;
+  if (frequency === "weekly") return `${cronTime} * * ${cronWeekday(weekday)}`;
   return `${cronTime} * * *`;
 }
 
@@ -323,12 +341,15 @@ function buildInitialForm(
     triggerKind: form.triggerKind ?? "cron",
     frequency: form.frequency ?? "daily",
     time: form.time ?? DEFAULT_TIME,
+    weekday: form.weekday ?? "1",
     scheduleDateTime: form.scheduleDateTime ?? "",
     timezone: form.timezone ?? DEFAULT_TIMEZONE,
     customSchedule: form.customSchedule ?? DEFAULT_CUSTOM_SCHEDULE,
     eventSource: form.eventSource ?? DEFAULT_EVENT_SOURCE,
     eventKey: form.eventKey ?? DEFAULT_EVENT_KEY,
     eventFilter: form.eventFilter ?? "",
+    model: form.model ?? "",
+    agentProfileId: form.agentProfileId ?? "",
     showTimeout: form.showTimeout ?? false,
     timeoutSeconds: form.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS,
   };
@@ -400,6 +421,9 @@ function formFromServerDraft(
         ? trigger.on[0]
         : base.eventKey),
     eventFilter: getStringField(trigger ?? {}, "filter") ?? base.eventFilter,
+    model: getStringField(body, "model") ?? base.model,
+    agentProfileId:
+      getStringField(body, "agent_profile_id") ?? base.agentProfileId,
     showTimeout: typeof body.timeout === "number" || base.showTimeout,
     timeoutSeconds:
       typeof body.timeout === "number"
@@ -630,7 +654,7 @@ export function AutomationSetupPanel({
   conversationTags,
   toolbarPortal,
   showInlineHeader = true,
-  onClose,
+  reserveComposerSpace = false,
 }: AutomationSetupPanelProps) {
   const { t } = useTranslation("openhands");
   const { navigate } = useNavigation();
@@ -771,12 +795,15 @@ export function AutomationSetupPanel({
     triggerKind,
     frequency,
     time,
+    weekday,
     scheduleDateTime,
     timezone,
     customSchedule,
     eventSource,
     eventKey,
     eventFilter,
+    model,
+    agentProfileId,
     showTimeout,
     timeoutSeconds,
   } = form;
@@ -994,6 +1021,7 @@ export function AutomationSetupPanel({
             frequency,
             customSchedule.trim(),
             scheduleDateTime,
+            weekday,
           ),
           timezone: timezone.trim() || DEFAULT_TIMEZONE,
         };
@@ -1018,6 +1046,8 @@ export function AutomationSetupPanel({
         },
       ];
     }
+    if (model.trim()) body.model = model.trim();
+    if (agentProfileId.trim()) body.agent_profile_id = agentProfileId.trim();
     return body;
   };
   const buildCustomBody = (tarballPath: string): SetupRequestBody =>
@@ -1074,12 +1104,15 @@ export function AutomationSetupPanel({
     triggerKind,
     frequency,
     time,
+    weekday,
     scheduleDateTime,
     timezone,
     customSchedule,
     eventSource,
     eventKey,
     eventFilter,
+    model,
+    agentProfileId,
     showTimeout,
     timeoutSeconds,
   ]);
@@ -1408,10 +1441,6 @@ export function AutomationSetupPanel({
     (pluginFieldsOpen ||
       kind === "plugin" ||
       Boolean(pluginSource.trim() || pluginRef.trim()));
-  const addOptionButtonClassName = cn(
-    "inline-flex w-fit shrink-0 cursor-pointer items-center rounded-lg border border-[var(--oh-border)] px-3 py-1.5 text-sm text-[var(--oh-muted)] hover:border-[var(--oh-interactive-hover)] hover:bg-surface-raised hover:text-content",
-    formControlTransitionClassName,
-  );
   const saveStateText = saveStateLabel();
 
   const renderToolbarActions = () => (
@@ -1471,12 +1500,6 @@ export function AutomationSetupPanel({
         {showInlineHeader ? (
           <header className="flex h-10 min-h-10 shrink-0 items-center justify-between gap-2 border-b border-[var(--oh-border)] bg-base px-3">
             <div className="flex min-w-0 items-center gap-2">
-              <BackNavButton
-                testId="automation-setup-back"
-                className="!p-1.5"
-                ariaLabel={t(I18nKey.BUTTON$BACK)}
-                onClick={onClose}
-              />
               <h2 className="min-w-0 truncate text-sm font-medium text-content">
                 {name.trim() || t(I18nKey.AUTOMATION_SETUP$TITLE)}
               </h2>
@@ -1485,7 +1508,12 @@ export function AutomationSetupPanel({
           </header>
         ) : null}
 
-        <div className="custom-scrollbar-always min-h-0 flex-1 overflow-y-auto px-5 pt-5 pb-5 [scrollbar-gutter:stable]">
+        <div
+          className={cn(
+            "custom-scrollbar-always min-h-0 flex-1 overflow-y-auto px-5 pt-5 [scrollbar-gutter:stable]",
+            reserveComposerSpace ? "pb-52" : "pb-5",
+          )}
+        >
           <div className="mx-auto flex w-full min-w-0 max-w-[800px] flex-col gap-6">
             <Field
               label={t(I18nKey.AUTOMATIONS$NAME)}
@@ -1524,87 +1552,94 @@ export function AutomationSetupPanel({
               <DraftRunDetailsCard draft={serverDraft} runs={draftRuns} />
             ) : null}
 
-            {kind !== "custom" ? (
-              <AutomationSetupPromptStack
-                prompt={prompt}
-                repository={repository}
-                updatedSuffix={agentUpdatedSuffix("prompt")}
-                repositorySuffix={agentUpdatedSuffix("repository")}
-                isStreaming={streamingField === "prompt"}
-                errorText={fieldError("prompt")}
-                titleAction={
-                  <button
-                    type="button"
-                    data-testid="automation-setup-kind-custom"
-                    onClick={() => updateField("kind", "custom")}
-                    className={cn(
-                      addOptionButtonClassName,
-                      "gap-1.5",
-                      streamingHighlightClassName(streamingField === "kind"),
-                    )}
-                  >
-                    <Code2 className="size-4" aria-hidden />
-                    {t(I18nKey.AUTOMATION_SETUP$TYPE_CUSTOM)}
-                  </button>
-                }
-                onPromptChange={(value) => updateField("prompt", value)}
-                onRepositoryChange={(value) => updateField("repository", value)}
-              />
-            ) : (
-              <div className="flex flex-col gap-2.5">
-                <div className="flex w-full items-center gap-2">
-                  <span className="flex items-center gap-2 text-sm">
-                    {t(I18nKey.AUTOMATION_SETUP$CUSTOM_PYTHON)}
-                    {agentUpdatedSuffix("customCode") ? (
-                      <span className="font-normal text-[var(--oh-muted)]">
-                        {agentUpdatedSuffix("customCode")}
-                      </span>
-                    ) : null}
-                  </span>
-                  <button
-                    type="button"
-                    data-testid="automation-setup-kind-prompt"
-                    onClick={() => updateField("kind", "prompt")}
-                    className={cn(
-                      addOptionButtonClassName,
-                      "ml-auto gap-1.5",
-                      streamingHighlightClassName(streamingField === "kind"),
-                    )}
-                  >
-                    <FileText className="size-4" aria-hidden />
-                    {t(I18nKey.AUTOMATIONS$PROMPT)}
-                  </button>
-                </div>
-                <CustomCodeFields
-                  code={customCode}
-                  entrypoint={entrypoint}
-                  setupScriptPath={setupScriptPath}
-                  setupScript={setupScript}
-                  updatedSuffixes={{
-                    customCode: agentUpdatedSuffix("customCode"),
-                    entrypoint: agentUpdatedSuffix("entrypoint"),
-                    setupScriptPath: agentUpdatedSuffix("setupScriptPath"),
-                    setupScript: agentUpdatedSuffix("setupScript"),
-                  }}
-                  streamingField={streamingField}
-                  onCodeChange={(value) => updateField("customCode", value)}
-                  onEntrypointChange={(value) =>
-                    updateField("entrypoint", value)
+            <SetupKindCrossfade view={kind === "custom" ? "custom" : "prompt"}>
+              {kind !== "custom" ? (
+                <AutomationSetupPromptStack
+                  prompt={prompt}
+                  repository={repository}
+                  updatedSuffix={agentUpdatedSuffix("prompt")}
+                  repositorySuffix={agentUpdatedSuffix("repository")}
+                  isStreaming={streamingField === "prompt"}
+                  errorText={fieldError("prompt")}
+                  titleAction={
+                    <button
+                      type="button"
+                      data-testid="automation-setup-kind-custom"
+                      onClick={() => updateField("kind", "custom")}
+                      className={cn(
+                        addOptionButtonClassName,
+                        "gap-1.5",
+                        streamingHighlightClassName(streamingField === "kind"),
+                      )}
+                    >
+                      <Code2 className="size-4" aria-hidden />
+                      {t(I18nKey.AUTOMATION_SETUP$TYPE_CUSTOM)}
+                    </button>
                   }
-                  onSetupScriptPathChange={(value) =>
-                    updateField("setupScriptPath", value)
+                  onPromptChange={(value) => updateField("prompt", value)}
+                  onRepositoryChange={(value) =>
+                    updateField("repository", value)
                   }
-                  onSetupScriptChange={(value) =>
-                    updateField("setupScript", value)
+                  model={model}
+                  onModelChange={(value) => updateField("model", value)}
+                  agentProfileId={agentProfileId}
+                  onAgentProfileChange={(value) =>
+                    updateField("agentProfileId", value)
                   }
                 />
-              </div>
-            )}
+              ) : (
+                <div className="flex flex-col gap-2.5">
+                  <div className="flex w-full items-center gap-2">
+                    <span className="flex items-center gap-2 text-sm">
+                      {t(I18nKey.AUTOMATION_SETUP$CUSTOM_PYTHON)}
+                      {agentUpdatedSuffix("customCode") ? (
+                        <span className="font-normal text-[var(--oh-muted)]">
+                          {agentUpdatedSuffix("customCode")}
+                        </span>
+                      ) : null}
+                    </span>
+                    <button
+                      type="button"
+                      data-testid="automation-setup-kind-prompt"
+                      onClick={() => updateField("kind", "prompt")}
+                      className={cn(
+                        addOptionButtonClassName,
+                        "ml-auto gap-1.5",
+                        streamingHighlightClassName(streamingField === "kind"),
+                      )}
+                    >
+                      <FileText className="size-4" aria-hidden />
+                      {t(I18nKey.AUTOMATIONS$PROMPT)}
+                    </button>
+                  </div>
+                  <CustomCodeFields
+                    code={customCode}
+                    entrypoint={entrypoint}
+                    setupScriptPath={setupScriptPath}
+                    setupScript={setupScript}
+                    updatedSuffixes={{
+                      customCode: agentUpdatedSuffix("customCode"),
+                      entrypoint: agentUpdatedSuffix("entrypoint"),
+                      setupScriptPath: agentUpdatedSuffix("setupScriptPath"),
+                      setupScript: agentUpdatedSuffix("setupScript"),
+                    }}
+                    streamingField={streamingField}
+                    onCodeChange={(value) => updateField("customCode", value)}
+                    onEntrypointChange={(value) =>
+                      updateField("entrypoint", value)
+                    }
+                    onSetupScriptPathChange={(value) =>
+                      updateField("setupScriptPath", value)
+                    }
+                    onSetupScriptChange={(value) =>
+                      updateField("setupScript", value)
+                    }
+                  />
+                </div>
+              )}
+            </SetupKindCrossfade>
 
             <section className="flex flex-col gap-2.5">
-              <span className="text-sm">
-                {t(I18nKey.AUTOMATIONS$DETAIL$TRIGGER)}
-              </span>
               <div
                 role="radiogroup"
                 aria-label={t(I18nKey.AUTOMATIONS$DETAIL$TRIGGER)}
@@ -1634,6 +1669,7 @@ export function AutomationSetupPanel({
               <ScheduleFields
                 frequency={frequency}
                 time={time}
+                weekday={weekday}
                 scheduleDateTime={scheduleDateTime}
                 timezone={timezone}
                 customSchedule={customSchedule}
@@ -1654,6 +1690,7 @@ export function AutomationSetupPanel({
                   }
                 }}
                 setTime={(value) => updateField("time", value)}
+                setWeekday={(value) => updateField("weekday", value)}
                 setScheduleDateTime={(value) =>
                   updateField("scheduleDateTime", value)
                 }
@@ -1850,11 +1887,58 @@ export function AutomationSetupPanel({
   );
 }
 
+const SETUP_KIND_CROSSFADE_SECONDS = 0.3;
+
+function SetupKindCrossfade({
+  view,
+  children,
+}: {
+  view: "prompt" | "custom";
+  children: ReactNode;
+}) {
+  const reduceMotion = useReducedMotion();
+  if (reduceMotion || import.meta.env.MODE === "test") {
+    return children;
+  }
+
+  return (
+    <div className="relative">
+      <AnimatePresence initial={false}>
+        <motion.div
+          key={view}
+          data-testid="automation-setup-kind-crossfade"
+          data-kind={view}
+          className="w-full"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{
+            opacity: 0,
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            pointerEvents: "none",
+          }}
+          transition={{
+            duration: SETUP_KIND_CROSSFADE_SECONDS,
+            ease: "easeInOut",
+          }}
+        >
+          {children}
+        </motion.div>
+      </AnimatePresence>
+    </div>
+  );
+}
+
 const CUSTOM_CODE_LINE_HEIGHT_PX = 20;
+const CUSTOM_CODE_PAD_PX = 16;
 const CUSTOM_CODE_VISIBLE_LINES = 12;
+/** Top inset plus whole lines, so the scrollbar sits on the card edge and the clip falls between lines. */
 const CUSTOM_CODE_MIN_HEIGHT =
-  CUSTOM_CODE_VISIBLE_LINES * CUSTOM_CODE_LINE_HEIGHT_PX;
-const CUSTOM_CODE_MAX_HEIGHT = 28 * CUSTOM_CODE_LINE_HEIGHT_PX;
+  CUSTOM_CODE_PAD_PX + CUSTOM_CODE_VISIBLE_LINES * CUSTOM_CODE_LINE_HEIGHT_PX;
+const CUSTOM_CODE_MAX_HEIGHT =
+  CUSTOM_CODE_PAD_PX + 28 * CUSTOM_CODE_LINE_HEIGHT_PX;
 
 function CustomCodeFields({
   code,
@@ -1886,12 +1970,26 @@ function CustomCodeFields({
 }) {
   const { t } = useTranslation("openhands");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
+  const [detailsOpen, setDetailsOpen] = useState(
+    () =>
+      entrypoint !== DEFAULT_CUSTOM_ENTRYPOINT ||
+      setupScriptPath !== DEFAULT_CUSTOM_SETUP_SCRIPT_PATH ||
+      setupScript !== DEFAULT_CUSTOM_SETUP_SCRIPT,
+  );
   const { gripRef, isGripDragging, handleGripMouseDown, handleGripTouchStart } =
-    usePromptTextareaResize(textareaRef, {
+    usePromptTextareaResize(frameRef, {
       minHeight: CUSTOM_CODE_MIN_HEIGHT,
       maxHeight: CUSTOM_CODE_MAX_HEIGHT,
       contentKey: code,
     });
+
+  useLayoutEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = "0px";
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }, [code]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -1900,20 +1998,28 @@ function CustomCodeFields({
           streamingField === "customCode" ? "true" : undefined
         }
         className={cn(
-          "relative rounded-[15px] border border-[var(--oh-border)] bg-[var(--oh-surface)] p-4",
+          "relative overflow-hidden rounded-[15px] border border-[var(--oh-border)] bg-[var(--oh-surface)]",
           streamingHighlightClassName(streamingField === "customCode"),
         )}
       >
-        <textarea
-          ref={textareaRef}
-          data-testid="automation-setup-custom-code"
-          aria-label={t(I18nKey.AUTOMATION_SETUP$CUSTOM_PYTHON)}
-          rows={CUSTOM_CODE_VISIBLE_LINES}
-          value={code}
-          onChange={(event) => onCodeChange(event.target.value)}
-          spellCheck={false}
-          className="custom-scrollbar-always block w-full resize-none border-0 bg-transparent p-0 font-mono text-sm leading-5 text-content outline-none"
-        />
+        <div
+          ref={frameRef}
+          data-testid="automation-setup-custom-code-scroll"
+          className="custom-scrollbar-always min-h-[256px] overflow-x-hidden"
+        >
+          <div className="px-4 pt-4 pb-4">
+            <textarea
+              ref={textareaRef}
+              data-testid="automation-setup-custom-code"
+              aria-label={t(I18nKey.AUTOMATION_SETUP$CUSTOM_PYTHON)}
+              rows={CUSTOM_CODE_VISIBLE_LINES}
+              value={code}
+              onChange={(event) => onCodeChange(event.target.value)}
+              spellCheck={false}
+              className="block w-full resize-none overflow-hidden border-0 bg-transparent p-0 font-mono text-sm leading-5 text-content outline-none"
+            />
+          </div>
+        </div>
         <div
           data-testid="automation-setup-custom-code-grip"
           className="group absolute bottom-0 left-0 z-20 h-3 w-full"
@@ -1935,56 +2041,82 @@ function CustomCodeFields({
           />
         </div>
       </div>
-      <div className="grid gap-3 md:grid-cols-[2fr_1fr]">
-        <Field
-          label={t(I18nKey.AUTOMATION_SETUP$ENTRYPOINT)}
-          suffix={updatedSuffixes.entrypoint}
-          isStreaming={streamingField === "entrypoint"}
-        >
-          <input
-            data-testid="automation-setup-entrypoint"
-            value={entrypoint}
-            onChange={(event) => onEntrypointChange(event.target.value)}
-            className={formControlFieldClassName}
-          />
-        </Field>
-        <Field
-          label={t(I18nKey.AUTOMATION_SETUP$SETUP_SCRIPT_PATH)}
-          suffix={updatedSuffixes.setupScriptPath}
-          isStreaming={streamingField === "setupScriptPath"}
-        >
-          <input
-            data-testid="automation-setup-setup-script-path"
-            value={setupScriptPath}
-            onChange={(event) => onSetupScriptPathChange(event.target.value)}
-            className={formControlFieldClassName}
-          />
-        </Field>
-      </div>
-      <Field
-        label={t(I18nKey.AUTOMATION_SETUP$SETUP_SCRIPT)}
-        suffix={updatedSuffixes.setupScript}
-        isStreaming={streamingField === "setupScript"}
+      <button
+        type="button"
+        data-testid="automation-setup-custom-details-toggle"
+        aria-expanded={detailsOpen}
+        aria-controls="automation-setup-custom-details"
+        onClick={() => setDetailsOpen((open) => !open)}
+        className={cn(addOptionButtonClassName, "gap-1.5")}
       >
-        <textarea
-          data-testid="automation-setup-setup-script"
-          rows={4}
-          value={setupScript}
-          onChange={(event) => onSetupScriptChange(event.target.value)}
-          spellCheck={false}
+        <ChevronDown
           className={cn(
-            formControlMultilineFieldClassName,
-            "font-mono text-xs",
+            "size-4 transition-transform",
+            detailsOpen && "rotate-180",
           )}
+          aria-hidden
         />
-      </Field>
+        {t(I18nKey.AUTOMATION_SETUP$SHOW_ENTRYPOINT_AND_SETUP)}
+      </button>
+      {detailsOpen ? (
+        <div
+          id="automation-setup-custom-details"
+          className="flex flex-col gap-4"
+        >
+          <div className="grid gap-3 md:grid-cols-[2fr_1fr]">
+            <Field
+              label={t(I18nKey.AUTOMATION_SETUP$ENTRYPOINT)}
+              suffix={updatedSuffixes.entrypoint}
+              isStreaming={streamingField === "entrypoint"}
+            >
+              <input
+                data-testid="automation-setup-entrypoint"
+                value={entrypoint}
+                onChange={(event) => onEntrypointChange(event.target.value)}
+                className={formControlFieldClassName}
+              />
+            </Field>
+            <Field
+              label={t(I18nKey.AUTOMATION_SETUP$SETUP_SCRIPT_PATH)}
+              suffix={updatedSuffixes.setupScriptPath}
+              isStreaming={streamingField === "setupScriptPath"}
+            >
+              <input
+                data-testid="automation-setup-setup-script-path"
+                value={setupScriptPath}
+                onChange={(event) =>
+                  onSetupScriptPathChange(event.target.value)
+                }
+                className={formControlFieldClassName}
+              />
+            </Field>
+          </div>
+          <Field
+            label={t(I18nKey.AUTOMATION_SETUP$SETUP_SCRIPT)}
+            suffix={updatedSuffixes.setupScript}
+            isStreaming={streamingField === "setupScript"}
+          >
+            <textarea
+              data-testid="automation-setup-setup-script"
+              rows={4}
+              value={setupScript}
+              onChange={(event) => onSetupScriptChange(event.target.value)}
+              spellCheck={false}
+              className={cn(
+                formControlMultilineFieldClassName,
+                "font-mono text-xs",
+              )}
+            />
+          </Field>
+        </div>
+      ) : null}
     </div>
   );
 }
 
 function frequencyTabClassName(selected: boolean) {
   return cn(
-    "inline-flex h-full shrink-0 items-center rounded-md px-3 text-sm",
+    "inline-flex h-full shrink-0 items-center rounded-md px-1.5 text-sm",
     formControlTransitionClassName,
     selected
       ? cn(
@@ -1996,9 +2128,20 @@ function frequencyTabClassName(selected: boolean) {
   );
 }
 
+const WEEKDAY_KEYS: I18nKey[] = [
+  I18nKey.AUTOMATIONS$WEEKDAY_SUN,
+  I18nKey.AUTOMATIONS$WEEKDAY_MON,
+  I18nKey.AUTOMATIONS$WEEKDAY_TUE,
+  I18nKey.AUTOMATIONS$WEEKDAY_WED,
+  I18nKey.AUTOMATIONS$WEEKDAY_THU,
+  I18nKey.AUTOMATIONS$WEEKDAY_FRI,
+  I18nKey.AUTOMATIONS$WEEKDAY_SAT,
+];
+
 function ScheduleFields({
   frequency,
   time,
+  weekday,
   scheduleDateTime,
   timezone,
   customSchedule,
@@ -2006,12 +2149,14 @@ function ScheduleFields({
   streamingField,
   setFrequency,
   setTime,
+  setWeekday,
   setScheduleDateTime,
   setTimezone,
   setCustomSchedule,
 }: {
   frequency: Frequency;
   time: string;
+  weekday: string;
   scheduleDateTime: string;
   timezone: string;
   customSchedule: string;
@@ -2024,6 +2169,7 @@ function ScheduleFields({
   streamingField: AutomationSetupField | null;
   setFrequency: (value: Frequency) => void;
   setTime: (value: string) => void;
+  setWeekday: (value: string) => void;
   setScheduleDateTime: (value: string) => void;
   setTimezone: (value: string) => void;
   setCustomSchedule: (value: string) => void;
@@ -2043,37 +2189,39 @@ function ScheduleFields({
 
   return (
     <section className="flex flex-col gap-2.5">
-      <span className="flex items-center gap-2 text-sm">
-        <span>{t(I18nKey.AUTOMATION_SETUP$FREQUENCY)}</span>
-        {updatedSuffixes.frequency && (
-          <span className="text-xs font-normal text-[var(--oh-muted)]">
-            {updatedSuffixes.frequency}
-          </span>
-        )}
-      </span>
-      <div
-        role="radiogroup"
-        aria-label={t(I18nKey.AUTOMATION_SETUP$FREQUENCY)}
-        className={cn(
-          formControlHeightClassName,
-          formControlRadiusClassName,
-          "inline-flex w-fit max-w-full min-w-0 items-center gap-0.5 overflow-x-auto bg-[var(--oh-surface-raised)] p-0.5",
-          streamingHighlightClassName(streamingField === "frequency"),
-        )}
-      >
-        {FREQUENCIES.map((item) => (
-          <button
-            key={item}
-            type="button"
-            role="radio"
-            data-testid={`automation-setup-frequency-${item}`}
-            aria-checked={frequency === item}
-            onClick={() => setFrequency(item)}
-            className={frequencyTabClassName(frequency === item)}
-          >
-            {t(frequencyLabelKey(item))}
-          </button>
-        ))}
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="flex shrink-0 items-center gap-2 text-sm">
+          <span>{t(I18nKey.AUTOMATION_SETUP$FREQUENCY)}</span>
+          {updatedSuffixes.frequency && (
+            <span className="text-xs font-normal text-[var(--oh-muted)]">
+              {updatedSuffixes.frequency}
+            </span>
+          )}
+        </span>
+        <div
+          role="radiogroup"
+          aria-label={t(I18nKey.AUTOMATION_SETUP$FREQUENCY)}
+          className={cn(
+            formControlHeightClassName,
+            formControlRadiusClassName,
+            "inline-flex max-w-full min-w-0 items-center gap-0.5 overflow-x-auto bg-[var(--oh-surface-raised)] p-0.5",
+            streamingHighlightClassName(streamingField === "frequency"),
+          )}
+        >
+          {FREQUENCIES.map((item) => (
+            <button
+              key={item}
+              type="button"
+              role="radio"
+              data-testid={`automation-setup-frequency-${item}`}
+              aria-checked={frequency === item}
+              onClick={() => setFrequency(item)}
+              className={frequencyTabClassName(frequency === item)}
+            >
+              {t(frequencyLabelKey(item))}
+            </button>
+          ))}
+        </div>
       </div>
       <div
         data-testid="automation-setup-at-row"
@@ -2120,6 +2268,40 @@ function ScheduleFields({
               onChange={(event) => setTime(event.target.value)}
               className={cn(formControlFieldClassName, "w-[9.5rem]")}
             />
+          </div>
+        ) : null}
+        {frequency === "weekly" ? (
+          <div className="flex shrink-0 items-center gap-2.5">
+            <span className="shrink-0 text-sm text-content">
+              {t(I18nKey.AUTOMATION_SETUP$ON)}
+            </span>
+            <div
+              className={cn(
+                "relative w-fit shrink-0",
+                streamingHighlightClassName(streamingField === "weekday"),
+              )}
+            >
+              <select
+                aria-label={t(I18nKey.AUTOMATIONS$WEEKDAY)}
+                data-testid="automation-setup-weekday"
+                value={weekday}
+                onChange={(event) => setWeekday(event.target.value)}
+                className={cn(
+                  formControlFieldClassName,
+                  "w-auto appearance-none pr-8",
+                )}
+              >
+                {WEEKDAY_KEYS.map((key, index) => (
+                  <option key={key} value={String(index)}>
+                    {t(key)}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown
+                className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-[var(--oh-muted)]"
+                aria-hidden
+              />
+            </div>
           </div>
         ) : null}
         <div

@@ -2,12 +2,13 @@ import { useRef, useState, type ReactNode } from "react";
 import { Plus, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { BrandButton } from "#/components/features/settings/brand-button";
-import { OptionalTag } from "#/components/features/settings/optional-tag";
 import { SettingsInput } from "#/components/features/settings/settings-input";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import { ModalCloseButton } from "#/components/shared/modals/modal-close-button";
 import { ContextMenuListItem } from "#/components/features/context-menu/context-menu-list-item";
-import { useChatInputLlmProfileState } from "#/hooks/use-chat-input-llm-profile-state";
+import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
+import { useAgentProfiles } from "#/hooks/query/use-agent-profiles";
+import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { usePromptTextareaResize } from "#/hooks/use-prompt-textarea-resize";
 import { I18nKey } from "#/i18n/declaration";
@@ -40,43 +41,58 @@ function parseRepositories(value: string): string[] {
     });
 }
 
-function SetupModelPill() {
+function SetupModelPill({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (profileName: string) => void;
+}) {
   const { t } = useTranslation("openhands");
-  const profile = useChatInputLlmProfileState();
+  const { data, isLoading } = useLlmProfiles();
+  const profiles = data?.profiles ?? [];
+  const activeProfileName = data?.active_profile ?? null;
   const [isOpen, setIsOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useClickOutsideElement<HTMLUListElement>(
     () => setIsOpen(false),
     triggerRef,
   );
-  const displayName = profile.currentProfileName;
+  const pinnedProfileName = value.trim() || null;
+  const displayName = pinnedProfileName ?? activeProfileName;
   const pillLabel =
     displayName ?? t(I18nKey.AUTOMATION_SETUP$MODEL_PLACEHOLDER);
-  const canOpen = profile.profiles.length > 0;
+  const canOpen = !isLoading && profiles.length > 0;
+  const tooltip = t(I18nKey.LLM$MODEL);
 
   return (
     <div className="relative min-w-0">
-      <button
-        ref={triggerRef}
-        type="button"
-        className={cn(chatInputPillButtonClassName, "max-w-[200px] rounded-lg")}
-        title={displayName ?? undefined}
-        data-testid="automation-setup-model"
-        aria-expanded={isOpen}
-        aria-haspopup="dialog"
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          if (!canOpen) return;
-          setIsOpen((open) => !open);
-        }}
-      >
-        <span className="truncate">
-          {displayName ? truncateLabel(pillLabel) : pillLabel}
-        </span>
-        <ComboboxCaretInline isOpen={isOpen} />
-      </button>
+      <StyledTooltip content={tooltip} placement="top">
+        <button
+          ref={triggerRef}
+          type="button"
+          className={cn(
+            chatInputPillButtonClassName,
+            "max-w-[200px] rounded-lg",
+          )}
+          data-testid="automation-setup-model"
+          aria-label={displayName ?? pillLabel}
+          aria-expanded={isOpen}
+          aria-haspopup="dialog"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (!canOpen) return;
+            setIsOpen((open) => !open);
+          }}
+        >
+          <span className="truncate">
+            {displayName ? truncateLabel(pillLabel) : pillLabel}
+          </span>
+          <ComboboxCaretInline isOpen={isOpen} />
+        </button>
+      </StyledTooltip>
       {isOpen && canOpen ? (
         <ContextMenu
           ref={popoverRef}
@@ -86,8 +102,26 @@ function SetupModelPill() {
           spacing="none"
           className="z-[60] mb-2 min-w-[200px] max-w-[320px] max-h-[60vh] overflow-y-auto"
         >
-          {profile.profiles.map((item) => {
-            const isSelected = item.name === profile.currentProfileName;
+          <ContextMenuListItem
+            testId="automation-setup-model-option-active"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onChange("");
+              setIsOpen(false);
+            }}
+            className={cn(
+              "flex items-center justify-between gap-2",
+              !pinnedProfileName && "bg-[var(--oh-interactive-hover)]",
+            )}
+          >
+            <span className="truncate">{t(I18nKey.COMMON$ACTIVE_PROFILE)}</span>
+            {!pinnedProfileName ? (
+              <CheckIcon className="size-4 shrink-0" aria-hidden />
+            ) : null}
+          </ContextMenuListItem>
+          {profiles.map((item) => {
+            const isSelected = item.name === pinnedProfileName;
             const displayModel = formatModelNameForDisplay(item.model);
             return (
               <ContextMenuListItem
@@ -96,7 +130,7 @@ function SetupModelPill() {
                 onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
-                  profile.selectProfile(item.name);
+                  onChange(item.name);
                   setIsOpen(false);
                 }}
                 className={cn(
@@ -115,6 +149,121 @@ function SetupModelPill() {
                     {displayModel}
                   </span>
                 ) : null}
+              </ContextMenuListItem>
+            );
+          })}
+        </ContextMenu>
+      ) : null}
+    </div>
+  );
+}
+
+function SetupAgentProfilePill({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (profileId: string) => void;
+}) {
+  const { t } = useTranslation("openhands");
+  const { data, isLoading } = useAgentProfiles();
+  const profiles = (data?.profiles ?? []).filter(
+    (profile) => profile.id != null,
+  );
+  const activeProfile =
+    profiles.find((profile) => profile.id === data?.active_agent_profile_id) ??
+    null;
+  const [isOpen, setIsOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useClickOutsideElement<HTMLUListElement>(
+    () => setIsOpen(false),
+    triggerRef,
+  );
+  const pinnedProfile =
+    profiles.find((profile) => profile.id === value.trim()) ?? null;
+  const displayName = pinnedProfile?.name ?? activeProfile?.name ?? null;
+  const pillLabel = displayName ?? t(I18nKey.CHAT$AGENT_PROFILE_PLACEHOLDER);
+  const canOpen = !isLoading && profiles.length > 0;
+  const tooltip = t(I18nKey.CHAT$AGENT_PROFILE_PLACEHOLDER);
+
+  return (
+    <div className="relative min-w-0">
+      <StyledTooltip content={tooltip} placement="top">
+        <button
+          ref={triggerRef}
+          type="button"
+          className={cn(
+            chatInputPillButtonClassName,
+            "max-w-[200px] rounded-lg",
+          )}
+          data-testid="automation-setup-agent-profile"
+          aria-label={displayName ?? pillLabel}
+          aria-expanded={isOpen}
+          aria-haspopup="dialog"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (!canOpen) return;
+            setIsOpen((open) => !open);
+          }}
+        >
+          <span className="truncate">
+            {displayName ? truncateLabel(pillLabel) : pillLabel}
+          </span>
+          <ComboboxCaretInline isOpen={isOpen} />
+        </button>
+      </StyledTooltip>
+      {isOpen && canOpen ? (
+        <ContextMenu
+          ref={popoverRef}
+          testId="automation-setup-agent-profile-popover"
+          position="top"
+          alignment="left"
+          spacing="none"
+          className="z-[60] mb-2 min-w-[200px] max-w-[320px] max-h-[60vh] overflow-y-auto"
+        >
+          <ContextMenuListItem
+            testId="automation-setup-agent-profile-option-active"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onChange("");
+              setIsOpen(false);
+            }}
+            className={cn(
+              "flex items-center justify-between gap-2",
+              !pinnedProfile && "bg-[var(--oh-interactive-hover)]",
+            )}
+          >
+            <span className="truncate">{t(I18nKey.COMMON$ACTIVE_PROFILE)}</span>
+            {!pinnedProfile ? (
+              <CheckIcon className="size-4 shrink-0" aria-hidden />
+            ) : null}
+          </ContextMenuListItem>
+          {profiles.map((profile) => {
+            const isSelected = profile.id === pinnedProfile?.id;
+            return (
+              <ContextMenuListItem
+                key={profile.id}
+                testId={`automation-setup-agent-profile-option-${profile.name}`}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  if (profile.id) onChange(profile.id);
+                  setIsOpen(false);
+                }}
+                className={cn(
+                  "flex flex-col items-stretch gap-0.5",
+                  isSelected && "bg-[var(--oh-interactive-hover)]",
+                )}
+              >
+                <div className="flex min-w-0 items-center justify-between gap-2">
+                  <span className="truncate">{profile.name}</span>
+                  {isSelected ? (
+                    <CheckIcon className="size-4 shrink-0" aria-hidden />
+                  ) : null}
+                </div>
               </ContextMenuListItem>
             );
           })}
@@ -203,8 +352,12 @@ export function AutomationSetupPromptStack({
   isStreaming,
   errorText,
   titleAction,
+  model,
+  agentProfileId,
   onPromptChange,
   onRepositoryChange,
+  onModelChange,
+  onAgentProfileChange,
 }: {
   prompt: string;
   repository: string;
@@ -214,8 +367,12 @@ export function AutomationSetupPromptStack({
   errorText?: string;
   /** Sits on the Prompt title row, outside the field label. */
   titleAction?: ReactNode;
+  model: string;
+  agentProfileId: string;
   onPromptChange: (value: string) => void;
   onRepositoryChange: (value: string) => void;
+  onModelChange: (profileName: string) => void;
+  onAgentProfileChange: (profileId: string) => void;
 }) {
   const { t } = useTranslation("openhands");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -266,8 +423,12 @@ export function AutomationSetupPromptStack({
               rows={5}
               className="min-h-[120px] w-full resize-none border-0 bg-transparent p-0 text-sm text-content outline-none placeholder:text-tertiary-alt placeholder:italic"
             />
-            <div className="flex min-w-0 items-center pt-2">
-              <SetupModelPill />
+            <div className="flex min-w-0 items-center gap-2 pt-2">
+              <SetupModelPill value={model} onChange={onModelChange} />
+              <SetupAgentProfilePill
+                value={agentProfileId}
+                onChange={onAgentProfileChange}
+              />
             </div>
             <div
               data-testid="automation-setup-prompt-grip"
@@ -292,7 +453,7 @@ export function AutomationSetupPromptStack({
           </div>
           <div
             data-testid="automation-setup-prompt-drawer"
-            className="flex min-h-9 items-center rounded-b-[15px] bg-[var(--oh-surface-raised)] px-4 pb-3 pt-[calc(15px+0.5rem)]"
+            className="flex min-h-9 items-center rounded-b-[15px] border-x border-b border-[var(--oh-border)] bg-[var(--oh-surface-raised)] px-4 pb-3 pt-[calc(15px+0.5rem)]"
           >
             <div
               data-testid="automation-setup-repository"
@@ -302,7 +463,6 @@ export function AutomationSetupPromptStack({
                 <span className="text-sm">
                   {t(I18nKey.AUTOMATIONS$DETAIL$REPOSITORIES)}
                 </span>
-                <OptionalTag />
                 {repositorySuffix ? (
                   <span className="text-xs text-[var(--oh-muted)]">
                     {repositorySuffix}

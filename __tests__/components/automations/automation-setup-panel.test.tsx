@@ -76,15 +76,46 @@ vi.mock("#/hooks/query/use-manifest-capabilities", () => ({
   useDeploymentCapabilities: vi.fn(() => ({ data: null, isLoading: false })),
 }));
 
-vi.mock("#/hooks/use-chat-input-llm-profile-state", () => ({
-  useChatInputLlmProfileState: () => ({
-    profiles: [],
-    currentProfileName: null,
-    currentProfileModel: null,
+vi.mock("#/hooks/query/use-agent-profiles", () => ({
+  useAgentProfiles: () => ({
+    data: {
+      profiles: [
+        {
+          id: "agent-default",
+          name: "default",
+          agent_kind: "openhands",
+          revision: 1,
+          llm_profile_ref: "claude-opus-4-5-20251101",
+          mcp_server_refs: null,
+        },
+        {
+          id: "agent-reviewer",
+          name: "reviewer",
+          agent_kind: "openhands",
+          revision: 1,
+          llm_profile_ref: "fast",
+          mcp_server_refs: null,
+        },
+      ],
+      active_agent_profile_id: "agent-default",
+    },
     isLoading: false,
-    isSwitching: false,
-    canSwitchProfile: false,
-    selectProfile: vi.fn(),
+  }),
+}));
+
+vi.mock("#/hooks/query/use-llm-profiles", () => ({
+  useLlmProfiles: () => ({
+    data: {
+      profiles: [
+        { name: "fast", model: "openai/gpt-4.1-mini" },
+        {
+          name: "claude-opus-4-5-20251101",
+          model: "anthropic/claude-opus-4-5",
+        },
+      ],
+      active_profile: "claude-opus-4-5-20251101",
+    },
+    isLoading: false,
   }),
 }));
 
@@ -123,7 +154,6 @@ function renderPanel(
         draft={draft}
         conversationId={conversationId}
         conversationTags={conversationTags}
-        onClose={vi.fn()}
       />
     </NavigationProvider>,
   );
@@ -156,17 +186,20 @@ describe("AutomationSetupPanel", () => {
     const user = userEvent.setup();
     renderPanel();
 
-    expect(screen.getByTestId("automation-setup-frequency-daily")).toHaveAttribute(
-      "aria-checked",
-      "true",
-    );
+    expect(
+      screen.getByTestId("automation-setup-frequency-daily"),
+    ).toHaveAttribute("aria-checked", "true");
     expect(screen.getByTestId("automation-setup-time")).toBeInTheDocument();
-    expect(screen.queryByTestId("automation-setup-datetime")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automation-setup-datetime"),
+    ).not.toBeInTheDocument();
 
     await user.click(screen.getByTestId("automation-setup-frequency-once"));
 
     expect(screen.getByTestId("automation-setup-datetime")).toBeInTheDocument();
-    expect(screen.queryByTestId("automation-setup-time")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automation-setup-time"),
+    ).not.toBeInTheDocument();
     expect(screen.getByTestId("automation-setup-timezone")).toHaveValue(
       "America/New_York",
     );
@@ -211,6 +244,18 @@ describe("AutomationSetupPanel", () => {
     expect(
       screen.getByTestId("automation-setup-custom-code-grip"),
     ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("automation-setup-custom-code-scroll"),
+    ).not.toHaveClass("p-4");
+    expect(screen.getByTestId("automation-setup-custom-code")).toHaveClass(
+      "p-0",
+    );
+    expect(
+      screen.queryByTestId("automation-setup-entrypoint"),
+    ).not.toBeInTheDocument();
+    await user.click(
+      screen.getByTestId("automation-setup-custom-details-toggle"),
+    );
     expect(screen.getByTestId("automation-setup-entrypoint")).toHaveValue(
       "python3 main.py",
     );
@@ -258,6 +303,13 @@ describe("AutomationSetupPanel", () => {
     await user.click(screen.getByTestId("automation-setup-kind-prompt"));
     expect(screen.getByTestId("automation-setup-prompt")).toBeInTheDocument();
     expect(
+      screen.getByTestId("automation-setup-repository"),
+    ).not.toHaveTextContent("COMMON$OPTIONAL");
+    expect(screen.getByTestId("automation-setup-prompt-drawer")).toHaveClass(
+      "border-x",
+      "border-b",
+    );
+    expect(
       screen.queryByTestId("automation-setup-entrypoint"),
     ).not.toBeInTheDocument();
     expect(
@@ -287,7 +339,9 @@ describe("AutomationSetupPanel", () => {
     expect(
       screen.queryByTestId("automation-setup-plugin-source"),
     ).not.toBeInTheDocument();
-    expect(screen.getByTestId("automation-setup-add-plugin")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("automation-setup-add-plugin"),
+    ).toBeInTheDocument();
   });
 
   it("falls back to validation when draft endpoints are unavailable", async () => {
@@ -329,6 +383,80 @@ describe("AutomationSetupPanel", () => {
     });
     expect(screen.getByTestId("automation-setup-status")).toHaveTextContent(
       "AUTOMATION_SETUP$READY_TO_TEST",
+    );
+  });
+
+  it("pins an automation model without changing the conversation profile", async () => {
+    vi.mocked(AutomationService.createServerDraft).mockRejectedValue({
+      response: { status: 404 },
+    });
+    vi.mocked(AutomationService.validateDraft).mockResolvedValue({
+      valid: true,
+      errors: [],
+    });
+
+    const user = userEvent.setup();
+    renderPanel();
+
+    expect(screen.getByTestId("automation-setup-model")).toHaveAttribute(
+      "aria-label",
+      "claude-opus-4-5-20251101",
+    );
+    await user.click(screen.getByTestId("automation-setup-model"));
+    await user.click(screen.getByTestId("automation-setup-model-option-fast"));
+    expect(screen.getByTestId("automation-setup-model")).toHaveAttribute(
+      "aria-label",
+      "fast",
+    );
+
+    await user.click(screen.getByTestId("automation-setup-test"));
+
+    await waitFor(() =>
+      expect(AutomationService.validateDraft).toHaveBeenCalledWith(
+        expect.objectContaining({
+          draft: expect.objectContaining({ model: "fast" }),
+        }),
+      ),
+    );
+  });
+
+  it("pins an automation agent profile without changing the conversation", async () => {
+    vi.mocked(AutomationService.createServerDraft).mockRejectedValue({
+      response: { status: 404 },
+    });
+    vi.mocked(AutomationService.validateDraft).mockResolvedValue({
+      valid: true,
+      errors: [],
+    });
+
+    const user = userEvent.setup();
+    renderPanel();
+
+    expect(
+      screen.getByTestId("automation-setup-agent-profile"),
+    ).toHaveAttribute("aria-label", "default");
+    await user.click(screen.getByTestId("automation-setup-agent-profile"));
+    await user.click(
+      screen.getByTestId("automation-setup-agent-profile-option-reviewer"),
+    );
+    expect(
+      screen.getByTestId("automation-setup-agent-profile"),
+    ).toHaveAttribute("aria-label", "reviewer");
+    expect(screen.getByTestId("automation-setup-model")).toHaveAttribute(
+      "aria-label",
+      "claude-opus-4-5-20251101",
+    );
+
+    await user.click(screen.getByTestId("automation-setup-test"));
+
+    await waitFor(() =>
+      expect(AutomationService.validateDraft).toHaveBeenCalledWith(
+        expect.objectContaining({
+          draft: expect.objectContaining({
+            agent_profile_id: "agent-reviewer",
+          }),
+        }),
+      ),
     );
   });
 
@@ -472,7 +600,44 @@ describe("AutomationSetupPanel", () => {
       "2026-01-01T00:00:01.000Z",
     );
 
-    expect(nameInput).toHaveValue("Manual name");
+    expect(nameInput).toHaveValue("Manual name"    );
+  });
+
+  it("shows a weekday dropdown for a weekly schedule", async () => {
+    vi.mocked(AutomationService.createServerDraft).mockRejectedValue({
+      response: { status: 404 },
+    });
+    vi.mocked(AutomationService.validateDraft).mockResolvedValue({
+      valid: true,
+      errors: [],
+    });
+
+    const user = userEvent.setup();
+    renderPanel();
+
+    expect(
+      screen.queryByTestId("automation-setup-weekday"),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("automation-setup-frequency-weekly"));
+    const weekday = screen.getByTestId("automation-setup-weekday");
+    expect(weekday).toHaveValue("1");
+    expect(weekday.parentElement?.parentElement).toHaveTextContent(
+      "AUTOMATION_SETUP$ON",
+    );
+    await user.selectOptions(weekday, "3");
+
+    await user.click(screen.getByTestId("automation-setup-test"));
+
+    await waitFor(() =>
+      expect(AutomationService.validateDraft).toHaveBeenCalledWith(
+        expect.objectContaining({
+          draft: expect.objectContaining({
+            trigger: expect.objectContaining({ schedule: "0 9 * * 3" }),
+          }),
+        }),
+      ),
+    );
   });
 
   it("creates plugin drafts with the selected plugin source", async () => {
@@ -516,6 +681,9 @@ describe("AutomationSetupPanel", () => {
       kind: "custom",
     });
 
+    await user.click(
+      screen.getByTestId("automation-setup-custom-details-toggle"),
+    );
     await user.clear(screen.getByTestId("automation-setup-entrypoint"));
     await user.type(
       screen.getByTestId("automation-setup-entrypoint"),

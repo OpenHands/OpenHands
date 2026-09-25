@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "#/utils/utils";
-import { BackNavButton } from "#/components/shared/buttons/back-nav-button";
 import { ChatActionTooltip } from "#/components/features/chat/chat-action-tooltip";
 import BlockDrawerLeftIcon from "#/icons/block-drawer-left.svg?react";
 import { mobileTopBarIconButtonClassName } from "#/utils/mobile-top-bar-icon-button-classes";
@@ -14,7 +13,6 @@ import { useResizablePanels } from "#/hooks/use-resizable-panels";
 import { useConversationStore } from "#/stores/conversation-store";
 import { AutomationSetupPanel } from "#/components/features/automations/setup/automation-setup-panel";
 import {
-  clearAutomationSetupDraft,
   getAutomationSetupDraft,
   subscribeAutomationSetupDraft,
   type AutomationSetupDraft,
@@ -27,15 +25,10 @@ import {
 import { SidebarMobileMenuToggle } from "#/components/features/sidebar/sidebar-mobile-menu-toggle";
 import { ConversationOverviewDrawer } from "../conversation-overview-drawer";
 import { useConversationOverviewDrawerOptional } from "../conversation-overview-drawer-context";
-import { useNavigation } from "#/context/navigation-context";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { I18nKey } from "#/i18n/declaration";
-import {
-  getAutomationDraftIdFromTags,
-  hasAutomationSetupModeTag,
-} from "#/utils/automation-draft-tags";
+import { hasAutomationSetupModeTag } from "#/utils/automation-draft-tags";
 
-const SPLASH_ROUTE = "/";
 const TAGGED_AUTOMATION_SETUP_DRAFT: AutomationSetupDraft = {
   prompt: "",
   kind: "prompt",
@@ -49,7 +42,6 @@ function getDesktopTabPanelClass(isRightPanelShown: boolean) {
 
 export function ConversationMain() {
   const { t } = useTranslation("openhands");
-  const { navigate } = useNavigation();
   const { conversationId } = useConversationId();
   const { data: conversation } = useActiveConversation();
   const isMobile = useBreakpoint();
@@ -63,12 +55,10 @@ export function ConversationMain() {
   const [automationToolbarElement, setAutomationToolbarElement] =
     useState<HTMLDivElement | null>(null);
   const [isAutomationAgentHidden, setIsAutomationAgentHidden] = useState(false);
-  const [dismissedTaggedDraftId, setDismissedTaggedDraftId] = useState<
-    string | null
-  >(null);
+  const [composerDockTarget, setComposerDockTarget] =
+    useState<HTMLDivElement | null>(null);
   const overviewDrawer = useConversationOverviewDrawerOptional();
   const isSecondaryDrawerOpen = Boolean(overviewDrawer?.section);
-  const taggedDraftId = getAutomationDraftIdFromTags(conversation?.tags);
   const hasTaggedAutomationSetupMode = hasAutomationSetupModeTag(
     conversation?.tags,
   );
@@ -83,7 +73,6 @@ export function ConversationMain() {
     });
 
   useEffect(() => {
-    setDismissedTaggedDraftId(null);
     setAutomationSetupDraftState(getAutomationSetupDraft(conversationId));
     if (!conversationId) return undefined;
     return subscribeAutomationSetupDraft(
@@ -93,20 +82,11 @@ export function ConversationMain() {
   }, [conversationId]);
 
   useEffect(() => {
-    if (
-      automationSetupDraft ||
-      !hasTaggedAutomationSetupMode ||
-      (taggedDraftId && taggedDraftId === dismissedTaggedDraftId)
-    ) {
+    if (automationSetupDraft || !hasTaggedAutomationSetupMode) {
       return;
     }
     setAutomationSetupDraftState(TAGGED_AUTOMATION_SETUP_DRAFT);
-  }, [
-    automationSetupDraft,
-    dismissedTaggedDraftId,
-    hasTaggedAutomationSetupMode,
-    taggedDraftId,
-  ]);
+  }, [automationSetupDraft, hasTaggedAutomationSetupMode]);
 
   useEffect(() => {
     if (!automationSetupDraft) return;
@@ -120,17 +100,7 @@ export function ConversationMain() {
     }
   }, [automationSetupDraft]);
 
-  const closeAutomationSetup = () => {
-    if (conversationId) clearAutomationSetupDraft(conversationId);
-    setDismissedTaggedDraftId(taggedDraftId ?? null);
-    setAutomationSetupDraftState(null);
-    setIsRightPanelShown(false);
-  };
-
-  const handleBackToSplash = () => {
-    navigate(SPLASH_ROUTE);
-  };
-
+  const showDockedComposer = isAutomationSetupMode && isAutomationAgentHidden;
   const agentToggleLabel = isAutomationAgentHidden
     ? t(I18nKey.AUTOMATION_SETUP$SHOW_AGENT)
     : t(I18nKey.AUTOMATION_SETUP$HIDE_AGENT);
@@ -154,12 +124,6 @@ export function ConversationMain() {
         >
           <div className="flex min-w-0 items-center gap-2">
             {isSidebarRailHidden ? <SidebarMobileMenuToggle /> : null}
-            <BackNavButton
-              testId="automation-setup-back"
-              className="!p-1.5"
-              ariaLabel={t(I18nKey.BUTTON$BACK)}
-              onClick={handleBackToSplash}
-            />
             <h2
               data-testid="automation-setup-conversation-title"
               className="min-w-0 truncate text-sm font-medium text-content"
@@ -264,6 +228,8 @@ export function ConversationMain() {
             <ChatInterfaceWrapper
               isRightPanelShown={!isMobile && isRightPanelShown}
               showGitControlBar={!isAutomationSetupMode}
+              composerDockTarget={composerDockTarget}
+              onDockedComposerSubmit={() => setIsAutomationAgentHidden(false)}
             />
           </div>
         </div>
@@ -298,7 +264,7 @@ export function ConversationMain() {
             <div className="flex h-full w-full flex-col">
               <div
                 className={cn(
-                  "flex flex-col flex-1 min-h-0 bg-surface overflow-hidden",
+                  "relative flex flex-col flex-1 min-h-0 bg-surface overflow-hidden",
                   !(isAutomationSetupMode && isAutomationAgentHidden) &&
                     "border-l border-border",
                 )}
@@ -310,7 +276,7 @@ export function ConversationMain() {
                     conversationTags={conversation?.tags}
                     toolbarPortal={automationToolbarElement}
                     showInlineHeader={false}
-                    onClose={closeAutomationSetup}
+                    reserveComposerSpace={showDockedComposer}
                   />
                 ) : (
                   <>
@@ -325,6 +291,17 @@ export function ConversationMain() {
                     </div>
                   </>
                 )}
+                {showDockedComposer ? (
+                  <div className="pointer-events-none absolute inset-0 z-20 px-5 [scrollbar-gutter:stable]">
+                    <div className="relative mx-auto h-full w-full min-w-0 max-w-[800px]">
+                      <div
+                        ref={setComposerDockTarget}
+                        data-testid="automation-setup-docked-composer"
+                        className="pointer-events-auto absolute inset-x-0 bottom-5 overflow-visible rounded-[15px] shadow-[0_12px_40px_rgba(0,0,0,0.55)]"
+                      />
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>

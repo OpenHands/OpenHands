@@ -25,10 +25,13 @@ export interface AutomationSetupFormValues {
   time: string;
   scheduleDateTime: string;
   timezone: string;
+  weekday: string;
   customSchedule: string;
   eventSource: string;
   eventKey: string;
   eventFilter: string;
+  model: string;
+  agentProfileId: string;
   showTimeout: boolean;
   timeoutSeconds: string;
 }
@@ -92,10 +95,13 @@ const STRING_FIELDS = [
   "time",
   "scheduleDateTime",
   "timezone",
+  "weekday",
   "customSchedule",
   "eventSource",
   "eventKey",
   "eventFilter",
+  "model",
+  "agentProfileId",
   "timeoutSeconds",
 ] as const satisfies readonly AutomationSetupField[];
 

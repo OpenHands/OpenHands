@@ -42703,6 +42703,23 @@
     "zh-CN": "At",
     "zh-TW": "At"
   },
+  "AUTOMATION_SETUP$ON": {
+    "ar": "في",
+    "ca": "El",
+    "de": "Am",
+    "en": "On",
+    "es": "El",
+    "fr": "Le",
+    "it": "Il",
+    "ja": "毎週",
+    "ko-KR": "매주",
+    "no": "På",
+    "pt": "Em",
+    "tr": "Her",
+    "uk": "У",
+    "zh-CN": "每",
+    "zh-TW": "每"
+  },
   "AUTOMATION_SETUP$EVENT_SOURCE": {
     "ar": "Event source",
     "ca": "Event source",
@@ -42958,6 +42975,23 @@
     "zh-CN": "设置脚本",
     "zh-TW": "設定指令碼"
   },
+  "AUTOMATION_SETUP$SHOW_ENTRYPOINT_AND_SETUP": {
+    "ar": "نقطة الدخول والإعداد",
+    "ca": "Punt d’entrada i configuració",
+    "de": "Einstiegspunkt und Setup",
+    "en": "Entrypoint and setup",
+    "es": "Punto de entrada y configuración",
+    "fr": "Point d’entrée et installation",
+    "it": "Punto di ingresso e configurazione",
+    "ja": "エントリーポイントとセットアップ",
+    "ko-KR": "진입점 및 설정",
+    "no": "Inngangspunkt og oppsett",
+    "pt": "Ponto de entrada e configuração",
+    "tr": "Giriş noktası ve kurulum",
+    "uk": "Точка входу та налаштування",
+    "zh-CN": "入口点与设置",
+    "zh-TW": "進入點與設定"
+  },
   "AUTOMATION_SETUP$ENTRYPOINT_REQUIRED": {
     "ar": "أضف أمر نقطة دخول قبل المتابعة.",
     "ca": "Afegeix una ordre de punt d’entrada abans de continuar.",
@@ -43042,6 +43076,23 @@
     "de": "Agent anzeigen",
     "uk": "Показати агента",
     "ca": "Mostra l'agent"
+  },
+  "AUTOMATION_SETUP$DOCKED_COMPOSER_PLACEHOLDER": {
+    "en": "Need help creating an automation?",
+    "ja": "自動化の設定でお困りですか？",
+    "zh-CN": "需要帮助创建自动化吗？",
+    "zh-TW": "需要協助建立自動化嗎？",
+    "ko-KR": "자동화 생성에 도움이 필요하신가요?",
+    "no": "Trenger du hjelp med å opprette en automatisering?",
+    "it": "Hai bisogno di aiuto per creare un'automazione?",
+    "pt": "Precisa de ajuda para criar uma automação?",
+    "es": "¿Necesitas ayuda para crear una automatización?",
+    "ar": "هل تحتاج إلى مساعدة في إنشاء أتمتة؟",
+    "fr": "Besoin d'aide pour créer une automatisation ?",
+    "tr": "Bir otomasyon oluşturmak için yardıma mı ihtiyacınız var?",
+    "de": "Brauchen Sie Hilfe beim Erstellen einer Automatisierung?",
+    "uk": "Потрібна допомога зі створенням автоматизації?",
+    "ca": "Necessites ajuda per crear una automatització?"
   },
   "AUTOMATION_SETUP$FILLED_BY_OPENHANDS": {
     "en": "✦ Filled by OpenHands",
