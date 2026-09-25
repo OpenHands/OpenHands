@@ -229,8 +229,8 @@ describe("getObservationResult", () => {
 
   it("maps editor errors and successful editor outcomes", () => {
     // The current agent-server reports editor failures with is_error=true;
-    // the legacy `error` string predates the agent-server line and is not
-    // sent by any supported backend.
+    // legacy runtimes report them through the `error` string instead, so both
+    // shapes must classify as errors.
     const editor = (kind: string, isError: boolean) =>
       makeObs({
         kind,
@@ -253,6 +253,31 @@ describe("getObservationResult", () => {
     expect(
       getObservationResult(editor("StrReplaceEditorObservation", true)),
     ).toBe("error");
+
+    // Legacy runtimes send only the `error` string, with no is_error flag.
+    const legacy = (kind: string) =>
+      makeObs({
+        kind,
+        command: "str_replace",
+        output: "",
+        path: "/workspace/file.ts",
+        prev_exist: true,
+        old_content: null,
+        new_content: null,
+        error: "No replacement was performed",
+      } as ObservationEvent["observation"]);
+    expect(getObservationResult(legacy("FileEditorObservation"))).toBe("error");
+    expect(getObservationResult(legacy("StrReplaceEditorObservation"))).toBe(
+      "error",
+    );
+
+    const legacyBrowser = makeObs({
+      kind: "BrowserObservation",
+      output: "",
+      content: [],
+      error: "Timeout navigating to page",
+    } as ObservationEvent["observation"]);
+    expect(getObservationResult(legacyBrowser)).toBe("error");
   });
 
   it("maps MCP and model-switch error flags", () => {

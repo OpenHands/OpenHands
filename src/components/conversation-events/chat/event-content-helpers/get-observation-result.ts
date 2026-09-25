@@ -44,7 +44,8 @@ export const getObservationResult = (
       return "success";
     }
     case "BrowserObservation":
-      if (observation.is_error) return "error";
+      // Current agent-server sets is_error; legacy runtimes set `error`.
+      if (observation.is_error || observation.error) return "error";
       return "success";
     case "GlobObservation":
     case "GrepObservation":
@@ -52,7 +53,9 @@ export const getObservationResult = (
       return "success";
     case "FileEditorObservation":
     case "StrReplaceEditorObservation":
-      if (observation.is_error) return "error";
+      // Prefer is_error (current agent-server wire shape); legacy runtimes
+      // still report edit failures through the `error` string alone.
+      if (observation.is_error || observation.error) return "error";
       return "success";
     case "PlanningFileEditorObservation":
       if (observation.is_error) return "error";
