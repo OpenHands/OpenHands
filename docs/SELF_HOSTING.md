@@ -179,6 +179,34 @@ before they can use it. Without `--public`, the key is auto-injected into
 the frontend (convenient for local-only use, but unsafe for a
 publicly-reachable deployment).
 
+### Portal auth (username + password login)
+
+If you want to host the canvas in front of a broader audience without handing out
+the agent-server session API key, you can additionally put the whole origin behind a
+username/password portal. Every request — static assets, SPA navigation, and
+proxied `/api/*` traffic — is gated behind an HTTP-only session cookie.
+
+- The first time the portal store is empty, all traffic redirects to `/setup`,
+  where you create the **admin account**.
+- After that, unauthenticated requests are redirected to `/login`.
+- Admins can create additional non-admin users from `POST /api/portal-auth/users`.
+
+Gate the static server with the `--portal-auth <store-file>` flag:
+
+```bash
+# Pass the flag to the static server in public mode:
+node scripts/static-server.mjs --port 3001 --dir build --portal-auth /var/lib/canvas/auth.json
+
+# Or via the standalone published binary's public-mode launcher, add the flag to
+# the underlying static-server invocation.
+```
+
+When `--portal-auth` is enabled you must NOT also pass `--session-api-key`: the
+baked-in key path would hand the agent-server session key to unauthenticated
+visitors through the injected `index.html`. Passwords are stored as salted scrypt
+hashes and session tokens are stored only as SHA-256 digests, so a leak of the
+store file does not expose usable credentials or sessions.
+
 ## 4. (Optional) Get a domain and put nginx + Let's Encrypt in front
 
 If you want to reach the UI from a browser without an SSH tunnel — for
