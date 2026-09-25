@@ -704,3 +704,108 @@ describe("LlmSettingsRoute - backend mode rendering", () => {
     expect(screen.getByTestId("add-llm-profile")).toBeInTheDocument();
   });
 });
+
+describe("LlmSettingsScreen - custom model for a provider", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    useFreeModelsStore.getState().setFlags({
+      freeModels: new Set(),
+      defaultModel: null,
+    });
+    vi.spyOn(activeBackendContext, "useActiveBackend").mockReturnValue({
+      backend: mockLocalBackend,
+      orgId: null,
+    } as ReturnType<typeof activeBackendContext.useActiveBackend>);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        llm_model: "openrouter/anthropic/claude-3.5",
+        llm_api_key_set: true,
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          llm: {
+            model: "openrouter/anthropic/claude-3.5",
+            api_key: null,
+            base_url: "",
+          },
+        },
+      }),
+    );
+    vi.spyOn(ConfigService, "searchProviders").mockResolvedValue({
+      items: [{ name: "openrouter", verified: false }],
+      next_page_id: null,
+    });
+    // LiteLLM only knows a fraction of what OpenRouter serves, so the catalog
+    // never lists a freshly published model.
+    vi.spyOn(ConfigService, "searchModels").mockResolvedValue({
+      items: [
+        {
+          provider: "openrouter",
+          name: "anthropic/claude-3.5",
+          verified: false,
+          free: false,
+          default: false,
+        },
+      ],
+      next_page_id: null,
+    });
+  });
+
+  it("saves a model the provider catalog does not list, qualified with the provider", async () => {
+    const user = userEvent.setup();
+    const saveSettingsSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+
+    renderLlmSettingsScreen();
+
+    await screen.findByTestId("llm-settings-screen");
+    await screen.findByTestId("llm-settings-form-basic");
+
+    await user.click(screen.getByTestId("llm-model-input"));
+    await user.click(await screen.findByTestId("model-item-custom"));
+    // The field starts on the profile's current model, so replace it.
+    const customInput = await screen.findByTestId("custom-model-input");
+    expect(customInput).toHaveValue("anthropic/claude-3.5");
+    await user.clear(customInput);
+    await user.type(customInput, "thinkingmachines/inkling-small:free");
+
+    fireEvent.click(screen.getByTestId("save-button"));
+
+    await waitFor(() => expect(saveSettingsSpy).toHaveBeenCalled());
+    const payload = saveSettingsSpy.mock.calls[0][0] as Record<string, unknown>;
+    const llmPayload = (payload.agent_settings_diff as Record<string, unknown>)
+      .llm as Record<string, unknown>;
+    expect(llmPayload.model).toBe(
+      "openrouter/thinkingmachines/inkling-small:free",
+    );
+  });
+
+  it("clears the model when the custom field is emptied rather than keeping the previous one", async () => {
+    const user = userEvent.setup();
+    const saveSettingsSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+
+    renderLlmSettingsScreen();
+
+    await screen.findByTestId("llm-settings-screen");
+    await screen.findByTestId("llm-settings-form-basic");
+
+    await user.click(screen.getByTestId("llm-model-input"));
+    await user.click(await screen.findByTestId("model-item-custom"));
+    await user.clear(await screen.findByTestId("custom-model-input"));
+
+    fireEvent.click(screen.getByTestId("save-button"));
+
+    await waitFor(() => expect(saveSettingsSpy).toHaveBeenCalled());
+    const payload = saveSettingsSpy.mock.calls[0][0] as Record<string, unknown>;
+    const llmPayload = (payload.agent_settings_diff as Record<string, unknown>)
+      .llm as Record<string, unknown>;
+    // The model the user can no longer see must not be what gets saved; the
+    // profile save path turns this empty value into a model-required error.
+    expect(llmPayload.model).not.toBe("openrouter/anthropic/claude-3.5");
+    // The schema normalizes the empty string away; either form reads as
+    // "no model" to the profile save path's required-field check.
+    expect(llmPayload.model ?? "").toBe("");
+  });
+});
