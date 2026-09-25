@@ -32,9 +32,10 @@ function Code({
     if (!isMultiline) {
       return (
         <code
+          dir="ltr"
           className={cn(
             className,
-            "bg-surface-raised text-foreground border border-surface-raised rounded px-[0.4em] py-[0.2em]",
+            "bg-surface-raised text-foreground border border-surface-raised rounded px-[0.4em] py-[0.2em] text-left",
           )}
         >
           {children}
@@ -44,7 +45,10 @@ function Code({
 
     return (
       <CopyableContentWrapper text={codeString}>
-        <pre className="bg-surface-raised text-foreground border border-surface-raised rounded p-[1em] overflow-auto">
+        <pre
+          dir="ltr"
+          className="bg-surface-raised text-foreground border border-surface-raised rounded p-[1em] overflow-auto text-left"
+        >
           <code className={className}>{codeString}</code>
         </pre>
       </CopyableContentWrapper>
@@ -53,14 +57,16 @@ function Code({
 
   return (
     <CopyableContentWrapper text={codeString}>
-      <SyntaxHighlighter
-        className="rounded-lg"
-        style={getSyntaxHighlighterTheme(colorTheme)}
-        language={match?.[1]}
-        PreTag="div"
-      >
-        {codeString}
-      </SyntaxHighlighter>
+      <div dir="ltr" className="text-left">
+        <SyntaxHighlighter
+          className="rounded-lg"
+          style={getSyntaxHighlighterTheme(colorTheme)}
+          language={match?.[1]}
+          PreTag="div"
+        >
+          {codeString}
+        </SyntaxHighlighter>
+      </div>
     </CopyableContentWrapper>
   );
 }

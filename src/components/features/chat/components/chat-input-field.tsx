@@ -54,12 +54,13 @@ export function ChatInputField({
     >
       {/* `text-base` is a color utility in this theme (--color-base), not 16px. */}
       {/* eslint-disable-next-line shadcn/no-arbitrary-values */}
-      <div className="basis-0 flex flex-col font-normal grow justify-center leading-[0] min-h-px min-w-px overflow-ellipsis overflow-hidden relative shrink-0 text-text-tertiary text-[16px] text-left">
+      <div className="basis-0 flex flex-col font-normal grow justify-center leading-[0] min-h-px min-w-px overflow-ellipsis overflow-hidden relative shrink-0 text-text-tertiary text-[16px]">
         <div
           ref={chatInputRef}
+          dir="auto"
           className={cn(
             // eslint-disable-next-line shadcn/no-arbitrary-values
-            "chat-input bg-transparent text-contrast text-[16px] font-normal leading-5 outline-none resize-none custom-scrollbar min-h-5 max-h-100 [text-overflow:inherit] [text-wrap-mode:inherit] [white-space-collapse:inherit] block whitespace-pre-wrap",
+            "chat-input bg-transparent text-contrast text-[16px] text-start font-normal leading-5 outline-none resize-none custom-scrollbar min-h-5 max-h-100 [text-overflow:inherit] [text-wrap-mode:inherit] [white-space-collapse:inherit] block whitespace-pre-wrap",
             disabled && "cursor-not-allowed opacity-50",
           )}
           contentEditable={!disabled}
