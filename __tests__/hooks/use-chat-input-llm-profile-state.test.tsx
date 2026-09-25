@@ -111,6 +111,17 @@ describe("useChatInputLlmProfileState", () => {
     expect(result.current.currentProfileName).toBe("Smart");
   });
 
+  // A conversation the server returns without agent LLM metadata reports no
+  // model at all, so the picker must still name a profile rather than fall
+  // back to the "Select a model" placeholder (#16263).
+  it("names the account active profile when the conversation has no model", () => {
+    useActiveConversationMock.mockReturnValue({
+      data: { active_profile: null, llm_model: null },
+    });
+    const { result } = renderState();
+    expect(result.current.currentProfileName).toBe("Fast");
+  });
+
   it("live-switches a different profile against the conversation id", () => {
     useActiveConversationMock.mockReturnValue({
       data: { active_profile: "Fast", llm_model: "gpt-4o-mini" },

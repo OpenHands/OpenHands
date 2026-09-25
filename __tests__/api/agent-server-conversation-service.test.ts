@@ -949,7 +949,10 @@ describe("AgentServerConversationService", () => {
           per_turn_token: 0,
         },
       });
-      expect(conversation?.llm_model).toBeTruthy();
+      // A malformed ``agent`` carries no LLM metadata, so there is no model
+      // the session is known to be running. This used to read back as the
+      // registry default, which matched no saved profile (#16263).
+      expect(conversation?.llm_model).toBeNull();
       expect(conversation?.workspace?.working_dir).toBe(
         "/workspace/project/agent-canvas",
       );

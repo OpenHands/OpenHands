@@ -400,10 +400,15 @@ export function toAppConversation(
     acp_server: acpServer,
     tags: info.tags ?? null,
     launched_agent_profile: info.launched_agent_profile ?? null,
-    // Chip path: omit ``providerDefault`` so that when no concrete model
-    // resolves, the chip falls back to the provider display name in
-    // ConversationCardFooter rather than a registry default the session may
-    // not actually be running.
+    // Display path: report only a model the session is actually running, for
+    // both agent kinds. A conversation the server returns without agent LLM
+    // metadata — a failed one, or one written by an older client — has no
+    // known model, and naming ``DEFAULT_SETTINGS.llm_model`` there invented a
+    // value that matched no saved profile, which collapsed the chat-input
+    // picker to its "Select a model" placeholder (#16263). ``null`` instead
+    // lets the profile-backed surfaces name the active profile and the
+    // conversation chip name the provider. The launch payload keeps sending
+    // the default explicitly — see ``buildNormalizedLlmSettings``.
     llm_model: isAcp
       ? resolveEffectiveAcpModel({
           runtimeName: info.current_model_name,
@@ -411,7 +416,7 @@ export function toAppConversation(
           configured: info.agent?.acp_model,
           sdkLlm: info.agent?.llm?.model,
         })
-      : (info.agent?.llm?.model ?? DEFAULT_SETTINGS.llm_model),
+      : (info.agent?.llm?.model ?? null),
     metrics: info.metrics
       ? {
           accumulated_cost: info.metrics.accumulated_cost ?? null,

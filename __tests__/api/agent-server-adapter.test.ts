@@ -1184,6 +1184,16 @@ describe("toAppConversation", () => {
     expect(result.llm_model).toBe("claude-sonnet-4-6");
   });
 
+  it("reports no model when an openhands conversation has no agent LLM", () => {
+    // Naming DEFAULT_SETTINGS.llm_model here invented a model the session was
+    // not running; it matched no saved profile, so the chat-input picker
+    // collapsed to its "Select a model" placeholder (#16263).
+    const result = toAppConversation(baseInfo);
+
+    expect(result.agent_kind).toBe("openhands");
+    expect(result.llm_model).toBeNull();
+  });
+
   it("marks ACP conversations and surfaces the configured acp_model", () => {
     // The SDK's ACPAgent may still carry a sentinel ``llm`` (``acp-managed``)
     // for cost-attribution. Consumers should see the concrete ACP model Canvas
