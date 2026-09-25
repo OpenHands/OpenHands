@@ -56,6 +56,26 @@ describe("SchemaField", () => {
     expect(input).toHaveAttribute("step", "0.01");
   });
 
+  it("constrains condenser max size to the SDK-supported minimum", () => {
+    render(
+      <SchemaField
+        field={buildField({
+          key: "condenser.max_size",
+          label: "Max size",
+          value_type: "integer",
+        })}
+        value="20"
+        isDisabled={false}
+        onChange={() => {}}
+      />,
+    );
+
+    const input = screen.getByTestId("sdk-settings-condenser.max_size");
+
+    expect(input).toHaveAttribute("min", "20");
+    expect(input).toHaveAttribute("step", "1");
+  });
+
   it("translates schema-backed labels and descriptions", () => {
     render(
       <SchemaField
