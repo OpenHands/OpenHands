@@ -12,6 +12,8 @@ const DEFAULT_MAX_HEIGHT = 400;
 interface UsePromptTextareaResizeOptions {
   minHeight?: number;
   maxHeight?: number;
+  /** Re-measure overflow when the field value changes without changing the dragged height. */
+  contentKey?: unknown;
 }
 
 function styleHeightPx(element: HTMLElement, fallback: number): number {
@@ -19,41 +21,41 @@ function styleHeightPx(element: HTMLElement, fallback: number): number {
   return Number.isFinite(height) ? height : fallback;
 }
 
-export function usePromptTextareaResize(
-  textareaRef: RefObject<HTMLTextAreaElement | null>,
+export function usePromptTextareaResize<T extends HTMLElement>(
+  elementRef: RefObject<T | null>,
   {
     minHeight = DEFAULT_MIN_HEIGHT,
     maxHeight = DEFAULT_MAX_HEIGHT,
+    contentKey,
   }: UsePromptTextareaResizeOptions = {},
 ) {
   const [isGripDragging, setIsGripDragging] = useState(false);
   const gripRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    textarea.style.height = `${minHeight}px`;
-    textarea.style.overflowY = "hidden";
-  }, [minHeight, textareaRef]);
-
   const applyHeight = useCallback(
     (height: number) => {
-      const textarea = textareaRef.current;
-      if (!textarea) return;
+      const element = elementRef.current;
+      if (!element) return;
       const nextHeight = Math.max(minHeight, Math.min(maxHeight, height));
-      textarea.style.height = `${nextHeight}px`;
-      textarea.style.overflowY =
-        textarea.scrollHeight > nextHeight ? "auto" : "hidden";
+      element.style.height = `${nextHeight}px`;
+      element.style.overflowY =
+        element.scrollHeight > nextHeight ? "auto" : "hidden";
     },
-    [maxHeight, minHeight, textareaRef],
+    [elementRef, maxHeight, minHeight],
   );
+
+  useEffect(() => {
+    const element = elementRef.current;
+    if (!element) return;
+    applyHeight(styleHeightPx(element, minHeight));
+  }, [applyHeight, contentKey, elementRef, minHeight]);
 
   const startDrag = useCallback(
     (startY: number) => {
-      const textarea = textareaRef.current;
-      if (!textarea) return;
+      const element = elementRef.current;
+      if (!element) return;
 
-      const startHeight = styleHeightPx(textarea, minHeight);
+      const startHeight = styleHeightPx(element, minHeight);
       let dragCommitted = false;
 
       const handleDragMove = (moveEvent: MouseEvent | TouchEvent) => {
@@ -88,7 +90,7 @@ export function usePromptTextareaResize(
       });
       document.addEventListener("touchend", handleDragEnd);
     },
-    [applyHeight, minHeight, textareaRef],
+    [applyHeight, elementRef, minHeight],
   );
 
   const handleGripMouseDown = useCallback(
