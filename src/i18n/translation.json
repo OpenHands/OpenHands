@@ -41957,6 +41957,23 @@
     "zh-CN": "编辑提供商连接",
     "zh-TW": "編輯提供者連線"
   },
+  "SETTINGS$PROVIDER_CONNECTION_INVALID_BASE_URL": {
+    "en": "Enter a valid URL (e.g. http://localhost:8080)",
+    "ja": "有効なURLを入力してください (例: http://localhost:8080)",
+    "zh-CN": "请输入有效的 URL（例如 http://localhost:8080）",
+    "zh-TW": "請輸入有效的 URL（例如 http://localhost:8080）",
+    "ko-KR": "유효한 URL을 입력하세요 (예: http://localhost:8080)",
+    "no": "Skriv inn en gyldig URL (f.eks. http://localhost:8080)",
+    "it": "Inserisci un URL valido (es. http://localhost:8080)",
+    "pt": "Insira uma URL válida (ex.: http://localhost:8080)",
+    "es": "Introduce una URL válida (p. ej. http://localhost:8080)",
+    "ar": "أدخل عنوان URL صالحًا (مثل http://localhost:8080)",
+    "fr": "Saisissez une URL valide (par ex. http://localhost:8080)",
+    "tr": "Geçerli bir URL girin (ör. http://localhost:8080)",
+    "de": "Gib eine gültige URL ein (z. B. http://localhost:8080)",
+    "uk": "Введіть дійсну URL-адресу (наприклад, http://localhost:8080)",
+    "ca": "Introduïu un URL vàlid (p. ex. http://localhost:8080)"
+  },
   "SETTINGS$PROVIDER_CONNECTION_MODEL_COUNT": {
     "ar": "{{count}} نموذج",
     "ca": "{{count}} model(s)",
