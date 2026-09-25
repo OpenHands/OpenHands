@@ -455,6 +455,40 @@ describe("Conversation websocket behavior", () => {
     expect(planningOptions().reconnect).toEqual({ enabled: true });
   });
 
+  it("hydrates terminal history from the REST event page", async () => {
+    const action = makeActionEvent("history-action", {
+      kind: "ExecuteBashAction",
+      command: "printf 'history\\n'",
+      is_input: false,
+      timeout: null,
+      reset: false,
+    });
+    const observation = {
+      ...makeObservationEvent("history-observation", {
+        kind: "ExecuteBashObservation",
+        content: [{ type: "text", text: "history" }],
+      }),
+      action_id: "history-action",
+    } as OpenHandsEvent;
+    historyCapture.result.data = { events: [action, observation] };
+
+    renderProvider();
+
+    await waitFor(() =>
+      expect(useCommandStore.getState().commands).toEqual([
+        { type: "input", content: "printf 'history\\n'" },
+        { type: "output", content: "history" },
+      ]),
+    );
+
+    dispatchMain(action);
+    dispatchMain(observation);
+    expect(useCommandStore.getState().commands).toEqual([
+      { type: "input", content: "printf 'history\\n'" },
+      { type: "output", content: "history" },
+    ]);
+  });
+
   it("waits for the first history load before opening the main socket", () => {
     // The socket gate keys on `isPending` (the genuine first load with no
     // cached data) rather than `isFetching`, so background refetches never
@@ -551,6 +585,7 @@ describe("Conversation websocket behavior", () => {
       .getState()
       .addEvent(makeMessageEvent("05", "assistant", ["old conversation"]));
     useEventStore.setState({ loadedConversationId: "conv-old" });
+    useCommandStore.getState().appendOutput("old terminal");
     useBrowserStore.getState().setUrl("https://old.example");
 
     const first = renderProvider();
@@ -558,16 +593,21 @@ describe("Conversation websocket behavior", () => {
       events: [],
       loadedConversationId: "conv-main",
     });
+    expect(useCommandStore.getState().commands).toEqual([]);
     expect(useBrowserStore.getState().url).toBe("");
     first.unmount();
 
     useEventStore
       .getState()
       .addEvent(makeMessageEvent("06", "assistant", ["keep on remount"]));
+    useCommandStore.getState().appendOutput("keep terminal");
     useBrowserStore.getState().setUrl("https://current.example");
     socketCapture.callIndex = 0;
     const sameConversation = renderProvider();
     expect(useEventStore.getState().events).toHaveLength(1);
+    expect(useCommandStore.getState().commands).toEqual([
+      { type: "output", content: "keep terminal" },
+    ]);
     expect(useBrowserStore.getState().url).toBe("https://current.example");
 
     sameConversation.rerender(
@@ -584,6 +624,7 @@ describe("Conversation websocket behavior", () => {
       events: [],
       loadedConversationId: "conv-next",
     });
+    expect(useCommandStore.getState().commands).toEqual([]);
     expect(useBrowserStore.getState().url).toBe("");
   });
 

@@ -159,7 +159,8 @@ export function ConversationWebSocketProvider({
     (state) => state.consumeMatchingPendingMessage,
   );
   const { setExecutionStatus } = useConversationStateStore();
-  const { appendInput, appendOutput } = useCommandStore();
+  const { appendInput, appendOutput, hydrateFromEvents, clearTerminal } =
+    useCommandStore();
   const resetBrowserStore = useBrowserStore((state) => state.reset);
 
   // Coalesce streaming deltas to ≤1 store commit/render per frame.
@@ -312,19 +313,26 @@ export function ConversationWebSocketProvider({
     // records the new loaded id in one `set`, so no subscriber can observe a
     // half-applied state (events gone but the old id still reported).
     clearEventsForConversation(nextId);
+    clearTerminal();
     resetBrowserStore();
     // The metrics store is conversation-scoped state too: without a reset the
     // previous conversation's usage/cost keeps rendering in the new
     // conversation's meter until fresh WS stats arrive — and a brand-new
     // conversation sends none, so the stale figure stuck indefinitely.
     useMetricsStore.getState().resetMetrics();
-  }, [conversationId, clearEventsForConversation, resetBrowserStore]);
+  }, [
+    conversationId,
+    clearEventsForConversation,
+    clearTerminal,
+    resetBrowserStore,
+  ]);
 
   useLayoutEffect(() => {
     if (!preloadedHistory || preloadedHistory.events.length === 0) {
       return;
     }
     addEvents(preloadedHistory.events);
+    hydrateFromEvents(preloadedHistory.events);
 
     // The first user message of a cloud start-task conversation is persisted
     // server-side and reaches us via this REST preload, not over the WebSocket
@@ -358,6 +366,7 @@ export function ConversationWebSocketProvider({
     addEvents,
     conversationId,
     consumeMatchingPendingMessage,
+    hydrateFromEvents,
   ]);
 
   /**
