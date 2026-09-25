@@ -5,6 +5,8 @@ import {
   MessageEvent,
   SecurityRisk,
   OpenHandsEvent,
+  ConversationStateUpdateEventGoal,
+  ConversationStateUpdateEventStats,
 } from "#/types/agent-server/core";
 import { ACPToolCallEvent } from "#/types/agent-server/core/events/acp-tool-call-event";
 import { StreamingDeltaEvent } from "#/types/agent-server/core/events/streaming-delta-event";
@@ -883,6 +885,57 @@ describe("handleEventForUI", () => {
       // The action renders the Thinking section itself, so the delta is fully
       // redundant and dropped — no leftover reasoning-only delta.
       expect(result).toEqual([mockMessageEvent, action]);
+    });
+
+    it("keeps one bubble and reconciles it when a hidden state update lands mid-stream (#16455)", () => {
+      const statsUpdate: ConversationStateUpdateEventStats = {
+        id: "stats-1",
+        timestamp: Date.now().toString(),
+        source: "environment",
+        kind: "ConversationStateUpdateEvent",
+        key: "stats",
+        value: { usage_to_metrics: {} },
+      };
+      const action = makeThoughtAction(
+        "intermediate-1",
+        "Let me check the README first.",
+      );
+
+      const result = [
+        makeStreamingDelta("delta-1", "Let me check the "),
+        statsUpdate,
+        makeStreamingDelta("delta-2", "README first."),
+        action,
+      ].reduce<OpenHandsEvent[]>(
+        (uiEvents, event) => handleEventForUI(event, uiEvents),
+        [mockMessageEvent],
+      );
+
+      // The stats update is never rendered, so it must not split the stream
+      // into two bubbles and strand the first half next to the hoisted thought.
+      expect(result).toEqual([mockMessageEvent, action]);
+    });
+
+    it("still adds a state update that renders (a finished /goal)", () => {
+      const finishedGoal: ConversationStateUpdateEventGoal = {
+        id: "goal-1",
+        timestamp: Date.now().toString(),
+        source: "environment",
+        kind: "ConversationStateUpdateEvent",
+        key: "goal",
+        value: {
+          active: false,
+          status: "complete",
+          iteration: 1,
+          max_iterations: 10,
+          objective: "make pytest pass",
+          verdict: null,
+        },
+      };
+
+      const result = handleEventForUI(finishedGoal, [mockMessageEvent]);
+
+      expect(result).toEqual([mockMessageEvent, finishedGoal]);
     });
   });
 

@@ -7,6 +7,7 @@ import {
 import {
   isACPToolCallEvent,
   isActionEvent,
+  isConversationStateUpdateEvent,
   isMessageEvent,
   isObservationEvent,
   isStreamingDeltaEvent,
@@ -16,6 +17,7 @@ import {
   getReasoningContent,
   splitInlineThink,
 } from "#/components/conversation-events/chat/event-thought-helpers";
+import { shouldRenderEvent } from "#/components/conversation-events/chat/event-content-helpers/should-render-event";
 
 export const mergeStreamingDeltaEvent = (
   incoming: StreamingDeltaEvent,
@@ -350,6 +352,13 @@ export const handleEventForUI = (
   uiEvents: OpenHandsEvent[],
 ): OpenHandsEvent[] => {
   const newUiEvents = [...uiEvents];
+
+  // Hidden state updates (stats, execution_status, an active /goal) can land
+  // mid-stream. Keep them out so they never split one streamed reply into two
+  // bubbles, which would strand the first half next to the finalized text.
+  if (isConversationStateUpdateEvent(event) && !shouldRenderEvent(event)) {
+    return newUiEvents;
+  }
 
   if (isStreamingDeltaEvent(event)) {
     if (event.content === null && event.reasoning_content === null) {
