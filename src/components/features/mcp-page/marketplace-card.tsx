@@ -54,7 +54,7 @@ export function MarketplaceCard({
       onKeyDown={handleKeyDown}
       data-testid={`mcp-marketplace-card-${entry.id}`}
       className={cn(
-        "flex min-h-[132px] flex-col overflow-hidden p-4 text-left",
+        "flex min-h-33 flex-col overflow-hidden p-4 text-left",
         extensionModuleCardSurfaceClassName,
         extensionModuleCardInteractiveClassName,
       )}

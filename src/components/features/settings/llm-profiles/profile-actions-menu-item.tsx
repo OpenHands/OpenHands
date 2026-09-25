@@ -34,7 +34,7 @@ export function MenuItem({
       disabled={disabled}
       className={cn(
         "group w-full cursor-pointer rounded px-2 py-2 text-start text-nowrap text-sm font-normal",
-        "text-[var(--oh-foreground)] hover:bg-[var(--oh-interactive-hover)]",
+        "text-foreground hover:bg-interactive-hover",
         "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent",
       )}
       role="menuitem"

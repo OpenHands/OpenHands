@@ -203,3 +203,19 @@ You can create a `.env` file in the project directory with these variables based
 | `VITE_USE_TLS`              | Use HTTPS/WSS for the Vite proxy target                                                   | `false`                |
 | `VITE_FRONTEND_PORT`        | Port to run the frontend application                                                      | `3001`                 |
 | `VITE_INSECURE_SKIP_VERIFY` | Skip TLS certificate verification for proxied backend requests                            | `false`                |
+
+
+### Cloud organization recovery in embedded hosts
+
+`AgentServerUIProviders` leaves organization recovery off by default so the host's
+login and onboarding can render before authentication. Import the public
+`CloudOrganizationBoundary` and mount it inside the providers, after your auth
+gate, around consumers that send organization-scoped requests. If the entire
+provider subtree is already authenticated, use `resolveCloudOrganization` to
+apply the same boundary automatically. Recovery fills its containing panel.
+Standalone Canvas mounts the boundary after its own authentication gate.
+
+A successful membership response repairs an inaccessible saved selection. A
+transient lookup failure retains a saved selection; 401/403 responses and an
+empty membership list show recovery instead. Background refreshes retain cached
+membership and user identity while the saved selection remains accessible.

@@ -26,7 +26,7 @@ function TaskListTab() {
           data-active={task.status === "in_progress" ? "true" : "false"}
           className={cn(
             "px-4 py-2",
-            task.status === "in_progress" && "bg-[var(--oh-surface-raised)]",
+            task.status === "in_progress" && "bg-surface-raised",
           )}
         >
           <TaskItem task={task} />

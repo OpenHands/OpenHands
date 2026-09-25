@@ -42,7 +42,7 @@ export function PluginDetailModal({
       <div
         data-testid="plugin-detail-modal"
         data-plugin-name={plugin.name}
-        className="relative flex w-[640px] max-w-[90vw] max-h-[85vh] flex-col rounded-xl border border-[var(--oh-border)] bg-base-secondary"
+        className="relative flex w-160 max-w-[90vw] max-h-[85vh] flex-col rounded-xl border border-border bg-base-secondary"
       >
         <ModalCloseButton
           onClose={onClose}
@@ -108,7 +108,7 @@ export function PluginDetailModal({
 
           {plugin.skills?.length ? (
             <section className="flex min-w-0 flex-col gap-2">
-              <h3 className="text-sm font-medium text-white">
+              <h3 className="text-sm font-medium text-contrast">
                 {t(I18nKey.SETTINGS$PLUGINS_SKILLS_IN_BUNDLE)}
               </h3>
               <ul className="flex min-w-0 flex-col gap-2">
@@ -116,11 +116,11 @@ export function PluginDetailModal({
                   <li
                     key={skill.name}
                     data-testid={`plugin-bundled-skill-${skill.name}`}
-                    className="flex items-start gap-3 rounded-lg border border-[var(--oh-border)] bg-[rgba(255,255,255,0.04)] px-3 py-2.5"
+                    className="flex items-start gap-3 rounded-lg border border-border bg-contrast/[0.04] px-3 py-2.5"
                   >
                     <SkillIconBadge skillName={skill.name} />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-white">
+                      <p className="truncate text-sm font-semibold text-contrast">
                         {skill.name}
                       </p>
                       {skill.description ? (

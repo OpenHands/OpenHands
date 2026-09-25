@@ -21,7 +21,7 @@ const EVENT_TYPE_I18N_KEYS: Record<string, I18nKey> = {
 };
 
 const HOOK_PILL_CLASS =
-  "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-medium leading-4 border border-[var(--oh-border)] bg-[var(--oh-surface)] text-tertiary-light";
+  "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-medium leading-4 border border-border bg-surface text-tertiary-light";
 
 const HOOK_COUNT_I18N_KEY = "HOOKS_MODAL$HOOK_COUNT";
 
@@ -55,7 +55,7 @@ export function HookEventItem({
           <span className={HOOK_PILL_CLASS}>
             {t(HOOK_COUNT_I18N_KEY, { count: totalHooks })}
           </span>
-          <Typography.Text className="text-[var(--oh-text-tertiary)]">
+          <Typography.Text className="text-text-tertiary">
             {isExpanded ? (
               <ChevronDown size={18} />
             ) : (
@@ -66,8 +66,8 @@ export function HookEventItem({
       </button>
 
       {isExpanded && (
-        <div className="border-t border-[var(--oh-border)] px-3 pt-3 pb-3">
-          <div className="divide-y divide-[var(--oh-border)]">
+        <div className="border-t border-border px-3 pt-3 pb-3">
+          <div className="divide-y divide-border">
             {hookEvent.matchers.map((matcher, index) => (
               <HookMatcherContent
                 key={`${hookEvent.event_type}-${matcher.matcher}-${index}`}

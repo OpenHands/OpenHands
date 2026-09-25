@@ -1,4 +1,4 @@
-import { fireEvent, screen } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderWithProviders } from "test-utils";
 
@@ -66,6 +66,21 @@ describe("ChatInputLlmProfilePicker", () => {
     expect(screen.getByTestId("chat-input-llm-profile")).toHaveTextContent(
       "Fast",
     );
+  });
+
+  it("fits the upward menu above its trigger and follows scrolling", () => {
+    renderWithProviders(<ChatInputLlmProfilePicker />);
+    const trigger = screen.getByTestId("chat-input-llm-profile");
+    const rect = vi.spyOn(trigger, "getBoundingClientRect");
+    rect.mockReturnValue({ top: 200 } as DOMRect);
+    fireEvent.click(trigger);
+    const menu = screen.getByTestId("chat-input-llm-profile-popover");
+    expect(menu).toHaveStyle({ maxHeight: "184px" });
+
+    rect.mockReturnValue({ top: 100 } as DOMRect);
+    act(() => window.dispatchEvent(new Event("scroll")));
+    expect(menu).toHaveStyle({ maxHeight: "84px" });
+    rect.mockRestore();
   });
 
   it("live-switches to the picked profile", () => {
