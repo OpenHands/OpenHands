@@ -583,6 +583,7 @@ describe("LlmSettingsLocalView", () => {
 
       const modelInput = await screen.findByTestId("mock-basic-model-input");
       await user.clear(modelInput);
+      expect(screen.getByTestId("save-profile-btn")).toBeDisabled();
       await user.type(modelInput, "openai/gpt-4o");
       await waitFor(() => {
         expect(screen.getByTestId("save-profile-btn")).not.toBeDisabled();

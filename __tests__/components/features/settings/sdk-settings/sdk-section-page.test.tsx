@@ -1060,6 +1060,32 @@ describe("SdkSectionPage", () => {
     });
   });
 
+  it("exposes all schema values for profile persistence even when nothing is dirty", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSavableSettings(),
+    );
+    let latestControl: SdkSectionSaveControl | null = null;
+    renderSdkSectionPage({
+      settingsSources: [
+        { settingsSource: "agent_settings", sectionKeys: ["llm"] },
+      ],
+      onSaveControlChange: (control) => {
+        latestControl = control;
+      },
+    });
+    await screen.findByTestId("sdk-settings-llm.endpoint");
+    await waitFor(() =>
+      expect(latestControl?.getFullPayload()).toEqual({
+        llm: {
+          endpoint: "https://api.example.com",
+          auth_type: "api_key",
+          subscription_vendor: "openai",
+        },
+      }),
+    );
+    await waitFor(() => expect(latestControl?.getDirtyPayload()).toEqual({}));
+  });
+
   it("exposes the active view and a coerced, dirty-only payload on the save control", async () => {
     // Arrange — a basic-tier schema with a single editable field.
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(

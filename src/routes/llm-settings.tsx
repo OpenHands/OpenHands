@@ -16,7 +16,6 @@ import {
 import { LlmSettingsLocalView } from "#/components/features/settings/llm-profiles";
 import { I18nKey } from "#/i18n/declaration";
 import { Settings, SettingsSchema, SettingsScope } from "#/types/settings";
-import { extractModelAndProvider } from "#/utils/extract-model-and-provider";
 import {
   inferInitialView,
   type SettingsFormValues,
@@ -40,6 +39,11 @@ import {
   isOpenHandsProviderModel,
 } from "#/utils/format-model-name";
 import { FreeOpenHandsModelsNote } from "#/components/shared/free-models-note";
+import {
+  buildModelId,
+  isProviderDefaultBaseUrl,
+  getProviderApiKeyHelpUrl,
+} from "#/utils/llm-provider-settings";
 
 /** Form-values key for the shared provider connection a profile links to. */
 export const LLM_PROVIDER_CONNECTION_KEY = "llm.provider_connection_id";
@@ -56,11 +60,6 @@ const LLM_EXCLUDED_KEYS = new Set([
   LLM_SUBSCRIPTION_VENDOR_KEY,
 ]);
 
-const buildModelId = (provider: string | null, model: string | null) => {
-  if (!provider || !model) return null;
-  return `${provider}/${model}`;
-};
-
 const getSchemaFieldDefaultValue = (
   schema: SettingsSchema | null | undefined,
   fieldKey: string,
@@ -68,37 +67,6 @@ const getSchemaFieldDefaultValue = (
   schema?.sections
     .flatMap((section) => section.fields)
     .find((field) => field.key === fieldKey)?.default ?? null;
-
-const KNOWN_PROVIDER_DEFAULT_BASE_URLS: Partial<Record<string, Set<string>>> = {
-  openai: new Set(["https://api.openai.com", "https://api.openai.com/v1"]),
-  moonshot: new Set(["https://api.kimi.com/coding/v1"]),
-};
-
-const normalizeBaseUrl = (baseUrl: string) => {
-  try {
-    const parsedUrl = new URL(baseUrl);
-    const normalizedPath = parsedUrl.pathname.replace(/\/+$/, "") || "";
-    return `${parsedUrl.origin}${normalizedPath}`;
-  } catch {
-    return baseUrl.trim().replace(/\/+$/, "");
-  }
-};
-
-const isProviderDefaultBaseUrl = (model: string, baseUrl: string) => {
-  const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
-  const { provider } = extractModelAndProvider(model);
-
-  if (provider) {
-    const knownDefaults = KNOWN_PROVIDER_DEFAULT_BASE_URLS[provider];
-    if (knownDefaults) {
-      return knownDefaults.has(normalizedBaseUrl);
-    }
-  }
-
-  return Object.values(KNOWN_PROVIDER_DEFAULT_BASE_URLS).some((knownDefaults) =>
-    knownDefaults?.has(normalizedBaseUrl),
-  );
-};
 
 interface OpenHandsApiKeyHelpProps {
   testId: string;
@@ -187,6 +155,7 @@ export function LlmSettingsScreen({
     enableSubscriptionModels &&
     !subscriptionModels &&
     (isSubscriptionModelsLoading || isSubscriptionModelsFetching);
+  const customModelEditedRef = React.useRef(false);
   const lastApiKeyModelRef = React.useRef<string | null>(null);
   const lastSubscriptionModelRef = React.useRef<string | null>(null);
 
@@ -269,6 +238,9 @@ export function LlmSettingsScreen({
           ? values[LLM_PROVIDER_CONNECTION_KEY]
           : "";
       const isLinkedToConnection = Boolean(connectionValue);
+      const selectedConnection = connectionOptions.find(
+        (connection) => connection.id === connectionValue,
+      );
       // Show the selector whenever connections can be linked here. Include the
       // linked case so a profile pointing at an orphaned connection (its only
       // connection deleted, or the list still loading) still exposes a control
@@ -312,6 +284,15 @@ export function LlmSettingsScreen({
                 ? selectedKey
                 : "";
             onChange(LLM_PROVIDER_CONNECTION_KEY, next);
+            const connection = connectionOptions.find(
+              (candidate) => candidate.id === next,
+            );
+            if (
+              connection &&
+              !modelValue.startsWith(`${connection.provider}/`)
+            ) {
+              onChange("llm.model", "");
+            }
           }}
         />
       );
@@ -347,7 +328,7 @@ export function LlmSettingsScreen({
               testId={helpTestId}
               text={t(I18nKey.SETTINGS$DONT_KNOW_API_KEY)}
               linkText={t(I18nKey.SETTINGS$CLICK_FOR_INSTRUCTIONS)}
-              href="https://docs.openhands.dev/usage/local-setup#getting-an-api-key"
+              href={getProviderApiKeyHelpUrl(modelValue)}
             />
           )}
         </>
@@ -457,11 +438,10 @@ export function LlmSettingsScreen({
                 <>
                   <ModelSelector
                     currentModel={modelValue || undefined}
+                    fixedProvider={selectedConnection?.provider}
                     onChange={(provider, model) => {
                       const nextModel = buildModelId(provider, model);
-                      if (nextModel) {
-                        onChange("llm.model", nextModel);
-                      }
+                      onChange("llm.model", nextModel ?? "");
                     }}
                     wrapperClassName="!flex-col !gap-6"
                     isDisabled={isDisabled}
@@ -500,7 +480,26 @@ export function LlmSettingsScreen({
                     className="w-full"
                     value={modelValue}
                     placeholder={defaultModel}
-                    onChange={(value) => onChange("llm.model", value)}
+                    onChange={(value) => {
+                      customModelEditedRef.current = true;
+                      onChange("llm.model", value);
+                    }}
+                    onBlur={() => {
+                      const wasEdited = customModelEditedRef.current;
+                      customModelEditedRef.current = false;
+                      if (
+                        wasEdited &&
+                        selectedConnection?.provider === "openrouter"
+                      ) {
+                        onChange(
+                          "llm.model",
+                          buildModelId(
+                            selectedConnection.provider,
+                            modelValue,
+                          ) ?? "",
+                        );
+                      }
+                    }}
                     isDisabled={isDisabled}
                   />
 
@@ -597,6 +596,9 @@ export function LlmSettingsScreen({
         delete llm.api_key;
         delete llm.base_url;
       } else {
+        if (!String(context.values["llm.model"] ?? "").trim()) {
+          throw new Error(t(I18nKey.SETTINGS$MODEL_REQUIRED));
+        }
         if (context.dirty[LLM_AUTH_TYPE_KEY]) {
           llm.auth_type = LLM_AUTH_TYPE_API_KEY;
           llm.subscription_vendor = null;
@@ -619,7 +621,7 @@ export function LlmSettingsScreen({
       agentSettings.llm = llm;
       return { agent_settings_diff: agentSettings };
     },
-    [schema, subscriptionModels, isCloud],
+    [schema, subscriptionModels, isCloud, t],
   );
 
   return (

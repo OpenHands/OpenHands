@@ -1,6 +1,7 @@
 import { WebClientFeatureFlags } from "#/api/option-service/option.types";
 import { Settings, SettingsValue } from "#/types/settings";
 import { getProviderId } from "#/utils/map-provider";
+import { buildModelId } from "#/utils/llm-provider-settings";
 
 const extractBasicFormData = (formData: FormData) => {
   const providerDisplay = formData.get("llm-provider-input")?.toString();
@@ -8,7 +9,7 @@ const extractBasicFormData = (formData: FormData) => {
   const model = formData.get("llm-model-input")?.toString();
 
   return {
-    llmModel: provider && model ? `${provider}/${model}` : undefined,
+    llmModel: buildModelId(provider ?? null, model ?? null) ?? undefined,
     llmApiKey: formData.get("llm-api-key-input")?.toString(),
     agent: formData.get("agent")?.toString(),
     language: formData.get("language")?.toString(),
