@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import { useRef } from "react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ConversationTabsContextMenu } from "#/components/features/conversation/conversation-tabs/conversation-tabs-context-menu";
@@ -38,6 +39,76 @@ function seedActiveBackend(backend: Backend): void {
   );
   __resetActiveStoreForTests();
 }
+
+const MENU_WIDTH = 220;
+const MENU_HEIGHT = 300;
+
+/**
+ * Renders the menu against a trigger pinned to a fixed viewport rect so the
+ * portal's collision handling can be asserted. jsdom reports a 1024x768
+ * viewport and zero-sized elements, so both rects are stubbed.
+ */
+function AnchoredMenu({
+  top,
+  bottom,
+  left,
+}: {
+  top: number;
+  bottom: number;
+  left: number;
+}) {
+  const anchorRef = useRef<HTMLButtonElement>(null);
+
+  const setAnchorRect = (node: HTMLButtonElement | null) => {
+    anchorRef.current = node;
+    if (!node) return;
+    vi.spyOn(node, "getBoundingClientRect").mockReturnValue({
+      top,
+      bottom,
+      left,
+      right: left + 24,
+      width: 24,
+      height: bottom - top,
+      x: left,
+      y: top,
+      toJSON: () => ({}),
+    } as DOMRect);
+  };
+
+  return (
+    <>
+      <button type="button" ref={setAnchorRect} />
+      <ConversationTabsContextMenu
+        isOpen
+        onClose={vi.fn()}
+        anchorRef={anchorRef}
+      />
+    </>
+  );
+}
+
+const renderAnchoredMenu = (rect: {
+  top: number;
+  bottom: number;
+  left: number;
+}) => {
+  vi.spyOn(HTMLUListElement.prototype, "getBoundingClientRect").mockReturnValue(
+    {
+      width: MENU_WIDTH,
+      height: MENU_HEIGHT,
+      top: 0,
+      bottom: MENU_HEIGHT,
+      left: 0,
+      right: MENU_WIDTH,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect,
+  );
+
+  render(<AnchoredMenu {...rect} />);
+  return document.querySelector<HTMLElement>('div[style*="position: fixed"]');
+};
 
 describe("ConversationTabsContextMenu", () => {
   beforeEach(() => {
@@ -168,6 +239,33 @@ describe("ConversationTabsContextMenu", () => {
       render(<ConversationTabsContextMenu isOpen={true} onClose={vi.fn()} />);
 
       expect(screen.getByText("COMMON$TASK_LIST")).toBeInTheDocument();
+    });
+  });
+
+  describe("portal placement", () => {
+    it("anchors below and to the left of the trigger when the menu fits", () => {
+      const portal = renderAnchoredMenu({ top: 20, bottom: 44, left: 300 });
+
+      expect(portal?.style.top).toBe("52px");
+      expect(portal?.style.left).toBe("300px");
+      expect(portal?.style.bottom).toBe("");
+    });
+
+    it("keeps the menu inside the viewport when the trigger hugs the right edge", () => {
+      // An embedded canvas can sit hard against the viewport edge; left-aligning
+      // on the trigger there would clip the labels and the pin controls.
+      const portal = renderAnchoredMenu({ top: 20, bottom: 44, left: 1000 });
+
+      // 1024 (jsdom viewport) - 220 (menu) - 8 (margin)
+      expect(portal?.style.left).toBe("796px");
+    });
+
+    it("flips above the trigger when the menu would clip at the viewport bottom", () => {
+      const portal = renderAnchoredMenu({ top: 700, bottom: 724, left: 300 });
+
+      // 768 (jsdom viewport) - 700 (trigger top) + 8 (gap)
+      expect(portal?.style.bottom).toBe("76px");
+      expect(portal?.style.top).toBe("");
     });
   });
 });

@@ -1,9 +1,10 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
 import { ConversationTabs } from "#/components/features/conversation/conversation-tabs/conversation-tabs";
+import { CONVERSATION_TAB_PANEL_ID } from "#/components/features/conversation/conversation-tabs/conversation-tab-ids";
 import { useConversationStore } from "#/stores/conversation-store";
 import { AgentState } from "#/types/agent-state";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
@@ -669,6 +670,110 @@ describe("ConversationTabs localStorage behavior", () => {
         useConversationStore.getState();
       expect(selectedTab).toBe("tasklist");
       expect(hasRightPanelToggled).toBe(true);
+    });
+  });
+  describe("accessible tab semantics", () => {
+    beforeEach(() => {
+      mockConversationId = REAL_CONVERSATION_ID;
+    });
+
+    it("exposes the tab strip as a tablist and marks the open tab selected", () => {
+      setActiveTabState("files");
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      const tablist = screen.getByRole("tablist");
+      expect(within(tablist).getAllByRole("tab").length).toBeGreaterThan(1);
+
+      const filesTab = screen.getByTestId("conversation-tab-files");
+      expect(filesTab).toHaveAttribute("aria-selected", "true");
+      expect(filesTab).toHaveAttribute(
+        "aria-controls",
+        CONVERSATION_TAB_PANEL_ID,
+      );
+      expect(screen.getByTestId("conversation-tab-browser")).toHaveAttribute(
+        "aria-selected",
+        "false",
+      );
+    });
+
+    it("names every tab, including the ones rendering icon-only", () => {
+      setActiveTabState("files");
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      // Inactive tabs hide their label, so without an explicit name they
+      // would be announced as an unlabelled button.
+      expect(
+        screen.getByRole("tab", { name: "COMMON$BROWSER" }),
+      ).toBeInTheDocument();
+    });
+
+    it("gives the open tab the strip's only tab stop", () => {
+      setActiveTabState("files");
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      expect(screen.getByTestId("conversation-tab-files")).toHaveAttribute(
+        "tabindex",
+        "0",
+      );
+      expect(screen.getByTestId("conversation-tab-commits")).toHaveAttribute(
+        "tabindex",
+        "-1",
+      );
+    });
+
+    it("moves focus with the arrow keys without changing the open tab", async () => {
+      setActiveTabState("files");
+      const user = userEvent.setup();
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      screen.getByTestId("conversation-tab-files").focus();
+      await user.keyboard("{ArrowRight}");
+
+      expect(screen.getByTestId("conversation-tab-commits")).toHaveFocus();
+      expect(useConversationStore.getState().selectedTab).toBe("files");
+
+      // Wraps around the start of the strip.
+      await user.keyboard("{ArrowLeft}{ArrowLeft}");
+      expect(screen.getByTestId("conversation-tab-usage")).toHaveFocus();
+    });
+
+    it("activates the focused tab with Enter", async () => {
+      setActiveTabState("files");
+      const user = userEvent.setup();
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      screen.getByTestId("conversation-tab-files").focus();
+      await user.keyboard("{ArrowRight}{Enter}");
+
+      expect(useConversationStore.getState().selectedTab).toBe("commits");
+    });
+
+    it("names the overflow trigger for what it customizes", () => {
+      setActiveTabState("files");
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      expect(screen.getByTestId("ellipsis-button")).toHaveAttribute(
+        "aria-label",
+        "CONVERSATION$CUSTOMIZE_TABS",
+      );
     });
   });
 });

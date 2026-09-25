@@ -1,4 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { LayoutGroup } from "framer-motion";
 import { Gauge, Globe, ListTodo, SquareChevronRight } from "lucide-react";
@@ -251,6 +257,50 @@ export function ConversationTabs({
   ]);
 
   const safeInlineTabCount = Math.min(inlineTabCount, visibleTabs.length);
+  const inlineTabs = visibleTabs.slice(0, safeInlineTabCount);
+
+  // Roving tabindex: the strip is a single tab stop. It sits on the open tab,
+  // or — with the drawer closed, when nothing is selected — on the tab the
+  // user last arrowed to.
+  const activeTabIndex = inlineTabs.findIndex((tab) => tab.isActive);
+  const [rovingTabIndex, setRovingTabIndex] = useState(0);
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  useEffect(() => {
+    if (activeTabIndex >= 0) setRovingTabIndex(activeTabIndex);
+  }, [activeTabIndex]);
+
+  const tabStopIndex = Math.min(
+    rovingTabIndex,
+    Math.max(inlineTabs.length - 1, 0),
+  );
+
+  // Arrow keys move focus only; Enter/Space still activate, which keeps the
+  // drawer from thrashing through tabs as the user scans the strip.
+  const handleTabKeyDown = (
+    event: KeyboardEvent<HTMLButtonElement>,
+    index: number,
+  ) => {
+    const lastIndex = inlineTabs.length - 1;
+    if (lastIndex < 0) return;
+
+    let nextIndex: number;
+    if (event.key === "ArrowRight") {
+      nextIndex = index === lastIndex ? 0 : index + 1;
+    } else if (event.key === "ArrowLeft") {
+      nextIndex = index === 0 ? lastIndex : index - 1;
+    } else if (event.key === "Home") {
+      nextIndex = 0;
+    } else if (event.key === "End") {
+      nextIndex = lastIndex;
+    } else {
+      return;
+    }
+
+    event.preventDefault();
+    setRovingTabIndex(nextIndex);
+    tabRefs.current[nextIndex]?.focus();
+  };
 
   return (
     <>
@@ -305,47 +355,56 @@ export function ConversationTabs({
           <div className="flex min-w-0 flex-1 items-center justify-start overflow-hidden">
             <div className="flex w-fit max-w-full min-w-0 items-center gap-1.5">
               <LayoutGroup id="conversation-drawer-tabs">
-                <div className="flex w-fit max-w-full min-w-0 flex-nowrap items-center gap-1.5 overflow-x-hidden">
-                  {visibleTabs
-                    .slice(0, safeInlineTabCount)
-                    .map(
-                      (
-                        {
-                          tabValue,
-                          icon,
-                          onClick,
-                          isActive,
-                          tooltipContent,
-                          tooltipAriaLabel,
-                          label,
-                          className: tabClassName,
-                        },
-                        index,
-                      ) => (
-                        <ChatActionTooltip
-                          key={`${tabValue}-${index}`}
-                          tooltip={tooltipContent}
-                          ariaLabel={tooltipAriaLabel}
-                        >
-                          <ConversationTabNav
-                            tabValue={tabValue}
-                            icon={icon}
-                            onClick={onClick}
-                            isActive={isActive}
-                            label={label}
-                            className={cn(tabClassName, "shrink-0")}
-                            suppressLayoutAnimation={isPanelResizing}
-                          />
-                        </ChatActionTooltip>
-                      ),
-                    )}
+                <div
+                  // A narrow drawer can push every tab into the overflow menu,
+                  // and a tablist owning no tabs is not a tablist.
+                  role={inlineTabs.length > 0 ? "tablist" : undefined}
+                  aria-label={t(I18nKey.CONVERSATION$TABS_LABEL)}
+                  className="flex w-fit max-w-full min-w-0 flex-nowrap items-center gap-1.5 overflow-x-hidden"
+                >
+                  {inlineTabs.map(
+                    (
+                      {
+                        tabValue,
+                        icon,
+                        onClick,
+                        isActive,
+                        tooltipContent,
+                        tooltipAriaLabel,
+                        label,
+                        className: tabClassName,
+                      },
+                      index,
+                    ) => (
+                      <ChatActionTooltip
+                        key={`${tabValue}-${index}`}
+                        tooltip={tooltipContent}
+                        ariaLabel={tooltipAriaLabel}
+                      >
+                        <ConversationTabNav
+                          tabValue={tabValue}
+                          icon={icon}
+                          onClick={onClick}
+                          isActive={isActive}
+                          label={label}
+                          className={cn(tabClassName, "shrink-0")}
+                          suppressLayoutAnimation={isPanelResizing}
+                          tabIndex={index === tabStopIndex ? 0 : -1}
+                          onKeyDown={(event) => handleTabKeyDown(event, index)}
+                          buttonRef={(node) => {
+                            tabRefs.current[index] = node;
+                          }}
+                        />
+                      </ChatActionTooltip>
+                    ),
+                  )}
                 </div>
               </LayoutGroup>
               <div ref={menuRef} className="relative shrink-0">
                 <EllipsisButton
                   ref={anchorRef}
                   onClick={() => setIsMenuOpen(!isMenuOpen)}
-                  ariaLabel={t(I18nKey.COMMON$MORE_OPTIONS)}
+                  ariaLabel={t(I18nKey.CONVERSATION$CUSTOMIZE_TABS)}
                   iconClassName={
                     variant === "compact"
                       ? mobileTopBarIconClassName

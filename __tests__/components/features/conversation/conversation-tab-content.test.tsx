@@ -4,6 +4,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
 import { ConversationTabContent } from "#/components/features/conversation/conversation-tabs/conversation-tab-content/conversation-tab-content";
 import {
+  CONVERSATION_TAB_PANEL_ID,
+  conversationTabId,
+} from "#/components/features/conversation/conversation-tabs/conversation-tab-ids";
+import {
   useConversationStore,
   ConversationTab,
 } from "#/stores/conversation-store";
@@ -97,6 +101,19 @@ describe("ConversationTabContent", () => {
       await waitFor(() => {
         expect(screen.getByTestId("files-tab-content")).toBeInTheDocument();
       });
+    });
+
+    it("should expose the content area as the tab strip's panel", () => {
+      setSelectedTab("browser");
+
+      render(<ConversationTabContent />, { wrapper: createWrapper() });
+
+      const panel = screen.getByRole("tabpanel");
+      expect(panel).toHaveAttribute("id", CONVERSATION_TAB_PANEL_ID);
+      expect(panel).toHaveAttribute(
+        "aria-labelledby",
+        conversationTabId("browser"),
+      );
     });
 
     it("should render files tab when selectedTab is null", async () => {

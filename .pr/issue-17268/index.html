@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Accessible conversation drawer tabs — review doc</title>
+    <style>
+      :root {
+        --bg: #101114;
+        --panel: #17191d;
+        --panel-2: #1d2026;
+        --ink: #e8e9ec;
+        --muted: #9aa0ab;
+        --line: #2a2e36;
+        --accent: #f2c94c;
+        --good: #5ac48b;
+        --bad: #e2766b;
+        --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      }
+      .wrap { max-width: 1040px; margin: 0 auto; padding: 40px 20px 80px; }
+      header h1 { font-size: 30px; line-height: 1.2; margin: 0 0 6px; letter-spacing: -0.02em; }
+      header .sub { color: var(--muted); font-size: 14px; margin: 0 0 4px; }
+      header .stats { color: var(--muted); font-size: 13px; font-family: var(--mono); }
+      .star {
+        margin: 24px 0 32px;
+        border: 1px solid var(--accent);
+        border-left-width: 4px;
+        border-radius: 8px;
+        background: rgba(242, 201, 76, 0.07);
+        padding: 16px 18px;
+      }
+      .star b { color: var(--accent); }
+      h2 {
+        font-size: 20px;
+        margin: 40px 0 14px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid var(--line);
+        letter-spacing: -0.01em;
+      }
+      h3 { font-size: 16px; margin: 26px 0 8px; }
+      p { margin: 10px 0; }
+      code, .mono { font-family: var(--mono); font-size: 13px; }
+      code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; }
+      a { color: #8ab4f8; }
+      .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+      @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 14px 16px;
+      }
+      .card h4 { margin: 0 0 10px; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+      .card.before h4 { color: var(--bad); }
+      .card.after h4 { color: var(--good); }
+      pre {
+        margin: 0;
+        overflow-x: auto;
+        font-family: var(--mono);
+        font-size: 12.5px;
+        line-height: 1.55;
+        color: #cfd3da;
+        white-space: pre;
+      }
+      figure { margin: 14px 0 0; }
+      figure img { width: 100%; border: 1px solid var(--line); border-radius: 8px; display: block; }
+      figcaption { color: var(--muted); font-size: 12.5px; margin-top: 6px; }
+      table { border-collapse: collapse; width: 100%; font-size: 14px; }
+      th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+      th { color: var(--muted); font-weight: 600; font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.06em; }
+      td.path { font-family: var(--mono); font-size: 12.5px; }
+      .tag { font-size: 11px; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+      ul { margin: 10px 0; padding-left: 20px; }
+      li { margin: 4px 0; }
+      .note { color: var(--muted); font-size: 13.5px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <h1>Accessible conversation drawer tabs</h1>
+        <p class="sub">
+          Review doc for <strong>OpenHands/OpenHands#17268</strong> — conversation
+          drawer tabs need accessible semantics and collision-aware overflow.
+        </p>
+        <p class="stats">
+          base cf1cc69f · head 5b85f7c2 · 10 files · +444 / −53
+        </p>
+      </header>
+
+      <div class="star">
+        <b>★ The whole change lives in one folder</b>
+        (<code>src/components/features/conversation/conversation-tabs/</code>) plus two
+        new translation keys. Nothing in the tab store, the pin/unpin preferences,
+        or the responsive overflow measurement moves — the strip keeps the exact
+        same DOM shape and click behaviour, and gains ARIA attributes, a roving
+        tabindex, and a viewport clamp on the portaled menu. The one behavioural
+        change a mouse user can notice is the overflow menu no longer running off
+        the right edge of the viewport.
+      </div>
+
+      <h2>1 · What a screen-reader / keyboard user gets</h2>
+
+      <p class="note">
+        Captured from a real Chromium session against <code>npm run dev:mock</code>,
+        on this branch and on its merge-base, same viewport (1280×800) and same
+        drawer width. <code>ariaSnapshot()</code> is Playwright's view of the
+        browser's accessibility tree — not our own assertion of it.
+      </p>
+
+      <div class="grid2">
+        <div class="card before">
+          <h4>Before — accessibility tree of the tab strip</h4>
+<pre>- button "Files":
+  - img
+  - text: Files
+- button:
+  - img
+- button
+- button "More options":
+  - img</pre>
+          <p class="note">
+            No tablist, no tabs, no selected state. Every tab except the open one
+            hides its label, so it reaches assistive tech as an unnamed
+            <code>button</code>. The overflow trigger is "More options".
+          </p>
+        </div>
+        <div class="card after">
+          <h4>After — accessibility tree of the tab strip</h4>
+<pre>- tablist "Conversation panels":
+  - tab "Files" [selected]:
+    - img
+    - text: Files
+  - tab "Commits":
+    - img
+  - tab "Planner"
+  - tab "Terminal"
+  - tab "Browser"
+  - tab "Usage"
+- button "Customize tabs":
+  - img</pre>
+          <p class="note">
+            Every control is a named <code>tab</code> inside a named
+            <code>tablist</code>, with the open one marked selected.
+          </p>
+        </div>
+      </div>
+
+      <h3>Keyboard: two <kbd>→</kbd> presses from the open Files tab</h3>
+      <div class="grid2">
+        <div class="card before">
+          <h4>Before — focus does not move</h4>
+          <figure>
+            <img src="./keyboard-before.png" onerror="this.onerror=null;this.src='https://raw.githubusercontent.com/errmakov/OpenHands/feat/accessible-conversation-drawer-tabs/.pr/issue-17268/keyboard-before.png'" alt="Tab strip with the focus ring still on the Files tab after two right-arrow presses" />
+            <figcaption>
+              <code>document.activeElement</code> →
+              <code>conversation-tab-files</code>, <code>aria-label: null</code>.
+              Arrow keys do nothing; every tab is its own <kbd>Tab</kbd> stop.
+            </figcaption>
+          </figure>
+        </div>
+        <div class="card after">
+          <h4>After — focus roves, selection stays put</h4>
+          <figure>
+            <img src="./keyboard-after.png" onerror="this.onerror=null;this.src='https://raw.githubusercontent.com/errmakov/OpenHands/feat/accessible-conversation-drawer-tabs/.pr/issue-17268/keyboard-after.png'" alt="Tab strip with the focus ring on the third tab while Files remains the selected tab" />
+            <figcaption>
+              <code>document.activeElement</code> →
+              <code>conversation-tab-planner</code>,
+              <code>aria-label: "Planner"</code>. Files is still the selected tab —
+              activation is manual (<kbd>Enter</kbd>/<kbd>Space</kbd>), so scanning
+              the strip does not thrash the drawer.
+            </figcaption>
+          </figure>
+        </div>
+      </div>
+
+      <h2>2 · The overflow menu at the viewport edge</h2>
+
+      <p>
+        The menu is portaled to <code>document.body</code> with
+        <code>position: fixed</code>. It was anchored with
+        <code>left: rect.left</code> and nothing else, so wherever the trigger sat
+        near the right edge — an embedded canvas, or just a narrow drawer — the
+        labels and the pin controls fell outside the viewport with no way to reach
+        them.
+      </p>
+
+      <div class="grid2">
+        <div class="card before">
+          <h4>Before — 87px of the menu is off-screen</h4>
+          <figure>
+            <img src="./overflow-menu-before.png" onerror="this.onerror=null;this.src='https://raw.githubusercontent.com/errmakov/OpenHands/feat/accessible-conversation-drawer-tabs/.pr/issue-17268/overflow-menu-before.png'" alt="Overflow menu clipped at the right edge, showing only the first letter of each tab name and no pin controls" />
+            <figcaption>
+              trigger <code>x = 1234.6</code> · menu
+              <code>x = 1234.6, w = 132.2</code> · viewport <code>1280</code> →
+              <strong>87px clipped</strong>. Labels read "P / F / C / T / B / U";
+              the pin toggles are unreachable.
+            </figcaption>
+          </figure>
+        </div>
+        <div class="card after">
+          <h4>After — clamped inside the viewport</h4>
+          <figure>
+            <img src="./overflow-menu-after.png" onerror="this.onerror=null;this.src='https://raw.githubusercontent.com/errmakov/OpenHands/feat/accessible-conversation-drawer-tabs/.pr/issue-17268/overflow-menu-after.png'" alt="Overflow menu fully inside the viewport with full tab names and pin controls visible" />
+            <figcaption>
+              same trigger · menu <code>x = 1139.8, w = 132.2</code> → right edge
+              <code>1272</code> · <strong>0px clipped</strong>. Full labels and the
+              pin toggles are visible.
+            </figcaption>
+          </figure>
+        </div>
+      </div>
+
+      <h3>The placement rule</h3>
+      <div class="grid2">
+        <div class="card before">
+          <h4>Before</h4>
+<pre>const gap = 8;
+setPortalStyle({
+  position: "fixed",
+  zIndex: 9999,
+  top: rect.bottom + gap,
+  left: rect.left,
+});</pre>
+        </div>
+        <div class="card after">
+          <h4>After</h4>
+<pre>const menuRect = ref.current?.getBoundingClientRect();
+
+const overflowsBelow =
+  rect.bottom + MENU_GAP_PX + (menuRect?.height ?? 0) &gt;
+  window.innerHeight;
+
+const rightmostLeft =
+  window.innerWidth - (menuRect?.width ?? 0)
+  - MENU_VIEWPORT_MARGIN_PX;
+
+setPortalStyle({
+  position: "fixed",
+  zIndex: 9999,
+  ...(overflowsBelow
+    ? { bottom: window.innerHeight - rect.top + MENU_GAP_PX }
+    : { top: rect.bottom + MENU_GAP_PX }),
+  left: Math.max(
+    MENU_VIEWPORT_MARGIN_PX,
+    Math.min(rect.left, rightmostLeft),
+  ),
+});</pre>
+        </div>
+      </div>
+      <p class="note">
+        The menu's own box is only measurable once it has painted, so the first
+        pass falls back to the trigger and a
+        <code>requestAnimationFrame</code> re-runs with real dimensions — the same
+        two-pass shape already used by the automations kebab menu
+        (<code>src/components/features/automations/kebab-menu.tsx</code>, PR #16926),
+        which this now matches, plus the horizontal clamp.
+      </p>
+
+      <h2>3 · Component API</h2>
+
+      <p>
+        <code>ConversationTabNav</code> gains three optional props. All are
+        additive; the measurement clones in the offscreen
+        <code>aria-hidden</code> row pass none of them and stay inert.
+      </p>
+
+      <div class="grid2">
+        <div class="card before">
+          <h4>Before</h4>
+<pre>type ConversationTabNavProps = {
+  tabValue: string;
+  icon: ComponentType&lt;{ className: string }&gt;;
+  onClick(): void;
+  isActive?: boolean;
+  label?: string;
+  className?: string;
+  measureOnly?: boolean;
+  suppressLayoutAnimation?: boolean;
+};</pre>
+        </div>
+        <div class="card after">
+          <h4>After</h4>
+<pre>type ConversationTabNavProps = {
+  tabValue: string;
+  icon: ComponentType&lt;{ className: string }&gt;;
+  onClick(): void;
+  isActive?: boolean;
+  label?: string;
+  className?: string;
+  measureOnly?: boolean;
+  suppressLayoutAnimation?: boolean;
+  <b>tabIndex?: number;</b>
+  <b>onKeyDown?(event: KeyboardEvent&lt;HTMLButtonElement&gt;): void;</b>
+  <b>buttonRef?: Ref&lt;HTMLButtonElement&gt;;</b>
+};</pre>
+        </div>
+      </div>
+
+      <h3>New module: <code>conversation-tab-ids.ts</code></h3>
+<pre class="card">export const CONVERSATION_TAB_PANEL_ID = "conversation-tab-panel";
+
+export const conversationTabId = (tabValue: string) =&gt;
+  `conversation-tab-${tabValue}`;</pre>
+      <p class="note">
+        Both the strip and the panel need the same two identifiers, and the tab's
+        DOM id is the string the tests already address it by. The desktop drawer
+        and the mobile <code>/panel</code> route each render one strip and one
+        panel and never mount together, so a constant panel id is unambiguous.
+      </p>
+
+      <h2>4 · Files</h2>
+      <table>
+        <thead>
+          <tr><th>File</th><th></th><th>What changed</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="path">conversation-tabs/conversation-tab-ids.ts</td>
+            <td><span class="tag">added</span></td>
+            <td>The panel id and the tab-id helper shared by the strip and the panel.</td>
+          </tr>
+          <tr>
+            <td class="path">conversation-tabs/conversation-tab-nav.tsx</td>
+            <td><span class="tag">changed</span></td>
+            <td>
+              Real tabs get <code>role="tab"</code>, <code>aria-selected</code>,
+              <code>id</code>, <code>aria-controls</code>, an explicit
+              <code>aria-label</code>, and the roving <code>tabIndex</code> /
+              <code>onKeyDown</code> / <code>ref</code>. Measurement clones get
+              <code>tabIndex=-1</code> and no role, so the offscreen
+              <code>aria-hidden</code> row holds no focusable elements.
+            </td>
+          </tr>
+          <tr>
+            <td class="path">conversation-tabs/conversation-tabs.tsx</td>
+            <td><span class="tag">changed</span></td>
+            <td>
+              The inline row becomes the <code>tablist</code> (dropped when a narrow
+              drawer pushes every tab into the menu — a tablist owning no tabs is
+              not a tablist). Adds the roving-tabindex state and the
+              <code>←/→/Home/End</code> handler, and renames the overflow trigger.
+            </td>
+          </tr>
+          <tr>
+            <td class="path">conversation-tabs/conversation-tabs-context-menu.tsx</td>
+            <td><span class="tag">changed</span></td>
+            <td>Viewport-aware portal placement (clamp + flip), see §2.</td>
+          </tr>
+          <tr>
+            <td class="path">conversation-tab-content/tab-container.tsx</td>
+            <td><span class="tag">changed</span></td>
+            <td>
+              Becomes the <code>role="tabpanel"</code> with the shared id and an
+              <code>aria-labelledby</code> pointing at the open tab.
+            </td>
+          </tr>
+          <tr>
+            <td class="path">conversation-tab-content/conversation-tab-content.tsx</td>
+            <td><span class="tag">mechanical</span></td>
+            <td>Passes <code>labelledBy={conversationTabId(selectedTab)}</code>.</td>
+          </tr>
+          <tr>
+            <td class="path">src/i18n/translation.json</td>
+            <td><span class="tag">changed</span></td>
+            <td>
+              <code>CONVERSATION$TABS_LABEL</code> ("Conversation panels") and
+              <code>CONVERSATION$CUSTOMIZE_TABS</code> ("Customize tabs"), both with
+              all 15 locales.
+            </td>
+          </tr>
+          <tr>
+            <td class="path">__tests__/…/conversation-tabs.test.tsx</td>
+            <td><span class="tag">changed</span></td>
+            <td>
+              Six cases: tablist + <code>aria-selected</code> +
+              <code>aria-controls</code>; icon-only tabs are named; the open tab
+              holds the only tab stop; arrows move focus without changing the open
+              tab; <kbd>Enter</kbd> activates; the trigger's name.
+            </td>
+          </tr>
+          <tr>
+            <td class="path">__tests__/…/conversation-tabs-context-menu.test.tsx</td>
+            <td><span class="tag">changed</span></td>
+            <td>
+              Three placement cases against stubbed trigger/menu rects: anchors
+              below-left when it fits, clamps at the right edge, flips above at the
+              bottom edge.
+            </td>
+          </tr>
+          <tr>
+            <td class="path">__tests__/…/conversation-tab-content.test.tsx</td>
+            <td><span class="tag">changed</span></td>
+            <td>The content area is the <code>tabpanel</code> labelled by the open tab.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>5 · What is deliberately not in this PR</h2>
+      <ul>
+        <li>
+          <strong>No <code>tabIndex={0}</code> on the panel.</strong> APG only asks
+          for it when the panel has no focusable content; these panels host a file
+          tree, a terminal and a browser view, and adding a focus stop over the
+          whole drawer risked changing terminal focus handling for no gain.
+        </li>
+        <li>
+          <strong>No <code>aria-expanded</code> on the overflow trigger.</strong>
+          That means touching the shared <code>EllipsisButton</code> used by four
+          other surfaces; the issue asks for the trigger's <em>name</em>, so that is
+          what changed here.
+        </li>
+        <li>
+          <strong>No change to pin/unpin or to the overflow measurement.</strong>
+          The existing localStorage tests cover both and still pass unmodified.
+        </li>
+      </ul>
+
+      <p class="note" style="margin-top: 36px">
+        This page is a review aid under <code>.pr/</code> and is removed before
+        merge by <code>.github/workflows/pr-artifacts.yml</code>.
+      </p>
+    </div>
+  </body>
+</html>

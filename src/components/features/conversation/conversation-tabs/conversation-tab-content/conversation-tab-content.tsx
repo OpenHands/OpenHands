@@ -3,6 +3,7 @@ import { TabWrapper } from "./tab-wrapper";
 import { TabContainer } from "./tab-container";
 import { TabContentArea } from "./tab-content-area";
 import { ConversationTabContentCrossfade } from "./conversation-tab-content-crossfade";
+import { conversationTabId } from "../conversation-tab-ids";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useConversationId } from "#/hooks/use-conversation-id";
 
@@ -45,7 +46,9 @@ export function ConversationTabContent() {
       : (selectedTab ?? "files");
 
   return (
-    <TabContainer>
+    <TabContainer
+      labelledBy={selectedTab ? conversationTabId(selectedTab) : undefined}
+    >
       <TabContentArea>
         <ConversationTabContentCrossfade
           showAgentLoading={shouldShownAgentLoading}
