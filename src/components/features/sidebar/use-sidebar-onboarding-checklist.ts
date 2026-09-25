@@ -6,6 +6,7 @@ import { useAutomationHealth } from "#/hooks/query/use-automation-health";
 import { usePaginatedConversations } from "#/hooks/query/use-paginated-conversations";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
+import { useSearchSecrets } from "#/hooks/query/use-get-secrets";
 import { useLlmConfigured } from "#/hooks/use-llm-configured";
 import { parseMcpConfig } from "#/utils/mcp-config";
 import {
@@ -35,6 +36,11 @@ function hasConfiguredMcpServers(mcpConfig: unknown): boolean {
   return Object.keys(parseMcpConfig(mcpConfig)).length > 0;
 }
 
+const SUBSCRIPTION_CREDENTIAL_NAMES = new Set([
+  "CODEX_AUTH_JSON",
+  "CLAUDE_CODE_OAUTH_TOKEN",
+]);
+
 export function useSidebarOnboardingChecklist() {
   const { isCompleted: onboardingCompleted } = useOnboardingCompletion();
   const { currentPath } = useNavigation();
@@ -57,6 +63,7 @@ export function useSidebarOnboardingChecklist() {
   const { isConfigured: isLlmConfigured, isLoading: isLlmConfiguredLoading } =
     useLlmConfigured();
   const { data: profilesData, isLoading: isProfilesLoading } = useLlmProfiles();
+  const { data: secrets } = useSearchSecrets();
   const { data: conversationPage } = usePaginatedConversations(1);
   const { data: healthData } = useAutomationHealth();
   const isAutomationBackendHealthy = healthData?.status === "ok";
@@ -91,7 +98,9 @@ export function useSidebarOnboardingChecklist() {
         profilesData,
         isProfilesLoading,
       ),
-      "configure-subscription-agent": hasExploredCustomize,
+      "configure-subscription-agent": (secrets ?? []).some((secret) =>
+        SUBSCRIPTION_CREDENTIAL_NAMES.has(secret.name),
+      ),
       "connect-mcp": hasConfiguredMcpServers(
         settings?.agent_settings?.mcp_config,
       ),
@@ -109,6 +118,7 @@ export function useSidebarOnboardingChecklist() {
     isLlmConfiguredLoading,
     isProfilesLoading,
     profilesData,
+    secrets,
     settings,
     settings?.agent_settings?.mcp_config,
   ]);
