@@ -11,6 +11,7 @@ import { ConversationTabs } from "../conversation-tabs/conversation-tabs";
 import { ResizeHandle } from "../../../ui/resize-handle";
 import { useResizablePanels } from "#/hooks/use-resizable-panels";
 import { useConversationStore } from "#/stores/conversation-store";
+import { AUTOMATION_SETUP_SHOW_AGENT_EVENT } from "#/components/features/automations/setup/automation-setup-agent-request";
 import { AutomationSetupPanel } from "#/components/features/automations/setup/automation-setup-panel";
 import {
   getAutomationSetupDraft,
@@ -99,6 +100,13 @@ export function ConversationMain() {
       setIsAutomationAgentHidden(false);
     }
   }, [automationSetupDraft]);
+
+  useEffect(() => {
+    const showAgent = () => setIsAutomationAgentHidden(false);
+    window.addEventListener(AUTOMATION_SETUP_SHOW_AGENT_EVENT, showAgent);
+    return () =>
+      window.removeEventListener(AUTOMATION_SETUP_SHOW_AGENT_EVENT, showAgent);
+  }, []);
 
   const showDockedComposer = isAutomationSetupMode && isAutomationAgentHidden;
   const agentToggleLabel = isAutomationAgentHidden
@@ -228,6 +236,7 @@ export function ConversationMain() {
             <ChatInterfaceWrapper
               isRightPanelShown={!isMobile && isRightPanelShown}
               showGitControlBar={!isAutomationSetupMode}
+              showEmptyStateSuggestions={!isAutomationSetupMode}
               composerDockTarget={composerDockTarget}
               onDockedComposerSubmit={() => setIsAutomationAgentHidden(false)}
             />
@@ -292,7 +301,11 @@ export function ConversationMain() {
                   </>
                 )}
                 {showDockedComposer ? (
-                  <div className="pointer-events-none absolute inset-0 z-20 px-5 [scrollbar-gutter:stable]">
+                  // The setup form scrolls in a padded column with a stable
+                  // scrollbar gutter. This overlay has to be a scroll container
+                  // with the same gutter, or the composer centers in a wider
+                  // box and sits off the fields.
+                  <div className="custom-scrollbar-always pointer-events-none absolute inset-0 z-20 overflow-y-scroll px-5 [scrollbar-gutter:stable] [&::-webkit-scrollbar-thumb]:bg-transparent">
                     <div className="relative mx-auto h-full w-full min-w-0 max-w-[800px]">
                       <div
                         ref={setComposerDockTarget}

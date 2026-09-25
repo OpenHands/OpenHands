@@ -13,6 +13,7 @@ import {
 interface ChatInterfaceWrapperProps {
   isRightPanelShown: boolean;
   showGitControlBar?: boolean;
+  showEmptyStateSuggestions?: boolean;
   composerDockTarget?: HTMLElement | null;
   onDockedComposerSubmit?: () => void;
 }
@@ -23,6 +24,7 @@ const THREAD_CLASSNAME =
 export function ChatInterfaceWrapper({
   isRightPanelShown: _isRightPanelShown,
   showGitControlBar = true,
+  showEmptyStateSuggestions = true,
   composerDockTarget = null,
   onDockedComposerSubmit,
 }: ChatInterfaceWrapperProps) {
@@ -49,6 +51,7 @@ export function ChatInterfaceWrapper({
         <div className={THREAD_CLASSNAME}>
           <ChatInterface
             showGitControlBar={showGitControlBar}
+            showEmptyStateSuggestions={showEmptyStateSuggestions}
             composerDockTarget={composerDockTarget}
             onDockedComposerSubmit={onDockedComposerSubmit}
           />

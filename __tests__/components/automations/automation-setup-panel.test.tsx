@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -25,11 +26,16 @@ import {
 import { packTarGzip } from "#/utils/tar-gzip";
 import { handleAutomationFormUpdateAction } from "#/services/automation-form";
 import { AUTOMATION_FORM_UPDATE_ACTION_KIND } from "#/constants/automation-form";
+import { GitProviderItemsService } from "#/api/git-provider-items-service";
+import { AUTOMATION_SETUP_SHOW_AGENT_EVENT } from "#/components/features/automations/setup/automation-setup-agent-request";
 import { useDeploymentCapabilities } from "#/hooks/query/use-manifest-capabilities";
 import type { AutomationDraftApiResponse } from "#/manifests/types";
 
 const mockNavigate = vi.fn();
 const mockToastSuccess = vi.fn();
+const { mockSendMessage } = vi.hoisted(() => ({
+  mockSendMessage: vi.fn().mockResolvedValue({ queued: false }),
+}));
 
 vi.mock("react-hot-toast", () => ({
   default: { success: (...args: unknown[]) => mockToastSuccess(...args) },
@@ -72,6 +78,10 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
   },
 }));
 
+vi.mock("#/hooks/use-send-message", () => ({
+  useSendMessage: () => ({ send: mockSendMessage }),
+}));
+
 vi.mock("#/hooks/query/use-manifest-capabilities", () => ({
   useDeploymentCapabilities: vi.fn(() => ({ data: null, isLoading: false })),
 }));
@@ -101,6 +111,15 @@ vi.mock("#/hooks/query/use-agent-profiles", () => ({
     },
     isLoading: false,
   }),
+}));
+
+vi.mock("#/api/git-provider-items-service", () => ({
+  GitProviderItemsService: {
+    listUserRepositories: vi.fn(async () => [
+      "OpenHands/OpenHands",
+      "OpenHands/software-agent-sdk",
+    ]),
+  },
 }));
 
 vi.mock("#/hooks/use-user-providers", () => ({
@@ -215,6 +234,10 @@ describe("AutomationSetupPanel", () => {
     vi.mocked(
       AgentServerConversationService.updateConversationTags,
     ).mockResolvedValue({ tags: {} } as never);
+    vi.mocked(GitProviderItemsService.listUserRepositories).mockResolvedValue([
+      "OpenHands/OpenHands",
+      "OpenHands/software-agent-sdk",
+    ]);
   });
 
   afterEach(() => {
@@ -527,6 +550,13 @@ describe("AutomationSetupPanel", () => {
 
     const addButton = screen.getByTestId("automation-setup-repository-add");
     const pill = screen.getByTestId("automation-setup-repository-value");
+    expect(screen.getByTestId("automation-setup-repository-values")).toHaveClass(
+      "flex-wrap",
+    );
+    expect(screen.getByTestId("automation-setup-kind-custom")).toHaveClass(
+      "bg-tertiary",
+      "text-content",
+    );
     expect(
       addButton.compareDocumentPosition(pill) &
         Node.DOCUMENT_POSITION_FOLLOWING,
@@ -563,12 +593,13 @@ describe("AutomationSetupPanel", () => {
     const menu = screen.getByTestId("automation-setup-repository-menu");
     const custom = screen.getByTestId("automation-setup-repository-custom");
     expect(menu.lastElementChild).toContainElement(custom);
+    expect(menu.className).toContain("top-full");
     expect(
       screen.queryByTestId("automation-setup-add-repository-modal"),
     ).not.toBeInTheDocument();
 
     await user.click(
-      screen.getByTestId(
+      await screen.findByTestId(
         "automation-setup-repository-option-OpenHands/OpenHands",
       ),
     );
@@ -580,6 +611,45 @@ describe("AutomationSetupPanel", () => {
     await user.click(screen.getByTestId("automation-setup-repository-custom"));
     expect(
       screen.getByTestId("automation-setup-add-repository-modal"),
+    ).toBeInTheDocument();
+  });
+
+  it("filters the repository menu from the search and keeps a divider above custom", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(screen.getByTestId("automation-setup-repository-add"));
+    expect(
+      await screen.findByTestId(
+        "automation-setup-repository-option-OpenHands/OpenHands",
+      ),
+    ).toBeInTheDocument();
+    const custom = screen.getByTestId("automation-setup-repository-custom");
+    const divider = screen.getByTestId(
+      "automation-setup-repository-custom-divider",
+    );
+    expect(
+      divider.compareDocumentPosition(custom) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    await user.type(
+      screen.getByTestId("automation-setup-repository-search"),
+      "sdk",
+    );
+
+    expect(
+      screen.queryByTestId(
+        "automation-setup-repository-option-OpenHands/OpenHands",
+      ),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId(
+        "automation-setup-repository-option-OpenHands/software-agent-sdk",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("automation-setup-repository-custom"),
     ).toBeInTheDocument();
   });
 
@@ -740,6 +810,162 @@ describe("AutomationSetupPanel", () => {
       ),
     );
     expect(mockNavigate).toHaveBeenCalledWith("/automations/automation-1");
+  });
+
+  it("hides the event filter until Add Event Filter is clicked", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(screen.getByText("AUTOMATIONS$DETAIL$TRIGGER_EVENT"));
+    expect(
+      screen.queryByTestId("automation-setup-event-filter"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("automation-setup-event-key").parentElement,
+    ).toContainElement(screen.getByTestId("automation-setup-add-event-filter"));
+    expect(screen.getByTestId("automation-setup-add-event-filter")).toHaveTextContent(
+      "AUTOMATION_SETUP$ADD_FILTER",
+    );
+
+    await user.click(screen.getByTestId("automation-setup-add-event-filter"));
+    expect(
+      screen.getByTestId("automation-setup-event-filter"),
+    ).toBeInTheDocument();
+
+    await user.click(
+      screen.getByTestId("automation-setup-event-filter-remove"),
+    );
+    expect(
+      screen.queryByTestId("automation-setup-event-filter"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("automation-setup-add-event-filter"),
+    ).toBeInTheDocument();
+  });
+
+  it("asks the agent to fill the event trigger", async () => {
+    const user = userEvent.setup();
+    const showAgent = vi.fn();
+    window.addEventListener(AUTOMATION_SETUP_SHOW_AGENT_EVENT, showAgent);
+    renderPanel();
+
+    await user.click(screen.getByText("AUTOMATIONS$DETAIL$TRIGGER_EVENT"));
+    await user.click(screen.getByTestId("automation-setup-ask-agent"));
+
+    expect(mockSendMessage).toHaveBeenCalledWith({
+      action: "message",
+      args: { content: "AUTOMATION_SETUP$ASK_AGENT_EVENT_PROMPT" },
+    });
+    expect(showAgent).toHaveBeenCalled();
+    window.removeEventListener(AUTOMATION_SETUP_SHOW_AGENT_EVENT, showAgent);
+  });
+
+  it("shows a spinner in the repository menu while the list loads", async () => {
+    let resolveNames: (names: string[]) => void = () => {};
+    vi.mocked(GitProviderItemsService.listUserRepositories).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveNames = resolve;
+        }),
+    );
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(screen.getByTestId("automation-setup-repository-add"));
+    expect(
+      screen.getByTestId("automation-setup-repository-loading"),
+    ).toBeInTheDocument();
+
+    resolveNames(["OpenHands/OpenHands"]);
+    expect(
+      await screen.findByTestId(
+        "automation-setup-repository-option-OpenHands/OpenHands",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automation-setup-repository-loading"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("removes one plugin row from the module", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(screen.getByTestId("automation-setup-add-plugin"));
+    await user.click(screen.getByTestId("automation-setup-add-plugin"));
+    expect(
+      screen.getByTestId("automation-setup-plugin-source-1"),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("automation-setup-plugin-remove-1"));
+
+    expect(
+      screen.queryByTestId("automation-setup-plugin-source-1"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("automation-setup-plugin-source"),
+    ).toBeInTheDocument();
+  });
+
+  it("creates a draft with every plugin that has a source", async () => {
+    vi.mocked(AutomationService.createAutomationDraft).mockResolvedValue({
+      id: "automation-plugins",
+    });
+
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(screen.getByTestId("automation-setup-add-plugin"));
+    expect(screen.getByTestId("automation-setup-plugin-ref")).toHaveValue(
+      "main",
+    );
+    expect(screen.getByTestId("automation-setup-plugin-remove")).toHaveClass(
+      "size-6",
+    );
+    await user.type(
+      screen.getByTestId("automation-setup-plugin-source"),
+      "github:org/blockers-plugin",
+    );
+    await user.click(screen.getByTestId("automation-setup-add-plugin"));
+    const pluginModule = screen.getByTestId("automation-setup-plugin-module");
+    expect(pluginModule).toContainElement(
+      screen.getByTestId("automation-setup-add-plugin"),
+    );
+    expect(pluginModule).toContainElement(
+      screen.getByTestId("automation-setup-plugin-source-1"),
+    );
+    expect(
+      within(pluginModule).getAllByText("AUTOMATION_SETUP$PLUGIN_SOURCE"),
+    ).toHaveLength(1);
+    expect(
+      within(pluginModule).getAllByText("AUTOMATION_SETUP$PLUGIN_REF"),
+    ).toHaveLength(1);
+    expect(
+      screen.getByTestId("automation-setup-plugin-ref").compareDocumentPosition(
+        screen.getByTestId("automation-setup-plugin-remove"),
+      ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.getByTestId("automation-setup-plugin-ref-1")).toHaveValue(
+      "main",
+    );
+    await user.type(
+      screen.getByTestId("automation-setup-plugin-source-1"),
+      "github:org/review-plugin",
+    );
+
+    await user.click(screen.getByTestId("automation-setup-create"));
+
+    await waitFor(() =>
+      expect(AutomationService.createAutomationDraft).toHaveBeenCalledWith(
+        expect.objectContaining({
+          plugins: [
+            { source: "github:org/blockers-plugin", ref: "main" },
+            { source: "github:org/review-plugin", ref: "main" },
+          ],
+        }),
+        "plugin",
+      ),
+    );
   });
 
   it("creates custom bundle drafts with entrypoint and setup script path", async () => {
@@ -1043,6 +1269,48 @@ describe("AutomationSetupPanel", () => {
       expect(AutomationService.dispatchServerDraft).not.toHaveBeenCalled();
     });
 
+    it("shows a public URL notice and collapses the test payload for event triggers", async () => {
+      const user = userEvent.setup();
+      renderPanel();
+
+      expect(
+        screen.queryByTestId("automation-setup-event-public-url-notice"),
+      ).not.toBeInTheDocument();
+
+      await user.click(screen.getByText("AUTOMATIONS$DETAIL$TRIGGER_EVENT"));
+
+      expect(
+        screen.getByTestId("automation-setup-event-public-url-notice"),
+      ).toHaveTextContent("AUTOMATION_SETUP$EVENT_PUBLIC_URL_NOTICE");
+      expect(
+        screen.getByTestId("automation-setup-event-public-url-notice"),
+      ).not.toHaveClass("bg-tertiary");
+      expect(
+        screen
+          .getByTestId("automation-setup-event-source")
+          .compareDocumentPosition(
+            screen.getByTestId("automation-setup-event-public-url-notice"),
+          ) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(
+        screen.queryByTestId("automation-setup-event-test-payload"),
+      ).not.toBeInTheDocument();
+
+      await user.click(
+        screen.getByTestId("automation-setup-event-test-payload-toggle"),
+      );
+      expect(
+        screen.getByTestId("automation-setup-event-test-payload"),
+      ).toBeInTheDocument();
+
+      await user.click(
+        screen.getByTestId("automation-setup-event-test-payload-toggle"),
+      );
+      expect(
+        screen.queryByTestId("automation-setup-event-test-payload"),
+      ).not.toBeInTheDocument();
+    });
+
     it("sends synthetic JSON payload when testing an event draft", async () => {
       vi.mocked(AutomationService.createServerDraft).mockResolvedValue(
         dispatchableDraft,
@@ -1062,6 +1330,9 @@ describe("AutomationSetupPanel", () => {
       renderPanel();
 
       await user.click(screen.getByText("AUTOMATIONS$DETAIL$TRIGGER_EVENT"));
+      await user.click(
+        screen.getByTestId("automation-setup-event-test-payload-toggle"),
+      );
       const payloadInput = await screen.findByTestId(
         "automation-setup-event-test-payload",
       );
@@ -1126,18 +1397,44 @@ describe("AutomationSetupPanel", () => {
 
       await user.click(screen.getByText("AUTOMATIONS$DETAIL$TRIGGER_EVENT"));
       expect(
-        document.querySelector(
-          '#automation-setup-event-source-options option[value="linear"]',
-        ),
-      ).not.toBeNull();
+        screen.queryByTestId("automation-setup-custom-webhook-enabled"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("automation-setup-event-source")).toHaveValue(
+        "GitHub",
+      );
+      await user.click(screen.getByTestId("automation-setup-event-source"));
+      expect(
+        screen.queryByTestId("automation-setup-event-source-menu"),
+      ).not.toBeInTheDocument();
+      await user.click(
+        screen.getByTestId("automation-setup-event-source-toggle"),
+      );
+      expect(
+        screen.getByTestId("automation-setup-event-source-option-linear"),
+      ).toBeInTheDocument();
+      const custom = screen.getByTestId("automation-setup-event-source-custom");
+      expect(
+        screen
+          .getByTestId("automation-setup-event-source-option-github")
+          .compareDocumentPosition(custom) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
       expect(
         document.querySelector(
           '#automation-setup-event-key-options option[value="issues.*"]',
         ),
       ).not.toBeNull();
+      await user.click(custom);
       fireEvent.change(screen.getByTestId("automation-setup-event-source"), {
         target: { value: "incident-alerts" },
       });
+      expect(
+        screen.getByTestId("automation-setup-custom-webhook-enabled"),
+      ).toBeInTheDocument();
+      await user.click(screen.getByTestId("automation-setup-event-source-toggle"));
+      expect(
+        screen.getByTestId("automation-setup-event-source-option-github"),
+      ).toBeInTheDocument();
+      await user.click(screen.getByTestId("automation-setup-event-source-toggle"));
       await user.click(
         screen.getByTestId("automation-setup-custom-webhook-enabled"),
       );
@@ -1181,6 +1478,9 @@ describe("AutomationSetupPanel", () => {
       renderPanel();
 
       await user.click(screen.getByText("AUTOMATIONS$DETAIL$TRIGGER_EVENT"));
+      await user.click(
+        screen.getByTestId("automation-setup-event-test-payload-toggle"),
+      );
       const payloadInput = await screen.findByTestId(
         "automation-setup-event-test-payload",
       );

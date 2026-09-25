@@ -1,8 +1,11 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Plus, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { getActiveBackend } from "#/api/backend-registry/active-store";
+import { GitProviderItemsService } from "#/api/git-provider-items-service";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { SettingsInput } from "#/components/features/settings/settings-input";
+import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import { ModalCloseButton } from "#/components/shared/modals/modal-close-button";
 import { ContextMenuListItem } from "#/components/features/context-menu/context-menu-list-item";
@@ -15,7 +18,9 @@ import { useUserProviders } from "#/hooks/use-user-providers";
 import { usePromptTextareaResize } from "#/hooks/use-prompt-textarea-resize";
 import { I18nKey } from "#/i18n/declaration";
 import CheckIcon from "#/icons/checkmark.svg?react";
+import SearchIcon from "#/icons/search.svg?react";
 import { ComboboxCaretInline } from "#/ui/combobox-caret";
+import { Divider } from "#/ui/divider";
 import { ContextMenu } from "#/ui/context-menu";
 import { extensionModuleCardPillClassName } from "#/utils/extension-module-card-classes";
 import { chatInputPillButtonClassName } from "#/utils/form-control-classes";
@@ -383,6 +388,7 @@ export function AutomationSetupPromptStack({
     usePromptTextareaResize(textareaRef, { contentKey: prompt });
   const [isRepositoryModalOpen, setIsRepositoryModalOpen] = useState(false);
   const [isRepositoryMenuOpen, setIsRepositoryMenuOpen] = useState(false);
+  const [repositorySearch, setRepositorySearch] = useState("");
   const repositoryAddRef = useRef<HTMLButtonElement>(null);
   const repositoryMenuRef = useClickOutsideElement<HTMLDivElement>(
     () => setIsRepositoryMenuOpen(false),
@@ -397,14 +403,48 @@ export function AutomationSetupPromptStack({
     enabled: isRepositoryMenuOpen && repositoryProvider !== null,
   });
   const repositories = parseRepositories(repository);
-  const listedRepositories = (repositoryQuery.data?.pages ?? [])
+  const isLocalBackend = getActiveBackend().backend.kind === "local";
+  const [localRepositoryNames, setLocalRepositoryNames] = useState<string[]>(
+    [],
+  );
+  const [isLocalRepositoryListLoading, setIsLocalRepositoryListLoading] =
+    useState(false);
+  useEffect(() => {
+    if (!isRepositoryMenuOpen || !isLocalBackend) return undefined;
+    let cancelled = false;
+    setIsLocalRepositoryListLoading(true);
+    GitProviderItemsService.listUserRepositories("github")
+      .then((names) => {
+        if (!cancelled) setLocalRepositoryNames(names);
+      })
+      .catch(() => {
+        if (!cancelled) setLocalRepositoryNames([]);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLocalRepositoryListLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isRepositoryMenuOpen, isLocalBackend]);
+  const isRepositoryListLoading = isLocalBackend
+    ? isLocalRepositoryListLoading
+    : repositoryQuery.isLoading;
+  const cloudRepositoryNames = (repositoryQuery.data?.pages ?? [])
     .flatMap((page) => page.items)
-    .filter(
-      (repo, index, repos) =>
-        !repositories.includes(repo.full_name) &&
-        repos.findIndex((entry) => entry.full_name === repo.full_name) ===
-          index,
-    );
+    .map((repo) => repo.full_name);
+  const repositorySearchText = repositorySearch.trim().toLowerCase();
+  const listedRepositoryNames = (
+    isLocalBackend ? localRepositoryNames : cloudRepositoryNames
+  ).filter(
+    (name, index, names) =>
+      !repositories.includes(name) && names.indexOf(name) === index,
+  );
+  const visibleRepositoryNames = repositorySearchText
+    ? listedRepositoryNames.filter((name) =>
+        name.toLowerCase().includes(repositorySearchText),
+      )
+    : listedRepositoryNames;
   const addLabel = `${t(I18nKey.BUTTON$ADD)} ${t(I18nKey.AUTOMATIONS$DETAIL$REPOSITORIES)}`;
 
   const writeRepositories = (next: string[]) => {
@@ -412,7 +452,12 @@ export function AutomationSetupPromptStack({
   };
 
   return (
-    <div className="flex w-full min-w-0 flex-col gap-2.5">
+    <div
+      className={cn(
+        "flex w-full min-w-0 flex-col gap-2.5",
+        isRepositoryMenuOpen && "relative z-30",
+      )}
+    >
       <div className="flex w-full items-center gap-2">
         <span className="flex items-center gap-2 text-sm">
           {t(I18nKey.AUTOMATIONS$PROMPT)}
@@ -482,7 +527,7 @@ export function AutomationSetupPromptStack({
           >
             <div
               data-testid="automation-setup-repository"
-              className="flex w-full min-w-0 items-center gap-1"
+              className="flex w-full min-w-0 items-start gap-1"
             >
               <div className="relative flex shrink-0 items-center gap-2">
                 <span className="text-sm">
@@ -502,7 +547,10 @@ export function AutomationSetupPromptStack({
                   aria-expanded={isRepositoryMenuOpen}
                   className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-[var(--oh-muted)] hover:bg-white/10 hover:text-white"
                   onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => setIsRepositoryMenuOpen((open) => !open)}
+                  onClick={() => {
+                    setRepositorySearch("");
+                    setIsRepositoryMenuOpen((open) => !open);
+                  }}
                 >
                   <Plus className="size-4" aria-hidden />
                 </button>
@@ -511,8 +559,31 @@ export function AutomationSetupPromptStack({
                     ref={repositoryMenuRef}
                     role="menu"
                     data-testid="automation-setup-repository-menu"
-                    className="absolute bottom-full left-0 z-[60] mb-2 flex max-h-60 w-[260px] flex-col overflow-hidden rounded-md border border-border-subtle bg-tertiary py-1 shadow-lg"
+                    className="absolute top-full left-0 z-[60] mt-1 flex max-h-72 w-[260px] flex-col overflow-hidden rounded-md border border-border-subtle bg-tertiary py-1 shadow-lg"
                   >
+                    <div className="shrink-0 px-2">
+                      <div className="relative">
+                        <SearchIcon
+                          width={16}
+                          height={16}
+                          aria-hidden
+                          className="pointer-events-none absolute top-1/2 left-0 -translate-y-1/2 text-muted"
+                        />
+                        <input
+                          type="text"
+                          data-testid="automation-setup-repository-search"
+                          value={repositorySearch}
+                          onChange={(event) =>
+                            setRepositorySearch(event.target.value)
+                          }
+                          onKeyDown={(event) => event.stopPropagation()}
+                          placeholder={t(I18nKey.COMMON$SEARCH_REPOSITORIES)}
+                          aria-label={t(I18nKey.COMMON$SEARCH_REPOSITORIES)}
+                          className="w-full border-0 bg-transparent py-1.5 pr-0 pl-6 text-sm text-contrast outline-none placeholder:text-muted focus:ring-0 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                    <Divider inset="menu" />
                     <div
                       className="min-h-0 flex-1 overflow-y-auto px-1"
                       onScroll={(event) => {
@@ -525,26 +596,44 @@ export function AutomationSetupPromptStack({
                         }
                       }}
                     >
-                      {listedRepositories.map((repo) => (
-                        <ContextMenuListItem
-                          key={`${repo.git_provider}:${repo.full_name}`}
-                          testId={`automation-setup-repository-option-${repo.full_name}`}
-                          onClick={(event) => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            writeRepositories([
-                              ...repositories,
-                              repo.full_name,
-                            ]);
-                            setIsRepositoryMenuOpen(false);
-                          }}
-                          className="flex w-full items-center"
+                      {isRepositoryListLoading &&
+                      visibleRepositoryNames.length === 0 ? (
+                        <div
+                          data-testid="automation-setup-repository-loading"
+                          className="flex items-center justify-center py-3"
                         >
-                          <span className="truncate">{repo.full_name}</span>
-                        </ContextMenuListItem>
-                      ))}
+                          <LoadingSpinner size="small" />
+                        </div>
+                      ) : (
+                        visibleRepositoryNames.map((name) => (
+                          <ContextMenuListItem
+                            key={name}
+                            testId={`automation-setup-repository-option-${name}`}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              writeRepositories([...repositories, name]);
+                              setIsRepositoryMenuOpen(false);
+                            }}
+                            className="flex w-full items-center"
+                          >
+                            <span className="truncate">{name}</span>
+                          </ContextMenuListItem>
+                        ))
+                      )}
+                      {repositorySearchText &&
+                      !isRepositoryListLoading &&
+                      visibleRepositoryNames.length === 0 ? (
+                        <p className="px-2 py-2 text-sm text-muted italic">
+                          {t(I18nKey.GITHUB$NO_RESULTS)}
+                        </p>
+                      ) : null}
                     </div>
-                    <div className="shrink-0 border-t border-border-subtle px-1 pt-1">
+                    <Divider
+                      inset="menu"
+                      testId="automation-setup-repository-custom-divider"
+                    />
+                    <div className="shrink-0 px-1">
                       <ContextMenuListItem
                         testId="automation-setup-repository-custom"
                         onClick={(event) => {
@@ -563,7 +652,10 @@ export function AutomationSetupPromptStack({
                   </div>
                 ) : null}
               </div>
-              <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
+              <div
+                data-testid="automation-setup-repository-values"
+                className="flex min-w-0 flex-1 flex-wrap items-center gap-1"
+              >
                 {repositories.map((item) => (
                   <span
                     key={item}
