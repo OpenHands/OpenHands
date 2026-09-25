@@ -13,6 +13,9 @@ export function formatCompactTokenCount(value: number): string {
     if (Number.isInteger(thousands)) {
       return `${thousands.toFixed(0)}k`;
     }
+    if (thousands >= 999.95) {
+      return `${(value / 1_000_000).toFixed(1)}M`;
+    }
     return `${thousands.toFixed(1)}k`;
   }
 
