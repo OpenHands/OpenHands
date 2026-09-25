@@ -22,6 +22,7 @@ import {
 import AutomationService, {
   type CustomWebhookCreateResponse,
 } from "#/api/automation-service/automation-service.api";
+import { isSdkHttpError } from "#/api/agent-server-compatibility";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import {
   patchAutomationSetupDraft,
@@ -393,6 +394,10 @@ function draftEndpoint(kind: AutomationSetupKind): AutomationDraftEndpoint {
  * transport errors surface as a thrown Error instead.
  */
 function getResponseStatus(error: unknown): number | null {
+  // Draft calls reach over two transports: local backends go through axios
+  // (status under `response`), while Cloud backends go through callCloudProxy
+  // (the shared client's HttpError carries `status` directly).
+  if (isSdkHttpError(error)) return (error as { status: number }).status;
   if (!error || typeof error !== "object") return null;
   const response = (error as Record<string, unknown>).response;
   if (!response || typeof response !== "object") return null;

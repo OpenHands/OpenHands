@@ -7,6 +7,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { HttpError } from "@openhands/typescript-client";
 import {
   NavigationProvider,
   type NavigationContextValue,
@@ -179,47 +180,57 @@ describe("AutomationSetupPanel", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("falls back to validation when draft endpoints are unavailable", async () => {
-    vi.mocked(AutomationService.createServerDraft).mockRejectedValue({
-      response: { status: 404 },
-    });
-    vi.mocked(AutomationService.validateDraft).mockResolvedValue({
-      valid: true,
-      errors: [],
-    });
+  it.each([
+    {
+      label: "an axios-shaped 404 (local backend)",
+      error: { response: { status: 404 } },
+    },
+    {
+      label: "the shared client's HttpError 404 (cloud backend)",
+      error: new HttpError(404, "Not Found", { detail: "No such route" }),
+    },
+  ])(
+    "falls back to validation when draft endpoints are unavailable ($label)",
+    async ({ error }) => {
+      vi.mocked(AutomationService.createServerDraft).mockRejectedValue(error);
+      vi.mocked(AutomationService.validateDraft).mockResolvedValue({
+        valid: true,
+        errors: [],
+      });
 
-    const user = userEvent.setup();
-    renderPanel();
+      const user = userEvent.setup();
+      renderPanel();
 
-    await user.click(screen.getByTestId("automation-setup-test"));
+      await user.click(screen.getByTestId("automation-setup-test"));
 
-    await waitFor(() =>
-      expect(AutomationService.createServerDraft).toHaveBeenCalledWith(
-        expect.objectContaining({
-          endpoint: "/v1/preset/prompt",
-          draft: expect.objectContaining({
-            enabled: false,
-            prompt: "Review every pull request",
+      await waitFor(() =>
+        expect(AutomationService.createServerDraft).toHaveBeenCalledWith(
+          expect.objectContaining({
+            endpoint: "/v1/preset/prompt",
+            draft: expect.objectContaining({
+              enabled: false,
+              prompt: "Review every pull request",
+            }),
           }),
+        ),
+      );
+      expect(AutomationService.validateDraft).toHaveBeenCalledWith({
+        endpoint: "/v1/preset/prompt",
+        draft: expect.objectContaining({
+          enabled: false,
+          prompt: "Review every pull request",
+          trigger: {
+            type: "cron",
+            schedule: "0 9 * * *",
+            timezone: "America/New_York",
+          },
         }),
-      ),
-    );
-    expect(AutomationService.validateDraft).toHaveBeenCalledWith({
-      endpoint: "/v1/preset/prompt",
-      draft: expect.objectContaining({
-        enabled: false,
-        prompt: "Review every pull request",
-        trigger: {
-          type: "cron",
-          schedule: "0 9 * * *",
-          timezone: "America/New_York",
-        },
-      }),
-    });
-    expect(screen.getByTestId("automation-setup-status")).toHaveTextContent(
-      "AUTOMATION_SETUP$READY_TO_TEST",
-    );
-  });
+      });
+      expect(screen.getByTestId("automation-setup-status")).toHaveTextContent(
+        "AUTOMATION_SETUP$READY_TO_TEST",
+      );
+    },
+  );
 
   it("sends each comma-separated repository to the automation service", async () => {
     vi.mocked(AutomationService.validateDraft).mockResolvedValue({
