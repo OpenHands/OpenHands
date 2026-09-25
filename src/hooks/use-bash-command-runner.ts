@@ -19,6 +19,7 @@ interface WaitingCommand {
 }
 
 interface PendingCommand {
+  command: string;
   resolve: (result: CommandResult) => void;
   reject: (error: Error) => void;
 }
@@ -52,9 +53,12 @@ function isBashError(event: BashEvent): event is BashError {
  * executes a bash command and returns a Promise that resolves when the
  * final `BashOutput` (non-null `exit_code`) arrives.
  *
- * Commands are correlated using a FIFO queue: each `BashCommand` echo
- * received from the server is paired with the oldest outstanding request in
- * the queue, and subsequent `BashOutput` events are matched by `command_id`.
+ * Commands are correlated by content: each `BashCommand` echo received from
+ * the server is paired with the oldest pending request carrying the same
+ * command text, and subsequent `BashOutput` events are matched by
+ * `command_id`. Echoes with no matching pending request belong to other
+ * clients of the shared `/sockets/bash-events` stream (every bash command on
+ * the runtime is broadcast to every subscriber) and are ignored.
  *
  * Commands are buffered until the socket's open handler sends authentication.
  */
@@ -95,7 +99,7 @@ export function useBashCommandRunner(
         resolve,
         reject,
       } of waitingQueueRef.current) {
-        pendingQueueRef.current.push({ resolve, reject });
+        pendingQueueRef.current.push({ command, resolve, reject });
         ws.send(JSON.stringify({ command, cwd, timeout }));
       }
       waitingQueueRef.current = [];
@@ -110,15 +114,23 @@ export function useBashCommandRunner(
       }
 
       if (isBashCommand(data)) {
-        // Associate the next pending request with the server-assigned command_id
-        const pending = pendingQueueRef.current.shift();
-        if (pending) {
-          activeCommandsRef.current.set(data.id, {
-            ...pending,
-            stdout: [],
-            stderr: [],
-          });
+        // The bash-events stream broadcasts every command started on the
+        // runtime - other open tabs and REST /api/bash callers included - so
+        // pair an echo by command text, not by arrival order. A foreign echo
+        // (no pending match) is ignored: pairing it would resolve one of our
+        // callers with another command's output and drop our own.
+        const matchIndex = pendingQueueRef.current.findIndex(
+          (pending) => pending.command === data.command,
+        );
+        if (matchIndex === -1) {
+          return;
         }
+        const [pending] = pendingQueueRef.current.splice(matchIndex, 1);
+        activeCommandsRef.current.set(data.id, {
+          ...pending,
+          stdout: [],
+          stderr: [],
+        });
       } else if (isBashOutput(data) && data.command_id) {
         const active = activeCommandsRef.current.get(data.command_id);
         if (active) {
@@ -195,7 +207,7 @@ export function useBashCommandRunner(
             reject,
           });
         } else {
-          pendingQueueRef.current.push({ resolve, reject });
+          pendingQueueRef.current.push({ command, resolve, reject });
           ws.send(JSON.stringify({ command, cwd, timeout }));
         }
       }),

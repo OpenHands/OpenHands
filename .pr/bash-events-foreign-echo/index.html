@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>bash-events echoes from other clients stole pending command pairings - repro evidence</title>
+</head>
+<body>
+  <h1>Reproduction evidence</h1>
+  <p>Terminal runs of <code>__tests__/hooks/use-bash-command-runner.test.ts(x)</code>: failing twice on main (a foreign BashCommand echo resolves our pending command with another client's output), passing twice with the fix (echoes paired by command text; foreign echoes ignored).</p>
+  <img src="terminal.png" alt="vitest runs failing before the fix and passing after it" style="max-width:100%" />
+</body>
+</html>
