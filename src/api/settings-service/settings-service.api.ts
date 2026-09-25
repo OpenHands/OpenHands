@@ -173,18 +173,54 @@ let settingsCache: {
   encrypted: SettingsApiResponse | null;
   /** Timestamp when the cache was last populated */
   timestamp: number;
+  /** Which backend answered. Settings from one are not settings from another. */
+  backendKey: string | null;
 } = {
   redacted: null,
   encrypted: null,
   timestamp: 0,
+  backendKey: null,
 };
 
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
-const isCacheValid = () => Date.now() - settingsCache.timestamp < CACHE_TTL_MS;
+/**
+ * Identity of the backend a cached response came from.
+ *
+ * `connectionRevision` is part of it because it changes whenever the
+ * connection credentials do, which is the same reason the query keys across
+ * the app already include it: the host can stay the same while what it
+ * answers with does not.
+ */
+const activeBackendKey = (): string => {
+  const { backend } = getActiveBackend();
+  return `${backend.id}:${backend.connectionRevision ?? 0}`;
+};
+
+const isCacheValid = () =>
+  settingsCache.backendKey === activeBackendKey() &&
+  Date.now() - settingsCache.timestamp < CACHE_TTL_MS;
 
 const clearCache = () => {
-  settingsCache = { redacted: null, encrypted: null, timestamp: 0 };
+  settingsCache = {
+    redacted: null,
+    encrypted: null,
+    timestamp: 0,
+    backendKey: null,
+  };
+};
+
+/**
+ * Whether a response requested from `requestedKey` may be cached: only while
+ * that backend is still the active one, so a switch during the request does
+ * not file the old backend's answer under the new one. An entry from another
+ * backend is dropped first, so the two are never mixed.
+ */
+const prepareCacheFor = (requestedKey: string): boolean => {
+  if (activeBackendKey() !== requestedKey) return false;
+  if (settingsCache.backendKey !== requestedKey) clearCache();
+  settingsCache.backendKey = requestedKey;
+  return true;
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -256,6 +292,13 @@ export const headersFromMcpAuth = (
 /**
  * Convert SDK `auth` credentials to the cloud's header-only storage shape.
  *
+ * An `oauth2` credential is the exception and is sent as-is: the app server
+ * stores its token state under `auth.state` (restoring redacted parts by
+ * key) and the sandbox refreshes the access token from it. Flattening it to
+ * a bearer header drops the refresh token, so the server stops working once
+ * the access token expires. A header the old flattening stored is tombstoned
+ * like any other header the credential no longer produces.
+ *
  * Only the entries in `value` are converted. The cloud `POST /api/v1/settings`
  * applies an `mcp_config` map WITHOUT a `null` entry as a full-catalog
  * replacement and only a map WITH a `null` entry (delete / rename) as a
@@ -323,7 +366,10 @@ const cloudCompatibleMcpConfig = async (
       }
       if (!isRecord(server.auth)) return [name, server];
 
-      const authHeaders = headersFromMcpAuth(server.auth);
+      const keepsAuth = server.auth.strategy === "oauth2";
+      const authHeaders: Record<string, string> | null = keepsAuth
+        ? {}
+        : headersFromMcpAuth(server.auth);
       if (authHeaders === null) return [name, server];
 
       const nextServer = { ...server };
@@ -340,7 +386,7 @@ const cloudCompatibleMcpConfig = async (
         }
       }
 
-      delete nextServer.auth;
+      if (!keepsAuth) delete nextServer.auth;
       if (Object.keys(mergedHeaders).length > 0) {
         nextServer.headers = mergedHeaders;
       } else {
@@ -578,10 +624,13 @@ class SettingsService {
       return syncDerivedSettings(transformApiResponse(settingsCache.redacted));
     }
 
+    const requestedKey = activeBackendKey();
     try {
       const response = await this.fetchSettingsFromApi();
-      settingsCache.redacted = response;
-      settingsCache.timestamp = Date.now();
+      if (prepareCacheFor(requestedKey)) {
+        settingsCache.redacted = response;
+        settingsCache.timestamp = Date.now();
+      }
       return syncDerivedSettings(transformApiResponse(response));
     } catch (error) {
       // If API fails, return defaults
@@ -616,10 +665,13 @@ class SettingsService {
 
     // Fetch encrypted settings - this MUST succeed for conversations to work.
     // Do not fall back to redacted settings as that would cause auth failures.
+    const requestedKey = activeBackendKey();
     const response = await this.fetchSettingsFromApi("encrypted");
-    settingsCache.encrypted = response;
-    if (!settingsCache.timestamp) {
-      settingsCache.timestamp = Date.now();
+    if (prepareCacheFor(requestedKey)) {
+      settingsCache.encrypted = response;
+      if (!settingsCache.timestamp) {
+        settingsCache.timestamp = Date.now();
+      }
     }
     return {
       agentSettings: response.agent_settings,

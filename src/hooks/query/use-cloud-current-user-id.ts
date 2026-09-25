@@ -6,27 +6,7 @@ import {
 } from "#/contexts/active-backend-context";
 import { useAllCloudOrganizations } from "./use-cloud-organizations";
 
-/**
- * Resolve the current user's `user_id` per cloud backend with one
- * `/api/organizations/{orgId}/me` call per backend (NOT one per org).
- *
- * The cloud contract: `/me` returns `{ org_id, user_id, … }`. `user_id`
- * is identical regardless of which org you ask, so we make a single
- * call per backend.
- *
- * Path-param rule: when `backend.id === active.backend.id` and
- * `active.orgId` is set, the call uses **that** orgId — i.e. `/me`
- * always tracks the currently selected environment for the active
- * backend. For inactive backends (or when no org is selected yet), the
- * first org is used as a sentinel just to obtain `user_id`. This
- * matches the requirement that `/me` reflect the selected org for the
- * active environment, while still supporting the personal-workspace
- * label across non-active backends in the dropdown.
- *
- * The query key includes `active.orgId`, so picking a different org
- * via `setActive` re-keys this query and refetches `/me` with the new
- * active orgId.
- */
+/** Resolve one authorized membership per backend to identify personal workspaces. */
 export function useCloudCurrentUserId(): Record<
   string,
   { isLoading: boolean; userId: string | null }
@@ -43,13 +23,20 @@ export function useCloudCurrentUserId(): Record<
   for (const backend of backends) {
     if (backend.kind === "cloud") {
       const entry = cloudOrgs[backend.id];
-      // Prefer the active org when this backend IS the active one and
-      // an org has been selected; otherwise fall back to the first org
-      // we know about for that backend.
+      if (!entry?.hasData || entry.isAuthorizationError) continue;
+      const isActiveBackend = backend.id === active.backend.id;
+      if (
+        isActiveBackend &&
+        active.orgId &&
+        !entry.orgs.some((org) => org.id === active.orgId)
+      ) {
+        // Wait for selection repair so the request's X-Org-Id matches its path.
+        continue;
+      }
       const preferredOrgId =
-        backend.id === active.backend.id && active.orgId
+        isActiveBackend && active.orgId
           ? active.orgId
-          : (entry?.orgs[0]?.id ?? null);
+          : (entry.orgs[0]?.id ?? null);
       if (preferredOrgId) {
         targets.push({
           backendId: backend.id,

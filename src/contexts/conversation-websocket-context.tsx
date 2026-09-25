@@ -349,6 +349,7 @@ export function ConversationWebSocketProvider({
           consumeMatchingPendingMessage(
             conversationId,
             extractMessageEventText(event),
+            event,
           );
         }
       }
@@ -624,34 +625,31 @@ export function ConversationWebSocketProvider({
           }
 
           // Clear optimistic user message when a user message is confirmed.
-          // We match by the echoed text content (with FIFO fallback inside the
-          // store), so an echo for "second" pops "second" — not whichever
-          // pending entry happens to be oldest — protecting against any
-          // out-of-order delivery between conversations or sub-agents.
+          // History and live delivery share the same timestamp/identity checks.
           if (isUserMessageEvent(event)) {
             if (conversationId) {
               consumeMatchingPendingMessage(
                 conversationId,
                 extractMessageEventText(event),
+                event,
               );
               // Clear draft from localStorage - message was successfully delivered
               setConversationState(conversationId, { draftMessage: null });
             }
           }
 
-          // Handle cache invalidation for ActionEvent
-          if (isActionEvent(event)) {
-            const currentConversationId =
-              conversationId || "test-conversation-id"; // TODO: Get from context
+          // Handle cache invalidation for ActionEvent. The main WebSocket only
+          // opens when `conversationId` is present (see `wsUrl` below), so it
+          // is always defined for events arriving over this socket.
+          if (isActionEvent(event) && conversationId) {
             handleActionEventCacheInvalidation(
               event,
-              currentConversationId,
+              conversationId,
               queryClient,
             );
           }
 
           // Handle conversation state updates
-          // TODO: Tests
           if (isConversationStateUpdateEvent(event)) {
             if (
               isFullStateConversationStateUpdateEvent(event) &&
@@ -900,25 +898,27 @@ export function ConversationWebSocketProvider({
               consumeMatchingPendingMessage(
                 conversationId,
                 extractMessageEventText(event),
+                event,
               );
               setConversationState(conversationId, { draftMessage: null });
             }
           }
 
-          // Handle cache invalidation for ActionEvent
+          // Handle cache invalidation for ActionEvent. The planning socket only
+          // opens when the first sub-conversation has an id (see
+          // `planningAgentWsUrl` below), so it is always defined here.
           if (isActionEvent(event)) {
             const planningAgentConversation = subConversations?.[0];
-            const currentConversationId =
-              planningAgentConversation?.id || "test-conversation-id"; // TODO: Get from context
-            handleActionEventCacheInvalidation(
-              event,
-              currentConversationId,
-              queryClient,
-            );
+            if (planningAgentConversation?.id) {
+              handleActionEventCacheInvalidation(
+                event,
+                planningAgentConversation.id,
+                queryClient,
+              );
+            }
           }
 
           // Handle conversation state updates
-          // TODO: Tests
           if (isConversationStateUpdateEvent(event)) {
             // Scope to the planning agent's own conversation id, not the main
             // `conversationId` — this socket reports the planning helper
