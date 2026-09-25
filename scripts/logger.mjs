@@ -9,7 +9,7 @@
  * resolvable — most importantly inside the packaged Electron desktop app,
  * whose `afterPack` hook strips `Resources/app/node_modules/` — `fileLog`
  * becomes a no-op and console logging continues to work unchanged. See
- * AGENTS.md "Electron desktop packaging" for the strip-hook details.
+ * `.agents/skills/desktop-electron/references/guide.md` for strip-hook details.
  */
 
 import { mkdirSync } from "node:fs";

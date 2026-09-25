@@ -74,7 +74,7 @@ describe("useTaskPolling", () => {
     vi.clearAllMocks();
     localStorage.clear();
     resetPendingTaskMessageLinkState();
-    useOptimisticUserMessageStore.setState({ pendingMessages: [] });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
   });
 
   afterEach(() => {

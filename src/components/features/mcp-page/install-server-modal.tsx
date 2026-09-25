@@ -535,9 +535,9 @@ export function InstallServerModal({
           {oauthMode ? (
             <div
               data-testid="mcp-install-oauth-info"
-              className="flex flex-col gap-2 p-3 rounded-lg border border-border bg-base-tertiary"
+              className="flex flex-col gap-2 p-3 rounded-lg border border-border bg-tertiary"
             >
-              <p className="text-sm text-secondary-light">
+              <p className="text-sm text-text-secondary">
                 {t(I18nKey.MCP$OAUTH_CONNECT_INFO)}
               </p>
               <p className="text-xs text-tertiary-alt">
