@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
-import { BudgetDisplay } from "../../conversation-panel/budget-display";
+import { CostText } from "#/components/shared/cost-text";
 import { I18nKey } from "#/i18n/declaration";
+import { BudgetDisplay } from "../../conversation-panel/budget-display";
 
 interface CostSectionProps {
   cost: number | null;
@@ -21,7 +22,9 @@ export function CostSection({ cost, maxBudgetPerTask }: CostSectionProps) {
         <span className="font-semibold">
           {t(I18nKey.CONVERSATION$TOTAL_COST)}
         </span>
-        <span className="font-semibold">${cost.toFixed(4)}</span>
+        <span className="font-semibold">
+          <CostText amount={cost} detailed />
+        </span>
       </div>
     </>
   );
