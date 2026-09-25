@@ -143,10 +143,10 @@ export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
       className="flex flex-col gap-6 max-h-[calc(90vh-7rem)]"
     >
       <header className="flex flex-col gap-2">
-        <h2 className="text-2xl font-medium text-white">
+        <h2 className="text-2xl font-medium text-contrast">
           {t(I18nKey.ONBOARDING$LLM_TITLE)}
         </h2>
-        <p className="text-sm text-[var(--oh-muted)]">
+        <p className="text-sm text-muted">
           {t(I18nKey.ONBOARDING$LLM_SUBTITLE)}
         </p>
       </header>

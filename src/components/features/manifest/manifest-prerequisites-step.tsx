@@ -28,9 +28,7 @@ export function SetupPrerequisitesStep({
         ({ id, requirement, entry }) => (
           <div key={id} className="flex flex-col gap-1">
             <span className="text-sm">{entry?.name ?? id}</span>
-            <span className="text-xs text-[var(--oh-muted)]">
-              {requirement.message}
-            </span>
+            <span className="text-xs text-muted">{requirement.message}</span>
           </div>
         ),
       )}

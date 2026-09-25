@@ -16,7 +16,7 @@ export function AutomationsFilteredEmptyState({
   return (
     <div
       data-testid="automations-filtered-empty"
-      className="rounded-xl border border-dashed border-[var(--oh-border)] p-8 text-center"
+      className="rounded-xl border border-dashed border-border p-8 text-center"
     >
       <p className="text-sm text-muted">
         {t(I18nKey.AUTOMATIONS$NO_FILTER_MATCHES)}
@@ -25,7 +25,7 @@ export function AutomationsFilteredEmptyState({
         type="button"
         data-testid="automations-clear-filters"
         onClick={onClear}
-        className="mt-2 text-sm text-white underline-offset-2 hover:underline"
+        className="mt-2 text-sm text-contrast underline-offset-2 hover:underline"
       >
         {t(I18nKey.AUTOMATIONS$CLEAR_FILTERS)}
       </button>

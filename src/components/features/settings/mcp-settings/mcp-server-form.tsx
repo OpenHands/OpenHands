@@ -39,6 +39,12 @@ interface MCPServerFormProps {
   onTest?: (server: MCPServerConfig) => void;
   isTestPending?: boolean;
   testMessage?: TestMessage | null;
+  /**
+   * Hide the Test button while the form describes a stdio server. Cloud
+   * backends can only probe remote servers; the type is live form state in
+   * add mode, so the form owns this decision.
+   */
+  isStdioTestUnavailable?: boolean;
 }
 
 export function MCPServerForm({
@@ -52,6 +58,7 @@ export function MCPServerForm({
   onTest,
   isTestPending = false,
   testMessage = null,
+  isStdioTestUnavailable = false,
 }: MCPServerFormProps) {
   const { t } = useTranslation("openhands");
   const [serverType, setServerType] = React.useState<MCPServerType>(
@@ -534,7 +541,7 @@ export function MCPServerForm({
                 className={cn(
                   formControlMultilineFieldClassName,
                   "resize-none placeholder:italic",
-                  "disabled:bg-[var(--oh-surface-raised)] disabled:border-[var(--oh-border-subtle)]",
+                  "disabled:bg-surface-raised disabled:border-border-subtle",
                 )}
               />
             </label>
@@ -658,7 +665,7 @@ export function MCPServerForm({
               className={cn(
                 formControlMultilineFieldClassName,
                 "resize-none placeholder:italic",
-                "disabled:bg-[var(--oh-surface-raised)] disabled:border-[var(--oh-border-subtle)]",
+                "disabled:bg-surface-raised disabled:border-border-subtle",
               )}
             />
             <p className="text-xs text-tertiary-alt">
@@ -683,7 +690,7 @@ export function MCPServerForm({
               className={cn(
                 formControlMultilineFieldClassName,
                 "resize-none placeholder:italic",
-                "disabled:bg-[var(--oh-surface-raised)] disabled:border-[var(--oh-border-subtle)]",
+                "disabled:bg-surface-raised disabled:border-border-subtle",
               )}
             />
           </label>
@@ -705,7 +712,7 @@ export function MCPServerForm({
 
       <div
         className={cn(
-          "flex w-full items-center gap-2",
+          "flex w-full flex-wrap items-center gap-2",
           onDelete ? "justify-between" : "justify-end",
         )}
       >
@@ -723,7 +730,7 @@ export function MCPServerForm({
             {t(I18nKey.BUTTON$DELETE)}
           </BrandButton>
         ) : null}
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 [&_button]:whitespace-nowrap">
           <BrandButton
             testId="cancel-button"
             type="button"
@@ -733,7 +740,7 @@ export function MCPServerForm({
           >
             {t(I18nKey.BUTTON$CANCEL)}
           </BrandButton>
-          {onTest && (
+          {onTest && !(isStdioTestUnavailable && serverType === "stdio") && (
             <BrandButton
               testId="mcp-test-connection"
               type="button"

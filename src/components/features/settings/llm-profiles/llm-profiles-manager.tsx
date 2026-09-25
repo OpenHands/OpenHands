@@ -10,6 +10,7 @@ import ProfilesService, {
   type SaveProfileRequest,
 } from "#/api/profiles-service/profiles-service.api";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
+import { useModelCatalogWarning } from "#/hooks/use-model-catalog-warning";
 import { useProviderConnections } from "#/hooks/query/use-provider-connections";
 import { useActivateLlmProfile } from "#/hooks/mutation/use-activate-llm-profile";
 import { useSaveLlmProfile } from "#/hooks/mutation/use-save-llm-profile";
@@ -32,6 +33,7 @@ export function LlmProfilesManager({
 }: LlmProfilesManagerProps) {
   const { t } = useTranslation("openhands");
   const { data, isLoading, error } = useLlmProfiles();
+  const isModelUnlisted = useModelCatalogWarning();
   const activateProfile = useActivateLlmProfile();
   const saveProfile = useSaveLlmProfile();
   // Cloud members are view-only; only owners/admins (and all local users) may
@@ -126,7 +128,7 @@ export function LlmProfilesManager({
       <div className="flex flex-col gap-8">
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-base font-medium text-white">
+            <h2 className="text-base font-medium text-contrast">
               {t(I18nKey.SETTINGS$AVAILABLE_PROFILES)}
             </h2>
             {onAddProfile && canManage ? (
@@ -155,6 +157,7 @@ export function LlmProfilesManager({
             onDuplicate={handleDuplicate}
             onDelete={setProfileToDelete}
             isActivating={activateProfile.isPending}
+            isModelUnlisted={isModelUnlisted}
           />
         </div>
 

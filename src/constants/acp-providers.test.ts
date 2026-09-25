@@ -4,49 +4,30 @@ import {
   ACP_MANAGED_SENTINEL,
   ACP_PROVIDERS,
   getAcpProviderSecrets,
-  resolveCodexDefaultCommand,
   SURFACED_ACP_PROVIDERS,
   resolveEffectiveAcpModel,
 } from "./acp-providers";
 
 describe("ACP_PROVIDERS", () => {
-  it("offers GPT-6 Astra first for Codex ACP", () => {
+  it("passes every codex data field through from the pinned client registry", () => {
+    // No local override may sit between the registry and the picker: a
+    // hand-maintained model entry survives an upstream *removal*, so Canvas
+    // would keep offering an id the live ACP server has started rejecting.
     const codex = ACP_PROVIDERS.find(({ key }) => key === "codex");
-    expect(codex?.available_models?.[0]).toEqual({
-      id: "gpt-6-astra",
-      label: "GPT-6 Astra",
-    });
-    expect(codex?.default_command).toEqual([
-      "npx",
-      "-y",
-      "@agentclientprotocol/codex-acp@1.10.0",
-    ]);
+    const client = CLIENT_ACP_PROVIDERS.codex;
+    expect(codex?.default_command).toEqual([...client.default_command]);
+    expect(codex?.available_models).toEqual(
+      client.available_models.map(({ id, label }) => ({ id, label })),
+    );
   });
-});
 
-describe("resolveCodexDefaultCommand", () => {
-  it("overrides only the exact stale codex pin from the pinned client", () => {
-    expect(
-      resolveCodexDefaultCommand([
-        "npx",
-        "-y",
-        "@agentclientprotocol/codex-acp@1.1.7",
-      ]),
-    ).toEqual(["npx", "-y", "@agentclientprotocol/codex-acp@1.10.0"]);
-    expect(
-      resolveCodexDefaultCommand([
-        "npx",
-        "-y",
-        "@agentclientprotocol/codex-acp@1.10.0",
-      ]),
-    ).toEqual(["npx", "-y", "@agentclientprotocol/codex-acp@1.10.0"]);
-    expect(
-      resolveCodexDefaultCommand([
-        "npx",
-        "-y",
-        "@agentclientprotocol/codex-acp@2.0.0",
-      ]),
-    ).toEqual(["npx", "-y", "@agentclientprotocol/codex-acp@2.0.0"]);
+  it("carries GPT-6 Astra, so the pin is new enough to launch it", () => {
+    // Canary for the pin's freshness, not a catalog Canvas maintains: Astra
+    // needs codex-acp >= 1.10.0, which only client >= 1.45.0 mirrors.
+    const codex = ACP_PROVIDERS.find(({ key }) => key === "codex");
+    expect(codex?.available_models?.map(({ id }) => id)).toContain(
+      "gpt-6-astra",
+    );
   });
 });
 

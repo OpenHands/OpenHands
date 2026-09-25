@@ -35,7 +35,7 @@ export function ConfirmDeleteModal({
         ns="openhands"
         i18nKey={I18nKey.CONVERSATION$DELETE_WARNING_WITH_TITLE}
         values={{ title: conversationTitle }}
-        components={{ title: <span className="text-white" /> }}
+        components={{ title: <span className="text-contrast" /> }}
       />
     );
   } else {
@@ -44,7 +44,7 @@ export function ConfirmDeleteModal({
 
   return (
     <ModalBackdrop onClose={onCancel}>
-      <ModalBody className="items-start border border-[var(--oh-border)]">
+      <ModalBody className="items-start border border-border">
         <div className="flex flex-col gap-2">
           <BaseModalTitle
             title={title ?? t(I18nKey.CONVERSATION$CONFIRM_DELETE)}

@@ -56,7 +56,7 @@ export function ExtensionsMobileHub() {
                   {t(I18nKey.SIDEBAR$SKILLS_AND_PLUGINS_CLOUD_LINK)}
                 </span>
                 <ExternalLink
-                  className="size-4 shrink-0 text-[var(--oh-muted)]"
+                  className="size-4 shrink-0 text-muted"
                   aria-hidden
                 />
               </a>

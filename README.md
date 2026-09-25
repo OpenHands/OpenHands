@@ -65,7 +65,7 @@ code review and dependency updates, then have your personal agents running on yo
 > [!WARNING]
 > This runs the agent-server directly on the machine you're installing on — the agent will have full access to your filesystem!
 
-**Prerequisites**: Node.js 22.12.x or later, `uv`
+**Prerequisites**: [Node.js](https://nodejs.org/) 24 or later, `uv`
 
 ```sh
 npm install -g @openhands/agent-canvas
@@ -96,7 +96,7 @@ docker run -it --rm \
   -p 8000:8000 \
   -v "$HOME/.openhands:/home/openhands/.openhands" \
   -v "${PROJECTS_PATH}:/projects" \
-  ghcr.io/openhands/agent-canvas:1.18.0 # x-release-please-version
+  ghcr.io/openhands/agent-canvas:1.23.0 # x-release-please-version
 ```
 
 **Windows (PowerShell / Windows Terminal):** See [README.windows.md](./README.windows.md) for the equivalent commands.
@@ -108,7 +108,7 @@ The agent will be able to access any project under `PROJECTS_PATH`.
 > [!WARNING]
 > This runs the agent-server directly on the machine you're installing on — the agent will have full access to your filesystem!
 
-**Prerequisites**: Node.js 22.12.x or later, `npm`, `uv` (for running the agent server via `uvx`)
+**Prerequisites**: [Node.js](https://nodejs.org/) 24 or later, `npm`, `uv` (for running the agent server via `uvx`)
 
 ```sh
 git clone https://github.com/OpenHands/OpenHands.git

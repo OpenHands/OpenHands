@@ -17,7 +17,7 @@ export function ActiveStatusBadge({ active }: ActiveStatusBadgeProps) {
       className={cn(
         "inline-flex items-center rounded-full px-3 py-1 text-xs font-medium",
         active
-          ? "bg-[var(--oh-success)]/15 text-[var(--oh-success)]"
+          ? "bg-semantic-success/15 text-semantic-success"
           : "bg-surface-raised text-muted",
       )}
     >
