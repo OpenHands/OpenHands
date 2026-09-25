@@ -132,6 +132,12 @@ This single command downloads the latest release, starts the agent server,
 the automation backend, and the static frontend, and fronts them with an
 ingress proxy on `127.0.0.1:8000`.
 
+The ingress port is the only port you open in a browser (or proxy nginx to);
+`-p`/`--port` and `PORT` control only that ingress. The internal static
+frontend server defaults to `:3001` but automatically moves to a free port
+when `3001` is taken by another application. If you need to pin it, set
+`OH_CANVAS_SAFE_VITE_PORT=<port>` when launching.
+
 To keep the service running after your SSH session ends, use a process manager.
 
 **Option A — tmux (quick):**
