@@ -26,7 +26,6 @@ import {
   __resetEnvironmentSwitchOverlayForTests,
   EnvironmentSwitchOverlay,
 } from "#/components/features/backends/environment-switch-overlay";
-import { ENVIRONMENT_SWITCH_SETACTIVE_DELAY_MS } from "#/components/features/backends/environment-switch-store";
 
 import {
   ServerClient,
@@ -109,6 +108,8 @@ function TestSeed({
   return children as React.ReactElement;
 }
 
+const ACTIVE_BACKEND_STORAGE_KEY = "openhands-active-backend";
+
 async function openDropdown() {
   const user = userEvent.setup();
   const wrapper = screen.getByTestId("backend-selector");
@@ -161,21 +162,35 @@ beforeEach(() => {
   });
 });
 
-afterEach(async () => {
-  // When a test selects a dropdown option, BackendSelector's onChange
-  // calls `triggerEnvironmentSwitch` and then awaits a real-time
-  // `setTimeout(..., ENVIRONMENT_SWITCH_SETACTIVE_DELAY_MS)` before
-  // running `setActive`. `userEvent.click` does NOT await that async
-  // handler, so the trailing `setActive` can land AFTER the test ends,
-  // re-polluting `localStorage` during a later test. The body's
-  // `data-environment-switching` attribute is set while the switch is
-  // in flight; wait it out before clearing storage so the in-flight
-  // `setActive` writes BEFORE we wipe state.
-  if (document.body.hasAttribute("data-environment-switching")) {
-    await new Promise((resolve) => {
-      setTimeout(resolve, ENVIRONMENT_SWITCH_SETACTIVE_DELAY_MS + 20);
-    });
-  }
+/**
+ * Wait for a backend switch triggered by a dropdown click to finish.
+ *
+ * `BackendSelector.handleSelectBackend` awaits a real
+ * `ENVIRONMENT_SWITCH_SETACTIVE_DELAY_MS` timer before calling `setActive`,
+ * and `userEvent.click` does not await that async handler. Waiting for the
+ * persisted selection to change proves the trailing `setActive` landed inside
+ * the test rather than leaking into the next one.
+ *
+ * This deliberately observes the persisted selection rather than the body's
+ * `data-environment-switching` attribute: that attribute is cleared by the
+ * overlay's separate ENVIRONMENT_SWITCH_DURATION_MS timer, so it does not
+ * track when `setActive` actually ran.
+ */
+async function settleBackendSwitch(previous: string | null) {
+  await waitFor(() => {
+    expect(window.localStorage.getItem(ACTIVE_BACKEND_STORAGE_KEY)).not.toBe(
+      previous,
+    );
+  });
+}
+
+function activeBackendSnapshot() {
+  return window.localStorage.getItem(ACTIVE_BACKEND_STORAGE_KEY);
+}
+
+afterEach(() => {
+  // Each test that switches backends awaits `settleBackendSwitch`, so no
+  // trailing `setActive` is in flight here and teardown needs no delay.
   window.localStorage.clear();
   vi.unstubAllEnvs();
   __resetActiveStoreForTests();
@@ -629,7 +644,9 @@ describe("BackendSelector", () => {
 
     // Auto-switch lands on "Local 1"; click the seeded default to switch.
     const user = await openDropdown();
+    const before = activeBackendSnapshot();
     await user.click(screen.getByText("Local"));
+    await settleBackendSwitch(before);
 
     const wrapper = screen.getByTestId("backend-selector");
     const input = wrapper.querySelector("input") as HTMLInputElement;
@@ -693,7 +710,9 @@ describe("BackendSelector", () => {
       );
 
       const user = await openDropdown();
+      const before = activeBackendSnapshot();
       await user.click(screen.getByText("Local"));
+      await settleBackendSwitch(before);
 
       if (expectRedirect) {
         expect(await screen.findByTestId("landing-route")).toBeInTheDocument();
@@ -733,6 +752,7 @@ describe("BackendSelector", () => {
     // to trigger a switch, then immediately unmount the selector (the
     // click itself would do this in production via the outside-click handler).
     const user = await openDropdown();
+    const before = activeBackendSnapshot();
     await user.click(screen.getByText("Local"));
     selectorRender.unmount();
 
@@ -741,6 +761,10 @@ describe("BackendSelector", () => {
       "data-target",
       "Local",
     );
+
+    // The switch was deliberately left in flight across the unmount; let its
+    // trailing `setActive` land here rather than during the next test.
+    await settleBackendSwitch(before);
   });
 
   it("does not open backend modals on mouse down alone", async () => {
