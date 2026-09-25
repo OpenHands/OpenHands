@@ -276,7 +276,7 @@ describe("getObservationResult", () => {
       output: "",
       content: [],
       error: "Timeout navigating to page",
-    } as ObservationEvent["observation"]);
+    } as unknown as ObservationEvent["observation"]);
     expect(getObservationResult(legacyBrowser)).toBe("error");
   });
 
