@@ -50,7 +50,7 @@ const LAYOUT_PRESETS: LayoutPreset[] = [
     icon: Folder,
     settings: {
       ...DEFAULT_LAYOUT_SETTINGS,
-      organizeMode: "grouped",
+      groupByWorkspace: true,
     },
   },
   {

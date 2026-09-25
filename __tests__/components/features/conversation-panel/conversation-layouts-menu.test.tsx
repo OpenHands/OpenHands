@@ -8,7 +8,8 @@ import { UNNAMED_AUTOMATION_FACET } from "#/components/features/conversation-pan
 
 beforeEach(() => {
   useConversationPanelPreferencesStore.setState({
-    organizeMode: "chronological",
+    groupByContainer: false,
+    groupByWorkspace: false,
     conversationSort: "updated",
     threadScope: "all",
     showOlderConversations: true,
@@ -48,7 +49,8 @@ describe("ConversationLayoutsMenu", () => {
     await user.click(screen.getByTestId("layout-preset-focused"));
 
     const state = useConversationPanelPreferencesStore.getState();
-    expect(state.organizeMode).toBe("chronological");
+    expect(state.groupByContainer).toBe(false);
+    expect(state.groupByWorkspace).toBe(false);
     expect(state.conversationSort).toBe("updated");
     expect(state.threadScope).toBe("relevant");
     expect(state.showOlderConversations).toBe(false);
@@ -81,22 +83,30 @@ describe("ConversationLayoutsMenu", () => {
     ).toBe(true);
 
     await user.click(screen.getByTestId("layout-preset-recent-activity"));
-    expect(
-      screen.getByTestId("layout-preset-recent-activity"),
-    ).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByTestId("layout-preset-recent-activity")).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
 
     await user.click(screen.getByTestId("layout-preset-by-workspace"));
     expect(screen.getByTestId("layout-preset-by-workspace")).toHaveAttribute(
       "aria-checked",
       "true",
     );
+    expect(
+      useConversationPanelPreferencesStore.getState().groupByWorkspace,
+    ).toBe(true);
+    expect(
+      useConversationPanelPreferencesStore.getState().groupByContainer,
+    ).toBe(false);
   });
 
   it("labels the Advanced options row Custom when no preset matches", async () => {
     // Matches no preset: the chronological presets all hide older
-    // conversations, and by-workspace requires grouped mode.
+    // conversations, and by-workspace requires workspace grouping.
     useConversationPanelPreferencesStore.getState().applyLayoutSettings({
-      organizeMode: "chronological",
+      groupByContainer: false,
+      groupByWorkspace: false,
       conversationSort: "updated",
       threadScope: "relevant",
       showOlderConversations: true,
