@@ -30,6 +30,10 @@ interface LlmConfiguredResult {
    * warning doesn't flash before data loads or on a transient network error.
    */
   isLoading: boolean;
+  /** True when the active local LLM profile exists but has no usable API key. */
+  activeProfileMissingApiKey: boolean;
+  /** Name of the active profile when its API key is missing, otherwise null. */
+  activeProfileName: string | null;
 }
 
 /**
@@ -160,9 +164,19 @@ export function useLlmConfigured(): LlmConfiguredResult {
     shouldLoadActiveProfileDetail &&
     (activeProfileDetailLoading ||
       (activeProfileDetailError && !activeProfileDetail));
+  const activeProfileMissingApiKey =
+    isLocal &&
+    activeProfile !== undefined &&
+    !hasActiveProfileApiKey &&
+    !hasActiveProfileSubscription &&
+    !activeProfileDetailIndeterminate;
 
   return {
     isConfigured: isAcpAgent || llmSettingsHidden || hasUsableLlm,
+    activeProfileMissingApiKey,
+    activeProfileName: activeProfileMissingApiKey
+      ? (activeProfile?.name ?? null)
+      : null,
     isLoading:
       settingsIndeterminate ||
       configIndeterminate ||
