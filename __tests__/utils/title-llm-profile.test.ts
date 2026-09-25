@@ -40,4 +40,24 @@ describe("resolveTitleLlmProfile", () => {
       }),
     ).toBeUndefined();
   });
+
+  describe("agentLlmProfileRef priority", () => {
+    it("uses agentLlmProfileRef when no explicit preference is set", () => {
+      expect(resolveTitleLlmProfile(null, profiles, "Titles")).toBe("Titles");
+    });
+
+    it("explicit preference takes priority over agentLlmProfileRef", () => {
+      expect(resolveTitleLlmProfile("Titles", profiles, "Default")).toBe(
+        "Titles",
+      );
+    });
+
+    it("falls back to active_profile when agentLlmProfileRef is not in the list", () => {
+      expect(resolveTitleLlmProfile(null, profiles, "Deleted")).toBe("Default");
+    });
+
+    it("ignores null agentLlmProfileRef and falls back to active_profile", () => {
+      expect(resolveTitleLlmProfile(null, profiles, null)).toBe("Default");
+    });
+  });
 });

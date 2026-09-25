@@ -270,6 +270,9 @@ export const useCreateConversation = () => {
             ? {
                 agentProfileId: effectiveAgentProfileId,
                 agentProfileKind: resolvedAgentProfile?.agent_kind,
+                // Let title generation use the same LLM as the agent profile
+                // so the title and the agent steps share a model (#16885).
+                agentLlmProfileRef: resolvedAgentProfile?.llm_profile_ref,
               }
             : {}),
         });
