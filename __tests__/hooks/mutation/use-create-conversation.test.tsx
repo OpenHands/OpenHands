@@ -1,6 +1,6 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { SuggestedTask } from "#/utils/types";
@@ -9,6 +9,7 @@ import {
   removeStoredConversationMetadata,
 } from "#/api/conversation-metadata-store";
 import { AGENT_PROFILES_QUERY_KEYS } from "#/hooks/query/query-keys";
+import { useInFlightStartTasksStore } from "#/stores/in-flight-start-tasks-store";
 
 vi.mock("#/hooks/use-tracking", () => ({
   useTracking: () => ({
@@ -87,6 +88,10 @@ vi.mock("#/api/profiles-service/profiles-service.api", () => ({
 listLlmProfilesMock.mockResolvedValue({ profiles: [], active_profile: null });
 
 describe("useCreateConversation", () => {
+  beforeEach(() => {
+    useInFlightStartTasksStore.setState({ taskIdsByBackendId: {} });
+  });
+
   afterEach(() => {
     // Restore the default (no active AgentProfile) so the overrides below
     // don't leak into the other create-call assertions.
@@ -591,6 +596,46 @@ describe("useCreateConversation", () => {
 
     const call = createConversationSpy.mock.lastCall;
     expect(call?.[0]?.agentProfileId).toBe("profile-default");
+  });
+
+  it.each([
+    {
+      name: "tracks a still-provisioning start task so the sidebar can poll it",
+      appConversationId: null,
+      expectedTracked: ["task-id"],
+    },
+    {
+      name: "does not track a task that already resolved to a conversation",
+      appConversationId: "conv-1",
+      expectedTracked: [],
+    },
+  ])("$name", async ({ appConversationId, expectedTracked }) => {
+    mockUseActiveBackend.mockReturnValue({
+      backend: { id: "cloud-1", kind: "cloud" },
+      orgId: null,
+    });
+    vi.spyOn(
+      AgentServerConversationService,
+      "createConversation",
+    ).mockResolvedValue({
+      id: "task-id",
+      app_conversation_id: appConversationId,
+      agent_server_url: "http://agent-server.local",
+    } as never);
+
+    const { result } = renderHook(() => useCreateConversation(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={new QueryClient()}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    await result.current.mutateAsync({ query: "hello" });
+
+    expect(
+      useInFlightStartTasksStore.getState().taskIdsByBackendId["cloud-1"] ?? [],
+    ).toEqual(expectedTracked);
   });
 
   it("stamps the launched openhands profile's llm_profile_ref into conversation metadata (#1082)", async () => {
