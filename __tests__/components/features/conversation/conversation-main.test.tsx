@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { SidebarMobileNavProvider } from "#/components/features/sidebar/sidebar-mobile-nav-context";
@@ -7,6 +7,7 @@ import {
   type NavigationContextValue,
 } from "#/context/navigation-context";
 import type { AutomationSetupDraft } from "#/api/automation-setup-draft-store";
+import { requestAutomationSetupAgent } from "#/components/features/automations/setup/automation-setup-agent-request";
 
 // Mutable mock state for controlling breakpoint
 let mockIsMobile = false;
@@ -72,10 +73,12 @@ vi.mock("#/components/features/chat/chat-interface", () => {
   return {
     ChatInterface: ({
       showGitControlBar = true,
+      showEmptyStateSuggestions = true,
       composerDockTarget = null,
       onDockedComposerSubmit,
     }: {
       showGitControlBar?: boolean;
+      showEmptyStateSuggestions?: boolean;
       composerDockTarget?: HTMLElement | null;
       onDockedComposerSubmit?: () => void;
     }) => {
@@ -87,6 +90,9 @@ vi.mock("#/components/features/chat/chat-interface", () => {
           <div
             data-testid="chat-interface"
             data-show-git-control-bar={showGitControlBar ? "true" : "false"}
+            data-show-empty-state-suggestions={
+              showEmptyStateSuggestions ? "true" : "false"
+            }
           />
           {composerDockTarget
             ? createPortal(
@@ -315,6 +321,10 @@ describe("ConversationMain - Layout Transition Stability", () => {
       "data-show-git-control-bar",
       "false",
     );
+    expect(screen.getByTestId("chat-interface")).toHaveAttribute(
+      "data-show-empty-state-suggestions",
+      "false",
+    );
     expect(
       screen.queryByTestId("automation-setup-back"),
     ).not.toBeInTheDocument();
@@ -330,8 +340,12 @@ describe("ConversationMain - Layout Transition Stability", () => {
 
     renderConversationMain();
 
-    expect(screen.queryByTestId("automation-setup-topbar")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("automation-setup-panel")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automation-setup-topbar"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automation-setup-panel"),
+    ).not.toBeInTheDocument();
     expect(screen.getByTestId("chat-pane-header")).toBeInTheDocument();
     expect(screen.getByTestId("chat-interface")).toBeInTheDocument();
   });
@@ -367,6 +381,14 @@ describe("ConversationMain - Layout Transition Stability", () => {
     expect(
       screen.getByTestId("automation-setup-docked-composer"),
     ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("automation-setup-docked-composer").parentElement
+        ?.parentElement,
+    ).toHaveClass(
+      "px-5",
+      "custom-scrollbar-always",
+      "[scrollbar-gutter:stable]",
+    );
     expect(screen.getByTestId("docked-composer-submit")).toBeInTheDocument();
 
     await user.click(screen.getByTestId("docked-composer-submit"));
@@ -377,5 +399,28 @@ describe("ConversationMain - Layout Transition Stability", () => {
     expect(
       screen.queryByTestId("automation-setup-docked-composer"),
     ).not.toBeInTheDocument();
+  });
+
+  it("reveals the agent when the setup form asks for help", async () => {
+    const user = userEvent.setup();
+    mockIsRightPanelShown = true;
+    mockAutomationSetupDraft = {
+      prompt: "Write a haiku each morning",
+      kind: "prompt",
+    };
+
+    renderConversationMain();
+    await user.click(screen.getByTestId("automation-setup-agent-toggle"));
+    expect(screen.getByTestId("conversation-chat-panel")).toHaveStyle({
+      width: "0%",
+    });
+
+    act(() => {
+      requestAutomationSetupAgent();
+    });
+
+    expect(screen.getByTestId("conversation-chat-panel")).toHaveStyle({
+      width: "50%",
+    });
   });
 });
