@@ -57,7 +57,14 @@ const DEFAULT_AGENT_SERVER_TELEMETRY_POSTHOG_API_KEY =
   SHARED_DEFAULTS.telemetry.posthogApiKey;
 const DEFAULT_AGENT_SERVER_TELEMETRY_POSTHOG_HOST =
   SHARED_DEFAULTS.telemetry.posthogHost;
+// TODO: Remove this constraint and AGENT_SERVER_LITELLM_CONSTRAINT once the SDK
+// stops sending prompt_cache_key (tracked in OpenHands/software-agent-sdk#5325)
+// and Canvas pins an agent-server release containing that fix. The SDK only declares
+// litellm>=1.93.0, so a fresh uvx environment resolved after 2026-09-01 gets
+// litellm>=1.99, which forwards prompt_cache_key to the LiteLLM proxy and rejects
+// it for Anthropic models (HTTP 400).
 const AGENT_SERVER_POSTHOG_CONSTRAINT = "posthog>=6,<7";
+const AGENT_SERVER_LITELLM_CONSTRAINT = "litellm>=1.93,<1.99";
 const FRONTEND_REQUIRED_BINS = ["cross-env", "react-router"];
 
 /**
@@ -451,6 +458,8 @@ export function buildAgentServerCommand(env = process.env) {
       path.join(localPath, "openhands-workspace"),
       "--with",
       AGENT_SERVER_POSTHOG_CONSTRAINT,
+      "--with",
+      AGENT_SERVER_LITELLM_CONSTRAINT,
       "agent-server",
     );
     source = `local (${localPath})`;
@@ -477,6 +486,8 @@ export function buildAgentServerCommand(env = process.env) {
       `${baseGitUrl}#subdirectory=openhands-workspace`,
       "--with",
       AGENT_SERVER_POSTHOG_CONSTRAINT,
+      "--with",
+      AGENT_SERVER_LITELLM_CONSTRAINT,
       "agent-server",
     );
     source = `git (${gitRef})`;
@@ -495,6 +506,7 @@ export function buildAgentServerCommand(env = process.env) {
       `openhands-workspace==${version}`,
     );
     uvxArgs.push("--with", AGENT_SERVER_POSTHOG_CONSTRAINT);
+    uvxArgs.push("--with", AGENT_SERVER_LITELLM_CONSTRAINT);
     uvxArgs.push("agent-server");
     source = `PyPI (${version})`;
   } else {
@@ -511,6 +523,7 @@ export function buildAgentServerCommand(env = process.env) {
       `openhands-workspace==${DEFAULT_AGENT_SERVER_VERSION}`,
     );
     uvxArgs.push("--with", AGENT_SERVER_POSTHOG_CONSTRAINT);
+    uvxArgs.push("--with", AGENT_SERVER_LITELLM_CONSTRAINT);
     uvxArgs.push("agent-server");
     source = `PyPI (${DEFAULT_AGENT_SERVER_VERSION}, default)`;
   }
