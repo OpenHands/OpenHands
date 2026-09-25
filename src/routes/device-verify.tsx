@@ -146,7 +146,7 @@ export default function DeviceVerify() {
             <H1 className="text-2xl mb-4 text-center">
               {t(I18nKey.DEVICE$AUTHORIZATION_REQUEST)}
             </H1>
-            <div className="mb-6 p-4 bg-base rounded-lg border border-border-subtle">
+            <div className="mb-6 p-4 bg-canvas-base rounded-lg border border-border-subtle">
               <p className="text-xs text-text-subtle mb-2 text-center uppercase tracking-wider">
                 {t(I18nKey.DEVICE$CODE_LABEL)}
               </p>

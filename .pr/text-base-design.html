@@ -1,0 +1,434 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Separate base color from base typography</title><style>
+:root{--fg:#1a1a1a;--muted:#626262;--bg:#fdfdfb;--rule:#ddd;--accent:#9c4b13}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 system-ui}main{max-width:1120px;margin:auto;padding:36px}h1{font-size:38px;line-height:1.15;max-width:780px}h2{margin-top:38px}a{color:#234f92}code,pre{font-family:ui-monospace,monospace;font-size:13px;background:#f1f1ed}pre{overflow:auto;padding:16px}aside{border-left:4px solid var(--accent);background:#fff2e7;padding:14px 20px}.columns{display:grid;grid-template-columns:1fr 1fr;gap:24px}table{border-collapse:collapse;width:100%}td,th{padding:10px;text-align:left;border-bottom:1px solid var(--rule);vertical-align:top}svg{width:100%;height:auto;border:1px solid var(--rule);background:white}section{border-top:1px solid var(--rule);margin-top:28px}small{color:var(--muted)}nav{font-size:12px}nav ul{columns:2;padding-left:20px}h3{font-size:15px;overflow-wrap:anywhere}summary{cursor:pointer}@media(max-width:720px){main{padding:20px}.columns{grid-template-columns:1fr}nav ul{columns:1}}</style><main>
+<p><small>Agent Canvas · issue #17643 · proposed theme migration</small></p><h1>Give base color and base typography different names</h1>
+<p>Canvas’s color token took over Tailwind’s <code>text-base</code> utility. This change renames the color alias to <code>canvas-base</code>, migrates its consumers, and restores the standard font-size utility. The underlying <code>--oh-color-base</code> theme variable keeps the same name and value.</p>
+<aside><strong>Compatibility decision:</strong> custom components that consume generated <code>bg-base</code> or color <code>text-base</code> must migrate. Keeping the old color alias would retain the collision. Runtime theme-variable overrides remain compatible. <a href="https://github.com/smolpaws/OpenHands/blob/c5f86b2fbbb4efeeb850ce61206a8f3750c63bd4/src/tailwind.css#L15">Start with src/tailwind.css:15</a>.</aside>
+<h2>Before → after</h2>
+<svg viewBox="0 0 960 250" role="img" aria-label="Before: a color alias captures text-base. After: distinct color and font size utilities."><text x="28" y="35" font-size="18" fill="#626262">BEFORE</text><text x="500" y="35" font-size="18" fill="#9c4b13">AFTER</text><rect x="28" y="55" width="400" height="60" rx="8" fill="#f1f1ed"/><text x="45" y="92" font-family="monospace" font-size="17">--color-base → text-base</text><path d="M228 115v35" stroke="#626262" stroke-width="2"/><rect x="28" y="150" width="400" height="65" rx="8" fill="#f1f1ed"/><text x="45" y="177" font-size="16">Generated CSS: color only</text><text x="45" y="201" font-size="16">cn / tailwind-merge treats it as font size</text><rect x="500" y="55" width="430" height="60" rx="8" fill="#fff2e7" stroke="#9c4b13"/><text x="515" y="92" font-family="monospace" font-size="16">--color-canvas-base → text-canvas-base</text><path d="M715 115v35" stroke="#9c4b13" stroke-width="2"/><rect x="500" y="150" width="430" height="65" rx="8" fill="#fff2e7" stroke="#9c4b13"/><text x="515" y="177" font-size="16">Color and text-base font size coexist</text><text x="515" y="201" font-size="16">cn independently resolves color and size</text></svg>
+<p><a href="https://github.com/OpenHands/OpenHands/blob/a3cfe98267c52937dc4e91a55644a6131c6c01bc/src/tailwind.css#L15">Before: theme alias</a> · <a href="https://github.com/smolpaws/OpenHands/blob/c5f86b2fbbb4efeeb850ce61206a8f3750c63bd4/src/tailwind.css#L15">After: theme alias</a> · <a href="https://github.com/smolpaws/OpenHands/blob/c5f86b2fbbb4efeeb850ce61206a8f3750c63bd4/src/utils/utils.ts#L19">Unchanged cn helper</a></p>
+<table><tr><th>Consumer</th><th>Migration</th></tr><tr><td>App surfaces, including opacity variants</td><td><code>bg-base → bg-canvas-base</code>; same color variable</td></tr><tr><td>Reject-action foreground</td><td><code>text-base → text-canvas-base</code>; independent <code>text-sm</code> survives merging</td></tr><tr><td>Primary-surface badges and banners</td><td><code>text-base → text-on-primary</code>; existing same-value alias</td></tr><tr><td>Intentional font-size consumers</td><td><code>text-base</code> now supplies 1rem and the default line height instead of accidental color</td></tr><tr><td>Chat and onboarding fixed-size inputs</td><td>Keep <code>text-[16px]</code>; update suppression explanation</td></tr></table>
+<h2>Evidence and limits</h2><p>The regression test failed on the original CSS and passes on this head. <code>node .pr/verify-theme.mjs</code> compiles both source revisions and proves color CSS is identical after renaming, including background/opacity/hover/ring/gradient/text-color cases. Browser checks used the real Canvas UI with MSW data, not a live LLM.</p>
+<p>Desktop and 390×844 home screenshots accompany the PR. Chat input styles stayed <code>16px / 20px</code>; with a temporary 20px host root they stayed <code>16px / 25px</code> on both revisions. That root override was restored after verification. This does not certify every route or embedding host.</p>
+<p><a href="https://github.com/smolpaws/OpenHands/blob/c5f86b2fbbb4efeeb850ce61206a8f3750c63bd4/__tests__/themes/tailwind-text-base.test.ts#L17">Regression tests</a> · <a href="https://github.com/smolpaws/OpenHands/blob/c5f86b2fbbb4efeeb850ce61206a8f3750c63bd4/docs/DEVELOPMENT.md#L5">Consumer migration guide</a></p>
+<h2>Review the changes</h2><nav><ul><li><a href="#f0">__tests__/themes/tailwind-text-base.test.ts</a> <small>+38/−0</small></li><li><a href="#f1">docs/DEVELOPMENT.md</a> <small>+20/−0</small></li><li><a href="#f2">src/components/features/alerts/alert-banner.tsx</a> <small>+2/−2</small></li><li><a href="#f3">src/components/features/backends/api-key-entry-screen.tsx</a> <small>+1/−1</small></li><li><a href="#f4">src/components/features/chat/components/chat-input-field.tsx</a> <small>+1/−1</small></li><li><a href="#f5">src/components/features/conversation-panel/conversation-status-dot.tsx</a> <small>+1/−1</small></li><li><a href="#f6">src/components/features/conversation-panel/hook-matcher-content.tsx</a> <small>+1/−1</small></li><li><a href="#f7">src/components/features/conversation-panel/skill-content.tsx</a> <small>+1/−1</small></li><li><a href="#f8">src/components/features/conversation-panel/system-message-modal/tool-parameters.tsx</a> <small>+1/−1</small></li><li><a href="#f9">src/components/features/conversation/conversation-main/conversation-main.tsx</a> <small>+1/−1</small></li><li><a href="#f10">src/components/features/diff-viewer/file-diff-viewer.tsx</a> <small>+2/−2</small></li><li><a href="#f11">src/components/features/onboarding/steps/say-hello-step.tsx</a> <small>+1/−1</small></li><li><a href="#f12">src/components/features/settings/settings-switch.tsx</a> <small>+1/−1</small></li><li><a href="#f13">src/components/features/settings/upgrade-banner.tsx</a> <small>+1/−1</small></li><li><a href="#f14">src/components/features/sidebar/sidebar.tsx</a> <small>+2/−2</small></li><li><a href="#f15">src/components/shared/action-tooltip.tsx</a> <small>+1/−1</small></li><li><a href="#f16">src/root.tsx</a> <small>+5/−5</small></li><li><a href="#f17">src/routes/device-verify.tsx</a> <small>+1/−1</small></li><li><a href="#f18">src/routes/root-layout.tsx</a> <small>+2/−2</small></li><li><a href="#f19">src/routes/shared-conversation.tsx</a> <small>+3/−3</small></li><li><a href="#f20">src/tailwind.css</a> <small>+2/−2</small></li><li><a href="#f21">src/ui/pre.tsx</a> <small>+1/−1</small></li></ul></nav><section id="f0"><h3><a href="https://github.com/smolpaws/OpenHands/blob/c5f86b2fbbb4efeeb850ce61206a8f3750c63bd4/__tests__/themes/tailwind-text-base.test.ts">__tests__/themes/tailwind-text-base.test.ts</a></h3><p>Compile the real theme and verify typography/color separation, then exercise the real cn merge helper.</p><details><summary>Diff · +38/−0</summary><pre>diff --git a/__tests__/themes/tailwind-text-base.test.ts b/__tests__/themes/tailwind-text-base.test.ts
+new file mode 100644
+index 0000000..72b33ee
+--- /dev/null
++++ b/__tests__/themes/tailwind-text-base.test.ts
+@@ -0,0 +1,38 @@
++import { readFile } from &quot;node:fs/promises&quot;;
++import { resolve } from &quot;node:path&quot;;
++import { beforeAll, describe, expect, it } from &quot;vitest&quot;;
++import { compile } from &quot;@tailwindcss/node&quot;;
++import { cn } from &quot;#/utils/utils&quot;;
++
++let css: string;
++
++beforeAll(async () =&gt; {
++  const compiler = await compile(
++    await readFile(resolve(&quot;src/tailwind.css&quot;), &quot;utf8&quot;),
++    { base: resolve(&quot;src&quot;), onDependency: () =&gt; {} },
++  );
++  css = compiler.build([&quot;text-base&quot;, &quot;text-canvas-base&quot;, &quot;bg-canvas-base&quot;]);
++});
++
++describe(&quot;Canvas text-base theme contract&quot;, () =&gt; {
++  it(&quot;generates a font size independently of the base surface color&quot;, () =&gt; {
++    const rule = css.match(/\.text-base \{([^}]+)\}/)?.[1];
++    expect(rule).toContain(&quot;font-size:&quot;);
++    expect(rule).not.toMatch(/(?:^|\s)color:/);
++    expect(css).toMatch(
++      /\.text-canvas-base \{\s*color: var\(--oh-color-base\)/,
++    );
++    expect(css).toMatch(
++      /\.bg-canvas-base \{\s*background-color: var\(--oh-color-base\)/,
++    );
++  });
++
++  it(&quot;merges font sizes and Canvas text colors independently in either order&quot;, () =&gt; {
++    expect(cn(&quot;text-sm text-canvas-base&quot;, &quot;text-base text-contrast&quot;)).toBe(
++      &quot;text-base text-contrast&quot;,
++    );
++    expect(cn(&quot;text-contrast text-base&quot;, &quot;text-canvas-base text-sm&quot;)).toBe(
++      &quot;text-canvas-base text-sm&quot;,
++    );
++  });
++});
+</pre></details></section><section id="f1"><h3><a href="https://github.com/smolpaws/OpenHands/blob/c5f86b2fbbb4efeeb850ce61206a8f3750c63bd4/docs/DEVELOPMENT.md">docs/DEVELOPMENT.md</a></h3><p>Document the generated-utility migration for custom components and embedding hosts.</p><details><summary>Diff · +20/−0</summary><pre>diff --git a/docs/DEVELOPMENT.md b/docs/DEVELOPMENT.md
+index 1796175..4cff49e 100644
+--- a/docs/DEVELOPMENT.md
++++ b/docs/DEVELOPMENT.md
+@@ -2,6 +2,26 @@
+ 
+ This document is for contributors working on `agent-canvas` itself.
+ 
++## Base color and typography utilities
++
++`text-base` is the standard Tailwind font-size utility (1rem with its default
++line height). Canvas&#x27;s base surface color uses the distinct `canvas-base` token:
++`bg-canvas-base` and `text-canvas-base` resolve to `--oh-color-base`. Text on a
++primary surface can use the existing `text-on-primary` alias.
++
++When updating custom components or an embedding host that uses Canvas&#x27;s generated
++CSS, migrate `bg-base` to `bg-canvas-base` (including variants and opacity modifiers),
++and migrate any intentional color use of `text-base` to `text-canvas-base` or an
++appropriate semantic color. The old `--color-base` Tailwind alias is removed to
++prevent it from taking over `text-base`; other `*-base` color utilities must use
++`*-canvas-base` when generated by the host&#x27;s Tailwind build. The runtime theme
++variable `--oh-color-base` and the separate `base-secondary` token are unchanged.
++
++Keep fixed-pixel input sizes explicit when required: replacing `text-[16px]` with
++`text-base` changes its behavior when the host root font size differs from 16px,
++and can introduce a default line height. Check computed styles and class merging
++when migrating typography.
++
+ ## Recommended local workflow
+ 
+ `npm run dev` runs the full local stack (agent-server + automation backend via
+</pre></details></section><section id="f2"><h3><a href="https://github.com/smolpaws/OpenHands/blob/c5f86b2fbbb4efeeb850ce61206a8f3750c63bd4/src/components/features/alerts/alert-banner.tsx">src/components/features/alerts/alert-banner.tsx</a></h3><p>Mechanical base-color utility rename; the runtime color variable is unchanged.</p><details><summary>Diff · +2/−2</summary><pre>diff --git a/src/components/features/alerts/alert-banner.tsx b/src/components/features/alerts/alert-banner.tsx
+index 0c1a5e5..4d2e113 100644
+--- a/src/components/features/alerts/alert-banner.tsx
++++ b/src/components/features/alerts/alert-banner.tsx
+@@ -116,7 +116,7 @@ export function AlertBanner({
+     &lt;div
+       data-testid=&quot;alert-banner&quot;
+       className={cn(
+-        &quot;bg-base border border-primary text-contrast p-4 rounded&quot;,
++        &quot;bg-canvas-base border border-primary text-contrast p-4 rounded&quot;,
+         &quot;flex flex-row items-center justify-between m-1&quot;,
+         currentPath === &quot;/&quot; &amp;&amp; &quot;mt-3 mr-3&quot;,
+       )}
+@@ -133,7 +133,7 @@ export function AlertBanner({
+         data-testid=&quot;dismiss-button&quot;
+         onClick={() =&gt; setDismissedAt(updatedAt)}
+         className={cn(
+-          &quot;bg-base rounded-full w-5 h-5 flex items-center justify-center cursor-pointer&quot;,
++          &quot;bg-canvas-base rounded-full w-5 h-5 flex items-center justify-center cursor-pointer&quot;,
+         )}
+       &gt;
+         &lt;CloseIcon /&gt;
+</pre></details></section><section id="f3"><h3><a href="https://github.com/smolpaws/OpenHands/blob/c5f86b2fbbb4efeeb850ce61206a8f3750c63bd4/src/components/features/backends/api-key-entry-screen.tsx">src/components/features/backends/api-key-entry-screen.tsx</a></h3><p>Mechanical base-color utility rename; the runtime color variable is unchanged.</p><details><summary>Diff · +1/−1</summary><pre>diff --git a/src/components/features/backends/api-key-entry-screen.tsx b/src/components/features/backends/api-key-entry-screen.tsx
+index c6c0cc7..cc346fb 100644
+--- a/src/components/features/backends/api-key-entry-screen.tsx
++++ b/src/components/features/backends/api-key-entry-screen.tsx
+@@ -83,7 +83,7 @@ export default function ApiKeyEntryScreen() {
+   return (
+     &lt;div
+       data-testid=&quot;api-key-entry-screen&quot;
+-      className=&quot;flex min-h-screen items-center justify-center bg-base px-6&quot;
++      className=&quot;flex min-h-screen items-center justify-center bg-canvas-base px-6&quot;
+     &gt;
+       &lt;div
+         className={cn(
+</pre></details></section><section id="f4"><h3><a href="https://github.com/smolpaws/OpenHands/blob/c5f86b2fbbb4efeeb850ce61206a8f3750c63bd4/src/components/features/chat/components/chat-input-field.tsx">src/components/features/chat/components/chat-input-field.tsx</a></h3><p>Retain fixed 16px inputs and explain their behavior under an embedding host’s root font size.</p><details><summary>Diff · +1/−1</summary><pre>diff --git a/src/components/features/chat/components/chat-input-field.tsx b/src/components/features/chat/components/chat-input-field.tsx
+index c427434..6099971 100644
+--- a/src/components/features/chat/components/chat-input-field.tsx
++++ b/src/components/features/chat/components/chat-input-field.tsx
+@@ -45,7 +45,7 @@ export function ChatInputField({
+       className=&quot;box-border content-stretch flex flex-row items-center justify-start min-h-6 p-0 relative shrink-0 flex-1&quot;
+       data-name=&quot;Text &amp; caret&quot;
+     &gt;
+-      {/* `text-base` is a color utility in this theme (--color-base), not 16px. */}
++      {/* Keep a fixed 16px input size; text-base scales with the host root font size. */}
+       {/* eslint-disable-next-line shadcn/no-arbitrary-values */}
+       &lt;div className=&quot;basis-0 flex flex-col font-normal grow justify-center leading-[0] min-h-px min-w-px overflow-ellipsis overflow-hidden relative shrink-0 text-text-tertiary text-[16px] text-left&quot;&gt;
+         &lt;div
+</pre></details></section><section id="f5"><h3><a href="https://github.com/smolpaws/OpenHands/blob/c5f86b2fbbb4efeeb850ce61206a8f3750c63bd4/src/components/features/conversation-panel/conversation-status-dot.tsx">src/components/features/conversation-panel/conversation-status-dot.tsx</a></h3><p>Mechanical base-color utility rename; the runtime color variable is unchanged.</p><details><summary>Diff · +1/−1</summary><pre>diff --git a/src/components/features/conversation-panel/conversation-status-dot.tsx b/src/components/features/conversation-panel/conversation-status-dot.tsx
+index 42aa8f7..a709cc6 100644
+--- a/src/components/features/conversation-panel/conversation-status-dot.tsx
++++ b/src/components/features/conversation-panel/conversation-status-dot.tsx
+@@ -158,7 +158,7 @@ export function ConversationStatusDot({
+       content={label}
+       placement=&quot;right&quot;
+       showArrow
+-      tooltipClassName=&quot;bg-base text-contrast text-xs shadow-lg&quot;
++      tooltipClassName=&quot;bg-canvas-base text-contrast text-xs shadow-lg&quot;
+     &gt;
+       {dot}
+     &lt;/StyledTooltip&gt;
+</pre></details></section><section id="f6"><h3><a href="https://github.com/smolpaws/OpenHands/blob/c5f86b2fbbb4efeeb850ce61206a8f3750c63bd4/src/components/features/conversation-panel/hook-matcher-content.tsx">src/components/features/conversation-panel/hook-matcher-content.tsx</a></h3><p>Mechanical base-color utility rename; the runtime color variable is unchanged.</p><details><summary>Diff · +1/−1</summary><pre>diff --git a/src/components/features/conversation-panel/hook-matcher-content.tsx b/src/components/features/conversation-panel/hook-matcher-content.tsx
+index 3c95f3d..94877f5 100644
+--- a/src/components/features/conversation-panel/hook-matcher-content.tsx
++++ b/src/components/features/conversation-panel/hook-matcher-content.tsx
+@@ -37,7 +37,7 @@ export function HookMatcherContent({ matcher }: HookMatcherContentProps) {
+               borderRadius=&quot;medium&quot;
+               maxHeight=&quot;small&quot;
+               overflow=&quot;auto&quot;
+-              className=&quot;border border-border bg-base text-text-tertiary&quot;
++              className=&quot;border border-border bg-canvas-base text-text-tertiary&quot;
+             &gt;
+               {hook.command}
+             &lt;/Pre&gt;
+</pre></details></section><section id="f7"><h3><a href="https://github.com/smolpaws/OpenHands/blob/c5f86b2fbbb4efeeb850ce61206a8f3750c63bd4/src/components/features/conversation-panel/skill-content.tsx">src/components/features/conversation-panel/skill-content.tsx</a></h3><p>Mechanical base-color utility rename; the runtime color variable is unchanged.</p><details><summary>Diff · +1/−1</summary><pre>diff --git a/src/components/features/conversation-panel/skill-content.tsx b/src/components/features/conversation-panel/skill-content.tsx
+index 57ecb4c..00bccef 100644
+--- a/src/components/features/conversation-panel/skill-content.tsx
++++ b/src/components/features/conversation-panel/skill-content.tsx
+@@ -23,7 +23,7 @@ export function SkillContent({ content }: SkillContentProps) {
+         borderRadius=&quot;medium&quot;
+         maxHeight=&quot;small&quot;
+         overflow=&quot;auto&quot;
+-        className=&quot;mt-2 border border-border bg-base text-text-tertiary&quot;
++        className=&quot;mt-2 border border-border bg-canvas-base text-text-tertiary&quot;
+       &gt;
+         {content || t(I18nKey.SKILLS_MODAL$NO_CONTENT)}
+       &lt;/Pre&gt;
+</pre></details></section><section id="f8"><h3><a href="https://github.com/smolpaws/OpenHands/blob/c5f86b2fbbb4efeeb850ce61206a8f3750c63bd4/src/components/features/conversation-panel/system-message-modal/tool-parameters.tsx">src/components/features/conversation-panel/system-message-modal/tool-parameters.tsx</a></h3><p>Mechanical base-color utility rename; the runtime color variable is unchanged.</p><details><summary>Diff · +1/−1</summary><pre>diff --git a/src/components/features/conversation-panel/system-message-modal/tool-parameters.tsx b/src/components/features/conversation-panel/system-message-modal/tool-parameters.tsx
+index a732361..4c81348 100644
+--- a/src/components/features/conversation-panel/system-message-modal/tool-parameters.tsx
++++ b/src/components/features/conversation-panel/system-message-modal/tool-parameters.tsx
+@@ -16,7 +16,7 @@ export function ToolParameters({ parameters }: ToolParametersProps) {
+       &lt;Typography.Text className=&quot;text-sm font-semibold text-text-tertiary&quot;&gt;
+         {t(I18nKey.SYSTEM_MESSAGE_MODAL$PARAMETERS)}
+       &lt;/Typography.Text&gt;
+-      &lt;div className=&quot;text-sm mt-2 p-3 bg-base rounded-md overflow-auto text-text-tertiary max-h-100 border border-border&quot;&gt;
++      &lt;div className=&quot;text-sm mt-2 p-3 bg-canvas-base rounded-md overflow-auto text-text-tertiary max-h-100 border border-border&quot;&gt;
+         &lt;ReactJsonView name={false} src={parameters} theme={JSON_VIEW_THEME} /&gt;
+       &lt;/div&gt;
+     &lt;/div&gt;
+</pre></details></section><section id="f9"><h3><a href="https://github.com/smolpaws/OpenHands/blob/c5f86b2fbbb4efeeb850ce61206a8f3750c63bd4/src/components/features/conversation/conversation-main/conversation-main.tsx">src/components/features/conversation/conversation-main/conversation-main.tsx</a></h3><p>Mechanical base-color utility rename; the runtime color variable is unchanged.</p><details><summary>Diff · +1/−1</summary><pre>diff --git a/src/components/features/conversation/conversation-main/conversation-main.tsx b/src/components/features/conversation/conversation-main/conversation-main.tsx
+index 24562a6..ca9f736 100644
+--- a/src/components/features/conversation/conversation-main/conversation-main.tsx
++++ b/src/components/features/conversation/conversation-main/conversation-main.tsx
+@@ -61,7 +61,7 @@ export function ConversationMain() {
+             chat input doesn&#x27;t slam the floor. */}
+         &lt;div
+           className={cn(
+-            &quot;flex flex-col bg-base overflow-hidden&quot;,
++            &quot;flex flex-col bg-canvas-base overflow-hidden&quot;,
+             isMobile
+               ? &quot;flex-1&quot;
+               : cn(
+</pre></details></section><section id="f10"><h3><a href="https://github.com/smolpaws/OpenHands/blob/c5f86b2fbbb4efeeb850ce61206a8f3750c63bd4/src/components/features/diff-viewer/file-diff-viewer.tsx">src/components/features/diff-viewer/file-diff-viewer.tsx</a></h3><p>Mechanical base-color utility rename; the runtime color variable is unchanged.</p><details><summary>Diff · +2/−2</summary><pre>diff --git a/src/components/features/diff-viewer/file-diff-viewer.tsx b/src/components/features/diff-viewer/file-diff-viewer.tsx
+index 3c28135..8271b5e 100644
+--- a/src/components/features/diff-viewer/file-diff-viewer.tsx
++++ b/src/components/features/diff-viewer/file-diff-viewer.tsx
+@@ -311,7 +311,7 @@ export function FileDiffViewer({
+       return (
+         &lt;div
+           className={cn(
+-            &quot;w-full border-b border-border overflow-auto p-4 bg-base prose max-w-none&quot;,
++            &quot;w-full border-b border-border overflow-auto p-4 bg-canvas-base prose max-w-none&quot;,
+             !isLightTheme &amp;&amp; &quot;prose-invert&quot;,
+           )}
+           data-testid=&quot;markdown-preview&quot;
+@@ -404,7 +404,7 @@ export function FileDiffViewer({
+         {isDeleted &amp;&amp; !commit ? (
+           &lt;div
+             data-testid=&quot;file-deleted-message&quot;
+-            className=&quot;w-full border-b border-border p-4 bg-base text-text-dim text-sm&quot;
++            className=&quot;w-full border-b border-border p-4 bg-canvas-base text-text-dim text-sm&quot;
+           &gt;
+             {t(I18nKey.DIFF_VIEWER$FILE_DELETED)}
+           &lt;/div&gt;
+</pre></details></section><section id="f11"><h3><a href="https://github.com/smolpaws/OpenHands/blob/c5f86b2fbbb4efeeb850ce61206a8f3750c63bd4/src/components/features/onboarding/steps/say-hello-step.tsx">src/components/features/onboarding/steps/say-hello-step.tsx</a></h3><p>Retain fixed 16px inputs and explain their behavior under an embedding host’s root font size.</p><details><summary>Diff · +1/−1</summary><pre>diff --git a/src/components/features/onboarding/steps/say-hello-step.tsx b/src/components/features/onboarding/steps/say-hello-step.tsx
+index 765aa11..754592a 100644
+--- a/src/components/features/onboarding/steps/say-hello-step.tsx
++++ b/src/components/features/onboarding/steps/say-hello-step.tsx
+@@ -107,7 +107,7 @@ export function SayHelloStep({
+               }}
+               placeholder={defaultMessage}
+               disabled={isLaunching}
+-              // `text-base` is a color utility in this theme (--color-base), not 16px.
++              // Keep a fixed 16px input size; text-base scales with the host root font size.
+               // eslint-disable-next-line shadcn/no-arbitrary-values
+               className=&quot;min-h-5 w-full flex-1 bg-transparent text-[16px] font-normal leading-5 text-contrast outline-none placeholder:text-text-tertiary disabled:cursor-not-allowed disabled:opacity-50&quot;
+             /&gt;
+</pre></details></section><section id="f12"><h3><a href="https://github.com/smolpaws/OpenHands/blob/c5f86b2fbbb4efeeb850ce61206a8f3750c63bd4/src/components/features/settings/settings-switch.tsx">src/components/features/settings/settings-switch.tsx</a></h3><p>Use the existing text-on-primary color alias; preserve the original resolved color.</p><details><summary>Diff · +1/−1</summary><pre>diff --git a/src/components/features/settings/settings-switch.tsx b/src/components/features/settings/settings-switch.tsx
+index a3b3ea4..93e6369 100644
+--- a/src/components/features/settings/settings-switch.tsx
++++ b/src/components/features/settings/settings-switch.tsx
+@@ -57,7 +57,7 @@ export function SettingsSwitch({
+       &lt;div className=&quot;flex items-center gap-1&quot;&gt;
+         &lt;span className=&quot;text-sm&quot;&gt;{children}&lt;/span&gt;
+         {isBeta &amp;&amp; (
+-          &lt;span className=&quot;text-[11px] leading-4 text-base font-[500] tracking-tighter bg-primary px-1 rounded-full&quot;&gt;
++          &lt;span className=&quot;text-[11px] leading-4 text-on-primary font-[500] tracking-tighter bg-primary px-1 rounded-full&quot;&gt;
+             {t(I18nKey.BADGE$BETA)}
+           &lt;/span&gt;
+         )}
+</pre></details></section><section id="f13"><h3><a href="https://github.com/smolpaws/OpenHands/blob/c5f86b2fbbb4efeeb850ce61206a8f3750c63bd4/src/components/features/settings/upgrade-banner.tsx">src/components/features/settings/upgrade-banner.tsx</a></h3><p>Use the existing text-on-primary color alias; preserve the original resolved color.</p><details><summary>Diff · +1/−1</summary><pre>diff --git a/src/components/features/settings/upgrade-banner.tsx b/src/components/features/settings/upgrade-banner.tsx
+index 475ee6a..2e01263 100644
+--- a/src/components/features/settings/upgrade-banner.tsx
++++ b/src/components/features/settings/upgrade-banner.tsx
+@@ -18,7 +18,7 @@ export function UpgradeBanner({
+   return (
+     &lt;div
+       className={cn(
+-        &quot;bg-primary text-base flex items-center justify-center gap-3 p-2 w-full rounded&quot;,
++        &quot;bg-primary text-on-primary flex items-center justify-center gap-3 p-2 w-full rounded&quot;,
+         className,
+       )}
+       data-testid=&quot;upgrade-banner&quot;
+</pre></details></section><section id="f14"><h3><a href="https://github.com/smolpaws/OpenHands/blob/c5f86b2fbbb4efeeb850ce61206a8f3750c63bd4/src/components/features/sidebar/sidebar.tsx">src/components/features/sidebar/sidebar.tsx</a></h3><p>Mechanical base-color utility rename; the runtime color variable is unchanged.</p><details><summary>Diff · +2/−2</summary><pre>diff --git a/src/components/features/sidebar/sidebar.tsx b/src/components/features/sidebar/sidebar.tsx
+index 9d0c88b..ed82470 100644
+--- a/src/components/features/sidebar/sidebar.tsx
++++ b/src/components/features/sidebar/sidebar.tsx
+@@ -218,7 +218,7 @@ export function Sidebar() {
+           setCollapsedRailHovered(false);
+         }}
+         className={cn(
+-          &quot;max-md:hidden flex bg-base flex-col min-h-0 transition-[width,min-width] duration-200&quot;,
++          &quot;max-md:hidden flex bg-canvas-base flex-col min-h-0 transition-[width,min-width] duration-200&quot;,
+           &quot;md:border-r md:border-border md:h-full&quot;,
+           collapsed
+             ? &quot;md:w-15 md:min-w-15 md:px-2.5&quot;
+@@ -252,7 +252,7 @@ export function Sidebar() {
+             data-testid=&quot;sidebar-mobile-drawer&quot;
+             aria-hidden={!mobileDrawerVisible}
+             className={cn(
+-              &quot;fixed inset-y-0 left-0 z-50 flex min-h-0 w-[min(300px,85vw)] flex-col bg-base&quot;,
++              &quot;fixed inset-y-0 left-0 z-50 flex min-h-0 w-[min(300px,85vw)] flex-col bg-canvas-base&quot;,
+               &quot;border-r border-border pb-2 pl-2.5 pr-0 md:hidden&quot;,
+               &quot;transition-transform ease-in-out motion-reduce:transition-none&quot;,
+               mobileDrawerVisible ? &quot;translate-x-0&quot; : &quot;-translate-x-full&quot;,
+</pre></details></section><section id="f15"><h3><a href="https://github.com/smolpaws/OpenHands/blob/c5f86b2fbbb4efeeb850ce61206a8f3750c63bd4/src/components/shared/action-tooltip.tsx">src/components/shared/action-tooltip.tsx</a></h3><p>Use text-canvas-base for the reject action so cn preserves its independent text-sm size.</p><details><summary>Diff · +1/−1</summary><pre>diff --git a/src/components/shared/action-tooltip.tsx b/src/components/shared/action-tooltip.tsx
+index e380480..820b12a 100644
+--- a/src/components/shared/action-tooltip.tsx
++++ b/src/components/shared/action-tooltip.tsx
+@@ -35,7 +35,7 @@ export function ActionTooltip({ type, onClick }: ActionTooltipProps) {
+           &quot;rounded px-2 h-6.5 text-sm font-normal leading-5 cursor-pointer hover:opacity-80&quot;,
+           type === &quot;confirm&quot;
+             ? &quot;bg-tertiary text-contrast&quot;
+-            : &quot;bg-contrast text-base&quot;,
++            : &quot;bg-contrast text-canvas-base&quot;,
+         )}
+         onClick={onClick}
+       &gt;
+</pre></details></section><section id="f16"><h3><a href="https://github.com/smolpaws/OpenHands/blob/c5f86b2fbbb4efeeb850ce61206a8f3750c63bd4/src/root.tsx">src/root.tsx</a></h3><p>Mechanical base-color utility rename; the runtime color variable is unchanged.</p><details><summary>Diff · +5/−5</summary><pre>diff --git a/src/root.tsx b/src/root.tsx
+index 4ad349d..800f6d4 100644
+--- a/src/root.tsx
++++ b/src/root.tsx
+@@ -118,9 +118,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
+ 
+ function AgentServerBootstrapLoading() {
+   return (
+-    &lt;main className=&quot;min-h-screen bg-base px-6 py-10 text-contrast&quot;&gt;
++    &lt;main className=&quot;min-h-screen bg-canvas-base px-6 py-10 text-contrast&quot;&gt;
+       &lt;div className=&quot;mx-auto flex min-h-screen max-w-6xl items-center justify-center&quot;&gt;
+-        &lt;div className=&quot;rounded-3xl border border-contrast/10 bg-base/80 px-8 py-10 shadow-2xl&quot;&gt;
++        &lt;div className=&quot;rounded-3xl border border-contrast/10 bg-canvas-base/80 px-8 py-10 shadow-2xl&quot;&gt;
+           &lt;LoadingSpinner size=&quot;large&quot; /&gt;
+         &lt;/div&gt;
+       &lt;/div&gt;
+@@ -153,7 +153,7 @@ function MissingAgentServerScreen() {
+   return (
+     &lt;main
+       data-testid=&quot;agent-server-onboarding-screen&quot;
+-      className=&quot;min-h-screen bg-base&quot;
++      className=&quot;min-h-screen bg-canvas-base&quot;
+     &gt;
+       &lt;React.Suspense fallback={null}&gt;
+         &lt;ManageBackendsModal onClose={handleClose} recoveryMode /&gt;
+@@ -189,7 +189,7 @@ function FirstRunOnboardingScreen({ onClose }: { onClose: () =&gt; void }) {
+     return (
+       &lt;main
+         data-testid=&quot;first-run-onboarding-screen&quot;
+-        className=&quot;min-h-screen bg-base&quot;
++        className=&quot;min-h-screen bg-canvas-base&quot;
+       &gt;
+         &lt;React.Suspense fallback={&lt;AgentServerBootstrapLoading /&gt;}&gt;
+           &lt;BackendFormModal
+@@ -206,7 +206,7 @@ function FirstRunOnboardingScreen({ onClose }: { onClose: () =&gt; void }) {
+   return (
+     &lt;main
+       data-testid=&quot;first-run-onboarding-screen&quot;
+-      className=&quot;min-h-screen bg-base&quot;
++      className=&quot;min-h-screen bg-canvas-base&quot;
+     &gt;
+       &lt;NavigationProvider value={navigationValue}&gt;
+         &lt;React.Suspense fallback={&lt;AgentServerBootstrapLoading /&gt;}&gt;
+</pre></details></section><section id="f17"><h3><a href="https://github.com/smolpaws/OpenHands/blob/c5f86b2fbbb4efeeb850ce61206a8f3750c63bd4/src/routes/device-verify.tsx">src/routes/device-verify.tsx</a></h3><p>Mechanical base-color utility rename; the runtime color variable is unchanged.</p><details><summary>Diff · +1/−1</summary><pre>diff --git a/src/routes/device-verify.tsx b/src/routes/device-verify.tsx
+index cffb468..cdbd197 100644
+--- a/src/routes/device-verify.tsx
++++ b/src/routes/device-verify.tsx
+@@ -148,7 +148,7 @@ export default function DeviceVerify() {
+             &lt;H1 className=&quot;text-2xl mb-4 text-center&quot;&gt;
+               {t(I18nKey.DEVICE$AUTHORIZATION_REQUEST)}
+             &lt;/H1&gt;
+-            &lt;div className=&quot;mb-6 p-4 bg-base rounded-lg border border-border-subtle&quot;&gt;
++            &lt;div className=&quot;mb-6 p-4 bg-canvas-base rounded-lg border border-border-subtle&quot;&gt;
+               &lt;p className=&quot;text-xs text-text-subtle mb-2 text-center uppercase tracking-wider&quot;&gt;
+                 {t(I18nKey.DEVICE$CODE_LABEL)}
+               &lt;/p&gt;
+</pre></details></section><section id="f18"><h3><a href="https://github.com/smolpaws/OpenHands/blob/c5f86b2fbbb4efeeb850ce61206a8f3750c63bd4/src/routes/root-layout.tsx">src/routes/root-layout.tsx</a></h3><p>Mechanical base-color utility rename; the runtime color variable is unchanged.</p><details><summary>Diff · +2/−2</summary><pre>diff --git a/src/routes/root-layout.tsx b/src/routes/root-layout.tsx
+index 60c0fbe..b35a4a5 100644
+--- a/src/routes/root-layout.tsx
++++ b/src/routes/root-layout.tsx
+@@ -96,7 +96,7 @@ export default function MainApp() {
+ 
+   if (config.isLoading) {
+     return (
+-      &lt;div className=&quot;min-h-screen flex items-center justify-center bg-base&quot;&gt;
++      &lt;div className=&quot;min-h-screen flex items-center justify-center bg-canvas-base&quot;&gt;
+         &lt;LoadingSpinner size=&quot;large&quot; /&gt;
+       &lt;/div&gt;
+     );
+@@ -115,7 +115,7 @@ export default function MainApp() {
+         &lt;SidebarMobileNavProvider&gt;
+           &lt;div
+             data-testid=&quot;root-layout&quot;
+-            className=&quot;h-screen lg:min-w-5xl flex flex-col md:flex-row bg-base overflow-hidden p-0&quot;
++            className=&quot;h-screen lg:min-w-5xl flex flex-col md:flex-row bg-canvas-base overflow-hidden p-0&quot;
+           &gt;
+             &lt;title&gt;{appTitle}&lt;/title&gt;
+             &lt;Sidebar /&gt;
+</pre></details></section><section id="f19"><h3><a href="https://github.com/smolpaws/OpenHands/blob/c5f86b2fbbb4efeeb850ce61206a8f3750c63bd4/src/routes/shared-conversation.tsx">src/routes/shared-conversation.tsx</a></h3><p>Mechanical base-color utility rename; the runtime color variable is unchanged.</p><details><summary>Diff · +3/−3</summary><pre>diff --git a/src/routes/shared-conversation.tsx b/src/routes/shared-conversation.tsx
+index bd59a18..b5172ae 100644
+--- a/src/routes/shared-conversation.tsx
++++ b/src/routes/shared-conversation.tsx
+@@ -60,7 +60,7 @@ export default function SharedConversation() {
+ 
+   if (isLoading) {
+     return (
+-      &lt;div className=&quot;flex items-center justify-center h-screen bg-base&quot;&gt;
++      &lt;div className=&quot;flex items-center justify-center h-screen bg-canvas-base&quot;&gt;
+         &lt;LoadingSpinner size=&quot;large&quot; /&gt;
+       &lt;/div&gt;
+     );
+@@ -68,14 +68,14 @@ export default function SharedConversation() {
+ 
+   if (error || !conversation) {
+     return (
+-      &lt;div className=&quot;flex items-center justify-center h-screen bg-base&quot;&gt;
++      &lt;div className=&quot;flex items-center justify-center h-screen bg-canvas-base&quot;&gt;
+         &lt;div className=&quot;text-contrast&quot;&gt;{t(I18nKey.CONVERSATION$NOT_FOUND)}&lt;/div&gt;
+       &lt;/div&gt;
+     );
+   }
+ 
+   return (
+-    &lt;div className=&quot;h-screen bg-base text-contrast flex flex-col&quot;&gt;
++    &lt;div className=&quot;h-screen bg-canvas-base text-contrast flex flex-col&quot;&gt;
+       {/* Header with logo, conversation title and branch info */}
+       &lt;div className=&quot;border-b border-border-subtle p-4 flex-shrink-0&quot;&gt;
+         &lt;div className=&quot;max-w-4xl mx-auto flex items-start gap-4&quot;&gt;
+</pre></details></section><section id="f20"><h3><a href="https://github.com/smolpaws/OpenHands/blob/c5f86b2fbbb4efeeb850ce61206a8f3750c63bd4/src/tailwind.css">src/tailwind.css</a></h3><p>Rename the Tailwind color namespace so text-base once again generates font-size and line-height.</p><details><summary>Diff · +2/−2</summary><pre>diff --git a/src/tailwind.css b/src/tailwind.css
+index ce6c9a6..4afc8db 100644
+--- a/src/tailwind.css
++++ b/src/tailwind.css
+@@ -12,8 +12,8 @@
+ @theme inline {
+   --color-primary: var(--oh-color-primary);
+   --color-logo: var(--oh-color-logo);
+-  --color-base: var(--oh-color-base);
+-  /* Avoid text-base: tailwind-merge interprets it as a font size. */
++  --color-canvas-base: var(--oh-color-base);
++  /* Keep color names distinct from font sizes such as text-base. */
+   --color-on-primary: var(--oh-color-base);
+   --color-base-secondary: var(--oh-color-base-secondary);
+   --color-danger: var(--oh-color-danger);
+</pre></details></section><section id="f21"><h3><a href="https://github.com/smolpaws/OpenHands/blob/c5f86b2fbbb4efeeb850ce61206a8f3750c63bd4/src/ui/pre.tsx">src/ui/pre.tsx</a></h3><p>Mechanical base-color utility rename; the runtime color variable is unchanged.</p><details><summary>Diff · +1/−1</summary><pre>diff --git a/src/ui/pre.tsx b/src/ui/pre.tsx
+index 9fe3e2a..58f9e34 100644
+--- a/src/ui/pre.tsx
++++ b/src/ui/pre.tsx
+@@ -17,7 +17,7 @@ const preVariants = cva(&quot;whitespace-pre-wrap&quot;, {
+     },
+     background: {
+       default: &quot;&quot;,
+-      dark: &quot;bg-base&quot;,
++      dark: &quot;bg-canvas-base&quot;,
+     },
+     textColor: {
+       default: &quot;&quot;,
+</pre></details></section>
+<p><small>Base a3cfe98267c52937dc4e91a55644a6131c6c01bc · Code head c5f86b2fbbb4efeeb850ce61206a8f3750c63bd4. This self-contained review aid is temporary; remove .pr before merging the fork PR.</small></p></main></html>

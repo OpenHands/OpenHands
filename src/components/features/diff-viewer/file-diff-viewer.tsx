@@ -311,7 +311,7 @@ export function FileDiffViewer({
       return (
         <div
           className={cn(
-            "w-full border-b border-border overflow-auto p-4 bg-base prose max-w-none",
+            "w-full border-b border-border overflow-auto p-4 bg-canvas-base prose max-w-none",
             !isLightTheme && "prose-invert",
           )}
           data-testid="markdown-preview"
@@ -404,7 +404,7 @@ export function FileDiffViewer({
         {isDeleted && !commit ? (
           <div
             data-testid="file-deleted-message"
-            className="w-full border-b border-border p-4 bg-base text-text-dim text-sm"
+            className="w-full border-b border-border p-4 bg-canvas-base text-text-dim text-sm"
           >
             {t(I18nKey.DIFF_VIEWER$FILE_DELETED)}
           </div>
