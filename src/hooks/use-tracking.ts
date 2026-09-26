@@ -18,6 +18,7 @@ import { setTelemetryBackendContext, trackEvent } from "#/services/telemetry";
  */
 export type OnboardingLinkId =
   | "configure_llm"
+  | "configure_subscription_agent"
   | "start_conversation"
   | "schedule_task"
   | "customize_agent"

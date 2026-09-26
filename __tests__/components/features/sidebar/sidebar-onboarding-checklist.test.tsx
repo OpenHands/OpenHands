@@ -35,6 +35,11 @@ const mockUseAutomations = vi.fn();
 const mockUseSettings = vi.fn();
 const mockUseLlmConfigured = vi.fn();
 const mockUseLlmProfiles = vi.fn();
+const mockUseSearchSecrets = vi.fn();
+
+vi.mock("#/hooks/query/use-get-secrets", () => ({
+  useSearchSecrets: () => mockUseSearchSecrets(),
+}));
 
 vi.mock("#/hooks/query/use-paginated-conversations", () => ({
   usePaginatedConversations: () => mockUsePaginatedConversations(),
@@ -120,6 +125,7 @@ describe("SidebarOnboardingChecklist", () => {
       data: { active_profile: null, profiles: [] },
       isLoading: false,
     });
+    mockUseSearchSecrets.mockReturnValue({ data: [] });
   });
 
   it("renders setup items including LLM keys, agent profiles, schedule a task, and Slack", () => {
@@ -131,6 +137,11 @@ describe("SidebarOnboardingChecklist", () => {
     expect(
       screen.getByTestId("sidebar-onboarding-checklist-item-configure-llm"),
     ).toHaveAttribute("href", "/settings/llm");
+    expect(
+      screen.getByTestId(
+        "sidebar-onboarding-checklist-item-configure-subscription-agent",
+      ),
+    ).toHaveAttribute("href", "/settings/agents");
     expect(
       screen.getByTestId("sidebar-onboarding-checklist-item-connect-mcp"),
     ).toHaveAttribute("href", "/mcp");
@@ -170,6 +181,28 @@ describe("SidebarOnboardingChecklist", () => {
     expect(readSidebarOnboardingChecklistSlackJoined()).toBe(true);
     expect(
       screen.getByText(I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_JOIN_SLACK),
+    ).toHaveClass("line-through");
+  });
+
+  it("does not complete subscription setup merely from visiting agent settings", () => {
+    window.localStorage.setItem(
+      SIDEBAR_ONBOARDING_CHECKLIST_CUSTOMIZE_EXPLORED_STORAGE_KEY,
+      "true",
+    );
+    renderChecklist();
+    expect(
+      screen.getByText(I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_CONFIGURE_SUBSCRIPTION_AGENT),
+    ).not.toHaveClass("line-through");
+    expect(
+      screen.getByText(I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_CUSTOMIZE),
+    ).toHaveClass("line-through");
+  });
+
+  it("completes subscription setup when Codex auth is saved", () => {
+    mockUseSearchSecrets.mockReturnValue({ data: [{ name: "CODEX_AUTH_JSON" }] });
+    renderChecklist();
+    expect(
+      screen.getByText(I18nKey.SIDEBAR$ONBOARDING_CHECKLIST_CONFIGURE_SUBSCRIPTION_AGENT),
     ).toHaveClass("line-through");
   });
 

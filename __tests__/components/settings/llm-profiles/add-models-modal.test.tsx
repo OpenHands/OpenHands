@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AddModelsModal } from "#/components/features/settings/llm-profiles/add-models-modal";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
 import ConfigService from "#/api/config-service/config-service.api";
+import type { LLMModelPage } from "#/api/config-service/config-service.types";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 vi.mock("react-i18next", () => ({
@@ -78,11 +79,29 @@ const httpError = (status: number, detail?: string) => {
   });
 };
 
-const MODELS = {
+const MODELS: LLMModelPage = {
   items: [
-    { provider: "openhands", name: "trinity-large-thinking", verified: true },
-    { provider: "openhands", name: "deepseek-v4-flash", verified: true },
-    { provider: "openhands", name: "unverified-model", verified: false },
+    {
+      provider: "openhands",
+      name: "trinity-large-thinking",
+      verified: true,
+      free: false,
+      default: false,
+    },
+    {
+      provider: "openhands",
+      name: "deepseek-v4-flash",
+      verified: true,
+      free: false,
+      default: false,
+    },
+    {
+      provider: "openhands",
+      name: "unverified-model",
+      verified: false,
+      free: false,
+      default: false,
+    },
   ],
   next_page_id: null,
 };
@@ -177,7 +196,13 @@ describe("AddModelsModal", () => {
     // and the filter is hiding them sends the user looking for the wrong thing.
     vi.mocked(ConfigService.searchModels).mockResolvedValue({
       items: [
-        { provider: "openhands", name: "unverified-only", verified: false },
+        {
+          provider: "openhands",
+          name: "unverified-only",
+          verified: false,
+          free: false,
+          default: false,
+        },
       ],
       next_page_id: null,
     });
@@ -457,9 +482,7 @@ describe("AddModelsModal", () => {
 
     setOpen(false);
     await waitFor(() =>
-      expect(
-        screen.queryByTestId("add-models-modal"),
-      ).not.toBeInTheDocument(),
+      expect(screen.queryByTestId("add-models-modal")).not.toBeInTheDocument(),
     );
     await queryClient.refetchQueries({
       queryKey: ["config", "models", "openhands"],
@@ -468,9 +491,7 @@ describe("AddModelsModal", () => {
     setOpen(true);
     await screen.findByTestId("add-models-modal");
     expect(screen.getByTestId("add-models-provider")).toHaveValue("");
-    expect(
-      screen.queryAllByTestId(/^add-models-row-/),
-    ).toHaveLength(0);
+    expect(screen.queryAllByTestId(/^add-models-row-/)).toHaveLength(0);
   });
 
   it("starts a fresh session when the modal is reopened", async () => {
