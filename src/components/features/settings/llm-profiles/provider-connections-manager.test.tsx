@@ -26,6 +26,16 @@ vi.mock("#/hooks/query/use-search-providers", () => ({
   }),
 }));
 
+// The add-models modal hydrates its list through useProviderModels, which
+// pages ConfigService.searchModels; stub it to an empty list so the modal
+// renders its empty state without hitting a backend. The returned array is
+// module-level so its reference is stable across renders — the modal's row
+// effect keys off `data`, so a fresh array each render would loop forever.
+const STUB_MODELS: unknown[] = [];
+vi.mock("#/hooks/query/use-provider-models", () => ({
+  useProviderModels: () => ({ data: STUB_MODELS, isLoading: false }),
+}));
+
 const renderWith = (ui: React.ReactElement) => renderWithProviders(ui);
 
 const connection: ProviderConnection = {
@@ -54,6 +64,7 @@ describe("ProviderConnectionsManager", () => {
         connections={[]}
         linkedCountById={{}}
         isLoading={false}
+        existingNames={[]}
         loadError={null}
       />,
     );
@@ -71,6 +82,7 @@ describe("ProviderConnectionsManager", () => {
         connections={[]}
         linkedCountById={{}}
         isLoading={false}
+        existingNames={[]}
         loadError={null}
       />,
     );
@@ -107,6 +119,7 @@ describe("ProviderConnectionsManager", () => {
         connections={[]}
         linkedCountById={{}}
         isLoading={false}
+        existingNames={[]}
         loadError={null}
       />,
     );
@@ -142,6 +155,7 @@ describe("ProviderConnectionsManager", () => {
         connections={[connection]}
         linkedCountById={{ "conn-1": 3 }}
         isLoading={false}
+        existingNames={[]}
         loadError={null}
       />,
     );
@@ -149,6 +163,44 @@ describe("ProviderConnectionsManager", () => {
     expect(screen.getByTestId("provider-connection-row")).toBeInTheDocument();
     expect(screen.getByText("My OpenAI")).toBeInTheDocument();
     expect(screen.getByText("openai")).toBeInTheDocument();
+  });
+
+  it("renders a bulk-add-models button on each connection row", () => {
+    renderWith(
+      <ProviderConnectionsManager
+        connections={[connection]}
+        linkedCountById={{}}
+        isLoading={false}
+        existingNames={[]}
+        loadError={null}
+      />,
+    );
+
+    expect(
+      screen.getByTestId("provider-connection-add-models"),
+    ).toBeInTheDocument();
+  });
+
+  it("opens the add-models modal scoped to the clicked connection", async () => {
+    const user = userEvent.setup();
+    renderWith(
+      <ProviderConnectionsManager
+        connections={[connection]}
+        linkedCountById={{}}
+        isLoading={false}
+        existingNames={["existing"]}
+        loadError={null}
+      />,
+    );
+
+    await user.click(screen.getByTestId("provider-connection-add-models"));
+
+    // The modal summarizes the connection it was launched from — no provider
+    // combobox, because the provider comes from the connection itself.
+    expect(
+      await screen.findByTestId("add-models-connection-summary"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("add-models-provider")).not.toBeInTheDocument();
   });
 
   it("shows supported providers in the edit-connection selector", async () => {
@@ -159,6 +211,7 @@ describe("ProviderConnectionsManager", () => {
         connections={[connection]}
         linkedCountById={{}}
         isLoading={false}
+        existingNames={[]}
         loadError={null}
       />,
     );
@@ -191,6 +244,7 @@ describe("ProviderConnectionsManager", () => {
         connections={[connection]}
         linkedCountById={{ "conn-1": 1 }}
         isLoading={false}
+        existingNames={[]}
         loadError={null}
       />,
     );

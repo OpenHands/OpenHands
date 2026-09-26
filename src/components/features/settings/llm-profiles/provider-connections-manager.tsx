@@ -4,6 +4,7 @@ import { BrandButton } from "#/components/features/settings/brand-button";
 import { ProviderConnectionRow } from "./provider-connection-row";
 import { ProviderConnectionModal } from "./provider-connection-modal";
 import { DeleteProviderConnectionModal } from "./delete-provider-connection-modal";
+import { AddModelsModal } from "./add-models-modal";
 import type { ProviderConnection } from "#/api/provider-connections-service/provider-connections-service.api";
 import { cn } from "#/utils/utils";
 import {
@@ -17,6 +18,8 @@ interface ProviderConnectionsManagerProps {
   connections: ProviderConnection[];
   /** Number of LLM profiles linked to each connection id. */
   linkedCountById: Record<string, number>;
+  /** Existing profile names, so the bulk-add modal can flag conflicts. */
+  existingNames: string[];
   isLoading: boolean;
   loadError: Error | null;
 }
@@ -24,11 +27,13 @@ interface ProviderConnectionsManagerProps {
 /**
  * Manages shared provider connections: a shared API key + optional base URL
  * that LLM profiles reference by id. Rendered only for the local agent-server,
- * which is the only backend exposing the endpoints.
+ * which is the only backend exposing the endpoints. Each connection row carries
+ * its own "add models" action that bulk-creates profiles linked to it.
  */
 export function ProviderConnectionsManager({
   connections,
   linkedCountById,
+  existingNames,
   isLoading,
   loadError,
 }: ProviderConnectionsManagerProps) {
@@ -37,6 +42,8 @@ export function ProviderConnectionsManager({
   const [connectionToEdit, setConnectionToEdit] =
     useState<ProviderConnection | null>(null);
   const [connectionToDelete, setConnectionToDelete] =
+    useState<ProviderConnection | null>(null);
+  const [connectionToAddModels, setConnectionToAddModels] =
     useState<ProviderConnection | null>(null);
 
   const renderBody = () => {
@@ -80,6 +87,7 @@ export function ProviderConnectionsManager({
             key={connection.id}
             connection={connection}
             linkedProfileCount={linkedCountById[connection.id] ?? 0}
+            onAddModels={setConnectionToAddModels}
             onEdit={setConnectionToEdit}
             onDelete={setConnectionToDelete}
           />
@@ -128,6 +136,12 @@ export function ProviderConnectionsManager({
       <DeleteProviderConnectionModal
         connection={connectionToDelete}
         onClose={() => setConnectionToDelete(null)}
+      />
+      <AddModelsModal
+        isOpen={connectionToAddModels !== null}
+        connection={connectionToAddModels}
+        existingNames={existingNames}
+        onClose={() => setConnectionToAddModels(null)}
       />
     </>
   );
