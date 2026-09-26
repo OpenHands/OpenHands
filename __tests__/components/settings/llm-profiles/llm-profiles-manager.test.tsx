@@ -132,6 +132,7 @@ describe("LlmProfilesManager", () => {
     props: {
       onAddProfile?: () => void;
       onEditProfile?: (profile: ProfileInfo) => void;
+      onConfigureOracle?: () => void;
     } = {},
     options: {
       canManage?: boolean;
@@ -214,6 +215,22 @@ describe("LlmProfilesManager", () => {
     await user.click(screen.getByTestId("add-llm-profile"));
 
     expect(handleAddProfile).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls onConfigureOracle from the reserved-profile entry", async () => {
+    const user = userEvent.setup();
+    const handleConfigureOracle = vi.fn();
+    vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
+      profiles: mockProfiles,
+      active_profile: "gpt-4-profile",
+    });
+
+    renderManager({ onConfigureOracle: handleConfigureOracle });
+
+    await screen.findByText("gpt-4-profile");
+    await user.click(screen.getByTestId("configure-oracle-profile"));
+
+    expect(handleConfigureOracle).toHaveBeenCalledTimes(1);
   });
 
   it("hides profile mutation controls from view-only members", async () => {
