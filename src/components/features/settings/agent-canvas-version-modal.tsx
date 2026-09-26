@@ -18,6 +18,7 @@ import DockerIcon from "#/icons/docker.svg?react";
 import NpmIcon from "#/icons/npm.svg?react";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
+import { statusToneBadgeClassName } from "#/utils/status-tone-classes";
 
 const COPY_FEEDBACK_MS = 2000;
 
@@ -121,7 +122,12 @@ export function AgentCanvasVersionModal({
             )}
           </h2>
           {updateAvailable && latestVersion ? (
-            <span className="rounded-full border border-info/30 bg-info/10 px-2 py-0.5 text-xs font-semibold text-info">
+            <span
+              className={cn(
+                "rounded-full border border-info/30 px-2 py-0.5 text-xs font-semibold",
+                statusToneBadgeClassName.info,
+              )}
+            >
               {latestVersion}
             </span>
           ) : null}

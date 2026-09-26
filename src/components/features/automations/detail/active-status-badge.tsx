@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
+import { statusToneBadgeClassName } from "#/utils/status-tone-classes";
 
 interface ActiveStatusBadgeProps {
   active: boolean;
@@ -17,7 +18,7 @@ export function ActiveStatusBadge({ active }: ActiveStatusBadgeProps) {
       className={cn(
         "inline-flex items-center rounded-full px-3 py-1 text-xs font-medium",
         active
-          ? "bg-semantic-success/15 text-semantic-success"
+          ? statusToneBadgeClassName.success
           : "bg-surface-raised text-muted",
       )}
     >

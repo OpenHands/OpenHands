@@ -4,18 +4,18 @@ import {
 } from "#/manifests/automation-insights";
 import type { InterfaceListInsights } from "#/manifests/types";
 import { cn } from "#/utils/utils";
+import { statusToneBadgeClassName } from "#/utils/status-tone-classes";
 
 /**
  * The states and their colors are the host's; the captions come from the
  * manifest's `insights.health` block.
  */
 const HEALTH_STYLES: Record<AutomationHealth, string> = {
-  healthy:
-    "border-semantic-success/50 bg-semantic-success/10 text-semantic-success",
-  failing: "border-semantic-danger/50 bg-semantic-danger/10 text-danger",
+  healthy: cn("border-success/50", statusToneBadgeClassName.success),
+  failing: cn("border-danger/50", statusToneBadgeClassName.danger),
   running: "border-border bg-surface-raised text-muted",
   disabled: "border-border bg-surface-raised text-muted",
-  "never-run": "border-warning/50 bg-warning/10 text-warning",
+  "never-run": cn("border-warning/50", statusToneBadgeClassName.warning),
   unknown: "border-border bg-surface-raised text-muted",
 };
 

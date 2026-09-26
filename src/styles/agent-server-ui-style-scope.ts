@@ -75,6 +75,20 @@ export const AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES = {
   "--oh-status-error": "#FF684E",
   "--oh-link": "var(--cool-grey-100)",
   "--oh-info": "oklch(62.3% 0.214 259.815)",
+  "--oh-success-soft":
+    "color-mix(in srgb, var(--oh-color-success) 10%, transparent)",
+  "--oh-success-soft-foreground":
+    "color-mix(in srgb, var(--oh-color-success) 55%, #ffffff)",
+  "--oh-warning-soft": "color-mix(in srgb, var(--oh-warning) 10%, transparent)",
+  "--oh-warning-soft-foreground":
+    "color-mix(in srgb, var(--oh-warning) 55%, #ffffff)",
+  "--oh-danger-soft":
+    "color-mix(in srgb, var(--oh-color-danger) 10%, transparent)",
+  "--oh-danger-soft-foreground":
+    "color-mix(in srgb, var(--oh-color-danger) 55%, #ffffff)",
+  "--oh-info-soft": "color-mix(in srgb, var(--oh-info) 10%, transparent)",
+  "--oh-info-soft-foreground":
+    "color-mix(in srgb, var(--oh-info) 55%, #ffffff)",
   "--oh-radius": "8px",
   "--oh-field-radius": "8px",
   "--oh-surface-shadow": "none",

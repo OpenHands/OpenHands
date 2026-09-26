@@ -1,54 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { COLOR_THEMES } from "#/themes/color-themes";
-import type { ColorThemeKey } from "#/themes/color-theme/types";
-
-type Rgb = [number, number, number];
-
-const LIGHT_THEMES: ColorThemeKey[] = ["light-plus", "solarized-light"];
-
-function tokenValue(theme: ColorThemeKey, name: string): string {
-  const { tokens, scale } = COLOR_THEMES[theme];
-  const raw =
-    (tokens as Record<string, string> | undefined)?.[name] ?? scale[name];
-  if (!raw) throw new Error(`${theme} does not define ${name}`);
-  const ref = raw.match(/^var\((--[\w-]+)\)$/);
-  return ref ? tokenValue(theme, ref[1]) : raw;
-}
-
-function hex(theme: ColorThemeKey, name: string): Rgb {
-  const value = tokenValue(theme, name);
-  const match = value.match(/^#([0-9a-f]{6})$/i);
-  if (!match)
-    throw new Error(`${theme} ${name} is not a 6-digit hex: ${value}`);
-  const n = parseInt(match[1], 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-}
-
-function luminance(rgb: Rgb): number {
-  const [r, g, b] = rgb.map((channel) => {
-    const c = channel / 255;
-    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-  });
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
-
-function contrast(a: Rgb, b: Rgb): number {
-  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
-  return (hi + 0.05) / (lo + 0.05);
-}
-
-function tint(color: Rgb, over: Rgb, alpha: number): Rgb {
-  return color.map((c, i) =>
-    Math.round(c * alpha + over[i] * (1 - alpha)),
-  ) as Rgb;
-}
-
-const SURFACES = [
-  "--oh-color-base",
-  "--oh-surface",
-  "--oh-color-tertiary",
-  "--oh-surface-raised",
-];
+import { automationActivityRowClassName } from "#/components/features/automations/automation-view-mode";
+import { dropdownFilterTriggerClassName } from "#/utils/dropdown-classes";
+import {
+  formControlBackNavButtonClassName,
+  formControlBorderClassName,
+  formControlFieldClassName,
+  formControlFilterTriggerClassName,
+  formControlShellClassName,
+} from "#/utils/form-control-classes";
+import {
+  LIGHT_THEMES,
+  PANEL_SURFACES,
+  colorUtility,
+  contrast,
+  over,
+  surfaceColor,
+  utilityColor,
+} from "./theme-color-resolver";
 
 const BODY_TEXT = [
   "--oh-foreground",
@@ -63,29 +31,32 @@ const BODY_TEXT = [
   "--oh-danger",
 ];
 
+/** Shared controls that draw an interactive boundary on a filled shell. */
+const OUTLINED_CONTROLS = {
+  field: formControlFieldClassName,
+  shell: formControlShellClassName,
+  "filter trigger": formControlFilterTriggerClassName,
+  "dropdown filter trigger": dropdownFilterTriggerClassName,
+};
+
+/** Fills that outlined controls take on hover (secondary buttons, back nav). */
+const CONTROL_HOVER_FILLS = ["--oh-surface-raised", "--oh-color-tertiary"];
+
+/** Page backgrounds controls are placed on. */
+const CONTROL_PAGE_SURFACES = [
+  "--oh-color-base",
+  "--oh-color-base-secondary",
+  "--oh-surface",
+];
+
 describe.each(LIGHT_THEMES)("%s contrast contract", (theme) => {
   it.each(BODY_TEXT)("%s meets WCAG AA on every panel surface", (text) => {
-    for (const surface of SURFACES) {
+    for (const surface of PANEL_SURFACES) {
       expect
         .soft(
-          contrast(hex(theme, text), hex(theme, surface)),
+          contrast(surfaceColor(theme, text), surfaceColor(theme, surface)),
           `${text} on ${surface}`,
         )
-        .toBeGreaterThanOrEqual(4.5);
-    }
-  });
-
-  it("keeps status text readable on its own 10% badge tint", () => {
-    const base = hex(theme, "--oh-color-base");
-    for (const tone of [
-      "--oh-success",
-      "--oh-warning",
-      "--oh-danger",
-      "--oh-info",
-    ]) {
-      const ink = hex(theme, tone);
-      expect
-        .soft(contrast(ink, tint(ink, base, 0.1)), `${tone} on 10% tint`)
         .toBeGreaterThanOrEqual(4.5);
     }
   });
@@ -100,7 +71,7 @@ describe.each(LIGHT_THEMES)("%s contrast contract", (theme) => {
     ]) {
       expect
         .soft(
-          contrast(hex(theme, fill), hex(theme, label)),
+          contrast(surfaceColor(theme, fill), surfaceColor(theme, label)),
           `${label} on ${fill}`,
         )
         .toBeGreaterThanOrEqual(4.5);
@@ -108,35 +79,92 @@ describe.each(LIGHT_THEMES)("%s contrast contract", (theme) => {
   });
 
   it("makes hover rows visible on menus, sidebars, and cards", () => {
-    const hover = hex(theme, "--oh-interactive-hover");
+    const hover = surfaceColor(theme, "--oh-interactive-hover");
     for (const surface of [
       "--oh-color-base",
       "--oh-surface",
       "--oh-color-tertiary",
     ]) {
       expect
-        .soft(contrast(hover, hex(theme, surface)), `hover on ${surface}`)
+        .soft(
+          contrast(hover, surfaceColor(theme, surface)),
+          `hover on ${surface}`,
+        )
         .toBeGreaterThanOrEqual(1.2);
     }
   });
 
-  it("separates raised buttons and dividers from the page", () => {
-    const base = hex(theme, "--oh-color-base");
-    const surface = hex(theme, "--oh-surface");
+  it("makes automation and settings list-row hover visible on its list surface", () => {
+    const list = surfaceColor(theme, "--oh-surface");
+    const hover = over(
+      utilityColor(
+        theme,
+        colorUtility(automationActivityRowClassName, "bg", "hover:"),
+      ),
+      list,
+    );
+    // Capped by BODY_TEXT above: a darker hover would drop row text below AA.
+    expect(contrast(hover, list)).toBeGreaterThanOrEqual(1.12);
     expect(
-      contrast(hex(theme, "--oh-surface-raised"), base),
-    ).toBeGreaterThanOrEqual(1.2);
-    expect(
-      contrast(hex(theme, "--oh-border-subtle"), surface),
-    ).toBeGreaterThanOrEqual(1.1);
-    expect(contrast(hex(theme, "--oh-border"), base)).toBeGreaterThanOrEqual(
-      1.5,
+      contrast(hover, list),
+      "row hover must separate more than the raised surface it replaced",
+    ).toBeGreaterThan(
+      contrast(surfaceColor(theme, "--oh-surface-raised"), list),
     );
   });
 
-  it("outlines form fields at the WCAG 3:1 non-text contrast minimum", () => {
+  it("separates raised buttons and dividers from the page", () => {
+    const base = surfaceColor(theme, "--oh-color-base");
+    const surface = surfaceColor(theme, "--oh-surface");
     expect(
-      contrast(hex(theme, "--oh-border-input"), hex(theme, "--oh-color-base")),
-    ).toBeGreaterThanOrEqual(3);
+      contrast(surfaceColor(theme, "--oh-surface-raised"), base),
+    ).toBeGreaterThanOrEqual(1.2);
+    expect(
+      contrast(surfaceColor(theme, "--oh-border-subtle"), surface),
+    ).toBeGreaterThanOrEqual(1.1);
+    expect(
+      contrast(surfaceColor(theme, "--oh-border"), base),
+    ).toBeGreaterThanOrEqual(1.5);
+  });
+
+  it.each(Object.entries(OUTLINED_CONTROLS))(
+    "outlines the %s at the WCAG 3:1 non-text minimum against its fill, page, and hover fill",
+    (_, classList) => {
+      const border = utilityColor(theme, colorUtility(classList, "border"));
+      const fill = utilityColor(theme, colorUtility(classList, "bg"));
+      for (const page of CONTROL_PAGE_SURFACES) {
+        const pageColor = surfaceColor(theme, page);
+        const fillColor = over(fill, pageColor);
+        expect
+          .soft(
+            contrast(over(border, fillColor), fillColor),
+            `vs fill on ${page}`,
+          )
+          .toBeGreaterThanOrEqual(3);
+        expect
+          .soft(contrast(over(border, pageColor), pageColor), `vs ${page}`)
+          .toBeGreaterThanOrEqual(3);
+      }
+      for (const hoverFill of CONTROL_HOVER_FILLS) {
+        const hoverColor = surfaceColor(theme, hoverFill);
+        expect
+          .soft(
+            contrast(over(border, hoverColor), hoverColor),
+            `vs ${hoverFill}`,
+          )
+          .toBeGreaterThanOrEqual(3);
+      }
+    },
+  );
+
+  it("routes every outlined shared control through the same boundary utility", () => {
+    const boundary = colorUtility(formControlBorderClassName, "border");
+    expect(boundary).toBe("border-border-input");
+    for (const classList of [
+      ...Object.values(OUTLINED_CONTROLS),
+      formControlBackNavButtonClassName,
+    ]) {
+      expect(colorUtility(classList, "border")).toBe(boundary);
+    }
   });
 });

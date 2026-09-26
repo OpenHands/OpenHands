@@ -84,7 +84,7 @@ export const LIGHT_PLUS_TOKENS: Partial<
   "--oh-text-dim": "#656565",
   "--oh-text-subtle": "#616161",
   "--oh-interactive-hover": "#D0D0D0",
-  "--oh-interactive-hover-low": "#E8E8E8",
+  "--oh-interactive-hover-low": "#E3E3E3",
   "--oh-interactive-active": "#DCDCDC",
   "--oh-interactive-selected": "#D6E9F8",
   "--oh-context-window-foreground": "#1F1F1F",
@@ -104,7 +104,7 @@ export const LIGHT_PLUS_TOKENS: Partial<
   "--oh-segment": "#F3F3F3",
   "--oh-segment-foreground": "#1F1F1F",
   "--oh-border": "#C4C4C4",
-  "--oh-border-input": "#858585",
+  "--oh-border-input": "#808080",
   "--oh-border-subtle": "#D1D1D1",
   "--oh-separator": "rgba(31, 31, 31, 0.16)",
   "--oh-focus": "#007ACC",
@@ -112,6 +112,20 @@ export const LIGHT_PLUS_TOKENS: Partial<
   "--oh-status-error": "#C12A1C",
   "--oh-link": "#0068AE",
   "--oh-info": "#0068AE",
+  // Opaque tints: a translucent 10% fill darkens over tertiary/raised panels
+  // and drops the tone ink below 4.5:1. Solarized inherits these references.
+  "--oh-success-soft":
+    "color-mix(in srgb, var(--oh-color-success) 10%, var(--oh-color-base))",
+  "--oh-success-soft-foreground": "var(--oh-color-success)",
+  "--oh-warning-soft":
+    "color-mix(in srgb, var(--oh-warning) 10%, var(--oh-color-base))",
+  "--oh-warning-soft-foreground": "var(--oh-warning)",
+  "--oh-danger-soft":
+    "color-mix(in srgb, var(--oh-color-danger) 10%, var(--oh-color-base))",
+  "--oh-danger-soft-foreground": "var(--oh-color-danger)",
+  "--oh-info-soft":
+    "color-mix(in srgb, var(--oh-info) 10%, var(--oh-color-base))",
+  "--oh-info-soft-foreground": "var(--oh-info)",
   "--oh-bg-dark": "#FFFFFF",
   "--oh-bg-light": "#F3F3F3",
   "--oh-bg-input": "#FFFFFF",

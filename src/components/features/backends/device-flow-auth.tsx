@@ -7,6 +7,7 @@ import { useDeviceFlow, type DeviceFlowStatus } from "#/hooks/use-device-flow";
 import type { CloudConnectionSource } from "#/services/cloud-funnel-analytics";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
+import { statusToneBannerClassName } from "#/utils/status-tone-classes";
 
 type DeviceFlowButtonVariant =
   | "primary"
@@ -330,11 +331,14 @@ function DeviceFlowStatusContent({
 
   return (
     <div
-      className="flex flex-col gap-3 rounded-lg border border-danger/40 bg-danger/10 p-4"
+      className={cn(
+        "flex flex-col gap-3 rounded-lg p-4",
+        statusToneBannerClassName.danger,
+      )}
       data-testid={`${testIdRoot}-auth-error`}
       role="alert"
     >
-      <p className="text-sm text-danger">{error}</p>
+      <p className="text-sm">{error}</p>
       <BrandButton
         type="button"
         variant="secondary"

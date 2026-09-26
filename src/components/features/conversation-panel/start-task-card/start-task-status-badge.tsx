@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import type { AppConversationStartTaskStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { cn } from "#/utils/utils";
+import { statusToneBadgeClassName } from "#/utils/status-tone-classes";
 import { getTaskStatusI18nKey } from "#/utils/status";
 
 interface StartTaskStatusBadgeProps {
@@ -25,11 +26,11 @@ export function StartTaskStatusBadge({
   const getStatusStyle = () => {
     switch (taskStatus) {
       case "READY":
-        return "bg-success/10 text-success border-success/20";
+        return cn(statusToneBadgeClassName.success, "border-success/20");
       case "ERROR":
-        return "bg-danger/10 text-danger border-danger/20";
+        return cn(statusToneBadgeClassName.danger, "border-danger/20");
       default:
-        return "bg-warning/10 text-warning border-warning/20";
+        return cn(statusToneBadgeClassName.warning, "border-warning/20");
     }
   };
 

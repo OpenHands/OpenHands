@@ -59,7 +59,7 @@ export const BrandButton = forwardRef<
         variant === "primary" &&
           "bg-primary text-[var(--oh-accent-foreground)] hover:opacity-80 disabled:bg-interactive-hover disabled:text-muted disabled:opacity-100",
         variant === "secondary" &&
-          "border border-border bg-base-secondary text-contrast hover:bg-surface-raised",
+          "border border-border-input bg-base-secondary text-contrast hover:bg-surface-raised",
         variant === "tertiary" &&
           "bg-interactive-hover text-contrast hover:opacity-80",
         variant === "danger" && "bg-red-600 text-white hover:bg-red-700",
