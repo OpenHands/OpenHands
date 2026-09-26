@@ -2070,7 +2070,10 @@ describe("Conversation websocket behavior", () => {
         },
       }),
     );
-    expect(useMetricsStore.getState().cost).toBe(4);
+    // Planning stats must NOT touch the shared metrics store: it feeds the
+    // main conversation's context meter, so the planner's own cost/usage
+    // would overwrite it (the metrics bleed this branch fixes).
+    expect(useMetricsStore.getState().cost).toBeNull();
     expect(
       useConversationStateStore.getState().executionStatusByConversation[
         "conv-planning"
