@@ -213,6 +213,23 @@ describe("AutomationService.createAutomation", () => {
     vi.clearAllMocks();
   });
 
+  it("sends agent_profile_id and omits model when the spec carries a profile", async () => {
+    const profileId = "11111111-1111-4111-8111-111111111111";
+
+    await AutomationService.createAutomation({
+      ...spec,
+      agent_profile_id: profileId,
+    });
+
+    expect(localAxios.post).toHaveBeenCalledWith(
+      "/api/automation/v1/preset/plugin",
+      expect.objectContaining({ agent_profile_id: profileId }),
+      expect.anything(),
+    );
+    const body = localAxios.post.mock.calls[0][1] as Record<string, unknown>;
+    expect(body).not.toHaveProperty("model");
+  });
+
   it("creates plugin automations through the preset API and disables them", async () => {
     const created = await AutomationService.createAutomation(spec);
 
