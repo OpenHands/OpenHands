@@ -201,9 +201,22 @@ when cleanup and dependencies are explicit.
 - Require evidence proportional to the behavior changed. UI changes need a
   screenshot or video from the real app; CLI, API, and script changes need the
   exact runtime command and observed result.
+- "Real app" evidence must exercise the production integration path with a real
+  backend and, when the behavior depends on model execution, a real LLM. A
+  mock-LLM or mocked backend run is E2E regression coverage, not live evidence.
+  The artifact and description must identify the backend and model used so the
+  reviewer can distinguish live evidence from a mock fixture.
 - Runtime and user-visible bug fixes require the same production-facing setup
   before and after the change. The base or released version must reproduce the
   bug; the PR head must show the corrected behavior.
+- Match the artifact type to the behavior. A screenshot can prove a static render
+  state, but not duration, ordering, disappearance, refresh, navigation, or any
+  other temporal behavior. Those changes require a video that visibly shows the
+  trigger, the relevant transition, and the final corrected state. A still image
+  of a supposedly stuck or stale state does not establish how long it persisted.
+- Visual evidence must leave the changed behavior and relevant controls readable.
+  Dismiss privacy, consent, onboarding, cookie, tooltip, and other overlays before
+  capture; an obscured target is not evidence even if the underlying app is real.
 - Lifecycle fixes must also verify resulting process or resource state, such as
   the parent exit code and remaining child services or listening ports.
 - Tests must exercise real logic and observable state. A claimed regression test
@@ -211,9 +224,9 @@ when cleanup and dependencies are explicit.
   that only prove another mock was called are insufficient.
 - Do not duplicate library behavior or add brittle presentation-only snapshots.
 
-Tests are regression proof, not a substitute for required live evidence. Submit
-**COMMENT** when production-facing evidence is required but absent, and name the
-exact verification still needed.
+Tests, mock-LLM runs, and mocked-backend runs are regression proof, not a
+substitute for required live evidence. Submit **COMMENT** when production-facing
+evidence is required but absent, and name the exact verification still needed.
 
 Follow the test routing in `AGENTS.md`. Mock-LLM, Docker mock-LLM, and live
 LLM-backed E2E suites run after changes reach `main`, not from PR labels. For
