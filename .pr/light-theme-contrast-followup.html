@@ -93,17 +93,19 @@
             4.5:1 text threshold and interactive form boundaries clear 3:1 in browser measurements.
           </div>
           <p>
-            The first commit audits exposed dark-only assumptions across Canvas and moves the light
-            rendering onto theme-aware roles, while explicit <code>dark:</code> compatibility
-            overrides preserve the established Neutral palette. The second closes the remaining
+            The follow-up commits audit exposed dark-only assumptions across Canvas and move the
+            light rendering onto theme-aware roles, while explicit <code>dark:</code> compatibility
+            overrides preserve the established Neutral palette. They also close the remaining
             compositing gaps: a translucent badge no longer changes legibility when its parent card
-            changes surface, and shared inputs no longer use the decorative border token.
+            changes surface, shared inputs no longer use the decorative border token, and UI rendered
+            through a portal now keeps the active appearance context.
           </p>
           <p>
             Sources:
-            <a class="src" href="https://github.com/rajshah4/OpenHands/blob/82bccfa54fc524581e9e77ae8a2415a2577d0c0f/src/utils/status-tone-classes.ts#L18">status-tone-classes.ts:18</a>,
-            <a class="src" href="https://github.com/rajshah4/OpenHands/blob/82bccfa54fc524581e9e77ae8a2415a2577d0c0f/src/utils/form-control-classes.ts#L8">form-control-classes.ts:8</a>,
-            <a class="src" href="https://github.com/rajshah4/OpenHands/blob/82bccfa54fc524581e9e77ae8a2415a2577d0c0f/src/themes/color-theme/definitions/light-plus.ts#L106">light-plus.ts:106</a>
+            <a class="src" href="https://github.com/rajshah4/OpenHands/blob/af1b9afa76d508ca19a487a3869e0b14309edc39/src/utils/status-tone-classes.ts#L18">status-tone-classes.ts:18</a>,
+            <a class="src" href="https://github.com/rajshah4/OpenHands/blob/af1b9afa76d508ca19a487a3869e0b14309edc39/src/utils/form-control-classes.ts#L8">form-control-classes.ts:8</a>,
+            <a class="src" href="https://github.com/rajshah4/OpenHands/blob/af1b9afa76d508ca19a487a3869e0b14309edc39/src/components/shared/appearance-portal.tsx#L10">appearance-portal.tsx:10</a>,
+            <a class="src" href="https://github.com/rajshah4/OpenHands/blob/af1b9afa76d508ca19a487a3869e0b14309edc39/src/themes/color-theme/definitions/light-plus.ts#L106">light-plus.ts:106</a>
           </p>
         </section>
 
@@ -166,9 +168,9 @@
           </figure>
           <p>
             Sources:
-            <a class="src" href="https://github.com/rajshah4/OpenHands/blob/82bccfa54fc524581e9e77ae8a2415a2577d0c0f/src/tailwind.css#L62">tailwind.css:62</a>,
-            <a class="src" href="https://github.com/rajshah4/OpenHands/blob/82bccfa54fc524581e9e77ae8a2415a2577d0c0f/src/utils/status-tone-classes.ts#L18">status-tone-classes.ts:18</a>,
-            <a class="src" href="https://github.com/rajshah4/OpenHands/blob/82bccfa54fc524581e9e77ae8a2415a2577d0c0f/src/utils/form-control-classes.ts#L73">form-control-classes.ts:73</a>
+            <a class="src" href="https://github.com/rajshah4/OpenHands/blob/af1b9afa76d508ca19a487a3869e0b14309edc39/src/tailwind.css#L62">tailwind.css:62</a>,
+            <a class="src" href="https://github.com/rajshah4/OpenHands/blob/af1b9afa76d508ca19a487a3869e0b14309edc39/src/utils/status-tone-classes.ts#L18">status-tone-classes.ts:18</a>,
+            <a class="src" href="https://github.com/rajshah4/OpenHands/blob/af1b9afa76d508ca19a487a3869e0b14309edc39/src/utils/form-control-classes.ts#L75">form-control-classes.ts:75</a>
           </p>
         </section>
 
@@ -189,8 +191,8 @@
           </p>
           <p>
             Sources:
-            <a class="src" href="https://github.com/rajshah4/OpenHands/blob/82bccfa54fc524581e9e77ae8a2415a2577d0c0f/__tests__/themes/status-tone-contrast.test.ts#L26">status-tone-contrast.test.ts:26</a>,
-            <a class="src" href="https://github.com/rajshah4/OpenHands/blob/82bccfa54fc524581e9e77ae8a2415a2577d0c0f/__tests__/themes/light-theme-contrast.test.ts#L97">light-theme-contrast.test.ts:97</a>
+            <a class="src" href="https://github.com/rajshah4/OpenHands/blob/af1b9afa76d508ca19a487a3869e0b14309edc39/__tests__/themes/status-tone-contrast.test.ts#L26">status-tone-contrast.test.ts:26</a>,
+            <a class="src" href="https://github.com/rajshah4/OpenHands/blob/af1b9afa76d508ca19a487a3869e0b14309edc39/__tests__/themes/light-theme-contrast.test.ts#L99">light-theme-contrast.test.ts:99</a>
           </p>
         </section>
 
@@ -199,22 +201,24 @@
           <table>
             <thead><tr><th>Area</th><th>What to review</th><th>Representative source</th></tr></thead>
             <tbody>
-              <tr><td>Theme contract</td><td>Soft status pairs, light palette values, input boundary and hover tokens</td><td><a class="src" href="https://github.com/rajshah4/OpenHands/blob/82bccfa54fc524581e9e77ae8a2415a2577d0c0f/src/themes/color-theme/definitions/light-plus.ts#L106">light-plus.ts:106</a></td></tr>
-              <tr><td>Shared utilities</td><td>Status badges/banners and form/dropdown boundary classes</td><td><a class="src" href="https://github.com/rajshah4/OpenHands/blob/82bccfa54fc524581e9e77ae8a2415a2577d0c0f/src/utils/status-tone-classes.ts#L18">status-tone-classes.ts:18</a></td></tr>
-              <tr><td>Component audit</td><td>Hard-coded white/gray and hand-rolled translucent states moved to semantic roles</td><td><a class="src" href="https://github.com/rajshah4/OpenHands/blob/82bccfa54fc524581e9e77ae8a2415a2577d0c0f/src/components/features/settings/agent-canvas-update-card.tsx#L209">agent-canvas-update-card.tsx:209</a></td></tr>
-              <tr><td>Regression proof</td><td>Real compositing, actual class consumers, and source scan against reintroducing fragile pairs</td><td><a class="src" href="https://github.com/rajshah4/OpenHands/blob/82bccfa54fc524581e9e77ae8a2415a2577d0c0f/__tests__/themes/status-tone-contrast.test.ts#L54">status-tone-contrast.test.ts:54</a></td></tr>
+              <tr><td>Theme contract</td><td>Soft status pairs, light palette values, input boundary and hover tokens</td><td><a class="src" href="https://github.com/rajshah4/OpenHands/blob/af1b9afa76d508ca19a487a3869e0b14309edc39/src/themes/color-theme/definitions/light-plus.ts#L106">light-plus.ts:106</a></td></tr>
+              <tr><td>Shared utilities</td><td>Status badges/banners and form/dropdown boundary classes</td><td><a class="src" href="https://github.com/rajshah4/OpenHands/blob/af1b9afa76d508ca19a487a3869e0b14309edc39/src/utils/status-tone-classes.ts#L18">status-tone-classes.ts:18</a></td></tr>
+              <tr><td>Portal context</td><td>Menus, drawers, and dialogs rendered under <code>document.body</code> retain the active light appearance</td><td><a class="src" href="https://github.com/rajshah4/OpenHands/blob/af1b9afa76d508ca19a487a3869e0b14309edc39/src/components/shared/appearance-portal.tsx#L10">appearance-portal.tsx:10</a></td></tr>
+              <tr><td>Component audit</td><td>Hard-coded white/gray and hand-rolled translucent states moved to semantic roles</td><td><a class="src" href="https://github.com/rajshah4/OpenHands/blob/af1b9afa76d508ca19a487a3869e0b14309edc39/src/components/features/settings/agent-canvas-update-card.tsx#L323">agent-canvas-update-card.tsx:323</a></td></tr>
+              <tr><td>Regression proof</td><td>Real compositing, actual class consumers, and source scan against reintroducing fragile pairs</td><td><a class="src" href="https://github.com/rajshah4/OpenHands/blob/af1b9afa76d508ca19a487a3869e0b14309edc39/__tests__/themes/status-tone-contrast.test.ts#L54">status-tone-contrast.test.ts:54</a></td></tr>
             </tbody>
           </table>
           <details>
-            <summary>Why 77 files changed</summary>
+            <summary>Why 133 files changed</summary>
             <div>
-              <p>The behavioral center is small: theme tokens and shared utilities. Most remaining files are narrow utility substitutions that give Light+ and Solarized semantic colors while retaining each component's prior Neutral colors through explicit <code>dark:</code> overrides.</p>
+              <p>The behavioral center is small: theme tokens, shared utilities, and the appearance-preserving portal wrapper. Most remaining files are narrow utility substitutions that give Light+ and Solarized semantic colors while retaining each component's prior Neutral colors through explicit <code>dark:</code> overrides.</p>
               <ul class="compact">
                 <li>status badges and inline notices</li>
                 <li>settings and backend forms</li>
                 <li>automation rows and activity states</li>
                 <li>conversation controls and modals</li>
                 <li>icons, dividers, and focus/hover states</li>
+                <li>portal-rendered menus, drawers, and dialogs</li>
                 <li>tests updated to assert semantic classes</li>
               </ul>
             </div>
@@ -226,8 +230,8 @@
           <table>
             <thead><tr><th>Check</th><th>Result</th></tr></thead>
             <tbody>
-              <tr><td>Focused theme/runtime/form-control suite</td><td>97 / 97 passed</td></tr>
-              <tr><td>Related component and theme suites</td><td>1,728 tests passed</td></tr>
+              <tr><td>Focused theme/runtime/form-control and affected-component suite</td><td>64 / 64 passed independently</td></tr>
+              <tr><td>Full Vitest suite</td><td>8,010 passed; one pre-existing timezone-sensitive failure reproduced on the parent and passes with <code>TZ=UTC</code></td></tr>
               <tr><td>TypeScript</td><td><code>npm run typecheck</code> passed</td></tr>
               <tr><td>Standalone application</td><td><code>npm run build:app</code> passed</td></tr>
               <tr><td>Embeddable library</td><td><code>npm run build:lib</code> passed</td></tr>
