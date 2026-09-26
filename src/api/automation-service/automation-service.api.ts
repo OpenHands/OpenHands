@@ -197,7 +197,12 @@ function buildCreateAutomationRequest(spec: AutomationSpec) {
         source: importDefaults.placeholderEventSource,
         on: generatePendingImportEvent(),
       },
-      ...(spec.model && { model: spec.model }),
+      // A saved agent profile supersedes the legacy model field: the server
+      // treats them as alternatives, and the setup manifest already withholds
+      // `model` whenever `agent_profile_id` is set. Match that here so an
+      // imported automation keeps the profile it was exported with.
+      ...(spec.agent_profile_id && { agent_profile_id: spec.agent_profile_id }),
+      ...(spec.model && !spec.agent_profile_id && { model: spec.model }),
       ...(repos && { repos }),
       ...(spec.plugins?.length && {
         plugins: spec.plugins.map((source) => ({ source })),
