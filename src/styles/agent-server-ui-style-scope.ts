@@ -74,6 +74,7 @@ export const AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES = {
   "--oh-status-success": "#1FBD53",
   "--oh-status-error": "#FF684E",
   "--oh-link": "var(--cool-grey-100)",
+  "--oh-info": "oklch(62.3% 0.214 259.815)",
   "--oh-radius": "8px",
   "--oh-field-radius": "8px",
   "--oh-surface-shadow": "none",

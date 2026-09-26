@@ -33,7 +33,7 @@ export function LlmNotConfiguredBanner() {
     >
       <div className="flex min-w-0 items-start sm:items-center">
         <div className="flex-shrink-0">
-          <FaTriangleExclamation className="align-middle text-yellow-400" />
+          <FaTriangleExclamation className="align-middle text-warning" />
         </div>
         <Typography.Text className="ml-3 text-sm font-medium">
           {t(I18nKey.HOME$LLM_NOT_CONFIGURED_MESSAGE)}

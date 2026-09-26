@@ -36,7 +36,7 @@ export function CompactContextButton({
       className="flex flex-col gap-2 border-t border-border-subtle pt-3"
     >
       {isHighFill && (
-        <span className="text-xs text-amber-500">
+        <span className="text-xs text-warning">
           {t(I18nKey.CONVERSATION$CONTEXT_FILLING_UP)}
         </span>
       )}

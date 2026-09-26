@@ -96,10 +96,7 @@ describe("hook execution event message", () => {
       `${icon} ${I18nKey.HOOK$HOOK_LABEL}: ${hookType}`,
     );
     expect(message).toHaveAttribute("data-success", "success");
-    expect(screen.getByText("ok")).toHaveClass(
-      "bg-green-900/50",
-      "text-green-300",
-    );
+    expect(screen.getByText("ok")).toHaveClass("bg-success/10", "text-success");
   });
 
   it("shows all available metadata for a blocked hook", () => {
@@ -129,8 +126,8 @@ describe("hook execution event message", () => {
       "py-0.5",
       "rounded",
       "text-xs",
-      "bg-amber-900/50",
-      "text-amber-300",
+      "bg-warning/10",
+      "text-warning",
     );
     expect(message).toHaveTextContent(`${I18nKey.HOOK$COMMAND}: check-policy`);
     expect(message).toHaveTextContent(`${I18nKey.HOOK$EXIT_CODE}: 13`);
@@ -156,8 +153,8 @@ describe("hook execution event message", () => {
     const message = screen.getByTestId("generic-event-message");
     expect(message).toHaveAttribute("data-success", "error");
     expect(screen.getByText("failed")).toHaveClass(
-      "bg-red-900/50",
-      "text-red-300",
+      "bg-danger/10",
+      "text-danger",
     );
     expect(screen.getByText(`${"x".repeat(77)}...`)).toBeInTheDocument();
     expect(message).not.toHaveTextContent(longCommand);

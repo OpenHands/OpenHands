@@ -1,6 +1,8 @@
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { formatTimeDelta } from "#/utils/format-time-delta";
+import { statusToneBannerClassName } from "#/utils/status-tone-classes";
+import { cn } from "#/utils/utils";
 
 interface GitSyncErrorBannerProps {
   error: string;
@@ -17,14 +19,17 @@ export function GitSyncErrorBanner({
     <div
       role="alert"
       data-testid="git-sync-error-banner"
-      className="rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-300 whitespace-pre-wrap break-words"
+      className={cn(
+        "rounded-md p-3 text-sm whitespace-pre-wrap break-words",
+        statusToneBannerClassName.danger,
+      )}
     >
       <p className="font-medium">
         {t(I18nKey.AUTOMATIONS$GIT_SYNC$LAST_ERROR_TITLE)}
       </p>
       <p className="mt-1">{error}</p>
       {errorAt && (
-        <p className="mt-1 text-xs text-red-300/70">
+        <p className="mt-1 text-xs text-muted">
           {`${formatTimeDelta(errorAt)} ${t(I18nKey.CONVERSATION$AGO)}`}
         </p>
       )}

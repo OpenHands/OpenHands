@@ -67,9 +67,9 @@ export function ContextMeter({
           className={cn(
             "shrink-0 text-xs",
             isDanger
-              ? "text-red-500"
+              ? "text-danger"
               : isWarning
-                ? "text-amber-500"
+                ? "text-warning"
                 : "text-muted",
           )}
         >
@@ -81,11 +81,7 @@ export function ContextMeter({
           data-testid="context-meter-bar"
           className={cn(
             "absolute inset-y-0 left-0 rounded-full transition-all duration-300",
-            isDanger
-              ? "bg-red-500"
-              : isWarning
-                ? "bg-amber-500"
-                : "bg-foreground",
+            isDanger ? "bg-danger" : isWarning ? "bg-warning" : "bg-foreground",
           )}
           // runtime usage-percentage width
           style={{ width: `${usagePercentage}%` }}

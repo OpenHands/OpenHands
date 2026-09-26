@@ -330,11 +330,11 @@ function DeviceFlowStatusContent({
 
   return (
     <div
-      className="flex flex-col gap-3 rounded-lg border border-red-700 bg-red-900/20 p-4"
+      className="flex flex-col gap-3 rounded-lg border border-danger/40 bg-danger/10 p-4"
       data-testid={`${testIdRoot}-auth-error`}
       role="alert"
     >
-      <p className="text-sm text-red-400">{error}</p>
+      <p className="text-sm text-danger">{error}</p>
       <BrandButton
         type="button"
         variant="secondary"

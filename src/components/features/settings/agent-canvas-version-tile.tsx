@@ -73,10 +73,7 @@ export function AgentCanvasVersionTile({
           </span>
         </span>
         {updateAvailable ? (
-          <ArrowUpCircle
-            className="size-5 shrink-0 text-[#3B82F6]"
-            aria-hidden
-          />
+          <ArrowUpCircle className="size-5 shrink-0 text-info" aria-hidden />
         ) : (
           <CheckCircle2
             className="size-5 shrink-0 text-status-success"

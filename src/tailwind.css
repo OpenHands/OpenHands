@@ -59,6 +59,7 @@
   --color-status-success: var(--oh-status-success);
   --color-status-error: var(--oh-status-error);
   --color-accent: var(--oh-accent);
+  --color-info: var(--oh-info);
   --color-warning: var(--oh-warning);
 
   /* Cool Grey scale */
@@ -136,6 +137,7 @@
   --oh-status-success: #1FBD53;
   --oh-status-error: #FF684E;
   --oh-link: var(--cool-grey-100);
+  --oh-info: oklch(62.3% 0.214 259.815); /* informational blue: content links, update notices */
   --oh-radius: 8px;
   --oh-field-radius: 8px;
   --oh-surface-shadow: none;

@@ -232,7 +232,7 @@ export function EditConversationTagsModal({
             <p
               role="alert"
               data-testid="edit-tags-error"
-              className="text-xs text-red-400"
+              className="text-xs text-danger"
             >
               {t(errorKey)}
             </p>

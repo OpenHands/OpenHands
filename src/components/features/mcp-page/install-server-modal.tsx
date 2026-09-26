@@ -497,7 +497,7 @@ export function InstallServerModal({
             className="w-full"
           />
           {state.errors.url && (
-            <p className="text-xs text-red-500">{state.errors.url}</p>
+            <p className="text-xs text-danger">{state.errors.url}</p>
           )}
           {headerFields.map((field) => (
             <div key={field.key} className="flex flex-col gap-1">
@@ -519,9 +519,7 @@ export function InstallServerModal({
                 </p>
               )}
               {state.errors[field.key] && (
-                <p className="text-xs text-red-500">
-                  {state.errors[field.key]}
-                </p>
+                <p className="text-xs text-danger">{state.errors[field.key]}</p>
               )}
               {field.key in state.savedAsSecret && (
                 <SaveAsSecretToggle
@@ -570,7 +568,7 @@ export function InstallServerModal({
                 </p>
               )}
               {state.errors.api_key && (
-                <p className="text-xs text-red-500">{state.errors.api_key}</p>
+                <p className="text-xs text-danger">{state.errors.api_key}</p>
               )}
               {credentialSecretName && (
                 <SaveAsSecretToggle
@@ -619,7 +617,7 @@ export function InstallServerModal({
               </p>
             )}
             {state.errors[field.key] && (
-              <p className="text-xs text-red-500">{state.errors[field.key]}</p>
+              <p className="text-xs text-danger">{state.errors[field.key]}</p>
             )}
             {field.key in state.savedAsSecret && (
               <SaveAsSecretToggle
@@ -652,7 +650,7 @@ export function InstallServerModal({
               </p>
             )}
             {state.errors[field.key] && (
-              <p className="text-xs text-red-500">{state.errors[field.key]}</p>
+              <p className="text-xs text-danger">{state.errors[field.key]}</p>
             )}
           </div>
         ))}
@@ -701,7 +699,7 @@ export function InstallServerModal({
         {globalError && (
           <p
             data-testid="mcp-install-modal-error"
-            className="text-sm text-red-500 whitespace-pre-wrap"
+            className="text-sm text-danger whitespace-pre-wrap"
           >
             {globalError}
           </p>

@@ -205,7 +205,7 @@ function AgentCanvasUpdateModal({
                 {t(I18nKey.SETTINGS$APP_UPDATE_CHECKING)}
               </span>
             ) : updateAvailable ? (
-              <div className="flex items-start gap-2 rounded-lg border border-[#3B82F6]/30 bg-[#1E3A5F] px-3 py-2 text-xs text-[#3B82F6]">
+              <div className="flex items-start gap-2 rounded-lg border border-info/30 bg-info/10 px-3 py-2 text-xs text-info">
                 <ArrowUpCircle className="size-4 shrink-0" aria-hidden />
                 <span>
                   {t(I18nKey.SETTINGS$APP_UPDATE_AVAILABLE_MESSAGE, {
@@ -318,7 +318,7 @@ export function AgentCanvasUpdateCard({
                 className={cn(
                   "inline-flex shrink-0 items-center gap-1 text-[10px] font-medium leading-none",
                   updateAvailable
-                    ? "rounded-full border border-transparent bg-[#1E3A5F] px-1.5 py-0.5 text-[#3B82F6]"
+                    ? "rounded-full border border-info/30 bg-info/10 px-1.5 py-0.5 text-info"
                     : "text-success",
                 )}
               >
