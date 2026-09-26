@@ -28,9 +28,13 @@ import {
   toPluginCoordinates,
   type WorkspaceMode,
 } from "#/api/conversation-metadata-store";
+import type { RcaContext } from "#/utils/rca-context";
 
 export interface CreateConversationVariables {
   query?: string;
+  // Structured RCA context from an external system (deeplink or paste
+  // import); folded into the conversation's first user message.
+  rcaContext?: RcaContext;
   repository?: {
     name: string;
     gitProvider: Provider;
@@ -82,6 +86,7 @@ export const useCreateConversation = () => {
     ): Promise<CreateConversationResponse> => {
       const {
         query,
+        rcaContext,
         conversationInstructions,
         plugins,
         repository,
@@ -253,6 +258,7 @@ export const useCreateConversation = () => {
       const conversation =
         await AgentServerConversationService.createConversation({
           initialUserMsg: query,
+          rcaContext,
           conversationInstructions,
           plugins,
           metadata: repository

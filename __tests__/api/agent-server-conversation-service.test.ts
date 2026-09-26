@@ -2092,6 +2092,42 @@ describe("AgentServerConversationService", () => {
       });
     });
 
+    it("folds RCA context into the cloud initial_message ahead of the task", async () => {
+      setRegisteredBackends([cloudBackend]);
+      setActiveSelection({ backendId: cloudBackend.id });
+      const requests = captureRequests(["post"], {
+        id: "task-1",
+        status: "WORKING",
+        request: {},
+      });
+
+      await AgentServerConversationService.createConversation({
+        initialUserMsg: "Fix the bug",
+        rcaContext: {
+          summary: "Connection pool exhaustion",
+          evidence: ["pool max reached"],
+          suspectedComponents: [],
+          suspectedFiles: ["src/db/pool.ts"],
+          recommendedAction: "Raise the pool limit",
+          source: "holmesgpt",
+        },
+      });
+
+      expect(requests).toHaveLength(1);
+      const { initial_message: initialMessage } = requests[0].body as {
+        initial_message: { content: { type: string; text: string }[] };
+      };
+      const text = initialMessage.content[0].text;
+      expect(text).toContain("## Root Cause Analysis Context");
+      expect(text).toContain("provided by holmesgpt");
+      expect(text).toContain("Connection pool exhaustion");
+      expect(text).toContain("- src/db/pool.ts");
+      expect(text).toContain("Raise the pool limit");
+      expect(text.indexOf("## Root Cause Analysis Context")).toBeLessThan(
+        text.indexOf("Fix the bug"),
+      );
+    });
+
     it("uses null cloud launch context when optional values are omitted", async () => {
       setRegisteredBackends([cloudBackend]);
       setActiveSelection({ backendId: cloudBackend.id });
@@ -2696,6 +2732,27 @@ describe("AgentServerConversationService", () => {
         selected_workspace: "/Users/jane/projects/canvas",
         workspace_mode: "local_repo",
       });
+    });
+
+    it("folds RCA context into the local initial_message", async () => {
+      arrangeLocalCreate("conv-rca");
+
+      const result = await AgentServerConversationService.createConversation({
+        initialUserMsg: "Fix the bug",
+        rcaContext: {
+          summary: "Connection pool exhaustion",
+          evidence: [],
+          suspectedComponents: [],
+          suspectedFiles: ["src/db/pool.ts"],
+        },
+      });
+
+      const content = result.request.initial_message?.content[0];
+      const text = content?.type === "text" ? content.text : "";
+      expect(text).toContain("## Root Cause Analysis Context");
+      expect(text).toContain("provided by an external system");
+      expect(text).toContain("Connection pool exhaustion");
+      expect(text).toContain("Fix the bug");
     });
 
     it("does not persist empty metadata for a conversation without a selected source", async () => {

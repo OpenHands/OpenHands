@@ -19,8 +19,10 @@ export const useChatSubmission = (
   const handleSubmit = useCallback(() => {
     const message = chatInputRef.current?.innerText || "";
     const trimmedMessage = message.trim();
-    const { images, files } = useConversationStore.getState();
-    const hasAttachments = images.length > 0 || files.length > 0;
+    const { images, files, pendingRcaContext } =
+      useConversationStore.getState();
+    const hasAttachments =
+      images.length > 0 || files.length > 0 || Boolean(pendingRcaContext);
 
     if (!trimmedMessage && !hasAttachments) {
       return;
