@@ -137,9 +137,12 @@ export const formControlFilterTriggerClassName = cn(
   "shrink-0 text-contrast",
 );
 
-/** Muted back navigation control with tertiary hover fill (settings sub-pages, detail views). */
+/** Outlined back navigation control with tertiary hover fill (settings sub-pages, detail views). */
 export const formControlBackNavButtonClassName = cn(
-  "inline-flex items-center gap-2 self-start rounded-lg p-2",
+  formControlHeightClassName,
+  "inline-flex items-center gap-2 self-start px-2",
+  formControlRadiusClassName,
+  formControlBorderClassName,
   "text-sm font-normal leading-5 text-muted cursor-pointer",
   formControlTransitionClassName,
   "hover:bg-tertiary hover:text-contrast",
