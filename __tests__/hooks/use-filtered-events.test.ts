@@ -1,7 +1,8 @@
-import { describe, expect, it, beforeEach } from "vitest";
+import { describe, expect, it, beforeEach, vi } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { useFilteredEvents } from "#/hooks/use-filtered-events";
 import { useEventStore } from "#/stores/use-event-store";
+import * as shouldRenderEventModule from "#/components/conversation-events/chat/event-content-helpers/should-render-event";
 import type { ActionEvent, MessageEvent } from "#/types/agent-server/core";
 import { SecurityRisk } from "#/types/agent-server/core";
 import type { SystemPromptEvent } from "#/types/agent-server/core/events/system-event";
@@ -122,6 +123,27 @@ describe("useFilteredEvents", () => {
 
       expect(result.current.renderableEvents).not.toBe(firstRenderableEvents);
       expect(result.current.renderableEvents).toHaveLength(2);
+    });
+
+    it("does not rescan allConversationEvents for user events on rerender when storeEvents has not changed", () => {
+      const event = createUserMessage("msg-1");
+      useEventStore.setState({
+        events: [event],
+        eventIds: new Set(["msg-1"]),
+        uiEvents: [event],
+      });
+
+      const hasUserEventSpy = vi.spyOn(shouldRenderEventModule, "hasUserEvent");
+
+      const { rerender } = renderHook(() => useFilteredEvents());
+      const callsAfterFirstRender = hasUserEventSpy.mock.calls.length;
+
+      rerender();
+      rerender();
+
+      expect(hasUserEventSpy.mock.calls.length).toBe(callsAfterFirstRender);
+
+      hasUserEventSpy.mockRestore();
     });
   });
 
