@@ -4,10 +4,10 @@ import { BrandButton } from "#/components/features/settings/brand-button";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { ApiKeyModalBase } from "#/components/features/settings/api-key-modal-base";
 import { SettingsInput } from "#/components/features/settings/settings-input";
-import { useSearchProviders } from "#/hooks/query/use-search-providers";
 import { useProviderModels } from "#/hooks/query/use-provider-models";
 import { useSaveLlmProfile } from "#/hooks/mutation/use-save-llm-profile";
 import type { SaveProfileRequest } from "#/api/profiles-service/profiles-service.api";
+import type { ProviderConnection } from "#/api/provider-connections-service/provider-connections-service.api";
 import {
   deriveProfileNameFromModel,
   isProfileNameValid,
@@ -30,6 +30,13 @@ function getServerDetail(error: unknown): string | null {
 interface AddModelsModalProps {
   isOpen: boolean;
   existingNames: string[];
+  /**
+   * The connection the user launched this modal from. Its provider drives the
+   * model list (no provider combobox) and every created profile is linked to
+   * it via `provider_connection_id`, so the credential is wired up out of the
+   * box — no key to add afterward.
+   */
+  connection: ProviderConnection | null;
   onClose: () => void;
 }
 
@@ -46,23 +53,26 @@ interface ModelRow {
 }
 
 /**
- * Bulk-add a provider's models as LLM profiles: pick a provider, select
- * models, edit the proposed names, add them all at once. Profiles are created
- * keyless (`include_secrets: false`) — a key, when a model needs one, is added
- * by editing the profile afterward, same as any keyless profile.
+ * Bulk-add models as LLM profiles, launched from a specific provider
+ * connection. The connection's provider drives the model list (no provider
+ * combobox), and every created profile is linked to that connection via
+ * `provider_connection_id` — mirroring the link flow in
+ * `llm-settings-local-view.tsx` — so the shared credential is wired up out of
+ * the box and no key needs to be added afterward.
  */
 export function AddModelsModal({
   isOpen,
   existingNames,
+  connection,
   onClose,
 }: AddModelsModalProps) {
   const { t } = useTranslation("openhands");
-  const [provider, setProvider] = useState<string | null>(null);
+  const provider = connection?.provider ?? null;
+  const connectionId = connection?.id ?? null;
   const [verifiedOnly, setVerifiedOnly] = useState(true);
   const [rows, setRows] = useState<ModelRow[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
-  const providers = useSearchProviders();
   const models = useProviderModels(provider);
   const saveProfile = useSaveLlmProfile();
 
@@ -99,10 +109,9 @@ export function AddModelsModal({
 
   // The manager keeps this component mounted and drives it with `isOpen`, so
   // without an explicit reset a reopened modal still shows the last session's
-  // provider, selections and Saved/Failed marks.
+  // selections and Saved/Failed marks.
   useEffect(() => {
     if (!isOpen) {
-      setProvider(null);
       setVerifiedOnly(true);
       setRows([]);
       setSubmitting(false);
@@ -111,7 +120,7 @@ export function AddModelsModal({
 
   const existing = useMemo(() => new Set(existingNames), [existingNames]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !connection) return null;
 
   // Everything below reasons about what the user can see: a row hidden by the
   // filter is neither counted, nor conflict-checked, nor submitted.
@@ -173,7 +182,14 @@ export function AddModelsModal({
         await saveProfile.mutateAsync({
           name: row.name,
           request: {
-            llm: { model: row.model } as SaveProfileRequest["llm"],
+            // The connection sources the credential, so it replaces any inline
+            // api_key/base_url — mirrored on the normal save flow in
+            // `llm-settings-local-view.tsx`. `include_secrets: false` because
+            // no secret is being sent; the link is by id.
+            llm: {
+              model: row.model,
+              provider_connection_id: connectionId,
+            } as SaveProfileRequest["llm"],
             include_secrets: false,
           },
         });
@@ -231,16 +247,8 @@ export function AddModelsModal({
     if (!submitting) onClose();
   };
 
-  // Split verified from the rest, matching how the model selector presents the
-  // same list: the provider feed carries entries that are not really providers
-  // (image dimensions, quality tiers), and they belong below a divider rather
-  // than inline with Anthropic and OpenAI.
-  const providerOptions = providers.data ?? [];
-  const verifiedProviders = providerOptions.filter((p) => p.verified);
-  const otherProviders = providerOptions.filter((p) => !p.verified);
-  const isLoadingModels = provider !== null && models.isLoading;
-  const showEmpty =
-    provider !== null && !isLoadingModels && visibleRows.length === 0;
+  const isLoadingModels = models.isLoading;
+  const showEmpty = !isLoadingModels && visibleRows.length === 0;
   // Empty because the provider has nothing, or empty because the filter hid
   // everything it has. Telling the user the provider is bare when the fix is
   // one checkbox away sends them looking in the wrong place.
@@ -285,51 +293,30 @@ export function AddModelsModal({
       onClose={handleClose}
     >
       <div data-testid="add-models-modal" className="flex flex-col gap-3">
-        <label className="flex flex-col gap-2 text-sm text-white">
-          {t(I18nKey.SETTINGS$ADD_MODELS_PROVIDER_LABEL)}
-          <select
-            data-testid="add-models-provider"
-            className="rounded-md border border-[var(--oh-border)] bg-[var(--oh-background)] px-3 py-2 text-sm text-white"
-            value={provider ?? ""}
-            onChange={(e) => setProvider(e.target.value || null)}
-            disabled={submitting}
-          >
-            <option value="" disabled>
-              {t(I18nKey.SETTINGS$ADD_MODELS_PROVIDER_PLACEHOLDER)}
-            </option>
-            {verifiedProviders.length > 0 && (
-              <optgroup label={t(I18nKey.MODEL_SELECTOR$VERIFIED)}>
-                {verifiedProviders.map((p) => (
-                  <option key={p.name} value={p.name}>
-                    {p.name}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-            {otherProviders.length > 0 && (
-              <optgroup label={t(I18nKey.MODEL_SELECTOR$OTHERS)}>
-                {otherProviders.map((p) => (
-                  <option key={p.name} value={p.name}>
-                    {p.name}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-          </select>
-        </label>
+        <div
+          data-testid="add-models-connection-summary"
+          className="flex flex-col gap-1 rounded-md border border-[var(--oh-border)] bg-[var(--oh-background)] px-3 py-2"
+        >
+          <span className="min-w-0 max-w-full truncate text-sm font-medium text-white">
+            {connection.display_name}
+          </span>
+          <span className="min-w-0 max-w-full truncate text-xs text-[var(--oh-muted)]">
+            {t(I18nKey.SETTINGS$ADD_MODELS_CONNECTION_BOUND, {
+              provider: connection.provider,
+            })}
+          </span>
+        </div>
 
-        {provider !== null && (
-          <label className="flex items-center gap-2 text-sm text-white">
-            <input
-              data-testid="add-models-verified-only"
-              type="checkbox"
-              checked={verifiedOnly}
-              onChange={(e) => setVerifiedOnly(e.target.checked)}
-              disabled={submitting}
-            />
-            {t(I18nKey.SETTINGS$ADD_MODELS_VERIFIED_ONLY)}
-          </label>
-        )}
+        <label className="flex items-center gap-2 text-sm text-white">
+          <input
+            data-testid="add-models-verified-only"
+            type="checkbox"
+            checked={verifiedOnly}
+            onChange={(e) => setVerifiedOnly(e.target.checked)}
+            disabled={submitting}
+          />
+          {t(I18nKey.SETTINGS$ADD_MODELS_VERIFIED_ONLY)}
+        </label>
 
         {isLoadingModels && (
           <div data-testid="add-models-loading" className="py-4 text-center">

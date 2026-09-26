@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { RenameProfileModal } from "./rename-profile-modal";
 import { DeleteProfileModal } from "./delete-profile-modal";
-import { AddModelsModal } from "./add-models-modal";
 import { ProfilesBody } from "./profiles-body";
 import { ProviderConnectionsManager } from "./provider-connections-manager";
 import ProfilesService, {
@@ -57,7 +56,6 @@ export function LlmProfilesManager({
   const [profileToDelete, setProfileToDelete] = useState<ProfileInfo | null>(
     null,
   );
-  const [showAddModels, setShowAddModels] = useState(false);
 
   const profiles = data?.profiles ?? [];
   const active = data?.active_profile ?? null;
@@ -134,25 +132,15 @@ export function LlmProfilesManager({
               {t(I18nKey.SETTINGS$AVAILABLE_PROFILES)}
             </h2>
             {onAddProfile && canManage ? (
-              <>
-                <BrandButton
-                  testId="add-models-from-provider"
-                  type="button"
-                  variant="tertiary"
-                  className="ml-auto"
-                  onClick={() => setShowAddModels(true)}
-                >
-                  {t(I18nKey.SETTINGS$ADD_MODELS_FROM_PROVIDER)}
-                </BrandButton>
-                <BrandButton
-                  testId="add-llm-profile"
-                  type="button"
-                  variant="secondary"
-                  onClick={onAddProfile}
-                >
-                  {t(I18nKey.SETTINGS$ADD_LLM_PROFILE)}
-                </BrandButton>
-              </>
+              <BrandButton
+                testId="add-llm-profile"
+                type="button"
+                variant="secondary"
+                className="ml-auto"
+                onClick={onAddProfile}
+              >
+                {t(I18nKey.SETTINGS$ADD_LLM_PROFILE)}
+              </BrandButton>
             ) : null}
           </div>
 
@@ -177,6 +165,7 @@ export function LlmProfilesManager({
           <ProviderConnectionsManager
             connections={connectionList}
             linkedCountById={linkedCountById}
+            existingNames={profiles.map((p) => p.name)}
             isLoading={isLoadingConnections}
             loadError={connectionsError ?? null}
           />
@@ -190,11 +179,6 @@ export function LlmProfilesManager({
       <DeleteProfileModal
         profile={profileToDelete}
         onClose={() => setProfileToDelete(null)}
-      />
-      <AddModelsModal
-        isOpen={showAddModels}
-        existingNames={profiles.map((p) => p.name)}
-        onClose={() => setShowAddModels(false)}
       />
     </>
   );

@@ -31825,23 +31825,6 @@
     "ca": "No s'han trobat models per a aquest proveïdor.",
     "uk": "Для цього постачальника моделей не знайдено."
   },
-  "SETTINGS$ADD_MODELS_FROM_PROVIDER": {
-    "en": "Add from provider models",
-    "ja": "プロバイダーのモデルから追加",
-    "zh-CN": "从提供商模型添加",
-    "zh-TW": "從供應商模型新增",
-    "ko-KR": "제공업체 모델에서 추가",
-    "no": "Legg til fra leverandørmodeller",
-    "it": "Aggiungi dai modelli del provider",
-    "pt": "Adicionar a partir de modelos do provedor",
-    "es": "Añadir desde modelos del proveedor",
-    "ar": "إضافة من نماذج المزوّد",
-    "fr": "Ajouter depuis les modèles du fournisseur",
-    "tr": "Sağlayıcı modellerinden ekle",
-    "de": "Von Anbieter-Modellen hinzufügen",
-    "ca": "Afegeix des de models del proveïdor",
-    "uk": "Додати з моделей постачальника"
-  },
   "SETTINGS$ADD_MODELS_NAME_TAKEN": {
     "en": "Name already exists",
     "ja": "この名前はすでに存在します",
@@ -31858,40 +31841,6 @@
     "de": "Name bereits vergeben",
     "ca": "El nom ja existeix",
     "uk": "Ім'я вже існує"
-  },
-  "SETTINGS$ADD_MODELS_PROVIDER_LABEL": {
-    "en": "Provider",
-    "ja": "プロバイダー",
-    "zh-CN": "提供商",
-    "zh-TW": "供應商",
-    "ko-KR": "제공업체",
-    "no": "Leverandør",
-    "it": "Provider",
-    "pt": "Provedor",
-    "es": "Proveedor",
-    "ar": "المزوّد",
-    "fr": "Fournisseur",
-    "tr": "Sağlayıcı",
-    "de": "Anbieter",
-    "ca": "Proveïdor",
-    "uk": "Постачальник"
-  },
-  "SETTINGS$ADD_MODELS_PROVIDER_PLACEHOLDER": {
-    "en": "Select a provider",
-    "ja": "プロバイダーを選択",
-    "zh-CN": "选择提供商",
-    "zh-TW": "選擇供應商",
-    "ko-KR": "제공업체 선택",
-    "no": "Velg en leverandør",
-    "it": "Seleziona un provider",
-    "pt": "Selecione um provedor",
-    "es": "Selecciona un proveedor",
-    "ar": "اختر مزوّدًا",
-    "fr": "Sélectionner un fournisseur",
-    "tr": "Bir sağlayıcı seçin",
-    "de": "Anbieter auswählen",
-    "ca": "Selecciona un proveïdor",
-    "uk": "Виберіть постачальника"
   },
   "SETTINGS$ADD_MODELS_SELECT_ALL": {
     "en": "Select all",
@@ -31943,6 +31892,23 @@
     "de": "Nur verifizierte Modelle",
     "ca": "Només models verificats",
     "uk": "Лише перевірені моделі"
+  },
+  "SETTINGS$ADD_MODELS_CONNECTION_BOUND": {
+    "en": "Linked to {{provider}} — profiles inherit this connection's key",
+    "ja": "{{provider}} にリンク — プロファイルはこの接続のキーを引き継ぎます",
+    "zh-CN": "已链接到 {{provider}} — 配置文件将继承此连接的密钥",
+    "zh-TW": "已連結至 {{provider}} — 設定檔將繼承此連線的金鑰",
+    "ko-KR": "{{provider}}에 연결됨 — 프로필이 이 연결의 키를 상속합니다",
+    "no": "Koblet til {{provider}} — profilene arver denne tilkoblingens nøkkel",
+    "it": "Collegato a {{provider}} — i profili ereditano la chiave di questa connessione",
+    "pt": "Vinculado a {{provider}} — os perfis herdam a chave desta conexão",
+    "es": "Vinculado a {{provider}} — los perfiles heredan la clave de esta conexión",
+    "ar": "مرتبط بـ {{provider}} — ترث الملفات الشخصية مفتاح هذا الاتصال",
+    "fr": "Lié à {{provider}} — les profils héritent de la clé de cette connexion",
+    "tr": "{{provider}} ile bağlandı — profiller bu bağlantının anahtarını miras alır",
+    "de": "Verknüpft mit {{provider}} — Profile erben den Schlüssel dieser Verbindung",
+    "ca": "Vinculat a {{provider}} — els perfils hereten la clau d'aquesta connexió",
+    "uk": "Прив'язано до {{provider}} — профілі успадковують ключ цього з'єднання"
   },
   "SETTINGS$ADD_N_PROFILES": {
     "en": "Add {{count}} profiles",
@@ -42160,6 +42126,23 @@
     "uk": "Ви впевнені, що хочете видалити підключення \"{{name}}\"?",
     "zh-CN": "确定要删除连接“{{name}}”吗？",
     "zh-TW": "確定要刪除連線「{{name}}」嗎？"
+  },
+  "SETTINGS$PROVIDER_CONNECTION_ADD_MODELS_TITLE": {
+    "ar": "إضافة نماذج كملفات شخصية",
+    "ca": "Afegeix models com a perfils",
+    "de": "Modelle als Profile hinzufügen",
+    "en": "Add models as profiles",
+    "es": "Añadir modelos como perfiles",
+    "fr": "Ajouter des modèles comme profils",
+    "it": "Aggiungi modelli come profili",
+    "ja": "モデルをプロファイルとして追加",
+    "ko-KR": "모델을 프로필로 추가",
+    "no": "Legg til modeller som profiler",
+    "pt": "Adicionar modelos como perfis",
+    "tr": "Modelleri profil olarak ekle",
+    "uk": "Додати моделі як профілі",
+    "zh-CN": "将模型添加为配置文件",
+    "zh-TW": "將模型新增為設定檔"
   },
   "SETTINGS$PROVIDER_CONNECTION_DELETE_TITLE": {
     "ar": "حذف اتصال المزود",

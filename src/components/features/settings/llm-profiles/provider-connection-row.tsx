@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import EditIcon from "#/icons/u-edit.svg?react";
 import DeleteIcon from "#/icons/u-delete.svg?react";
+import AddModelsIcon from "#/icons/u-plus.svg?react";
 import { KeyStatusIcon } from "#/components/features/settings/key-status-icon";
 import type { ProviderConnection } from "#/api/provider-connections-service/provider-connections-service.api";
 import { cn } from "#/utils/utils";
@@ -14,6 +15,7 @@ interface ProviderConnectionRowProps {
   connection: ProviderConnection;
   /** Number of LLM profiles linked to this connection. */
   linkedProfileCount: number;
+  onAddModels: (connection: ProviderConnection) => void;
   onEdit: (connection: ProviderConnection) => void;
   onDelete: (connection: ProviderConnection) => void;
 }
@@ -21,6 +23,7 @@ interface ProviderConnectionRowProps {
 export function ProviderConnectionRow({
   connection,
   linkedProfileCount,
+  onAddModels,
   onEdit,
   onDelete,
 }: ProviderConnectionRowProps) {
@@ -49,6 +52,15 @@ export function ProviderConnectionRow({
         <KeyStatusIcon isSet={connection.api_key_set} />
       </div>
       <div className="flex shrink-0 items-center gap-1">
+        <button
+          type="button"
+          data-testid="provider-connection-add-models"
+          aria-label={t(I18nKey.SETTINGS$PROVIDER_CONNECTION_ADD_MODELS_TITLE)}
+          className={settingsListIconActionButtonClassName}
+          onClick={() => onAddModels(connection)}
+        >
+          <AddModelsIcon width={16} height={16} />
+        </button>
         <button
           type="button"
           data-testid="provider-connection-edit"
