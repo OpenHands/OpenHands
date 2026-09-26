@@ -107,6 +107,7 @@ export const LIGHT_PLUS_TOKENS: Partial<
   "--oh-border-input": "#808080",
   "--oh-border-subtle": "#D1D1D1",
   "--oh-separator": "rgba(31, 31, 31, 0.16)",
+  "--oh-divider": "color-mix(in srgb, var(--oh-contrast) 24%, transparent)",
   "--oh-focus": "#007ACC",
   "--oh-status-success": "#0E743B",
   "--oh-status-error": "#C12A1C",

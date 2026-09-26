@@ -9,12 +9,14 @@ import {
   formControlShellClassName,
 } from "#/utils/form-control-classes";
 import {
+  ALL_THEMES,
   LIGHT_THEMES,
   PANEL_SURFACES,
   colorUtility,
   contrast,
   over,
   surfaceColor,
+  tokenColor,
   utilityColor,
 } from "./theme-color-resolver";
 
@@ -166,6 +168,30 @@ describe.each(LIGHT_THEMES)("%s contrast contract", (theme) => {
     },
   );
 
+  it("draws row dividers that read as separators on every panel surface", () => {
+    const divider = utilityColor(theme, "border-divider");
+    for (const surface of PANEL_SURFACES) {
+      const backdrop = surfaceColor(theme, surface);
+      const painted = contrast(over(divider, backdrop), backdrop);
+      expect.soft(painted, `divider on ${surface}`).toBeGreaterThanOrEqual(1.5);
+      expect
+        .soft(painted, `divider must out-separate border-subtle on ${surface}`)
+        .toBeGreaterThan(
+          contrast(surfaceColor(theme, "--oh-border-subtle"), backdrop),
+        );
+    }
+  });
+
+  it("keeps danger menu text readable on overlays and panel surfaces", () => {
+    const danger = utilityColor(theme, "text-danger");
+    for (const surface of [...PANEL_SURFACES, "--oh-overlay"]) {
+      const backdrop = surfaceColor(theme, surface);
+      expect
+        .soft(contrast(over(danger, backdrop), backdrop), `on ${surface}`)
+        .toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   it("routes every outlined shared control through the same boundary utility", () => {
     const boundary = colorUtility(formControlBorderClassName, "border");
     expect(boundary).toBe("border-border-input");
@@ -177,3 +203,14 @@ describe.each(LIGHT_THEMES)("%s contrast contract", (theme) => {
     }
   });
 });
+
+describe.each(ALL_THEMES.filter((key) => !LIGHT_THEMES.includes(key)))(
+  "%s divider parity",
+  (theme) => {
+    it("keeps dividers on the established border-subtle color", () => {
+      expect(utilityColor(theme, "border-divider")).toEqual(
+        tokenColor(theme, "--oh-border-subtle"),
+      );
+    });
+  },
+);

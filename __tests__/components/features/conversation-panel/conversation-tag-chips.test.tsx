@@ -99,7 +99,9 @@ describe("ConversationTagChips", () => {
     const popover = screen.getByTestId(
       "conversation-card-tag-overflow-popover",
     );
-    expect(popover.parentElement).toBe(document.body);
+    // The appearance wrapper is display: contents, so the popover still lays out at body level.
+    expect(popover.parentElement).toHaveClass("contents");
+    expect(popover.parentElement?.parentElement).toBe(document.body);
     const rows = within(popover).getAllByTestId(
       "conversation-card-tag-overflow-row",
     );

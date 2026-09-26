@@ -1,9 +1,9 @@
 import React from "react";
-import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 import { extensionModuleCardPillClassName } from "#/utils/extension-module-card-classes";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
 
 /** @deprecated Use {@link extensionModuleCardPillClassName} from `#/utils/extension-module-card-classes`. */
 export const SKILL_CARD_PILL_CLASS = extensionModuleCardPillClassName;
@@ -230,12 +230,10 @@ export function SkillCardPillRow({ pills, testId }: SkillCardPillRowProps) {
         ) : null}
       </div>
 
-      {isOverflowOpen &&
-        popoverBox &&
-        typeof document !== "undefined" &&
-        createPortal(
-          // Stop card-level click activation when interacting with the list.
-          // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- dialog surface must swallow clicks
+      {isOverflowOpen && popoverBox && typeof document !== "undefined" && (
+        <AppearancePortal>
+          {/* Stop card-level click activation when interacting with the list. */}
+          {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- dialog surface must swallow clicks */}
           <div
             ref={popoverRef}
             role="dialog"
@@ -265,9 +263,9 @@ export function SkillCardPillRow({ pills, testId }: SkillCardPillRowProps) {
                 {pill.node}
               </div>
             ))}
-          </div>,
-          document.body,
-        )}
+          </div>
+        </AppearancePortal>
+      )}
     </div>
   );
 }

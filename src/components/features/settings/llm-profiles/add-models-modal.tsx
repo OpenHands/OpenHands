@@ -285,11 +285,11 @@ export function AddModelsModal({
       onClose={handleClose}
     >
       <div data-testid="add-models-modal" className="flex flex-col gap-3">
-        <label className="flex flex-col gap-2 text-sm text-white">
+        <label className="flex flex-col gap-2 text-sm text-contrast">
           {t(I18nKey.SETTINGS$ADD_MODELS_PROVIDER_LABEL)}
           <select
             data-testid="add-models-provider"
-            className="rounded-md border border-[var(--oh-border)] bg-[var(--oh-background)] px-3 py-2 text-sm text-white"
+            className="rounded-md border border-border-input bg-[var(--oh-background)] px-3 py-2 text-sm text-contrast"
             value={provider ?? ""}
             onChange={(e) => setProvider(e.target.value || null)}
             disabled={submitting}
@@ -319,7 +319,7 @@ export function AddModelsModal({
         </label>
 
         {provider !== null && (
-          <label className="flex items-center gap-2 text-sm text-white">
+          <label className="flex items-center gap-2 text-sm text-contrast">
             <input
               data-testid="add-models-verified-only"
               type="checkbox"
@@ -348,7 +348,7 @@ export function AddModelsModal({
 
         {visibleRows.length > 0 && (
           <>
-            <label className="flex items-center gap-2 text-sm text-white">
+            <label className="flex items-center gap-2 text-sm text-contrast">
               <input
                 data-testid="add-models-select-all"
                 type="checkbox"
@@ -385,7 +385,7 @@ export function AddModelsModal({
                       disabled={disabled || !valid}
                     />
                     <span
-                      className="min-w-0 flex-1 truncate text-sm text-white"
+                      className="min-w-0 flex-1 truncate text-sm text-contrast"
                       title={row.model}
                     >
                       {row.model}

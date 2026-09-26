@@ -131,7 +131,11 @@ export function ManageWorkspacesModal({
                       data-testid={`manage-workspaces-remove-${workspace.name}`}
                       className="flex items-center gap-1 px-2 py-1 rounded text-xs text-text-tertiary hover:bg-interactive-hover hover:text-contrast cursor-pointer"
                     >
-                      <CloseIcon width={12} height={12} />
+                      <CloseIcon
+                        width={12}
+                        height={12}
+                        className="text-contrast"
+                      />
                       <span>{t(I18nKey.HOME$REMOVE_WORKSPACE)}</span>
                     </button>
                   </li>
@@ -190,7 +194,11 @@ export function ManageWorkspacesModal({
                               data-testid={`manage-workspaces-remove-parent-${parent.name}`}
                               className="flex items-center gap-1 px-2 py-1 rounded text-xs text-text-tertiary hover:bg-interactive-hover hover:text-contrast cursor-pointer"
                             >
-                              <CloseIcon width={12} height={12} />
+                              <CloseIcon
+                                width={12}
+                                height={12}
+                                className="text-contrast"
+                              />
                               <span>
                                 {t(I18nKey.HOME$REMOVE_WORKSPACE_PARENT)}
                               </span>

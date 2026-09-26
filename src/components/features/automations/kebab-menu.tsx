@@ -1,5 +1,4 @@
 import { useState, useEffect, useLayoutEffect, useRef } from "react";
-import ReactDOM from "react-dom";
 import { useTranslation } from "react-i18next";
 import KebabVerticalIcon from "#/icons/kebab-vertical.svg?react";
 import { ContextMenuListItem } from "#/components/features/context-menu/context-menu-list-item";
@@ -8,6 +7,7 @@ import { ContextMenu } from "#/ui/context-menu";
 import { cn } from "#/utils/utils";
 import { automationIconActionButtonClassName } from "./automation-action-button-classes";
 import { KebabMenuItemContent } from "./kebab-menu-item-content";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
 
 export interface KebabMenuItem {
   label: string;
@@ -132,12 +132,11 @@ export function KebabMenu({ items, triggerClassName }: KebabMenuProps) {
         <KebabVerticalIcon className="size-4" />
       </button>
 
-      {open && portalStyle && typeof document !== "undefined"
-        ? ReactDOM.createPortal(
-            <div style={portalStyle}>{menu}</div>,
-            document.body,
-          )
-        : null}
+      {open && portalStyle && typeof document !== "undefined" ? (
+        <AppearancePortal>
+          <div style={portalStyle}>{menu}</div>
+        </AppearancePortal>
+      ) : null}
     </>
   );
 }

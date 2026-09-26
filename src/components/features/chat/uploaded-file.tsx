@@ -39,7 +39,10 @@ export function UploadedFile({
       </div>
       {isLoading && (
         <div className="flex items-center justify-center">
-          <LoaderCircle className="animate-spin w-5 h-5" color="white" />
+          <LoaderCircle
+            className="animate-spin w-5 h-5"
+            color="var(--oh-contrast)"
+          />
         </div>
       )}
     </div>

@@ -70,6 +70,7 @@ export const AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES = {
   "--oh-border-input": "var(--cool-grey-600)",
   "--oh-border-subtle": "var(--cool-grey-800)",
   "--oh-separator": "rgba(113, 120, 136, 0.5)",
+  "--oh-divider": "var(--oh-border-subtle)",
   "--oh-focus": "#ffffff",
   "--oh-status-success": "#1FBD53",
   "--oh-status-error": "#FF684E",

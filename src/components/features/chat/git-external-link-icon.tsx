@@ -13,7 +13,7 @@ export function GitExternalLinkIcon({ className }: GitExternalLinkIconProps) {
         className,
       )}
     >
-      <LinkExternalIcon width={12} height={12} color="white" />
+      <LinkExternalIcon width={12} height={12} color="var(--oh-contrast)" />
     </div>
   );
 }

@@ -1,11 +1,11 @@
 import React from "react";
-import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import {
   getEnvironmentSwitchSnapshot,
   subscribeEnvironmentSwitch,
 } from "./environment-switch-store";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
 
 // Re-export the store API so existing call sites and tests that import from
 // this module keep working unchanged.
@@ -149,22 +149,23 @@ export function EnvironmentSwitchOverlay() {
 
   if (!visible || typeof document === "undefined") return null;
 
-  return createPortal(
-    <div
-      data-testid="environment-switch-overlay"
-      data-target={target}
-      className="environment-switch-overlay pointer-events-none fixed inset-0 z-[2147483646] flex items-center justify-center"
-      aria-live="polite"
-      aria-atomic="true"
-    >
-      <div className="pointer-events-none flex min-w-70 max-w-105 flex-col items-center gap-2 rounded-xl border border-border bg-surface px-5 py-4 text-foreground shadow-2xl">
-        <EnvironmentSwitchIcon className="mb-2 h-6 w-20 shrink-0 text-foreground" />
-        <p className="text-center text-sm font-medium">
-          {t(I18nKey.BACKEND$SWITCHING_TO, { environment: target })}
-        </p>
+  return (
+    <AppearancePortal>
+      <div
+        data-testid="environment-switch-overlay"
+        data-target={target}
+        className="environment-switch-overlay pointer-events-none fixed inset-0 z-[2147483646] flex items-center justify-center"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        <div className="pointer-events-none flex min-w-70 max-w-105 flex-col items-center gap-2 rounded-xl border border-border bg-surface px-5 py-4 text-foreground shadow-2xl">
+          <EnvironmentSwitchIcon className="mb-2 h-6 w-20 shrink-0 text-foreground" />
+          <p className="text-center text-sm font-medium">
+            {t(I18nKey.BACKEND$SWITCHING_TO, { environment: target })}
+          </p>
+        </div>
       </div>
-    </div>,
-    document.body,
+    </AppearancePortal>
   );
 }
 

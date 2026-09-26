@@ -110,6 +110,7 @@ const SOLARIZED_LIGHT_TOKENS: Partial<
   "--oh-border-input": "#6A7B7E",
   "--oh-border-subtle": "#D2CBB7",
   "--oh-separator": "rgba(88, 110, 117, 0.22)",
+  "--oh-divider": "color-mix(in srgb, var(--oh-contrast) 24%, transparent)",
   "--oh-focus": "#1E70AD",
   "--oh-status-success": "#596700",
   "--oh-status-error": "#B52825",

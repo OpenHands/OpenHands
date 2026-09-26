@@ -45,6 +45,7 @@
   --color-border: var(--oh-border);
   --color-border-input: var(--oh-border-input);
   --color-border-subtle: var(--oh-border-subtle);
+  --color-divider: var(--oh-divider);
 
   /* Focus / interactive state aliases */
   --color-focus: var(--oh-focus);
@@ -143,6 +144,7 @@
   --oh-border-input: var(--cool-grey-700);   /* unified with --oh-border; same stroke weight everywhere */
   --oh-border-subtle: var(--cool-grey-800);  /* within-panel separators, list dividers */
   --oh-separator: rgba(113, 120, 136, 0.5);
+  --oh-divider: var(--oh-border-subtle);     /* rules between rows inside a card or panel */
   --oh-focus: #ffffff;
   --oh-status-success: #1FBD53;
   --oh-status-error: #FF684E;
