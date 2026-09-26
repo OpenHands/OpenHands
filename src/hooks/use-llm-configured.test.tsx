@@ -173,4 +173,85 @@ describe("useLlmConfigured", () => {
     // Detail is fetched because the profile is local + active + key-less.
     expect(mockGetProfile).toHaveBeenCalledWith("gpt-5.5");
   });
+
+  // #15609: when an active local profile exists but its API key is missing,
+  // surface apiKeyMissing so the home-page banner can show a more specific
+  // message ("active profile is missing its API key") instead of the generic
+  // "LLM not set up" text.
+  it("sets apiKeyMissing when an active local API-key profile has no key (#15609)", async () => {
+    mockListProfiles.mockResolvedValue({
+      active_profile: "gpt-5.5",
+      profiles: [
+        {
+          name: "gpt-5.5",
+          model: "gpt-5.5",
+          base_url: "https://api.openai.com/v1",
+          api_key_set: false,
+        },
+      ],
+    });
+    mockGetProfile.mockResolvedValue({
+      name: "gpt-5.5",
+      api_key_set: false,
+      config: {
+        model: "openai/gpt-5.5",
+      },
+    });
+
+    const { result } = renderLlmConfiguredHook();
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.isConfigured).toBe(false);
+    expect(result.current.apiKeyMissing).toBe(true);
+  });
+
+  it("does not set apiKeyMissing when the subscription profile has no key (#15609)", async () => {
+    mockListProfiles.mockResolvedValue({
+      active_profile: "gpt-5.5-sub",
+      profiles: [
+        {
+          name: "gpt-5.5-sub",
+          model: "gpt-5.5",
+          base_url: "https://chatgpt.com/backend-api/codex",
+          api_key_set: false,
+        },
+      ],
+    });
+    mockGetProfile.mockResolvedValue({
+      name: "gpt-5.5-sub",
+      api_key_set: false,
+      config: {
+        model: "openai/gpt-5.5",
+        auth_type: "subscription",
+        subscription_vendor: "openai",
+      },
+    });
+
+    const { result } = renderLlmConfiguredHook();
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.isConfigured).toBe(true);
+    // Subscription profiles never need a key — the missing-key state doesn't
+    // apply even though api_key_set is false.
+    expect(result.current.apiKeyMissing).toBe(false);
+  });
+
+  it("does not set apiKeyMissing when no active profile exists (#15609)", async () => {
+    mockListProfiles.mockResolvedValue({
+      active_profile: null,
+      profiles: [],
+    });
+
+    const { result } = renderLlmConfiguredHook();
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.isConfigured).toBe(false);
+    // Genuinely unconfigured state (no profile at all) — distinct from the
+    // "profile exists but no key" case. The banner should show the original
+    // "LLM not set up" message, not the api-key-missing one.
+    expect(result.current.apiKeyMissing).toBe(false);
+  });
 });
