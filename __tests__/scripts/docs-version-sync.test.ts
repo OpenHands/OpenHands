@@ -29,12 +29,12 @@ const agentServerVersion = config.versions.agentServer;
 const dockerImage = `${config.images.agentCanvas}:${config.versions.agentCanvas}`;
 
 describe("docs/example references stay in sync with config/defaults.json", () => {
-  it("AGENTS.md documents the current default version", () => {
-    const agentsMd = read("AGENTS.md");
-    expect(agentsMd).toContain(
+  it("the runtime-services skill documents the current default version", () => {
+    const runtimeSkill = read(".agents/skills/runtime-services/SKILL.md");
+    expect(runtimeSkill).toContain(
       `\`OH_AGENT_SERVER_VERSION\` — specific PyPI version (e.g., "${agentServerVersion}")`,
     );
-    expect(agentsMd).toContain(
+    expect(runtimeSkill).toContain(
       `Default: released PyPI version \`${agentServerVersion}\` for agent-server SDK libraries`,
     );
   });
