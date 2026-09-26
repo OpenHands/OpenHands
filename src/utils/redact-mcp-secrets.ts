@@ -52,8 +52,22 @@ function addUrlSecrets(values: Set<string>, rawUrl: string | undefined): void {
     const url = new URL(rawUrl);
     addValue(values, url.username);
     addValue(values, url.password);
-    addValue(values, decodeURIComponent(url.username));
-    addValue(values, decodeURIComponent(url.password));
+    // Wrapping each decodeURIComponent individually prevents a lone "%" in the
+    // username or password from aborting the entire collection, including the
+    // searchParams pass below (fixes #16978).
+    try {
+      addValue(values, decodeURIComponent(url.username));
+    } catch {
+      // Malformed %-encoding in username — skip the decoded form, keep the
+      // already-collected raw form and continue to the rest of the URL.
+    }
+    try {
+      addValue(values, decodeURIComponent(url.password));
+    } catch {
+      // Malformed %-encoding in password — same as above.
+    }
+    // Always attempt searchParams — a parseable URL may still carry secrets in
+    // its query string even when the userinfo has malformed %-encoding.
     url.searchParams.forEach((value, name) => {
       if (SECRETLIKE_PARAM_NAME.test(name)) addValue(values, value);
     });
