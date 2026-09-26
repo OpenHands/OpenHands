@@ -2,8 +2,6 @@ import { FileClient } from "@openhands/typescript-client/clients";
 import { RemoteWorkspace } from "@openhands/typescript-client/workspace/remote-workspace";
 import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
 import { getActiveBackend } from "#/api/backend-registry/active-store";
-import { callCloudProxy } from "#/api/cloud/proxy";
-import { buildHttpBaseUrl } from "#/utils/websocket-url";
 
 export interface CommandResult {
   exit_code: number;
@@ -17,9 +15,10 @@ export interface CommandResult {
  * In **local** mode the runtime is reachable directly from the browser
  * (e.g. `127.0.0.1:18000`) so the SDK's typed clients work fine.
  * In **cloud** mode the runtime lives at `*.prod-runtime.all-hands.dev`,
- * which doesn't allow CORS from `localhost`, so all calls go through
- * `callCloudProxy` with the runtime URL as `hostOverride` and the
- * conversation's `session_api_key` as auth — server-side hop, no CORS.
+ * whose CORS allowlist (`OH_ALLOW_CORS_ORIGINS`, set to the Canvas origin
+ * in saas-deploy) permits direct browser calls authenticated with the
+ * conversation's `X-Session-API-Key`. So both modes now use the same
+ * direct typed-client path against the per-conversation runtime URL.
  */
 class AgentServerRuntimeService {
   static async executeCommand(
@@ -31,39 +30,32 @@ class AgentServerRuntimeService {
   ): Promise<CommandResult> {
     const active = getActiveBackend().backend;
 
-    if (active.kind === "cloud" && conversationUrl) {
-      const output = await callCloudProxy<{
-        exit_code?: number;
-        stdout?: string;
-        stderr?: string;
-      }>({
-        backend: active,
-        method: "POST",
-        hostOverride: buildHttpBaseUrl(conversationUrl),
-        path: "/api/bash/execute_bash_command",
-        body: {
-          command,
-          ...(cwd ? { cwd } : {}),
-          timeout: Math.floor(timeout),
-        },
-        authMode: "session-api-key",
-        sessionApiKey,
-        timeoutSeconds: timeout + 10,
-      });
-      return {
-        exit_code: output.exit_code ?? -1,
-        stdout: output.stdout ?? "",
-        stderr: output.stderr ?? "",
-      };
+    if (active.kind === "cloud" && !conversationUrl) {
+      throw new Error(
+        "AgentServerRuntimeService.executeCommand requires a conversation URL on cloud backends",
+      );
     }
 
+    // `RemoteWorkspace.executeCommand` forwards `timeout` (seconds) to the
+    // agent-server as the command timeout AND sets the HTTP request timeout to
+    // `(timeout + 10) * 1000` ms — the same +10s buffer the old cloud
+    // `callCloudProxy` branch used (`timeoutSeconds: timeout + 10`). We
+    // deliberately do NOT pass `timeout` into `getAgentServerClientOptions`:
+    // that option is the SDK HttpClient's default timeout in *milliseconds*,
+    // so a seconds value (e.g. 30) would be read as 30 ms. The per-request
+    // timeout the SDK sets on `executeCommand` overrides the client default
+    // anyway, but passing a ms-mismatched default is a latent footgun if any
+    // method on the client ever lacks a per-request timeout.
     const result = await new RemoteWorkspace(
       getAgentServerClientOptions({ conversationUrl, sessionApiKey }),
     ).executeCommand(command, cwd, timeout);
+    // The SDK already coerces these (`exit_code ?? 0`, `stdout || ''`,
+    // `stderr || ''`); keep a defensive fallback so a contract drift in the
+    // client can never surface `undefined` to callers.
     return {
-      exit_code: result.exit_code,
-      stdout: result.stdout,
-      stderr: result.stderr,
+      exit_code: result.exit_code ?? -1,
+      stdout: result.stdout ?? "",
+      stderr: result.stderr ?? "",
     };
   }
 
@@ -74,17 +66,10 @@ class AgentServerRuntimeService {
   ): Promise<ArrayBuffer> {
     const active = getActiveBackend().backend;
 
-    if (active.kind === "cloud" && conversationUrl) {
-      const blob = await callCloudProxy<Blob>({
-        backend: active,
-        method: "GET",
-        hostOverride: buildHttpBaseUrl(conversationUrl),
-        path: `/api/file/download?path=${encodeURIComponent(path)}`,
-        authMode: "session-api-key",
-        sessionApiKey,
-        responseType: "blob",
-      });
-      return blob.arrayBuffer();
+    if (active.kind === "cloud" && !conversationUrl) {
+      throw new Error(
+        "AgentServerRuntimeService.downloadFile requires a conversation URL on cloud backends",
+      );
     }
 
     return new FileClient(

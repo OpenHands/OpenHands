@@ -3,7 +3,7 @@ import { cn } from "#/utils/utils";
 
 const MENU_SECTION_HEADING_PADDING = "px-2 pb-1 pt-1";
 const MENU_SECTION_HEADING_TEXT =
-  "text-[11px] font-semibold uppercase tracking-wide text-[var(--oh-muted)]";
+  "text-[11px] font-semibold uppercase tracking-wide text-muted";
 
 export function MenuHeading({
   children,

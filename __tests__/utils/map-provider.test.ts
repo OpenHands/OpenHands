@@ -1,5 +1,5 @@
 import { test, expect } from "vitest";
-import { mapProvider } from "../../src/utils/map-provider";
+import { getProviderId, mapProvider } from "../../src/utils/map-provider";
 
 test("mapProvider", () => {
   expect(mapProvider("azure")).toBe("Azure");
@@ -14,7 +14,7 @@ test("mapProvider", () => {
   expect(mapProvider("anyscale")).toBe("Anyscale");
   expect(mapProvider("databricks")).toBe("Databricks");
   expect(mapProvider("ollama")).toBe("Ollama");
-  expect(mapProvider("perlexity")).toBe("Perplexity AI");
+  expect(mapProvider("perplexity")).toBe("Perplexity AI");
   expect(mapProvider("friendliai")).toBe("FriendliAI");
   expect(mapProvider("groq")).toBe("Groq");
   expect(mapProvider("fireworks_ai")).toBe("Fireworks AI");
@@ -26,4 +26,12 @@ test("mapProvider", () => {
   expect(mapProvider("openrouter")).toBe("OpenRouter");
   expect(mapProvider("clarifai")).toBe("Clarifai");
   expect(mapProvider("moonshot")).toBe("Moonshot");
+});
+
+test("getProviderId round-trips the display name back to the provider id", () => {
+  // The backend addresses providers by their litellm id (`perplexity`), so the
+  // display name must map back to that id, not to a misspelling of it.
+  expect(getProviderId("Perplexity AI")).toBe("perplexity");
+  expect(getProviderId("OpenAI")).toBe("openai");
+  expect(getProviderId("Some New Provider")).toBe("Some New Provider");
 });

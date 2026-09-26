@@ -4,6 +4,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import McpService from "#/api/mcp-service/mcp-service.api";
 import {
+  __resetActiveStoreForTests,
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
+import {
   __resetMcpHealthStoreForTests,
   getMcpHealthSnapshot,
 } from "#/api/mcp-health/mcp-health-store";
@@ -35,6 +40,10 @@ function renderWith(ui: React.ReactNode) {
 describe("InstallServerModal", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    // The backend registry persists to localStorage; wipe it before the
+    // reset re-reads storage so each test starts on the default local backend.
+    window.localStorage.clear();
+    __resetActiveStoreForTests();
     vi.spyOn(SettingsService, "createMcpServer").mockImplementation(
       (settingsKey, server) =>
         SettingsService.saveSettings({
@@ -131,6 +140,92 @@ describe("InstallServerModal", () => {
         verification: "connectivity-only",
       }),
     );
+  });
+
+  it("seeds a remote catalog server's health on cloud backends", async () => {
+    // Arrange: on a cloud backend remote servers are probed through the app
+    // server, so the pre-save verdict is real and must reach the card.
+    __resetMcpHealthStoreForTests();
+    setRegisteredBackends([
+      {
+        id: "cloud-1",
+        name: "Cloud",
+        host: "https://app.all-hands.dev",
+        apiKey: "k",
+        kind: "cloud",
+      },
+    ]);
+    setActiveSelection({ backendId: "cloud-1" });
+    const linear = getMcpMarketplaceCatalog(MCP_MARKETPLACE).find(
+      (e) => e.id === "linear",
+    )!;
+    const getSpy = vi
+      .spyOn(SettingsService, "getSettings")
+      .mockResolvedValue(MOCK_DEFAULT_USER_SETTINGS);
+    vi.spyOn(SettingsService, "saveSettings").mockResolvedValue(true);
+    renderWith(
+      <InstallServerModal
+        existingServers={[]}
+        entry={linear}
+        onClose={vi.fn()}
+      />,
+    );
+    await screen.findByTestId("mcp-install-modal");
+    await waitFor(() => expect(getSpy).toHaveBeenCalled());
+
+    // Act
+    fireEvent.change(screen.getByTestId("mcp-install-field-api_key"), {
+      target: { value: "lin_api_secret" },
+    });
+    fireEvent.click(screen.getByTestId("mcp-install-submit"));
+
+    // Assert
+    await waitFor(() =>
+      expect(Object.values(getMcpHealthSnapshot())).toEqual([
+        expect.objectContaining({ status: "healthy" }),
+      ]),
+    );
+  });
+
+  it("does not seed a stdio catalog server's health on cloud backends", async () => {
+    // Arrange: stdio servers cannot be probed off-sandbox, so their cloud
+    // pre-save test is synthetic and must not become a health verdict.
+    __resetMcpHealthStoreForTests();
+    setRegisteredBackends([
+      {
+        id: "cloud-1",
+        name: "Cloud",
+        host: "https://app.all-hands.dev",
+        apiKey: "k",
+        kind: "cloud",
+      },
+    ]);
+    setActiveSelection({ backendId: "cloud-1" });
+    const slack = MCP_MARKETPLACE.find((e) => e.id === "slack")!;
+    const saveSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+    renderWith(
+      <InstallServerModal
+        existingServers={[]}
+        entry={slack}
+        onClose={vi.fn()}
+      />,
+    );
+    await screen.findByTestId("mcp-install-modal");
+
+    // Act
+    fireEvent.change(screen.getByTestId("mcp-install-field-SLACK_BOT_TOKEN"), {
+      target: { value: "xoxb-abc" },
+    });
+    fireEvent.change(screen.getByTestId("mcp-install-field-SLACK_TEAM_ID"), {
+      target: { value: "T01" },
+    });
+    fireEvent.click(screen.getByTestId("mcp-install-submit"));
+
+    // Assert: the install still completes, but no verdict is recorded.
+    await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
+    expect(getMcpHealthSnapshot()).toEqual({});
   });
 
   it("installs Tavily as a stdio MCP server with TAVILY_API_KEY env", async () => {
@@ -317,6 +412,42 @@ describe("InstallServerModal", () => {
         },
       },
     });
+  });
+
+  it("styles the OAuth info box with theme surface and text tokens", async () => {
+    const entry: MarketplaceEntry = {
+      id: "synthetic-oauth",
+      name: "Synthetic OAuth",
+      description: "Synthetic OAuth entry.",
+      docsUrl: "https://example.com/docs",
+      iconBg: "#000000",
+      connectionOptions: [
+        {
+          id: "oauth",
+          provider: "mcp",
+          transport: {
+            kind: "shttp",
+            url: "https://mcp.example.com/mcp",
+          },
+          auth: {
+            strategy: "oauth2",
+            oauth: { clientAuthentication: "none" },
+          },
+        },
+      ],
+    };
+
+    renderWith(
+      <InstallServerModal existingServers={[]} entry={entry} onClose={vi.fn()} />,
+    );
+
+    const box = await screen.findByTestId("mcp-install-oauth-info");
+    expect(box).toHaveClass("bg-tertiary");
+    expect(box).not.toHaveClass("bg-base-tertiary");
+
+    const text = box.querySelector("p");
+    expect(text).toHaveClass("text-text-secondary");
+    expect(text).not.toHaveClass("text-secondary-light");
   });
 
   it("installs header-field remote servers with tagged header auth", async () => {

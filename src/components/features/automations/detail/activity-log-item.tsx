@@ -12,6 +12,7 @@ import { getAutomationRunDisplay } from "#/utils/automation-run-display";
 import { RunStatusBadge } from "./run-status-badge";
 import { RunPhase, shouldShowRunPhase } from "./run-phase";
 import { RunLogsModal } from "./run-logs-modal";
+import { buildAgentCanvasPath } from "#/utils/base-path";
 
 interface ActivityLogItemProps {
   run: AutomationRun;
@@ -31,8 +32,9 @@ function formatRunTimestamp(dateStr: string, locale: string): string {
 }
 
 function getConversationUrl(conversationId: string): string {
-  // In agent-canvas, conversations are at /conversations/:id
-  return `/conversations/${conversationId}`;
+  // In agent-canvas, conversations are at /conversations/:id, under the base
+  // path when Canvas is mounted on a subpath.
+  return buildAgentCanvasPath(`/conversations/${conversationId}`);
 }
 
 /**
@@ -114,7 +116,13 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
           <span className="text-sm text-content">{formattedTimestamp}</span>
           {showNoConversationLabel && (
             <span className="text-xs text-muted">
-              {t(I18nKey.AUTOMATIONS$DETAIL$NO_CONVERSATION)}
+              {t(
+                hasBashCommand
+                  ? // A command ran but no agent did: a script automation.
+                    // Point at the logs button, the only place its output is.
+                    I18nKey.AUTOMATIONS$DETAIL$SCRIPT_RUN_NO_CONVERSATION
+                  : I18nKey.AUTOMATIONS$DETAIL$NO_CONVERSATION,
+              )}
             </span>
           )}
         </div>
@@ -168,6 +176,7 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
       {hasBashCommand && (
         <RunLogsModal
           conversationId={run.conversation_id}
+          sandboxId={run.sandbox_id ?? null}
           bashCommandId={run.bash_command_id}
           isOpen={logsOpen}
           onClose={() => setLogsOpen(false)}

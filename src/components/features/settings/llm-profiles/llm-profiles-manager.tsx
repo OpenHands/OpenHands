@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { RenameProfileModal } from "./rename-profile-modal";
 import { DeleteProfileModal } from "./delete-profile-modal";
+import { AddModelsModal } from "./add-models-modal";
 import { ProfilesBody } from "./profiles-body";
 import { ProviderConnectionsManager } from "./provider-connections-manager";
 import ProfilesService, {
@@ -10,6 +11,7 @@ import ProfilesService, {
   type SaveProfileRequest,
 } from "#/api/profiles-service/profiles-service.api";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
+import { useModelCatalogWarning } from "#/hooks/use-model-catalog-warning";
 import { useProviderConnections } from "#/hooks/query/use-provider-connections";
 import { useActivateLlmProfile } from "#/hooks/mutation/use-activate-llm-profile";
 import { useSaveLlmProfile } from "#/hooks/mutation/use-save-llm-profile";
@@ -32,6 +34,7 @@ export function LlmProfilesManager({
 }: LlmProfilesManagerProps) {
   const { t } = useTranslation("openhands");
   const { data, isLoading, error } = useLlmProfiles();
+  const isModelUnlisted = useModelCatalogWarning();
   const activateProfile = useActivateLlmProfile();
   const saveProfile = useSaveLlmProfile();
   // Cloud members are view-only; only owners/admins (and all local users) may
@@ -54,6 +57,7 @@ export function LlmProfilesManager({
   const [profileToDelete, setProfileToDelete] = useState<ProfileInfo | null>(
     null,
   );
+  const [showAddModels, setShowAddModels] = useState(false);
 
   const profiles = data?.profiles ?? [];
   const active = data?.active_profile ?? null;
@@ -126,19 +130,29 @@ export function LlmProfilesManager({
       <div className="flex flex-col gap-8">
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-base font-medium text-white">
+            <h2 className="text-base font-medium text-contrast">
               {t(I18nKey.SETTINGS$AVAILABLE_PROFILES)}
             </h2>
             {onAddProfile && canManage ? (
-              <BrandButton
-                testId="add-llm-profile"
-                type="button"
-                variant="secondary"
-                className="ml-auto"
-                onClick={onAddProfile}
-              >
-                {t(I18nKey.SETTINGS$ADD_LLM_PROFILE)}
-              </BrandButton>
+              <>
+                <BrandButton
+                  testId="add-models-from-provider"
+                  type="button"
+                  variant="tertiary"
+                  className="ml-auto"
+                  onClick={() => setShowAddModels(true)}
+                >
+                  {t(I18nKey.SETTINGS$ADD_MODELS_FROM_PROVIDER)}
+                </BrandButton>
+                <BrandButton
+                  testId="add-llm-profile"
+                  type="button"
+                  variant="secondary"
+                  onClick={onAddProfile}
+                >
+                  {t(I18nKey.SETTINGS$ADD_LLM_PROFILE)}
+                </BrandButton>
+              </>
             ) : null}
           </div>
 
@@ -155,6 +169,7 @@ export function LlmProfilesManager({
             onDuplicate={handleDuplicate}
             onDelete={setProfileToDelete}
             isActivating={activateProfile.isPending}
+            isModelUnlisted={isModelUnlisted}
           />
         </div>
 
@@ -175,6 +190,11 @@ export function LlmProfilesManager({
       <DeleteProfileModal
         profile={profileToDelete}
         onClose={() => setProfileToDelete(null)}
+      />
+      <AddModelsModal
+        isOpen={showAddModels}
+        existingNames={profiles.map((p) => p.name)}
+        onClose={() => setShowAddModels(false)}
       />
     </>
   );
