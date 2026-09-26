@@ -1,0 +1,77 @@
+{
+  "before": {
+    "canvas_commit": "a3c7915db5f47800f5240a25987b2af75b0d8d04",
+    "sdk_commit": "c37007429be8b4465a83487dc1fd0914df0ea734",
+    "ui_values": {
+      "timeout": 3,
+      "num_retries": 1,
+      "retry_min_wait": 0,
+      "retry_max_wait": 0
+    },
+    "actual_conversation": {
+      "conversation_id": "2a687d2b-719b-404c-86de-c751db0e3f5e",
+      "execution_status": "paused",
+      "llm": {
+        "model": "openai/gpt-4o-mini",
+        "timeout": 300,
+        "stream_idle_timeout": null,
+        "num_retries": 5,
+        "retry_min_wait": 8,
+        "retry_max_wait": 64,
+        "stream": true
+      },
+      "errors": []
+    }
+  },
+  "after": {
+    "case": "onboarding-after",
+    "manifest": {
+      "case": "onboarding-after",
+      "variant": "integrated",
+      "sdk_commit": "ac6d12b0b9d76f1cc38a6eb1ea51cd92e34a0bf2",
+      "canvas_commit": "9874c820a23e4026483ad9540ec9cb56194ce3ec",
+      "canvas_url": "http://127.0.0.1:9108",
+      "provider": "disclosed local HTTP fixture; no external requests",
+      "started_at": 1789316512.0148194,
+      "memory_available_kib": 8265084,
+      "config": "isolated empty settings; dummy credentials only; UI config to follow"
+    },
+    "saved_llm_profile": {
+      "model": "openai/gpt-4o-mini",
+      "auth_type": "api_key",
+      "timeout": 3,
+      "num_retries": 1,
+      "retry_min_wait": 0,
+      "retry_max_wait": 0,
+      "stream": false
+    },
+    "conversations": [
+      {
+        "id": "30804b53-8333-43bb-a522-fdb6be0b1bbe",
+        "execution_status": "finished",
+        "llm": {
+          "model": "openai/gpt-4o-mini",
+          "auth_type": "api_key",
+          "timeout": 3,
+          "num_retries": 1,
+          "retry_min_wait": 0,
+          "retry_max_wait": 0,
+          "stream": true
+        }
+      }
+    ],
+    "after-browser.json": {
+      "savedOptions": {
+        "timeout": "3",
+        "num_retries": "1",
+        "retry_min_wait": "0",
+        "retry_max_wait": "0"
+      },
+      "url": "http://127.0.0.1:9108/conversations/30804b53-8333-43bb-a522-fdb6be0b1bbe",
+      "at": "2026-09-13T16:23:22.780Z"
+    }
+  },
+  "production_fix": "5f259b873e28084b9465587d6eb0f79787ae3f75",
+  "regression_test_commit": "664ad330132d9daec1fc93d74e77fdb10b0b0467",
+  "claim": "Canonical onboarding payload persistence, not a model stream latency comparison or new OAuth login."
+}
