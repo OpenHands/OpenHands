@@ -7,8 +7,15 @@ on:
 jobs:
   release-ready:
     permissions:
+      # All four are required unconditionally, even when the optional
+      # release-test inputs are unset. GitHub validates a called workflow's job
+      # permissions statically, before any job runs and regardless of `if:`
+      # gating, and release-ready.yml declares jobs needing `actions: write` and
+      # `contents: write`. Granting `read` for either kills the run as
+      # `startup_failure` with no jobs and no logs. See the consumer snippet in
+      # OpenHands/release-actions' README.
       actions: write
-      contents: read
+      contents: write
       issues: write
       pull-requests: write
     secrets: inherit
