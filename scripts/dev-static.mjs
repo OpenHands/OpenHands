@@ -37,6 +37,7 @@
  */
 
 import { spawn, spawnSync } from "node:child_process";
+import { unlinkSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
@@ -56,6 +57,7 @@ import {
   isProcessRunning,
   resolveWindowsCommand,
   signalProcessTree,
+  watchAutomationMigration,
 } from "./dev-process-utils.mjs";
 import {
   buildAgentServerAutomationEnv,
@@ -383,7 +385,9 @@ function startAutomationBackend(config) {
   const automationCmd = buildAutomationCommand(process.env);
   logService("automation", `Using ${automationCmd.source}`, c.dim);
 
-  spawnService(
+  const autoDbPath = join(config.stateDir, "automations.db");
+
+  const proc = spawnService(
     "automation",
     automationCmd.command,
     [
@@ -399,6 +403,21 @@ function startAutomationBackend(config) {
       color: c.green,
     },
   );
+
+  // Detect stale SQLite migration failures and recover once via the
+  // shared watcher in dev-process-utils.mjs (same behaviour as
+  // dev-with-automation.mjs — single shared implementation).
+  watchAutomationMigration(proc, {
+    dbPath: autoDbPath,
+    onRecover: () => {
+      unlinkSync(autoDbPath);
+      startAutomationBackend(config);
+    },
+    log: (message, kind) => {
+      const colors = { warn: c.yellow, ok: c.green, error: c.red };
+      logService("automation", message, colors[kind] ?? c.dim);
+    },
+  });
 }
 
 function startStaticServer(config) {

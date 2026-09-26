@@ -148,3 +148,86 @@ export function createShutdownHookRegistry(onError) {
     },
   };
 }
+
+/**
+ * Process-wide latch for stale-DB recovery.
+ *
+ * The latch MUST outlive a single watcher instance. Recovery deletes the
+ * DB then respawns the backend, and that spawn installs a *new* watcher.
+ * If the latch lived on the old instance, the new watcher would recover
+ * again, and `npm run dev` would restart forever.
+ */
+let recoveryAttempted = false;
+
+/** Test-only: reset the process-wide latch between cases. */
+export function resetAutomationMigrationLatch() {
+  recoveryAttempted = false;
+}
+
+/**
+ * Watch a spawned automation backend for a stale SQLite migration failure
+ * and recover once by deleting the stale DB.
+ *
+ * The failure happens when openhands-automation is updated to a version
+ * with a restructured Alembic revision chain: the old DB references a
+ * revision the new chain doesn't know about, and the backend exits with
+ * Alembic's "Can't locate revision identified by" error.
+ *
+ * Both dev launchers (dev-static and dev-with-automation) need exactly
+ * this behaviour; keeping it here means they cannot drift apart.
+ *
+ * Recovery is single-shot for the whole process. If the restarted backend
+ * fails the same way — broken upstream package, read-only filesystem,
+ * changed error wording — we log loudly and give up rather than loop.
+ * An unbounded respawn cycle would wedge `npm run dev` and mask the real
+ * breakage from the developer.
+ *
+ * Callers put the restart *inside* `onRecover`, after the delete. Do not
+ * also restart on a bare exit-code-3 handler: that would respawn even
+ * when the log pattern never appeared, and it would bypass this latch.
+ *
+ * Params are injectable so tests can drive the whole lifecycle with fake
+ * streams.
+ */
+export function watchAutomationMigration(
+  proc,
+  { dbPath, onRecover, log, pattern = "Can't locate revision identified by" },
+) {
+  let detected = false;
+
+  const checkForMigrationError = (data) => {
+    if (!detected && data.toString().includes(pattern)) {
+      detected = true;
+    }
+  };
+
+  proc.stdout?.on("data", checkForMigrationError);
+  proc.stderr?.on("data", checkForMigrationError);
+
+  proc.on("exit", (code) => {
+    if (!detected) {
+      return;
+    }
+
+    // Exit code 3 is how the automation backend currently surfaces an
+    // unrecoverable startup error. We still require the log pattern so a
+    // coincidental exit 3 from another cause never deletes the DB.
+    if (code !== 3) {
+      return;
+    }
+
+    if (recoveryAttempted) {
+      log?.("Migration error again after recovery — giving up.", "error");
+      return;
+    }
+    recoveryAttempted = true;
+
+    log?.(`Migration error detected — removing stale DB at ${dbPath}...`, "warn");
+    try {
+      onRecover();
+      log?.("Deleted stale automations.db, restarting...", "ok");
+    } catch (err) {
+      log?.(`Failed to remove stale automations.db: ${err.message}`, "error");
+    }
+  });
+}

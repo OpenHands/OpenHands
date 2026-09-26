@@ -45,7 +45,7 @@
  */
 
 import { spawn, spawnSync } from "node:child_process";
-import { mkdirSync, existsSync, readFileSync } from "node:fs";
+import { mkdirSync, existsSync, readFileSync, unlinkSync } from "node:fs";
 import { join, resolve, dirname, isAbsolute } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { homedir } from "node:os";
@@ -69,6 +69,7 @@ import {
   isProcessRunning,
   resolveWindowsCommand,
   signalProcessTree,
+  watchAutomationMigration,
 } from "./dev-process-utils.mjs";
 import { fileLog, stripAnsi } from "./logger.mjs";
 
@@ -970,7 +971,12 @@ function startAutomationBackend(config) {
   const automationCmd = buildAutomationCommand(process.env);
   logService("automation", `Using ${automationCmd.source}`, c.dim);
 
-  spawnService(
+  const autoDbPath = join(
+    dirname(config.stateDir),
+    SHARED_DEFAULTS.paths.automationDb,
+  );
+
+  const proc = spawnService(
     "automation",
     automationCmd.command,
     [
@@ -1015,7 +1021,7 @@ function startAutomationBackend(config) {
           : {}),
         AUTOMATION_AGENT_SERVER_API_KEY: config.sessionApiKey,
         // ~/.openhands/automation/automations.db — matches docker/entrypoint.sh.
-        AUTOMATION_DB_URL: `sqlite+aiosqlite:///${join(dirname(config.stateDir), SHARED_DEFAULTS.paths.automationDb)}`,
+        AUTOMATION_DB_URL: `sqlite+aiosqlite:///${autoDbPath}`,
         // The automation backend uses this as its publicly-reachable base
         // URL: it's appended to callback URLs and injected into each
         // sandbox as `AUTOMATION_API_URL` (consumed by setup.sh for
@@ -1059,6 +1065,24 @@ function startAutomationBackend(config) {
       color: c.green,
     },
   );
+
+  // Detect stale SQLite migration failures and recover once via the
+  // shared watcher in dev-process-utils.mjs (single shared implementation
+  // with dev-static.mjs). The latch inside the watcher guarantees at most
+  // one recovery attempt per run, so a persistently broken backend can
+  // never wedge this launcher in a restart loop.
+  watchAutomationMigration(proc, {
+    dbPath: autoDbPath,
+    onRecover: () => {
+      unlinkSync(autoDbPath);
+      startAutomationBackend(config);
+    },
+    log: (message, kind) => {
+      const colors = { warn: c.yellow, ok: c.green, error: c.red };
+      logService("automation", message, colors[kind] ?? c.dim);
+      fileLog(kind === "error" ? "error" : "info", message);
+    },
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
