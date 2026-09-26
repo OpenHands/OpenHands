@@ -13,10 +13,11 @@ import {
 } from "#/constants/acp-providers";
 
 describe("getAcpProviderDisplayName", () => {
-  it("resolves the three built-in registry keys to their human names", () => {
+  it("resolves the built-in registry keys to their human names", () => {
     expect(getAcpProviderDisplayName("claude-code")).toBe("Claude Code");
     expect(getAcpProviderDisplayName("codex")).toBe("Codex");
     expect(getAcpProviderDisplayName("gemini-cli")).toBe("Gemini CLI");
+    expect(getAcpProviderDisplayName("opencode")).toBe("OpenCode");
   });
 
   it("returns null for the Custom-command preset so callers can fall back to the generic 'ACP' label", () => {
@@ -149,6 +150,15 @@ describe("getAcpProviderSecrets — containerized credentials", () => {
       "GOOGLE_GENAI_USE_VERTEXAI",
       "GEMINI_API_KEY",
       "GEMINI_BASE_URL",
+    ]);
+  });
+
+  it("collects only the API key for OpenCode", () => {
+    // OpenCode has no subscription/file credentials (OPENCODE_AUTH_CONTENT
+    // rides the ordinary env channel server-side) and no base-URL override —
+    // the Zen endpoint comes from its model catalogue.
+    expect(getAcpProviderSecrets("opencode").map((f) => f.name)).toEqual([
+      "OPENCODE_API_KEY",
     ]);
   });
 
