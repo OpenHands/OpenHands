@@ -75,9 +75,9 @@ describe("IntegrationsSettingsLink", () => {
     );
   });
 
-  it("renders nothing when the canvas is locked to a Cloud host", () => {
+  it("renders a direct Integrations shortcut when the canvas is locked to a Cloud host", () => {
     // Arrange — SaaS / self-hosted OHE serve the canvas with `--lock-to-cloud`;
-    // the OHE settings shell already exposes Integrations.
+    // keep Integrations visible beside the broader All Cloud Settings link.
     vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://app.all-hands.dev");
     setRegisteredBackends([cloudBackend]);
     setActiveSelection({ backendId: cloudBackend.id });
@@ -86,6 +86,9 @@ describe("IntegrationsSettingsLink", () => {
     renderWithProviders();
 
     // Assert
-    expect(screen.queryByTestId("settings-integrations-link")).toBeNull();
+    expect(screen.getByTestId("settings-integrations-link")).toHaveAttribute(
+      "href",
+      "https://app.all-hands.dev/settings/integrations",
+    );
   });
 });

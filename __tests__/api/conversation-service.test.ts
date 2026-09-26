@@ -4,8 +4,18 @@ import { RemoteWorkspace } from "@openhands/typescript-client/workspace/remote-w
 import ConversationService from "#/api/conversation-service/conversation-service.api";
 import { clearAgentServerHomeDirCache } from "#/api/agent-server-home";
 
-const fileUploadMock = vi.fn();
-const getHomeMock = vi.fn();
+const { fileUploadMock, getHomeMock, getVSCodeUrlMock, vscodeClientMock } =
+  vi.hoisted(() => {
+    const getVSCodeUrlMock = vi.fn();
+    return {
+      fileUploadMock: vi.fn(),
+      getHomeMock: vi.fn(),
+      getVSCodeUrlMock,
+      vscodeClientMock: vi.fn(function VSCodeClientMock() {
+        return { getUrl: getVSCodeUrlMock };
+      }),
+    };
+  });
 
 vi.mock("@openhands/typescript-client/workspace/remote-workspace", () => ({
   RemoteWorkspace: vi.fn(function RemoteWorkspaceMock() {
@@ -17,6 +27,7 @@ vi.mock("@openhands/typescript-client/clients", () => ({
   FileClient: vi.fn(function FileClientMock() {
     return { getHome: getHomeMock };
   }),
+  VSCodeClient: vscodeClientMock,
 }));
 
 function makeFile(name: string) {
@@ -138,6 +149,30 @@ describe("ConversationService", () => {
       expect(maxActiveUploads).toBe(5);
       expect(result.uploaded_files).toEqual(files.map((file) => file.name));
       expect(result.skipped_files).toEqual([]);
+    });
+  });
+
+  describe("getVSCodeUrl", () => {
+    it("targets the current conversation runtime URL and session key", async () => {
+      ConversationService.setCurrentConversation({
+        id: "conv-1",
+        conversation_url:
+          "https://runtime.example.com/api/conversations/conv-1",
+        session_api_key: "runtime-session-key",
+        workspace: { working_dir: "/workspace/project/conv-1" },
+      } as never);
+      getVSCodeUrlMock.mockResolvedValue("https://runtime.example.com/vscode");
+
+      await expect(ConversationService.getVSCodeUrl("conv-1")).resolves.toEqual(
+        { vscode_url: "https://runtime.example.com/vscode" },
+      );
+
+      expect(vscodeClientMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          host: "https://runtime.example.com",
+          apiKey: "runtime-session-key",
+        }),
+      );
     });
   });
 });
