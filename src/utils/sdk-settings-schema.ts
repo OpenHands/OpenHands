@@ -357,6 +357,72 @@ function parseBooleanFieldValue(rawValue: string | boolean): boolean | null {
   throw new Error(`Expected a boolean value, received: ${rawValue}`);
 }
 
+/** Fields whose value is a URL, by naming convention. Decides both the
+ *  `type="url"` input rendering in `SchemaField` and the save-time format
+ *  check in `coerceFieldValue`, so the two can never disagree. */
+export function isUrlField(field: SettingsFieldSchema): boolean {
+  return field.key.endsWith("url") || field.key.endsWith("_url");
+}
+
+/** Fields whose value is an API key, by naming convention. Same
+ *  render/enforce pairing as {@link isUrlField}. */
+export function isApiKeyField(field: SettingsFieldSchema): boolean {
+  return field.key.endsWith("api_key");
+}
+
+/** Minimum length for a non-blank API key: a single character (the "-" from
+ *  #15774) is never a usable credential. Blank stays valid — it means
+ *  "unset" for these optional fields. */
+export const MIN_API_KEY_LENGTH = 2;
+
+/** A URL we are willing to send to a provider: parseable, and http(s)
+ *  rather than `file:`, `javascript:` or a bare host that parses as its own
+ *  scheme (`localhost:8000` yields `protocol === "localhost:"`). Matches
+ *  the check MCP server URLs already get in `mcp-server-form.tsx`. */
+export function isValidSettingsUrl(value: string): boolean {
+  try {
+    const { protocol } = new URL(value);
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+/** A non-blank API key is at least {@link MIN_API_KEY_LENGTH} characters
+ *  once trimmed. Callers gate on blank separately, same as
+ *  {@link isValidSettingsUrl}. */
+export function isValidApiKey(value: string): boolean {
+  return value.trim().length >= MIN_API_KEY_LENGTH;
+}
+
+/** Codes identifying which format rule a field value violates. Renderers
+ *  map each code to a translated inline message; `coerceFieldValue` maps
+ *  them to the save-blocking errors below. */
+export type SettingsFieldFormatError = "url" | "api_key";
+
+/**
+ * Single source of truth for per-field format checks, shared by the
+ * save-time coercion and the inline error rendering so they never
+ * disagree. Blank values return null — optional fields use blank to mean
+ * "unset" — and fields without a format rule return null.
+ */
+export function getSettingsFieldFormatError(
+  field: SettingsFieldSchema,
+  rawValue: string | boolean,
+): SettingsFieldFormatError | null {
+  const trimmedValue = String(rawValue).trim();
+  if (!trimmedValue) {
+    return null;
+  }
+  if (isUrlField(field) && !isValidSettingsUrl(trimmedValue)) {
+    return "url";
+  }
+  if (isApiKeyField(field) && !isValidApiKey(trimmedValue)) {
+    return "api_key";
+  }
+  return null;
+}
+
 export function coerceFieldValue(
   field: SettingsFieldSchema,
   rawValue: string | boolean,
@@ -424,6 +490,20 @@ export function coerceFieldValue(
   const stringValue = String(rawValue);
   if (stringValue === "" && !field.secret) {
     return null;
+  }
+
+  // Reject malformed values here rather than saving them: the field stays
+  // optional when blank, but a value like "." is otherwise accepted all the
+  // way to a green "saved" toast and only resurfaces later as an opaque
+  // provider error.
+  const formatError = getSettingsFieldFormatError(field, stringValue);
+  if (formatError === "url") {
+    throw new Error(`${field.label} must use http:// or https://`);
+  }
+  if (formatError === "api_key") {
+    throw new Error(
+      `${field.label} must be at least ${MIN_API_KEY_LENGTH} characters`,
+    );
   }
 
   return stringValue;
