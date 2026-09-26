@@ -225,14 +225,22 @@ export function ConversationWebSocketProvider({
       }
 
       // usage_to_metrics is keyed by arbitrary LLM usage ids ("default",
-      // "condenser", "profile:<name>:<uuid>", …) — combine across all of
-      // them, mirroring getCombinedMetrics on the REST path.
-      const combined = Object.values(usageToMetrics).reduce<{
+      // "condenser", "planning_condenser", "profile:<name>:<uuid>", …), and a
+      // profile switch starts a NEW entry while the old one stays frozen, so
+      // matching one exact key would pin the meter to a stale entry. Condenser
+      // usages keep their own (typically larger) last-turn size after the
+      // agent compacts, so a max across entries pins the meter too, and the
+      // compaction hook never observes the drop. Take the last entry whose id
+      // is not a condenser entry: insertion order tracks recency, so that is
+      // the live agent usage. Mirrors combineUsageMetrics on the REST path.
+      let primaryPerTurnToken: number | null = null;
+
+      const combined = Object.entries(usageToMetrics).reduce<{
         cost: number;
         maxBudgetPerTask: number | null;
         usage: MetricsState["usage"];
       }>(
-        (acc, metrics) => {
+        (acc, [usageId, metrics]) => {
           acc.cost += metrics.accumulated_cost;
           if (
             acc.maxBudgetPerTask === null &&
@@ -242,6 +250,9 @@ export function ConversationWebSocketProvider({
           }
           const tokenUsage = metrics.accumulated_token_usage;
           if (tokenUsage) {
+            if (!usageId.includes("condenser")) {
+              primaryPerTurnToken = tokenUsage.per_turn_token;
+            }
             acc.usage = {
               prompt_tokens:
                 (acc.usage?.prompt_tokens ?? 0) + tokenUsage.prompt_tokens,
@@ -268,6 +279,10 @@ export function ConversationWebSocketProvider({
         },
         { cost: 0, maxBudgetPerTask: null, usage: null },
       );
+
+      if (combined.usage && primaryPerTurnToken !== null) {
+        combined.usage.per_turn_token = primaryPerTurnToken;
+      }
 
       useMetricsStore.getState().setMetrics({
         cost: combined.cost,

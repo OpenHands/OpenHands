@@ -1094,6 +1094,77 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     expect(useMetricsStore.getState().max_budget_per_task).toBeNull();
   });
 
+  // --- Live-path per_turn_token selection (mirrors combineUsageMetrics) ---
+
+  const makeStatsEvent = (usageToMetrics: Record<string, unknown>) => ({
+    id: `stats-${Math.random().toString(36).slice(2)}`,
+    timestamp: new Date().toISOString(),
+    source: "environment",
+    kind: "ConversationStateUpdateEvent",
+    key: "stats",
+    value: { usage_to_metrics: usageToMetrics },
+  });
+
+  const makeUsage = (perTurnToken: number) => ({
+    accumulated_cost: 0.01,
+    max_budget_per_task: null,
+    accumulated_token_usage: {
+      prompt_tokens: 100,
+      completion_tokens: 50,
+      cache_read_tokens: 0,
+      cache_write_tokens: 0,
+      context_window: 128_000,
+      per_turn_token: perTurnToken,
+    },
+  });
+
+  const feedStats = (usageToMetrics: Record<string, unknown>) =>
+    act(() => {
+      wsCapture.mainOnMessage!({
+        data: JSON.stringify(makeStatsEvent(usageToMetrics)),
+      });
+    });
+
+  it("tracks the profile usage entry after a profile switch (live path)", async () => {
+    renderProviderWithUrl("conv-stats-profile");
+    await waitFor(() => expect(wsCapture.mainOnMessage).not.toBeNull());
+
+    // A profile switch starts a NEW entry keyed `profile:<name>:<uuid>` while
+    // the old "default" entry stays frozen at its pre-switch size.
+    feedStats({
+      default: makeUsage(8000),
+      "profile:gpt-5:abc-123": makeUsage(2000),
+    });
+
+    expect(useMetricsStore.getState().usage?.per_turn_token).toBe(2000);
+  });
+
+  it("reads a non-default primary usage key (live path)", async () => {
+    renderProviderWithUrl("conv-stats-agent");
+    await waitFor(() => expect(wsCapture.mainOnMessage).not.toBeNull());
+
+    // The fixtures from #13939 key the primary usage "agent", not "default";
+    // the stale condenser entry must not win through the max.
+    feedStats({
+      condenser: makeUsage(8000),
+      agent: makeUsage(2000),
+    });
+
+    expect(useMetricsStore.getState().usage?.per_turn_token).toBe(2000);
+  });
+
+  it("keeps planning_condenser excluded (live path)", async () => {
+    renderProviderWithUrl("conv-stats-planning");
+    await waitFor(() => expect(wsCapture.mainOnMessage).not.toBeNull());
+
+    feedStats({
+      default: makeUsage(2000),
+      planning_condenser: makeUsage(9000),
+    });
+
+    expect(useMetricsStore.getState().usage?.per_turn_token).toBe(2000);
+  });
+
   it("keeps events that arrived after history when re-entering the same conversation", async () => {
     // Arrange: open conversation A, then receive an agent reply over the socket
     // that is not part of the cached REST history page.
