@@ -134,7 +134,7 @@ export function ManageWorkspacesModal({
                       <CloseIcon
                         width={12}
                         height={12}
-                        className="text-contrast"
+                        className="text-contrast dark:text-white"
                       />
                       <span>{t(I18nKey.HOME$REMOVE_WORKSPACE)}</span>
                     </button>
@@ -197,7 +197,7 @@ export function ManageWorkspacesModal({
                               <CloseIcon
                                 width={12}
                                 height={12}
-                                className="text-contrast"
+                                className="text-contrast dark:text-white"
                               />
                               <span>
                                 {t(I18nKey.HOME$REMOVE_WORKSPACE_PARENT)}

@@ -61,4 +61,47 @@ describe("McpLogoBadge", () => {
     expect(screen.queryByTestId("mcp-logo-tinted-mark")).toBeNull();
     expect(screen.getByAltText("GitLab logo")).toBeInTheDocument();
   });
+
+  it("renders the bundled local SVG instead of the remote logo", () => {
+    render(
+      <McpLogoBadge
+        entry={entry({
+          id: "slack",
+          name: "Slack",
+          iconBg: "#4A154B",
+          logoUrl: "https://cdn.simpleicons.org/slack/FFFFFF",
+        })}
+        testId="badge"
+      />,
+    );
+
+    const badge = screen.getByTestId("badge");
+    expect(badge.querySelector("svg")).not.toBeNull();
+    expect(screen.queryByRole("img")).toBeNull();
+    expect(screen.queryByTestId("mcp-logo-tinted-mark")).toBeNull();
+    expect(badge.style.color).toBe("rgb(255, 255, 255)");
+  });
+
+  it("falls back to the default mark on the tertiary surface without a logo", () => {
+    render(<McpLogoBadge entry={null} testId="badge" />);
+
+    const badge = screen.getByTestId("badge");
+    expect(badge.querySelector("svg.lucide-bot")).not.toBeNull();
+    expect(screen.queryByRole("img")).toBeNull();
+    expect(badge.style.backgroundColor).toBe("var(--oh-color-tertiary)");
+    expect(badge.style.color).toBe("var(--oh-contrast)");
+  });
+
+  it("renders a custom fallback for entries without a logo URL", () => {
+    render(
+      <McpLogoBadge
+        entry={entry({ id: "custom", name: "Custom", logoUrl: undefined })}
+        fallback={<span data-testid="custom-fallback" />}
+      />,
+    );
+
+    expect(screen.getByTestId("custom-fallback")).toBeInTheDocument();
+    expect(screen.queryByRole("img")).toBeNull();
+    expect(screen.queryByTestId("mcp-logo-tinted-mark")).toBeNull();
+  });
 });

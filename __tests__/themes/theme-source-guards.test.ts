@@ -55,4 +55,29 @@ describe("theme source guards", () => {
     expect(svg).toContain('fill="currentColor"');
     expect(svg).not.toMatch(/fill="(?:white|#fff)"/i);
   });
+
+  // close.svg used to hard-code fill="white"; every render must keep that
+  // literal white in dark themes, where --oh-contrast is consumer-overridable.
+  it("keeps every close.svg render literal white in dark themes", () => {
+    const importer =
+      /import\s+(\w+)\s+from\s+["'][^"']*icons\/close\.svg(?:\?react)?["']/;
+    const sites = SOURCES.flatMap(({ file, text }) => {
+      const name = text.match(importer)?.[1];
+      if (!name) return [];
+      return [...text.matchAll(new RegExp(`<${name}\\b[^>]*>`, "g"))].map(
+        ([tag]) => ({ file, tag }),
+      );
+    });
+
+    expect(sites.length).toBeGreaterThanOrEqual(5);
+    const unpinned = sites
+      .filter(({ tag }) => {
+        const classes = tag.match(/className="([^"]*)"/)?.[1].split(/\s+/);
+        return !classes?.some(
+          (c) => c === "text-white" || c === "dark:text-white",
+        );
+      })
+      .map(({ file, tag }) => `${file}: ${tag.replace(/\s+/g, " ")}`);
+    expect(unpinned).toEqual([]);
+  });
 });
