@@ -740,32 +740,35 @@ export function ConversationWebSocketProvider({
           // Router-driven model switch (Pareto/meta-profile classifier).
           // Same UI semantics as SwitchLLMObservation: update the combobox,
           // stamp the active profile, record the inline "Switched to"
-          // message. The "profile name" in agent-canvas terms is the LLM
-          // profile the SDK matched the classifier's model output against —
-          // i.e. `active_model`, which equals the saved profile name on a
-          // successful match.
+          // message. Per the SDK wire contract, `model` is the saved LLM
+          // profile name that was activated and `active_model` is the
+          // underlying model string — so the profile stamp and inline
+          // message use `model` (mirroring SwitchLLMObservation.profile_name),
+          // while the combobox cache update uses `active_model`.
           if (
             conversationId &&
             classifyAndSwitchLLMObservation &&
             !classifyAndSwitchLLMObservation.observation.is_error &&
-            classifyAndSwitchLLMObservation.observation.active_model
+            classifyAndSwitchLLMObservation.observation.model
           ) {
-            const activeModel =
-              classifyAndSwitchLLMObservation.observation.active_model;
+            const profileName =
+              classifyAndSwitchLLMObservation.observation.model;
 
-            recordModelSwitchMessage(conversationId, activeModel);
+            recordModelSwitchMessage(conversationId, profileName);
 
             stampActiveLlmProfile(
               conversationId,
-              activeModel,
+              profileName,
               classifyAndSwitchLLMObservation.timestamp,
             );
 
-            updateConversationLlmModelInCache(
-              queryClient,
-              conversationId,
-              activeModel,
-            );
+            if (classifyAndSwitchLLMObservation.observation.active_model) {
+              updateConversationLlmModelInCache(
+                queryClient,
+                conversationId,
+                classifyAndSwitchLLMObservation.observation.active_model,
+              );
+            }
 
             invalidateConversationQueries(queryClient, conversationId);
           }

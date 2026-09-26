@@ -113,12 +113,14 @@ export function seedModelSwitchesFromHistory(
     } else if (
       isClassifyAndSwitchLLMObservationEvent(event) &&
       !event.observation.is_error &&
-      event.observation.active_model
+      event.observation.model
     ) {
       // Router-driven switch: the matched LLM profile name is the
-      // observation's `active_model` (the SDK matched classifier output
-      // against saved profile names case-insensitively).
-      const profileName = event.observation.active_model;
+      // observation's `model` (the SDK matched classifier output against
+      // saved profile names case-insensitively and stamped the profile name
+      // there; `active_model` is the underlying model string, not the
+      // profile name).
+      const profileName = event.observation.model;
       switches.push({
         id: `history-classify-switch:${event.id}`,
         anchorEventId: lastRenderableId,
