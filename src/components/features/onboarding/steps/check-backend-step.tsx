@@ -56,16 +56,16 @@ function ConnectionBanner({
         role="status"
         data-testid="onboarding-backend-connected"
         className={cn(
-          "flex items-start gap-3 rounded-xl px-4 py-3",
+          "flex items-start gap-3 rounded-xl px-4 py-3 dark:border-green-500/40 dark:bg-green-500/10",
           statusToneBannerClassName.success,
         )}
       >
-        <CheckCircle2 className="mt-0.5 size-5 shrink-0" />
+        <CheckCircle2 className="mt-0.5 size-5 shrink-0 dark:text-green-400" />
         <div className="flex flex-col gap-1">
-          <span className="text-sm font-medium">
+          <span className="text-sm font-medium dark:text-green-200">
             {t(I18nKey.ONBOARDING$BACKEND_CONNECTED_TITLE)}
           </span>
-          <span className="text-xs text-foreground">
+          <span className="text-xs text-foreground dark:text-green-200/80">
             {t(I18nKey.ONBOARDING$BACKEND_CONNECTED_BODY)}
           </span>
         </div>
@@ -83,14 +83,16 @@ function ConnectionBanner({
         role="alert"
         data-testid="onboarding-backend-disconnected"
         className={cn(
-          "flex items-start gap-3 rounded-xl px-4 py-3",
+          "flex items-start gap-3 rounded-xl px-4 py-3 dark:border-red-500/40 dark:bg-red-500/10",
           statusToneBannerClassName.danger,
         )}
       >
-        <AlertCircle className="mt-0.5 size-5 shrink-0" />
+        <AlertCircle className="mt-0.5 size-5 shrink-0 dark:text-red-400" />
         <div className="flex flex-col gap-1">
-          <span className="text-sm font-medium">{statusLabel}</span>
-          <span className="text-xs text-foreground">
+          <span className="text-sm font-medium dark:text-red-200">
+            {statusLabel}
+          </span>
+          <span className="text-xs text-foreground dark:text-red-200/80">
             {t(I18nKey.ONBOARDING$BACKEND_DISCONNECTED_BODY)}
           </span>
         </div>

@@ -20,7 +20,7 @@ export function AcpConflictWarnings({
         <p
           key={`${credential}:${conflicting}`}
           data-testid="acp-credential-conflict-warning"
-          className="text-sm text-warning"
+          className="text-sm text-warning dark:text-amber-300"
         >
           {t(I18nKey.SETTINGS$ACP_CREDENTIAL_CONFLICT_WARNING, {
             credential,

@@ -113,6 +113,15 @@ describe.each(LIGHT_THEMES)("%s contrast contract", (theme) => {
     );
   });
 
+  it("keeps the established Neutral hover treatment as a dark override", () => {
+    expect(automationActivityRowClassName).toContain(
+      "dark:hover:bg-surface-raised",
+    );
+    expect(automationActivityRowClassName).toContain(
+      "dark:has-[:focus-visible]:bg-surface-raised",
+    );
+  });
+
   it("separates raised buttons and dividers from the page", () => {
     const base = surfaceColor(theme, "--oh-color-base");
     const surface = surfaceColor(theme, "--oh-surface");

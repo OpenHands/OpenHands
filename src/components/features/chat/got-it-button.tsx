@@ -11,7 +11,7 @@ export function GotItButton({ onClick }: { onClick: () => void }) {
       type="button"
       onClick={onClick}
       className={cn(
-        "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-normal border border-success/30 hover:border-success transition-colors",
+        "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-normal border border-success/30 hover:border-success transition-colors dark:bg-success/10 dark:text-success dark:hover:border-success/30 dark:hover:bg-success/20",
         statusToneBadgeClassName.success,
       )}
     >

@@ -113,7 +113,7 @@ function RunInspectionSummary({ run }: { run: AutomationRun | undefined }) {
   const hasSystemDetails = systemError || statusDetail;
 
   return (
-    <dl className="mt-4 grid gap-3 rounded-lg border border-border bg-surface-deep p-3 text-xs">
+    <dl className="mt-4 grid gap-3 rounded-lg border border-border bg-surface-deep p-3 text-xs dark:bg-black/20">
       <div className="grid gap-1 sm:grid-cols-[5rem_minmax(0,1fr)] sm:items-center">
         <dt className="text-muted">
           {t(I18nKey.AUTOMATIONS$DETAIL$RUN_LABEL)}
@@ -148,7 +148,7 @@ function RunInspectionSummary({ run }: { run: AutomationRun | undefined }) {
               </p>
               <pre
                 data-testid="automation-task-metadata"
-                className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-surface-deep p-2 font-mono text-[11px] leading-4 text-content"
+                className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-surface-deep p-2 font-mono text-[11px] leading-4 text-content dark:bg-black/30"
               >
                 {taskMetadataText}
               </pre>
@@ -321,7 +321,7 @@ export function RunLogsModal({
           role="tabpanel"
           id={`run-logs-panel-${activeTab}`}
           aria-labelledby={`run-logs-tab-${activeTab}`}
-          className="mt-3 min-h-[12rem] flex-1 overflow-auto rounded-lg border border-border bg-surface-deep p-4 font-mono text-xs"
+          className="mt-3 min-h-[12rem] flex-1 overflow-auto rounded-lg border border-border bg-surface-deep p-4 font-mono text-xs dark:bg-black/40"
         >
           {noBashCommand && (
             <p className="text-muted italic">

@@ -63,11 +63,14 @@ export function AcpAuthStatusBanner({
         // Matches the onboarding "backend connected" success banner
         // (check-backend-step.tsx) for a consistent look.
         className={cn(
-          "flex items-start gap-2 rounded-xl px-4 py-3 text-sm",
+          "flex items-start gap-2 rounded-xl px-4 py-3 text-sm dark:border-green-500/40 dark:bg-green-500/10 dark:text-green-200",
           statusToneBannerClassName.success,
         )}
       >
-        <Check className="mt-0.5 size-4 shrink-0" aria-hidden />
+        <Check
+          className="mt-0.5 size-4 shrink-0 dark:text-green-400"
+          aria-hidden
+        />
         <span>
           {t(I18nKey.ONBOARDING$ACP_AUTH_DETECTED, { provider: providerName })}
         </span>

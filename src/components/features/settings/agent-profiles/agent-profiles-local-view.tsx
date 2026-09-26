@@ -350,7 +350,10 @@ export function AgentProfilesLocalView() {
             onSelectionChange={(key) => key && setLlmProfileRef(String(key))}
           />
         ) : (
-          <p data-testid="agent-profile-no-llm" className="text-sm text-danger">
+          <p
+            data-testid="agent-profile-no-llm"
+            className="text-sm text-danger dark:text-red-400"
+          >
             {t(I18nKey.SETTINGS$AGENT_PROFILE_NO_LLM)}
           </p>
         ))}

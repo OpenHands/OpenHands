@@ -20,7 +20,7 @@ import { FREE_MODEL_BADGE_LABEL } from "#/utils/format-model-name";
 import { FreeOpenHandsModelsNote } from "#/components/shared/free-models-note";
 
 const freeModelBadgeClassName = cn(
-  "shrink-0 rounded-full border border-warning/40 px-1.5 py-0.5 text-[10px] leading-none",
+  "shrink-0 rounded-full border border-warning/40 px-1.5 py-0.5 text-[10px] leading-none dark:bg-warning/10 dark:text-warning",
   statusToneBadgeClassName.warning,
 );
 

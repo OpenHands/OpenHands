@@ -99,6 +99,8 @@ describe("hook execution event message", () => {
     expect(screen.getByText("ok")).toHaveClass(
       "bg-success-soft",
       "text-success-soft-foreground",
+      "dark:bg-green-900/50",
+      "dark:text-green-300",
     );
   });
 
@@ -131,6 +133,8 @@ describe("hook execution event message", () => {
       "text-xs",
       "bg-warning-soft",
       "text-warning-soft-foreground",
+      "dark:bg-amber-900/50",
+      "dark:text-amber-300",
     );
     expect(message).toHaveTextContent(`${I18nKey.HOOK$COMMAND}: check-policy`);
     expect(message).toHaveTextContent(`${I18nKey.HOOK$EXIT_CODE}: 13`);
@@ -158,6 +162,8 @@ describe("hook execution event message", () => {
     expect(screen.getByText("failed")).toHaveClass(
       "bg-danger-soft",
       "text-danger-soft-foreground",
+      "dark:bg-red-900/50",
+      "dark:text-red-300",
     );
     expect(screen.getByText(`${"x".repeat(77)}...`)).toBeInTheDocument();
     expect(message).not.toHaveTextContent(longCommand);

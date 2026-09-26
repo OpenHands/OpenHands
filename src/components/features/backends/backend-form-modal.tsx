@@ -261,11 +261,11 @@ function BackendStatusBadge({
         <div
           data-testid={`${testIdRoot}-status-error`}
           className={cn(
-            "flex flex-col gap-1 rounded-md p-3 text-sm",
+            "flex flex-col gap-1 rounded-md p-3 text-sm dark:border-red-500/40 dark:bg-red-500/10",
             statusToneBannerClassName.danger,
           )}
         >
-          <span className="font-semibold">
+          <span className="font-semibold dark:text-red-300">
             {t(I18nKey.BACKEND$HEALTH_FAILED_TITLE)}
           </span>
           <span className="text-xs text-text-tertiary">
@@ -276,7 +276,7 @@ function BackendStatusBadge({
           {lastError ? (
             <span
               data-testid={`${testIdRoot}-status-error-message`}
-              className="text-xs whitespace-pre-wrap break-words"
+              className="text-xs whitespace-pre-wrap break-words dark:text-red-300"
             >
               {lastError}
             </span>
@@ -652,7 +652,7 @@ export function BackendForm({
             role="alert"
             data-testid={`${testIdRoot}-error`}
             className={cn(
-              "rounded-md p-3 text-sm whitespace-pre-wrap break-words",
+              "rounded-md p-3 text-sm whitespace-pre-wrap break-words dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-300",
               statusToneBannerClassName.danger,
             )}
           >
@@ -940,7 +940,7 @@ function ManualConnectionColumn({
           role="alert"
           data-testid={`${testIdRoot}-error`}
           className={cn(
-            "rounded-md p-3 text-sm whitespace-pre-wrap break-words",
+            "rounded-md p-3 text-sm whitespace-pre-wrap break-words dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-300",
             statusToneBannerClassName.danger,
           )}
         >

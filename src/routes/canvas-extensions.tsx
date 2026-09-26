@@ -118,7 +118,7 @@ export default function CanvasExtensionsScreen() {
             </BrandButton>
           </div>
 
-          <div className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-foreground">
+          <div className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-foreground dark:border-amber-400/30 dark:bg-amber-400/5 dark:text-amber-100">
             {t(I18nKey.SETTINGS$APPS_TRUST_NOTICE)}
           </div>
 

@@ -421,7 +421,7 @@ export function GitSyncConfigForm({
             role="alert"
             data-testid="git-sync-check-failure"
             className={cn(
-              "rounded-md p-3 text-sm whitespace-pre-wrap break-words",
+              "rounded-md p-3 text-sm whitespace-pre-wrap break-words dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-300",
               statusToneBannerClassName.danger,
             )}
           >
@@ -429,7 +429,7 @@ export function GitSyncConfigForm({
               {t(I18nKey.AUTOMATIONS$GIT_SYNC$CHECK_FAILED_TITLE)}
             </p>
             <p className="mt-1">{failedCheck.detail}</p>
-            <p className="mt-1 text-xs text-muted">
+            <p className="mt-1 text-xs text-muted dark:text-red-300/70">
               {t(I18nKey.AUTOMATIONS$GIT_SYNC$CHECK_FAILED_HINT)}
             </p>
           </div>

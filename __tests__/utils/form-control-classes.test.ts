@@ -10,6 +10,7 @@ describe("formControlClasses", () => {
     expect(formControlFieldClassName).toContain("h-9");
     expect(formControlFieldClassName).toContain("rounded-lg");
     expect(formControlFieldClassName).toContain("border-border-input");
+    expect(formControlFieldClassName).toContain("dark:border-border");
     expect(formControlFieldClassName).toContain("bg-base-secondary");
 
     expect(formControlShellClassName).toContain("h-9");

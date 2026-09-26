@@ -107,7 +107,10 @@ export function AgentCanvasVersionModal({
 
         <header className="flex items-center gap-3 pr-8">
           {updateAvailable ? (
-            <ArrowUpCircle className="size-7 shrink-0 text-info" aria-hidden />
+            <ArrowUpCircle
+              className="size-7 shrink-0 text-info dark:text-[#3B82F6]"
+              aria-hidden
+            />
           ) : (
             <CheckCircle2
               className="size-7 shrink-0 text-status-success"
@@ -124,7 +127,7 @@ export function AgentCanvasVersionModal({
           {updateAvailable && latestVersion ? (
             <span
               className={cn(
-                "rounded-full border border-info/30 px-2 py-0.5 text-xs font-semibold",
+                "rounded-full border border-info/30 px-2 py-0.5 text-xs font-semibold dark:border-transparent dark:bg-[#1E3A5F] dark:text-[#3B82F6]",
                 statusToneBadgeClassName.info,
               )}
             >

@@ -20,7 +20,7 @@ export const automationActivityListClassName =
   "divide-y divide-border-subtle overflow-hidden rounded-xl border border-border-subtle bg-surface";
 
 export const automationActivityRowClassName =
-  "group relative flex items-stretch transition-colors hover:bg-interactive-hover-low has-[:focus-visible]:bg-interactive-hover-low";
+  "group relative flex items-stretch transition-colors hover:bg-interactive-hover-low has-[:focus-visible]:bg-interactive-hover-low dark:hover:bg-surface-raised dark:has-[:focus-visible]:bg-surface-raised";
 
 /** Inset last-run strip used under the trigger/sparkline row. */
 export const automationCardStatusStripClassName =

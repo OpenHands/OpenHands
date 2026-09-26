@@ -118,8 +118,8 @@ export default function ApiKeyEntryScreen() {
                       data-testid={`${testIdRoot}-status`}
                       className={
                         connectionStatus === "error"
-                          ? "text-danger"
-                          : "text-success"
+                          ? "text-danger dark:text-red-400"
+                          : "text-success dark:text-green-400"
                       }
                     >
                       {connectionStatus === "error"

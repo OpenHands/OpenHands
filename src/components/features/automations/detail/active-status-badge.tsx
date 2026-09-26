@@ -18,7 +18,10 @@ export function ActiveStatusBadge({ active }: ActiveStatusBadgeProps) {
       className={cn(
         "inline-flex items-center rounded-full px-3 py-1 text-xs font-medium",
         active
-          ? statusToneBadgeClassName.success
+          ? cn(
+              statusToneBadgeClassName.success,
+              "dark:bg-semantic-success/15 dark:text-semantic-success",
+            )
           : "bg-surface-raised text-muted",
       )}
     >

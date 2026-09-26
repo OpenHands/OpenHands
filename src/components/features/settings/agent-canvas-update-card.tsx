@@ -211,7 +211,7 @@ function AgentCanvasUpdateModal({
             ) : updateAvailable ? (
               <div
                 className={cn(
-                  "flex items-start gap-2 rounded-lg px-3 py-2 text-xs",
+                  "flex items-start gap-2 rounded-lg px-3 py-2 text-xs dark:border-[#3B82F6]/30 dark:bg-[#1E3A5F] dark:text-[#3B82F6]",
                   statusToneBannerClassName.info,
                 )}
               >
@@ -235,7 +235,7 @@ function AgentCanvasUpdateModal({
             ) : upToDate ? (
               <div
                 className={cn(
-                  "flex items-start gap-2 rounded-lg px-3 py-2 text-xs",
+                  "flex items-start gap-2 rounded-lg px-3 py-2 text-xs dark:border-status-success/30 dark:bg-status-success/10 dark:text-status-success",
                   statusToneBannerClassName.success,
                 )}
               >
@@ -333,7 +333,7 @@ export function AgentCanvasUpdateCard({
                   "inline-flex shrink-0 items-center gap-1 text-[10px] font-medium leading-none",
                   updateAvailable
                     ? cn(
-                        "rounded-full border border-info/30 px-1.5 py-0.5",
+                        "rounded-full border border-info/30 px-1.5 py-0.5 dark:border-transparent dark:bg-[#1E3A5F] dark:text-[#3B82F6]",
                         statusToneBadgeClassName.info,
                       )
                     : "text-success",

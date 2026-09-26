@@ -240,7 +240,7 @@ export function CommandMenu() {
               <X className="size-4" />
             </button>
           ) : null}
-          <kbd className="hidden rounded-md border border-border bg-surface-deep px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted sm:inline-flex">
+          <kbd className="hidden rounded-md border border-border bg-surface-deep px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted dark:bg-black/25 dark:text-text-dim sm:inline-flex">
             {t(I18nKey.COMMAND_MENU$SHORTCUT)}
           </kbd>
         </div>
@@ -305,7 +305,7 @@ export function CommandMenu() {
                               "flex size-9 shrink-0 items-center justify-center rounded-lg border transition-colors duration-150",
                               isActive
                                 ? "border-accent bg-accent/15 text-contrast"
-                                : "border-border bg-surface-deep text-muted group-hover:text-contrast",
+                                : "border-border bg-surface-deep text-muted group-hover:text-contrast dark:bg-black/15 dark:text-text-dim",
                             )}
                             aria-hidden="true"
                           >

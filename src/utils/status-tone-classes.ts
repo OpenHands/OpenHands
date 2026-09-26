@@ -1,10 +1,8 @@
 /**
- * Theme-aware status colors. Each tone resolves through semantic tokens, so
- * light palettes get dark ink on a pale tint and dark palettes keep light ink
- * on a deep tint. Prefer these over Tailwind palette literals such as
- * `text-red-300` or `bg-green-900/50`, which only work on dark backgrounds,
- * and over ad-hoc `bg-<tone>/10 text-<tone>` pairs, whose contrast depends on
- * whichever panel the badge happens to sit on.
+ * Theme-aware status colors for the light palettes. Call sites retain their
+ * established `dark:` classes so OpenHands Neutral remains visually stable.
+ * The unprefixed semantic classes repair Light+ and Solarized Light without
+ * turning this accessibility follow-up into a dark-theme redesign.
  */
 export type StatusTone = "success" | "warning" | "danger" | "info";
 

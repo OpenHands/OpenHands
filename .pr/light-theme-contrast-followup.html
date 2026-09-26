@@ -93,10 +93,11 @@
             4.5:1 text threshold and interactive form boundaries clear 3:1 in browser measurements.
           </div>
           <p>
-            The first commit audits exposed dark-only assumptions across Canvas and moves them
-            onto theme-aware roles. The second closes the remaining compositing gaps: a translucent
-            badge no longer changes legibility when its parent card changes surface, and shared
-            inputs no longer use the decorative border token.
+            The first commit audits exposed dark-only assumptions across Canvas and moves the light
+            rendering onto theme-aware roles, while explicit <code>dark:</code> compatibility
+            overrides preserve the established Neutral palette. The second closes the remaining
+            compositing gaps: a translucent badge no longer changes legibility when its parent card
+            changes surface, and shared inputs no longer use the decorative border token.
           </p>
           <p>
             Sources:
@@ -207,7 +208,7 @@
           <details>
             <summary>Why 77 files changed</summary>
             <div>
-              <p>The behavioral center is small: theme tokens and shared utilities. Most remaining files are narrow utility substitutions that replace dark-only literal colors with those roles.</p>
+              <p>The behavioral center is small: theme tokens and shared utilities. Most remaining files are narrow utility substitutions that give Light+ and Solarized semantic colors while retaining each component's prior Neutral colors through explicit <code>dark:</code> overrides.</p>
               <ul class="compact">
                 <li>status badges and inline notices</li>
                 <li>settings and backend forms</li>
@@ -234,8 +235,9 @@
             </tbody>
           </table>
           <div class="callout note">
-            ⓘ Neutral/dark remains a regression baseline, not the target of the light-palette redesign.
-            Status badges improve there as a side effect; its established field-border strength is unchanged.
+            ⓘ Neutral/dark is a compatibility boundary, not a target of this light-palette redesign.
+            Shared components retain their previous dark colors, including hover and focus states, through
+            explicit <code>dark:</code> overrides. Any dark-palette redesign should be proposed and reviewed separately.
           </div>
           <div class="callout warn">
             ⚠ The automation-row hover remains intentionally restrained. A darker Solarized hover would

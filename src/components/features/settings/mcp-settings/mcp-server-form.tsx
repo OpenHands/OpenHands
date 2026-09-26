@@ -474,7 +474,9 @@ export function MCPServerForm({
         />
       )}
 
-      {error && <p className="text-danger text-sm">{error}</p>}
+      {error && (
+        <p className="text-danger text-sm dark:text-red-500">{error}</p>
+      )}
 
       {(serverType === "sse" || serverType === "shttp") && (
         <>
@@ -702,8 +704,8 @@ export function MCPServerForm({
           data-testid="mcp-test-message"
           className={
             testMessage.ok
-              ? "text-sm text-success whitespace-pre-wrap"
-              : "text-sm text-danger whitespace-pre-wrap"
+              ? "text-sm text-success whitespace-pre-wrap dark:text-green-500"
+              : "text-sm text-danger whitespace-pre-wrap dark:text-red-500"
           }
         >
           {testMessage.text}

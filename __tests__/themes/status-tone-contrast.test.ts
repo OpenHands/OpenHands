@@ -52,10 +52,14 @@ function sourceFiles(dir: string): string[] {
 }
 
 describe("status tone usage", () => {
-  it("does not hand-roll translucent tone fills under same-tone text", () => {
+  it("does not hand-roll translucent tone fills for the light-theme defaults", () => {
     const tone =
       "(success|warning|danger|info|semantic-success|semantic-danger|status-success|status-error)";
-    const fill = new RegExp(`\\bbg-${tone}/\\d+`, "g");
+    // The established Neutral appearance is a compatibility contract, so a
+    // `dark:` override may retain its previous translucent pair. Unprefixed
+    // utilities are what Light+ and Solarized Light render and must use the
+    // surface-independent semantic status tokens.
+    const fill = new RegExp(`(?<!:)\\bbg-${tone}/\\d+`, "g");
     const offenders = new Set<string>();
     for (const file of sourceFiles(SRC_ROOT)) {
       for (const [literal] of readFileSync(file, "utf8").matchAll(
@@ -63,7 +67,7 @@ describe("status tone usage", () => {
       )) {
         for (const [, fillTone] of literal.matchAll(fill)) {
           const bare = fillTone.replace(/^(semantic|status)-/, "");
-          if (new RegExp(`\\btext-(\\w+-)?${bare}\\b`).test(literal)) {
+          if (new RegExp(`(?<!:)\\btext-(\\w+-)?${bare}\\b`).test(literal)) {
             offenders.add(`${relative(SRC_ROOT, file)}: ${literal}`);
           }
         }

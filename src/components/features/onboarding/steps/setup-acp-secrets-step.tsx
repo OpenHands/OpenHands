@@ -195,7 +195,7 @@ export function SetupAcpSecretsStep({
       {blockNext ? (
         <p
           data-testid="onboarding-acp-secrets-blocked"
-          className="text-sm text-warning"
+          className="text-sm text-warning dark:text-amber-300"
         >
           {t(I18nKey.ONBOARDING$ACP_SECRETS_REQUIRED_BLOCKED)}
         </p>

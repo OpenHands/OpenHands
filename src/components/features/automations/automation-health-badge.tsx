@@ -11,11 +11,20 @@ import { statusToneBadgeClassName } from "#/utils/status-tone-classes";
  * manifest's `insights.health` block.
  */
 const HEALTH_STYLES: Record<AutomationHealth, string> = {
-  healthy: cn("border-success/50", statusToneBadgeClassName.success),
-  failing: cn("border-danger/50", statusToneBadgeClassName.danger),
+  healthy: cn(
+    "border-success/50 dark:border-semantic-success/50 dark:bg-semantic-success/10 dark:text-semantic-success",
+    statusToneBadgeClassName.success,
+  ),
+  failing: cn(
+    "border-danger/50 dark:border-semantic-danger/50 dark:bg-semantic-danger/10 dark:text-danger",
+    statusToneBadgeClassName.danger,
+  ),
   running: "border-border bg-surface-raised text-muted",
   disabled: "border-border bg-surface-raised text-muted",
-  "never-run": cn("border-warning/50", statusToneBadgeClassName.warning),
+  "never-run": cn(
+    "border-warning/50 dark:bg-warning/10 dark:text-warning",
+    statusToneBadgeClassName.warning,
+  ),
   unknown: "border-border bg-surface-raised text-muted",
 };
 

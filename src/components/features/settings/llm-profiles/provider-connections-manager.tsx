@@ -48,7 +48,7 @@ export function ProviderConnectionsManager({
           data-testid="provider-connections-load-error"
           className={extensionModuleEmptyStateClassName}
         >
-          <p className="text-sm text-danger">
+          <p className="text-sm text-danger dark:text-red-400">
             {t(I18nKey.SETTINGS$PROVIDER_CONNECTIONS_LOAD_ERROR)}
           </p>
         </div>
