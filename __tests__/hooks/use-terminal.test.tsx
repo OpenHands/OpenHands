@@ -14,11 +14,11 @@ function TestTerminalComponent() {
   return <div ref={ref} />;
 }
 
-function TestTerminalPair() {
+function TestTerminalPair({ showFirst = true }: { showFirst?: boolean } = {}) {
   return (
     <>
-      <TestTerminalComponent />
-      <TestTerminalComponent />
+      {showFirst && <TestTerminalComponent key="first" />}
+      <TestTerminalComponent key="second" />
     </>
   );
 }
@@ -125,7 +125,30 @@ describe("useTerminal", () => {
     expect(mockTerminal.writeln).toHaveBeenCalledTimes(4);
   });
 
-  it("should preserve the command cursor when a terminal remounts", () => {
+  it("should not reset a sibling terminal's cursor when one unmounts", () => {
+    const commands: Command[] = [
+      { content: "echo hello", type: "input" },
+      { content: "hello", type: "output" },
+    ];
+    useCommandStore.setState({ commands });
+
+    const { rerender } = renderWithProviders(<TestTerminalPair />);
+    expect(mockTerminal.writeln).toHaveBeenCalledTimes(4);
+
+    mockTerminal.writeln.mockClear();
+    rerender(<TestTerminalPair showFirst={false} />);
+
+    act(() => {
+      useCommandStore.setState({
+        commands: [...commands, { content: "done", type: "output" }],
+      });
+    });
+
+    expect(mockTerminal.writeln).toHaveBeenCalledTimes(1);
+    expect(mockTerminal.writeln).toHaveBeenCalledWith("done");
+  });
+
+  it("should replay command history when a terminal remounts", () => {
     const commands: Command[] = [
       { content: "echo hello", type: "input" },
       { content: "hello", type: "output" },
@@ -138,6 +161,27 @@ describe("useTerminal", () => {
     firstRender.unmount();
     mockTerminal.writeln.mockClear();
     renderWithProviders(<TestTerminalComponent />);
+
+    expect(mockTerminal.writeln).toHaveBeenCalledTimes(2);
+  });
+
+  it("should replay commands after the command store is cleared", () => {
+    const commands: Command[] = [
+      { content: "echo hello", type: "input" },
+      { content: "hello", type: "output" },
+    ];
+    useCommandStore.setState({ commands });
+
+    renderWithProviders(<TestTerminalComponent />);
+    expect(mockTerminal.writeln).toHaveBeenCalledTimes(2);
+
+    mockTerminal.writeln.mockClear();
+    act(() => {
+      useCommandStore.setState({ commands: [] });
+    });
+    act(() => {
+      useCommandStore.setState({ commands });
+    });
 
     expect(mockTerminal.writeln).toHaveBeenCalledTimes(2);
   });
