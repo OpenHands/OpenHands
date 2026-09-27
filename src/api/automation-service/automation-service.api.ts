@@ -36,7 +36,7 @@ import type {
   SetupRequestBody,
   ValidateDraftResponse,
 } from "#/manifests/types";
-import { downloadBlob } from "#/utils/utils";
+import { downloadBlob, buildSessionHeaders } from "#/utils/utils";
 import type { Backend, ResolvedActiveBackend } from "../backend-registry/types";
 import {
   getActiveBackend,
@@ -303,9 +303,18 @@ class AutomationService {
       });
     }
 
+    // Attach `X-Session-API-Key` at the call site in addition to the
+    // local-axios interceptor. The sidebar onboarding poller calls this on
+    // every refresh of the active-backend context, and self-hosted users were
+    // seeing 401s with no header attached (issue #17690). Building the header
+    // explicitly here means the poller stays correct even if the interceptor
+    // is bypassed.
+    const sessionHeaders = buildSessionHeaders(
+      getEffectiveLocalBackend()?.apiKey,
+    );
     const { data } = await localAutomationAxios.get<AutomationsResponse>(
       `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}`,
-      { params: { limit, offset, created_by: createdBy } },
+      { params: { limit, offset, created_by: createdBy }, headers: sessionHeaders },
     );
     return data;
   }

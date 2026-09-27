@@ -358,6 +358,74 @@ describe("AutomationService.createAutomation", () => {
   });
 });
 
+describe("AutomationService.listAutomations", () => {
+  beforeEach(() => {
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+  });
+
+  afterEach(() => {
+    setActiveSelection(null);
+    setRegisteredBackends([]);
+    vi.clearAllMocks();
+  });
+
+  it("attaches the local session API key to the poller's GET request", async () => {
+    localAxios.get.mockResolvedValueOnce({
+      data: { automations: [], total: 0 },
+    });
+
+    await AutomationService.listAutomations({ limit: 1, offset: 0 });
+
+    expect(localAxios.get).toHaveBeenCalledWith(
+      "/api/automation/v1",
+      expect.objectContaining({
+        params: { limit: 1, offset: 0 },
+        headers: expect.objectContaining({
+          "X-Session-API-Key": localBackend.apiKey,
+        }),
+      }),
+    );
+  });
+
+  it("omits the session header when the local backend has no api key", async () => {
+    setRegisteredBackends([{ ...localBackend, apiKey: "" }]);
+    localAxios.get.mockResolvedValueOnce({
+      data: { automations: [], total: 0 },
+    });
+
+    await AutomationService.listAutomations({ limit: 1, offset: 0 });
+
+    expect(localAxios.get).toHaveBeenCalledWith(
+      "/api/automation/v1",
+      expect.objectContaining({
+        headers: expect.not.objectContaining({
+          "X-Session-API-Key": expect.anything(),
+        }),
+      }),
+    );
+  });
+
+  it("routes cloud requests through the cloud proxy", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
+    callCloudProxy.mockResolvedValueOnce({ automations: [], total: 0 });
+
+    await AutomationService.listAutomations({ limit: 1, offset: 0 });
+
+    expect(callCloudProxy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backend: cloudBackend,
+        method: "GET",
+        path: "/api/automation/v1?limit=1&offset=0",
+        headers: expect.objectContaining({
+          "X-OpenHands-Client": "agent_canvas",
+        }),
+      }),
+    );
+  });
+});
+
 const gitSyncStatus: GitSyncStatus = {
   enabled: true,
   repo_url: "https://example.com/org/repo.git",
