@@ -177,8 +177,15 @@ export const useTerminal = () => {
   }, [colorTheme]);
 
   React.useEffect(() => {
-    if (commands.length === 0) {
+    if (commands.length < lastCommandIndex.current) {
+      if (terminal.current) {
+        terminal.current.reset();
+        // Reset restores the default cursor visibility.
+        terminal.current.write("\x1b[?25l");
+      }
       lastCommandIndex.current = 0;
+    }
+    if (commands.length === 0) {
       return;
     }
     if (terminal.current && lastCommandIndex.current < commands.length) {

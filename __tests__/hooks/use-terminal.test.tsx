@@ -30,6 +30,7 @@ const mockTerminal = vi.hoisted(() => ({
   write: vi.fn(),
   writeln: vi.fn(),
   dispose: vi.fn(),
+  reset: vi.fn(),
   element: document.createElement("div"),
 }));
 
@@ -50,6 +51,8 @@ vi.mock("@xterm/xterm", async (importOriginal) => ({
     writeln = mockTerminal.writeln;
 
     dispose = mockTerminal.dispose;
+
+    reset = mockTerminal.reset;
 
     element = mockTerminal.element;
   },
@@ -165,25 +168,33 @@ describe("useTerminal", () => {
     expect(mockTerminal.writeln).toHaveBeenCalledTimes(2);
   });
 
-  it("should replay commands after the command store is cleared", () => {
-    const commands: Command[] = [
+  it("should reset rendered history when the command store is cleared", () => {
+    const originalCommands: Command[] = [
       { content: "echo hello", type: "input" },
       { content: "hello", type: "output" },
     ];
-    useCommandStore.setState({ commands });
+    useCommandStore.setState({ commands: originalCommands });
 
     renderWithProviders(<TestTerminalComponent />);
     expect(mockTerminal.writeln).toHaveBeenCalledTimes(2);
 
     mockTerminal.writeln.mockClear();
     act(() => {
-      useCommandStore.setState({ commands: [] });
+      useCommandStore.getState().clearTerminal();
     });
+    expect(mockTerminal.reset).toHaveBeenCalledOnce();
+
     act(() => {
-      useCommandStore.setState({ commands });
+      useCommandStore.getState().appendInput("echo fresh");
+      useCommandStore.getState().appendOutput("fresh");
     });
 
     expect(mockTerminal.writeln).toHaveBeenCalledTimes(2);
+    expect(mockTerminal.writeln).toHaveBeenNthCalledWith(1, "echo fresh");
+    expect(mockTerminal.writeln).toHaveBeenNthCalledWith(2, "fresh");
+    expect(mockTerminal.reset.mock.invocationCallOrder[0]).toBeLessThan(
+      mockTerminal.writeln.mock.invocationCallOrder[0],
+    );
   });
 
   it("should not call fit() when terminal.element is null", () => {
