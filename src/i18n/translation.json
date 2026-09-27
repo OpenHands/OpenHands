@@ -33814,6 +33814,23 @@
     "uk": "Застосунок встановлено. Перевірте його тут і ввімкніть, коли будете готові.",
     "ca": "Aplicació instal·lada. Revisa-la aquí i activa-la quan estiguis a punt."
   },
+  "SETTINGS$APPS_REFRESH_SUCCESS": {
+    "en": "App updated.",
+    "ja": "アプリを更新しました。",
+    "zh-CN": "应用已更新。",
+    "zh-TW": "應用程式已更新。",
+    "ko-KR": "앱이 업데이트되었습니다.",
+    "no": "Appen er oppdatert.",
+    "ar": "تم تحديث التطبيق.",
+    "de": "App aktualisiert.",
+    "fr": "Application mise à jour.",
+    "it": "App aggiornata.",
+    "pt": "Aplicativo atualizado.",
+    "es": "Aplicación actualizada.",
+    "tr": "Uygulama güncellendi.",
+    "uk": "Застосунок оновлено.",
+    "ca": "Aplicació actualitzada."
+  },
   "SETTINGS$APPS_UNINSTALL_SUCCESS": {
     "en": "App uninstalled.",
     "ja": "アプリをアンインストールしました。",
