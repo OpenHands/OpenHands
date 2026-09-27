@@ -8,4 +8,5 @@ This directory contains the project documentation.
 - [Canvas Extensions manual testing](./CANVAS_EXTENSIONS_TESTING.md)
 - [Self-hosting guide](./SELF_HOSTING.md)
 - [Integrating DefenseClaw](./DefenseClaw.md): run the DefenseClaw security governance layer alongside the Agent Server.
+- [Optional ScreenContextAgent integration](./screen-context-agent.md): opt-in MCP setup that lets the agent read a time-bounded OCR excerpt of local screen history (local backend).
 - [Testing matrix](./TESTING_MATRIX.md): release smoke-test coverage across installers, operating systems, and agents.
