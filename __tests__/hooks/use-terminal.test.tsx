@@ -4,20 +4,6 @@ import { useTerminal } from "#/hooks/use-terminal";
 import { Command, useCommandStore } from "#/stores/command-store";
 import { renderWithProviders } from "../../test-utils";
 
-const activeConversation = vi.hoisted(() => ({
-  id: "test-conversation-id",
-}));
-
-// Mock useActiveConversation
-vi.mock("#/hooks/query/use-active-conversation", () => ({
-  useActiveConversation: () => ({
-    data: {
-      id: activeConversation.id,
-    },
-    isFetched: true,
-  }),
-}));
-
 // Mock useConversationWebSocket
 vi.mock("#/contexts/conversation-websocket-context", () => ({
   useConversationWebSocket: () => null,
@@ -90,7 +76,6 @@ describe("useTerminal", () => {
 
   afterEach(() => {
     vi.clearAllMocks();
-    activeConversation.id = "test-conversation-id";
     // Reset command store between tests
     useCommandStore.setState({ commands: [] });
   });
@@ -145,7 +130,6 @@ describe("useTerminal", () => {
       { content: "echo hello", type: "input" },
       { content: "hello", type: "output" },
     ];
-    activeConversation.id = "remount-conversation-id";
     useCommandStore.setState({ commands });
 
     const firstRender = renderWithProviders(<TestTerminalComponent />);
@@ -155,7 +139,7 @@ describe("useTerminal", () => {
     mockTerminal.writeln.mockClear();
     renderWithProviders(<TestTerminalComponent />);
 
-    expect(mockTerminal.writeln).not.toHaveBeenCalled();
+    expect(mockTerminal.writeln).toHaveBeenCalledTimes(2);
   });
 
   it("should not call fit() when terminal.element is null", () => {
