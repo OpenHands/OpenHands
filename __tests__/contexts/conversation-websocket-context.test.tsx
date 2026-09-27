@@ -1265,4 +1265,117 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
       ),
     );
   });
+
+  // The events WebSocket subscribes with `resend_mode='since'` and an
+  // `after_timestamp` anchor so the server only resends events we don't
+  // already have. That anchor used to be computed once from the REST
+  // preload and never advanced as live events streamed in — so any
+  // reconnect for the lifetime of an open conversation replayed the
+  // whole session (#17619). The fix advances the anchor from the store's
+  // tail on every render; `useWebSocket` reads the latest
+  // `optionsRef.current.queryParams` at connect time, so a reconnect
+  // picks up the fresh value automatically.
+  describe("since-anchor advances with live events (#17619)", () => {
+    it("advances `after_timestamp` past live events streamed over the socket", async () => {
+      // Arrange: the REST preload returns one user message — the anchor for
+      // the very first WS connect.
+      const preloadBase = Date.parse("2026-09-22T10:00:00.000Z");
+      const preloadTimestamp = new Date(preloadBase).toISOString();
+      vi.spyOn(EventService, "searchEvents").mockResolvedValueOnce({
+        items: [
+          {
+            ...createUserMessageEvent("user-msg-anchor"),
+            timestamp: preloadTimestamp,
+          },
+        ],
+        next_page_id: null,
+      });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <ConversationWebSocketProvider
+            conversationId="conv-anchor"
+            conversationUrl="http://localhost/api"
+          >
+            <div />
+          </ConversationWebSocketProvider>
+        </QueryClientProvider>,
+      );
+      await waitFor(() => expect(wsCapture.mainOptions).not.toBeNull());
+
+      // Act + Assert: the initial anchor equals the preloaded tail. Without
+      // the fix this value would also be what a later reconnect uses.
+      const initialAnchor = wsCapture.mainOptions?.queryParams?.after_timestamp;
+      expect(initialAnchor).toBe(preloadTimestamp);
+
+      // Act: stream 500 live events with strictly increasing timestamps.
+      const N = 500;
+      const latestTimestamp = new Date(preloadBase + N * 1000).toISOString();
+      for (let i = 0; i < N; i += 1) {
+        const timestamp = new Date(preloadBase + (i + 1) * 1000).toISOString();
+        act(() => {
+          wsCapture.mainOnMessage!({
+            data: JSON.stringify({
+              id: `live-${i}`,
+              timestamp,
+              source: "agent",
+              llm_message: {
+                role: "assistant",
+                content: [{ type: "text", text: `m${i}` }],
+              },
+              activated_skills: [],
+              extended_content: [],
+            }),
+          });
+        });
+      }
+
+      // Assert: the captured main-socket options now anchor `since` at the
+      // latest live event — the freshest value `useWebSocket` would read at
+      // its next connect. The preloaded anchor must NOT still be in place;
+      // otherwise a reconnect would resubscribe from `initialAnchor` and
+      // resend the entire session.
+      expect(wsCapture.mainOptions?.queryParams).toMatchObject({
+        resend_mode: "since",
+        after_timestamp: latestTimestamp,
+      });
+      expect(wsCapture.mainOptions?.queryParams?.after_timestamp).not.toBe(
+        initialAnchor,
+      );
+
+      // Sanity-check the store actually holds those events so the assertion
+      // above is about the real anchor source, not a coincidence.
+      const { events } = useEventStore.getState();
+      expect(events.map((event) => event.id)).toContain("live-0");
+      expect(events.map((event) => event.id)).toContain(`live-${N - 1}`);
+    });
+
+    it("falls back to `resend_mode='all'` when the store has no events", async () => {
+      // Arrange: empty REST preload → no anchor available.
+      vi.spyOn(EventService, "searchEvents").mockResolvedValueOnce({
+        items: [],
+        next_page_id: null,
+      });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <ConversationWebSocketProvider
+            conversationId="conv-empty"
+            conversationUrl="http://localhost/api"
+          >
+            <div />
+          </ConversationWebSocketProvider>
+        </QueryClientProvider>,
+      );
+      await waitFor(() => expect(wsCapture.mainOptions).not.toBeNull());
+
+      // Assert: no anchor means `resend_mode='all'`. The pre-fix code also
+      // took this branch on the very first connect — the regression to
+      // avoid is the new code regressing it back to `'all'` even when the
+      // store has events.
+      expect(wsCapture.mainOptions?.queryParams).toEqual({
+        resend_mode: "all",
+      });
+    });
+  });
 });
