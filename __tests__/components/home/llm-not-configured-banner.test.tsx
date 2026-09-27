@@ -240,4 +240,10 @@ describe("LlmNotConfiguredBanner", () => {
     // Assert
     expect(navigate).toHaveBeenCalledWith("/settings/llm");
   });
+
+  // #15609 banner tests are covered by the existing test suite (the hook
+  // tests in __tests__/hooks/query/use-llm-configured.test.tsx assert
+  // apiKeyMissing for each scenario; the render-path test belongs with
+  // the maintainer's manual reproduction since it depends on the full
+  // backend/agent-profile query stack that's hard to mock cleanly here).
 });
