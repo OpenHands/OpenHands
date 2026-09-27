@@ -18,6 +18,7 @@ import {
   buildAgentServerAutomationEnv,
   buildAutomationCommand,
   buildAutomationTelemetryEnv,
+  buildAutomationRuntimeServicesInfo,
   buildConfig,
   buildRouteArgs,
   buildViteBackendEnv,
@@ -45,6 +46,48 @@ const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../..",
 );
+
+type RuntimeServicesInfo = {
+  services: Record<string, { url_from_agent: string }>;
+};
+
+describe("buildAutomationRuntimeServicesInfo", () => {
+  const config = {
+    mode: "agent-canvas",
+    agentServerPort: 18000,
+    ingressPort: 8000,
+    vitePort: 3001,
+    autoBackendPort: 18001,
+    launchFrontend: true,
+    launchAutomation: true,
+  };
+
+  it("advertises host services through the Docker host gateway", () => {
+    const info = buildAutomationRuntimeServicesInfo(config, {
+      OH_CONVERSATION_RUNTIME: "docker",
+    }) as RuntimeServicesInfo;
+    expect(info.services.agent_server.url_from_agent).toBe(
+      "http://localhost:18000",
+    );
+    expect(info.services.ingress.url_from_agent).toBe(
+      "http://host.docker.internal:8000",
+    );
+    expect(info.services.automation.url_from_agent).toBe(
+      "http://host.docker.internal:8000",
+    );
+  });
+
+  it("keeps host services on localhost for local conversations", () => {
+    const info = buildAutomationRuntimeServicesInfo(
+      config,
+      {},
+    ) as RuntimeServicesInfo;
+    expect(info.services.ingress.url_from_agent).toBe("http://localhost:8000");
+    expect(info.services.automation.url_from_agent).toBe(
+      "http://localhost:18001",
+    );
+  });
+});
 
 describe("buildAutomationCommand", () => {
   it("uses released PyPI version by default", () => {

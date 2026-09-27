@@ -43,7 +43,7 @@ export function GitControlBarPrButton({
       disabled={!isButtonEnabled}
       className={cn(
         gitControlBarActionButtonClassName(isButtonEnabled),
-        "px-2 py-1 w-[126px] min-w-[126px] h-7",
+        "px-2 py-1 w-31.5 min-w-31.5 h-7",
       )}
     >
       <div className="w-3 h-3 flex items-center justify-center">
@@ -54,7 +54,7 @@ export function GitControlBarPrButton({
         />
       </div>
       <div
-        className={cn(gitControlBarActionLabelClassName, "max-w-[126px]")}
+        className={cn(gitControlBarActionLabelClassName, "max-w-31.5")}
         title={t(I18nKey.COMMON$PULL_REQUEST)}
       >
         {t(I18nKey.COMMON$PULL_REQUEST)}

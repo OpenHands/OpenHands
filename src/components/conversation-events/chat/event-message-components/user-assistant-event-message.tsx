@@ -23,7 +23,7 @@ interface UserAssistantEventMessageProps {
   isFromPlanningAgent: boolean;
 }
 
-export function UserAssistantEventMessage({
+function UserAssistantEventMessageComponent({
   event,
   isFromPlanningAgent,
 }: UserAssistantEventMessageProps) {
@@ -130,3 +130,10 @@ export function UserAssistantEventMessage({
     </>
   );
 }
+
+// Appending at the live tail keeps historical event objects and these scalar
+// rendering inputs stable. Context and store subscriptions still propagate,
+// while unchanged message wrappers avoid reconciling their large DOM subtrees.
+export const UserAssistantEventMessage = React.memo(
+  UserAssistantEventMessageComponent,
+);
