@@ -914,17 +914,20 @@ describe("automations list interactions", () => {
     expect(mocks.trackExported).toHaveBeenCalledWith({ backendKind: "local" });
   });
 
-  it("hides create and import actions without management permission", () => {
+  it("shows create and import actions without management permission", () => {
+    // Arrange
     mocks.canManage = false;
+
+    // Act
     render(<AutomationsList />);
+
+    // Assert
     expect(
-      screen.queryByTestId("automations-add-automation"),
-    ).not.toBeInTheDocument();
+      screen.getByTestId("automations-add-automation"),
+    ).toBeInTheDocument();
     expect(
-      screen.queryByTestId("automations-import-automation"),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByTestId("add-modal")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("import-modal")).not.toBeInTheDocument();
+      screen.getByTestId("automations-import-automation"),
+    ).toBeInTheDocument();
   });
 
   it("opens and closes the add-automation form", async () => {

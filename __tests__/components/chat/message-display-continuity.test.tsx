@@ -113,7 +113,7 @@ describe("ChatInterface – message display continuity (spec 3.1)", () => {
       conversationId: "test-conversation-id",
     });
 
-    useOptimisticUserMessageStore.setState({ pendingMessages: [] });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
 
     (useConfig as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       data: { app_mode: "local" },

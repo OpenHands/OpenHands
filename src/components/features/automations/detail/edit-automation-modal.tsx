@@ -306,7 +306,7 @@ export function EditAutomationModal({
         }}
         role="presentation"
       />
-      <div className="relative w-full max-w-md rounded-xl border border-[var(--oh-border)] bg-[var(--oh-surface)] p-6">
+      <div className="relative w-full max-w-md rounded-xl border border-border bg-surface p-6">
         <button
           type="button"
           onClick={onClose}
@@ -415,7 +415,7 @@ export function EditAutomationModal({
           )}
 
           {automation.trigger.type === "event" ? (
-            <div className="flex flex-col gap-3 rounded-lg bg-[var(--oh-surface-raised)] p-3">
+            <div className="flex flex-col gap-3 rounded-lg bg-surface-raised p-3">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-medium text-muted">
                   {t(I18nKey.AUTOMATIONS$DETAIL$TRIGGER)}
@@ -499,7 +499,7 @@ export function EditAutomationModal({
                   disabled={form.isCustomSchedule}
                   className={cn(
                     formControlSettingsFieldClassName,
-                    "disabled:bg-[var(--oh-surface-raised)]",
+                    "disabled:bg-surface-raised",
                   )}
                 />
                 {automation.timezone && (

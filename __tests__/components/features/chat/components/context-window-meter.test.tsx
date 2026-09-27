@@ -118,7 +118,7 @@ describe("ContextWindowMeter", () => {
     renderWithProviders(<ContextWindowMeter />);
 
     const trigger = screen.getByTestId("context-window-meter");
-    expect(trigger).toHaveClass("hover:bg-white/10");
+    expect(trigger).toHaveClass("hover:bg-contrast/10");
     expect(trigger.className).not.toContain("--oh-interactive-hover");
   });
 
@@ -150,9 +150,7 @@ describe("ContextWindowMeter", () => {
     expect(
       screen.getByTestId("context-window-compact-button"),
     ).toHaveTextContent("CONVERSATION$COMPACT_CONTEXT");
-    expect(
-      screen.getByText("CONVERSATION$CONTEXT_WINDOW"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("CONVERSATION$CONTEXT_WINDOW")).toBeInTheDocument();
   });
 
   it("opens the Usage drawer from the popover meter", () => {

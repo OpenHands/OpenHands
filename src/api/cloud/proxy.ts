@@ -12,7 +12,7 @@ export interface CloudProxyRequest {
   hostOverride?: string;
   authMode?: "bearer" | "session-api-key" | "none";
   sessionApiKey?: string | null;
-  responseType?: "blob";
+  responseType?: "blob" | "arrayBuffer";
 }
 
 export async function callCloudProxy<TResponse = unknown>(
