@@ -5,22 +5,37 @@ export interface GitDiffLineStats {
   deletions: number;
 }
 
-function countUnifiedDiffStats(diff: string): GitDiffLineStats {
+export function countUnifiedDiffStats(diff: string): {
+  additions: number;
+  deletions: number;
+} {
   let additions = 0;
   let deletions = 0;
+  let inHunk = false;
 
   for (const line of diff.split("\n")) {
-    if (
-      line.startsWith("+++") ||
-      line.startsWith("---") ||
-      line.startsWith("@@")
-    ) {
+    if (line.startsWith("diff --git") || line.startsWith("index ")) {
+      inHunk = false;
       continue;
     }
-    if (line.startsWith("+")) {
-      additions += 1;
-    } else if (line.startsWith("-")) {
-      deletions += 1;
+
+    if (line.startsWith("@@")) {
+      inHunk = true;
+      continue;
+    }
+
+    if (!inHunk) {
+      if (line.startsWith("---") || line.startsWith("+++")) {
+        continue;
+      }
+    }
+
+    if (inHunk) {
+      if (line.startsWith("+")) {
+        additions += 1;
+      } else if (line.startsWith("-")) {
+        deletions += 1;
+      }
     }
   }
 

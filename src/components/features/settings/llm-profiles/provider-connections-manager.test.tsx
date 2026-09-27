@@ -151,6 +151,31 @@ describe("ProviderConnectionsManager", () => {
     expect(screen.getByText("openai")).toBeInTheDocument();
   });
 
+  it("shows supported providers in the edit-connection selector", async () => {
+    const user = userEvent.setup();
+
+    renderWith(
+      <ProviderConnectionsManager
+        connections={[connection]}
+        linkedCountById={{}}
+        isLoading={false}
+        loadError={null}
+      />,
+    );
+
+    await user.click(screen.getByTestId("provider-connection-edit"));
+
+    const providerSelector = screen.getByRole("combobox", {
+      name: /provider/i,
+    });
+    expect(providerSelector).toHaveValue("OpenAI");
+
+    await user.click(providerSelector);
+
+    expect(screen.getByText("Anthropic")).toBeInTheDocument();
+    expect(screen.getByText("OpenHands")).toBeInTheDocument();
+  });
+
   it("surfaces the server message when deleting a referenced connection fails", async () => {
     const conflict = Object.assign(new Error("HTTP 409"), {
       response: {

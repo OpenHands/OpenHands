@@ -20,10 +20,12 @@ import { useSyncAutomationTelemetryConsent } from "#/hooks/use-sync-automation-t
 
 import { useTelemetryIdentity } from "#/hooks/use-telemetry-identity";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
+import { CloudOrganizationBoundary } from "#/components/features/backends/cloud-organization-boundary";
 import { useAppTitle } from "#/hooks/use-app-title";
 import { ReactRouterNavigationProvider } from "./react-router-navigation-provider";
 import { OnboardingHost } from "#/components/features/onboarding";
 import { isOnboardingPreviewActive } from "#/components/features/onboarding/onboarding-preview";
+import { CanvasExtensionsRuntimeProvider } from "#/components/features/canvas-extensions/canvas-extensions-runtime";
 
 const EnvironmentSwitchOverlay = React.lazy(
   () => import("#/components/features/backends/environment-switch-overlay"),
@@ -73,6 +75,14 @@ export function ErrorBoundary() {
 }
 
 export default function MainApp() {
+  return (
+    <CloudOrganizationBoundary>
+      <MainAppContent />
+    </CloudOrganizationBoundary>
+  );
+}
+
+function MainAppContent() {
   const location = useLocation();
   const appTitle = useAppTitle();
   const { data: settings } = useSettings();
@@ -110,44 +120,46 @@ export default function MainApp() {
 
   return (
     <ReactRouterNavigationProvider>
-      <SidebarMobileNavProvider>
-        <div
-          data-testid="root-layout"
-          className="h-screen lg:min-w-5xl flex flex-col md:flex-row bg-base overflow-hidden p-0"
-        >
-          <title>{appTitle}</title>
-          <Sidebar />
+      <CanvasExtensionsRuntimeProvider>
+        <SidebarMobileNavProvider>
+          <div
+            data-testid="root-layout"
+            className="h-screen lg:min-w-5xl flex flex-col md:flex-row bg-base overflow-hidden p-0"
+          >
+            <title>{appTitle}</title>
+            <Sidebar />
 
-          <div className="flex min-h-0 flex-col w-full min-w-0 h-full gap-3">
-            {!hideMobileSidebarMenuBar ? <SidebarMobileMenuBar /> : null}
-            {config.data &&
-              (config.data.maintenance_start_time ||
-                (config.data.faulty_models &&
-                  config.data.faulty_models.length > 0) ||
-                config.data.error_message) && (
-                <React.Suspense fallback={null}>
-                  <AlertBanner
-                    maintenanceStartTime={config.data.maintenance_start_time}
-                    faultyModels={config.data.faulty_models}
-                    errorMessage={config.data.error_message}
-                    updatedAt={config.data.updated_at}
-                  />
-                </React.Suspense>
-              )}
-            <div
-              id="root-outlet"
-              className="relative flex-1 overflow-auto px-0 custom-scrollbar"
-            >
-              <Outlet />
+            <div className="flex min-h-0 flex-col w-full min-w-0 h-full gap-3">
+              {!hideMobileSidebarMenuBar ? <SidebarMobileMenuBar /> : null}
+              {config.data &&
+                (config.data.maintenance_start_time ||
+                  (config.data.faulty_models &&
+                    config.data.faulty_models.length > 0) ||
+                  config.data.error_message) && (
+                  <React.Suspense fallback={null}>
+                    <AlertBanner
+                      maintenanceStartTime={config.data.maintenance_start_time}
+                      faultyModels={config.data.faulty_models}
+                      errorMessage={config.data.error_message}
+                      updatedAt={config.data.updated_at}
+                    />
+                  </React.Suspense>
+                )}
+              <div
+                id="root-outlet"
+                className="relative flex-1 overflow-auto px-0 custom-scrollbar"
+              >
+                <Outlet />
+              </div>
             </div>
           </div>
-        </div>
-        <React.Suspense fallback={null}>
-          <EnvironmentSwitchOverlay />
-          <CommandMenu />
-        </React.Suspense>
-        {showOnboardingPreview ? <OnboardingHost /> : null}
-      </SidebarMobileNavProvider>
+          <React.Suspense fallback={null}>
+            <EnvironmentSwitchOverlay />
+            <CommandMenu />
+          </React.Suspense>
+          {showOnboardingPreview ? <OnboardingHost /> : null}
+        </SidebarMobileNavProvider>
+      </CanvasExtensionsRuntimeProvider>
     </ReactRouterNavigationProvider>
   );
 }

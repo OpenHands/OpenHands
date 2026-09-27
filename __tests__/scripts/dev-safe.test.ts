@@ -385,6 +385,24 @@ describe("formatMissingUvxGuidance", () => {
 });
 
 describe("buildAgentServerTelemetryEnv", () => {
+  const agentServerConfig = {
+    cwd: "/tmp/cwd",
+    backendPort: 18000,
+    tmuxTmpDir: "/tmp/tmux",
+    stateDir: "/tmp/state",
+    conversationsPath: "/tmp/conversations",
+    workspacesPath: "/tmp/workspaces",
+    bashEventsDir: "/tmp/bash-events",
+    vscodePort: 19000,
+    vscodeBasePath: "/vscode",
+    secretKey: "secret",
+    sessionApiKey: "session",
+    backendBaseUrl: "http://127.0.0.1:18000",
+    backendHost: "127.0.0.1:18000",
+    workingDir: "/tmp/workspaces",
+    canvasToolsDir: "/tmp/tools",
+  };
+
   it("configures PostHog telemetry by default without seeding consent", () => {
     expect(buildAgentServerTelemetryEnv({})).toEqual({
       OH_TELEMETRY_EXPORTER: "posthog",
@@ -432,31 +450,37 @@ describe("buildAgentServerTelemetryEnv", () => {
   });
 
   it("includes telemetry defaults in the full agent-server environment", () => {
-    const env = buildAgentServerEnv(
-      {
-        cwd: "/tmp/cwd",
-        backendPort: 18000,
-        tmuxTmpDir: "/tmp/tmux",
-        stateDir: "/tmp/state",
-        conversationsPath: "/tmp/conversations",
-        workspacesPath: "/tmp/workspaces",
-        bashEventsDir: "/tmp/bash-events",
-        vscodePort: 19000,
-        vscodeBasePath: "/vscode",
-        secretKey: "secret",
-        sessionApiKey: "session",
-        backendBaseUrl: "http://127.0.0.1:18000",
-        backendHost: "127.0.0.1:18000",
-        workingDir: "/tmp/workspaces",
-        canvasToolsDir: "/tmp/tools",
-      },
-      { env: {} },
-    );
+    const env = buildAgentServerEnv(agentServerConfig, { env: {} });
 
     expect(env).toMatchObject({
       OH_TELEMETRY_EXPORTER: "posthog",
       OH_SESSION_API_KEYS_0: "session",
     });
+  });
+
+  it("forwards configured Docker conversation runtime settings", () => {
+    const configured = buildAgentServerEnv(agentServerConfig, {
+      env: {
+        OH_CONVERSATION_RUNTIME: "docker",
+        OH_CONVERSATION_IMAGE: "agent-server:test",
+        OH_CONVERSATION_CONTAINER_MEMORY: "2g",
+        OH_CONVERSATION_CONTAINER_CPUS: "1",
+        OH_CONVERSATION_CONTAINER_PIDS_LIMIT: "256",
+        OH_CONVERSATION_CONTAINER_STARTUP_TIMEOUT: "180",
+      },
+    });
+
+    expect(configured).toMatchObject({
+      OH_CONVERSATION_RUNTIME: "docker",
+      OH_CONVERSATION_IMAGE: "agent-server:test",
+      OH_CONVERSATION_CONTAINER_MEMORY: "2g",
+      OH_CONVERSATION_CONTAINER_CPUS: "1",
+      OH_CONVERSATION_CONTAINER_PIDS_LIMIT: "256",
+      OH_CONVERSATION_CONTAINER_STARTUP_TIMEOUT: "180",
+    });
+    expect(
+      buildAgentServerEnv(agentServerConfig, { env: {} }),
+    ).not.toHaveProperty("OH_CONVERSATION_RUNTIME");
   });
 });
 
@@ -468,20 +492,20 @@ describe("buildAgentServerCommand", () => {
     // Defaults to the released PyPI version with all SDK packages pinned to same version
     expect(cmd.args).toEqual([
       "--from",
-      "openhands-agent-server==1.42.1",
+      "openhands-agent-server==1.49.6",
       "--with",
-      "openhands-sdk==1.42.1",
+      "openhands-sdk==1.49.6",
       "--with",
-      "openhands-tools==1.42.1",
+      "openhands-tools==1.49.6",
       "--with",
-      "openhands-workspace==1.42.1",
-      "--with",
-      "agent-client-protocol<0.11",
+      "openhands-workspace==1.49.6",
       "--with",
       "posthog>=6,<7",
       "agent-server",
+      "--import-modules",
+      "canvas_ui_tool",
     ]);
-    expect(cmd.source).toBe("PyPI (1.42.1, default)");
+    expect(cmd.source).toBe("PyPI (1.49.6, default)");
   });
 
   it("uses specific PyPI version when OH_AGENT_SERVER_VERSION is set with all packages pinned", () => {
@@ -500,10 +524,10 @@ describe("buildAgentServerCommand", () => {
       "--with",
       "openhands-workspace==1.18.0",
       "--with",
-      "agent-client-protocol<0.11",
-      "--with",
       "posthog>=6,<7",
       "agent-server",
+      "--import-modules",
+      "canvas_ui_tool",
     ]);
     expect(cmd.source).toBe("PyPI (1.18.0)");
   });
@@ -527,6 +551,8 @@ describe("buildAgentServerCommand", () => {
       "--with",
       "posthog>=6,<7",
       "agent-server",
+      "--import-modules",
+      "canvas_ui_tool",
     ]);
     expect(cmd.source).toBe("git (feature-branch)");
   });
@@ -548,6 +574,8 @@ describe("buildAgentServerCommand", () => {
       "--with",
       "posthog>=6,<7",
       "agent-server",
+      "--import-modules",
+      "canvas_ui_tool",
     ]);
     expect(cmd.source).toBe("git (abc1234)");
   });
@@ -584,6 +612,8 @@ describe("buildAgentServerCommand", () => {
       "--with",
       "posthog>=6,<7",
       "agent-server",
+      "--import-modules",
+      "canvas_ui_tool",
     ]);
     expect(cmd.source).toBe(`local (${sdk})`);
   });
@@ -602,6 +632,27 @@ describe("buildAgentServerCommand", () => {
       "git+https://github.com/OpenHands/software-agent-sdk@feature-branch#subdirectory=openhands-agent-server",
     );
     expect(cmd.args).not.toContain("openhands-agent-server==1.18.0");
+  });
+
+  it("passes --import-modules to the agent-server, after the executable, in every source mode", () => {
+    // The flag must sit after "agent-server" so uvx hands it to the server
+    // instead of parsing it itself. tools/canvas_ui_tool.py documents why the
+    // module has to be imported before any conversation is created.
+    const variants = [
+      {},
+      { OH_AGENT_SERVER_VERSION: "1.18.0" },
+      { OH_AGENT_SERVER_GIT_REF: "feature-branch" },
+      { OH_AGENT_SERVER_LOCAL_PATH: "/abs/path/to/software-agent-sdk" },
+    ];
+    for (const env of variants) {
+      const { args } = buildAgentServerCommand(env);
+      const executable = args.indexOf("agent-server");
+      expect(executable).toBeGreaterThan(-1);
+      expect(args.slice(executable + 1)).toEqual([
+        "--import-modules",
+        "canvas_ui_tool",
+      ]);
+    }
   });
 
   it("rejects relative OH_AGENT_SERVER_LOCAL_PATH", () => {

@@ -4,6 +4,8 @@ import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { useSharedConversation } from "#/hooks/query/use-shared-conversation";
 import { useSharedConversationEvents } from "#/hooks/query/use-shared-conversation-events";
+import { useCloudOrgMember } from "#/hooks/query/use-cloud-org-member";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 import { Messages } from "#/components/conversation-events/chat/messages";
 import { shouldRenderEvent } from "#/components/conversation-events/chat/event-content-helpers/should-render-event";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
@@ -12,9 +14,22 @@ import { OpenHandsEvent } from "#/types/agent-server/core";
 import OpenHandsLogo from "#/assets/branding/openhands-logo.svg?react";
 import { useInfiniteScroll } from "#/hooks/use-infinite-scroll";
 
+/**
+ * Resolve the creator's email through the active cloud org, following the
+ * "Automation Runs As" precedent on the automation detail page. Falls back to
+ * the raw user id when the member lookup cannot resolve it (for example when
+ * the conversation belongs to another org the viewer is a member of).
+ */
+function SharedConversationCreator({ userId }: { userId: string }) {
+  const { data: creator, isFetching } = useCloudOrgMember(userId);
+  if (creator?.email) return <>{creator.email}</>;
+  return isFetching ? null : <>{userId}</>;
+}
+
 export default function SharedConversation() {
   const { t } = useTranslation("openhands");
   const { conversationId } = useParams<{ conversationId: string }>();
+  const active = useActiveBackend();
 
   const {
     data: conversation,
@@ -69,22 +84,26 @@ export default function SharedConversation() {
   if (error || !conversation) {
     return (
       <div className="flex items-center justify-center h-screen bg-base">
-        <div className="text-white">{t(I18nKey.CONVERSATION$NOT_FOUND)}</div>
+        <div className="text-contrast">{t(I18nKey.CONVERSATION$NOT_FOUND)}</div>
       </div>
     );
   }
 
   return (
-    <div className="h-screen bg-base text-white flex flex-col">
+    <div className="h-screen bg-base text-contrast flex flex-col">
       {/* Header with logo, conversation title and branch info */}
-      <div className="border-b border-[var(--oh-border-subtle)] p-4 flex-shrink-0">
+      <div className="border-b border-border-subtle p-4 flex-shrink-0">
         <div className="max-w-4xl mx-auto flex items-start gap-4">
           <Link
             to="/conversations"
             className="flex-shrink-0"
             aria-label={t(I18nKey.BRANDING$OPENHANDS_LOGO)}
           >
-            <OpenHandsLogo width={46} height={30} />
+            <OpenHandsLogo
+              width={46}
+              height={30}
+              className="text-contrast [&_path:not([fill=transparent])]:fill-current"
+            />
           </Link>
           <div className="flex-1 min-w-0">
             <h1 className="text-xl font-medium mb-2">
@@ -92,19 +111,31 @@ export default function SharedConversation() {
                 t(I18nKey.CONVERSATION$SHARED_CONVERSATION)}
             </h1>
             {conversation?.selected_branch && (
-              <div className="text-sm text-[var(--oh-muted)]">
+              <div className="text-sm text-muted">
                 {t(I18nKey.CONVERSATION$BRANCH)}: {conversation.selected_branch}
               </div>
             )}
             {conversation?.selected_repository && (
-              <div className="text-sm text-[var(--oh-muted)]">
+              <div className="text-sm text-muted">
                 {t(I18nKey.CONVERSATION$REPOSITORY)}:{" "}
                 {conversation.selected_repository}
               </div>
             )}
             {conversation?.llm_model && (
-              <div className="text-sm text-[var(--oh-muted)]">
+              <div className="text-sm text-muted">
                 {t(I18nKey.LLM$MODEL)}: {conversation.llm_model}
+              </div>
+            )}
+            {conversation?.created_by_user_id && (
+              <div className="text-sm text-muted">
+                {t(I18nKey.CONVERSATION$CREATED_BY)}:{" "}
+                {active.backend.kind === "cloud" ? (
+                  <SharedConversationCreator
+                    userId={conversation.created_by_user_id}
+                  />
+                ) : (
+                  conversation.created_by_user_id
+                )}
               </div>
             )}
           </div>
@@ -116,7 +147,7 @@ export default function SharedConversation() {
         ref={scrollContainerRef}
         className="flex-1 overflow-y-auto custom-scrollbar-always px-4 pt-4 gap-2"
       >
-        <div className="max-w-4xl mx-auto p-4 border border-[var(--oh-border-subtle)] rounded">
+        <div className="max-w-4xl mx-auto p-4 border border-border-subtle rounded">
           {renderableEvents.length > 0 ? (
             <Messages
               messages={renderableEvents}
@@ -124,7 +155,7 @@ export default function SharedConversation() {
             />
           ) : (
             <div className="flex items-center justify-center h-full">
-              <div className="text-center text-[var(--oh-muted)] py-8">
+              <div className="text-center text-muted py-8">
                 {t(I18nKey.CONVERSATION$NO_HISTORY_AVAILABLE)}
               </div>
             </div>

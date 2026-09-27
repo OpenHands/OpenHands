@@ -221,6 +221,24 @@ export async function updateCloudConversationPublicFlag(
 }
 
 /**
+ * Rename a cloud v1 app-conversation. The title belongs to the Cloud
+ * app-conversation resource, so updating a runtime Agent Server would not
+ * persist it in the Cloud conversation list.
+ */
+export async function updateCloudConversationTitle(
+  conversationId: string,
+  title: string,
+): Promise<AppConversation> {
+  const backend = getActiveCloudBackend();
+  return callCloudProxy<AppConversation>({
+    backend,
+    method: "PATCH",
+    path: `/api/v1/app-conversations/${conversationId}`,
+    body: { title },
+  });
+}
+
+/**
  * Pause the cloud sandbox backing a v1 app-conversation. Mirrors
  * OpenHands' `SandboxService.pauseSandbox`:
  * `POST /api/v1/sandboxes/{sandboxId}/pause` on the cloud backend, which stops

@@ -1,10 +1,15 @@
-import type { RecommendedAutomation } from "@openhands/extensions/automations";
+import {
+  AUTOMATION_CATALOG,
+  type RecommendedAutomation,
+} from "@openhands/extensions/automations";
 import {
   SKILLS_CATALOG,
   type SkillCatalogEntry,
 } from "@openhands/extensions/skills";
 import type { LucideIcon } from "lucide-react";
 import { MANIFEST_ICON_BY_SLUG } from "#/components/features/manifest/manifest-icons";
+import { interpolateValues } from "#/manifests/manifest-template";
+import type { Automation } from "#/types/automation";
 
 /**
  * Reading a published automation catalog entry.
@@ -90,4 +95,91 @@ export function getAutomationLaunchPrompt(
     findAutomationCommand(automation) ??
     `Set up the ${automation.name} automation`
   );
+}
+
+const CATALOG_ENTRY_BY_ID = new Map<string, RecommendedAutomation>(
+  AUTOMATION_CATALOG.map((entry) => [entry.id, entry]),
+);
+
+/** Rejects markup the same way the catalog schema's copy rule does. */
+const MARKUP_PATTERN = /<[A-Za-z/!]/;
+
+/** Every `{{` an impact phrase opens must be the count placeholder. */
+const FOREIGN_PLACEHOLDER_PATTERN = /\{\{(?!count\}\})/;
+
+const COUNT_PLACEHOLDER = "{{count}}";
+
+interface AutomationImpactCopy {
+  one: string;
+  other: string;
+}
+
+function isImpactPhrase(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    !MARKUP_PATTERN.test(value) &&
+    !FOREIGN_PLACEHOLDER_PATTERN.test(value)
+  );
+}
+
+/**
+ * The entry's `impact` value statement, or null when it declares none this
+ * host can honor. The catalog is published elsewhere, so the field is read
+ * off the raw entry and validated here rather than trusted from the package
+ * types — which also keeps this module compiling against a pinned package
+ * that predates the field. A basis other than `completed-runs` is a counter
+ * this host does not know how to compute, so it renders nothing rather than
+ * a number the phrase was not written for.
+ */
+function readImpactCopy(
+  entry: RecommendedAutomation,
+): AutomationImpactCopy | null {
+  const { impact } = entry as unknown as Record<string, unknown>;
+  if (typeof impact !== "object" || impact === null) return null;
+  const { basis, one, other } = impact as Record<string, unknown>;
+  if (basis !== "completed-runs") return null;
+  if (!isImpactPhrase(one) || !isImpactPhrase(other)) return null;
+  if (!other.includes(COUNT_PLACEHOLDER)) return null;
+  return { one, other };
+}
+
+/**
+ * The catalog entry an installed automation was created from, via the
+ * `template` provenance its setup stored — the only join back to the catalog.
+ * Null for automations without provenance: imports, agent-built ones, and
+ * entries whose setup publishes no version.
+ */
+function getAutomationTemplateEntry(
+  automation: Automation,
+): RecommendedAutomation | null {
+  const metadata = automation.preset_metadata;
+  if (typeof metadata !== "object" || metadata === null) return null;
+  const { template } = metadata as Record<string, unknown>;
+  if (typeof template !== "object" || template === null) return null;
+  const { id } = template as Record<string, unknown>;
+  if (typeof id !== "string" || id.length === 0) return null;
+  return CATALOG_ENTRY_BY_ID.get(id) ?? null;
+}
+
+/**
+ * The value statement an automation card shows for its completed runs, or
+ * null when there is nothing defensible to say: no template provenance, no
+ * honored `impact` declaration, an unknown count (older service with more
+ * history than the sample), or a count of zero — absence, never a zero-value
+ * claim. Provenance persists across prompt edits, so a reworked automation
+ * keeps its template's phrase; the phrases are run-shaped, which keeps them
+ * true for as long as the automation runs at all.
+ */
+export function resolveAutomationImpactStatement(
+  automation: Automation,
+  completedTotal: number | null,
+): string | null {
+  if (completedTotal === null || completedTotal < 1) return null;
+  const entry = getAutomationTemplateEntry(automation);
+  if (!entry) return null;
+  const copy = readImpactCopy(entry);
+  if (!copy) return null;
+  const phrase = completedTotal === 1 ? copy.one : copy.other;
+  return interpolateValues(phrase, { count: completedTotal.toLocaleString() });
 }

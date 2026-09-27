@@ -1,5 +1,5 @@
 import { renderHook } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OSS_NAV_ITEMS } from "#/constants/settings-nav";
 import { useSettingsNavItems } from "#/hooks/use-settings-nav-items";
 import { WebClientConfig } from "#/api/option-service/option.types";
@@ -61,6 +61,10 @@ describe("useSettingsNavItems", () => {
       orgId: null,
     });
     useActiveAgentProfileMock.mockReturnValue({ activeProfile: null });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it("returns the LLM settings item unchanged on local backends", () => {
@@ -175,5 +179,25 @@ describe("useSettingsNavItems", () => {
         item: OSS_NAV_ITEMS.find((item) => item.to === path),
       });
     }
+  });
+
+  it("lists only the Application page when the canvas is locked to a Cloud host", () => {
+    // Arrange — SaaS / self-hosted OHE serve the canvas with `--lock-to-cloud`;
+    // the OHE settings shell ("All Cloud Settings") owns every other page.
+    vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://app.all-hands.dev");
+    useConfigMock.mockReturnValue({ data: createConfig() });
+    useActiveBackendMock.mockReturnValue({
+      backend: { kind: "cloud" },
+      orgId: "org-123",
+    });
+
+    // Act
+    const { result } = renderHook(() => useSettingsNavItems());
+
+    // Assert
+    const paths = result.current
+      .filter((item) => item.type === "item")
+      .map((item) => (item.type === "item" ? item.item.to : null));
+    expect(paths).toEqual(["/settings/app"]);
   });
 });

@@ -74,7 +74,7 @@ export function PinnedAutomationsDashboard() {
       aria-label={t(I18nKey.FEATURED_AUTOMATIONS$PINNED_DASHBOARD_LABEL)}
       className={cn("w-full", AUTOMATION_STACK_SECTION_BOTTOM_CLASS)}
     >
-      <h2 className="mb-2 text-sm font-medium text-[var(--oh-foreground)]">
+      <h2 className="mb-2 text-sm font-medium text-foreground">
         {t(I18nKey.FEATURED_AUTOMATIONS$PINNED_TITLE)}
       </h2>
 
@@ -116,7 +116,7 @@ export function PinnedAutomationsDashboard() {
             type="button"
             data-testid="pinned-automations-view-more"
             onClick={() => setIsExpanded((value) => !value)}
-            className="text-xs text-[var(--oh-text-secondary)] hover:text-[var(--oh-foreground)]"
+            className="text-xs text-text-secondary hover:text-foreground"
           >
             {t(
               isExpanded ? I18nKey.COMMON$VIEW_LESS : I18nKey.COMMON$VIEW_MORE,

@@ -74,6 +74,8 @@ describe("Telemetry Service", () => {
     sessionStorage.clear();
     delete (window as unknown as Record<string, unknown>)
       .__AGENT_CANVAS_LOCK_TO_CLOUD__;
+    delete (window as unknown as Record<string, unknown>)
+      .__AGENT_CANVAS_DO_NOT_TRACK__;
     // Reset mock
     vi.clearAllMocks();
     identifiedUserId = undefined;
@@ -92,6 +94,8 @@ describe("Telemetry Service", () => {
     sessionStorage.clear();
     delete (window as unknown as Record<string, unknown>)
       .__AGENT_CANVAS_LOCK_TO_CLOUD__;
+    delete (window as unknown as Record<string, unknown>)
+      .__AGENT_CANVAS_DO_NOT_TRACK__;
   });
 
   describe("PostHog ownership", () => {
@@ -120,7 +124,7 @@ describe("Telemetry Service", () => {
           consent_persistence_name: "agent-canvas-consent",
           person_profiles: "always",
           capture_pageview: "history_change",
-          autocapture: true,
+          autocapture: false,
         }),
         "agent-canvas",
       );
@@ -139,6 +143,7 @@ describe("Telemetry Service", () => {
           package_name: "@openhands/agent-canvas",
           package_version: expect.any(String),
           backend_kind: null,
+          deployment_kind: null,
           agent_server_version: "unknown",
           automation_sdk_version: "unknown",
           backend_version: "unknown",
@@ -160,6 +165,7 @@ describe("Telemetry Service", () => {
         event: "backend_context_event",
         properties: expect.objectContaining({
           backend_kind: "cloud",
+          deployment_kind: "remote",
           agent_server_version: "1.36.2",
           automation_sdk_version: "1.36.3",
           backend_version: "1.36.2",
@@ -454,6 +460,40 @@ describe("Telemetry Service", () => {
 
       // Should NOT call opt_out_capturing when consent is granted
       expect(mockPosthog.opt_out_capturing).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("runtime do-not-track global", () => {
+    it("reports consent as denied when the global is set", () => {
+      (
+        window as unknown as Record<string, unknown>
+      ).__AGENT_CANVAS_DO_NOT_TRACK__ = true;
+
+      expect(getTelemetryConsent()).toBe("denied");
+      expect(isTelemetryEnabled()).toBe(false);
+    });
+
+    it("suppresses the install event even without consent", async () => {
+      (
+        window as unknown as Record<string, unknown>
+      ).__AGENT_CANVAS_DO_NOT_TRACK__ = true;
+
+      await trackInstall();
+
+      expect(mockPosthog.capture).not.toHaveBeenCalled();
+    });
+
+    it("does not suppress tracking when the global is not true", async () => {
+      (
+        window as unknown as Record<string, unknown>
+      ).__AGENT_CANVAS_DO_NOT_TRACK__ = false;
+
+      await trackInstall();
+
+      expect(mockPosthog.capture).toHaveBeenCalledWith(
+        "canvas_install",
+        expect.any(Object),
+      );
     });
   });
 

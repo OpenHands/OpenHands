@@ -20,7 +20,7 @@ export async function routeOnboardingLlmCatalog(page: Page) {
       body: JSON.stringify({
         models: {
           anthropic: ["claude-opus-4-8"],
-          openai: ["gpt-5.5"],
+          openai: ["gpt-5.5", "gpt-6-astra"],
           openhands: ["claude-opus-4-5-20251101", "kimi-k3", "glm-5.2"],
         },
       }),
@@ -36,7 +36,8 @@ export async function routeOnboardingLlmCatalog(page: Page) {
           "anthropic/claude-opus-4-8",
           "openai/gpt-5.5",
           "openhands/claude-opus-4-5-20251101",
-          "openhands/kimi-k3",
+          "openai/gpt-5.6-sol",
+          "openai/gpt-6-astra",
           "openhands/glm-5.2",
         ],
       }),

@@ -19,10 +19,17 @@ import { NavigationProvider } from "#/context/navigation-context";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { SecretsService } from "#/api/secrets-service";
 import { DEFAULT_SETTINGS } from "#/services/settings";
+import { useFreeModelsStore } from "#/stores/free-models-store";
 import * as telemetry from "#/services/telemetry";
 
 const llmSettingsScreenMock = vi.hoisted(() => vi.fn());
 const getServerInfoMock = vi.hoisted(() => vi.fn());
+const getSettingsMock = vi.hoisted(() => vi.fn().mockResolvedValue({}));
+const saveAgentProfileMock = vi.hoisted(() => vi.fn().mockResolvedValue({}));
+const getAgentProfileMock = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({ profile: { id: "default-profile-id" } }),
+);
+const activateAgentProfileMock = vi.hoisted(() => vi.fn().mockResolvedValue({}));
 let captureMock: MockInstance<typeof telemetry.trackEvent>;
 
 // Both the backend status badge in the embedded edit form and the
@@ -38,7 +45,14 @@ vi.mock("@openhands/typescript-client/clients", () => ({
   // `LlmSettingsScreen` is stubbed, so provide the minimal client it needs.
   SettingsClient: vi.fn(function SettingsClientMock() {
     return {
-      getSettings: vi.fn().mockResolvedValue({}),
+      getSettings: vi.fn(() => getSettingsMock()),
+    };
+  }),
+  AgentProfilesClient: vi.fn(function AgentProfilesClientMock() {
+    return {
+      saveAgentProfile: vi.fn((...args) => saveAgentProfileMock(...args)),
+      getAgentProfile: vi.fn((...args) => getAgentProfileMock(...args)),
+      activateAgentProfile: vi.fn((...args) => activateAgentProfileMock(...args)),
     };
   }),
 }));
@@ -175,10 +189,7 @@ function seedCloudBackend() {
   return backend;
 }
 
-function renderModal(
-  onClose = vi.fn(),
-  options?: { initialStep?: number },
-) {
+function renderModal(onClose = vi.fn(), options?: { initialStep?: number }) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -209,6 +220,10 @@ beforeEach(() => {
   vi.stubEnv("VITE_BACKEND_BASE_URL", "http://localhost:9000");
   vi.stubEnv("VITE_SESSION_API_KEY", "session-key");
   __resetActiveStoreForTests();
+  useFreeModelsStore.getState().setFlags({
+    freeModels: new Set(),
+    defaultModel: null,
+  });
   // Clear accumulated spy/mock call history so per-test assertions (the
   // ACP secret-write checks and the LLM-defaults mock) don't see calls
   // leaked from a prior test. Covers `llmSettingsScreenMock` too.
@@ -618,6 +633,47 @@ describe("OnboardingModal", () => {
     expect(screen.queryByText("BACKEND$LOGIN_OR")).toBeNull();
   });
 
+  it("shows a connection error when the backend API key is invalid", async () => {
+    window.localStorage.clear();
+    vi.stubEnv("VITE_BACKEND_BASE_URL", "");
+    vi.stubEnv("VITE_SESSION_API_KEY", "");
+    delete (window as unknown as Record<string, unknown>)
+      .__AGENT_CANVAS_SESSION_API_KEY__;
+    __resetActiveStoreForTests();
+
+    // Mock SettingsClient to throw a 401 error
+    const authError = new Error("Unauthorized");
+    authError.name = "HttpError";
+    (authError as any).status = 401;
+    getSettingsMock.mockRejectedValueOnce(authError);
+    // getServerInfoMock implicitly resolves, but shouldn't be reached if test is correct
+
+    renderModal();
+    const user = userEvent.setup();
+
+    await user.clear(screen.getByTestId("onboarding-backend-host"));
+    await user.type(
+      screen.getByTestId("onboarding-backend-host"),
+      "https://127.0.0.1:8000",
+    );
+    await user.clear(screen.getByTestId("onboarding-backend-api-key"));
+    await user.type(
+      screen.getByTestId("onboarding-backend-api-key"),
+      "invalid-session-key",
+    );
+    await user.click(screen.getByTestId("onboarding-backend-next"));
+
+    expect(
+      await screen.findByTestId("onboarding-backend-error"),
+    ).toHaveTextContent("BACKEND$CONNECTION_TEST_FAILED");
+    expect(screen.getByTestId("onboarding-backend-error")).toHaveTextContent(
+      "Invalid API key", // This comes from INVALID_BACKEND_API_KEY_ERROR
+    );
+
+    // Should not advance to the next step
+    expect(screen.queryByText("BACKEND$LOGIN_OR")).toBeNull();
+  });
+
   it("shows a connection error when saving an unreachable backend", async () => {
     window.localStorage.clear();
     vi.stubEnv("VITE_BACKEND_BASE_URL", "");
@@ -657,6 +713,24 @@ describe("OnboardingModal", () => {
       expect.objectContaining({
         initialValueOverrides: {
           "llm.model": ONBOARDING_DEFAULT_LLM_MODEL,
+        },
+      }),
+    );
+  });
+
+  it("pre-fills the LLM step with the DB-selected OpenHands default", () => {
+    useFreeModelsStore.getState().setFlags({
+      freeModels: new Set(["openhands/gpt-5.2"]),
+      defaultModel: "openhands/gpt-5.2",
+    });
+
+    renderModal();
+
+    expect(llmSettingsScreenMock).toHaveBeenCalledTimes(1);
+    expect(llmSettingsScreenMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        initialValueOverrides: {
+          "llm.model": "openhands/gpt-5.2",
         },
       }),
     );
@@ -977,7 +1051,7 @@ describe("OnboardingModal", () => {
     );
     expect(
       helloInput.compareDocumentPosition(recommendations) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
+      Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
       within(recommendations).getByTestId(

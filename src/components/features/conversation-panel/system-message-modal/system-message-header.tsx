@@ -26,7 +26,7 @@ export function SystemMessageHeader({
           <div className="flex flex-col gap-2">
             {agentClass && (
               <div className="text-sm">
-                <Typography.Text className="font-semibold text-[var(--oh-text-tertiary)]">
+                <Typography.Text className="font-semibold text-text-tertiary">
                   {t(I18nKey.SYSTEM_MESSAGE_MODAL$AGENT_CLASS)}
                 </Typography.Text>{" "}
                 <Typography.Text className="font-medium text-content-2">
@@ -36,7 +36,7 @@ export function SystemMessageHeader({
             )}
             {openhandsVersion && (
               <div className="text-sm">
-                <Typography.Text className="font-semibold text-[var(--oh-text-tertiary)]">
+                <Typography.Text className="font-semibold text-text-tertiary">
                   {t(I18nKey.SYSTEM_MESSAGE_MODAL$OPENHANDS_VERSION)}
                 </Typography.Text>{" "}
                 <Typography.Text className="text-content-2">

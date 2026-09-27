@@ -126,6 +126,17 @@ export function automationTemplatesPath(): string {
 }
 
 /**
+ * Whether `path` (a location pathname) is inside the automation surface: the
+ * list route itself or anything nested under it (detail, setup, templates,
+ * git-sync). Prefix-safe: "/automations-foo" does not match.
+ */
+export function isAutomationsRoute(path: string): boolean {
+  return (
+    path === MOUNTED_ROUTES.list || path.startsWith(`${MOUNTED_ROUTES.list}/`)
+  );
+}
+
+/**
  * A declared endpoint path. Empty for one the manifest may omit - the two a
  * bundle needs were added after the block shipped - so a caller that needs one
  * says so rather than reading a host-held default that does not exist.

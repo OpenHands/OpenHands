@@ -112,6 +112,30 @@ afterEach(() => {
   __resetActiveStoreForTests();
 });
 
+const LLM_PROFILE_FIELD: SetupFormFieldDefinition = {
+  type: "llm-profile",
+  label: "LLM profile",
+  help: "Which profile should run the automation.",
+  required: false,
+};
+
+describe("SetupFormField llm-profile", () => {
+  it("shows an empty disabled dropdown instead of a text input", () => {
+    // Arrange / Act
+    renderRepositoryField(LOCAL_BACKEND, { field: LLM_PROFILE_FIELD });
+
+    // Assert — profile names must come from the backend; when none are loaded,
+    // the form should not invite users to type an unchecked profile name.
+    const profileInput = screen.getByTestId("setup-field-repository");
+    expect(profileInput).toHaveAttribute("role", "combobox");
+    expect(profileInput).toBeDisabled();
+    expect(profileInput).toHaveAttribute(
+      "placeholder",
+      "MODEL$NO_SAVED_PROFILES",
+    );
+  });
+});
+
 describe("SetupFormField repo-picker", () => {
   it("lets a repository be typed on a backend that cannot list them", async () => {
     // Arrange — a local backend, where GitService answers every repository

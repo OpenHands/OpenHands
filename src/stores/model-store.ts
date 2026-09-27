@@ -54,6 +54,13 @@ interface ModelActions {
    * without duplicating, and it preserves live-recorded entries.
    */
   seedSwitches: (conversationId: string, switches: SeededSwitch[]) => void;
+  /**
+   * Sets the optimistic active-profile entry for a conversation without
+   * appending a chat entry — the reload/history path re-derives the stamp
+   * from past SwitchLLM observations, which seed their chat entries through
+   * `seedSwitches` instead of `recordSwitch`.
+   */
+  setActiveProfile: (conversationId: string, profileName: string) => void;
   /** Drops only the optimistic active-profile entry for a conversation. */
   clearActiveProfile: (conversationId: string) => void;
   clear: (conversationId: string) => void;
@@ -124,6 +131,13 @@ export const useModelStore = create<ModelStore>()(
             },
           };
         }),
+      setActiveProfile: (conversationId, profileName) =>
+        set((s) => ({
+          activeProfileByConversation: {
+            ...s.activeProfileByConversation,
+            [conversationId]: profileName,
+          },
+        })),
       clearActiveProfile: (conversationId) =>
         set((s) => {
           if (!(conversationId in s.activeProfileByConversation)) return s;

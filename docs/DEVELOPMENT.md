@@ -13,8 +13,7 @@ Docker.
 This repository contains the Agent Canvas frontend and local-stack orchestration. Use the sibling repositories for their owned layers:
 
 - [`OpenHands/software-agent-sdk`](https://github.com/OpenHands/software-agent-sdk) owns the Python SDK, Agent Server, agent/tool behavior, conversations, workspaces, events, and server API.
-- [`OpenHands/typescript-client`](https://github.com/OpenHands/typescript-client) owns browser-compatible typed access to that Agent Server API. Add client methods there rather than reimplementing API calls in Canvas.
-- [`OpenHands/extensions`](https://github.com/OpenHands/extensions) owns reusable skills, plugins, automations, and integrations.
+- [`software-agent-sdk/clients/typescript`](https://github.com/OpenHands/software-agent-sdk/tree/main/clients/typescript) owns browser-compatible typed access to that Agent Server API. Add client methods there rather than reimplementing API calls in Canvas.
 - [`OpenHands/extensions`](https://github.com/OpenHands/extensions) owns reusable skills, plugins, automations, and integrations; [`OpenHands/automation`](https://github.com/OpenHands/automation) owns automation definitions, scheduling, webhooks, run history, and dispatching; Agent Server/SDK code executes the dispatched conversations.
 
 When a feature crosses repositories, implement the backend contract in the SDK first, expose it through `typescript-client`, and consume it in Canvas. Coordinate automation lifecycle changes in `automation`. Version pins, local-stack overrides, and PR ordering are in [Cross-repository version compatibility](#cross-repository-version-compatibility). See the repository [contributor notes](../AGENTS.md) and follow the [custom code-review guide](../.agents/skills/custom-codereview-guide.md) for every pull request.
@@ -80,7 +79,7 @@ Owning repositories:
 
 - [`OpenHands/OpenHands`](https://github.com/OpenHands/OpenHands) (this repo) — Agent Canvas
 - [`OpenHands/software-agent-sdk`](https://github.com/OpenHands/software-agent-sdk) — Python SDK and Agent Server
-- [`OpenHands/typescript-client`](https://github.com/OpenHands/typescript-client) — `@openhands/typescript-client`
+- [`software-agent-sdk/clients/typescript`](https://github.com/OpenHands/software-agent-sdk/tree/main/clients/typescript) — `@openhands/typescript-client`
 - [`OpenHands/automation`](https://github.com/OpenHands/automation) — scheduling, webhooks, run history
 - [`OpenHands/extensions`](https://github.com/OpenHands/extensions) — `@openhands/extensions` skills and integrations
 
@@ -112,7 +111,7 @@ Meeting `compatibility.minimumAgentServer` does not mean every Canvas feature
 is available on that backend.
 
 The TypeScript client records the Agent Server contract it was generated from
-in that repository (see its README, "Agent Server API contract"). That client
+in `software-agent-sdk/clients/typescript`. That client
 contract pin is independent of Canvas `versions.agentServer`.
 
 #### Released package, Git ref, and local path
@@ -166,7 +165,8 @@ Server no longer clones the extensions repo or honors `EXTENSIONS_REF`.
 Contributor notes require a **published** TypeScript client before Canvas
 bumps that pin. Do not point this repository at an unpublished commit SHA.
 
-Iterate on unreleased client or extensions work in those repositories, then
+Iterate on unreleased client work in `software-agent-sdk/clients/typescript`
+and extensions work in `OpenHands/extensions`, then
 bump the Canvas pin after the package exists on the registry.
 
 #### Cross-repository change checklist
@@ -178,7 +178,7 @@ bump the Canvas pin after the package exists on the registry.
    For local Canvas testing, use `OH_AGENT_SERVER_LOCAL_PATH` or
    `OH_AGENT_SERVER_GIT_REF`; keep the TypeScript client pin until the client
    is published.
-4. Mirror the contract in `typescript-client` (OpenAPI and handwritten
+4. Mirror the contract in `software-agent-sdk/clients/typescript` (OpenAPI and handwritten
    clients). Publish that package, then bump `@openhands/typescript-client`
    here.
 5. If automation must run against the new SDK, release `openhands-automation`
@@ -187,10 +187,11 @@ bump the Canvas pin after the package exists on the registry.
 6. If public skills or integrations change, publish `@openhands/extensions`
    and then bump that dependency.
 7. If a Canvas PR needs an unreleased Agent Server, link the
-   `OpenHands/software-agent-sdk` **pull request** (not only an issue) in the
-   Canvas PR body so
-   [mock-LLM Docker e2e](../.github/workflows/mock-llm-docker-e2e.yml) can
-   install that git ref.
+   `OpenHands/software-agent-sdk` pull request and record the local-path or
+   Git-ref verification in the Canvas PR body. E2E workflows run after
+   changes reach `main`; for risky pre-merge changes, ask a maintainer to
+   manually dispatch the relevant workflow against the PR branch. Do not
+   assume a PR link automatically installs an SDK ref in mock-LLM Docker E2E.
 8. Do not merge Canvas UI that requires a contract the pinned client does not
    yet expose.
 
@@ -257,6 +258,75 @@ Useful targeted verification for the isolated dev launcher:
 ```sh
 npm run test -- __tests__/api/agent-server-config.test.ts __tests__/scripts/dev-safe.test.ts
 ```
+
+### Unit test environments
+
+`npm test` runs Vitest as two projects, so each suite pays only for the
+environment it actually needs:
+
+| Project | Environment | Setup             | Suites                                                                   |
+| ------- | ----------- | ----------------- | ------------------------------------------------------------------------ |
+| `jsdom` | `jsdom`     | `vitest.setup.ts` | everything else (the default)                                            |
+| `node`  | `node`      | none              | the DOM-free suites listed in `NODE_ENV_PILOT_TESTS` in `vite.config.ts` |
+
+Both projects run in a single `npm test`, and the Node list is excluded from
+the jsdom project, so every suite runs exactly once. Vitest prefixes each
+result with its project name (`|node|` / `|jsdom|`) when a test fails or when
+you pass `--reporter=verbose`.
+
+The Node project exists because jsdom is not free: it costs roughly a second of
+environment setup per run, plus the whole of `vitest.setup.ts` (Testing Library
+cleanup, MSW, jest-dom, DOM global stubs). Suites that only call pure functions
+need none of it.
+
+#### Adding a suite to the Node project
+
+A suite qualifies only if **all** of the following hold. Check the suite and
+everything it imports, transitively — an import that touches the DOM at module
+scope is enough to disqualify it.
+
+- No DOM: no `document`, `window`, `HTMLElement`, `navigator`, or
+  `@testing-library/*` rendering.
+- No Web Storage or browser-owned globals: no `localStorage`,
+  `sessionStorage`, `location`, `matchMedia`, `requestAnimationFrame`.
+- No React component rendering or hook execution.
+- No MSW / network interception: nothing that relies on the `server` started
+  in `vitest.setup.ts`.
+- Nothing from `vitest.setup.ts` at all — the Node project loads no setup
+  file, so a suite that depends on one of its stubs (for example the
+  `VITE_SESSION_API_KEY` env stub) belongs in jsdom.
+
+Then add the suite's path to `NODE_ENV_PILOT_TESTS` in `vite.config.ts` and run
+it. Passing under the Node project is the confirmation; a `ReferenceError`
+naming a browser global means the suite belongs in jsdom.
+
+Keep the list explicit rather than glob-based: a glob would silently adopt new
+suites that have never been checked against the rules above.
+
+An individual suite can also opt into Node with a `// @vitest-environment node`
+docblock, which several `__tests__/scripts/` suites already do. That still
+loads `vitest.setup.ts`; the Node project is for suites that need no setup at
+all.
+
+#### Rolling back
+
+The pilot is contained in one config block and unwinds in stages:
+
+- **One suite misbehaves** — remove its path from `NODE_ENV_PILOT_TESTS`. It
+  returns to the jsdom project automatically, because that project excludes
+  exactly this list.
+- **Revert the split entirely** — empty `NODE_ENV_PILOT_TESTS`, then replace
+  `test.projects` with the previous flat options:
+
+  ```ts
+  environment: "jsdom",
+  setupFiles: ["vitest.setup.ts"],
+  exclude: [...configDefaults.exclude, "tests"],
+  ```
+
+No test file changes are needed either way: the pilot suites are unmodified and
+pass in both environments. The expectations in `__tests__/vite-config.test.ts`
+describe the split, so remove them in the same commit as a full revert.
 
 ### Mutation testing
 
@@ -329,3 +399,18 @@ You can create a `.env` file in the project directory with these variables based
 | `VITE_USE_TLS`              | Use HTTPS/WSS for the Vite proxy target                                                   | `false`                |
 | `VITE_FRONTEND_PORT`        | Port to run the frontend application                                                      | `3001`                 |
 | `VITE_INSECURE_SKIP_VERIFY` | Skip TLS certificate verification for proxied backend requests                            | `false`                |
+
+### Cloud organization recovery in embedded hosts
+
+`AgentServerUIProviders` leaves organization recovery off by default so the host's
+login and onboarding can render before authentication. Import the public
+`CloudOrganizationBoundary` and mount it inside the providers, after your auth
+gate, around consumers that send organization-scoped requests. If the entire
+provider subtree is already authenticated, use `resolveCloudOrganization` to
+apply the same boundary automatically. Recovery fills its containing panel.
+Standalone Canvas mounts the boundary after its own authentication gate.
+
+A successful membership response repairs an inaccessible saved selection. A
+transient lookup failure retains a saved selection; 401/403 responses and an
+empty membership list show recovery instead. Background refreshes retain cached
+membership and user identity while the saved selection remains accessible.

@@ -30,7 +30,7 @@ export function PluginPickerTrigger({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "flex flex-row items-center gap-2 rounded-full px-2.5 py-1 text-white",
+        "flex flex-row items-center gap-2 rounded-full px-2.5 py-1 text-contrast",
         formControlBorderClassName,
         formControlSurfaceClassName,
         formControlTransitionClassName,
@@ -48,7 +48,7 @@ export function PluginPickerTrigger({
       {count > 0 ? (
         <span
           data-testid="plugin-picker-count"
-          className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-white px-1 text-[11px] font-semibold leading-none text-black"
+          className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-contrast px-1 text-[11px] font-semibold leading-none text-contrast-foreground"
         >
           {count}
         </span>

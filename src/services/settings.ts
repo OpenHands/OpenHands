@@ -3,7 +3,7 @@ import { Settings } from "#/types/settings";
 export const LATEST_SETTINGS_VERSION = 5;
 
 export const DEFAULT_SETTINGS: Settings = {
-  llm_model: "openhands/kimi-k3",
+  llm_model: "openai/gpt-5.6-sol",
   llm_base_url: "",
   agent: "CodeActAgent",
   language: "en",
@@ -37,7 +37,7 @@ export const DEFAULT_SETTINGS: Settings = {
     agent_kind: "openhands",
     agent: "CodeActAgent",
     llm: {
-      model: "openhands/kimi-k3",
+      model: "openai/gpt-5.6-sol",
     },
     condenser: {
       enabled: true,
