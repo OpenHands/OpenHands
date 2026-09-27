@@ -31,8 +31,9 @@ Fixes #17711
 
 ## Video/Screenshots
 
-- Import modal: `https://github.com/sid288791/OpenHands/blob/feature/rca-context/.pr/rca-import-modal.png`
-- Attached chip on home launcher: `https://github.com/sid288791/OpenHands/blob/feature/rca-context/.pr/rca-attached-chip.png`
+![Import RCA context modal](https://raw.githubusercontent.com/sid288791/OpenHands/feature/rca-context/.pr/rca-import-modal.png)
+
+![RCA context attached on the home launcher](https://raw.githubusercontent.com/sid288791/OpenHands/feature/rca-context/.pr/rca-attached-chip.png)
 
 ## Type
 
