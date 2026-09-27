@@ -1,0 +1,88 @@
+---
+name: Update Canvas Debian Snapshot
+
+on:
+  schedule:
+    - cron: 17 6 * * 1
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: update-canvas-debian-snapshot
+  cancel-in-progress: true
+
+jobs:
+  update-snapshot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ secrets.OPENHANDS_BOT_GITHUB_PAT_PUBLIC }}
+      BRANCH: chore/update-canvas-debian-snapshot
+      DOCKERFILE: docker/Dockerfile
+      IMAGE: openhands/agent-canvas:snapshot-update
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.OPENHANDS_BOT_GITHUB_PAT_PUBLIC }}
+      - name: Select newest snapshot older than seven days
+        run: python .github/scripts/update_debian_snapshot.py --dockerfile "$DOCKERFILE"
+      - name: Read image build defaults
+        id: defaults
+        run: |
+          echo "agent_server_image=$(node -p \"require('./config/defaults.json').images.agentServer + ':' + require('./config/defaults.json').versions.agentServer + '-python'\")" >> "$GITHUB_OUTPUT"
+          echo "agent_server_version=$(node -p \"require('./config/defaults.json').versions.agentServer\")" >> "$GITHUB_OUTPUT"
+          echo "automation_version=$(node -p \"require('./config/defaults.json').versions.automation\")" >> "$GITHUB_OUTPUT"
+      - name: Build image
+        run: |
+          docker build --tag "$IMAGE" --file "$DOCKERFILE" \
+            --build-arg AGENT_SERVER_IMAGE="${{ steps.defaults.outputs.agent_server_image }}" \
+            --build-arg AGENT_SERVER_VERSION="${{ steps.defaults.outputs.agent_server_version }}" \
+            --build-arg AUTOMATION_VERSION="${{ steps.defaults.outputs.automation_version }}" .
+      - name: Scan image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}
+          format: json
+          output: trivy.json
+          scanners: vuln
+      - name: Open or refresh update PR
+        env:
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "Debian snapshot is already current."
+            exit 0
+          fi
+          SNAPSHOT=$(sed -n 's/^ARG DEBIAN_SNAPSHOT=//p' "$DOCKERFILE")
+          TRIVY_COUNTS=$(jq -r '[.Results[]?.Vulnerabilities[]?] | group_by(.Severity) | map("\(.[0].Severity): \(length)") | join(", ")' trivy.json)
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin "$BRANCH" || true
+          git checkout -B "$BRANCH"
+          git add "$DOCKERFILE"
+          git commit -m "chore(canvas): update Debian snapshot to $SNAPSHOT" \
+            -m "Use the newest UTC snapshot that has completed the seven-day observation period." \
+            -m "Co-authored-by: openhands <openhands@all-hands.dev>"
+          git push --force-with-lease -u origin "$BRANCH"
+          BODY=$(cat <<EOF2
+          ## Summary
+          Advance the Canvas runtime to Debian snapshot \\`$SNAPSHOT\\`, the newest UTC snapshot that completed the seven-day observation period.
+
+          The workflow built and scanned the image before opening this PR.
+
+          **Trivy findings:** $TRIVY_COUNTS
+
+          _This pull request was created by an automated workflow._
+          EOF2
+          )
+          EXISTING=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open --json number --jq '.[0].number')
+          if [ -n "$EXISTING" ]; then
+            gh pr edit "$EXISTING" --repo "$REPO" --title "chore(canvas): update Debian snapshot to $SNAPSHOT" --body "$BODY"
+          else
+            gh pr create --repo "$REPO" --base main --head "$BRANCH" --title "chore(canvas): update Debian snapshot to $SNAPSHOT" --body "$BODY"
+          fi

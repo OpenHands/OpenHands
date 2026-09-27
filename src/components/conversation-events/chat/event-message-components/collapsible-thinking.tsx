@@ -41,9 +41,9 @@ export function CollapsibleThinking({ content }: CollapsibleThinkingProps) {
         data-testid="collapsible-thinking-toggle"
         className="w-full flex items-center gap-2 text-left cursor-pointer"
       >
-        <Chevron className="h-4 w-4 fill-[var(--oh-muted)] flex-shrink-0" />
-        <LightbulbIcon className="h-4 w-4 fill-[var(--oh-muted)] flex-shrink-0" />
-        <span className="font-normal text-[var(--oh-muted)]">
+        <Chevron className="h-4 w-4 fill-muted flex-shrink-0" />
+        <LightbulbIcon className="h-4 w-4 fill-muted flex-shrink-0" />
+        <span className="font-normal text-muted">
           {t(I18nKey.THINKING$TITLE)}
         </span>
       </button>

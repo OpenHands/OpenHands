@@ -117,7 +117,7 @@ export function ConversationConfirmationButtons() {
         />
       )}
       <div className="flex justify-between items-center">
-        <p className="text-sm font-normal text-white">
+        <p className="text-sm font-normal text-contrast">
           {t(I18nKey.CHAT_INTERFACE$USER_ASK_CONFIRMATION)}
         </p>
         <div className="flex items-center gap-3">
