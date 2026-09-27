@@ -136,6 +136,24 @@ installXhrGlobalsFallback({
   XMLHttpRequestUpload: MockXMLHttpRequestUpload,
 });
 
+// MSW resolves an intercepted request asynchronously, and `resetHandlers()` does
+// not cancel one that is already in flight. Track what the server still owes a
+// response to, so the `afterAll` drain can wait for exactly that instead of
+// counting a fixed number of event-loop turns. Keyed by request id rather than a
+// counter so a duplicate listener registration cannot skew the total.
+const inFlightRequestIds = new Set<string>();
+server.events.on("request:start", ({ requestId }) => {
+  inFlightRequestIds.add(requestId);
+});
+server.events.on("request:end", ({ requestId }) => {
+  inFlightRequestIds.delete(requestId);
+});
+
+// Bounds only a request that never settles; the drain exits as soon as the set
+// empties, which for most test files is immediately.
+const DRAIN_TIMEOUT_MS = 2_000;
+const DRAIN_POLL_MS = 5;
+
 // Mock ResizeObserver for test environment
 class MockResizeObserver {
   observe = vi.fn();
@@ -202,21 +220,24 @@ afterEach(async () => {
   await Promise.resolve();
 });
 afterAll(async () => {
-  // Drain pending MSW `respondWith` callbacks (and any other queued
-  // macrotasks) before jsdom is torn down, so most late callbacks settle
-  // against a live jsdom rather than a torn-down one. This is a best-effort
-  // tidy-up, not the guarantee: a callback can always outlast the drain
-  // window (a bypassed request stuck on a real socket, for instance), which
-  // is what the prototype-chain XHR-globals fallback above is for. We
-  // restore real timers first so a test that left fake timers active can't
+  // Drain pending MSW `respondWith` callbacks before jsdom is torn down, so a
+  // late callback settles against a live jsdom rather than a torn-down one.
+  // This is still a best-effort tidy-up, not the guarantee: a request can
+  // outlast `DRAIN_TIMEOUT_MS` (one stuck on a real socket, for instance),
+  // which is what the prototype-chain XHR-globals fallback above is for.
+  // We restore real timers first so a test that left fake timers active can't
   // stall the drain.
   vi.useRealTimers();
   // Reset handlers first so no new intercepted requests start processing
   // during the drain window.
   server.resetHandlers();
-  for (let i = 0; i < 30; i += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 0));
+  const drainDeadline = Date.now() + DRAIN_TIMEOUT_MS;
+  while (inFlightRequestIds.size > 0 && Date.now() < drainDeadline) {
+    await new Promise((resolve) => setTimeout(resolve, DRAIN_POLL_MS));
   }
+  // `request:end` fires before the interceptor's own continuation runs, so give
+  // that continuation one more turn while jsdom's XHR globals still exist.
+  await new Promise((resolve) => setTimeout(resolve, 0));
   server.close();
   vi.unstubAllGlobals();
 });

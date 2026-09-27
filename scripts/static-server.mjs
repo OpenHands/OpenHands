@@ -584,12 +584,32 @@ function setStaticHeaders(res, pathname) {
 }
 
 function createStaticMiddleware(dirAbs) {
-  return sirv(dirAbs, {
+  // Builds replace hashed assets while the local server is running.
+  const serve = sirv(dirAbs, {
     dev: true,
     etag: true,
     single: false,
     setHeaders: setStaticHeaders,
   });
+
+  return (req, res, next) => {
+    let pathname = req.url || "";
+    try {
+      pathname = decodeURIComponent(new URL(req.url, "http://localhost").pathname);
+    } catch {
+      // Fall back to raw url if malformed
+    }
+
+    // Guard against dotfile disclosure in dev mode (replicates sirv cached behavior).
+    // Disallows any path segment beginning with '.', except RFC 8615 /.well-known/
+    if (/(?:^|\/)\.(?!well-known(?:$|\/))/.test(pathname)) {
+      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end("Not Found");
+      return;
+    }
+
+    return serve(req, res, next);
+  };
 }
 
 async function handleStatic(

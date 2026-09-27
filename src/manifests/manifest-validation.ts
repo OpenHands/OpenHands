@@ -42,7 +42,7 @@ const TEMPLATE_VERSION_PATTERN =
 const BUNDLE_COMMAND_PATTERN = /^[A-Za-z0-9 ._/-]+$/;
 const BUNDLE_PATH_PATTERN = /^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/;
 const BUNDLE_SOURCE_PATTERN =
-  /^(skills|automations)\/[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/;
+  /^(skills|automations|plugins)\/[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/;
 /** Every `{{` must open a known namespace and close immediately. */
 const UNKNOWN_PLACEHOLDER_PATTERN = new RegExp(
   `\\{\\{(?!(?:${SETUP_PLACEHOLDER_NAMESPACES.join("|")})\\.[A-Za-z0-9_.]+\\}\\})`,
@@ -595,7 +595,7 @@ function checkBundle(check: SetupChecker, bundle: unknown): void {
       if (!isRelativePath(source, BUNDLE_SOURCE_PATTERN)) {
         check.fail(
           `setup.bundle.files.${packedPath}`,
-          "must name a file under skills/ or automations/",
+          "must name a file under skills/, automations/, or plugins/",
         );
       }
     });
