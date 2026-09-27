@@ -80,9 +80,27 @@ const httpError = (status: number, detail?: string) => {
 
 const MODELS = {
   items: [
-    { provider: "openhands", name: "trinity-large-thinking", verified: true },
-    { provider: "openhands", name: "deepseek-v4-flash", verified: true },
-    { provider: "openhands", name: "unverified-model", verified: false },
+    {
+      provider: "openhands",
+      name: "trinity-large-thinking",
+      verified: true,
+      free: false,
+      default: false,
+    },
+    {
+      provider: "openhands",
+      name: "deepseek-v4-flash",
+      verified: true,
+      free: false,
+      default: false,
+    },
+    {
+      provider: "openhands",
+      name: "unverified-model",
+      verified: false,
+      free: false,
+      default: false,
+    },
   ],
   next_page_id: null,
 };
@@ -177,7 +195,13 @@ describe("AddModelsModal", () => {
     // and the filter is hiding them sends the user looking for the wrong thing.
     vi.mocked(ConfigService.searchModels).mockResolvedValue({
       items: [
-        { provider: "openhands", name: "unverified-only", verified: false },
+        {
+          provider: "openhands",
+          name: "unverified-only",
+          verified: false,
+          free: false,
+          default: false,
+        },
       ],
       next_page_id: null,
     });
