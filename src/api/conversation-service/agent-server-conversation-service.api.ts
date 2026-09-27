@@ -83,6 +83,9 @@ const DEFAULT_CONVERSATION_TIMESTAMP = "1970-01-01T00:00:00.000Z";
 // machine or the packaged desktop app, where uvx may still be warming caches)
 // can exceed the client's 60s default timeout.
 const CREATE_CONVERSATION_TIMEOUT_MS = 5 * 60 * 1000;
+// Condensation summarizes the whole history with the conversation's LLM; slow
+// models (e.g. local Ollama on a long conversation) routinely exceed 60s.
+const CONDENSE_CONVERSATION_TIMEOUT_MS = 5 * 60 * 1000;
 const INVALID_CONVERSATION_RESPONSE_MESSAGE =
   "Unable to load conversations because the selected agent server returned " +
   "data this UI does not understand. Check the backend URL/session key and " +
@@ -908,7 +911,11 @@ class AgentServerConversationService {
     }
 
     await new ConversationClient(
-      getAgentServerClientOptions({ conversationUrl, sessionApiKey }),
+      getAgentServerClientOptions({
+        conversationUrl,
+        sessionApiKey,
+        timeout: CONDENSE_CONVERSATION_TIMEOUT_MS,
+      }),
     ).condenseConversation(conversationId);
   }
 
