@@ -102,6 +102,9 @@ describe("useLlmConfigured (local, agent-profile-driven)", () => {
 
     const { result } = renderHook(() => useLlmConfigured(), { wrapper });
     expect(result.current.isConfigured).toBe(false);
+    // The referenced (active) profile exists but its key is missing — the UI
+    // should point the user at repairing that profile, so surface the flag.
+    expect(result.current.activeProfileMissingKey).toBe(true);
   });
 
   it("falls back to the active LLM profile when the ref is stale (matches the launch fallback)", () => {

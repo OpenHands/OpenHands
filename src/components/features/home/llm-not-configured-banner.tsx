@@ -19,11 +19,23 @@ import { Typography } from "#/ui/typography";
 export function LlmNotConfiguredBanner() {
   const { t } = useTranslation("openhands");
   const { navigate } = useNavigation();
-  const { isConfigured, isLoading } = useLlmConfigured();
+  const { isConfigured, isLoading, activeProfileMissingKey } =
+    useLlmConfigured();
 
   if (isLoading || isConfigured) {
     return null;
   }
+
+  // When an active profile exists but is unusable (its API key is missing),
+  // say so explicitly so the dropdown showing that profile doesn't look like
+  // it contradicts the warning. Otherwise fall back to the generic
+  // "no LLM set up" message for the genuinely unconfigured state.
+  const message = activeProfileMissingKey
+    ? t(I18nKey.HOME$LLM_PROFILE_MISSING_KEY_MESSAGE)
+    : t(I18nKey.HOME$LLM_NOT_CONFIGURED_MESSAGE);
+  const action = activeProfileMissingKey
+    ? t(I18nKey.HOME$LLM_PROFILE_MISSING_KEY_ACTION)
+    : t(I18nKey.HOME$LLM_NOT_CONFIGURED_ACTION);
 
   return (
     <div
@@ -36,7 +48,7 @@ export function LlmNotConfiguredBanner() {
           <FaTriangleExclamation className="align-middle text-yellow-400" />
         </div>
         <Typography.Text className="ml-3 text-sm font-medium">
-          {t(I18nKey.HOME$LLM_NOT_CONFIGURED_MESSAGE)}
+          {message}
         </Typography.Text>
       </div>
 
@@ -47,7 +59,7 @@ export function LlmNotConfiguredBanner() {
         className="w-fit shrink-0 self-start whitespace-nowrap sm:self-auto"
         onClick={() => navigate("/settings/llm")}
       >
-        {t(I18nKey.HOME$LLM_NOT_CONFIGURED_ACTION)}
+        {action}
       </BrandButton>
     </div>
   );
