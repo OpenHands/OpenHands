@@ -82,6 +82,22 @@ describe("useInstallCanvasExtension", () => {
 });
 
 describe("useRefreshCanvasExtension", () => {
+  const installed = {
+    name: "demo",
+    version: "0.1.0",
+    enabled: true,
+    source: "github:example/apps",
+    requested_ref: "v1",
+    resolved_ref: "abc123",
+    repo_path: "demo",
+    installed_at: "2026-08-01T00:00:00Z",
+    install_path: "/tmp/demo",
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("force-reinstalls from the recorded source coordinates", async () => {
     const install = vi
       .spyOn(CanvasExtensionsService, "install")
@@ -90,17 +106,7 @@ describe("useRefreshCanvasExtension", () => {
     const { result } = renderHook(() => useRefreshCanvasExtension(), {
       wrapper: createWrapper(),
     });
-    result.current.mutate({
-      name: "demo",
-      version: "0.1.0",
-      enabled: true,
-      source: "github:example/apps",
-      requested_ref: "v1",
-      resolved_ref: "abc123",
-      repo_path: "demo",
-      installed_at: "2026-08-01T00:00:00Z",
-      install_path: "/tmp/demo",
-    });
+    result.current.mutate(installed);
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(install).toHaveBeenCalledWith({
@@ -109,5 +115,21 @@ describe("useRefreshCanvasExtension", () => {
       repo_path: "demo",
       force: true,
     });
+  });
+
+  it("surfaces the server's validation error", async () => {
+    const detail =
+      "entrypoint 'dist/missing.js' does not resolve to a file in the extension package";
+    vi.spyOn(CanvasExtensionsService, "install").mockRejectedValue(
+      new HttpError(422, detail),
+    );
+
+    const { result } = renderHook(() => useRefreshCanvasExtension(), {
+      wrapper: createWrapper(),
+    });
+    result.current.mutate(installed);
+
+    await waitFor(() => expect(displayErrorToast).toHaveBeenCalled());
+    expect(displayErrorToast).toHaveBeenCalledWith(detail);
   });
 });
