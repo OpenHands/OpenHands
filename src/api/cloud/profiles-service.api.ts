@@ -57,8 +57,9 @@ export async function fetchCloudProfile(
 ): Promise<ProfileDetailResponse> {
   const { backend, base } = cloudProfilesTarget();
   // Org returns `{ name, llm }`; settings returns `{ name, config, api_key_set }`.
-  // Normalize to the SDK detail shape. Neither route exposes the key, and the
-  // GUI never reads the detail's `api_key_set` (only list-item `api_key_set`).
+  // Normalize to the SDK detail shape. Neither route exposes the key; consumers
+  // use `api_key_set` to know whether a stored key exists (e.g. the edit
+  // form's "<hidden>" placeholder).
   const result = await callCloudProxy<{
     name: string;
     config?: Record<string, unknown>;

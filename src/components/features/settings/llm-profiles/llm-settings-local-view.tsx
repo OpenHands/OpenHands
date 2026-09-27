@@ -56,6 +56,7 @@ type ViewMode = "list" | "create" | "edit";
 interface EditingProfile {
   profile: ProfileInfo;
   initialValues: SettingsFormValues;
+
   /**
    * The profile's full LLM config (flat keys; `api_key` is the encrypted
    * token). Used as the merge base on save so fields the user did not touch —
@@ -63,6 +64,15 @@ interface EditingProfile {
    * preserved instead of being reset to LLM defaults by the full-replace save.
    */
   baseConfig: Record<string, unknown>;
+
+  /**
+   * Whether the profile being edited has a stored API key. On cloud the
+   * detail's `config.api_key` is always absent (nulled), so this piggybacks
+   * on `api_key_set` from the profile detail/list responses; on local it also
+   * covers the encrypted-token fallback. The flag drives the "<hidden>"
+   * placeholder and key-set indicator while the form field stays blank.
+   */
+  storedApiKeyIsSet: boolean;
 }
 
 export function shouldReapplyProfileAfterSave({
@@ -175,6 +185,14 @@ export function LlmSettingsLocalView() {
         // (NOT nested under a "llm" key)
         const config = (detail.config ?? {}) as Record<string, unknown>;
 
+        // Cloud never exposes the encrypted key in `config.api_key`; its
+        // detail response carries `api_key_set` instead, and its list items
+        // do too. Prefer the detail flag (more authoritative for the profile
+        // being edited), falling back to the encrypted token in local mode.
+        const storedApiKeyIsSet =
+          detail.api_key_set === true ||
+          (typeof config.api_key === "string" && config.api_key.length > 0);
+
         // Seed every llm.* form field from the profile config so all tabs —
         // including "All" — reflect the profile's real values rather than the
         // active settings. Fields absent from the schema are still preserved
@@ -229,7 +247,12 @@ export function LlmSettingsLocalView() {
             ? config.provider_connection_id
             : "";
 
-        setEditingProfile({ profile, initialValues, baseConfig: config });
+        setEditingProfile({
+          profile,
+          initialValues,
+          baseConfig: config,
+          storedApiKeyIsSet,
+        });
         setProfileName(profile.name);
         setViewMode("edit");
       } catch (error) {
@@ -465,11 +488,12 @@ export function LlmSettingsLocalView() {
   // Whether the profile being edited has a stored API key. The encrypted
   // key is never seeded into the form, so this flag drives the "<hidden>"
   // placeholder and key-set indicator while the field stays blank.
-  const storedApiKey = editingProfile?.baseConfig.api_key;
+  // On cloud `baseConfig.api_key` is absent (nulled), so this
+  // uses the `api_key_set` flag resolved from the profile detail/list
+  // responses instead (see `handleEditProfile`), falling back to the
+  // encrypted token in local mode.
   const hasStoredApiKey =
-    viewMode === "edit" &&
-    typeof storedApiKey === "string" &&
-    storedApiKey.length > 0;
+    viewMode === "edit" && editingProfile?.storedApiKeyIsSet === true;
 
   const profileEditorTitle =
     viewMode === "edit"

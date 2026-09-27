@@ -218,7 +218,10 @@ function renderView() {
   );
 }
 
-async function openEditor(profileConfig: Record<string, unknown>) {
+async function openEditor(
+  profileConfig: Record<string, unknown>,
+  detailOverrides: { apiKeyIsSet?: boolean } = {},
+) {
   hooksMock.profilesData = {
     profiles: [{ name: PROFILE_NAME, model: PROFILE_MODEL }],
     active_profile: PROFILE_NAME,
@@ -226,6 +229,10 @@ async function openEditor(profileConfig: Record<string, unknown>) {
   profilesServiceMock.getProfile.mockResolvedValue({
     name: PROFILE_NAME,
     config: profileConfig,
+    // Cloud behavior (and the no-secrets mock path): the detail exposes
+    // `api_key_set` and never embeds the key in `config`. Simulate it here
+    // when the caller wants the cloud shape; defaults to the local shape.
+    api_key_set: detailOverrides.apiKeyIsSet,
   });
 
   renderView();
@@ -257,6 +264,19 @@ describe("LlmSettingsLocalView API key masking (issue #15706)", () => {
     expect(screen.getByTestId("set-indicator")).toBeInTheDocument();
     expect(screen.queryByDisplayValue(ENCRYPTED_KEY)).not.toBeInTheDocument();
     expect(screen.queryByText(ENCRYPTED_KEY)).not.toBeInTheDocument();
+  });
+
+  it("shows the <hidden> placeholder from the detail's api_key_set flag when editing a cloud profile (no key in config)", async () => {
+    const input = await openEditor(
+      { model: PROFILE_MODEL, base_url: null },
+      { apiKeyIsSet: true },
+    );
+
+    // Cloud nulls `config.api_key` entirely; only `api_key_set` tells the
+    // form a stored key exists, so the indicator must derive from that flag.
+    expect(input).toHaveValue("");
+    expect(input).toHaveAttribute("placeholder", "<hidden>");
+    expect(screen.getByTestId("set-indicator")).toBeInTheDocument();
   });
 
   it("keeps the field blank without a key-set indicator when the profile has no stored key", async () => {
