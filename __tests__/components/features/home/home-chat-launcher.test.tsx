@@ -514,12 +514,12 @@ describe("HomeChatLauncher", () => {
     await user.click(screen.getByTestId("stub-chat-submit"));
 
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
-    expect(createSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        initialUserMsg: "hello world",
-        metadata: null,
-      }),
-    );
+    expect(createSpy.mock.calls[0]?.[0]).toMatchObject({
+      initialUserMsg: "hello world",
+      metadata: null,
+      workingDirOverride: undefined,
+      workspaceMode: undefined,
+    });
   });
 
   it("passes the picked workspace path with new-worktree mode when selected", async () => {
@@ -611,6 +611,37 @@ describe("HomeChatLauncher", () => {
     expect(
       await screen.findByText("HOME$WORKSPACES_UNSUPPORTED_AGENT_SERVER"),
     ).toBeInTheDocument();
+  });
+
+  it("keeps Automate mode local-only on cloud backends", async () => {
+    mockUseActiveBackend.mockReturnValue(cloudBackend);
+    const createSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue(makeConversationResponse());
+
+    renderLauncher();
+    const user = userEvent.setup();
+
+    expect(
+      screen.getByText("HOME$AUTOMATE_LOCAL_BACKEND_ONLY"),
+    ).toBeInTheDocument();
+    await user.click(screen.getByTestId("home-launcher-mode-automate"));
+
+    expect(screen.getByTestId("home-launcher-mode-code")).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(screen.getByTestId("stub-chat-submit")).toHaveAttribute(
+      "data-placeholder",
+      "SUGGESTIONS$WHAT_TO_BUILD",
+    );
+
+    await user.click(screen.getByTestId("stub-chat-submit"));
+
+    await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ automationSetup: false }),
+    );
   });
 
   it("passes the picked repository + branch payload on a cloud backend", async () => {
