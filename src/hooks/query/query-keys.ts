@@ -31,9 +31,6 @@ export const AGENT_PROFILES_QUERY_KEYS = {
 
 export const TOOL_CATALOG_QUERY_KEYS = {
   all: ["tool-catalog"] as const,
-  /** Resolved toolset for a draft, keyed by the draft the server resolves. */
-  resolved: (backendId: string, draft: unknown) =>
-    ["tool-catalog", backendId, "resolved", draft] as const,
 } as const;
 
 export const PROVIDER_CONNECTIONS_QUERY_KEYS = {

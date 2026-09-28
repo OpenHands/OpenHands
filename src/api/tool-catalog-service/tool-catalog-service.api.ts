@@ -1,12 +1,3 @@
-/**
- * The tools an agent-server offers for configuring an agent, and what a draft
- * profile resolves to.
- *
- * Both endpoints shipped with the tool catalog (software-agent-sdk#4958) and
- * are absent from the pinned ts-client, so they go through the generic
- * `AgentServerClient`. Call sites gate on `agentProfileSupportsToolCatalog()`
- * rather than probing: a server without the catalog simply offers no picker.
- */
 import { AgentServerClient } from "@openhands/typescript-client/clients";
 
 import { getAgentServerClientOptions } from "../agent-server-client-options";
@@ -20,19 +11,13 @@ export interface ToolCatalogEntry {
   user_selectable: boolean;
   /** Whether this server's runtime can actually run it. */
   usable: boolean;
-  /** One line on what the tool lets the agent do; may be absent on older servers. */
+  /** Whether the tool belongs to the standard set a profile gets by default. */
+  in_default_set: boolean;
   description?: string;
 }
 
 interface ToolCatalogResponse {
   tools: ToolCatalogEntry[];
-}
-
-/** A profile body evaluated without saving it. */
-export type DraftAgentProfile = Record<string, unknown> & { name: string };
-
-interface MaterializeResponse {
-  resolved_settings?: { tools?: { name?: unknown }[] | null } | null;
 }
 
 function getClient(): AgentServerClient {
@@ -45,25 +30,6 @@ class ToolCatalogService {
     const response =
       await getClient().get<ToolCatalogResponse>(TOOL_CATALOG_PATH);
     return response?.tools ?? [];
-  }
-
-  /**
-   * Tool names a draft profile would launch with.
-   *
-   * Asks the server rather than reproducing its defaulting rules, so the editor
-   * shows the browser tool exactly where the runtime can run it.
-   */
-  static async getResolvedToolNames(
-    profile: DraftAgentProfile,
-  ): Promise<string[]> {
-    const response = await getClient().post<MaterializeResponse>(
-      `/api/agent-profiles/${encodeURIComponent(profile.name)}/materialize`,
-      { profile },
-    );
-    const tools = response?.resolved_settings?.tools ?? [];
-    return tools
-      .map(({ name }) => name)
-      .filter((name): name is string => typeof name === "string");
   }
 }
 

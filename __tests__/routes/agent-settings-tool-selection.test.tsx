@@ -10,140 +10,76 @@ import {
   type AgentSettingsSaveControl,
 } from "#/routes/agent-settings";
 
+const CATALOG = [
+  {
+    name: "terminal",
+    user_selectable: true,
+    usable: true,
+    in_default_set: true,
+  },
+];
+
 beforeEach(() => {
   vi.restoreAllMocks();
   vi.spyOn(profileSupport, "agentProfileSupportsToolCatalog").mockReturnValue(
     true,
   );
-  vi.spyOn(ToolCatalogService, "getCatalog").mockResolvedValue([
-    { name: "terminal", user_selectable: true, usable: true },
-  ]);
-  vi.spyOn(ToolCatalogService, "getResolvedToolNames").mockResolvedValue([
-    "terminal",
-  ]);
+  vi.spyOn(ToolCatalogService, "getCatalog").mockResolvedValue(CATALOG);
 });
 
 it.each([false, true])(
-  "initializes an unnamed custom profile after resolution (explicitly cleared: %s)",
+  "initializes a custom selection once the catalog arrives (explicitly cleared: %s)",
   async (clearWhilePending) => {
     const user = userEvent.setup();
-    let resolveNames!: (names: string[]) => void;
-    vi.mocked(ToolCatalogService.getResolvedToolNames).mockReturnValue(
-      new Promise<string[]>((resolve) => {
-        resolveNames = resolve;
+    let resolveCatalog!: (catalog: typeof CATALOG) => void;
+    vi.mocked(ToolCatalogService.getCatalog).mockReturnValue(
+      new Promise((resolve) => {
+        resolveCatalog = resolve;
       }),
     );
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    const settings = { agent_kind: "openhands", tools: null };
     let control: AgentSettingsSaveControl | null = null;
-    const editor = (name: string) => (
+    render(
       <MemoryRouter>
-        <QueryClientProvider client={client}>
+        <QueryClientProvider
+          client={
+            new QueryClient({ defaultOptions: { queries: { retry: false } } })
+          }
+        >
           <AgentSettingsScreen
             embedded
-            profileName={name}
-            llmProfileRef="main"
-            agentSettingsOverride={settings}
+            agentSettingsOverride={{
+              agent_kind: "openhands",
+              tools: clearWhilePending ? [] : null,
+            }}
             onSaveControlChange={(next) => {
               control = next;
             }}
           />
         </QueryClientProvider>
-      </MemoryRouter>
+      </MemoryRouter>,
     );
-    const { rerender } = render(editor(""));
-    await user.click(await screen.findByTestId("agent-settings-tools-mode"));
-    await user.click(
-      await screen.findByRole("option", {
-        name: "SETTINGS$AGENT_PROFILE_TOOLS_CHOOSE",
-      }),
-    );
-    const terminal = await screen.findByTestId("agent-settings-tool-terminal");
-    expect(ToolCatalogService.getResolvedToolNames).not.toHaveBeenCalled();
-    if (clearWhilePending) {
-      await user.click(terminal);
-      await user.click(terminal);
+    if (!clearWhilePending) {
+      expect(
+        await screen.findByTestId("agent-settings-tools-mode"),
+      ).toBeDisabled();
     }
-    rerender(editor("new-agent"));
-    await waitFor(() =>
-      expect(ToolCatalogService.getResolvedToolNames).toHaveBeenCalled(),
-    );
-    expect(control!.isValid).toBe(clearWhilePending);
-    await act(async () => resolveNames(["terminal"]));
+    await act(async () => resolveCatalog(CATALOG));
+    if (!clearWhilePending) {
+      await user.click(screen.getByTestId("agent-settings-tools-mode"));
+      await user.click(
+        await screen.findByRole("option", {
+          name: "SETTINGS$AGENT_PROFILE_TOOLS_CHOOSE",
+        }),
+      );
+    }
     await waitFor(() =>
       expect(control!.buildAgentProfileFields()).toMatchObject({
         tools: clearWhilePending ? [] : [{ name: "terminal", params: {} }],
       }),
     );
-    expect(terminal).toHaveProperty("checked", !clearWhilePending);
     expect(control!.isValid).toBe(true);
   },
 );
-
-it("waits for a usable standard set and the catalog before initializing", async () => {
-  const user = userEvent.setup();
-  let resolveCatalog!: (
-    catalog: Awaited<ReturnType<typeof ToolCatalogService.getCatalog>>,
-  ) => void;
-  vi.mocked(ToolCatalogService.getCatalog).mockReturnValue(
-    new Promise((resolve) => {
-      resolveCatalog = resolve;
-    }),
-  );
-  vi.mocked(ToolCatalogService.getResolvedToolNames).mockResolvedValue([]);
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  const settings = { agent_kind: "openhands", tools: null };
-  let control: AgentSettingsSaveControl | null = null;
-  const editor = (name: string) => (
-    <MemoryRouter>
-      <QueryClientProvider client={client}>
-        <AgentSettingsScreen
-          embedded
-          profileName={name}
-          llmProfileRef="main"
-          agentSettingsOverride={settings}
-          onSaveControlChange={(next) => {
-            control = next;
-          }}
-        />
-      </QueryClientProvider>
-    </MemoryRouter>
-  );
-  const { rerender } = render(editor(""));
-  await user.click(await screen.findByTestId("agent-settings-tools-mode"));
-  await user.click(
-    await screen.findByRole("option", {
-      name: "SETTINGS$AGENT_PROFILE_TOOLS_CHOOSE",
-    }),
-  );
-  rerender(editor("empty-response"));
-  await waitFor(() =>
-    expect(ToolCatalogService.getResolvedToolNames).toHaveBeenCalled(),
-  );
-  expect(control!.isValid).toBe(false);
-
-  vi.mocked(ToolCatalogService.getResolvedToolNames).mockResolvedValue([
-    "terminal",
-  ]);
-  rerender(editor("resolved-response"));
-  await waitFor(() =>
-    expect(ToolCatalogService.getResolvedToolNames).toHaveBeenCalledTimes(2),
-  );
-  expect(control!.isValid).toBe(false);
-  await act(async () =>
-    resolveCatalog([{ name: "terminal", user_selectable: true, usable: true }]),
-  );
-  await waitFor(() =>
-    expect(control!.buildAgentProfileFields()).toMatchObject({
-      tools: [{ name: "terminal", params: {} }],
-    }),
-  );
-  expect(control!.isValid).toBe(true);
-});
 
 it.each(["saved", "cleared"] as const)(
   "preserves a %s empty tool selection across mode changes",
@@ -161,8 +97,6 @@ it.each(["saved", "cleared"] as const)(
         >
           <AgentSettingsScreen
             embedded
-            profileName="bare-agent"
-            llmProfileRef="main"
             agentSettingsOverride={{
               agent_kind: "openhands",
               tools: selection === "saved" ? [] : null,
