@@ -43,6 +43,7 @@ import {
   formControlTransitionClassName,
 } from "#/utils/form-control-classes";
 import { cn } from "#/utils/utils";
+import { isSdkHttpError } from "#/api/agent-server-compatibility";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { useNavigation } from "#/context/navigation-context";
 import type {
@@ -61,6 +62,7 @@ import {
   hasAutomationSetupModeTag,
   removeAutomationDraftTags,
 } from "#/utils/automation-draft-tags";
+import { useDeploymentCapabilities } from "#/hooks/query/use-manifest-capabilities";
 
 const DEFAULT_TIMEZONE = "America/New_York";
 const DEFAULT_TIME = "09:00";
@@ -349,6 +351,7 @@ function draftEndpoint(kind: AutomationSetupKind): AutomationDraftEndpoint {
  * transport errors surface as a thrown Error instead.
  */
 function getResponseStatus(error: unknown): number | null {
+  if (isSdkHttpError(error)) return (error as { status: number }).status;
   if (!error || typeof error !== "object") return null;
   const response = (error as Record<string, unknown>).response;
   if (!response || typeof response !== "object") return null;
@@ -506,6 +509,10 @@ export function AutomationSetupPanel({
 }: AutomationSetupPanelProps) {
   const { t } = useTranslation("openhands");
   const { navigate } = useNavigation();
+  const deploymentCapabilities = useDeploymentCapabilities();
+  const serverDraftsSupported = AutomationService.supportsAutomationDrafts(
+    deploymentCapabilities.data,
+  );
   const [form, setForm] = useState(() => buildInitialForm(draft));
   const [fieldMetadata, setFieldMetadata] = useState(
     () => draft.fieldMetadata ?? {},
@@ -574,7 +581,11 @@ export function AutomationSetupPanel({
   );
 
   useEffect(() => {
-    if (!taggedServerDraftId || serverDraft?.id === taggedServerDraftId) {
+    if (
+      !serverDraftsSupported ||
+      !taggedServerDraftId ||
+      serverDraft?.id === taggedServerDraftId
+    ) {
       return undefined;
     }
 
@@ -605,7 +616,7 @@ export function AutomationSetupPanel({
     return () => {
       cancelled = true;
     };
-  }, [draft, serverDraft?.id, taggedServerDraftId]);
+  }, [draft, serverDraft?.id, serverDraftsSupported, taggedServerDraftId]);
 
   const {
     kind,
@@ -959,6 +970,7 @@ export function AutomationSetupPanel({
     return true;
   };
   const handleSaveDraft = async () => {
+    if (!serverDraftsSupported) return;
     setIsSubmitting(true);
     try {
       const saved = await persistServerDraft();
@@ -985,6 +997,10 @@ export function AutomationSetupPanel({
     if (!validateRequiredFields()) return;
     setIsSubmitting(true);
     try {
+      if (!serverDraftsSupported) {
+        await runPreflightValidation();
+        return;
+      }
       // Persist the current form state as a draft first, then dispatch it.
       // The service materializes the validated draft body into a disabled
       // automation and starts a manual run; the draft row stays as source
@@ -1087,7 +1103,7 @@ export function AutomationSetupPanel({
         type="button"
         variant="secondary"
         testId="automation-setup-save-draft"
-        isDisabled
+        isDisabled={isSubmitting || !serverDraftsSupported}
         onClick={handleSaveDraft}
       >
         {t(I18nKey.AUTOMATION_SETUP$SAVE_DRAFT)}
