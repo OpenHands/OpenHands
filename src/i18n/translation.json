@@ -31825,23 +31825,6 @@
     "ca": "No s'han trobat models per a aquest proveïdor.",
     "uk": "Для цього постачальника моделей не знайдено."
   },
-  "SETTINGS$ADD_MODELS_NAME_TAKEN": {
-    "en": "Name already exists",
-    "ja": "この名前はすでに存在します",
-    "zh-CN": "名称已存在",
-    "zh-TW": "名稱已存在",
-    "ko-KR": "이미 존재하는 이름입니다",
-    "no": "Navnet finnes allerede",
-    "it": "Nome già esistente",
-    "pt": "Nome já existe",
-    "es": "El nombre ya existe",
-    "ar": "الاسم موجود بالفعل",
-    "fr": "Ce nom existe déjà",
-    "tr": "Bu ad zaten var",
-    "de": "Name bereits vergeben",
-    "ca": "El nom ja existeix",
-    "uk": "Ім'я вже існує"
-  },
   "SETTINGS$ADD_MODELS_SELECT_ALL": {
     "en": "Select all",
     "ja": "すべて選択",

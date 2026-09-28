@@ -18,8 +18,6 @@ import {
 } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
 import { isSdkHttpStatusError } from "#/api/agent-server-compatibility";
-import { cn } from "#/utils/utils";
-
 /** Pull the server's own explanation out of an error, when it sent one. */
 function getServerDetail(error: unknown): string | null {
   const detail = (error as { response?: { detail?: unknown } })?.response
@@ -85,25 +83,38 @@ export function AddModelsModal({
     const items = models.data ?? [];
     setRows((prev) => {
       const prior = new Map(prev.map((row) => [row.model, row]));
-      return items.map((m) => {
+      // Dedupe by canonical model id: a provider's catalog can list the same
+      // model twice (e.g. once in the verified set and once in the raw list
+      // when the two disagree on prefixing). Without dedup each copy becomes
+      // its own row with the same derived name, and the two flag each other as
+      // conflicts — surfacing bogus "Name already exists" on a fresh account.
+      const seen = new Set<string>();
+      const built: ModelRow[] = [];
+      for (const m of items) {
         const full =
           m.provider && !m.name.startsWith(`${m.provider}/`)
             ? `${m.provider}/${m.name}`
             : m.name;
+        if (seen.has(full)) continue;
+        seen.add(full);
         const verified = !!m.verified;
         const carried = prior.get(full);
-        if (carried) return { ...carried, verified };
-        return {
-          model: full,
-          name: deriveProfileNameFromModel(full),
-          verified,
-          // Nothing is pre-selected: the server caps how many profiles an
-          // account may hold, so defaulting to "all" invites a submission
-          // that is mostly refusals. Choosing is the point of the modal.
-          selected: false,
-          status: "idle" as RowStatus,
-        };
-      });
+        built.push(
+          carried
+            ? { ...carried, verified }
+            : {
+                model: full,
+                name: deriveProfileNameFromModel(full),
+                verified,
+                // Nothing is pre-selected: the server caps how many profiles an
+                // account may hold, so defaulting to "all" invites a submission
+                // that is mostly refusals. Choosing is the point of the modal.
+                selected: false,
+                status: "idle" as RowStatus,
+              },
+        );
+      }
+      return built;
     });
   }, [models.data]);
 
@@ -122,19 +133,16 @@ export function AddModelsModal({
 
   if (!isOpen || !connection) return null;
 
-  // Everything below reasons about what the user can see: a row hidden by the
-  // filter is neither counted, nor conflict-checked, nor submitted.
-  const visibleRows = rows.filter((row) => !verifiedOnly || row.verified);
-
-  const nameCounts = new Map<string, number>();
-  for (const row of visibleRows) {
-    nameCounts.set(row.name, (nameCounts.get(row.name) ?? 0) + 1);
-  }
-  const hasConflict = (row: ModelRow) =>
-    existing.has(row.name) || (nameCounts.get(row.name) ?? 0) > 1;
+  // Already-added models are hidden, not disabled: a row whose name matches an
+  // existing profile can't be re-created, so showing it (flagged or greyed)
+  // just clutters the list. A saved row is exempt — it was added from this
+  // very session, so it stays visible with its "Saved" mark.
+  const visibleRows = rows
+    .filter((row) => row.status === "saved" || !existing.has(row.name))
+    .filter((row) => !verifiedOnly || row.verified);
 
   const isSelectable = (row: ModelRow) =>
-    !hasConflict(row) && isProfileNameValid(row.name, { isRequired: true });
+    isProfileNameValid(row.name, { isRequired: true });
   const selectable = visibleRows.filter(isSelectable);
   const selectedRows = selectable.filter((row) => row.selected);
 
@@ -347,15 +355,10 @@ export function AddModelsModal({
             </label>
             <ul className="flex max-h-64 flex-col gap-2 overflow-y-auto">
               {visibleRows.map((row) => {
-                // A successfully saved row re-appears in existingNames after
-                // the profiles query refreshes — don't flag it as conflicting
-                // with itself.
-                const conflict = row.status !== "saved" && hasConflict(row);
                 const valid = isProfileNameValid(row.name, {
                   isRequired: true,
                 });
-                const disabled =
-                  submitting || conflict || row.status === "saved";
+                const disabled = submitting || row.status === "saved";
                 return (
                   <li
                     key={row.model}
@@ -365,7 +368,7 @@ export function AddModelsModal({
                     <input
                       data-testid={`add-models-check-${row.model}`}
                       type="checkbox"
-                      checked={row.selected && !conflict}
+                      checked={row.selected}
                       onChange={(e) =>
                         setRow(row.model, { selected: e.target.checked })
                       }
@@ -396,17 +399,9 @@ export function AddModelsModal({
                         value={row.name}
                         onChange={(value) => setRow(row.model, { name: value })}
                         isDisabled={disabled}
-                        ariaInvalid={!valid || conflict}
+                        ariaInvalid={!valid}
                       />
                     </div>
-                    {conflict && (
-                      <span
-                        data-testid={`add-models-conflict-${row.model}`}
-                        className={cn("text-xs", "text-red-400")}
-                      >
-                        {t(I18nKey.SETTINGS$ADD_MODELS_NAME_TAKEN)}
-                      </span>
-                    )}
                   </li>
                 );
               })}

@@ -23,7 +23,6 @@ vi.mock("react-i18next", () => ({
         SETTINGS$ADD_MODELS_SELECT_ALL: "Select all",
         SETTINGS$ADD_MODELS_EMPTY: "No models found for this provider.",
         COMMON$NO_RESULTS: "No results found",
-        SETTINGS$ADD_MODELS_NAME_TAKEN: "Name already exists",
         SETTINGS$ADD_N_PROFILES: `Add ${params?.count ?? "?"} profiles`,
         SETTINGS$MODELS_ADDED: `Added ${params?.count ?? "?"} profiles`,
         SETTINGS$MODELS_ADDED_PARTIAL: `Added ${params?.added ?? "?"} profiles; ${params?.failed ?? "?"} failed`,
@@ -220,20 +219,43 @@ describe("AddModelsModal", () => {
     );
   });
 
-  it("flags names that collide with existing profiles and excludes them", async () => {
+  it("hides models whose name matches an existing profile", async () => {
     renderModal(OPENAI_CONNECTION, ["gpt-4o-mini"]);
-    await screen.findByTestId("add-models-row-openai/gpt-4o-mini");
+    // The non-hidden model renders first; await it so the query has settled.
+    await screen.findByTestId("add-models-row-openai/gpt-4o");
+    // The already-added model is not rendered at all — no row, no checkbox,
+    // no conflict badge. Showing it disabled just clutters the list.
     expect(
-      screen.getByTestId("add-models-conflict-openai/gpt-4o-mini"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByTestId("add-models-check-openai/gpt-4o-mini"),
-    ).toBeDisabled();
-    // select-all reaches only the non-colliding row
+      screen.queryByTestId("add-models-row-openai/gpt-4o-mini"),
+    ).not.toBeInTheDocument();
+    // select-all reaches only the non-hidden row
     await userEvent.click(screen.getByTestId("add-models-select-all"));
     expect(screen.getByTestId("add-models-submit")).toHaveTextContent(
       "Add 1 profiles",
     );
+  });
+
+  it("dedupes a model the catalog lists twice (verified + raw)", async () => {
+    // A provider's catalog can surface the same model twice — once in the
+    // verified set and once in the raw list — when the two disagree on
+    // prefixing. Both must collapse to a single row instead of flagging each
+    // other as a name conflict on a fresh account with no profiles.
+    vi.mocked(ConfigService.searchModels).mockResolvedValue({
+      items: [
+        model("openai", "gpt-4o", true),
+        model("openai", "gpt-4o", false),
+        model("openai", "gpt-4o-mini", true),
+      ],
+      next_page_id: null,
+    });
+    renderModal();
+    await screen.findByTestId("add-models-row-openai/gpt-4o");
+    expect(screen.getAllByTestId("add-models-row-openai/gpt-4o")).toHaveLength(
+      1,
+    );
+    expect(
+      screen.queryByTestId("add-models-conflict-openai/gpt-4o"),
+    ).not.toBeInTheDocument();
   });
 
   it("selects nothing until the user chooses", async () => {
