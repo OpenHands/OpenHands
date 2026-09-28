@@ -37,10 +37,10 @@ export function ConversationMobilePanelPage({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[var(--oh-surface)]">
+    <div className="flex h-full min-h-0 flex-col bg-surface">
       <div
         data-testid="conversation-mobile-panel-top"
-        className="flex h-10 min-h-10 shrink-0 items-center gap-1.5 border-b border-[var(--oh-border)] pl-2.5"
+        className="flex h-10 min-h-10 shrink-0 items-center gap-1.5 border-b border-border pl-2.5"
       >
         <button
           type="button"
@@ -65,7 +65,7 @@ export function ConversationMobilePanelPage({
           </div>
         </div>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col bg-[var(--oh-surface)]">
+      <div className="flex min-h-0 flex-1 flex-col bg-surface">
         <ConversationTabContent />
       </div>
     </div>

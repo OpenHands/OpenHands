@@ -50,10 +50,7 @@ export function CloudSettingsLink() {
         {t(I18nKey.SETTINGS$CLOUD_SETTINGS_LINK)}
       </span>
       {!isLockedToCloud && (
-        <ExternalLink
-          className="size-4 shrink-0 text-[var(--oh-muted)]"
-          aria-hidden
-        />
+        <ExternalLink className="size-4 shrink-0 text-muted" aria-hidden />
       )}
     </a>
   );
