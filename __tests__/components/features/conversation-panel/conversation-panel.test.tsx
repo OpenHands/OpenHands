@@ -2416,6 +2416,76 @@ describe("ConversationPanel", () => {
       ).toBeInTheDocument();
     });
 
+    it("loads more conversations for the selected workspace group", async () => {
+      useConversationPanelPreferencesStore.setState({
+        organizeMode: "grouped",
+      });
+
+      const searchSpy = vi
+        .spyOn(AgentServerConversationService, "searchConversations")
+        .mockResolvedValueOnce({
+          items: [
+            createMockConversation({
+              id: "alpha-1",
+              title: "Alpha 1",
+              selected_workspace: "/workspace/alpha",
+            }),
+            createMockConversation({
+              id: "beta-1",
+              title: "Beta 1",
+              selected_workspace: "/workspace/beta",
+            }),
+          ],
+          next_page_id: "page-2",
+        })
+        .mockResolvedValueOnce({
+          items: [
+            createMockConversation({
+              id: "beta-2",
+              title: "Beta 2",
+              selected_workspace: "/workspace/beta",
+            }),
+          ],
+          next_page_id: "page-3",
+        })
+        .mockResolvedValueOnce({
+          items: [
+            createMockConversation({
+              id: "alpha-2",
+              title: "Alpha 2",
+              selected_workspace: "/workspace/alpha",
+            }),
+          ],
+          next_page_id: null,
+        });
+
+      const user = userEvent.setup();
+      renderConversationPanel();
+
+      const alphaFolder = await screen.findByTestId(
+        "thread-folder-ws--workspace-alpha",
+      );
+
+      await user.click(alphaFolder);
+
+      const loadMore = within(alphaFolder).getByTestId(
+        "thread-folder-load-more-ws--workspace-alpha",
+      );
+
+      await user.click(loadMore);
+
+      const viewMore = within(alphaFolder).getByTestId(
+        "thread-folder-view-more-ws--workspace-alpha",
+      );
+
+      await user.click(viewMore);
+
+      expect(
+        await within(alphaFolder).findByText("Alpha 2"),
+      ).toBeInTheDocument();
+      expect(searchSpy).toHaveBeenCalledTimes(3);
+    });
+
     it("caps a grouped load-more click at three pages when no new folder appears", async () => {
       useConversationPanelPreferencesStore.setState({
         organizeMode: "grouped",

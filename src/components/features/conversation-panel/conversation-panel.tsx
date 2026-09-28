@@ -603,38 +603,104 @@ export function ConversationPanel({
   const [loadMorePageFloor, setLoadMorePageFloor] = React.useState<
     number | null
   >(null);
+  const [loadMoreGroupId, setLoadMoreGroupId] = React.useState<string | null>(
+    null,
+  );
+  const [loadMoreGroupConversationIds, setLoadMoreGroupConversationIds] =
+    React.useState<ReadonlySet<string> | null>(null);
+
   const visibleCountRef = React.useRef(visibleCount);
   visibleCountRef.current = visibleCount;
+
   const loadedPageCountRef = React.useRef(loadedPageCount);
   loadedPageCountRef.current = loadedPageCount;
 
   const clearLoadMoreRequest = React.useCallback(() => {
     setLoadMoreFloor(null);
     setLoadMorePageFloor(null);
+    setLoadMoreGroupId(null);
+    setLoadMoreGroupConversationIds(null);
   }, []);
 
   const requestLoadMore = React.useCallback(() => {
-    if (hasNextPage) {
-      setLoadMoreFloor(visibleCountRef.current);
-      setLoadMorePageFloor(loadedPageCountRef.current);
+    if (!hasNextPage) {
+      return;
     }
+
+    setLoadMoreGroupId(null);
+    setLoadMoreGroupConversationIds(null);
+    setLoadMoreFloor(visibleCountRef.current);
+    setLoadMorePageFloor(loadedPageCountRef.current);
   }, [hasNextPage]);
+
+  const requestLoadMoreGroup = React.useCallback(
+    (groupId: string) => {
+      if (!hasNextPage) {
+        return;
+      }
+
+      const group = conversationGroups?.find(
+        (conversationGroup) => conversationGroup.id === groupId,
+      );
+
+      setLoadMoreGroupId(groupId);
+      setLoadMoreGroupConversationIds(
+        new Set(
+          group?.conversations.map((conversation) => conversation.id) ?? [],
+        ),
+      );
+      setLoadMoreFloor(group?.conversations.length ?? 0);
+      setLoadMorePageFloor(loadedPageCountRef.current);
+    },
+    [conversationGroups, hasNextPage],
+  );
+
+  const loadMoreGroupPageCount =
+    loadMoreGroupId == null || loadMorePageFloor == null
+      ? 0
+      : Math.max(0, loadedPageCount - loadMorePageFloor);
+
+  const currentLoadMoreGroupConversationIds =
+    loadMoreGroupId == null
+      ? null
+      : new Set(
+          conversationGroups
+            ?.find((group) => group.id === loadMoreGroupId)
+            ?.conversations.map((conversation) => conversation.id) ?? [],
+        );
+
+  const loadMoreGroupFoundNewConversation =
+    loadMoreGroupConversationIds !== null &&
+    currentLoadMoreGroupConversationIds !== null &&
+    Array.from(currentLoadMoreGroupConversationIds).some(
+      (conversationId) => !loadMoreGroupConversationIds.has(conversationId),
+    );
 
   React.useEffect(() => {
     if (loadMoreFloor === null) {
       return;
     }
-    // Goal met: the visible list grew past where it was when the user clicked.
-    if (visibleCount > loadMoreFloor) {
+
+    if (loadMoreGroupId !== null && loadMoreGroupFoundNewConversation) {
       clearLoadMoreRequest();
       return;
     }
-    // Hard cap (grouped only): pages that merely deepen already-visible
-    // folders are walked past — a new folder may sit right behind them — but
-    // never unbounded many, so one click cannot drain the whole cursor.
-    // Chronological mode keeps its pre-existing behavior: fetch until a
-    // visible row appears or pages run out.
+
+    if (loadMoreGroupId === null && visibleCount > loadMoreFloor) {
+      clearLoadMoreRequest();
+      return;
+    }
+
     if (
+      loadMoreGroupId !== null &&
+      loadMoreGroupPageCount >= MAX_PAGES_PER_LOAD_MORE_CLICK
+    ) {
+      clearLoadMoreRequest();
+      return;
+    }
+
+    if (
+      loadMoreGroupId === null &&
       organizeMode === "grouped" &&
       !compact &&
       loadMorePageFloor != null &&
@@ -643,13 +709,11 @@ export function ConversationPanel({
       clearLoadMoreRequest();
       return;
     }
-    // Wait for any in-flight fetch (including the background refetch) to settle
-    // before evaluating `hasNextPage`; React Query may transiently clear that
-    // flag while replacing the last page.
+
     if (isFetching || isFetchingNextPage) {
       return;
     }
-    // Nothing more to fetch — stop waiting even if the list did not grow.
+
     if (!hasNextPage) {
       clearLoadMoreRequest();
       return;
@@ -658,19 +722,28 @@ export function ConversationPanel({
   }, [
     clearLoadMoreRequest,
     compact,
-    loadMoreFloor,
-    loadMorePageFloor,
-    visibleCount,
-    loadedPageCount,
-    organizeMode,
+    fetchNextPage,
     hasNextPage,
     isFetching,
     isFetchingNextPage,
-    fetchNextPage,
+    loadMoreFloor,
+    loadMoreGroupFoundNewConversation,
+    loadMoreGroupId,
+    loadMoreGroupPageCount,
+    loadMorePageFloor,
+    loadedPageCount,
+    organizeMode,
+    visibleCount,
   ]);
 
   const isLoadingMore = loadMoreFloor !== null || isFetchingNextPage;
 
+  const isLoadingMoreGroup = React.useCallback(
+    (groupId: string) =>
+      loadMoreGroupId === groupId &&
+      (loadMoreFloor !== null || isFetchingNextPage),
+    [isFetchingNextPage, loadMoreFloor, loadMoreGroupId],
+  );
   const { mutate: deleteConversation, mutateAsync: deleteConversationAsync } =
     useDeleteConversation();
   const { mutate: pauseConversation } = useUnifiedPauseConversation();
@@ -1226,6 +1299,9 @@ export function ConversationPanel({
             discoveryConversationIds={groupDiscoveryConversationIds}
             onToggleGroupCollapsed={toggleGroupCollapsed}
             onToggleGroupPreviewExpanded={toggleGroupPreviewExpanded}
+            onLoadMoreGroup={requestLoadMoreGroup}
+            hasNextPage={!!hasNextPage}
+            isLoadingMoreGroup={isLoadingMoreGroup}
             isCreatingConversationFlow={isCreatingConversationFlow}
             activeConversationId={currentConversationId}
             onLaunchFromGroup={launchFromGroup}
