@@ -27,3 +27,9 @@ docker run -it --rm `
 Open [http://localhost:8000/canvas](http://localhost:8000/canvas) in your browser.
 
 The agent will be able to access any project under `PROJECTS_PATH`.
+
+## Option 3: With Multiple Docker Sandboxes (WSL 2)
+
+For per-conversation containers, run Canvas inside a Linux distribution under WSL 2, with Docker Desktop's WSL integration enabled for that distribution. Install Node.js 24 or later and `uv` inside WSL, and confirm that `docker info` succeeds there.
+
+Run the [multiple-sandbox quickstart](./README.md#option-3-with-multiple-docker-sandboxes) in the WSL shell, using workspace paths inside that Linux environment. The native Windows host is not supported by this runtime, which uses POSIX user/group IDs.
