@@ -43,7 +43,7 @@ export function SettingsMobileDrawer({
         data-testid="settings-navbar"
         className={cn(
           "flex flex-col gap-6 transition-transform duration-300 ease-in-out",
-          "fixed inset-0 z-50 w-full bg-[var(--oh-surface-deep)] p-4 transform md:hidden",
+          "fixed inset-0 z-50 w-full bg-surface-deep p-4 transform md:hidden",
           isMobileMenuOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >

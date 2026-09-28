@@ -24,6 +24,7 @@ const config = JSON.parse(
 );
 
 const agentServerImage = `${config.images.agentServer}:${config.versions.agentServer}-python`;
+const agentServerVersion = config.versions.agentServer;
 const automationVersion = config.versions.automation;
 const canvasBasePath = config.paths.canvasBasePath;
 
@@ -49,6 +50,8 @@ const cmd = [
   "docker/Dockerfile",
   "--build-arg",
   `AGENT_SERVER_IMAGE=${agentServerImage}`,
+  "--build-arg",
+  `AGENT_SERVER_VERSION=${agentServerVersion}`,
   "--build-arg",
   `AUTOMATION_VERSION=${automationVersion}`,
   "--build-arg",

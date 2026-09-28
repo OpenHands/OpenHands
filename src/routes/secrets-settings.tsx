@@ -149,9 +149,7 @@ export function SecretsSettingsScreen() {
           data-testid="secrets-empty"
           className={extensionModuleEmptyStateClassName}
         >
-          <p className="text-sm text-[var(--oh-muted)]">
-            {t(I18nKey.SECRETS$EMPTY)}
-          </p>
+          <p className="text-sm text-muted">{t(I18nKey.SECRETS$EMPTY)}</p>
         </div>
       )}
 
