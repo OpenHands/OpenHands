@@ -67,7 +67,7 @@ describe.skipIf(process.platform === "win32")(
     });
 
     function resolveSessionApiKey(
-      env: Record<string, string> = {},
+      env: Record<string, string | undefined> = {},
     ): ResolvedSessionApiKey {
       const script = [
         "set -uo pipefail",
@@ -82,7 +82,7 @@ describe.skipIf(process.platform === "win32")(
 
       const res = spawnSync("bash", ["-c", script], {
         encoding: "utf-8",
-        env: { PATH: process.env.PATH ?? "", ...env },
+        env: { PATH: process.env.PATH ?? "", ...env } as Record<string, string>,
       });
 
       const [sessionApiKey = "", effectiveSessionKey = "", automationApiKey = ""] =
@@ -131,12 +131,13 @@ describe.skipIf(process.platform === "win32")(
     });
 
     it("completes startup without unbound-variable failure in all combinations", () => {
-      for (const env of [
+      const combinations: Record<string, string | undefined>[] = [
         {},
         { LOCAL_BACKEND_API_KEY: "test-key" },
         { OH_SESSION_API_KEYS_0: "test-key-0" },
         { LOCAL_BACKEND_API_KEY: "key-a", OH_SESSION_API_KEYS_0: "key-b" },
-      ]) {
+      ];
+      for (const env of combinations) {
         const resolved = resolveSessionApiKey(env);
         expect(resolved.status).toBe(0);
         expect(resolved.stderr).toBe("");
