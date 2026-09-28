@@ -7,32 +7,15 @@ export type ProfileToolSpec = {
   params: Record<string, SettingsValue>;
 };
 
-const SWITCH_LLM_TOOL_NAME = "switch_llm";
-
 /** Selectable built-ins a profile may store under their class name. */
 const BUILT_IN_TOOL_NAMES: ReadonlyMap<string, string> = new Map([
-  ["SwitchLLMTool", SWITCH_LLM_TOOL_NAME],
+  ["SwitchLLMTool", "switch_llm"],
 ]);
-
-/** The tool name a stored spec resolves to. */
-function canonicalToolName(name: string): string {
-  return BUILT_IN_TOOL_NAMES.get(name) ?? name;
-}
 
 function toParams(value: unknown): Record<string, SettingsValue> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, SettingsValue>)
     : {};
-}
-
-function readStoredProfileTools(value: unknown): ProfileToolSpec[] | null {
-  if (!Array.isArray(value)) return null;
-  return value.flatMap((entry) => {
-    const name = (entry as { name?: unknown })?.name;
-    return typeof name === "string"
-      ? [{ name, params: toParams((entry as { params?: unknown }).params) }]
-      : [];
-  });
 }
 
 /** Read stored `tools` into picker state: absent = standard, `[]` = bare. */
@@ -41,12 +24,15 @@ export function readProfileTools(value: unknown): {
   selected: string[];
   params: Record<string, Record<string, SettingsValue>>;
 } {
-  const stored = readStoredProfileTools(value);
-  if (stored === null) return { mode: "standard", selected: [], params: {} };
+  if (!Array.isArray(value))
+    return { mode: "standard", selected: [], params: {} };
   const params = new Map<string, Record<string, SettingsValue>>();
-  stored.forEach((spec) => {
-    const name = canonicalToolName(spec.name);
-    if (!params.has(name)) params.set(name, spec.params);
+  value.forEach((entry) => {
+    const stored = (entry as { name?: unknown })?.name;
+    if (typeof stored !== "string") return;
+    const name = BUILT_IN_TOOL_NAMES.get(stored) ?? stored;
+    if (!params.has(name))
+      params.set(name, toParams((entry as { params?: unknown }).params));
   });
   return {
     mode: "custom",
