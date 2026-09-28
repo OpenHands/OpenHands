@@ -54,10 +54,7 @@ import {
 import { useToolCatalog } from "#/hooks/query/use-tool-catalog";
 import { flattenMcpConfig } from "#/utils/mcp-installed-servers";
 import { parseMcpConfig } from "#/utils/mcp-config";
-import {
-  agentProfileMayServeToolCatalog,
-  agentProfileSupportsSecretRefs,
-} from "#/api/agent-profiles-service/profile-field-support";
+import { agentProfileSupportsSecretRefs } from "#/api/agent-profiles-service/profile-field-support";
 import { useSearchSecrets } from "#/hooks/query/use-get-secrets";
 
 export const handle = { hideTitle: true };
@@ -398,10 +395,10 @@ export function AgentSettingsScreen({
     data: toolCatalog,
     isError: toolCatalogFailed,
     refetch: refetchToolCatalog,
+    supported: catalogSupported,
   } = useToolCatalog({ enabled: embedded });
   // A backend that answers "no catalog" (null) gets no tool controls at all.
-  const toolCatalogSupported =
-    embedded && agentProfileMayServeToolCatalog() && toolCatalog !== null;
+  const toolCatalogSupported = embedded && catalogSupported;
   const standardToolNames = React.useMemo(
     () =>
       toolCatalog

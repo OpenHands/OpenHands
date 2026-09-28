@@ -10,6 +10,10 @@ import {
   type AgentSettingsSaveControl,
 } from "#/routes/agent-settings";
 
+vi.mock("#/hooks/query/use-agent-server-info", () => ({
+  useAgentServerInfo: () => ({ data: null }),
+}));
+
 const CATALOG = [
   {
     name: "terminal",

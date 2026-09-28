@@ -45,7 +45,13 @@ const toolCatalogMock = vi.hoisted(() =>
   >(),
 );
 vi.mock("#/hooks/query/use-tool-catalog", () => ({
-  useToolCatalog: () => ({ data: toolCatalogMock() }),
+  useToolCatalog: () => {
+    const data = toolCatalogMock();
+    return {
+      data,
+      supported: profileSupportsToolCatalogMock() && data !== null,
+    };
+  },
 }));
 
 // The secret picker lists the user's saved secrets; stub the query so these

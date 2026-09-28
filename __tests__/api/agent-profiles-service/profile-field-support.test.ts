@@ -3,6 +3,7 @@ import {
   agentProfileMayServeToolCatalog,
   agentProfileSupportsSecretRefs,
 } from "#/api/agent-profiles-service/profile-field-support";
+import type { AgentServerInfo } from "#/api/agent-server-compatibility";
 
 const mockServerInfo = vi.fn<() => { capabilities?: string[] } | null>();
 const mockBackendKind = vi.fn<() => string>(() => "local");
@@ -50,26 +51,24 @@ describe("agentProfileSupportsSecretRefs", () => {
 });
 
 describe("agentProfileMayServeToolCatalog", () => {
-  beforeEach(() => {
-    mockBackendKind.mockReturnValue("local");
-  });
-
-  it.each([null, {}, { capabilities: [] }])(
+  it.each([null, undefined, {}, { capabilities: [] }])(
     "offers no picker when the catalog is unadvertised: %j",
     (info) => {
-      mockServerInfo.mockReturnValue(info);
-      expect(agentProfileMayServeToolCatalog()).toBe(false);
+      expect(
+        agentProfileMayServeToolCatalog("local", info as AgentServerInfo),
+      ).toBe(false);
     },
   );
 
   it("offers the picker when the backend serves the catalog", () => {
-    mockServerInfo.mockReturnValue({ capabilities: ["tool_catalog_v1"] });
-    expect(agentProfileMayServeToolCatalog()).toBe(true);
+    expect(
+      agentProfileMayServeToolCatalog("local", {
+        capabilities: ["tool_catalog_v1"],
+      } as AgentServerInfo),
+    ).toBe(true);
   });
 
   it("asks cloud, which advertises no capabilities", () => {
-    mockBackendKind.mockReturnValue("cloud");
-    mockServerInfo.mockReturnValue(null);
-    expect(agentProfileMayServeToolCatalog()).toBe(true);
+    expect(agentProfileMayServeToolCatalog("cloud", null)).toBe(true);
   });
 });
