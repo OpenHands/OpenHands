@@ -27,7 +27,6 @@ export interface CustomChatInputProps {
   ) => void;
   className?: React.HTMLAttributes<HTMLDivElement>["className"];
   buttonClassName?: React.HTMLAttributes<HTMLButtonElement>["className"];
-  placeholder?: string;
 }
 
 export function CustomChatInput({
@@ -42,7 +41,6 @@ export function CustomChatInput({
   onFilesPaste,
   className = "",
   buttonClassName = "",
-  placeholder,
 }: CustomChatInputProps) {
   const [canSubmit, setCanSubmit] = React.useState(false);
   const {
@@ -196,7 +194,6 @@ export function CustomChatInput({
           hasStartedConversation={hasStartedConversation}
           isNewConversationPending={isNewConversationPending}
           showButton={showButton}
-          placeholder={placeholder}
           buttonClassName={buttonClassName}
           chatInputRef={chatInputRef}
           placeholder={placeholder}
