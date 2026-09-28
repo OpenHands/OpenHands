@@ -85,13 +85,21 @@ runtime-sandbox API.
 - `src/api/no-direct-agent-server-calls.test.ts` is the executable source of
   truth. Agent Server access must use `@openhands/typescript-client` with options
   from `src/api/agent-server-client-options.ts`.
-- Cloud and runtime-sandbox requests must use `callCloudProxy`; runtime requests
-  must provide the correct `hostOverride` and authentication mode.
+- Cloud **App-API** requests must use `callCloudProxy` (now a direct browser
+  call, since the SaaS permits CORS for API-key-authenticated requests). Per-
+  conversation **runtime-sandbox** requests are not proxied: they must call the
+  conversation's runtime URL directly via the typed client
+  (`ConversationClient` / `BashClient` / `RemoteWorkspace` / `FileClient`, or a
+  typed wrapper built via `getAgentServerHttpClientOptions`) with its session
+  API key -- the same path local mode uses. Do not route runtime calls through
+  `callCloudProxy` with `hostOverride`: the `/api/cloud-proxy` envelope it relied
+  on was removed from the agent-server (software-agent-sdk #3326) and 405s on
+  current backends.
 - Treat changes to the guard's allowlist as architecture changes. Do not copy the
   allowlist into this guide.
 
 Submit **COMMENT** if the PR adds raw `fetch`, `axios`, shared `openHands`, or
-low-level HTTP client access to an Agent Server endpoint.
+low-level HTTP client access to an Agent Server or cloud endpoint.
 
 ### Agent Server compatibility
 

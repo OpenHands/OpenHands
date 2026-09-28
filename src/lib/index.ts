@@ -7,6 +7,7 @@ export * from "../components/terminal";
 export {
   AgentServerUIProviders,
   AgentServerUIRoot,
+  CloudOrganizationBoundary,
   DEFAULT_AGENT_SERVER_ANALYTICS,
   type AgentServerUIAnalyticsConfig,
   type AgentServerUIPostHogAnalyticsConfig,
