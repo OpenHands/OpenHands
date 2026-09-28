@@ -62,7 +62,7 @@
     "sirv": "3.0.2",
     "sirv-cli": "3.0.1",
     "socket.io-client": "4.8.3",
-    "tailwind-merge": "3.6.0",
+    "tailwind-merge": "3.7.0",
     "tailwind-scrollbar": "4.0.2",
     "unist-util-visit": "5.1.0",
     "uuid": "14.0.1",
