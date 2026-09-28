@@ -215,7 +215,7 @@ fi
 export OH_SESSION_API_KEYS_0
 # <<< session-api-key-config
 
-# Both backends share the same API key value and the same `X-Session-API-Key`
+# Both backends share the samAPI_KEY_FILE="${STATE_DIR}/api-key.txt"e API key value and the same `X-Session-API-Key`
 # header for authentication.  Default OPENHANDS_AUTOMATION_API_KEY to the
 # API key so a single credential secures the whole stack.
 EFFECTIVE_SESSION_KEY="${OH_SESSION_API_KEYS_0:-${LOCAL_BACKEND_API_KEY:-}}"
