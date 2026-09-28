@@ -64,7 +64,7 @@ describe("ProviderConnectionsManager", () => {
         connections={[]}
         linkedCountById={{}}
         isLoading={false}
-        existingNames={[]}
+        onAddModels={vi.fn()}
         loadError={null}
       />,
     );
@@ -82,7 +82,7 @@ describe("ProviderConnectionsManager", () => {
         connections={[]}
         linkedCountById={{}}
         isLoading={false}
-        existingNames={[]}
+        onAddModels={vi.fn()}
         loadError={null}
       />,
     );
@@ -119,7 +119,7 @@ describe("ProviderConnectionsManager", () => {
         connections={[]}
         linkedCountById={{}}
         isLoading={false}
-        existingNames={[]}
+        onAddModels={vi.fn()}
         loadError={null}
       />,
     );
@@ -155,7 +155,7 @@ describe("ProviderConnectionsManager", () => {
         connections={[connection]}
         linkedCountById={{ "conn-1": 3 }}
         isLoading={false}
-        existingNames={[]}
+        onAddModels={vi.fn()}
         loadError={null}
       />,
     );
@@ -172,7 +172,7 @@ describe("ProviderConnectionsManager", () => {
         connections={[connection]}
         linkedCountById={{}}
         isLoading={false}
-        existingNames={[]}
+        onAddModels={vi.fn()}
         loadError={null}
       />,
     );
@@ -183,27 +183,25 @@ describe("ProviderConnectionsManager", () => {
     ).toBeInTheDocument();
   });
 
-  it("opens the add-models modal scoped to the clicked connection", async () => {
+  it("calls onAddModels with the clicked connection (parent opens the modal)", async () => {
     const user = userEvent.setup();
+    const onAddModels = vi.fn();
     renderWith(
       <ProviderConnectionsManager
         connections={[connection]}
         linkedCountById={{}}
         isLoading={false}
-        existingNames={["existing"]}
         loadError={null}
+        onAddModels={onAddModels}
       />,
     );
 
     await user.click(screen.getByTestId("provider-connection-menu-trigger"));
     await user.click(screen.getByTestId("provider-connection-add-models"));
 
-    // The modal summarizes the connection it was launched from — no provider
-    // combobox, because the provider comes from the connection itself.
-    expect(
-      await screen.findByTestId("add-models-connection-summary"),
-    ).toBeInTheDocument();
-    expect(screen.queryByTestId("add-models-provider")).not.toBeInTheDocument();
+    // The modal itself is owned by the parent (one shared instance for both
+    // entry points), so the row's job is to hand the clicked connection up.
+    expect(onAddModels).toHaveBeenCalledWith(connection);
   });
 
   it("shows supported providers in the edit-connection selector", async () => {
@@ -214,7 +212,7 @@ describe("ProviderConnectionsManager", () => {
         connections={[connection]}
         linkedCountById={{}}
         isLoading={false}
-        existingNames={[]}
+        onAddModels={vi.fn()}
         loadError={null}
       />,
     );
@@ -248,7 +246,7 @@ describe("ProviderConnectionsManager", () => {
         connections={[connection]}
         linkedCountById={{ "conn-1": 1 }}
         isLoading={false}
-        existingNames={[]}
+        onAddModels={vi.fn()}
         loadError={null}
       />,
     );

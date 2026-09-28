@@ -288,6 +288,47 @@ describe("LlmProfilesManager", () => {
     ).toBeVisible();
   });
 
+  it("shows the top Add-from-provider-connections button and opens the chooser modal", async () => {
+    const user = userEvent.setup();
+    vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
+      profiles: mockProfiles,
+      active_profile: "gpt-4-profile",
+    });
+
+    renderManager(
+      { onAddProfile: vi.fn() },
+      { connections: [makeConnection()] },
+    );
+
+    const topButton = await screen.findByTestId("add-models-from-provider");
+    expect(topButton).toBeInTheDocument();
+    // The regular single-profile button remains alongside it.
+    expect(screen.getByTestId("add-llm-profile")).toBeInTheDocument();
+
+    // Chooser entry point: the modal opens with the combobox unset (no
+    // preselected connection), so the model list has not loaded yet.
+    await user.click(topButton);
+    expect(await screen.findByTestId("add-models-modal")).toBeInTheDocument();
+    const combobox = screen.getByTestId(
+      "add-models-provider",
+    ) as HTMLSelectElement;
+    expect(combobox.value).toBe("");
+  });
+
+  it("hides the top Add-from-provider-connections button when there are no connections", async () => {
+    vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
+      profiles: mockProfiles,
+      active_profile: "gpt-4-profile",
+    });
+
+    renderManager({ onAddProfile: vi.fn() }, { connections: [] });
+
+    await screen.findByTestId("add-llm-profile");
+    expect(
+      screen.queryByTestId("add-models-from-provider"),
+    ).not.toBeInTheDocument();
+  });
+
   it("hides provider connections on a cloud backend without an org", async () => {
     vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
       profiles: mockProfiles,

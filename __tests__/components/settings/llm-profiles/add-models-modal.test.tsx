@@ -18,6 +18,9 @@ vi.mock("react-i18next", () => ({
     t: (key: string, params?: Record<string, string>) => {
       const translations: Record<string, string> = {
         SETTINGS$ADD_MODELS_TITLE: "Add models as profiles",
+        SETTINGS$ADD_MODELS_PROVIDER_LABEL: "Provider connection",
+        SETTINGS$ADD_MODELS_PROVIDER_PLACEHOLDER:
+          "Select a provider connection",
         SETTINGS$ADD_MODELS_CONNECTION_BOUND: `Linked to ${params?.provider ?? "?"}`,
         SETTINGS$ADD_MODELS_SELECT_ALL: "Select all",
         SETTINGS$ADD_MODELS_EMPTY: "No models found for this provider.",
@@ -110,11 +113,18 @@ describe("AddModelsModal", () => {
     existingNames: string[] = [],
     onClose = vi.fn(),
   ) => {
+    // When a connection is given, preselect it (the "..." entry point). When
+    // null, render chooser mode with no preselect (the top-button entry
+    // point) and an empty connection pool — the modal then just shows the
+    // combobox prompt.
+    const connections = connection ? [connection] : [];
+    const initialConnectionId = connection?.id ?? null;
     const view = render(
       <QueryClientProvider client={queryClient}>
         <AddModelsModal
           isOpen
-          connection={connection}
+          connections={connections}
+          initialConnectionId={initialConnectionId}
           existingNames={existingNames}
           onClose={onClose}
         />
@@ -127,7 +137,8 @@ describe("AddModelsModal", () => {
         <QueryClientProvider client={queryClient}>
           <AddModelsModal
             isOpen={isOpen}
-            connection={connection}
+            connections={connections}
+            initialConnectionId={initialConnectionId}
             existingNames={existingNames}
             onClose={onClose}
           />
@@ -156,18 +167,28 @@ describe("AddModelsModal", () => {
     });
   });
 
-  it("renders nothing without a connection to bind to", () => {
+  it("renders only the provider combobox in chooser mode (no connection picked)", () => {
     renderModal(null);
-    expect(screen.queryByTestId("add-models-modal")).not.toBeInTheDocument();
+    expect(screen.getByTestId("add-models-modal")).toBeInTheDocument();
+    // The combobox is the prompt — no model list, no empty-state, no spinner.
+    expect(screen.getByTestId("add-models-provider")).toBeInTheDocument();
+    expect(screen.queryByTestId("add-models-loading")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("add-models-empty")).not.toBeInTheDocument();
   });
 
-  it("shows the connection summary and no provider combobox", async () => {
+  it("shows the provider combobox preselected to the launched connection", async () => {
     renderModal();
     expect(
       await screen.findByTestId("add-models-connection-summary"),
     ).toBeInTheDocument();
-    expect(screen.queryByTestId("add-models-provider")).not.toBeInTheDocument();
-    expect(screen.getByText("Shared OpenAI")).toBeInTheDocument();
+    // Preselect mode: the combobox is present and bound to the connection...
+    const combobox = screen.getByTestId(
+      "add-models-provider",
+    ) as HTMLSelectElement;
+    expect(combobox.value).toBe("conn-openai");
+    // ...so the connection's models load without the user choosing.
+    await screen.findByTestId("add-models-row-openai/gpt-4o");
+    expect(screen.getByText("Shared OpenAI (OpenAI)")).toBeInTheDocument();
   });
 
   it("lists all models for the connection's provider with derived names", async () => {
