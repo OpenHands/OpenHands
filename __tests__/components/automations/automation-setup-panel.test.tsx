@@ -1439,20 +1439,24 @@ describe("AutomationSetupPanel", () => {
         ),
       ).not.toBeNull();
       await user.click(custom);
-      fireEvent.change(screen.getByTestId("automation-setup-event-source"), {
+      const sourceInput = screen.getByTestId("automation-setup-event-source");
+      expect(sourceInput).toHaveValue("");
+      expect(sourceInput).toHaveAttribute(
+        "placeholder",
+        "AUTOMATION_SETUP$EVENT_SOURCE_CUSTOM_PLACEHOLDER",
+      );
+      expect(sourceInput).toHaveFocus();
+      fireEvent.change(sourceInput, {
         target: { value: "incident-alerts" },
       });
       expect(
         screen.getByTestId("automation-setup-custom-webhook-enabled"),
-      ).toBeInTheDocument();
+      ).toBeChecked();
       await user.click(screen.getByTestId("automation-setup-event-source-toggle"));
       expect(
         screen.getByTestId("automation-setup-event-source-option-github"),
       ).toBeInTheDocument();
       await user.click(screen.getByTestId("automation-setup-event-source-toggle"));
-      await user.click(
-        screen.getByTestId("automation-setup-custom-webhook-enabled"),
-      );
       await user.type(
         screen.getByTestId("automation-setup-custom-webhook-name"),
         "Incident webhook",

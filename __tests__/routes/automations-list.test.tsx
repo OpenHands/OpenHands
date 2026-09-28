@@ -737,13 +737,8 @@ describe("AutomationsList — add automation menu", () => {
 
     await user.click(screen.getByTestId("automations-add-automation-create"));
     expect(screen.queryByTestId("add-automation-modal")).not.toBeInTheDocument();
-    expect(mocks.createConversationMutate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        automationSetup: true,
-        entryPoint: "automations_add",
-      }),
-      expect.any(Object),
-    );
+    expect(mocks.createConversationMutate).not.toHaveBeenCalled();
+    expect(mocks.navigate).toHaveBeenCalledWith("/automations/setup");
   });
 
   it("opens the import picker from the Add Automation menu", async () => {

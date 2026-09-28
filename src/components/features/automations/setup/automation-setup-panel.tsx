@@ -27,6 +27,7 @@ import AutomationService, {
 import { isSdkHttpError } from "#/api/agent-server-compatibility";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import {
+  isPendingAutomationSetupId,
   patchAutomationSetupDraft,
   setAutomationSetupDraft,
   subscribeAutomationSetupDraft,
@@ -790,7 +791,13 @@ export function AutomationSetupPanel({
   }, [propTaggedServerDraftId]);
 
   useEffect(() => {
-    if (!conversationId || hasAutomationSetupModeTag(conversationTags)) return;
+    if (
+      !conversationId ||
+      isPendingAutomationSetupId(conversationId) ||
+      hasAutomationSetupModeTag(conversationTags)
+    ) {
+      return;
+    }
     AgentServerConversationService.updateConversationTags(
       conversationId,
       buildAutomationSetupModeTags(conversationTags),
@@ -801,7 +808,7 @@ export function AutomationSetupPanel({
 
   const updateConversationDraftTags = useCallback(
     async (draftId: string | null) => {
-      if (!conversationId) return;
+      if (!conversationId || isPendingAutomationSetupId(conversationId)) return;
       const nextTags = draftId
         ? buildAutomationDraftTags(conversationTags, draftId)
         : removeAutomationDraftTags(conversationTags);
@@ -2768,10 +2775,12 @@ function EventSourceControl({
   value,
   options,
   onChange,
+  onSelectCustom,
 }: {
   value: string;
   options: string[];
   onChange: (value: string) => void;
+  onSelectCustom: () => void;
 }) {
   const { t } = useTranslation("openhands");
   const knownSources = knownEventSources(options);
@@ -2789,6 +2798,9 @@ function EventSourceControl({
         ref={inputRef}
         data-testid="automation-setup-event-source"
         value={eventSourceInputValue(value, knownSources)}
+        placeholder={t(
+          I18nKey.AUTOMATION_SETUP$EVENT_SOURCE_CUSTOM_PLACEHOLDER,
+        )}
         onChange={(event) =>
           onChange(commitEventSourceInput(event.target.value, knownSources))
         }
@@ -2840,9 +2852,9 @@ function EventSourceControl({
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
+                onSelectCustom();
                 setIsMenuOpen(false);
-                inputRef.current?.focus();
-                inputRef.current?.select();
+                queueMicrotask(() => inputRef.current?.focus());
               }}
               className="flex w-full items-center"
             >
@@ -2905,6 +2917,22 @@ function EventFields({
     isEventFilterOpen ||
     eventFilter.trim().length > 0 ||
     streamingField === "eventFilter";
+  const knownSources = knownEventSources(eventSourceOptions);
+  const sourceIsKnown = (source: string) =>
+    knownSources.some(
+      (option) => option.toLowerCase() === source.trim().toLowerCase(),
+    );
+  const handleEventSourceChange = (value: string) => {
+    const leavingKnownSource =
+      sourceIsKnown(eventSource) && !sourceIsKnown(value);
+    setEventSource(value);
+    if (leavingKnownSource) setCustomWebhookField("enabled", true);
+    if (sourceIsKnown(value)) setCustomWebhookField("enabled", false);
+  };
+  const selectCustomEventSource = () => {
+    setEventSource("");
+    setCustomWebhookField("enabled", true);
+  };
   return (
     <div className="@container min-w-0">
       <section className="grid gap-3 @min-[640px]:grid-cols-2">
@@ -2917,7 +2945,8 @@ function EventFields({
             <EventSourceControl
               value={eventSource}
               options={eventSourceOptions}
-              onChange={setEventSource}
+              onChange={handleEventSourceChange}
+              onSelectCustom={selectCustomEventSource}
             />
           </Field>
           <p

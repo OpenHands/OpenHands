@@ -951,13 +951,8 @@ describe("automations list interactions", () => {
 
     await user.click(screen.getByTestId("automations-add-automation"));
 
-    expect(mocks.createConversation).toHaveBeenCalledWith(
-      expect.objectContaining({
-        automationSetup: true,
-        entryPoint: "automations_add",
-      }),
-      expect.any(Object),
-    );
+    expect(mocks.createConversation).not.toHaveBeenCalled();
+    expect(mocks.navigate).toHaveBeenCalledWith("/automations/setup");
     expect(screen.queryByTestId("add-modal")).not.toBeInTheDocument();
   });
 

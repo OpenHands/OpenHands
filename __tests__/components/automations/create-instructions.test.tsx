@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -23,8 +23,11 @@ vi.mock("#/hooks/mutation/use-create-conversation", () => ({
 }));
 
 vi.mock("#/api/automation-setup-draft-store", () => ({
+  PENDING_AUTOMATION_SETUP_ID: "pending-new-automation",
   setAutomationSetupDraft: (...args: unknown[]) =>
     mocks.setAutomationSetupDraft(...args),
+  getAutomationSetupDraft: () => null,
+  clearAutomationSetupDraft: () => undefined,
 }));
 
 vi.mock("#/contexts/active-backend-context", () => ({
@@ -128,26 +131,20 @@ describe("CreateInstructions", () => {
     });
   });
 
-  it("creates an automation setup conversation when Create Automation is clicked", async () => {
+  it("opens the setup form without creating a conversation", async () => {
     const user = userEvent.setup();
     const { navigate } = renderCreateInstructions();
 
     await user.click(screen.getByTestId("automations-create-automation"));
 
-    expect(mocks.createConversationMutate).toHaveBeenCalledWith(
+    expect(mocks.createConversationMutate).not.toHaveBeenCalled();
+    expect(mocks.setAutomationSetupDraft).toHaveBeenCalledWith(
+      "pending-new-automation",
       {
-        query: "Create an automation",
-        automationSetup: true,
-        entryPoint: "automations_add",
-      },
-      expect.any(Object),
-    );
-    await waitFor(() => {
-      expect(mocks.setAutomationSetupDraft).toHaveBeenCalledWith("conv-new", {
         prompt: "",
         kind: "prompt",
-      });
-      expect(navigate).toHaveBeenCalledWith("/conversations/conv-new");
-    });
+      },
+    );
+    expect(navigate).toHaveBeenCalledWith("/automations/setup");
   });
 });

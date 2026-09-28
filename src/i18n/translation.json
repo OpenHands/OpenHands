@@ -43111,6 +43111,23 @@
     "zh-CN": "Event source",
     "zh-TW": "Event source"
   },
+  "AUTOMATION_SETUP$EVENT_SOURCE_CUSTOM_PLACEHOLDER": {
+    "ar": "مثال: pagerduty",
+    "ca": "p. ex. pagerduty",
+    "de": "z. B. pagerduty",
+    "en": "e.g. pagerduty",
+    "es": "p. ej. pagerduty",
+    "fr": "p. ex. pagerduty",
+    "it": "es. pagerduty",
+    "ja": "例: pagerduty",
+    "ko-KR": "예: pagerduty",
+    "no": "f.eks. pagerduty",
+    "pt": "ex.: pagerduty",
+    "tr": "örn. pagerduty",
+    "uk": "напр. pagerduty",
+    "zh-CN": "例如 pagerduty",
+    "zh-TW": "例如 pagerduty"
+  },
   "AUTOMATION_SETUP$EVENT_KEY": {
     "ar": "Event key",
     "ca": "Event key",

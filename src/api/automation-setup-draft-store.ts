@@ -74,6 +74,20 @@ export interface AutomationSetupDraft {
 }
 
 const AUTOMATION_SETUP_DRAFTS_STORAGE_KEY = "openhands-automation-setup-drafts";
+
+/**
+ * Local draft for a new automation that does not have a conversation yet.
+ * The automations page opens the form under this id, and a conversation is
+ * created only after the user sends a prompt.
+ */
+export const PENDING_AUTOMATION_SETUP_ID = "pending-new-automation";
+
+export function isPendingAutomationSetupId(
+  conversationId: string | null | undefined,
+): boolean {
+  return conversationId === PENDING_AUTOMATION_SETUP_ID;
+}
+
 const AUTOMATION_SETUP_DRAFT_CHANGED_EVENT =
   "openhands:automation-setup-draft-changed";
 const AUTOMATION_SETUP_KINDS: AutomationSetupKind[] = [
