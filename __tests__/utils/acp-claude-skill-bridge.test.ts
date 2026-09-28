@@ -1,8 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { SKILLS_CATALOG } from "@openhands/extensions/skills";
+import {
+  DEFAULT_ENABLED_SKILL_NAMES,
+  SKILLS_CATALOG,
+} from "@openhands/extensions/skills";
 import {
   AGENT_LAUNCH_SUFFIX_APPEND_MAX_LENGTH,
   CANVAS_ENABLED_SKILLS_TAG,
+  CANVAS_SKILLS_TRUNCATED_MARKER,
   CLAUDE_CODE_ACP_SERVER,
   buildClaudeAcpSkillSuffixAppend,
   isClaudeCodeAcpAgent,
@@ -93,7 +97,8 @@ describe("packClaudeAcpSkillSuffix", () => {
     );
   });
 
-  it("packs the largest enabled skill first so automation is not crowded out", () => {
+  it("reserves per-skill budget so a small skill is not silently evicted", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const suffix = packClaudeAcpSkillSuffix(
       [
         { name: "tiny", content: "tiny body" },
@@ -102,7 +107,10 @@ describe("packClaudeAcpSkillSuffix", () => {
       4_000,
     );
     expect(suffix).toContain(`## ${AUTOMATION}`);
-    expect(suffix).not.toContain("## tiny");
+    expect(suffix).toContain("## tiny");
+    expect(suffix).toContain(CANVAS_SKILLS_TRUNCATED_MARKER);
+    expect(suffix).toMatch(/truncated="[^"]*openhands-automation/);
+    warn.mockRestore();
   });
 
   it("returns undefined when nothing is selected", () => {
@@ -130,6 +138,31 @@ describe("buildClaudeAcpSkillSuffixAppend", () => {
       },
     });
     expect(suffix ?? "").not.toContain("# OpenHands Automations");
+    warn.mockRestore();
+  });
+
+  it("keeps several DEFAULT_ENABLED skills under the 32KiB cap with a truncation marker", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const suffix = buildClaudeAcpSkillSuffixAppend({
+      enablement: { enabledSkills: [...DEFAULT_ENABLED_SKILL_NAMES] },
+    });
+
+    expect(suffix).toBeDefined();
+    expect(suffix!.length).toBeLessThanOrEqual(
+      AGENT_LAUNCH_SUFFIX_APPEND_MAX_LENGTH,
+    );
+
+    const present = DEFAULT_ENABLED_SKILL_NAMES.filter((name) =>
+      suffix!.includes(`## ${name}`),
+    );
+    // Old largest-first packing kept only openhands-automation; reserved
+    // shares must keep multiple default-enabled headings alive.
+    expect(present.length).toBeGreaterThan(1);
+    expect(present).toContain(AUTOMATION);
+    expect(present.length).toBe(DEFAULT_ENABLED_SKILL_NAMES.length);
+
+    expect(suffix).toContain(CANVAS_SKILLS_TRUNCATED_MARKER);
+    expect(suffix).toMatch(/truncated="/);
     warn.mockRestore();
   });
 });
