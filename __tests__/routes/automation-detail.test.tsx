@@ -21,6 +21,7 @@ import AutomationDetail from "#/routes/automation-detail";
 import type { Backend } from "#/api/backend-registry/types";
 import { AutomationRunStatus } from "#/types/automation";
 import type { Automation, AutomationRunsResponse } from "#/types/automation";
+import { packTarGzip } from "#/utils/tar-gzip";
 
 vi.mock("#/api/automation-service/automation-service.api", () => ({
   default: {
@@ -29,6 +30,7 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
     toggleAutomation: vi.fn(),
     deleteAutomation: vi.fn(),
     dispatchAutomation: vi.fn(),
+    fetchTarballBytes: vi.fn(),
     checkHealth: vi.fn(),
   },
 }));
@@ -343,5 +345,80 @@ describe("AutomationDetail — Automation Runs As", () => {
       screen.queryByText(I18nKey.AUTOMATIONS$DETAIL$RUNS_AS),
     ).not.toBeInTheDocument();
     expect(getCloudOrganizationMember).not.toHaveBeenCalled();
+  });
+});
+
+describe("AutomationDetail — disabled reason banner", () => {
+  it("surfaces the latest disablement reason on an inactive automation", async () => {
+    // Arrange — an automation paused automatically for a permanent config fault.
+    const reason =
+      "Paused automatically: auth — Invalid API key. This failed the last 3 runs and needs a configuration fix.";
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+      ...automation,
+      enabled: false,
+      disabled_reason: reason,
+      disabled_detail: {
+        reason: "consecutive_permanent_failures",
+        source: "consecutive_permanent_failures",
+      },
+      disabled_at: "2026-09-14T10:00:00Z",
+    });
+
+    // Act
+    renderDetail();
+    await waitFor(() => {
+      expect(AutomationService.getAutomation).toHaveBeenCalledTimes(1);
+    });
+
+    // Assert — the banner renders the backend's human-readable reason.
+    expect(
+      await screen.findByTestId("automation-disabled-reason-banner"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("automation-disabled-reason-text"),
+    ).toHaveTextContent(reason);
+  });
+
+  it("does not render the banner for an enabled automation", async () => {
+    // Arrange — default beforeEach returns the enabled automation fixture.
+    renderDetail();
+    await waitFor(() => {
+      expect(AutomationService.getAutomation).toHaveBeenCalledTimes(1);
+    });
+    await screen.findByText(automation.name);
+
+    // Assert
+    expect(
+      screen.queryByTestId("automation-disabled-reason-banner"),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("AutomationDetail — script automations", () => {
+  it("shows the bundle's script in place of the prompt for an automation without a prompt", async () => {
+    // Arrange
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue({
+      ...automation,
+      prompt: null,
+      entrypoint: "python main.py",
+    });
+    vi.mocked(AutomationService.fetchTarballBytes).mockResolvedValue(
+      new Uint8Array(
+        await packTarGzip([{ name: "main.py", content: "print('hi')\n" }]),
+      ),
+    );
+
+    // Act
+    renderDetail();
+
+    // Assert
+    expect(
+      await screen.findByTestId("automation-script-file"),
+    ).toHaveTextContent("main.py");
+    expect(
+      screen.queryByTestId("automation-prompt-content"),
+    ).not.toBeInTheDocument();
   });
 });

@@ -48,10 +48,7 @@ export function IntegrationsSettingsLink() {
       <span className={cn(sidebarNavLabelClassName(false), "flex-1")}>
         {t(I18nKey.SETTINGS$INTEGRATIONS_SETTINGS_LINK)}
       </span>
-      <ExternalLink
-        className="size-4 shrink-0 text-[var(--oh-muted)]"
-        aria-hidden
-      />
+      <ExternalLink className="size-4 shrink-0 text-muted" aria-hidden />
     </a>
   );
 }

@@ -62,7 +62,7 @@ export function SetupFormField({
   const { t } = useTranslation("openhands");
   const { backend } = useActiveBackend();
   const testId = `setup-field-${name}`;
-  const help = <p className="text-xs text-[var(--oh-muted)]">{field.help}</p>;
+  const help = <p className="text-xs text-muted">{field.help}</p>;
 
   // Listing a user's repositories is a cloud-backend capability: `GitService`
   // answers with an empty page on any other backend, so the picker would offer
@@ -208,7 +208,7 @@ export function SetupFormField({
           )}
         />
         {fieldText(value) && (
-          <p className="text-xs text-[var(--oh-muted)]">{fieldText(value)}</p>
+          <p className="text-xs text-muted">{fieldText(value)}</p>
         )}
         <FieldError testId={testId} error={error} />
         {help}

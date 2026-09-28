@@ -36,6 +36,7 @@ import prettierPlugin from "eslint-plugin-prettier";
 import prettierConfig from "eslint-config-prettier";
 import unusedImportsPlugin from "eslint-plugin-unused-imports";
 import tanstackQueryPlugin from "@tanstack/eslint-plugin-query";
+import { plugin as shadcnPlugin } from "@shadcn/lint";
 import globals from "globals";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -387,6 +388,24 @@ export default [
       "react/no-array-index-key": "off",
       "react-hooks/exhaustive-deps": "off",
       "react/react-in-jsx-scope": "off",
+    },
+  },
+
+  // @shadcn/lint — design-system linter for Tailwind v4.
+  // Rules: https://github.com/shadcn-ui/lint#rules
+  // `no-arbitrary-values` stays at "warn": the remaining hits are one-offs
+  // (raw hex, vh/vw, calc(), grid templates) with no theme-scale equivalent.
+  // The other rules need per-component contracts before they are useful here.
+  {
+    files: ["src/**/*.{ts,tsx}"],
+    plugins: { shadcn: shadcnPlugin },
+    rules: {
+      "shadcn/no-arbitrary-values": "warn",
+      "shadcn/no-restyle": "off",
+      "shadcn/no-raw-colors": "off",
+      "shadcn/no-inline-styles": "off",
+      "shadcn/require-static-classes": "off",
+      "shadcn/no-unknown-classes": "off",
     },
   },
 ];

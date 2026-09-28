@@ -52,15 +52,25 @@ function TagIconSlot({
   );
 }
 
+function formatTagChipLabel(
+  key: string,
+  value: string,
+  t: (key: I18nKey) => string,
+): string {
+  // Same string as the tooltip, with the value hard-truncated so long chips
+  // still fit. Bare tags (empty value) show the humanized key once.
+  return formatConversationTagTooltip(key, truncateTagChipValue(value), t);
+}
+
 function TagChipContent({
   icon,
   keyName,
-  value,
+  chipLabel,
   iconTestId,
 }: {
   icon: ConversationTagIcon;
   keyName: string;
-  value: string;
+  chipLabel: string;
   /**
    * Only the visible row passes this. The off-screen measure row renders the
    * same chips, so tagging both would emit every chip test id twice and break
@@ -71,26 +81,22 @@ function TagChipContent({
   return (
     <>
       <TagIconSlot icon={icon} keyName={keyName} testId={iconTestId} />
-      {/* Bare tags (empty value) fall back to the key so the chip is never
-          an empty pill. */}
-      <span className="truncate leading-4">
-        {truncateTagChipValue(value || keyName)}
-      </span>
+      <span className="truncate leading-4">{chipLabel}</span>
     </>
   );
 }
 
 /**
- * Single-row tag chips for a conversation card. Chip labels are value-only
- * (bare tags with an empty value show the key; the full ``key: value`` pair
- * lives in the tooltip); chips that do not fit fold behind a ``+N``
+ * Single-row tag chips for a conversation card. Chip labels show the same
+ * humanized ``key: value`` pair as the tooltip (bare tags with an empty
+ * value show the key once); chips that do not fit fold behind a ``+N``
  * button that opens a key/value popover.
  *
  * The overflow popover is portaled with ``position: fixed`` so it is not
  * clipped by the chip row's ``overflow-hidden`` or the sidebar scroller.
  */
 export function ConversationTagChips({ tags }: ConversationTagChipsProps) {
-  const { t } = useTranslation("openhands");
+  const { t, i18n } = useTranslation("openhands");
   const containerRef = React.useRef<HTMLDivElement>(null);
   const measureRef = React.useRef<HTMLDivElement>(null);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
@@ -145,6 +151,13 @@ export function ConversationTagChips({ tags }: ConversationTagChipsProps) {
     setIsOverflowOpen(false);
     recomputeVisibleCount();
   }, [tagsKey, recomputeVisibleCount]);
+
+  // Localized key labels change chip width (e.g. "Git" vs a longer
+  // translation), so overflow must be remeasured when the language changes.
+  const language = i18n.resolvedLanguage ?? i18n.language;
+  React.useLayoutEffect(() => {
+    recomputeVisibleCount();
+  }, [language, recomputeVisibleCount]);
 
   React.useEffect(() => {
     const container = containerRef.current;
@@ -228,14 +241,14 @@ export function ConversationTagChips({ tags }: ConversationTagChipsProps) {
       <div
         ref={measureRef}
         aria-hidden
-        className="pointer-events-none fixed top-0 -left-[10000px] z-[-1] flex flex-nowrap items-center gap-1 opacity-0"
+        className="pointer-events-none fixed top-0 -left-2500 z-[-1] flex flex-nowrap items-center gap-1 opacity-0"
       >
         {tags.map(([key, value]) => (
           <span key={key} className={CONVERSATION_CARD_META_CHIP_CLASSNAME}>
             <TagChipContent
               icon={getConversationTagIcon(key, value)}
               keyName={key}
-              value={value}
+              chipLabel={formatTagChipLabel(key, value, t)}
             />
           </span>
         ))}
@@ -256,7 +269,7 @@ export function ConversationTagChips({ tags }: ConversationTagChipsProps) {
             <TagChipContent
               icon={getConversationTagIcon(key, value)}
               keyName={key}
-              value={value}
+              chipLabel={formatTagChipLabel(key, value, t)}
               iconTestId="conversation-card-tag-chip-icon"
             />
           </span>
@@ -275,7 +288,7 @@ export function ConversationTagChips({ tags }: ConversationTagChipsProps) {
             onClick={activateOverflow}
             className={cn(
               CONVERSATION_CARD_META_CHIP_CLASSNAME,
-              "shrink-0 self-center hover:bg-[var(--oh-interactive-hover)] hover:text-[var(--foreground)]",
+              "shrink-0 self-center hover:bg-interactive-hover hover:text-foreground",
             )}
           >
             {/* Match chip height (icon slot + label) so +N shares the same centerline. */}
@@ -297,8 +310,8 @@ export function ConversationTagChips({ tags }: ConversationTagChipsProps) {
             data-testid="conversation-card-tag-overflow-popover"
             className={cn(
               "z-[9999] min-w-[10rem] max-w-[16rem]",
-              "rounded-md border border-[var(--oh-border-subtle)]",
-              "bg-[var(--oh-surface)] p-2 shadow-lg",
+              "rounded-md border border-border-subtle",
+              "bg-surface p-2 shadow-lg",
             )}
             style={{
               position: "fixed",
@@ -318,14 +331,14 @@ export function ConversationTagChips({ tags }: ConversationTagChipsProps) {
                   data-testid="conversation-card-tag-overflow-row"
                   className="grid grid-cols-[minmax(0,auto)_minmax(0,1fr)] gap-x-2 text-[10px] leading-4"
                 >
-                  <dt className="m-0 inline-flex min-w-0 items-center gap-1 whitespace-normal break-words text-[var(--oh-muted)]">
+                  <dt className="m-0 inline-flex min-w-0 items-center gap-1 whitespace-normal break-words text-muted">
                     <TagIconSlot icon={getConversationTagIcon(key, value)} />
                     <span className="min-w-0 whitespace-normal break-words leading-4">
                       {getConversationTagLabel(key, t)}
                     </span>
                   </dt>
                   <dd
-                    className="m-0 whitespace-normal break-words text-left leading-4 text-[var(--foreground)]"
+                    className="m-0 whitespace-normal break-words text-left leading-4 text-foreground"
                     title={value}
                   >
                     {value}
