@@ -15,6 +15,7 @@ import { Settings } from "#/types/settings";
 import { ACP_PROVIDERS } from "#/constants/acp-providers";
 const CLAUDE_COMMAND = getClientAcpProvider("claude-code")!.default_command;
 const CODEX_COMMAND = getClientAcpProvider("codex")!.default_command;
+const OPENCODE_PROVIDER = getClientAcpProvider("opencode")!;
 
 // Stub the login-detection probe so the ACP credentials section doesn't spin a
 // subprocess; default to no detected session so existing tests are unaffected.
@@ -482,6 +483,77 @@ describe("AgentSettingsScreen", () => {
       agent_settings_diff?: Record<string, unknown>;
     };
     expect(call.agent_settings_diff?.acp_model).toBe("haiku");
+  });
+
+  it("offers OpenCode as a built-in preset and saves its registry defaults", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings: {
+          schema_version: 1,
+          agent_kind: "acp",
+          acp_server: "claude-code",
+          acp_command: [],
+          acp_model: null,
+        },
+      }),
+    );
+    const save = vi.spyOn(SettingsService, "saveSettings");
+
+    renderAgentSettingsScreen();
+    await screen.findByTestId("agent-command-input");
+    await user.click(screen.getByTestId("agent-preset-selector"));
+    await user.click(await screen.findByRole("option", { name: "OpenCode" }));
+
+    expect(screen.getByTestId("agent-command-input")).toHaveValue(
+      OPENCODE_PROVIDER.default_command.join(" "),
+    );
+    expect(screen.getByLabelText("SETTINGS$AGENT_MODEL")).toHaveValue(
+      OPENCODE_PROVIDER.available_models.find(
+        ({ id }) => id === OPENCODE_PROVIDER.default_model,
+      )?.label,
+    );
+
+    await user.click(screen.getByTestId("agent-save-button"));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+
+    expect(save.mock.calls[0]?.[0]).toMatchObject({
+      agent_settings_diff: {
+        agent_kind: "acp",
+        acp_server: "opencode",
+        acp_command: [...OPENCODE_PROVIDER.default_command],
+        acp_args: [],
+        acp_model: OPENCODE_PROVIDER.default_model,
+      },
+    });
+  });
+
+  it("reloads a saved OpenCode preset without losing its command or model", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings: {
+          schema_version: 1,
+          agent_kind: "acp",
+          acp_server: "opencode",
+          acp_command: [...OPENCODE_PROVIDER.default_command],
+          acp_model: OPENCODE_PROVIDER.default_model,
+        },
+      }),
+    );
+
+    renderAgentSettingsScreen();
+
+    expect(await screen.findByTestId("agent-preset-selector")).toHaveValue(
+      "OpenCode",
+    );
+    expect(screen.getByTestId("agent-command-input")).toHaveValue(
+      OPENCODE_PROVIDER.default_command.join(" "),
+    );
+    expect(screen.getByLabelText("SETTINGS$AGENT_MODEL")).toHaveValue(
+      OPENCODE_PROVIDER.available_models.find(
+        ({ id }) => id === OPENCODE_PROVIDER.default_model,
+      )?.label,
+    );
   });
 
   it("clears the model when switching from a built-in provider to Custom", async () => {

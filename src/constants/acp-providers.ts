@@ -5,6 +5,7 @@ export type ACPProviderIcon =
   | "claude-code"
   | "codex"
   | "gemini"
+  | "opencode"
   | "cli-generic";
 
 export const ACP_PROVIDER_FALLBACK_ICON: ACPProviderIcon = "cli-generic";
@@ -142,6 +143,10 @@ const ACP_PROVIDER_UI: Record<
     icon: "gemini",
     description_key: I18nKey.ONBOARDING$AGENT_GEMINI_CLI_DESCRIPTION,
   },
+  opencode: {
+    icon: "opencode",
+    description_key: I18nKey.ONBOARDING$AGENT_OPENCODE_DESCRIPTION,
+  },
 };
 
 function getAvailableModels(key: string): ACPModelOption[] | undefined {
@@ -179,6 +184,14 @@ export const ACP_PROVIDERS: ACPProviderConfig[] = Object.entries(
 });
 
 export const ACP_CUSTOM_PRESET_KEY = "custom";
+
+// OpenCode's first-class preset deliberately persists the registry command in
+// settings. Unlike the older presets (whose empty command delegates resolution
+// to the backend registry), this is part of the product contract for the
+// OpenCode rollout: a saved preset must remain self-describing and round-trip
+// the exact command shown in Settings. The tokens still come from the shared
+// client registry above; Canvas does not duplicate the command literal.
+const ACP_PRESETS_WITH_EXPLICIT_DEFAULT_COMMAND = new Set(["opencode"]);
 
 /**
  * A credential an ACP provider authenticates with, surfaced during onboarding
@@ -482,7 +495,9 @@ export function labelForAcpModel(
  * agent" step — keeping the shape in one helper means a future change
  * (e.g. always seeding ``acp_command`` from the registry instead of
  * sending ``[]``, or adding new ``acp_*`` reset fields) lands in both
- * surfaces atomically.
+ * surfaces atomically. Existing presets delegate their default command to the
+ * backend by saving ``[]``. OpenCode saves a copy of its client-registry
+ * default so its first-class preset is self-describing and reloads losslessly.
  *
  * Returns ``null`` for an unknown ACP provider key by default — the
  * caller can skip the save (the UI shouldn't surface unknown options,
@@ -526,6 +541,13 @@ export function buildAcpAgentSettingsDiff(
       ? getAcpPreferredDefaultModel(providerKey)
       : options.model;
 
+  const command =
+    provider &&
+    ACP_PRESETS_WITH_EXPLICIT_DEFAULT_COMMAND.has(providerKey) &&
+    (!options.command || options.command.length === 0)
+      ? [...provider.default_command]
+      : (options.command ?? []);
+
   // ``acp_args: []`` resets any API-set ``acp_args`` that would
   // otherwise survive and concatenate to ``acp_command`` at spawn time
   // (the agent-server merges the two before exec). Callers building the
@@ -535,7 +557,7 @@ export function buildAcpAgentSettingsDiff(
   return {
     agent_kind: "acp",
     acp_server: providerKey,
-    acp_command: options.command ?? [],
+    acp_command: command,
     acp_args: [],
     acp_model: model ?? null,
   };
