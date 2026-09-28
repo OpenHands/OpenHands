@@ -60,12 +60,12 @@ script against Agent Server 1.49.6 and OpenCode 1.18.23. The real turn reached
 `finished` and returned `ACPOK-OPENCODE`; the selected preset, registry command,
 and `opencode/big-pickle` model also survived a browser reload.
 
-| Provider | Result | Evidence (agent-server logs) |
-|---|---|---|
-| **Codex** | ✅ real reply `ACPOK-CODEX` (both scripts) | `Materialised ACP file-secret 'CODEX_AUTH_JSON' -> …/acp/codex/auth.json`; codex-acp 0.15.0; `Authenticating with ACP method: chatgpt` |
-| **Claude Code** | ✅ real reply `ACPOK-CLAUDE` (both scripts) | claude-agent-acp 0.30.0; `CLAUDE_CODE_OAUTH_TOKEN` env path (no `ANTHROPIC_BASE_URL`) |
-| **Gemini CLI** | ✅ real reply `ACPOK-GEMINI`¹ | `Materialised ACP file-secret 'GOOGLE_APPLICATION_CREDENTIALS_JSON' -> …/acp/gemini-cli/gcloud-credentials.json`; gemini-cli 0.45.1; `Authenticating with ACP method: vertex-ai` → real Vertex inference on `gemini-2.5-pro` |
-| **OpenCode** | ✅ real reply `ACPOK-OPENCODE` | OpenCode 1.18.23 starts through the shared registry command; default `opencode/big-pickle`; optional `OPENCODE_API_KEY` is emitted as a `LookupSecret` when present |
+| Provider        | Result                                      | Evidence (agent-server logs)                                                                                                                                                                                                 |
+| --------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Codex**       | ✅ real reply `ACPOK-CODEX` (both scripts)  | `Materialised ACP file-secret 'CODEX_AUTH_JSON' -> …/acp/codex/auth.json`; codex-acp 0.15.0; `Authenticating with ACP method: chatgpt`                                                                                       |
+| **Claude Code** | ✅ real reply `ACPOK-CLAUDE` (both scripts) | claude-agent-acp 0.30.0; `CLAUDE_CODE_OAUTH_TOKEN` env path (no `ANTHROPIC_BASE_URL`)                                                                                                                                        |
+| **Gemini CLI**  | ✅ real reply `ACPOK-GEMINI`¹               | `Materialised ACP file-secret 'GOOGLE_APPLICATION_CREDENTIALS_JSON' -> …/acp/gemini-cli/gcloud-credentials.json`; gemini-cli 0.45.1; `Authenticating with ACP method: vertex-ai` → real Vertex inference on `gemini-2.5-pro` |
+| **OpenCode**    | ✅ real reply `ACPOK-OPENCODE`              | OpenCode 1.18.23 starts through the shared registry command; default `opencode/big-pickle`; optional `OPENCODE_API_KEY` is emitted as a `LookupSecret` when present                                                          |
 
 ¹ **Gemini prerequisites.** The full turn passes with: a **fresh** host ADC
 (`gcloud auth application-default login` — a stale one fails as `invalid_rapt`,
@@ -85,5 +85,7 @@ software-agent-sdk#3532; this is why Canvas preselects `gemini-2.5-pro`), and
   request-builder script and `/workspace/app-e2e` for the app-path script)
 - `ACP_E2E_CODEX_MODEL` / `ACP_E2E_CLAUDE_MODEL` / `ACP_E2E_GEMINI_MODEL` /
   `ACP_E2E_OPENCODE_MODEL`
+- `ACP_E2E_EXPECTED_REPLY` (optional human-readable reply override; defaults to
+  the provider's short smoke-test token)
 - `ACP_E2E_GEMINI_SESSION_MODE` (set `default` to bypass the SDK `yolo` blocker)
 - `GOOGLE_CLOUD_PROJECT` / `GOOGLE_CLOUD_LOCATION` (else read from gcloud / `us-central1`)
