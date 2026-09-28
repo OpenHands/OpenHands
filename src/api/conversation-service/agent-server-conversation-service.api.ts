@@ -13,7 +13,6 @@ import {
 import { v4 as uuidv4 } from "uuid";
 import { AgentKind, Provider } from "#/types/settings";
 import type { ConversationRuntimeContext } from "#/api/conversation-file-upload.api";
-import { buildHttpBaseUrl } from "#/utils/websocket-url";
 import { getAgentServerWorkingDir } from "../agent-server-config";
 import { resolveNewConversationWorkspace } from "../conversation-workspace";
 import {
