@@ -2,7 +2,15 @@ import { describe, expect, it } from "vitest";
 import { buildAgentProfileFields } from "#/routes/agent-settings";
 import type { SettingsFieldSchema } from "#/types/settings";
 
+const legacyToolToggles = {
+  subAgentsEnabled: false,
+  switchLlmToolField: undefined,
+  switchLlmToolEnabled: false,
+  switchLlmToolSupportedOnProfile: true,
+};
+
 const baseAcp = {
+  ...legacyToolToggles,
   isAcp: true,
   selectedPreset: "claude-code",
   isDefaultProviderCommand: true,
@@ -19,6 +27,20 @@ const baseAcp = {
   selectedTools: [] as string[],
   toolParams: {},
   toolCatalogSupported: true,
+};
+
+const switchLlmToolField: SettingsFieldSchema = {
+  key: "enable_switch_llm_tool",
+  label: "Enable LLM switching tool",
+  section: "general",
+  section_label: "General",
+  value_type: "boolean",
+  default: true,
+  choices: [],
+  depends_on: [],
+  prominence: "major",
+  secret: false,
+  required: false,
 };
 
 const concurrencyField: SettingsFieldSchema = {
@@ -86,6 +108,7 @@ describe("buildAgentProfileFields — ACP", () => {
 
 describe("buildAgentProfileFields — OpenHands", () => {
   const baseOh = {
+    ...legacyToolToggles,
     isAcp: false,
     selectedPreset: "custom",
     isDefaultProviderCommand: false,
@@ -100,13 +123,60 @@ describe("buildAgentProfileFields — OpenHands", () => {
     secretRefsSupportedOnProfile: true,
   };
 
-  it("no longer emits the retired tool switches", () => {
-    // Delegation and LLM switching are picked in `tools` now, so a profile
-    // save must not carry a second control over the same tools.
-    const fields = buildAgentProfileFields({ ...baseAcp, isAcp: false });
+  it("emits no tool switches alongside a tool catalog", () => {
+    const fields = buildAgentProfileFields({
+      ...baseAcp,
+      isAcp: false,
+      subAgentsEnabled: true,
+      switchLlmToolField,
+      switchLlmToolEnabled: true,
+    });
 
     expect(fields).not.toHaveProperty("enable_sub_agents");
     expect(fields).not.toHaveProperty("enable_switch_llm_tool");
+  });
+
+  describe("without a tool catalog", () => {
+    const noCatalog = {
+      ...baseOh,
+      subAgentsEnabled: true,
+      toolCatalogSupported: false,
+    };
+
+    it("passes through enable_sub_agents", () => {
+      expect(buildAgentProfileFields(noCatalog)).toEqual({
+        agent_kind: "openhands",
+        mcp_server_refs: null,
+        enable_sub_agents: true,
+        secret_refs: null,
+      });
+    });
+
+    it("emits enable_switch_llm_tool when the schema exposes the field", () => {
+      const fields = buildAgentProfileFields({
+        ...noCatalog,
+        switchLlmToolField,
+        switchLlmToolEnabled: true,
+      });
+      expect(fields).toMatchObject({ enable_switch_llm_tool: true });
+    });
+
+    it("omits enable_switch_llm_tool when the profile model predates it", () => {
+      const fields = buildAgentProfileFields({
+        ...noCatalog,
+        switchLlmToolField,
+        switchLlmToolSupportedOnProfile: false,
+      });
+      expect(fields).not.toHaveProperty("enable_switch_llm_tool");
+    });
+
+    it("omits enable_switch_llm_tool when the schema predates it", () => {
+      const fields = buildAgentProfileFields({
+        ...noCatalog,
+        switchLlmToolEnabled: true,
+      });
+      expect(fields).not.toHaveProperty("enable_switch_llm_tool");
+    });
   });
 
   it("coerces a valid tool_concurrency_limit to a number", () => {
@@ -159,6 +229,7 @@ describe("buildAgentProfileFields — OpenHands", () => {
 
 describe("buildAgentProfileFields — mcp_server_refs", () => {
   const baseOh = {
+    ...legacyToolToggles,
     isAcp: false,
     selectedPreset: "custom",
     isDefaultProviderCommand: false,
@@ -215,6 +286,7 @@ describe("buildAgentProfileFields — mcp_server_refs", () => {
 
 describe("buildAgentProfileFields — secret scope", () => {
   const base = {
+    ...legacyToolToggles,
     isAcp: false,
     selectedPreset: "custom",
     isDefaultProviderCommand: false,
@@ -304,8 +376,6 @@ describe("tool selection", () => {
   });
 
   it("omits tools entirely when the backend serves no catalog", () => {
-    // The save overwrites the whole profile, so emitting null here would clear
-    // a selection this build never showed the user.
     const fields = buildAgentProfileFields({
       ...baseOpenHands,
       toolCatalogSupported: false,

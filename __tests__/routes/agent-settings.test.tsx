@@ -25,35 +25,28 @@ vi.mock("#/hooks/query/use-acp-auth-status", () => ({
 
 const profileSupportsSecretRefsMock = vi.hoisted(() => vi.fn(() => true));
 const profileSupportsToolCatalogMock = vi.hoisted(() => vi.fn(() => true));
+const profileSupportsSwitchLlmToolMock = vi.hoisted(() => vi.fn(() => true));
 vi.mock("#/api/agent-profiles-service/profile-field-support", () => ({
+  agentProfileSupportsSwitchLlmTool: () => profileSupportsSwitchLlmToolMock(),
   agentProfileSupportsSecretRefs: () => profileSupportsSecretRefsMock(),
   agentProfileSupportsToolCatalog: () => profileSupportsToolCatalogMock(),
 }));
 
-// The tool picker renders what the server offers and what it says a draft
-// resolves to; stub both so these tests need no live agent-server.
 const toolCatalogMock = vi.hoisted(() =>
   vi.fn<
-    () => {
-      name: string;
-      user_selectable: boolean;
-      usable: boolean;
-      description?: string;
-    }[]
+    () =>
+      | {
+          name: string;
+          user_selectable: boolean;
+          usable: boolean;
+          in_default_set: boolean;
+          description?: string;
+        }[]
+      | undefined
   >(),
 );
-// `undefined` stands for "the server has not answered yet", so `isPending`
-// tracks it the way react-query would.
-const resolvedToolsMock = vi.hoisted(() => vi.fn<() => string[] | undefined>());
 vi.mock("#/hooks/query/use-tool-catalog", () => ({
   useToolCatalog: () => ({ data: toolCatalogMock() }),
-  // Mirrors react-query: a query disabled for want of a draft reports
-  // `isPending` too, so a create-mode form must not read that as "in flight".
-  useResolvedProfileTools: ({ draft }: { draft: unknown }) => {
-    if (draft === null) return { data: undefined, isPending: true };
-    const data = resolvedToolsMock();
-    return { data, isPending: data === undefined };
-  },
 }));
 
 // The secret picker lists the user's saved secrets; stub the query so these
@@ -122,6 +115,8 @@ describe("AgentSettingsScreen", () => {
     toastMocks.error.mockClear();
     toastMocks.warning.mockClear();
     profileSupportsSecretRefsMock.mockReturnValue(true);
+    profileSupportsSwitchLlmToolMock.mockReturnValue(true);
+    profileSupportsToolCatalogMock.mockReturnValue(true);
     savedSecretsMock.mockReturnValue([
       { name: "GITHUB_TOKEN", description: "repo access" },
       { name: "DATADOG_API_KEY" },
@@ -129,18 +124,255 @@ describe("AgentSettingsScreen", () => {
     ]);
   });
 
-  it("renders the agent type selector without the retired tool switches", async () => {
-    // Delegation and LLM switching are picked in the tool list now; a second
-    // control over the same tools is exactly what this PR removes.
+  it("renders the agent type selector defaulting to OpenHands with sub-agents toggle", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          agent_kind: "openhands",
+        },
+      }),
+    );
+
+    renderAgentSettingsScreen();
+    await screen.findByTestId("agent-settings-screen");
+    expect(screen.getByTestId("agent-type-selector")).toBeInTheDocument();
+    // Sub-agents toggle visible on the OpenHands branch.
+    expect(
+      screen.getByTestId("agent-settings-enable-sub-agents"),
+    ).toBeInTheDocument();
+    // ACP-only fields stay hidden on the OpenHands branch.
+    expect(screen.queryByTestId("agent-command-input")).not.toBeInTheDocument();
+  });
+  it("saves enable_sub_agents when toggling on the OpenHands path", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          agent_kind: "openhands",
+          enable_sub_agents: false,
+        },
+      }),
+    );
+    const save = vi.spyOn(SettingsService, "saveSettings");
+
     renderAgentSettingsScreen();
     await screen.findByTestId("agent-settings-screen");
 
-    expect(screen.getByTestId("agent-type-selector")).toBeTruthy();
+    // Toggle sub-agents on via the enclosing label
+    const toggle = screen.getByTestId("agent-settings-enable-sub-agents");
+    const label = toggle.closest("label")!;
+    await user.click(label);
+
+    await user.click(screen.getByTestId("agent-save-button"));
+
+    await waitFor(() => {
+      expect(save).toHaveBeenCalledTimes(1);
+    });
+    const call = save.mock.calls[0]?.[0] as {
+      agent_settings_diff?: Record<string, unknown>;
+    };
+    expect(call.agent_settings_diff).toEqual({
+      agent_kind: "openhands",
+      enable_sub_agents: true,
+      enable_switch_llm_tool: true,
+      tool_concurrency_limit: 1,
+    });
+  });
+
+  it("renders the LLM-switching toggle on the OpenHands path and saves it when toggled off", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          agent_kind: "openhands",
+          enable_switch_llm_tool: true,
+        },
+      }),
+    );
+    const save = vi.spyOn(SettingsService, "saveSettings");
+
+    renderAgentSettingsScreen();
+    await screen.findByTestId("agent-settings-screen");
+
+    // The toggle renders (schema exposes the field) and starts on.
+    const toggle = screen.getByTestId("agent-settings-enable-switch-llm-tool");
+    expect(toggle).toBeChecked();
+
+    // Toggle it off via the enclosing label, then save.
+    const label = toggle.closest("label")!;
+    await user.click(label);
+    expect(toggle).not.toBeChecked();
+
+    await user.click(screen.getByTestId("agent-save-button"));
+
+    await waitFor(() => {
+      expect(save).toHaveBeenCalledTimes(1);
+    });
+    const call = save.mock.calls[0]?.[0] as {
+      agent_settings_diff?: Record<string, unknown>;
+    };
+    expect(call.agent_settings_diff).toEqual({
+      agent_kind: "openhands",
+      enable_sub_agents: false,
+      enable_switch_llm_tool: false,
+      tool_concurrency_limit: 1,
+    });
+  });
+
+  it("hides the LLM-switching toggle when the schema predates the field", async () => {
+    const schema = MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema;
+    const schemaWithoutField = schema && {
+      ...schema,
+      sections: schema.sections.map((section) => ({
+        ...section,
+        fields: section.fields.filter(
+          (field) => field.key !== "enable_switch_llm_tool",
+        ),
+      })),
+    };
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings_schema: schemaWithoutField,
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          agent_kind: "openhands",
+        },
+      }),
+    );
+
+    renderAgentSettingsScreen();
+    await screen.findByTestId("agent-settings-screen");
+
+    // Older agent-servers without the field hide the toggle cleanly...
+    expect(
+      screen.queryByTestId("agent-settings-enable-switch-llm-tool"),
+    ).not.toBeInTheDocument();
+    // ...while the other OpenHands controls still render.
+    expect(
+      screen.getByTestId("agent-settings-enable-sub-agents"),
+    ).toBeInTheDocument();
+  });
+
+  it("hides the LLM-switching toggle in the profile editor when the profile model predates the field", async () => {
+    // agent-server 1.29.0–1.30.x advertises the field in the settings schema
+    // while `OpenHandsAgentProfile` still rejects it. Rendering the toggle
+    // there would offer a control whose save the server refuses outright.
+    profileSupportsToolCatalogMock.mockReturnValue(false);
+    profileSupportsSwitchLlmToolMock.mockReturnValue(false);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          agent_kind: "openhands",
+        },
+      }),
+    );
+
+    renderAgentSettingsScreen({
+      embedded: true,
+      agentSettingsOverride: { agent_kind: "openhands" },
+    });
+    await screen.findByTestId("agent-settings-screen");
+
+    expect(
+      screen.queryByTestId("agent-settings-enable-switch-llm-tool"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("agent-settings-enable-sub-agents"),
+    ).toBeInTheDocument();
+  });
+
+  it("renders the LLM-switching toggle in the profile editor once the profile model carries the field", async () => {
+    profileSupportsToolCatalogMock.mockReturnValue(false);
+    profileSupportsSwitchLlmToolMock.mockReturnValue(true);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          agent_kind: "openhands",
+        },
+      }),
+    );
+
+    renderAgentSettingsScreen({
+      embedded: true,
+      agentSettingsOverride: { agent_kind: "openhands" },
+    });
+    await screen.findByTestId("agent-settings-screen");
+
+    expect(
+      screen.getByTestId("agent-settings-enable-switch-llm-tool"),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the LLM-switching toggle in non-embedded mode even when the profile model predates the field", async () => {
+    // Non-embedded, the form writes `agent_settings`, which has accepted the
+    // key since 1.22.0. The profile-model gap must not reach back and hide it.
+    // (That mode has no route today — #1571 turned /settings/agent into a
+    // redirect — but the gate should stay scoped to what it actually knows.)
+    profileSupportsSwitchLlmToolMock.mockReturnValue(false);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          agent_kind: "openhands",
+        },
+      }),
+    );
+
+    renderAgentSettingsScreen();
+    await screen.findByTestId("agent-settings-screen");
+
+    expect(
+      screen.getByTestId("agent-settings-enable-switch-llm-tool"),
+    ).toBeInTheDocument();
+  });
+
+  it("hides sub-agents toggle when ACP is selected", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          agent_kind: "openhands",
+        },
+      }),
+    );
+
+    renderAgentSettingsScreen();
+    await screen.findByTestId("agent-settings-screen");
+
+    // Sub-agents toggle should be visible initially
+    expect(
+      screen.getByTestId("agent-settings-enable-sub-agents"),
+    ).toBeInTheDocument();
+
+    // Switch to ACP
+    await user.click(screen.getByTestId("agent-type-selector"));
+    await user.click(
+      await screen.findByRole("option", { name: "SETTINGS$AGENT_TYPE_ACP" }),
+    );
+
+    // Sub-agents toggle should be hidden, ACP fields should appear
+    expect(
+      screen.queryByTestId("agent-settings-enable-sub-agents"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("agent-command-input")).toBeInTheDocument();
+  });
+
+  it("hides the tool switches in a profile editor that has the tool picker", async () => {
+    renderAgentSettingsScreen({ embedded: true });
+    await screen.findByTestId("agent-settings-screen");
+
     expect(screen.queryByTestId("agent-settings-enable-sub-agents")).toBeNull();
     expect(
       screen.queryByTestId("agent-settings-enable-switch-llm-tool"),
     ).toBeNull();
   });
+
   it("labels the save button 'Save Changes' for consistency with other settings pages", async () => {
     // Arrange — render with any valid settings; the label is independent
     // of the form's state.
@@ -471,6 +703,8 @@ describe("AgentSettingsScreen", () => {
     };
     expect(call.agent_settings_diff).toEqual({
       agent_kind: "openhands",
+      enable_sub_agents: false,
+      enable_switch_llm_tool: true,
       tool_concurrency_limit: 1,
     });
   });
@@ -1488,14 +1722,40 @@ describe("AgentSettingsScreen — tool selection", () => {
       name: "terminal",
       user_selectable: true,
       usable: true,
+      in_default_set: true,
       description: "Run shell commands.",
     },
-    { name: "file_editor", user_selectable: true, usable: true },
-    { name: "glob", user_selectable: true, usable: true },
-    { name: "task_tool_set", user_selectable: true, usable: true },
+    {
+      name: "file_editor",
+      user_selectable: true,
+      usable: true,
+      in_default_set: true,
+    },
+    {
+      name: "glob",
+      user_selectable: true,
+      usable: true,
+      in_default_set: false,
+    },
+    {
+      name: "task_tool_set",
+      user_selectable: true,
+      usable: true,
+      in_default_set: false,
+    },
     // Not offered: internal to a tool set, and unusable on this runtime.
-    { name: "task", user_selectable: false, usable: true },
-    { name: "browser_tool_set", user_selectable: true, usable: false },
+    {
+      name: "task",
+      user_selectable: false,
+      usable: true,
+      in_default_set: false,
+    },
+    {
+      name: "browser_tool_set",
+      user_selectable: true,
+      usable: false,
+      in_default_set: true,
+    },
   ];
 
   beforeEach(() => {
@@ -1503,7 +1763,6 @@ describe("AgentSettingsScreen — tool selection", () => {
     vi.spyOn(SettingsService, "saveSettings").mockResolvedValue(true);
     profileSupportsToolCatalogMock.mockReturnValue(true);
     toolCatalogMock.mockReturnValue(CATALOG);
-    resolvedToolsMock.mockReturnValue(["terminal", "file_editor"]);
   });
 
   function renderEditor(overrides: Record<string, unknown> = {}): {
@@ -1512,8 +1771,6 @@ describe("AgentSettingsScreen — tool selection", () => {
     let captured: AgentSettingsSaveControl | null = null;
     renderAgentSettingsScreen({
       embedded: true,
-      profileName: "explorer",
-      llmProfileRef: "main",
       agentSettingsOverride: {
         agent_kind: "openhands",
         tools: null,
@@ -1533,8 +1790,10 @@ describe("AgentSettingsScreen — tool selection", () => {
     const terminal = screen.getByTestId("agent-settings-tool-terminal");
     expect(terminal).toBeChecked();
     expect(terminal).toBeDisabled();
-    // The preview is the server's answer, not a list this build maintains.
     expect(screen.queryByTestId("agent-settings-tool-glob")).toBeNull();
+    expect(
+      screen.queryByTestId("agent-settings-tool-browser_tool_set"),
+    ).toBeNull();
     expect(control().buildAgentProfileFields()).toMatchObject({ tools: null });
   });
 
@@ -1558,7 +1817,6 @@ describe("AgentSettingsScreen — tool selection", () => {
     await screen.findByTestId("agent-settings-screen");
 
     expect(screen.getByTestId("agent-settings-tool-terminal")).toBeTruthy();
-    // Delegation is a pick like any other now.
     expect(
       screen.getByTestId("agent-settings-tool-task_tool_set"),
     ).toBeTruthy();
@@ -1577,50 +1835,14 @@ describe("AgentSettingsScreen — tool selection", () => {
   });
 
   it("shows the blurb in the read-only standard list too", async () => {
-    resolvedToolsMock.mockReturnValue(["terminal"]);
     renderEditor({ tools: null });
     await screen.findByTestId("agent-settings-screen");
 
     expect(screen.getByText("Run shell commands.")).toBeTruthy();
   });
 
-  it("will not let an unresolved standard set become an empty selection", async () => {
-    // The race the picker must not lose: switching to "choose" before the
-    // server answers would seed from nothing and save a tool-less agent.
-    resolvedToolsMock.mockReturnValue(undefined);
-    renderEditor({ tools: null });
-    await screen.findByTestId("agent-settings-screen");
-
-    const mode = screen.getByTestId("agent-settings-tools-mode");
-    expect(
-      mode.hasAttribute("disabled") ||
-        mode.getAttribute("aria-disabled") === "true",
-    ).toBe(true);
-  });
-
-  it("leaves the mode control usable while naming a brand-new profile", async () => {
-    // No name yet, so there is no draft to materialise and the query never
-    // runs. That is not "an answer in flight" — locking here would strand the
-    // create form (react-query reports isPending for a disabled query too).
-    renderAgentSettingsScreen({
-      embedded: true,
-      profileName: "",
-      llmProfileRef: "main",
-      agentSettingsOverride: { agent_kind: "openhands", tools: null },
-    });
-    await screen.findByTestId("agent-settings-screen");
-
-    const mode = screen.getByTestId("agent-settings-tools-mode");
-    expect(
-      mode.hasAttribute("disabled") ||
-        mode.getAttribute("aria-disabled") === "true",
-    ).toBe(false);
-  });
-
-  it("stays locked when materialize answers with nothing", async () => {
-    // A dangling llm_profile_ref resolves 200 with no tools. That is not a
-    // legitimate standard set, so it must not seed an empty custom selection.
-    resolvedToolsMock.mockReturnValue([]);
+  it("locks the mode control until the catalog arrives", async () => {
+    toolCatalogMock.mockReturnValue(undefined);
     renderEditor({ tools: null });
     await screen.findByTestId("agent-settings-screen");
 
@@ -1694,6 +1916,9 @@ describe("AgentSettingsScreen — tool selection", () => {
     expect(screen.queryByTestId("agent-settings-tools-mode")).toBeNull();
     // ... and the stored selection survives the save untouched.
     expect(control().buildAgentProfileFields()).not.toHaveProperty("tools");
+    expect(
+      screen.getByTestId("agent-settings-enable-sub-agents"),
+    ).toBeInTheDocument();
   });
 
   it("hides the picker outside the profile editor", async () => {

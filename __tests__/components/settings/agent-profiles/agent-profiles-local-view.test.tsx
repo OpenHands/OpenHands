@@ -205,6 +205,8 @@ describe("AgentProfilesLocalView save mapping", () => {
       system_message_suffix: "Be terse.",
       condenser: { kind: "NoOpCondenserSettings" },
       verification: { critic_enabled: true },
+      enable_sub_agents: false,
+      enable_switch_llm_tool: false,
       tools: [{ name: "terminal", params: {} }],
       tool_concurrency_limit: 4,
       mcp_server_refs: ["github"],
@@ -242,6 +244,8 @@ describe("AgentProfilesLocalView save mapping", () => {
     );
     expect(seededOverride).toMatchObject({
       agent_kind: "openhands",
+      enable_sub_agents: false,
+      enable_switch_llm_tool: false,
       tools: [{ name: "terminal", params: {} }],
       tool_concurrency_limit: 4,
       // Without this the picker opens on "all servers" and the save widens the

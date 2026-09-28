@@ -60,6 +60,10 @@ function toAgentSettingsOverride(
     mcp_server_refs: profile.mcp_server_refs ?? null,
     // Untyped in the pinned ts-client, like `secret_refs` above.
     tools: ((profile as { tools?: unknown }).tools as SettingsValue) ?? null,
+    enable_sub_agents: profile.enable_sub_agents,
+    enable_switch_llm_tool:
+      (profile as { enable_switch_llm_tool?: boolean })
+        .enable_switch_llm_tool ?? true,
     tool_concurrency_limit: profile.tool_concurrency_limit,
     secret_refs: secretRefs,
   };
@@ -325,8 +329,6 @@ export function AgentProfilesLocalView() {
         key={viewMode === "edit" ? `edit-${editingProfile?.id}` : "new-profile"}
         embedded
         agentSettingsOverride={override}
-        profileName={profileName}
-        llmProfileRef={llmProfileRef}
         onSaveControlChange={setSaveControl}
       />
 
