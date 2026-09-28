@@ -43,7 +43,7 @@ import { EmptyState } from "#/components/features/automations/empty-state";
 import { ErrorState } from "#/components/features/automations/error-state";
 import { BackendNotConfigured } from "#/components/features/automations/backend-not-configured";
 import { DeleteConfirmationModal } from "#/components/features/automations/delete-confirmation-modal";
-import { EditAutomationModal } from "#/components/features/automations/detail/edit-automation-modal";
+import { useOpenAutomationEditor } from "#/hooks/use-open-automation-editor";
 import { AddAutomationMenu } from "#/components/features/automations/add-automation-menu";
 import { AddAutomationModal } from "#/components/features/automations/add-automation-modal";
 import { ImportAutomationModal } from "#/components/features/automations/import-automation-modal";
@@ -322,7 +322,7 @@ export default function AutomationsList() {
   const [deleteDraftTarget, setDeleteDraftTarget] =
     useState<AutomationDraftApiResponse | null>(null);
   const [resumingDraftId, setResumingDraftId] = useState<string | null>(null);
-  const [editTarget, setEditTarget] = useState<Automation | null>(null);
+  const { openEditor } = useOpenAutomationEditor();
   const [isAddAutomationOpen, setIsAddAutomationOpen] = useState(false);
   const [importSpec, setImportSpec] = useState<AutomationSpec | null>(null);
   const [isImportOpen, setIsImportOpen] = useState(false);
@@ -510,9 +510,7 @@ export default function AutomationsList() {
 
   const handleEditRequest = (id: string) => {
     const automation = data?.automations.find((a) => a.id === id);
-    if (automation) {
-      setEditTarget(automation);
-    }
+    if (automation) openEditor(automation);
   };
 
   const handleExport = (automation: Automation) => {
@@ -896,15 +894,6 @@ export default function AutomationsList() {
           </div>
         </div>
       ) : null}
-
-      {/* Edit modal */}
-      {editTarget && (
-        <EditAutomationModal
-          automation={editTarget}
-          isOpen={editTarget !== null}
-          onClose={() => setEditTarget(null)}
-        />
-      )}
 
       <AddAutomationModal
         isOpen={isAddAutomationOpen}

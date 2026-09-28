@@ -28,6 +28,7 @@ import { isSdkHttpError } from "#/api/agent-server-compatibility";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import {
   patchAutomationSetupDraft,
+  setAutomationSetupDraft,
   subscribeAutomationSetupDraft,
   type AutomationSetupDraft,
   type AutomationSetupField,
@@ -78,7 +79,7 @@ import type {
   InterfaceEndpointName,
   SetupRequestBody,
 } from "#/manifests/types";
-import type { AutomationRun } from "#/types/automation";
+import type { Automation, AutomationRun } from "#/types/automation";
 import { formatRelativeTime } from "#/utils/format-relative-time";
 import { ActivityLogItem } from "../detail/activity-log-item";
 import { requestAutomationSetupAgent } from "./automation-setup-agent-request";
@@ -86,9 +87,11 @@ import {
   buildAutomationDraftTags,
   buildAutomationSetupModeTags,
   getAutomationDraftIdFromTags,
+  getAutomationEditIdFromTags,
   hasAutomationSetupModeTag,
   removeAutomationDraftTags,
 } from "#/utils/automation-draft-tags";
+import { setupDraftFromAutomation } from "#/utils/automation-edit-draft";
 
 const DEFAULT_TIMEZONE = "America/New_York";
 const DEFAULT_TIME = "09:00";
@@ -762,6 +765,11 @@ export function AutomationSetupPanel({
   const taggedServerDraftId = currentTaggedServerDraftId;
   const serverDraftId =
     serverDraft?.id ?? (isTaggedDraftMissing ? null : taggedServerDraftId);
+  const editingAutomationId =
+    draft.editingAutomationId?.trim() ||
+    getAutomationEditIdFromTags(conversationTags) ||
+    "";
+  const isEditingExisting = editingAutomationId.length > 0;
   const streamQueueRef = useRef<
     {
       field: AutomationSetupField;
@@ -804,6 +812,26 @@ export function AutomationSetupPanel({
     },
     [conversationId, conversationTags],
   );
+
+  useEffect(() => {
+    if (!isEditingExisting || draft.form || !conversationId) return undefined;
+    let cancelled = false;
+    AutomationService.getAutomation(editingAutomationId)
+      .then((automation) => {
+        if (cancelled) return;
+        const next = setupDraftFromAutomation(automation);
+        setAutomationSetupDraft(conversationId, next);
+        setForm(buildInitialForm(next));
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          displayErrorToast(error instanceof Error ? error.message : null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [conversationId, draft.form, editingAutomationId, isEditingExisting]);
 
   useEffect(() => {
     if (!taggedServerDraftId || serverDraft?.id === taggedServerDraftId) {
@@ -1528,11 +1556,104 @@ export function AutomationSetupPanel({
   const saveStateLabel = () => {
     if (saveState === "saving") return t(I18nKey.AUTOMATION_SETUP$SAVING);
     if (saveState === "error") return t(I18nKey.AUTOMATION_SETUP$SAVE_FAILED);
+    if (isEditingExisting) {
+      return saveState === "saved"
+        ? t(I18nKey.AUTOMATION_SETUP$SAVED_JUST_NOW)
+        : null;
+    }
     if (serverDraft && !isDraftDirty) {
       return t(I18nKey.AUTOMATION_SETUP$SAVED_JUST_NOW);
     }
     if (isDraftDirty) return t(I18nKey.AUTOMATION_SETUP$UNSAVED_CHANGES);
     return null;
+  };
+
+  /**
+   * Fields the setup form owns, written back onto the automation being edited.
+   * `enabled` stays off this body so Save does not turn a live automation off
+   * the way creating a draft does.
+   */
+  const buildExistingAutomationBody = async () => {
+    const repositories = parseAutomationSetupRepositories(repository);
+    const body: Record<string, unknown> = {
+      name: normalizedName(),
+      trigger: buildTrigger(),
+      model: model.trim() || null,
+      agent_profile_id: agentProfileId.trim() || null,
+      timeout:
+        showTimeout && timeoutSeconds.trim() ? Number(timeoutSeconds) : null,
+    };
+    if (kind !== "custom") body.prompt = prompt.trim();
+    if (repositories[0]) body.repository = repositories[0];
+    if (repositories.length > 0) {
+      body.repos = repositories.map((url) => ({ url, provider: "github" }));
+    }
+    if (configuredPlugins.length > 0) body.plugins = configuredPlugins;
+    if (kind === "custom") {
+      body.entrypoint = entrypoint.trim();
+      body.setup_script_path = setupScriptPath.trim();
+      body.tarball_path = await uploadCustomArchive();
+    }
+    return body as Partial<Automation>;
+  };
+
+  const handleSaveExisting = async () => {
+    if (!validateRequiredFields()) return;
+    setIsSubmitting(true);
+    setSaveState("saving");
+    try {
+      if (!(await ensureCustomWebhookSource())) return;
+      await AutomationService.updateAutomation(
+        editingAutomationId,
+        await buildExistingAutomationBody(),
+      );
+      setSaveState("saved");
+      toast.success(t(I18nKey.AUTOMATIONS$EDIT_SUCCESS));
+    } catch (error) {
+      setSaveState("error");
+      displayErrorToast(error instanceof Error ? error.message : null);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleTestExisting = async () => {
+    if (!validateRequiredFields()) return;
+    if (
+      triggerKind === "event" &&
+      parseEventTestPayload(eventTestPayload) === null
+    ) {
+      setStatusMessage({
+        kind: "error",
+        text: t(I18nKey.AUTOMATION_SETUP$TEST_EVENT_PAYLOAD_INVALID),
+      });
+      return;
+    }
+    setIsSubmitting(true);
+    setSaveState("saving");
+    try {
+      if (!(await ensureCustomWebhookSource())) return;
+      await AutomationService.updateAutomation(
+        editingAutomationId,
+        await buildExistingAutomationBody(),
+      );
+      const run =
+        await AutomationService.dispatchAutomation(editingAutomationId);
+      setSaveState("saved");
+      setDraftRuns((previous) => [
+        run,
+        ...previous.filter((existing) => existing.id !== run.id),
+      ]);
+      setStatusMessage({
+        kind: "success",
+        text: t(I18nKey.AUTOMATION_SETUP$TEST_DISPATCHED),
+      });
+    } catch (error) {
+      setSaveState("error");
+      displayErrorToast(error instanceof Error ? error.message : null);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const compactToolbarButtonClassName = "!h-7 !min-h-7 !px-2.5 !text-xs";
@@ -1554,16 +1675,30 @@ export function AutomationSetupPanel({
           {saveStateText}
         </span>
       ) : null}
-      <BrandButton
-        type="button"
-        variant="secondary"
-        testId="automation-setup-save-draft"
-        className={compactToolbarButtonClassName}
-        isDisabled={isSubmitting}
-        onClick={handleSaveDraft}
-      >
-        {t(I18nKey.AUTOMATION_SETUP$SAVE_DRAFT)}
-      </BrandButton>
+      {isEditingExisting ? (
+        <BrandButton
+          type="button"
+          variant="primary"
+          testId="automation-setup-save"
+          className={compactToolbarButtonClassName}
+          isDisabled={isSubmitting}
+          aria-busy={isSubmitting}
+          onClick={handleSaveExisting}
+        >
+          {t(I18nKey.BUTTON$SAVE)}
+        </BrandButton>
+      ) : (
+        <BrandButton
+          type="button"
+          variant="secondary"
+          testId="automation-setup-save-draft"
+          className={compactToolbarButtonClassName}
+          isDisabled={isSubmitting}
+          onClick={handleSaveDraft}
+        >
+          {t(I18nKey.AUTOMATION_SETUP$SAVE_DRAFT)}
+        </BrandButton>
+      )}
       <BrandButton
         type="button"
         variant="secondary"
@@ -1571,21 +1706,23 @@ export function AutomationSetupPanel({
         className={compactToolbarButtonClassName}
         isDisabled={isSubmitting}
         aria-busy={isSubmitting}
-        onClick={handleTest}
+        onClick={isEditingExisting ? handleTestExisting : handleTest}
       >
         {t(I18nKey.AUTOMATION_SETUP$TEST)}
       </BrandButton>
-      <BrandButton
-        type="button"
-        variant="primary"
-        testId="automation-setup-create"
-        className={compactToolbarButtonClassName}
-        isDisabled={isSubmitting}
-        aria-busy={isSubmitting}
-        onClick={handleCreate}
-      >
-        {t(I18nKey.AUTOMATIONS$CREATE_AUTOMATION_BUTTON)}
-      </BrandButton>
+      {isEditingExisting ? null : (
+        <BrandButton
+          type="button"
+          variant="primary"
+          testId="automation-setup-create"
+          className={compactToolbarButtonClassName}
+          isDisabled={isSubmitting}
+          aria-busy={isSubmitting}
+          onClick={handleCreate}
+        >
+          {t(I18nKey.AUTOMATIONS$CREATE_AUTOMATION_BUTTON)}
+        </BrandButton>
+      )}
     </div>
   );
 

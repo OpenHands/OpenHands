@@ -889,7 +889,7 @@ describe("automations list interactions", () => {
     expect(screen.queryByTestId("delete-modal")).not.toBeInTheDocument();
   });
 
-  it("opens and closes editing for local automations", async () => {
+  it("opens the setup page when editing an automation", async () => {
     const automation = makeAutomation();
     mocks.automationsState.data = { automations: [automation], total: 1 };
     const user = userEvent.setup();
@@ -898,9 +898,14 @@ describe("automations list interactions", () => {
     await user.click(
       screen.getByRole("button", { name: `edit-${automation.id}` }),
     );
-    expect(screen.getByTestId("edit-modal")).toHaveTextContent(automation.name);
-    await user.click(screen.getByRole("button", { name: "close-edit" }));
 
+    expect(mocks.createConversation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        automationSetup: true,
+        entryPoint: "automation_edit",
+      }),
+      expect.any(Object),
+    );
     expect(screen.queryByTestId("edit-modal")).not.toBeInTheDocument();
   });
 

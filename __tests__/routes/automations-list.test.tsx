@@ -438,13 +438,17 @@ describe("AutomationsList — Edit from the row kebab", () => {
       screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
     );
 
-    // Assert — the shared Edit modal mounts wired to this row (name input is
-    // pre-filled with that row's name, proving the list page passed the right
-    // automation through).
-    const nameInput = (await screen.findByTestId(
-      "edit-automation-name",
-    )) as HTMLInputElement;
-    expect(nameInput.value).toBe(automation.name);
+    // Assert — edit opens the setup page for this automation instead of the
+    // modal, carrying the row's prompt so the form can be seeded from it.
+    expect(mocks.createConversationMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        automationSetup: true,
+        entryPoint: "automation_edit",
+        query: automation.prompt,
+      }),
+      expect.any(Object),
+    );
+    expect(screen.queryByTestId("edit-automation-name")).not.toBeInTheDocument();
   });
 
   it("opens the Edit modal pre-filled from the row kebab when the active backend is cloud", async () => {
@@ -466,12 +470,17 @@ describe("AutomationsList — Edit from the row kebab", () => {
       screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
     );
 
-    // Assert — the same Edit modal mounts on cloud, wired to this row; the
-    // permission model decides, not the backend kind.
-    const nameInput = (await screen.findByTestId(
-      "edit-automation-name",
-    )) as HTMLInputElement;
-    expect(nameInput.value).toBe(automation.name);
+    // Assert — cloud uses the same setup page; the permission model decides
+    // whether Edit is offered, not which editor opens.
+    expect(mocks.createConversationMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        automationSetup: true,
+        entryPoint: "automation_edit",
+        query: automation.prompt,
+      }),
+      expect.any(Object),
+    );
+    expect(screen.queryByTestId("edit-automation-name")).not.toBeInTheDocument();
   });
 });
 

@@ -74,6 +74,9 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
     listServerDrafts: vi.fn(),
     listAutomationRuns: vi.fn().mockResolvedValue({ runs: [], total: 0 }),
     dispatchServerDraft: vi.fn(),
+    dispatchAutomation: vi.fn(),
+    updateAutomation: vi.fn(),
+    getAutomation: vi.fn(),
     createCustomWebhook: vi.fn(),
     supportsAutomationDrafts: vi.fn(),
   },
@@ -1540,5 +1543,58 @@ describe("AutomationSetupPanel", () => {
         "/automations/automation-final",
       );
     });
+  });
+
+  it("saves and tests an existing automation instead of drafting or creating one", async () => {
+    vi.mocked(AutomationService.updateAutomation).mockResolvedValue({
+      id: "auto-1",
+    } as never);
+    vi.mocked(AutomationService.dispatchAutomation).mockResolvedValue({
+      id: "run-9",
+    } as never);
+
+    const user = userEvent.setup();
+    renderPanel({
+      prompt: "Review every pull request",
+      kind: "prompt",
+      editingAutomationId: "auto-1",
+      form: {
+        kind: "prompt",
+        name: "Daily digest",
+        prompt: "Review every pull request",
+      },
+    });
+
+    expect(
+      screen.queryByTestId("automation-setup-save-draft"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("automation-setup-create")).not.toBeInTheDocument();
+    expect(screen.getByTestId("automation-setup-save")).toHaveTextContent(
+      "BUTTON$SAVE",
+    );
+    expect(screen.getByTestId("automation-setup-test")).toBeInTheDocument();
+    expect(screen.getByTestId("automation-setup-name")).toHaveValue(
+      "Daily digest",
+    );
+
+    await user.click(screen.getByTestId("automation-setup-save"));
+    await waitFor(() =>
+      expect(AutomationService.updateAutomation).toHaveBeenCalledWith(
+        "auto-1",
+        expect.objectContaining({
+          name: "Daily digest",
+          prompt: "Review every pull request",
+        }),
+      ),
+    );
+    expect(AutomationService.createServerDraft).not.toHaveBeenCalled();
+    expect(AutomationService.createAutomationDraft).not.toHaveBeenCalled();
+
+    await user.click(screen.getByTestId("automation-setup-test"));
+    await waitFor(() =>
+      expect(AutomationService.dispatchAutomation).toHaveBeenCalledWith(
+        "auto-1",
+      ),
+    );
   });
 });

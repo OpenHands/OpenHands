@@ -61,6 +61,11 @@ export interface AutomationSetupDraft {
   prompt: string;
   kind: AutomationSetupKind;
   plugins?: string[];
+  /**
+   * Set when this form is editing a saved automation. Absent for new
+   * setups, which still save a draft and then create.
+   */
+  editingAutomationId?: string;
   form?: AutomationSetupFormPatch;
   fieldMetadata?: Partial<
     Record<AutomationSetupField, AutomationSetupFieldMetadata>
@@ -245,6 +250,10 @@ function normalizeDraft(value: AutomationSetupDraft): AutomationSetupDraft {
   };
   const normalizedPlugins = pluginSources;
   const fieldMetadata = normalizeFieldMetadata(value.fieldMetadata);
+  const editingAutomationId =
+    typeof value.editingAutomationId === "string"
+      ? value.editingAutomationId.trim()
+      : "";
   const appliedAgentEventIds = Array.isArray(value.appliedAgentEventIds)
     ? [
         ...new Set(
@@ -258,6 +267,7 @@ function normalizeDraft(value: AutomationSetupDraft): AutomationSetupDraft {
     kind,
     ...(normalizedPlugins.length > 0 ? { plugins: normalizedPlugins } : {}),
     form: normalizedForm,
+    ...(editingAutomationId ? { editingAutomationId } : {}),
     ...(fieldMetadata ? { fieldMetadata } : {}),
     ...(appliedAgentEventIds && appliedAgentEventIds.length > 0
       ? { appliedAgentEventIds }

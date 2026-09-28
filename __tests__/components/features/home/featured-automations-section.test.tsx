@@ -27,6 +27,16 @@ import {
 } from "#/types/automation";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
+const homeMocks = vi.hoisted(() => ({
+  createConversationMutate: vi.fn(),
+}));
+
+vi.mock("#/hooks/mutation/use-create-conversation", () => ({
+  useCreateConversation: () => ({
+    mutate: homeMocks.createConversationMutate,
+  }),
+}));
+
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, options?: { name?: string; count?: number }) => {
@@ -572,7 +582,7 @@ describe("home automations on a cloud backend", () => {
     __resetActiveStoreForTests();
   });
 
-  it("opens the Edit modal in place from a row menu instead of leaving the home surface", async () => {
+  it("opens the setup page from a row menu", async () => {
     // Arrange — make a cloud backend active before mounting.
     setRegisteredBackends([cloudBackend]);
     setActiveSelection({ backendId: cloudBackend.id });
@@ -588,11 +598,15 @@ describe("home automations on a cloud backend", () => {
     await user.click(screen.getByTestId("running-automation-menu-auto-1"));
     await user.click(screen.getByTestId("running-automation-edit-auto-1"));
 
-    // Assert — the editor opens pre-filled for this row rather than
-    // bouncing the user to the detail page.
-    const nameInput = (await screen.findByTestId(
-      "edit-automation-name",
-    )) as HTMLInputElement;
-    expect(nameInput.value).toBe("Daily digest");
+    // Assert — Edit starts the setup page for this row rather than the modal.
+    expect(homeMocks.createConversationMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        automationSetup: true,
+        entryPoint: "automation_edit",
+        query: "Summarize yesterday's PRs",
+      }),
+      expect.any(Object),
+    );
+    expect(screen.queryByTestId("edit-automation-name")).not.toBeInTheDocument();
   });
 });

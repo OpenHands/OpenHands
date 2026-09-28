@@ -106,6 +106,7 @@ describe("getDisplayConversationTags", () => {
         automationsetup: "draft",
         automationdraftid: "draft-1",
         automationmaterializeddraftid: "auto-draft-1",
+        automationeditid: "auto-1",
       }),
     ).toEqual([
       ["origin", "slack"],
