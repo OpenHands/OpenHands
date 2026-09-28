@@ -18,6 +18,10 @@ import {
 } from "#/utils/conversation-local-storage";
 import { resetPendingTaskMessageLinkState } from "#/utils/pending-task-message-link";
 import { getStoredConversationMetadata } from "#/api/conversation-metadata-store";
+import {
+  getAutomationSetupDraft,
+  setAutomationSetupDraft,
+} from "#/api/automation-setup-draft-store";
 
 vi.mock(
   "#/api/conversation-service/agent-server-conversation-service.api",
@@ -73,6 +77,7 @@ describe("useTaskPolling", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    sessionStorage.clear();
     resetPendingTaskMessageLinkState();
     useOptimisticUserMessageStore.getState().clearPendingMessages();
   });
@@ -80,6 +85,7 @@ describe("useTaskPolling", () => {
   afterEach(() => {
     queryClient?.clear();
     localStorage.clear();
+    sessionStorage.clear();
   });
 
   it("moves pending task drafts onto the real conversation before redirecting", async () => {
@@ -109,6 +115,32 @@ describe("useTaskPolling", () => {
     expect(AgentServerConversationService.getStartTask).toHaveBeenCalledWith(
       "123",
     );
+  });
+
+  it("moves automation setup drafts onto the real conversation before redirecting", async () => {
+    vi.mocked(AgentServerConversationService.getStartTask).mockResolvedValue(
+      readyTask,
+    );
+    setAutomationSetupDraft("task-123", {
+      prompt: "Create a daily report automation",
+      kind: "prompt",
+    });
+
+    renderHook(() => useTaskPollingController(), { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      expect(navigate).toHaveBeenCalledWith(
+        "/conversations/conversation-1?backend=default-local",
+        {
+          replace: true,
+        },
+      );
+    });
+
+    expect(getAutomationSetupDraft("conversation-1")).toMatchObject({
+      prompt: "Create a daily report automation",
+      kind: "prompt",
+    });
   });
 
   it("stores cloud task plugin coordinates on the real conversation", async () => {

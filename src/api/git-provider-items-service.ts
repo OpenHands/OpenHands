@@ -1,4 +1,7 @@
-import { SettingsClient } from "@openhands/typescript-client/clients";
+import {
+  BashClient,
+  SettingsClient,
+} from "@openhands/typescript-client/clients";
 import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
 import { SecretsService } from "#/api/secrets-service";
 import { getActiveBackend } from "#/api/backend-registry/active-store";
@@ -22,6 +25,8 @@ const PROVIDER_TOKEN_SECRET_CANDIDATES: Partial<Record<Provider, string[]>> = {
 };
 
 const LIST_LIMIT = 30;
+const GH_REPO_LIST_LIMIT = 100;
+const GH_REPO_LIST_COMMAND = `gh repo list --limit ${GH_REPO_LIST_LIMIT} --json nameWithOwner`;
 
 async function resolveProviderToken(
   provider: Provider,
@@ -359,5 +364,63 @@ export class GitProviderItemsService {
         authorLogin: item.user?.login ?? null,
         updatedAt: item.updated_at ?? null,
       }));
+  }
+
+  /**
+   * Repositories the signed-in user can access, most recently pushed first.
+   * A stored provider token is preferred. Local backends without one fall
+   * back to `gh repo list` on the agent server, which uses the machine's
+   * GitHub CLI login. Cloud repository search stays on `GitService`.
+   */
+  static async listUserRepositories(provider: Provider): Promise<string[]> {
+    if (provider !== "github") return [];
+    const token = await resolveProviderToken(provider);
+    if (token) {
+      try {
+        const items = await fetchGithubJson<Array<{ full_name?: string }>>(
+          "/user/repos?per_page=100&sort=pushed&affiliation=owner,collaborator,organization_member",
+          token,
+        );
+        const names = repositoryNames(
+          items as Array<Record<string, unknown>>,
+          "full_name",
+        );
+        if (names.length > 0) return names;
+      } catch {
+        // Fall through to the GitHub CLI on the local agent server.
+      }
+    }
+    return listRepositoriesViaGitHubCli();
+  }
+}
+
+function repositoryNames(
+  items: Array<Record<string, unknown>>,
+  key: string,
+): string[] {
+  return items
+    .map((item) => {
+      const value = item[key];
+      return typeof value === "string" ? value.trim() : "";
+    })
+    .filter((name) => name.length > 0);
+}
+
+async function listRepositoriesViaGitHubCli(): Promise<string[]> {
+  if (getActiveBackend().backend.kind !== "local") return [];
+  try {
+    const output = await new BashClient(
+      getAgentServerClientOptions(),
+    ).executeCommand(GH_REPO_LIST_COMMAND, undefined, 20);
+    if (output.exit_code !== 0 || !output.stdout) return [];
+    const items = JSON.parse(output.stdout) as Array<{
+      nameWithOwner?: string;
+    }>;
+    return repositoryNames(
+      items as Array<Record<string, unknown>>,
+      "nameWithOwner",
+    );
+  } catch {
+    return [];
   }
 }

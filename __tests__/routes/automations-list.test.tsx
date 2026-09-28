@@ -5,7 +5,6 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
 import { HttpError } from "@openhands/typescript-client";
-
 import { I18nKey } from "#/i18n/declaration";
 import type { AutomationDraftListResponse } from "#/manifests/types";
 
@@ -20,6 +19,21 @@ import {
 } from "#/api/backend-registry/active-store";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import AutomationsList from "#/routes/automations-list";
+
+vi.mock("#/components/shared/buttons/styled-tooltip", () => ({
+  StyledTooltip: ({
+    content,
+    children,
+  }: {
+    content: React.ReactNode;
+    children: React.ReactNode;
+  }) => (
+    <>
+      {children}
+      <span data-testid="styled-tooltip-content">{content}</span>
+    </>
+  ),
+}));
 import type { Backend } from "#/api/backend-registry/types";
 import {
   AutomationRunStatus,
@@ -158,8 +172,24 @@ const draftListResponse: AutomationDraftListResponse = {
       createdAt: "2026-01-02T00:00:00Z",
       updatedAt: "2026-01-02T00:00:00Z",
     },
+    {
+      id: "draft-event",
+      endpoint: "/v1/preset/prompt",
+      name: "Event setup draft",
+      draft: {
+        prompt: "Event prompt",
+        trigger: { type: "event", source: "github", on: "pull_request" },
+      },
+      validationErrors: null,
+      dispatchable: false,
+      sourceAutomationId: null,
+      materializedAutomationId: null,
+      lastTestRunId: null,
+      createdAt: "2026-01-03T00:00:00Z",
+      updatedAt: "2026-01-03T00:00:00Z",
+    },
   ],
-  total: 1,
+  total: 2,
 };
 
 function renderList(queryClient?: QueryClient) {
@@ -236,24 +266,49 @@ describe("AutomationsList — draft sections", () => {
 
     renderList();
 
-    const draftCard = await screen.findByTestId(
-      "automation-setup-draft-draft-1",
-    );
+    expect(
+      await screen.findByText(I18nKey.AUTOMATIONS$SAVED_DRAFTS),
+    ).toBeInTheDocument();
     expect(screen.getByText("Saved setup draft")).toBeInTheDocument();
-    expect(draftCard).toBeInTheDocument();
+    const draftCard = screen.getByTestId("automation-setup-draft-draft-1");
+    expect(draftCard.parentElement).toHaveClass(
+      "divide-y",
+      "rounded-xl",
+      "bg-surface",
+    );
+    expect(draftCard).toHaveClass("hover:bg-surface-raised");
+    expect(
+      within(draftCard).queryByText(I18nKey.AUTOMATIONS$DETAIL$DRAFT),
+    ).not.toBeInTheDocument();
     expect(
       within(draftCard).getByTestId("automation-setup-draft-open-draft-1"),
     ).toBeInTheDocument();
     expect(
       within(draftCard).getByTestId("automation-setup-draft-resume-draft-1"),
     ).toBeInTheDocument();
+    const activePlay = within(draftCard).getByTestId(
+      "automation-setup-draft-test-draft-1",
+    );
+    expect(activePlay).toBeEnabled();
     expect(
-      within(draftCard).getByTestId("automation-setup-draft-test-draft-1"),
-    ).toBeInTheDocument();
+      within(draftCard).getByTestId("styled-tooltip-content"),
+    ).toHaveTextContent(I18nKey.AUTOMATION_SETUP$TEST_RUN);
+    const inactivePlay = screen.getByTestId(
+      "automation-setup-draft-test-draft-event",
+    );
+    expect(inactivePlay).toBeDisabled();
+    expect(
+      within(
+        screen.getByTestId("automation-setup-draft-draft-event"),
+      ).queryByTestId("styled-tooltip-content"),
+    ).not.toBeInTheDocument();
     expect(
       within(draftCard).getByTestId("automation-setup-draft-delete-draft-1"),
     ).toBeInTheDocument();
 
+    expect(
+      screen.queryByText(I18nKey.AUTOMATIONS$MATERIALIZED_DRAFTS),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByText("Materialized test draft"),
     ).not.toBeInTheDocument();
@@ -328,7 +383,7 @@ describe("AutomationsList — draft sections", () => {
       within(draftCard).getByTestId("automation-setup-draft-delete-draft-1"),
     );
     expect(
-      screen.getByTestId("automation-setup-draft-delete-confirm"),
+      screen.getByText(I18nKey.AUTOMATION_SETUP$DELETE_DRAFT_TITLE),
     ).toBeInTheDocument();
     await user.click(
       screen.getByTestId("automation-setup-draft-delete-confirm"),
@@ -338,6 +393,30 @@ describe("AutomationsList — draft sections", () => {
         "draft-1",
       ),
     );
+  });
+
+  it("treats a Cloud HttpError 404 from the drafts API as an empty drafts list", async () => {
+    // Cloud draft calls run through callCloudProxy, which throws the shared
+    // client's HttpError with `status` on the error itself (not under `response`).
+    // A drafts-less automation service answers those routes with 404; the page
+    // must degrade to an empty drafts list instead of the error banner.
+
+    vi.mocked(AutomationService.getAutomations).mockResolvedValue(listResponse);
+    vi.mocked(AutomationService.listServerDrafts).mockRejectedValue(
+      new HttpError(404, "Not Found", { detail: "No such route" }),
+    );
+
+    renderList();
+
+    await screen.findByText(automation.name);
+    await waitFor(() => {
+      expect(
+        screen.queryByText(I18nKey.AUTOMATIONS$SAVED_DRAFTS),
+      ).not.toBeInTheDocument();
+    });
+    expect(
+      screen.queryByText(I18nKey.AUTOMATIONS$ERROR_TITLE),
+    ).not.toBeInTheDocument();
   });
 });
 

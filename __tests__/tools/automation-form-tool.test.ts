@@ -29,7 +29,14 @@ describe("automation_form_update client tool", () => {
             kind: { enum: ["prompt", "plugin", "custom"] },
             triggerKind: { enum: ["cron", "event"] },
             frequency: {
-              enum: ["hourly", "daily", "weekdays", "weekly", "custom"],
+              enum: [
+                "once",
+                "hourly",
+                "daily",
+                "weekdays",
+                "weekly",
+                "custom",
+              ],
             },
             customCode: { type: "string" },
             setupScript: { type: "string" },
