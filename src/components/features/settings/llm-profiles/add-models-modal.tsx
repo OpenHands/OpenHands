@@ -3,16 +3,12 @@ import { useTranslation } from "react-i18next";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { ApiKeyModalBase } from "#/components/features/settings/api-key-modal-base";
-import { SettingsInput } from "#/components/features/settings/settings-input";
 import { useProviderModels } from "#/hooks/query/use-provider-models";
 import { useSaveLlmProfile } from "#/hooks/mutation/use-save-llm-profile";
 import type { SaveProfileRequest } from "#/api/profiles-service/profiles-service.api";
 import type { ProviderConnection } from "#/api/provider-connections-service/provider-connections-service.api";
 import { mapProvider } from "#/utils/map-provider";
-import {
-  deriveProfileNameFromModel,
-  isProfileNameValid,
-} from "#/utils/derive-profile-name";
+import { deriveProfileNameFromModel } from "#/utils/derive-profile-name";
 import {
   displayErrorToast,
   displaySuccessToast,
@@ -49,9 +45,8 @@ type RowStatus = "idle" | "saving" | "saved" | "failed";
 interface ModelRow {
   /** Full model id, e.g. "openhands/deepseek-v4-flash". */
   model: string;
-  /** Editable profile name. */
+  /** Derived profile name (not user-editable). */
   name: string;
-  verified: boolean;
   selected: boolean;
   status: RowStatus;
 }
@@ -92,9 +87,8 @@ export function AddModelsModal({
 
   // Rows follow the model list, and only the model list. Already-added models
   // are hidden at render rather than rebuilding the rows, because a rebuild
-  // discards the edited names, selections and per-row statuses the user has
-  // accumulated. A row already on screen keeps its state when the list
-  // refreshes; only its verified flag tracks the server.
+  // discards the selections and per-row statuses the user has accumulated. A
+  // row already on screen keeps its state when the list refreshes.
   useEffect(() => {
     const items = models.data ?? [];
     setRows((prev) => {
@@ -113,15 +107,13 @@ export function AddModelsModal({
             : m.name;
         if (seen.has(full)) continue;
         seen.add(full);
-        const verified = !!m.verified;
         const carried = prior.get(full);
         built.push(
           carried
-            ? { ...carried, verified }
+            ? carried
             : {
                 model: full,
                 name: deriveProfileNameFromModel(full),
-                verified,
                 // Nothing is pre-selected: the server caps how many profiles an
                 // account may hold, so defaulting to "all" invites a submission
                 // that is mostly refusals. Choosing is the point of the modal.
@@ -160,9 +152,7 @@ export function AddModelsModal({
     (row) => row.status === "saved" || !existing.has(row.name),
   );
 
-  const isSelectable = (row: ModelRow) =>
-    isProfileNameValid(row.name, { isRequired: true });
-  const selectable = visibleRows.filter(isSelectable);
+  const selectable = visibleRows;
   const selectedRows = selectable.filter((row) => row.selected);
 
   const setRow = (model: string, patch: Partial<ModelRow>) =>
@@ -378,10 +368,11 @@ export function AddModelsModal({
             </label>
             <ul className="flex max-h-64 flex-col gap-2 overflow-y-auto">
               {visibleRows.map((row) => {
-                const valid = isProfileNameValid(row.name, {
-                  isRequired: true,
-                });
                 const disabled = submitting || row.status === "saved";
+                // Show the model name without the provider prefix — the
+                // prefix is implied by the selected connection and just adds
+                // visual noise to every row.
+                const shortName = row.model.split("/").pop() ?? row.model;
                 return (
                   <li
                     key={row.model}
@@ -395,13 +386,13 @@ export function AddModelsModal({
                       onChange={(e) =>
                         setRow(row.model, { selected: e.target.checked })
                       }
-                      disabled={disabled || !valid}
+                      disabled={disabled}
                     />
                     <span
                       className="min-w-0 flex-1 truncate text-sm text-white"
                       title={row.model}
                     >
-                      {row.model}
+                      {shortName}
                     </span>
                     {row.status === "saving" && <LoadingSpinner size="small" />}
                     {row.status === "saved" && (
@@ -414,17 +405,6 @@ export function AddModelsModal({
                         {t(I18nKey.SETTINGS$MODEL_ROW_FAILED)}
                       </span>
                     )}
-                    <div className="w-48">
-                      <SettingsInput
-                        testId={`add-models-name-${row.model}`}
-                        label=""
-                        type="text"
-                        value={row.name}
-                        onChange={(value) => setRow(row.model, { name: value })}
-                        isDisabled={disabled}
-                        ariaInvalid={!valid}
-                      />
-                    </div>
                   </li>
                 );
               })}

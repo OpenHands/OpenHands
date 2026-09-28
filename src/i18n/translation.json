@@ -14330,7 +14330,6 @@
     "uk": "Повідомлено користувацькі метадані завдання.",
     "ca": "S'han informat metadades personalitzades de la tasca."
   },
-
   "AUTOMATIONS$DETAIL$VIEW_CONVERSATION_FOR_RUN": {
     "en": "View conversation for run at {{timestamp}}",
     "ja": "{{timestamp}} の実行の会話を表示",
@@ -14348,7 +14347,6 @@
     "uk": "Переглянути розмову для запуску о {{timestamp}}",
     "ca": "Mostra la conversa de l'execució a {{timestamp}}"
   },
-
   "AUTOMATIONS$DETAIL$PHASE": {
     "ar": "المرحلة",
     "ca": "Fase",
@@ -42144,23 +42142,6 @@
     "zh-CN": "确定要删除连接“{{name}}”吗？",
     "zh-TW": "確定要刪除連線「{{name}}」嗎？"
   },
-  "SETTINGS$PROVIDER_CONNECTION_ADD_MODELS_TITLE": {
-    "ar": "إضافة نماذج كملفات شخصية",
-    "ca": "Afegeix models com a perfils",
-    "de": "Modelle als Profile hinzufügen",
-    "en": "Add models as profiles",
-    "es": "Añadir modelos como perfiles",
-    "fr": "Ajouter des modèles comme profils",
-    "it": "Aggiungi modelli come profili",
-    "ja": "モデルをプロファイルとして追加",
-    "ko-KR": "모델을 프로필로 추가",
-    "no": "Legg til modeller som profiler",
-    "pt": "Adicionar modelos como perfis",
-    "tr": "Modelleri profil olarak ekle",
-    "uk": "Додати моделі як профілі",
-    "zh-CN": "将模型添加为配置文件",
-    "zh-TW": "將模型新增為設定檔"
-  },
   "SETTINGS$PROVIDER_CONNECTION_DELETE_TITLE": {
     "ar": "حذف اتصال المزود",
     "ca": "Elimina la connexió de proveïdor",
@@ -42517,5 +42498,22 @@
     "ca": "No hi ha espais de treball accessibles. Demana a l’administrador que comprovi els teus permisos.",
     "tr": "Erişilebilir çalışma alanı yok. Yöneticinizden erişim izinlerinizi kontrol etmesini isteyin.",
     "uk": "Немає доступних робочих просторів. Попросіть адміністратора перевірити ваші права доступу."
+  },
+  "SETTINGS$PROVIDER_CONNECTION_BULK_ADD": {
+    "ar": "إضافة جماعية",
+    "ca": "Afegir en lot",
+    "de": "Massen hinzufügen",
+    "en": "Bulk add",
+    "es": "Añadir en lote",
+    "fr": "Ajout groupé",
+    "it": "Aggiungi in blocco",
+    "ja": "一括追加",
+    "ko-KR": "일괄 추가",
+    "no": "Legg til flere",
+    "pt": "Adicionar em lote",
+    "tr": "Toplu ekle",
+    "uk": "Масове додавання",
+    "zh-CN": "批量添加",
+    "zh-TW": "批次新增"
   }
 }

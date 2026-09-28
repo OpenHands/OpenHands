@@ -191,7 +191,7 @@ describe("AddModelsModal", () => {
     expect(screen.getByText("Shared OpenAI (OpenAI)")).toBeInTheDocument();
   });
 
-  it("lists all models for the connection's provider with derived names", async () => {
+  it("lists all models for the connection's provider with short (unprefixed) names", async () => {
     renderModal();
     await screen.findByTestId("add-models-row-openai/gpt-4o");
     expect(
@@ -201,10 +201,14 @@ describe("AddModelsModal", () => {
     expect(
       screen.getByTestId("add-models-row-openai/unverified-model"),
     ).toBeInTheDocument();
-    // derived name pre-fills the input
+    // The provider prefix is stripped from the displayed label — it's implied
+    // by the selected connection.
+    expect(screen.getByText("gpt-4o-mini")).toBeInTheDocument();
+    expect(screen.queryByText("openai/gpt-4o-mini")).not.toBeInTheDocument();
+    // No per-row name editor.
     expect(
-      screen.getByTestId("add-models-name-openai/gpt-4o-mini"),
-    ).toHaveValue("gpt-4o-mini");
+      screen.queryByTestId("add-models-name-openai/gpt-4o-mini"),
+    ).not.toBeInTheDocument();
   });
 
   it("says the provider is empty when it really has no models", async () => {
@@ -390,21 +394,15 @@ describe("AddModelsModal", () => {
     );
   });
 
-  it("keeps edited names and selections once the list has settled", async () => {
+  it("keeps selections once the list has settled", async () => {
     renderModal();
     await screen.findByTestId("add-models-row-openai/gpt-4o");
-    const name = screen.getByTestId("add-models-name-openai/gpt-4o-mini");
-    await userEvent.clear(name);
-    await userEvent.type(name, "my-mini");
     await userEvent.click(
       screen.getByTestId("add-models-check-openai/gpt-4o-mini"),
     );
 
     await showUnverified();
 
-    expect(
-      screen.getByTestId("add-models-name-openai/gpt-4o-mini"),
-    ).toHaveValue("my-mini");
     expect(
       screen.getByTestId("add-models-check-openai/gpt-4o-mini"),
     ).toBeChecked();

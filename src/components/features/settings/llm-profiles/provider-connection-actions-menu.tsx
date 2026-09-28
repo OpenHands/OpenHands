@@ -138,7 +138,7 @@ export function ProviderConnectionActionsMenu({
       <MenuItem
         index={0}
         icon={<AddModelsIcon width={16} height={16} />}
-        label={t(I18nKey.SETTINGS$PROVIDER_CONNECTION_ADD_MODELS_TITLE)}
+        label={t(I18nKey.SETTINGS$PROVIDER_CONNECTION_BULK_ADD)}
         onClick={() => handleAction(onAddModels)}
         onKeyDown={handleKeyDown}
         menuItemsRef={menuItemsRef}
@@ -147,7 +147,7 @@ export function ProviderConnectionActionsMenu({
       <MenuItem
         index={1}
         icon={<EditIcon width={16} height={16} />}
-        label={t(I18nKey.SETTINGS$PROVIDER_CONNECTION_EDIT_TITLE)}
+        label={t(I18nKey.BUTTON$EDIT)}
         onClick={() => handleAction(onEdit)}
         onKeyDown={handleKeyDown}
         menuItemsRef={menuItemsRef}
@@ -156,7 +156,7 @@ export function ProviderConnectionActionsMenu({
       <MenuItem
         index={2}
         icon={<DeleteIcon width={16} height={16} />}
-        label={t(I18nKey.SETTINGS$PROVIDER_CONNECTION_DELETE_TITLE)}
+        label={t(I18nKey.BUTTON$DELETE)}
         onClick={() => handleAction(onDelete)}
         onKeyDown={handleKeyDown}
         menuItemsRef={menuItemsRef}
