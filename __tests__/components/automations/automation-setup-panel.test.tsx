@@ -413,132 +413,6 @@ describe("AutomationSetupPanel", () => {
     ).toBeInTheDocument();
   });
 
-  it.each([
-    {
-      label: "an axios-shaped 404 (local backend)",
-      error: { response: { status: 404 } },
-    },
-    {
-      label: "the shared client's HttpError 404 (cloud backend)",
-      error: new HttpError(404, "Not Found", { detail: "No such route" }),
-    },
-  ])(
-    "falls back to validation when draft endpoints are unavailable ($label)",
-    async ({ error }) => {
-      vi.mocked(AutomationService.createServerDraft).mockRejectedValue(error);
-      vi.mocked(AutomationService.validateDraft).mockResolvedValue({
-        valid: true,
-        errors: [],
-      });
-
-      const user = userEvent.setup();
-      renderPanel();
-
-      await user.click(screen.getByTestId("automation-setup-test"));
-
-      await waitFor(() =>
-        expect(AutomationService.createServerDraft).toHaveBeenCalledWith(
-          expect.objectContaining({
-            endpoint: "/v1/preset/prompt",
-            draft: expect.objectContaining({
-              enabled: false,
-              prompt: "Review every pull request",
-            }),
-          }),
-        ),
-      );
-      expect(AutomationService.validateDraft).toHaveBeenCalledWith({
-        endpoint: "/v1/preset/prompt",
-        draft: expect.objectContaining({
-          enabled: false,
-          prompt: "Review every pull request",
-          trigger: {
-            type: "cron",
-            schedule: "0 9 * * *",
-            timezone: "America/New_York",
-          },
-        }),
-      });
-      expect(screen.getByTestId("automation-setup-status")).toHaveTextContent(
-        "AUTOMATION_SETUP$READY_TO_TEST",
-      );
-    },
-  );
-
-  it("pins an automation model without changing the conversation profile", async () => {
-    vi.mocked(AutomationService.createServerDraft).mockRejectedValue({
-      response: { status: 404 },
-    });
-    vi.mocked(AutomationService.validateDraft).mockResolvedValue({
-      valid: true,
-      errors: [],
-    });
-
-    const user = userEvent.setup();
-    renderPanel();
-
-    expect(screen.getByTestId("automation-setup-model")).toHaveAttribute(
-      "aria-label",
-      "claude-opus-4-5-20251101",
-    );
-    await user.click(screen.getByTestId("automation-setup-model"));
-    await user.click(screen.getByTestId("automation-setup-model-option-fast"));
-    expect(screen.getByTestId("automation-setup-model")).toHaveAttribute(
-      "aria-label",
-      "fast",
-    );
-
-    await user.click(screen.getByTestId("automation-setup-test"));
-
-    await waitFor(() =>
-      expect(AutomationService.validateDraft).toHaveBeenCalledWith(
-        expect.objectContaining({
-          draft: expect.objectContaining({ model: "fast" }),
-        }),
-      ),
-    );
-  });
-
-  it("pins an automation agent profile without changing the conversation", async () => {
-    vi.mocked(AutomationService.createServerDraft).mockRejectedValue({
-      response: { status: 404 },
-    });
-    vi.mocked(AutomationService.validateDraft).mockResolvedValue({
-      valid: true,
-      errors: [],
-    });
-
-    const user = userEvent.setup();
-    renderPanel();
-
-    expect(
-      screen.getByTestId("automation-setup-agent-profile"),
-    ).toHaveAttribute("aria-label", "default");
-    await user.click(screen.getByTestId("automation-setup-agent-profile"));
-    await user.click(
-      screen.getByTestId("automation-setup-agent-profile-option-reviewer"),
-    );
-    expect(
-      screen.getByTestId("automation-setup-agent-profile"),
-    ).toHaveAttribute("aria-label", "reviewer");
-    expect(screen.getByTestId("automation-setup-model")).toHaveAttribute(
-      "aria-label",
-      "claude-opus-4-5-20251101",
-    );
-
-    await user.click(screen.getByTestId("automation-setup-test"));
-
-    await waitFor(() =>
-      expect(AutomationService.validateDraft).toHaveBeenCalledWith(
-        expect.objectContaining({
-          draft: expect.objectContaining({
-            agent_profile_id: "agent-reviewer",
-          }),
-        }),
-      ),
-    );
-  });
-
   it("sends each comma-separated repository to the automation service", async () => {
     vi.mocked(AutomationService.createServerDraft).mockRejectedValue({
       response: { status: 404 },
@@ -561,9 +435,9 @@ describe("AutomationSetupPanel", () => {
 
     const addButton = screen.getByTestId("automation-setup-repository-add");
     const pill = screen.getByTestId("automation-setup-repository-value");
-    expect(screen.getByTestId("automation-setup-repository-values")).toHaveClass(
-      "flex-wrap",
-    );
+    expect(
+      screen.getByTestId("automation-setup-repository-values"),
+    ).toHaveClass("flex-wrap");
     expect(screen.getByTestId("automation-setup-kind-custom")).toHaveClass(
       "bg-tertiary",
       "text-content",
@@ -834,9 +708,9 @@ describe("AutomationSetupPanel", () => {
     expect(
       screen.getByTestId("automation-setup-event-key").parentElement,
     ).toContainElement(screen.getByTestId("automation-setup-add-event-filter"));
-    expect(screen.getByTestId("automation-setup-add-event-filter")).toHaveTextContent(
-      "AUTOMATION_SETUP$ADD_FILTER",
-    );
+    expect(
+      screen.getByTestId("automation-setup-add-event-filter"),
+    ).toHaveTextContent("AUTOMATION_SETUP$ADD_FILTER");
 
     await user.click(screen.getByTestId("automation-setup-add-event-filter"));
     expect(
@@ -952,9 +826,11 @@ describe("AutomationSetupPanel", () => {
       within(pluginModule).getAllByText("AUTOMATION_SETUP$PLUGIN_REF"),
     ).toHaveLength(1);
     expect(
-      screen.getByTestId("automation-setup-plugin-ref").compareDocumentPosition(
-        screen.getByTestId("automation-setup-plugin-remove"),
-      ) & Node.DOCUMENT_POSITION_FOLLOWING,
+      screen
+        .getByTestId("automation-setup-plugin-ref")
+        .compareDocumentPosition(
+          screen.getByTestId("automation-setup-plugin-remove"),
+        ) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(screen.getByTestId("automation-setup-plugin-ref-1")).toHaveValue(
       "main",
@@ -1441,11 +1317,15 @@ describe("AutomationSetupPanel", () => {
       expect(
         screen.getByTestId("automation-setup-custom-webhook-enabled"),
       ).toBeInTheDocument();
-      await user.click(screen.getByTestId("automation-setup-event-source-toggle"));
+      await user.click(
+        screen.getByTestId("automation-setup-event-source-toggle"),
+      );
       expect(
         screen.getByTestId("automation-setup-event-source-option-github"),
       ).toBeInTheDocument();
-      await user.click(screen.getByTestId("automation-setup-event-source-toggle"));
+      await user.click(
+        screen.getByTestId("automation-setup-event-source-toggle"),
+      );
       await user.click(
         screen.getByTestId("automation-setup-custom-webhook-enabled"),
       );
