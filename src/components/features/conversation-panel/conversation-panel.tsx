@@ -1049,6 +1049,32 @@ export function ConversationPanel({
     !startTasks?.length &&
     !hasVisibleGroups;
 
+  // The Conversations header doubles as a bulk control for the grouped view:
+  // collapse every visible folder while any is expanded, expand them all once
+  // none is. Folders outside the current view keep their own state.
+  const allGroupsCollapsed =
+    hasVisibleGroups &&
+    (orderedConversationGroups ?? []).every((group) =>
+      collapsedGroupIds.has(group.id),
+    );
+
+  const toggleAllGroupsCollapsed = React.useCallback(() => {
+    setCollapsedGroupIds((prev) => {
+      const groupIds =
+        orderedConversationGroups?.map((group) => group.id) ?? [];
+      if (groupIds.length === 0) {
+        return prev;
+      }
+      const next = new Set(prev);
+      if (groupIds.every((groupId) => prev.has(groupId))) {
+        groupIds.forEach((groupId) => next.delete(groupId));
+      } else {
+        groupIds.forEach((groupId) => next.add(groupId));
+      }
+      return next;
+    });
+  }, [orderedConversationGroups]);
+
   const showConversationHeader = !compact;
 
   return (
@@ -1070,9 +1096,25 @@ export function ConversationPanel({
             data-testid="older-conversations-summary"
             className="flex min-w-0 flex-nowrap items-center gap-x-2 py-2 pl-4 pr-2.5 text-muted"
           >
-            <span className="min-w-0 truncate text-sm font-medium text-muted">
-              {t(I18nKey.SIDEBAR$CONVERSATIONS)}
-            </span>
+            {hasVisibleGroups ? (
+              <button
+                type="button"
+                data-testid="conversations-header-toggle"
+                aria-expanded={!allGroupsCollapsed}
+                onClick={toggleAllGroupsCollapsed}
+                className={cn(
+                  "min-w-0 cursor-pointer truncate text-left text-sm font-medium",
+                  "text-muted transition-colors hover:text-white",
+                  "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border",
+                )}
+              >
+                {t(I18nKey.SIDEBAR$CONVERSATIONS)}
+              </button>
+            ) : (
+              <span className="min-w-0 truncate text-sm font-medium text-muted">
+                {t(I18nKey.SIDEBAR$CONVERSATIONS)}
+              </span>
+            )}
             <div className="ml-auto flex shrink-0 items-center gap-0.5">
               <ConversationPanelNewThreadPicker
                 backendKind={activeBackend.kind}

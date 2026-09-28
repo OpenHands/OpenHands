@@ -362,8 +362,8 @@ test.describe("mock-LLM automation lifecycle", () => {
     // If the padding ever becomes misaligned (e.g. the agent-server stops
     // making this call or starts making two), step 2's
     // waitForNonUserMessageText(AUTOMATION_REPLY_TOKEN) will time out
-    // quickly, making the failure obvious. See AGENTS.md → "Padding
-    // response for internal LLM call" for more context.
+    // quickly, making the failure obvious. See the "Padding response for
+    // internal LLM call" section in the E2E testing skill reference.
     //
     // After the main conversation finishes (responses 0-3),the dispatched
     // automation run spawns a NEW conversation on the same agent-server.

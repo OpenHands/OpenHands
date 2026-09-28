@@ -143,6 +143,7 @@ describe("Telemetry Service", () => {
           package_name: "@openhands/agent-canvas",
           package_version: expect.any(String),
           backend_kind: null,
+          deployment_kind: null,
           agent_server_version: "unknown",
           automation_sdk_version: "unknown",
           backend_version: "unknown",
@@ -164,6 +165,7 @@ describe("Telemetry Service", () => {
         event: "backend_context_event",
         properties: expect.objectContaining({
           backend_kind: "cloud",
+          deployment_kind: "remote",
           agent_server_version: "1.36.2",
           automation_sdk_version: "1.36.3",
           backend_version: "1.36.2",

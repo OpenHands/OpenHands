@@ -464,7 +464,7 @@ function createMainWindow() {
 // otherwise be lost) and it backs the "Copy logs" action. In a packaged app
 // this console is the only log surface — stdout/stderr go to /dev/null when
 // launched from Finder, and the winston file logger is a no-op there (see
-// AGENTS.md on the node_modules strip).
+// `.agents/skills/desktop-electron/references/guide.md` on dependency stripping).
 
 const BOOT_LOG_MAX_LINES = 2000;
 const BOOT_LOG_FLUSH_MS = 200;

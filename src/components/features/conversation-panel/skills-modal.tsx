@@ -1,7 +1,10 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
-import { ModalBody } from "#/components/shared/modals/modal-body";
+import {
+  MODAL_MAX_WIDTH_VIEWPORT,
+  ModalBody,
+} from "#/components/shared/modals/modal-body";
 import { I18nKey } from "#/i18n/declaration";
 import { getAgentServerWorkingDir } from "#/api/agent-server-config";
 import { useConversationSkills } from "#/hooks/query/use-conversation-skills";
@@ -11,6 +14,7 @@ import {
   SKILL_SCOPE_ORDER,
   type SkillScope,
 } from "#/utils/skill-scope";
+import { cn } from "#/utils/utils";
 import { SkillsModalHeader } from "./skills-modal-header";
 import { SkillsModalSection } from "./skills-modal-section";
 import { SkillsLoadingState } from "./skills-loading-state";
@@ -67,7 +71,10 @@ export function SkillsModal({ onClose }: SkillsModalProps) {
     <ModalBackdrop onClose={onClose}>
       <ModalBody
         width="lg"
-        className="relative max-h-[80vh] flex flex-col items-start border border-border"
+        className={cn(
+          "relative max-h-[80vh] flex flex-col items-start border border-border",
+          MODAL_MAX_WIDTH_VIEWPORT,
+        )}
         testID="skills-modal"
       >
         <SkillsModalHeader
