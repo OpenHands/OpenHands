@@ -121,6 +121,21 @@ npm run dev
 
 Access the UI at [http://localhost:8000](http://localhost:8000) for the npm/source launchers, or [http://localhost:8000/canvas](http://localhost:8000/canvas) for the Docker image. You can add additional backends directly from the UI.
 
+## Connecting to OpenHands Cloud (optional)
+
+If you want conversations and automations to run on hosted OpenHands Cloud infrastructure instead of your local machine:
+
+1. In Agent Canvas, open the backend switcher in the sidebar footer and select **Manage Backends** → **Add Backend**.
+2. Click **Login with OpenHands Cloud** and sign in with your GitHub, GitLab, or Bitbucket account.
+
+Agent Canvas connects automatically via OAuth — no manual API keys required. For full details and advanced settings, see the [Cloud Backend Guide](https://docs.openhands.dev/openhands/usage/agent-canvas/backend-setup/cloud).
+
+> [!NOTE]
+> **OpenHands API Key vs. OpenHands LLM Key** (in [Cloud Settings → API Keys](https://app.all-hands.dev/settings/api-keys)):
+>
+> - **OpenHands API Key**: Used by programmatic scripts and external agents to authenticate against OpenHands Cloud.
+> - **OpenHands LLM Key**: Used for model inference (e.g. `LLM_API_KEY`) when running agents with OpenHands-hosted models.
+
 # Architecture
 
 Agent Canvas is powered by the [OpenHands Agent Server](https://github.com/OpenHands/software-agent-sdk/tree/main/openhands-agent-server/openhands/agent_server), a REST API for running multiple agents on a single machine. Each Agent Server runs on a single host/port; the Agent Canvas can connect to multiple Agent Servers and easily flip between them.
@@ -140,15 +155,14 @@ The Agent Server is often paired with an [Automation Server](https://github.com/
 
 Agent Canvas is part of a multi-repository OpenHands system. Changes should go to the repository that owns the behavior:
 
-| Repository | Responsibility |
-|---|---|
-| [`OpenHands/OpenHands`](https://github.com/OpenHands/OpenHands) | Agent Canvas frontend, user-facing control center, backend selection, and local-stack orchestration. |
+| Repository                                                                        | Responsibility                                                                                            |
+| --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| [`OpenHands/OpenHands`](https://github.com/OpenHands/OpenHands)                   | Agent Canvas frontend, user-facing control center, backend selection, and local-stack orchestration.      |
 | [`OpenHands/software-agent-sdk`](https://github.com/OpenHands/software-agent-sdk) | Python SDK, Agent Server, agents, tools, conversations, workspaces, events, and the canonical server API. |
-| [`OpenHands/typescript-client`](https://github.com/OpenHands/typescript-client) | Browser-compatible TypeScript client for the Agent Server API. |
-| [`OpenHands/automation`](https://github.com/OpenHands/automation) | Automation definitions, scheduling, webhooks, run history, and dispatching. |
+| [`OpenHands/typescript-client`](https://github.com/OpenHands/typescript-client)   | Browser-compatible TypeScript client for the Agent Server API.                                            |
+| [`OpenHands/automation`](https://github.com/OpenHands/automation)                 | Automation definitions, scheduling, webhooks, run history, and dispatching.                               |
 
 The Agent Server API is implemented by the SDK and consumed through the TypeScript client by Agent Canvas. The automation service decides when work runs and dispatches conversations to the Agent Server/SDK, which decides what runs. See [`AGENTS.md`](./AGENTS.md) for contributor-specific boundaries and the required custom code-review guide.
-
 
 ## More documentation
 
