@@ -131,7 +131,7 @@ export function PluginLaunchModal({
       <div
         data-testid="plugin-launch-modal"
         className={cn(
-          "relative bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-[var(--oh-border)] max-h-[80vh]",
+          "relative bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-border max-h-[80vh]",
           modalWidthClassName("md"),
           MODAL_MAX_WIDTH_VIEWPORT,
         )}
@@ -141,7 +141,7 @@ export function PluginLaunchModal({
           {t(I18nKey.LAUNCH$MODAL_TITLE)} {modalTitle}
         </Typography.H2>
 
-        {message && <p className="text-sm text-white">{message}</p>}
+        {message && <p className="text-sm text-contrast">{message}</p>}
 
         <div className="flex-1 overflow-y-auto custom-scrollbar">
           {pluginsWithParams.length > 0 && (
@@ -162,7 +162,7 @@ export function PluginLaunchModal({
 
           {pluginsWithoutParams.length > 0 && (
             <div className={cn(pluginsWithParams.length > 0 && "mt-4")}>
-              <Typography.H3 className="mb-2 text-white">
+              <Typography.H3 className="mb-2 text-contrast">
                 {pluginsWithParams.length > 0
                   ? t(I18nKey.LAUNCH$ADDITIONAL_PLUGINS)
                   : t(I18nKey.LAUNCH$PLUGINS)}
@@ -176,7 +176,7 @@ export function PluginLaunchModal({
                     <div className="font-medium">
                       {getPluginDisplayName(plugin)}
                     </div>
-                    <div className="text-xs text-white mt-1">
+                    <div className="text-xs text-contrast mt-1">
                       {getPluginSourceInfo(plugin)}
                       {plugin.repo_path && (
                         <span className="ml-1">/ {plugin.repo_path}</span>
@@ -192,7 +192,7 @@ export function PluginLaunchModal({
           )}
         </div>
 
-        <div className="pt-4 border-t border-[var(--oh-border-subtle)]">
+        <div className="pt-4 border-t border-border-subtle">
           <div className="flex items-start gap-3 mb-4">
             <input
               id="trust-checkbox"
@@ -202,7 +202,7 @@ export function PluginLaunchModal({
               onChange={(e) => setTrustConfirmed(e.target.checked)}
               className="mt-1 h-4 w-4 flex-shrink-0"
             />
-            <label htmlFor="trust-checkbox" className="text-sm text-white">
+            <label htmlFor="trust-checkbox" className="text-sm text-contrast">
               {t(I18nKey.LAUNCH$TRUST_SKILL_CHECKBOX, {
                 sources: getUniqueSources().join(", "),
                 interpolation: { escapeValue: false },

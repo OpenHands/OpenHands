@@ -24,6 +24,9 @@ export const LLM_PROFILES_QUERY_KEYS = {
 
 export const AGENT_PROFILES_QUERY_KEYS = {
   all: ["agent-profiles"] as const,
+  // Nested under `all` so profile mutations invalidate cached details too.
+  detail: (backendId: string, orgId: string | null | undefined, name: string) =>
+    ["agent-profiles", backendId, orgId, "detail", name] as const,
 } as const;
 
 export const PROVIDER_CONNECTIONS_QUERY_KEYS = {

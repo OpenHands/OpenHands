@@ -41,11 +41,19 @@ import { useStreamedText } from "#/hooks/use-streamed-text";
 
 interface EventMessageProps {
   event: OpenHandsEvent & { isFromPlanningAgent?: boolean };
-  messages: OpenHandsEvent[];
+  /** @deprecated Prefer the stable correspondingAction prop. */
+  messages?: OpenHandsEvent[];
+  /**
+   * The action paired with an observation. null means the caller performed
+   * the lookup and found no action; undefined keeps legacy messages lookup.
+   */
+  correspondingAction?: ActionEvent | null;
   isLastMessage: boolean;
   isInLast10Actions: boolean;
   /** Set of event IDs that should render PlanPreview (one per user message phase) */
   planPreviewEventIds?: Set<string>;
+  /** Stable per-event replacement for planPreviewEventIds. */
+  showPlanPreview?: boolean;
   /**
    * When true, do not render the inline `ThoughtEventMessage` for action /
    * observation events. The caller is expected to render the thought
@@ -164,16 +172,18 @@ function PlanningObservationPreview({
   );
 }
 
-export function EventMessage({
+function EventMessageComponent({
   event,
   messages,
+  correspondingAction: suppliedCorrespondingAction,
   isLastMessage,
   isInLast10Actions,
   planPreviewEventIds,
+  showPlanPreview,
   suppressThought = false,
 }: EventMessageProps) {
   const { data: config } = useConfig();
-  const { planContent } = useConversationStore();
+  const planContent = useConversationStore((state) => state.planContent);
   const { curAgentState } = useAgentState();
 
   // Planner-running state is folded in by PlanningObservationPreview below,
@@ -298,8 +308,10 @@ export function EventMessage({
       // Only show PlanPreview if this event is marked as the one to display
       // (last PlanningFileEditorObservation in its phase)
       if (
-        planPreviewEventIds &&
-        shouldShowPlanPreview(event.id, planPreviewEventIds)
+        showPlanPreview ??
+        (planPreviewEventIds
+          ? shouldShowPlanPreview(event.id, planPreviewEventIds)
+          : false)
       ) {
         return (
           <PlanningObservationPreview
@@ -315,9 +327,12 @@ export function EventMessage({
     }
 
     // Find the action that this observation is responding to
-    const correspondingAction = messages.find(
-      (msg) => isActionEvent(msg) && msg.id === event.action_id,
-    );
+    const correspondingAction =
+      suppliedCorrespondingAction === undefined
+        ? messages?.find(
+            (msg) => isActionEvent(msg) && msg.id === event.action_id,
+          )
+        : (suppliedCorrespondingAction ?? undefined);
 
     // Skip ThoughtEventMessage for ThinkAction (thought IS the action)
     const shouldShowThought =
@@ -381,3 +396,9 @@ export function EventMessage({
     <GenericEventMessageWrapper event={event} isLastMessage={isLastMessage} />
   );
 }
+
+// Messages passes stable event-specific lookup results, so an appended tail
+// can update only the wrappers whose event or positional state really changed.
+// Context and store subscriptions inside this component still bypass memo.
+export const EventMessage = React.memo(EventMessageComponent);
+EventMessage.displayName = "EventMessage";
