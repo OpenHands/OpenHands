@@ -31859,23 +31859,6 @@
     "ca": "Afegeix models com a perfils",
     "uk": "Додати моделі як профілі"
   },
-  "SETTINGS$ADD_MODELS_VERIFIED_ONLY": {
-    "en": "Verified models only",
-    "ja": "検証済みモデルのみ",
-    "zh-CN": "仅已验证的模型",
-    "zh-TW": "僅已驗證的模型",
-    "ko-KR": "검증된 모델만",
-    "no": "Kun verifiserte modeller",
-    "it": "Solo modelli verificati",
-    "pt": "Apenas modelos verificados",
-    "es": "Solo modelos verificados",
-    "ar": "النماذج الموثّقة فقط",
-    "fr": "Modèles vérifiés uniquement",
-    "tr": "Yalnızca doğrulanmış modeller",
-    "de": "Nur verifizierte Modelle",
-    "ca": "Només models verificats",
-    "uk": "Лише перевірені моделі"
-  },
   "SETTINGS$ADD_MODELS_CONNECTION_BOUND": {
     "en": "Linked to {{provider}} — profiles inherit this connection's key",
     "ja": "{{provider}} にリンク — プロファイルはこの接続のキーを引き継ぎます",

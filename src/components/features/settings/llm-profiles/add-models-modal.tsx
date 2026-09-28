@@ -67,15 +67,14 @@ export function AddModelsModal({
   const { t } = useTranslation("openhands");
   const provider = connection?.provider ?? null;
   const connectionId = connection?.id ?? null;
-  const [verifiedOnly, setVerifiedOnly] = useState(true);
   const [rows, setRows] = useState<ModelRow[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   const models = useProviderModels(provider);
   const saveProfile = useSaveLlmProfile();
 
-  // Rows follow the model list, and only the model list: the verified filter
-  // hides rows at render rather than rebuilding them, because a rebuild
+  // Rows follow the model list, and only the model list. Already-added models
+  // are hidden at render rather than rebuilding the rows, because a rebuild
   // discards the edited names, selections and per-row statuses the user has
   // accumulated. A row already on screen keeps its state when the list
   // refreshes; only its verified flag tracks the server.
@@ -123,7 +122,6 @@ export function AddModelsModal({
   // selections and Saved/Failed marks.
   useEffect(() => {
     if (!isOpen) {
-      setVerifiedOnly(true);
       setRows([]);
       setSubmitting(false);
     }
@@ -137,9 +135,9 @@ export function AddModelsModal({
   // existing profile can't be re-created, so showing it (flagged or greyed)
   // just clutters the list. A saved row is exempt — it was added from this
   // very session, so it stays visible with its "Saved" mark.
-  const visibleRows = rows
-    .filter((row) => row.status === "saved" || !existing.has(row.name))
-    .filter((row) => !verifiedOnly || row.verified);
+  const visibleRows = rows.filter(
+    (row) => row.status === "saved" || !existing.has(row.name),
+  );
 
   const isSelectable = (row: ModelRow) =>
     isProfileNameValid(row.name, { isRequired: true });
@@ -257,13 +255,7 @@ export function AddModelsModal({
 
   const isLoadingModels = models.isLoading;
   const showEmpty = !isLoadingModels && visibleRows.length === 0;
-  // Empty because the provider has nothing, or empty because the filter hid
-  // everything it has. Telling the user the provider is bare when the fix is
-  // one checkbox away sends them looking in the wrong place.
-  const emptyMessage =
-    showEmpty && rows.length > 0
-      ? I18nKey.COMMON$NO_RESULTS
-      : I18nKey.SETTINGS$ADD_MODELS_EMPTY;
+  const emptyMessage = I18nKey.SETTINGS$ADD_MODELS_EMPTY;
 
   const footer = (
     <>
@@ -314,17 +306,6 @@ export function AddModelsModal({
             })}
           </span>
         </div>
-
-        <label className="flex items-center gap-2 text-sm text-white">
-          <input
-            data-testid="add-models-verified-only"
-            type="checkbox"
-            checked={verifiedOnly}
-            onChange={(e) => setVerifiedOnly(e.target.checked)}
-            disabled={submitting}
-          />
-          {t(I18nKey.SETTINGS$ADD_MODELS_VERIFIED_ONLY)}
-        </label>
 
         {isLoadingModels && (
           <div data-testid="add-models-loading" className="py-4 text-center">

@@ -19,10 +19,8 @@ vi.mock("react-i18next", () => ({
       const translations: Record<string, string> = {
         SETTINGS$ADD_MODELS_TITLE: "Add models as profiles",
         SETTINGS$ADD_MODELS_CONNECTION_BOUND: `Linked to ${params?.provider ?? "?"}`,
-        SETTINGS$ADD_MODELS_VERIFIED_ONLY: "Verified models only",
         SETTINGS$ADD_MODELS_SELECT_ALL: "Select all",
         SETTINGS$ADD_MODELS_EMPTY: "No models found for this provider.",
-        COMMON$NO_RESULTS: "No results found",
         SETTINGS$ADD_N_PROFILES: `Add ${params?.count ?? "?"} profiles`,
         SETTINGS$MODELS_ADDED: `Added ${params?.count ?? "?"} profiles`,
         SETTINGS$MODELS_ADDED_PARTIAL: `Added ${params?.added ?? "?"} profiles; ${params?.failed ?? "?"} failed`,
@@ -139,7 +137,9 @@ describe("AddModelsModal", () => {
   };
 
   const showUnverified = async () => {
-    await userEvent.click(screen.getByTestId("add-models-verified-only"));
+    // No verified filter anymore — unverified models are always visible, so
+    // this just waits for the unverified row to render. Kept as a helper so
+    // call sites read clearly.
     await screen.findByTestId("add-models-row-openai/unverified-model");
   };
 
@@ -170,41 +170,20 @@ describe("AddModelsModal", () => {
     expect(screen.getByText("Shared OpenAI")).toBeInTheDocument();
   });
 
-  it("lists verified models for the connection's provider with derived names", async () => {
+  it("lists all models for the connection's provider with derived names", async () => {
     renderModal();
     await screen.findByTestId("add-models-row-openai/gpt-4o");
     expect(
       screen.getByTestId("add-models-row-openai/gpt-4o-mini"),
     ).toBeInTheDocument();
-    // unverified filtered out by default
+    // No verified filter: unverified models are shown too.
     expect(
-      screen.queryByTestId("add-models-row-openai/unverified-model"),
-    ).not.toBeInTheDocument();
+      screen.getByTestId("add-models-row-openai/unverified-model"),
+    ).toBeInTheDocument();
     // derived name pre-fills the input
     expect(
       screen.getByTestId("add-models-name-openai/gpt-4o-mini"),
     ).toHaveValue("gpt-4o-mini");
-  });
-
-  it("shows unverified models when the filter is toggled off", async () => {
-    renderModal();
-    await screen.findByTestId("add-models-row-openai/gpt-4o");
-    await userEvent.click(screen.getByTestId("add-models-verified-only"));
-    await screen.findByTestId("add-models-row-openai/unverified-model");
-  });
-
-  it("distinguishes a provider with no models from a filter hiding them all", async () => {
-    vi.mocked(ConfigService.searchModels).mockResolvedValue({
-      items: [model("openai", "unverified-only", false)],
-      next_page_id: null,
-    });
-    renderModal();
-    await screen.findByTestId("add-models-empty");
-    expect(screen.getByTestId("add-models-empty")).toHaveTextContent(
-      "No results found",
-    );
-    await userEvent.click(screen.getByTestId("add-models-verified-only"));
-    await screen.findByTestId("add-models-row-openai/unverified-only");
   });
 
   it("says the provider is empty when it really has no models", async () => {
@@ -228,10 +207,10 @@ describe("AddModelsModal", () => {
     expect(
       screen.queryByTestId("add-models-row-openai/gpt-4o-mini"),
     ).not.toBeInTheDocument();
-    // select-all reaches only the non-hidden row
+    // select-all reaches the non-hidden rows (gpt-4o + unverified-model)
     await userEvent.click(screen.getByTestId("add-models-select-all"));
     expect(screen.getByTestId("add-models-submit")).toHaveTextContent(
-      "Add 1 profiles",
+      "Add 2 profiles",
     );
   });
 
@@ -292,7 +271,8 @@ describe("AddModelsModal", () => {
     const onClose = vi.fn();
     vi.mocked(ProfilesService.saveProfile)
       .mockResolvedValueOnce({ name: "a", message: "ok" })
-      .mockRejectedValueOnce(new Error("boom"));
+      .mockRejectedValueOnce(new Error("boom"))
+      .mockResolvedValue({ name: "c", message: "ok" });
     renderModal(OPENAI_CONNECTION, [], onClose);
     await screen.findByTestId("add-models-row-openai/gpt-4o");
     await userEvent.click(screen.getByTestId("add-models-select-all"));
@@ -303,7 +283,7 @@ describe("AddModelsModal", () => {
     );
     expect(onClose).not.toHaveBeenCalled();
     const rows = screen.getAllByText(/^(Saved|Failed)$/);
-    expect(rows).toHaveLength(2);
+    expect(rows).toHaveLength(3);
   });
 
   it("stops the run and reports the server's reason when it refuses with 409", async () => {
@@ -334,7 +314,7 @@ describe("AddModelsModal", () => {
   it("carries on past a single 409 so one raced name collision cannot halt the run", async () => {
     vi.mocked(ProfilesService.saveProfile)
       .mockRejectedValueOnce(httpError(409, "Profile 'x' already exists."))
-      .mockResolvedValueOnce({ name: "b", message: "ok" });
+      .mockResolvedValue({ name: "b", message: "ok" });
     renderModal();
     await screen.findByTestId("add-models-row-openai/gpt-4o");
     await userEvent.click(screen.getByTestId("add-models-select-all"));
@@ -343,10 +323,10 @@ describe("AddModelsModal", () => {
     await waitFor(() =>
       expect(screen.getByTestId("add-models-submit")).not.toBeDisabled(),
     );
-    expect(ProfilesService.saveProfile).toHaveBeenCalledTimes(2);
-    expect(screen.getByText("Saved")).toBeInTheDocument();
+    expect(ProfilesService.saveProfile).toHaveBeenCalledTimes(3);
+    expect(screen.getAllByText("Saved")).toHaveLength(2);
     expect(displayErrorToast).toHaveBeenCalledWith(
-      "Added 1 profiles; 1 failed",
+      "Added 2 profiles; 1 failed",
     );
   });
 
@@ -389,7 +369,7 @@ describe("AddModelsModal", () => {
     );
   });
 
-  it("keeps selections and edited names across a filter toggle", async () => {
+  it("keeps edited names and selections once the list has settled", async () => {
     renderModal();
     await screen.findByTestId("add-models-row-openai/gpt-4o");
     const name = screen.getByTestId("add-models-name-openai/gpt-4o-mini");
@@ -407,16 +387,6 @@ describe("AddModelsModal", () => {
     expect(
       screen.getByTestId("add-models-check-openai/gpt-4o-mini"),
     ).toBeChecked();
-
-    await userEvent.click(screen.getByTestId("add-models-verified-only"));
-    await waitFor(() =>
-      expect(
-        screen.queryByTestId("add-models-row-openai/unverified-model"),
-      ).not.toBeInTheDocument(),
-    );
-    expect(
-      screen.getByTestId("add-models-name-openai/gpt-4o-mini"),
-    ).toHaveValue("my-mini");
   });
 
   it("starts a fresh session when the modal is reopened", async () => {
@@ -425,7 +395,7 @@ describe("AddModelsModal", () => {
     await screen.findByTestId("add-models-row-openai/gpt-4o");
     await userEvent.click(screen.getByTestId("add-models-select-all"));
     await userEvent.click(screen.getByTestId("add-models-submit"));
-    await waitFor(() => expect(screen.getAllByText("Failed")).toHaveLength(2));
+    await waitFor(() => expect(screen.getAllByText("Failed")).toHaveLength(3));
 
     setOpen(false);
     setOpen(true);
@@ -443,7 +413,7 @@ describe("AddModelsModal", () => {
 
     await userEvent.click(screen.getByTestId("add-models-select-all"));
     expect(screen.getByTestId("add-models-submit")).toHaveTextContent(
-      "Add 2 profiles",
+      "Add 3 profiles",
     );
 
     await userEvent.click(screen.getByTestId("add-models-select-all"));
