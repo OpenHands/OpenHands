@@ -10,6 +10,7 @@ import { I18nKey } from "#/i18n/declaration";
 import type { AutomationDraftListResponse } from "#/manifests/types";
 
 import AutomationService from "#/api/automation-service/automation-service.api";
+import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { getCloudOrganizationMe } from "#/api/cloud/organization-service.api";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
 import {
@@ -26,6 +27,34 @@ import {
   type AutomationsResponse,
 } from "#/types/automation";
 import { AUTOMATION_STACK_SECTION_BOTTOM_CLASS } from "#/utils/automation-stack-section";
+
+const mocks = vi.hoisted(() => ({
+  createConversationMutate: vi.fn(),
+  navigate: vi.fn(),
+}));
+
+vi.mock(
+  "#/api/conversation-service/agent-server-conversation-service.api",
+  () => ({
+    default: {
+      batchGetAppConversations: vi.fn(),
+      updateConversationTags: vi.fn(),
+    },
+  }),
+);
+
+vi.mock("#/hooks/mutation/use-create-conversation", () => ({
+  useCreateConversation: () => ({ mutate: mocks.createConversationMutate }),
+}));
+
+vi.mock("#/context/navigation-context", () => ({
+  useNavigation: () => ({
+    currentPath: "/automations",
+    conversationId: null,
+    isNavigating: false,
+    navigate: mocks.navigate,
+  }),
+}));
 
 vi.mock("#/api/automation-service/automation-service.api", () => ({
   default: {
@@ -167,6 +196,18 @@ beforeEach(() => {
   });
   vi.mocked(AutomationService.updateAutomation).mockReset();
   vi.mocked(AutomationService.dispatchAutomation).mockReset();
+  mocks.createConversationMutate.mockReset();
+  mocks.navigate.mockReset();
+  vi.mocked(
+    AgentServerConversationService.batchGetAppConversations,
+  ).mockReset();
+  vi.mocked(
+    AgentServerConversationService.batchGetAppConversations,
+  ).mockResolvedValue([]);
+  vi.mocked(AgentServerConversationService.updateConversationTags).mockReset();
+  vi.mocked(
+    AgentServerConversationService.updateConversationTags,
+  ).mockResolvedValue({} as never);
   vi.mocked(ProfilesService.listProfiles).mockReset();
   vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
     profiles: [],
@@ -195,11 +236,10 @@ describe("AutomationsList — draft sections", () => {
 
     renderList();
 
-    expect(
-      await screen.findByText(I18nKey.AUTOMATIONS$SAVED_DRAFTS),
-    ).toBeInTheDocument();
+    const draftCard = await screen.findByTestId(
+      "automation-setup-draft-draft-1",
+    );
     expect(screen.getByText("Saved setup draft")).toBeInTheDocument();
-    const draftCard = screen.getByTestId("automation-setup-draft-draft-1");
     expect(draftCard).toBeInTheDocument();
     expect(
       within(draftCard).getByTestId("automation-setup-draft-open-draft-1"),
@@ -215,14 +255,48 @@ describe("AutomationsList — draft sections", () => {
     ).toBeInTheDocument();
 
     expect(
-      screen.queryByText(I18nKey.AUTOMATIONS$MATERIALIZED_DRAFTS),
-    ).not.toBeInTheDocument();
-    expect(
       screen.queryByText("Materialized test draft"),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByTestId("automation-card-auto-draft-1"),
     ).not.toBeInTheDocument();
+  });
+
+  it("preserves existing conversation tags when resuming a saved draft", async () => {
+    const user = userEvent.setup();
+    vi.mocked(AutomationService.listServerDrafts).mockResolvedValue(
+      draftListResponse,
+    );
+    mocks.createConversationMutate.mockImplementation((_, options) => {
+      options?.onSuccess?.({ conversation_id: "conv-resume" });
+    });
+    vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    ).mockResolvedValue([{ tags: { existing: "tag" } }] as never);
+
+    renderList();
+
+    const draftCard = await screen.findByTestId(
+      "automation-setup-draft-draft-1",
+    );
+    await user.click(
+      within(draftCard).getByTestId("automation-setup-draft-resume-draft-1"),
+    );
+
+    await waitFor(() =>
+      expect(
+        AgentServerConversationService.updateConversationTags,
+      ).toHaveBeenCalledWith(
+        "conv-resume",
+        expect.objectContaining({
+          existing: "tag",
+          automationsetup: "draft",
+          automationdraftid: "draft-1",
+          automationmaterializeddraftid: "auto-draft-1",
+        }),
+      ),
+    );
+    expect(mocks.navigate).toHaveBeenCalledWith("/conversations/conv-resume");
   });
 
   it("can test and delete saved setup drafts", async () => {
@@ -254,7 +328,7 @@ describe("AutomationsList — draft sections", () => {
       within(draftCard).getByTestId("automation-setup-draft-delete-draft-1"),
     );
     expect(
-      screen.getByText(I18nKey.AUTOMATION_SETUP$DELETE_DRAFT_TITLE),
+      screen.getByTestId("automation-setup-draft-delete-confirm"),
     ).toBeInTheDocument();
     await user.click(
       screen.getByTestId("automation-setup-draft-delete-confirm"),

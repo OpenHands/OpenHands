@@ -505,10 +505,14 @@ export default function AutomationsList() {
             setupDraftFromServerDraft(draft),
           );
           try {
+            const [conversationDetails] =
+              await AgentServerConversationService.batchGetAppConversations([
+                conversationId,
+              ]);
             await AgentServerConversationService.updateConversationTags(
               conversationId,
               buildAutomationDraftTags(
-                null,
+                conversationDetails?.tags ?? null,
                 draft.id,
                 draft.materializedAutomationId,
               ),

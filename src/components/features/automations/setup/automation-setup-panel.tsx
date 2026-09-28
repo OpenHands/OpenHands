@@ -66,7 +66,6 @@ import {
   hasAutomationSetupModeTag,
   removeAutomationDraftTags,
 } from "#/utils/automation-draft-tags";
-import { useDeploymentCapabilities } from "#/hooks/query/use-manifest-capabilities";
 
 const DEFAULT_TIMEZONE = "America/New_York";
 const DEFAULT_TIME = "09:00";

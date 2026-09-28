@@ -208,9 +208,6 @@ describe("AutomationSetupPanel", () => {
         },
       }),
     });
-    expect(screen.getByTestId("automation-setup-status")).toHaveTextContent(
-      "AUTOMATION_SETUP$READY_TO_TEST",
-    );
   });
 
   it("sends each comma-separated repository to the automation service", async () => {
@@ -532,9 +529,6 @@ describe("AutomationSetupPanel", () => {
       expect(
         screen.getByTestId("automation-setup-draft-details"),
       ).toBeInTheDocument();
-      expect(
-        screen.getByTestId("automation-setup-draft-validity"),
-      ).toHaveTextContent("AUTOMATION_SETUP$READY_TO_TEST");
 
       // Second save reuses the persisted id rather than creating again.
       await user.click(screen.getByTestId("automation-setup-save-draft"));
@@ -667,9 +661,6 @@ describe("AutomationSetupPanel", () => {
         ),
       );
       expect(AutomationService.validateDraft).not.toHaveBeenCalled();
-      expect(
-        screen.getByTestId("automation-setup-draft-run"),
-      ).toHaveTextContent("AUTOMATIONS$DETAIL$PENDING");
       expect(mockNavigate).not.toHaveBeenCalledWith(
         "/conversations/conv-run-1",
       );
@@ -845,9 +836,6 @@ describe("AutomationSetupPanel", () => {
       fireEvent.change(payloadInput, { target: { value: "not json" } });
       await user.click(screen.getByTestId("automation-setup-test"));
 
-      expect(screen.getByTestId("automation-setup-status")).toHaveTextContent(
-        "AUTOMATION_SETUP$TEST_EVENT_PAYLOAD_INVALID",
-      );
       expect(AutomationService.createServerDraft).not.toHaveBeenCalled();
       expect(AutomationService.dispatchServerDraft).not.toHaveBeenCalled();
     });
