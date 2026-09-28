@@ -5,7 +5,7 @@
 # Starts three services (plus an optional fourth):
 #   1. Agent Server   on port $AGENT_SERVER_PORT  (default 18000)
 #   2. Automation     on port $AUTOMATION_PORT     (default 18001)
-#   3. Static server  on port $PORT               (default 8000)
+#   3. Static server  on port $PORT                (default 8000)
 #      Routes /api/automation/* → automation, /api/* → agent-server,
 #      and serves the frontend static build for everything else.
 #   4. (Optional) Public-mode static server on $PUBLIC_MODE_PORT
@@ -102,7 +102,7 @@ VSCODE_BASE_PATH="${OH_VSCODE_BASE_PATH:-${VSCODE_BASE_PATH:-${CONFIG_VSCODE_BAS
 normalize_base_path() {
   local p="$1"
   while [ "${p#/}" != "$p" ]; do p="${p#/}"; done
-  while [ "${p%/}" != "$p" ]; do p="${p%/}"; done
+  while [ "${p\%/}" != "$p" ]; do p="${p%/}"; done
   printf '/%s' "$p"
 }
 VSCODE_BASE_PATH="$(normalize_base_path "$VSCODE_BASE_PATH")"
@@ -195,20 +195,25 @@ export OH_SECRET_KEY
 # API key — generate one if not provided so the image doesn't run wide-open
 # by default. LOCAL_BACKEND_API_KEY is the single user-facing env var.
 # Persisted so restarts reuse the same key.
+# >>> session-api-key-config: this block is extracted and asserted by script tests
 API_KEY_FILE="${STATE_DIR}/api-key.txt"
 
-if [ -z "${LOCAL_BACKEND_API_KEY:-}" ] && [ -z "${OH_SESSION_API_KEYS_0:-}" ]; then
-  if [ -f "$API_KEY_FILE" ]; then
-    LOCAL_BACKEND_API_KEY="$(cat "$API_KEY_FILE")"
-  else
-    LOCAL_BACKEND_API_KEY="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
-    mkdir -p "$(dirname "$API_KEY_FILE")"
-    printf '%s' "$LOCAL_BACKEND_API_KEY" > "$API_KEY_FILE"
-    chmod 600 "$API_KEY_FILE"
-    log "Generated API key (persisted to $API_KEY_FILE)"
+if [ -z "${OH_SESSION_API_KEYS_0:-}" ]; then
+  if [ -z "${LOCAL_BACKEND_API_KEY:-}" ]; then
+    if [ -f "$API_KEY_FILE" ]; then
+      LOCAL_BACKEND_API_KEY="$(cat "$API_KEY_FILE")"
+    else
+      LOCAL_BACKEND_API_KEY="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+      mkdir -p "$(dirname "$API_KEY_FILE")"
+      printf '%s' "$LOCAL_BACKEND_API_KEY" > "$API_KEY_FILE"
+      chmod 600 "$API_KEY_FILE"
+      log "Generated API key (persisted to $API_KEY_FILE)"
+    fi
   fi
   export OH_SESSION_API_KEYS_0="$LOCAL_BACKEND_API_KEY"
 fi
+export OH_SESSION_API_KEYS_0
+# <<< session-api-key-config
 
 # Both backends share the same API key value and the same `X-Session-API-Key`
 # header for authentication.  Default OPENHANDS_AUTOMATION_API_KEY to the
@@ -360,11 +365,11 @@ wait_for_port() {
     sleep 1
     elapsed=$((elapsed + 1))
     if [ "$elapsed" -ge "$max_wait" ]; then
-      log "WARNING: $name on port $port did not become ready within ${max_wait}s"
+      log "WARNING: $name on port $port did not become ready within${max_wait}s"
       return 1
     fi
   done
-  log "$name is ready on port $port"
+  log "$name is ready on port$port"
 }
 
 wait_for_port "$AGENT_SERVER_PORT" "Agent Server" 60 &
