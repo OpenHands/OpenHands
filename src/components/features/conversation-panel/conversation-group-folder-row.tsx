@@ -10,6 +10,7 @@ import type {
   GroupFolderDropPosition,
 } from "./conversation-panel-list-helpers";
 import { getGroupConversationPreview } from "./conversation-panel-list-helpers";
+import { ConversationCardSkeleton } from "./conversation-card/conversation-card-skeleton";
 
 interface ConversationGroup {
   id: string;
@@ -36,6 +37,10 @@ interface ConversationGroupFolderRowProps {
   onDrop: (event: DragEvent<HTMLElement>) => void;
   onTogglePreviewExpanded: () => void;
   onLaunchFromGroup: () => void;
+  onLoadMoreGroup: () => void;
+  isLoadingMore: boolean;
+  /** Backend pages remain; when false the folder's "Load more" is unnecessary. */
+  hasMorePages: boolean;
   renderConversationCard: (conversation: AppConversation) => ReactNode;
 }
 
@@ -57,6 +62,9 @@ export function ConversationGroupFolderRow({
   onDrop,
   onTogglePreviewExpanded,
   onLaunchFromGroup,
+  onLoadMoreGroup,
+  isLoadingMore,
+  hasMorePages,
   renderConversationCard,
 }: ConversationGroupFolderRowProps) {
   const { t } = useTranslation("openhands");
@@ -231,6 +239,26 @@ export function ConversationGroupFolderRow({
                   {isShowingAll
                     ? t(I18nKey.CONVERSATION_PANEL$LESS)
                     : t(I18nKey.CONVERSATION_PANEL$MORE)}
+                </button>
+              </div>
+            ) : null}
+            {isLoadingMore ? (
+              <div className="py-1">
+                <ConversationCardSkeleton compact={false} />
+              </div>
+            ) : // Only show the per-workspace control once every already-loaded row
+            // is on screen (expanded preview, or nothing truncated yet) — next
+            // to a truncated preview it would compete with the "More" link,
+            // which reveals rows that are already loaded.
+            hasMorePages && (previewExpanded || !isPreviewTruncated) ? (
+              <div className="pl-2">
+                <button
+                  type="button"
+                  data-testid={`thread-folder-load-more-${groupTestIdSuffix}`}
+                  onClick={onLoadMoreGroup}
+                  className="cursor-pointer text-xs text-text-dim hover:text-contrast"
+                >
+                  {t(I18nKey.CONVERSATION$LOAD_MORE)}
                 </button>
               </div>
             ) : null}

@@ -2518,6 +2518,184 @@ describe("ConversationPanel", () => {
         ).getAllByTestId("conversation-card"),
       ).toHaveLength(5);
     });
+
+    it("per-workspace load more reveals the next conversations for the clicked workspace even when the page belongs to another workspace", async () => {
+      useConversationPanelPreferencesStore.setState({
+        organizeMode: "grouped",
+      });
+      // Page 1: one alpha + four no-workspace rows. Page 2 belongs entirely to
+      // a different workspace, page 3 finally contains alpha's next row.
+      const searchSpy = vi
+        .spyOn(AgentServerConversationService, "searchConversations")
+        .mockResolvedValueOnce({
+          items: [
+            createMockConversation({
+              id: "alpha-1",
+              title: "Alpha 1",
+              selected_workspace: "/workspace/alpha",
+            }),
+            ...Array.from({ length: 4 }, (_, index) =>
+              createMockConversation({
+                id: `none-${index + 1}`,
+                title: `None ${index + 1}`,
+              }),
+            ),
+          ],
+          next_page_id: "page-2",
+        })
+        .mockResolvedValueOnce({
+          items: [
+            createMockConversation({
+              id: "beta-1",
+              title: "Beta 1",
+              selected_workspace: "/workspace/beta",
+            }),
+            createMockConversation({
+              id: "beta-2",
+              title: "Beta 2",
+              selected_workspace: "/workspace/beta",
+            }),
+          ],
+          next_page_id: "page-3",
+        })
+        .mockResolvedValueOnce({
+          items: [
+            createMockConversation({
+              id: "alpha-2",
+              title: "Alpha 2",
+              selected_workspace: "/workspace/alpha",
+            }),
+          ],
+          next_page_id: null,
+        });
+
+      const user = userEvent.setup();
+      renderConversationPanel();
+
+      const alphaFolder = await screen.findByTestId(
+        "thread-folder-ws--workspace-alpha",
+      );
+      // One alpha conversation on the first page — nothing truncated yet, so
+      // the folder shows its own per-workspace "Load more".
+      expect(
+        within(alphaFolder).getAllByTestId("conversation-card"),
+      ).toHaveLength(1);
+      const alphaLoadMore = within(alphaFolder).getByTestId(
+        "thread-folder-load-more-ws--workspace-alpha",
+      );
+
+      await user.click(alphaLoadMore);
+
+      // The driver walks past the beta-only page and reveals Alpha 2.
+      await waitFor(() => {
+        expect(within(alphaFolder).getByText("Alpha 2")).toBeInTheDocument();
+      });
+      // Exactly three pages were fetched: the initial one, the deepen-only
+      // page-2, and the page that actually grew this workspace.
+      expect(searchSpy).toHaveBeenCalledTimes(3);
+    });
+
+    it("per-workspace load more walks past pages that belong to other workspaces after a preview is expanded", async () => {
+      useConversationPanelPreferencesStore.setState({
+        organizeMode: "grouped",
+      });
+      // Page 1: six no-workspace rows (one past the preview limit). Page 2
+      // belongs entirely to another workspace (does not grow this group),
+      // page 3 holds this group's next row.
+      const searchSpy = vi
+        .spyOn(AgentServerConversationService, "searchConversations")
+        .mockResolvedValueOnce({
+          items: Array.from({ length: 6 }, (_, index) =>
+            createMockConversation({
+              id: `none-${index + 1}`,
+              title: `None ${index + 1}`,
+            }),
+          ),
+          next_page_id: "page-2",
+        })
+        .mockResolvedValueOnce({
+          items: [
+            createMockConversation({
+              id: "beta-1",
+              title: "Beta 1",
+              selected_workspace: "/workspace/beta",
+            }),
+          ],
+          next_page_id: "page-3",
+        })
+        .mockResolvedValueOnce({
+          items: [
+            createMockConversation({
+              id: "none-7",
+              title: "None 7",
+            }),
+          ],
+          next_page_id: null,
+        });
+
+      const user = userEvent.setup();
+      renderConversationPanel();
+
+      const noneFolder = await screen.findByTestId(
+        "thread-folder-__none_workspace",
+      );
+      // While the preview is truncated the per-workspace control is hidden,
+      // so it cannot compete with the "More" link that reveals rows which are
+      // already loaded.
+      expect(
+        within(noneFolder).queryByTestId(
+          "thread-folder-load-more-__none_workspace",
+        ),
+      ).not.toBeInTheDocument();
+      await user.click(
+        within(noneFolder).getByTestId(
+          "thread-folder-view-more-__none_workspace",
+        ),
+      );
+      const noneLoadMore = within(noneFolder).getByTestId(
+        "thread-folder-load-more-__none_workspace",
+      );
+
+      await user.click(noneLoadMore);
+
+      // The driver walks past the beta-only page 2 and reveals None 7.
+      await waitFor(() => {
+        expect(within(noneFolder).getByText("None 7")).toBeInTheDocument();
+      });
+      expect(searchSpy).toHaveBeenCalledTimes(3);
+    });
+
+    it("hides the per-workspace control when no more pages exist", async () => {
+      useConversationPanelPreferencesStore.setState({
+        organizeMode: "grouped",
+      });
+      // No next page: a folder that is not truncated must not render a dead
+      // per-workspace "Load more".
+      vi.spyOn(
+        AgentServerConversationService,
+        "searchConversations",
+      ).mockResolvedValue({
+        items: [
+          createMockConversation({
+            id: "alpha-1",
+            title: "Alpha 1",
+            selected_workspace: "/workspace/alpha",
+          }),
+        ],
+        next_page_id: null,
+      });
+
+      renderConversationPanel();
+
+      const alphaFolder = await screen.findByTestId(
+        "thread-folder-ws--workspace-alpha",
+      );
+      expect(
+        within(alphaFolder).queryByTestId(
+          "thread-folder-load-more-ws--workspace-alpha",
+        ),
+      ).not.toBeInTheDocument();
+    });
   });
 
   it("reorders grouped folders via drag and drop", async () => {

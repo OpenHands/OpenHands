@@ -75,6 +75,9 @@ const noop = () => {};
 
 const EMPTY_PINNED_CONVERSATION_IDS: readonly string[] = [];
 
+/** Sentinel for "no group is currently loading more". */
+const EMPTY_LOADING_MORE_GROUP_ID = "";
+
 export function ConversationPanel({
   onClose,
   compact = false,
@@ -225,6 +228,7 @@ export function ConversationPanel({
     if (organizeMode !== "grouped") {
       setCollapsedGroupIds(new Set());
       setExpandedGroupPreviewIds(new Set());
+      setGroupLoadMoreRequest(null);
     }
   }, [organizeMode]);
 
@@ -608,17 +612,127 @@ export function ConversationPanel({
   const loadedPageCountRef = React.useRef(loadedPageCount);
   loadedPageCountRef.current = loadedPageCount;
 
+  // ------------------------------------------------------------------------
+  // Per-workspace "Load more" (#17760).
+  //
+  // The backend cursor is page-shaped, not workspace-shaped: a global page can
+  // contain conversations from several workspaces, so a folder that is
+  // interleaved with other groups cannot satisfy "show me the next page for
+  // THIS workspace" with one backend fetch. The group control therefore drives
+  // the same page cursor as the global control, but its success condition is
+  // workspace-specific: it keeps fetching (bounded by
+  // `MAX_PAGES_PER_LOAD_MORE_CLICK`, the same per-click cap the grouped global
+  // control uses) until the clicked workspace's loaded conversation count
+  // grows, then stops immediately — regardless of whether the page also added
+  // rows to other folders or deepened an already-visible folder. Pages fetched
+  // this way persist into the loaded pages, so rows for other workspaces only
+  // ever help those folders; no workspace can consume another's requested
+  // page.
+  interface GroupLoadMoreRequest {
+    groupId: string;
+    /** Loaded page count when the user clicked. */
+    pageFloor: number;
+    /** The workspace's loaded conversation count when the user clicked. */
+    conversationFloor: number;
+  }
+  const [groupLoadMoreRequest, setGroupLoadMoreRequest] =
+    React.useState<GroupLoadMoreRequest | null>(null);
+
+  const handleGroupLoadMore = React.useCallback(
+    (groupId: string) => {
+      if (!hasNextPage || !orderedConversationGroups) {
+        return;
+      }
+      const group = orderedConversationGroups.find((g) => g.id === groupId);
+      if (!group) {
+        return;
+      }
+      // Reveal every loaded row of this folder so the newly fetched
+      // conversations are actually visible next to where the user clicked
+      // (a collapsed folder freezes its preview by design).
+      setExpandedGroupPreviewIds((prev) => {
+        const next = new Set(prev);
+        next.add(groupId);
+        return next;
+      });
+      setGroupLoadMoreRequest({
+        groupId,
+        pageFloor: loadedPageCountRef.current,
+        conversationFloor: group.conversations.length,
+      });
+    },
+    [hasNextPage, orderedConversationGroups],
+  );
+
+  React.useEffect(() => {
+    if (groupLoadMoreRequest === null) {
+      return;
+    }
+    const { groupId, pageFloor, conversationFloor } = groupLoadMoreRequest;
+    const group = orderedConversationGroups?.find((g) => g.id === groupId);
+    // The group vanished (e.g. organize mode or backend switched) — stop.
+    if (!group) {
+      setGroupLoadMoreRequest(null);
+      return;
+    }
+    // Success: this workspace gained a conversation since the click.
+    if (group.conversations.length > conversationFloor) {
+      setGroupLoadMoreRequest(null);
+      return;
+    }
+    // The cursor reset (e.g. backend or org switched while the request was
+    // armed): the page floors no longer apply, so stop instead of walking the
+    // new backend's cursor.
+    if (loadedPageCount < pageFloor) {
+      setGroupLoadMoreRequest(null);
+      return;
+    }
+    // Same per-click page cap the grouped global driver uses.
+    if (loadedPageCount >= pageFloor + MAX_PAGES_PER_LOAD_MORE_CLICK) {
+      setGroupLoadMoreRequest(null);
+      return;
+    }
+    if (!hasNextPage) {
+      setGroupLoadMoreRequest(null);
+      return;
+    }
+    // Wait for any in-flight fetch (including the 30s background refetch)
+    // before evaluating the floors again.
+    if (isFetching || isFetchingNextPage) {
+      return;
+    }
+    fetchNextPage();
+  }, [
+    groupLoadMoreRequest,
+    orderedConversationGroups,
+    loadedPageCount,
+    hasNextPage,
+    isFetching,
+    isFetchingNextPage,
+    fetchNextPage,
+  ]);
+
+  const loadingMoreGroupId =
+    groupLoadMoreRequest?.groupId ?? EMPTY_LOADING_MORE_GROUP_ID;
+
+  const isLoadingMore = loadMoreFloor !== null || isFetchingNextPage;
+
   const clearLoadMoreRequest = React.useCallback(() => {
     setLoadMoreFloor(null);
     setLoadMorePageFloor(null);
   }, []);
 
   const requestLoadMore = React.useCallback(() => {
+    // A per-workspace "Load more" is already driving the page cursor; ignore
+    // the global click so the two drivers cannot double-fetch.
+    if (groupLoadMoreRequest !== null) {
+      return;
+    }
     if (hasNextPage) {
       setLoadMoreFloor(visibleCountRef.current);
       setLoadMorePageFloor(loadedPageCountRef.current);
     }
-  }, [hasNextPage]);
+  }, [groupLoadMoreRequest, hasNextPage]);
 
   React.useEffect(() => {
     if (loadMoreFloor === null) {
@@ -654,10 +768,16 @@ export function ConversationPanel({
       clearLoadMoreRequest();
       return;
     }
+    // A per-workspace "Load more" is already driving the same page cursor;
+    // let it finish its bounded run instead of double-fetching.
+    if (groupLoadMoreRequest !== null) {
+      return;
+    }
     fetchNextPage();
   }, [
     clearLoadMoreRequest,
     compact,
+    groupLoadMoreRequest,
     loadMoreFloor,
     loadMorePageFloor,
     visibleCount,
@@ -668,8 +788,6 @@ export function ConversationPanel({
     isFetchingNextPage,
     fetchNextPage,
   ]);
-
-  const isLoadingMore = loadMoreFloor !== null || isFetchingNextPage;
 
   const { mutate: deleteConversation, mutateAsync: deleteConversationAsync } =
     useDeleteConversation();
@@ -1229,6 +1347,9 @@ export function ConversationPanel({
             isCreatingConversationFlow={isCreatingConversationFlow}
             activeConversationId={currentConversationId}
             onLaunchFromGroup={launchFromGroup}
+            onLoadMoreGroup={handleGroupLoadMore}
+            loadingMoreGroupId={loadingMoreGroupId}
+            hasMorePages={hasNextPage && !olderHidden}
             renderConversationCard={(conversation) =>
               renderConversationCard(conversation)
             }

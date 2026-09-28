@@ -36,6 +36,13 @@ interface ConversationGroupFolderListProps {
   isCreatingConversationFlow: boolean;
   activeConversationId?: string | null;
   onLaunchFromGroup: (launch: ConversationGroupLaunch) => void;
+  onLoadMoreGroup: (groupId: string) => void;
+  loadingMoreGroupId: string;
+  /**
+   * Backend pages remain (the global "Load more" is rendered at the list end,
+   * so a workspace folder knows about them only through this flag).
+   */
+  hasMorePages: boolean;
   renderConversationCard: (conversation: AppConversation) => ReactNode;
 }
 
@@ -52,6 +59,9 @@ export function ConversationGroupFolderList({
   isCreatingConversationFlow,
   activeConversationId,
   onLaunchFromGroup,
+  onLoadMoreGroup,
+  loadingMoreGroupId,
+  hasMorePages,
   renderConversationCard,
 }: ConversationGroupFolderListProps) {
   const { t } = useTranslation("openhands");
@@ -183,6 +193,9 @@ export function ConversationGroupFolderList({
           }}
           onTogglePreviewExpanded={() => onToggleGroupPreviewExpanded(group.id)}
           onLaunchFromGroup={() => onLaunchFromGroup(group.launch)}
+          onLoadMoreGroup={() => onLoadMoreGroup(group.id)}
+          isLoadingMore={loadingMoreGroupId === group.id}
+          hasMorePages={hasMorePages}
           renderConversationCard={renderConversationCard}
         />
       ))}
