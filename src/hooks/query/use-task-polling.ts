@@ -23,6 +23,10 @@ import {
   schedulePendingTaskMessageReassign,
 } from "#/utils/pending-task-message-link";
 import { useBackendScopedPath } from "#/hooks/use-backend-scoped-path";
+import {
+  getAutomationSetupDraft,
+  setAutomationSetupDraft,
+} from "#/api/automation-setup-draft-store";
 
 const storeTaskPlugins = (
   task: AppConversationStartTask,
@@ -162,6 +166,11 @@ export const useTaskPollingController = () => {
       const taskConversationId = `task-${taskId}`;
       linkPendingTaskMessages(appConversationId, taskConversationId);
       schedulePendingTaskMessageReassign(taskConversationId, appConversationId);
+
+      const automationSetupDraft = getAutomationSetupDraft(taskConversationId);
+      if (automationSetupDraft) {
+        setAutomationSetupDraft(appConversationId, automationSetupDraft);
+      }
 
       const pendingDraft = consumePendingTaskDraft(taskId);
       if (pendingDraft) {
