@@ -23,12 +23,20 @@ export function usesIsolatedWorkspace(
 
 export async function getConversationServerInfo(
   overrides: AgentServerClientOverrides = {},
-): Promise<ServerInfo> {
+): Promise<ServerInfo | null> {
   const options = getAgentServerClientOptions(overrides);
-  return (
-    getCachedAgentServerInfo({ host: options.host }) ??
-    new ServerClient(options).getServerInfo()
-  );
+  const cached = getCachedAgentServerInfo({ host: options.host });
+  if (cached) return cached;
+  try {
+    return await new ServerClient(options).getServerInfo();
+  } catch {
+    // An unreachable or non-responding agent-server is not fatal: callers
+    // fall back to host-workspace behavior, matching how the rest of the
+    // app treats an unavailable `server_info` (see
+    // `fetchBackendServerInfo`). Only a *successful* probe that reports
+    // `conversation_runtime: "docker"` may isolate the workspace.
+    return null;
+  }
 }
 
 export async function resolveNewConversationWorkspace(options: {

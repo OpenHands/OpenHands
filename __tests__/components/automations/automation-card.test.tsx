@@ -113,7 +113,7 @@ describe("AutomationCard", () => {
     const card = screen.getByTestId("automation-card-automation-1");
     expect(card.className).toContain("extension-module-card-interactive");
     expect(card.className).toContain("bg-base-secondary");
-    expect(card.className).not.toContain("border-[var(--oh-border)]");
+    expect(card.className).not.toContain("border-border");
   });
 
   it("renders title, description, and overflow pills", () => {

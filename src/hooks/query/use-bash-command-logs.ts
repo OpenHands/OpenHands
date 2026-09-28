@@ -4,6 +4,7 @@ import { isSdkHttpError } from "#/api/agent-server-compatibility";
 import BashService from "#/api/bash-service/bash-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import type { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
+import { useCloudSandbox } from "./use-cloud-sandbox";
 import { useUserConversation } from "./use-user-conversation";
 
 export const BASH_COMMAND_LOGS_QUERY_KEY = ["bash-command-logs"] as const;
@@ -28,8 +29,27 @@ interface UseBashCommandLogsOptions {
    * fire requests at known-unreachable sandboxes.
    */
   conversationId: string | null | undefined;
+  /**
+   * The cloud sandbox that ran the command. Script automations never
+   * create a conversation, so on cloud backends this is the only handle
+   * to their agent-server: its `AGENT_SERVER` exposed URL and
+   * `session_api_key` stand in for the conversation's `conversation_url`
+   * and `session_api_key`. Ignored when a conversation id is given, and
+   * on local backends.
+   */
+  sandboxId?: string | null;
   bashCommandId: string | null | undefined;
   enabled?: boolean;
+}
+
+/** Name of the agent-server entry in a cloud sandbox's `exposed_urls`. */
+const AGENT_SERVER_EXPOSED_URL_NAME = "AGENT_SERVER";
+
+/** The agent-server that holds the command's events, however it was found. */
+interface RuntimeTarget {
+  url: string | null;
+  sessionApiKey: string | null;
+  sandboxStatus: SandboxStatus | null;
 }
 
 /**
@@ -102,54 +122,110 @@ function classifyFetchError(error: unknown): SandboxIssue | null {
  * Search `BashOutput` events for an automation run's bash command.
  *
  * - **Local backend**: the query fires as soon as the modal opens and
- *   we have both the command and owning conversation IDs. The conversation lookup runs in
+ *   we have a `bash_command_id`. The conversation lookup runs in
  *   parallel; if it resolves with `session_api_key`/`conversation_url`
  *   those are passed through, but a missing/stale conversation does not
- *   block the conversation-scoped bash query.
- * - **Cloud backend**: pre-checks `sandbox_status` and the existence of
- *   a `conversation_url` before firing — paused, starting, errored, or
- *   missing sandboxes report a `sandboxIssue` and skip the request
- *   entirely (saves a doomed round-trip and gives the UI a targeted
- *   empty state). If the request does fire and fails with a 5xx /
- *   network error / 404 we re-classify it as `unreachable`.
+ *   block the bash query (the local agent-server hosts events under a
+ *   single root).
+ * - **Cloud backend**: the run's agent-server is found through its
+ *   conversation when it has one, and through its sandbox otherwise
+ *   (script automations never create a conversation). Either lookup
+ *   pre-checks the sandbox status and the existence of a runtime URL
+ *   before firing — paused, starting, errored, or missing sandboxes
+ *   report a `sandboxIssue` and skip the request entirely (saves a
+ *   doomed round-trip and gives the UI a targeted empty state). A run
+ *   with neither handle reports `missing` at once. If the request does
+ *   fire and fails with a 5xx / network error / 404 we re-classify it
+ *   as `unreachable`.
  */
 export function useBashCommandLogs(options: UseBashCommandLogsOptions) {
-  const { conversationId, bashCommandId, enabled = true } = options;
+  const { conversationId, sandboxId, bashCommandId, enabled = true } = options;
   const active = useActiveBackend();
-  // Only resolve the conversation when the modal is open. RunLogsModal mounts
+  const isCloud = active.backend.kind === "cloud";
+
+  // Only resolve the runtime when the modal is open. RunLogsModal mounts
   // (closed) for every activity-log row, so an unconditional lookup would fire
   // one /api/conversations request per row on page load. Passing null when
-  // disabled trips useUserConversation's own `!!cid` gate.
+  // disabled trips each lookup hook's own `!!id` gate.
+  const viaConversation = enabled && !!conversationId;
+  const viaSandbox = enabled && isCloud && !viaConversation && !!sandboxId;
   const conversationQuery = useUserConversation(
-    enabled ? (conversationId ?? null) : null,
+    viaConversation ? (conversationId as string) : null,
   );
+  const sandboxQuery = useCloudSandbox(viaSandbox ? sandboxId : null);
   const conversation = conversationQuery.data;
-  const conversationUrl = conversation?.conversation_url ?? null;
-  const sessionApiKey = conversation?.session_api_key ?? null;
 
-  const isCloud = active.backend.kind === "cloud";
-  const conversationFetched = conversationQuery.isFetched;
-
-  // Resolve a single "sandbox issue" only for cloud backends. Local
-  // backends do not carry the Cloud sandbox_status model.
+  let runtime: RuntimeTarget | null = null;
+  let isResolvingRuntime = false;
+  let conversationMissing = false;
   let preflightIssue: SandboxIssue | null = null;
-  let conversationMissing = !conversationId;
-  if (isCloud && conversationFetched) {
-    if (!conversation) {
-      conversationMissing = true;
-    } else {
-      preflightIssue =
-        sandboxIssueFromStatus(conversation.sandbox_status) ??
-        (!conversation.conversation_url ? "missing" : null);
+
+  if (!isCloud) {
+    // Local backends don't carry sandbox_status, and the agent-server hosts
+    // events under a single root so there's nothing to gate on.
+    runtime = {
+      url: conversation?.conversation_url ?? null,
+      sessionApiKey: conversation?.session_api_key ?? null,
+      sandboxStatus: null,
+    };
+  } else if (viaConversation) {
+    // `isLoading`, not `isPending`: a query that is disabled — including
+    // when `useUserConversation` disables itself — stays `pending` forever
+    // without ever fetching, and reporting that as "resolving" is what left
+    // the modal loading with no request in flight.
+    isResolvingRuntime = conversationQuery.isLoading;
+    if (conversationQuery.isFetched) {
+      if (!conversation) {
+        conversationMissing = true;
+      } else {
+        runtime = {
+          url: conversation.conversation_url ?? null,
+          sessionApiKey: conversation.session_api_key ?? null,
+          sandboxStatus: conversation.sandbox_status ?? null,
+        };
+      }
     }
+  } else if (viaSandbox) {
+    isResolvingRuntime = sandboxQuery.isLoading;
+    if (sandboxQuery.isFetched) {
+      const sandbox = sandboxQuery.data;
+      if (sandboxQuery.isError) {
+        preflightIssue = "unreachable";
+      } else if (!sandbox) {
+        // Deleted, or created by someone else: the lookup only returns the
+        // caller's own sandboxes.
+        preflightIssue = "missing";
+      } else {
+        runtime = {
+          url:
+            sandbox.exposed_urls?.find(
+              (exposed) => exposed.name === AGENT_SERVER_EXPOSED_URL_NAME,
+            )?.url ?? null,
+          sessionApiKey: sandbox.session_api_key,
+          sandboxStatus: sandbox.status,
+        };
+      }
+    }
+  } else if (enabled) {
+    // Neither a conversation nor a sandbox to ask: nothing to load, and
+    // nothing to wait for.
+    preflightIssue = "missing";
   }
 
-  // Cloud needs the conversation URL before it can talk to the
-  // runtime; local does not.
-  const hasRequiredAuth = isCloud ? !!conversationUrl : true;
+  if (isCloud && runtime && !preflightIssue) {
+    preflightIssue =
+      sandboxIssueFromStatus(runtime.sandboxStatus) ??
+      (!runtime.url ? "missing" : null);
+  }
+
+  const runtimeUrl = runtime?.url ?? null;
+  const sessionApiKey = runtime?.sessionApiKey ?? null;
+
+  // Cloud needs the runtime URL before it can talk to the agent-server;
+  // local does not.
+  const hasRequiredAuth = isCloud ? !!runtimeUrl : true;
   const canFire =
     enabled &&
-    !!conversationId &&
     !!bashCommandId &&
     hasRequiredAuth &&
     !preflightIssue &&
@@ -158,17 +234,15 @@ export function useBashCommandLogs(options: UseBashCommandLogsOptions) {
   const query = useQuery({
     queryKey: [
       ...BASH_COMMAND_LOGS_QUERY_KEY,
-      conversationId,
       bashCommandId,
-      conversationUrl,
+      runtimeUrl,
       sessionApiKey,
       active.backend.id,
       active.orgId,
     ],
     queryFn: () =>
       BashService.listOutputs(
-        conversationId as string,
-        conversationUrl,
+        runtimeUrl,
         sessionApiKey,
         bashCommandId as string,
       ),
@@ -196,9 +270,12 @@ export function useBashCommandLogs(options: UseBashCommandLogsOptions) {
     error: fetchIssue ? null : query.error,
     isFetching: query.isFetching,
     isPending: query.isPending,
-    /** True while we're still resolving the conversation runtime URL. */
-    isResolvingConversation: isCloud && conversationQuery.isPending,
-    /** No owner ID, or the Cloud conversation is deleted or inaccessible. */
+    /**
+     * True while we're still resolving the runtime URL through the
+     * conversation or, failing that, the sandbox.
+     */
+    isResolvingConversation: isResolvingRuntime,
+    /** Cloud-only: conversation lookup failed (deleted or no access). */
     conversationMissing,
     /**
      * Reason the bash query couldn't / didn't usefully complete. Always

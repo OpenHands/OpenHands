@@ -220,7 +220,7 @@ export function LocalNewConversationMenu({
           )}
           <ul
             className={cn(
-              "max-h-[40vh] overflow-y-auto sm:max-h-[280px]",
+              "max-h-[40vh] overflow-y-auto sm:max-h-70",
               dropdownMenuListClassName,
             )}
           >

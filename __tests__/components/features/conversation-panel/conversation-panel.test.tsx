@@ -10,15 +10,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nextProvider } from "react-i18next";
 import i18n from "i18next";
 import { NavigationProvider } from "#/context/navigation-context";
-import {
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { createRoutesStub } from "react-router";
 import React from "react";
@@ -89,6 +81,14 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
   TOAST_OPTIONS: {},
 }));
 
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
+  Link: ({ children }: React.PropsWithChildren) => children,
+  useNavigate: vi.fn(() => vi.fn()),
+  useLocation: vi.fn(() => ({ pathname: "/conversation" })),
+  useParams: vi.fn(() => ({ conversationId: "2" })),
+}));
+
 describe("ConversationPanel", () => {
   const onCloseMock = vi.fn();
   const RouterStub = createRoutesStub([
@@ -117,16 +117,6 @@ describe("ConversationPanel", () => {
     await user.click(screen.getByTestId("conversation-layouts-toggle"));
     await user.click(screen.getByTestId("advanced-options-row"));
   };
-
-  beforeAll(() => {
-    vi.mock("react-router", async (importOriginal) => ({
-      ...(await importOriginal<typeof import("react-router")>()),
-      Link: ({ children }: React.PropsWithChildren) => children,
-      useNavigate: vi.fn(() => vi.fn()),
-      useLocation: vi.fn(() => ({ pathname: "/conversation" })),
-      useParams: vi.fn(() => ({ conversationId: "2" })),
-    }));
-  });
 
   const mockConversations: AppConversation[] = [
     createMockConversation({ id: "1", title: "Conversation 1" }),
@@ -1863,7 +1853,7 @@ describe("ConversationPanel", () => {
       const deleteAllRow = screen.getByTestId("delete-all-conversations");
       expect(deleteAllRow.querySelector("svg")).toBeInTheDocument();
       expect(deleteAllRow).toHaveClass("text-danger");
-      expect(deleteAllRow).not.toHaveClass("text-[var(--oh-foreground)]");
+      expect(deleteAllRow).not.toHaveClass("text-foreground");
 
       // The older-conversations toggle lives in the Advanced options modal.
       await user.click(screen.getByTestId("advanced-options-row"));
@@ -2708,5 +2698,117 @@ describe("ConversationPanel", () => {
     expect(
       within(pinnedSection).getByTestId("conversation-panel-pinned-view-more"),
     ).toHaveTextContent("CONVERSATION_PANEL$MORE");
+  });
+
+  describe("Conversations header folder toggle", () => {
+    const renderTwoFolders = async () => {
+      vi.spyOn(
+        AgentServerConversationService,
+        "searchConversations",
+      ).mockResolvedValue({
+        items: [
+          createMockConversation({
+            id: "alpha-chat",
+            title: "Alpha Chat",
+            selected_workspace: "/workspace/alpha",
+          }),
+          createMockConversation({
+            id: "beta-chat",
+            title: "Beta Chat",
+            selected_workspace: "/workspace/beta",
+          }),
+        ],
+        next_page_id: null,
+      });
+
+      renderConversationPanel();
+
+      await screen.findByTestId("thread-folder-ws--workspace-alpha");
+      return screen.getByTestId("conversations-header-toggle");
+    };
+
+    const folderToggles = () => [
+      screen.getByTestId("thread-folder-drag-ws--workspace-alpha"),
+      screen.getByTestId("thread-folder-drag-ws--workspace-beta"),
+    ];
+
+    beforeEach(() => {
+      useConversationPanelPreferencesStore.setState({
+        organizeMode: "grouped",
+        groupFolderOrder: [],
+      });
+    });
+
+    it("collapses every folder when all of them are expanded", async () => {
+      const user = userEvent.setup();
+      const header = await renderTwoFolders();
+      expect(header).toHaveAttribute("aria-expanded", "true");
+
+      await user.click(header);
+
+      folderToggles().forEach((toggle) => {
+        expect(toggle).toHaveAttribute("aria-expanded", "false");
+      });
+      expect(header).toHaveAttribute("aria-expanded", "false");
+    });
+
+    it("collapses the rest when only some folders are expanded", async () => {
+      const user = userEvent.setup();
+      const header = await renderTwoFolders();
+      const [alphaToggle] = folderToggles();
+
+      await user.click(alphaToggle);
+      expect(header).toHaveAttribute("aria-expanded", "true");
+
+      await user.click(header);
+
+      folderToggles().forEach((toggle) => {
+        expect(toggle).toHaveAttribute("aria-expanded", "false");
+      });
+    });
+
+    it("expands every folder when all of them are collapsed", async () => {
+      const user = userEvent.setup();
+      const header = await renderTwoFolders();
+
+      await user.click(header);
+      await user.click(header);
+
+      folderToggles().forEach((toggle) => {
+        expect(toggle).toHaveAttribute("aria-expanded", "true");
+      });
+      expect(header).toHaveAttribute("aria-expanded", "true");
+    });
+
+    it("stays a static label in chronological mode", async () => {
+      useConversationPanelPreferencesStore.setState({
+        organizeMode: "chronological",
+      });
+
+      renderConversationPanel();
+
+      const summary = await screen.findByTestId("older-conversations-summary");
+      expect(
+        within(summary).queryByTestId("conversations-header-toggle"),
+      ).toBeNull();
+      expect(summary).toHaveTextContent("SIDEBAR$CONVERSATIONS");
+    });
+
+    it("stays a static label when the grouped view has no folders", async () => {
+      vi.spyOn(
+        AgentServerConversationService,
+        "searchConversations",
+      ).mockResolvedValue({ items: [], next_page_id: null });
+
+      renderConversationPanel();
+
+      const summary = await screen.findByTestId("older-conversations-summary");
+      await waitFor(() => {
+        expect(
+          within(summary).queryByTestId("conversations-header-toggle"),
+        ).toBeNull();
+      });
+      expect(summary).toHaveTextContent("SIDEBAR$CONVERSATIONS");
+    });
   });
 });
