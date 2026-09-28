@@ -114,7 +114,12 @@ export function HomeChatLauncher() {
       query: hasAttachments ? undefined : trimmed || undefined,
       entryPoint: "home_chat_launcher",
     };
-    if (isLocal && pendingWorkspace) {
+    // An isolated backend owns its workspace, so a host selection left over
+    // from a non-isolated session must not be forwarded: the server rejects it
+    // (`HOME$ISOLATED_WORKSPACE_NOTICE`) and the user sees an error toast for a
+    // selection they may not have noticed. Creation proceeds isolated instead;
+    // the launcher still offers an explicit "clear" affordance for the UI.
+    if (isLocal && pendingWorkspace && !isolated) {
       variables = {
         ...variables,
         workingDir: pendingWorkspace.path,
