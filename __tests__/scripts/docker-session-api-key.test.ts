@@ -13,7 +13,7 @@
 // 5. Downstream automation env vars resolve to the effective session key.
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import os from "node:os";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -59,7 +59,7 @@ describe.skipIf(process.platform === "win32")(
     let tmpDir: string;
 
     beforeEach(() => {
-      tmpDir = mkdtempSync(path.join(os.tmpdir(), "session-key-test-"));
+      tmpDir = mkdtempSync(path.join(tmpdir(), "session-key-test-"));
     });
 
     afterEach(() => {
