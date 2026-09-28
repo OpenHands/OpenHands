@@ -103,7 +103,37 @@ docker run -it --rm \
 
 The agent will be able to access any project under `PROJECTS_PATH`.
 
-### Option 3: From Source
+### Option 3: With Multiple Docker Sandboxes
+
+Run outer services on the host machine while isolating each conversation in an individual Docker container.
+
+**Prerequisites**:
+
+- [Node.js](https://nodejs.org/) 24 or later, `uv`
+- Docker daemon and CLI reachable by the user running the stack (the agent-server launches container sandboxes using `docker run`).
+
+**macOS / Linux:**
+
+```sh
+OH_CONVERSATION_RUNTIME=docker agent-canvas
+```
+
+Or when running from source:
+
+```sh
+OH_CONVERSATION_RUNTIME=docker npm run dev
+```
+
+**Windows (PowerShell / Windows Terminal):** See [README.windows.md](./README.windows.md) for running under WSL2.
+
+#### How It Works
+
+- **Outer services on host**: Outer services (frontend, ingress, agent-server, automation) run directly on your host machine.
+- **Per-conversation container execution**: When a new conversation starts, the agent-server automatically launches a dedicated Docker container sandbox to execute commands and tools.
+- **Persistence & workspace sharing**: Conversation history is persisted on the host independently of the container lifecycle. Each conversation runs against a persisted workspace directory; selecting the same host workspace directory shares its files with the host and any other conversation configured with it.
+- **Customization (Optional)**: Configure `OH_CONVERSATION_IMAGE` to override the sandbox container image, or configure resource constraints via `OH_CONVERSATION_CONTAINER_MEMORY`, `OH_CONVERSATION_CONTAINER_CPUS`, `OH_CONVERSATION_CONTAINER_PIDS_LIMIT`, and `OH_CONVERSATION_CONTAINER_STARTUP_TIMEOUT`.
+
+### Option 4: From Source
 
 > [!WARNING]
 > This runs the agent-server directly on the machine you're installing on — the agent will have full access to your filesystem!

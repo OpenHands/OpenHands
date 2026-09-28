@@ -27,3 +27,15 @@ docker run -it --rm `
 Open [http://localhost:8000/canvas](http://localhost:8000/canvas) in your browser.
 
 The agent will be able to access any project under `PROJECTS_PATH`.
+
+## Option 3: With Multiple Docker Sandboxes (Windows)
+
+Running per-conversation Docker sandboxes requires Linux Docker socket integration, which is not supported natively in Windows PowerShell.
+
+Windows users should run this option inside a Linux environment such as **[WSL2 (Windows Subsystem for Linux)](https://learn.microsoft.com/en-us/windows/wsl/install)** with Docker Desktop's WSL2 integration enabled.
+
+Inside your WSL2 terminal, follow the Linux instructions in [README.md](./README.md#option-3-with-multiple-docker-sandboxes):
+
+```sh
+OH_CONVERSATION_RUNTIME=docker agent-canvas
+```
