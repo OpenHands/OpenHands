@@ -16,7 +16,6 @@ interface ChatInputContainerProps {
   hasStartedConversation?: boolean;
   isNewConversationPending?: boolean;
   showButton: boolean;
-  placeholder?: string;
   buttonClassName: string;
   chatInputRef: React.RefObject<HTMLDivElement | null>;
   placeholder?: string;
@@ -44,7 +43,6 @@ export function ChatInputContainer({
   hasStartedConversation,
   isNewConversationPending = false,
   showButton,
-  placeholder,
   buttonClassName,
   chatInputRef,
   placeholder,
@@ -96,7 +94,6 @@ export function ChatInputContainer({
 
         <ChatInputRow
           chatInputRef={chatInputRef}
-          placeholder={placeholder}
           isNewConversationPending={isNewConversationPending}
           placeholder={placeholder}
           onInput={onInput}
