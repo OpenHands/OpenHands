@@ -35,6 +35,7 @@ import { ContextMenuListItem } from "../../context-menu/context-menu-list-item";
 import { ContextMenu } from "#/ui/context-menu";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { cn } from "#/utils/utils";
+import { useComposerDockedMinimal } from "#/context/composer-docked-context";
 import {
   chatInputIconButtonClassName,
   formControlTransitionClassName,
@@ -60,6 +61,7 @@ export function ChatInputActions({
   handleSubmit = () => {},
 }: ChatInputActionsProps) {
   const { t } = useTranslation("openhands");
+  const isComposerDockedMinimal = useComposerDockedMinimal();
   const unifiedPauseMutation = useUnifiedPauseConversation();
   const pauseConversationMutation = usePauseConversation();
   const resumeConversationMutation = useResumeConversation();
@@ -423,6 +425,23 @@ export function ChatInputActions({
       )}
     </ContextMenu>
   );
+
+  if (isComposerDockedMinimal) {
+    return (
+      <div
+        data-testid="chat-input-actions-minimal"
+        className="w-full min-w-0 flex items-center justify-end gap-2"
+      >
+        {showButton ? (
+          <ChatSendButton
+            buttonClassName={buttonClassName}
+            handleSubmit={handleSubmit}
+            disabled={disabled || !canSubmit}
+          />
+        ) : null}
+      </div>
+    );
+  }
 
   return (
     <div

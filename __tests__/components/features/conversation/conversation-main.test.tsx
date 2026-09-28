@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { SidebarMobileNavProvider } from "#/components/features/sidebar/sidebar-mobile-nav-context";
@@ -7,6 +7,7 @@ import {
   type NavigationContextValue,
 } from "#/context/navigation-context";
 import type { AutomationSetupDraft } from "#/api/automation-setup-draft-store";
+import { requestAutomationSetupAgent } from "#/components/features/automations/setup/automation-setup-agent-request";
 
 // Mutable mock state for controlling breakpoint
 let mockIsMobile = false;
@@ -67,12 +68,50 @@ vi.mock("#/hooks/query/use-active-conversation", () => ({
 vi.mock("#/components/features/chat/chat-interface", () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const React = require("react");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { createPortal } = require("react-dom");
   return {
-    ChatInterface: () => {
+    ChatInterface: ({
+      showGitControlBar = true,
+      showEmptyStateSuggestions = true,
+      composerDockTarget = null,
+      onDockedComposerSubmit,
+      minimalComposer = false,
+      composerPlaceholder,
+    }: {
+      showGitControlBar?: boolean;
+      showEmptyStateSuggestions?: boolean;
+      composerDockTarget?: HTMLElement | null;
+      onDockedComposerSubmit?: () => void;
+      minimalComposer?: boolean;
+      composerPlaceholder?: string;
+    }) => {
       React.useEffect(() => {
         return () => chatInterfaceUnmount();
       }, []);
-      return <div data-testid="chat-interface" />;
+      return (
+        <>
+          <div
+            data-testid="chat-interface"
+            data-show-git-control-bar={showGitControlBar ? "true" : "false"}
+            data-show-empty-state-suggestions={
+              showEmptyStateSuggestions ? "true" : "false"
+            }
+            data-minimal-composer={minimalComposer ? "true" : "false"}
+            data-composer-placeholder={composerPlaceholder}
+          />
+          {composerDockTarget
+            ? createPortal(
+                <button
+                  type="button"
+                  data-testid="docked-composer-submit"
+                  onClick={() => onDockedComposerSubmit?.()}
+                />,
+                composerDockTarget,
+              )
+            : null}
+        </>
+      );
     },
   };
 });
@@ -176,7 +215,10 @@ describe("ConversationMain - Layout Transition Stability", () => {
   it("renders ChatInterface at desktop width", () => {
     mockIsMobile = false;
     renderConversationMain();
-    expect(screen.getByTestId("chat-interface")).toBeInTheDocument();
+    expect(screen.getByTestId("chat-interface")).toHaveAttribute(
+      "data-show-git-control-bar",
+      "true",
+    );
   });
 
   it("renders ChatInterface at mobile width", () => {
@@ -266,8 +308,7 @@ describe("ConversationMain - Layout Transition Stability", () => {
     expect(screen.getByTestId("chat-interface")).toBeInTheDocument();
   });
 
-  it("uses a single automation setup top bar with splash back navigation", async () => {
-    const user = userEvent.setup();
+  it("uses a single automation setup top bar", () => {
     mockIsRightPanelShown = true;
     mockAutomationSetupDraft = {
       prompt: "Write a haiku each morning",
@@ -282,13 +323,25 @@ describe("ConversationMain - Layout Transition Stability", () => {
       screen.getByTestId("automation-setup-conversation-title"),
     ).toHaveTextContent("Daily Morning Haiku");
     expect(screen.getByTestId("automation-setup-create")).toBeInTheDocument();
-
-    await user.click(screen.getByTestId("automation-setup-back"));
-
-    expect(mockNavigate).toHaveBeenCalledWith("/");
+    expect(screen.getByTestId("chat-interface")).toHaveAttribute(
+      "data-show-git-control-bar",
+      "false",
+    );
+    expect(screen.getByTestId("chat-interface")).toHaveAttribute(
+      "data-show-empty-state-suggestions",
+      "false",
+    );
+    expect(screen.getByTestId("chat-interface")).toHaveAttribute(
+      "data-composer-placeholder",
+      "AUTOMATION_SETUP$CONVERSATION_COMPOSER_PLACEHOLDER",
+    );
+    expect(
+      screen.queryByTestId("automation-setup-back"),
+    ).not.toBeInTheDocument();
   });
 
-  it("suppresses automation setup chrome on mobile", () => {
+  it("keeps the automation form on a narrow window and toggles to the styled conversation", async () => {
+    const user = userEvent.setup();
     mockIsMobile = true;
     mockIsRightPanelShown = true;
     mockAutomationSetupDraft = {
@@ -298,10 +351,77 @@ describe("ConversationMain - Layout Transition Stability", () => {
 
     renderConversationMain();
 
-    expect(screen.queryByTestId("automation-setup-topbar")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("automation-setup-panel")).not.toBeInTheDocument();
-    expect(screen.getByTestId("chat-pane-header")).toBeInTheDocument();
-    expect(screen.getByTestId("chat-interface")).toBeInTheDocument();
+    expect(screen.getByTestId("automation-setup-topbar")).toBeInTheDocument();
+    expect(screen.getByTestId("automation-setup-panel")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("automation-setup-docked-composer"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("automation-setup-mobile-view-form"),
+    ).toHaveAttribute("aria-label", "AUTOMATION_SETUP$VIEW_FORM");
+    expect(
+      screen.getByTestId("automation-setup-mobile-view-conversation"),
+    ).toHaveAttribute("aria-label", "AUTOMATION_SETUP$VIEW_CONVERSATION");
+    expect(screen.queryByTestId("chat-pane-header")).not.toBeInTheDocument();
+    expect(screen.getByTestId("conversation-chat-panel")).toHaveClass("hidden");
+
+    await user.click(
+      screen.getByTestId("automation-setup-mobile-view-conversation"),
+    );
+
+    expect(
+      screen.queryByTestId("automation-setup-mobile-form"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automation-setup-docked-composer"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("chat-pane-header")).not.toBeInTheDocument();
+    expect(screen.getByTestId("conversation-chat-panel")).not.toHaveClass(
+      "hidden",
+    );
+    expect(screen.getByTestId("chat-interface")).toHaveAttribute(
+      "data-show-git-control-bar",
+      "false",
+    );
+    expect(screen.getByTestId("chat-interface")).toHaveAttribute(
+      "data-show-empty-state-suggestions",
+      "false",
+    );
+    expect(screen.getByTestId("chat-interface")).toHaveAttribute(
+      "data-minimal-composer",
+      "true",
+    );
+    expect(screen.getByTestId("automation-setup-topbar")).toHaveClass(
+      "flex-col",
+    );
+
+    await user.click(screen.getByTestId("automation-setup-mobile-view-form"));
+
+    expect(
+      screen.getByTestId("automation-setup-mobile-form"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("automation-setup-docked-composer"),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("docked-composer-submit"));
+
+    expect(
+      screen.queryByTestId("automation-setup-mobile-form"),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("automation-setup-mobile-view-form"));
+
+    act(() => {
+      requestAutomationSetupAgent();
+    });
+
+    expect(
+      screen.queryByTestId("automation-setup-mobile-form"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("conversation-chat-panel")).not.toHaveClass(
+      "hidden",
+    );
   });
 
   it("expands the automation form to full width when hiding the agent", async () => {
@@ -320,6 +440,9 @@ describe("ConversationMain - Layout Transition Stability", () => {
     expect(screen.getByTestId("conversation-right-panel")).toHaveStyle({
       width: "50%",
     });
+    expect(
+      screen.queryByTestId("automation-setup-docked-composer"),
+    ).not.toBeInTheDocument();
 
     await user.click(screen.getByTestId("automation-setup-agent-toggle"));
 
@@ -328,6 +451,50 @@ describe("ConversationMain - Layout Transition Stability", () => {
     });
     expect(screen.getByTestId("conversation-right-panel")).toHaveStyle({
       width: "100%",
+    });
+    expect(
+      screen.getByTestId("automation-setup-docked-composer"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("automation-setup-docked-composer").parentElement
+        ?.parentElement,
+    ).toHaveClass(
+      "px-5",
+      "custom-scrollbar-always",
+      "[scrollbar-gutter:stable]",
+    );
+    expect(screen.getByTestId("docked-composer-submit")).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("docked-composer-submit"));
+
+    expect(screen.getByTestId("conversation-chat-panel")).toHaveStyle({
+      width: "50%",
+    });
+    expect(
+      screen.queryByTestId("automation-setup-docked-composer"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("reveals the agent when the setup form asks for help", async () => {
+    const user = userEvent.setup();
+    mockIsRightPanelShown = true;
+    mockAutomationSetupDraft = {
+      prompt: "Write a haiku each morning",
+      kind: "prompt",
+    };
+
+    renderConversationMain();
+    await user.click(screen.getByTestId("automation-setup-agent-toggle"));
+    expect(screen.getByTestId("conversation-chat-panel")).toHaveStyle({
+      width: "0%",
+    });
+
+    act(() => {
+      requestAutomationSetupAgent();
+    });
+
+    expect(screen.getByTestId("conversation-chat-panel")).toHaveStyle({
+      width: "50%",
     });
   });
 });
