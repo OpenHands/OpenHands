@@ -9,7 +9,7 @@ import {
   DEFAULT_MAX_SCORE_PARETO_META_PROFILE_NAME,
 } from "#/components/features/settings/meta-llm-profiles/default-meta-profile";
 
-const AVAILABLE = ["minimax", "kimi-k2.6", "gpt", "deepseek"];
+const AVAILABLE = ["minimax", "minimax-m3", "gpt", "deepseek"];
 
 const CONNECTIONS = [
   {
@@ -28,7 +28,7 @@ const FILLED: MetaProfile = {
   classes: [],
   prompt_template:
     "Return JSON with the best model.\n{{ model_table }}\nTask:\n{{ instance_text }}",
-  model_table: "- GPT-5.4\n- Kimi-K2.6",
+  model_table: "- GPT-5.4\n- MiniMax-M3",
 };
 
 describe("MetaProfileEditor", () => {
@@ -51,7 +51,7 @@ describe("MetaProfileEditor", () => {
       DEFAULT_MAX_SCORE_PARETO_META_PROFILE_NAME,
     );
     expect(screen.getByTestId("meta-profile-classifier-input")).toHaveValue(
-      "kimi-k2.6",
+      "minimax-m3",
     );
     expect(screen.getByTestId("meta-profile-prompt-template")).toHaveValue(
       DEFAULT_MAX_SCORE_PARETO_META_PROFILE_DEFAULT.prompt_template,
