@@ -47,7 +47,7 @@ export function ConversationActiveTagFilters({
   }
 
   const chipClassName =
-    "flex min-w-0 max-w-full cursor-pointer items-center gap-1 rounded-full bg-surface px-2 py-0.5 text-[10px] leading-4 text-white hover:bg-white/10";
+    "flex min-w-0 max-w-full cursor-pointer items-center gap-1 rounded-full bg-surface px-2 py-0.5 text-[10px] leading-4 text-contrast hover:bg-contrast/10";
 
   return (
     <div
@@ -93,7 +93,7 @@ export function ConversationActiveTagFilters({
         type="button"
         data-testid="clear-tag-filters"
         onClick={onClearAll}
-        className="shrink-0 cursor-pointer text-[10px] leading-5 text-muted hover:text-white"
+        className="shrink-0 cursor-pointer text-[10px] leading-5 text-muted hover:text-contrast"
       >
         {t(I18nKey.CONVERSATION_PANEL$CLEAR_FILTERS)}
       </button>

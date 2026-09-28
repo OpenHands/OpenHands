@@ -37,7 +37,7 @@ export function CirclePlusBadge({
         aria-hidden="true"
         data-testid={testId}
         className={cn(
-          "inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-surface-raised text-white transition-colors hover:bg-interactive-hover",
+          "inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-surface-raised text-contrast transition-colors hover:bg-interactive-hover",
           className,
         )}
       >
@@ -94,9 +94,9 @@ export function CirclePlusCheckToggle({
           isSelected &&
             (showRemoveIcon
               ? "border-0 bg-[rgba(248,113,113,0.14)] text-[#ef4444] hover:bg-[rgba(248,113,113,0.24)]"
-              : "border border-white bg-transparent text-white [&_path]:fill-current"),
+              : "border border-contrast bg-transparent text-contrast [&_path]:fill-current"),
           !isSelected &&
-            "border-0 bg-surface-raised text-white hover:bg-interactive-hover",
+            "border-0 bg-surface-raised text-contrast hover:bg-interactive-hover",
           isDisabled && "cursor-not-allowed opacity-50",
           className,
         )}

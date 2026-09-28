@@ -146,7 +146,7 @@ export function ConversationCardPreview({
             />
           </span>
         ) : null}
-        <span className="break-words text-sm font-medium leading-5 text-white">
+        <span className="break-words text-sm font-medium leading-5 text-contrast">
           {title}
         </span>
       </div>

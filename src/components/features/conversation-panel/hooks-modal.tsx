@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
-import { ModalBody } from "#/components/shared/modals/modal-body";
+import {
+  MODAL_MAX_WIDTH_VIEWPORT,
+  ModalBody,
+} from "#/components/shared/modals/modal-body";
 import { useConversationHooks } from "#/hooks/query/use-conversation-hooks";
 import { AgentState } from "#/types/agent-state";
 import { HooksModalHeader } from "./hooks-modal-header";
@@ -9,6 +12,7 @@ import { HooksEmptyState } from "./hooks-empty-state";
 import { HookEventItem } from "./hook-event-item";
 import { RuntimeWaitingState } from "./runtime-waiting-state";
 import { useAgentState } from "#/hooks/use-agent-state";
+import { cn } from "#/utils/utils";
 
 interface HooksModalProps {
   onClose: () => void;
@@ -42,7 +46,10 @@ export function HooksModal({ onClose }: HooksModalProps) {
     <ModalBackdrop onClose={onClose}>
       <ModalBody
         width="lg"
-        className="relative max-h-[80vh] flex flex-col items-start border border-border"
+        className={cn(
+          "relative max-h-[80vh] flex flex-col items-start border border-border",
+          MODAL_MAX_WIDTH_VIEWPORT,
+        )}
         testID="hooks-modal"
       >
         <HooksModalHeader

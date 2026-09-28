@@ -39,15 +39,17 @@ export function SkillFacetRow({
           ? "cursor-default text-tertiary-alt/40"
           : // Same hover pair as the extensions nav links: a raised surface the
             // label brightens against, rather than a light fill it sinks into.
-            "cursor-pointer hover:bg-surface-raised hover:text-white",
-        checked ? "text-white" : "text-tertiary-light",
+            "cursor-pointer hover:bg-surface-raised hover:text-contrast",
+        checked ? "text-contrast" : "text-tertiary-light",
       )}
     >
       <span
         aria-hidden
         className={cn(
           "flex size-3.5 shrink-0 items-center justify-center rounded-[3px] border",
-          checked ? "border-white bg-white text-black" : "border-border",
+          checked
+            ? "border-contrast bg-contrast text-contrast-foreground"
+            : "border-border",
         )}
       >
         {checked ? <Check className="size-2.5" strokeWidth={3} /> : null}

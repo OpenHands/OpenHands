@@ -24,7 +24,7 @@ export function SkillsToolbar({
         className={cn(
           "relative flex flex-1 min-w-0 items-center",
           "rounded-lg border border-border bg-base-secondary",
-          "focus-within:border-white/40 focus-within:ring-1 focus-within:ring-white/20",
+          "focus-within:border-contrast/40 focus-within:ring-1 focus-within:ring-contrast/20",
           "transition-colors",
         )}
       >
@@ -50,7 +50,7 @@ export function SkillsToolbar({
             type="button"
             onClick={() => onSearchChange("")}
             aria-label={t(I18nKey.MCP$SEARCH_CLEAR)}
-            className="mr-2 p-1 rounded text-tertiary-alt hover:text-white cursor-pointer"
+            className="mr-2 p-1 rounded text-tertiary-alt hover:text-contrast cursor-pointer"
           >
             <X className="h-4 w-4" aria-hidden />
           </button>
@@ -64,14 +64,14 @@ export function SkillsToolbar({
         onClick={onOpenFilters}
         className={cn(
           "flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm md:hidden",
-          "border border-border bg-base-secondary text-white",
+          "border border-border bg-base-secondary text-contrast",
           "cursor-pointer hover:bg-interactive-hover",
         )}
       >
         <ListFilter className="size-4 shrink-0" aria-hidden />
         {t(I18nKey.SETTINGS$SKILLS_FILTERS_BUTTON)}
         {activeFilterCount > 0 ? (
-          <span className="rounded-full bg-white px-1.5 text-[11px] font-medium text-black">
+          <span className="rounded-full bg-contrast px-1.5 text-[11px] font-medium text-contrast-foreground">
             {activeFilterCount}
           </span>
         ) : null}

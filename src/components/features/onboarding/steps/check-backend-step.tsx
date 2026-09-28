@@ -99,7 +99,7 @@ function ConnectionBanner({
     <div
       role="status"
       data-testid="onboarding-backend-checking"
-      className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3"
+      className="flex items-start gap-3 rounded-xl border border-contrast/10 bg-contrast/5 px-4 py-3"
     >
       <Loader2 className="mt-0.5 size-5 shrink-0 animate-spin text-text-tertiary" />
       <span className="text-sm text-text-tertiary">
@@ -239,7 +239,7 @@ export function CheckBackendStep({
       className="flex flex-col gap-6"
     >
       <header className="flex flex-col gap-2">
-        <h2 className="text-2xl font-medium text-white">{t(titleKey)}</h2>
+        <h2 className="text-2xl font-medium text-contrast">{t(titleKey)}</h2>
         {treatAsNoBackend ? null : (
           <p
             data-testid="onboarding-backend-subtitle"

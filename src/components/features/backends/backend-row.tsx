@@ -16,7 +16,7 @@ import { getBackendStatusLabel } from "./backend-status-label";
 import { getLockedCloudHost } from "#/api/agent-server-config";
 
 const ROW_ACTION_BUTTON_CLASS =
-  "inline-flex cursor-pointer items-center justify-center rounded-md p-1 text-muted transition-colors hover:bg-interactive-hover hover:text-white";
+  "inline-flex cursor-pointer items-center justify-center rounded-md p-1 text-muted transition-colors hover:bg-interactive-hover hover:text-contrast";
 
 interface BackendRowProps {
   backend: Backend;
@@ -81,7 +81,9 @@ export function BackendRow({
         <BackendStatusDot isConnected={dotStatus} />
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex min-w-0 items-center gap-2">
-            <span className="truncate text-sm text-white">{backend.name}</span>
+            <span className="truncate text-sm text-contrast">
+              {backend.name}
+            </span>
             <BackendVersion backend={backend} />
           </div>
           {orgLabel ? (

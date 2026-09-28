@@ -491,7 +491,7 @@ export default function AutomationsList() {
                 <button
                   type="button"
                   onClick={() => setLimit((prev) => prev + PAGE_SIZE)}
-                  className="self-center rounded-lg border border-border px-6 py-2 text-sm text-white hover:bg-surface-raised"
+                  className="self-center rounded-lg border border-border px-6 py-2 text-sm text-contrast hover:bg-surface-raised"
                 >
                   {t(I18nKey.AUTOMATIONS$LOAD_MORE)}
                 </button>

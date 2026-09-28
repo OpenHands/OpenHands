@@ -6,6 +6,7 @@ import { ProfileInfo } from "#/api/profiles-service/profiles-service.api";
 import { I18nKey } from "#/i18n/declaration";
 import { EllipsisButton } from "#/components/features/conversation-panel/ellipsis-button";
 import { BrandBadge } from "#/components/shared/badge";
+import { ModelCatalogWarning } from "#/components/shared/model-catalog-warning";
 import { cn } from "#/utils/utils";
 import { useFreeModels } from "#/hooks/query/use-free-models";
 import { formatModelNameForDisplay } from "#/utils/format-model-name";
@@ -25,6 +26,7 @@ interface ProfileRowProps {
   onDuplicate: (profile: ProfileInfo) => void;
   onDelete: (profile: ProfileInfo) => void;
   isActivating: boolean;
+  isModelUnlisted?: boolean;
 }
 
 export function ProfileRow({
@@ -37,6 +39,7 @@ export function ProfileRow({
   onDuplicate,
   onDelete,
   isActivating,
+  isModelUnlisted = false,
 }: ProfileRowProps) {
   const { t } = useTranslation("openhands");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -51,7 +54,7 @@ export function ProfileRow({
     >
       <div className="flex min-w-0 flex-1 items-center gap-3">
         <span
-          className="min-w-0 max-w-full truncate text-sm font-medium text-white"
+          className="min-w-0 max-w-full truncate text-sm font-medium text-contrast"
           title={profile.name}
         >
           {profile.name}
@@ -85,6 +88,7 @@ export function ProfileRow({
             {t(I18nKey.SETTINGS$PROFILE_BROKEN_CONNECTION)}
           </span>
         )}
+        {isModelUnlisted && <ModelCatalogWarning />}
       </div>
       {canManage && (
         <div className="relative shrink-0">

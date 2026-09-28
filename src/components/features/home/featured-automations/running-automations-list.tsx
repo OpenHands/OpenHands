@@ -108,7 +108,7 @@ function RunningAutomationRow({
         placement="top-start"
         closeDelay={100}
         disableAnimation={disableAnimation}
-        className="rounded-xl border border-border bg-base-secondary p-0 text-white shadow-xl"
+        className="rounded-xl border border-border bg-base-secondary p-0 text-contrast shadow-xl"
       >
         <NavigationLink
           to={hrefForActivityItem(item)}

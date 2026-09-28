@@ -16,10 +16,10 @@ export function ChatSendButton({
     <button
       type="button"
       className={cn(
-        "flex items-center justify-center rounded-full border border-white size-8",
+        "flex items-center justify-center rounded-full border border-contrast size-8",
         disabled
           ? "cursor-not-allowed border-muted"
-          : "cursor-pointer hover:bg-white/10",
+          : "cursor-pointer hover:bg-contrast/10",
         buttonClassName,
       )}
       data-name="arrow-up-circle-fill"

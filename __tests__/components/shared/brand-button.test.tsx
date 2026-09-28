@@ -18,7 +18,7 @@ describe("BrandButton", () => {
       // tailwind-merge, dropping text-sm or being dropped by a size override.
       expect(screen.getByRole("button", { name: "Save" })).toHaveClass(
         className ?? "text-sm",
-        "text-on-primary",
+        "text-[var(--oh-accent-foreground)]",
       );
     },
   );

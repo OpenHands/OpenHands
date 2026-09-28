@@ -99,7 +99,7 @@ export default function MCPPage() {
       >
         <ExtensionsNavigation />
         <div className="flex h-full flex-1 items-center justify-center px-4 md:px-0">
-          <div className="h-8 w-8 rounded-full border-2 border-transparent border-t-white animate-spin" />
+          <div className="h-8 w-8 rounded-full border-2 border-transparent border-t-contrast animate-spin" />
         </div>
       </div>
     );

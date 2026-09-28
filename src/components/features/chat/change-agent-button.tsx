@@ -169,13 +169,13 @@ export function ChangeAgentButton() {
           formControlTransitionClassName,
           isExecutionAgent
             ? "border border-transparent text-muted"
-            : "border border-[#597FF4] bg-[#4A67BD]",
+            : "border border-[#597FF4] bg-[#4A67BD] text-white",
           !isButtonDisabled &&
             isExecutionAgent &&
             cn("cursor-pointer", formControlMutedHoverClassName),
           !isButtonDisabled &&
             !isExecutionAgent &&
-            "cursor-pointer text-white hover:bg-[#597FF4]",
+            "cursor-pointer hover:bg-[#597FF4]",
           isButtonDisabled &&
             cn(
               "opacity-50 cursor-not-allowed",
@@ -185,7 +185,7 @@ export function ChangeAgentButton() {
       >
         <div className="flex items-center gap-1 pl-1.5">
           {buttonIcon}
-          <Typography.Text className="text-[11px] not-italic font-normal leading-5">
+          <Typography.Text className="text-[11px] text-inherit not-italic font-normal leading-5">
             {buttonLabel}
           </Typography.Text>
         </div>

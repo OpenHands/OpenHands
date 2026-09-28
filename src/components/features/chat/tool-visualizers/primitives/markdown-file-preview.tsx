@@ -168,7 +168,7 @@ export function MarkdownFilePreview({
     >
       <div
         data-testid="markdown-file-preview-content"
-        className="max-h-40 overflow-y-auto px-4 py-3 text-white custom-scrollbar-always [--oh-scroll-fade-from:var(--oh-surface)]"
+        className="max-h-40 overflow-y-auto px-4 py-3 text-contrast custom-scrollbar-always [--oh-scroll-fade-from:var(--oh-surface)]"
       >
         {/* Deliberately compact: the clipped in-stream card reuses the plan
             preview's small typography; the Files drawer renders the same
@@ -194,10 +194,10 @@ export function MarkdownFilePreview({
             className="flex shrink-0 cursor-pointer items-center gap-1 transition-opacity hover:opacity-80"
             data-testid="markdown-file-preview-view"
           >
-            <Typography.Text className="text-[11px] leading-4 tracking-[0.11px] text-white">
+            <Typography.Text className="text-[11px] leading-4 tracking-[0.11px] text-contrast">
               {t(I18nKey.COMMON$VIEW)}
             </Typography.Text>
-            <ArrowUpRight className="text-white" size={16} />
+            <ArrowUpRight className="text-contrast" size={16} />
           </button>
         ) : null}
       </div>

@@ -75,7 +75,7 @@ export function ConversationGitActionsToggle({
       disabled={isArchivedConversation}
       className={cn(
         GIT_ACTIONS_BUTTON_CLASSNAME,
-        isGitMenuOpen && "bg-white/10 text-foreground",
+        isGitMenuOpen && "bg-contrast/10 text-foreground",
         isArchivedConversation &&
           "cursor-not-allowed opacity-50 hover:bg-transparent hover:text-muted",
         className,
