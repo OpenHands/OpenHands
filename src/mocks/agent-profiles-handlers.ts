@@ -41,8 +41,7 @@ const DEFAULT_VERIFICATION = {
 };
 
 function makeOpenHandsProfile(
-  // `tools` rides untyped: the pinned ts-client predates it on the profile
-  // model (same pattern as `secret_refs`).
+  // Untyped in the pinned ts-client.
   overrides: Partial<AgentProfile> & {
     id: string;
     name: string;

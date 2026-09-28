@@ -13,14 +13,7 @@ function toParams(value: unknown): Record<string, SettingsValue> {
     : {};
 }
 
-/**
- * Read a stored profile's `tools` into picker state.
- *
- * Same tri-state as the scope fields: `null`/absent = the server's standard
- * set, an array = exactly those tools (`[]` = a deliberately bare agent).
- * Stored params ride along untouched so a round-trip through the editor cannot
- * drop configuration the editor does not model.
- */
+/** Read stored `tools` into picker state: absent = standard, `[]` = bare. */
 export function readProfileTools(value: unknown): {
   mode: ProfileScopeMode;
   selected: string[];
