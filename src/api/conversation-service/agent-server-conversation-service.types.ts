@@ -1,4 +1,5 @@
 import { ConversationTrigger } from "../open-hands.types";
+import type { ClientToolSpec } from "../canvas-ui-client-tool";
 import { Provider } from "#/types/settings";
 import { SuggestedTask } from "#/utils/types";
 import { ExecutionStatus } from "#/types/agent-server/core";
@@ -82,6 +83,8 @@ export interface AppConversationStartRequest {
   agent_type?: "default" | "plan";
   sandbox_id?: string | null;
   plugins?: PluginSpec[] | null; // Plugins to load when starting the conversation
+  client_tools?: ClientToolSpec[] | null; // Browser/client-handled tools registered with the runtime
+  tags?: Record<string, string> | null; // Conversation tags to persist at start
   // One-off launch from a saved AgentProfile, resolved server-side (#3727).
   // Accepted by the cloud app-server (OpenHands #15060) on
   // POST /api/v1/app-conversations; the local path uses the encrypted
