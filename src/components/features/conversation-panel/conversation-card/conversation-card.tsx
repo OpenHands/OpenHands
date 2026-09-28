@@ -293,7 +293,6 @@ export function ConversationCard({
                       onDownloadConversation={handleDownloadConversation}
                       executionStatus={executionStatus}
                       conversationId={conversationId}
-                      showOptions={showOptions}
                     />
                   </div>
                   <p
@@ -320,7 +319,6 @@ export function ConversationCard({
                   onDownloadConversation={handleDownloadConversation}
                   executionStatus={executionStatus}
                   conversationId={conversationId}
-                  showOptions={showOptions}
                 />
               ) : null}
             </div>

@@ -20,7 +20,6 @@ interface ConversationCardActionsProps {
   onDownloadConversation?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   executionStatus?: ExecutionStatus | null;
   conversationId?: string;
-  showOptions?: boolean;
 }
 
 export function ConversationCardActions({
@@ -35,7 +34,6 @@ export function ConversationCardActions({
   onDownloadConversation,
   executionStatus,
   conversationId,
-  showOptions,
 }: ConversationCardActionsProps) {
   const { t } = useTranslation("openhands");
   const isPaused = isExecutionPaused(executionStatus);
