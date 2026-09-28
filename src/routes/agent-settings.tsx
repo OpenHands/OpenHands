@@ -14,7 +14,11 @@ import { useAcpCredentialForm } from "#/hooks/use-acp-credential-form";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import {
   buildProfileToolsValue,
+  applyToolSwitchesToProfileTools,
+  PROFILE_SCHEMA_VERSION_KEY,
+  profileToolsCarrySwitchLlm,
   readProfileTools,
+  readStoredProfileTools,
   type ProfileToolSpec,
 } from "#/constants/profile-tools";
 import { ProfileScopeList } from "#/components/features/settings/agent-profiles/profile-scope-list";
@@ -192,6 +196,10 @@ export interface AgentProfileFieldsInput {
   toolParams?: Record<string, Record<string, SettingsValue>>;
   /** Whether the backend serves the tool catalog, and so takes `tools`. */
   toolCatalogSupported?: boolean;
+  /** The profile's stored `tools`, which the legacy switches edit in place. */
+  storedTools?: ProfileToolSpec[] | null;
+  /** Whether the server reads `switch_llm` from `tools` rather than its switch. */
+  toolsCarrySwitchLlm?: boolean;
 }
 
 /**
@@ -236,6 +244,8 @@ export function buildAgentProfileFields(
     selectedTools = [],
     toolParams = {},
     toolCatalogSupported = false,
+    storedTools = null,
+    toolsCarrySwitchLlm = false,
   } = input;
   // Both are base-model fields, so they ride both variants. `mcp_server_refs`
   // needs no version gate — it has existed since agent profiles shipped, below
@@ -276,8 +286,21 @@ export function buildAgentProfileFields(
   } else {
     fields.enable_sub_agents = subAgentsEnabled;
     // The profile model is `extra="forbid"`, so an unknown key 422s the save.
-    if (switchLlmToolField && switchLlmToolSupportedOnProfile) {
+    const sendsSwitchLlm = Boolean(
+      switchLlmToolField && switchLlmToolSupportedOnProfile,
+    );
+    if (sendsSwitchLlm) {
       fields.enable_switch_llm_tool = switchLlmToolEnabled;
+    }
+    // An explicit list is what the server launches, so the switches must edit it.
+    if (storedTools !== null) {
+      fields.tools = applyToolSwitchesToProfileTools(storedTools, {
+        subAgents: subAgentsEnabled,
+        switchLlm:
+          sendsSwitchLlm && toolsCarrySwitchLlm
+            ? switchLlmToolEnabled
+            : undefined,
+      });
     }
   }
   if (toolConcurrencyField) {
@@ -411,6 +434,13 @@ export function AgentSettingsScreen({
   const initialTools = React.useMemo(
     () => readProfileTools(agentSettingsSource?.[TOOLS_KEY]),
     [agentSettingsSource],
+  );
+  const storedTools = React.useMemo(
+    () => readStoredProfileTools(agentSettingsSource?.[TOOLS_KEY]),
+    [agentSettingsSource],
+  );
+  const toolsCarrySwitchLlm = profileToolsCarrySwitchLlm(
+    agentSettingsSource?.[PROFILE_SCHEMA_VERSION_KEY],
   );
   const [toolsMode, setToolsMode] = useState<ProfileScopeMode>(
     initialTools.mode,
@@ -746,7 +776,8 @@ export function AgentSettingsScreen({
     !sameScopeSelection(orderedSelectedSecrets, initialSecretRefs.selected);
   const toolSelectionDirty =
     toolsMode !== initialTools.mode ||
-    !sameScopeSelection(orderedSelectedTools, initialTools.selected);
+    (toolsMode === "custom" &&
+      !sameScopeSelection(orderedSelectedTools, initialTools.selected));
   const settingsDirty =
     agentType !== loadedSnapshot.agentType ||
     mcpScopeDirty ||
@@ -840,6 +871,8 @@ export function AgentSettingsScreen({
       selectedTools: orderedSelectedTools,
       toolParams: initialTools.params,
       toolCatalogSupported,
+      storedTools,
+      toolsCarrySwitchLlm,
     });
 
   const isSavingAny = isSaving || acpCredentialForm.isSaving;

@@ -1915,11 +1915,75 @@ describe("AgentSettingsScreen — tool selection", () => {
 
     expect(screen.queryByTestId("agent-settings-tools-mode")).toBeNull();
     // ... and the stored selection survives the save untouched.
-    expect(control().buildAgentProfileFields()).not.toHaveProperty("tools");
+    expect(control().buildAgentProfileFields()).toHaveProperty("tools", [
+      { name: "glob", params: {} },
+    ]);
     expect(
       screen.getByTestId("agent-settings-enable-sub-agents"),
     ).toBeInTheDocument();
   });
+
+  it("is clean again after a standard → custom → standard round-trip", async () => {
+    const { control } = renderEditor({ tools: null });
+    await screen.findByTestId("agent-settings-screen");
+
+    const user = userEvent.setup();
+    const mode = () => screen.getByTestId("agent-settings-tools-mode");
+    await user.click(mode());
+    await user.click(
+      await screen.findByRole("option", {
+        name: "SETTINGS$AGENT_PROFILE_TOOLS_CHOOSE",
+      }),
+    );
+    await waitFor(() => expect(control().isDirty).toBe(true));
+    await user.click(mode());
+    await user.click(
+      await screen.findByRole("option", {
+        name: "SETTINGS$AGENT_PROFILE_TOOLS_STANDARD",
+      }),
+    );
+
+    await waitFor(() => expect(control().isDirty).toBe(false));
+  });
+
+  it.each([
+    [
+      3,
+      [
+        { name: "terminal", params: {} },
+        { name: "switch_llm", params: {} },
+      ],
+    ],
+    [2, [{ name: "terminal", params: {} }]],
+  ])(
+    "edits a stored list with the switches when the server has no catalog (schema %i)",
+    async (schemaVersion, expected) => {
+      profileSupportsToolCatalogMock.mockReturnValue(false);
+      const { control } = renderEditor({
+        profile_schema_version: schemaVersion,
+        tools: [
+          { name: "terminal", params: {} },
+          { name: "task_tool_set", params: {} },
+        ],
+        enable_sub_agents: true,
+        enable_switch_llm_tool: false,
+      });
+      await screen.findByTestId("agent-settings-screen");
+
+      const user = userEvent.setup();
+      await user.click(screen.getByTestId("agent-settings-enable-sub-agents"));
+      await user.click(
+        screen.getByTestId("agent-settings-enable-switch-llm-tool"),
+      );
+
+      const fields = control().buildAgentProfileFields();
+      expect(fields).toMatchObject({
+        enable_sub_agents: false,
+        enable_switch_llm_tool: true,
+        tools: expected,
+      });
+    },
+  );
 
   it("hides the picker outside the profile editor", async () => {
     renderAgentSettingsScreen();
