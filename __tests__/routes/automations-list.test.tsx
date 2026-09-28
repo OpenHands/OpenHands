@@ -302,6 +302,18 @@ describe("AutomationsList — draft sections", () => {
         screen.getByTestId("automation-setup-draft-draft-event"),
       ).queryByTestId("styled-tooltip-content"),
     ).not.toBeInTheDocument();
+    const editButton = within(draftCard).getByTestId(
+      "automation-setup-draft-edit-draft-1",
+    );
+    expect(editButton).toBeEnabled();
+    expect(editButton).toHaveAttribute(
+      "aria-label",
+      I18nKey.AUTOMATIONS$EDIT,
+    );
+    expect(
+      editButton.compareDocumentPosition(activePlay) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(
       within(draftCard).getByTestId("automation-setup-draft-delete-draft-1"),
     ).toBeInTheDocument();
@@ -335,7 +347,7 @@ describe("AutomationsList — draft sections", () => {
       "automation-setup-draft-draft-1",
     );
     await user.click(
-      within(draftCard).getByTestId("automation-setup-draft-resume-draft-1"),
+      within(draftCard).getByTestId("automation-setup-draft-edit-draft-1"),
     );
 
     await waitFor(() =>
@@ -724,7 +736,14 @@ describe("AutomationsList — add automation menu", () => {
     ).toBeInTheDocument();
 
     await user.click(screen.getByTestId("automations-add-automation-create"));
-    expect(screen.getByTestId("add-automation-modal")).toBeInTheDocument();
+    expect(screen.queryByTestId("add-automation-modal")).not.toBeInTheDocument();
+    expect(mocks.createConversationMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        automationSetup: true,
+        entryPoint: "automations_add",
+      }),
+      expect.any(Object),
+    );
   });
 
   it("opens the import picker from the Add Automation menu", async () => {

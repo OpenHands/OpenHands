@@ -44,6 +44,7 @@ import {
 } from "#/api/automation-setup-plugins";
 import {
   automationDetailPath,
+  automationListPath,
   getAutomationEndpoint,
 } from "#/manifests/automation-interface";
 import { packTarGzip } from "#/utils/tar-gzip";
@@ -1656,6 +1657,10 @@ export function AutomationSetupPanel({
     }
   };
 
+  const closeEditor = () => {
+    navigate(automationListPath());
+  };
+
   const compactToolbarButtonClassName = "!h-7 !min-h-7 !px-2.5 !text-xs";
   const visiblePluginEntries = kind === "custom" ? [] : pluginEntries;
   const addPlugin = () =>
@@ -1676,52 +1681,74 @@ export function AutomationSetupPanel({
         </span>
       ) : null}
       {isEditingExisting ? (
-        <BrandButton
-          type="button"
-          variant="primary"
-          testId="automation-setup-save"
-          className={compactToolbarButtonClassName}
-          isDisabled={isSubmitting}
-          aria-busy={isSubmitting}
-          onClick={handleSaveExisting}
-        >
-          {t(I18nKey.BUTTON$SAVE)}
-        </BrandButton>
+        <>
+          <BrandButton
+            type="button"
+            variant="secondary"
+            testId="automation-setup-test"
+            className={compactToolbarButtonClassName}
+            isDisabled={isSubmitting}
+            aria-busy={isSubmitting}
+            onClick={handleTestExisting}
+          >
+            {t(I18nKey.AUTOMATION_SETUP$TEST)}
+          </BrandButton>
+          <BrandButton
+            type="button"
+            variant="primary"
+            testId="automation-setup-save"
+            className={compactToolbarButtonClassName}
+            isDisabled={isSubmitting}
+            aria-busy={isSubmitting}
+            onClick={handleSaveExisting}
+          >
+            {t(I18nKey.BUTTON$SAVE)}
+          </BrandButton>
+          <BrandButton
+            type="button"
+            variant="secondary"
+            testId="automation-setup-close"
+            className={compactToolbarButtonClassName}
+            onClick={closeEditor}
+          >
+            {t(I18nKey.BUTTON$CLOSE)}
+          </BrandButton>
+        </>
       ) : (
-        <BrandButton
-          type="button"
-          variant="secondary"
-          testId="automation-setup-save-draft"
-          className={compactToolbarButtonClassName}
-          isDisabled={isSubmitting}
-          onClick={handleSaveDraft}
-        >
-          {t(I18nKey.AUTOMATION_SETUP$SAVE_DRAFT)}
-        </BrandButton>
-      )}
-      <BrandButton
-        type="button"
-        variant="secondary"
-        testId="automation-setup-test"
-        className={compactToolbarButtonClassName}
-        isDisabled={isSubmitting}
-        aria-busy={isSubmitting}
-        onClick={isEditingExisting ? handleTestExisting : handleTest}
-      >
-        {t(I18nKey.AUTOMATION_SETUP$TEST)}
-      </BrandButton>
-      {isEditingExisting ? null : (
-        <BrandButton
-          type="button"
-          variant="primary"
-          testId="automation-setup-create"
-          className={compactToolbarButtonClassName}
-          isDisabled={isSubmitting}
-          aria-busy={isSubmitting}
-          onClick={handleCreate}
-        >
-          {t(I18nKey.AUTOMATIONS$CREATE_AUTOMATION_BUTTON)}
-        </BrandButton>
+        <>
+          <BrandButton
+            type="button"
+            variant="secondary"
+            testId="automation-setup-save-draft"
+            className={compactToolbarButtonClassName}
+            isDisabled={isSubmitting}
+            onClick={handleSaveDraft}
+          >
+            {t(I18nKey.AUTOMATION_SETUP$SAVE_DRAFT)}
+          </BrandButton>
+          <BrandButton
+            type="button"
+            variant="secondary"
+            testId="automation-setup-test"
+            className={compactToolbarButtonClassName}
+            isDisabled={isSubmitting}
+            aria-busy={isSubmitting}
+            onClick={handleTest}
+          >
+            {t(I18nKey.AUTOMATION_SETUP$TEST)}
+          </BrandButton>
+          <BrandButton
+            type="button"
+            variant="primary"
+            testId="automation-setup-create"
+            className={compactToolbarButtonClassName}
+            isDisabled={isSubmitting}
+            aria-busy={isSubmitting}
+            onClick={handleCreate}
+          >
+            {t(I18nKey.AUTOMATIONS$CREATE_AUTOMATION_BUTTON)}
+          </BrandButton>
+        </>
       )}
     </div>
   );

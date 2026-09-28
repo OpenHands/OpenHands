@@ -186,6 +186,7 @@ vi.mock("#/utils/tar-gzip", () => ({
 }));
 
 vi.mock("#/manifests/automation-interface", () => ({
+  automationListPath: () => "/automations",
   automationDetailPath: (id: string) => `/automations/${id}`,
   getAutomationEndpoint: (name: string) =>
     name === "createPlugin"
@@ -1568,11 +1569,26 @@ describe("AutomationSetupPanel", () => {
     expect(
       screen.queryByTestId("automation-setup-save-draft"),
     ).not.toBeInTheDocument();
-    expect(screen.queryByTestId("automation-setup-create")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automation-setup-create"),
+    ).not.toBeInTheDocument();
+    expect(
+      [
+        ...(screen
+          .getByTestId("automation-setup-test")
+          .parentElement?.querySelectorAll("button") ?? []),
+      ].map((button) => button.getAttribute("data-testid")),
+    ).toEqual([
+      "automation-setup-test",
+      "automation-setup-save",
+      "automation-setup-close",
+    ]);
     expect(screen.getByTestId("automation-setup-save")).toHaveTextContent(
       "BUTTON$SAVE",
     );
-    expect(screen.getByTestId("automation-setup-test")).toBeInTheDocument();
+    expect(screen.getByTestId("automation-setup-close")).toHaveTextContent(
+      "BUTTON$CLOSE",
+    );
     expect(screen.getByTestId("automation-setup-name")).toHaveValue(
       "Daily digest",
     );
@@ -1596,5 +1612,8 @@ describe("AutomationSetupPanel", () => {
         "auto-1",
       ),
     );
+
+    await user.click(screen.getByTestId("automation-setup-close"));
+    expect(mockNavigate).toHaveBeenCalledWith("/automations");
   });
 });
