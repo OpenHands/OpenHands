@@ -352,7 +352,7 @@ const buildTranscriptEntries = (
       if (
         isClassifyAndSwitchLLMObservationEvent(event) &&
         !event.observation.is_error &&
-        event.observation.active_model
+        event.observation.model
       ) {
         // Router-driven switch: surface the activated profile the same way
         // as a manual `/model` switch, and tag the chosen classifier
@@ -361,7 +361,7 @@ const buildTranscriptEntries = (
         entries.push({
           kind: "note",
           summary: translatePlain(I18nKey.MODEL$SWITCHED_TO_PROFILE, {
-            name: event.observation.active_model,
+            name: event.observation.model,
           }),
           content: [
             `${i18n.t(I18nKey.TRANSCRIPT_EXPORT$MODEL)}: ${event.observation.active_model}`,
