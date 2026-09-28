@@ -42144,6 +42144,23 @@
     "zh-CN": "编辑提供商连接",
     "zh-TW": "編輯提供者連線"
   },
+  "SETTINGS$PROVIDER_CONNECTION_MENU": {
+    "ar": "قائمة اتصال المزود",
+    "ca": "Menú de connexió de proveïdor",
+    "de": "Anbieterverbindungsmenü",
+    "en": "Provider connection menu",
+    "es": "Menú de conexión de proveedor",
+    "fr": "Menu de connexion fournisseur",
+    "it": "Menu connessione provider",
+    "ja": "プロバイダー接続メニュー",
+    "ko-KR": "공급자 연결 메뉴",
+    "no": "Leverandørtilkoblingsmeny",
+    "pt": "Menu de conexão de provedor",
+    "tr": "Sağlayıcı bağlantı menüsü",
+    "uk": "Меню підключення постачальника",
+    "zh-CN": "提供商连接菜单",
+    "zh-TW": "提供者連線選單"
+  },
   "SETTINGS$PROVIDER_CONNECTION_MODEL_COUNT": {
     "ar": "{{count}} نموذج",
     "ca": "{{count}} model(s)",

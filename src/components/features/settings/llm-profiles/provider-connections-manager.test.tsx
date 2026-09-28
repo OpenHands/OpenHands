@@ -165,7 +165,8 @@ describe("ProviderConnectionsManager", () => {
     expect(screen.getByText("openai")).toBeInTheDocument();
   });
 
-  it("renders a bulk-add-models button on each connection row", () => {
+  it("renders a bulk-add-models action in each connection's menu", async () => {
+    const user = userEvent.setup();
     renderWith(
       <ProviderConnectionsManager
         connections={[connection]}
@@ -176,8 +177,9 @@ describe("ProviderConnectionsManager", () => {
       />,
     );
 
+    await user.click(screen.getByTestId("provider-connection-menu-trigger"));
     expect(
-      screen.getByTestId("provider-connection-add-models"),
+      await screen.findByTestId("provider-connection-add-models"),
     ).toBeInTheDocument();
   });
 
@@ -193,6 +195,7 @@ describe("ProviderConnectionsManager", () => {
       />,
     );
 
+    await user.click(screen.getByTestId("provider-connection-menu-trigger"));
     await user.click(screen.getByTestId("provider-connection-add-models"));
 
     // The modal summarizes the connection it was launched from — no provider
@@ -216,6 +219,7 @@ describe("ProviderConnectionsManager", () => {
       />,
     );
 
+    await user.click(screen.getByTestId("provider-connection-menu-trigger"));
     await user.click(screen.getByTestId("provider-connection-edit"));
 
     const providerSelector = screen.getByRole("combobox", {
@@ -249,6 +253,7 @@ describe("ProviderConnectionsManager", () => {
       />,
     );
 
+    fireEvent.click(screen.getByTestId("provider-connection-menu-trigger"));
     fireEvent.click(screen.getByTestId("provider-connection-delete"));
     fireEvent.click(screen.getByTestId("delete-provider-connection-confirm"));
 

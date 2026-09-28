@@ -281,8 +281,11 @@ describe("LlmProfilesManager", () => {
     expect(await screen.findByText("Provider connections")).toBeInTheDocument();
     expect(screen.getByTestId("add-provider-connection")).toBeInTheDocument();
     const row = await screen.findByTestId("provider-connection-row");
-    expect(within(row).getByTestId("provider-connection-edit")).toBeVisible();
-    expect(within(row).getByTestId("provider-connection-delete")).toBeVisible();
+    // Edit/delete/bulk-add live behind the three-dots menu, so a manager sees
+    // the trigger; the actions themselves appear once it is opened.
+    expect(
+      within(row).getByTestId("provider-connection-menu-trigger"),
+    ).toBeVisible();
   });
 
   it("hides provider connections on a cloud backend without an org", async () => {
