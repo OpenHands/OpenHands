@@ -7,6 +7,9 @@ import {
   CODEX_VIEWBOX,
   GEMINI_MARK_PATH,
   GEMINI_VIEWBOX,
+  OPENCODE_MARK_INNER_PATH,
+  OPENCODE_MARK_OUTER_PATH,
+  OPENCODE_VIEWBOX,
 } from "#/constants/acp-brand-marks";
 import type { ACPProviderIcon } from "#/constants/acp-providers";
 import { cn } from "#/utils/utils";
@@ -103,6 +106,27 @@ export function AgentBrandIcon({
         aria-hidden
       >
         <path fill="currentColor" d={GEMINI_MARK_PATH} />
+      </svg>
+    );
+  }
+  if (kind === "opencode") {
+    return (
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox={OPENCODE_VIEWBOX}
+        width={size}
+        height={size}
+        className={cn("shrink-0", className)}
+        data-testid={testId ?? "agent-brand-icon-opencode"}
+        aria-hidden
+      >
+        <path
+          fillRule="evenodd"
+          clipRule="evenodd"
+          d={OPENCODE_MARK_OUTER_PATH}
+          fill="currentColor"
+        />
+        <path d={OPENCODE_MARK_INNER_PATH} fill="currentColor" opacity="0.35" />
       </svg>
     );
   }

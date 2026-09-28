@@ -261,6 +261,17 @@ describe("SetupAcpSecretsStep", () => {
     ).toBeInTheDocument();
   });
 
+  it("renders only OpenCode's registry API key credential", () => {
+    renderStep("opencode");
+
+    expect(
+      screen.getByTestId("onboarding-acp-secret-OPENCODE_API_KEY"),
+    ).toHaveAttribute("type", "password");
+    expect(
+      screen.queryByTestId("onboarding-acp-secret-OPENCODE_BASE_URL"),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows no banner when the provider is not authenticated", () => {
     acpAuthStatusMock.mockReturnValue({
       status: "unauthenticated",
@@ -348,6 +359,52 @@ describe("SetupAcpSecretsStep", () => {
     expect(
       screen.getByTestId("onboarding-acp-secrets-next"),
     ).not.toBeDisabled();
+  });
+
+  it("keeps OpenCode skippable on local when auth cannot be probed", () => {
+    acpAuthStatusMock.mockReturnValue({
+      status: "unknown",
+      isChecking: false,
+      isSupported: false,
+    });
+    renderStep("opencode");
+
+    expect(
+      screen.queryByTestId("onboarding-acp-secrets-blocked"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("onboarding-acp-secrets-next")).toBeEnabled();
+  });
+
+  it("requires and stores OpenCode's API key on cloud", async () => {
+    setRegisteredBackends([
+      {
+        id: "cloud-1",
+        name: "Cloud",
+        host: "https://app.example.dev",
+        apiKey: "key",
+        kind: "cloud",
+      },
+    ]);
+    setActiveSelection({ backendId: "cloud-1", orgId: null });
+    const { onNext, user } = renderStep("opencode");
+
+    expect(screen.getByTestId("onboarding-acp-secrets-next")).toBeDisabled();
+
+    await user.type(
+      screen.getByTestId("onboarding-acp-secret-OPENCODE_API_KEY"),
+      "opencode-test-key",
+    );
+    expect(screen.getByTestId("onboarding-acp-secrets-next")).toBeEnabled();
+    await user.click(screen.getByTestId("onboarding-acp-secrets-next"));
+
+    await waitFor(() => {
+      expect(SecretsService.createSecret).toHaveBeenCalledWith(
+        "OPENCODE_API_KEY",
+        "opencode-test-key",
+        undefined,
+      );
+      expect(onNext).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("stays blocked when only a non-credential field is filled", async () => {

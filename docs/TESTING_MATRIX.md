@@ -14,11 +14,13 @@ Each cell = smoke test: install → onboard → start conversation → agent rep
 | **npm — Claude Code** | ☐ | ☐ | ☐ |
 | **npm — Codex** | ☐ | ☐ | ☐ |
 | **npm — Gemini CLI** | ☐ | ☐ | ☐ |
+| **npm — OpenCode** | ☐ | ☐ | ☐ |
 | **npm — Custom ACP** | ☐ | ☐ | ☐ |
 | **Docker — OpenHands** | ☐ | ☐ | ☐ |
 | **Docker — Claude Code** | ☐ | ☐ | ☐ |
 | **Docker — Codex** | ☐ | ☐ | ☐ |
 | **Docker — Gemini CLI** | ☐ | ☐ | ☐ |
+| **Docker — OpenCode** | ☐ | ☐ | ☐ |
 | **Docker — Custom ACP** | ☐ | ☐ | ☐ |
 
 ---
@@ -33,6 +35,7 @@ Requires full stack (automation backend running).
 | **Claude Code** | ✅ P1 | ✅ P1 |
 | **Codex** | ✅ P1 | ✅ P1 |
 | **Gemini CLI** | ✅ P2 | ✅ P2 |
+| **OpenCode** | ✅ P2 | ✅ P2 |
 
 Each cell = create automation → dispatch run → run reaches COMPLETED → conversation link works.
 
@@ -51,37 +54,37 @@ Each cell = create automation → dispatch run → run reaches COMPLETED → con
 
 ### npm
 
-| Feature | OpenHands | Claude Code | Codex | Gemini CLI |
-|---|:---:|:---:|:---:|:---:|
-| Onboarding | ☐ | ☐ | ☐ | ☐ |
-| Conversation — start, resume, history | ☐ | ☐ | ☐ | ☐ |
-| Terminal tool | ☐ | ☐ | ☐ | ☐ |
-| File editor tool | ☐ | ☐ | ☐ | ☐ |
-| Browser tool | ☐ | ☐ | ☐ | ☐ |
-| LLM profiles — create / switch | ☐ | — | — | — |
-| Secrets — add / delete / forwarded | ☐ | ☐ | ☐ | ☐ |
-| Automations — create, dispatch, COMPLETED | ☐ | ☐ | ☐ | ☐ |
-| Files tab + Changes/diff tab | ☐ | ☐ | ☐ | ☐ |
-| MCP server install | ☐ | ☐ | ☐ | ☐ |
-| Image upload in chat | ☐ | ☐ | ☐ | ☐ |
-| Key rotation | ☐ | ☐ | ☐ | ☐ |
+| Feature | OpenHands | Claude Code | Codex | Gemini CLI | OpenCode |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Onboarding | ☐ | ☐ | ☐ | ☐ | ☐ |
+| Conversation — start, resume, history | ☐ | ☐ | ☐ | ☐ | ☐ |
+| Terminal tool | ☐ | ☐ | ☐ | ☐ | ☐ |
+| File editor tool | ☐ | ☐ | ☐ | ☐ | ☐ |
+| Browser tool | ☐ | ☐ | ☐ | ☐ | ☐ |
+| LLM profiles — create / switch | ☐ | — | — | — | — |
+| Secrets — add / delete / forwarded | ☐ | ☐ | ☐ | ☐ | ☐ |
+| Automations — create, dispatch, COMPLETED | ☐ | ☐ | ☐ | ☐ | ☐ |
+| Files tab + Changes/diff tab | ☐ | ☐ | ☐ | ☐ | ☐ |
+| MCP server install | ☐ | ☐ | ☐ | ☐ | ☐ |
+| Image upload in chat | ☐ | ☐ | ☐ | ☐ | ☐ |
+| Key rotation | ☐ | ☐ | ☐ | ☐ | ☐ |
 
 ### Docker
 
-| Feature | OpenHands | Claude Code | Codex | Gemini CLI |
-|---|:---:|:---:|:---:|:---:|
-| Onboarding | ☐ | ☐ | ☐ | ☐ |
-| Conversation — start, resume, history | ☐ | ☐ | ☐ | ☐ |
-| Terminal tool | ☐ | ☐ | ☐ | ☐ |
-| File editor tool | ☐ | ☐ | ☐ | ☐ |
-| Browser tool | ☐ | ☐ | ☐ | ☐ |
-| LLM profiles — create / switch | ☐ | — | — | — |
-| Secrets — add / delete / forwarded | ☐ | ☐ | ☐ | ☐ |
-| Automations — create, dispatch, COMPLETED | ☐ | ☐ | ☐ | ☐ |
-| Files tab + Changes/diff tab | ☐ | ☐ | ☐ | ☐ |
-| MCP server install | ☐ | ☐ | ☐ | ☐ |
-| Image upload in chat | ☐ | ☐ | ☐ | ☐ |
-| Key rotation | ☐ | ☐ | ☐ | ☐ |
+| Feature | OpenHands | Claude Code | Codex | Gemini CLI | OpenCode |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Onboarding | ☐ | ☐ | ☐ | ☐ | ☐ |
+| Conversation — start, resume, history | ☐ | ☐ | ☐ | ☐ | ☐ |
+| Terminal tool | ☐ | ☐ | ☐ | ☐ | ☐ |
+| File editor tool | ☐ | ☐ | ☐ | ☐ | ☐ |
+| Browser tool | ☐ | ☐ | ☐ | ☐ | ☐ |
+| LLM profiles — create / switch | ☐ | — | — | — | — |
+| Secrets — add / delete / forwarded | ☐ | ☐ | ☐ | ☐ | ☐ |
+| Automations — create, dispatch, COMPLETED | ☐ | ☐ | ☐ | ☐ | ☐ |
+| Files tab + Changes/diff tab | ☐ | ☐ | ☐ | ☐ | ☐ |
+| MCP server install | ☐ | ☐ | ☐ | ☐ | ☐ |
+| Image upload in chat | ☐ | ☐ | ☐ | ☐ | ☐ |
+| Key rotation | ☐ | ☐ | ☐ | ☐ | ☐ |
 
 ---
 
@@ -94,4 +97,4 @@ Each cell = create automation → dispatch run → run reaches COMPLETED → con
 | `test:e2e:mock-llm:docker` | Docker | Linux | OpenHands, ACP (mock) | ✅ full |
 | `test:e2e:live` | npm | Linux | OpenHands | ❌ |
 
-**Not yet covered by CI:** real ACP credentials (Claude Code / Codex / Gemini), macOS, public auth mode, subscription login paths, Windows.
+**Not yet covered by CI:** real ACP credentials (Claude Code / Codex / Gemini / OpenCode), macOS, public auth mode, subscription login paths, Windows.

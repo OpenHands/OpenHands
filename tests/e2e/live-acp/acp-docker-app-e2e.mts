@@ -42,6 +42,9 @@ import {
 
 registerDockerBackend();
 
+const WORKING_DIR_BASE =
+  process.env.ACP_E2E_WORKING_DIR_BASE ?? "/workspace/app-e2e";
+
 async function run(plan: ProviderPlan): Promise<boolean> {
   const secrets = plan.collectSecrets();
   if (!secrets) {
@@ -77,7 +80,7 @@ async function run(plan: ProviderPlan): Promise<boolean> {
 
   // 3) conversation start — the app's own orchestrator. It re-reads settings +
   //    the saved secret names and emits each as a LookupSecret.
-  const workingDir = `/workspace/app-e2e/${plan.id}-${Date.now()}`;
+  const workingDir = `${WORKING_DIR_BASE}/${plan.id}-${Date.now()}`;
   const payload = (await buildStartConversationRequestWithEncryptedSettings({
     settings: undefined as any, // base settings come from the backend fetch
     query: `Reply with exactly: ${plan.expectedToken}`,
@@ -111,7 +114,9 @@ async function run(plan: ProviderPlan): Promise<boolean> {
   console.log(
     `   status=${status} reply=${JSON.stringify(reply.slice(0, 160))}`,
   );
-  console.log(`   ${ok ? "✅ PASS" : "❌ FAIL"} (expected "${plan.expectedToken}")`);
+  console.log(
+    `   ${ok ? "✅ PASS" : "❌ FAIL"} (expected "${plan.expectedToken}")`,
+  );
   return ok;
 }
 
@@ -119,7 +124,9 @@ async function main() {
   const args = process.argv.slice(2).filter((a) => a !== "--");
   const plan = args[0] ? getProviderPlan(args[0]) : undefined;
   if (!plan) {
-    console.error(`usage: ... acp-docker-app-e2e.mts -- <codex|claude|gemini>`);
+    console.error(
+      `usage: ... acp-docker-app-e2e.mts -- <codex|claude|gemini|opencode>`,
+    );
     process.exit(2);
   }
   console.log(`App-path e2e against ${BASE} — provider: ${plan.id}`);
