@@ -93,6 +93,11 @@ function getCustomFinishToolMetadata(response: unknown): unknown | null {
   return null;
 }
 
+export function getAutomationRunTaskSummary(run: AutomationRun): string | null {
+  const response = getAutomationRunFinishToolResponse(run);
+  return isRecord(response) ? trimString(response.outcome_summary) : null;
+}
+
 export function getAutomationRunTaskOutcome(
   run: AutomationRun,
 ): AutomationRunTaskOutcome | null {

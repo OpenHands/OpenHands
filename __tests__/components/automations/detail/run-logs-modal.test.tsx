@@ -374,6 +374,33 @@ describe("RunLogsModal — run inspection summary", () => {
     expect(screen.getByText(/Sandbox timed out/)).toBeInTheDocument();
   });
 
+  it("shows a failed run's agent summary separately from its system error", () => {
+    useBashCommandLogsMock.mockReturnValue(makeHookResult());
+
+    render(
+      <RunLogsModal
+        isOpen
+        conversationId="conv-1"
+        bashCommandId="cmd-1"
+        onClose={() => {}}
+        run={makeRun({
+          status: AutomationRunStatus.FAILED,
+          error_detail: "Sandbox timed out.",
+          run_metadata: {
+            finish_tool_response: {
+              outcome_summary: "The report was generated before the timeout.",
+            },
+          },
+        })}
+      />,
+    );
+
+    expect(
+      screen.getByText("The report was generated before the timeout."),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Sandbox timed out/)).toBeInTheDocument();
+  });
+
   it("shows a successful task with readable custom metadata when no status was reported", () => {
     useBashCommandLogsMock.mockReturnValue(makeHookResult());
 

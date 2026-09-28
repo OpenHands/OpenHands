@@ -15,7 +15,10 @@ import {
   type AutomationRun,
   type AutomationRunStatusDetail,
 } from "#/types/automation";
-import { getAutomationRunDisplay } from "#/utils/automation-run-display";
+import {
+  getAutomationRunDisplay,
+  getAutomationRunTaskSummary,
+} from "#/utils/automation-run-display";
 import { DebugAutomationButton } from "./debug-automation-button";
 import { RunStatusBadge } from "./run-status-badge";
 
@@ -105,7 +108,7 @@ function RunInspectionSummary({ run }: { run: AutomationRun | undefined }) {
   const taskSummary =
     run.status === AutomationRunStatus.COMPLETED
       ? display.summary
-      : (display.taskOutcome?.outcomeSummary ?? null);
+      : getAutomationRunTaskSummary(run);
   const taskMetadataText = display.customTaskMetadataText;
   const taskStatus =
     run.status === AutomationRunStatus.COMPLETED || display.taskOutcome
