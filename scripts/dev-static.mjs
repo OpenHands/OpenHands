@@ -431,9 +431,8 @@ function startStaticServer(config) {
         : []),
       // Inject the API key so the pre-built frontend can authenticate
       // to the agent-server without a baked-in VITE_SESSION_API_KEY.
-      ...(config.sessionApiKey
-        ? ["--session-api-key", config.sessionApiKey]
-        : []),
+      // The key travels via SESSION_API_KEY env (not argv) so it is not
+      // visible in `ps`/`/proc/<pid>/cmdline` on shared hosts.
       "--runtime-services-info",
       runtimeServicesInfo,
       ...buildLocalServiceRouteArgs(config),
@@ -446,6 +445,11 @@ function startStaticServer(config) {
     {
       cwd: config.canvasPath,
       color: c.magenta,
+      // Pass the session key through the environment instead of argv so it
+      // never shows up in process listings on shared hosts.
+      ...(config.sessionApiKey
+        ? { env: { SESSION_API_KEY: config.sessionApiKey } }
+        : {}),
     },
   );
 }
