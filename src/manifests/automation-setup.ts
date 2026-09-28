@@ -501,7 +501,7 @@ function buildTrigger(
 
   const filter = entry.setup.filter
     ? interpolateText(entry.setup.filter, {
-        form: values,
+        form: filterFormValues(values),
         automation: entry,
       })
     : undefined;
@@ -516,6 +516,23 @@ function buildTrigger(
       ...(hasPayloadValue(filter) && { filter }),
     }),
   };
+}
+
+/**
+ * The form as a filter reads it. A filter is a JMESPath expression, so a
+ * multi-value answer inside it is a list literal - `['a/b', 'c/d']`, as the
+ * reference renderer writes one - rather than the list of names it reads as
+ * inside a sentence.
+ */
+function filterFormValues(values: SetupFormValues): SetupFormValues {
+  return Object.fromEntries(
+    Object.entries(values).map(([name, value]) => [
+      name,
+      Array.isArray(value)
+        ? `[${value.map((item) => `'${item}'`).join(", ")}]`
+        : value,
+    ]),
+  );
 }
 
 /**

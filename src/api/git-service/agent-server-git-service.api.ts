@@ -1,7 +1,6 @@
 import { isAxiosError } from "axios";
 import { RemoteWorkspace } from "@openhands/typescript-client/workspace/remote-workspace";
 import { mapAnyGitStatusToClientStatus } from "#/utils/git-status-mapper";
-import { buildHttpBaseUrl } from "#/utils/websocket-url";
 import type {
   GitChange,
   GitChangeDiff,
@@ -31,17 +30,18 @@ interface AgentServerGitCommitsPage {
 }
 
 /**
- * Git operations for agent-server conversations.
+ * Cloud-aware Git operations for agent-server conversations.
  *
  * In **local** mode the runtime is reachable directly from the browser
  * (it's `127.0.0.1:18000`); the SDK's `RemoteWorkspace` calls land
- * fine. In **cloud** mode the runtime is at
- * `*.prod-runtime.all-hands.dev`, which doesn't allow CORS from
- * `localhost`. So cloud-mode calls hit the cloud API's
- * `GET /api/v1/app-conversations/{id}/git/{changes,diff}` proxy
- * endpoints instead — the server resolves the conversation's runtime
- * and makes the hop itself with the sandbox's session API key, and the
- * cloud API's CORS is permissive for bearer-token requests.
+ * fine. In **cloud** mode the runtime is at `*.prod-runtime.all-hands.dev`,
+ * whose CORS allowlist (`OH_ALLOW_CORS_ORIGINS`, set to the Canvas origin
+ * in saas-deploy) permits direct browser calls authenticated with the
+ * conversation's `X-Session-API-Key`. The changes/diff listing endpoints
+ * additionally have dedicated cloud App-API proxies
+ * (`GET /api/v1/app-conversations/{id}/git/{changes,diff}`) which the
+ * server resolves itself; the commit endpoints below go straight to the
+ * runtime.
  */
 
 /**
@@ -49,21 +49,19 @@ interface AgentServerGitCommitsPage {
  * `/workspace/` to relative paths (so a relative arg like
  * `workspace/project` becomes `/workspace/workspace/project` and 404s).
  * `getGitPath` returns the local agent-server's relative convention by
- * default; normalize to an absolute path before sending to the cloud
- * runtime.
+ * default; normalize to an absolute path before sending to the runtime.
  */
 function toAbsoluteRuntimePath(path: string): string {
   return path.startsWith("/") ? path : `/${path}`;
 }
 
 /**
- * GET an arbitrary runtime git endpoint in both backend modes. Local mode
- * uses the SDK's public `HttpClient` (the typed `gitChanges`/`gitDiff`
- * wrappers don't know the newer endpoints/params, and they re-wrap errors,
- * dropping the `.status` needed for 404 feature-detection). Cloud mode goes
- * through the generic cloud-proxy envelope with the sandbox's session API
- * key — the same hop `executeCommand`/`downloadFile` use — so no dedicated
- * cloud API endpoints are required.
+ * GET an arbitrary runtime git endpoint in both backend modes. Targets the
+ * per-conversation runtime host directly via the SDK's public `HttpClient`
+ * (the typed `gitChanges`/`gitDiff` wrappers don't know the newer
+ * endpoints/params, and they re-wrap errors, dropping the `.status` needed
+ * for 404 feature-detection). Authenticated with the sandbox's session API
+ * key; the runtime CORS allowlist permits the cross-origin cloud call.
  */
 async function getFromRuntime<T>(
   conversationUrl: string | null | undefined,
@@ -71,26 +69,17 @@ async function getFromRuntime<T>(
   apiPath: string,
   params: { path: string } & Record<string, string>,
 ): Promise<T> {
-  const active = getActiveBackend().backend;
-
-  if (active.kind === "cloud" && conversationUrl) {
-    const search = new URLSearchParams({
-      ...params,
-      path: toAbsoluteRuntimePath(params.path),
-    });
-    return callCloudProxy<T>({
-      backend: active,
-      method: "GET",
-      hostOverride: buildHttpBaseUrl(conversationUrl),
-      path: `${apiPath}?${search.toString()}`,
-      authMode: "session-api-key",
-      sessionApiKey: sessionApiKey ?? undefined,
-    });
+  if (getActiveBackend().backend.kind === "cloud" && !conversationUrl) {
+    throw new Error(
+      "AgentServerGitService.getFromRuntime requires a conversation URL on cloud backends",
+    );
   }
 
   const response = await new RemoteWorkspace(
     getAgentServerClientOptions({ conversationUrl, sessionApiKey }),
-  ).client.get<T>(apiPath, { params });
+  ).client.get<T>(apiPath, {
+    params: { ...params, path: toAbsoluteRuntimePath(params.path) },
+  });
   return response.data;
 }
 

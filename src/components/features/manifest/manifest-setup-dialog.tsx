@@ -430,7 +430,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     <ModalBackdrop onClose={onClose} aria-label={entry.name}>
       <div
         data-testid="setup-dialog"
-        className="relative flex max-h-[85vh] w-[92vw] max-w-lg flex-col rounded-xl border border-[var(--oh-border)] bg-base-secondary"
+        className="relative flex max-h-[85vh] w-[92vw] max-w-lg flex-col rounded-xl border border-border bg-base-secondary"
       >
         <ModalCloseButton
           onClose={onClose}
@@ -450,7 +450,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
 
           {!isLoading && isUnsupported && (
             <div className="flex flex-col gap-2">
-              <p className="text-sm text-[var(--oh-muted)]">
+              <p className="text-sm text-muted">
                 {t(I18nKey.SETUP$UNSUPPORTED_MESSAGE)}
               </p>
               {/* The unmet requirements are the names both sides of the
@@ -461,7 +461,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
               {unmet.length > 0 && (
                 <p
                   data-testid="setup-unmet-requirements"
-                  className="text-sm text-[var(--oh-muted)]"
+                  className="text-sm text-muted"
                 >
                   {unmet.join(", ")}
                 </p>
@@ -475,13 +475,9 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
 
           {!isLoading && !isUnsupported && currentStep === "form" && (
             <div className="flex flex-col gap-5">
-              <p className="text-sm text-[var(--oh-muted)]">
-                {entry.description}
-              </p>
+              <p className="text-sm text-muted">{entry.description}</p>
               {entry.setup.form.note && (
-                <p className="text-sm text-[var(--oh-muted)]">
-                  {entry.setup.form.note}
-                </p>
+                <p className="text-sm text-muted">{entry.setup.form.note}</p>
               )}
               {allActionOptions.length > 1 && actionOptions.length > 1 && (
                 <div className="flex w-full flex-col gap-2.5">
@@ -507,7 +503,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
                     entry.setup.actions?.[
                       selectedAction as keyof typeof entry.setup.actions
                     ] && (
-                      <p className="text-xs text-[var(--oh-muted)]">
+                      <p className="text-xs text-muted">
                         {
                           entry.setup.actions[
                             selectedAction as keyof typeof entry.setup.actions
@@ -534,7 +530,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
                       if (key !== null) setTriggerValue(String(key));
                     }}
                   />
-                  <p className="text-xs text-[var(--oh-muted)]">
+                  <p className="text-xs text-muted">
                     {t(I18nKey.SETUP$TRIGGER_HELP)}
                   </p>
                 </div>
