@@ -2,15 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildAgentProfileFields } from "#/routes/agent-settings";
 import type { SettingsFieldSchema } from "#/types/settings";
 
-const legacyToolToggles = {
-  subAgentsEnabled: false,
-  switchLlmToolField: undefined,
-  switchLlmToolEnabled: false,
-  switchLlmToolSupportedOnProfile: true,
-};
-
 const baseAcp = {
-  ...legacyToolToggles,
   isAcp: true,
   selectedPreset: "claude-code",
   isDefaultProviderCommand: true,
@@ -27,20 +19,6 @@ const baseAcp = {
   selectedTools: [] as string[],
   toolParams: {},
   toolCatalogSupported: true,
-};
-
-const switchLlmToolField: SettingsFieldSchema = {
-  key: "enable_switch_llm_tool",
-  label: "Enable LLM switching tool",
-  section: "general",
-  section_label: "General",
-  value_type: "boolean",
-  default: true,
-  choices: [],
-  depends_on: [],
-  prominence: "major",
-  secret: false,
-  required: false,
 };
 
 const concurrencyField: SettingsFieldSchema = {
@@ -108,7 +86,6 @@ describe("buildAgentProfileFields — ACP", () => {
 
 describe("buildAgentProfileFields — OpenHands", () => {
   const baseOh = {
-    ...legacyToolToggles,
     isAcp: false,
     selectedPreset: "custom",
     isDefaultProviderCommand: false,
@@ -123,59 +100,24 @@ describe("buildAgentProfileFields — OpenHands", () => {
     secretRefsSupportedOnProfile: true,
   };
 
-  it("emits no tool switches alongside a tool catalog", () => {
-    const fields = buildAgentProfileFields({
-      ...baseAcp,
-      isAcp: false,
-      subAgentsEnabled: true,
-      switchLlmToolField,
-      switchLlmToolEnabled: true,
-    });
-
-    expect(fields).not.toHaveProperty("enable_sub_agents");
-    expect(fields).not.toHaveProperty("enable_switch_llm_tool");
+  it("never emits the retired tool switches", () => {
+    for (const toolCatalogSupported of [true, false]) {
+      const fields = buildAgentProfileFields({
+        ...baseOh,
+        toolCatalogSupported,
+      });
+      expect(fields).not.toHaveProperty("enable_sub_agents");
+      expect(fields).not.toHaveProperty("enable_switch_llm_tool");
+    }
   });
 
-  describe("without a tool catalog", () => {
-    const noCatalog = {
-      ...baseOh,
-      subAgentsEnabled: true,
-      toolCatalogSupported: false,
-    };
-
-    it("passes through enable_sub_agents", () => {
-      expect(buildAgentProfileFields(noCatalog)).toEqual({
-        agent_kind: "openhands",
-        mcp_server_refs: null,
-        enable_sub_agents: true,
-        secret_refs: null,
-      });
-    });
-
-    it("emits enable_switch_llm_tool when the schema exposes the field", () => {
-      const fields = buildAgentProfileFields({
-        ...noCatalog,
-        switchLlmToolField,
-        switchLlmToolEnabled: true,
-      });
-      expect(fields).toMatchObject({ enable_switch_llm_tool: true });
-    });
-
-    it("omits enable_switch_llm_tool when the profile model predates it", () => {
-      const fields = buildAgentProfileFields({
-        ...noCatalog,
-        switchLlmToolField,
-        switchLlmToolSupportedOnProfile: false,
-      });
-      expect(fields).not.toHaveProperty("enable_switch_llm_tool");
-    });
-
-    it("omits enable_switch_llm_tool when the schema predates it", () => {
-      const fields = buildAgentProfileFields({
-        ...noCatalog,
-        switchLlmToolEnabled: true,
-      });
-      expect(fields).not.toHaveProperty("enable_switch_llm_tool");
+  it("leaves tools out without a catalog, so the stored selection survives", () => {
+    expect(
+      buildAgentProfileFields({ ...baseOh, toolCatalogSupported: false }),
+    ).toEqual({
+      agent_kind: "openhands",
+      mcp_server_refs: null,
+      secret_refs: null,
     });
   });
 
@@ -229,7 +171,6 @@ describe("buildAgentProfileFields — OpenHands", () => {
 
 describe("buildAgentProfileFields — mcp_server_refs", () => {
   const baseOh = {
-    ...legacyToolToggles,
     isAcp: false,
     selectedPreset: "custom",
     isDefaultProviderCommand: false,
@@ -286,7 +227,6 @@ describe("buildAgentProfileFields — mcp_server_refs", () => {
 
 describe("buildAgentProfileFields — secret scope", () => {
   const base = {
-    ...legacyToolToggles,
     isAcp: false,
     selectedPreset: "custom",
     isDefaultProviderCommand: false,

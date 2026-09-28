@@ -30,10 +30,6 @@ import { BackNavButton } from "#/components/shared/buttons/back-nav-button";
 import { Typography } from "#/ui/typography";
 import { useSettingsSectionHeader } from "#/contexts/settings-section-header-context";
 import { parseCommand } from "#/utils/acp-command";
-import {
-  PROFILE_SCHEMA_VERSION_KEY,
-  toolSwitchesFromProfileTools,
-} from "#/constants/profile-tools";
 
 type ViewMode = "list" | "create" | "edit";
 
@@ -61,22 +57,10 @@ function toAgentSettingsOverride(
   }
   // Untyped in the pinned ts-client, like `secret_refs` above.
   const tools = (profile as { tools?: unknown }).tools;
-  const implied = toolSwitchesFromProfileTools(tools);
-  const stored = profile as {
-    enable_sub_agents?: boolean;
-    enable_switch_llm_tool?: boolean;
-  };
   return {
     agent_kind: "openhands",
-    [PROFILE_SCHEMA_VERSION_KEY]: profile.schema_version ?? null,
     mcp_server_refs: profile.mcp_server_refs ?? null,
     tools: (tools as SettingsValue) ?? null,
-    // An explicit list is what launches, whatever a stored switch says.
-    enable_sub_agents: Array.isArray(tools)
-      ? implied.enable_sub_agents
-      : (stored.enable_sub_agents ?? false),
-    enable_switch_llm_tool:
-      stored.enable_switch_llm_tool ?? implied.enable_switch_llm_tool,
     tool_concurrency_limit: profile.tool_concurrency_limit,
     secret_refs: secretRefs,
   };

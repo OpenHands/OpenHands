@@ -244,8 +244,6 @@ describe("AgentProfilesLocalView save mapping", () => {
     );
     expect(seededOverride).toMatchObject({
       agent_kind: "openhands",
-      enable_sub_agents: false,
-      enable_switch_llm_tool: false,
       tools: [{ name: "terminal", params: {} }],
       tool_concurrency_limit: 4,
       // Without this the picker opens on "all servers" and the save widens the
@@ -280,7 +278,7 @@ describe("AgentProfilesLocalView save mapping", () => {
     expect(profile).not.toHaveProperty("revision");
   });
 
-  it("seeds the legacy tool switches from a profile that only stores tools", async () => {
+  it("seeds tools, never tool switches, from a stored profile", async () => {
     vi.mocked(AgentProfilesService.getProfile).mockResolvedValue({
       name: "default",
       profile: {
@@ -315,9 +313,10 @@ describe("AgentProfilesLocalView save mapping", () => {
         .getAttribute("data-override") as string,
     );
     expect(seededOverride).toMatchObject({
-      enable_sub_agents: true,
-      enable_switch_llm_tool: false,
+      tools: [{ name: "terminal" }, { name: "task_tool_set" }],
     });
+    expect(seededOverride).not.toHaveProperty("enable_sub_agents");
+    expect(seededOverride).not.toHaveProperty("enable_switch_llm_tool");
   });
 
   it("seeds the editor with a stored secret scope", async () => {

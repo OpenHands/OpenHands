@@ -14,11 +14,7 @@ import { useAcpCredentialForm } from "#/hooks/use-acp-credential-form";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import {
   buildProfileToolsValue,
-  applyToolSwitchesToProfileTools,
-  PROFILE_SCHEMA_VERSION_KEY,
-  profileToolsCarrySwitchLlm,
   readProfileTools,
-  readStoredProfileTools,
   type ProfileToolSpec,
 } from "#/constants/profile-tools";
 import { ProfileScopeList } from "#/components/features/settings/agent-profiles/profile-scope-list";
@@ -59,9 +55,8 @@ import { useToolCatalog } from "#/hooks/query/use-tool-catalog";
 import { flattenMcpConfig } from "#/utils/mcp-installed-servers";
 import { parseMcpConfig } from "#/utils/mcp-config";
 import {
+  agentProfileMayServeToolCatalog,
   agentProfileSupportsSecretRefs,
-  agentProfileSupportsSwitchLlmTool,
-  agentProfileSupportsToolCatalog,
 } from "#/api/agent-profiles-service/profile-field-support";
 import { useSearchSecrets } from "#/hooks/query/use-get-secrets";
 
@@ -149,8 +144,6 @@ export type AgentProfileFieldsDraft =
   | {
       agent_kind: "openhands";
       mcp_server_refs: string[] | null;
-      enable_sub_agents?: boolean;
-      enable_switch_llm_tool?: boolean;
       tool_concurrency_limit?: number;
       secret_refs?: string[] | null;
       tools?: ProfileToolSpec[] | null;
@@ -174,14 +167,6 @@ export interface AgentProfileFieldsInput {
   isDefaultProviderCommand: boolean;
   commandTokens: string[];
   acpModel: string;
-  subAgentsEnabled: boolean;
-  switchLlmToolField?: SettingsFieldSchema;
-  switchLlmToolEnabled: boolean;
-  /**
-   * Whether the backend's *profile* model accepts `enable_switch_llm_tool`,
-   * which can differ from the settings schema advertising it.
-   */
-  switchLlmToolSupportedOnProfile: boolean;
   toolConcurrencyField?: SettingsFieldSchema;
   toolConcurrency: string | boolean;
   mcpMode: ProfileScopeMode;
@@ -196,10 +181,6 @@ export interface AgentProfileFieldsInput {
   toolParams?: Record<string, Record<string, SettingsValue>>;
   /** Whether the backend serves the tool catalog, and so takes `tools`. */
   toolCatalogSupported?: boolean;
-  /** The profile's stored `tools`, which the legacy switches edit in place. */
-  storedTools?: ProfileToolSpec[] | null;
-  /** Whether the server reads `switch_llm` from `tools` rather than its switch. */
-  toolsCarrySwitchLlm?: boolean;
 }
 
 /**
@@ -229,10 +210,6 @@ export function buildAgentProfileFields(
     isDefaultProviderCommand,
     commandTokens,
     acpModel,
-    subAgentsEnabled,
-    switchLlmToolField,
-    switchLlmToolEnabled,
-    switchLlmToolSupportedOnProfile,
     toolConcurrencyField,
     toolConcurrency,
     mcpMode,
@@ -244,8 +221,6 @@ export function buildAgentProfileFields(
     selectedTools = [],
     toolParams = {},
     toolCatalogSupported = false,
-    storedTools = null,
-    toolsCarrySwitchLlm = false,
   } = input;
   // Both are base-model fields, so they ride both variants. `mcp_server_refs`
   // needs no version gate — it has existed since agent profiles shipped, below
@@ -277,31 +252,13 @@ export function buildAgentProfileFields(
       ...mcpRefs,
       ...secretRefs,
     };
+  // Without a catalog, `tools` is left out so the stored selection survives.
   if (toolCatalogSupported) {
     fields.tools = buildProfileToolsValue({
       mode: toolsMode,
       selected: selectedTools,
       params: toolParams,
     });
-  } else {
-    fields.enable_sub_agents = subAgentsEnabled;
-    // The profile model is `extra="forbid"`, so an unknown key 422s the save.
-    const sendsSwitchLlm = Boolean(
-      switchLlmToolField && switchLlmToolSupportedOnProfile,
-    );
-    if (sendsSwitchLlm) {
-      fields.enable_switch_llm_tool = switchLlmToolEnabled;
-    }
-    // An explicit list is what the server launches, so the switches must edit it.
-    if (storedTools !== null) {
-      fields.tools = applyToolSwitchesToProfileTools(storedTools, {
-        subAgents: subAgentsEnabled,
-        switchLlm:
-          sendsSwitchLlm && toolsCarrySwitchLlm
-            ? switchLlmToolEnabled
-            : undefined,
-      });
-    }
   }
   if (toolConcurrencyField) {
     // Reuse the schema-driven coercion/validation; throws on bad input.
@@ -381,9 +338,8 @@ export function AgentSettingsScreen({
     [schema],
   );
 
-  // --- Sub-agents and LLM switching, where there is no tool picker ---
-  const toolCatalogSupported = agentProfileSupportsToolCatalog();
-  const showLegacyToolToggles = !(embedded && toolCatalogSupported);
+  // --- Sub-agents and LLM switching (agent settings only; profiles pick tools) ---
+  const showLegacyToolToggles = !embedded;
   const subAgentsField = findEnableSubAgentsField(fields);
   const initialSubAgentsEnabled = React.useMemo(
     () =>
@@ -410,10 +366,7 @@ export function AgentSettingsScreen({
   const [switchLlmToolEnabled, setSwitchLlmToolEnabled] = useState(
     initialSwitchLlmToolEnabled,
   );
-  const switchLlmToolSupportedOnProfile = agentProfileSupportsSwitchLlmTool();
-  const showSwitchLlmTool =
-    Boolean(switchLlmToolField) &&
-    (!embedded || switchLlmToolSupportedOnProfile);
+  const showSwitchLlmTool = Boolean(switchLlmToolField);
 
   // --- Parallel tool calls (OpenHands path) ---
   // Surfaced only when the backend schema exposes the field, so older
@@ -435,13 +388,6 @@ export function AgentSettingsScreen({
     () => readProfileTools(agentSettingsSource?.[TOOLS_KEY]),
     [agentSettingsSource],
   );
-  const storedTools = React.useMemo(
-    () => readStoredProfileTools(agentSettingsSource?.[TOOLS_KEY]),
-    [agentSettingsSource],
-  );
-  const toolsCarrySwitchLlm = profileToolsCarrySwitchLlm(
-    agentSettingsSource?.[PROFILE_SCHEMA_VERSION_KEY],
-  );
   const [toolsMode, setToolsMode] = useState<ProfileScopeMode>(
     initialTools.mode,
   );
@@ -452,9 +398,10 @@ export function AgentSettingsScreen({
     data: toolCatalog,
     isError: toolCatalogFailed,
     refetch: refetchToolCatalog,
-  } = useToolCatalog({
-    enabled: embedded && toolCatalogSupported,
-  });
+  } = useToolCatalog({ enabled: embedded });
+  // A backend that answers "no catalog" (null) gets no tool controls at all.
+  const toolCatalogSupported =
+    embedded && agentProfileMayServeToolCatalog() && toolCatalog !== null;
   const standardToolNames = React.useMemo(
     () =>
       toolCatalog
@@ -856,10 +803,6 @@ export function AgentSettingsScreen({
       isDefaultProviderCommand,
       commandTokens,
       acpModel,
-      subAgentsEnabled,
-      switchLlmToolField,
-      switchLlmToolEnabled,
-      switchLlmToolSupportedOnProfile,
       toolConcurrencyField,
       toolConcurrency,
       mcpMode,
@@ -871,8 +814,6 @@ export function AgentSettingsScreen({
       selectedTools: orderedSelectedTools,
       toolParams: initialTools.params,
       toolCatalogSupported,
-      storedTools,
-      toolsCarrySwitchLlm,
     });
 
   const isSavingAny = isSaving || acpCredentialForm.isSaving;

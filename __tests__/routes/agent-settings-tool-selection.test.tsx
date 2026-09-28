@@ -21,7 +21,7 @@ const CATALOG = [
 
 beforeEach(() => {
   vi.restoreAllMocks();
-  vi.spyOn(profileSupport, "agentProfileSupportsToolCatalog").mockReturnValue(
+  vi.spyOn(profileSupport, "agentProfileMayServeToolCatalog").mockReturnValue(
     true,
   );
   vi.spyOn(ToolCatalogService, "getCatalog").mockResolvedValue(CATALOG);
