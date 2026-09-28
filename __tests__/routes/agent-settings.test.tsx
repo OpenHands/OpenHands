@@ -24,10 +24,8 @@ vi.mock("#/hooks/query/use-acp-auth-status", () => ({
 }));
 
 const profileSupportsSecretRefsMock = vi.hoisted(() => vi.fn(() => true));
-const profileSupportsToolCatalogMock = vi.hoisted(() => vi.fn(() => true));
 vi.mock("#/api/agent-profiles-service/profile-field-support", () => ({
   agentProfileSupportsSecretRefs: () => profileSupportsSecretRefsMock(),
-  agentProfileMayServeToolCatalog: () => profileSupportsToolCatalogMock(),
 }));
 
 const toolCatalogMock = vi.hoisted(() =>
@@ -44,14 +42,13 @@ const toolCatalogMock = vi.hoisted(() =>
       | undefined
   >(),
 );
+const toolCatalogFailedMock = vi.hoisted(() => vi.fn(() => false));
 vi.mock("#/hooks/query/use-tool-catalog", () => ({
-  useToolCatalog: () => {
-    const data = toolCatalogMock();
-    return {
-      data,
-      supported: profileSupportsToolCatalogMock() && data !== null,
-    };
-  },
+  useToolCatalog: () => ({
+    data: toolCatalogMock(),
+    isError: toolCatalogFailedMock(),
+    refetch: vi.fn(),
+  }),
 }));
 
 // The secret picker lists the user's saved secrets; stub the query so these
@@ -120,7 +117,6 @@ describe("AgentSettingsScreen", () => {
     toastMocks.error.mockClear();
     toastMocks.warning.mockClear();
     profileSupportsSecretRefsMock.mockReturnValue(true);
-    profileSupportsToolCatalogMock.mockReturnValue(true);
     savedSecretsMock.mockReturnValue([
       { name: "GITHUB_TOKEN", description: "repo access" },
       { name: "DATADOG_API_KEY" },
@@ -295,7 +291,7 @@ describe("AgentSettingsScreen", () => {
   it.each([true, false])(
     "shows no tool switches in the profile editor (catalog served: %s)",
     async (catalogServed) => {
-      profileSupportsToolCatalogMock.mockReturnValue(catalogServed);
+      toolCatalogMock.mockReturnValue(catalogServed ? [] : null);
       renderAgentSettingsScreen({
         embedded: true,
         agentSettingsOverride: { agent_kind: "openhands" },
@@ -1699,7 +1695,7 @@ describe("AgentSettingsScreen — tool selection", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.spyOn(SettingsService, "saveSettings").mockResolvedValue(true);
-    profileSupportsToolCatalogMock.mockReturnValue(true);
+    toolCatalogFailedMock.mockReturnValue(false);
     toolCatalogMock.mockReturnValue(CATALOG);
   });
 
@@ -1847,26 +1843,41 @@ describe("AgentSettingsScreen — tool selection", () => {
   });
 
   it.each([
-    ["advertises none", false, undefined],
-    ["answers with none", true, null],
+    ["serves no catalog", null, false, "agent-settings-tools-unavailable"],
+    ["fails to load it", undefined, true, "agent-settings-tools-load-failed"],
+    ["is still loading it", undefined, false, null],
   ])(
-    "offers no tool control when the backend %s",
-    async (_label, advertised, catalog) => {
-      profileSupportsToolCatalogMock.mockReturnValue(advertised);
+    "leaves stored tools untouched when the backend %s",
+    async (_label, catalog, failed, notice) => {
       toolCatalogMock.mockReturnValue(catalog);
+      toolCatalogFailedMock.mockReturnValue(failed);
       const { control } = renderEditor({
-        tools: [{ name: "glob", params: {} }],
+        tools: [{ name: "SwitchLLMTool", params: { x: 1 } }],
       });
       await screen.findByTestId("agent-settings-screen");
 
-      expect(screen.queryByTestId("agent-settings-tools-mode")).toBeNull();
+      if (notice) {
+        expect(screen.getByTestId(notice)).toHaveTextContent(
+          "SETTINGS$AGENT_PROFILE_TOOLS_KEPT_ON_SAVE",
+        );
+      }
       expect(
         screen.queryByTestId("agent-settings-enable-sub-agents"),
       ).toBeNull();
-      // The stored selection is left out, so the merge keeps it untouched.
-      expect(control().buildAgentProfileFields()).not.toHaveProperty("tools");
+      const fields = control().buildAgentProfileFields();
+      expect(fields).not.toHaveProperty("tools");
+      expect(fields).not.toHaveProperty("enable_sub_agents");
+      expect(fields).not.toHaveProperty("enable_switch_llm_tool");
     },
   );
+
+  it("hides the mode control when the backend serves no catalog", async () => {
+    toolCatalogMock.mockReturnValue(null);
+    renderEditor();
+    await screen.findByTestId("agent-settings-screen");
+
+    expect(screen.queryByTestId("agent-settings-tools-mode")).toBeNull();
+  });
 
   it("is clean again after a standard → custom → standard round-trip", async () => {
     const { control } = renderEditor({ tools: null });

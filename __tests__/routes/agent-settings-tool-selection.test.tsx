@@ -4,15 +4,10 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, expect, it, vi } from "vitest";
 import ToolCatalogService from "#/api/tool-catalog-service/tool-catalog-service.api";
-import * as profileSupport from "#/api/agent-profiles-service/profile-field-support";
 import {
   AgentSettingsScreen,
   type AgentSettingsSaveControl,
 } from "#/routes/agent-settings";
-
-vi.mock("#/hooks/query/use-agent-server-info", () => ({
-  useAgentServerInfo: () => ({ data: null }),
-}));
 
 const CATALOG = [
   {
@@ -25,9 +20,6 @@ const CATALOG = [
 
 beforeEach(() => {
   vi.restoreAllMocks();
-  vi.spyOn(profileSupport, "agentProfileMayServeToolCatalog").mockReturnValue(
-    true,
-  );
   vi.spyOn(ToolCatalogService, "getCatalog").mockResolvedValue(CATALOG);
 });
 

@@ -29,10 +29,6 @@ export const AGENT_PROFILES_QUERY_KEYS = {
     ["agent-profiles", backendId, orgId, "detail", name] as const,
 } as const;
 
-export const AGENT_SERVER_INFO_QUERY_KEYS = {
-  all: ["agent-server-info"] as const,
-} as const;
-
 export const TOOL_CATALOG_QUERY_KEYS = {
   all: ["tool-catalog"] as const,
 } as const;

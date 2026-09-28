@@ -133,3 +133,26 @@ describe("mergeAgentProfileSaveInput", () => {
     expect(mergeAgentProfileSaveInput(null, edited)).toEqual(edited);
   });
 });
+
+describe("mergeAgentProfileSaveInput without a tool catalog", () => {
+  it("round-trips stored tools and legacy tool switches the draft leaves out", () => {
+    const stored = {
+      ...storedOpenHands,
+      tools: [{ name: "SwitchLLMTool", params: { x: 1 } }],
+      enable_sub_agents: true,
+      enable_switch_llm_tool: false,
+    } as unknown as AgentProfile;
+    const edited = {
+      agent_kind: "openhands",
+      mcp_server_refs: null,
+      tool_concurrency_limit: 2,
+    } as AgentProfileSaveInput;
+
+    expect(mergeAgentProfileSaveInput(stored, edited)).toMatchObject({
+      tools: [{ name: "SwitchLLMTool", params: { x: 1 } }],
+      enable_sub_agents: true,
+      enable_switch_llm_tool: false,
+      tool_concurrency_limit: 2,
+    });
+  });
+});

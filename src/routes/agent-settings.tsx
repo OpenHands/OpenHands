@@ -395,10 +395,10 @@ export function AgentSettingsScreen({
     data: toolCatalog,
     isError: toolCatalogFailed,
     refetch: refetchToolCatalog,
-    supported: catalogSupported,
   } = useToolCatalog({ enabled: embedded });
-  // A backend that answers "no catalog" (null) gets no tool controls at all.
-  const toolCatalogSupported = embedded && catalogSupported;
+  // Only a loaded catalog may write `tools`.
+  const toolCatalogSupported = embedded && Array.isArray(toolCatalog);
+  const toolCatalogUnavailable = toolCatalog === null;
   const standardToolNames = React.useMemo(
     () =>
       toolCatalog
@@ -1143,7 +1143,22 @@ export function AgentSettingsScreen({
         </div>
       ) : null}
 
-      {showProfileScopeFields && !isAcp && toolCatalogSupported ? (
+      {showProfileScopeFields && !isAcp && toolCatalogUnavailable ? (
+        <div
+          className="flex flex-col gap-2.5"
+          data-testid="agent-settings-tools-unavailable"
+        >
+          <Typography.Text className="text-sm">
+            {t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS)}
+          </Typography.Text>
+          <Typography.Text className="text-xs text-tertiary-alt">
+            {t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_UNAVAILABLE)}{" "}
+            {t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_KEPT_ON_SAVE)}
+          </Typography.Text>
+        </div>
+      ) : null}
+
+      {showProfileScopeFields && !isAcp && !toolCatalogUnavailable ? (
         <div className="flex flex-col gap-2.5">
           <Typography.Text className="text-sm">
             {t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS)}
@@ -1175,7 +1190,8 @@ export function AgentSettingsScreen({
               data-testid="agent-settings-tools-load-failed"
             >
               <Typography.Text className="text-xs text-red-400">
-                {t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_LOAD_FAILED)}
+                {t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_LOAD_FAILED)}{" "}
+                {t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_KEPT_ON_SAVE)}
               </Typography.Text>
               <BrandButton
                 testId="agent-settings-tools-retry"

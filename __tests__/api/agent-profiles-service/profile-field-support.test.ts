@@ -1,9 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  agentProfileMayServeToolCatalog,
-  agentProfileSupportsSecretRefs,
-} from "#/api/agent-profiles-service/profile-field-support";
-import type { AgentServerInfo } from "#/api/agent-server-compatibility";
+import { agentProfileSupportsSecretRefs } from "#/api/agent-profiles-service/profile-field-support";
 
 const mockServerInfo = vi.fn<() => { capabilities?: string[] } | null>();
 const mockBackendKind = vi.fn<() => string>(() => "local");
@@ -47,28 +43,5 @@ describe("agentProfileSupportsSecretRefs", () => {
       capabilities: ["profile_secret_scope_v1"],
     });
     expect(agentProfileSupportsSecretRefs()).toBe(false);
-  });
-});
-
-describe("agentProfileMayServeToolCatalog", () => {
-  it.each([null, undefined, {}, { capabilities: [] }])(
-    "offers no picker when the catalog is unadvertised: %j",
-    (info) => {
-      expect(
-        agentProfileMayServeToolCatalog("local", info as AgentServerInfo),
-      ).toBe(false);
-    },
-  );
-
-  it("offers the picker when the backend serves the catalog", () => {
-    expect(
-      agentProfileMayServeToolCatalog("local", {
-        capabilities: ["tool_catalog_v1"],
-      } as AgentServerInfo),
-    ).toBe(true);
-  });
-
-  it("asks cloud, which advertises no capabilities", () => {
-    expect(agentProfileMayServeToolCatalog("cloud", null)).toBe(true);
   });
 });
