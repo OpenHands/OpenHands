@@ -207,8 +207,11 @@ if [ -z "${LOCAL_BACKEND_API_KEY:-}" ] && [ -z "${OH_SESSION_API_KEYS_0:-}" ]; t
     chmod 600 "$API_KEY_FILE"
     log "Generated API key (persisted to $API_KEY_FILE)"
   fi
-  export OH_SESSION_API_KEYS_0="$LOCAL_BACKEND_API_KEY"
 fi
+
+# Ensure session API keys are exported to the environment so agent-server can authenticate
+export OH_SESSION_API_KEYS_0="${OH_SESSION_API_KEYS_0:-${LOCAL_BACKEND_API_KEY:-}}"
+export SESSION_API_KEY="${SESSION_API_KEY:-${OH_SESSION_API_KEYS_0:-}}"
 
 # Both backends share the same API key value and the same `X-Session-API-Key`
 # header for authentication.  Default OPENHANDS_AUTOMATION_API_KEY to the
