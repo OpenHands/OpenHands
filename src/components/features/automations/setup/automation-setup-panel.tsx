@@ -77,6 +77,15 @@ export function parseAutomationSetupRepositories(value: string): string[] {
     });
 }
 
+function buildRepositorySource(url: string): {
+  url: string;
+  provider?: "github";
+} {
+  const isExplicitProviderUrl =
+    /^[a-z][a-z\d+.-]*:\/\//i.test(url) || url.startsWith("git@");
+  return isExplicitProviderUrl ? { url } : { url, provider: "github" };
+}
+
 type Frequency = (typeof FREQUENCIES)[number];
 type TriggerKind = "cron" | "event";
 type StatusMessage = { kind: "success" | "error"; text: string } | null;
@@ -210,7 +219,7 @@ export function AutomationSetupPanel({
     } as SetupRequestBody;
     const repositories = parseAutomationSetupRepositories(repository);
     if (repositories.length > 0) {
-      body.repos = repositories.map((url) => ({ url, provider: "github" }));
+      body.repos = repositories.map(buildRepositorySource);
     }
     if (showTimeout && timeoutSeconds.trim())
       body.timeout = Number(timeoutSeconds);
@@ -230,6 +239,7 @@ export function AutomationSetupPanel({
       trigger: buildTrigger(),
       tarball_path: tarballPath,
       entrypoint: entrypoint.trim(),
+      enabled: false,
       setup_script_path: setupScriptPath.trim(),
       ...(showTimeout && timeoutSeconds.trim()
         ? { timeout: Number(timeoutSeconds) }
@@ -353,7 +363,7 @@ export function AutomationSetupPanel({
         type="button"
         variant="secondary"
         testId="automation-setup-save-draft"
-        isDisabled={isSubmitting}
+        isDisabled
         onClick={handleSaveDraft}
       >
         {t(I18nKey.AUTOMATION_SETUP$SAVE_DRAFT)}
