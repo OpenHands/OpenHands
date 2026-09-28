@@ -584,6 +584,37 @@ describe("HomeChatLauncher", () => {
     ).toBeInTheDocument();
   });
 
+  it("keeps Automate mode local-only on cloud backends", async () => {
+    mockUseActiveBackend.mockReturnValue(cloudBackend);
+    const createSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue(makeConversationResponse());
+
+    renderLauncher();
+    const user = userEvent.setup();
+
+    expect(
+      screen.getByText("HOME$AUTOMATE_LOCAL_BACKEND_ONLY"),
+    ).toBeInTheDocument();
+    await user.click(screen.getByTestId("home-launcher-mode-automate"));
+
+    expect(screen.getByTestId("home-launcher-mode-code")).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(screen.getByTestId("stub-chat-submit")).toHaveAttribute(
+      "data-placeholder",
+      "SUGGESTIONS$WHAT_TO_BUILD",
+    );
+
+    await user.click(screen.getByTestId("stub-chat-submit"));
+
+    await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ automationSetup: false }),
+    );
+  });
+
   it("passes the picked repository + branch payload on a cloud backend", async () => {
     mockUseActiveBackend.mockReturnValue(cloudBackend);
     const createSpy = vi
