@@ -156,3 +156,31 @@ describe("mergeAgentProfileSaveInput without a tool catalog", () => {
     });
   });
 });
+
+describe("mergeAgentProfileSaveInput with a tool selection", () => {
+  it.each([[[{ name: "terminal", params: {} }]], [null]])(
+    "drops the stored legacy tool switches when the draft sends tools %j",
+    (tools) => {
+      const stored = {
+        ...storedOpenHands,
+        tools: [
+          { name: "terminal", params: {} },
+          { name: "switch_llm", params: {} },
+        ],
+        enable_sub_agents: false,
+        enable_switch_llm_tool: true,
+      } as unknown as AgentProfile;
+      const edited = {
+        agent_kind: "openhands",
+        mcp_server_refs: null,
+        tools,
+      } as unknown as AgentProfileSaveInput;
+
+      const merged = mergeAgentProfileSaveInput(stored, edited);
+      expect(merged).toMatchObject({ tools });
+      expect(merged).not.toHaveProperty("enable_sub_agents");
+      expect(merged).not.toHaveProperty("enable_switch_llm_tool");
+      expect(merged).toMatchObject({ system_message_suffix: "Be terse." });
+    },
+  );
+});

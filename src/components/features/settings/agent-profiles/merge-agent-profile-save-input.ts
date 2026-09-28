@@ -3,6 +3,11 @@ import type {
   AgentProfileSaveInput,
 } from "#/api/agent-profiles-service/agent-profiles-service.api";
 
+const LEGACY_TOOL_SWITCHES = [
+  "enable_sub_agents",
+  "enable_switch_llm_tool",
+] as const;
+
 /**
  * Merge the minimal editor's fields over the stored profile so an edit-save
  * doesn't wipe the fields the editor doesn't model (condenser, verification,
@@ -25,6 +30,11 @@ export function mergeAgentProfileSaveInput(
 ): AgentProfileSaveInput {
   if (!stored) return edited;
   if (stored.agent_kind !== edited.agent_kind) return edited;
-  const { id, name, revision, ...preserved } = stored;
+  const { id, name, revision, ...preserved } = stored as AgentProfile &
+    Record<string, unknown>;
+  if (Object.hasOwn(edited, "tools")) {
+    // The server reads a switch that differs from the stored one as a toggle.
+    LEGACY_TOOL_SWITCHES.forEach((key) => delete preserved[key]);
+  }
   return { ...preserved, ...edited } as AgentProfileSaveInput;
 }
