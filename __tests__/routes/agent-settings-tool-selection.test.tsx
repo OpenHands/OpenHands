@@ -137,3 +137,38 @@ it.each(["saved", "cleared"] as const)(
     expect(control!.buildAgentProfileFields()).toMatchObject({ tools: [] });
   },
 );
+
+it("reports a failed catalog load and recovers on retry", async () => {
+  const user = userEvent.setup();
+  vi.mocked(ToolCatalogService.getCatalog)
+    .mockRejectedValueOnce(new Error("proxy 502"))
+    .mockResolvedValue(CATALOG);
+  render(
+    <MemoryRouter>
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <AgentSettingsScreen
+          embedded
+          agentSettingsOverride={{ agent_kind: "openhands", tools: null }}
+        />
+      </QueryClientProvider>
+    </MemoryRouter>,
+  );
+
+  expect(
+    await screen.findByTestId("agent-settings-tools-load-failed"),
+  ).toHaveTextContent("SETTINGS$AGENT_PROFILE_TOOLS_LOAD_FAILED");
+
+  await user.click(screen.getByTestId("agent-settings-tools-retry"));
+
+  expect(
+    await screen.findByTestId("agent-settings-tool-terminal"),
+  ).toBeChecked();
+  expect(
+    screen.queryByTestId("agent-settings-tools-load-failed"),
+  ).not.toBeInTheDocument();
+  expect(screen.getByTestId("agent-settings-tools-mode")).not.toBeDisabled();
+});

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildProfileToolsValue,
   readProfileTools,
+  toolSwitchesFromProfileTools,
 } from "#/constants/profile-tools";
 
 describe("readProfileTools", () => {
@@ -59,5 +60,27 @@ describe("buildProfileToolsValue", () => {
     const stored = [{ name: "glob", params: {} }];
     const { mode, selected, params } = readProfileTools(stored);
     expect(buildProfileToolsValue({ mode, selected, params })).toEqual(stored);
+  });
+});
+
+describe("toolSwitchesFromProfileTools", () => {
+  it("reads unset tools as the legacy defaults", () => {
+    expect(toolSwitchesFromProfileTools(null)).toEqual({
+      enable_sub_agents: false,
+      enable_switch_llm_tool: true,
+    });
+  });
+
+  it.each([
+    [["terminal"], false, false],
+    [["terminal", "task_tool_set", "switch_llm"], true, true],
+    [["SwitchLLMTool"], false, true],
+  ])("reads %j as the switches it implies", (names, subAgents, switchLlm) => {
+    expect(
+      toolSwitchesFromProfileTools(names.map((name) => ({ name }))),
+    ).toEqual({
+      enable_sub_agents: subAgents,
+      enable_switch_llm_tool: switchLlm,
+    });
   });
 });

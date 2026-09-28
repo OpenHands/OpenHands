@@ -280,6 +280,46 @@ describe("AgentProfilesLocalView save mapping", () => {
     expect(profile).not.toHaveProperty("revision");
   });
 
+  it("seeds the legacy tool switches from a profile that only stores tools", async () => {
+    vi.mocked(AgentProfilesService.getProfile).mockResolvedValue({
+      name: "default",
+      profile: {
+        schema_version: 3,
+        id: "p-1",
+        name: "default",
+        revision: 3,
+        agent_kind: "openhands",
+        llm_profile_ref: "default",
+        tools: [{ name: "terminal" }, { name: "task_tool_set" }],
+      },
+    } as never);
+    emitControl = {
+      agentType: "openhands",
+      isValid: true,
+      isDirty: false,
+      buildAgentProfileFields: () => ({
+        agent_kind: "openhands",
+        mcp_server_refs: null,
+      }),
+      credentials: { isDirty: false, save: vi.fn(), reset: vi.fn() },
+    };
+
+    render(<AgentProfilesLocalView />);
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("edit-agent-profile"));
+    await screen.findByTestId("mock-agent-settings");
+
+    const seededOverride = JSON.parse(
+      screen
+        .getByTestId("mock-agent-settings")
+        .getAttribute("data-override") as string,
+    );
+    expect(seededOverride).toMatchObject({
+      enable_sub_agents: true,
+      enable_switch_llm_tool: false,
+    });
+  });
+
   it("seeds the editor with a stored secret scope", async () => {
     vi.mocked(AgentProfilesService.getProfile).mockResolvedValue({
       name: "default",

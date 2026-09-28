@@ -45,3 +45,18 @@ export function buildProfileToolsValue({
   if (mode === "standard") return null;
   return selected.map((name) => ({ name, params: params[name] ?? {} }));
 }
+
+/** The legacy tool switches a `tools` selection implies, for servers without a picker. */
+export function toolSwitchesFromProfileTools(value: unknown): {
+  enable_sub_agents: boolean;
+  enable_switch_llm_tool: boolean;
+} {
+  if (!Array.isArray(value))
+    return { enable_sub_agents: false, enable_switch_llm_tool: true };
+  const { selected } = readProfileTools(value);
+  return {
+    enable_sub_agents: selected.includes("task_tool_set"),
+    enable_switch_llm_tool:
+      selected.includes("switch_llm") || selected.includes("SwitchLLMTool"),
+  };
+}

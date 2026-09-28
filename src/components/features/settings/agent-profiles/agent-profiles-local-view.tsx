@@ -30,6 +30,7 @@ import { BackNavButton } from "#/components/shared/buttons/back-nav-button";
 import { Typography } from "#/ui/typography";
 import { useSettingsSectionHeader } from "#/contexts/settings-section-header-context";
 import { parseCommand } from "#/utils/acp-command";
+import { toolSwitchesFromProfileTools } from "#/constants/profile-tools";
 
 type ViewMode = "list" | "create" | "edit";
 
@@ -55,15 +56,20 @@ function toAgentSettingsOverride(
       acp_model: profile.acp_model ?? "",
     };
   }
+  // Untyped in the pinned ts-client, like `secret_refs` above.
+  const tools = (profile as { tools?: unknown }).tools;
+  const implied = toolSwitchesFromProfileTools(tools);
+  const stored = profile as {
+    enable_sub_agents?: boolean;
+    enable_switch_llm_tool?: boolean;
+  };
   return {
     agent_kind: "openhands",
     mcp_server_refs: profile.mcp_server_refs ?? null,
-    // Untyped in the pinned ts-client, like `secret_refs` above.
-    tools: ((profile as { tools?: unknown }).tools as SettingsValue) ?? null,
-    enable_sub_agents: profile.enable_sub_agents,
+    tools: (tools as SettingsValue) ?? null,
+    enable_sub_agents: stored.enable_sub_agents ?? implied.enable_sub_agents,
     enable_switch_llm_tool:
-      (profile as { enable_switch_llm_tool?: boolean })
-        .enable_switch_llm_tool ?? true,
+      stored.enable_switch_llm_tool ?? implied.enable_switch_llm_tool,
     tool_concurrency_limit: profile.tool_concurrency_limit,
     secret_refs: secretRefs,
   };

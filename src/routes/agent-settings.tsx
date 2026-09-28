@@ -418,7 +418,11 @@ export function AgentSettingsScreen({
   const [selectedTools, setSelectedTools] = useState<string[] | null>(
     initialTools.mode === "custom" ? initialTools.selected : null,
   );
-  const { data: toolCatalog } = useToolCatalog({
+  const {
+    data: toolCatalog,
+    isError: toolCatalogFailed,
+    refetch: refetchToolCatalog,
+  } = useToolCatalog({
     enabled: embedded && toolCatalogSupported,
   });
   const standardToolNames = React.useMemo(
@@ -1194,7 +1198,24 @@ export function AgentSettingsScreen({
               setToolsMode(key as ProfileScopeMode);
             }}
           />
-          {toolsMode === "standard" ? (
+          {toolCatalogFailed && standardToolNames === undefined ? (
+            <div
+              className="flex items-center gap-2"
+              data-testid="agent-settings-tools-load-failed"
+            >
+              <Typography.Text className="text-xs text-red-400">
+                {t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_LOAD_FAILED)}
+              </Typography.Text>
+              <BrandButton
+                testId="agent-settings-tools-retry"
+                type="button"
+                variant="secondary"
+                onClick={() => refetchToolCatalog()}
+              >
+                {t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_RETRY)}
+              </BrandButton>
+            </div>
+          ) : toolsMode === "standard" ? (
             <ProfileScopeList
               testId="agent-settings-tool"
               items={(standardToolNames ?? []).map((name) => ({
