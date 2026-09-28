@@ -46,8 +46,8 @@
     "lucide-react": "1.25.0",
     "monaco-editor": "0.56.0",
     "posthog-js": "1.380.0",
-    "react": "19.2.8",
-    "react-dom": "19.2.8",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
     "react-hot-toast": "2.6.0",
     "react-i18next": "17.0.11",
     "react-icons": "5.6.0",
@@ -142,8 +142,8 @@
     "@testing-library/user-event": "14.6.7",
     "@types/mdast": "4.0.4",
     "@types/node": "26.1.2",
-    "@types/react": "19.2.18",
-    "@types/react-dom": "19.2.4",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
     "@types/react-syntax-highlighter": "15.5.13",
     "@typescript-eslint/eslint-plugin": "8.67.0",
     "@typescript-eslint/parser": "8.67.0",
@@ -248,8 +248,8 @@
     "./package.json": "./package.json"
   },
   "peerDependencies": {
-    "react": "19.2.8",
-    "react-dom": "19.2.8",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
     "react-router": "7.18.2"
   }
 }
