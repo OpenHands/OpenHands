@@ -37,7 +37,15 @@ const saveSettingsMutationFn = async (settings: SettingsUpdate) => {
   const llmSettings = agentSettings?.llm as Record<string, unknown> | undefined;
   if (llmSettings && typeof llmSettings.api_key === "string") {
     const apiKey = llmSettings.api_key.trim();
-    llmSettings.api_key = apiKey === "" ? "" : apiKey;
+    // The API key input is never populated with the stored secret — an empty
+    // value means "the user didn't retype the key", not "clear it". Forwarding
+    // "" would have the backend's deep_merge overwrite the stored key with an
+    // empty string, so drop it from the diff and preserve the existing key.
+    if (apiKey === "") {
+      delete llmSettings.api_key;
+    } else {
+      llmSettings.api_key = apiKey;
+    }
   }
   if (agentSettings && Object.keys(agentSettings).length > 0) {
     settingsToSave.agent_settings_diff = agentSettings;
