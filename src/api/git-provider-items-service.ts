@@ -14,8 +14,13 @@ export interface GitProviderItem {
   updatedAt: string | null;
 }
 
+export interface UserRepositoryListResult {
+  repositories: string[];
+  missingToken: boolean;
+}
+
 const PROVIDER_TOKEN_SECRET_CANDIDATES: Partial<Record<Provider, string[]>> = {
-  github: ["GITHUB_TOKEN", "GH_TOKEN", "github"],
+  github: ["github_token", "GITHUB_TOKEN", "GH_TOKEN", "github"],
   gitlab: ["GITLAB_TOKEN", "GL_TOKEN", "gitlab"],
   bitbucket: ["BITBUCKET_TOKEN", "bitbucket"],
   forgejo: ["FORGEJO_TOKEN", "forgejo"],
@@ -360,4 +365,50 @@ export class GitProviderItemsService {
         updatedAt: item.updated_at ?? null,
       }));
   }
+
+  /**
+   * Repositories the signed-in user can access, most recently pushed first.
+   * Local repository discovery requires a configured provider token secret.
+   * Cloud repository search stays on `GitService`.
+   */
+  static async listUserRepositories(
+    provider: Provider,
+  ): Promise<UserRepositoryListResult> {
+    if (provider !== "github") {
+      return { repositories: [], missingToken: false };
+    }
+
+    const token = await resolveProviderToken(provider);
+    if (!token) {
+      return { repositories: [], missingToken: true };
+    }
+
+    try {
+      const items = await fetchGithubJson<Array<{ full_name?: string }>>(
+        "/user/repos?per_page=100&sort=pushed&affiliation=owner,collaborator,organization_member",
+        token,
+      );
+      return {
+        repositories: repositoryNames(
+          items as Array<Record<string, unknown>>,
+          "full_name",
+        ),
+        missingToken: false,
+      };
+    } catch {
+      return { repositories: [], missingToken: false };
+    }
+  }
+}
+
+function repositoryNames(
+  items: Array<Record<string, unknown>>,
+  key: string,
+): string[] {
+  return items
+    .map((item) => {
+      const value = item[key];
+      return typeof value === "string" ? value.trim() : "";
+    })
+    .filter((name) => name.length > 0);
 }
