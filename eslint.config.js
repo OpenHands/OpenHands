@@ -263,6 +263,13 @@ export default [
                 "Use typed @openhands/typescript-client clients instead of constructing HttpClient directly.",
             },
           ],
+          patterns: [
+            {
+              group: ["#/context/*"],
+              message:
+                "React contexts belong in #/contexts; import them from that directory instead.",
+            },
+          ],
         },
       ],
       // All agent-server API access must go through the typed

@@ -1,4 +1,4 @@
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 
 export function useOptionalConversationId() {
   const { conversationId } = useNavigation();

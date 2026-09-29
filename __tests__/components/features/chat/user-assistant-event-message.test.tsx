@@ -33,7 +33,7 @@ vi.mock("#/contexts/active-backend-context", () => ({
   useActiveBackend: () => useActiveBackendMock(),
 }));
 
-vi.mock("#/context/navigation-context", async (importActual) => ({
+vi.mock("#/contexts/navigation-context", async (importActual) => ({
   ...(await importActual<object>()),
   useNavigation: () => ({ navigate: navigateMock }),
 }));
