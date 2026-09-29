@@ -75,6 +75,9 @@ AUTH MODES:
 
 OPTIONS:
   -p, --port <port>     Ingress port (default: 8000)
+  --frontend-port <port>
+                        Frontend/static-server port (default: 3001; falls
+                        back to a free port if taken)
   --public              Enable public mode (see above)
   --frontend-only       Start only the static frontend behind ingress
   --backend-only        Start only agent-server + automation behind ingress
@@ -90,6 +93,8 @@ ENVIRONMENT VARIABLES:
   OH_AGENT_SERVER_GIT_REF      Git ref for agent-server
   OH_AGENT_SERVER_LOCAL_PATH   Path to local SDK checkout (for development)
   OH_AGENT_SERVER_VERSION      Specific PyPI version for agent-server
+  OH_CANVAS_SAFE_VITE_PORT     Frontend/static-server port (alternative to
+                               --frontend-port)
 
 Note: LLM settings are configured through the web UI settings page,
 not environment variables.

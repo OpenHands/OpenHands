@@ -79,6 +79,13 @@ agent-canvas --frontend-only  # static frontend + ingress only
 agent-canvas --backend-only   # agent server + automation backend + ingress only
 ```
 
+**Ports.** `--port <port>` / `PORT=<port>` set the ingress port — that is the
+URL you open in the browser (default `8000`). The internal frontend port
+defaults to `3001` and is picked automatically: if `3001` is already taken by
+another app, the launcher serves the frontend on a free port instead of
+aborting. To pin it explicitly, use `--frontend-port <port>` or
+`OH_CANVAS_SAFE_VITE_PORT=<port>`.
+
 ### Option 2: With a Docker Sandbox
 
 **Prerequisites**:

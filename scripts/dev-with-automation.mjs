@@ -59,6 +59,7 @@ import {
   buildAgentServerEnv,
   buildNpmScriptCommand,
   buildRuntimeServicesInfo,
+  findFreePort,
   formatMissingUvxGuidance,
   validateFrontendDependencies,
   validateLocalAgentServerPath,
@@ -166,6 +167,7 @@ function parseArgs() {
   const args = process.argv.slice(2);
   const config = {
     port: null,
+    frontendPort: null,
     automationGitRef: null,
     automationRepo: null,
     verbose: false,
@@ -183,6 +185,9 @@ function parseArgs() {
       case "-p":
       case "--port":
         config.port = parseInt(args[++i], 10);
+        break;
+      case "--frontend-port":
+        config.frontendPort = parseInt(args[++i], 10);
         break;
       case "--automation-ref":
         config.automationGitRef = args[++i];
@@ -237,6 +242,9 @@ USAGE:
 
 OPTIONS:
   -p, --port <port>           Ingress port (default: 8000)
+  --frontend-port <port>      Frontend/Vite port (default: 3001; falls back
+                              to a free port if taken). Env alternative:
+                              OH_CANVAS_SAFE_VITE_PORT
   --automation-ref <ref>      Git ref for automation (branch/tag/SHA)
   --automation-repo <url>     Git repo URL (default: ${DEFAULT_AUTOMATION_REPO})
   --static                    Serve an existing production build instead of Vite
@@ -249,7 +257,8 @@ OPTIONS:
   -h, --help                  Show this help
 
 ENVIRONMENT VARIABLES:
-  PORT                        Alternative to --port
+  PORT                        Ingress port (alternative to --port)
+  OH_CANVAS_SAFE_VITE_PORT    Frontend/Vite port (alternative to --frontend-port)
   OH_AUTOMATION_GIT_REF       Git ref for automation (overrides default version)
   OH_AUTOMATION_VERSION       Specific PyPI version for automation (default: ${DEFAULT_AUTOMATION_VERSION})
   OH_AUTOMATION_LOCAL_PATH    Absolute path to a local automation checkout (overridden only by --automation-git-ref)
@@ -428,9 +437,15 @@ async function buildConfig(args, env = process.env) {
     parseInt(env.OH_CANVAS_SAFE_BACKEND_PORT, 10) || DEFAULT_BACKEND_PORT;
   const preferredAutomationPort =
     parseInt(env.OH_CANVAS_SAFE_AUTOMATION_PORT, 10) || DEFAULT_AUTOMATION_PORT;
-  const preferredVitePort = parseInt(env.OH_CANVAS_SAFE_VITE_PORT, 10) || 3001;
+  const preferredVitePort =
+    args.frontendPort || parseInt(env.OH_CANVAS_SAFE_VITE_PORT, 10) || 3001;
 
   // Fail fast if any preferred port for a service in this mode is already in use.
+  // The ingress port stays a hard failure so a second concurrent agent-canvas
+  // instance is still detected. The frontend port, by contrast, is only a
+  // default: if it is taken (e.g. by an unrelated app), fall back to a free
+  // port so the stack still starts. The frontend is internal — callers reach
+  // it through the ingress — so there is no reason to refuse to start over it.
   const requiredPorts = [{ name: "ingress", port: preferredIngressPort }];
   if (launchAgentServer) {
     requiredPorts.push({ name: "agent-server", port: preferredBackendPort });
@@ -438,12 +453,21 @@ async function buildConfig(args, env = process.env) {
   if (launchAutomation) {
     requiredPorts.push({ name: "automation", port: preferredAutomationPort });
   }
-  if (launchFrontend) {
-    requiredPorts.push({ name: "frontend", port: preferredVitePort });
-  }
 
   logStep("ports", "Checking ports...");
   await assertPortsFree(requiredPorts);
+
+  const vitePort = launchFrontend
+    ? await findFreePort(preferredVitePort)
+    : preferredVitePort;
+
+  if (launchFrontend && vitePort !== preferredVitePort) {
+    logService(
+      "frontend",
+      `Port ${preferredVitePort} is in use — serving the frontend on port ${vitePort} instead.`,
+      c.yellow,
+    );
+  }
 
   const vscodePort = preferredBackendPort + 1000;
 
@@ -483,7 +507,7 @@ async function buildConfig(args, env = process.env) {
     // Service ports (internal)
     agentServerPort: preferredBackendPort,
     autoBackendPort: preferredAutomationPort,
-    vitePort: preferredVitePort,
+    vitePort,
     vscodePort,
     // Prefix the editor is served under on the ingress origin. Carried on the
     // config so the route table and the agent-server env are built from one
@@ -842,6 +866,32 @@ function getFrontendBackend(config) {
   return config.launchFrontend ? `http://localhost:${config.vitePort}` : null;
 }
 
+/**
+ * Build the automation backend's CORS allow-list, unless the user pinned one.
+ *
+ * Defaults to the ingress origin plus the frontend origin on both host
+ * spellings — the ingress is the main browser origin, while the Vite/static
+ * server port is a second origin whose direct access the frontend also allows.
+ * Referencing `config.vitePort` instead of a hardcoded default keeps the list
+ * correct when the launcher falls back to a free port for the frontend.
+ */
+export function buildAutomationCorsOrigins(config, env = process.env) {
+  const frontendPort = config.launchFrontend ? config.vitePort : null;
+  return (
+    env.AUTOMATION_CORS_ORIGINS ||
+    [
+      `http://localhost:${config.ingressPort}`,
+      `http://127.0.0.1:${config.ingressPort}`,
+      ...(frontendPort
+        ? [
+            `http://localhost:${frontendPort}`,
+            `http://127.0.0.1:${frontendPort}`,
+          ]
+        : []),
+    ].join(",")
+  );
+}
+
 function buildViteBackendEnv(config, env = process.env) {
   // VITE_BACKEND_HOST tells the Vite dev-server proxy (vite.config.ts) where
   // to forward /api, /sockets, etc.  It is NOT read by the frontend at
@@ -1049,9 +1099,7 @@ function startAutomationBackend(config) {
         AUTOMATION_KV_SECRET:
           process.env.AUTOMATION_KV_SECRET || config.sessionApiKey,
         // CORS: allow localhost origins for dev, unless explicitly overridden.
-        AUTOMATION_CORS_ORIGINS:
-          process.env.AUTOMATION_CORS_ORIGINS ||
-          `http://localhost:${config.ingressPort},http://127.0.0.1:${config.ingressPort},http://localhost:3001,http://127.0.0.1:3001`,
+        AUTOMATION_CORS_ORIGINS: buildAutomationCorsOrigins(config),
         FILE_STORE: "local",
         LOCAL_STORAGE_PATH: join(config.stateDir, "storage"),
         OPENHANDS_SUPPRESS_BANNER: "1",
