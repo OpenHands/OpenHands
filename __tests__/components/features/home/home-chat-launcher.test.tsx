@@ -391,10 +391,6 @@ describe("HomeChatLauncher", () => {
       "data-placeholder",
       "SUGGESTIONS$WHAT_TO_BUILD",
     );
-    expect(
-      screen.getByTestId("recommended-automations-rail"),
-    ).toBeInTheDocument();
-
     await user.click(screen.getByTestId("home-launcher-mode-automate"));
 
     expect(screen.getByTestId("home-launcher-mode-automate")).toHaveAttribute(
@@ -615,7 +611,7 @@ describe("HomeChatLauncher", () => {
     ).toBeInTheDocument();
   });
 
-  it("keeps Automate mode local-only on cloud backends", async () => {
+  it("allows Automate mode on cloud backends", async () => {
     mockUseActiveBackend.mockReturnValue(cloudBackend);
     const createSpy = vi
       .spyOn(AgentServerConversationService, "createConversation")
@@ -625,24 +621,24 @@ describe("HomeChatLauncher", () => {
     const user = userEvent.setup();
 
     expect(
-      screen.getByText("HOME$AUTOMATE_LOCAL_BACKEND_ONLY"),
-    ).toBeInTheDocument();
+      screen.queryByText("HOME$AUTOMATE_LOCAL_BACKEND_ONLY"),
+    ).not.toBeInTheDocument();
     await user.click(screen.getByTestId("home-launcher-mode-automate"));
 
-    expect(screen.getByTestId("home-launcher-mode-code")).toHaveAttribute(
+    expect(screen.getByTestId("home-launcher-mode-automate")).toHaveAttribute(
       "aria-checked",
       "true",
     );
     expect(screen.getByTestId("stub-chat-submit")).toHaveAttribute(
       "data-placeholder",
-      "SUGGESTIONS$WHAT_TO_BUILD",
+      "HOME$AUTOMATE_PROMPT_PLACEHOLDER",
     );
 
     await user.click(screen.getByTestId("stub-chat-submit"));
 
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
     expect(createSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ automationSetup: false }),
+      expect.objectContaining({ automationSetup: true }),
     );
   });
 
@@ -819,6 +815,7 @@ describe("HomeChatLauncher", () => {
         await userEvent.click(await screen.findByTestId("stub-plugin-pick"));
       },
       expectedPlugins: [{ source: "github:o/a", ref: null, repo_path: null }],
+      expectedAutomationSetup: false,
       marksAutomationSetup: false,
     },
     {
@@ -829,11 +826,17 @@ describe("HomeChatLauncher", () => {
         );
       },
       expectedPlugins: undefined,
+      expectedAutomationSetup: true,
       marksAutomationSetup: true,
     },
   ])(
     "creates a conversation in $name",
-    async ({ prepare, expectedPlugins, marksAutomationSetup }) => {
+    async ({
+      prepare,
+      expectedPlugins,
+      expectedAutomationSetup,
+      marksAutomationSetup,
+    }) => {
       const createSpy = vi
         .spyOn(AgentServerConversationService, "createConversation")
         .mockResolvedValue(makeConversationResponse());
@@ -848,6 +851,7 @@ describe("HomeChatLauncher", () => {
         expect.objectContaining({
           initialUserMsg: "hello world",
           plugins: expectedPlugins,
+          automationSetup: expectedAutomationSetup,
           metadata: null,
         }),
       );

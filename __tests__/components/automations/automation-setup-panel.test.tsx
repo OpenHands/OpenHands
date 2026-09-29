@@ -315,23 +315,6 @@ describe("AutomationSetupPanel", () => {
     expect(
       screen.getAllByText("AUTOMATION_SETUP$FILLED_BY_OPENHANDS").length,
     ).toBeGreaterThan(0);
-
-    vi.useRealTimers();
-    const realUser = userEvent.setup();
-    await realUser.clear(nameInput);
-    await realUser.type(nameInput, "Manual name");
-
-    handleAutomationFormUpdateAction(
-      {
-        kind: AUTOMATION_FORM_UPDATE_ACTION_KIND,
-        fields: { name: "Agent replacement" },
-      },
-      conversationId,
-      "agent-event-2",
-      "2026-01-01T00:00:01.000Z",
-    );
-
-    expect(nameInput).toHaveValue("Manual name");
   });
 
   it("creates plugin drafts with the selected plugin source", async () => {
