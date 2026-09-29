@@ -32,11 +32,15 @@ export interface AutomationRepository {
   ref?: string;
 }
 
+export type AutomationState = "ACTIVE" | "INACTIVE" | "DRAFT";
+
 export interface Automation {
   id: string;
   name: string;
   trigger: AutomationTrigger;
   enabled: boolean;
+  /** Backend automation lifecycle state. Prefer this over deprecated `enabled` when present. */
+  state?: AutomationState | string | null;
   /**
    * Human-readable reason the automation was last disabled (the latest
    * disablement event overwrites this). Mirrors the automation service's

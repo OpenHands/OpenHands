@@ -73,6 +73,7 @@ describe("useTaskPolling", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    sessionStorage.clear();
     resetPendingTaskMessageLinkState();
     useOptimisticUserMessageStore.getState().clearPendingMessages();
   });
@@ -80,6 +81,7 @@ describe("useTaskPolling", () => {
   afterEach(() => {
     queryClient?.clear();
     localStorage.clear();
+    sessionStorage.clear();
   });
 
   it("moves pending task drafts onto the real conversation before redirecting", async () => {
