@@ -1652,7 +1652,7 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
   parentConversationId?: string;
   workingDir?: string;
   /** Workspace root for the hooks lookup, not the per-conversation `workingDir` (#16907). */
-  hooksProjectDir?: string;
+  hooksProjectDir?: string | null;
   worktree?: boolean;
   agentProfileId?: string;
   agentProfileKind?: AgentKind;
@@ -1668,7 +1668,9 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
       SettingsService.getSettingsForConversation(),
       SecretsService.getSecrets(),
       fetchBackendServerInfo(),
-      HooksService.loadWorkspaceHooks(options.hooksProjectDir),
+      options.hooksProjectDir === null
+        ? Promise.resolve(null)
+        : HooksService.loadWorkspaceHooks(options.hooksProjectDir),
     ]);
 
   const { agentSettings, conversationSettings, secretsEncrypted } =
