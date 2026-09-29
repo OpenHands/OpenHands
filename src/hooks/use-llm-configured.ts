@@ -129,16 +129,14 @@ export function useLlmConfigured(): LlmConfiguredResult {
     config?.feature_flags,
   );
 
-  // In local mode, profiles are the source of truth: a usable LLM must be
-  // backed by an active profile that still exists and is authenticated. API-key
-  // profiles use the list endpoint's api_key_set flag; subscription profiles
-  // intentionally have no key, so we inspect the active profile detail config.
-  // The raw settings key can be a stale copy left behind by a deleted profile
-  // (settings are not cleared on delete), so we don't count it here. Cloud
-  // backends don't use profiles and keep the settings-key signal.
+  // Profiles are the source of truth on local. Cloud still accepts the legacy
+  // settings-key signal, but provider-backed org profiles can be usable even
+  // when settings.llm_api_key_set is false.
   const hasUsableActiveProfile =
     hasActiveProfileApiKey || hasActiveProfileSubscription;
-  const hasUsableLlm = isLocal ? hasUsableActiveProfile : hasApiKey;
+  const hasUsableLlm = isLocal
+    ? hasUsableActiveProfile
+    : hasApiKey || hasUsableActiveProfile;
 
   // Treat a fetch failure as indeterminate (same as loading) only when it
   // leaves us with no data to decide from — otherwise a transient network
