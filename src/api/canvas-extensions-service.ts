@@ -31,7 +31,10 @@ interface AppBackendSessionResponse {
 }
 
 interface AppBackendSessionClient {
-  createAppBackendSession: (name: string) => Promise<AppBackendSessionResponse>;
+  createAppBackendSession: (
+    name: string,
+    context?: { signal?: AbortSignal },
+  ) => Promise<AppBackendSessionResponse>;
   revokeAppBackendSession: (name: string) => Promise<void>;
   close: () => void;
 }
@@ -46,7 +49,9 @@ interface AppBackendSessionClientConstructor {
 }
 
 export interface CanvasExtensionAppBackendViewClient {
-  createSession: () => Promise<CanvasExtensionAppViewSession>;
+  createSession: (
+    signal?: AbortSignal,
+  ) => Promise<CanvasExtensionAppViewSession>;
   revokeSession: () => Promise<void>;
   dispose: () => void;
 }
@@ -185,9 +190,11 @@ async function createAppBackendViewClient(
     }
   };
   return {
-    createSession: async () => {
+    createSession: async (signal) => {
       if (disposed) throw new Error("Canvas App backend view is disposed");
-      const session = await sessionClient.createAppBackendSession(name);
+      const session = signal
+        ? await sessionClient.createAppBackendSession(name, { signal })
+        : await sessionClient.createAppBackendSession(name);
       hasSession = true;
       const sessionUrl = parseHttpUrl(session.ingress_url);
       if (sessionUrl?.origin !== ingressUrl.origin) {

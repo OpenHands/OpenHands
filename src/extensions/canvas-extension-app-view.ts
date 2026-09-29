@@ -29,6 +29,7 @@ export interface MountedCanvasExtensionAppView {
   retry: () => void;
 }
 
+const IFRAME_LOAD_TIMEOUT_MS = 15000;
 const SAFE_SANDBOX_TOKENS = new Set([
   "allow-forms",
   "allow-modals",
@@ -92,7 +93,15 @@ export function mountCanvasExtensionAppView({
   let disposed = false;
   let generation = 0;
   let controller: AbortController | null = null;
+  let loadTimeout: ReturnType<typeof setTimeout> | null = null;
+  let activeMount: Promise<void> | null = null;
   let hasSession = false;
+
+  const clearLoadTimeout = () => {
+    if (loadTimeout === null) return;
+    clearTimeout(loadTimeout);
+    loadTimeout = null;
+  };
 
   const revoke = async () => {
     if (!hasSession || !revokeSession) return;
@@ -130,6 +139,7 @@ export function mountCanvasExtensionAppView({
   const mount = async () => {
     const currentGeneration = ++generation;
     controller?.abort();
+    clearLoadTimeout();
     controller = new AbortController();
     container.replaceChildren(createStatus(labels.loading));
 
@@ -151,6 +161,7 @@ export function mountCanvasExtensionAppView({
         "load",
         () => {
           if (!disposed && currentGeneration === generation) {
+            clearLoadTimeout();
             container.replaceChildren(frame);
           }
         },
@@ -160,11 +171,18 @@ export function mountCanvasExtensionAppView({
         "error",
         () => {
           if (!disposed && currentGeneration === generation) {
+            clearLoadTimeout();
             renderError(labels.unavailable, created.url);
           }
         },
         { once: true },
       );
+      loadTimeout = setTimeout(() => {
+        loadTimeout = null;
+        if (!disposed && currentGeneration === generation) {
+          renderError(labels.unavailable, created.url);
+        }
+      }, IFRAME_LOAD_TIMEOUT_MS);
       container.replaceChildren(createStatus(labels.loading), frame);
     } catch {
       if (hasSession) await revoke();
@@ -175,11 +193,18 @@ export function mountCanvasExtensionAppView({
 
   function retry() {
     if (disposed) return;
+    generation += 1;
     controller?.abort();
-    void revoke().finally(mount);
+    clearLoadTimeout();
+    const previousMount = activeMount;
+    activeMount = (async () => {
+      await previousMount;
+      await revoke();
+      if (!disposed) await mount();
+    })();
   }
 
-  void mount();
+  activeMount = mount();
 
   return {
     retry,
@@ -188,6 +213,7 @@ export function mountCanvasExtensionAppView({
       disposed = true;
       generation += 1;
       controller?.abort();
+      clearLoadTimeout();
       container.replaceChildren();
       void revoke();
     },

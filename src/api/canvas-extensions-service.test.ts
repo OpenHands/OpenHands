@@ -282,6 +282,29 @@ describe("CanvasExtensionsService", () => {
     expect(closeAppBackendClient).toHaveBeenCalledTimes(1);
   });
 
+  it("forwards cancellation to the app session request", async () => {
+    getServerInfo.mockResolvedValue({
+      capabilities: ["canvas_app_backend_bridge_v1"],
+      app_backend_ingress_url: "https://apps.example.test",
+    });
+    createAppBackendSession.mockResolvedValue({
+      ingress_url: "https://apps.example.test/app-backends/demo-extension/",
+      expires_at: "2026-09-23T16:00:00Z",
+      iframe_sandbox: "allow-scripts",
+    });
+    const viewClient = await CanvasExtensionsService.createAppBackendViewClient(
+      extension.name,
+      localBackend,
+    );
+    const controller = new AbortController();
+
+    await viewClient!.createSession(controller.signal);
+
+    expect(createAppBackendSession).toHaveBeenCalledWith(extension.name, {
+      signal: controller.signal,
+    });
+  });
+
   it("rejects and revokes a session outside the discovered ingress origin", async () => {
     getServerInfo.mockResolvedValue({
       capabilities: ["canvas_app_backend_bridge_v1"],

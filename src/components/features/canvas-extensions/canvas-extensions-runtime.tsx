@@ -241,7 +241,8 @@ export function CanvasExtensionsRuntimeProvider({
                     const mounted = mountCanvasExtensionAppView({
                       container,
                       labels: appViewLabelsRef.current,
-                      createSession: () => appBackendViewClient.createSession(),
+                      createSession: ({ signal }) =>
+                        appBackendViewClient.createSession(signal),
                       revokeSession: () => appBackendViewClient.revokeSession(),
                     });
                     let disposed = false;

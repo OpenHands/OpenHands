@@ -31,6 +31,7 @@ function deferred<T>() {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   document.body.replaceChildren();
 });
@@ -131,6 +132,59 @@ describe("mountCanvasExtensionAppView", () => {
       "noopener,noreferrer",
     );
     expect(createSession).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows retry and new-tab fallback when an iframe never loads", async () => {
+    vi.useFakeTimers();
+    const container = document.createElement("div");
+
+    mountCanvasExtensionAppView({
+      container,
+      labels,
+      createSession: vi.fn().mockResolvedValue(session),
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(container.querySelector("iframe")).not.toBeNull();
+    expect(container).toHaveTextContent(labels.loading);
+
+    await vi.advanceTimersToNextTimerAsync();
+    expect(container).toHaveTextContent(labels.unavailable);
+    expect(container.querySelector("button")).toHaveTextContent(labels.retry);
+    expect(container.querySelector("a")).toHaveAttribute("href", session.url);
+    expect(container.querySelector("iframe")).toBeNull();
+  });
+
+  it("waits for an aborted session request before starting its retry", async () => {
+    const container = document.createElement("div");
+    const firstSession = deferred<CanvasExtensionAppViewSession>();
+    const createSession = vi
+      .fn<
+        (context: {
+          signal: AbortSignal;
+        }) => Promise<CanvasExtensionAppViewSession>
+      >()
+      .mockImplementationOnce(({ signal }) => {
+        signal.addEventListener("abort", () => {
+          firstSession.reject(new DOMException("Aborted", "AbortError"));
+        });
+        return firstSession.promise;
+      })
+      .mockResolvedValueOnce(session);
+
+    const mounted = mountCanvasExtensionAppView({
+      container,
+      labels,
+      createSession,
+    });
+    const firstSignal = createSession.mock.calls[0][0].signal;
+
+    mounted.retry();
+    expect(firstSignal.aborted).toBe(true);
+    expect(createSession).toHaveBeenCalledTimes(1);
+
+    await vi.waitFor(() => expect(createSession).toHaveBeenCalledTimes(2));
+    expect(createSession.mock.calls[1][0].signal.aborted).toBe(false);
   });
 
   it("aborts a pending mount and revokes a late session on disposal", async () => {
