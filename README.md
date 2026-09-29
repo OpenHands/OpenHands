@@ -72,7 +72,12 @@ npm install -g @openhands/agent-canvas
 agent-canvas
 ```
 
-The `agent-canvas` command starts the full local stack by default. You can also split it when you want to run pieces separately:
+The `agent-canvas` command starts the full local stack by default. `--port` / `PORT` controls
+**only** the ingress port (`:8000`, default). The frontend (Vite or static server) listens on an
+internal port that defaults to `:3001` and automatically falls back to a free port when `3001`
+is already taken by another app — or set `OH_CANVAS_SAFE_VITE_PORT` to force a specific one.
+
+You can also split it when you want to run pieces separately:
 
 ```sh
 agent-canvas --frontend-only  # static frontend + ingress only

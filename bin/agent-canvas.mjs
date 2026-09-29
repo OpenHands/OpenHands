@@ -91,6 +91,10 @@ ENVIRONMENT VARIABLES:
   OH_AGENT_SERVER_LOCAL_PATH   Path to local SDK checkout (for development)
   OH_AGENT_SERVER_VERSION      Specific PyPI version for agent-server
 
+Note: --port / PORT controls only the ingress port. The frontend listens
+on an internal port (default 3001) that automatically falls back to a free
+port when taken; set OH_CANVAS_SAFE_VITE_PORT to force a specific one.
+
 Note: LLM settings are configured through the web UI settings page,
 not environment variables.
 
@@ -104,8 +108,11 @@ EXAMPLES:
   # Public mode — users must enter the API key in the browser
   LOCAL_BACKEND_API_KEY=my-secret npx @openhands/agent-canvas --public
 
-  # Use a specific port
+  # Use a specific ingress port
   npx @openhands/agent-canvas --port 3000
+
+  # Force a specific frontend (Vite/static) port
+  OH_CANVAS_SAFE_VITE_PORT=4000 npx @openhands/agent-canvas
 
   # Start only the static frontend behind ingress
   npx @openhands/agent-canvas --frontend-only
