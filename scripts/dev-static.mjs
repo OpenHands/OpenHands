@@ -20,8 +20,9 @@
  *   ┌─────────────┐    ┌───────────────┐         ┌──────────────────┐
  *   │ sirv-cli    │    │ Agent Server  │         │ Automation       │
  *   │ build/      │    │ (uvx) :18000  │         │ Backend (uvx)    │
- *   │ :3001       │    │               │         │ :18001           │
+ *   │ :3001*      │    │               │         │ :18001           │
  *   └─────────────┘    └───────────────┘         └──────────────────┘
+ *   (* default; falls back to a free port if 3001 is taken)
  *
  * Usage:
  *   npm run dev:static
@@ -60,6 +61,7 @@ import {
 import {
   buildAgentServerAutomationEnv,
   buildAutomationCommand,
+  buildAutomationCorsOrigins,
   buildAutomationTelemetryEnv,
   buildAutomationRuntimeServicesInfo,
   buildConfig,
@@ -366,7 +368,7 @@ function buildAutomationBackendEnv(config, env = process.env) {
     AUTOMATION_WORKSPACE_BASE: join(config.stateDir, "workspaces"),
     AUTOMATION_LOCAL_API_KEY: config.sessionApiKey,
     ...buildAutomationTelemetryEnv(env),
-    AUTOMATION_CORS_ORIGINS: `http://localhost:${config.ingressPort},http://127.0.0.1:${config.ingressPort},http://localhost:3001,http://127.0.0.1:3001`,
+    AUTOMATION_CORS_ORIGINS: buildAutomationCorsOrigins(config, env),
     FILE_STORE: "local",
     LOCAL_STORAGE_PATH: join(config.stateDir, "storage"),
     OPENHANDS_SUPPRESS_BANNER: "1",
@@ -407,9 +409,10 @@ function startStaticServer(config) {
   logService("static", `Starting on port ${config.vitePort}...`, c.magenta);
 
   // Mirror the proxy targets that vite.config.ts exposes in dev mode so that
-  // hitting :3001 directly behaves like Vite's dev server (e.g. /server_info
-  // is forwarded to the agent-server instead of falling back to the SPA
-  // shell). Without this, /server_info on :3001 returns index.html.
+  // hitting the frontend origin (`config.vitePort`) directly behaves like Vite's
+  // dev server (e.g. /server_info is forwarded to the agent-server instead
+  // of falling back to the SPA shell). Without this, /server_info on the
+  // frontend origin returns index.html.
   const staticServerScript = join(projectRoot, "scripts", "static-server.mjs");
   const runtimeServicesInfo = JSON.stringify(
     buildAutomationRuntimeServicesInfo({

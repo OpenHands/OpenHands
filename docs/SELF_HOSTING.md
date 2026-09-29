@@ -84,7 +84,8 @@ Cloud Firewall, AWS Security Group, GCP firewall rule, etc.):
 
 - **Inbound 22 (SSH)** — restrict to your own IP / VPN CIDR.
 - **Everything else** — drop. The ingress port (`:8000`), agent server
-  (`:18000`), automation backend (`:18001`), and static server (`:3001`)
+  (`:18000`), automation backend (`:18001`), and static server (`:3001` by
+  default; falls back to a free port when that is taken)
   must not be reachable from outside the host.
 
 At this point your machine is reachable only over SSH. That's enough to run

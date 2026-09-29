@@ -50,8 +50,18 @@ it instead.
 | Variable                  | Description                    | Default |
 | ------------------------- | ------------------------------ | ------- |
 | `PORT`                    | Ingress port                   | `8000`  |
+| `OH_CANVAS_SAFE_VITE_PORT` | Frontend (Vite/static-server) port; if the preferred port is taken the launcher automatically falls back to a free port | `3001` |
 | `OH_AUTOMATION_GIT_REF`   | Git ref for automation backend (overrides the pinned default version) | *(unset)* |
 | `OH_AGENT_SERVER_GIT_REF` | Git ref for agent-server (overrides the pinned default version) | *(unset)* |
+
+> **Ports in the local stack**: `--port` / `PORT` only control the *ingress* —
+> the single public entry point where you access the UI (`http://localhost:<PORT>`).
+> The internal frontend port (Vite or static-server) is an implementation detail
+> that defaults to `3001`. If `3001` is already bound by another process, the
+> launcher picks a free port automatically and routes the ingress (and the
+> automation backend's CORS allow-list) to it, so the stack still starts.
+> To pin the frontend explicitly, set `OH_CANVAS_SAFE_VITE_PORT=<port>`; the
+> launcher still falls back to a free port if even that one is taken.
 
 ### Alternative: Minimal Mode (without Automation)
 
