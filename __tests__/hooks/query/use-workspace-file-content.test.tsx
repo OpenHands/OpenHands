@@ -27,7 +27,11 @@ vi.mock("#/hooks/query/use-active-conversation", () => ({
 
 const useRuntimeIsReadyMock = vi.fn();
 vi.mock("#/hooks/use-runtime-is-ready", () => ({
-  useRuntimeIsReady: () => useRuntimeIsReadyMock(),
+  useRuntimeIsReady: (...args: unknown[]) => useRuntimeIsReadyMock(...args),
+}));
+
+vi.mock("#/hooks/use-agent-state", () => ({
+  useAgentState: () => ({ curAgentState: "error" }),
 }));
 
 const getActiveBackendMock = vi.fn();
@@ -107,6 +111,26 @@ describe("useWorkspaceFileContent", () => {
   function arrayBufferFromString(value: string): ArrayBuffer {
     return new TextEncoder().encode(value).buffer as ArrayBuffer;
   }
+
+  it("reads a diagnostic file while the conversation is in Error", async () => {
+    const { useRuntimeIsReady } = await vi.importActual<
+      typeof import("#/hooks/use-runtime-is-ready")
+    >("#/hooks/use-runtime-is-ready");
+    useRuntimeIsReadyMock.mockImplementation(useRuntimeIsReady);
+    useActiveConversationMock.mockReturnValue({
+      data: { id: "conv-1", execution_status: "error" },
+    });
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      arrayBuffer: () => Promise.resolve(arrayBufferFromString("diagnostic")),
+    });
+    const { result } = renderHook(
+      () => useWorkspaceFileContent("evidence/checkpoint.txt"),
+      { wrapper: makeWrapper() },
+    );
+    await waitFor(() => expect(result.current.data?.text).toBe("diagnostic"));
+  });
 
   it("returns a static URL on the workspace fileserver for text content", async () => {
     fetchMock.mockResolvedValue({
