@@ -3,13 +3,13 @@ import { createPortal } from "react-dom";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import {
-  ArrowLeft,
   CalendarDays,
   Clock3,
   Code2,
   FileText,
   Globe2,
-  Puzzle,
+  Plus,
+  X,
   Zap,
 } from "lucide-react";
 import AutomationService from "#/api/automation-service/automation-service.api";
@@ -24,6 +24,7 @@ import {
 import { packTarGzip } from "#/utils/tar-gzip";
 import { I18nKey } from "#/i18n/declaration";
 import { BrandButton } from "#/components/features/settings/brand-button";
+import { AutomationSetupPromptStack } from "#/components/features/automations/setup/automation-setup-prompt-stack";
 import {
   formControlFieldClassName,
   formControlMultilineFieldClassName,
@@ -43,6 +44,11 @@ const DEFAULT_CUSTOM_SCHEDULE = "0 9 * * *";
 const DEFAULT_EVENT_SOURCE = "github";
 const DEFAULT_EVENT_KEY = "issue_comment.created";
 const DEFAULT_CUSTOM_ENTRYPOINT = "python3 main.py";
+const addOptionButtonClassName = cn(
+  "inline-flex w-fit shrink-0 cursor-pointer items-center rounded-lg border border-[var(--oh-border)] bg-tertiary px-3 py-1.5 text-sm text-content hover:bg-interactive-hover",
+  formControlTransitionClassName,
+);
+
 const MAIN_PY_FILENAME = "main.py";
 const DEFAULT_CUSTOM_SETUP_SCRIPT_PATH = "setup.sh";
 const DEFAULT_CUSTOM_SETUP_SCRIPT = `#!/usr/bin/env bash
@@ -52,11 +58,6 @@ const DEFAULT_TIMEOUT_SECONDS = "600";
 const PREFLIGHT_TARBALL_PATH =
   "oh-internal://uploads/00000000-0000-0000-0000-000000000000";
 
-const AUTOMATION_SETUP_KINDS: AutomationSetupKind[] = [
-  "prompt",
-  "plugin",
-  "custom",
-];
 const FREQUENCIES = [
   "hourly",
   "daily",
@@ -140,12 +141,6 @@ function endpointName(kind: AutomationSetupKind): InterfaceEndpointName {
   return "createPrompt";
 }
 
-function kindLabelKey(kind: AutomationSetupKind): I18nKey {
-  if (kind === "plugin") return I18nKey.AUTOMATION_SETUP$TYPE_PLUGIN;
-  if (kind === "custom") return I18nKey.AUTOMATION_SETUP$TYPE_CUSTOM;
-  return I18nKey.AUTOMATION_SETUP$TYPE_PROMPT;
-}
-
 function frequencyLabelKey(frequency: Frequency): I18nKey {
   switch (frequency) {
     case "hourly":
@@ -165,8 +160,10 @@ export function AutomationSetupPanel({
   draft,
   toolbarPortal,
   showInlineHeader = true,
-  onClose,
+  onClose: _onClose,
 }: AutomationSetupPanelProps) {
+  const [model, setModel] = useState("");
+  const [agentProfileId, setAgentProfileId] = useState("");
   const { t } = useTranslation("openhands");
   const { navigate } = useNavigation();
   const [kind, setKind] = useState<AutomationSetupKind>(draft.kind);
@@ -217,6 +214,11 @@ export function AutomationSetupPanel({
       trigger: buildTrigger(),
       enabled: false,
     } as SetupRequestBody;
+    if (agentProfileId.trim()) {
+      body.agent_profile_id = agentProfileId.trim();
+    } else if (model.trim()) {
+      body.model = model.trim();
+    }
     const repositories = parseAutomationSetupRepositories(repository);
     if (repositories.length > 0) {
       body.repos = repositories.map(buildRepositorySource);
@@ -399,63 +401,18 @@ export function AutomationSetupPanel({
         className="flex h-full min-h-0 flex-col bg-base"
       >
         {showInlineHeader ? (
-          <header className="flex h-10 min-h-10 items-center justify-between border-b border-[var(--oh-border)] px-3">
+          <header className="flex h-10 min-h-10 shrink-0 items-center justify-between gap-2 border-b border-[var(--oh-border)] bg-base px-3">
             <div className="flex min-w-0 items-center gap-2">
-              <button
-                type="button"
-                aria-label={t(I18nKey.AUTOMATION_SETUP$BACK_LABEL)}
-                onClick={onClose}
-                className={cn(
-                  "flex size-7 items-center justify-center rounded-lg text-[var(--oh-muted)] hover:bg-white/10 hover:text-white",
-                  formControlTransitionClassName,
-                )}
-              >
-                <ArrowLeft className="size-4" aria-hidden />
-              </button>
-              <h2 className="truncate text-sm font-semibold text-white">
-                {t(I18nKey.AUTOMATION_SETUP$TITLE)}
+              <h2 className="min-w-0 truncate text-sm font-medium text-content">
+                {name.trim() || t(I18nKey.AUTOMATION_SETUP$TITLE)}
               </h2>
             </div>
             {renderToolbarActions()}
           </header>
         ) : null}
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6">
-          <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
-            <div
-              role="group"
-              aria-label={t(I18nKey.AUTOMATION_SETUP$TYPE_LABEL)}
-              className="grid grid-cols-3 gap-2 rounded-xl border border-[var(--oh-border)] bg-base-secondary p-1"
-            >
-              {AUTOMATION_SETUP_KINDS.map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  aria-pressed={kind === item}
-                  data-testid={`automation-setup-kind-${item}`}
-                  onClick={() => setKind(item)}
-                  className={cn(
-                    "flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm",
-                    formControlTransitionClassName,
-                    kind === item
-                      ? "bg-white/10 text-white"
-                      : "text-[var(--oh-muted)] hover:bg-white/5 hover:text-white",
-                  )}
-                >
-                  {item === "prompt" && (
-                    <FileText className="size-4" aria-hidden />
-                  )}
-                  {item === "plugin" && (
-                    <Puzzle className="size-4" aria-hidden />
-                  )}
-                  {item === "custom" && (
-                    <Code2 className="size-4" aria-hidden />
-                  )}
-                  <span>{t(kindLabelKey(item))}</span>
-                </button>
-              ))}
-            </div>
-
+        <div className="custom-scrollbar-always min-h-0 flex-1 overflow-y-auto px-5 pt-5 pb-5 [scrollbar-gutter:stable]">
+          <div className="mx-auto flex w-full min-w-0 max-w-[800px] flex-col gap-6">
             <Field label={t(I18nKey.AUTOMATIONS$NAME)}>
               <input
                 data-testid="automation-setup-name"
@@ -466,69 +423,68 @@ export function AutomationSetupPanel({
               />
             </Field>
 
-            {kind !== "custom" ? (
-              <PromptFields prompt={prompt} onPromptChange={setPrompt} />
-            ) : (
-              <CustomCodeFields
-                code={customCode}
-                entrypoint={entrypoint}
-                setupScriptPath={setupScriptPath}
-                setupScript={setupScript}
-                onCodeChange={setCustomCode}
-                onEntrypointChange={setEntrypoint}
-                onSetupScriptPathChange={setSetupScriptPath}
-                onSetupScriptChange={setSetupScript}
-              />
-            )}
-
-            {kind === "plugin" && (
-              <div className="grid gap-3 rounded-xl border border-[var(--oh-border)] bg-base-secondary p-4 md:grid-cols-[2fr_1fr]">
-                <Field label={t(I18nKey.AUTOMATION_SETUP$PLUGIN_SOURCE)}>
-                  <input
-                    data-testid="automation-setup-plugin-source"
-                    value={pluginSource}
-                    placeholder={t(
-                      I18nKey.AUTOMATION_SETUP$PLUGIN_SOURCE_PLACEHOLDER,
-                    )}
-                    onChange={(event) => setPluginSource(event.target.value)}
-                    className={formControlFieldClassName}
-                  />
-                </Field>
-                <Field label={t(I18nKey.AUTOMATION_SETUP$PLUGIN_REF)}>
-                  <input
-                    data-testid="automation-setup-plugin-ref"
-                    value={pluginRef}
-                    placeholder={t(
-                      I18nKey.AUTOMATION_SETUP$PLUGIN_REF_PLACEHOLDER,
-                    )}
-                    onChange={(event) => setPluginRef(event.target.value)}
-                    className={formControlFieldClassName}
-                  />
-                </Field>
+            <div className="flex flex-col gap-2.5">
+              <div className="flex w-full items-center gap-2">
+                <span className="flex items-center gap-2 text-sm">
+                  {kind === "custom"
+                    ? t(I18nKey.AUTOMATION_SETUP$CUSTOM_PYTHON)
+                    : t(I18nKey.AUTOMATIONS$PROMPT)}
+                </span>
+                <button
+                  type="button"
+                  data-testid={
+                    kind === "custom"
+                      ? "automation-setup-kind-prompt"
+                      : "automation-setup-kind-custom"
+                  }
+                  onClick={() =>
+                    setKind(kind === "custom" ? "prompt" : "custom")
+                  }
+                  className={cn(addOptionButtonClassName, "ml-auto gap-1.5")}
+                >
+                  {kind === "custom" ? (
+                    <FileText className="size-4" aria-hidden />
+                  ) : (
+                    <Code2 className="size-4" aria-hidden />
+                  )}
+                  {kind === "custom"
+                    ? t(I18nKey.AUTOMATIONS$PROMPT)
+                    : t(I18nKey.AUTOMATION_SETUP$TYPE_CUSTOM)}
+                </button>
               </div>
-            )}
-
-            {kind !== "custom" && (
-              <Field
-                label={t(I18nKey.COMMON$REPOSITORIES)}
-                suffix={t(I18nKey.COMMON$OPTIONAL)}
-              >
-                <textarea
-                  data-testid="automation-setup-repository"
-                  value={repository}
-                  placeholder={t(I18nKey.SETUP$REPOSITORY_PLACEHOLDER)}
-                  onChange={(event) => setRepository(event.target.value)}
-                  className={formControlMultilineFieldClassName}
-                  rows={2}
+              {kind !== "custom" ? (
+                <AutomationSetupPromptStack
+                  prompt={prompt}
+                  repository={repository}
+                  showTitle={false}
+                  isStreaming={false}
+                  onPromptChange={setPrompt}
+                  onRepositoryChange={setRepository}
+                  model={model}
+                  onModelChange={setModel}
+                  agentProfileId={agentProfileId}
+                  onAgentProfileChange={setAgentProfileId}
                 />
-              </Field>
-            )}
+              ) : (
+                <CustomCodeFields
+                  code={customCode}
+                  entrypoint={entrypoint}
+                  setupScriptPath={setupScriptPath}
+                  setupScript={setupScript}
+                  onCodeChange={setCustomCode}
+                  onEntrypointChange={setEntrypoint}
+                  onSetupScriptPathChange={setSetupScriptPath}
+                  onSetupScriptChange={setSetupScript}
+                />
+              )}
+            </div>
 
-            <section className="flex flex-col gap-3">
-              <h3 className="text-sm font-semibold text-white">
-                {t(I18nKey.AUTOMATIONS$DETAIL$TRIGGER)}
-              </h3>
-              <div className="grid gap-3 md:grid-cols-2">
+            <section className="flex flex-col gap-2.5">
+              <div
+                role="radiogroup"
+                aria-label={t(I18nKey.AUTOMATIONS$DETAIL$TRIGGER)}
+                className="grid grid-cols-2 gap-2"
+              >
                 <TriggerCard
                   icon={<CalendarDays className="size-4" aria-hidden />}
                   title={t(I18nKey.AUTOMATION_SETUP$SCHEDULE)}
@@ -568,34 +524,115 @@ export function AutomationSetupPanel({
               />
             )}
 
-            <section className="flex flex-col gap-3">
-              <h3 className="text-sm font-semibold text-white">
+            <section className="flex flex-col gap-2.5">
+              <span className="text-sm">
                 {t(I18nKey.AUTOMATION_SETUP$ADDITIONAL_OPTIONS)}
-              </h3>
-              {showTimeout ? (
-                <Field label={t(I18nKey.AUTOMATION_SETUP$TIMEOUT_SECONDS)}>
-                  <input
-                    data-testid="automation-setup-timeout"
-                    type="number"
-                    min="1"
-                    value={timeoutSeconds}
-                    onChange={(event) => setTimeoutSeconds(event.target.value)}
-                    className={formControlFieldClassName}
-                  />
-                </Field>
-              ) : (
-                <button
-                  type="button"
-                  data-testid="automation-setup-add-timeout"
-                  onClick={() => setShowTimeout(true)}
-                  className={cn(
-                    "w-fit rounded-full border border-[var(--oh-border)] px-4 py-2 text-sm text-[var(--oh-muted)] hover:bg-white/5 hover:text-white",
-                    formControlTransitionClassName,
-                  )}
+              </span>
+              {kind === "plugin" ? (
+                <div
+                  data-testid="automation-setup-plugin-module"
+                  className="flex flex-col gap-3 rounded-xl border border-[var(--oh-border)] bg-base-secondary p-4"
                 >
-                  {t(I18nKey.AUTOMATION_SETUP$ADD_TIMEOUT)}
-                </button>
-              )}
+                  <div className="flex min-w-0 items-end gap-2">
+                    <div className="grid min-w-0 flex-1 gap-3 md:grid-cols-[2fr_1fr]">
+                      <Field label={t(I18nKey.AUTOMATION_SETUP$PLUGIN_SOURCE)}>
+                        <input
+                          data-testid="automation-setup-plugin-source"
+                          value={pluginSource}
+                          placeholder={t(
+                            I18nKey.AUTOMATION_SETUP$PLUGIN_SOURCE_PLACEHOLDER,
+                          )}
+                          onChange={(event) =>
+                            setPluginSource(event.target.value)
+                          }
+                          className={formControlFieldClassName}
+                        />
+                      </Field>
+                      <Field label={t(I18nKey.AUTOMATION_SETUP$PLUGIN_REF)}>
+                        <input
+                          data-testid="automation-setup-plugin-ref"
+                          value={pluginRef}
+                          placeholder={t(
+                            I18nKey.AUTOMATION_SETUP$PLUGIN_REF_PLACEHOLDER,
+                          )}
+                          onChange={(event) => setPluginRef(event.target.value)}
+                          className={formControlFieldClassName}
+                        />
+                      </Field>
+                    </div>
+                    <button
+                      type="button"
+                      data-testid="automation-setup-plugin-remove"
+                      aria-label={t(I18nKey.COMMON$REMOVE)}
+                      onClick={() => {
+                        setPluginSource("");
+                        setPluginRef("");
+                        setKind("prompt");
+                      }}
+                      className={cn(
+                        "flex size-9 shrink-0 items-center justify-center rounded-lg border border-[var(--oh-border)] text-[var(--oh-muted)] hover:bg-white/5 hover:text-white",
+                        formControlTransitionClassName,
+                      )}
+                    >
+                      <X className="size-4" aria-hidden />
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              {showTimeout ? (
+                <div className="flex min-w-0 items-end gap-2">
+                  <div className="min-w-0 flex-1">
+                    <Field label={t(I18nKey.AUTOMATION_SETUP$TIMEOUT_SECONDS)}>
+                      <input
+                        data-testid="automation-setup-timeout"
+                        type="number"
+                        min="1"
+                        value={timeoutSeconds}
+                        onChange={(event) =>
+                          setTimeoutSeconds(event.target.value)
+                        }
+                        className={formControlFieldClassName}
+                      />
+                    </Field>
+                  </div>
+                  <button
+                    type="button"
+                    data-testid="automation-setup-timeout-remove"
+                    aria-label={t(I18nKey.COMMON$REMOVE)}
+                    onClick={() => setShowTimeout(false)}
+                    className={cn(
+                      "flex size-9 shrink-0 items-center justify-center rounded-lg border border-[var(--oh-border)] text-[var(--oh-muted)] hover:bg-white/5 hover:text-white",
+                      formControlTransitionClassName,
+                    )}
+                  >
+                    <X className="size-4" aria-hidden />
+                  </button>
+                </div>
+              ) : null}
+              <div className="flex flex-wrap items-center gap-2">
+                {kind !== "plugin" ? (
+                  <button
+                    type="button"
+                    data-testid="automation-setup-add-plugin"
+                    onClick={() => setKind("plugin")}
+                    className={cn(addOptionButtonClassName, "gap-1.5")}
+                  >
+                    <Plus className="size-4" aria-hidden />
+                    {`${t(I18nKey.BUTTON$ADD)} ${t(I18nKey.AUTOMATION_SETUP$TYPE_PLUGIN)}`}
+                  </button>
+                ) : null}
+                {!showTimeout ? (
+                  <button
+                    type="button"
+                    data-testid="automation-setup-add-timeout"
+                    onClick={() => setShowTimeout(true)}
+                    className={cn(addOptionButtonClassName, "gap-1.5")}
+                  >
+                    <Plus className="size-4" aria-hidden />
+                    {t(I18nKey.AUTOMATION_SETUP$ADD_TIMEOUT)}
+                  </button>
+                ) : null}
+              </div>
             </section>
 
             {statusMessage && (
@@ -616,36 +653,6 @@ export function AutomationSetupPanel({
         </div>
       </div>
     </>
-  );
-}
-
-function PromptFields({
-  prompt,
-  onPromptChange,
-}: {
-  prompt: string;
-  onPromptChange: (value: string) => void;
-}) {
-  const { t } = useTranslation("openhands");
-  return (
-    <Field label={t(I18nKey.AUTOMATIONS$PROMPT)}>
-      <div className="rounded-xl border border-[var(--oh-border)] bg-base-secondary">
-        <textarea
-          data-testid="automation-setup-prompt"
-          rows={7}
-          value={prompt}
-          onChange={(event) => onPromptChange(event.target.value)}
-          className={cn(
-            formControlMultilineFieldClassName,
-            "min-h-44 resize-none border-0 bg-transparent p-4",
-          )}
-        />
-        <div className="flex items-center justify-between border-t border-[var(--oh-border)] px-4 py-3 text-xs text-[var(--oh-muted)]">
-          <span>{t(I18nKey.AUTOMATION_SETUP$MODEL_PLACEHOLDER)}</span>
-          <span>{t(I18nKey.AUTOMATION_SETUP$PROMPT_HINT)}</span>
-        </div>
-      </div>
-    </Field>
   );
 }
 
@@ -740,68 +747,90 @@ function ScheduleFields({
 }) {
   const { t } = useTranslation("openhands");
   return (
-    <section className="flex flex-col gap-3">
-      <h3 className="text-sm font-semibold text-white">
-        {t(I18nKey.AUTOMATION_SETUP$FREQUENCY)}
-      </h3>
-      <div className="grid grid-cols-2 gap-1 rounded-xl bg-base-secondary p-1 md:grid-cols-6">
-        {FREQUENCIES.map((item) => (
-          <button
-            key={item}
-            type="button"
-            data-testid={`automation-setup-frequency-${item}`}
-            aria-pressed={frequency === item}
-            onClick={() => setFrequency(item)}
-            className={cn(
-              "rounded-lg px-3 py-2 text-sm",
-              formControlTransitionClassName,
-              frequency === item
-                ? "bg-[var(--oh-interactive-hover)] text-white"
-                : "text-[var(--oh-muted)] hover:text-white",
-            )}
-          >
-            {t(frequencyLabelKey(item))}
-          </button>
-        ))}
+    <section className="flex flex-col gap-2.5">
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="shrink-0 text-sm">
+          {t(I18nKey.AUTOMATION_SETUP$FREQUENCY)}
+        </span>
+        <div
+          role="radiogroup"
+          aria-label={t(I18nKey.AUTOMATION_SETUP$FREQUENCY)}
+          className="inline-flex max-w-full min-w-0 items-center gap-0.5 overflow-x-auto rounded-lg bg-[var(--oh-surface-raised)] p-0.5"
+        >
+          {FREQUENCIES.map((item) => (
+            <button
+              key={item}
+              type="button"
+              role="radio"
+              data-testid={`automation-setup-frequency-${item}`}
+              aria-checked={frequency === item}
+              onClick={() => setFrequency(item)}
+              className={cn(
+                "inline-flex h-8 shrink-0 items-center rounded-md px-3 text-sm",
+                formControlTransitionClassName,
+                frequency === item
+                  ? "border border-[var(--oh-interactive-hover)] bg-base-secondary text-content"
+                  : "border border-transparent text-[var(--oh-muted)] hover:text-content",
+              )}
+            >
+              {t(frequencyLabelKey(item))}
+            </button>
+          ))}
+        </div>
       </div>
-      {frequency === "custom" ? (
-        <input
-          data-testid="automation-setup-custom-schedule"
-          value={customSchedule}
-          onChange={(event) => setCustomSchedule(event.target.value)}
-          className={formControlFieldClassName}
-        />
-      ) : (
-        <div className="grid gap-3 md:grid-cols-[16rem_1fr]">
-          <Field label={t(I18nKey.AUTOMATION_SETUP$AT)} horizontal>
-            <div className="relative">
-              <input
-                data-testid="automation-setup-time"
-                type="time"
-                value={time}
-                onChange={(event) => setTime(event.target.value)}
-                className={formControlFieldClassName}
-              />
-              <Clock3
-                className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-[var(--oh-muted)]"
+      <div className="flex w-full min-w-0 items-center gap-4 overflow-x-auto">
+        {frequency === "custom" ? (
+          <label className="flex shrink-0 items-center gap-2.5">
+            <span className="shrink-0 text-sm text-content">
+              {t(I18nKey.AUTOMATION_SETUP$TYPE_CUSTOM)}
+            </span>
+            <input
+              data-testid="automation-setup-custom-schedule"
+              value={customSchedule}
+              onChange={(event) => setCustomSchedule(event.target.value)}
+              className={cn(formControlFieldClassName, "w-[14rem]")}
+            />
+          </label>
+        ) : (
+          <>
+            <label className="flex shrink-0 items-center gap-2.5">
+              <span className="shrink-0 text-sm text-content">
+                {t(I18nKey.AUTOMATION_SETUP$AT)}
+              </span>
+              <div className="relative">
+                <input
+                  data-testid="automation-setup-time"
+                  type="time"
+                  value={time}
+                  onChange={(event) => setTime(event.target.value)}
+                  className={cn(formControlFieldClassName, "w-[9.5rem] pr-9")}
+                />
+                <Clock3
+                  className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-[var(--oh-muted)]"
+                  aria-hidden
+                />
+              </div>
+            </label>
+            <div className="relative shrink-0">
+              <select
+                data-testid="automation-setup-timezone"
+                value={timezone}
+                onChange={(event) => setTimezone(event.target.value)}
+                className={cn(formControlFieldClassName, "w-[15rem] pl-9")}
+              >
+                <option value={timezone}>{timezone}</option>
+                {timezone !== DEFAULT_TIMEZONE ? (
+                  <option value={DEFAULT_TIMEZONE}>{DEFAULT_TIMEZONE}</option>
+                ) : null}
+              </select>
+              <Globe2
+                className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--oh-muted)]"
                 aria-hidden
               />
             </div>
-          </Field>
-          <div className="relative">
-            <input
-              data-testid="automation-setup-timezone"
-              value={timezone}
-              onChange={(event) => setTimezone(event.target.value)}
-              className={cn(formControlFieldClassName, "pl-9")}
-            />
-            <Globe2
-              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--oh-muted)]"
-              aria-hidden
-            />
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </div>
     </section>
   );
 }

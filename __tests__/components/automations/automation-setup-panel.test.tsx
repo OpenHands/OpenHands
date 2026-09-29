@@ -47,6 +47,28 @@ vi.mock("#/manifests/automation-interface", () => ({
         : "/v1/preset/prompt",
 }));
 
+vi.mock("#/hooks/query/use-llm-profiles", () => ({
+  useLlmProfiles: () => ({
+    data: { active_profile: "default", profiles: [] },
+    isLoading: false,
+  }),
+}));
+
+vi.mock("#/hooks/query/use-agent-profiles", () => ({
+  useAgentProfiles: () => ({
+    data: { active_agent_profile_id: null, profiles: [] },
+    isLoading: false,
+  }),
+}));
+
+vi.mock("#/hooks/use-user-providers", () => ({
+  useUserProviders: () => ({ providers: [] }),
+}));
+
+vi.mock("#/hooks/query/use-git-repositories", () => ({
+  useGitRepositories: () => ({ data: { pages: [] }, isLoading: false }),
+}));
+
 function renderPanel(
   draft: AutomationSetupDraft = {
     prompt: "Review every pull request",
@@ -81,7 +103,7 @@ describe("AutomationSetupPanel", () => {
     );
     expect(screen.getByTestId("automation-setup-save-draft")).toBeDisabled();
 
-    await user.click(screen.getByTestId("automation-setup-kind-plugin"));
+    await user.click(screen.getByTestId("automation-setup-add-plugin"));
     expect(
       screen.getByTestId("automation-setup-plugin-source"),
     ).toBeInTheDocument();
@@ -147,10 +169,13 @@ describe("AutomationSetupPanel", () => {
     const user = userEvent.setup();
     renderPanel();
 
+    await user.click(screen.getByTestId("automation-setup-repository-add"));
+    await user.click(screen.getByTestId("automation-setup-repository-custom"));
     await user.type(
-      screen.getByTestId("automation-setup-repository"),
+      screen.getByTestId("automation-setup-repository-address"),
       "OpenHands/OpenHands, https://gitlab.com/acme/project",
     );
+    await user.click(screen.getByTestId("automation-setup-repository-submit"));
     await user.click(screen.getByTestId("automation-setup-test"));
 
     await waitFor(() =>
