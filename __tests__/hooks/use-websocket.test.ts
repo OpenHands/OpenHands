@@ -1,10 +1,6 @@
 /**
- * TODO: Fix flaky WebSocket tests (https://github.com/OpenHands/OpenHands/issues/11944)
- *
- * Several tests in this file are skipped because they fail intermittently in CI
- * but pass locally. The SUSPECTED root cause is that `wsLink.broadcast()` sends messages
- * to ALL connected clients across all tests, causing cross-test contamination
- * when tests run in parallel with Vitest v4.
+ * MSW covers integration behavior; lifecycle and callback tests use an isolated
+ * WebSocket implementation to avoid cross-test broadcasts from shared MSW links.
  */
 import { act, renderHook, waitFor } from "@testing-library/react";
 import {
@@ -19,6 +15,60 @@ import {
 import { ws } from "msw";
 import { setupServer } from "msw/node";
 import { useWebSocket } from "#/hooks/use-websocket";
+
+class DeterministicWebSocket {
+  static readonly CONNECTING = 0;
+  static readonly OPEN = 1;
+  static readonly CLOSING = 2;
+  static readonly CLOSED = 3;
+  static instance: DeterministicWebSocket | null = null;
+
+  readonly url: string;
+  readonly sent: (string | Blob | BufferSource)[] = [];
+  readyState = DeterministicWebSocket.CONNECTING;
+  onopen: ((event: Event) => void) | null = null;
+  onmessage: ((event: MessageEvent) => void) | null = null;
+  onclose: ((event: CloseEvent) => void) | null = null;
+  onerror: ((event: Event) => void) | null = null;
+
+  constructor(url: string) {
+    this.url = url;
+    DeterministicWebSocket.instance = this;
+    queueMicrotask(() => {
+      this.readyState = DeterministicWebSocket.OPEN;
+      this.onopen?.(new Event("open"));
+    });
+  }
+
+  send(data: string | Blob | BufferSource) {
+    this.sent.push(data);
+  }
+
+  close() {
+    this.readyState = DeterministicWebSocket.CLOSED;
+    this.onclose?.(
+      new CloseEvent("close", {
+        code: 1000,
+        reason: "Normal closure",
+        wasClean: true,
+      }),
+    );
+  }
+
+  emitMessage(data: string) {
+    this.onmessage?.(new MessageEvent("message", { data }));
+  }
+}
+
+function installDeterministicWebSocket() {
+  const originalWebSocket = globalThis.WebSocket;
+  DeterministicWebSocket.instance = null;
+  vi.stubGlobal("WebSocket", DeterministicWebSocket);
+  return () => {
+    globalThis.WebSocket = originalWebSocket;
+    DeterministicWebSocket.instance = null;
+  };
+}
 
 describe("useWebSocket", () => {
   // MSW WebSocket mock setup
@@ -190,27 +240,26 @@ describe("useWebSocket", () => {
     expect(result.current.socket).toBeTruthy();
   });
 
-  it.skip("should close the WebSocket connection on unmount", async () => {
-    const { result, unmount } = renderHook(() =>
-      useWebSocket("ws://acme.com/ws"),
-    );
+  it("should close the WebSocket connection on unmount", async () => {
+    const restoreWebSocket = installDeterministicWebSocket();
+    try {
+      const { result, unmount } = renderHook(() =>
+        useWebSocket("ws://acme.com/ws"),
+      );
+      await waitForConnection(result);
+      const stream = result.current.socket;
+      expect(stream).toBeTruthy();
+      const stopSpy = vi.spyOn(stream!, "stop");
 
-    // Wait for connection to be established
-    await waitFor(() => {
-      expect(result.current.isConnected).toBe(true);
-    });
+      unmount();
 
-    // Verify connection is active
-    expect(result.current.isConnected).toBe(true);
-    expect(result.current.socket).toBeTruthy();
-
-    const closeSpy = vi.spyOn(result.current.socket!, "stop");
-
-    // Unmount the component (this should trigger the useEffect cleanup)
-    unmount();
-
-    // Verify that WebSocket close was called during cleanup
-    expect(closeSpy).toHaveBeenCalledOnce();
+      expect(stopSpy).toHaveBeenCalledOnce();
+      expect(DeterministicWebSocket.instance?.readyState).toBe(
+        DeterministicWebSocket.CLOSED,
+      );
+    } finally {
+      restoreWebSocket();
+    }
   });
 
   it("should support query parameters in WebSocket URL", async () => {
@@ -364,24 +413,23 @@ describe("useWebSocket", () => {
     }
   });
 
-  // Skipped: flaky in CI - see comment at top of file
-  it.skip("should call onOpen handler when WebSocket connection opens", async () => {
+  it("should call onOpen handler when WebSocket connection opens", async () => {
+    const restoreWebSocket = installDeterministicWebSocket();
     const onOpenSpy = vi.fn();
-    const options = { onOpen: onOpenSpy };
+    try {
+      const { result, unmount } = renderHook(() =>
+        useWebSocket("ws://acme.com/ws", { onOpen: onOpenSpy }),
+      );
 
-    const { result } = renderHook(() =>
-      useWebSocket("ws://acme.com/ws", options),
-    );
+      expect(result.current.isConnected).toBe(false);
+      expect(onOpenSpy).not.toHaveBeenCalled();
+      await waitForConnection(result);
 
-    // Initially should not be connected
-    expect(result.current.isConnected).toBe(false);
-    expect(onOpenSpy).not.toHaveBeenCalled();
-
-    // Wait for connection to be established
-    await waitForConnection(result);
-
-    // onOpen handler should have been called
-    expect(onOpenSpy).toHaveBeenCalledOnce();
+      expect(onOpenSpy).toHaveBeenCalledOnce();
+      unmount();
+    } finally {
+      restoreWebSocket();
+    }
   });
 
   it("should call onClose handler when WebSocket connection closes", async () => {
@@ -447,31 +495,25 @@ describe("useWebSocket", () => {
     }
   });
 
-  it.skip("should call onMessage handler when WebSocket receives a message", async () => {
+  it("should call onMessage handler when WebSocket receives a message", async () => {
+    const restoreWebSocket = installDeterministicWebSocket();
     const onMessageSpy = vi.fn();
-    const options = { onMessage: onMessageSpy };
+    try {
+      const { result, unmount } = renderHook(() =>
+        useWebSocket("ws://acme.com/ws", { onMessage: onMessageSpy }),
+      );
+      await waitForConnection(result);
 
-    const { result } = renderHook(() =>
-      useWebSocket("ws://acme.com/ws", options),
-    );
+      act(() => {
+        DeterministicWebSocket.instance?.emitMessage("Hello from server!");
+      });
 
-    // Wait for connection to be established
-    await waitFor(() => {
-      expect(result.current.isConnected).toBe(true);
-    });
-
-    // onMessage handler should have been called for the welcome message
-    await waitFor(() => {
       expect(onMessageSpy).toHaveBeenCalledOnce();
-    });
-
-    // Send another message from the mock server
-    wsLink.broadcast("Hello from server!");
-
-    // onMessage handler should have been called twice now
-    await waitFor(() => {
-      expect(onMessageSpy).toHaveBeenCalledTimes(2);
-    });
+      expect(onMessageSpy.mock.calls[0][0].data).toBe("Hello from server!");
+      unmount();
+    } finally {
+      restoreWebSocket();
+    }
   });
 
   it("should call onError handler when WebSocket encounters an error", async () => {
@@ -509,27 +551,25 @@ describe("useWebSocket", () => {
     expect(onErrorSpy).toHaveBeenCalled();
   });
 
-  it.skip("should provide sendMessage function to send messages to WebSocket", async () => {
-    const { result } = renderHook(() => useWebSocket("ws://acme.com/ws"));
+  it("should provide sendMessage function to send messages to WebSocket", async () => {
+    const restoreWebSocket = installDeterministicWebSocket();
+    try {
+      const { result, unmount } = renderHook(() =>
+        useWebSocket("ws://acme.com/ws"),
+      );
+      await waitForConnection(result);
 
-    // Wait for connection to be established
-    await waitFor(() => {
-      expect(result.current.isConnected).toBe(true);
-    });
+      act(() => {
+        result.current.sendMessage("Hello WebSocket!");
+      });
 
-    // Should have a sendMessage function
-    expect(result.current.sendMessage).toBeDefined();
-    expect(typeof result.current.sendMessage).toBe("function");
-
-    // Mock the WebSocket send method
-    const sendSpy = vi.spyOn(result.current.socket!, "send");
-
-    // Send a message
-    result.current.sendMessage("Hello WebSocket!");
-
-    // Verify that WebSocket.send was called with the correct message
-    expect(sendSpy).toHaveBeenCalledOnce();
-    expect(sendSpy).toHaveBeenCalledWith("Hello WebSocket!");
+      expect(DeterministicWebSocket.instance?.sent).toEqual([
+        "Hello WebSocket!",
+      ]);
+      unmount();
+    } finally {
+      restoreWebSocket();
+    }
   });
 
   it("closes a handshake stuck in CONNECTING at the timeout and retries", async () => {
