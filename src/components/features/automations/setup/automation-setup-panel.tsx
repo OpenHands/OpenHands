@@ -16,7 +16,7 @@ import AutomationService from "#/api/automation-service/automation-service.api";
 import type {
   AutomationSetupDraft,
   AutomationSetupKind,
-} from "#/api/automation-setup-draft-store";
+} from "#/api/automation-setup-types";
 import {
   automationDetailPath,
   getAutomationEndpoint,

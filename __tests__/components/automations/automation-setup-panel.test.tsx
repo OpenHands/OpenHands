@@ -7,7 +7,7 @@ import {
 } from "#/context/navigation-context";
 import { AutomationSetupPanel } from "#/components/features/automations/setup/automation-setup-panel";
 import AutomationService from "#/api/automation-service/automation-service.api";
-import type { AutomationSetupDraft } from "#/api/automation-setup-draft-store";
+import type { AutomationSetupDraft } from "#/api/automation-setup-types";
 import { packTarGzip } from "#/utils/tar-gzip";
 
 const mockNavigate = vi.fn();

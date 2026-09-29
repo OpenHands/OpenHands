@@ -6,19 +6,18 @@ import {
   NavigationProvider,
   type NavigationContextValue,
 } from "#/context/navigation-context";
-import type { AutomationSetupDraft } from "#/api/automation-setup-draft-store";
 import { requestAutomationSetupAgent } from "#/components/features/automations/setup/automation-setup-agent-request";
 
 // Mutable mock state for controlling breakpoint
 let mockIsMobile = false;
 let mockIsRightPanelShown = false;
 let mockLeftWidth = 50;
-let mockAutomationSetupDraft: AutomationSetupDraft | null = null;
+let mockHasAutomationSetupHandoff = false;
 
 const mockNavigate = vi.fn();
 const mockSetHasRightPanelToggled = vi.fn();
 const mockSetIsRightPanelShown = vi.fn();
-const mockClearAutomationSetupDraft = vi.fn();
+const mockClearAutomationSetupHandoff = vi.fn();
 
 // Track ChatInterface unmount via vi.fn()
 const chatInterfaceUnmount = vi.fn();
@@ -50,10 +49,10 @@ vi.mock("#/stores/conversation-store", () => ({
   }),
 }));
 
-vi.mock("#/api/automation-setup-draft-store", () => ({
-  getAutomationSetupDraft: () => mockAutomationSetupDraft,
-  clearAutomationSetupDraft: (...args: unknown[]) =>
-    mockClearAutomationSetupDraft(...args),
+vi.mock("#/api/automation-setup-handoff-store", () => ({
+  consumeAutomationSetupHandoff: () => mockHasAutomationSetupHandoff,
+  clearAutomationSetupHandoff: (...args: unknown[]) =>
+    mockClearAutomationSetupHandoff(...args),
 }));
 
 vi.mock("#/hooks/query/use-active-conversation", () => ({
@@ -189,12 +188,12 @@ describe("ConversationMain - Layout Transition Stability", () => {
     mockIsMobile = false;
     mockIsRightPanelShown = false;
     mockLeftWidth = 50;
-    mockAutomationSetupDraft = null;
+    mockHasAutomationSetupHandoff = false;
     chatInterfaceUnmount.mockClear();
     mockNavigate.mockClear();
     mockSetHasRightPanelToggled.mockClear();
     mockSetIsRightPanelShown.mockClear();
-    mockClearAutomationSetupDraft.mockClear();
+    mockClearAutomationSetupHandoff.mockClear();
   });
 
   it("renders ChatInterface at desktop width", () => {
@@ -293,10 +292,7 @@ describe("ConversationMain - Layout Transition Stability", () => {
   it("uses a single automation setup top bar with splash back navigation", async () => {
     const user = userEvent.setup();
     mockIsRightPanelShown = true;
-    mockAutomationSetupDraft = {
-      prompt: "Write a haiku each morning",
-      kind: "prompt",
-    };
+    mockHasAutomationSetupHandoff = true;
 
     renderConversationMain();
 
@@ -328,10 +324,7 @@ describe("ConversationMain - Layout Transition Stability", () => {
     const user = userEvent.setup();
     mockIsMobile = true;
     mockIsRightPanelShown = true;
-    mockAutomationSetupDraft = {
-      prompt: "Write a haiku each morning",
-      kind: "prompt",
-    };
+    mockHasAutomationSetupHandoff = true;
 
     renderConversationMain();
 
@@ -411,10 +404,7 @@ describe("ConversationMain - Layout Transition Stability", () => {
   it("expands the automation form to full width when hiding the agent", async () => {
     const user = userEvent.setup();
     mockIsRightPanelShown = true;
-    mockAutomationSetupDraft = {
-      prompt: "Write a haiku each morning",
-      kind: "prompt",
-    };
+    mockHasAutomationSetupHandoff = true;
 
     renderConversationMain();
 
@@ -462,10 +452,7 @@ describe("ConversationMain - Layout Transition Stability", () => {
   it("reveals the agent when the setup form asks for help", async () => {
     const user = userEvent.setup();
     mockIsRightPanelShown = true;
-    mockAutomationSetupDraft = {
-      prompt: "Write a haiku each morning",
-      kind: "prompt",
-    };
+    mockHasAutomationSetupHandoff = true;
 
     renderConversationMain();
     await user.click(screen.getByTestId("automation-setup-agent-toggle"));

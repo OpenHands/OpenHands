@@ -15,10 +15,10 @@ import { useConversationStore } from "#/stores/conversation-store";
 import { AUTOMATION_SETUP_SHOW_AGENT_EVENT } from "#/components/features/automations/setup/automation-setup-agent-request";
 import { AutomationSetupPanel } from "#/components/features/automations/setup/automation-setup-panel";
 import {
-  clearAutomationSetupDraft,
-  getAutomationSetupDraft,
-  type AutomationSetupDraft,
-} from "#/api/automation-setup-draft-store";
+  clearAutomationSetupHandoff,
+  consumeAutomationSetupHandoff,
+} from "#/api/automation-setup-handoff-store";
+import type { AutomationSetupDraft } from "#/api/automation-setup-types";
 import { useConversationId } from "#/hooks/use-conversation-id";
 import {
   useBreakpoint,
@@ -33,6 +33,11 @@ import { I18nKey } from "#/i18n/declaration";
 import { formControlTransitionClassName } from "#/utils/form-control-classes";
 
 const SPLASH_ROUTE = "/";
+
+const BLANK_AUTOMATION_SETUP_DRAFT: AutomationSetupDraft = {
+  prompt: "",
+  kind: "prompt",
+};
 
 type MobileAutomationView = "form" | "conversation";
 
@@ -86,10 +91,9 @@ export function ConversationMain() {
   const isSidebarRailHidden = useBreakpoint(SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH);
   const { isRightPanelShown, setHasRightPanelToggled, setIsRightPanelShown } =
     useConversationStore();
-  const [automationSetupDraft, setAutomationSetupDraftState] =
-    useState<AutomationSetupDraft | null>(() =>
-      getAutomationSetupDraft(conversationId),
-    );
+  const [isAutomationSetupMode, setIsAutomationSetupMode] = useState(() =>
+    consumeAutomationSetupHandoff(conversationId),
+  );
   const [automationToolbarElement, setAutomationToolbarElement] =
     useState<HTMLDivElement | null>(null);
   const [isAutomationAgentHidden, setIsAutomationAgentHidden] = useState(false);
@@ -99,7 +103,9 @@ export function ConversationMain() {
     useState<HTMLDivElement | null>(null);
   const overviewDrawer = useConversationOverviewDrawerOptional();
   const isSecondaryDrawerOpen = Boolean(overviewDrawer?.section);
-  const isAutomationSetupMode = Boolean(automationSetupDraft);
+  const automationSetupDraft = isAutomationSetupMode
+    ? BLANK_AUTOMATION_SETUP_DRAFT
+    : null;
   const showMobileAutomationForm =
     isMobile && isAutomationSetupMode && mobileAutomationView === "form";
 
@@ -112,7 +118,7 @@ export function ConversationMain() {
     });
 
   useEffect(() => {
-    setAutomationSetupDraftState(getAutomationSetupDraft(conversationId));
+    setIsAutomationSetupMode(consumeAutomationSetupHandoff(conversationId));
   }, [conversationId]);
 
   useEffect(() => {
@@ -128,8 +134,8 @@ export function ConversationMain() {
   }, [automationSetupDraft]);
 
   const closeAutomationSetup = () => {
-    if (conversationId) clearAutomationSetupDraft(conversationId);
-    setAutomationSetupDraftState(null);
+    if (conversationId) clearAutomationSetupHandoff(conversationId);
+    setIsAutomationSetupMode(false);
     setIsRightPanelShown(false);
   };
 
