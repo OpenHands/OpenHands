@@ -37,30 +37,46 @@ describe("setupDraftFromAutomation", () => {
     });
   });
 
-  it("recognizes hourly cron and event triggers", () => {
-    expect(
-      setupDraftFromAutomation(
-        automation({ trigger: { type: "cron", schedule: "0 * * * *" } }),
-      ).form?.frequency,
-    ).toBe("hourly");
-
-    expect(
-      setupDraftFromAutomation(
-        automation({
-          prompt: "On each pull request",
-          trigger: {
-            type: "event",
-            source: "github",
-            on: "pull_request",
-            filter: "action == 'opened'",
-          },
-        }),
-      ).form,
-    ).toMatchObject({
-      triggerKind: "event",
-      eventSource: "github",
-      eventKey: "pull_request",
-      eventFilter: "action == 'opened'",
-    });
+  it.each([
+    {
+      name: "hourly cron",
+      automation: automation({
+        trigger: { type: "cron", schedule: "0 * * * *" },
+      }),
+      expected: { triggerKind: "cron", frequency: "hourly" },
+    },
+    {
+      name: "custom cron",
+      automation: automation({
+        trigger: { type: "cron", schedule: "*/17 * * * *" },
+      }),
+      expected: {
+        triggerKind: "cron",
+        frequency: "custom",
+        customSchedule: "*/17 * * * *",
+      },
+    },
+    {
+      name: "event trigger",
+      automation: automation({
+        prompt: "On each pull request",
+        trigger: {
+          type: "event",
+          source: "github",
+          on: "pull_request",
+          filter: "action == 'opened'",
+        },
+      }),
+      expected: {
+        triggerKind: "event",
+        eventSource: "github",
+        eventKey: "pull_request",
+        eventFilter: "action == 'opened'",
+      },
+    },
+  ])("maps $name fields", ({ automation: savedAutomation, expected }) => {
+    expect(setupDraftFromAutomation(savedAutomation).form).toMatchObject(
+      expected,
+    );
   });
 });

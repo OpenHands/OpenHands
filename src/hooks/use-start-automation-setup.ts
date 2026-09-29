@@ -1,5 +1,4 @@
 import { useCallback } from "react";
-import { useTranslation } from "react-i18next";
 import {
   PENDING_AUTOMATION_SETUP_ID,
   clearAutomationFormSession,
@@ -9,11 +8,8 @@ import {
 import { markAutomationSetupHandoff } from "#/api/automation-setup-handoff-store";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useNavigation } from "#/context/navigation-context";
-import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
+import { useCreateAutomationSetupConversation } from "#/hooks/use-create-automation-setup-conversation";
 import { useTracking } from "#/hooks/use-tracking";
-import { I18nKey } from "#/i18n/declaration";
-import { getApiErrorMessage } from "#/utils/api-error-message";
-import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 /**
  * Open a new automation on the setup form.
@@ -23,10 +19,10 @@ import { displayErrorToast } from "#/utils/custom-toast-handlers";
  * starts only after the user sends a prompt.
  */
 export function useStartAutomationSetup() {
-  const { t } = useTranslation("openhands");
   const active = useActiveBackend();
   const { navigate } = useNavigation();
-  const createConversation = useCreateConversation();
+  const { startAutomationSetupConversation, isPending } =
+    useCreateAutomationSetupConversation();
   const { trackAutomationCreatedButton } = useTracking();
 
   const startSetup = useCallback(() => {
@@ -36,42 +32,27 @@ export function useStartAutomationSetup() {
 
   const startConversationFromPrompt = useCallback(
     (prompt: string) => {
-      const text = prompt.trim();
-      if (!text || createConversation.isPending) return;
       const draft = getAutomationFormSession(PENDING_AUTOMATION_SETUP_ID) ?? {
         prompt: "",
         kind: "prompt" as const,
       };
-      createConversation.mutate(
-        {
-          query: text,
-          automationSetup: true,
-          entryPoint: "automations_add",
+      startAutomationSetupConversation({
+        query: prompt,
+        entryPoint: "automations_add",
+        onSuccess: (conversation) => {
+          initializeAutomationFormSession(conversation.conversation_id, draft);
+          markAutomationSetupHandoff(conversation.conversation_id);
+          clearAutomationFormSession(PENDING_AUTOMATION_SETUP_ID);
+          navigate?.(`/conversations/${conversation.conversation_id}`);
         },
-        {
-          onSuccess: (conversation) => {
-            initializeAutomationFormSession(
-              conversation.conversation_id,
-              draft,
-            );
-            markAutomationSetupHandoff(conversation.conversation_id);
-            clearAutomationFormSession(PENDING_AUTOMATION_SETUP_ID);
-            navigate?.(`/conversations/${conversation.conversation_id}`);
-          },
-          onError: (error) => {
-            displayErrorToast(
-              getApiErrorMessage(error, t(I18nKey.ERROR$GENERIC)),
-            );
-          },
-        },
-      );
+      });
     },
-    [createConversation, navigate, t],
+    [navigate, startAutomationSetupConversation],
   );
 
   return {
     startSetup,
     startConversationFromPrompt,
-    isPending: createConversation.isPending,
+    isPending,
   };
 }

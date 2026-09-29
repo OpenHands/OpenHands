@@ -1,3 +1,12 @@
+import { useCallback, useState } from "react";
+import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import { initializeAutomationFormSession } from "#/api/automation-form-session";
+import { useNavigation } from "#/context/navigation-context";
+import { useCreateAutomationSetupConversation } from "#/hooks/use-create-automation-setup-conversation";
+import type { Automation } from "#/types/automation";
+import { setupDraftFromAutomation } from "#/utils/automation-edit-draft";
+import { buildAutomationEditTags } from "#/utils/automation-draft-tags";
+
 /**
  * Open an existing automation in the setup page.
  *
@@ -6,23 +15,10 @@
  * and tags it so a reload still knows which automation Save and Test
  * should update.
  */
-import { useCallback, useState } from "react";
-import { useTranslation } from "react-i18next";
-import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
-import { initializeAutomationFormSession } from "#/api/automation-form-session";
-import { useNavigation } from "#/context/navigation-context";
-import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
-import { I18nKey } from "#/i18n/declaration";
-import type { Automation } from "#/types/automation";
-import { getApiErrorMessage } from "#/utils/api-error-message";
-import { setupDraftFromAutomation } from "#/utils/automation-edit-draft";
-import { buildAutomationEditTags } from "#/utils/automation-draft-tags";
-import { displayErrorToast } from "#/utils/custom-toast-handlers";
-
 export function useOpenAutomationEditor() {
-  const { t } = useTranslation("openhands");
   const { navigate } = useNavigation();
-  const createConversationMutation = useCreateConversation();
+  const { startAutomationSetupConversation } =
+    useCreateAutomationSetupConversation();
   const [openingAutomationId, setOpeningAutomationId] = useState<string | null>(
     null,
   );
@@ -31,46 +27,37 @@ export function useOpenAutomationEditor() {
     (automation: Automation) => {
       if (openingAutomationId) return;
       setOpeningAutomationId(automation.id);
-      createConversationMutation.mutate(
-        {
-          query: automation.prompt?.trim() || automation.name,
-          automationSetup: true,
-          entryPoint: "automation_edit",
-        },
-        {
-          onSuccess: async (conversation) => {
-            const conversationId = conversation.conversation_id;
-            initializeAutomationFormSession(
-              conversationId,
-              setupDraftFromAutomation(automation),
-            );
-            try {
-              const [conversationDetails] =
-                await AgentServerConversationService.batchGetAppConversations([
-                  conversationId,
-                ]);
-              await AgentServerConversationService.updateConversationTags(
+      const started = startAutomationSetupConversation({
+        query: automation.prompt?.trim() || automation.name,
+        entryPoint: "automation_edit",
+        onSuccess: async (conversation) => {
+          const conversationId = conversation.conversation_id;
+          initializeAutomationFormSession(
+            conversationId,
+            setupDraftFromAutomation(automation),
+          );
+          try {
+            const [conversationDetails] =
+              await AgentServerConversationService.batchGetAppConversations([
                 conversationId,
-                buildAutomationEditTags(
-                  conversationDetails?.tags ?? null,
-                  automation.id,
-                ),
-              );
-            } catch {
-              // The in-memory form draft still opens the form for this navigation.
-            }
-            navigate?.(`/conversations/${conversationId}`);
-          },
-          onError: (error) => {
-            displayErrorToast(
-              getApiErrorMessage(error, t(I18nKey.ERROR$GENERIC)),
+              ]);
+            await AgentServerConversationService.updateConversationTags(
+              conversationId,
+              buildAutomationEditTags(
+                conversationDetails?.tags ?? null,
+                automation.id,
+              ),
             );
-          },
-          onSettled: () => setOpeningAutomationId(null),
+          } catch {
+            // The in-memory form draft still opens the form for this navigation.
+          }
+          navigate?.(`/conversations/${conversationId}`);
         },
-      );
+        onSettled: () => setOpeningAutomationId(null),
+      });
+      if (!started) setOpeningAutomationId(null);
     },
-    [createConversationMutation, navigate, openingAutomationId, t],
+    [navigate, openingAutomationId, startAutomationSetupConversation],
   );
 
   return { openEditor, openingAutomationId };
