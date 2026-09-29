@@ -250,10 +250,25 @@ function normalizeLaunchedAgentProfile(
 }
 
 function normalizeAbsolutePath(path: string): string | null {
-  if (!path.startsWith("/")) return null;
+  // Windows drive-letter absolute paths (e.g. `C:\Users\me\ws` or mixed
+  // `C:/Users\me/ws`) normalize against the drive root: separators become
+  // `/`, `.`/`..` segments resolve, and the drive letter lowercases so
+  // containment compares case-insensitively. POSIX paths skip this branch
+  // entirely and behave exactly as before.
+  const driveMatch = /^[A-Za-z]:[\\/]/.exec(path);
+  let rest: string;
+  let root: string;
+  if (driveMatch) {
+    rest = path.slice(3).replace(/\\/g, "/");
+    root = `${driveMatch[0][0].toLowerCase()}:/`;
+  } else {
+    if (!path.startsWith("/")) return null;
+    rest = path;
+    root = "/";
+  }
 
   const segments: string[] = [];
-  for (const segment of path.split("/")) {
+  for (const segment of rest.split("/")) {
     if (segment && segment !== ".") {
       if (segment === "..") {
         if (!segments.length) return null;
@@ -264,7 +279,7 @@ function normalizeAbsolutePath(path: string): string | null {
     }
   }
 
-  return `/${segments.join("/")}`;
+  return `${root}${segments.join("/")}`;
 }
 
 function requirePathInsideDirectory(path: string, directory: string): string {
