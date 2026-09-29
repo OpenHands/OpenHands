@@ -79,6 +79,14 @@ agent-canvas --frontend-only  # static frontend + ingress only
 agent-canvas --backend-only   # agent server + automation backend + ingress only
 ```
 
+`agent-canvas` exposes a single ingress origin on port `8000` (override with
+`-p`/`--port` or the `PORT` env var). Everything — the UI, `/api/*`, and
+`/api/automation/*` — is reachable through that one port. Internally the
+frontend serves on port `3001`; if that port is already taken by another app,
+Agent Canvas automatically picks a free port and keeps serving through the
+ingress origin. To pin the frontend port explicitly (e.g. so you can hard-code
+a CORS rule), use `--frontend-port <port>` or `OH_CANVAS_SAFE_VITE_PORT=<port>`.
+
 ### Option 2: With a Docker Sandbox
 
 **Prerequisites**:
