@@ -87,41 +87,41 @@ AUTOMATION_PORT="${AUTOMATION_PORT:-${CONFIG_AUTOMATION_PORT:-18001}}"
 # moving the route, leaving the button pointing at a path the proxy never
 # serves.
 VSCODE_ROUTE_ARGS=()
+# >>> canvas-base-path: this block is extracted and executed by
+# >>> __tests__/scripts/docker-vscode-route-sync.test.ts — keep the markers.
+# Accept "canvas" and "/canvas/" alike: agent-server and both static-server
+# instances normalize whatever they are handed, so this settles on one spelling
+# for every consumer and keeps the collision guard below comparing the value the
+# router will actually use.
+normalize_base_path() {
+  local p="$1"
+  while [ "${p#/}" != "$p" ]; do p="${p#/}"; done
+  while [ "${p%/}" != "$p" ]; do p="${p%/}"; done
+  printf '/%s' "$p"
+}
+# Resolved outside the editor guard on purpose: this value is consumed
+# unconditionally further down (the `--base-path` arguments to both static-server
+# instances and the reserved-route list) and this script runs under `set -u`, so
+# leaving it unresolved aborts the entrypoint with "unbound variable" whenever
+# the editor is disabled — the default.
+AGENT_CANVAS_BASE_PATH="${AGENT_CANVAS_BASE_PATH:-${CONFIG_CANVAS_BASE_PATH:-/canvas}}"
+AGENT_CANVAS_BASE_PATH="$(normalize_base_path "$AGENT_CANVAS_BASE_PATH")"
+# <<< canvas-base-path
+
 if [ "${OH_CANVAS_ENABLE_VSCODE:-false}" = "true" ]; then
   # >>> vscode-config: this block is extracted and executed by
   # >>> __tests__/scripts/docker-vscode-route-sync.test.ts — keep the markers.
-  # The canvas mount is resolved here rather than alongside the ports above
-  # because the collision guard below compares the two prefixes: keeping both
-  # inside the extracted block is what lets that comparison be tested against the
-  # real defaults instead of only against values a test injects.
-  AGENT_CANVAS_BASE_PATH="${AGENT_CANVAS_BASE_PATH:-${CONFIG_CANVAS_BASE_PATH:-/canvas}}"
   VSCODE_PORT="${OH_VSCODE_PORT:-${VSCODE_PORT:-}}"
   VSCODE_BASE_PATH="${OH_VSCODE_BASE_PATH:-${VSCODE_BASE_PATH:-/vscode}}"
 
   # Accept "editor", "/editor" and "/editor/" alike: agent-server strips the
   # slashes when it builds the advertised URL, the static-server route table
   # needs the leading one, so settle on one spelling rather than one per use site.
-  normalize_base_path() {
-    local p="$1"
-    while [ "${p#/}" != "$p" ]; do p="${p#/}"; done
-    while [ "${p%/}" != "$p" ]; do p="${p%/}"; done
-    printf '/%s' "$p"
-  }
   VSCODE_BASE_PATH="$(normalize_base_path "$VSCODE_BASE_PATH")"
   if [ "$VSCODE_BASE_PATH" = "/" ]; then
     log_error "VSCODE_BASE_PATH resolved to the site root — that would route the whole origin to the editor instead of the canvas. Set a prefix such as /vscode."
     exit 1
   fi
-
-  # The canvas mount gets the same treatment, for the same reason and with the
-  # same function. static-server normalizes whatever `--base-path` it is handed
-  # (`canvas` and `/canvas/` both mount at `/canvas`), so comparing a normalized
-  # editor prefix against a raw canvas one below would let `AGENT_CANVAS_BASE_PATH=canvas`
-  # with `OH_VSCODE_BASE_PATH=/canvas` past the collision guard and then land both
-  # on `/canvas` — where the editor route, registered after the SPA mount, takes
-  # the application over. Normalizing here rather than at the comparison keeps the
-  # value passed to `--base-path` further down identical to the one guarded.
-  AGENT_CANVAS_BASE_PATH="$(normalize_base_path "$AGENT_CANVAS_BASE_PATH")"
 
   # static-server keys its route table by prefix and the editor route is
   # registered last, so a prefix that collides with an earlier route silently

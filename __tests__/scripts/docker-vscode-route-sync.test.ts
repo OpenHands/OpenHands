@@ -60,17 +60,31 @@ function staticServerInvocations(): string[] {
 // it to keep the enabled/disabled behavior under test.
 const BLOCK_START = "# >>> vscode-config";
 const BLOCK_END = "# <<< vscode-config";
+// The canvas mount is resolved outside the editor guard (it has non-editor
+// consumers and the script runs under `set -u`), so the harness has to run that
+// block too: the collision guard inside the editor block compares against the
+// value it produces.
+const CANVAS_BLOCK_START = "# >>> canvas-base-path";
+const CANVAS_BLOCK_END = "# <<< canvas-base-path";
 
-function editorConfigBlock(): string {
-  const start = entrypoint.indexOf(BLOCK_START);
-  const end = entrypoint.indexOf(BLOCK_END);
+function markedBlock(startMarker: string, endMarker: string): string {
+  const start = entrypoint.indexOf(startMarker);
+  const end = entrypoint.indexOf(endMarker);
   if (start === -1 || end === -1) {
     throw new Error(
-      `docker/entrypoint.sh is missing the "${BLOCK_START}"/"${BLOCK_END}" markers; ` +
-        "the editor-config block can no longer be located, so its behavior is untested.",
+      `docker/entrypoint.sh is missing the "${startMarker}"/"${endMarker}" markers; ` +
+        "the block can no longer be located, so its behavior is untested.",
     );
   }
   return entrypoint.slice(start, end);
+}
+
+function canvasBasePathBlock(): string {
+  return markedBlock(CANVAS_BLOCK_START, CANVAS_BLOCK_END);
+}
+
+function editorConfigBlock(): string {
+  return markedBlock(BLOCK_START, BLOCK_END);
 }
 
 interface ResolvedEditorConfig {
@@ -90,8 +104,11 @@ function resolveEditorConfig(
 ): ResolvedEditorConfig {
   const script = [
     "set -uo pipefail",
-    // Defined near the top of entrypoint.sh, above the extracted block.
+    // Defined near the top of entrypoint.sh, above the extracted blocks.
     `log_error() { printf 'ERROR: %s\\n' "$*" >&2; }`,
+    // Runs before the guard in entrypoint.sh, and is what the editor block's
+    // collision guard compares against.
+    canvasBasePathBlock(),
     // Mirrors the guard wrapping the block in entrypoint.sh.
     `OH_CANVAS_ENABLE_VSCODE="\${OH_CANVAS_ENABLE_VSCODE:-false}"`,
     "VSCODE_ROUTE_ARGS=()",
