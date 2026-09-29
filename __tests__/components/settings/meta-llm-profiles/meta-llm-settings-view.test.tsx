@@ -185,8 +185,12 @@ describe("MetaLlmSettingsView", () => {
     expect(
       screen.getByTestId("meta-profile-template-modal"),
     ).toBeInTheDocument();
-    expect(screen.getByTestId("meta-profile-template-router-pro")).toBeEnabled();
-    expect(screen.getByTestId("meta-profile-template-router-flash")).toBeEnabled();
+    expect(
+      screen.getByTestId("meta-profile-template-router-pro"),
+    ).toBeEnabled();
+    expect(
+      screen.getByTestId("meta-profile-template-router-flash"),
+    ).toBeEnabled();
     expect(screen.getByTestId("meta-profile-template-custom")).toBeEnabled();
   });
 
