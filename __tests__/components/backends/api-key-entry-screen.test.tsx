@@ -197,7 +197,7 @@ describe("ApiKeyEntryScreen", () => {
       expect(screen.getByTestId("api-key-entry-status")).toBeInTheDocument();
     });
     expect(screen.getByTestId("api-key-entry-status")).toHaveClass(
-      "text-red-400",
+      "text-danger",
     );
     expect(screen.getByTestId("api-key-entry-status").textContent).toContain(
       "AUTH$INVALID_KEY",
@@ -266,7 +266,7 @@ describe("ApiKeyEntryScreen", () => {
     await user.click(screen.getByTestId("api-key-entry-submit"));
     await waitFor(() => {
       expect(screen.getByTestId("api-key-entry-status")).toHaveClass(
-        "text-red-400",
+        "text-danger",
       );
     });
 

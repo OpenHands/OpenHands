@@ -25,6 +25,10 @@ import DockerIcon from "#/icons/docker.svg?react";
 import NpmIcon from "#/icons/npm.svg?react";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
+import {
+  statusToneBadgeClassName,
+  statusToneBannerClassName,
+} from "#/utils/status-tone-classes";
 
 const COPY_FEEDBACK_MS = 2000;
 
@@ -205,7 +209,12 @@ function AgentCanvasUpdateModal({
                 {t(I18nKey.SETTINGS$APP_UPDATE_CHECKING)}
               </span>
             ) : updateAvailable ? (
-              <div className="flex items-start gap-2 rounded-lg border border-[#3B82F6]/30 bg-[#1E3A5F] px-3 py-2 text-xs text-[#3B82F6]">
+              <div
+                className={cn(
+                  "flex items-start gap-2 rounded-lg px-3 py-2 text-xs dark:border-[#3B82F6]/30 dark:bg-[#1E3A5F] dark:text-[#3B82F6]",
+                  statusToneBannerClassName.info,
+                )}
+              >
                 <ArrowUpCircle className="size-4 shrink-0" aria-hidden />
                 <span>
                   {t(I18nKey.SETTINGS$APP_UPDATE_AVAILABLE_MESSAGE, {
@@ -224,7 +233,12 @@ function AgentCanvasUpdateModal({
                 </span>
               </div>
             ) : upToDate ? (
-              <div className="flex items-start gap-2 rounded-lg border border-status-success/30 bg-status-success/10 px-3 py-2 text-xs text-status-success">
+              <div
+                className={cn(
+                  "flex items-start gap-2 rounded-lg px-3 py-2 text-xs dark:border-status-success/30 dark:bg-status-success/10 dark:text-status-success",
+                  statusToneBannerClassName.success,
+                )}
+              >
                 <CircleCheck className="size-4 shrink-0" aria-hidden />
                 <span>
                   {t(I18nKey.SETTINGS$APP_UPDATE_LATEST_MESSAGE)}{" "}
@@ -318,7 +332,10 @@ export function AgentCanvasUpdateCard({
                 className={cn(
                   "inline-flex shrink-0 items-center gap-1 text-[10px] font-medium leading-none",
                   updateAvailable
-                    ? "rounded-full border border-transparent bg-[#1E3A5F] px-1.5 py-0.5 text-[#3B82F6]"
+                    ? cn(
+                        "rounded-full border border-info/30 px-1.5 py-0.5 dark:border-transparent dark:bg-[#1E3A5F] dark:text-[#3B82F6]",
+                        statusToneBadgeClassName.info,
+                      )
                     : "text-success",
                 )}
               >

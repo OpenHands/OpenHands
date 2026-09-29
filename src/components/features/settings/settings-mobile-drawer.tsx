@@ -61,7 +61,11 @@ export function SettingsMobileDrawer({
             )}
             aria-label={t(I18nKey.SIDEBAR$CLOSE_MENU)}
           >
-            <CloseIcon width={32} height={32} />
+            <CloseIcon
+              width={32}
+              height={32}
+              className="text-contrast dark:text-white"
+            />
           </button>
         </div>
 

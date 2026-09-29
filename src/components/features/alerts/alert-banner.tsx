@@ -136,7 +136,7 @@ export function AlertBanner({
           "bg-base rounded-full w-5 h-5 flex items-center justify-center cursor-pointer",
         )}
       >
-        <CloseIcon />
+        <CloseIcon className="text-contrast dark:text-white" />
       </button>
     </div>
   );

@@ -24,14 +24,14 @@ import {
 
 const TONE_BAR_CLASS = {
   neutral: "bg-foreground",
-  warning: "bg-amber-500",
-  danger: "bg-red-500",
+  warning: "bg-warning dark:bg-amber-500",
+  danger: "bg-danger dark:bg-red-500",
 } as const;
 
 const TONE_LABEL_CLASS = {
   neutral: "text-muted",
-  warning: "text-amber-500",
-  danger: "text-red-500",
+  warning: "text-warning dark:text-amber-500",
+  danger: "text-danger dark:text-red-500",
 } as const;
 
 export function ContextWindowMeter() {

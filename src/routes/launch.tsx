@@ -105,7 +105,7 @@ function ErrorDisplay({
       data-testid="launch-error"
     >
       <div className="max-w-md rounded-lg bg-surface p-6 text-center">
-        <h2 className="mb-4 text-xl font-medium text-red-400">
+        <h2 className="mb-4 text-xl font-medium text-danger dark:text-red-400">
           {t(I18nKey.LAUNCH$ERROR_TITLE)}
         </h2>
         <p className="mb-6 text-text-tertiary">{errorMessages[errorType]}</p>

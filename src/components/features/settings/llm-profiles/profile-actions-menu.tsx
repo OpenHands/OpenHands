@@ -5,7 +5,6 @@ import {
   useCallback,
   useState,
 } from "react";
-import ReactDOM from "react-dom";
 import { useTranslation } from "react-i18next";
 import { TextCursor, Copy } from "lucide-react";
 import { cn } from "#/utils/utils";
@@ -15,6 +14,7 @@ import EditIcon from "#/icons/u-edit.svg?react";
 import CheckCircleIcon from "#/icons/u-check-circle.svg?react";
 import DeleteIcon from "#/icons/u-delete.svg?react";
 import { MenuItem } from "./profile-actions-menu-item";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
 
 interface ProfileActionsMenuProps {
   onEdit: () => void;
@@ -201,10 +201,11 @@ export function ProfileActionsMenu({
     if (typeof document === "undefined" || !portalStyle) {
       return null;
     }
-    return ReactDOM.createPortal(
-      // portal position computed from DOM bounding rect at runtime
-      <div style={portalStyle}>{menu}</div>,
-      document.body,
+    return (
+      <AppearancePortal>
+        {/* portal position computed from DOM bounding rect at runtime */}
+        <div style={portalStyle}>{menu}</div>
+      </AppearancePortal>
     );
   }
 

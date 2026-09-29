@@ -9,6 +9,7 @@ import {
 } from "#/hooks/query/use-backends-health";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
+import { statusToneTextClassName } from "#/utils/status-tone-classes";
 import { BackendStatusDot } from "./backend-status-dot";
 import { BackendVersion } from "./backend-version";
 import { DeviceFlowAuth } from "./device-flow-auth";
@@ -54,9 +55,9 @@ export function BackendRow({
     : getBackendStatusLabel(t, backend, health);
   const statusClassName =
     health?.isConnected === true
-      ? "text-green-300"
+      ? cn(statusToneTextClassName.success, "dark:text-green-300")
       : health?.isConnected === false
-        ? "text-red-300"
+        ? cn(statusToneTextClassName.danger, "dark:text-red-300")
         : "text-muted";
   const dotStatus = isInvalidApiKey ? false : (health?.isConnected ?? null);
   const canSelect = health?.isConnected === true && !isInvalidApiKey;
@@ -105,7 +106,7 @@ export function BackendRow({
             <span
               data-testid={`manage-backends-status-detail-${backend.name}`}
               title={statusDetail}
-              className="text-xs text-red-300/80 whitespace-normal break-words"
+              className="text-xs text-danger whitespace-normal break-words dark:text-red-300/80"
             >
               {statusDetail}
             </span>

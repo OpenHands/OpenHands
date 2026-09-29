@@ -29,13 +29,13 @@ describe("ContextMeter", () => {
   it("warns above 70% fill", () => {
     render(<ContextMeter perTurnToken={75} contextWindow={100} />);
 
-    expect(screen.getByTestId("context-meter-bar")).toHaveClass("bg-amber-500");
+    expect(screen.getByTestId("context-meter-bar")).toHaveClass("bg-warning");
   });
 
   it("signals danger above 90% fill", () => {
     render(<ContextMeter perTurnToken={95} contextWindow={100} />);
 
-    expect(screen.getByTestId("context-meter-bar")).toHaveClass("bg-red-500");
+    expect(screen.getByTestId("context-meter-bar")).toHaveClass("bg-danger");
     expect(screen.getByTestId("context-meter")).toHaveTextContent(
       "95% CONVERSATION$USED (5% CONVERSATION$LEFT)",
     );

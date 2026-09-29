@@ -117,7 +117,9 @@ describe("SkillCardPillRow", () => {
     await user.click(overflow);
 
     const popover = screen.getByTestId("skill-triggers-test-overflow-popover");
-    expect(popover.parentElement).toBe(document.body);
+    // The appearance wrapper is display: contents, so the popover still lays out at body level.
+    expect(popover.parentElement).toHaveClass("contents");
+    expect(popover.parentElement?.parentElement).toBe(document.body);
     expect(
       within(popover).getByTestId("skill-triggers-test-overflow-item"),
     ).toHaveTextContent("review-fast");

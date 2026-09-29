@@ -322,7 +322,7 @@ export function CloudNewConversationMenu({
             )}
             {isError && (
               <li
-                className="px-2 py-2 text-sm text-[#F87171]"
+                className="px-2 py-2 text-sm text-danger dark:text-[#F87171]"
                 data-testid="cloud-repo-error"
               >
                 {t(I18nKey.HOME$FAILED_TO_LOAD_REPOSITORIES)}

@@ -1104,7 +1104,7 @@ export function ConversationPanel({
                 onClick={toggleAllGroupsCollapsed}
                 className={cn(
                   "min-w-0 cursor-pointer truncate text-left text-sm font-medium",
-                  "text-muted transition-colors hover:text-white",
+                  "text-muted transition-colors hover:text-contrast",
                   "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border",
                 )}
               >

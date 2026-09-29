@@ -1,5 +1,4 @@
 import React, { useLayoutEffect, useState } from "react";
-import ReactDOM from "react-dom";
 import { useTranslation } from "react-i18next";
 import { ContextMenu } from "#/ui/context-menu";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
@@ -25,6 +24,7 @@ import {
   dropdownInstantColorClassName,
   dropdownMenuRowIconWrapperClassName,
 } from "#/utils/dropdown-classes";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
 
 interface ConversationTabsContextMenuProps {
   isOpen: boolean;
@@ -249,9 +249,10 @@ export function ConversationTabsContextMenu({
   );
 
   if (isPortaled && portalStyle && typeof document !== "undefined") {
-    return ReactDOM.createPortal(
-      <div style={portalStyle}>{menu}</div>,
-      document.body,
+    return (
+      <AppearancePortal>
+        <div style={portalStyle}>{menu}</div>
+      </AppearancePortal>
     );
   }
 

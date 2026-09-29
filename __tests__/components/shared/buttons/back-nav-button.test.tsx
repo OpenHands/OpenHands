@@ -25,7 +25,8 @@ describe("BackNavButton", () => {
 
     expect(screen.getByTestId("back-button")).toHaveClass(
       "border",
-      "border-border",
+      "border-border-input",
+      "dark:border-border",
     );
   });
 });

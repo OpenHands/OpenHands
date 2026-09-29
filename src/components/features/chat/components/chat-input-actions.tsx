@@ -1,5 +1,4 @@
 import React from "react";
-import ReactDOM from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Cpu } from "lucide-react";
 import { AgentStatus } from "#/components/features/controls/agent-status";
@@ -39,6 +38,7 @@ import {
   chatInputIconButtonClassName,
   formControlTransitionClassName,
 } from "#/utils/form-control-classes";
+import { AppearancePortal } from "#/components/shared/appearance-portal";
 
 interface ChatInputActionsProps {
   disabled: boolean;
@@ -477,10 +477,10 @@ export function ChatInputActions({
 
               {isOverflowOpen &&
                 typeof document !== "undefined" &&
-                overflowPortalStyle &&
-                ReactDOM.createPortal(
-                  <div style={overflowPortalStyle}>{overflowMenu}</div>,
-                  document.body,
+                overflowPortalStyle && (
+                  <AppearancePortal>
+                    <div style={overflowPortalStyle}>{overflowMenu}</div>
+                  </AppearancePortal>
                 )}
             </div>
           )}

@@ -80,7 +80,7 @@ export function ProfileRow({
         )}
         {profile.provider_connection_broken && (
           <span
-            className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-warning px-2 py-0.5 text-xs font-medium text-black"
+            className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-warning px-2 py-0.5 text-xs font-medium text-[var(--oh-warning-foreground)] dark:text-black"
             title={t(I18nKey.SETTINGS$PROFILE_BROKEN_CONNECTION_TOOLTIP)}
             data-testid="profile-broken-connection-badge"
           >

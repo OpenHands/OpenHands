@@ -158,7 +158,7 @@ function FilesTab() {
       <RefreshIcon
         width={12.75}
         height={15}
-        color="#ffffff"
+        color="var(--oh-contrast)"
         className={isRefreshing ? "animate-spin" : ""}
       />
     </button>
