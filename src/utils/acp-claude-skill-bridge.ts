@@ -110,7 +110,9 @@ function wrapOverhead(): number {
   return wrapSkillSuffix("").length;
 }
 
-function estimatePackedBodyLength(skills: readonly CatalogSkillEntry[]): number {
+function estimatePackedBodyLength(
+  skills: readonly CatalogSkillEntry[],
+): number {
   if (skills.length === 0) return 0;
   let total = 0;
   for (const entry of skills) {
@@ -217,8 +219,7 @@ export function packClaudeAcpSkillSuffix(
     const afterFull = available - block.length;
     const canTakeFull =
       block.length <= available &&
-      (laterCount === 0 ||
-        afterFull >= laterCount * MIN_TRUNCATED_SKILL_CHARS);
+      (laterCount === 0 || afterFull >= laterCount * MIN_TRUNCATED_SKILL_CHARS);
 
     if (canTakeFull) {
       blocks.push(block);
