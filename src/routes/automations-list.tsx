@@ -20,9 +20,7 @@ import {
   useImportAutomation,
 } from "#/hooks/query/use-automations";
 import { useAutomationHealth } from "#/hooks/query/use-automation-health";
-import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import type { AutomationSetupKind } from "#/api/automation-setup-types";
-import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useNavigation } from "#/context/navigation-context";
 import { SearchInput } from "#/components/features/automations/search-input";
@@ -89,7 +87,6 @@ import { uniqueById } from "#/utils/unique-by-id";
 import { isDraftAutomation } from "#/utils/automation-state";
 import { automationIconActionButtonClassName } from "#/components/features/automations/automation-action-button-classes";
 import PlayIcon from "#/icons/play.svg?react";
-import { buildAutomationDraftTags } from "#/utils/automation-draft-tags";
 import { StatusBadge } from "#/components/features/automations/status-badge";
 
 const PAGE_SIZE = 50;
@@ -307,7 +304,6 @@ export default function AutomationsList() {
   } | null>(null);
   const [deleteDraftTarget, setDeleteDraftTarget] =
     useState<AutomationDraftApiResponse | null>(null);
-  const [resumingDraftId, setResumingDraftId] = useState<string | null>(null);
   const [editTarget, setEditTarget] = useState<Automation | null>(null);
   const [isAddAutomationOpen, setIsAddAutomationOpen] = useState(false);
   const [importSpec, setImportSpec] = useState<AutomationSpec | null>(null);
@@ -384,7 +380,6 @@ export default function AutomationsList() {
   const dispatchMutation = useDispatchAutomation();
   const dispatchDraftMutation = useDispatchAutomationDraft();
   const importMutation = useImportAutomation();
-  const createConversationMutation = useCreateConversation();
 
   const visible = useMemo(() => {
     if (!data?.automations) return [];
@@ -461,45 +456,9 @@ export default function AutomationsList() {
     });
   };
 
-  const handleResumeDraft = (draft: AutomationDraftApiResponse) => {
-    if (resumingDraftId) return;
-    setResumingDraftId(draft.id);
-    createConversationMutation.mutate(
-      {
-        query: t(I18nKey.AUTOMATIONS$CREATE_AUTOMATION_PROMPT),
-        automationSetup: true,
-        entryPoint: "automation_draft_resume",
-      },
-      {
-        onSuccess: async (conversation) => {
-          const conversationId = conversation.conversation_id;
-          try {
-            const [conversationDetails] =
-              await AgentServerConversationService.batchGetAppConversations([
-                conversationId,
-              ]);
-            await AgentServerConversationService.updateConversationTags(
-              conversationId,
-              buildAutomationDraftTags(
-                conversationDetails?.tags ?? null,
-                draft.id,
-                draft.materializedAutomationId,
-              ),
-            );
-          } catch {
-            // Best-effort: the local setup draft still opens the form, and the
-            // panel can save tags again after the next draft write.
-          }
-          navigate?.(`/conversations/${conversationId}`);
-        },
-        onError: (error) => {
-          displayErrorToast(
-            getApiErrorMessage(error, t(I18nKey.ERROR$GENERIC)),
-          );
-        },
-        onSettled: () => setResumingDraftId(null),
-      },
-    );
+  const handleResumeDraft = (_draft: AutomationDraftApiResponse) => {
+    // Draft resume is intentionally wired in the follow-up PR once the setup
+    // route can open without immediately starting an agent conversation.
   };
 
   const handleTestDraft = (draft: AutomationDraftApiResponse) => {
@@ -814,7 +773,7 @@ export default function AutomationsList() {
                 onResume={handleResumeDraft}
                 onDelete={handleDeleteDraftRequest}
                 onTest={handleTestDraft}
-                resumingDraftId={resumingDraftId}
+                resumingDraftId={null}
                 deletingDraftId={
                   deleteDraftMutation.isPending
                     ? (deleteDraftMutation.variables ?? null)
