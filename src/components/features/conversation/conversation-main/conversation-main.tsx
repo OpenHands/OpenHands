@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { ArrowLeft, FileText, MessageSquare } from "lucide-react";
 import { cn } from "#/utils/utils";
+import { ChatActionTooltip } from "#/components/features/chat/chat-action-tooltip";
+import BlockDrawerLeftIcon from "#/icons/block-drawer-left.svg?react";
+import { mobileTopBarIconButtonClassName } from "#/utils/mobile-top-bar-icon-button-classes";
 import { ChatInterfaceWrapper } from "./chat-interface-wrapper";
 import { ConversationTabContent } from "../conversation-tabs/conversation-tab-content/conversation-tab-content";
 import { ConversationNameWithStatus } from "../conversation-name-with-status";
@@ -9,6 +12,7 @@ import { ConversationTabs } from "../conversation-tabs/conversation-tabs";
 import { ResizeHandle } from "../../../ui/resize-handle";
 import { useResizablePanels } from "#/hooks/use-resizable-panels";
 import { useConversationStore } from "#/stores/conversation-store";
+import { AUTOMATION_SETUP_SHOW_AGENT_EVENT } from "#/components/features/automations/setup/automation-setup-agent-request";
 import { AutomationSetupPanel } from "#/components/features/automations/setup/automation-setup-panel";
 import {
   clearAutomationSetupDraft,
@@ -29,6 +33,43 @@ import { I18nKey } from "#/i18n/declaration";
 import { formControlTransitionClassName } from "#/utils/form-control-classes";
 
 const SPLASH_ROUTE = "/";
+
+type MobileAutomationView = "form" | "conversation";
+
+const MOBILE_AUTOMATION_VIEW_OPTIONS: {
+  view: MobileAutomationView;
+  labelKey: I18nKey;
+  Icon: typeof FileText;
+}[] = [
+  {
+    view: "form",
+    labelKey: I18nKey.AUTOMATION_SETUP$VIEW_FORM,
+    Icon: FileText,
+  },
+  {
+    view: "conversation",
+    labelKey: I18nKey.AUTOMATION_SETUP$VIEW_CONVERSATION,
+    Icon: MessageSquare,
+  },
+];
+
+function AutomationSetupDockedComposer({
+  onTarget,
+}: {
+  onTarget: (element: HTMLDivElement | null) => void;
+}) {
+  return (
+    <div className="custom-scrollbar-always pointer-events-none absolute inset-0 z-20 overflow-y-scroll px-5 [scrollbar-gutter:stable] [&::-webkit-scrollbar-thumb]:bg-transparent">
+      <div className="relative mx-auto h-full w-full min-w-0 max-w-[800px]">
+        <div
+          ref={onTarget}
+          data-testid="automation-setup-docked-composer"
+          className="pointer-events-auto absolute inset-x-0 bottom-5 overflow-visible rounded-[15px] shadow-[0_12px_40px_rgba(0,0,0,0.55)]"
+        />
+      </div>
+    </div>
+  );
+}
 
 function getDesktopTabPanelClass(isRightPanelShown: boolean) {
   return isRightPanelShown
@@ -52,9 +93,15 @@ export function ConversationMain() {
   const [automationToolbarElement, setAutomationToolbarElement] =
     useState<HTMLDivElement | null>(null);
   const [isAutomationAgentHidden, setIsAutomationAgentHidden] = useState(false);
+  const [mobileAutomationView, setMobileAutomationView] =
+    useState<MobileAutomationView>("form");
+  const [composerDockTarget, setComposerDockTarget] =
+    useState<HTMLDivElement | null>(null);
   const overviewDrawer = useConversationOverviewDrawerOptional();
   const isSecondaryDrawerOpen = Boolean(overviewDrawer?.section);
-  const isAutomationSetupMode = Boolean(automationSetupDraft) && !isMobile;
+  const isAutomationSetupMode = Boolean(automationSetupDraft);
+  const showMobileAutomationForm =
+    isMobile && isAutomationSetupMode && mobileAutomationView === "form";
 
   const { leftWidth, rightWidth, isDragging, containerRef, handleMouseDown } =
     useResizablePanels({
@@ -90,9 +137,21 @@ export function ConversationMain() {
     navigate(SPLASH_ROUTE);
   };
 
+  useEffect(() => {
+    const showAgent = () => {
+      setIsAutomationAgentHidden(false);
+      setMobileAutomationView("conversation");
+    };
+    window.addEventListener(AUTOMATION_SETUP_SHOW_AGENT_EVENT, showAgent);
+    return () =>
+      window.removeEventListener(AUTOMATION_SETUP_SHOW_AGENT_EVENT, showAgent);
+  }, []);
+
+  const showDockedComposer = isAutomationSetupMode && isAutomationAgentHidden;
   const agentToggleLabel = isAutomationAgentHidden
     ? t(I18nKey.AUTOMATION_SETUP$SHOW_AGENT)
     : t(I18nKey.AUTOMATION_SETUP$HIDE_AGENT);
+  const setupTitle = conversation?.title || t(I18nKey.AUTOMATION_SETUP$TITLE);
 
   return (
     <div
@@ -105,53 +164,108 @@ export function ConversationMain() {
       {isAutomationSetupMode ? (
         <header
           data-testid="automation-setup-topbar"
-          className="flex h-10 min-h-10 shrink-0 items-center gap-2 border-b border-[var(--oh-border)] bg-base px-3"
+          className={cn(
+            "flex shrink-0 border-b border-[var(--oh-border)] bg-base",
+            isMobile
+              ? "flex-col"
+              : "h-10 min-h-10 items-center justify-between gap-2 px-3",
+          )}
         >
-          {isSidebarRailHidden ? <SidebarMobileMenuToggle /> : null}
-          <button
-            type="button"
-            data-testid="automation-setup-back"
-            aria-label={t(I18nKey.AUTOMATION_SETUP$BACK_LABEL)}
-            onClick={handleBackToSplash}
+          <div
             className={cn(
-              "flex size-7 items-center justify-center rounded-lg text-[var(--oh-muted)] hover:bg-white/10 hover:text-white",
-              formControlTransitionClassName,
+              "flex min-w-0 items-center gap-2",
+              isMobile && "h-10 justify-between px-3",
             )}
           >
-            <ArrowLeft className="size-4" aria-hidden />
-          </button>
-          <h1
-            data-testid="automation-setup-conversation-title"
-            className="min-w-0 truncate text-sm font-semibold text-white"
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              {isSidebarRailHidden ? <SidebarMobileMenuToggle /> : null}
+              {!isMobile ? (
+                <button
+                  type="button"
+                  data-testid="automation-setup-back"
+                  aria-label={t(I18nKey.AUTOMATION_SETUP$BACK_LABEL)}
+                  onClick={handleBackToSplash}
+                  className={cn(
+                    "flex size-7 items-center justify-center rounded-lg text-[var(--oh-muted)] hover:bg-white/10 hover:text-white",
+                    formControlTransitionClassName,
+                  )}
+                >
+                  <ArrowLeft className="size-4" aria-hidden />
+                </button>
+              ) : null}
+              <h1
+                data-testid="automation-setup-conversation-title"
+                className="min-w-0 truncate text-sm font-semibold text-content"
+              >
+                {setupTitle}
+              </h1>
+            </div>
+            {isMobile ? (
+              <div
+                role="group"
+                aria-label={`${t(I18nKey.AUTOMATION_SETUP$VIEW_FORM)} / ${t(I18nKey.AUTOMATION_SETUP$VIEW_CONVERSATION)}`}
+                className="flex shrink-0 overflow-hidden rounded-lg border border-[var(--oh-border)]"
+              >
+                {MOBILE_AUTOMATION_VIEW_OPTIONS.map(
+                  ({ view, labelKey, Icon }) => {
+                    const label = t(labelKey);
+                    return (
+                      <button
+                        key={view}
+                        type="button"
+                        data-testid={`automation-setup-mobile-view-${view}`}
+                        aria-label={label}
+                        aria-pressed={mobileAutomationView === view}
+                        title={label}
+                        onClick={() => setMobileAutomationView(view)}
+                        className={cn(
+                          "inline-flex size-7 items-center justify-center",
+                          mobileAutomationView === view
+                            ? "bg-tertiary text-content"
+                            : "text-[var(--oh-muted)]",
+                        )}
+                      >
+                        <Icon className="size-4" aria-hidden />
+                      </button>
+                    );
+                  },
+                )}
+              </div>
+            ) : null}
+          </div>
+          <div
+            className={cn(
+              "flex min-w-0 items-center gap-1.5",
+              isMobile ? "overflow-x-auto px-3 pb-2" : "shrink-0",
+              isMobile && mobileAutomationView === "conversation" && "hidden",
+            )}
           >
-            {conversation?.title || t(I18nKey.AUTOMATION_SETUP$TITLE)}
-          </h1>
-          <div className="ml-auto flex min-w-0 shrink-0 items-center gap-2">
             <div
               ref={setAutomationToolbarElement}
               data-testid="automation-setup-toolbar"
-              className="flex min-w-0 shrink-0 items-center gap-2"
+              className="flex min-w-0 shrink-0 items-center gap-1.5"
             />
             {!isMobile ? (
-              <button
-                type="button"
-                data-testid="automation-setup-agent-toggle"
-                aria-label={agentToggleLabel}
-                title={agentToggleLabel}
-                onClick={() =>
-                  setIsAutomationAgentHidden((previous) => !previous)
-                }
-                className={cn(
-                  "flex size-7 items-center justify-center rounded-lg text-[var(--oh-muted)] hover:bg-white/10 hover:text-white",
-                  formControlTransitionClassName,
-                )}
+              <ChatActionTooltip
+                tooltip={agentToggleLabel}
+                ariaLabel={agentToggleLabel}
               >
-                {isAutomationAgentHidden ? (
-                  <PanelLeftOpen className="size-4" aria-hidden />
-                ) : (
-                  <PanelLeftClose className="size-4" aria-hidden />
-                )}
-              </button>
+                <button
+                  type="button"
+                  data-testid="automation-setup-agent-toggle"
+                  aria-label={agentToggleLabel}
+                  aria-pressed={!isAutomationAgentHidden}
+                  onClick={() =>
+                    setIsAutomationAgentHidden((previous) => !previous)
+                  }
+                  className={cn(
+                    mobileTopBarIconButtonClassName,
+                    "size-7 self-center",
+                  )}
+                >
+                  <BlockDrawerLeftIcon className="size-5 shrink-0" />
+                </button>
+              </ChatActionTooltip>
             ) : null}
           </div>
         </header>
@@ -178,7 +292,7 @@ export function ConversationMain() {
           className={cn(
             "flex flex-col bg-base overflow-hidden",
             isMobile
-              ? "flex-1"
+              ? cn("flex-1", showMobileAutomationForm && "hidden")
               : cn(
                   "min-w-0",
                   isAutomationSetupMode &&
@@ -221,6 +335,21 @@ export function ConversationMain() {
           <div className="flex-1 min-h-0 flex flex-col">
             <ChatInterfaceWrapper
               isRightPanelShown={!isMobile && isRightPanelShown}
+              showGitControlBar={!isAutomationSetupMode}
+              showEmptyStateSuggestions={!isAutomationSetupMode}
+              composerDockTarget={composerDockTarget}
+              minimalComposer={isMobile && isAutomationSetupMode}
+              composerPlaceholder={
+                isAutomationSetupMode
+                  ? t(
+                      I18nKey.AUTOMATION_SETUP$CONVERSATION_COMPOSER_PLACEHOLDER,
+                    )
+                  : undefined
+              }
+              onDockedComposerSubmit={() => {
+                setIsAutomationAgentHidden(false);
+                setMobileAutomationView("conversation");
+              }}
             />
           </div>
         </div>
@@ -234,6 +363,22 @@ export function ConversationMain() {
               isDragging={isDragging}
             />
           )}
+
+        {showMobileAutomationForm && automationSetupDraft ? (
+          <div
+            data-testid="automation-setup-mobile-form"
+            className="relative flex min-h-0 flex-1 flex-col overflow-hidden"
+          >
+            <AutomationSetupPanel
+              draft={automationSetupDraft}
+              toolbarPortal={automationToolbarElement}
+              showInlineHeader={false}
+              onClose={closeAutomationSetup}
+              reserveComposerSpace
+            />
+            <AutomationSetupDockedComposer onTarget={setComposerDockTarget} />
+          </div>
+        ) : null}
 
         {/* Right panel: desktop side drawer. Mobile opens Files/Tools via /panel route. */}
         {!isMobile && (
@@ -255,7 +400,7 @@ export function ConversationMain() {
             <div className="flex h-full w-full flex-col">
               <div
                 className={cn(
-                  "flex flex-col flex-1 min-h-0 bg-surface overflow-hidden",
+                  "relative flex flex-col flex-1 min-h-0 bg-surface overflow-hidden",
                   !(isAutomationSetupMode && isAutomationAgentHidden) &&
                     "border-l border-border",
                 )}
@@ -266,6 +411,7 @@ export function ConversationMain() {
                     toolbarPortal={automationToolbarElement}
                     showInlineHeader={false}
                     onClose={closeAutomationSetup}
+                    reserveComposerSpace={showDockedComposer}
                   />
                 ) : (
                   <>
@@ -280,6 +426,11 @@ export function ConversationMain() {
                     </div>
                   </>
                 )}
+                {showDockedComposer ? (
+                  <AutomationSetupDockedComposer
+                    onTarget={setComposerDockTarget}
+                  />
+                ) : null}
               </div>
             </div>
           </div>
