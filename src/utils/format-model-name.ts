@@ -8,7 +8,7 @@ export const FREE_MODEL_SUFFIX = " (free)";
  * status still comes only from the backend-provided `freeModels` set.
  */
 export const FREE_OPENHANDS_MODELS = {
-  "openhands/deepseek-v4-flash": "OpenHands DeepSeek V4 Flash",
+  "openhands/deepseek-v4.1-flash": "OpenHands DeepSeek V4.1 Flash",
 } as const;
 
 export const FREE_OPENHANDS_MODEL_IDS = Object.keys(FREE_OPENHANDS_MODELS);
