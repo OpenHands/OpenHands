@@ -110,23 +110,15 @@ describe("CreateInstructions", () => {
     });
   });
 
-  it("captures automation_created_button with the active backend kind when Create Automation is clicked", async () => {
+  it("tracks the click and opens the setup form without creating a conversation", async () => {
     const user = userEvent.setup();
-    renderCreateInstructions();
+    const { navigate } = renderCreateInstructions();
 
     await user.click(screen.getByTestId("automations-create-automation"));
 
     expect(mocks.trackAutomationCreatedButton).toHaveBeenCalledWith({
       backendKind: "local",
     });
-  });
-
-  it("opens the setup form without creating a conversation", async () => {
-    const user = userEvent.setup();
-    const { navigate } = renderCreateInstructions();
-
-    await user.click(screen.getByTestId("automations-create-automation"));
-
     expect(mocks.createConversationMutate).not.toHaveBeenCalled();
     expect(navigate).toHaveBeenCalledWith("/automations/setup");
   });
