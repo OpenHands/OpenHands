@@ -131,6 +131,7 @@ export function LlmSettingsScreen({
   suppressSuccessToast,
   onSaveControlChange,
   showProviderConnection,
+  forceBasicInitialView = false,
 }: {
   scope?: SettingsScope;
   /** Optional hook fired after a successful save (e.g. advance an onboarding step). */
@@ -153,6 +154,14 @@ export function LlmSettingsScreen({
    * one connection exists, so the form is unchanged until the user creates one.
    */
   showProviderConnection?: boolean;
+  /**
+   * When true, the form always opens on the Basic tab. The default
+   * initial-view inference reads the user's *global* settings, so a global
+   * advanced override (e.g. a custom base URL) would otherwise land the
+   * profile create/edit form on the Advanced/All tab. Only the profile
+   * editor sets this; the global settings page keeps the inferred view.
+   */
+  forceBasicInitialView?: boolean;
 }) {
   const { t } = useTranslation("openhands");
 
@@ -213,6 +222,15 @@ export function LlmSettingsScreen({
       currentSettings: Settings,
       filteredSchema: SettingsSchema,
     ): SettingsView => {
+      // The profile create/edit form is a focused flow for a single profile:
+      // always start on the Basic tab. The inference below reads the user's
+      // *global* settings, so a global advanced override (e.g. a custom base
+      // URL) would otherwise escalate a brand-new profile form to the
+      // Advanced/All tab (OpenHands/OpenHands#17801).
+      if (forceBasicInitialView) {
+        return "basic";
+      }
+
       const schemaView = inferInitialView(currentSettings, filteredSchema);
       if (schemaView !== "basic") {
         return schemaView;
@@ -226,7 +244,7 @@ export function LlmSettingsScreen({
 
       return hasCustomBaseUrl ? "all" : "basic";
     },
-    [],
+    [forceBasicInitialView],
   );
 
   const buildHeader = React.useCallback(

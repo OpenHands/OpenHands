@@ -402,6 +402,74 @@ describe("LlmSettingsScreen", () => {
   });
 });
 
+describe("LlmSettingsScreen - forceBasicInitialView", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    useFreeModelsStore.getState().setFlags({
+      freeModels: new Set(["openhands/kimi-k3"]),
+      defaultModel: "openhands/kimi-k3",
+    });
+  });
+
+  const mockGlobalSettingsWithCustomBaseUrl = () =>
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        llm_model: "openai/gpt-4o",
+        llm_base_url: "https://custom.example/v1",
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          llm: {
+            model: "openai/gpt-4o",
+            api_key: "",
+            base_url: "https://custom.example/v1",
+          },
+        },
+      }),
+    );
+
+  // A custom base URL in the *global* settings escalates the inferred initial
+  // view to the All tab. The profile create/edit form must not inherit that:
+  // it is a focused flow for a single profile and must always open on Basic
+  // (OpenHands/OpenHands#17801).
+  it("opens on the Basic tab for the profile editor even when global settings have a custom base URL (bug #17801)", async () => {
+    mockGlobalSettingsWithCustomBaseUrl();
+
+    renderLlmSettingsScreen({
+      embedded: true,
+      hideSaveButton: true,
+      forceBasicInitialView: true,
+      initialValueOverrides: {
+        "llm.model": "openai/gpt-4o",
+        "llm.api_key": "",
+        "llm.base_url": "",
+      },
+    });
+
+    await screen.findByTestId("llm-settings-screen");
+
+    expect(screen.getByTestId("sdk-section-basic-toggle")).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(
+      screen.getByTestId("llm-settings-form-basic"),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the inferred All tab on the global settings page when the flag is not set", async () => {
+    mockGlobalSettingsWithCustomBaseUrl();
+
+    renderLlmSettingsScreen();
+
+    await screen.findByTestId("llm-settings-screen");
+
+    expect(screen.getByTestId("sdk-section-all-toggle")).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+});
+
 describe("LlmSettingsScreen - provider connection selector", () => {
   const connection: ProviderConnection = {
     id: "conn-1",
