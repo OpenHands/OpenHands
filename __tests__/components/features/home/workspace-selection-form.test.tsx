@@ -9,7 +9,7 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, vi, beforeEach, it } from "vitest";
+import { describe, expect, vi, beforeEach, afterEach, it } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import {
@@ -182,6 +182,48 @@ describe("WorkspaceSelectionForm (server-backed workspaces)", () => {
       items: [],
       next_page_id: null,
     });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("discovers /projects workspaces from Docker runtime metadata", async () => {
+    // Arrange
+    vi.stubEnv("DEV", false);
+    clearCachedAgentServerInfo();
+    server.use(
+      http.get("*/server_info", () =>
+        HttpResponse.json({
+          version: "1.45.0",
+          uptime: 0,
+          idle_time: 0,
+          runtime_services: {
+            mode: "docker",
+            services: {},
+          },
+        }),
+      ),
+    );
+    mockSearchSubdirectories.mockImplementation(async (path: string) => ({
+      items:
+        path === "/projects"
+          ? [{ name: "app-a", path: "/projects/app-a" }]
+          : [],
+      next_page_id: null,
+    }));
+    renderForm();
+    const user = userEvent.setup();
+
+    // Act
+    const menu = await openWorkspaceDropdown(user);
+
+    // Assert
+    expect(mockSearchSubdirectories).toHaveBeenCalledWith(
+      "/projects",
+      undefined,
+    );
+    expect(await within(menu).findByText("app-a")).toBeInTheDocument();
   });
 
   it("renders the default empty selection when no workspace path is persisted", async () => {
