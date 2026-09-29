@@ -113,6 +113,10 @@ vi.mock("@openhands/typescript-client/clients", () => ({
       return socketCapture.queueMessage(...args);
     }
   },
+  buildConversationEventStreamUrl: (
+    host: string,
+    conversationId: string,
+  ) => `${host}/sockets/events/${conversationId}`,
 }));
 
 const contextCapture: {
