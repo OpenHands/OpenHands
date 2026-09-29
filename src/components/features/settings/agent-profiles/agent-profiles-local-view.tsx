@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AgentProfilesManager } from "./agent-profiles-manager";
+import { GlobalToolsNotice } from "./global-tools-notice";
 import { mergeAgentProfileSaveInput } from "./merge-agent-profile-save-input";
 import { ProfileNameInput } from "#/components/features/settings/llm-profiles/profile-name-input";
 import { BrandButton } from "#/components/features/settings/brand-button";
@@ -265,10 +266,13 @@ export function AgentProfilesLocalView() {
 
   if (viewMode === "list") {
     return (
-      <AgentProfilesManager
-        onAddProfile={handleAddProfile}
-        onEditProfile={handleEditProfile}
-      />
+      <div className="flex flex-col gap-4">
+        <GlobalToolsNotice />
+        <AgentProfilesManager
+          onAddProfile={handleAddProfile}
+          onEditProfile={handleEditProfile}
+        />
+      </div>
     );
   }
 

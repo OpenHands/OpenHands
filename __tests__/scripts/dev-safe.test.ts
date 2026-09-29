@@ -464,6 +464,7 @@ describe("buildAgentServerTelemetryEnv", () => {
       env: {
         OH_CONVERSATION_RUNTIME: "docker",
         OH_CONVERSATION_IMAGE: "agent-server:test",
+        OH_CONVERSATION_IMAGE_HAS_BROWSER: "true",
         OH_CONVERSATION_CONTAINER_MEMORY: "2g",
         OH_CONVERSATION_CONTAINER_CPUS: "1",
         OH_CONVERSATION_CONTAINER_PIDS_LIMIT: "256",
@@ -474,6 +475,7 @@ describe("buildAgentServerTelemetryEnv", () => {
     expect(configured).toMatchObject({
       OH_CONVERSATION_RUNTIME: "docker",
       OH_CONVERSATION_IMAGE: "agent-server:test",
+      OH_CONVERSATION_IMAGE_HAS_BROWSER: "true",
       OH_CONVERSATION_CONTAINER_MEMORY: "2g",
       OH_CONVERSATION_CONTAINER_CPUS: "1",
       OH_CONVERSATION_CONTAINER_PIDS_LIMIT: "256",

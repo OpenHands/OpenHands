@@ -75,6 +75,11 @@ vi.mock(
   }),
 );
 
+vi.mock(
+  "#/components/features/settings/agent-profiles/global-tools-notice",
+  () => ({ GlobalToolsNotice: () => null }),
+);
+
 const saveMutate = vi.fn().mockResolvedValue({ name: "x", message: "ok" });
 vi.mock("#/hooks/mutation/use-save-agent-profile", () => ({
   useSaveAgentProfile: () => ({ mutateAsync: saveMutate }),

@@ -43399,5 +43399,39 @@
     "ca": "La sincronització de Git només està disponible en connectar-se a un backend local d'OpenHands.",
     "tr": "Git Senkronizasyonu yalnızca yerel bir OpenHands arka ucuna bağlıyken kullanılabilir.",
     "uk": "Git-синхронізація доступна лише при підключенні до локального бекенду OpenHands."
+  },
+  "SETTINGS$GLOBAL_TOOLS_CUSTOM": {
+    "en": "Conversations started without an agent profile use a custom tool list: {{names}}.",
+    "ja": "エージェントプロファイルなしで開始した会話は、カスタムのツール一覧を使用します: {{names}}。",
+    "zh-CN": "未使用代理配置文件启动的对话将使用自定义工具列表：{{names}}。",
+    "zh-TW": "未使用代理設定檔啟動的對話會使用自訂工具清單：{{names}}。",
+    "ko-KR": "에이전트 프로필 없이 시작한 대화는 사용자 지정 도구 목록을 사용합니다: {{names}}.",
+    "no": "Samtaler som startes uten en agentprofil bruker en egendefinert verktøyliste: {{names}}.",
+    "it": "Le conversazioni avviate senza un profilo agente usano un elenco di strumenti personalizzato: {{names}}.",
+    "pt": "As conversas iniciadas sem um perfil de agente usam uma lista de ferramentas personalizada: {{names}}.",
+    "es": "Las conversaciones iniciadas sin un perfil de agente usan una lista de herramientas personalizada: {{names}}.",
+    "ar": "تستخدم المحادثات التي تبدأ دون ملف تعريف وكيل قائمة أدوات مخصصة: {{names}}.",
+    "fr": "Les conversations démarrées sans profil d'agent utilisent une liste d'outils personnalisée : {{names}}.",
+    "tr": "Aracı profili olmadan başlatılan konuşmalar özel bir araç listesi kullanır: {{names}}.",
+    "de": "Unterhaltungen, die ohne Agentenprofil gestartet werden, verwenden eine benutzerdefinierte Werkzeugliste: {{names}}.",
+    "uk": "Розмови, розпочаті без профілю агента, використовують власний список інструментів: {{names}}.",
+    "ca": "Les converses iniciades sense un perfil d'agent fan servir una llista d'eines personalitzada: {{names}}."
+  },
+  "SETTINGS$GLOBAL_TOOLS_RESET": {
+    "en": "Reset to standard tools",
+    "ja": "標準ツールに戻す",
+    "zh-CN": "重置为标准工具",
+    "zh-TW": "重設為標準工具",
+    "ko-KR": "표준 도구로 재설정",
+    "no": "Tilbakestill til standardverktøy",
+    "it": "Ripristina gli strumenti standard",
+    "pt": "Redefinir para as ferramentas padrão",
+    "es": "Restablecer las herramientas estándar",
+    "ar": "إعادة التعيين إلى الأدوات القياسية",
+    "fr": "Rétablir les outils standard",
+    "tr": "Standart araçlara sıfırla",
+    "de": "Auf Standardwerkzeuge zurücksetzen",
+    "uk": "Скинути до стандартних інструментів",
+    "ca": "Restableix les eines estàndard"
   }
 }

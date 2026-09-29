@@ -320,6 +320,23 @@ describe("buildStartConversationRequest", () => {
     ]);
   });
 
+  it("leaves a null tool list to the server", () => {
+    const payload = buildStartConversationRequest({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        agent_settings: {
+          ...DEFAULT_SETTINGS.agent_settings,
+          tools: null,
+          llm: { model: "nested-model" },
+        },
+      },
+    }) as { agent_settings: Record<string, unknown> };
+
+    expect(
+      JSON.parse(JSON.stringify(payload.agent_settings)),
+    ).not.toHaveProperty("tools");
+  });
+
   it("keeps an explicitly empty tool list bare", () => {
     const payload = buildStartConversationRequest({
       settings: {
