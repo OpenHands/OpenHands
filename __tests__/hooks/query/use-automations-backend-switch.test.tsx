@@ -45,6 +45,10 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
   },
 }));
 
+// Mirrors the non-terminal poll interval returned by `useAutomationRuns`
+// (`refetchInterval` in src/hooks/query/use-automation-detail.ts).
+const RUNS_POLL_INTERVAL_MS = 3000;
+
 let captureMock: ReturnType<typeof vi.spyOn>;
 
 vi.mock("#/hooks/query/use-settings", () => ({
@@ -209,23 +213,29 @@ describe("useAutomationRuns — polling", () => {
     completed_at: "2026-01-02T00:00:30Z",
   };
 
-  it(
-    "re-fetches while a run is non-terminal, and stops once all runs are terminal",
-    async () => {
-      // Arrange: first fetch returns a PENDING run (polling should engage);
-      // subsequent fetches return a COMPLETED run (polling should then stop).
-      const pendingResponse: AutomationRunsResponse = {
-        runs: [pendingRun],
-        total: 1,
-      };
-      const completedResponse: AutomationRunsResponse = {
-        runs: [completedRun],
-        total: 1,
-      };
-      vi.mocked(AutomationService.getAutomationRuns)
-        .mockResolvedValueOnce(pendingResponse)
-        .mockResolvedValue(completedResponse);
+  it("re-fetches while a run is non-terminal, and stops once all runs are terminal", async () => {
+    // Arrange: first fetch returns a PENDING run (polling should engage);
+    // subsequent fetches return a COMPLETED run (polling should then stop).
+    const pendingResponse: AutomationRunsResponse = {
+      runs: [pendingRun],
+      total: 1,
+    };
+    const completedResponse: AutomationRunsResponse = {
+      runs: [completedRun],
+      total: 1,
+    };
+    vi.mocked(AutomationService.getAutomationRuns)
+      .mockResolvedValueOnce(pendingResponse)
+      .mockResolvedValue(completedResponse);
 
+    // Drive the poll window with fake timers: the contract under test is
+    // "one refetch per window while non-terminal, none once terminal", and
+    // advancing the clock asserts exactly that without paying for it in
+    // real time. `advanceTimersByTimeAsync` is required rather than the
+    // synchronous form because each refetch settles through microtasks
+    // between timer callbacks.
+    vi.useFakeTimers();
+    try {
       // Act
       renderHook(
         () => useAutomationRuns({ id: "auto-1", limit: 20, offset: 0 }),
@@ -233,29 +243,28 @@ describe("useAutomationRuns — polling", () => {
       );
 
       // Assert: the initial fetch fires once.
-      await waitFor(() => {
-        expect(AutomationService.getAutomationRuns).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
       });
+      expect(AutomationService.getAutomationRuns).toHaveBeenCalledTimes(1);
 
       // The cached data still contains a PENDING run, so refetchInterval
-      // engages and a second fetch arrives within the poll window.
-      await waitFor(
-        () => {
-          expect(AutomationService.getAutomationRuns).toHaveBeenCalledTimes(2);
-        },
-        { timeout: 5000 },
-      );
-
-      // The second fetch returned a COMPLETED run, so polling should stop.
-      // Give the would-be next poll window plenty of slack and assert no
-      // further calls happen.
-      await new Promise((resolve) => {
-        setTimeout(resolve, 4000);
+      // engages and a second fetch arrives one poll window later.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(RUNS_POLL_INTERVAL_MS);
       });
       expect(AutomationService.getAutomationRuns).toHaveBeenCalledTimes(2);
-    },
-    15000,
-  );
+
+      // The second fetch returned a COMPLETED run, so polling should stop:
+      // several further poll windows elapse with no additional calls.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(RUNS_POLL_INTERVAL_MS * 3);
+      });
+      expect(AutomationService.getAutomationRuns).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe("run mutations — sidebar conversation refresh", () => {

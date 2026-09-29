@@ -20,6 +20,7 @@ import { useSyncAutomationTelemetryConsent } from "#/hooks/use-sync-automation-t
 
 import { useTelemetryIdentity } from "#/hooks/use-telemetry-identity";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
+import { CloudOrganizationBoundary } from "#/components/features/backends/cloud-organization-boundary";
 import { useAppTitle } from "#/hooks/use-app-title";
 import { ReactRouterNavigationProvider } from "./react-router-navigation-provider";
 import { OnboardingHost } from "#/components/features/onboarding";
@@ -74,6 +75,14 @@ export function ErrorBoundary() {
 }
 
 export default function MainApp() {
+  return (
+    <CloudOrganizationBoundary>
+      <MainAppContent />
+    </CloudOrganizationBoundary>
+  );
+}
+
+function MainAppContent() {
   const location = useLocation();
   const appTitle = useAppTitle();
   const { data: settings } = useSettings();
