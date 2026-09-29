@@ -584,4 +584,61 @@ describe("AddModelsModal", () => {
       "Add 3 profiles",
     );
   });
+
+  it("does not re-submit saved rows on retry (no false failure)", async () => {
+    // Two models: the first saves, the second fails. The saved row must drop
+    // out of the selection so a retry only re-attempts the failed one —
+    // otherwise the saved row is re-created, 409s on its now-existing name,
+    // and surfaces as a failure for work that already succeeded.
+    vi.mocked(ConfigService.searchModels).mockResolvedValue({
+      items: [
+        model("openai", "gpt-4o", true),
+        model("openai", "gpt-4o-mini", true),
+      ],
+      next_page_id: null,
+    });
+    vi.mocked(ProfilesService.saveProfile)
+      .mockResolvedValueOnce({ name: "gpt-4o", message: "ok" })
+      .mockRejectedValue(new Error("boom"));
+    renderModal(OPENAI_CONNECTION, []);
+    await screen.findByTestId("add-models-row-openai/gpt-4o");
+
+    await userEvent.click(screen.getByTestId("add-models-submit"));
+    await waitFor(() =>
+      expect(screen.getByTestId("add-models-submit")).not.toBeDisabled(),
+    );
+
+    // The saved row is no longer selectable; only the failed row remains.
+    expect(screen.getByTestId("add-models-submit")).toHaveTextContent(
+      "Add 1 profiles",
+    );
+
+    // Retry: exactly one more create (the failed row), not two.
+    await userEvent.click(screen.getByTestId("add-models-submit"));
+    await waitFor(() =>
+      expect(ProfilesService.saveProfile).toHaveBeenCalledTimes(3),
+    );
+    // The third create targets the failed row, never the saved one.
+    expect(
+      vi.mocked(ProfilesService.saveProfile).mock.calls[2][1].llm.model,
+    ).toBe("openai/gpt-4o-mini");
+  });
+
+  it("reloads the model list when reopened in preselect mode", async () => {
+    // Close leaves the provider set in state, and useProviderModels serves a
+    // cached list for the same provider — so reopening used to render the
+    // empty state with Submit disabled. Resetting provider/connection on close
+    // makes the list reload.
+    const { setOpen } = renderModal(OPENAI_CONNECTION, []);
+    await screen.findByTestId("add-models-row-openai/gpt-4o");
+
+    setOpen(false);
+    setOpen(true);
+
+    // The model list reloads instead of showing the empty state.
+    await screen.findByTestId("add-models-row-openai/gpt-4o");
+    expect(screen.queryByTestId("add-models-empty")).not.toBeInTheDocument();
+    // And the rows are re-selected (preselect intent carries across the reopen).
+    expect(screen.getByTestId("add-models-submit")).not.toBeDisabled();
+  });
 });

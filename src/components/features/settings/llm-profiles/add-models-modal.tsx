@@ -182,6 +182,15 @@ export function AddModelsModal({
         setSelectedConnectionId(null);
       }
     } else {
+      // Clear the provider/connection too, not just the rows. The modal stays
+      // mounted between openings, and `useProviderModels` serves a cached
+      // `models.data` for the same provider — so if `selectedProvider` is left
+      // set, reopening in preselect mode reseeds the same provider string, the
+      // cached list reference is unchanged, and the `[models.data]` effect
+      // never re-runs to rebuild `rows`. Resetting to null makes that effect
+      // see undefined -> cached-list on reopen, so the model list reloads.
+      setSelectedProvider(null);
+      setSelectedConnectionId(null);
       setRows([]);
       setSubmitting(false);
       autoSelectRef.current = false;
@@ -200,7 +209,13 @@ export function AddModelsModal({
     (row) => row.status === "saved" || !existing.has(row.name),
   );
 
-  const selectable = visibleRows;
+  // Saved rows stay visible (so the user sees the "Saved" mark) but are not
+  // selectable: a saved row is finished work, so it must not count toward the
+  // footer's "Add N", drive select-all, or be re-POSTed on a retry. Without
+  // this exclusion a partial submit leaves the saved rows selected, and a
+  // second Submit re-creates them — the create now 409s (the name exists) and
+  // is reported as a fresh failure for work that already succeeded.
+  const selectable = visibleRows.filter((row) => row.status !== "saved");
   const selectedRows = selectable.filter((row) => row.selected);
 
   const setRow = (model: string, patch: Partial<ModelRow>) =>
