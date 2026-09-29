@@ -257,7 +257,9 @@ describe("UserAssistantEventMessage — branch action", () => {
   });
 
   it("hides the branch action outside of a conversation", () => {
-    useOptionalConversationIdMock.mockReturnValue({ conversationId: undefined });
+    useOptionalConversationIdMock.mockReturnValue({
+      conversationId: undefined,
+    });
 
     renderMessage(makeEvent("agent", "evt-agent"));
 
@@ -265,5 +267,82 @@ describe("UserAssistantEventMessage — branch action", () => {
     expect(
       screen.queryByRole("button", { name: BRANCH_LABEL }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("UserAssistantEventMessage — reasoning rendering (#17026)", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    useActiveBackendMock.mockReset();
+    useOptionalConversationIdMock.mockReset();
+    navigateMock.mockReset();
+
+    useActiveBackendMock.mockReturnValue({
+      backend: { kind: "local" },
+      orgId: null,
+    });
+    useOptionalConversationIdMock.mockReturnValue({ conversationId: "conv-1" });
+    useConversationStore.setState({ setMessageToSend: setMessageToSendMock });
+  });
+
+  const makeAgentEvent = (
+    overrides: Partial<MessageEvent> = {},
+  ): MessageEvent =>
+    ({
+      id: "evt-agent",
+      source: "agent",
+      timestamp: "2024-01-01T00:00:00.000Z",
+      llm_message: {
+        role: "assistant",
+        content: [{ type: "text", text: "Final reply text" }],
+      },
+      critic_result: null,
+      ...overrides,
+    }) as unknown as MessageEvent;
+
+  const queryThinking = () => screen.queryByTestId("collapsible-thinking");
+
+  it("renders llm_message.reasoning_content for a text-only final reply", () => {
+    renderMessage(
+      makeAgentEvent({
+        llm_message: {
+          role: "assistant",
+          content: [{ type: "text", text: "Final reply text" }],
+          reasoning_content: "The user wants a summary. Compose it concisely.",
+        },
+      }),
+    );
+
+    expect(queryThinking()).toBeInTheDocument();
+  });
+
+  it("falls back to an inline thinking block when reasoning_content is absent", () => {
+    renderMessage(
+      makeAgentEvent({
+        llm_message: {
+          role: "assistant",
+          content: [
+            {
+              type: "text",
+              text: "<think>The user wants a greeting. Simple.</think>\n\nHello!",
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(queryThinking()).toBeInTheDocument();
+  });
+
+  it("does not render thinking for a user message", () => {
+    renderMessage(makeEvent("user", "evt-user"));
+
+    expect(queryThinking()).not.toBeInTheDocument();
+  });
+
+  it("renders no thinking when the message has neither structured nor inline reasoning", () => {
+    renderMessage(makeAgentEvent());
+
+    expect(queryThinking()).not.toBeInTheDocument();
   });
 });
