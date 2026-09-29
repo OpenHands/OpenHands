@@ -75,7 +75,6 @@ export const AGENT_FIELD_STREAM_CHARACTER_DELAY_MS = 12;
 export const AGENT_FIELD_STREAM_SETTLE_DELAY_MS = 160;
 
 const FREQUENCIES = [
-  "once",
   "hourly",
   "daily",
   "weekdays",
@@ -242,8 +241,6 @@ function endpointName(kind: AutomationSetupKind): InterfaceEndpointName {
 
 function frequencyLabelKey(frequency: Frequency): I18nKey {
   switch (frequency) {
-    case "once":
-      return I18nKey.AUTOMATION_SETUP$FREQUENCY_ONCE;
     case "hourly":
       return I18nKey.AUTOMATION_SETUP$FREQUENCY_HOURLY;
     case "daily":
