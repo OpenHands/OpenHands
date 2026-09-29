@@ -37,10 +37,6 @@ export const useActiveConversation = () => {
   useEffect(() => {
     const conversation = userConversation.data;
     ConversationService.setCurrentConversation(conversation || null);
-  }, [
-    conversationId,
-    userConversation.isFetched,
-    userConversation?.data?.execution_status,
-  ]);
+  }, [conversationId, userConversation.isFetched, userConversation.data]);
   return userConversation;
 };
