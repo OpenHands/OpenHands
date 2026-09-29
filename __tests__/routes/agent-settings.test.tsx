@@ -123,7 +123,7 @@ describe("AgentSettingsScreen", () => {
     ]);
   });
 
-  it("renders the agent type selector defaulting to OpenHands with sub-agents toggle", async () => {
+  it("renders the agent type selector defaulting to OpenHands without tool controls", async () => {
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
       buildSettings({
         agent_settings: {
@@ -136,169 +136,12 @@ describe("AgentSettingsScreen", () => {
     renderAgentSettingsScreen();
     await screen.findByTestId("agent-settings-screen");
     expect(screen.getByTestId("agent-type-selector")).toBeInTheDocument();
-    // Sub-agents toggle visible on the OpenHands branch.
-    expect(
-      screen.getByTestId("agent-settings-enable-sub-agents"),
-    ).toBeInTheDocument();
-    // ACP-only fields stay hidden on the OpenHands branch.
-    expect(screen.queryByTestId("agent-command-input")).not.toBeInTheDocument();
-  });
-  it("saves enable_sub_agents when toggling on the OpenHands path", async () => {
-    const user = userEvent.setup();
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettings({
-        agent_settings: {
-          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
-          agent_kind: "openhands",
-          enable_sub_agents: false,
-        },
-      }),
-    );
-    const save = vi.spyOn(SettingsService, "saveSettings");
-
-    renderAgentSettingsScreen();
-    await screen.findByTestId("agent-settings-screen");
-
-    // Toggle sub-agents on via the enclosing label
-    const toggle = screen.getByTestId("agent-settings-enable-sub-agents");
-    const label = toggle.closest("label")!;
-    await user.click(label);
-
-    await user.click(screen.getByTestId("agent-save-button"));
-
-    await waitFor(() => {
-      expect(save).toHaveBeenCalledTimes(1);
-    });
-    const call = save.mock.calls[0]?.[0] as {
-      agent_settings_diff?: Record<string, unknown>;
-    };
-    expect(call.agent_settings_diff).toEqual({
-      agent_kind: "openhands",
-      enable_sub_agents: true,
-      enable_switch_llm_tool: true,
-      tool_concurrency_limit: 1,
-    });
-  });
-
-  it("renders the LLM-switching toggle on the OpenHands path and saves it when toggled off", async () => {
-    const user = userEvent.setup();
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettings({
-        agent_settings: {
-          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
-          agent_kind: "openhands",
-          enable_switch_llm_tool: true,
-        },
-      }),
-    );
-    const save = vi.spyOn(SettingsService, "saveSettings");
-
-    renderAgentSettingsScreen();
-    await screen.findByTestId("agent-settings-screen");
-
-    // The toggle renders (schema exposes the field) and starts on.
-    const toggle = screen.getByTestId("agent-settings-enable-switch-llm-tool");
-    expect(toggle).toBeChecked();
-
-    // Toggle it off via the enclosing label, then save.
-    const label = toggle.closest("label")!;
-    await user.click(label);
-    expect(toggle).not.toBeChecked();
-
-    await user.click(screen.getByTestId("agent-save-button"));
-
-    await waitFor(() => {
-      expect(save).toHaveBeenCalledTimes(1);
-    });
-    const call = save.mock.calls[0]?.[0] as {
-      agent_settings_diff?: Record<string, unknown>;
-    };
-    expect(call.agent_settings_diff).toEqual({
-      agent_kind: "openhands",
-      enable_sub_agents: false,
-      enable_switch_llm_tool: false,
-      tool_concurrency_limit: 1,
-    });
-  });
-
-  it("hides the LLM-switching toggle when the schema predates the field", async () => {
-    const schema = MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema;
-    const schemaWithoutField = schema && {
-      ...schema,
-      sections: schema.sections.map((section) => ({
-        ...section,
-        fields: section.fields.filter(
-          (field) => field.key !== "enable_switch_llm_tool",
-        ),
-      })),
-    };
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettings({
-        agent_settings_schema: schemaWithoutField,
-        agent_settings: {
-          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
-          agent_kind: "openhands",
-        },
-      }),
-    );
-
-    renderAgentSettingsScreen();
-    await screen.findByTestId("agent-settings-screen");
-
-    // Older agent-servers without the field hide the toggle cleanly...
-    expect(
-      screen.queryByTestId("agent-settings-enable-switch-llm-tool"),
-    ).not.toBeInTheDocument();
-    // ...while the other OpenHands controls still render.
-    expect(
-      screen.getByTestId("agent-settings-enable-sub-agents"),
-    ).toBeInTheDocument();
-  });
-
-  it("hides sub-agents toggle when ACP is selected", async () => {
-    const user = userEvent.setup();
-    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettings({
-        agent_settings: {
-          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
-          agent_kind: "openhands",
-        },
-      }),
-    );
-
-    renderAgentSettingsScreen();
-    await screen.findByTestId("agent-settings-screen");
-
-    // Sub-agents toggle should be visible initially
-    expect(
-      screen.getByTestId("agent-settings-enable-sub-agents"),
-    ).toBeInTheDocument();
-
-    // Switch to ACP
-    await user.click(screen.getByTestId("agent-type-selector"));
-    await user.click(
-      await screen.findByRole("option", { name: "SETTINGS$AGENT_TYPE_ACP" }),
-    );
-
-    // Sub-agents toggle should be hidden, ACP fields should appear
-    expect(
-      screen.queryByTestId("agent-settings-enable-sub-agents"),
-    ).not.toBeInTheDocument();
-    expect(screen.getByTestId("agent-command-input")).toBeInTheDocument();
-  });
-
-  it("shows no tool switches in the profile editor", async () => {
-    toolCatalogMock.mockReturnValue([]);
-    renderAgentSettingsScreen({
-      embedded: true,
-      agentSettingsOverride: { agent_kind: "openhands" },
-    });
-    await screen.findByTestId("agent-settings-screen");
-
     expect(screen.queryByTestId("agent-settings-enable-sub-agents")).toBeNull();
     expect(
       screen.queryByTestId("agent-settings-enable-switch-llm-tool"),
     ).toBeNull();
+    expect(screen.queryByTestId("agent-settings-tools-mode")).toBeNull();
+    expect(screen.queryByTestId("agent-command-input")).not.toBeInTheDocument();
   });
 
   it("labels the save button 'Save Changes' for consistency with other settings pages", async () => {
@@ -631,8 +474,6 @@ describe("AgentSettingsScreen", () => {
     };
     expect(call.agent_settings_diff).toEqual({
       agent_kind: "openhands",
-      enable_sub_agents: false,
-      enable_switch_llm_tool: true,
       tool_concurrency_limit: 1,
     });
   });
@@ -1854,9 +1695,6 @@ describe("AgentSettingsScreen — tool selection", () => {
           "SETTINGS$AGENT_PROFILE_TOOLS_KEPT_ON_SAVE",
         );
       }
-      expect(
-        screen.queryByTestId("agent-settings-enable-sub-agents"),
-      ).toBeNull();
       const fields = control().buildAgentProfileFields();
       expect(fields).not.toHaveProperty("tools");
     },

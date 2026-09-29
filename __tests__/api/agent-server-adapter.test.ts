@@ -163,7 +163,6 @@ describe("buildStartConversationRequest", () => {
         agent_settings: {
           ...DEFAULT_SETTINGS.agent_settings,
           agent: "CodeActAgent",
-          enable_sub_agents: true,
           llm: {
             model: "nested-model",
             api_key: "  nested-key  ",
@@ -173,7 +172,6 @@ describe("buildStartConversationRequest", () => {
             enabled: true,
             max_size: 120,
           },
-          enable_switch_llm_tool: true,
         },
         conversation_settings: {
           ...DEFAULT_SETTINGS.conversation_settings,
@@ -210,7 +208,7 @@ describe("buildStartConversationRequest", () => {
       { name: "file_editor", params: {} },
       { name: "task_tracker", params: {} },
       { name: "browser_tool_set", params: {} },
-      { name: "task_tool_set", params: {} },
+      { name: "switch_llm", params: {} },
     ]);
     expect(payload.agent_settings.agent_context).toMatchObject({
       load_public_skills: false,
@@ -254,7 +252,6 @@ describe("buildStartConversationRequest", () => {
       }
     }
     expect(payload.agent_settings.agent).toBe("CodeActAgent");
-    expect(payload.agent_settings.enable_switch_llm_tool).toBe(true);
     expect(payload.workspace.working_dir).toBe(
       "/workspace/project/agent-canvas",
     );
@@ -306,30 +303,47 @@ describe("buildStartConversationRequest", () => {
     expect(payload.agent_settings.llm.model).toBe("openai/gpt-4o");
   });
 
-  it("forwards the switch-LLM setting to SDK agent settings", () => {
+  it("sends configured tools as given", () => {
     const payload = buildStartConversationRequest({
       settings: {
         ...DEFAULT_SETTINGS,
         agent_settings: {
           ...DEFAULT_SETTINGS.agent_settings,
-          enable_switch_llm_tool: true,
+          tools: [
+            { name: "glob", params: {} },
+            { name: "task_tool_set", params: { x: 1 } },
+          ],
           llm: { model: "nested-model" },
         },
       },
     }) as {
-      agent?: unknown;
       agent_settings: {
-        enable_switch_llm_tool?: boolean;
-        include_default_tools?: unknown;
+        tools: Array<{ name: string; params: Record<string, unknown> }>;
       };
     };
 
-    expect(payload.agent).toBeUndefined();
-    expect(payload.agent_settings.enable_switch_llm_tool).toBe(true);
-    expect(payload.agent_settings.include_default_tools).toBeUndefined();
+    expect(payload.agent_settings.tools).toEqual([
+      { name: "glob", params: {} },
+      { name: "task_tool_set", params: { x: 1 } },
+    ]);
   });
 
-  it("omits browser_tool_set and task_tool_set when the server does not advertise them", () => {
+  it("keeps an explicitly empty tool list bare", () => {
+    const payload = buildStartConversationRequest({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        agent_settings: {
+          ...DEFAULT_SETTINGS.agent_settings,
+          tools: [],
+          llm: { model: "nested-model" },
+        },
+      },
+    }) as { agent_settings: { tools: unknown[] } };
+
+    expect(payload.agent_settings.tools).toEqual([]);
+  });
+
+  it("omits browser_tool_set from the standard set when the server does not advertise it", () => {
     mockIsAgentServerToolAvailable.mockReturnValue(false);
 
     const payload = buildStartConversationRequest({
@@ -350,20 +364,22 @@ describe("buildStartConversationRequest", () => {
       { name: "terminal", params: {} },
       { name: "file_editor", params: {} },
       { name: "task_tracker", params: {} },
+      { name: "switch_llm", params: {} },
     ]);
   });
 
-  it("includes task_tool_set when sub-agents are enabled and the server advertises it but not browser tools", () => {
-    mockIsAgentServerToolAvailable.mockImplementation(
-      (toolName: string) => toolName === "task_tool_set",
-    );
+  it("drops a selected task_tool_set the server does not advertise", () => {
+    mockIsAgentServerToolAvailable.mockReturnValue(false);
 
     const payload = buildStartConversationRequest({
       settings: {
         ...DEFAULT_SETTINGS,
         agent_settings: {
           ...DEFAULT_SETTINGS.agent_settings,
-          enable_sub_agents: true,
+          tools: [
+            { name: "terminal", params: {} },
+            { name: "task_tool_set", params: {} },
+          ],
           llm: { model: "nested-model" },
         },
       },
@@ -375,30 +391,7 @@ describe("buildStartConversationRequest", () => {
 
     expect(payload.agent_settings.tools).toEqual([
       { name: "terminal", params: {} },
-      { name: "file_editor", params: {} },
-      { name: "task_tracker", params: {} },
-      { name: "task_tool_set", params: {} },
     ]);
-  });
-
-  it("omits task_tool_set when sub-agents are disabled even if the server advertises it", () => {
-    const payload = buildStartConversationRequest({
-      settings: {
-        ...DEFAULT_SETTINGS,
-        agent_settings: {
-          ...DEFAULT_SETTINGS.agent_settings,
-          enable_sub_agents: false,
-          llm: { model: "nested-model" },
-        },
-      },
-    }) as {
-      agent_settings: {
-        tools: Array<{ name: string; params: Record<string, unknown> }>;
-      };
-    };
-
-    const toolNames = payload.agent_settings.tools.map((t) => t.name);
-    expect(toolNames).not.toContain("task_tool_set");
   });
 
   it("derives confirmation and security settings the same way as OpenHands", () => {

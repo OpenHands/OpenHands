@@ -7,7 +7,6 @@ import { useSaveSettings } from "#/hooks/mutation/use-save-settings";
 import { useAgentSettingsSchema } from "#/hooks/query/use-agent-settings-schema";
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
 import { SettingsInput } from "#/components/features/settings/settings-input";
-import { SettingsSwitch } from "#/components/features/settings/settings-switch";
 import { SchemaField } from "#/components/features/settings/sdk-settings/schema-field";
 import { AcpCredentialsSection } from "#/components/features/settings/acp-credentials-section";
 import { useAcpCredentialForm } from "#/hooks/use-acp-credential-form";
@@ -20,8 +19,6 @@ import {
 import { ProfileScopeList } from "#/components/features/settings/agent-profiles/profile-scope-list";
 import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
-import { formControlSwitchDescriptionClassName } from "#/utils/form-control-classes";
-import { cn } from "#/utils/utils";
 import { SettingsFieldSchema, SettingsValue } from "#/types/settings";
 import {
   coerceFieldValue,
@@ -32,10 +29,6 @@ import {
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
 import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
-import {
-  resolveSchemaFieldDescription,
-  resolveSchemaFieldLabel,
-} from "#/utils/sdk-settings-field-metadata";
 import {
   ACP_PROVIDERS,
   ACP_CUSTOM_PRESET_KEY,
@@ -68,8 +61,6 @@ type AgentSettingsSnapshot = {
   isCustomAcpModel: boolean;
 };
 
-const ENABLE_SUB_AGENTS_FIELD_KEY = "enable_sub_agents";
-const ENABLE_SWITCH_LLM_TOOL_FIELD_KEY = "enable_switch_llm_tool";
 const TOOL_CONCURRENCY_FIELD_KEY = "tool_concurrency_limit";
 const MCP_SERVER_REFS_KEY = "mcp_server_refs";
 const SECRET_REFS_KEY = "secret_refs";
@@ -100,28 +91,6 @@ function detectPreset(
     }
   }
   return ACP_CUSTOM_PRESET_KEY;
-}
-
-function findEnableSubAgentsField(
-  fields: SettingsFieldSchema[] | undefined,
-): SettingsFieldSchema | undefined {
-  return fields?.find((field) => field.key === ENABLE_SUB_AGENTS_FIELD_KEY);
-}
-
-function getEnableSubAgentsValue(
-  settingsValue: unknown,
-  field: SettingsFieldSchema | undefined,
-) {
-  if (typeof settingsValue === "boolean") return settingsValue;
-  return field?.default === true;
-}
-
-function getEnableSwitchLlmToolValue(
-  settingsValue: unknown,
-  field: SettingsFieldSchema | undefined,
-) {
-  if (typeof settingsValue === "boolean") return settingsValue;
-  return field?.default === true;
 }
 
 function isKnownAcpModel(
@@ -334,36 +303,6 @@ export function AgentSettingsScreen({
     () => schema?.sections.flatMap((section) => section.fields),
     [schema],
   );
-
-  // --- Sub-agents and LLM switching (agent settings only; profiles pick tools) ---
-  const showLegacyToolToggles = !embedded;
-  const subAgentsField = findEnableSubAgentsField(fields);
-  const initialSubAgentsEnabled = React.useMemo(
-    () =>
-      getEnableSubAgentsValue(
-        agentSettingsSource?.[ENABLE_SUB_AGENTS_FIELD_KEY],
-        subAgentsField,
-      ),
-    [subAgentsField, agentSettingsSource],
-  );
-  const [subAgentsEnabled, setSubAgentsEnabled] = useState(
-    initialSubAgentsEnabled,
-  );
-  const switchLlmToolField = fields?.find(
-    (field) => field.key === ENABLE_SWITCH_LLM_TOOL_FIELD_KEY,
-  );
-  const initialSwitchLlmToolEnabled = React.useMemo(
-    () =>
-      getEnableSwitchLlmToolValue(
-        agentSettingsSource?.[ENABLE_SWITCH_LLM_TOOL_FIELD_KEY],
-        switchLlmToolField,
-      ),
-    [switchLlmToolField, agentSettingsSource],
-  );
-  const [switchLlmToolEnabled, setSwitchLlmToolEnabled] = useState(
-    initialSwitchLlmToolEnabled,
-  );
-  const showSwitchLlmTool = Boolean(switchLlmToolField);
 
   // --- Parallel tool calls (OpenHands path) ---
   // Surfaced only when the backend schema exposes the field, so older
@@ -639,16 +578,6 @@ export function AgentSettingsScreen({
     }
   }, [settings, agentSettingsOverride]);
 
-  // Sync the sub-agents toggle when settings reload
-  useEffect(() => {
-    setSubAgentsEnabled(initialSubAgentsEnabled);
-  }, [initialSubAgentsEnabled]);
-
-  // Sync the LLM-switching toggle when settings reload
-  useEffect(() => {
-    setSwitchLlmToolEnabled(initialSwitchLlmToolEnabled);
-  }, [initialSwitchLlmToolEnabled]);
-
   // Sync the parallel-tool-calls input when settings reload
   useEffect(() => {
     setToolConcurrency(initialToolConcurrency);
@@ -730,10 +659,7 @@ export function AgentSettingsScreen({
       ? commandText !== loadedSnapshot.commandText ||
         acpModel !== loadedSnapshot.acpModel ||
         isCustomAcpModel !== loadedSnapshot.isCustomAcpModel
-      : (showLegacyToolToggles &&
-          (subAgentsEnabled !== initialSubAgentsEnabled ||
-            switchLlmToolEnabled !== initialSwitchLlmToolEnabled)) ||
-        toolConcurrency !== initialToolConcurrency);
+      : toolConcurrency !== initialToolConcurrency);
   const credentialsDirty = acpCredentialForm.isDirty;
   const isAnyDirty = settingsDirty || credentialsDirty;
   const customToolsUninitialized =
@@ -876,17 +802,9 @@ export function AgentSettingsScreen({
         },
       );
     } else {
-      // OpenHands path: save agent_kind + sub-agents toggle + the LLM-switching
-      // toggle + parallel tool calls
       const agentSettingsDiff: Record<string, SettingsValue> = {
         agent_kind: "openhands",
-        enable_sub_agents: subAgentsEnabled,
       };
-
-      if (switchLlmToolField) {
-        agentSettingsDiff[ENABLE_SWITCH_LLM_TOOL_FIELD_KEY] =
-          switchLlmToolEnabled;
-      }
 
       if (toolConcurrencyField) {
         let coerced: SettingsValue;
@@ -929,31 +847,6 @@ export function AgentSettingsScreen({
       );
     }
   };
-
-  const subAgentsLabel = subAgentsField
-    ? resolveSchemaFieldLabel(t, subAgentsField.key, subAgentsField.label)
-    : t(I18nKey.SCHEMA$ENABLE_SUB_AGENTS$LABEL);
-  const subAgentsDescription = subAgentsField
-    ? resolveSchemaFieldDescription(
-        t,
-        subAgentsField.key,
-        subAgentsField.description,
-      )
-    : t(I18nKey.SCHEMA$ENABLE_SUB_AGENTS$DESCRIPTION);
-  const switchLlmToolLabel = switchLlmToolField
-    ? resolveSchemaFieldLabel(
-        t,
-        switchLlmToolField.key,
-        switchLlmToolField.label,
-      )
-    : t(I18nKey.SCHEMA$ENABLE_SWITCH_LLM_TOOL$LABEL);
-  const switchLlmToolDescription = switchLlmToolField
-    ? resolveSchemaFieldDescription(
-        t,
-        switchLlmToolField.key,
-        switchLlmToolField.description,
-      )
-    : t(I18nKey.SCHEMA$ENABLE_SWITCH_LLM_TOOL$DESCRIPTION);
 
   return (
     <div
@@ -1006,54 +899,6 @@ export function AgentSettingsScreen({
           }
         }}
       />
-
-      {!isAcp && showLegacyToolToggles ? (
-        <div className="flex flex-col gap-1.5">
-          <SettingsSwitch
-            testId="agent-settings-enable-sub-agents"
-            isToggled={subAgentsEnabled}
-            onToggle={(val) => {
-              setSubAgentsEnabled(val);
-            }}
-          >
-            {subAgentsLabel}
-          </SettingsSwitch>
-          {subAgentsDescription ? (
-            <Typography.Paragraph
-              className={cn(
-                formControlSwitchDescriptionClassName,
-                "text-tertiary-alt text-xs leading-5",
-              )}
-            >
-              {subAgentsDescription}
-            </Typography.Paragraph>
-          ) : null}
-        </div>
-      ) : null}
-
-      {!isAcp && showLegacyToolToggles && showSwitchLlmTool ? (
-        <div className="flex flex-col gap-1.5">
-          <SettingsSwitch
-            testId="agent-settings-enable-switch-llm-tool"
-            isToggled={switchLlmToolEnabled}
-            onToggle={(val) => {
-              setSwitchLlmToolEnabled(val);
-            }}
-          >
-            {switchLlmToolLabel}
-          </SettingsSwitch>
-          {switchLlmToolDescription ? (
-            <Typography.Paragraph
-              className={cn(
-                formControlSwitchDescriptionClassName,
-                "text-tertiary-alt text-xs leading-5",
-              )}
-            >
-              {switchLlmToolDescription}
-            </Typography.Paragraph>
-          ) : null}
-        </div>
-      ) : null}
 
       {!isAcp && toolConcurrencyField ? (
         <SchemaField
