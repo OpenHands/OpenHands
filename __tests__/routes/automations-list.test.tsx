@@ -317,17 +317,11 @@ describe("AutomationsList — draft sections", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("preserves existing conversation tags when resuming a saved draft", async () => {
+  it("does not start a conversation when resuming a saved draft in this PR", async () => {
     const user = userEvent.setup();
     vi.mocked(AutomationService.listServerDrafts).mockResolvedValue(
       draftListResponse,
     );
-    mocks.createConversationMutate.mockImplementation((_, options) => {
-      options?.onSuccess?.({ conversation_id: "conv-resume" });
-    });
-    vi.mocked(
-      AgentServerConversationService.batchGetAppConversations,
-    ).mockResolvedValue([{ tags: { existing: "tag" } }] as never);
 
     renderList();
 
@@ -338,20 +332,13 @@ describe("AutomationsList — draft sections", () => {
       within(draftCard).getByTestId("automation-setup-draft-resume-draft-1"),
     );
 
-    await waitFor(() =>
-      expect(
-        AgentServerConversationService.updateConversationTags,
-      ).toHaveBeenCalledWith(
-        "conv-resume",
-        expect.objectContaining({
-          existing: "tag",
-          automationsetup: "draft",
-          automationdraftid: "draft-1",
-          automationmaterializeddraftid: "auto-draft-1",
-        }),
-      ),
+    expect(mocks.createConversationMutate).not.toHaveBeenCalled();
+    expect(
+      AgentServerConversationService.updateConversationTags,
+    ).not.toHaveBeenCalled();
+    expect(mocks.navigate).not.toHaveBeenCalledWith(
+      expect.stringContaining("/conversations/"),
     );
-    expect(mocks.navigate).toHaveBeenCalledWith("/conversations/conv-resume");
   });
 
   it("can test and delete saved setup drafts", async () => {
