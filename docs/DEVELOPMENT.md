@@ -49,7 +49,8 @@ it instead.
 
 | Variable                  | Description                    | Default |
 | ------------------------- | ------------------------------ | ------- |
-| `PORT`                    | Ingress port                   | `8000`  |
+| `PORT`                    | Ingress port (the single public entry point) | `8000`  |
+| `OH_CANVAS_SAFE_VITE_PORT` | Frontend/Vite port override | `3001`  |
 | `OH_AUTOMATION_GIT_REF`   | Git ref for automation backend (overrides the pinned default version) | *(unset)* |
 | `OH_AGENT_SERVER_GIT_REF` | Git ref for agent-server (overrides the pinned default version) | *(unset)* |
 
@@ -86,6 +87,10 @@ OH_AGENT_SERVER_VERSION=1.18.0 npm run dev
 
 - `OH_CANVAS_SAFE_BACKEND_PORT` — backend port for the isolated server (default `18000`)
 - `OH_CANVAS_SAFE_VSCODE_PORT` — VS Code sidecar port (default `backend port + 1`)
+- `OH_CANVAS_SAFE_VITE_PORT` — frontend/Vite port override (default `3001`). The full
+  stack's frontend port automatically falls back to a free port when `3001` is taken;
+  set this (or pass `--frontend-port`) to pin it to a specific value. `PORT`/`--port`
+  only controls the ingress port.
 - `OH_CANVAS_SAFE_STATE_DIR` — base directory for isolated server state
 - `VITE_WORKING_DIR` — repo root used for new conversations (defaults to the current checkout)
 

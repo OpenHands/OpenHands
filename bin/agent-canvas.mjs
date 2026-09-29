@@ -45,10 +45,15 @@ Default ports:
   ingress:         ${defaults.ports.proxy}
   agent-server:    ${defaults.ports.agentServer}
   automation:      ${defaults.ports.automation}
+  frontend:        3001 (falls back to a free port when busy)
 
 Override versions via environment variables:
   OH_AGENT_SERVER_VERSION, OH_AGENT_SERVER_GIT_REF, OH_AGENT_SERVER_LOCAL_PATH
-  OH_AUTOMATION_VERSION, OH_AUTOMATION_GIT_REF`);
+  OH_AUTOMATION_VERSION, OH_AUTOMATION_GIT_REF
+
+Override ports via:
+  --port / PORT                        ingress port
+  --frontend-port / OH_CANVAS_SAFE_VITE_PORT   frontend port`);
   process.exit(0);
 }
 const isPublic = args.includes("--public");
@@ -74,19 +79,22 @@ AUTH MODES:
               frontend. Users must paste it when the UI loads.
 
 OPTIONS:
-  -p, --port <port>     Ingress port (default: 8000)
-  --public              Enable public mode (see above)
-  --frontend-only       Start only the static frontend behind ingress
-  --backend-only        Start only agent-server + automation behind ingress
-  -v, --version         Show version number
-  --info                Show version and default stack configuration
-  -h, --help            Show this help message
+  -p, --port <port>          Ingress port (default: 8000)
+  --frontend-port <port>     Frontend static-server port (default: 3001;
+                             auto-picks a free port when busy)
+  --public                   Enable public mode (see above)
+  --frontend-only            Start only the static frontend behind ingress
+  --backend-only             Start only agent-server + automation behind ingress
+  -v, --version              Show version number
+  --info                     Show version and default stack configuration
+  -h, --help                 Show this help message
 
 ENVIRONMENT VARIABLES:
   LOCAL_BACKEND_API_KEY        API key for the server. Required in --public
                                mode; optional otherwise (auto-generated if
                                omitted, persisted across restarts).
   OH_SECRET_KEY                Secret key for encrypting settings
+  OH_CANVAS_SAFE_VITE_PORT     Frontend port override (default: 3001)
   OH_AGENT_SERVER_GIT_REF      Git ref for agent-server
   OH_AGENT_SERVER_LOCAL_PATH   Path to local SDK checkout (for development)
   OH_AGENT_SERVER_VERSION      Specific PyPI version for agent-server
@@ -106,6 +114,9 @@ EXAMPLES:
 
   # Use a specific port
   npx @openhands/agent-canvas --port 3000
+
+  # Use a specific frontend port when 3001 is busy
+  npx @openhands/agent-canvas --frontend-port 3002
 
   # Start only the static frontend behind ingress
   npx @openhands/agent-canvas --frontend-only
