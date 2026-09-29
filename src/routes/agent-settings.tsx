@@ -218,7 +218,6 @@ export function buildAgentProfileFields(
       ...mcpRefs,
       ...secretRefs,
     };
-  // Until the catalog loads, `tools` is left out so the stored selection survives.
   if (toolCatalogLoaded) {
     fields.tools = buildProfileToolsValue({
       mode: toolsMode,
@@ -349,8 +348,7 @@ export function AgentSettingsScreen({
     const items = (toolCatalog ?? [])
       .filter(({ user_selectable: selectable, usable }) => selectable && usable)
       .map(({ name, description }) => ({ name, description }));
-    // A stored name outside the catalog rides along: the save overwrites the
-    // whole profile, so hiding it would silently drop the user's choice.
+    // Stored names outside the catalog stay selectable so they are kept.
     initialTools.selected.forEach((name) => {
       if (!items.some((item) => item.name === name))
         items.push({ name, description: undefined });
