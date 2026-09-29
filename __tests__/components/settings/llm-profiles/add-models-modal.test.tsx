@@ -10,6 +10,8 @@ import ConfigService from "#/api/config-service/config-service.api";
 import type {
   LLMModel,
   LLMModelPage,
+  LLMProvider,
+  ProviderPage,
 } from "#/api/config-service/config-service.types";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
@@ -18,10 +20,13 @@ vi.mock("react-i18next", () => ({
     t: (key: string, params?: Record<string, string>) => {
       const translations: Record<string, string> = {
         SETTINGS$ADD_MODELS_TITLE: "Add models as profiles",
-        SETTINGS$ADD_MODELS_PROVIDER_LABEL: "Provider connection",
-        SETTINGS$ADD_MODELS_PROVIDER_PLACEHOLDER:
-          "Select a provider connection",
+        SETTINGS$ADD_MODELS_PROVIDER_LABEL: "Provider",
+        SETTINGS$ADD_MODELS_PROVIDER_PLACEHOLDER: "Select a provider",
+        SETTINGS$ADD_MODELS_CONNECTION_LABEL: "Provider connection",
+        SETTINGS$ADD_MODELS_NO_CONNECTION: "No connection (keyless)",
         SETTINGS$ADD_MODELS_CONNECTION_BOUND: `Linked to ${params?.provider ?? "?"}`,
+        SETTINGS$ADD_MODELS_KEYLESS_NOTE:
+          "No connection — profiles will need a key added later",
         SETTINGS$ADD_MODELS_SELECT_ALL: "Select all",
         SETTINGS$ADD_MODELS_EMPTY: "No models found for this provider.",
         SETTINGS$ADD_N_PROFILES: `Add ${params?.count ?? "?"} profiles`,
@@ -85,6 +90,13 @@ const OPENAI_MODELS: LLMModelPage = {
     model("openai", "gpt-4o-mini", true),
     model("openai", "unverified-model", false),
   ],
+  next_page_id: null,
+};
+
+// The provider combobox is driven by `searchProviders`. The modal only needs
+// the openai provider to appear so it can be picked / preselected.
+const PROVIDERS: ProviderPage = {
+  items: [{ name: "openai", verified: true } satisfies LLMProvider],
   next_page_id: null,
 };
 
@@ -154,6 +166,16 @@ describe("AddModelsModal", () => {
     await screen.findByTestId("add-models-row-openai/unverified-model");
   };
 
+  // The provider combobox options arrive asynchronously (searchProviders is a
+  // query), so wait for the openai option before interacting with it.
+  const chooseOpenAI = async () => {
+    await screen.findByText("OpenAI");
+    await userEvent.selectOptions(
+      screen.getByTestId("add-models-provider"),
+      "openai",
+    );
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
     queryClient = new QueryClient({
@@ -161,34 +183,41 @@ describe("AddModelsModal", () => {
     });
     // `searchModels` is provider-scoped; the default fixture covers openai.
     vi.mocked(ConfigService.searchModels).mockResolvedValue(OPENAI_MODELS);
+    // `searchProviders` feeds the provider combobox.
+    vi.mocked(ConfigService.searchProviders).mockResolvedValue(PROVIDERS);
     vi.mocked(ProfilesService.saveProfile).mockResolvedValue({
       name: "x",
       message: "ok",
     });
   });
 
-  it("renders only the provider combobox in chooser mode (no connection picked)", () => {
+  it("renders only the provider combobox in chooser mode (no provider picked)", () => {
     renderModal(null);
     expect(screen.getByTestId("add-models-modal")).toBeInTheDocument();
-    // The combobox is the prompt — no model list, no empty-state, no spinner.
+    // The provider box is the prompt — no model list, no empty-state, no
+    // spinner, and no connection box (there is no provider to match yet).
     expect(screen.getByTestId("add-models-provider")).toBeInTheDocument();
     expect(screen.queryByTestId("add-models-loading")).not.toBeInTheDocument();
     expect(screen.queryByTestId("add-models-empty")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("add-models-connection-field"),
+    ).not.toBeInTheDocument();
   });
 
-  it("shows the provider combobox preselected to the launched connection", async () => {
+  it("shows the provider preselected to the launched connection's provider", async () => {
     renderModal();
-    expect(
-      await screen.findByTestId("add-models-connection-summary"),
-    ).toBeInTheDocument();
-    // Preselect mode: the combobox is present and bound to the connection...
-    const combobox = screen.getByTestId(
+    // Preselect mode: the provider box opens on the connection's provider,
+    // the connection is bound, and the models load without the user choosing.
+    await screen.findByText("OpenAI");
+    const providerBox = screen.getByTestId(
       "add-models-provider",
     ) as HTMLSelectElement;
-    expect(combobox.value).toBe("conn-openai");
-    // ...so the connection's models load without the user choosing.
+    expect(providerBox.value).toBe("openai");
+    const connectionBox = (await screen.findByTestId(
+      "add-models-connection",
+    )) as HTMLSelectElement;
+    expect(connectionBox.value).toBe("conn-openai");
     await screen.findByTestId("add-models-row-openai/gpt-4o");
-    expect(screen.getByText("Shared OpenAI (OpenAI)")).toBeInTheDocument();
   });
 
   it("lists all models for the connection's provider with short (unprefixed) names", async () => {
@@ -232,8 +261,8 @@ describe("AddModelsModal", () => {
     expect(
       screen.queryByTestId("add-models-row-openai/gpt-4o-mini"),
     ).not.toBeInTheDocument();
-    // select-all reaches the non-hidden rows (gpt-4o + unverified-model)
-    await userEvent.click(screen.getByTestId("add-models-select-all"));
+    // Preselect mode auto-selects the visible rows (gpt-4o + unverified-model);
+    // the hidden gpt-4o-mini is not counted.
     expect(screen.getByTestId("add-models-submit")).toHaveTextContent(
       "Add 2 profiles",
     );
@@ -262,8 +291,11 @@ describe("AddModelsModal", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("selects nothing until the user chooses", async () => {
-    renderModal();
+  it("selects nothing until the user chooses (chooser mode)", async () => {
+    // Chooser entry point: no preselect, so the user picks a provider. Rows
+    // are not auto-selected — choosing is the point of the modal.
+    renderModal(null);
+    await chooseOpenAI();
     await screen.findByTestId("add-models-row-openai/gpt-4o");
     expect(
       screen.getByTestId("add-models-check-openai/gpt-4o"),
@@ -274,19 +306,137 @@ describe("AddModelsModal", () => {
     expect(screen.getByTestId("add-models-submit")).toBeDisabled();
   });
 
+  it("auto-selects the loaded rows in preselect mode (connection row entry point)", async () => {
+    // The "..." entry point is an explicit intent to bulk-add from that
+    // connection, so its models load already selected.
+    renderModal();
+    await screen.findByTestId("add-models-row-openai/gpt-4o");
+    expect(screen.getByTestId("add-models-check-openai/gpt-4o")).toBeChecked();
+    expect(
+      screen.getByTestId("add-models-check-openai/gpt-4o-mini"),
+    ).toBeChecked();
+    expect(screen.getByTestId("add-models-submit")).toHaveTextContent(
+      "Add 3 profiles",
+    );
+  });
+
   it("creates profiles linked to the connection", async () => {
     const onClose = vi.fn();
     renderModal(OPENAI_CONNECTION, [], onClose);
+    // Preselect mode auto-selects the rows; submit creates one profile per
+    // selected row, each linked to the bound connection.
     await screen.findByTestId("add-models-row-openai/gpt-4o");
-    await userEvent.click(screen.getByTestId("add-models-check-openai/gpt-4o"));
     await userEvent.click(screen.getByTestId("add-models-submit"));
 
     await waitFor(() => expect(onClose).toHaveBeenCalled());
-    expect(ProfilesService.saveProfile).toHaveBeenCalledTimes(1);
+    expect(ProfilesService.saveProfile).toHaveBeenCalledTimes(3);
     expect(ProfilesService.saveProfile).toHaveBeenCalledWith("gpt-4o", {
       llm: {
         model: "openai/gpt-4o",
         provider_connection_id: "conn-openai",
+      },
+      include_secrets: false,
+    });
+  });
+
+  it("creates keyless profiles when the provider has no matching connection", async () => {
+    // Chooser entry point with no connections at all: the user picks a
+    // provider from the catalog and bulk-adds. With no connection to bind,
+    // profiles are created keyless (provider_connection_id: null) — the
+    // pre-connection bulk-add behavior the linked issue requires.
+    const onClose = vi.fn();
+    renderModal(null, [], onClose);
+    await chooseOpenAI();
+    await screen.findByTestId("add-models-row-openai/gpt-4o");
+    // No connection box: nothing matches the chosen provider.
+    expect(
+      screen.queryByTestId("add-models-connection-field"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("add-models-keyless-note")).toHaveTextContent(
+      "No connection — profiles will need a key added later",
+    );
+    await userEvent.click(screen.getByTestId("add-models-select-all"));
+    await userEvent.click(screen.getByTestId("add-models-submit"));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(ProfilesService.saveProfile).toHaveBeenCalledWith("gpt-4o", {
+      llm: {
+        model: "openai/gpt-4o",
+        provider_connection_id: null,
+      },
+      include_secrets: false,
+    });
+  });
+
+  it("binds a matching connection by default when the user picks a provider in chooser mode", async () => {
+    // Picking a provider that has a connection binds it automatically, so
+    // created profiles are usable out of the box. The user can opt out via
+    // the connection box's "No connection" option.
+    const onClose = vi.fn();
+    // Chooser entry point (no preselect) but a connection exists in the pool.
+    render(
+      <QueryClientProvider client={queryClient}>
+        <AddModelsModal
+          isOpen
+          connections={[OPENAI_CONNECTION]}
+          initialConnectionId={null}
+          existingNames={[]}
+          onClose={onClose}
+        />
+      </QueryClientProvider>,
+    );
+    await chooseOpenAI();
+    await screen.findByTestId("add-models-row-openai/gpt-4o");
+    // The connection box appears and defaults to the matching connection.
+    const connectionBox = screen.getByTestId(
+      "add-models-connection",
+    ) as HTMLSelectElement;
+    expect(connectionBox.value).toBe("conn-openai");
+    expect(
+      screen.queryByTestId("add-models-keyless-note"),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId("add-models-select-all"));
+    await userEvent.click(screen.getByTestId("add-models-submit"));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(ProfilesService.saveProfile).toHaveBeenCalledWith("gpt-4o", {
+      llm: {
+        model: "openai/gpt-4o",
+        provider_connection_id: "conn-openai",
+      },
+      include_secrets: false,
+    });
+  });
+
+  it("lets the user opt out of a matching connection to create keyless profiles", async () => {
+    const onClose = vi.fn();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <AddModelsModal
+          isOpen
+          connections={[OPENAI_CONNECTION]}
+          initialConnectionId={null}
+          existingNames={[]}
+          onClose={onClose}
+        />
+      </QueryClientProvider>,
+    );
+    await chooseOpenAI();
+    await screen.findByTestId("add-models-row-openai/gpt-4o");
+    // Explicitly choose "No connection (keyless)".
+    await userEvent.selectOptions(
+      screen.getByTestId("add-models-connection"),
+      "",
+    );
+    expect(screen.getByTestId("add-models-keyless-note")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId("add-models-select-all"));
+    await userEvent.click(screen.getByTestId("add-models-submit"));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(ProfilesService.saveProfile).toHaveBeenCalledWith("gpt-4o", {
+      llm: {
+        model: "openai/gpt-4o",
+        provider_connection_id: null,
       },
       include_secrets: false,
     });
@@ -300,7 +450,7 @@ describe("AddModelsModal", () => {
       .mockResolvedValue({ name: "c", message: "ok" });
     renderModal(OPENAI_CONNECTION, [], onClose);
     await screen.findByTestId("add-models-row-openai/gpt-4o");
-    await userEvent.click(screen.getByTestId("add-models-select-all"));
+    // Preselect mode auto-selects the rows; submit drives all three.
     await userEvent.click(screen.getByTestId("add-models-submit"));
 
     await waitFor(() =>
@@ -320,7 +470,6 @@ describe("AddModelsModal", () => {
     await screen.findByTestId("add-models-row-openai/gpt-4o");
     await showUnverified();
 
-    await userEvent.click(screen.getByTestId("add-models-select-all"));
     await userEvent.click(screen.getByTestId("add-models-submit"));
 
     await waitFor(() =>
@@ -342,7 +491,6 @@ describe("AddModelsModal", () => {
       .mockResolvedValue({ name: "b", message: "ok" });
     renderModal();
     await screen.findByTestId("add-models-row-openai/gpt-4o");
-    await userEvent.click(screen.getByTestId("add-models-select-all"));
     await userEvent.click(screen.getByTestId("add-models-submit"));
 
     await waitFor(() =>
@@ -363,7 +511,6 @@ describe("AddModelsModal", () => {
     await screen.findByTestId("add-models-row-openai/gpt-4o");
     await showUnverified();
 
-    await userEvent.click(screen.getByTestId("add-models-select-all"));
     await userEvent.click(screen.getByTestId("add-models-submit"));
 
     await waitFor(() =>
@@ -383,7 +530,6 @@ describe("AddModelsModal", () => {
     await screen.findByTestId("add-models-row-openai/gpt-4o");
     await showUnverified();
 
-    await userEvent.click(screen.getByTestId("add-models-select-all"));
     await userEvent.click(screen.getByTestId("add-models-submit"));
 
     await waitFor(() =>
@@ -395,12 +541,10 @@ describe("AddModelsModal", () => {
   });
 
   it("keeps selections once the list has settled", async () => {
+    // Preselect mode auto-selects the rows; a selection must survive the
+    // list settling (the unverified row arriving after the verified ones).
     renderModal();
     await screen.findByTestId("add-models-row-openai/gpt-4o");
-    await userEvent.click(
-      screen.getByTestId("add-models-check-openai/gpt-4o-mini"),
-    );
-
     await showUnverified();
 
     expect(
@@ -412,7 +556,6 @@ describe("AddModelsModal", () => {
     vi.mocked(ProfilesService.saveProfile).mockRejectedValue(new Error("boom"));
     const { setOpen } = renderModal();
     await screen.findByTestId("add-models-row-openai/gpt-4o");
-    await userEvent.click(screen.getByTestId("add-models-select-all"));
     await userEvent.click(screen.getByTestId("add-models-submit"));
     await waitFor(() => expect(screen.getAllByText("Failed")).toHaveLength(3));
 
@@ -425,6 +568,12 @@ describe("AddModelsModal", () => {
   it("select-all toggles every selectable row", async () => {
     renderModal();
     await screen.findByTestId("add-models-row-openai/gpt-4o");
+    // Preselect mode auto-selects every row.
+    expect(screen.getByTestId("add-models-submit")).toHaveTextContent(
+      "Add 3 profiles",
+    );
+
+    await userEvent.click(screen.getByTestId("add-models-select-all"));
     expect(screen.getByTestId("add-models-submit")).toHaveTextContent(
       "Add 0 profiles",
     );
@@ -433,11 +582,6 @@ describe("AddModelsModal", () => {
     await userEvent.click(screen.getByTestId("add-models-select-all"));
     expect(screen.getByTestId("add-models-submit")).toHaveTextContent(
       "Add 3 profiles",
-    );
-
-    await userEvent.click(screen.getByTestId("add-models-select-all"));
-    expect(screen.getByTestId("add-models-submit")).toHaveTextContent(
-      "Add 0 profiles",
     );
   });
 });

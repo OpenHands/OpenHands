@@ -315,7 +315,10 @@ describe("LlmProfilesManager", () => {
     expect(combobox.value).toBe("");
   });
 
-  it("hides the top Add-from-provider-connections button when there are no connections", async () => {
+  it("still shows the top Add-from-provider-connections button when there are no connections", async () => {
+    // The entry point stays reachable with zero connections: the user can
+    // pick a provider from the catalog and bulk-add keyless profiles, the
+    // pre-connection behavior the linked issue requires.
     vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
       profiles: mockProfiles,
       active_profile: "gpt-4-profile",
@@ -323,10 +326,10 @@ describe("LlmProfilesManager", () => {
 
     renderManager({ onAddProfile: vi.fn() }, { connections: [] });
 
-    await screen.findByTestId("add-llm-profile");
     expect(
-      screen.queryByTestId("add-models-from-provider"),
-    ).not.toBeInTheDocument();
+      await screen.findByTestId("add-models-from-provider"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("add-llm-profile")).toBeInTheDocument();
   });
 
   it("hides provider connections on a cloud backend without an org", async () => {

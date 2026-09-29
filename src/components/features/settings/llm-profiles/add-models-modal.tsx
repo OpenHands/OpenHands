@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { ApiKeyModalBase } from "#/components/features/settings/api-key-modal-base";
 import { useProviderModels } from "#/hooks/query/use-provider-models";
+import { useSearchProviders } from "#/hooks/query/use-search-providers";
 import { useSaveLlmProfile } from "#/hooks/mutation/use-save-llm-profile";
 import type { SaveProfileRequest } from "#/api/profiles-service/profiles-service.api";
 import type { ProviderConnection } from "#/api/provider-connections-service/provider-connections-service.api";
@@ -26,15 +27,20 @@ interface AddModelsModalProps {
   isOpen: boolean;
   existingNames: string[];
   /**
-   * Provider connections the user can bulk-add from. Each option in the
-   * provider combobox is one of these — picking it drives the model list and
-   * links every created profile to that connection's credential.
+   * Provider connections the user can bulk-add from. When the selected
+   * provider has a matching connection, the modal binds it (created profiles
+   * inherit the connection's credential). When it does not — or the user
+   * chooses "No connection" — profiles are created keyless, preserving the
+   * pre-connection bulk-add behavior.
    */
   connections: ProviderConnection[];
   /**
    * A connection id to preselect when the modal opens (launched from a
-   * connection row's "..."). Omit/leave null for the chooser entry point
-   * (the top "Add from provider connections" button), where the user picks.
+   * connection row's "…"). Omit/leave null for the chooser entry point
+   * (the top "Add from provider connections" button), where the user picks a
+   * provider. In preselect mode the provider combobox opens on that
+   * connection's provider, the connection is bound, and its models load
+   * already selected.
    */
   initialConnectionId?: string | null;
   onClose: () => void;
@@ -51,15 +57,22 @@ interface ModelRow {
   status: RowStatus;
 }
 
+/** Sentinel for the "no connection" (keyless) option in the connection box. */
+const KEYLESS_CONNECTION_VALUE = "";
+
 /**
- * Bulk-add models as LLM profiles from a provider connection. One modal serves
- * two entry points: the top "Add from provider connections" button (chooser
- * mode — pick a connection in the combobox) and a connection row's "..."
- * (preselect mode — the combobox opens on that connection). Whichever entry
- * point, the selected connection's provider drives the model list and every
- * created profile is linked to it via `provider_connection_id` — mirroring the
- * link flow in `llm-settings-local-view.tsx` — so the shared credential is
- * wired up out of the box and no key needs to be added afterward.
+ * Bulk-add models as LLM profiles. One modal serves two entry points: the top
+ * "Add from provider connections" button (chooser mode — pick a provider) and
+ * a connection row's "…" (preselect mode — opens on that connection's
+ * provider with the connection bound and models already selected).
+ *
+ * The selected provider drives the model list. When a matching provider
+ * connection exists it is bound by default, so created profiles inherit the
+ * connection's shared credential via `provider_connection_id` (mirroring the
+ * link flow in `llm-settings-local-view.tsx`) and no key needs to be added
+ * afterward. When no connection matches — or the user chooses "No connection"
+ * — `provider_connection_id` is null and profiles are created keyless, the
+ * same behavior bulk-add had before provider connections existed.
  */
 export function AddModelsModal({
   isOpen,
@@ -69,28 +82,50 @@ export function AddModelsModal({
   onClose,
 }: AddModelsModalProps) {
   const { t } = useTranslation("openhands");
+  const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const [selectedConnectionId, setSelectedConnectionId] = useState<
     string | null
   >(null);
   const [rows, setRows] = useState<ModelRow[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
-  const connection = useMemo(
-    () => connections.find((c) => c.id === selectedConnectionId) ?? null,
-    [connections, selectedConnectionId],
-  );
-  const provider = connection?.provider ?? null;
-  const connectionId = connection?.id ?? null;
-
-  const models = useProviderModels(provider);
+  const { data: providers } = useSearchProviders();
+  const models = useProviderModels(selectedProvider);
   const saveProfile = useSaveLlmProfile();
+
+  // Connections whose provider matches the selected provider. These are the
+  // only ones the connection box offers: a connection is only usable as a
+  // credential source for its own provider's models.
+  const matchingConnections = useMemo(
+    () =>
+      selectedProvider
+        ? connections.filter((c) => c.provider === selectedProvider)
+        : [],
+    [connections, selectedProvider],
+  );
+
+  // The bound connection id drives the submit payload. Null means keyless.
+  const connectionId = useMemo(() => {
+    if (!selectedConnectionId) return null;
+    return matchingConnections.some((c) => c.id === selectedConnectionId)
+      ? selectedConnectionId
+      : null;
+  }, [matchingConnections, selectedConnectionId]);
 
   // Rows follow the model list, and only the model list. Already-added models
   // are hidden at render rather than rebuilding the rows, because a rebuild
   // discards the selections and per-row statuses the user has accumulated. A
   // row already on screen keeps its state when the list refreshes.
+  // `autoSelectRef` is set when the modal opens from a connection row ("…"):
+  // that entry point is an explicit intent to bulk-add from that connection,
+  // so the loaded rows are selected for the user instead of forcing per-row
+  // clicking. It fires once per open (on the first model list that arrives)
+  // and is cleared, so a later connection change in the combobox does not
+  // re-select rows the user has already curated.
+  const autoSelectRef = useRef(false);
   useEffect(() => {
     const items = models.data ?? [];
+    const selectNew = autoSelectRef.current;
     setRows((prev) => {
       const prior = new Map(prev.map((row) => [row.model, row]));
       // Dedupe by canonical model id: a provider's catalog can list the same
@@ -114,31 +149,44 @@ export function AddModelsModal({
             : {
                 model: full,
                 name: deriveProfileNameFromModel(full),
-                // Nothing is pre-selected: the server caps how many profiles an
-                // account may hold, so defaulting to "all" invites a submission
-                // that is mostly refusals. Choosing is the point of the modal.
-                selected: false,
+                // Chooser mode leaves rows unselected: the server caps how
+                // many profiles an account may hold, so defaulting to "all"
+                // invites a submission that is mostly refusals. Preselect mode
+                // (autoSelectRef) selects them — see the comment above.
+                selected: selectNew,
                 status: "idle" as RowStatus,
               },
         );
       }
       return built;
     });
+    if (items.length > 0) autoSelectRef.current = false;
   }, [models.data]);
 
   // The manager keeps this component mounted and drives it with `isOpen`, so
   // without an explicit reset a reopened modal still shows the last session's
-  // selections and Saved/Failed marks. Re-seed the preselected connection too,
-  // so a row's "..." relaunches on its own connection rather than the one the
-  // user last picked in a different session.
+  // provider, connection, selections, and Saved/Failed marks. On open, seed
+  // the provider/connection from `initialConnectionId` (preselect mode) or
+  // leave both unset (chooser mode). On close, clear everything.
   useEffect(() => {
     if (isOpen) {
-      setSelectedConnectionId(initialConnectionId);
+      const initial =
+        initialConnectionId &&
+        connections.find((c) => c.id === initialConnectionId);
+      if (initial) {
+        setSelectedProvider(initial.provider);
+        setSelectedConnectionId(initial.id);
+        autoSelectRef.current = true;
+      } else {
+        setSelectedProvider(null);
+        setSelectedConnectionId(null);
+      }
     } else {
       setRows([]);
       setSubmitting(false);
+      autoSelectRef.current = false;
     }
-  }, [isOpen, initialConnectionId]);
+  }, [isOpen, initialConnectionId, connections]);
 
   const existing = useMemo(() => new Set(existingNames), [existingNames]);
 
@@ -173,6 +221,16 @@ export function AddModelsModal({
     );
   };
 
+  // When the user picks a provider, bind a matching connection by default so
+  // created profiles are usable out of the box (this modal's reason for
+  // existing). If there is no matching connection, leave it keyless. The user
+  // can still switch the connection box to "No connection" to opt out.
+  const handleProviderChange = (value: string) => {
+    setSelectedProvider(value || null);
+    const first = connections.find((c) => c.provider === value);
+    setSelectedConnectionId(first?.id ?? null);
+  };
+
   const handleSubmit = async () => {
     setSubmitting(true);
     const targets = selectedRows;
@@ -199,10 +257,12 @@ export function AddModelsModal({
         await saveProfile.mutateAsync({
           name: row.name,
           request: {
-            // The connection sources the credential, so it replaces any inline
-            // api_key/base_url — mirrored on the normal save flow in
+            // A bound connection sources the credential, so it replaces any
+            // inline api_key/base_url — mirrored on the normal save flow in
             // `llm-settings-local-view.tsx`. `include_secrets: false` because
-            // no secret is being sent; the link is by id.
+            // no secret is being sent; the link is by id. When no connection
+            // is bound (`connectionId` is null) the profile is keyless, the
+            // same as bulk-add before provider connections existed.
             llm: {
               model: row.model,
               provider_connection_id: connectionId,
@@ -264,12 +324,12 @@ export function AddModelsModal({
     if (!submitting) onClose();
   };
 
-  const isLoadingModels = connection !== null && models.isLoading;
-  // Only flag "empty" once a connection is chosen and its (non-loading) model
+  const isLoadingModels = selectedProvider !== null && models.isLoading;
+  // Only flag "empty" once a provider is chosen and its (non-loading) model
   // list came back bare. In chooser mode with nothing picked yet, the
-  // combobox is the prompt — there's no list to call empty.
+  // provider box is the prompt — there's no list to call empty.
   const showEmpty =
-    connection !== null && !isLoadingModels && visibleRows.length === 0;
+    selectedProvider !== null && !isLoadingModels && visibleRows.length === 0;
   const emptyMessage = I18nKey.SETTINGS$ADD_MODELS_EMPTY;
 
   const footer = (
@@ -310,32 +370,69 @@ export function AddModelsModal({
       <div data-testid="add-models-modal" className="flex flex-col gap-3">
         <label
           className="flex flex-col gap-2 text-sm text-white"
-          data-testid="add-models-connection-summary"
+          data-testid="add-models-provider-field"
         >
           {t(I18nKey.SETTINGS$ADD_MODELS_PROVIDER_LABEL)}
           <select
             data-testid="add-models-provider"
             className="rounded-md border border-[var(--oh-border)] bg-[var(--oh-background)] px-3 py-2 text-sm text-white"
-            value={selectedConnectionId ?? ""}
-            onChange={(e) => setSelectedConnectionId(e.target.value || null)}
+            value={selectedProvider ?? ""}
+            onChange={(e) => handleProviderChange(e.target.value)}
             disabled={submitting}
           >
             <option value="" disabled>
               {t(I18nKey.SETTINGS$ADD_MODELS_PROVIDER_PLACEHOLDER)}
             </option>
-            {connections.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.display_name} ({mapProvider(c.provider)})
+            {providers?.map((p) => (
+              <option key={p.name} value={p.name}>
+                {mapProvider(p.name)}
               </option>
             ))}
           </select>
         </label>
 
-        {connection && (
+        {/* Only offer a connection binding when the selected provider has a
+            matching connection. With none, the run is keyless and there is
+            nothing to choose, so the box is omitted rather than showing a
+            lone "No connection" option. */}
+        {matchingConnections.length > 0 && (
+          <label
+            className="flex flex-col gap-2 text-sm text-white"
+            data-testid="add-models-connection-field"
+          >
+            {t(I18nKey.SETTINGS$ADD_MODELS_CONNECTION_LABEL)}
+            <select
+              data-testid="add-models-connection"
+              className="rounded-md border border-[var(--oh-border)] bg-[var(--oh-background)] px-3 py-2 text-sm text-white"
+              value={selectedConnectionId ?? KEYLESS_CONNECTION_VALUE}
+              onChange={(e) => setSelectedConnectionId(e.target.value || null)}
+              disabled={submitting}
+            >
+              <option value={KEYLESS_CONNECTION_VALUE}>
+                {t(I18nKey.SETTINGS$ADD_MODELS_NO_CONNECTION)}
+              </option>
+              {matchingConnections.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.display_name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        {selectedProvider && connectionId && (
           <span className="min-w-0 max-w-full truncate text-xs text-[var(--oh-muted)]">
             {t(I18nKey.SETTINGS$ADD_MODELS_CONNECTION_BOUND, {
-              provider: connection.provider,
+              provider: selectedProvider,
             })}
+          </span>
+        )}
+        {selectedProvider && !connectionId && (
+          <span
+            data-testid="add-models-keyless-note"
+            className="min-w-0 max-w-full truncate text-xs text-[var(--oh-muted)]"
+          >
+            {t(I18nKey.SETTINGS$ADD_MODELS_KEYLESS_NOTE)}
           </span>
         )}
 

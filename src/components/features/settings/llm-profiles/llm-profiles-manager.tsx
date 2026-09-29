@@ -141,7 +141,7 @@ export function LlmProfilesManager({
               {t(I18nKey.SETTINGS$AVAILABLE_PROFILES)}
             </h2>
             <div className="ml-auto flex items-center gap-2">
-              {canManage && supportsConnections && connectionList.length > 0 ? (
+              {canManage && supportsConnections ? (
                 <BrandButton
                   testId="add-models-from-provider"
                   type="button"
