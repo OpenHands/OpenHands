@@ -97,9 +97,9 @@ in step 4.
 > served under a path prefix (`/vscode` by default) on the proxy port rather
 > than on a published port of its own — that is what keeps the deployment to a
 > single port, but a path prefix routes requests, it does not isolate them.
-> Script running anywhere on that origin, including editor content reached
-> through an extension or a compromised asset, can read the canvas's
-> `localStorage`, which holds the SESSION API key of _every_ backend registered
+> A script running anywhere on that origin, including editor content reached
+> through an extension or a compromised asset, can read the Canvas's
+> `localStorage`, which holds the session API key of _every_ backend registered
 > in that browser. Tracked in
 > [#16492](https://github.com/OpenHands/OpenHands/issues/16492).
 
