@@ -240,3 +240,50 @@ export const getACPToolCallContent = (event: ACPToolCallEvent): string => {
 
   return sections.join("\n\n");
 };
+
+/**
+ * Command string a surface-ready ACP execute tool call exposes for the
+ * Terminal panel. Prefers the ``raw_input.command`` the ACP server reports;
+ * falls back to the title with any redundant ``Bash`` / ``Run`` prefix stripped
+ * so the same command shows in the panel as in the chat card (#17777).
+ */
+export const getACPTerminalInput = (event: ACPToolCallEvent): string => {
+  const rawInput = event.raw_input;
+  if (
+    event.tool_kind === "execute" &&
+    rawInput &&
+    typeof rawInput === "object" &&
+    "command" in rawInput &&
+    typeof (rawInput as { command: unknown }).command === "string"
+  ) {
+    return (rawInput as { command: string }).command;
+  }
+  return stripRedundantTitlePrefix(event);
+};
+
+/**
+ * Output string a surface-ready ACP execute tool call exposes for the
+ * Terminal panel. Prefers the display-ready text blocks in ``content``
+ * (same fence-stripped view the chat card uses), falling back to
+ * ``raw_output`` when nothing renderable was surfaced (#17777).
+ */
+export const getACPTerminalOutput = (event: ACPToolCallEvent): string => {
+  if (event.tool_kind !== "execute") {
+    return "";
+  }
+  const textBlocks = getACPDisplayBlocks(event).filter(
+    (block): block is Extract<ACPDisplayBlock, { type: "text" }> =>
+      block.type === "text" && block.text.length > 0,
+  );
+  const fromContent = textBlocks
+    .map((block) => block.text)
+    .join("\n")
+    .trim();
+  if (fromContent) {
+    return fromContent;
+  }
+  if (typeof event.raw_output === "string") {
+    return event.raw_output.trim();
+  }
+  return "";
+};

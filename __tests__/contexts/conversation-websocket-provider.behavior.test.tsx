@@ -1386,6 +1386,60 @@ describe("Conversation websocket behavior", () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
+  it("feeds the terminal panel from ACP execute tool calls (#17777", () => {
+    renderProvider();
+
+    const makeACPExecute = (
+      id: string,
+      status: "in_progress" | "completed",
+      overrides: Record<string, unknown> = {},
+    ) => ({
+      id,
+      timestamp: `2024-01-01T00:00:${status === "completed" ? "02" : "01"}.000Z`,
+      source: "agent",
+      kind: "ACPToolCallEvent",
+      tool_call_id: "toolu_123",
+      title: "Bash echo PANEL_PROBE_42",
+      status,
+      tool_kind: "execute",
+      raw_input: { command: "echo PANEL_PROBE_42" },
+      raw_output: null,
+      content: null,
+      is_error: false,
+      ...overrides,
+    });
+
+    // The SDK emits a started event first: the command shows immediately,
+    // with no output yet.
+    dispatchMain(makeACPExecute("acp-1", "in_progress"));
+    expect(useCommandStore.getState().commands).toEqual([
+      { type: "input", content: "echo PANEL_PROBE_42" },
+    ]);
+
+    // The terminal event replaces it in the chat; here it must append the
+    // output once — from the display-ready fenced console block, not the raw
+    // model-facing ``raw_output``.
+    dispatchMain(
+      makeACPExecute("acp-2", "completed", {
+        raw_output:
+          "PANEL_PROBE_42\n<system-reminder>model-only</system-reminder>",
+        content: [
+          {
+            type: "content",
+            content: {
+              type: "text",
+              text: "```console\nPANEL_PROBE_42\n```",
+            },
+          },
+        ],
+      }),
+    );
+    expect(useCommandStore.getState().commands).toEqual([
+      { type: "input", content: "echo PANEL_PROBE_42" },
+      { type: "output", content: "PANEL_PROBE_42" },
+    ]);
+  });
+
   it("uses the latest conversation identity for canvas file navigation", () => {
     const view = renderProvider();
     view.rerender(

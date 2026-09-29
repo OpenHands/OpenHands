@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
+  getACPTerminalInput,
+  getACPTerminalOutput,
   getACPToolCallContent,
   getACPToolCallTitleKey,
   stripRedundantTitlePrefix,
@@ -411,6 +413,56 @@ describe("stripRedundantTitlePrefix", () => {
     expect(
       stripRedundantTitlePrefix(makeEvent({ tool_kind: "read", title: "" })),
     ).toBe("");
+  });
+});
+
+describe("getACPTerminalInput", () => {
+  it("returns the raw command for execute tool calls", () => {
+    expect(getACPTerminalInput(baseEvent)).toBe(
+      "gh pr diff 490 --repo OpenHands/evaluation",
+    );
+  });
+
+  it("strips a redundant 'Bash' prefix from the title when raw_input lacks a command", () => {
+    expect(
+      getACPTerminalInput(makeEvent({ raw_input: null, title: "Bash ls -la" })),
+    ).toBe("ls -la");
+  });
+
+  it("falls back to the stripped title for non-execute tool calls", () => {
+    expect(
+      getACPTerminalInput(
+        makeEvent({ tool_kind: "read", raw_input: null, title: "Read /foo" }),
+      ),
+    ).toBe("/foo");
+  });
+});
+
+describe("getACPTerminalOutput", () => {
+  it("returns the fence-stripped display block for execute tool calls", () => {
+    expect(
+      getACPTerminalOutput(
+        makeEvent({
+          raw_output: "actual\n<system-reminder>model-only</system-reminder>",
+          content: [
+            {
+              type: "content",
+              content: { type: "text", text: "```console\nactual\n```" },
+            },
+          ],
+        }),
+      ),
+    ).toBe("actual");
+  });
+
+  it("falls back to raw_output when no display block is present", () => {
+    expect(getACPTerminalOutput(makeEvent({ raw_output: "total 0" }))).toBe(
+      "total 0",
+    );
+  });
+
+  it("returns an empty string for non-execute tool calls", () => {
+    expect(getACPTerminalOutput(makeEvent({ tool_kind: "edit" }))).toBe("");
   });
 });
 
