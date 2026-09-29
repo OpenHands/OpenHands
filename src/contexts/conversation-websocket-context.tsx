@@ -361,21 +361,42 @@ export function ConversationWebSocketProvider({
     consumeMatchingPendingMessage,
   ]);
 
+  // Subscribe to the store's tail so the `since` anchor advances as live
+  // events stream in over the WebSocket (#17619). The store is hydrated from
+  // the REST preload in the useLayoutEffect below, but it is still empty on
+  // the very first render where that hydration has not yet run; the
+  // preloaded-history fallback below covers that one-render window so the
+  // first connect still gets a `since` anchor instead of degrading to
+  // `resend_mode='all'`. `useWebSocket` reads `optionsRef.current.queryParams`
+  // at connect time, so each subsequent store update pushes the freshest
+  // anchor into the ref for the next reconnect.
+  const latestStoreTimestamp = useEventStore((state) => {
+    const events = state.events;
+    // Events are sorted ascending by timestamp; the tail is the freshest.
+    // Walk from the end in case the tail lacks a `timestamp` (those are
+    // sorted to the back by the store).
+    for (let i = events.length - 1; i >= 0; i -= 1) {
+      const timestamp = events[i].timestamp;
+      if (timestamp) return timestamp;
+    }
+    return null;
+  });
+
   /**
-   * Timestamp of the latest event we already have from REST. Used as
-   * `after_timestamp` when opening the WebSocket so the server only resends
-   * events strictly after this point. `null` until the first REST page lands
-   * (the WS connection is gated on that — see `wsUrl` below). During
-   * background refetches `preloadedHistory` keeps the last-known page, so the
-   * anchor holds steady instead of flipping to null; reconnects read the
-   * freshest value from the options ref at connect time.
+   * Timestamp of the latest event we already have, used as `after_timestamp`
+   * when opening the WebSocket so the server only resends events strictly
+   * after this point. `null` until the first event lands (the WS connection
+   * is gated on the first REST page — see `wsUrl` below). On reconnect the
+   * store tail advances past live-streamed events, so the anchor never
+   * gets stuck at the original REST-preload timestamp (#17619).
    */
   const initialAfterTimestamp = useMemo<string | null>(() => {
+    if (latestStoreTimestamp) return latestStoreTimestamp;
     const events = preloadedHistory?.events ?? [];
     const latest = events[events.length - 1];
     if (!latest || !("timestamp" in latest) || !latest.timestamp) return null;
     return latest.timestamp;
-  }, [preloadedHistory]);
+  }, [latestStoreTimestamp, preloadedHistory]);
 
   // Build WebSocket URL from props.
   //
