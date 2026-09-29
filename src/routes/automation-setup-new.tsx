@@ -12,6 +12,7 @@ import { AutomationSetupPanel } from "#/components/features/automations/setup/au
 import { ComposerDockedProvider } from "#/context/composer-docked-context";
 import { useStartAutomationSetup } from "#/hooks/use-start-automation-setup";
 import { I18nKey } from "#/i18n/declaration";
+import { buildAutomationDraftTags } from "#/utils/automation-draft-tags";
 
 const BLANK_DRAFT: AutomationSetupDraft = { prompt: "", kind: "prompt" };
 
@@ -43,6 +44,13 @@ export default function AutomationSetupNew() {
   );
 
   const title = draft.form?.name?.trim() || t(I18nKey.AUTOMATION_SETUP$TITLE);
+  const conversationTags = draft.serverDraftId
+    ? buildAutomationDraftTags(
+        null,
+        draft.serverDraftId,
+        draft.materializedAutomationId,
+      )
+    : null;
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-base">
@@ -63,6 +71,7 @@ export default function AutomationSetupNew() {
         <AutomationSetupPanel
           draft={draft}
           conversationId={PENDING_AUTOMATION_SETUP_ID}
+          conversationTags={conversationTags}
           toolbarPortal={toolbarElement}
           showInlineHeader={false}
           reserveComposerSpace

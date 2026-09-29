@@ -57,6 +57,8 @@ export interface AutomationSetupDraft {
   kind: AutomationSetupKind;
   plugins?: string[];
   editingAutomationId?: string;
+  serverDraftId?: string;
+  materializedAutomationId?: string | null;
   form?: AutomationSetupFormPatch;
   serverDraftId?: string;
   materializedAutomationId?: string | null;

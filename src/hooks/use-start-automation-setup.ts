@@ -6,10 +6,12 @@ import {
   initializeAutomationFormSession,
 } from "#/api/automation-form-session";
 import { markAutomationSetupHandoff } from "#/api/automation-setup-handoff-store";
+import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useNavigation } from "#/context/navigation-context";
 import { useCreateAutomationSetupConversation } from "#/hooks/use-create-automation-setup-conversation";
 import { useTracking } from "#/hooks/use-tracking";
+import { buildAutomationDraftTags } from "#/utils/automation-draft-tags";
 
 /**
  * Open a new automation on the setup form.
@@ -38,12 +40,33 @@ export function useStartAutomationSetup() {
       };
       startAutomationSetupConversation({
         query: prompt,
-        entryPoint: "automations_add",
-        onSuccess: (conversation) => {
-          initializeAutomationFormSession(conversation.conversation_id, draft);
-          markAutomationSetupHandoff(conversation.conversation_id);
+        entryPoint: draft.serverDraftId
+          ? "automation_draft_resume"
+          : "automations_add",
+        onSuccess: async (conversation) => {
+          const conversationId = conversation.conversation_id;
+          initializeAutomationFormSession(conversationId, draft);
+          markAutomationSetupHandoff(conversationId);
           clearAutomationFormSession(PENDING_AUTOMATION_SETUP_ID);
-          navigate?.(`/conversations/${conversation.conversation_id}`);
+          if (draft.serverDraftId) {
+            try {
+              const [conversationDetails] =
+                await AgentServerConversationService.batchGetAppConversations([
+                  conversationId,
+                ]);
+              await AgentServerConversationService.updateConversationTags(
+                conversationId,
+                buildAutomationDraftTags(
+                  conversationDetails?.tags ?? null,
+                  draft.serverDraftId,
+                  draft.materializedAutomationId,
+                ),
+              );
+            } catch {
+              // The in-memory form draft still opens for this navigation.
+            }
+          }
+          navigate?.(`/conversations/${conversationId}`);
         },
       });
     },
