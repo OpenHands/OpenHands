@@ -699,6 +699,56 @@ describe("buildStartConversationRequest", () => {
     expect(payload.agent_settings.agent_context?.secrets).toBeUndefined();
   });
 
+  it("appends the route-at-conversation-start suffix when the toggle is on (OpenHands agent)", () => {
+    const payload = buildStartConversationRequest({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        run_router_at_conversation_start: true,
+      },
+    }) as {
+      agent_settings: { agent_context?: { system_message_suffix?: string } };
+    };
+
+    const suffix = payload.agent_settings.agent_context?.system_message_suffix;
+    expect(suffix).toContain("ROUTE_AT_CONVERSATION_START");
+    expect(suffix).toContain("route_task_to_model");
+  });
+
+  it("appends the route-at-conversation-start suffix for an inline ACP launch when the toggle is on", () => {
+    const payload = buildStartConversationRequest({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        agent_settings: {
+          ...DEFAULT_SETTINGS.agent_settings,
+          agent_kind: "acp",
+          acp_server: "claude-code",
+          acp_command: ["npx", "-y", "@agentclientprotocol/claude-agent-acp"],
+        },
+        run_router_at_conversation_start: true,
+      },
+    }) as {
+      agent_settings: { agent_context?: { system_message_suffix?: string } };
+    };
+
+    expect(
+      payload.agent_settings.agent_context?.system_message_suffix,
+    ).toContain("ROUTE_AT_CONVERSATION_START");
+  });
+
+  it("does not add a system_message_suffix for the router when the toggle is off (default)", () => {
+    const payload = buildStartConversationRequest({
+      settings: DEFAULT_SETTINGS,
+    }) as {
+      agent_settings: { agent_context?: { system_message_suffix?: string } };
+    };
+
+    // The suffix may be undefined (no runtime-services block either); assert
+    // specifically that the router sentinel is absent when present.
+    const suffix =
+      payload.agent_settings.agent_context?.system_message_suffix ?? "";
+    expect(suffix).not.toContain("ROUTE_AT_CONVERSATION_START");
+  });
+
   describe("ACP secret delivery", () => {
     // Settings factory for a containerized ACP conversation.
     const acpSettings = (overrides: Record<string, unknown> = {}) => ({

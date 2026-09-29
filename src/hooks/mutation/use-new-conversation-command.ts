@@ -10,6 +10,7 @@ import {
 } from "#/utils/custom-toast-handlers";
 import { useNavigation } from "#/context/navigation-context";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
+import { useSettings } from "#/hooks/query/use-settings";
 import { useTracking } from "#/hooks/use-tracking";
 
 export const useNewConversationCommand = () => {
@@ -17,6 +18,7 @@ export const useNewConversationCommand = () => {
   const { navigate } = useNavigation();
   const { t } = useTranslation("openhands");
   const { data: conversation } = useActiveConversation();
+  const { data: settings } = useSettings();
   const { trackConversationCreated } = useTracking();
 
   const mutation = useMutation({
@@ -31,6 +33,8 @@ export const useNewConversationCommand = () => {
       const startTask = await AgentServerConversationService.createConversation(
         {
           sandboxId: conversation.sandbox_id ?? undefined,
+          runRouterAtConversationStart:
+            settings?.run_router_at_conversation_start,
         },
       );
 

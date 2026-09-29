@@ -35,6 +35,7 @@ import {
 import {
   DirectConversationInfo,
   assertSubscriptionAuthReady,
+  buildRouterAtStartSystemSuffix,
   buildStartConversationRequestWithEncryptedSettings,
   buildStartPlanningConversationRequestWithEncryptedSettings,
   emptyHooksResponse,
@@ -391,6 +392,14 @@ export interface CreateConversationOptions {
   // encrypted-settings builder; cloud sends it as a flat request field.
   agentProfileId?: string;
   agentProfileKind?: AgentKind;
+  /**
+   * Whether the first message should be routed through the active Model
+   * Router. Only consumed on the cloud path — the local path reads the
+   * toggle from its own settings fetch. Threaded in by the caller from the
+   * warmed settings query to avoid a settings round-trip on the cloud hot
+   * path.
+   */
+  runRouterAtConversationStart?: boolean;
 }
 
 class AgentServerConversationService {
@@ -456,6 +465,12 @@ class AgentServerConversationService {
       // round-trip — the cloud backend holds secrets server-side.
       // When launching from a profile, send `agent_profile_id`; the backend
       // resolves it to agent_settings server-side.
+      // The "Run at conversation start" toggle is threaded in by the caller
+      // (from the warmed settings query) to avoid a settings round-trip on
+      // this hot path; the local path reads it from its own settings fetch.
+      const routerAtStartSuffix = buildRouterAtStartSystemSuffix(
+        options.runRouterAtConversationStart ?? false,
+      );
       const request: AppConversationStartRequest = {
         initial_message: initialUserMsg
           ? {
@@ -472,6 +487,13 @@ class AgentServerConversationService {
         agent_type: agentType,
         sandbox_id: sandboxId ?? null,
         agent_profile_id: agentProfileId ?? null,
+        ...(routerAtStartSuffix
+          ? {
+              agent_launch_additions: {
+                system_message_suffix_append: routerAtStartSuffix,
+              },
+            }
+          : {}),
         trigger: "gui",
       };
       return createCloudAppConversation(request);

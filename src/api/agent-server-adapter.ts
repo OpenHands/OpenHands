@@ -349,6 +349,33 @@ export function buildRuntimeServicesSystemSuffix(
   return lines.join("\n");
 }
 
+/**
+ * System-message instruction appended when the user enables "Run at
+ * conversation start" for the Model Router. With an active meta-profile the
+ * agent-server attaches the ``route_task_to_model`` tool; this suffix tells
+ * the agent to call it with the *first* user message before doing anything
+ * else, so the opening request is always routed to the classifier-selected
+ * model. Subsequent messages are left to the agent's own judgment.
+ *
+ * Returns `undefined` when disabled so no prompt noise is added — the default
+ * "everything works as normal" path is byte-identical to before.
+ */
+export function buildRouterAtStartSystemSuffix(
+  enabled: boolean,
+): string | undefined {
+  if (!enabled) return undefined;
+  return [
+    "<ROUTE_AT_CONVERSATION_START>",
+    "Before responding to the FIRST user message of this conversation, call",
+    "the `route_task_to_model` tool with that user message so the active",
+    "Model Router selects the appropriate model. After the router switches",
+    "the model, continue handling the user's request with the switched",
+    "model. Apply this only to the very first user message; do not route",
+    "subsequent messages this way.",
+    "</ROUTE_AT_CONVERSATION_START>",
+  ].join("\n");
+}
+
 export function toConversationUrl(conversationId: string): string {
   // Local-format conversation URL — points at whichever local agent-server
   // is actually serving the conversation (the bundled one when the active
@@ -859,9 +886,13 @@ function buildAgentContext(
   runtimeServicesInfo?: RuntimeServicesInfo | null,
   enablement: SkillEnablement = {},
   invokedCatalogSkill?: string,
+  runRouterAtStart?: boolean,
 ): SettingsRecord {
   const runtimeServicesSuffix =
     buildRuntimeServicesSystemSuffix(runtimeServicesInfo);
+  const routerAtStartSuffix = buildRouterAtStartSystemSuffix(
+    runRouterAtStart ?? false,
+  );
   const existingContext = toRecord(agentSettings.agent_context);
 
   // Merge bundled public skills with any skills already present in the
@@ -909,8 +940,12 @@ function buildAgentContext(
     // prompt too. The allow-list has no counterpart to send: the backend
     // loads no catalog skills of its own (`load_public_skills` is false).
     disabled_skills: disabledSkills,
-    ...(runtimeServicesSuffix
-      ? { system_message_suffix: runtimeServicesSuffix }
+    ...(runtimeServicesSuffix || routerAtStartSuffix
+      ? {
+          system_message_suffix: [runtimeServicesSuffix, routerAtStartSuffix]
+            .filter((s): s is string => Boolean(s))
+            .join("\n\n"),
+        }
       : {}),
   };
 }
@@ -955,6 +990,7 @@ function buildConfiguredAcpAgentSettings(
       runtimeServicesInfo,
       toSkillEnablement(settings),
       findInvokedCatalogSkill(query),
+      settings.run_router_at_conversation_start,
     ),
   };
 
@@ -1044,6 +1080,7 @@ function buildConfiguredOpenHandsAgentSettings(
       runtimeServicesInfo,
       toSkillEnablement(settings),
       findInvokedCatalogSkill(query),
+      settings.run_router_at_conversation_start,
     ),
     tools: getAgentTools(agentSettings),
   };

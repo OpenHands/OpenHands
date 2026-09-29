@@ -10,6 +10,9 @@ import { useProviderConnections } from "#/hooks/query/use-provider-connections";
 import { useSaveMetaProfile } from "#/hooks/mutation/use-save-meta-profile";
 import { useSaveLlmProfile } from "#/hooks/mutation/use-save-llm-profile";
 import { useActivateMetaProfile } from "#/hooks/mutation/use-activate-meta-profile";
+import { useSettings } from "#/hooks/query/use-settings";
+import { useSaveSettings } from "#/hooks/mutation/use-save-settings";
+import { SettingsSwitch } from "#/components/features/settings/settings-switch";
 import MetaProfilesService, {
   type MetaProfile,
 } from "#/api/meta-profiles-service/meta-profiles-service.api";
@@ -57,6 +60,8 @@ export function MetaLlmSettingsView() {
   const saveMetaProfile = useSaveMetaProfile();
   const saveLlmProfile = useSaveLlmProfile();
   const activateMetaProfile = useActivateMetaProfile();
+  const { data: settings } = useSettings();
+  const { mutate: saveSettings } = useSaveSettings();
 
   const [view, setView] = useState<ViewMode>("list");
   const [editing, setEditing] = useState<EditingMetaProfile | null>(null);
@@ -228,6 +233,17 @@ export function MetaLlmSettingsView() {
     setCreateInitial(null);
   };
 
+  const runRouterAtConversationStart =
+    !!settings?.run_router_at_conversation_start;
+  // The toggle only does something when a router is actually active: with no
+  // active meta-profile the `route_task_to_model` tool is not attached, so
+  // routing the first message would be a no-op. Disable it then so the state
+  // can't silently drift from what the agent will actually do.
+  const canRunRouterAtStart = active !== null;
+  const handleToggleRunAtConversationStart = (value: boolean) => {
+    saveSettings({ run_router_at_conversation_start: value });
+  };
+
   if (isUnsupportedBackend) {
     return (
       <p
@@ -324,6 +340,25 @@ export function MetaLlmSettingsView() {
             ))}
           </div>
         ) : null}
+
+        <div
+          className="flex flex-col gap-1 border-t border-border pt-4"
+          data-testid="meta-profile-run-at-conversation-start"
+        >
+          <SettingsSwitch
+            testId="meta-profile-run-at-conversation-start-switch"
+            isToggled={
+              canRunRouterAtStart ? runRouterAtConversationStart : false
+            }
+            isDisabled={!canRunRouterAtStart}
+            onToggle={handleToggleRunAtConversationStart}
+          >
+            {t(I18nKey.SETTINGS$META_PROFILE_RUN_AT_CONVERSATION_START)}
+          </SettingsSwitch>
+          <p className="text-xs leading-4 text-tertiary-light">
+            {t(I18nKey.SETTINGS$META_PROFILE_RUN_AT_CONVERSATION_START_HELP)}
+          </p>
+        </div>
       </div>
 
       <DeleteMetaProfileModal

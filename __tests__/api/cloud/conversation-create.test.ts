@@ -94,6 +94,62 @@ describe("AgentServerConversationService cloud branch", () => {
     expect(result.app_conversation_id).toBeNull();
   });
 
+  it("createConversation forwards the route-at-start suffix as agent_launch_additions on the cloud path", async () => {
+    fetchMock.mockResolvedValue(
+      mockJsonResponse({
+        id: "task-124",
+        created_by_user_id: null,
+        status: "WORKING",
+        detail: null,
+        app_conversation_id: null,
+        agent_server_url: null,
+        request: {},
+        created_at: "2026-05-06T00:00:00Z",
+        updated_at: "2026-05-06T00:00:00Z",
+      }),
+    );
+
+    await AgentServerConversationService.createConversation({
+      initialUserMsg: "fix the bug",
+      runRouterAtConversationStart: true,
+    });
+
+    const [, init] = getFetchCall(fetchMock);
+    const requestBody = getJsonBody(init) as {
+      agent_launch_additions?: { system_message_suffix_append?: string };
+    };
+
+    expect(requestBody.agent_launch_additions).toBeDefined();
+    expect(
+      requestBody.agent_launch_additions?.system_message_suffix_append,
+    ).toContain("ROUTE_AT_CONVERSATION_START");
+  });
+
+  it("createConversation omits agent_launch_additions on the cloud path when the toggle is off", async () => {
+    fetchMock.mockResolvedValue(
+      mockJsonResponse({
+        id: "task-125",
+        created_by_user_id: null,
+        status: "WORKING",
+        detail: null,
+        app_conversation_id: null,
+        agent_server_url: null,
+        request: {},
+        created_at: "2026-05-06T00:00:00Z",
+        updated_at: "2026-05-06T00:00:00Z",
+      }),
+    );
+
+    await AgentServerConversationService.createConversation({
+      initialUserMsg: "fix the bug",
+    });
+
+    const [, init] = getFetchCall(fetchMock);
+    const requestBody = getJsonBody(init);
+
+    expect(requestBody).not.toHaveProperty("agent_launch_additions");
+  });
+
   it("getStartTask polls /api/v1/app-conversations/start-tasks?ids= directly", async () => {
     fetchMock.mockResolvedValue(
       mockJsonResponse([

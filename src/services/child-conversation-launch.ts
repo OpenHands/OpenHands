@@ -16,6 +16,8 @@ import {
 } from "#/api/conversation-metadata-store";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import type { AppConversationStartTask } from "#/api/conversation-service/agent-server-conversation-service.types";
+import { buildRouterAtStartSystemSuffix } from "#/api/agent-server-adapter";
+import SettingsService from "#/api/settings-service/settings-service.api";
 import {
   CHILD_CONVERSATION_ISOLATIONS,
   CHILD_CONVERSATION_RESULT_PREFIX,
@@ -394,6 +396,14 @@ async function launchCloudChild(
   }
 
   const parentMetadata = getStoredConversationMetadata(parentConversationId);
+  // The cloud child path bypasses `createConversation`, so read the
+  // "Run at conversation start" toggle here to stamp the router instruction
+  // onto the launch additions (the local child path reads it inside its own
+  // settings fetch via the encrypted-settings builder).
+  const cloudSettings = await SettingsService.getSettings();
+  const routerAtStartSuffix = buildRouterAtStartSystemSuffix(
+    cloudSettings.run_router_at_conversation_start,
+  );
   const startTask = await createCloudAppConversation(
     {
       initial_message: {
@@ -415,6 +425,13 @@ async function launchCloudChild(
       // Cloud. Sending it would only hide the child from the Cloud
       // conversation list, which filters out anything with a parent.
       parent_conversation_id: null,
+      ...(routerAtStartSuffix
+        ? {
+            agent_launch_additions: {
+              system_message_suffix_append: routerAtStartSuffix,
+            },
+          }
+        : {}),
     },
     backend,
   );

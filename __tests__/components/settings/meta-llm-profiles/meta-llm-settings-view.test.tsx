@@ -10,6 +10,8 @@ import * as useProviderConnectionsHook from "#/hooks/query/use-provider-connecti
 import * as useSaveMetaProfileHook from "#/hooks/mutation/use-save-meta-profile";
 import * as useActivateMetaProfileHook from "#/hooks/mutation/use-activate-meta-profile";
 import * as useDeleteMetaProfileHook from "#/hooks/mutation/use-delete-meta-profile";
+import * as useSettingsHook from "#/hooks/query/use-settings";
+import * as useSaveSettingsHook from "#/hooks/mutation/use-save-settings";
 import MetaProfilesService from "#/api/meta-profiles-service/meta-profiles-service.api";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
 import {
@@ -26,6 +28,8 @@ vi.mock("#/hooks/query/use-provider-connections");
 vi.mock("#/hooks/mutation/use-save-meta-profile");
 vi.mock("#/hooks/mutation/use-activate-meta-profile");
 vi.mock("#/hooks/mutation/use-delete-meta-profile");
+vi.mock("#/hooks/query/use-settings");
+vi.mock("#/hooks/mutation/use-save-settings");
 vi.mock("#/api/meta-profiles-service/meta-profiles-service.api");
 vi.mock("#/api/profiles-service/profiles-service.api");
 vi.mock("#/utils/custom-toast-handlers");
@@ -117,6 +121,14 @@ describe("MetaLlmSettingsView", () => {
     ).mockReturnValue(mockMutation(activateMutateAsync));
     // The delete hook is consumed by the modal that is always mounted.
     vi.mocked(useDeleteMetaProfileHook.useDeleteMetaProfile).mockReturnValue(
+      mockMutation(vi.fn()),
+    );
+    vi.mocked(useSettingsHook.useSettings).mockReturnValue({
+      data: { run_router_at_conversation_start: false } as never,
+      isLoading: false,
+      error: null,
+    } as never);
+    vi.mocked(useSaveSettingsHook.useSaveSettings).mockReturnValue(
       mockMutation(vi.fn()),
     );
     vi.mocked(ProfilesService.getProfile).mockResolvedValue({
@@ -417,5 +429,66 @@ describe("MetaLlmSettingsView", () => {
     await user.click(screen.getByTestId("meta-profile-menu-trigger-balanced"));
 
     expect(screen.getByTestId("meta-profile-set-active")).toBeDisabled();
+  });
+
+  it("renders the Run-at-conversation-start toggle disabled when no meta-profile is active", () => {
+    vi.mocked(useMetaProfilesHook.useMetaProfiles).mockReturnValue({
+      data: { meta_profiles: [], active_meta_profile: null },
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<typeof useMetaProfilesHook.useMetaProfiles>);
+
+    renderWithProviders(<MetaLlmSettingsView />);
+
+    expect(
+      screen.getByTestId("meta-profile-run-at-conversation-start"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("meta-profile-run-at-conversation-start-switch"),
+    ).toBeDisabled();
+  });
+
+  it("persists the Run-at-conversation-start toggle through useSaveSettings", async () => {
+    const saveSettingsMock = vi.fn();
+    const base = mockMutation(vi.fn()) as Record<string, unknown>;
+    vi.mocked(useSaveSettingsHook.useSaveSettings).mockReturnValue({
+      ...base,
+      mutate: saveSettingsMock,
+    } as never);
+    vi.mocked(useSettingsHook.useSettings).mockReturnValue({
+      data: { run_router_at_conversation_start: false } as never,
+      isLoading: false,
+      error: null,
+    } as never);
+
+    renderWithProviders(<MetaLlmSettingsView />);
+
+    const user = userEvent.setup();
+    const toggle = screen.getByTestId(
+      "meta-profile-run-at-conversation-start-switch",
+    );
+    expect(toggle).not.toBeDisabled();
+    // An active meta-profile is set in the default beforeEach mock.
+    await user.click(toggle);
+
+    await waitFor(() =>
+      expect(saveSettingsMock).toHaveBeenCalledWith({
+        run_router_at_conversation_start: true,
+      }),
+    );
+  });
+
+  it("reflects the persisted Run-at-conversation-start value as on", () => {
+    vi.mocked(useSettingsHook.useSettings).mockReturnValue({
+      data: { run_router_at_conversation_start: true } as never,
+      isLoading: false,
+      error: null,
+    } as never);
+
+    renderWithProviders(<MetaLlmSettingsView />);
+
+    expect(
+      screen.getByTestId("meta-profile-run-at-conversation-start-switch"),
+    ).toBeChecked();
   });
 });

@@ -6,6 +6,7 @@ import { Provider } from "#/types/settings";
 import { useTracking } from "#/hooks/use-tracking";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useAgentProfiles } from "#/hooks/query/use-agent-profiles";
+import { useSettings } from "#/hooks/query/use-settings";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
 import AgentProfilesService, {
@@ -74,6 +75,11 @@ export const useCreateConversation = () => {
   // wrong agent.
   const { backend, orgId } = useActiveBackend();
   useAgentProfiles();
+  // Read the "Run at conversation start" toggle from the warmed settings
+  // query so the cloud path can stamp the router instruction without a
+  // settings round-trip at conversation creation. The local path reads the
+  // toggle from its own settings fetch inside the encrypted-settings builder.
+  const { data: settings } = useSettings();
 
   return useMutation({
     mutationKey: CREATE_CONVERSATION_MUTATION_KEY,
@@ -272,6 +278,8 @@ export const useCreateConversation = () => {
                 agentProfileKind: resolvedAgentProfile?.agent_kind,
               }
             : {}),
+          runRouterAtConversationStart:
+            settings?.run_router_at_conversation_start,
         });
 
       // Stamp the active LLM profile onto the (local) conversation so the
