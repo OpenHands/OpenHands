@@ -3,6 +3,8 @@ import Markdown, { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
 import rehypeRaw from "rehype-raw";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import type { Schema } from "hast-util-sanitize";
 import type { PluggableList } from "unified";
@@ -15,6 +17,7 @@ import { table, th, td } from "./table";
 import { blockquote } from "./blockquote";
 import { hr } from "./horizontal-rule";
 import { remarkGithubAlerts } from "./remark-github-alerts";
+import remarkMath from "remark-math";
 
 // Build a sanitize schema that extends rehype-sanitize's defaults with a
 // few markdown-friendly additions. The defaults strip `<script>`, event
@@ -172,15 +175,22 @@ function MarkdownRendererComponent({
   // tree. `rehype-sanitize` then strips anything dangerous (scripts,
   // event handlers, `javascript:` URLs, etc.). The order matters: sanitize
   // must run *after* raw so it sees the parsed HTML nodes.
-  const rehypePlugins: PluggableList | undefined = allowHtml
-    ? [rehypeRaw, [rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA]]
-    : undefined;
+  const rehypePlugins: PluggableList = [
+    ...(allowHtml ? [rehypeRaw] : []),
+    [rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA],
+    [rehypeKatex, { throwOnError: false }],
+  ];
 
   return (
     <div data-testid="markdown-renderer">
       <Markdown
         components={components}
-        remarkPlugins={[remarkGithubAlerts, remarkGfm, remarkBreaks]}
+        remarkPlugins={[
+          remarkGithubAlerts,
+          remarkGfm,
+          remarkBreaks,
+          remarkMath,
+        ]}
         rehypePlugins={rehypePlugins}
       >
         {markdownContent}
