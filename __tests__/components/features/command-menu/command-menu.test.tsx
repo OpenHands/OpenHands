@@ -17,7 +17,7 @@ import { getInterfaceCopy } from "#/manifests/automation-interface";
 import {
   NavigationProvider,
   type NavigationContextValue,
-} from "#/context/navigation-context";
+} from "#/contexts/navigation-context";
 import { ConversationCardActions } from "#/components/features/conversation-panel/conversation-card/conversation-card-actions";
 import { useCommandMenuStore } from "#/stores/command-menu-store";
 import { useSidebarStore } from "#/stores/sidebar-store";

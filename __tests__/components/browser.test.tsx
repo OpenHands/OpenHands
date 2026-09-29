@@ -8,7 +8,7 @@ vi.mock("#/hooks/use-conversation-id", () => ({
   useConversationId: () => ({ conversationId: "test-conversation-id" }),
 }));
 
-vi.mock("#/context/conversation-context", () => ({
+vi.mock("#/contexts/conversation-context", () => ({
   useConversation: () => ({ conversationId: "test-conversation-id" }),
   ConversationProvider: ({ children }: { children: React.ReactNode }) =>
     children,

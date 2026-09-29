@@ -14,7 +14,7 @@ import { useHomeStore } from "#/stores/home-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { getStoredConversationMetadata } from "#/api/conversation-metadata-store";
 import { GitControlBar } from "#/components/features/chat/git-control-bar";
-import { ScrollProvider } from "#/context/scroll-context";
+import { ScrollProvider } from "#/contexts/scroll-context";
 
 // Holder so the OpenRepositoryModal mock can hand its `onLaunch` prop back
 // to the test — the modal renders null but the parent's launch flow is the
