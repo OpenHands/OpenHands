@@ -1,4 +1,5 @@
 import React from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router";
 import { useTracking } from "#/hooks/use-tracking";
 import { useTranslation } from "react-i18next";
@@ -54,6 +55,7 @@ import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { I18nKey } from "#/i18n/declaration";
 import { hasConversationStarted } from "./components/resolve-picker-kind";
+import { ComposerDockedProvider } from "#/context/composer-docked-context";
 
 function getEntryPoint(
   hasRepository: boolean | null,
@@ -64,7 +66,21 @@ function getEntryPoint(
   return "direct";
 }
 
-export function ChatInterface() {
+export function ChatInterface({
+  showGitControlBar = true,
+  showEmptyStateSuggestions = true,
+  composerDockTarget = null,
+  onDockedComposerSubmit,
+  minimalComposer = false,
+  composerPlaceholder,
+}: {
+  showGitControlBar?: boolean;
+  showEmptyStateSuggestions?: boolean;
+  composerDockTarget?: HTMLElement | null;
+  onDockedComposerSubmit?: () => void;
+  minimalComposer?: boolean;
+  composerPlaceholder?: string;
+} = {}) {
   useAutoRefreshFilesOnEdit();
 
   const { trackInitialQuerySubmitted, trackUserMessageSent } = useTracking();
@@ -500,6 +516,33 @@ export function ChatInterface() {
     t,
   });
 
+  const isComposerDocked = Boolean(composerDockTarget);
+  const isMinimalComposer = isComposerDocked || minimalComposer;
+  const composer = (
+    <ComposerDockedProvider
+      enabled={isComposerDocked}
+      minimal={isMinimalComposer}
+    >
+      <InteractiveChatBox
+        onSubmit={(content, images, files) => {
+          if (isComposerDocked) onDockedComposerSubmit?.();
+          return handleSendMessage(content, images, files);
+        }}
+        disabled={isNewConversationPending || llmBlocked}
+        hasStartedConversation={hasStartedConversation}
+        showGitControlBar={showGitControlBar}
+        placeholder={
+          isMinimalComposer
+            ? t(I18nKey.AUTOMATION_SETUP$DOCKED_COMPOSER_PLACEHOLDER)
+            : composerPlaceholder
+        }
+      />
+    </ComposerDockedProvider>
+  );
+  const dockedOrInlineComposer = composerDockTarget
+    ? createPortal(composer, composerDockTarget)
+    : composer;
+
   return (
     <WorkspaceFilesForChatProvider>
       <ScrollProvider value={scrollProviderValue}>
@@ -519,7 +562,8 @@ export function ChatInterface() {
             // disabled). They're also a `pointer-events-auto` overlay that would
             // sit over the LlmNotConfiguredBanner below and swallow clicks on its
             // setup button — so hide them and let the banner be the lone CTA.
-            !llmBlocked && (
+            !llmBlocked &&
+            showEmptyStateSuggestions && (
               <ChatSuggestions
                 onSuggestionsClick={(message) => setMessageToSend(message)}
               />
@@ -674,11 +718,7 @@ export function ChatInterface() {
                   </div>
                 </div>
 
-                <InteractiveChatBox
-                  onSubmit={handleSendMessage}
-                  disabled={isNewConversationPending || llmBlocked}
-                  hasStartedConversation={hasStartedConversation}
-                />
+                {dockedOrInlineComposer}
               </div>
             )}
           </div>

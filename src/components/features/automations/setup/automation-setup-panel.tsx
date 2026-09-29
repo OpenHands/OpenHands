@@ -96,6 +96,7 @@ interface AutomationSetupPanelProps {
   toolbarPortal?: HTMLElement | null;
   showInlineHeader?: boolean;
   onClose: () => void;
+  reserveComposerSpace?: boolean;
 }
 
 function titleCase(value: string): string {
@@ -161,6 +162,7 @@ export function AutomationSetupPanel({
   toolbarPortal,
   showInlineHeader = true,
   onClose: _onClose,
+  reserveComposerSpace = false,
 }: AutomationSetupPanelProps) {
   const [model, setModel] = useState("");
   const [agentProfileId, setAgentProfileId] = useState("");
@@ -359,12 +361,15 @@ export function AutomationSetupPanel({
     }
   };
 
+  const compactToolbarButtonClassName = "!h-7 !min-h-7 !px-2.5 !text-xs";
+
   const renderToolbarActions = () => (
-    <div className="flex shrink-0 items-center gap-2">
+    <div className="flex shrink-0 items-center gap-1.5">
       <BrandButton
         type="button"
         variant="secondary"
         testId="automation-setup-save-draft"
+        className={compactToolbarButtonClassName}
         isDisabled
         onClick={handleSaveDraft}
       >
@@ -374,6 +379,7 @@ export function AutomationSetupPanel({
         type="button"
         variant="secondary"
         testId="automation-setup-test"
+        className={compactToolbarButtonClassName}
         isDisabled={isSubmitting}
         onClick={handleTest}
       >
@@ -383,6 +389,7 @@ export function AutomationSetupPanel({
         type="button"
         variant="primary"
         testId="automation-setup-create"
+        className={compactToolbarButtonClassName}
         isDisabled={isSubmitting}
         onClick={handleCreate}
       >
@@ -411,7 +418,12 @@ export function AutomationSetupPanel({
           </header>
         ) : null}
 
-        <div className="custom-scrollbar-always min-h-0 flex-1 overflow-y-auto px-5 pt-5 pb-5 [scrollbar-gutter:stable]">
+        <div
+          className={cn(
+            "custom-scrollbar-always min-h-0 flex-1 overflow-y-auto px-5 pt-5 [scrollbar-gutter:stable]",
+            reserveComposerSpace ? "pb-52" : "pb-5",
+          )}
+        >
           <div className="mx-auto flex w-full min-w-0 max-w-[800px] flex-col gap-6">
             <Field label={t(I18nKey.AUTOMATIONS$NAME)}>
               <input
