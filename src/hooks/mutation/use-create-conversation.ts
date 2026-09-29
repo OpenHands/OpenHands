@@ -278,8 +278,12 @@ export const useCreateConversation = () => {
                 agentProfileKind: resolvedAgentProfile?.agent_kind,
               }
             : {}),
-          runRouterAtConversationStart:
-            settings?.run_router_at_conversation_start,
+          // Only stamp the toggle when it's on so the default path stays
+          // byte-identical to the legacy launch (and the e2e snapshot tests
+          // that assert the exact createConversation payload).
+          ...(settings?.run_router_at_conversation_start
+            ? { runRouterAtConversationStart: true }
+            : {}),
         });
 
       // Stamp the active LLM profile onto the (local) conversation so the

@@ -33,8 +33,11 @@ export const useNewConversationCommand = () => {
       const startTask = await AgentServerConversationService.createConversation(
         {
           sandboxId: conversation.sandbox_id ?? undefined,
-          runRouterAtConversationStart:
-            settings?.run_router_at_conversation_start,
+          // Only stamp the toggle when it's on so the default /new path
+          // stays byte-identical to the legacy launch.
+          ...(settings?.run_router_at_conversation_start
+            ? { runRouterAtConversationStart: true }
+            : {}),
         },
       );
 
