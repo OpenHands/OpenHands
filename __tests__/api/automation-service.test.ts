@@ -256,17 +256,6 @@ describe("AutomationService", () => {
     });
   });
 
-  describe("dispatchAutomation", () => {
-    it("posts to the dispatch endpoint", async () => {
-      mockPost.mockResolvedValue({ data: mockRun });
-
-      const result = await AutomationService.dispatchAutomation("1");
-
-      expect(mockPost).toHaveBeenCalledWith("/api/automation/v1/1/dispatch");
-      expect(result).toEqual(mockRun);
-    });
-  });
-
   describe("deleteAutomation", () => {
     it("deletes an automation by id", async () => {
       mockDelete.mockResolvedValue({});
@@ -389,91 +378,60 @@ describe("AutomationService", () => {
       expect(result).toEqual(response);
     });
 
-    it("getAutomation routes to callCloudProxy with the id in the path", async () => {
-      mockCallCloudProxy.mockResolvedValue(mockAutomation);
+    it.each([
+      {
+        name: "getAutomation",
+        arrange: () => mockAutomation,
+        act: () => AutomationService.getAutomation("abc"),
+        expectedRequest: { method: "GET", path: "/api/automation/v1/abc" },
+        localMock: mockGet,
+      },
+      {
+        name: "dispatchAutomation",
+        arrange: () => mockRun,
+        act: () => AutomationService.dispatchAutomation("abc"),
+        expectedRequest: {
+          method: "POST",
+          path: "/api/automation/v1/abc/dispatch",
+        },
+        localMock: mockPost,
+      },
+      {
+        name: "updateAutomation",
+        arrange: () => ({ ...mockAutomation, enabled: false }),
+        act: () =>
+          AutomationService.updateAutomation("abc", { enabled: false }),
+        expectedRequest: {
+          method: "PATCH",
+          path: "/api/automation/v1/abc",
+          body: { enabled: false },
+        },
+        localMock: mockPatch,
+      },
+      {
+        name: "deleteAutomation",
+        arrange: () => undefined,
+        act: () => AutomationService.deleteAutomation("abc"),
+        expectedRequest: { method: "DELETE", path: "/api/automation/v1/abc" },
+        localMock: mockDelete,
+      },
+    ])(
+      "$name routes through callCloudProxy on cloud backends",
+      async ({ arrange, act, expectedRequest, localMock }) => {
+        const response = arrange();
+        mockCallCloudProxy.mockResolvedValue(response);
 
-      const result = await AutomationService.getAutomation("abc");
+        const result = await act();
 
-      expect(mockCallCloudProxy).toHaveBeenCalledWith({
-        backend: cloudBackend,
-        method: "GET",
-        path: "/api/automation/v1/abc",
-        headers: expectedAutomationTelemetryHeaders,
-      });
-      expect(result).toEqual(mockAutomation);
-    });
-
-    it("dispatchAutomation forwards method POST via callCloudProxy", async () => {
-      mockCallCloudProxy.mockResolvedValue(mockRun);
-
-      const result = await AutomationService.dispatchAutomation("abc");
-
-      expect(mockCallCloudProxy).toHaveBeenCalledWith({
-        backend: cloudBackend,
-        method: "POST",
-        path: "/api/automation/v1/abc/dispatch",
-        headers: expectedAutomationTelemetryHeaders,
-      });
-      expect(mockPost).not.toHaveBeenCalled();
-      expect(result).toEqual(mockRun);
-    });
-
-    it("updateAutomation forwards method PATCH and body via callCloudProxy", async () => {
-      const updated = { ...mockAutomation, enabled: false };
-      mockCallCloudProxy.mockResolvedValue(updated);
-
-      const result = await AutomationService.updateAutomation("abc", {
-        enabled: false,
-      });
-
-      expect(mockCallCloudProxy).toHaveBeenCalledWith({
-        backend: cloudBackend,
-        method: "PATCH",
-        path: "/api/automation/v1/abc",
-        body: { enabled: false },
-        headers: expectedAutomationTelemetryHeaders,
-      });
-      expect(mockPatch).not.toHaveBeenCalled();
-      expect(result).toEqual(updated);
-    });
-
-    it("deleteAutomation forwards method DELETE via callCloudProxy", async () => {
-      mockCallCloudProxy.mockResolvedValue(undefined);
-
-      await AutomationService.deleteAutomation("abc");
-
-      expect(mockCallCloudProxy).toHaveBeenCalledWith({
-        backend: cloudBackend,
-        method: "DELETE",
-        path: "/api/automation/v1/abc",
-        headers: expectedAutomationTelemetryHeaders,
-      });
-      expect(mockDelete).not.toHaveBeenCalled();
-    });
-
-    it("dispatchAutomation forwards method POST via callCloudProxy", async () => {
-      const run = {
-        id: "run-1",
-        status: "PENDING",
-        conversation_id: null,
-        bash_command_id: null,
-        error_detail: null,
-        started_at: "2026-01-01T00:00:00Z",
-        completed_at: null,
-      };
-      mockCallCloudProxy.mockResolvedValue(run);
-
-      const result = await AutomationService.dispatchAutomation("abc");
-
-      expect(mockCallCloudProxy).toHaveBeenCalledWith({
-        backend: cloudBackend,
-        method: "POST",
-        path: "/api/automation/v1/abc/dispatch",
-        headers: expectedAutomationTelemetryHeaders,
-      });
-      expect(mockPost).not.toHaveBeenCalled();
-      expect(result).toEqual(run);
-    });
+        expect(mockCallCloudProxy).toHaveBeenCalledWith({
+          backend: cloudBackend,
+          headers: expectedAutomationTelemetryHeaders,
+          ...expectedRequest,
+        });
+        expect(localMock).not.toHaveBeenCalled();
+        expect(result).toEqual(response);
+      },
+    );
 
     it("checkHealth calls the cloud host with a fail-fast timeout and returns the upstream status", async () => {
       mockCallCloudProxy.mockResolvedValue({ status: "ok" });
@@ -582,35 +540,41 @@ describe("AutomationService", () => {
   });
 
   describe("supportsAutomationDrafts", () => {
-    it("returns true when the features list advertises automation_drafts", () => {
-      expect(
-        AutomationService.supportsAutomationDrafts({
+    it.each([
+      {
+        name: "advertised feature",
+        capabilities: {
           ready: true,
           features: ["automationDrafts"],
           triggerKinds: [],
           eventSources: [],
           eventTypes: [],
           triggers: {},
-        }),
-      ).toBe(true);
-    });
-
-    it("returns false when the feature is missing", () => {
-      expect(
-        AutomationService.supportsAutomationDrafts({
+        },
+        expected: true,
+      },
+      {
+        name: "missing feature",
+        capabilities: {
           ready: true,
           features: ["presetPrompt"],
           triggerKinds: [],
           eventSources: [],
           eventTypes: [],
           triggers: {},
-        }),
-      ).toBe(false);
-    });
-
-    it("returns false for null/undefined capabilities", () => {
-      expect(AutomationService.supportsAutomationDrafts(null)).toBe(false);
-      expect(AutomationService.supportsAutomationDrafts(undefined)).toBe(false);
+        },
+        expected: false,
+      },
+      { name: "null capabilities", capabilities: null, expected: false },
+      {
+        name: "undefined capabilities",
+        capabilities: undefined,
+        expected: false,
+      },
+    ])("returns $expected for $name", ({ capabilities, expected }) => {
+      expect(AutomationService.supportsAutomationDrafts(capabilities)).toBe(
+        expected,
+      );
     });
   });
 

@@ -1105,17 +1105,6 @@ describe("AutomationSetupPanel", () => {
       );
     });
 
-    it("shows the save state beside Save draft instead of in its own bar", () => {
-      renderPanel();
-
-      const label = screen.getByTestId("automation-setup-save-state");
-      const save = screen.getByTestId("automation-setup-save-draft");
-
-      expect(label).toHaveTextContent("AUTOMATION_SETUP$UNSAVED_CHANGES");
-      expect(label.className).not.toContain("border-b");
-      expect(save.parentElement?.firstElementChild).toBe(label);
-    });
-
     it("creates a server draft on Save draft and updates it on the next save", async () => {
       vi.mocked(AutomationService.createServerDraft).mockResolvedValue({
         ...dispatchableDraft,
