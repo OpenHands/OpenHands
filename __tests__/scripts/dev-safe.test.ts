@@ -483,6 +483,17 @@ describe("buildAgentServerTelemetryEnv", () => {
       buildAgentServerEnv(agentServerConfig, { env: {} }),
     ).not.toHaveProperty("OH_CONVERSATION_RUNTIME");
   });
+
+  it("turns the browser off on the agent-server when browser tools are disabled", () => {
+    expect(
+      buildAgentServerEnv(agentServerConfig, {
+        env: { VITE_ENABLE_BROWSER_TOOLS: "false" },
+      }),
+    ).toMatchObject({ OH_ENABLE_BROWSER: "false" });
+    expect(
+      buildAgentServerEnv(agentServerConfig, { env: {} }),
+    ).not.toHaveProperty("OH_ENABLE_BROWSER");
+  });
 });
 
 describe("buildAgentServerCommand", () => {

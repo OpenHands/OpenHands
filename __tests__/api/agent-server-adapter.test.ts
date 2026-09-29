@@ -35,7 +35,6 @@ import {
 
 const {
   mockGetAgentServerWorkingDir,
-  mockIsAgentServerToolAvailable,
   mockGetEffectiveLocalBackend,
   mockGetCachedAgentServerInfo,
   mockGetServerInfo,
@@ -43,7 +42,6 @@ const {
   mockLoadHooks,
 } = vi.hoisted(() => ({
   mockGetAgentServerWorkingDir: vi.fn(() => "/workspace/project/agent-canvas"),
-  mockIsAgentServerToolAvailable: vi.fn((_toolName: string) => true),
   mockGetEffectiveLocalBackend: vi.fn(() => ({
     id: "default-local",
     name: "Local backend",
@@ -85,7 +83,6 @@ vi.mock("#/api/agent-server-config", () => ({
 }));
 
 vi.mock("#/api/agent-server-compatibility", () => ({
-  isAgentServerToolAvailable: mockIsAgentServerToolAvailable,
   getCachedAgentServerInfo: mockGetCachedAgentServerInfo,
 }));
 
@@ -125,7 +122,6 @@ const EXPLICIT_HOOK_CONFIG = makeHookConfig({
 });
 
 beforeEach(() => {
-  mockIsAgentServerToolAvailable.mockReturnValue(true);
   mockGetCachedAgentServerInfo.mockReturnValue(null);
   mockGetServerInfo.mockReset();
   mockGetEffectiveLocalBackend.mockReturnValue({
@@ -203,13 +199,9 @@ describe("buildStartConversationRequest", () => {
       enabled: true,
       max_size: 120,
     });
-    expect(payload.agent_settings.tools).toEqual([
-      { name: "terminal", params: {} },
-      { name: "file_editor", params: {} },
-      { name: "task_tracker", params: {} },
-      { name: "browser_tool_set", params: {} },
-      { name: "switch_llm", params: {} },
-    ]);
+    expect(
+      JSON.parse(JSON.stringify(payload.agent_settings)),
+    ).not.toHaveProperty("tools");
     expect(payload.agent_settings.agent_context).toMatchObject({
       load_public_skills: false,
       load_user_skills: true,
@@ -341,57 +333,6 @@ describe("buildStartConversationRequest", () => {
     }) as { agent_settings: { tools: unknown[] } };
 
     expect(payload.agent_settings.tools).toEqual([]);
-  });
-
-  it("omits browser_tool_set from the standard set when the server does not advertise it", () => {
-    mockIsAgentServerToolAvailable.mockReturnValue(false);
-
-    const payload = buildStartConversationRequest({
-      settings: {
-        ...DEFAULT_SETTINGS,
-        agent_settings: {
-          ...DEFAULT_SETTINGS.agent_settings,
-          llm: { model: "nested-model" },
-        },
-      },
-    }) as {
-      agent_settings: {
-        tools: Array<{ name: string; params: Record<string, unknown> }>;
-      };
-    };
-
-    expect(payload.agent_settings.tools).toEqual([
-      { name: "terminal", params: {} },
-      { name: "file_editor", params: {} },
-      { name: "task_tracker", params: {} },
-      { name: "switch_llm", params: {} },
-    ]);
-  });
-
-  it("drops a selected task_tool_set the server does not advertise", () => {
-    mockIsAgentServerToolAvailable.mockReturnValue(false);
-
-    const payload = buildStartConversationRequest({
-      settings: {
-        ...DEFAULT_SETTINGS,
-        agent_settings: {
-          ...DEFAULT_SETTINGS.agent_settings,
-          tools: [
-            { name: "terminal", params: {} },
-            { name: "task_tool_set", params: {} },
-          ],
-          llm: { model: "nested-model" },
-        },
-      },
-    }) as {
-      agent_settings: {
-        tools: Array<{ name: string; params: Record<string, unknown> }>;
-      };
-    };
-
-    expect(payload.agent_settings.tools).toEqual([
-      { name: "terminal", params: {} },
-    ]);
   });
 
   it("derives confirmation and security settings the same way as OpenHands", () => {
@@ -778,24 +719,6 @@ describe("buildStartConversationRequest", () => {
       });
       expect(
         payload.agent_settings?.tools?.map((tool) => tool.name) ?? [],
-      ).not.toContain("canvas_ui");
-      expect(payload.tool_module_qualnames).toBeUndefined();
-    });
-
-    it("omits canvas_ui and its module qualname when the backend does not advertise canvas_ui", () => {
-      mockIsAgentServerToolAvailable.mockImplementation(
-        (toolName: string) => toolName !== "canvas_ui",
-      );
-
-      const payload = buildStartConversationRequest({
-        settings: DEFAULT_SETTINGS,
-      }) as {
-        agent_settings: { tools: Array<{ name: string }> };
-        tool_module_qualnames?: Record<string, string>;
-      };
-
-      expect(
-        payload.agent_settings.tools.map((tool) => tool.name),
       ).not.toContain("canvas_ui");
       expect(payload.tool_module_qualnames).toBeUndefined();
     });

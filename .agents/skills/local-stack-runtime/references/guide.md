@@ -5,7 +5,7 @@ Supported deployment environment variables:
 - `VITE_BACKEND_BASE_URL` — Agent Server base URL.
 - `VITE_SESSION_API_KEY` — optional session authentication.
 - `VITE_WORKING_DIR` — default workspace path sent when starting conversations.
-- `VITE_ENABLE_BROWSER_TOOLS=false` — omit `browser_tool_set` from new conversation payloads.
+- `VITE_ENABLE_BROWSER_TOOLS=false` — start the agent-server with the browser tool set off (`OH_ENABLE_BROWSER=false`).
 - `VITE_BASE_PATH` — serve the SPA under a subpath such as `/canvas`; pair it with `scripts/static-server.mjs --base-path` at runtime.
 
 GitHub automation includes `.github/workflows/ci.yml` for `npm ci`, `npm test`, and `npm run build`, plus `.github/dependabot.yml` with weekly npm and GitHub Actions updates gated by a seven-day cooldown.

@@ -16,7 +16,6 @@ import {
 import { getAgentServerClientOptions } from "./agent-server-client-options";
 import {
   getCachedAgentServerInfo,
-  isAgentServerToolAvailable,
   type AgentServerInfo,
 } from "./agent-server-compatibility";
 import { getAgentServerWorkingDir } from "./agent-server-config";
@@ -142,25 +141,12 @@ export interface DirectConversationInfo {
   sub_conversation_ids?: string[] | null;
 }
 
-const BROWSER_TOOL_SET_NAME = "browser_tool_set";
-const TASK_TOOL_SET_NAME = "task_tool_set";
-const STANDARD_TOOL_NAMES = [
-  "terminal",
-  "file_editor",
-  "task_tracker",
-  BROWSER_TOOL_SET_NAME,
-  "switch_llm",
-];
 // Falls back to the same default the code agent uses when the user has not
 // configured `conversation_settings.max_iterations` (see buildConfiguredConversationSettings).
 const DEFAULT_MAX_ITERATIONS = 500;
 
 function resolveMaxIterations(value: unknown): number {
   return typeof value === "number" ? value : DEFAULT_MAX_ITERATIONS;
-}
-
-function browserToolsEnabled() {
-  return import.meta.env.VITE_ENABLE_BROWSER_TOOLS !== "false";
 }
 
 /**
@@ -742,32 +728,21 @@ function isToolRecord(
   );
 }
 
-function isRuntimeAvailable(name: string) {
-  if (name === BROWSER_TOOL_SET_NAME) {
-    return browserToolsEnabled() && isAgentServerToolAvailable(name);
-  }
-  if (name === TASK_TOOL_SET_NAME) return isAgentServerToolAvailable(name);
-  return true;
-}
-
-/** Unset `tools` is the standard set; a list is used as given. */
-function getAgentTools(agentSettings: SettingsRecord): AgentToolSpec[] {
+/** Unset `tools` is left to the server; a list is sent as given. */
+function getAgentTools(
+  agentSettings: SettingsRecord,
+): AgentToolSpec[] | undefined {
   const configuredTools = agentSettings.tools;
-  const specs =
-    Array.isArray(configuredTools) &&
-    configuredTools.every((tool) => isToolRecord(tool))
-      ? configuredTools.map((tool) => ({
-          name: tool.name,
-          params: toRecord(tool.params),
-        }))
-      : STANDARD_TOOL_NAMES.map((name) => ({ name, params: {} }));
-  const tools = new Map<string, AgentToolSpec>();
-  for (const spec of specs) {
-    if (!tools.has(spec.name) && isRuntimeAvailable(spec.name)) {
-      tools.set(spec.name, spec);
-    }
+  if (
+    !Array.isArray(configuredTools) ||
+    !configuredTools.every((tool) => isToolRecord(tool))
+  ) {
+    return undefined;
   }
-  return Array.from(tools.values());
+  return configuredTools.map((tool) => ({
+    name: tool.name,
+    params: toRecord(tool.params),
+  }));
 }
 
 function buildInitialMessage(

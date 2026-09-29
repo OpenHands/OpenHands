@@ -803,6 +803,9 @@ export function buildAgentServerEnv(config, options = {}) {
   return {
     ...buildAgentServerTelemetryEnv(env),
     ...conversationRuntimeEnv,
+    ...(env.VITE_ENABLE_BROWSER_TOOLS === "false"
+      ? { OH_ENABLE_BROWSER: "false" }
+      : {}),
     // Force Python to use UTF-8 for all file I/O and streams.
     //
     // On Windows, Python defaults to the system ANSI codepage (e.g. cp1252).
