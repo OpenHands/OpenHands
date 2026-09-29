@@ -7,6 +7,7 @@ import {
   focusContentEditableAtEnd,
   getClipboardFiles,
   getTextContent,
+  insertTextAtCaret,
   isContentEmpty,
   isPastedClipboardImage,
   normalizePastedFile,
@@ -343,5 +344,35 @@ describe("content-editable helpers", () => {
     vi.spyOn(window, "getSelection").mockReturnValue(null);
     focusContentEditableAtEnd(element);
     expect(focus).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("insertTextAtCaret", () => {
+  it("inserts at the caret with a separating space and emits input", () => {
+    const element = document.createElement("div");
+    element.textContent = "fix the bug";
+    document.body.appendChild(element);
+    const range = document.createRange();
+    range.setStart(element.firstChild!, "fix the".length);
+    window.getSelection()!.removeAllRanges();
+    window.getSelection()!.addRange(range);
+    const onInput = vi.fn();
+    element.addEventListener("input", onInput);
+
+    insertTextAtCaret(element, "login");
+
+    expect(element.textContent).toBe("fix the login bug");
+    expect(onInput).toHaveBeenCalledOnce();
+  });
+
+  it("appends to the end when the caret is outside the input", () => {
+    const element = document.createElement("div");
+    document.body.appendChild(element);
+    window.getSelection()!.removeAllRanges();
+
+    insertTextAtCaret(element, "hello");
+    insertTextAtCaret(element, "world");
+
+    expect(element.textContent).toBe("hello world");
   });
 });

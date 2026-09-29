@@ -177,3 +177,43 @@ export const focusContentEditableAtEnd = (
   selection.addRange(range);
   ensureCursorVisible(element);
 };
+
+/**
+ * Insert text at the caret (or the end when the caret is elsewhere) and emit
+ * `input` so the same handlers as typing run.
+ */
+export const insertTextAtCaret = (
+  element: HTMLElement | null,
+  text: string,
+): void => {
+  if (!element) {
+    return;
+  }
+
+  const selection = window.getSelection();
+  if (!selection) {
+    return;
+  }
+  if (selection.rangeCount === 0 || !element.contains(selection.anchorNode)) {
+    focusContentEditableAtEnd(element);
+  } else {
+    element.focus();
+  }
+
+  const range = selection.getRangeAt(0);
+  const textBefore = range.cloneRange();
+  textBefore.selectNodeContents(element);
+  textBefore.setEnd(range.startContainer, range.startOffset);
+  const node = document.createTextNode(
+    /\S$/.test(textBefore.toString()) ? ` ${text}` : text,
+  );
+
+  range.deleteContents();
+  range.insertNode(node);
+  range.setStartAfter(node);
+  range.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(range);
+  element.dispatchEvent(new Event("input", { bubbles: true }));
+  ensureCursorVisible(element);
+};
