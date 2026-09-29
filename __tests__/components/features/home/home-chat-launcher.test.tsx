@@ -21,7 +21,7 @@ const enqueueHomeTaskPendingMessage = vi.fn();
 const mockDisplayErrorToast = vi.fn();
 const mockUseLlmConfigured = vi.fn();
 const mockUseConversationWorkspace = vi.fn();
-const mockSetAutomationSetupDraft = vi.fn();
+const mockMarkAutomationSetupHandoff = vi.fn();
 
 let mockImages: File[] = [];
 let mockFiles: File[] = [];
@@ -37,9 +37,9 @@ vi.mock("#/utils/enqueue-home-task-pending-message", () => ({
     enqueueHomeTaskPendingMessage(...args),
 }));
 
-vi.mock("#/api/automation-setup-draft-store", () => ({
-  setAutomationSetupDraft: (...args: unknown[]) =>
-    mockSetAutomationSetupDraft(...args),
+vi.mock("#/api/automation-setup-handoff-store", () => ({
+  markAutomationSetupHandoff: (...args: unknown[]) =>
+    mockMarkAutomationSetupHandoff(...args),
 }));
 
 vi.mock("#/stores/conversation-store", () => ({
@@ -425,7 +425,7 @@ describe("HomeChatLauncher", () => {
     await user.click(screen.getByTestId("stub-chat-submit"));
 
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
-    expect(mockSetAutomationSetupDraft).not.toHaveBeenCalled();
+    expect(mockMarkAutomationSetupHandoff).not.toHaveBeenCalled();
 
     expect(createSpy).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -455,7 +455,7 @@ describe("HomeChatLauncher", () => {
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith("/conversations/conv-code"),
     );
-    expect(mockSetAutomationSetupDraft).not.toHaveBeenCalled();
+    expect(mockMarkAutomationSetupHandoff).not.toHaveBeenCalled();
   });
 
   it("disables the chat input and won't create a conversation when no LLM is configured", async () => {
@@ -790,7 +790,7 @@ describe("HomeChatLauncher", () => {
         metadata: null,
       }),
     );
-    expect(mockSetAutomationSetupDraft).not.toHaveBeenCalled();
+    expect(mockMarkAutomationSetupHandoff).not.toHaveBeenCalled();
   });
 
   it("sends automate launch text as chat and opens a blank setup form", async () => {
@@ -812,10 +812,7 @@ describe("HomeChatLauncher", () => {
         metadata: null,
       }),
     );
-    expect(mockSetAutomationSetupDraft).toHaveBeenCalledWith("conv-abc", {
-      prompt: "",
-      kind: "prompt",
-    });
+    expect(mockMarkAutomationSetupHandoff).toHaveBeenCalledWith("conv-abc");
   });
 
   it("renders the recommended automations rail above pinned activity in Automate mode", async () => {

@@ -32,7 +32,7 @@ import {
   writeStoredLocalWorkspaceMode,
 } from "#/utils/workspace-mode";
 import type { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
-import { setAutomationSetupDraft } from "#/api/automation-setup-draft-store";
+import { markAutomationSetupHandoff } from "#/api/automation-setup-handoff-store";
 import { PluginPickerModal } from "#/components/features/plugins/plugin-picker-modal";
 import { PluginPickerTrigger } from "#/components/features/plugins/plugin-picker-trigger";
 import { RecommendedAutomationsLauncher } from "#/components/features/automations/recommended-automations-launcher";
@@ -153,10 +153,7 @@ export function HomeChatLauncher() {
 
     const openAutomationSetupMode = (conversationId: string) => {
       if (!isAutomateMode) return;
-      setAutomationSetupDraft(conversationId, {
-        prompt: "",
-        kind: "prompt",
-      });
+      markAutomationSetupHandoff(conversationId);
     };
 
     // Loading toast gives the user a clear signal that the request is in
