@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Navigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { useSettings } from "#/hooks/query/use-settings";
