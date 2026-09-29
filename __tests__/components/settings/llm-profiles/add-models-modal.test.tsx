@@ -481,9 +481,7 @@ describe("AddModelsModal", () => {
 
     setOpen(false);
     await waitFor(() =>
-      expect(
-        screen.queryByTestId("add-models-modal"),
-      ).not.toBeInTheDocument(),
+      expect(screen.queryByTestId("add-models-modal")).not.toBeInTheDocument(),
     );
     await queryClient.refetchQueries({
       queryKey: ["config", "models", "openhands"],
@@ -492,9 +490,7 @@ describe("AddModelsModal", () => {
     setOpen(true);
     await screen.findByTestId("add-models-modal");
     expect(screen.getByTestId("add-models-provider")).toHaveValue("");
-    expect(
-      screen.queryAllByTestId(/^add-models-row-/),
-    ).toHaveLength(0);
+    expect(screen.queryAllByTestId(/^add-models-row-/)).toHaveLength(0);
   });
 
   it("starts a fresh session when the modal is reopened", async () => {
