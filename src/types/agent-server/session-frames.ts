@@ -5,6 +5,13 @@ import { OpenHandsEvent } from "./core";
  * `session_protocol.py`). The envelope is deliberately not an `Event`: the
  * durable record rides inside it untouched, and protocol fields live on the
  * envelope. The URL is the protocol version — there is no handshake.
+ * The wire shape is frozen at the authoritative source:the agent-server's
+ * `session_protocol.py` (software-agent-sdk, merged #4807 and #4822). This
+ * file is an exact mirror of that protocol aged to the agent-server version
+ * Canvas targets. The typed mirror still has to land in the published
+ * `@openhands/typescript-client` (tracked as software-agent-sdk#4763); until
+ * that lands, this local mirror exists so Canvas can consume the frozen wire
+ * shape without trusting a timer or comparing strings.
  *
  * Unknown frame types must be ignored: the envelope is allowed to grow.
  */
