@@ -410,7 +410,7 @@ describe("static-server.mjs", () => {
       const upstreamOrigin = await startHttpServer(
         createServer((_req, res) => {
           res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ version: "1.28.0" }));
+          res.end(JSON.stringify({ version: "1.48.0" }));
         }),
       );
       const runtimeServicesInfo = JSON.stringify({
@@ -439,7 +439,7 @@ describe("static-server.mjs", () => {
       };
 
       expect(response.status).toBe(200);
-      expect(body.version).toBe("1.28.0");
+      expect(body.version).toBe("1.48.0");
       expect(body.runtime_services).toEqual(JSON.parse(runtimeServicesInfo));
     });
 
