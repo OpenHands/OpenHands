@@ -67,13 +67,7 @@ export function HomeChatLauncher() {
   const [selectedPlugins, setSelectedPlugins] = useState<PluginSpec[]>([]);
   const [isPluginPickerOpen, setIsPluginPickerOpen] = useState(false);
   const [launcherMode, setLauncherMode] = useState<HomeLauncherMode>("code");
-  const supportsAutomateMode = isLocal;
-  const displayedLauncherMode = supportsAutomateMode ? launcherMode : "code";
-  const isAutomateMode = supportsAutomateMode && launcherMode === "automate";
-  const handleLauncherModeChange = (mode: HomeLauncherMode) => {
-    if (mode === "automate" && !supportsAutomateMode) return;
-    setLauncherMode(mode);
-  };
+  const isAutomateMode = launcherMode === "automate";
 
   const { mutateAsync: createConversation, isPending } =
     useCreateConversation();
@@ -269,16 +263,10 @@ export function HomeChatLauncher() {
 
         <div className="flex w-full justify-center">
           <HomeLauncherModeToggle
-            mode={displayedLauncherMode}
-            onChange={handleLauncherModeChange}
+            mode={launcherMode}
+            onChange={setLauncherMode}
           />
         </div>
-
-        {!supportsAutomateMode && (
-          <p className="-mt-2 text-center text-xs text-[var(--oh-muted)]">
-            {t(I18nKey.HOME$AUTOMATE_LOCAL_BACKEND_ONLY)}
-          </p>
-        )}
 
         <div className="w-full">
           <CustomChatInput

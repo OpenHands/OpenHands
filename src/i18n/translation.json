@@ -44351,22 +44351,5 @@
     "de": "✦ Von OpenHands ausgefüllt",
     "uk": "✦ Заповнено OpenHands",
     "ca": "✦ Emplenat per OpenHands"
-  },
-  "HOME$AUTOMATE_LOCAL_BACKEND_ONLY": {
-    "en": "Automate mode is available for local backends only.",
-    "ja": "Automate mode is available for local backends only.",
-    "zh-CN": "Automate mode is available for local backends only.",
-    "zh-TW": "Automate mode is available for local backends only.",
-    "ko-KR": "Automate mode is available for local backends only.",
-    "no": "Automate mode is available for local backends only.",
-    "ar": "Automate mode is available for local backends only.",
-    "de": "Automate mode is available for local backends only.",
-    "fr": "Automate mode is available for local backends only.",
-    "it": "Automate mode is available for local backends only.",
-    "pt": "Automate mode is available for local backends only.",
-    "es": "Automate mode is available for local backends only.",
-    "ca": "Automate mode is available for local backends only.",
-    "tr": "Automate mode is available for local backends only.",
-    "uk": "Automate mode is available for local backends only."
   }
 }

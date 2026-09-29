@@ -96,7 +96,20 @@ describe("handleAutomationFormUpdateAction", () => {
     expect(getAutomationFormSession("conv-1")?.form?.name).toBe("First value");
   });
 
-  it("protects user-edited fields unless overwrite is explicit", () => {
+  it.each([
+    {
+      name: "protects user-edited fields by default",
+      overwriteUserEdits: undefined,
+      expectedResult: { applied: [], skipped: ["name"] },
+      expectedName: "Manual title",
+    },
+    {
+      name: "overwrites user-edited fields when explicit",
+      overwriteUserEdits: true,
+      expectedResult: { applied: ["name"], skipped: [] },
+      expectedName: "Agent title",
+    },
+  ])("$name", ({ overwriteUserEdits, expectedResult, expectedName }) => {
     initializeAutomationFormSession("conv-1", {
       prompt: "Initial automation",
       kind: "prompt",
@@ -107,26 +120,17 @@ describe("handleAutomationFormUpdateAction", () => {
       { source: "user" },
     );
 
-    const skipped = handleAutomationFormUpdateAction(
+    const result = handleAutomationFormUpdateAction(
       {
         kind: AUTOMATION_FORM_UPDATE_ACTION_KIND,
         fields: { name: "Agent title" },
+        overwrite_user_edits: overwriteUserEdits,
       },
       "conv-1",
       "event-2",
     );
-    const overwritten = handleAutomationFormUpdateAction(
-      {
-        kind: AUTOMATION_FORM_UPDATE_ACTION_KIND,
-        fields: { name: "Agent title" },
-        overwrite_user_edits: true,
-      },
-      "conv-1",
-      "event-3",
-    );
 
-    expect(skipped).toMatchObject({ applied: [], skipped: ["name"] });
-    expect(overwritten).toMatchObject({ applied: ["name"], skipped: [] });
-    expect(getAutomationFormSession("conv-1")?.form?.name).toBe("Agent title");
+    expect(result).toMatchObject(expectedResult);
+    expect(getAutomationFormSession("conv-1")?.form?.name).toBe(expectedName);
   });
 });

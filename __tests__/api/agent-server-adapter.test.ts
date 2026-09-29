@@ -847,24 +847,35 @@ describe("buildStartConversationRequest", () => {
       ]);
     });
 
-    it("adds the automation form client tool only for automation setup starts", () => {
-      const regularPayload = buildStartConversationRequest({
-        settings: DEFAULT_SETTINGS,
-      });
-      const automationPayload = buildStartConversationRequest({
-        settings: DEFAULT_SETTINGS,
+    it.each([
+      {
+        automationSetup: false,
+        expectedTools: [
+          CANVAS_UI_CLIENT_TOOL_NAME,
+          LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
+        ],
+      },
+      {
         automationSetup: true,
-      });
+        expectedTools: [
+          CANVAS_UI_CLIENT_TOOL_NAME,
+          LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
+          AUTOMATION_FORM_UPDATE_TOOL_NAME,
+        ],
+      },
+    ])(
+      "builds client tools for automationSetup=$automationSetup",
+      ({ automationSetup, expectedTools }) => {
+        const payload = buildStartConversationRequest({
+          settings: DEFAULT_SETTINGS,
+          automationSetup,
+        });
 
-      expect(
-        regularPayload.client_tools.map((tool) => tool.name),
-      ).not.toContain(AUTOMATION_FORM_UPDATE_TOOL_NAME);
-      expect(automationPayload.client_tools.map((tool) => tool.name)).toEqual([
-        CANVAS_UI_CLIENT_TOOL_NAME,
-        LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
-        AUTOMATION_FORM_UPDATE_TOOL_NAME,
-      ]);
-    });
+        expect(payload.client_tools.map((tool) => tool.name)).toEqual(
+          expectedTools,
+        );
+      },
+    );
 
     it("sends the client tool when resuming a conversation", () => {
       const payload = buildStartConversationRequest({
