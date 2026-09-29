@@ -49,13 +49,7 @@ export function consumeAutomationSetupHandoff(
   conversationId: string | null | undefined,
 ): boolean {
   if (!conversationId) return false;
-  const handoffs = readHandoffs();
-  const hasHandoff = handoffs[conversationId] === true;
-  if (hasHandoff) {
-    delete handoffs[conversationId];
-    writeHandoffs(handoffs);
-  }
-  return hasHandoff;
+  return readHandoffs()[conversationId] === true;
 }
 
 export function clearAutomationSetupHandoff(conversationId: string) {
