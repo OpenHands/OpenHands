@@ -7,7 +7,20 @@ import { useRuntimeIsReady } from "#/hooks/use-runtime-is-ready";
 import { getGitPath } from "#/utils/get-git-path";
 import type { GitChange } from "#/api/open-hands.types";
 
-export const useUnifiedGetGitChanges = () => {
+export interface UseUnifiedGetGitChangesConfig {
+  /**
+   * Optional git ref to diff against — see
+   * {@link AgentServerGitService.getGitChanges} for the full contract.
+   * Pass `"HEAD"` for a strict `git status`-style list (only for a caller
+   * that means "uncommitted", not "this conversation's whole diff").
+   */
+  ref?: string;
+}
+
+export const useUnifiedGetGitChanges = (
+  config: UseUnifiedGetGitChangesConfig = {},
+) => {
+  const { ref } = config;
   const { conversationId } = useConversationId();
   const { data: conversation } = useActiveConversation();
   const [orderedChanges, setOrderedChanges] = React.useState<GitChange[]>([]);
@@ -31,6 +44,7 @@ export const useUnifiedGetGitChanges = () => {
       conversationUrl,
       sessionApiKey,
       gitPath,
+      ref,
     ],
     queryFn: async () => {
       if (!conversationId) throw new Error("No conversation ID");
@@ -40,6 +54,7 @@ export const useUnifiedGetGitChanges = () => {
         conversationUrl,
         sessionApiKey,
         gitPath,
+        ref,
       );
     },
     retry: false,

@@ -88,6 +88,22 @@ describe("AgentServerGitService", () => {
       expect(mockGitChanges).toHaveBeenCalledWith(pathWithSlashes);
     });
 
+    test("passes an explicit ref through to the runtime workspace", async () => {
+      mockGitChanges.mockResolvedValue([]);
+
+      await AgentServerGitService.getGitChanges(
+        "123",
+        "http://localhost:3000/api/conversations/123",
+        "my-session-key",
+        "/workspace/project",
+        "HEAD",
+      );
+
+      expect(mockGitChanges).toHaveBeenCalledWith("/workspace/project", {
+        ref: "HEAD",
+      });
+    });
+
     test("maps V1 git statuses to V0 format", async () => {
       mockGitChanges.mockResolvedValue([
         { status: "ADDED", path: "new-file.ts" },
@@ -146,6 +162,23 @@ describe("AgentServerGitService", () => {
       );
 
       expect(mockGitDiff).toHaveBeenCalledWith(filePath);
+    });
+
+    test("passes an explicit ref through to the runtime workspace diff helper", async () => {
+      mockGitDiff.mockResolvedValue({ diff: "diff content" });
+
+      await AgentServerGitService.getGitChangeDiff(
+        "123",
+        "http://localhost:3000/api/conversations/123",
+        "test-api-key",
+        "/workspace/project/file.ts",
+        undefined,
+        "HEAD",
+      );
+
+      expect(mockGitDiff).toHaveBeenCalledWith("/workspace/project/file.ts", {
+        ref: "HEAD",
+      });
     });
 
     test("returns the diff data from the response", async () => {
@@ -355,6 +388,27 @@ describe("AgentServerGitService", () => {
           ),
         ).rejects.toThrow("Invalid response from runtime");
       });
+
+      test("includes an explicit ref in the cloud query string", async () => {
+        // Arrange
+        vi.mocked(callCloudProxy).mockResolvedValue([]);
+
+        // Act
+        await AgentServerGitService.getGitChanges(
+          "conv-1",
+          runtimeConversationUrl,
+          "session-key",
+          "workspace/project",
+          "HEAD",
+        );
+
+        // Assert
+        expect(callCloudProxy).toHaveBeenCalledWith({
+          backend: cloudBackend,
+          method: "GET",
+          path: "/api/v1/app-conversations/conv-1/git/changes?path=%2Fworkspace%2Fproject&ref=HEAD",
+        });
+      });
     });
 
     describe("getGitChangeDiff", () => {
@@ -382,6 +436,31 @@ describe("AgentServerGitService", () => {
         expect(result).toEqual({
           original: "old content",
           modified: "new content",
+        });
+      });
+
+      test("includes an explicit ref in the cloud query string", async () => {
+        // Arrange
+        vi.mocked(callCloudProxy).mockResolvedValue({
+          original: "",
+          modified: "",
+        });
+
+        // Act
+        await AgentServerGitService.getGitChangeDiff(
+          "conv-1",
+          runtimeConversationUrl,
+          "session-key",
+          "/workspace/project/src/file.ts",
+          undefined,
+          "HEAD",
+        );
+
+        // Assert
+        expect(callCloudProxy).toHaveBeenCalledWith({
+          backend: cloudBackend,
+          method: "GET",
+          path: "/api/v1/app-conversations/conv-1/git/diff?path=%2Fworkspace%2Fproject%2Fsrc%2Ffile.ts&ref=HEAD",
         });
       });
     });

@@ -133,6 +133,28 @@ describe("Commits Tab", () => {
     expect(screen.queryByTestId("commit-row")).not.toBeInTheDocument();
   });
 
+  it("requests Uncommitted with a strict HEAD ref, not the whole-branch base", async () => {
+    // Regression: reusing the auto-detected display base here made a
+    // fully-pushed, clean branch show its entire diff as "Uncommitted"
+    // instead of an empty list.
+    // Arrange
+    getGitCommitsSpy.mockResolvedValue({ commits: [], hasMore: false });
+    getGitChangesSpy.mockResolvedValue([]);
+
+    // Act
+    render(<GitCommits />, { wrapper });
+
+    // Assert
+    await waitFor(() => expect(getGitChangesSpy).toHaveBeenCalled());
+    expect(getGitChangesSpy).toHaveBeenCalledWith(
+      "c1",
+      conversation.conversation_url,
+      conversation.session_api_key,
+      conversation.workspace.working_dir,
+      "HEAD",
+    );
+  });
+
   it("expanding a commit fetches and lists the files it changed", async () => {
     // Arrange
     const user = userEvent.setup();

@@ -15,6 +15,13 @@ type UseUnifiedGitDiffConfig = {
    * from git objects) instead of the working-tree-vs-base diff.
    */
   commit?: string;
+  /**
+   * Git ref to diff the working tree against — must match whatever base
+   * the change list this file came from was computed with (see
+   * {@link AgentServerGitService.getGitChanges}). Ignored when `commit` is
+   * set.
+   */
+  ref?: string;
 };
 
 export const useUnifiedGitDiff = (config: UseUnifiedGitDiffConfig) => {
@@ -57,6 +64,7 @@ export const useUnifiedGitDiff = (config: UseUnifiedGitDiffConfig) => {
         conversationUrl,
         sessionApiKey,
         absoluteFilePath,
+        config.ref,
       ];
 
   return useQuery({
@@ -70,6 +78,7 @@ export const useUnifiedGitDiff = (config: UseUnifiedGitDiffConfig) => {
         sessionApiKey,
         absoluteFilePath,
         config.commit,
+        config.ref,
       );
     },
     enabled: config.enabled && (!isDeleted || !!config.commit),

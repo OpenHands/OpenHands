@@ -14,13 +14,24 @@ export interface DiffChangeListProps {
    * the working-tree diff.
    */
   commit?: string;
+  /**
+   * Git ref each row's working-tree diff is computed against — must match
+   * whatever base `changes` itself was fetched with (see
+   * {@link AgentServerGitService.getGitChanges}). Ignored when `commit` is
+   * set. Named `diffRef`, not `ref`: `ref` is a reserved JSX prop name.
+   */
+  diffRef?: string;
 }
 
 /**
  * Single-open accordion of file diffs. Expanding one path collapses the
  * previously open one (same behavior as the Commits list).
  */
-export function DiffChangeList({ changes, commit }: DiffChangeListProps) {
+export function DiffChangeList({
+  changes,
+  commit,
+  diffRef,
+}: DiffChangeListProps) {
   const [expandedPath, setExpandedPath] = useState<string | null>(null);
 
   return (
@@ -31,6 +42,7 @@ export function DiffChangeList({ changes, commit }: DiffChangeListProps) {
           path={change.path}
           type={change.status}
           commit={commit}
+          diffRef={diffRef}
           isExpanded={expandedPath === change.path}
           onToggle={() =>
             setExpandedPath((prev) =>
