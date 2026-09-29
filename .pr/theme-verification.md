@@ -54,3 +54,61 @@ The worktree initially reused the lint checkout's pinned dependencies. It subseq
 Custom users of generated `bg-base` / color `text-base` need the migration in `docs/DEVELOPMENT.md`. The underlying `--oh-color-base` and `base-secondary` tokens remain unchanged. Keeping `--color-base` as a deprecated alias would preserve the collision, so it is intentionally removed.
 
 This is a fork PR: remove `.pr/` manually before merge. The repository workflow does not automatically clean fork branches.
+
+## Review follow-up (2026-09-28)
+
+Independently checked the bot review against `b33fed7c2`. Both concrete findings
+were valid:
+
+- The CSS-isolation probe still used the removed `bg-base` utility. It now uses
+  `bg-canvas-base`, first verifies the utility works inside the shell, then moves
+  the same probe outside and requires a transparent background. The probe keeps
+  an explicit `--oh-color-base` value so a missing theme variable cannot mask a
+  leaked selector. It is removed after both measurements.
+- The theme regression imported `@tailwindcss/node` without declaring it.
+  Added the already-installed version, `4.3.3`, as an exact devDependency through
+  npm. No resolved package versions changed. npm also synchronized the lockfile's
+  root `@shadcn/lint` constraint with its existing exact pin in `package.json`.
+
+Validation used Node 24.19.0 on Linux:
+
+- `npm ci --no-audit --no-fund`: passed before the dependency declaration update.
+- `npm ls @tailwindcss/node`: direct `4.3.3`, also deduplicated under
+  `@tailwindcss/vite`.
+- `node .pr/verify-theme.mjs`: color CSS parity and restored font sizing passed.
+- `npx vitest run __tests__/themes/tailwind-text-base.test.ts __tests__/package-library.test.ts`:
+  **2 files / 8 tests passed**.
+- `VITE_DO_NOT_TRACK=1 npm run build`: passed.
+- `npm run lint`: passed, including typecheck and formatting; **0 errors** and
+  the same **347 warnings** recorded above.
+- Focused mock-LLM CSS-isolation E2E: **1 passed** against the real
+  `bin/agent-canvas.mjs` stack and production build, without live LLM credentials.
+
+The pinned Playwright Chromium 153 download returned invalid archives locally.
+The E2E therefore used Chromium Headless Shell **134.0.6998.35**, installed by
+`npx --yes --package=playwright@1.51.1 playwright install --only-shell chromium`.
+A temporary `playwright.review.config.ts` spread the normal mock-LLM config,
+overrode only the Chromium project's `use.launchOptions.executablePath`, and
+disabled video. The command was:
+
+```sh
+VITE_DO_NOT_TRACK=1 LITELLM_LOCAL_MODEL_COST_MAP=True \
+MOCK_LLM_PYTHON=/workspace/scratch/90598e5f28f6/mock-llm-venv/bin/python \
+npx playwright test --config=playwright.review.config.ts \
+  tests/e2e/mock-llm/regressions/mock-llm-ui-regressions.spec.ts \
+  -g 'scopes standalone styles'
+```
+
+Separately executed the test's exact DOM probe callback with the production
+`build/assets/root-*.css` stylesheet in Chromium, including two negative controls:
+
+| Probe / stylesheet | Inside background | Outside background | Result |
+| --- | --- | --- | --- |
+| Current probe, production CSS | `rgb(11, 14, 20)` | `rgba(0, 0, 0, 0)` | Both assertions pass |
+| Restore removed `bg-base` probe class | `rgba(0, 0, 0, 0)` | `rgba(0, 0, 0, 0)` | Inside assertion fails |
+| Inject unscoped `.bg-canvas-base { background-color: var(--oh-color-base); }` | `rgb(11, 14, 20)` | `rgb(11, 14, 20)` | Outside assertion fails |
+
+This follow-up changes test coverage and dependency declarations only. It does
+not expand the earlier visual coverage to every migrated consumer or theme;
+the restored `text-base` typography remains the intentional behavior described
+above. The complete unit suite and library build were not rerun for this follow-up.
