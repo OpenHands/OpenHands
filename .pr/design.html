@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Automation setup design — draft testing and deferred conversations</title>
+<style>
+  :root{
+    --fg:#1a1a1a; --muted:#5a5a5a; --subtle:#8a8a82;
+    --bg:#fdfdfb; --card:#ffffff; --elevated:#f7f6f1;
+    --accent:#2b4eaa; --accent-soft:#e6ecfa;
+    --rule:#e2e2dc; --rule-strong:#bdbcb4;
+    --code-bg:#f3f1ec; --warn:#b25b0e; --ok:#2f7a3a; --crit:#a02020;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box} html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans)}
+  body{line-height:1.6;font-size:16px}
+  .wrap{display:grid;grid-template-columns:240px minmax(0,1fr);gap:48px;max-width:1180px;margin:0 auto;padding:32px 28px 96px}
+  nav.toc{position:sticky;top:24px;align-self:start;font-size:13px}
+  nav.toc h2{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+  nav.toc ol{list-style:none;padding:0;margin:0;counter-reset:toc}
+  nav.toc li{counter-increment:toc;margin:4px 0}
+  nav.toc li::before{content:counter(toc) ". ";color:var(--muted)}
+  nav.toc a{color:var(--fg);text-decoration:none} nav.toc a:hover{color:var(--accent)}
+  header.title{border-bottom:1px solid var(--rule);padding-bottom:22px;margin-bottom:28px}
+  header.title .eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  header.title h1{font-size:34px;margin:6px 0 4px;letter-spacing:-.01em}
+  header.title .sub{color:var(--muted);max-width:740px}
+  h2{font-size:22px;margin:44px 0 10px} h2 .num{color:var(--muted);font-weight:500;margin-right:8px}
+  h3{font-size:16px;margin:22px 0 8px}
+  code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);padding:1px 5px;border-radius:3px}
+  table{border-collapse:collapse;width:100%;font-size:14px;margin:12px 0}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
+  th{font-weight:600;background:var(--code-bg)}
+  .callout{border-left:3px solid var(--accent);background:var(--accent-soft);padding:10px 14px;margin:14px 0;border-radius:0 4px 4px 0;font-size:14.5px}
+  .callout.warn{border-color:var(--warn);background:#fbf1e6}
+  .fig{margin:18px 0 22px}
+  .fig svg{display:block;max-width:100%;height:auto;background:#fff;border:1px solid var(--rule);border-radius:6px}
+  .fig figcaption{font-size:13px;color:var(--muted);margin-top:6px;text-align:center}
+  a.src{font-family:var(--mono);font-size:12px;color:var(--accent);text-decoration:none;border-bottom:1px dotted var(--accent)}
+  .card{border:1px solid var(--rule);border-radius:8px;background:var(--card);padding:14px 16px;margin:14px 0}
+  @media(max-width:760px){.wrap{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="toc"><h2>Contents</h2><ol>
+  <li><a href="#what">What changed</a></li>
+  <li><a href="#create">Create flow</a></li>
+  <li><a href="#draft">Draft bar and tests</a></li>
+  <li><a href="#feedback">Feedback and logs</a></li>
+  <li><a href="#files">Files</a></li>
+</ol></nav>
+<main>
+<header class="title">
+  <div class="eyebrow">Stacked on openhands/automation-draft-management-testing</div>
+  <h1>Setup page owns draft testing</h1>
+  <p class="sub">Creating an automation no longer opens an agent conversation first. The setup form holds the draft, and a conversation starts only after the user sends a prompt. Saving, testing, and reading a failure stay on that page: a draft bar, a test-runs view, toasts, and a logs dialog that scrolls.</p>
+</header>
+
+<section id="what">
+  <h2><span class="num">1</span>What changed</h2>
+  <div class="callout">★ The form is usable before any conversation exists. <code>startSetup</code> stores a blank draft under <code>PENDING_AUTOMATION_SETUP_ID</code> and navigates to <code>/automations/setup</code>. It does not call <code>createConversation</code>. <a class="src" href="https://github.com/FraterCCCLXIII/openhands-main/blob/9645f1231f2415bbac974cd5e1504c7c07467846/src/hooks/use-start-automation-setup.ts#L31">use-start-automation-setup.ts:31</a></div>
+  <p>Edit-existing still opens a conversation immediately and uses Test, Save, and Close. New-from-the-automations-page waits.</p>
+  <div class="fig">
+    <svg viewBox="0 0 760 210" role="img" aria-label="Before and after create flow">
+      <text x="16" y="22" font-size="13" font-weight="700" fill="#5a5a5a">BEFORE</text>
+      <rect x="16" y="36" width="160" height="44" rx="6" fill="#f7f6f1" stroke="#bdbcb4"/>
+      <text x="96" y="62" text-anchor="middle" font-size="12" fill="#1a1a1a">Add Automation</text>
+      <path d="M176 58 H210" stroke="#bdbcb4" marker-end="url(#arr)"/>
+      <rect x="210" y="36" width="150" height="44" rx="6" fill="#f7f6f1" stroke="#bdbcb4"/>
+      <text x="285" y="62" text-anchor="middle" font-size="12" fill="#1a1a1a">createConversation</text>
+      <text x="400" y="22" font-size="13" font-weight="700" fill="#b25b0e">AFTER</text>
+      <rect x="400" y="36" width="150" height="44" rx="6" fill="#fff" stroke="#b25b0e" stroke-width="2"/>
+      <text x="475" y="54" text-anchor="middle" font-size="12" fill="#1a1a1a">startSetup</text>
+      <text x="475" y="70" text-anchor="middle" font-size="10" fill="#5a5a5a">pending draft only</text>
+      <path d="M550 58 H584" stroke="#b25b0e" marker-end="url(#arr2)"/>
+      <rect x="584" y="36" width="156" height="44" rx="6" fill="#fff" stroke="#b25b0e" stroke-width="2"/>
+      <text x="662" y="62" text-anchor="middle" font-size="12" fill="#1a1a1a">/automations/setup</text>
+      <rect x="400" y="120" width="340" height="56" rx="6" fill="#fff" stroke="#2b4eaa" stroke-width="2"/>
+      <text x="570" y="142" text-anchor="middle" font-size="12" fill="#1a1a1a">startConversationFromPrompt</text>
+      <text x="570" y="160" text-anchor="middle" font-size="10" fill="#5a5a5a">only after a non-empty docked prompt</text>
+      <defs>
+        <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6" fill="#bdbcb4"/></marker>
+        <marker id="arr2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6" fill="#b25b0e"/></marker>
+      </defs>
+    </svg>
+    <figcaption>Add Automation used to create a conversation immediately. It now opens a pending setup, and the conversation starts from the docked prompt.</figcaption>
+  </div>
+</section>
+
+<section id="create">
+  <h2><span class="num">2</span>Create flow</h2>
+  <div class="card">
+    <h3>Pending setup id</h3>
+    <p><code>PENDING_AUTOMATION_SETUP_ID</code> (<code>"pending-new-automation"</code>) is the draft key until a real conversation exists. The setup panel skips conversation tag updates for that sentinel. <a class="src" href="https://github.com/FraterCCCLXIII/openhands-main/blob/9645f1231f2415bbac974cd5e1504c7c07467846/src/api/automation-setup-draft-store.ts#L83">automation-setup-draft-store.ts:83</a></p>
+    <p>Route <code>automations/setup</code> is registered before <code>automations/:automationId</code> so the sentinel path is not parsed as an id.</p>
+  </div>
+  <div class="card">
+    <h3>Custom event source</h3>
+    <p>Choosing Custom clears the source, focuses it, and checks “Register this as a custom webhook source”. A known source such as GitHub unchecks and hides that option.</p>
+  </div>
+</section>
+
+<section id="draft">
+  <h2><span class="num">3</span>Draft bar and test runs</h2>
+  <p><code>DraftStatusBar</code> sits at the top of the form column, aligned with the prompt. The title and time stay on the left. View test runs and Test stay on the right. A validation error, such as a missing webhook, is a full-width line under that row so it does not wrap into the buttons. <a class="src" href="https://github.com/FraterCCCLXIII/openhands-main/blob/9645f1231f2415bbac974cd5e1504c7c07467846/src/components/features/automations/setup/automation-setup-panel.tsx#L607">automation-setup-panel.tsx:607</a></p>
+  <ul>
+    <li>Toolbar Test is small and secondary, and stays disabled until the saved request matches the form.</li>
+    <li>The bar’s Test is small and primary, at the far right. Clicking either Test opens the test-runs page and starts the test.</li>
+    <li><code>DraftRunsPage</code> has a back button, a page-sized title, an empty state, and a normal primary Test. The first run row is not highlighted. Errors use the red banner. <a class="src" href="https://github.com/FraterCCCLXIII/openhands-main/blob/9645f1231f2415bbac974cd5e1504c7c07467846/src/components/features/automations/setup/automation-setup-panel.tsx#L735">automation-setup-panel.tsx:735</a></li>
+    <li>The agent profile pill is to the left of the model pill.</li>
+  </ul>
+</section>
+
+<section id="feedback">
+  <h2><span class="num">4</span>Feedback and logs</h2>
+  <p>Setup status used to render as green or red text under Additional options. A <code>statusMessage</code> effect now sends success through <code>toast.success</code> and errors through <code>displayErrorToast</code>. The form no longer renders <code>automation-setup-status</code>. Validation text that already appears on the draft bar and the runs page is not copied to the bottom. <a class="src" href="https://github.com/FraterCCCLXIII/openhands-main/blob/9645f1231f2415bbac974cd5e1504c7c07467846/src/components/features/automations/setup/automation-setup-panel.tsx#L866">automation-setup-panel.tsx:866</a></p>
+  <p>The logs dialog is the scroll container (<code>max-h-[80vh] overflow-y-auto</code> on <code>run-logs-body</code>), with the title sticky. The output pane no longer has its own <code>overflow-auto</code>, which had grown with the log text and been clipped by the viewport. <a class="src" href="https://github.com/FraterCCCLXIII/openhands-main/blob/9645f1231f2415bbac974cd5e1504c7c07467846/src/components/features/automations/detail/run-logs-modal.tsx#L269">run-logs-modal.tsx:269</a></p>
+</section>
+
+<section id="files">
+  <h2><span class="num">5</span>Where to look</h2>
+  <table>
+    <thead><tr><th>Area</th><th>File</th><th>Change</th></tr></thead>
+    <tbody>
+      <tr><td>Create</td><td><code>use-start-automation-setup.ts</code></td><td>Defer <code>createConversation</code> until a prompt is sent</td></tr>
+      <tr><td>Create</td><td><code>automation-setup-new.tsx</code></td><td>Pending setup page and docked composer</td></tr>
+      <tr><td>Setup</td><td><code>automation-setup-panel.tsx</code></td><td>Draft bar, test runs, toasts, edit toolbar</td></tr>
+      <tr><td>Setup</td><td><code>automation-setup-prompt-stack.tsx</code></td><td>Profile pill left of the model pill</td></tr>
+      <tr><td>Logs</td><td><code>run-logs-modal.tsx</code></td><td>One scrollport for the dialog body</td></tr>
+      <tr><td>Copy</td><td><code>translation.json</code></td><td>View test runs, empty-state, custom source placeholder</td></tr>
+    </tbody>
+  </table>
+  <div class="callout warn">Local <code>config.toml</code> and the nested <code>frontend/</code> install are not part of this branch.</div>
+</section>
+</main>
+</div>
+</body>
+</html>
