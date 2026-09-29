@@ -60,6 +60,16 @@ vi.mock("#/api/cloud/organization-service.api", async (importOriginal) => ({
   getCloudOrganizationMember: vi.fn(),
 }));
 
+const detailMocks = vi.hoisted(() => ({
+  createConversationMutate: vi.fn(),
+}));
+
+vi.mock("#/hooks/mutation/use-create-conversation", () => ({
+  useCreateConversation: () => ({
+    mutate: detailMocks.createConversationMutate,
+  }),
+}));
+
 const localBackend: Backend = {
   id: "local-1",
   name: "Local 1",
@@ -163,7 +173,7 @@ describe("AutomationDetail — Edit in the kebab menu", () => {
     ).toBeInTheDocument();
   });
 
-  it("opens the Edit modal pre-filled from the kebab menu when the active backend is cloud", async () => {
+  it("opens the setup page from the kebab menu when the active backend is cloud", async () => {
     // Arrange — switch to the cloud backend BEFORE rendering so the
     // detail page mounts under cloud (the backend-change guard would
     // otherwise stop the fetch).
@@ -180,13 +190,18 @@ describe("AutomationDetail — Edit in the kebab menu", () => {
       screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
     );
 
-    // Assert — the Edit modal mounts on cloud, pre-filled for this
-    // automation; the permission model (mocked to canManage above) decides,
+    // Assert — Edit opens the setup page for this automation. The permission
+    // model (mocked to canManage above) decides whether the action exists,
     // not the backend kind.
-    const nameInput = (await screen.findByTestId(
-      "edit-automation-name",
-    )) as HTMLInputElement;
-    expect(nameInput.value).toBe(automation.name);
+    expect(detailMocks.createConversationMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        automationSetup: true,
+        entryPoint: "automation_edit",
+        query: automation.prompt,
+      }),
+      expect.any(Object),
+    );
+    expect(screen.queryByTestId("edit-automation-name")).not.toBeInTheDocument();
   });
 });
 

@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, type ReactNode } from "react";
-import { RefreshCw, Trash2 } from "lucide-react";
+import { Pencil, RefreshCw, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { I18nKey } from "#/i18n/declaration";
@@ -38,9 +38,9 @@ import { EmptyState } from "#/components/features/automations/empty-state";
 import { ErrorState } from "#/components/features/automations/error-state";
 import { BackendNotConfigured } from "#/components/features/automations/backend-not-configured";
 import { DeleteConfirmationModal } from "#/components/features/automations/delete-confirmation-modal";
-import { EditAutomationModal } from "#/components/features/automations/detail/edit-automation-modal";
+import { useOpenAutomationEditor } from "#/hooks/use-open-automation-editor";
+import { useStartAutomationSetup } from "#/hooks/use-start-automation-setup";
 import { AddAutomationMenu } from "#/components/features/automations/add-automation-menu";
-import { AddAutomationModal } from "#/components/features/automations/add-automation-modal";
 import { ImportAutomationModal } from "#/components/features/automations/import-automation-modal";
 import { RecommendedAutomationsLauncher } from "#/components/features/automations/recommended-automations-launcher";
 import { BrandButton } from "#/components/features/settings/brand-button";
@@ -218,6 +218,16 @@ function SavedDraftsGroup({
                 </span>
               </button>
               <div className="flex shrink-0 items-center gap-1.5 pr-1.5">
+                <button
+                  type="button"
+                  data-testid={`automation-setup-draft-edit-${draft.id}`}
+                  aria-label={t(I18nKey.AUTOMATIONS$EDIT)}
+                  disabled={isBusy}
+                  onClick={() => onResume(draft)}
+                  className={automationIconActionButtonClassName}
+                >
+                  <Pencil className="size-4" aria-hidden />
+                </button>
                 {canTestDirectly && !isBusy ? (
                   <StyledTooltip
                     content={t(I18nKey.AUTOMATION_SETUP$TEST_RUN)}
@@ -297,8 +307,8 @@ export default function AutomationsList() {
   } | null>(null);
   const [deleteDraftTarget, setDeleteDraftTarget] =
     useState<AutomationDraftApiResponse | null>(null);
-  const [editTarget, setEditTarget] = useState<Automation | null>(null);
-  const [isAddAutomationOpen, setIsAddAutomationOpen] = useState(false);
+  const { openEditor } = useOpenAutomationEditor();
+  const { startSetup } = useStartAutomationSetup();
   const [importSpec, setImportSpec] = useState<AutomationSpec | null>(null);
   const [isImportOpen, setIsImportOpen] = useState(false);
 
@@ -444,9 +454,7 @@ export default function AutomationsList() {
 
   const handleEditRequest = (id: string) => {
     const automation = data?.automations.find((a) => a.id === id);
-    if (automation) {
-      setEditTarget(automation);
-    }
+    if (automation) openEditor(automation);
   };
 
   const handleExport = (automation: Automation) => {
@@ -637,7 +645,7 @@ export default function AutomationsList() {
             </BrandButton>
           )}
           <AddAutomationMenu
-            onAdd={() => setIsAddAutomationOpen(true)}
+            onAdd={startSetup}
             onImport={() => setIsImportOpen(true)}
           />
         </div>
@@ -830,20 +838,6 @@ export default function AutomationsList() {
           </div>
         </div>
       ) : null}
-
-      {/* Edit modal */}
-      {editTarget && (
-        <EditAutomationModal
-          automation={editTarget}
-          isOpen={editTarget !== null}
-          onClose={() => setEditTarget(null)}
-        />
-      )}
-
-      <AddAutomationModal
-        isOpen={isAddAutomationOpen}
-        onClose={() => setIsAddAutomationOpen(false)}
-      />
 
       <ImportAutomationModal
         isOpen={isImportOpen}

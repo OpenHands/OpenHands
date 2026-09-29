@@ -302,6 +302,18 @@ describe("AutomationsList — draft sections", () => {
         screen.getByTestId("automation-setup-draft-draft-event"),
       ).queryByTestId("styled-tooltip-content"),
     ).not.toBeInTheDocument();
+    const editButton = within(draftCard).getByTestId(
+      "automation-setup-draft-edit-draft-1",
+    );
+    expect(editButton).toBeEnabled();
+    expect(editButton).toHaveAttribute(
+      "aria-label",
+      I18nKey.AUTOMATIONS$EDIT,
+    );
+    expect(
+      editButton.compareDocumentPosition(activePlay) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(
       within(draftCard).getByTestId("automation-setup-draft-delete-draft-1"),
     ).toBeInTheDocument();
@@ -329,7 +341,7 @@ describe("AutomationsList — draft sections", () => {
       "automation-setup-draft-draft-1",
     );
     await user.click(
-      within(draftCard).getByTestId("automation-setup-draft-resume-draft-1"),
+      within(draftCard).getByTestId("automation-setup-draft-edit-draft-1"),
     );
 
     expect(mocks.createConversationMutate).not.toHaveBeenCalled();
@@ -425,13 +437,17 @@ describe("AutomationsList — Edit from the row kebab", () => {
       screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
     );
 
-    // Assert — the shared Edit modal mounts wired to this row (name input is
-    // pre-filled with that row's name, proving the list page passed the right
-    // automation through).
-    const nameInput = (await screen.findByTestId(
-      "edit-automation-name",
-    )) as HTMLInputElement;
-    expect(nameInput.value).toBe(automation.name);
+    // Assert — edit opens the setup page for this automation instead of the
+    // modal, carrying the row's prompt so the form can be seeded from it.
+    expect(mocks.createConversationMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        automationSetup: true,
+        entryPoint: "automation_edit",
+        query: automation.prompt,
+      }),
+      expect.any(Object),
+    );
+    expect(screen.queryByTestId("edit-automation-name")).not.toBeInTheDocument();
   });
 
   it("opens the Edit modal pre-filled from the row kebab when the active backend is cloud", async () => {
@@ -453,12 +469,17 @@ describe("AutomationsList — Edit from the row kebab", () => {
       screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
     );
 
-    // Assert — the same Edit modal mounts on cloud, wired to this row; the
-    // permission model decides, not the backend kind.
-    const nameInput = (await screen.findByTestId(
-      "edit-automation-name",
-    )) as HTMLInputElement;
-    expect(nameInput.value).toBe(automation.name);
+    // Assert — cloud uses the same setup page; the permission model decides
+    // whether Edit is offered, not which editor opens.
+    expect(mocks.createConversationMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        automationSetup: true,
+        entryPoint: "automation_edit",
+        query: automation.prompt,
+      }),
+      expect.any(Object),
+    );
+    expect(screen.queryByTestId("edit-automation-name")).not.toBeInTheDocument();
   });
 });
 
@@ -685,7 +706,9 @@ describe("AutomationsList — add automation menu", () => {
     ).toBeInTheDocument();
 
     await user.click(screen.getByTestId("automations-add-automation-create"));
-    expect(screen.getByTestId("add-automation-modal")).toBeInTheDocument();
+    expect(screen.queryByTestId("add-automation-modal")).not.toBeInTheDocument();
+    expect(mocks.createConversationMutate).not.toHaveBeenCalled();
+    expect(mocks.navigate).toHaveBeenCalledWith("/automations/setup");
   });
 
   it("opens the import picker from the Add Automation menu", async () => {

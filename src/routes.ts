@@ -38,6 +38,7 @@ export default [
     route("automations/git-sync", "routes/automation-git-sync.tsx"),
     route("automations/templates", "routes/automation-templates.tsx"),
     route("automations/new/:automationId", "routes/automation-setup-route.tsx"),
+    route("automations/setup", "routes/automation-setup-new.tsx"),
     route("automations/:automationId", "routes/automation-detail.tsx"),
   ]),
   route(

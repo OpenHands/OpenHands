@@ -36,7 +36,7 @@ import { NotFoundState } from "#/components/features/automations/detail/not-foun
 import { ErrorState } from "#/components/features/automations/error-state";
 import { BackendNotConfigured } from "#/components/features/automations/backend-not-configured";
 import { DeleteConfirmationModal } from "#/components/features/automations/delete-confirmation-modal";
-import { EditAutomationModal } from "#/components/features/automations/detail/edit-automation-modal";
+import { useOpenAutomationEditor } from "#/hooks/use-open-automation-editor";
 import { useTracking } from "#/hooks/use-tracking";
 import {
   useAutomationPermissions,
@@ -85,7 +85,7 @@ export default function AutomationDetail() {
   const highlightedRunId = searchParams.get("run");
   const { navigate } = useNavigation();
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
+  const { openEditor } = useOpenAutomationEditor();
 
   const {
     data: healthData,
@@ -249,7 +249,7 @@ export default function AutomationDetail() {
           <DetailHeader
             automation={automation}
             onToggle={handleToggle}
-            onEdit={() => setShowEditModal(true)}
+            onEdit={() => openEditor(automation)}
             onDelete={() => setShowDeleteModal(true)}
             onExport={handleExport}
             onDownloadTarball={() =>
@@ -284,13 +284,6 @@ export default function AutomationDetail() {
             onConfirm={handleDelete}
             onCancel={() => setShowDeleteModal(false)}
           />
-          {showEditModal && (
-            <EditAutomationModal
-              automation={automation}
-              isOpen={showEditModal}
-              onClose={() => setShowEditModal(false)}
-            />
-          )}
         </div>
       </div>
     </div>

@@ -7,7 +7,6 @@ import {
   type SandboxIssue,
 } from "#/hooks/query/use-bash-command-logs";
 import type { BashOutput } from "@openhands/typescript-client";
-import { cn } from "#/utils/utils";
 import { modalTitleLgMediumClassName } from "#/utils/modal-classes";
 import {
   AutomationRunStatus,
@@ -266,131 +265,137 @@ export function RunLogsModal({
         }}
         role="presentation"
       />
-      <div className="relative flex max-h-[80vh] w-full max-w-3xl flex-col rounded-xl border border-border bg-surface p-6">
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute right-4 top-4 text-muted hover:text-foreground"
-          aria-label={t(I18nKey.AUTOMATIONS$CANCEL)}
-        >
-          <XMarkIcon className="size-5" />
-        </button>
-
-        <h2 className={cn("pr-8", modalTitleLgMediumClassName)}>
-          {t(I18nKey.AUTOMATIONS$DETAIL$LOGS_TITLE)}
-        </h2>
-
-        <RunInspectionSummary run={run} />
-
-        <div
-          role="tablist"
-          aria-label={t(I18nKey.AUTOMATIONS$DETAIL$LOGS_TITLE)}
-          className="mt-4 flex gap-1 border-b border-border"
-        >
+      <div
+        data-testid="run-logs-body"
+        className="relative flex max-h-[80vh] w-full max-w-3xl flex-col overflow-y-auto overscroll-contain rounded-xl border border-border bg-surface"
+      >
+        <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between gap-4 bg-surface px-6 pb-4 pt-6">
+          <h2 className={modalTitleLgMediumClassName}>
+            {t(I18nKey.AUTOMATIONS$DETAIL$LOGS_TITLE)}
+          </h2>
           <button
             type="button"
-            role="tab"
-            aria-selected={activeTab === "stdout"}
-            aria-controls="run-logs-panel-stdout"
-            id="run-logs-tab-stdout"
-            tabIndex={activeTab === "stdout" ? 0 : -1}
-            onClick={() => setActiveTab("stdout")}
-            className={`${tabBaseClass} ${
-              activeTab === "stdout" ? tabActiveClass : tabInactiveClass
-            }`}
+            onClick={onClose}
+            className="text-muted hover:text-foreground"
+            aria-label={t(I18nKey.AUTOMATIONS$CANCEL)}
           >
-            {t(I18nKey.AUTOMATIONS$DETAIL$LOGS_TAB_OUTPUT)}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === "stderr"}
-            aria-controls="run-logs-panel-stderr"
-            id="run-logs-tab-stderr"
-            tabIndex={activeTab === "stderr" ? 0 : -1}
-            onClick={() => setActiveTab("stderr")}
-            className={`${tabBaseClass} ${
-              activeTab === "stderr" ? tabActiveClass : tabInactiveClass
-            }`}
-          >
-            {t(I18nKey.AUTOMATIONS$DETAIL$LOGS_TAB_ERROR)}
+            <XMarkIcon className="size-5" />
           </button>
         </div>
 
-        <div
-          role="tabpanel"
-          id={`run-logs-panel-${activeTab}`}
-          aria-labelledby={`run-logs-tab-${activeTab}`}
-          className="mt-3 min-h-[12rem] flex-1 overflow-auto rounded-lg border border-border bg-black/40 p-4 font-mono text-xs"
-        >
-          {noBashCommand && (
-            <p className="text-muted italic">
-              {t(I18nKey.AUTOMATIONS$DETAIL$LOGS_NO_COMMAND)}
-            </p>
-          )}
+        <div className="px-6 pb-6">
+          <RunInspectionSummary run={run} />
 
-          {!noBashCommand && conversationMissing && (
-            <p className="text-muted italic">
-              {t(I18nKey.AUTOMATIONS$DETAIL$LOGS_CONVERSATION_MISSING)}
-            </p>
-          )}
-
-          {!noBashCommand && !conversationMissing && sandboxIssue && (
-            <p
-              data-testid={`run-logs-sandbox-issue-${sandboxIssue}`}
-              className="text-muted italic"
-            >
-              {t(SANDBOX_ISSUE_I18N[sandboxIssue])}
-            </p>
-          )}
-
-          {!noBashCommand &&
-            !conversationMissing &&
-            !sandboxIssue &&
-            loading && (
-              <p className="text-muted italic">
-                {t(I18nKey.AUTOMATIONS$DETAIL$LOGS_LOADING)}
-              </p>
-            )}
-
-          {!noBashCommand &&
-            !conversationMissing &&
-            !sandboxIssue &&
-            !loading &&
-            error &&
-            !outputs && (
-              <p className="text-danger">
-                {t(I18nKey.AUTOMATIONS$DETAIL$LOGS_ERROR)}: {String(error)}
-              </p>
-            )}
-
-          {!loading && !sandboxIssue && outputs && (
-            <pre
-              data-testid={`run-logs-output-${activeTab}`}
-              className={`whitespace-pre-wrap break-words ${
-                activeTab === "stderr" ? "text-danger" : "text-content"
+          <div
+            role="tablist"
+            aria-label={t(I18nKey.AUTOMATIONS$DETAIL$LOGS_TITLE)}
+            className="mt-4 flex gap-1 border-b border-border"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "stdout"}
+              aria-controls="run-logs-panel-stdout"
+              id="run-logs-tab-stdout"
+              tabIndex={activeTab === "stdout" ? 0 : -1}
+              onClick={() => setActiveTab("stdout")}
+              className={`${tabBaseClass} ${
+                activeTab === "stdout" ? tabActiveClass : tabInactiveClass
               }`}
             >
-              {activeBody.length > 0 ? (
-                activeBody
-              ) : (
-                <span className="text-muted italic">
-                  {t(I18nKey.AUTOMATIONS$DETAIL$LOGS_EMPTY)}
-                </span>
+              {t(I18nKey.AUTOMATIONS$DETAIL$LOGS_TAB_OUTPUT)}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "stderr"}
+              aria-controls="run-logs-panel-stderr"
+              id="run-logs-tab-stderr"
+              tabIndex={activeTab === "stderr" ? 0 : -1}
+              onClick={() => setActiveTab("stderr")}
+              className={`${tabBaseClass} ${
+                activeTab === "stderr" ? tabActiveClass : tabInactiveClass
+              }`}
+            >
+              {t(I18nKey.AUTOMATIONS$DETAIL$LOGS_TAB_ERROR)}
+            </button>
+          </div>
+
+          <div
+            role="tabpanel"
+            id={`run-logs-panel-${activeTab}`}
+            aria-labelledby={`run-logs-tab-${activeTab}`}
+            className="mt-3 min-h-[12rem] rounded-lg border border-border bg-black/40 p-4 font-mono text-xs"
+          >
+            {noBashCommand && (
+              <p className="text-muted italic">
+                {t(I18nKey.AUTOMATIONS$DETAIL$LOGS_NO_COMMAND)}
+              </p>
+            )}
+
+            {!noBashCommand && conversationMissing && (
+              <p className="text-muted italic">
+                {t(I18nKey.AUTOMATIONS$DETAIL$LOGS_CONVERSATION_MISSING)}
+              </p>
+            )}
+
+            {!noBashCommand && !conversationMissing && sandboxIssue && (
+              <p
+                data-testid={`run-logs-sandbox-issue-${sandboxIssue}`}
+                className="text-muted italic"
+              >
+                {t(SANDBOX_ISSUE_I18N[sandboxIssue])}
+              </p>
+            )}
+
+            {!noBashCommand &&
+              !conversationMissing &&
+              !sandboxIssue &&
+              loading && (
+                <p className="text-muted italic">
+                  {t(I18nKey.AUTOMATIONS$DETAIL$LOGS_LOADING)}
+                </p>
               )}
-            </pre>
+
+            {!noBashCommand &&
+              !conversationMissing &&
+              !sandboxIssue &&
+              !loading &&
+              error &&
+              !outputs && (
+                <p className="text-danger">
+                  {t(I18nKey.AUTOMATIONS$DETAIL$LOGS_ERROR)}: {String(error)}
+                </p>
+              )}
+
+            {!loading && !sandboxIssue && outputs && (
+              <pre
+                data-testid={`run-logs-output-${activeTab}`}
+                className={`whitespace-pre-wrap break-words ${
+                  activeTab === "stderr" ? "text-danger" : "text-content"
+                }`}
+              >
+                {activeBody.length > 0 ? (
+                  activeBody
+                ) : (
+                  <span className="text-muted italic">
+                    {t(I18nKey.AUTOMATIONS$DETAIL$LOGS_EMPTY)}
+                  </span>
+                )}
+              </pre>
+            )}
+          </div>
+
+          {run?.status === AutomationRunStatus.FAILED && (
+            <div className="mt-4 flex justify-end">
+              <DebugAutomationButton
+                run={run}
+                automation={automation}
+                stderr={stderr}
+              />
+            </div>
           )}
         </div>
-
-        {run?.status === AutomationRunStatus.FAILED && (
-          <div className="mt-4 flex justify-end">
-            <DebugAutomationButton
-              run={run}
-              automation={automation}
-              stderr={stderr}
-            />
-          </div>
-        )}
       </div>
     </div>
   );

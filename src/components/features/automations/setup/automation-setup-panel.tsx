@@ -28,7 +28,9 @@ import AutomationService, {
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import {
   clearAutomationFormSession,
+  getAutomationFormSession,
   initializeAutomationFormSession,
+  isPendingAutomationSetupId,
   patchAutomationFormSession,
   subscribeAutomationFormSession,
 } from "#/api/automation-form-session";
@@ -44,12 +46,17 @@ import {
   serializeAutomationSetupPluginList,
   type AutomationSetupPluginEntry,
 } from "#/api/automation-setup-plugins";
-import { automationDetailPath } from "#/manifests/automation-interface";
+import { AUTOMATION_DRAFTS_FEATURE } from "#/constants/automation-form";
+import {
+  automationDetailPath,
+  automationListPath,
+} from "#/manifests/automation-interface";
 import { packTarGzip } from "#/utils/tar-gzip";
 import { AvailableLanguages } from "#/i18n";
 import { I18nKey } from "#/i18n/declaration";
 import SparkleIcon from "#/icons/sparkle.svg?react";
 import { BrandButton } from "#/components/features/settings/brand-button";
+import { BackNavButton } from "#/components/shared/buttons/back-nav-button";
 import { OptionalTag } from "#/components/features/settings/optional-tag";
 import { AutomationSetupPromptStack } from "#/components/features/automations/setup/automation-setup-prompt-stack";
 import { ContextMenuListItem } from "#/components/features/context-menu/context-menu-list-item";
@@ -80,12 +87,13 @@ import type {
   AutomationDraftApiResponse,
   SetupRequestBody,
 } from "#/manifests/types";
-import type { AutomationRun } from "#/types/automation";
+import type { Automation, AutomationRun } from "#/types/automation";
 import { formatRelativeTime } from "#/utils/format-relative-time";
 import { ActivityLogItem } from "../detail/activity-log-item";
 import { requestAutomationSetupAgent } from "./automation-setup-agent-request";
 import {
   draftEndpoint,
+  draftRunPageErrors,
   draftValidationEndpoint,
   extractDraftDispatchErrors,
   formFromServerDraft,
@@ -98,9 +106,11 @@ import {
   buildAutomationDraftTags,
   buildAutomationSetupModeTags,
   getAutomationDraftIdFromTags,
+  getAutomationEditIdFromTags,
   hasAutomationSetupModeTag,
   removeAutomationDraftTags,
 } from "#/utils/automation-draft-tags";
+import { setupDraftFromAutomation } from "#/utils/automation-edit-draft";
 
 const DEFAULT_TIMEZONE = "America/New_York";
 const DEFAULT_TIME = "09:00";
@@ -392,94 +402,193 @@ function buildInitialForm(
   };
 }
 
-function DraftRunDetailsCard({
+function DraftStatusBar({
   draft,
   runs,
+  isSubmitting,
+  canTest,
+  onTest,
+  onViewRuns,
 }: {
   draft: AutomationDraftApiResponse;
   runs: AutomationRun[];
+  isSubmitting: boolean;
+  canTest: boolean;
+  onTest: () => void;
+  onViewRuns: () => void;
 }) {
   const { t, i18n } = useTranslation("openhands");
   const validationMessage = draft.validationErrors?.[0]?.message ?? null;
   const statusText = getDraftExecutionStatusText(draft, runs, t);
 
+  const validityClassName = cn(
+    "max-w-full min-w-0 whitespace-normal rounded-full px-2.5 py-0.5 text-left text-xs leading-4",
+    validationMessage
+      ? "w-fit bg-red-500/10 text-red-300"
+      : "bg-[var(--oh-success)]/10 text-[var(--oh-success)]",
+  );
+
   return (
     <section
       data-testid="automation-setup-draft-details"
-      className="rounded-2xl border border-[var(--oh-border)] bg-[var(--oh-surface)]"
+      className="flex flex-col gap-2 rounded-xl border border-[var(--oh-border)] bg-[var(--oh-surface)] px-3 py-2"
     >
-      <div className="border-b border-[var(--oh-border)] px-5 py-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-semibold text-content">
-              {t(I18nKey.AUTOMATION_SETUP$DRAFT_STATUS_TITLE)}
-            </h3>
-            <p className="mt-1 text-sm text-muted">
-              {t(I18nKey.AUTOMATION_SETUP$DRAFT_STATUS_DESCRIPTION)}
-            </p>
-          </div>
-          <span
-            data-testid="automation-setup-draft-validity"
-            className={cn(
-              "rounded-full px-3 py-1 text-xs",
-              validationMessage
-                ? "bg-[var(--oh-warning)]/10 text-[var(--oh-warning)]"
-                : "bg-[var(--oh-success)]/10 text-[var(--oh-success)]",
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <h3 className="truncate text-sm text-content">
+            {t(I18nKey.AUTOMATION_SETUP$DRAFT_STATUS_TITLE)}
+          </h3>
+          <span className="truncate text-xs text-muted">
+            {formatRelativeTime(
+              draft.updatedAt,
+              i18n?.language ?? AvailableLanguages[0].value,
+              t,
             )}
-          >
-            {statusText}
           </span>
         </div>
-        <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
-          <div>
-            <dt className="text-xs text-muted">
-              {t(I18nKey.AUTOMATION_SETUP$LAST_SAVED)}
-            </dt>
-            <dd className="mt-1 text-content">
-              {formatRelativeTime(
-                draft.updatedAt,
-                i18n?.language ?? AvailableLanguages[0].value,
-                t,
-              )}
-            </dd>
-          </div>
-          {draft.materializedAutomationId ? (
-            <div>
-              <dt className="text-xs text-muted">
-                {t(I18nKey.AUTOMATION_SETUP$TEST_AUTOMATION)}
-              </dt>
-              <dd className="mt-1 truncate font-mono text-xs text-content">
-                {draft.materializedAutomationId}
-              </dd>
-            </div>
-          ) : null}
-        </dl>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {validationMessage ? null : (
+            <span
+              data-testid="automation-setup-draft-validity"
+              className={validityClassName}
+            >
+              {statusText}
+            </span>
+          )}
+          <BrandButton
+            type="button"
+            variant="secondary"
+            testId="automation-setup-view-test-runs"
+            className="!h-7 !min-h-7 !px-2.5 !text-xs"
+            onClick={onViewRuns}
+          >
+            {t(I18nKey.AUTOMATION_SETUP$VIEW_TEST_RUNS)}
+          </BrandButton>
+          <BrandButton
+            type="button"
+            variant="primary"
+            testId="automation-setup-draft-test"
+            className="!h-7 !min-h-7 shrink-0 !px-2.5 !text-xs"
+            isDisabled={isSubmitting || !canTest}
+            aria-busy={isSubmitting}
+            onClick={onTest}
+          >
+            {t(I18nKey.AUTOMATION_SETUP$TEST)}
+          </BrandButton>
+        </div>
       </div>
+      {validationMessage ? (
+        <p
+          data-testid="automation-setup-draft-validity"
+          className={validityClassName}
+        >
+          {statusText}
+        </p>
+      ) : null}
+    </section>
+  );
+}
 
-      <div className="px-5 py-3">
-        <h4 className="text-sm font-medium text-content">
+function DraftRunTestButton({
+  isSubmitting,
+  canTest,
+  onTest,
+}: {
+  isSubmitting: boolean;
+  canTest: boolean;
+  onTest: () => void;
+}) {
+  const { t } = useTranslation("openhands");
+  return (
+    <BrandButton
+      type="button"
+      variant="primary"
+      testId="automation-setup-test"
+      isDisabled={isSubmitting || !canTest}
+      aria-busy={isSubmitting}
+      onClick={onTest}
+    >
+      {t(I18nKey.AUTOMATION_SETUP$TEST)}
+    </BrandButton>
+  );
+}
+
+function DraftRunsPage({
+  runs,
+  errors,
+  isSubmitting,
+  canTest,
+  onBack,
+  onTest,
+}: {
+  runs: AutomationRun[];
+  errors: string[];
+  isSubmitting: boolean;
+  canTest: boolean;
+  onBack: () => void;
+  onTest: () => void;
+}) {
+  const { t } = useTranslation("openhands");
+
+  return (
+    <section
+      data-testid="automation-setup-draft-runs-page"
+      className="flex flex-col gap-4"
+    >
+      <BackNavButton testId="automation-setup-draft-runs-back" onClick={onBack}>
+        {t(I18nKey.BUTTON$BACK)}
+      </BackNavButton>
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-xl font-medium text-content">
           {t(I18nKey.AUTOMATION_SETUP$TEST_RUNS)}
-        </h4>
+        </h3>
+        {runs.length > 0 ? (
+          <DraftRunTestButton
+            canTest={canTest}
+            isSubmitting={isSubmitting}
+            onTest={onTest}
+          />
+        ) : null}
       </div>
+      {errors.map((message) => (
+        <p
+          key={message}
+          role="alert"
+          data-testid="automation-setup-draft-runs-error"
+          className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300"
+        >
+          {message}
+        </p>
+      ))}
       {runs.length > 0 ? (
-        <div>
+        <div className="overflow-hidden rounded-xl border border-[var(--oh-border)]">
           {runs.map((run, index) => (
             <div
               key={run.id}
               data-testid="automation-setup-draft-run"
-              className={cn(
-                "border-t border-[var(--oh-border)]",
-                index === 0 && "bg-[var(--oh-focus)]/10",
-              )}
+              className={cn(index > 0 && "border-t border-[var(--oh-border)]")}
             >
               <ActivityLogItem run={run} />
             </div>
           ))}
         </div>
       ) : (
-        <p className="border-t border-[var(--oh-border)] px-5 py-6 text-sm text-muted">
-          {t(I18nKey.AUTOMATIONS$DETAIL$NO_RUNS)}
-        </p>
+        <div
+          data-testid="automation-setup-draft-runs-empty"
+          className="flex flex-col items-center gap-3 rounded-xl border border-[var(--oh-border)] bg-[var(--oh-surface)] px-5 py-10 text-center"
+        >
+          <p className="text-sm text-content">
+            {t(I18nKey.AUTOMATIONS$DETAIL$NO_RUNS)}
+          </p>
+          <p className="text-sm text-muted">
+            {t(I18nKey.AUTOMATION_SETUP$TEST_RUNS_EMPTY_DESCRIPTION)}
+          </p>
+          <DraftRunTestButton
+            canTest={canTest}
+            isSubmitting={isSubmitting}
+            onTest={onTest}
+          />
+        </div>
       )}
     </section>
   );
@@ -515,7 +624,10 @@ export function AutomationSetupPanel({
   const deploymentCapabilities = useDeploymentCapabilities();
   const eventSourceOptions = deploymentCapabilities.data?.eventSources ?? [];
   const eventTypeOptions = deploymentCapabilities.data?.eventTypes ?? [];
-  const [form, setForm] = useState(() => buildInitialForm(draft));
+  const initialDraft = conversationId
+    ? (getAutomationFormSession(conversationId) ?? draft)
+    : draft;
+  const [form, setForm] = useState(() => buildInitialForm(initialDraft));
   const [eventTestPayload, setEventTestPayload] = useState(() =>
     buildDefaultEventTestPayload(DEFAULT_EVENT_SOURCE, DEFAULT_EVENT_KEY),
   );
@@ -532,9 +644,19 @@ export function AutomationSetupPanel({
     useState<CustomWebhookCreateResponse | null>(null);
 
   const [fieldMetadata, setFieldMetadata] = useState(
-    () => draft.fieldMetadata ?? {},
+    () => initialDraft.fieldMetadata ?? {},
   );
   const [statusMessage, setStatusMessage] = useState<StatusMessage>(null);
+  const toastedStatusRef = useRef<StatusMessage>(null);
+  useEffect(() => {
+    if (!statusMessage || statusMessage === toastedStatusRef.current) return;
+    toastedStatusRef.current = statusMessage;
+    if (statusMessage.kind === "success") {
+      toast.success(statusMessage.text);
+      return;
+    }
+    displayErrorToast(statusMessage.text);
+  }, [statusMessage]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [streamingField, setStreamingField] =
     useState<AutomationSetupField | null>(null);
@@ -544,10 +666,17 @@ export function AutomationSetupPanel({
   const [serverDraft, setServerDraft] =
     useState<AutomationDraftApiResponse | null>(null);
   const [draftRuns, setDraftRuns] = useState<AutomationRun[]>([]);
+  const [isViewingDraftRuns, setIsViewingDraftRuns] = useState(false);
   const [isHydratingServerDraft, setIsHydratingServerDraft] = useState(false);
   const [saveState, setSaveState] = useState<
     "idle" | "saving" | "saved" | "error"
   >("idle");
+  // Request body from the last successful save. Compared with the form so
+  // Test stays inactive while there are unsaved edits, even if the service
+  // returns a normalized draft that does not byte-match the request.
+  const [savedDraftRequestKey, setSavedDraftRequestKey] = useState<
+    string | null
+  >(null);
   const [isTaggedDraftMissing, setIsTaggedDraftMissing] = useState(false);
   const queryClient = useQueryClient();
   const latestConversationTagsRef = useRef(conversationTags);
@@ -562,6 +691,11 @@ export function AutomationSetupPanel({
   const taggedServerDraftId = currentTaggedServerDraftId;
   const serverDraftId =
     serverDraft?.id ?? (isTaggedDraftMissing ? null : taggedServerDraftId);
+  const editingAutomationId =
+    draft.editingAutomationId?.trim() ||
+    getAutomationEditIdFromTags(conversationTags) ||
+    "";
+  const isEditingExisting = editingAutomationId.length > 0;
   const streamQueueRef = useRef<
     {
       field: AutomationSetupField;
@@ -622,6 +756,7 @@ export function AutomationSetupPanel({
   useEffect(() => {
     if (
       !conversationId ||
+      isPendingAutomationSetupId(conversationId) ||
       conversationTags === undefined ||
       hasAutomationSetupModeTag(conversationTags)
     ) {
@@ -657,7 +792,7 @@ export function AutomationSetupPanel({
 
   const updateConversationDraftTags = useCallback(
     async (draftId: string | null) => {
-      if (!conversationId) return;
+      if (!conversationId || isPendingAutomationSetupId(conversationId)) return;
       await updateConversationTags((tags) =>
         draftId
           ? buildAutomationDraftTags(tags, draftId)
@@ -667,6 +802,27 @@ export function AutomationSetupPanel({
     },
     [conversationId, updateConversationTags],
   );
+
+  useEffect(() => {
+    if (!isEditingExisting || draft.form || !conversationId) return undefined;
+    let cancelled = false;
+    AutomationService.getAutomation(editingAutomationId)
+      .then((automation) => {
+        if (cancelled) return;
+        const next = setupDraftFromAutomation(automation);
+        const nextForm = buildInitialForm(next);
+        initializeAutomationFormSession(conversationId, next);
+        setForm(nextForm);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          displayErrorToast(error instanceof Error ? error.message : null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [conversationId, draft.form, editingAutomationId, isEditingExisting]);
 
   useEffect(() => {
     if (!taggedServerDraftId || serverDraft?.id === taggedServerDraftId) {
@@ -1060,41 +1216,57 @@ export function AutomationSetupPanel({
   }, [serverDraft?.validationErrors]);
   const fieldError = (field: string): string | undefined =>
     draftValidationByField.get(field);
-  const isDraftDirty = useMemo(() => {
-    if (!serverDraft) return true;
-    return (
-      serverDraft.endpoint !== draftEndpoint(kind, pluginEndpointSource) ||
-      (serverDraft.name ?? "") !== normalizedName() ||
-      JSON.stringify(serverDraft.draft) !== JSON.stringify(draftRequestBody())
-    );
-  }, [
-    serverDraft,
-    kind,
-    name,
-    prompt,
-    repository,
-    pluginSource,
-    pluginRef,
-    pluginList,
-    customCode,
-    entrypoint,
-    setupScriptPath,
-    setupScript,
-    triggerKind,
-    frequency,
-    time,
-    weekday,
-    scheduleDateTime,
-    timezone,
-    customSchedule,
-    eventSource,
-    eventKey,
-    eventFilter,
-    model,
-    agentProfileId,
-    showTimeout,
-    timeoutSeconds,
-  ]);
+  const currentDraftRequestKey = useMemo(
+    () =>
+      JSON.stringify({
+        endpoint: draftEndpoint(kind, pluginEndpointSource),
+        name: normalizedName(),
+        draft: draftRequestBody(),
+      }),
+    [
+      serverDraft,
+      kind,
+      name,
+      prompt,
+      repository,
+      pluginSource,
+      pluginRef,
+      pluginList,
+      customCode,
+      entrypoint,
+      setupScriptPath,
+      setupScript,
+      triggerKind,
+      frequency,
+      time,
+      weekday,
+      scheduleDateTime,
+      timezone,
+      customSchedule,
+      eventSource,
+      eventKey,
+      eventFilter,
+      model,
+      agentProfileId,
+      showTimeout,
+      timeoutSeconds,
+    ],
+  );
+  const isDraftDirty = savedDraftRequestKey
+    ? savedDraftRequestKey !== currentDraftRequestKey
+    : serverDraft?.endpoint !== draftEndpoint(kind, pluginEndpointSource) ||
+      (serverDraft?.name ?? "") !== normalizedName() ||
+      JSON.stringify(serverDraft?.draft) !== JSON.stringify(draftRequestBody());
+  const wasHydratingServerDraftRef = useRef(false);
+  useEffect(() => {
+    if (isHydratingServerDraft) {
+      wasHydratingServerDraftRef.current = true;
+      return;
+    }
+    if (!wasHydratingServerDraftRef.current || !serverDraft) return;
+    wasHydratingServerDraftRef.current = false;
+    setSavedDraftRequestKey(currentDraftRequestKey);
+  }, [currentDraftRequestKey, isHydratingServerDraft, serverDraft]);
 
   const ensureCustomWebhookSource = async (): Promise<boolean> => {
     if (triggerKind !== "event" || !customWebhook.enabled) return true;
@@ -1169,6 +1341,13 @@ export function AutomationSetupPanel({
       : await AutomationService.createServerDraft(request);
     setServerDraft(saved);
     saveDraftInFormSession(saved, form);
+    setSavedDraftRequestKey(
+      JSON.stringify({
+        endpoint: request.endpoint,
+        name: request.name ?? "",
+        draft: request.draft,
+      }),
+    );
     setIsTaggedDraftMissing(false);
     await updateConversationDraftTags(saved.id);
     return saved;
@@ -1241,21 +1420,15 @@ export function AutomationSetupPanel({
     setSaveState("saving");
     try {
       if (!(await ensureCustomWebhookSource())) return;
-      const saved = await persistServerDraft();
+      await persistServerDraft();
       setSaveState("saved");
-      setStatusMessage({
-        kind: "success",
-        text:
-          saved.validationErrors?.[0]?.message ??
-          t(I18nKey.AUTOMATION_SETUP$DRAFT_SAVED),
-      });
+      setStatusMessage(null);
+      toast.success(t(I18nKey.AUTOMATION_SETUP$DRAFT_SAVED));
     } catch (error) {
       if (isDraftEndpointUnavailable(error)) {
         setSaveState("saved");
-        setStatusMessage({
-          kind: "success",
-          text: t(I18nKey.AUTOMATION_SETUP$DRAFT_SAVED),
-        });
+        setStatusMessage(null);
+        toast.success(t(I18nKey.AUTOMATION_SETUP$DRAFT_SAVED));
         return;
       }
       setSaveState("error");
@@ -1289,12 +1462,16 @@ export function AutomationSetupPanel({
       setSaveState("saved");
 
       if (!saved.dispatchable) {
-        setStatusMessage({
-          kind: "error",
-          text:
-            saved.validationErrors?.[0]?.message ??
-            t(I18nKey.SETUP$SUBMIT_FAILED),
-        });
+        // The draft bar already shows the validation error. A second copy
+        // at the bottom of the form just repeats it.
+        setStatusMessage(
+          saved.validationErrors?.[0]?.message
+            ? null
+            : {
+                kind: "error",
+                text: t(I18nKey.SETUP$SUBMIT_FAILED),
+              },
+        );
         return;
       }
 
@@ -1409,11 +1586,108 @@ export function AutomationSetupPanel({
   const saveStateLabel = () => {
     if (saveState === "saving") return t(I18nKey.AUTOMATION_SETUP$SAVING);
     if (saveState === "error") return t(I18nKey.AUTOMATION_SETUP$SAVE_FAILED);
+    if (isEditingExisting) {
+      return saveState === "saved"
+        ? t(I18nKey.AUTOMATION_SETUP$SAVED_JUST_NOW)
+        : null;
+    }
     if (serverDraft && !isDraftDirty) {
       return t(I18nKey.AUTOMATION_SETUP$SAVED_JUST_NOW);
     }
     if (isDraftDirty) return t(I18nKey.AUTOMATION_SETUP$UNSAVED_CHANGES);
     return null;
+  };
+
+  /**
+   * Fields the setup form owns, written back onto the automation being edited.
+   * `enabled` stays off this body so Save does not turn a live automation off
+   * the way creating a draft does.
+   */
+  const buildExistingAutomationBody = async () => {
+    const repositories = parseAutomationSetupRepositories(repository);
+    const body: Record<string, unknown> = {
+      name: normalizedName(),
+      trigger: buildTrigger(),
+      model: model.trim() || null,
+      agent_profile_id: agentProfileId.trim() || null,
+      timeout:
+        showTimeout && timeoutSeconds.trim() ? Number(timeoutSeconds) : null,
+    };
+    if (kind !== "custom") body.prompt = prompt.trim();
+    if (repositories[0]) body.repository = repositories[0];
+    if (repositories.length > 0) {
+      body.repos = repositories.map((url) => ({ url, provider: "github" }));
+    }
+    if (configuredPlugins.length > 0) body.plugins = configuredPlugins;
+    if (kind === "custom") {
+      body.entrypoint = entrypoint.trim();
+      body.setup_script_path = setupScriptPath.trim();
+      body.tarball_path = await uploadCustomArchive();
+    }
+    return body as Partial<Automation>;
+  };
+
+  const handleSaveExisting = async () => {
+    if (!validateRequiredFields()) return;
+    setIsSubmitting(true);
+    setSaveState("saving");
+    try {
+      if (!(await ensureCustomWebhookSource())) return;
+      await AutomationService.updateAutomation(
+        editingAutomationId,
+        await buildExistingAutomationBody(),
+      );
+      setSaveState("saved");
+      toast.success(t(I18nKey.AUTOMATIONS$EDIT_SUCCESS));
+    } catch (error) {
+      setSaveState("error");
+      displayErrorToast(error instanceof Error ? error.message : null);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleTestExisting = async () => {
+    if (!validateRequiredFields()) return;
+    if (
+      triggerKind === "event" &&
+      parseEventTestPayload(eventTestPayload) === null
+    ) {
+      setStatusMessage({
+        kind: "error",
+        text: t(I18nKey.AUTOMATION_SETUP$TEST_EVENT_PAYLOAD_INVALID),
+      });
+      return;
+    }
+    setIsSubmitting(true);
+    setSaveState("saving");
+    try {
+      if (!(await ensureCustomWebhookSource())) return;
+      await AutomationService.updateAutomation(
+        editingAutomationId,
+        await buildExistingAutomationBody(),
+      );
+      const run =
+        await AutomationService.dispatchAutomation(editingAutomationId);
+      setSaveState("saved");
+      setDraftRuns((previous) => [
+        run,
+        ...previous.filter((existing) => existing.id !== run.id),
+      ]);
+      setStatusMessage({
+        kind: "success",
+        text: t(I18nKey.AUTOMATION_SETUP$TEST_DISPATCHED),
+      });
+    } catch (error) {
+      setSaveState("error");
+      displayErrorToast(error instanceof Error ? error.message : null);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const closeEditor = () => {
+    navigate(automationListPath());
   };
 
   const compactToolbarButtonClassName = "!h-7 !min-h-7 !px-2.5 !text-xs";
@@ -1424,6 +1698,13 @@ export function AutomationSetupPanel({
       { source: "", ref: DEFAULT_AUTOMATION_PLUGIN_REF },
     ]);
   const saveStateText = saveStateLabel();
+  const draftsSupported =
+    deploymentCapabilities.data?.features.includes(AUTOMATION_DRAFTS_FEATURE) ??
+    false;
+  // Server drafts have to be saved before a test can run. Until then the
+  // toolbar button stays visible and inactive.
+  const canTestDraft =
+    !draftsSupported || (serverDraft !== null && !isDraftDirty);
 
   const renderToolbarActions = () => (
     <div className="flex shrink-0 items-center gap-1.5">
@@ -1435,38 +1716,79 @@ export function AutomationSetupPanel({
           {saveStateText}
         </span>
       ) : null}
-      <BrandButton
-        type="button"
-        variant="secondary"
-        testId="automation-setup-save-draft"
-        className={compactToolbarButtonClassName}
-        isDisabled={isSubmitting}
-        onClick={handleSaveDraft}
-      >
-        {t(I18nKey.AUTOMATION_SETUP$SAVE_DRAFT)}
-      </BrandButton>
-      <BrandButton
-        type="button"
-        variant="secondary"
-        testId="automation-setup-test"
-        className={compactToolbarButtonClassName}
-        isDisabled={isSubmitting}
-        aria-busy={isSubmitting}
-        onClick={handleTest}
-      >
-        {t(I18nKey.AUTOMATION_SETUP$TEST)}
-      </BrandButton>
-      <BrandButton
-        type="button"
-        variant="primary"
-        testId="automation-setup-create"
-        className={compactToolbarButtonClassName}
-        isDisabled={isSubmitting}
-        aria-busy={isSubmitting}
-        onClick={handleCreate}
-      >
-        {t(I18nKey.AUTOMATIONS$CREATE_AUTOMATION_BUTTON)}
-      </BrandButton>
+      {isEditingExisting ? (
+        <>
+          <BrandButton
+            type="button"
+            variant="secondary"
+            testId="automation-setup-test"
+            className={compactToolbarButtonClassName}
+            isDisabled={isSubmitting}
+            aria-busy={isSubmitting}
+            onClick={handleTestExisting}
+          >
+            {t(I18nKey.AUTOMATION_SETUP$TEST)}
+          </BrandButton>
+          <BrandButton
+            type="button"
+            variant="primary"
+            testId="automation-setup-save"
+            className={compactToolbarButtonClassName}
+            isDisabled={isSubmitting}
+            aria-busy={isSubmitting}
+            onClick={handleSaveExisting}
+          >
+            {t(I18nKey.BUTTON$SAVE)}
+          </BrandButton>
+          <BrandButton
+            type="button"
+            variant="secondary"
+            testId="automation-setup-close"
+            className={compactToolbarButtonClassName}
+            onClick={closeEditor}
+          >
+            {t(I18nKey.BUTTON$CLOSE)}
+          </BrandButton>
+        </>
+      ) : (
+        <>
+          <BrandButton
+            type="button"
+            variant="secondary"
+            testId="automation-setup-save-draft"
+            className={compactToolbarButtonClassName}
+            isDisabled={isSubmitting}
+            onClick={handleSaveDraft}
+          >
+            {t(I18nKey.AUTOMATION_SETUP$SAVE_DRAFT)}
+          </BrandButton>
+          <BrandButton
+            type="button"
+            variant="secondary"
+            testId="automation-setup-test"
+            className={compactToolbarButtonClassName}
+            isDisabled={isSubmitting || !canTestDraft}
+            aria-busy={isSubmitting}
+            onClick={() => {
+              setIsViewingDraftRuns(true);
+              void handleTest();
+            }}
+          >
+            {t(I18nKey.AUTOMATION_SETUP$TEST)}
+          </BrandButton>
+          <BrandButton
+            type="button"
+            variant="primary"
+            testId="automation-setup-create"
+            className={compactToolbarButtonClassName}
+            isDisabled={isSubmitting}
+            aria-busy={isSubmitting}
+            onClick={handleCreate}
+          >
+            {t(I18nKey.AUTOMATIONS$CREATE_AUTOMATION_BUTTON)}
+          </BrandButton>
+        </>
+      )}
     </div>
   );
 
@@ -1497,413 +1819,396 @@ export function AutomationSetupPanel({
           )}
         >
           <div className="mx-auto flex w-full min-w-0 max-w-[800px] flex-col gap-6">
-            <Field
-              label={t(I18nKey.AUTOMATIONS$NAME)}
-              suffix={agentUpdatedSuffix("name")}
-              isStreaming={streamingField === "name"}
-              errorText={fieldError("name")}
+            {serverDraft && !isViewingDraftRuns ? (
+              <DraftStatusBar
+                draft={serverDraft}
+                runs={draftRuns}
+                isSubmitting={isSubmitting}
+                canTest={isEditingExisting || canTestDraft}
+                onTest={() => {
+                  setIsViewingDraftRuns(true);
+                  void (isEditingExisting
+                    ? handleTestExisting()
+                    : handleTest());
+                }}
+                onViewRuns={() => setIsViewingDraftRuns(true)}
+              />
+            ) : null}
+            {isViewingDraftRuns ? (
+              <DraftRunsPage
+                runs={draftRuns}
+                errors={draftRunPageErrors(
+                  serverDraft,
+                  statusMessage,
+                  draftRuns,
+                )}
+                isSubmitting={isSubmitting}
+                canTest={isEditingExisting || canTestDraft}
+                onBack={() => setIsViewingDraftRuns(false)}
+                onTest={isEditingExisting ? handleTestExisting : handleTest}
+              />
+            ) : null}
+            <div
+              data-testid="automation-setup-form"
+              className={cn(
+                "flex flex-col gap-6",
+                isViewingDraftRuns && "hidden",
+              )}
             >
-              <input
-                data-testid="automation-setup-name"
-                value={name}
-                placeholder={t(I18nKey.AUTOMATION_SETUP$NAME_PLACEHOLDER)}
-                onChange={(event) => updateField("name", event.target.value)}
-                className={formControlFieldClassName}
-              />
-            </Field>
-
-            {isHydratingServerDraft ? (
-              <p
-                data-testid="automation-setup-draft-loading"
-                className="rounded-2xl border border-[var(--oh-border)] bg-[var(--oh-surface)] px-5 py-4 text-sm text-muted"
+              <Field
+                label={t(I18nKey.AUTOMATIONS$NAME)}
+                suffix={agentUpdatedSuffix("name")}
+                isStreaming={streamingField === "name"}
+                errorText={fieldError("name")}
               >
-                {t(I18nKey.AUTOMATION_SETUP$LOADING_DRAFT)}
-              </p>
-            ) : null}
-
-            {isTaggedDraftMissing ? (
-              <p
-                data-testid="automation-setup-draft-missing"
-                className="rounded-2xl border border-[var(--oh-warning)]/40 bg-[var(--oh-warning)]/10 px-5 py-4 text-sm text-[var(--oh-warning)]"
-              >
-                {t(I18nKey.AUTOMATION_SETUP$DRAFT_MISSING)}
-              </p>
-            ) : null}
-
-            {serverDraft ? (
-              <DraftRunDetailsCard draft={serverDraft} runs={draftRuns} />
-            ) : null}
-
-            <div className="flex flex-col gap-2.5">
-              <div className="flex w-full items-center gap-2">
-                <span className="flex items-center gap-2 text-sm">
-                  {kind === "custom"
-                    ? t(I18nKey.AUTOMATION_SETUP$CUSTOM_PYTHON)
-                    : t(I18nKey.AUTOMATIONS$PROMPT)}
-                  {agentUpdatedSuffix(
-                    kind === "custom" ? "customCode" : "prompt",
-                  ) ? (
-                    <span className="font-normal text-[var(--oh-muted)]">
-                      {agentUpdatedSuffix(
-                        kind === "custom" ? "customCode" : "prompt",
-                      )}
-                    </span>
-                  ) : null}
-                </span>
-                <button
-                  type="button"
-                  data-testid={
-                    kind === "custom"
-                      ? "automation-setup-kind-prompt"
-                      : "automation-setup-kind-custom"
-                  }
-                  onClick={() =>
-                    updateField("kind", kind === "custom" ? "prompt" : "custom")
-                  }
-                  className={cn(
-                    addOptionButtonClassName,
-                    "ml-auto gap-1.5",
-                    streamingHighlightClassName(streamingField === "kind"),
-                  )}
-                >
-                  {kind === "custom" ? (
-                    <FileText className="size-4" aria-hidden />
-                  ) : (
-                    <Code2 className="size-4" aria-hidden />
-                  )}
-                  {kind === "custom"
-                    ? t(I18nKey.AUTOMATIONS$PROMPT)
-                    : t(I18nKey.AUTOMATION_SETUP$TYPE_CUSTOM)}
-                </button>
-              </div>
-              <SetupKindCrossfade
-                view={kind === "custom" ? "custom" : "prompt"}
-              >
-                {kind !== "custom" ? (
-                  <AutomationSetupPromptStack
-                    prompt={prompt}
-                    repository={repository}
-                    updatedSuffix={agentUpdatedSuffix("prompt")}
-                    repositorySuffix={agentUpdatedSuffix("repository")}
-                    isStreaming={streamingField === "prompt"}
-                    errorText={fieldError("prompt")}
-                    showTitle={false}
-                    onPromptChange={(value) => updateField("prompt", value)}
-                    onRepositoryChange={(value) =>
-                      updateField("repository", value)
-                    }
-                    model={model}
-                    onModelChange={(value) => updateField("model", value)}
-                    agentProfileId={agentProfileId}
-                    onAgentProfileChange={(value) =>
-                      updateField("agentProfileId", value)
-                    }
-                  />
-                ) : (
-                  <CustomCodeFields
-                    code={customCode}
-                    entrypoint={entrypoint}
-                    setupScriptPath={setupScriptPath}
-                    setupScript={setupScript}
-                    updatedSuffixes={{
-                      customCode: agentUpdatedSuffix("customCode"),
-                      entrypoint: agentUpdatedSuffix("entrypoint"),
-                      setupScriptPath: agentUpdatedSuffix("setupScriptPath"),
-                      setupScript: agentUpdatedSuffix("setupScript"),
-                    }}
-                    streamingField={streamingField}
-                    onCodeChange={(value) => updateField("customCode", value)}
-                    onEntrypointChange={(value) =>
-                      updateField("entrypoint", value)
-                    }
-                    onSetupScriptPathChange={(value) =>
-                      updateField("setupScriptPath", value)
-                    }
-                    onSetupScriptChange={(value) =>
-                      updateField("setupScript", value)
-                    }
-                  />
-                )}
-              </SetupKindCrossfade>
-            </div>
-
-            <section className="flex flex-col gap-2.5">
-              <div
-                role="radiogroup"
-                aria-label={t(I18nKey.AUTOMATIONS$DETAIL$TRIGGER)}
-                className={cn(
-                  "grid grid-cols-2 gap-2",
-                  streamingHighlightClassName(streamingField === "triggerKind"),
-                )}
-              >
-                <TriggerCard
-                  icon={<CalendarDays className="size-4" aria-hidden />}
-                  title={t(I18nKey.AUTOMATION_SETUP$SCHEDULE)}
-                  description={t(I18nKey.AUTOMATION_SETUP$SCHEDULE_DESCRIPTION)}
-                  selected={triggerKind === "cron"}
-                  onClick={() => updateField("triggerKind", "cron")}
+                <input
+                  data-testid="automation-setup-name"
+                  value={name}
+                  placeholder={t(I18nKey.AUTOMATION_SETUP$NAME_PLACEHOLDER)}
+                  onChange={(event) => updateField("name", event.target.value)}
+                  className={formControlFieldClassName}
                 />
-                <TriggerCard
-                  icon={<Zap className="size-4" aria-hidden />}
-                  title={t(I18nKey.AUTOMATIONS$DETAIL$TRIGGER_EVENT)}
-                  description={t(I18nKey.AUTOMATION_SETUP$EVENT_DESCRIPTION)}
-                  selected={triggerKind === "event"}
-                  onClick={() => updateField("triggerKind", "event")}
-                />
-              </div>
-            </section>
+              </Field>
 
-            {triggerKind === "cron" ? (
-              <ScheduleFields
-                frequency={frequency}
-                time={time}
-                weekday={weekday}
-                scheduleDateTime={scheduleDateTime}
-                timezone={timezone}
-                customSchedule={customSchedule}
-                updatedSuffixes={{
-                  frequency: agentUpdatedSuffix("frequency"),
-                  time: agentUpdatedSuffix("time"),
-                  timezone: agentUpdatedSuffix("timezone"),
-                  customSchedule: agentUpdatedSuffix("customSchedule"),
-                }}
-                streamingField={streamingField}
-                setFrequency={(value) => {
-                  updateField("frequency", value);
-                  if (value === "once" && !scheduleDateTime.trim()) {
-                    updateField(
-                      "scheduleDateTime",
-                      defaultScheduleDateTimeLocal(),
-                    );
-                  }
-                }}
-                setTime={(value) => updateField("time", value)}
-                setWeekday={(value) => updateField("weekday", value)}
-                setScheduleDateTime={(value) =>
-                  updateField("scheduleDateTime", value)
-                }
-                setTimezone={(value) => updateField("timezone", value)}
-                setCustomSchedule={(value) =>
-                  updateField("customSchedule", value)
-                }
-              />
-            ) : (
-              <EventFields
-                eventSource={eventSource}
-                eventKey={eventKey}
-                eventFilter={eventFilter}
-                eventTestPayload={eventTestPayload}
-                eventSourceOptions={eventSourceOptions}
-                eventTypeOptions={eventTypeOptions}
-                customWebhook={customWebhook}
-                customWebhookRegistration={customWebhookRegistration}
-                updatedSuffixes={{
-                  eventSource: agentUpdatedSuffix("eventSource"),
-                  eventKey: agentUpdatedSuffix("eventKey"),
-                  eventFilter: agentUpdatedSuffix("eventFilter"),
-                }}
-                streamingField={streamingField}
-                setEventSource={(value) => updateField("eventSource", value)}
-                setEventKey={(value) => updateField("eventKey", value)}
-                setEventFilter={(value) => updateField("eventFilter", value)}
-                setEventTestPayload={(value) => {
-                  setIsEventTestPayloadDirty(true);
-                  setEventTestPayload(value);
-                }}
-                setCustomWebhookField={updateCustomWebhook}
-              />
-            )}
-
-            <section className="flex flex-col gap-2.5">
-              <span className="text-sm">
-                {t(I18nKey.AUTOMATION_SETUP$ADDITIONAL_OPTIONS)}
-              </span>
-              {visiblePluginEntries.length > 0 ? (
-                <div
-                  data-testid="automation-setup-plugin-module"
-                  className="flex flex-col gap-3 rounded-xl border border-[var(--oh-border)] bg-base-secondary p-4"
+              {isHydratingServerDraft ? (
+                <p
+                  data-testid="automation-setup-draft-loading"
+                  className="rounded-2xl border border-[var(--oh-border)] bg-[var(--oh-surface)] px-5 py-4 text-sm text-muted"
                 >
-                  {visiblePluginEntries.map((entry, index) => (
-                    <div
-                      key={`plugin-${index}`}
-                      className={cn(
-                        "flex min-w-0 gap-2",
-                        index === 0 ? "items-end" : "items-center",
-                      )}
-                    >
-                      <div className="grid min-w-0 flex-1 gap-3 md:grid-cols-[2fr_1fr]">
-                        <Field
-                          label={t(I18nKey.AUTOMATION_SETUP$PLUGIN_SOURCE)}
-                          showLabel={index === 0}
-                          suffix={
-                            index === 0
-                              ? agentUpdatedSuffix("pluginSource")
-                              : undefined
-                          }
-                          isStreaming={
-                            index === 0 && streamingField === "pluginSource"
-                          }
-                        >
-                          <input
-                            data-testid={
-                              index === 0
-                                ? "automation-setup-plugin-source"
-                                : `automation-setup-plugin-source-${index}`
-                            }
-                            value={entry.source}
-                            aria-label={
-                              index === 0
-                                ? undefined
-                                : t(I18nKey.AUTOMATION_SETUP$PLUGIN_SOURCE)
-                            }
-                            placeholder={t(
-                              I18nKey.AUTOMATION_SETUP$PLUGIN_SOURCE_PLACEHOLDER,
-                            )}
-                            onChange={(event) =>
-                              writePlugins(
-                                pluginEntries.map((plugin, entryIndex) =>
-                                  entryIndex === index
-                                    ? { ...plugin, source: event.target.value }
-                                    : plugin,
-                                ),
-                              )
-                            }
-                            className={formControlFieldClassName}
-                          />
-                        </Field>
-                        <Field
-                          label={t(I18nKey.AUTOMATION_SETUP$PLUGIN_REF)}
-                          showLabel={index === 0}
-                          suffix={
-                            index === 0
-                              ? agentUpdatedSuffix("pluginRef")
-                              : undefined
-                          }
-                          isStreaming={
-                            index === 0 && streamingField === "pluginRef"
-                          }
-                        >
-                          <input
-                            data-testid={
-                              index === 0
-                                ? "automation-setup-plugin-ref"
-                                : `automation-setup-plugin-ref-${index}`
-                            }
-                            value={entry.ref}
-                            aria-label={
-                              index === 0
-                                ? undefined
-                                : t(I18nKey.AUTOMATION_SETUP$PLUGIN_REF)
-                            }
-                            placeholder={t(
-                              I18nKey.AUTOMATION_SETUP$PLUGIN_REF_PLACEHOLDER,
-                            )}
-                            onChange={(event) =>
-                              writePlugins(
-                                pluginEntries.map((plugin, entryIndex) =>
-                                  entryIndex === index
-                                    ? { ...plugin, ref: event.target.value }
-                                    : plugin,
-                                ),
-                              )
-                            }
-                            className={formControlFieldClassName}
-                          />
-                        </Field>
-                      </div>
-                      <div
-                        className={cn(
-                          "flex shrink-0 items-center",
-                          index === 0 && formControlHeightClassName,
-                        )}
-                      >
-                        <button
-                          type="button"
-                          data-testid={
-                            index === 0
-                              ? "automation-setup-plugin-remove"
-                              : `automation-setup-plugin-remove-${index}`
-                          }
-                          aria-label={`${t(I18nKey.COMMON$REMOVE)} ${t(I18nKey.AUTOMATION_SETUP$TYPE_PLUGIN)}`}
-                          className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-[var(--oh-muted)] hover:bg-white/10 hover:text-white"
-                          onMouseDown={(event) => event.preventDefault()}
-                          onClick={() => {
-                            const nextEntries = pluginEntries.filter(
-                              (_, entryIndex) => entryIndex !== index,
-                            );
-                            writePlugins(nextEntries);
-                            if (nextEntries.length === 0 && kind === "plugin") {
-                              updateField("kind", "prompt");
-                            }
-                          }}
-                        >
-                          <X className="size-4" aria-hidden />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    data-testid="automation-setup-add-plugin"
-                    onClick={addPlugin}
-                    className={cn(
-                      addOptionButtonClassName,
-                      streamingHighlightClassName(
-                        streamingField === "pluginSource",
-                      ),
-                    )}
-                  >
-                    {`${t(I18nKey.BUTTON$ADD)} ${t(I18nKey.AUTOMATION_SETUP$TYPE_PLUGIN)}`}
-                  </button>
-                </div>
+                  {t(I18nKey.AUTOMATION_SETUP$LOADING_DRAFT)}
+                </p>
               ) : null}
-              {showTimeout ? (
-                <label className="flex w-full min-w-0 flex-col gap-2.5 rounded-xl border border-[var(--oh-border)] bg-base-secondary p-4">
-                  <div className="flex w-full items-center gap-2">
-                    <span className="text-sm font-normal text-content">
-                      {t(I18nKey.AUTOMATION_SETUP$TIMEOUT_SECONDS)}
-                    </span>
-                    <OptionalTag />
-                    {agentUpdatedSuffix("timeoutSeconds") ? (
-                      <span className="text-xs text-[var(--oh-muted)]">
-                        {agentUpdatedSuffix("timeoutSeconds")}
+
+              {isTaggedDraftMissing ? (
+                <p
+                  data-testid="automation-setup-draft-missing"
+                  className="rounded-2xl border border-[var(--oh-warning)]/40 bg-[var(--oh-warning)]/10 px-5 py-4 text-sm text-[var(--oh-warning)]"
+                >
+                  {t(I18nKey.AUTOMATION_SETUP$DRAFT_MISSING)}
+                </p>
+              ) : null}
+
+              <div className="flex flex-col gap-2.5">
+                <div className="flex w-full items-center gap-2">
+                  <span className="flex items-center gap-2 text-sm">
+                    {kind === "custom"
+                      ? t(I18nKey.AUTOMATION_SETUP$CUSTOM_PYTHON)
+                      : t(I18nKey.AUTOMATIONS$PROMPT)}
+                    {agentUpdatedSuffix(
+                      kind === "custom" ? "customCode" : "prompt",
+                    ) ? (
+                      <span className="font-normal text-[var(--oh-muted)]">
+                        {agentUpdatedSuffix(
+                          kind === "custom" ? "customCode" : "prompt",
+                        )}
                       </span>
                     ) : null}
-                    <button
-                      type="button"
-                      data-testid="automation-setup-timeout-remove"
-                      aria-label={`${t(I18nKey.COMMON$REMOVE)} ${t(I18nKey.AUTOMATION_SETUP$TIMEOUT_SECONDS)}`}
-                      className="ml-auto inline-flex size-6 items-center justify-center rounded-md text-[var(--oh-muted)] hover:bg-white/10 hover:text-white"
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => {
-                        updateField("showTimeout", false);
-                        updateField("timeoutSeconds", "");
-                      }}
-                    >
-                      <X className="size-4" aria-hidden />
-                    </button>
-                  </div>
-                  <input
-                    data-testid="automation-setup-timeout"
-                    type="number"
-                    min="1"
-                    name="timeout"
-                    value={timeoutSeconds}
-                    onChange={(event) =>
-                      updateField("timeoutSeconds", event.target.value)
+                  </span>
+                  <button
+                    type="button"
+                    data-testid={
+                      kind === "custom"
+                        ? "automation-setup-kind-prompt"
+                        : "automation-setup-kind-custom"
+                    }
+                    onClick={() =>
+                      updateField(
+                        "kind",
+                        kind === "custom" ? "prompt" : "custom",
+                      )
                     }
                     className={cn(
-                      formControlFieldClassName,
-                      streamingHighlightClassName(
-                        streamingField === "timeoutSeconds",
-                      ),
+                      addOptionButtonClassName,
+                      "ml-auto gap-1.5",
+                      streamingHighlightClassName(streamingField === "kind"),
                     )}
+                  >
+                    {kind === "custom" ? (
+                      <FileText className="size-4" aria-hidden />
+                    ) : (
+                      <Code2 className="size-4" aria-hidden />
+                    )}
+                    {kind === "custom"
+                      ? t(I18nKey.AUTOMATIONS$PROMPT)
+                      : t(I18nKey.AUTOMATION_SETUP$TYPE_CUSTOM)}
+                  </button>
+                </div>
+                <SetupKindCrossfade
+                  view={kind === "custom" ? "custom" : "prompt"}
+                >
+                  {kind !== "custom" ? (
+                    <AutomationSetupPromptStack
+                      prompt={prompt}
+                      repository={repository}
+                      updatedSuffix={agentUpdatedSuffix("prompt")}
+                      repositorySuffix={agentUpdatedSuffix("repository")}
+                      isStreaming={streamingField === "prompt"}
+                      errorText={fieldError("prompt")}
+                      showTitle={false}
+                      onPromptChange={(value) => updateField("prompt", value)}
+                      onRepositoryChange={(value) =>
+                        updateField("repository", value)
+                      }
+                      model={model}
+                      onModelChange={(value) => updateField("model", value)}
+                      agentProfileId={agentProfileId}
+                      onAgentProfileChange={(value) =>
+                        updateField("agentProfileId", value)
+                      }
+                    />
+                  ) : (
+                    <CustomCodeFields
+                      code={customCode}
+                      entrypoint={entrypoint}
+                      setupScriptPath={setupScriptPath}
+                      setupScript={setupScript}
+                      updatedSuffixes={{
+                        customCode: agentUpdatedSuffix("customCode"),
+                        entrypoint: agentUpdatedSuffix("entrypoint"),
+                        setupScriptPath: agentUpdatedSuffix("setupScriptPath"),
+                        setupScript: agentUpdatedSuffix("setupScript"),
+                      }}
+                      streamingField={streamingField}
+                      onCodeChange={(value) => updateField("customCode", value)}
+                      onEntrypointChange={(value) =>
+                        updateField("entrypoint", value)
+                      }
+                      onSetupScriptPathChange={(value) =>
+                        updateField("setupScriptPath", value)
+                      }
+                      onSetupScriptChange={(value) =>
+                        updateField("setupScript", value)
+                      }
+                    />
+                  )}
+                </SetupKindCrossfade>
+              </div>
+
+              <section className="flex flex-col gap-2.5">
+                <div
+                  role="radiogroup"
+                  aria-label={t(I18nKey.AUTOMATIONS$DETAIL$TRIGGER)}
+                  className={cn(
+                    "grid grid-cols-2 gap-2",
+                    streamingHighlightClassName(
+                      streamingField === "triggerKind",
+                    ),
+                  )}
+                >
+                  <TriggerCard
+                    icon={<CalendarDays className="size-4" aria-hidden />}
+                    title={t(I18nKey.AUTOMATION_SETUP$SCHEDULE)}
+                    description={t(
+                      I18nKey.AUTOMATION_SETUP$SCHEDULE_DESCRIPTION,
+                    )}
+                    selected={triggerKind === "cron"}
+                    onClick={() => updateField("triggerKind", "cron")}
                   />
-                </label>
-              ) : null}
-              {kind !== "custom" || !showTimeout ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  {kind !== "custom" && visiblePluginEntries.length === 0 ? (
+                  <TriggerCard
+                    icon={<Zap className="size-4" aria-hidden />}
+                    title={t(I18nKey.AUTOMATIONS$DETAIL$TRIGGER_EVENT)}
+                    description={t(I18nKey.AUTOMATION_SETUP$EVENT_DESCRIPTION)}
+                    selected={triggerKind === "event"}
+                    onClick={() => updateField("triggerKind", "event")}
+                  />
+                </div>
+              </section>
+
+              {triggerKind === "cron" ? (
+                <ScheduleFields
+                  frequency={frequency}
+                  time={time}
+                  weekday={weekday}
+                  scheduleDateTime={scheduleDateTime}
+                  timezone={timezone}
+                  customSchedule={customSchedule}
+                  updatedSuffixes={{
+                    frequency: agentUpdatedSuffix("frequency"),
+                    time: agentUpdatedSuffix("time"),
+                    timezone: agentUpdatedSuffix("timezone"),
+                    customSchedule: agentUpdatedSuffix("customSchedule"),
+                  }}
+                  streamingField={streamingField}
+                  setFrequency={(value) => {
+                    updateField("frequency", value);
+                    if (value === "once" && !scheduleDateTime.trim()) {
+                      updateField(
+                        "scheduleDateTime",
+                        defaultScheduleDateTimeLocal(),
+                      );
+                    }
+                  }}
+                  setTime={(value) => updateField("time", value)}
+                  setWeekday={(value) => updateField("weekday", value)}
+                  setScheduleDateTime={(value) =>
+                    updateField("scheduleDateTime", value)
+                  }
+                  setTimezone={(value) => updateField("timezone", value)}
+                  setCustomSchedule={(value) =>
+                    updateField("customSchedule", value)
+                  }
+                />
+              ) : (
+                <EventFields
+                  eventSource={eventSource}
+                  eventKey={eventKey}
+                  eventFilter={eventFilter}
+                  eventTestPayload={eventTestPayload}
+                  eventSourceOptions={eventSourceOptions}
+                  eventTypeOptions={eventTypeOptions}
+                  customWebhook={customWebhook}
+                  customWebhookRegistration={customWebhookRegistration}
+                  updatedSuffixes={{
+                    eventSource: agentUpdatedSuffix("eventSource"),
+                    eventKey: agentUpdatedSuffix("eventKey"),
+                    eventFilter: agentUpdatedSuffix("eventFilter"),
+                  }}
+                  streamingField={streamingField}
+                  setEventSource={(value) => updateField("eventSource", value)}
+                  setEventKey={(value) => updateField("eventKey", value)}
+                  setEventFilter={(value) => updateField("eventFilter", value)}
+                  setEventTestPayload={(value) => {
+                    setIsEventTestPayloadDirty(true);
+                    setEventTestPayload(value);
+                  }}
+                  setCustomWebhookField={updateCustomWebhook}
+                />
+              )}
+
+              <section className="flex flex-col gap-2.5">
+                <span className="text-sm">
+                  {t(I18nKey.AUTOMATION_SETUP$ADDITIONAL_OPTIONS)}
+                </span>
+                {visiblePluginEntries.length > 0 ? (
+                  <div
+                    data-testid="automation-setup-plugin-module"
+                    className="flex flex-col gap-3 rounded-xl border border-[var(--oh-border)] bg-base-secondary p-4"
+                  >
+                    {visiblePluginEntries.map((entry, index) => (
+                      <div
+                        key={`plugin-${index}`}
+                        className={cn(
+                          "flex min-w-0 gap-2",
+                          index === 0 ? "items-end" : "items-center",
+                        )}
+                      >
+                        <div className="grid min-w-0 flex-1 gap-3 md:grid-cols-[2fr_1fr]">
+                          <Field
+                            label={t(I18nKey.AUTOMATION_SETUP$PLUGIN_SOURCE)}
+                            showLabel={index === 0}
+                            suffix={
+                              index === 0
+                                ? agentUpdatedSuffix("pluginSource")
+                                : undefined
+                            }
+                            isStreaming={
+                              index === 0 && streamingField === "pluginSource"
+                            }
+                          >
+                            <input
+                              data-testid={
+                                index === 0
+                                  ? "automation-setup-plugin-source"
+                                  : `automation-setup-plugin-source-${index}`
+                              }
+                              value={entry.source}
+                              aria-label={
+                                index === 0
+                                  ? undefined
+                                  : t(I18nKey.AUTOMATION_SETUP$PLUGIN_SOURCE)
+                              }
+                              placeholder={t(
+                                I18nKey.AUTOMATION_SETUP$PLUGIN_SOURCE_PLACEHOLDER,
+                              )}
+                              onChange={(event) =>
+                                writePlugins(
+                                  pluginEntries.map((plugin, entryIndex) =>
+                                    entryIndex === index
+                                      ? {
+                                          ...plugin,
+                                          source: event.target.value,
+                                        }
+                                      : plugin,
+                                  ),
+                                )
+                              }
+                              className={formControlFieldClassName}
+                            />
+                          </Field>
+                          <Field
+                            label={t(I18nKey.AUTOMATION_SETUP$PLUGIN_REF)}
+                            showLabel={index === 0}
+                            suffix={
+                              index === 0
+                                ? agentUpdatedSuffix("pluginRef")
+                                : undefined
+                            }
+                            isStreaming={
+                              index === 0 && streamingField === "pluginRef"
+                            }
+                          >
+                            <input
+                              data-testid={
+                                index === 0
+                                  ? "automation-setup-plugin-ref"
+                                  : `automation-setup-plugin-ref-${index}`
+                              }
+                              value={entry.ref}
+                              aria-label={
+                                index === 0
+                                  ? undefined
+                                  : t(I18nKey.AUTOMATION_SETUP$PLUGIN_REF)
+                              }
+                              placeholder={t(
+                                I18nKey.AUTOMATION_SETUP$PLUGIN_REF_PLACEHOLDER,
+                              )}
+                              onChange={(event) =>
+                                writePlugins(
+                                  pluginEntries.map((plugin, entryIndex) =>
+                                    entryIndex === index
+                                      ? { ...plugin, ref: event.target.value }
+                                      : plugin,
+                                  ),
+                                )
+                              }
+                              className={formControlFieldClassName}
+                            />
+                          </Field>
+                        </div>
+                        <div
+                          className={cn(
+                            "flex shrink-0 items-center",
+                            index === 0 && formControlHeightClassName,
+                          )}
+                        >
+                          <button
+                            type="button"
+                            data-testid={
+                              index === 0
+                                ? "automation-setup-plugin-remove"
+                                : `automation-setup-plugin-remove-${index}`
+                            }
+                            aria-label={`${t(I18nKey.COMMON$REMOVE)} ${t(I18nKey.AUTOMATION_SETUP$TYPE_PLUGIN)}`}
+                            className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-[var(--oh-muted)] hover:bg-white/10 hover:text-white"
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => {
+                              const nextEntries = pluginEntries.filter(
+                                (_, entryIndex) => entryIndex !== index,
+                              );
+                              writePlugins(nextEntries);
+                              if (
+                                nextEntries.length === 0 &&
+                                kind === "plugin"
+                              ) {
+                                updateField("kind", "prompt");
+                              }
+                            }}
+                          >
+                            <X className="size-4" aria-hidden />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                     <button
                       type="button"
                       data-testid="automation-setup-add-plugin"
@@ -1917,40 +2222,88 @@ export function AutomationSetupPanel({
                     >
                       {`${t(I18nKey.BUTTON$ADD)} ${t(I18nKey.AUTOMATION_SETUP$TYPE_PLUGIN)}`}
                     </button>
-                  ) : null}
-                  {!showTimeout ? (
-                    <button
-                      type="button"
-                      data-testid="automation-setup-add-timeout"
-                      onClick={() => updateField("showTimeout", true)}
+                  </div>
+                ) : null}
+                {showTimeout ? (
+                  <label className="flex w-full min-w-0 flex-col gap-2.5 rounded-xl border border-[var(--oh-border)] bg-base-secondary p-4">
+                    <div className="flex w-full items-center gap-2">
+                      <span className="text-sm font-normal text-content">
+                        {t(I18nKey.AUTOMATION_SETUP$TIMEOUT_SECONDS)}
+                      </span>
+                      <OptionalTag />
+                      {agentUpdatedSuffix("timeoutSeconds") ? (
+                        <span className="text-xs text-[var(--oh-muted)]">
+                          {agentUpdatedSuffix("timeoutSeconds")}
+                        </span>
+                      ) : null}
+                      <button
+                        type="button"
+                        data-testid="automation-setup-timeout-remove"
+                        aria-label={`${t(I18nKey.COMMON$REMOVE)} ${t(I18nKey.AUTOMATION_SETUP$TIMEOUT_SECONDS)}`}
+                        className="ml-auto inline-flex size-6 items-center justify-center rounded-md text-[var(--oh-muted)] hover:bg-white/10 hover:text-white"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => {
+                          updateField("showTimeout", false);
+                          updateField("timeoutSeconds", "");
+                        }}
+                      >
+                        <X className="size-4" aria-hidden />
+                      </button>
+                    </div>
+                    <input
+                      data-testid="automation-setup-timeout"
+                      type="number"
+                      min="1"
+                      name="timeout"
+                      value={timeoutSeconds}
+                      onChange={(event) =>
+                        updateField("timeoutSeconds", event.target.value)
+                      }
                       className={cn(
-                        addOptionButtonClassName,
+                        formControlFieldClassName,
                         streamingHighlightClassName(
-                          streamingField === "showTimeout",
+                          streamingField === "timeoutSeconds",
                         ),
                       )}
-                    >
-                      {t(I18nKey.AUTOMATION_SETUP$ADD_TIMEOUT)}
-                    </button>
-                  ) : null}
-                </div>
-              ) : null}
-            </section>
-
-            {statusMessage && (
-              <p
-                role="status"
-                data-testid="automation-setup-status"
-                className={cn(
-                  "text-sm",
-                  statusMessage.kind === "success"
-                    ? "text-green-400"
-                    : "text-red-400",
-                )}
-              >
-                {statusMessage.text}
-              </p>
-            )}
+                    />
+                  </label>
+                ) : null}
+                {kind !== "custom" || !showTimeout ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {kind !== "custom" && visiblePluginEntries.length === 0 ? (
+                      <button
+                        type="button"
+                        data-testid="automation-setup-add-plugin"
+                        onClick={addPlugin}
+                        className={cn(
+                          addOptionButtonClassName,
+                          streamingHighlightClassName(
+                            streamingField === "pluginSource",
+                          ),
+                        )}
+                      >
+                        {`${t(I18nKey.BUTTON$ADD)} ${t(I18nKey.AUTOMATION_SETUP$TYPE_PLUGIN)}`}
+                      </button>
+                    ) : null}
+                    {!showTimeout ? (
+                      <button
+                        type="button"
+                        data-testid="automation-setup-add-timeout"
+                        onClick={() => updateField("showTimeout", true)}
+                        className={cn(
+                          addOptionButtonClassName,
+                          streamingHighlightClassName(
+                            streamingField === "showTimeout",
+                          ),
+                        )}
+                      >
+                        {t(I18nKey.AUTOMATION_SETUP$ADD_TIMEOUT)}
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+              </section>
+            </div>
           </div>
         </div>
       </div>
@@ -2485,10 +2838,12 @@ function EventSourceControl({
   value,
   options,
   onChange,
+  onSelectCustom,
 }: {
   value: string;
   options: string[];
   onChange: (value: string) => void;
+  onSelectCustom: () => void;
 }) {
   const { t } = useTranslation("openhands");
   const knownSources = knownEventSources(options);
@@ -2506,6 +2861,9 @@ function EventSourceControl({
         ref={inputRef}
         data-testid="automation-setup-event-source"
         value={eventSourceInputValue(value, knownSources)}
+        placeholder={t(
+          I18nKey.AUTOMATION_SETUP$EVENT_SOURCE_CUSTOM_PLACEHOLDER,
+        )}
         onChange={(event) =>
           onChange(commitEventSourceInput(event.target.value, knownSources))
         }
@@ -2557,9 +2915,9 @@ function EventSourceControl({
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
+                onSelectCustom();
                 setIsMenuOpen(false);
-                inputRef.current?.focus();
-                inputRef.current?.select();
+                queueMicrotask(() => inputRef.current?.focus());
               }}
               className="flex w-full items-center"
             >
@@ -2622,6 +2980,22 @@ function EventFields({
     isEventFilterOpen ||
     eventFilter.trim().length > 0 ||
     streamingField === "eventFilter";
+  const knownSources = knownEventSources(eventSourceOptions);
+  const sourceIsKnown = (source: string) =>
+    knownSources.some(
+      (option) => option.toLowerCase() === source.trim().toLowerCase(),
+    );
+  const handleEventSourceChange = (value: string) => {
+    const leavingKnownSource =
+      sourceIsKnown(eventSource) && !sourceIsKnown(value);
+    setEventSource(value);
+    if (leavingKnownSource) setCustomWebhookField("enabled", true);
+    if (sourceIsKnown(value)) setCustomWebhookField("enabled", false);
+  };
+  const selectCustomEventSource = () => {
+    setEventSource("");
+    setCustomWebhookField("enabled", true);
+  };
   return (
     <div className="@container min-w-0">
       <section className="grid gap-3 @min-[640px]:grid-cols-2">
@@ -2634,7 +3008,8 @@ function EventFields({
             <EventSourceControl
               value={eventSource}
               options={eventSourceOptions}
-              onChange={setEventSource}
+              onChange={handleEventSourceChange}
+              onSelectCustom={selectCustomEventSource}
             />
           </Field>
           <p
