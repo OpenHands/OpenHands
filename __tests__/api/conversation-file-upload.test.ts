@@ -144,4 +144,37 @@ describe("uploadFilesToConversation", () => {
     );
     expect(result.uploaded_files).toEqual(["notes.md"]);
   });
+
+  it("uses newly provisioned cloud runtime credentials when the cached conversation has empty fields", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+    const conversationId = "1717df59-63ee-43bf-b32a-83428d3efdc8";
+    batchGetCloudConversations.mockResolvedValue([
+      {
+        id: conversationId,
+        conversation_url: `http://runtime.example.dev/api/conversations/${conversationId}`,
+        session_api_key: "runtime-session-key",
+      },
+    ]);
+
+    const result = await uploadFilesToConversation(
+      conversationId,
+      [makeFile("notes.md")],
+      {
+        id: conversationId,
+        conversation_url: "",
+        session_api_key: "",
+        workspace: { working_dir: "/workspace/project" },
+      } as never,
+    );
+
+    expect(batchGetCloudConversations).toHaveBeenCalledWith([conversationId]);
+    expect(RemoteWorkspace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        host: "http://runtime.example.dev",
+        apiKey: "runtime-session-key",
+      }),
+    );
+    expect(result.uploaded_files).toEqual(["notes.md"]);
+  });
 });
