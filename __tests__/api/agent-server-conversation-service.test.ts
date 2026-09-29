@@ -502,9 +502,10 @@ describe("AgentServerConversationService", () => {
         workingDir: "/workspace/project/agent-canvas",
       });
       expect(FileClient).toHaveBeenCalledWith({
+        conversationId: "conv-123",
         host: "http://localhost:54928",
         apiKey: "test-api-key",
-        workingDir: "/workspace/project/agent-canvas",
+        workingDir: "/workspace/project/agent-canvas/conv-123",
       });
       expect(mockHttpGet).toHaveBeenCalledWith(
         "/api/file/download",
@@ -1822,6 +1823,7 @@ describe("AgentServerConversationService", () => {
       expect(result.status).toBe("paused");
       expect(mockGetConversation).toHaveBeenCalledWith("conv-cloud");
       expect(ConversationClient).toHaveBeenLastCalledWith({
+        conversationId: "conv-cloud",
         host: "http://runtime.example",
         apiKey: "session-key",
         workingDir: "/workspace/project/agent-canvas",
@@ -2472,6 +2474,7 @@ describe("AgentServerConversationService", () => {
 
       expect(result.title).toBe("Conversation conv-");
       expect(ConversationClient).toHaveBeenLastCalledWith({
+        conversationId: "conv-1",
         host: "http://runtime.internal:9000",
         apiKey: "runtime-key",
         workingDir: "/workspace/project/agent-canvas",
@@ -2489,6 +2492,7 @@ describe("AgentServerConversationService", () => {
       );
 
       expect(VSCodeClient).toHaveBeenCalledWith({
+        conversationId: "conv-1",
         host: "http://runtime.internal:9000",
         apiKey: "runtime-key",
         workingDir: "/workspace/project/agent-canvas",
@@ -2614,6 +2618,7 @@ describe("AgentServerConversationService", () => {
       expect(result.status).toBe("running");
       expect(mockGetConversation).toHaveBeenCalledWith("conv-cloud");
       expect(ConversationClient).toHaveBeenLastCalledWith({
+        conversationId: "conv-cloud",
         host: "http://runtime.example",
         apiKey: "runtime-key",
         workingDir: "/workspace/project/agent-canvas",

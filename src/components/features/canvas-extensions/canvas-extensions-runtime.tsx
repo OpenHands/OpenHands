@@ -242,8 +242,11 @@ export function CanvasExtensionsRuntimeProvider({
                       container,
                       query,
                       labels: appViewLabelsRef.current,
-                      createSession: ({ query: sessionQuery }) =>
-                        appBackendViewClient.createSession(sessionQuery),
+                      createSession: ({ query: sessionQuery, signal }) =>
+                        appBackendViewClient.createSession({
+                          query: sessionQuery,
+                          signal,
+                        }),
                       revokeSession: () => appBackendViewClient.revokeSession(),
                     });
                     let disposed = false;

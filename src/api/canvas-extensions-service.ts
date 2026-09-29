@@ -2,7 +2,10 @@ import { AgentServerClient } from "@openhands/typescript-client/clients";
 import * as AgentServerClients from "@openhands/typescript-client/clients";
 import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
 import { isSdkHttpStatusError } from "#/api/agent-server-compatibility";
-import type { CanvasExtensionAppViewSession } from "#/extensions/canvas-extension-app-view";
+import type {
+  CanvasExtensionAppViewSession,
+  CanvasExtensionAppViewSessionContext,
+} from "#/extensions/canvas-extension-app-view";
 import {
   getActiveBackend,
   isNoBackend,
@@ -31,7 +34,10 @@ interface AppBackendSessionResponse {
 }
 
 interface AppBackendSessionClient {
-  createAppBackendSession: (name: string) => Promise<AppBackendSessionResponse>;
+  createAppBackendSession: (
+    name: string,
+    context?: { signal?: AbortSignal },
+  ) => Promise<AppBackendSessionResponse>;
   revokeAppBackendSession: (name: string) => Promise<void>;
   close: () => void;
 }
@@ -47,7 +53,7 @@ interface AppBackendSessionClientConstructor {
 
 export interface CanvasExtensionAppBackendViewClient {
   createSession: (
-    query?: Record<string, string>,
+    context?: Partial<CanvasExtensionAppViewSessionContext>,
   ) => Promise<CanvasExtensionAppViewSession>;
   revokeSession: () => Promise<void>;
   dispose: () => void;
@@ -201,9 +207,12 @@ async function createAppBackendViewClient(
     }
   };
   return {
-    createSession: async (query) => {
+    createSession: async (context) => {
       if (disposed) throw new Error("Canvas App backend view is disposed");
-      const session = await sessionClient.createAppBackendSession(name);
+      const { query, signal } = context ?? {};
+      const session = signal
+        ? await sessionClient.createAppBackendSession(name, { signal })
+        : await sessionClient.createAppBackendSession(name);
       hasSession = true;
       const sessionUrl = parseHttpUrl(session.ingress_url);
       if (sessionUrl?.origin !== ingressUrl.origin) {
