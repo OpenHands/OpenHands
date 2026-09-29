@@ -11,6 +11,7 @@ describe("dev-static", () => {
       {
         agentServerPort: 18000,
         ingressPort: 8000,
+        vitePort: 3123,
         sessionApiKey: "shared-session-key",
         stateDir: "/tmp/agent-canvas-state",
       },
@@ -26,6 +27,12 @@ describe("dev-static", () => {
         "phc_kBtz5nKmxVRRQ7HtPwr2QX9eMC5j65zE86QKocVNwb4U",
       AUTOMATION_POSTHOG_HOST: "https://us.i.posthog.com",
     });
+
+    // The automation backend CORS list tracks the resolved frontend port
+    // (which may have fallen back from the default 3001), not a hardcoded value.
+    expect(env.AUTOMATION_CORS_ORIGINS).toBe(
+      "http://localhost:8000,http://127.0.0.1:8000,http://localhost:3123,http://127.0.0.1:3123",
+    );
   });
 
   it("points every local proxy route at the IPv4 loopback", () => {

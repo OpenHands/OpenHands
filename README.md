@@ -79,6 +79,8 @@ agent-canvas --frontend-only  # static frontend + ingress only
 agent-canvas --backend-only   # agent server + automation backend + ingress only
 ```
 
+**Ports:** `-p`/`--port` (or `PORT`) controls **only** the ingress port (default `8000`) — the single origin you open in the browser. The internal frontend/Vite server uses port `3001` by default, but if that port is already taken by another application, Agent Canvas automatically picks a free port instead of failing to start. To pin the frontend port explicitly, set `OH_CANVAS_SAFE_VITE_PORT=<port>`. A second `agent-canvas` instance still fails fast with a "port already in use" error because the ingress port is deliberately not auto-allocated.
+
 ### Option 2: With a Docker Sandbox
 
 **Prerequisites**:

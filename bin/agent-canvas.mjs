@@ -74,7 +74,9 @@ AUTH MODES:
               frontend. Users must paste it when the UI loads.
 
 OPTIONS:
-  -p, --port <port>     Ingress port (default: 8000)
+  -p, --port <port>     Ingress port only (default: 8000). The browser-origin
+                        served by the ingress; see OH_CANVAS_SAFE_VITE_PORT
+                        below for the internal frontend port.
   --public              Enable public mode (see above)
   --frontend-only       Start only the static frontend behind ingress
   --backend-only        Start only agent-server + automation behind ingress
@@ -86,6 +88,9 @@ ENVIRONMENT VARIABLES:
   LOCAL_BACKEND_API_KEY        API key for the server. Required in --public
                                mode; optional otherwise (auto-generated if
                                omitted, persisted across restarts).
+  OH_CANVAS_SAFE_VITE_PORT     Internal frontend/static-server port (default:
+                               3001). If the port is busy, a free port is
+                               selected automatically.
   OH_SECRET_KEY                Secret key for encrypting settings
   OH_AGENT_SERVER_GIT_REF      Git ref for agent-server
   OH_AGENT_SERVER_LOCAL_PATH   Path to local SDK checkout (for development)
