@@ -85,13 +85,21 @@ runtime-sandbox API.
 - `src/api/no-direct-agent-server-calls.test.ts` is the executable source of
   truth. Agent Server access must use `@openhands/typescript-client` with options
   from `src/api/agent-server-client-options.ts`.
-- Cloud and runtime-sandbox requests must use `callCloudProxy`; runtime requests
-  must provide the correct `hostOverride` and authentication mode.
+- Cloud **App-API** requests must use `callCloudProxy` (now a direct browser
+  call, since the SaaS permits CORS for API-key-authenticated requests). Per-
+  conversation **runtime-sandbox** requests are not proxied: they must call the
+  conversation's runtime URL directly via the typed client
+  (`ConversationClient` / `BashClient` / `RemoteWorkspace` / `FileClient`, or a
+  typed wrapper built via `getAgentServerHttpClientOptions`) with its session
+  API key -- the same path local mode uses. Do not route runtime calls through
+  `callCloudProxy` with `hostOverride`: the `/api/cloud-proxy` envelope it relied
+  on was removed from the agent-server (software-agent-sdk #3326) and 405s on
+  current backends.
 - Treat changes to the guard's allowlist as architecture changes. Do not copy the
   allowlist into this guide.
 
 Submit **COMMENT** if the PR adds raw `fetch`, `axios`, shared `openHands`, or
-low-level HTTP client access to an Agent Server endpoint.
+low-level HTTP client access to an Agent Server or cloud endpoint.
 
 ### Agent Server compatibility
 
@@ -190,12 +198,41 @@ when cleanup and dependencies are explicit.
 
 ## Testing and Production Evidence
 
+- Every PR that touches frontend code needs an authentic screenshot or video
+  captured while exercising the PR code. This includes non-visual frontend logic
+  whose effect appears in a generated or downloaded user-facing artifact.
 - Require evidence proportional to the behavior changed. UI changes need a
   screenshot or video from the real app; CLI, API, and script changes need the
   exact runtime command and observed result.
+- Authentic evidence comes from the real Agent Canvas app, browser, OS dialog,
+  generated or downloaded artifact, or actual terminal/runtime output. It must
+  include enough surrounding context and reproduction steps to establish what
+  produced it. Mockups, Figma or design images, diagrams, manually recreated
+  terminal output, synthetic before/after cards, and other illustrative graphics
+  do not prove that the code ran.
+- "Real app" evidence must exercise the production integration path with a real
+  backend and, when the behavior depends on model execution, a real LLM. A
+  mock-LLM or mocked backend run is E2E regression coverage, not live evidence.
+  The artifact and description must identify the backend and model used so the
+  reviewer can distinguish live evidence from a mock fixture.
 - Runtime and user-visible bug fixes require the same production-facing setup
   before and after the change. The base or released version must reproduce the
-  bug; the PR head must show the corrected behavior.
+  bug; the PR head must show the corrected behavior. If the claimed state cannot
+  be produced through the real product, require the issue and PR to say so and
+  describe the change as defensive handling rather than a reproduced production
+  bug.
+- Match the artifact type to the behavior. A screenshot can prove a static render
+  state, but not duration, ordering, disappearance, refresh, navigation, or any
+  other temporal behavior. Those changes require a video that visibly shows the
+  trigger, the relevant transition, and the final corrected state. A still image
+  of a supposedly stuck or stale state does not establish how long it persisted.
+- Visual evidence must leave the changed behavior and relevant controls readable.
+  Dismiss privacy, consent, onboarding, cookie, tooltip, and other overlays before
+  capture; an obscured target is not evidence even if the underlying app is real.
+- When unsure what genuine product evidence looks like, compare it with these
+  official OpenHands documentation captures: [first-time setup](https://github.com/OpenHands/docs/blob/2409e927af05a40acc27190383a424615fc0f807/openhands/static/img/agent-canvas-setup-step-1.png),
+  [LLM profiles manager](https://github.com/OpenHands/docs/blob/2409e927af05a40acc27190383a424615fc0f807/openhands/static/img/agent-canvas-llm-profiles-manager.png),
+  and [`/model` interaction](https://github.com/OpenHands/docs/blob/2409e927af05a40acc27190383a424615fc0f807/openhands/static/img/model-command-agent-canvas.png).
 - Lifecycle fixes must also verify resulting process or resource state, such as
   the parent exit code and remaining child services or listening ports.
 - Tests must exercise real logic and observable state. A claimed regression test
@@ -203,9 +240,10 @@ when cleanup and dependencies are explicit.
   that only prove another mock was called are insufficient.
 - Do not duplicate library behavior or add brittle presentation-only snapshots.
 
-Tests are regression proof, not a substitute for required live evidence. Submit
-**COMMENT** when production-facing evidence is required but absent, and name the
-exact verification still needed.
+Tests, mock-LLM runs, and mocked-backend runs are regression proof, not a
+substitute for required live evidence. Submit **COMMENT** when production-facing
+evidence is required but absent or ambiguous, and name the exact capture or
+verification still needed before approval.
 
 Follow the test routing in `AGENTS.md`. Mock-LLM, Docker mock-LLM, and live
 LLM-backed E2E suites run after changes reach `main`, not from PR labels. For

@@ -414,6 +414,42 @@ describe("InstallServerModal", () => {
     });
   });
 
+  it("styles the OAuth info box with theme surface and text tokens", async () => {
+    const entry: MarketplaceEntry = {
+      id: "synthetic-oauth",
+      name: "Synthetic OAuth",
+      description: "Synthetic OAuth entry.",
+      docsUrl: "https://example.com/docs",
+      iconBg: "#000000",
+      connectionOptions: [
+        {
+          id: "oauth",
+          provider: "mcp",
+          transport: {
+            kind: "shttp",
+            url: "https://mcp.example.com/mcp",
+          },
+          auth: {
+            strategy: "oauth2",
+            oauth: { clientAuthentication: "none" },
+          },
+        },
+      ],
+    };
+
+    renderWith(
+      <InstallServerModal existingServers={[]} entry={entry} onClose={vi.fn()} />,
+    );
+
+    const box = await screen.findByTestId("mcp-install-oauth-info");
+    expect(box).toHaveClass("bg-tertiary");
+    expect(box).not.toHaveClass("bg-base-tertiary");
+
+    const text = box.querySelector("p");
+    expect(text).toHaveClass("text-text-secondary");
+    expect(text).not.toHaveClass("text-secondary-light");
+  });
+
   it("installs header-field remote servers with tagged header auth", async () => {
     const entry = {
       id: "datadog-style",

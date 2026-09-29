@@ -313,18 +313,25 @@ class McpService {
       finalizeMcpTestResponse(result, validation, [server]);
     // Opened synchronously inside the click handler so popup blockers allow
     // it; every failure path below closes it again.
-    const popup = window.open("about:blank", "_blank");
+    let popup: Window | null = window.open("about:blank", "_blank");
     let transport: McpOAuthTransport | null = null;
     try {
       transport = McpService.createOAuthTransport();
       const start = await transport.start(server);
-      if (!start.ok || !start.job_id || !start.authorization_url) {
+      if (!start.ok || !start.job_id) {
         popup?.close();
         return finalize({
           ok: false,
           error: start.error || "Could not start OAuth authorization",
           error_kind: start.error_kind || "unknown",
         });
+      }
+      // No authorization URL: the probe completed on the stored tokens (still
+      // valid, or refreshed), so no consent is needed and the outcome is read
+      // from the status route.
+      if (!start.authorization_url) {
+        popup?.close();
+        popup = null;
       }
 
       let status = await transport.status(start.job_id);
@@ -338,7 +345,7 @@ class McpService {
         status = await transport.status(start.job_id);
       }
 
-      if (popup) {
+      if (popup && start.authorization_url) {
         popup.location.href = start.authorization_url;
       }
 
