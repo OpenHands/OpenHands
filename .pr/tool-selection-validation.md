@@ -1,67 +1,71 @@
-# Tool-selection follow-up verification
+# Tool-selection end-to-end validation
 
-Verified 2026-09-21 against Canvas head `448bd1e56415abb0c74400e9143746447c3ccecf` and SDK head `cc0f2493d5f8cf89ceb8768f7a81f942d547d873`.
+Run 2026-09-29 on a native `npm run dev:minimal` stack (no Docker) with the agent-server built from SDK `agent-profile-tool-catalog` @ `a88186b6e` (`OH_AGENT_SERVER_LOCAL_PATH`), Canvas `feat-profile-tool-catalog`, and the mock LLM from `tests/e2e/mock-llm`. No paid model was used. Tools the model saw come from the mock's `GET /admin/requests`.
 
-## Scope and results
+## Results
 
-This builds on Simon's fixes. Canvas retains the empty/failed standard-response guard and preserves intentional empty selections. Its remaining change initializes a custom selection when both a nonempty standard answer and the catalog arrive, without replacing user edits. Save is disabled while that selection is still uninitialized. The initialization effect precedes the settings-reset effect so a reload's reset wins.
+| Check | Result |
+|---|---|
+| `GET /api/tools/catalog` | 20 entries; default set = terminal, file_editor, task_tracker, browser_tool_set, switch_llm |
+| Create profile with `tools` unset | 201; stored `tools=null`; no `enable_*` switch keys |
+| Create profile with `[terminal, glob]` | 201; stored as given |
+| GET an unset-tools profile, set `[terminal, glob]`, save under a new name | 201; `[terminal, glob]` (no `switch_llm` re-added) |
+| Save a profile carrying `enable_sub_agents` | 422 `extra_forbidden` |
+| Stored v2 profile, `tools=null` + `enable_sub_agents=true` | loads as v3 `[terminal, file_editor, task_tracker, browser_tool_set, task_tool_set, switch_llm]`; re-save writes v3 without switches |
+| Stored v2 profile, `[terminal, glob]` + `enable_switch_llm_tool=false` | loads as `[terminal, glob]`; re-save writes v3 without switches |
+| Stored v2 profile with string switches (`"false"`/`"true"`) | coerced; `[terminal, switch_llm]` |
+| Materialize a draft selecting an unregistered tool | `unusable_tools=["definitely_not_a_tool"]` |
+| `GET /api/settings`, agent schema | no `enable_sub_agents` / `enable_switch_llm_tool` |
+| `PATCH agent_settings_diff {enable_sub_agents: true}` | folded into `tools` (adds `task_tool_set`); flags not returned |
+| Stored v6 `settings.json` with both switches | loads as `tools=[terminal, file_editor, task_tracker, task_tool_set]`; re-save writes v7 without switches |
+| API launch, default settings | model tools: terminal, file_editor, task_tracker, finish, think, switch_llm |
+| API launch, profile `tools=null` | standard set incl. browser and switch_llm |
+| API launch, profile `[terminal, glob]` | model tools: terminal, glob (+ finish, think, invoke_skill) |
+| API launch, profile `[terminal, task_tool_set]` | model tools include `task` |
+| UI: new chat on global settings | launch sends `tools=[terminal, file_editor, task_tracker, browser_tool_set, switch_llm]`, no switches; model received them |
+| UI: profile editor, Choose tools → tick glob + task_tool_set, untick browser + switch_llm, save | stored `[file_editor, task_tool_set, task_tracker, terminal, glob]` |
+| UI: reload and reopen that profile | same selection shown; unticking glob and saving removes it |
+| UI: settings pages | no sub-agent or LLM-switching toggles anywhere; `/settings/agent` redirects to the profile library |
+| `tool-selection-smoke.mjs` | empty, glob and standard profiles all finish with the expected model tools, no duplicates |
 
-Five real-query-hook cases cover saved/cleared empty selections, an unnamed profile's delayed defaults, edits while pending, and a late catalog after an empty answer. They live separately because the older route suite mocks the hooks globally; this file mocks only services and exercises the actual disabled-to-enabled query transition.
+The browser-less-host branch of the dry run was not exercised live (this host has a browser); it is covered by SDK unit tests.
 
-- Before: on the current Canvas head, the unnamed-profile test failed because Save was valid while the custom selection was still unresolved (3 other cases passed).
-- After: full Canvas suite passed 724 files / 7,374 tests, with 7 todo. Lint and typecheck passed.
-- Live before: Add agent profile, leave name blank, select Choose tools, then enter a name with the mock LLM profile selected. On upstream, all switches remained off even after the mode control unlocked and Save was enabled.
-- Live after: the same sequence selected file_editor, task_tracker, terminal, browser_tool_set, and switch_llm. Saved as review-followup-seed and reopened; all five selections persisted. UI checks used the dedicated existing localhost:18501/18500 stack, not the user's instance.
-- Fresh SDK smoke: four conversations finished against a newly started stack using SDK cc0f2493 plus the test-only follow-up. Empty, glob-only, standard and legacy SwitchLLMTool selections produced the expected model-facing tools without duplicates. No paid model was used.
-- SDK follow-up: only tests/sdk/tool/test_switch_llm.py changes. Tests inspect conversation.agent after initialization and initialize both alias spellings. All 342 tests across the five focused SDK/server files passed; scoped pre-commit checks passed. No SDK production changes are included.
+## Screenshots
 
-Local evidence logs: /private/tmp/tool-followup-before.log, tool-followup-canvas-full.log, tool-followup-canvas-lint.log, tool-followup-canvas-types.log, tool-followup-sdk-tests.log, tool-followup-sdk-hooks.log and tool-followup-smoke.log. Screenshots: /private/tmp/tool-followup-before.png and tool-followup-after.png (the latter shows the saved profile reopened). These machine-local paths are not accessible to remote reviewers until shared.
+- `01-standard-tools.png`: editing a profile with standard tools.
+- `02-choose-tools.png`: a custom selection.
+
+## Reproduce
+
+Start the mock LLM from the SDK checkout:
 
 ```sh
-TZ=UTC npm test -- --run --maxWorkers=4
-npm run lint
-npm run typecheck
-uv run pytest tests/sdk/tool/test_switch_llm.py tests/sdk/test_settings.py tests/sdk/profiles/test_agent_profile.py tests/agent_server/test_agent_profile_conv_start.py tests/agent_server/test_conversation_router.py -q --tb=short
-uv run pre-commit run --files tests/sdk/tool/test_switch_llm.py
+uv run python /absolute/path/to/OpenHands/tests/e2e/mock-llm/scripts/mock-llm-server.py --port 18399
 ```
 
-Canvas used Node 24. SDK tests used a local pytest isolation plugin that redirects home-path lookups to an empty temporary directory, and an ignored comment-only .env to block inherited tracing configuration. No tests were excluded. Remote CI has not run on these local follow-ups; these numbers are local results, not a claim of PR approval or benchmark validation.
-
-## Reproducible live smoke check
-
-The adjacent `tool-selection-smoke.mjs` is a manual integration check, not a CI test. It creates a uniquely named fake-key LLM profile, four agent profiles, four conversations, and per-conversation workspace directories. It resets the mock server's request history. Use a dedicated disposable stack, never an existing personal or production instance. It leaves fixtures for inspection; stop the stack when finished. No paid model is involved.
-
-Start the mock server from the SDK checkout (with its dependencies installed):
+From the Canvas checkout, start an isolated stack against the SDK branch. On macOS, set `TMUX_TMPDIR` to a short path when the state dir is deep.
 
 ```sh
-uv run python /absolute/path/to/OpenHands/tests/e2e/mock-llm/scripts/mock-llm-server.py --port 18504
-```
-
-In another terminal, from the Canvas checkout, start an isolated development stack. Set `OH_AGENT_SERVER_LOCAL_PATH` to the SDK PR checkout including the follow-up fixes. Choose unused ports if needed. The launcher creates its state and keys; do not print or commit the keys.
-
-```sh
+E2E=/private/tmp/tool-selection-e2e
 OH_AGENT_SERVER_LOCAL_PATH=/absolute/path/to/software-agent-sdk \
-OH_CANVAS_SAFE_STATE_DIR=/private/tmp/tool-selection-live/state \
-OH_SESSION_API_KEY_PATH=/private/tmp/tool-selection-live/api-key.txt \
-OH_SECRET_KEY_PATH=/private/tmp/tool-selection-live/secret-key.txt \
-OH_CANVAS_SAFE_BACKEND_PORT=18500 \
-OH_CANVAS_SAFE_VSCODE_PORT=18502 \
-VITE_FRONTEND_PORT=18501 \
-VITE_WORKING_DIR=/private/tmp/tool-selection-live/workspace \
+OH_CANVAS_SAFE_STATE_DIR=$E2E/state \
+OH_SESSION_API_KEY_PATH=$E2E/api-key.txt \
+OH_SECRET_KEY_PATH=$E2E/secret-key.txt \
+OH_CANVAS_SAFE_BACKEND_PORT=18300 \
+OH_CANVAS_SAFE_VSCODE_PORT=18301 \
+VITE_FRONTEND_PORT=3021 \
+VITE_WORKING_DIR=$E2E/workspace \
 VITE_DO_NOT_TRACK=1 npm run dev:minimal
 ```
 
-Once the backend is ready, from the Canvas checkout:
+In this run the agent-server's `OH_PERSISTENCE_DIR` was the directory holding the key files; point `E2E_PERSISTENCE_DIR` at whatever yours is. Then:
 
 ```sh
-TOOL_SELECTION_ISOLATED=1 node .pr/tool-selection-smoke.mjs
+E2E_PERSISTENCE_DIR=$E2E python .pr/tool-selection-e2e-api.py
+E2E_PERSISTENCE_DIR=$E2E python .pr/tool-selection-e2e-stored.py
+TOOL_SELECTION_ISOLATED=1 TOOL_SELECTION_SERVER_URL=http://127.0.0.1:18300 \
+  TOOL_SELECTION_MOCK_URL=http://127.0.0.1:18399 TOOL_SELECTION_KEY_FILE=$E2E/api-key.txt \
+  TOOL_SELECTION_WORKSPACE=$E2E/workspace node .pr/tool-selection-smoke.mjs
 ```
 
-Optional overrides: `TOOL_SELECTION_SERVER_URL`, `TOOL_SELECTION_MOCK_URL`, `TOOL_SELECTION_KEY_FILE`, and `TOOL_SELECTION_WORKSPACE`. Defaults match the example above; only localhost/127.0.0.1 servers are accepted. The backend and mock must share a host. `TOOL_SELECTION_UI_PROFILE` optionally checks an existing UI-created profile has persisted `tools=[]`, without changing that profile.
-
-The helper checks saved and materialized specs, launches a mock-model conversation for each selection (empty, glob, standard), checks the actual model-facing tool names for duplicates, and requires each conversation to finish. Mandatory finish/think and skill-related invoke_skill are independent of optional tool selection.
-
-For the UI timing check, open `/settings/agents`, add a profile, choose tools **before entering a name**, then enter a name with a valid mock LLM profile selected. Standard tools should become checked once the server responds. Clearing all tools and toggling Standard → Choose must retain the empty selection.
-
-
-The fresh smoke run overrode the example ports/state with backend 18610, frontend 18611, VS Code 18612, and /private/tmp/tool-followup-live. The mock server stayed on 18504.
+The Python scripts need `httpx` (the SDK venv has it). `tool-selection-e2e-stored.py` writes v2 profiles and a v6 `settings.json` into the persistence dir and restores `settings.json` afterwards. Use a disposable stack only.
