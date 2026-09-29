@@ -5,8 +5,8 @@ import { renderWithProviders } from "test-utils";
 import { MetaProfileEditor } from "#/components/features/settings/meta-llm-profiles";
 import type { MetaProfile } from "#/api/meta-profiles-service/meta-profiles-service.api";
 import {
-  DEFAULT_MAX_SCORE_PARETO_META_PROFILE_DEFAULT,
-  DEFAULT_MAX_SCORE_PARETO_META_PROFILE_NAME,
+  DEFAULT_ROUTER_PRO_META_PROFILE_DEFAULT,
+  DEFAULT_ROUTER_PRO_META_PROFILE_NAME,
 } from "#/components/features/settings/meta-llm-profiles/default-meta-profile";
 
 const AVAILABLE = ["minimax", "minimax-m3", "gpt", "deepseek"];
@@ -32,7 +32,7 @@ const FILLED: MetaProfile = {
 };
 
 describe("MetaProfileEditor", () => {
-  it("prefills create mode with the max-score Pareto router", async () => {
+  it("prefills create mode with the OpenHands Router Pro router", async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();
     renderWithProviders(
@@ -48,16 +48,16 @@ describe("MetaProfileEditor", () => {
     );
 
     expect(screen.getByTestId("meta-profile-name-input")).toHaveValue(
-      DEFAULT_MAX_SCORE_PARETO_META_PROFILE_NAME,
+      DEFAULT_ROUTER_PRO_META_PROFILE_NAME,
     );
     expect(screen.getByTestId("meta-profile-classifier-input")).toHaveValue(
       "minimax-m3",
     );
     expect(screen.getByTestId("meta-profile-prompt-template")).toHaveValue(
-      DEFAULT_MAX_SCORE_PARETO_META_PROFILE_DEFAULT.prompt_template,
+      DEFAULT_ROUTER_PRO_META_PROFILE_DEFAULT.prompt_template,
     );
     expect(screen.getByTestId("meta-profile-model-table")).toHaveValue(
-      DEFAULT_MAX_SCORE_PARETO_META_PROFILE_DEFAULT.model_table,
+      DEFAULT_ROUTER_PRO_META_PROFILE_DEFAULT.model_table,
     );
     expect(screen.getByTestId("meta-profile-router-connection")).toHaveValue(
       "OpenHands (openhands)",
@@ -66,8 +66,8 @@ describe("MetaProfileEditor", () => {
     await user.click(screen.getByTestId("meta-profile-save"));
 
     expect(onSave).toHaveBeenCalledWith(
-      DEFAULT_MAX_SCORE_PARETO_META_PROFILE_NAME,
-      DEFAULT_MAX_SCORE_PARETO_META_PROFILE_DEFAULT,
+      DEFAULT_ROUTER_PRO_META_PROFILE_NAME,
+      DEFAULT_ROUTER_PRO_META_PROFILE_DEFAULT,
       "conn-openhands",
     );
   });
