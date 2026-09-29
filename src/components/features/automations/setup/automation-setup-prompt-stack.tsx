@@ -476,11 +476,11 @@ export function AutomationSetupPromptStack({
               className="min-h-[120px] w-full resize-none border-0 bg-transparent p-0 text-sm text-content outline-none placeholder:text-tertiary-alt"
             />
             <div className="flex min-w-0 items-center gap-2 pt-2">
-              <SetupModelPill value={model} onChange={onModelChange} />
               <SetupAgentProfilePill
                 value={agentProfileId}
                 onChange={onAgentProfileChange}
               />
+              <SetupModelPill value={model} onChange={onModelChange} />
             </div>
             <div
               data-testid="automation-setup-prompt-grip"

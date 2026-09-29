@@ -31,6 +31,7 @@ import { handleAutomationFormUpdateAction } from "#/services/automation-form";
 import { AUTOMATION_FORM_UPDATE_ACTION_KIND } from "#/constants/automation-form";
 import { AUTOMATION_SETUP_SHOW_AGENT_EVENT } from "#/components/features/automations/setup/automation-setup-agent-request";
 import { useDeploymentCapabilities } from "#/hooks/query/use-manifest-capabilities";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import type { AutomationDraftApiResponse } from "#/manifests/types";
 
 const mockNavigate = vi.fn();
@@ -111,6 +112,9 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
     listServerDrafts: vi.fn(),
     listAutomationRuns: vi.fn().mockResolvedValue({ runs: [], total: 0 }),
     dispatchServerDraft: vi.fn(),
+    dispatchAutomation: vi.fn(),
+    updateAutomation: vi.fn(),
+    getAutomation: vi.fn(),
     createCustomWebhook: vi.fn(),
     supportsAutomationDrafts: vi.fn(),
   },
@@ -183,6 +187,7 @@ vi.mock("#/utils/tar-gzip", () => ({
 }));
 
 vi.mock("#/manifests/automation-interface", () => ({
+  automationListPath: () => "/automations",
   automationDetailPath: (id: string) => `/automations/${id}`,
   getAutomationEndpoint: (name: string) =>
     name === "createPlugin"
@@ -442,9 +447,12 @@ describe("AutomationSetupPanel", () => {
         }),
       }),
     );
-    expect(screen.getByTestId("automation-setup-status")).toHaveTextContent(
+    expect(mockToastSuccess).toHaveBeenCalledWith(
       "AUTOMATION_SETUP$READY_TO_TEST",
     );
+    expect(
+      screen.queryByTestId("automation-setup-status"),
+    ).not.toBeInTheDocument();
   });
 
   it("pins an automation model without changing the conversation profile", async () => {
@@ -493,9 +501,13 @@ describe("AutomationSetupPanel", () => {
     const user = userEvent.setup();
     renderPanel();
 
+    const agentProfile = screen.getByTestId("automation-setup-agent-profile");
+    const model = screen.getByTestId("automation-setup-model");
+    expect(agentProfile).toHaveAttribute("aria-label", "default");
     expect(
-      screen.getByTestId("automation-setup-agent-profile"),
-    ).toHaveAttribute("aria-label", "default");
+      agentProfile.compareDocumentPosition(model) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     await user.click(screen.getByTestId("automation-setup-agent-profile"));
     await user.click(
       screen.getByTestId("automation-setup-agent-profile-option-reviewer"),
@@ -1051,6 +1063,21 @@ describe("AutomationSetupPanel", () => {
       updatedAt: "2026-01-01T00:00:00.000Z",
     };
 
+    const echoSavedDraft = (
+      request: {
+        endpoint?: AutomationDraftApiResponse["endpoint"];
+        name?: string | null;
+        draft?: AutomationDraftApiResponse["draft"];
+      },
+      overrides: Partial<AutomationDraftApiResponse> = {},
+    ): AutomationDraftApiResponse => ({
+      ...dispatchableDraft,
+      endpoint: request.endpoint ?? dispatchableDraft.endpoint,
+      name: request.name ?? null,
+      draft: request.draft ?? dispatchableDraft.draft,
+      ...overrides,
+    });
+
     beforeEach(() => {
       vi.mocked(AutomationService.supportsAutomationDrafts).mockReturnValue(
         true,
@@ -1163,9 +1190,12 @@ describe("AutomationSetupPanel", () => {
           }),
         ),
       );
-      expect(screen.getByTestId("automation-setup-status")).toHaveTextContent(
+      expect(mockToastSuccess).toHaveBeenCalledWith(
         "AUTOMATION_SETUP$DRAFT_SAVED",
       );
+      expect(
+        screen.queryByTestId("automation-setup-status"),
+      ).not.toBeInTheDocument();
       expect(
         screen.getByTestId("automation-setup-draft-details"),
       ).toBeInTheDocument();
@@ -1215,13 +1245,137 @@ describe("AutomationSetupPanel", () => {
         ),
       );
       await waitFor(() =>
-        expect(screen.getByTestId("automation-setup-save-state")).toHaveTextContent(
-          "AUTOMATION_SETUP$SAVED_JUST_NOW",
-        ),
+        expect(
+          screen.getByTestId("automation-setup-save-state"),
+        ).toHaveTextContent("AUTOMATION_SETUP$SAVED_JUST_NOW"),
       );
-      expect(screen.getByTestId("automation-setup-save-state")).not.toHaveTextContent(
-        "AUTOMATION_SETUP$UNSAVED_CHANGES",
+      expect(
+        screen.getByTestId("automation-setup-save-state"),
+      ).not.toHaveTextContent("AUTOMATION_SETUP$UNSAVED_CHANGES");
+    });
+
+    it("puts draft status at the top and opens test runs behind a back button", async () => {
+      vi.mocked(AutomationService.createServerDraft).mockImplementation(
+        async (request) => ({
+          ...dispatchableDraft,
+          endpoint: request.endpoint,
+          name: request.name ?? null,
+          draft: request.draft,
+          validationErrors: null,
+        }),
       );
+
+      const user = userEvent.setup();
+      renderPanel();
+
+      expect(screen.getByTestId("automation-setup-test")).toBeDisabled();
+
+      await user.click(screen.getByTestId("automation-setup-save-draft"));
+
+      const details = await screen.findByTestId(
+        "automation-setup-draft-details",
+      );
+      const name = screen.getByTestId("automation-setup-name");
+      expect(
+        details.compareDocumentPosition(name) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      const testButton = screen.getByTestId("automation-setup-test");
+      expect(testButton).toBeEnabled();
+      expect(details).not.toContainElement(testButton);
+      const draftTest = screen.getByTestId("automation-setup-draft-test");
+      expect(details).toContainElement(draftTest);
+      expect(draftTest.parentElement?.lastElementChild).toBe(draftTest);
+
+      vi.mocked(AutomationService.getServerDraft).mockResolvedValue(
+        dispatchableDraft,
+      );
+      await user.click(draftTest);
+      expect(
+        screen.getByTestId("automation-setup-draft-runs-page"),
+      ).toBeInTheDocument();
+      await user.click(screen.getByTestId("automation-setup-draft-runs-back"));
+      expect(
+        screen.getByTestId("automation-setup-save-draft").parentElement,
+      ).toContainElement(testButton);
+
+      await user.click(screen.getByTestId("automation-setup-view-test-runs"));
+
+      expect(
+        screen.getByTestId("automation-setup-draft-runs-page"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId("automation-setup-draft-runs-back"),
+      ).toHaveTextContent("BUTTON$BACK");
+      expect(
+        screen.getByText("AUTOMATION_SETUP$TEST_RUNS"),
+      ).toBeInTheDocument();
+      const empty = screen.getByTestId("automation-setup-draft-runs-empty");
+      expect(empty).toHaveTextContent("AUTOMATIONS$DETAIL$NO_RUNS");
+      expect(empty).toHaveTextContent(
+        "AUTOMATION_SETUP$TEST_RUNS_EMPTY_DESCRIPTION",
+      );
+      expect(
+        screen
+          .getAllByTestId("automation-setup-test")
+          .some((button) => empty.contains(button)),
+      ).toBe(true);
+      expect(screen.getByTestId("automation-setup-form")).toHaveClass("hidden");
+
+      await user.click(screen.getByTestId("automation-setup-draft-runs-back"));
+
+      expect(screen.getByTestId("automation-setup-form")).not.toHaveClass(
+        "hidden",
+      );
+      expect(
+        screen.queryByTestId("automation-setup-draft-runs-page"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("shows draft and test errors on the test runs page", async () => {
+      const blockedDraft = {
+        ...dispatchableDraft,
+        dispatchable: false,
+        validationErrors: [
+          {
+            field: null,
+            code: "webhook",
+            message: "No webhook is configured",
+          },
+        ],
+      };
+      vi.mocked(AutomationService.createServerDraft).mockResolvedValue(
+        blockedDraft,
+      );
+      vi.mocked(AutomationService.updateServerDraft).mockResolvedValue(
+        blockedDraft,
+      );
+
+      const user = userEvent.setup();
+      renderPanel();
+      await user.click(screen.getByTestId("automation-setup-save-draft"));
+      await screen.findByTestId("automation-setup-draft-details");
+      await user.click(screen.getByTestId("automation-setup-view-test-runs"));
+
+      expect(
+        screen.getByTestId("automation-setup-draft-runs-error"),
+      ).toHaveTextContent("No webhook is configured");
+
+      const pageTest = screen
+        .getAllByTestId("automation-setup-test")
+        .find((button) =>
+          screen
+            .getByTestId("automation-setup-draft-runs-empty")
+            .contains(button),
+        );
+      await user.click(pageTest!);
+
+      await waitFor(() =>
+        expect(
+          screen.getAllByTestId("automation-setup-draft-runs-error"),
+        ).toHaveLength(1),
+      );
+      expect(AutomationService.dispatchServerDraft).not.toHaveBeenCalled();
     });
 
     it("tags the conversation with the server draft id after saving", async () => {
@@ -1381,11 +1535,11 @@ describe("AutomationSetupPanel", () => {
     });
 
     it("persists then dispatches the draft on Test", async () => {
-      vi.mocked(AutomationService.createServerDraft).mockResolvedValue(
-        dispatchableDraft,
+      vi.mocked(AutomationService.createServerDraft).mockImplementation(
+        async (request) => echoSavedDraft(request),
       );
-      vi.mocked(AutomationService.updateServerDraft).mockResolvedValue(
-        dispatchableDraft,
+      vi.mocked(AutomationService.updateServerDraft).mockImplementation(
+        async (_id, request) => echoSavedDraft(request),
       );
       vi.mocked(AutomationService.dispatchServerDraft).mockResolvedValue({
         id: "run-1",
@@ -1400,6 +1554,10 @@ describe("AutomationSetupPanel", () => {
       const user = userEvent.setup();
       renderPanel();
 
+      await user.click(screen.getByTestId("automation-setup-save-draft"));
+      await waitFor(() =>
+        expect(screen.getByTestId("automation-setup-test")).toBeEnabled(),
+      );
       await user.click(screen.getByTestId("automation-setup-test"));
 
       await waitFor(() =>
@@ -1408,37 +1566,62 @@ describe("AutomationSetupPanel", () => {
         ),
       );
       expect(AutomationService.validateDraft).not.toHaveBeenCalled();
-      expect(screen.getByTestId("automation-setup-status")).toHaveTextContent(
+      expect(mockToastSuccess).toHaveBeenCalledWith(
         "AUTOMATION_SETUP$TEST_DISPATCHED",
       );
+      expect(
+        screen.queryByTestId("automation-setup-status"),
+      ).not.toBeInTheDocument();
       expect(mockNavigate).not.toHaveBeenCalledWith(
         "/conversations/conv-run-1",
       );
     });
 
     it("surfaces validation errors when the draft is not dispatchable", async () => {
-      vi.mocked(AutomationService.createServerDraft).mockResolvedValue({
-        ...dispatchableDraft,
-        dispatchable: false,
-        validationErrors: [
-          {
-            field: "trigger.schedule",
-            code: "interval_too_short",
-            message: "Minimum interval is 5 minutes.",
-          },
-        ],
-      });
+      const blocked = (
+        request: Parameters<typeof echoSavedDraft>[0],
+      ): AutomationDraftApiResponse =>
+        echoSavedDraft(request, {
+          dispatchable: false,
+          validationErrors: [
+            {
+              field: "trigger.schedule",
+              code: "interval_too_short",
+              message: "Minimum interval is 5 minutes.",
+            },
+          ],
+        });
+      vi.mocked(AutomationService.createServerDraft).mockImplementation(
+        async (request) => blocked(request),
+      );
+      vi.mocked(AutomationService.updateServerDraft).mockImplementation(
+        async (_id, request) => blocked(request),
+      );
 
       const user = userEvent.setup();
       renderPanel();
 
+      await user.click(screen.getByTestId("automation-setup-save-draft"));
+      await waitFor(() =>
+        expect(screen.getByTestId("automation-setup-test")).toBeEnabled(),
+      );
+      const validity = screen.getByTestId("automation-setup-draft-validity");
+      expect(validity.parentElement).toBe(
+        screen.getByTestId("automation-setup-draft-details"),
+      );
+      expect(validity.previousElementSibling).toContainElement(
+        screen.getByTestId("automation-setup-draft-test"),
+      );
       await user.click(screen.getByTestId("automation-setup-test"));
 
       await waitFor(() =>
-        expect(screen.getByTestId("automation-setup-status")).toHaveTextContent(
-          "Minimum interval is 5 minutes.",
-        ),
+        expect(
+          screen.getByTestId("automation-setup-draft-runs-error"),
+        ).toHaveTextContent("Minimum interval is 5 minutes."),
       );
+      expect(
+        screen.queryByTestId("automation-setup-status"),
+      ).not.toBeInTheDocument();
       expect(AutomationService.dispatchServerDraft).not.toHaveBeenCalled();
     });
 
@@ -1485,8 +1668,11 @@ describe("AutomationSetupPanel", () => {
     });
 
     it("sends synthetic JSON payload when testing an event draft", async () => {
-      vi.mocked(AutomationService.createServerDraft).mockResolvedValue(
-        dispatchableDraft,
+      vi.mocked(AutomationService.createServerDraft).mockImplementation(
+        async (request) => echoSavedDraft(request),
+      );
+      vi.mocked(AutomationService.updateServerDraft).mockImplementation(
+        async (_id, request) => echoSavedDraft(request),
       );
       vi.mocked(AutomationService.dispatchServerDraft).mockResolvedValue({
         id: "run-1",
@@ -1514,6 +1700,10 @@ describe("AutomationSetupPanel", () => {
           value: JSON.stringify({ type: "issue.created", action: "opened" }),
         },
       });
+      await user.click(screen.getByTestId("automation-setup-save-draft"));
+      await waitFor(() =>
+        expect(screen.getByTestId("automation-setup-test")).toBeEnabled(),
+      );
       await user.click(screen.getByTestId("automation-setup-test"));
 
       await waitFor(() =>
@@ -1551,8 +1741,11 @@ describe("AutomationSetupPanel", () => {
         updated_at: "2026-01-01T00:00:00.000Z",
         webhook_secret: "generated-secret",
       });
-      vi.mocked(AutomationService.createServerDraft).mockResolvedValue(
-        dispatchableDraft,
+      vi.mocked(AutomationService.createServerDraft).mockImplementation(
+        async (request) => echoSavedDraft(request),
+      );
+      vi.mocked(AutomationService.updateServerDraft).mockImplementation(
+        async (_id, request) => echoSavedDraft(request),
       );
       vi.mocked(AutomationService.dispatchServerDraft).mockResolvedValue({
         id: "run-1",
@@ -1597,12 +1790,19 @@ describe("AutomationSetupPanel", () => {
         ),
       ).not.toBeNull();
       await user.click(custom);
-      fireEvent.change(screen.getByTestId("automation-setup-event-source"), {
+      const sourceInput = screen.getByTestId("automation-setup-event-source");
+      expect(sourceInput).toHaveValue("");
+      expect(sourceInput).toHaveAttribute(
+        "placeholder",
+        "AUTOMATION_SETUP$EVENT_SOURCE_CUSTOM_PLACEHOLDER",
+      );
+      expect(sourceInput).toHaveFocus();
+      fireEvent.change(sourceInput, {
         target: { value: "incident-alerts" },
       });
       expect(
         screen.getByTestId("automation-setup-custom-webhook-enabled"),
-      ).toBeInTheDocument();
+      ).toBeChecked();
       await user.click(
         screen.getByTestId("automation-setup-event-source-toggle"),
       );
@@ -1611,9 +1811,6 @@ describe("AutomationSetupPanel", () => {
       ).toBeInTheDocument();
       await user.click(
         screen.getByTestId("automation-setup-event-source-toggle"),
-      );
-      await user.click(
-        screen.getByTestId("automation-setup-custom-webhook-enabled"),
       );
       await user.type(
         screen.getByTestId("automation-setup-custom-webhook-name"),
@@ -1626,6 +1823,10 @@ describe("AutomationSetupPanel", () => {
       fireEvent.change(
         screen.getByTestId("automation-setup-custom-webhook-signature-header"),
         { target: { value: "X-Incident-Signature" } },
+      );
+      await user.click(screen.getByTestId("automation-setup-save-draft"));
+      await waitFor(() =>
+        expect(screen.getByTestId("automation-setup-test")).toBeEnabled(),
       );
       await user.click(screen.getByTestId("automation-setup-test"));
 
@@ -1662,12 +1863,21 @@ describe("AutomationSetupPanel", () => {
         "automation-setup-event-test-payload",
       );
       fireEvent.change(payloadInput, { target: { value: "not json" } });
+      vi.mocked(AutomationService.createServerDraft).mockImplementation(
+        async (request) => echoSavedDraft(request),
+      );
+      await user.click(screen.getByTestId("automation-setup-save-draft"));
+      await waitFor(() =>
+        expect(screen.getByTestId("automation-setup-test")).toBeEnabled(),
+      );
       await user.click(screen.getByTestId("automation-setup-test"));
 
-      expect(screen.getByTestId("automation-setup-status")).toHaveTextContent(
+      expect(displayErrorToast).toHaveBeenCalledWith(
         "AUTOMATION_SETUP$TEST_EVENT_PAYLOAD_INVALID",
       );
-      expect(AutomationService.createServerDraft).not.toHaveBeenCalled();
+      expect(
+        screen.queryByTestId("automation-setup-status"),
+      ).not.toBeInTheDocument();
       expect(AutomationService.dispatchServerDraft).not.toHaveBeenCalled();
     });
 
@@ -1706,5 +1916,76 @@ describe("AutomationSetupPanel", () => {
         "/automations/automation-final",
       );
     });
+  });
+
+  it("saves and tests an existing automation instead of drafting or creating one", async () => {
+    vi.mocked(AutomationService.updateAutomation).mockResolvedValue({
+      id: "auto-1",
+    } as never);
+    vi.mocked(AutomationService.dispatchAutomation).mockResolvedValue({
+      id: "run-9",
+    } as never);
+
+    const user = userEvent.setup();
+    renderPanel({
+      prompt: "Review every pull request",
+      kind: "prompt",
+      editingAutomationId: "auto-1",
+      form: {
+        kind: "prompt",
+        name: "Daily digest",
+        prompt: "Review every pull request",
+      },
+    });
+
+    expect(
+      screen.queryByTestId("automation-setup-save-draft"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automation-setup-create"),
+    ).not.toBeInTheDocument();
+    expect(
+      [
+        ...(screen
+          .getByTestId("automation-setup-test")
+          .parentElement?.querySelectorAll("button") ?? []),
+      ].map((button) => button.getAttribute("data-testid")),
+    ).toEqual([
+      "automation-setup-test",
+      "automation-setup-save",
+      "automation-setup-close",
+    ]);
+    expect(screen.getByTestId("automation-setup-save")).toHaveTextContent(
+      "BUTTON$SAVE",
+    );
+    expect(screen.getByTestId("automation-setup-close")).toHaveTextContent(
+      "BUTTON$CLOSE",
+    );
+    expect(screen.getByTestId("automation-setup-name")).toHaveValue(
+      "Daily digest",
+    );
+
+    await user.click(screen.getByTestId("automation-setup-save"));
+    await waitFor(() =>
+      expect(AutomationService.updateAutomation).toHaveBeenCalledWith(
+        "auto-1",
+        expect.objectContaining({
+          name: "Daily digest",
+          prompt: "Review every pull request",
+        }),
+      ),
+    );
+    expect(AutomationService.createServerDraft).not.toHaveBeenCalled();
+    expect(AutomationService.createAutomationDraft).not.toHaveBeenCalled();
+
+    await user.click(screen.getByTestId("automation-setup-test"));
+    await waitFor(() =>
+      expect(AutomationService.dispatchAutomation).toHaveBeenCalledWith(
+        "auto-1",
+      ),
+    );
+
+    await user.click(screen.getByTestId("automation-setup-close"));
+    expect(mockNavigate).toHaveBeenCalledWith("/automations");
   });
 });
