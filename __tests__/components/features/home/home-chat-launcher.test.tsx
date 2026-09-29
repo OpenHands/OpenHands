@@ -438,26 +438,6 @@ describe("HomeChatLauncher", () => {
     );
   });
 
-  it("does not seed an automation setup draft in Code mode", async () => {
-    vi.spyOn(
-      AgentServerConversationService,
-      "createConversation",
-    ).mockResolvedValue(
-      makeConversationResponse({ app_conversation_id: "conv-code" }),
-    );
-
-    renderLauncher();
-    const user = userEvent.setup();
-
-    await user.click(screen.getByTestId("home-launcher-mode-code"));
-    await user.click(screen.getByTestId("stub-chat-submit"));
-
-    await waitFor(() =>
-      expect(mockNavigate).toHaveBeenCalledWith("/conversations/conv-code"),
-    );
-    expect(mockMarkAutomationSetupHandoff).not.toHaveBeenCalled();
-  });
-
   it("disables the chat input and won't create a conversation when no LLM is configured", async () => {
     mockUseLlmConfigured.mockReturnValue({
       isConfigured: false,
@@ -770,50 +750,53 @@ describe("HomeChatLauncher", () => {
     );
   });
 
-  it("attaches picked plugins to code-mode conversations", async () => {
-    const createSpy = vi
-      .spyOn(AgentServerConversationService, "createConversation")
-      .mockResolvedValue(makeConversationResponse());
+  it.each([
+    {
+      name: "code mode with picked plugins",
+      prepare: async () => {
+        await userEvent.click(screen.getByTestId("open-plugin-picker"));
+        await userEvent.click(await screen.findByTestId("stub-plugin-pick"));
+      },
+      expectedPlugins: [{ source: "github:o/a", ref: null, repo_path: null }],
+      marksAutomationSetup: false,
+    },
+    {
+      name: "automate mode",
+      prepare: async () => {
+        await userEvent.click(
+          screen.getByTestId("home-launcher-mode-automate"),
+        );
+      },
+      expectedPlugins: undefined,
+      marksAutomationSetup: true,
+    },
+  ])(
+    "creates a conversation in $name",
+    async ({ prepare, expectedPlugins, marksAutomationSetup }) => {
+      const createSpy = vi
+        .spyOn(AgentServerConversationService, "createConversation")
+        .mockResolvedValue(makeConversationResponse());
 
-    renderLauncher();
-    const user = userEvent.setup();
+      renderLauncher();
 
-    await user.click(screen.getByTestId("open-plugin-picker"));
-    await user.click(await screen.findByTestId("stub-plugin-pick"));
-    await user.click(screen.getByTestId("stub-chat-submit"));
+      await prepare();
+      await userEvent.click(screen.getByTestId("stub-chat-submit"));
 
-    await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
-    expect(createSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        initialUserMsg: "hello world",
-        plugins: [{ source: "github:o/a", ref: null, repo_path: null }],
-        metadata: null,
-      }),
-    );
-    expect(mockMarkAutomationSetupHandoff).not.toHaveBeenCalled();
-  });
-
-  it("sends automate launch text as chat and opens a blank setup form", async () => {
-    const createSpy = vi
-      .spyOn(AgentServerConversationService, "createConversation")
-      .mockResolvedValue(makeConversationResponse());
-
-    renderLauncher();
-    const user = userEvent.setup();
-
-    await user.click(screen.getByTestId("home-launcher-mode-automate"));
-    await user.click(screen.getByTestId("stub-chat-submit"));
-
-    await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
-    expect(createSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        initialUserMsg: "hello world",
-        plugins: undefined,
-        metadata: null,
-      }),
-    );
-    expect(mockMarkAutomationSetupHandoff).toHaveBeenCalledWith("conv-abc");
-  });
+      await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          initialUserMsg: "hello world",
+          plugins: expectedPlugins,
+          metadata: null,
+        }),
+      );
+      if (marksAutomationSetup) {
+        expect(mockMarkAutomationSetupHandoff).toHaveBeenCalledWith("conv-abc");
+      } else {
+        expect(mockMarkAutomationSetupHandoff).not.toHaveBeenCalled();
+      }
+    },
+  );
 
   it("renders the recommended automations rail above pinned activity in Automate mode", async () => {
     renderLauncher();

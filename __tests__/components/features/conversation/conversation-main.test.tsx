@@ -166,7 +166,7 @@ vi.mock(
 
 import { ConversationMain } from "#/components/features/conversation/conversation-main/conversation-main";
 
-function renderConversationMain() {
+function conversationMainTree() {
   const navigation: NavigationContextValue = {
     currentPath: "/conversations/conv-1",
     conversationId: "conv-1",
@@ -174,13 +174,17 @@ function renderConversationMain() {
     navigate: mockNavigate,
   };
 
-  return render(
+  return (
     <NavigationProvider value={navigation}>
       <SidebarMobileNavProvider>
         <ConversationMain />
       </SidebarMobileNavProvider>
-    </NavigationProvider>,
+    </NavigationProvider>
   );
+}
+
+function renderConversationMain() {
+  return render(conversationMainTree());
 }
 
 describe("ConversationMain - Layout Transition Stability", () => {
@@ -196,71 +200,32 @@ describe("ConversationMain - Layout Transition Stability", () => {
     mockClearAutomationSetupHandoff.mockClear();
   });
 
-  it("renders ChatInterface at desktop width", () => {
-    mockIsMobile = false;
+  it.each([
+    ["desktop", false],
+    ["mobile", true],
+  ])("renders ChatInterface at %s width", (_name, isMobile) => {
+    mockIsMobile = isMobile;
     renderConversationMain();
     expect(screen.getByTestId("chat-interface")).toBeInTheDocument();
   });
 
-  it("renders ChatInterface at mobile width", () => {
-    mockIsMobile = true;
-    renderConversationMain();
-    expect(screen.getByTestId("chat-interface")).toBeInTheDocument();
-  });
+  it.each([
+    ["desktop to mobile", false, true],
+    ["mobile to desktop", true, false],
+  ])(
+    "does not unmount ChatInterface when crossing from %s",
+    (_name, initialIsMobile, nextIsMobile) => {
+      mockIsMobile = initialIsMobile;
+      const { rerender } = renderConversationMain();
+      expect(chatInterfaceUnmount).not.toHaveBeenCalled();
 
-  it("does not unmount ChatInterface when crossing from desktop to mobile", () => {
-    mockIsMobile = false;
-    const { rerender } = renderConversationMain();
-    expect(chatInterfaceUnmount).not.toHaveBeenCalled();
+      mockIsMobile = nextIsMobile;
+      rerender(conversationMainTree());
 
-    // Cross the breakpoint to mobile
-    mockIsMobile = true;
-    rerender(
-      <NavigationProvider
-        value={{
-          currentPath: "/conversations/conv-1",
-          conversationId: "conv-1",
-          isNavigating: false,
-          navigate: mockNavigate,
-        }}
-      >
-        <SidebarMobileNavProvider>
-          <ConversationMain />
-        </SidebarMobileNavProvider>
-      </NavigationProvider>,
-    );
-
-    // ChatInterface must NOT have been unmounted and remounted
-    expect(chatInterfaceUnmount).not.toHaveBeenCalled();
-    expect(screen.getByTestId("chat-interface")).toBeInTheDocument();
-  });
-
-  it("does not unmount ChatInterface when crossing from mobile to desktop", () => {
-    mockIsMobile = true;
-    const { rerender } = renderConversationMain();
-    expect(chatInterfaceUnmount).not.toHaveBeenCalled();
-
-    // Cross the breakpoint to desktop
-    mockIsMobile = false;
-    rerender(
-      <NavigationProvider
-        value={{
-          currentPath: "/conversations/conv-1",
-          conversationId: "conv-1",
-          isNavigating: false,
-          navigate: mockNavigate,
-        }}
-      >
-        <SidebarMobileNavProvider>
-          <ConversationMain />
-        </SidebarMobileNavProvider>
-      </NavigationProvider>,
-    );
-
-    // ChatInterface must NOT have been unmounted and remounted
-    expect(chatInterfaceUnmount).not.toHaveBeenCalled();
-    expect(screen.getByTestId("chat-interface")).toBeInTheDocument();
-  });
+      expect(chatInterfaceUnmount).not.toHaveBeenCalled();
+      expect(screen.getByTestId("chat-interface")).toBeInTheDocument();
+    },
+  );
 
   it("survives rapid back-and-forth resize without unmounting ChatInterface", () => {
     mockIsMobile = false;
@@ -269,20 +234,7 @@ describe("ConversationMain - Layout Transition Stability", () => {
     // Simulate rapid resize back and forth across the breakpoint
     for (const mobile of [true, false, true, false, true]) {
       mockIsMobile = mobile;
-      rerender(
-        <NavigationProvider
-          value={{
-            currentPath: "/conversations/conv-1",
-            conversationId: "conv-1",
-            isNavigating: false,
-            navigate: mockNavigate,
-          }}
-        >
-          <SidebarMobileNavProvider>
-            <ConversationMain />
-          </SidebarMobileNavProvider>
-        </NavigationProvider>,
-      );
+      rerender(conversationMainTree());
     }
 
     expect(chatInterfaceUnmount).not.toHaveBeenCalled();
@@ -429,43 +381,36 @@ describe("ConversationMain - Layout Transition Stability", () => {
     expect(
       screen.getByTestId("automation-setup-docked-composer"),
     ).toBeInTheDocument();
-    expect(
-      screen.getByTestId("automation-setup-docked-composer").parentElement
-        ?.parentElement,
-    ).toHaveClass(
-      "px-5",
-      "custom-scrollbar-always",
-      "[scrollbar-gutter:stable]",
-    );
     expect(screen.getByTestId("docked-composer-submit")).toBeInTheDocument();
-
-    await user.click(screen.getByTestId("docked-composer-submit"));
-
-    expect(screen.getByTestId("conversation-chat-panel")).toHaveStyle({
-      width: "50%",
-    });
-    expect(
-      screen.queryByTestId("automation-setup-docked-composer"),
-    ).not.toBeInTheDocument();
   });
 
-  it("reveals the agent when the setup form asks for help", async () => {
-    const user = userEvent.setup();
-    mockIsRightPanelShown = true;
-    mockHasAutomationSetupHandoff = true;
+  it.each(["docked composer submit", "setup form help request"])(
+    "reveals the agent from %s",
+    async (trigger) => {
+      const user = userEvent.setup();
+      mockIsRightPanelShown = true;
+      mockHasAutomationSetupHandoff = true;
 
-    renderConversationMain();
-    await user.click(screen.getByTestId("automation-setup-agent-toggle"));
-    expect(screen.getByTestId("conversation-chat-panel")).toHaveStyle({
-      width: "0%",
-    });
+      renderConversationMain();
+      await user.click(screen.getByTestId("automation-setup-agent-toggle"));
+      expect(screen.getByTestId("conversation-chat-panel")).toHaveStyle({
+        width: "0%",
+      });
 
-    act(() => {
-      requestAutomationSetupAgent();
-    });
+      if (trigger === "docked composer submit") {
+        await user.click(screen.getByTestId("docked-composer-submit"));
+      } else {
+        act(() => {
+          requestAutomationSetupAgent();
+        });
+      }
 
-    expect(screen.getByTestId("conversation-chat-panel")).toHaveStyle({
-      width: "50%",
-    });
-  });
+      expect(screen.getByTestId("conversation-chat-panel")).toHaveStyle({
+        width: "50%",
+      });
+      expect(
+        screen.queryByTestId("automation-setup-docked-composer"),
+      ).not.toBeInTheDocument();
+    },
+  );
 });

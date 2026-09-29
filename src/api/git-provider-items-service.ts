@@ -20,7 +20,7 @@ export interface UserRepositoryListResult {
 }
 
 const PROVIDER_TOKEN_SECRET_CANDIDATES: Partial<Record<Provider, string[]>> = {
-  github: ["github_token", "GITHUB_TOKEN", "GH_TOKEN", "github"],
+  github: ["GITHUB_TOKEN", "GH_TOKEN", "github"],
   gitlab: ["GITLAB_TOKEN", "GL_TOKEN", "gitlab"],
   bitbucket: ["BITBUCKET_TOKEN", "bitbucket"],
   forgejo: ["FORGEJO_TOKEN", "forgejo"],

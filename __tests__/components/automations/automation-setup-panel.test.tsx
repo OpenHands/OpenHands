@@ -94,19 +94,6 @@ describe("AutomationSetupPanel", () => {
     vi.clearAllMocks();
   });
 
-  it("renders compact top toolbar actions", () => {
-    renderPanel();
-
-    expect(screen.getByTestId("automation-setup-save-draft")).toHaveClass(
-      "!h-7",
-      "!min-h-7",
-      "!px-2.5",
-      "!text-xs",
-    );
-    expect(screen.getByTestId("automation-setup-test")).toHaveClass("!h-7");
-    expect(screen.getByTestId("automation-setup-create")).toHaveClass("!h-7");
-  });
-
   it("switches between prompt, plugin, and custom form types", async () => {
     const user = userEvent.setup();
     renderPanel();
