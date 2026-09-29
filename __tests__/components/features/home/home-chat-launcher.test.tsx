@@ -770,7 +770,7 @@ describe("HomeChatLauncher", () => {
     );
   });
 
-  it("attaches the picked plugins to the created conversation", async () => {
+  it("attaches picked plugins to code-mode conversations", async () => {
     const createSpy = vi
       .spyOn(AgentServerConversationService, "createConversation")
       .mockResolvedValue(makeConversationResponse());
@@ -778,7 +778,6 @@ describe("HomeChatLauncher", () => {
     renderLauncher();
     const user = userEvent.setup();
 
-    await user.click(screen.getByTestId("home-launcher-mode-automate"));
     await user.click(screen.getByTestId("open-plugin-picker"));
     await user.click(await screen.findByTestId("stub-plugin-pick"));
     await user.click(screen.getByTestId("stub-chat-submit"));
@@ -791,10 +790,31 @@ describe("HomeChatLauncher", () => {
         metadata: null,
       }),
     );
+    expect(mockSetAutomationSetupDraft).not.toHaveBeenCalled();
+  });
+
+  it("sends automate launch text as chat and opens a blank setup form", async () => {
+    const createSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue(makeConversationResponse());
+
+    renderLauncher();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId("home-launcher-mode-automate"));
+    await user.click(screen.getByTestId("stub-chat-submit"));
+
+    await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        initialUserMsg: "hello world",
+        plugins: undefined,
+        metadata: null,
+      }),
+    );
     expect(mockSetAutomationSetupDraft).toHaveBeenCalledWith("conv-abc", {
-      prompt: "hello world",
-      kind: "plugin",
-      plugins: ["github:o/a"],
+      prompt: "",
+      kind: "prompt",
     });
   });
 
