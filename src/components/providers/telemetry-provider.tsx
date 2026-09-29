@@ -12,6 +12,8 @@ import {
 
 const POSTHOG_BOOTSTRAP_KEY = "posthog_bootstrap";
 const POSTHOG_HANDOFF_PARAM = "oh_ph_handoff";
+const CONSUMED_HANDOFF_NONCES_KEY = `${POSTHOG_BOOTSTRAP_KEY}:consumed_nonces`;
+const MAX_CONSUMED_HANDOFF_NONCES = 100;
 const consumedHandoffNonces = new Set<string>();
 
 type PostHogHandoff = {
@@ -91,29 +93,58 @@ function sanitizeAttribution(
   return Object.keys(attribution).length > 0 ? attribution : undefined;
 }
 
-function isHandoffNonceConsumed(nonce: string): boolean {
-  if (consumedHandoffNonces.has(nonce)) return true;
+function pruneConsumedNonceMap(
+  nonces: Record<string, number>,
+  now = Date.now(),
+): Record<string, number> {
+  return Object.fromEntries(
+    Object.entries(nonces)
+      .filter(([, exp]) => Number.isFinite(exp) && exp >= now)
+      .sort(([, leftExp], [, rightExp]) => rightExp - leftExp)
+      .slice(0, MAX_CONSUMED_HANDOFF_NONCES),
+  );
+}
+
+function getConsumedNonceMap(): Record<string, number> {
+  const storage = safeLocalStorage();
+  if (!storage) return {};
 
   try {
-    return (
-      safeLocalStorage()?.getItem(`${POSTHOG_BOOTSTRAP_KEY}:${nonce}`) ===
-      "consumed"
-    );
+    const stored = storage.getItem(CONSUMED_HANDOFF_NONCES_KEY);
+    if (!stored) return {};
+    const parsed: unknown = JSON.parse(stored);
+    if (typeof parsed !== "object" || parsed === null) return {};
+    return pruneConsumedNonceMap(parsed as Record<string, number>);
   } catch {
-    return false;
+    return {};
   }
 }
 
-function markHandoffNonceConsumed(nonce: string): void {
-  consumedHandoffNonces.add(nonce);
+function setConsumedNonceMap(nonces: Record<string, number>): void {
+  const storage = safeLocalStorage();
+  if (!storage) return;
+
   try {
-    safeLocalStorage()?.setItem(
-      `${POSTHOG_BOOTSTRAP_KEY}:${nonce}`,
-      "consumed",
+    storage.setItem(
+      CONSUMED_HANDOFF_NONCES_KEY,
+      JSON.stringify(pruneConsumedNonceMap(nonces)),
     );
   } catch {
     // In-memory replay protection still applies for this page lifetime.
   }
+}
+
+function isHandoffNonceConsumed(nonce: string): boolean {
+  if (consumedHandoffNonces.has(nonce)) return true;
+  return Object.prototype.hasOwnProperty.call(getConsumedNonceMap(), nonce);
+}
+
+function markHandoffNonceConsumed(nonce: string, exp: number): void {
+  consumedHandoffNonces.add(nonce);
+  setConsumedNonceMap({
+    ...getConsumedNonceMap(),
+    [nonce]: exp,
+  });
 }
 
 function removeHandoffFromUrl(
@@ -166,7 +197,7 @@ function parseStructuredHandoff(encoded: string): StoredHandoff | undefined {
       exp: candidate.exp,
       nonce: candidate.nonce,
     };
-    markHandoffNonceConsumed(candidate.nonce);
+    markHandoffNonceConsumed(candidate.nonce, candidate.exp);
     return handoff;
   } catch {
     return undefined;

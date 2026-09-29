@@ -202,7 +202,10 @@ describe("TelemetryProvider", () => {
       session_id: "url-docs-session",
       attribution: { cta_surface: "docs_link" },
     });
-    localStorage.setItem("posthog_bootstrap:nonce-forwarded", "consumed");
+    localStorage.setItem(
+      "posthog_bootstrap:consumed_nonces",
+      JSON.stringify({ "nonce-forwarded": Date.now() + 60_000 }),
+    );
     sessionStorage.setItem(
       "posthog_bootstrap",
       JSON.stringify({
@@ -268,6 +271,43 @@ describe("TelemetryProvider", () => {
 
     expect(configureBootstrapMock).toHaveBeenCalledWith(undefined);
     expect(setWebsiteAttributionMock).toHaveBeenCalledWith(undefined);
+  });
+
+  it("stores consumed structured handoff nonces in a pruned bounded map", () => {
+    const now = Date.now();
+    localStorage.setItem(
+      "posthog_bootstrap:consumed_nonces",
+      JSON.stringify({
+        expired: now - 60_000,
+        ...Object.fromEntries(
+          Array.from({ length: 105 }, (_, index) => [
+            `existing-${index}`,
+            now + 10_000 + index,
+          ]),
+        ),
+      }),
+    );
+    window.location.hash = `oh_ph_handoff=${encodeHandoff({
+      v: 1,
+      exp: now + 120_000,
+      nonce: "bounded-new",
+      distinct_id: "website-anon-id",
+      session_id: "website-session-id",
+    })}`;
+
+    render(
+      <TelemetryProvider config={runtimeConfig}>
+        <div />
+      </TelemetryProvider>,
+    );
+
+    const stored = JSON.parse(
+      localStorage.getItem("posthog_bootstrap:consumed_nonces") ?? "{}",
+    );
+    expect(Object.keys(stored)).toHaveLength(100);
+    expect(stored.expired).toBeUndefined();
+    expect(stored["bounded-new"]).toBe(now + 120_000);
+    expect(localStorage.getItem("posthog_bootstrap:bounded-new")).toBeNull();
   });
 
   it("mounts telemetry lifecycle when analytics are enabled", () => {
