@@ -164,16 +164,15 @@ export function HomeChatLauncher() {
     // Explicitly-attached plugins are additive on top of any ambient set and
     // are resolved from git at run time. Omitted entirely when none selected so
     // nothing attaches unless the user picked it.
-    if (selectedPlugins.length > 0) {
+    if (!isAutomateMode && selectedPlugins.length > 0) {
       variables = { ...variables, plugins: selectedPlugins };
     }
 
-    const seedAutomationSetupDraft = (conversationId: string) => {
-      if (!isAutomateMode || !trimmed) return;
+    const openAutomationSetupMode = (conversationId: string) => {
+      if (!isAutomateMode) return;
       setAutomationSetupDraft(conversationId, {
-        prompt: trimmed,
-        kind: selectedPlugins.length > 0 ? "plugin" : "prompt",
-        plugins: selectedPlugins.map((plugin) => plugin.source),
+        prompt: "",
+        kind: "prompt",
       });
     };
 
@@ -228,7 +227,7 @@ export function HomeChatLauncher() {
               images: attachmentSnapshot.images,
               imagesMarkedUploadAsFile,
             });
-            seedAutomationSetupDraft(targetConversationId);
+            openAutomationSetupMode(targetConversationId);
             navigate(`/conversations/${targetConversationId}`);
             return;
           } else {
@@ -258,7 +257,7 @@ export function HomeChatLauncher() {
           });
         }
 
-        seedAutomationSetupDraft(targetConversationId);
+        openAutomationSetupMode(targetConversationId);
         navigate(`/conversations/${targetConversationId}`);
       } catch (error) {
         toast.dismiss(toastId);
