@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatDictationButton } from "#/components/features/chat/chat-dictation-button";
@@ -88,7 +88,7 @@ describe("ChatDictationButton", () => {
 
   it("transcribes recorded audio with the configured endpoint", async () => {
     writeTranscriptionEndpoint({
-      baseUrl: "http://localhost:9000/v1/",
+      baseUrl: " http://localhost:9000/v1/ ",
       apiKey: "secret",
     });
     vi.stubGlobal("MediaRecorder", FakeMediaRecorder);
@@ -107,7 +107,9 @@ describe("ChatDictationButton", () => {
     await user.click(screen.getByTestId("chat-dictation-button"));
     await user.click(screen.getByTestId("chat-dictation-button"));
 
-    await waitFor(() => expect(onTranscript).toHaveBeenCalledWith("hello world"));
+    await waitFor(() =>
+      expect(onTranscript).toHaveBeenCalledWith("hello world"),
+    );
     const [url, init] = fetchSpy.mock.calls[0];
     expect(url).toBe("http://localhost:9000/v1/audio/transcriptions");
     expect(init?.headers).toEqual({ Authorization: "Bearer secret" });
@@ -130,5 +132,75 @@ describe("ChatDictationButton", () => {
     expect(displayErrorToast).toHaveBeenCalledWith(
       I18nKey.CHAT_INTERFACE$DICTATION_FAILED,
     );
+  });
+
+  it("ignores clicks while the permission prompt is open", async () => {
+    writeTranscriptionEndpoint({ baseUrl: "http://localhost:9000/v1" });
+    vi.stubGlobal("MediaRecorder", FakeMediaRecorder);
+    let grant: (stream: MediaStream) => void = () => {};
+    const getUserMedia = vi.fn(
+      () =>
+        new Promise<MediaStream>((resolve) => {
+          grant = resolve;
+        }),
+    );
+    vi.stubGlobal("navigator", { mediaDevices: { getUserMedia } });
+    const user = userEvent.setup();
+    render(<ChatDictationButton onTranscript={vi.fn()} />);
+
+    await user.click(screen.getByTestId("chat-dictation-button"));
+    await user.click(screen.getByTestId("chat-dictation-button"));
+
+    expect(getUserMedia).toHaveBeenCalledOnce();
+    await act(async () =>
+      grant({ getTracks: () => [] } as unknown as MediaStream),
+    );
+    expect(screen.getByTestId("chat-dictation-button")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("can still stop a recording after the input turns read-only", async () => {
+    vi.stubGlobal("webkitSpeechRecognition", FakeSpeechRecognition);
+    const user = userEvent.setup();
+    const { rerender } = render(<ChatDictationButton onTranscript={vi.fn()} />);
+
+    await user.click(screen.getByTestId("chat-dictation-button"));
+    rerender(<ChatDictationButton onTranscript={vi.fn()} disabled />);
+
+    expect(screen.getByTestId("chat-dictation-button")).toBeEnabled();
+    await user.click(screen.getByTestId("chat-dictation-button"));
+    expect(FakeSpeechRecognition.instance.stop).toHaveBeenCalledOnce();
+    expect(screen.getByTestId("chat-dictation-button")).toBeDisabled();
+  });
+
+  it("releases the microphone when unmounted during the permission prompt", async () => {
+    writeTranscriptionEndpoint({ baseUrl: "http://localhost:9000/v1" });
+    const MediaRecorderSpy = vi.fn();
+    vi.stubGlobal("MediaRecorder", MediaRecorderSpy);
+    let grant: (stream: MediaStream) => void = () => {};
+    vi.stubGlobal("navigator", {
+      mediaDevices: {
+        getUserMedia: () =>
+          new Promise<MediaStream>((resolve) => {
+            grant = resolve;
+          }),
+      },
+    });
+    const stopTrack = vi.fn();
+    const user = userEvent.setup();
+    const { unmount } = render(<ChatDictationButton onTranscript={vi.fn()} />);
+
+    await user.click(screen.getByTestId("chat-dictation-button"));
+    unmount();
+    await act(async () =>
+      grant({
+        getTracks: () => [{ stop: stopTrack }],
+      } as unknown as MediaStream),
+    );
+
+    expect(stopTrack).toHaveBeenCalledOnce();
+    expect(MediaRecorderSpy).not.toHaveBeenCalled();
   });
 });

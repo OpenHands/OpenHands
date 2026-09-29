@@ -27,7 +27,7 @@ export function VoiceInputSettings() {
         <SettingsInput
           testId="transcription-base-url-input"
           type="text"
-          label={t(I18nKey.SETTINGS$TRANSCRIPTION_BASE_URL)}
+          label={t(I18nKey.SETTINGS$BASE_URL)}
           defaultValue={endpoint.baseUrl}
           placeholder={TRANSCRIPTION_BASE_URL_PLACEHOLDER}
           onChange={(baseUrl) => writeTranscriptionEndpoint({ baseUrl })}
@@ -37,7 +37,7 @@ export function VoiceInputSettings() {
         <SettingsInput
           testId="transcription-api-key-input"
           type="password"
-          label={t(I18nKey.SETTINGS$TRANSCRIPTION_API_KEY)}
+          label={t(I18nKey.SETTINGS_FORM$API_KEY)}
           defaultValue={endpoint.apiKey}
           onChange={(apiKey) => writeTranscriptionEndpoint({ apiKey })}
           showOptionalTag
@@ -46,7 +46,7 @@ export function VoiceInputSettings() {
         <SettingsInput
           testId="transcription-model-input"
           type="text"
-          label={t(I18nKey.SETTINGS$TRANSCRIPTION_MODEL)}
+          label={t(I18nKey.SETTINGS$AGENT_MODEL)}
           defaultValue={endpoint.model}
           placeholder={DEFAULT_TRANSCRIPTION_MODEL}
           onChange={(model) => writeTranscriptionEndpoint({ model })}

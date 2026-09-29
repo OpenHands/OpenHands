@@ -8,6 +8,7 @@ import { cn } from "#/utils/utils";
 
 const STATUS_ICONS: Record<DictationStatus, typeof Mic> = {
   idle: Mic,
+  starting: Loader2,
   recording: Square,
   transcribing: Loader2,
 };
@@ -31,7 +32,9 @@ export function ChatDictationButton({
   if (!isSupported) return null;
 
   const isRecording = status === "recording";
-  const isTranscribing = status === "transcribing";
+  const isBusy = status === "starting" || status === "transcribing";
+  // Stopping stays possible even if the text field turned read-only.
+  const isDisabled = !isRecording && (disabled || status !== "idle");
   const Icon = STATUS_ICONS[status];
 
   return (
@@ -41,7 +44,7 @@ export function ChatDictationButton({
         chatInputIconButtonClassName,
         "shrink-0 size-8",
         isRecording && "text-danger",
-        disabled && "cursor-not-allowed text-text-subtle",
+        isDisabled && "cursor-not-allowed text-text-subtle",
       )}
       aria-label={t(
         isRecording
@@ -49,13 +52,13 @@ export function ChatDictationButton({
           : I18nKey.CHAT_INTERFACE$START_DICTATION,
       )}
       aria-pressed={isRecording}
-      aria-busy={isTranscribing}
+      aria-busy={isBusy}
       data-testid="chat-dictation-button"
       onClick={toggle}
-      disabled={disabled || isTranscribing}
+      disabled={isDisabled}
     >
       <Icon
-        className={cn("size-4", isTranscribing && "animate-spin")}
+        className={cn("size-4", isBusy && "animate-spin")}
         fill={isRecording ? "currentColor" : "none"}
         aria-hidden
       />

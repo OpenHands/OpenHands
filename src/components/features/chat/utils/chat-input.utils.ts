@@ -179,8 +179,8 @@ export const focusContentEditableAtEnd = (
 };
 
 /**
- * Insert text at the caret (or the end when the caret is elsewhere) and emit
- * `input` so the same handlers as typing run.
+ * Insert text at the caret (or the end when the caret is elsewhere), padded
+ * with spaces so it doesn't fuse with neighbouring words.
  */
 export const insertTextAtCaret = (
   element: HTMLElement | null,
@@ -200,20 +200,16 @@ export const insertTextAtCaret = (
     element.focus();
   }
 
-  const range = selection.getRangeAt(0);
-  const textBefore = range.cloneRange();
-  textBefore.selectNodeContents(element);
-  textBefore.setEnd(range.startContainer, range.startOffset);
-  const node = document.createTextNode(
-    /\S$/.test(textBefore.toString()) ? ` ${text}` : text,
-  );
+  const caret = selection.getRangeAt(0);
+  const context = document.createRange();
+  context.selectNodeContents(element);
+  context.setEnd(caret.startContainer, caret.startOffset);
+  const lead = /\S$/.test(context.toString()) ? " " : "";
+  context.selectNodeContents(element);
+  context.setStart(caret.endContainer, caret.endOffset);
+  const trail = /^\S/.test(context.toString()) ? " " : "";
 
-  range.deleteContents();
-  range.insertNode(node);
-  range.setStartAfter(node);
-  range.collapse(true);
-  selection.removeAllRanges();
-  selection.addRange(range);
-  element.dispatchEvent(new Event("input", { bubbles: true }));
-  ensureCursorVisible(element);
+  // Same path as plain-text paste: fires `input`, keeps undo, and is a no-op
+  // when the field is read-only.
+  document.execCommand("insertText", false, `${lead}${text}${trail}`);
 };

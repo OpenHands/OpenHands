@@ -348,31 +348,42 @@ describe("content-editable helpers", () => {
 });
 
 describe("insertTextAtCaret", () => {
-  it("inserts at the caret with a separating space and emits input", () => {
+  function setup(text: string, caretOffset?: number) {
     const element = document.createElement("div");
-    element.textContent = "fix the bug";
+    element.textContent = text;
     document.body.appendChild(element);
-    const range = document.createRange();
-    range.setStart(element.firstChild!, "fix the".length);
     window.getSelection()!.removeAllRanges();
-    window.getSelection()!.addRange(range);
-    const onInput = vi.fn();
-    element.addEventListener("input", onInput);
+    if (caretOffset !== undefined) {
+      const range = document.createRange();
+      range.setStart(element.firstChild!, caretOffset);
+      window.getSelection()!.addRange(range);
+    }
+    const execCommand = vi.fn();
+    Object.defineProperty(document, "execCommand", {
+      configurable: true,
+      value: execCommand,
+    });
+    return { element, execCommand };
+  }
+
+  afterEach(() => {
+    Reflect.deleteProperty(document, "execCommand");
+    document.body.replaceChildren();
+  });
+
+  it("inserts through the paste path, padding against adjacent words", () => {
+    const { element, execCommand } = setup("fix the bug", "fix the ".length);
 
     insertTextAtCaret(element, "login");
 
-    expect(element.textContent).toBe("fix the login bug");
-    expect(onInput).toHaveBeenCalledOnce();
+    expect(execCommand).toHaveBeenCalledWith("insertText", false, "login ");
   });
 
-  it("appends to the end when the caret is outside the input", () => {
-    const element = document.createElement("div");
-    document.body.appendChild(element);
-    window.getSelection()!.removeAllRanges();
+  it("adds a leading space after a word and appends when the caret is outside", () => {
+    const { element, execCommand } = setup("hello");
 
-    insertTextAtCaret(element, "hello");
     insertTextAtCaret(element, "world");
 
-    expect(element.textContent).toBe("hello world");
+    expect(execCommand).toHaveBeenCalledWith("insertText", false, " world");
   });
 });

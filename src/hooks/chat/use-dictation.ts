@@ -5,7 +5,11 @@ import {
   type TranscriptionEndpoint,
 } from "#/utils/transcription-endpoint-storage";
 
-export type DictationStatus = "idle" | "recording" | "transcribing";
+export type DictationStatus =
+  | "idle"
+  | "starting"
+  | "recording"
+  | "transcribing";
 
 // Web Speech API types are not in lib.dom; this is the subset we use.
 interface SpeechRecognitionLike {
@@ -82,12 +86,19 @@ interface UseDictationOptions {
 export function useDictation({ onTranscript, onError }: UseDictationOptions) {
   const [status, setStatus] = React.useState<DictationStatus>("idle");
   const sessionRef = React.useRef<DictationSession | null>(null);
+  const mountedRef = React.useRef(true);
   const endpoint = readTranscriptionEndpoint();
   const isSupported = endpoint.baseUrl
     ? canRecordAudio()
     : !!getSpeechRecognition();
 
-  React.useEffect(() => () => sessionRef.current?.cancel(), []);
+  React.useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      sessionRef.current?.cancel();
+    };
+  }, []);
 
   const startSpeechRecognition = (
     Recognition: SpeechRecognitionConstructor,
@@ -127,7 +138,14 @@ export function useDictation({ onTranscript, onError }: UseDictationOptions) {
   };
 
   const startRecording = async (target: TranscriptionEndpoint) => {
+    // Enter "starting" before the permission prompt so further clicks are
+    // ignored instead of opening a second, untracked stream.
+    setStatus("starting");
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    if (!mountedRef.current) {
+      stream.getTracks().forEach((track) => track.stop());
+      return;
+    }
     const recorder = new MediaRecorder(stream);
     const chunks: Blob[] = [];
     let cancelled = false;

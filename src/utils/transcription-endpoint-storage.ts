@@ -17,7 +17,7 @@ const EMPTY_TRANSCRIPTION_ENDPOINT: TranscriptionEndpoint = {
 };
 
 const readString = (value: unknown): string =>
-  typeof value === "string" ? value : "";
+  typeof value === "string" ? value.trim() : "";
 
 export function readTranscriptionEndpoint(): TranscriptionEndpoint {
   if (typeof window === "undefined") return EMPTY_TRANSCRIPTION_ENDPOINT;
