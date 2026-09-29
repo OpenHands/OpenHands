@@ -44,6 +44,7 @@ import { AUTOMATION_STACK_SECTION_BOTTOM_CLASS } from "#/utils/automation-stack-
 
 const mocks = vi.hoisted(() => ({
   createConversationMutate: vi.fn(),
+  initializeAutomationFormSession: vi.fn(),
   navigate: vi.fn(),
 }));
 
@@ -59,6 +60,12 @@ vi.mock(
 
 vi.mock("#/hooks/mutation/use-create-conversation", () => ({
   useCreateConversation: () => ({ mutate: mocks.createConversationMutate }),
+}));
+
+vi.mock("#/api/automation-form-session", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#/api/automation-form-session")>()),
+  initializeAutomationFormSession: (...args: unknown[]) =>
+    mocks.initializeAutomationFormSession(...args),
 }));
 
 vi.mock("#/context/navigation-context", () => ({
@@ -227,6 +234,8 @@ beforeEach(() => {
   vi.mocked(AutomationService.updateAutomation).mockReset();
   vi.mocked(AutomationService.dispatchAutomation).mockReset();
   mocks.createConversationMutate.mockReset();
+  mocks.initializeAutomationFormSession.mockReset();
+
   mocks.navigate.mockReset();
   vi.mocked(
     AgentServerConversationService.batchGetAppConversations,
@@ -306,10 +315,7 @@ describe("AutomationsList — draft sections", () => {
       "automation-setup-draft-edit-draft-1",
     );
     expect(editButton).toBeEnabled();
-    expect(editButton).toHaveAttribute(
-      "aria-label",
-      I18nKey.AUTOMATIONS$EDIT,
-    );
+    expect(editButton).toHaveAttribute("aria-label", I18nKey.AUTOMATIONS$EDIT);
     expect(
       editButton.compareDocumentPosition(activePlay) &
         Node.DOCUMENT_POSITION_FOLLOWING,
@@ -329,7 +335,7 @@ describe("AutomationsList — draft sections", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("does not start a conversation when resuming a saved draft in this PR", async () => {
+  it("opens saved drafts in the deferred setup route without starting a conversation", async () => {
     const user = userEvent.setup();
     vi.mocked(AutomationService.listServerDrafts).mockResolvedValue(
       draftListResponse,
@@ -344,13 +350,25 @@ describe("AutomationsList — draft sections", () => {
       within(draftCard).getByTestId("automation-setup-draft-edit-draft-1"),
     );
 
+    expect(mocks.initializeAutomationFormSession).toHaveBeenCalledWith(
+      "pending-new-automation",
+      expect.objectContaining({
+        prompt: "Draft prompt",
+        kind: "prompt",
+        serverDraftId: "draft-1",
+        materializedAutomationId: "auto-draft-1",
+        form: expect.objectContaining({
+          kind: "prompt",
+          name: "Saved setup draft",
+          prompt: "Draft prompt",
+        }),
+      }),
+    );
+    expect(mocks.navigate).toHaveBeenCalledWith("/automations/setup");
     expect(mocks.createConversationMutate).not.toHaveBeenCalled();
     expect(
       AgentServerConversationService.updateConversationTags,
     ).not.toHaveBeenCalled();
-    expect(mocks.navigate).not.toHaveBeenCalledWith(
-      expect.stringContaining("/conversations/"),
-    );
   });
 
   it("can test and delete saved setup drafts", async () => {
@@ -447,7 +465,9 @@ describe("AutomationsList — Edit from the row kebab", () => {
       }),
       expect.any(Object),
     );
-    expect(screen.queryByTestId("edit-automation-name")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("edit-automation-name"),
+    ).not.toBeInTheDocument();
   });
 
   it("opens the Edit modal pre-filled from the row kebab when the active backend is cloud", async () => {
@@ -479,7 +499,9 @@ describe("AutomationsList — Edit from the row kebab", () => {
       }),
       expect.any(Object),
     );
-    expect(screen.queryByTestId("edit-automation-name")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("edit-automation-name"),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -706,7 +728,9 @@ describe("AutomationsList — add automation menu", () => {
     ).toBeInTheDocument();
 
     await user.click(screen.getByTestId("automations-add-automation-create"));
-    expect(screen.queryByTestId("add-automation-modal")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("add-automation-modal"),
+    ).not.toBeInTheDocument();
     expect(mocks.createConversationMutate).not.toHaveBeenCalled();
     expect(mocks.navigate).toHaveBeenCalledWith("/automations/setup");
   });

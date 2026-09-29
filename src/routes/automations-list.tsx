@@ -20,6 +20,10 @@ import {
   useImportAutomation,
 } from "#/hooks/query/use-automations";
 import { useAutomationHealth } from "#/hooks/query/use-automation-health";
+import {
+  PENDING_AUTOMATION_SETUP_ID,
+  initializeAutomationFormSession,
+} from "#/api/automation-form-session";
 import type { AutomationSetupKind } from "#/api/automation-setup-types";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useNavigation } from "#/context/navigation-context";
@@ -83,6 +87,7 @@ import { isDraftAutomation } from "#/utils/automation-state";
 import { automationIconActionButtonClassName } from "#/components/features/automations/automation-action-button-classes";
 import PlayIcon from "#/icons/play.svg?react";
 import { StatusBadge } from "#/components/features/automations/status-badge";
+import { setupDraftFromServerDraft } from "#/components/features/automations/setup/automation-setup-draft-service";
 
 const PAGE_SIZE = 50;
 
@@ -423,9 +428,12 @@ export default function AutomationsList() {
     });
   };
 
-  const handleResumeDraft = (_draft: AutomationDraftApiResponse) => {
-    // Draft resume is intentionally wired in the follow-up PR once the setup
-    // route can open without immediately starting an agent conversation.
+  const handleResumeDraft = (draft: AutomationDraftApiResponse) => {
+    initializeAutomationFormSession(
+      PENDING_AUTOMATION_SETUP_ID,
+      setupDraftFromServerDraft(draft),
+    );
+    navigate?.("/automations/setup");
   };
 
   const handleTestDraft = (draft: AutomationDraftApiResponse) => {

@@ -11,7 +11,7 @@ interface AutomationSetupConversation {
 
 interface StartAutomationSetupConversationOptions {
   query: string;
-  entryPoint: "automations_add" | "automation_edit";
+  entryPoint: "automations_add" | "automation_edit" | "automation_draft_resume";
   onSuccess: (
     conversation: AutomationSetupConversation,
   ) => void | Promise<void>;

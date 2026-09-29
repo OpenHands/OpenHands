@@ -684,7 +684,9 @@ export function AutomationSetupPanel({
     Promise.resolve(),
   );
   const propTaggedServerDraftId =
-    getAutomationDraftIdFromTags(conversationTags);
+    getAutomationDraftIdFromTags(conversationTags) ??
+    draft.serverDraftId ??
+    null;
   const [currentTaggedServerDraftId, setCurrentTaggedServerDraftId] = useState(
     propTaggedServerDraftId,
   );
