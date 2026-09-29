@@ -558,6 +558,7 @@ export function LlmSettingsLocalView() {
             isSaving ||
             isValidating ||
             !saveControl ||
+            !String(saveControl.values["llm.model"] ?? "").trim() ||
             !(
               viewMode === "create" ||
               saveControl.isDirty ||

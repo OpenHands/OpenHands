@@ -49,6 +49,26 @@ describe("parseMaxBudgetPerTask", () => {
 });
 
 describe("extractSettings", () => {
+  it.each([
+    ["vendor/Model:free", "openrouter/vendor/Model:free"],
+    ["openrouter/auto", "openrouter/openrouter/auto"],
+    ["openrouter/vendor/Model:nitro", "openrouter/vendor/Model:nitro"],
+    ["  vendor/Model:floor  ", "openrouter/vendor/Model:floor"],
+  ])("qualifies OpenRouter model %s exactly once", (model, expected) => {
+    const formData = new FormData();
+    formData.set("llm-provider-input", "OpenRouter");
+    formData.set("llm-model-input", model);
+    expect(extractSettings(formData)).toEqual({
+      agent_settings_diff: { llm: { model: expected } },
+    });
+  });
+
+  it("does not construct a model from whitespace", () => {
+    const formData = new FormData();
+    formData.set("llm-provider-input", "OpenRouter");
+    formData.set("llm-model-input", "   ");
+    expect(extractSettings(formData)).toEqual({});
+  });
   it("should preserve model name case when extracting settings", () => {
     const testCases = [
       { provider: "sambanova", model: "Meta-Llama-3.1-8B-Instruct" },

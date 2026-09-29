@@ -165,6 +165,8 @@ export interface SdkSectionSaveControl {
    * re-implementing schema-driven coercion. Throws if a field fails coercion.
    */
   getDirtyPayload: () => Record<string, unknown>;
+  /** Coerce all schema-backed values, including unchanged and hidden fields. */
+  getFullPayload: () => Record<string, unknown>;
 }
 
 /**
@@ -590,6 +592,14 @@ export function SdkSectionPage({
     [],
   );
 
+  const buildFullPayloadRef = React.useRef<() => Record<string, unknown>>(
+    () => ({}),
+  );
+  const stableGetFullPayload = React.useCallback(
+    () => buildFullPayloadRef.current(),
+    [],
+  );
+
   const handleSave = () => {
     if (isReadOnly) return;
     if (resolvedSources.some((src) => !src.filteredSchema)) return;
@@ -667,6 +677,22 @@ export function SdkSectionPage({
     return merged;
   };
 
+  buildFullPayloadRef.current = () => {
+    const merged: Record<string, unknown> = {};
+    for (const src of resolvedSources) {
+      if (!src.filteredSchema) continue;
+      const sourceValues = valuesBySource[src.settingsSource] ?? {};
+      const allFields = Object.fromEntries(
+        Object.keys(sourceValues).map((key) => [key, true]),
+      );
+      Object.assign(
+        merged,
+        buildSdkSettingsPayload(src.filteredSchema, sourceValues, allFields),
+      );
+    }
+    return merged;
+  };
+
   const isDirty = Object.keys(flatDirty).length > 0;
   const saveControlIsDirty = isDirty || extraDirty;
   React.useEffect(() => {
@@ -678,6 +704,7 @@ export function SdkSectionPage({
       values: flatValues,
       view,
       getDirtyPayload: stableGetDirtyPayload,
+      getFullPayload: stableGetFullPayload,
     });
   }, [isPending, saveControlIsDirty, flatValues, view]);
 

@@ -21,6 +21,7 @@ import { getApiErrorMessage } from "#/utils/api-error-message";
 import { I18nKey } from "#/i18n/declaration";
 import { useSearchProviders } from "#/hooks/query/use-search-providers";
 import { mapProvider } from "#/utils/map-provider";
+import { getProviderBaseUrlPlaceholder } from "#/utils/llm-provider-settings";
 import { formControlSettingsFieldClassName } from "#/utils/form-control-classes";
 import { heroUiAutocompleteSelectorButtonClassName } from "#/ui/combobox-caret";
 
@@ -268,8 +269,7 @@ export function ProviderConnectionModal({
           type="text"
           className="w-full"
           value={baseUrl}
-          // eslint-disable-next-line i18next/no-literal-string -- example value, not translatable
-          placeholder="https://api.openai.com"
+          placeholder={getProviderBaseUrlPlaceholder(provider)}
           onChange={setBaseUrl}
           showOptionalTag
         />
