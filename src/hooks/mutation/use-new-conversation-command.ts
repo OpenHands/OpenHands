@@ -11,6 +11,7 @@ import {
 import { useNavigation } from "#/context/navigation-context";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useSettings } from "#/hooks/query/use-settings";
+import { useMetaProfiles } from "#/hooks/query/use-meta-profiles";
 import { useTracking } from "#/hooks/use-tracking";
 
 export const useNewConversationCommand = () => {
@@ -19,6 +20,7 @@ export const useNewConversationCommand = () => {
   const { t } = useTranslation("openhands");
   const { data: conversation } = useActiveConversation();
   const { data: settings } = useSettings();
+  const { data: metaProfiles } = useMetaProfiles();
   const { trackConversationCreated } = useTracking();
 
   const mutation = useMutation({
@@ -34,9 +36,14 @@ export const useNewConversationCommand = () => {
         {
           sandboxId: conversation.sandbox_id ?? undefined,
           // Only stamp the toggle when it's on so the default /new path
-          // stays byte-identical to the legacy launch.
+          // stays byte-identical to the legacy launch. The active
+          // meta-profile gates the suffix: no router attached means no
+          // route-at-start instruction.
           ...(settings?.run_router_at_conversation_start
-            ? { runRouterAtConversationStart: true }
+            ? {
+                runRouterAtConversationStart: true,
+                hasActiveMetaProfile: !!metaProfiles?.active_meta_profile,
+              }
             : {}),
         },
       );

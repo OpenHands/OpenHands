@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { HttpError } from "@openhands/typescript-client";
 import { BrandButton } from "#/components/features/settings/brand-button";
@@ -243,6 +243,17 @@ export function MetaLlmSettingsView() {
   const handleToggleRunAtConversationStart = (value: boolean) => {
     saveSettings({ run_router_at_conversation_start: value });
   };
+
+  // Keep the persisted toggle in sync with the active-router guard: if the
+  // active meta-profile is removed (deleted), clear the toggle so the switch
+  // — which already renders off when no router is active — doesn't silently
+  // re-enable routing the next time a profile is activated. The launch paths
+  // also gate on an active router, so this is defense-in-depth against drift.
+  useEffect(() => {
+    if (active === null && settings?.run_router_at_conversation_start) {
+      saveSettings({ run_router_at_conversation_start: false });
+    }
+  }, [active, settings?.run_router_at_conversation_start, saveSettings]);
 
   if (isUnsupportedBackend) {
     return (

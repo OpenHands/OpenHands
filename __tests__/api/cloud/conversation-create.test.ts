@@ -112,6 +112,7 @@ describe("AgentServerConversationService cloud branch", () => {
     await AgentServerConversationService.createConversation({
       initialUserMsg: "fix the bug",
       runRouterAtConversationStart: true,
+      hasActiveMetaProfile: true,
     });
 
     const [, init] = getFetchCall(fetchMock);
@@ -142,6 +143,36 @@ describe("AgentServerConversationService cloud branch", () => {
 
     await AgentServerConversationService.createConversation({
       initialUserMsg: "fix the bug",
+    });
+
+    const [, init] = getFetchCall(fetchMock);
+    const requestBody = getJsonBody(init);
+
+    expect(requestBody).not.toHaveProperty("agent_launch_additions");
+  });
+
+  it("createConversation omits agent_launch_additions on the cloud path when no meta-profile is active", async () => {
+    // The toggle is on, but with no active meta-profile the agent-server
+    // does not attach `route_task_to_model`, so the instruction must not be
+    // emitted (the router would have nothing to call).
+    fetchMock.mockResolvedValue(
+      mockJsonResponse({
+        id: "task-126",
+        created_by_user_id: null,
+        status: "WORKING",
+        detail: null,
+        app_conversation_id: null,
+        agent_server_url: null,
+        request: {},
+        created_at: "2026-05-06T00:00:00Z",
+        updated_at: "2026-05-06T00:00:00Z",
+      }),
+    );
+
+    await AgentServerConversationService.createConversation({
+      initialUserMsg: "fix the bug",
+      runRouterAtConversationStart: true,
+      hasActiveMetaProfile: false,
     });
 
     const [, init] = getFetchCall(fetchMock);
