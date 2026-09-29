@@ -113,9 +113,6 @@ describe("useSaveSettings - LLM api_key handling", () => {
       wrapper: createWrapper(),
     });
 
-    // User changed only the model via the combobox and did not retype the key.
-    // The key input is never populated with the stored secret, so it arrives
-    // as an empty string.
     await result.current.mutateAsync({
       agent_settings_diff: {
         llm: { model: "anthropic/claude-sonnet-4-5", api_key: "" },
