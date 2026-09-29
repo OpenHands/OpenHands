@@ -244,6 +244,20 @@ describe("automatic content-editable resizing", () => {
     expect(scenario.editable?.element.style.overflowY).toBe("hidden");
   });
 
+  it("keeps an empty composer at the minimum height when the placeholder measures tall", () => {
+    const scenario = createHookScenario({
+      height: 20,
+      maxHeight: 400,
+      scrollHeight: 320,
+      text: "",
+    });
+
+    scenario.animationFrames.flushAll();
+
+    expect(scenario.editable?.element.style.height).toBe("20px");
+    expect(scenario.editable?.element.style.overflowY).toBe("hidden");
+  });
+
   it("resizes without a height callback", () => {
     const scenario = createHookScenario({
       callbacks: false,

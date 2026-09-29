@@ -5,10 +5,11 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
 import { HttpError } from "@openhands/typescript-client";
-
 import { I18nKey } from "#/i18n/declaration";
+import type { AutomationDraftListResponse } from "#/manifests/types";
 
 import AutomationService from "#/api/automation-service/automation-service.api";
+import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { getCloudOrganizationMe } from "#/api/cloud/organization-service.api";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
 import {
@@ -18,6 +19,21 @@ import {
 } from "#/api/backend-registry/active-store";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import AutomationsList from "#/routes/automations-list";
+
+vi.mock("#/components/shared/buttons/styled-tooltip", () => ({
+  StyledTooltip: ({
+    content,
+    children,
+  }: {
+    content: React.ReactNode;
+    children: React.ReactNode;
+  }) => (
+    <>
+      {children}
+      <span data-testid="styled-tooltip-content">{content}</span>
+    </>
+  ),
+}));
 import type { Backend } from "#/api/backend-registry/types";
 import {
   AutomationRunStatus,
@@ -26,9 +42,40 @@ import {
 } from "#/types/automation";
 import { AUTOMATION_STACK_SECTION_BOTTOM_CLASS } from "#/utils/automation-stack-section";
 
+const mocks = vi.hoisted(() => ({
+  createConversationMutate: vi.fn(),
+  navigate: vi.fn(),
+}));
+
+vi.mock(
+  "#/api/conversation-service/agent-server-conversation-service.api",
+  () => ({
+    default: {
+      batchGetAppConversations: vi.fn(),
+      updateConversationTags: vi.fn(),
+    },
+  }),
+);
+
+vi.mock("#/hooks/mutation/use-create-conversation", () => ({
+  useCreateConversation: () => ({ mutate: mocks.createConversationMutate }),
+}));
+
+vi.mock("#/context/navigation-context", () => ({
+  useNavigation: () => ({
+    currentPath: "/automations",
+    conversationId: null,
+    isNavigating: false,
+    navigate: mocks.navigate,
+  }),
+}));
+
 vi.mock("#/api/automation-service/automation-service.api", () => ({
   default: {
     getAutomations: vi.fn(),
+    listServerDrafts: vi.fn(),
+    deleteServerDraft: vi.fn(),
+    dispatchServerDraft: vi.fn(),
     updateAutomation: vi.fn(),
     toggleAutomation: vi.fn(),
     deleteAutomation: vi.fn(),
@@ -102,6 +149,49 @@ const listResponse: AutomationsResponse = {
   total: 1,
 };
 
+const materializedDraftAutomation: Automation = {
+  ...automation,
+  id: "auto-draft-1",
+  name: "Materialized test draft",
+  enabled: false,
+  state: "DRAFT",
+};
+
+const draftListResponse: AutomationDraftListResponse = {
+  drafts: [
+    {
+      id: "draft-1",
+      endpoint: "/v1/preset/prompt",
+      name: "Saved setup draft",
+      draft: { prompt: "Draft prompt" },
+      validationErrors: null,
+      dispatchable: true,
+      sourceAutomationId: null,
+      materializedAutomationId: "auto-draft-1",
+      lastTestRunId: null,
+      createdAt: "2026-01-02T00:00:00Z",
+      updatedAt: "2026-01-02T00:00:00Z",
+    },
+    {
+      id: "draft-event",
+      endpoint: "/v1/preset/prompt",
+      name: "Event setup draft",
+      draft: {
+        prompt: "Event prompt",
+        trigger: { type: "event", source: "github", on: "pull_request" },
+      },
+      validationErrors: null,
+      dispatchable: false,
+      sourceAutomationId: null,
+      materializedAutomationId: null,
+      lastTestRunId: null,
+      createdAt: "2026-01-03T00:00:00Z",
+      updatedAt: "2026-01-03T00:00:00Z",
+    },
+  ],
+  total: 2,
+};
+
 function renderList(queryClient?: QueryClient) {
   const client =
     queryClient ??
@@ -129,8 +219,25 @@ beforeEach(() => {
   vi.mocked(AutomationService.checkHealth).mockResolvedValue({ status: "ok" });
   vi.mocked(AutomationService.getAutomations).mockReset();
   vi.mocked(AutomationService.getAutomations).mockResolvedValue(listResponse);
+  vi.mocked(AutomationService.listServerDrafts).mockReset();
+  vi.mocked(AutomationService.listServerDrafts).mockResolvedValue({
+    drafts: [],
+    total: 0,
+  });
   vi.mocked(AutomationService.updateAutomation).mockReset();
   vi.mocked(AutomationService.dispatchAutomation).mockReset();
+  mocks.createConversationMutate.mockReset();
+  mocks.navigate.mockReset();
+  vi.mocked(
+    AgentServerConversationService.batchGetAppConversations,
+  ).mockReset();
+  vi.mocked(
+    AgentServerConversationService.batchGetAppConversations,
+  ).mockResolvedValue([]);
+  vi.mocked(AgentServerConversationService.updateConversationTags).mockReset();
+  vi.mocked(
+    AgentServerConversationService.updateConversationTags,
+  ).mockResolvedValue({} as never);
   vi.mocked(ProfilesService.listProfiles).mockReset();
   vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
     profiles: [],
@@ -145,6 +252,172 @@ beforeEach(() => {
 afterEach(() => {
   window.localStorage.clear();
   __resetActiveStoreForTests();
+});
+
+describe("AutomationsList — draft sections", () => {
+  it("renders saved setup drafts as actionable cards and hides materialized test artifacts", async () => {
+    vi.mocked(AutomationService.getAutomations).mockResolvedValue({
+      automations: [automation, materializedDraftAutomation],
+      total: 2,
+    });
+    vi.mocked(AutomationService.listServerDrafts).mockResolvedValue(
+      draftListResponse,
+    );
+
+    renderList();
+
+    expect(
+      await screen.findByText(I18nKey.AUTOMATIONS$SAVED_DRAFTS),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Saved setup draft")).toBeInTheDocument();
+    const draftCard = screen.getByTestId("automation-setup-draft-draft-1");
+    expect(draftCard.parentElement).toHaveClass(
+      "divide-y",
+      "rounded-xl",
+      "bg-surface",
+    );
+    expect(draftCard).toHaveClass("hover:bg-surface-raised");
+    expect(
+      within(draftCard).queryByText(I18nKey.AUTOMATIONS$DETAIL$DRAFT),
+    ).not.toBeInTheDocument();
+    expect(
+      within(draftCard).getByTestId("automation-setup-draft-open-draft-1"),
+    ).toBeInTheDocument();
+    expect(
+      within(draftCard).getByTestId("automation-setup-draft-resume-draft-1"),
+    ).toBeInTheDocument();
+    const activePlay = within(draftCard).getByTestId(
+      "automation-setup-draft-test-draft-1",
+    );
+    expect(activePlay).toBeEnabled();
+    expect(
+      within(draftCard).getByTestId("styled-tooltip-content"),
+    ).toHaveTextContent(I18nKey.AUTOMATION_SETUP$TEST_RUN);
+    const inactivePlay = screen.getByTestId(
+      "automation-setup-draft-test-draft-event",
+    );
+    expect(inactivePlay).toBeDisabled();
+    expect(
+      within(
+        screen.getByTestId("automation-setup-draft-draft-event"),
+      ).queryByTestId("styled-tooltip-content"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(draftCard).getByTestId("automation-setup-draft-delete-draft-1"),
+    ).toBeInTheDocument();
+
+    expect(
+      screen.queryByText(I18nKey.AUTOMATIONS$MATERIALIZED_DRAFTS),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Materialized test draft"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automation-card-auto-draft-1"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("preserves existing conversation tags when resuming a saved draft", async () => {
+    const user = userEvent.setup();
+    vi.mocked(AutomationService.listServerDrafts).mockResolvedValue(
+      draftListResponse,
+    );
+    mocks.createConversationMutate.mockImplementation((_, options) => {
+      options?.onSuccess?.({ conversation_id: "conv-resume" });
+    });
+    vi.mocked(
+      AgentServerConversationService.batchGetAppConversations,
+    ).mockResolvedValue([{ tags: { existing: "tag" } }] as never);
+
+    renderList();
+
+    const draftCard = await screen.findByTestId(
+      "automation-setup-draft-draft-1",
+    );
+    await user.click(
+      within(draftCard).getByTestId("automation-setup-draft-resume-draft-1"),
+    );
+
+    await waitFor(() =>
+      expect(
+        AgentServerConversationService.updateConversationTags,
+      ).toHaveBeenCalledWith(
+        "conv-resume",
+        expect.objectContaining({
+          existing: "tag",
+          automationsetup: "draft",
+          automationdraftid: "draft-1",
+          automationmaterializeddraftid: "auto-draft-1",
+        }),
+      ),
+    );
+    expect(mocks.navigate).toHaveBeenCalledWith("/conversations/conv-resume");
+  });
+
+  it("can test and delete saved setup drafts", async () => {
+    const user = userEvent.setup();
+    vi.mocked(AutomationService.getAutomations).mockResolvedValue(listResponse);
+    vi.mocked(AutomationService.listServerDrafts).mockResolvedValue(
+      draftListResponse,
+    );
+    vi.mocked(AutomationService.dispatchServerDraft).mockResolvedValue({
+      id: "run-1",
+    } as never);
+    vi.mocked(AutomationService.deleteServerDraft).mockResolvedValue(undefined);
+
+    renderList();
+
+    const draftCard = await screen.findByTestId(
+      "automation-setup-draft-draft-1",
+    );
+    await user.click(
+      within(draftCard).getByTestId("automation-setup-draft-test-draft-1"),
+    );
+    await waitFor(() =>
+      expect(AutomationService.dispatchServerDraft).toHaveBeenCalledWith(
+        "draft-1",
+      ),
+    );
+
+    await user.click(
+      within(draftCard).getByTestId("automation-setup-draft-delete-draft-1"),
+    );
+    expect(
+      screen.getByText(I18nKey.AUTOMATION_SETUP$DELETE_DRAFT_TITLE),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByTestId("automation-setup-draft-delete-confirm"),
+    );
+    await waitFor(() =>
+      expect(AutomationService.deleteServerDraft).toHaveBeenCalledWith(
+        "draft-1",
+      ),
+    );
+  });
+
+  it("treats a Cloud HttpError 404 from the drafts API as an empty drafts list", async () => {
+    // Cloud draft calls run through callCloudProxy, which throws the shared
+    // client's HttpError with `status` on the error itself (not under `response`).
+    // A drafts-less automation service answers those routes with 404; the page
+    // must degrade to an empty drafts list instead of the error banner.
+
+    vi.mocked(AutomationService.getAutomations).mockResolvedValue(listResponse);
+    vi.mocked(AutomationService.listServerDrafts).mockRejectedValue(
+      new HttpError(404, "Not Found", { detail: "No such route" }),
+    );
+
+    renderList();
+
+    await screen.findByText(automation.name);
+    await waitFor(() => {
+      expect(
+        screen.queryByText(I18nKey.AUTOMATIONS$SAVED_DRAFTS),
+      ).not.toBeInTheDocument();
+    });
+    expect(
+      screen.queryByText(I18nKey.AUTOMATIONS$ERROR_TITLE),
+    ).not.toBeInTheDocument();
+  });
 });
 
 describe("AutomationsList — Edit from the row kebab", () => {
