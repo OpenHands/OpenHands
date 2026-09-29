@@ -4,7 +4,6 @@ import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import {
   CalendarDays,
-  Clock3,
   Code2,
   FileText,
   Globe2,
@@ -815,11 +814,7 @@ function ScheduleFields({
                   type="time"
                   value={time}
                   onChange={(event) => setTime(event.target.value)}
-                  className={cn(formControlFieldClassName, "w-[9.5rem] pr-9")}
-                />
-                <Clock3
-                  className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-[var(--oh-muted)]"
-                  aria-hidden
+                  className={cn(formControlFieldClassName, "w-[9.5rem]")}
                 />
               </div>
             </label>
