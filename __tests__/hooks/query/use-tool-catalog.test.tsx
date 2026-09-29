@@ -37,10 +37,10 @@ beforeEach(() => {
 });
 
 it("asks the backend for its catalog without a capability check", async () => {
-  vi.spyOn(ToolCatalogService, "getCatalog").mockResolvedValue(null);
+  vi.spyOn(ToolCatalogService, "getCatalog").mockResolvedValue([]);
   const { result } = renderHook(() => useToolCatalog(), { wrapper });
 
-  await waitFor(() => expect(result.current.data).toBeNull());
+  await waitFor(() => expect(result.current.data).toEqual([]));
   expect(ToolCatalogService.getCatalog).toHaveBeenCalledTimes(1);
 });
 

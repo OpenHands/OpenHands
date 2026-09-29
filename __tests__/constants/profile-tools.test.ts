@@ -30,10 +30,10 @@ describe("readProfileTools", () => {
     });
   });
 
-  it("reads a built-in's class name as its tool name", () => {
+  it("keeps the first entry of a repeated tool", () => {
     expect(
       readProfileTools([
-        { name: "SwitchLLMTool", params: { a: 1 } },
+        { name: "switch_llm", params: { a: 1 } },
         { name: "switch_llm" },
       ]),
     ).toEqual({

@@ -4,6 +4,7 @@ import type {
   AgentProfileSaveInput,
   AgentProfileSummary,
 } from "@openhands/typescript-client";
+import type { ToolCatalogEntry } from "#/api/tool-catalog-service/tool-catalog-service.api";
 
 /**
  * In-memory agent-profile store for the mock agent-server API. Keyed by name
@@ -138,7 +139,27 @@ function notFound(name: string) {
  * path matcher, so the list route never claims the `:name` routes below and no
  * extra path guarding is needed.
  */
+const MOCK_TOOL_CATALOG: ToolCatalogEntry[] = [
+  ["terminal", true, "Run shell commands in a persistent terminal."],
+  ["file_editor", true, "View, create and edit files."],
+  ["task_tracker", true, "Plan and track multi-step work."],
+  ["browser_tool_set", true, "Browse and interact with web pages."],
+  ["switch_llm", true, "Switch to another configured LLM mid-conversation."],
+  ["task_tool_set", false, "Delegate work to sub-agents."],
+  ["glob", false, "Find files by glob pattern."],
+  ["grep", false, "Search file contents with regular expressions."],
+].map(([name, inDefaultSet, description]) => ({
+  name: name as string,
+  user_selectable: true,
+  usable: true,
+  in_default_set: inDefaultSet as boolean,
+  description: description as string,
+}));
+
 export const AGENT_PROFILES_HANDLERS = [
+  http.get("*/api/tools/catalog", () =>
+    HttpResponse.json({ tools: MOCK_TOOL_CATALOG }),
+  ),
   // GET /api/agent-profiles - List all profiles + the active id.
   http.get("*/api/agent-profiles", async () => {
     const summaries = Array.from(profiles.entries()).map(([name, profile]) =>

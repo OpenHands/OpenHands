@@ -176,8 +176,8 @@ export interface AgentProfileFieldsInput {
   selectedTools?: string[];
   /** Stored params per tool, kept so the editor cannot drop what it ignores. */
   toolParams?: Record<string, Record<string, SettingsValue>>;
-  /** Whether the backend serves the tool catalog, and so takes `tools`. */
-  toolCatalogSupported?: boolean;
+  /** Whether the tool catalog loaded; `tools` is only written then. */
+  toolCatalogLoaded?: boolean;
 }
 
 /**
@@ -217,7 +217,7 @@ export function buildAgentProfileFields(
     toolsMode = "standard",
     selectedTools = [],
     toolParams = {},
-    toolCatalogSupported = false,
+    toolCatalogLoaded = false,
   } = input;
   // Both are base-model fields, so they ride both variants. `mcp_server_refs`
   // needs no version gate — it has existed since agent profiles shipped, below
@@ -249,8 +249,8 @@ export function buildAgentProfileFields(
       ...mcpRefs,
       ...secretRefs,
     };
-  // Without a catalog, `tools` is left out so the stored selection survives.
-  if (toolCatalogSupported) {
+  // Until the catalog loads, `tools` is left out so the stored selection survives.
+  if (toolCatalogLoaded) {
     fields.tools = buildProfileToolsValue({
       mode: toolsMode,
       selected: selectedTools,
@@ -397,8 +397,7 @@ export function AgentSettingsScreen({
     refetch: refetchToolCatalog,
   } = useToolCatalog({ enabled: embedded });
   // Only a loaded catalog may write `tools`.
-  const toolCatalogSupported = embedded && Array.isArray(toolCatalog);
-  const toolCatalogUnavailable = toolCatalog === null;
+  const toolCatalogLoaded = embedded && toolCatalog !== undefined;
   const standardToolNames = React.useMemo(
     () =>
       toolCatalog
@@ -738,7 +737,7 @@ export function AgentSettingsScreen({
   const credentialsDirty = acpCredentialForm.isDirty;
   const isAnyDirty = settingsDirty || credentialsDirty;
   const customToolsUninitialized =
-    toolCatalogSupported &&
+    toolCatalogLoaded &&
     agentType === "openhands" &&
     toolsMode === "custom" &&
     selectedTools === null;
@@ -810,7 +809,7 @@ export function AgentSettingsScreen({
       toolsMode,
       selectedTools: orderedSelectedTools,
       toolParams: initialTools.params,
-      toolCatalogSupported,
+      toolCatalogLoaded,
     });
 
   const isSavingAny = isSaving || acpCredentialForm.isSaving;
@@ -1143,22 +1142,7 @@ export function AgentSettingsScreen({
         </div>
       ) : null}
 
-      {showProfileScopeFields && !isAcp && toolCatalogUnavailable ? (
-        <div
-          className="flex flex-col gap-2.5"
-          data-testid="agent-settings-tools-unavailable"
-        >
-          <Typography.Text className="text-sm">
-            {t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS)}
-          </Typography.Text>
-          <Typography.Text className="text-xs text-tertiary-alt">
-            {t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_UNAVAILABLE)}{" "}
-            {t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_KEPT_ON_SAVE)}
-          </Typography.Text>
-        </div>
-      ) : null}
-
-      {showProfileScopeFields && !isAcp && !toolCatalogUnavailable ? (
+      {showProfileScopeFields && !isAcp ? (
         <div className="flex flex-col gap-2.5">
           <Typography.Text className="text-sm">
             {t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS)}

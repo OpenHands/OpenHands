@@ -65,11 +65,6 @@ for (const [name, inputTools, expectedSpecs] of [
   ["smoke-empty", [], []],
   ["smoke-glob", [{ name: "glob", params: {} }], ["glob"]],
   ["smoke-standard", null, null],
-  [
-    "smoke-legacy-alias",
-    [{ name: "SwitchLLMTool", params: {} }],
-    ["SwitchLLMTool"],
-  ],
 ]) {
   const profile = {
     name: `${prefix}-${name}`,
@@ -79,9 +74,6 @@ for (const [name, inputTools, expectedSpecs] of [
     mcp_server_refs: [],
     secret_refs: [],
     condenser: { enabled: false },
-    ...(name === "smoke-legacy-alias"
-      ? { schema_version: 2, enable_switch_llm_tool: true }
-      : {}),
   };
   await profiles.saveAgentProfile(profile.name, profile);
   const saved = (await profiles.getAgentProfile(profile.name)).profile;

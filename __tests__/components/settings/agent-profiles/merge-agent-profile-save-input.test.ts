@@ -134,13 +134,11 @@ describe("mergeAgentProfileSaveInput", () => {
   });
 });
 
-describe("mergeAgentProfileSaveInput without a tool catalog", () => {
-  it("round-trips stored tools and legacy tool switches the draft leaves out", () => {
+describe("mergeAgentProfileSaveInput tools", () => {
+  it("round-trips stored tools the draft leaves out", () => {
     const stored = {
       ...storedOpenHands,
-      tools: [{ name: "SwitchLLMTool", params: { x: 1 } }],
-      enable_sub_agents: true,
-      enable_switch_llm_tool: false,
+      tools: [{ name: "switch_llm", params: { x: 1 } }],
     } as unknown as AgentProfile;
     const edited = {
       agent_kind: "openhands",
@@ -149,17 +147,13 @@ describe("mergeAgentProfileSaveInput without a tool catalog", () => {
     } as AgentProfileSaveInput;
 
     expect(mergeAgentProfileSaveInput(stored, edited)).toMatchObject({
-      tools: [{ name: "SwitchLLMTool", params: { x: 1 } }],
-      enable_sub_agents: true,
-      enable_switch_llm_tool: false,
+      tools: [{ name: "switch_llm", params: { x: 1 } }],
       tool_concurrency_limit: 2,
     });
   });
-});
 
-describe("mergeAgentProfileSaveInput with a tool selection", () => {
   it.each([[[{ name: "terminal", params: {} }]], [null]])(
-    "drops the stored legacy tool switches when the draft sends tools %j",
+    "replaces the stored tools with the draft's %j",
     (tools) => {
       const stored = {
         ...storedOpenHands,
@@ -167,8 +161,6 @@ describe("mergeAgentProfileSaveInput with a tool selection", () => {
           { name: "terminal", params: {} },
           { name: "switch_llm", params: {} },
         ],
-        enable_sub_agents: false,
-        enable_switch_llm_tool: true,
       } as unknown as AgentProfile;
       const edited = {
         agent_kind: "openhands",
@@ -176,11 +168,10 @@ describe("mergeAgentProfileSaveInput with a tool selection", () => {
         tools,
       } as unknown as AgentProfileSaveInput;
 
-      const merged = mergeAgentProfileSaveInput(stored, edited);
-      expect(merged).toMatchObject({ tools });
-      expect(merged).not.toHaveProperty("enable_sub_agents");
-      expect(merged).not.toHaveProperty("enable_switch_llm_tool");
-      expect(merged).toMatchObject({ system_message_suffix: "Be terse." });
+      expect(mergeAgentProfileSaveInput(stored, edited)).toMatchObject({
+        tools,
+        system_message_suffix: "Be terse.",
+      });
     },
   );
 });

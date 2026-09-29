@@ -38,7 +38,6 @@ const toolCatalogMock = vi.hoisted(() =>
           in_default_set: boolean;
           description?: string;
         }[]
-      | null
       | undefined
   >(),
 );
@@ -288,24 +287,19 @@ describe("AgentSettingsScreen", () => {
     expect(screen.getByTestId("agent-command-input")).toBeInTheDocument();
   });
 
-  it.each([true, false])(
-    "shows no tool switches in the profile editor (catalog served: %s)",
-    async (catalogServed) => {
-      toolCatalogMock.mockReturnValue(catalogServed ? [] : null);
-      renderAgentSettingsScreen({
-        embedded: true,
-        agentSettingsOverride: { agent_kind: "openhands" },
-      });
-      await screen.findByTestId("agent-settings-screen");
+  it("shows no tool switches in the profile editor", async () => {
+    toolCatalogMock.mockReturnValue([]);
+    renderAgentSettingsScreen({
+      embedded: true,
+      agentSettingsOverride: { agent_kind: "openhands" },
+    });
+    await screen.findByTestId("agent-settings-screen");
 
-      expect(
-        screen.queryByTestId("agent-settings-enable-sub-agents"),
-      ).toBeNull();
-      expect(
-        screen.queryByTestId("agent-settings-enable-switch-llm-tool"),
-      ).toBeNull();
-    },
-  );
+    expect(screen.queryByTestId("agent-settings-enable-sub-agents")).toBeNull();
+    expect(
+      screen.queryByTestId("agent-settings-enable-switch-llm-tool"),
+    ).toBeNull();
+  });
 
   it("labels the save button 'Save Changes' for consistency with other settings pages", async () => {
     // Arrange — render with any valid settings; the label is independent
@@ -1843,16 +1837,15 @@ describe("AgentSettingsScreen — tool selection", () => {
   });
 
   it.each([
-    ["serves no catalog", null, false, "agent-settings-tools-unavailable"],
     ["fails to load it", undefined, true, "agent-settings-tools-load-failed"],
     ["is still loading it", undefined, false, null],
   ])(
-    "leaves stored tools untouched when the backend %s",
+    "leaves stored tools untouched while the backend %s",
     async (_label, catalog, failed, notice) => {
       toolCatalogMock.mockReturnValue(catalog);
       toolCatalogFailedMock.mockReturnValue(failed);
       const { control } = renderEditor({
-        tools: [{ name: "SwitchLLMTool", params: { x: 1 } }],
+        tools: [{ name: "switch_llm", params: { x: 1 } }],
       });
       await screen.findByTestId("agent-settings-screen");
 
@@ -1866,18 +1859,8 @@ describe("AgentSettingsScreen — tool selection", () => {
       ).toBeNull();
       const fields = control().buildAgentProfileFields();
       expect(fields).not.toHaveProperty("tools");
-      expect(fields).not.toHaveProperty("enable_sub_agents");
-      expect(fields).not.toHaveProperty("enable_switch_llm_tool");
     },
   );
-
-  it("hides the mode control when the backend serves no catalog", async () => {
-    toolCatalogMock.mockReturnValue(null);
-    renderEditor();
-    await screen.findByTestId("agent-settings-screen");
-
-    expect(screen.queryByTestId("agent-settings-tools-mode")).toBeNull();
-  });
 
   it("is clean again after a standard → custom → standard round-trip", async () => {
     const { control } = renderEditor({ tools: null });

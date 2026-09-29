@@ -205,8 +205,6 @@ describe("AgentProfilesLocalView save mapping", () => {
       system_message_suffix: "Be terse.",
       condenser: { kind: "NoOpCondenserSettings" },
       verification: { critic_enabled: true },
-      enable_sub_agents: false,
-      enable_switch_llm_tool: false,
       tools: [{ name: "terminal", params: {} }],
       tool_concurrency_limit: 4,
       mcp_server_refs: ["github"],
@@ -278,7 +276,7 @@ describe("AgentProfilesLocalView save mapping", () => {
     expect(profile).not.toHaveProperty("revision");
   });
 
-  it("seeds tools, never tool switches, from a stored profile", async () => {
+  it("seeds tools from a stored profile", async () => {
     vi.mocked(AgentProfilesService.getProfile).mockResolvedValue({
       name: "default",
       profile: {
@@ -315,8 +313,6 @@ describe("AgentProfilesLocalView save mapping", () => {
     expect(seededOverride).toMatchObject({
       tools: [{ name: "terminal" }, { name: "task_tool_set" }],
     });
-    expect(seededOverride).not.toHaveProperty("enable_sub_agents");
-    expect(seededOverride).not.toHaveProperty("enable_switch_llm_tool");
   });
 
   it("seeds the editor with a stored secret scope", async () => {

@@ -7,11 +7,6 @@ export type ProfileToolSpec = {
   params: Record<string, SettingsValue>;
 };
 
-/** Selectable built-ins a profile may store under their class name. */
-const BUILT_IN_TOOL_NAMES: ReadonlyMap<string, string> = new Map([
-  ["SwitchLLMTool", "switch_llm"],
-]);
-
 function toParams(value: unknown): Record<string, SettingsValue> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, SettingsValue>)
@@ -28,9 +23,8 @@ export function readProfileTools(value: unknown): {
     return { mode: "standard", selected: [], params: {} };
   const params = new Map<string, Record<string, SettingsValue>>();
   value.forEach((entry) => {
-    const stored = (entry as { name?: unknown })?.name;
-    if (typeof stored !== "string") return;
-    const name = BUILT_IN_TOOL_NAMES.get(stored) ?? stored;
+    const name = (entry as { name?: unknown })?.name;
+    if (typeof name !== "string") return;
     if (!params.has(name))
       params.set(name, toParams((entry as { params?: unknown }).params));
   });

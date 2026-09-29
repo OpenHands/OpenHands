@@ -1,8 +1,6 @@
-import { isAxiosError } from "axios";
 import { AgentServerClient } from "@openhands/typescript-client/clients";
 
 import { getAgentServerClientOptions } from "../agent-server-client-options";
-import { isSdkHttpStatusError } from "../agent-server-compatibility";
 import { getActiveBackend } from "../backend-registry/active-store";
 import { callCloudProxy } from "../cloud/proxy";
 
@@ -24,13 +22,6 @@ interface ToolCatalogResponse {
   tools: ToolCatalogEntry[];
 }
 
-function isNotFound(error: unknown): boolean {
-  return (
-    isSdkHttpStatusError(error, 404) ||
-    (isAxiosError(error) && error.response?.status === 404)
-  );
-}
-
 function fetchCatalog(): Promise<ToolCatalogResponse> {
   const { backend } = getActiveBackend();
   if (backend.kind === "cloud") {
@@ -46,15 +37,10 @@ function fetchCatalog(): Promise<ToolCatalogResponse> {
 }
 
 class ToolCatalogService {
-  /** Tools this server offers, in its order; `null` when it serves no catalog. */
-  static async getCatalog(): Promise<ToolCatalogEntry[] | null> {
-    try {
-      const response = await fetchCatalog();
-      return response?.tools ?? [];
-    } catch (error) {
-      if (isNotFound(error)) return null;
-      throw error;
-    }
+  /** Tools this server offers, in its order. */
+  static async getCatalog(): Promise<ToolCatalogEntry[]> {
+    const response = await fetchCatalog();
+    return response?.tools ?? [];
   }
 }
 

@@ -59,7 +59,7 @@ TOOL_SELECTION_ISOLATED=1 node .pr/tool-selection-smoke.mjs
 
 Optional overrides: `TOOL_SELECTION_SERVER_URL`, `TOOL_SELECTION_MOCK_URL`, `TOOL_SELECTION_KEY_FILE`, and `TOOL_SELECTION_WORKSPACE`. Defaults match the example above; only localhost/127.0.0.1 servers are accepted. The backend and mock must share a host. `TOOL_SELECTION_UI_PROFILE` optionally checks an existing UI-created profile has persisted `tools=[]`, without changing that profile.
 
-The helper checks saved and materialized specs, launches a mock-model conversation for each selection (empty, glob, standard, legacy SwitchLLMTool alias), checks the actual model-facing tool names for duplicates, and requires each conversation to finish. Mandatory finish/think and skill-related invoke_skill are independent of optional tool selection.
+The helper checks saved and materialized specs, launches a mock-model conversation for each selection (empty, glob, standard), checks the actual model-facing tool names for duplicates, and requires each conversation to finish. Mandatory finish/think and skill-related invoke_skill are independent of optional tool selection.
 
 For the UI timing check, open `/settings/agents`, add a profile, choose tools **before entering a name**, then enter a name with a valid mock LLM profile selected. Standard tools should become checked once the server responds. Clearing all tools and toggling Standard → Choose must retain the empty selection.
 

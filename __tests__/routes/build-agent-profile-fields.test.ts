@@ -18,7 +18,7 @@ const baseAcp = {
   toolsMode: "standard" as const,
   selectedTools: [] as string[],
   toolParams: {},
-  toolCatalogSupported: true,
+  toolCatalogLoaded: true,
 };
 
 const concurrencyField: SettingsFieldSchema = {
@@ -100,20 +100,9 @@ describe("buildAgentProfileFields — OpenHands", () => {
     secretRefsSupportedOnProfile: true,
   };
 
-  it("never emits the retired tool switches", () => {
-    for (const toolCatalogSupported of [true, false]) {
-      const fields = buildAgentProfileFields({
-        ...baseOh,
-        toolCatalogSupported,
-      });
-      expect(fields).not.toHaveProperty("enable_sub_agents");
-      expect(fields).not.toHaveProperty("enable_switch_llm_tool");
-    }
-  });
-
-  it("leaves tools out without a catalog, so the stored selection survives", () => {
+  it("leaves tools out until the catalog loads, so the stored selection survives", () => {
     expect(
-      buildAgentProfileFields({ ...baseOh, toolCatalogSupported: false }),
+      buildAgentProfileFields({ ...baseOh, toolCatalogLoaded: false }),
     ).toEqual({
       agent_kind: "openhands",
       mcp_server_refs: null,
@@ -179,7 +168,7 @@ describe("buildAgentProfileFields — mcp_server_refs", () => {
     toolsMode: "standard" as const,
     selectedTools: [] as string[],
     toolParams: {},
-    toolCatalogSupported: true,
+    toolCatalogLoaded: true,
     toolConcurrencyField: undefined,
     toolConcurrency: "",
     mcpMode: "standard" as const,
@@ -242,7 +231,7 @@ describe("buildAgentProfileFields — secret scope", () => {
     toolsMode: "standard" as const,
     selectedTools: [] as string[],
     toolParams: {},
-    toolCatalogSupported: true,
+    toolCatalogLoaded: true,
   };
 
   it("persists null when every secret is allowed", () => {
@@ -318,7 +307,7 @@ describe("tool selection", () => {
   it("omits tools entirely when the backend serves no catalog", () => {
     const fields = buildAgentProfileFields({
       ...baseOpenHands,
-      toolCatalogSupported: false,
+      toolCatalogLoaded: false,
       toolsMode: "custom",
       selectedTools: ["glob"],
     });

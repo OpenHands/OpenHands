@@ -12,7 +12,7 @@ interface UseToolCatalogOptions {
   enabled?: boolean;
 }
 
-/** Tools the active backend offers; `null` when it serves no catalog. */
+/** Tools the active backend offers. */
 export function useToolCatalog(options: UseToolCatalogOptions = {}) {
   const { backend } = useActiveBackend();
 
