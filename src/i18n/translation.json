@@ -43587,23 +43587,6 @@
     "zh-CN": "Custom",
     "zh-TW": "Custom"
   },
-  "AUTOMATION_SETUP$CUSTOM_PYTHON": {
-    "ar": "Custom Python",
-    "ca": "Custom Python",
-    "de": "Benutzerdefiniertes Python",
-    "en": "Custom Python",
-    "es": "Python personalizado",
-    "fr": "Python personnalisé",
-    "it": "Custom Python",
-    "ja": "カスタム Python",
-    "ko-KR": "Custom Python",
-    "no": "Custom Python",
-    "pt": "Custom Python",
-    "tr": "Custom Python",
-    "uk": "Custom Python",
-    "zh-CN": "Custom Python",
-    "zh-TW": "Custom Python"
-  },
   "AUTOMATION_SETUP$NAME_PLACEHOLDER": {
     "ar": "Standup digest",
     "ca": "Standup digest",
@@ -43722,23 +43705,6 @@
     "uk": "github:owner/plugin",
     "zh-CN": "github:owner/plugin",
     "zh-TW": "github:owner/plugin"
-  },
-  "AUTOMATION_SETUP$GITHUB_TOKEN_REQUIRED_TOOLTIP": {
-    "ar": "قم بتكوين سر \"github_token\" في صفحة الإعدادات لرؤية خيارات المستودعات.",
-    "ca": "Configura el secret \"github_token\" a la pàgina de configuració per veure les opcions de repositoris.",
-    "de": "Konfiguriere das Geheimnis „github_token“ auf der Einstellungsseite, um Repo-Optionen zu sehen.",
-    "en": "Configure the \"github_token\" secret in the Settings page to see repo options.",
-    "es": "Configura el secreto \"github_token\" en la página de configuración para ver las opciones de repositorios.",
-    "fr": "Configurez le secret « github_token » dans la page des paramètres pour voir les options de dépôt.",
-    "it": "Configura il segreto \"github_token\" nella pagina delle impostazioni per vedere le opzioni dei repository.",
-    "ja": "リポジトリのオプションを表示するには、設定ページで「github_token」シークレットを設定してください。",
-    "ko-KR": "저장소 옵션을 보려면 설정 페이지에서 \"github_token\" 비밀을 구성하세요.",
-    "no": "Konfigurer \"github_token\"-hemmeligheten på innstillingssiden for å se repoalternativer.",
-    "pt": "Configure o segredo \"github_token\" na página de configurações para ver as opções de repositório.",
-    "tr": "Depo seçeneklerini görmek için ayarlar sayfasında \"github_token\" gizli anahtarını yapılandırın.",
-    "uk": "Налаштуйте секрет \"github_token\" на сторінці налаштувань, щоб бачити параметри репозиторіїв.",
-    "zh-CN": "在设置页面配置“github_token”密钥以查看仓库选项。",
-    "zh-TW": "在設定頁面設定「github_token」密鑰即可查看儲存庫選項。"
   },
   "AUTOMATION_SETUP$PLUGIN_REF": {
     "ar": "Plugin ref",
