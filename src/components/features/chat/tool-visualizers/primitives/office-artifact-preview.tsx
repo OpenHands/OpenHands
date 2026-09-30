@@ -30,6 +30,8 @@ import {
 import { Typography } from "#/ui/typography";
 import { getFileExtension } from "#/utils/is-previewable-file-path";
 import {
+  MAX_OOXML_DOWNLOAD_BYTES,
+  readBoundedArrayBuffer,
   readOoxmlPreview,
   type OoxmlKind,
   type OoxmlPreview,
@@ -214,7 +216,9 @@ export function OfficeArtifactPreview({
   const [expanded, setExpanded] = React.useState(false);
   const [inView, setInView] = React.useState(false);
   const [preview, setPreview] = React.useState<OoxmlPreview | null>(null);
-  const [failed, setFailed] = React.useState(false);
+  const [failure, setFailure] = React.useState<"error" | "too-large" | null>(
+    null,
+  );
   const [copied, setCopied] = React.useState(false);
   const containerRef = React.useRef<HTMLDivElement>(null);
 
@@ -286,25 +290,35 @@ export function OfficeArtifactPreview({
   }, [staticUrl, fileName]);
 
   React.useEffect(() => {
-    if (!inView || !staticUrl || !kind || preview || failed) return undefined;
+    if (!inView || !staticUrl || !kind || preview || failure) return undefined;
     let cancelled = false;
     (async () => {
       try {
         const response = await fetch(staticUrl, { credentials: "include" });
         if (!response.ok) throw new Error(String(response.status));
+        // Bound the download before it is buffered: the reader only caps the
+        // *unpacked* parts, so a huge container would otherwise be pulled into
+        // memory whole.
         const parsed = await readOoxmlPreview(
           kind,
-          await response.arrayBuffer(),
+          await readBoundedArrayBuffer(response, MAX_OOXML_DOWNLOAD_BYTES),
         );
         if (!cancelled) setPreview(parsed);
-      } catch {
-        if (!cancelled) setFailed(true);
+      } catch (error) {
+        if (cancelled) return;
+        // A size rejection is actionable ("too large"), not a generic load
+        // failure, so surface the distinction rather than a misleading error.
+        setFailure(
+          error instanceof Error && /exceeds|too large/i.test(error.message)
+            ? "too-large"
+            : "error",
+        );
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [inView, staticUrl, kind, preview, failed]);
+  }, [inView, staticUrl, kind, preview, failure]);
 
   return (
     <div
@@ -319,12 +333,14 @@ export function OfficeArtifactPreview({
           expanded ? "max-h-[32rem]" : "max-h-48",
         )}
       >
-        {failed || (query.isError && !preview) ? (
+        {failure || (query.isError && !preview) ? (
           <Typography.Text
             className="text-xs text-muted"
             testId="office-artifact-preview-error"
           >
-            {t(I18nKey.FILES$LOAD_ERROR)}
+            {failure === "too-large"
+              ? t(I18nKey.FILES$FILE_TOO_LARGE)
+              : t(I18nKey.FILES$LOAD_ERROR)}
           </Typography.Text>
         ) : !preview ? (
           <Typography.Text

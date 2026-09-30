@@ -56,8 +56,72 @@ const XML_MIME = "application/xml";
  * the whole result before the render caps below ever apply. Every part this
  * reader wants is XML text, so 8 MiB is generous for a real document and far
  * below what would threaten the tab.
+ *
+ * Applied to stored entries too: those skip inflation, but their declared
+ * compressed size is still attacker-controlled and a hand-crafted header can
+ * claim far more than the archive holds.
  */
-const MAX_INFLATED_PART_BYTES = 8 * 1024 * 1024;
+export const MAX_INFLATED_PART_BYTES = 8 * 1024 * 1024;
+
+/**
+ * Cap on the *compressed* size of an Office document this preview will accept.
+ * The container is downloaded whole before it is unpacked, so without this an
+ * arbitrarily large `.docx` from the workspace fileserver would be buffered into
+ * memory in one shot. A real OOXML package is a few MiB at most.
+ */
+export const MAX_OOXML_DOWNLOAD_BYTES = 32 * 1024 * 1024;
+
+/**
+ * Read a `fetch` response into an `ArrayBuffer`, refusing anything larger than
+ * `maxBytes`. Prefers the declared `Content-Length` (a cheap early reject), then
+ * streams the body so the ceiling is enforced while bytes arrive — a server that
+ * omits or under-reports the length cannot make us buffer an unbounded body.
+ */
+export async function readBoundedArrayBuffer(
+  response: Response,
+  maxBytes: number,
+): Promise<ArrayBuffer> {
+  const declared = Number(response.headers?.get?.("content-length") ?? "");
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    throw new Error(`File exceeds ${maxBytes} bytes`);
+  }
+
+  const body = response.body;
+  if (!body || typeof body.getReader !== "function") {
+    const buffer = await response.arrayBuffer();
+    if (buffer.byteLength > maxBytes) {
+      throw new Error(`File exceeds ${maxBytes} bytes`);
+    }
+    return buffer;
+  }
+
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value?.length) continue;
+      total += value.length;
+      if (total > maxBytes) {
+        await reader.cancel();
+        throw new Error(`File exceeds ${maxBytes} bytes`);
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return out.buffer;
+}
 
 interface ZipEntry {
   name: string;
@@ -116,7 +180,17 @@ function readZipEntries(buffer: ArrayBuffer): Map<string, ZipEntry> {
           dataStart,
           dataStart + compressedSize,
         );
-        if (method === 0) return compressed;
+        if (method === 0) {
+          // A stored part is returned as-is, so it bypasses `inflateRaw`'s
+          // running cap. Enforce the same ceiling here, or an oversized stored
+          // XML part flows straight into `DOMParser`.
+          if (compressed.length > MAX_INFLATED_PART_BYTES) {
+            throw new Error(
+              `ZIP entry expands beyond ${MAX_INFLATED_PART_BYTES} bytes`,
+            );
+          }
+          return compressed;
+        }
         if (method !== 8) throw new Error(`Unsupported ZIP method ${method}`);
         return inflateRaw(compressed);
       },

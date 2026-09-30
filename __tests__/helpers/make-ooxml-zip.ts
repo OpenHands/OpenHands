@@ -144,3 +144,81 @@ export async function makeZip(
   }
   return total.buffer;
 }
+
+/**
+ * Builds a ZIP whose entries use the *stored* method (0), so the reader returns
+ * the bytes without inflating them. Used to prove the per-part cap also applies
+ * to stored entries, which bypass `inflateRaw`'s running check.
+ */
+export function makeStoredZip(parts: Record<string, string>): ArrayBuffer {
+  const encoder = new TextEncoder();
+  const chunks: Uint8Array[] = [];
+  const entries: Entry[] = [];
+  let offset = 0;
+
+  const push = (bytes: Uint8Array) => {
+    chunks.push(bytes);
+    offset += bytes.length;
+  };
+
+  for (const [name, content] of Object.entries(parts)) {
+    const data = encoder.encode(content);
+    const nameBytes = encoder.encode(name);
+    const entry: Entry = {
+      name,
+      data,
+      compressed: data,
+      crc: crc32(data),
+      offset,
+    };
+
+    const header = new DataView(new ArrayBuffer(30));
+    header.setUint32(0, 0x04034b50, true);
+    header.setUint16(4, 20, true);
+    header.setUint16(6, 0, true);
+    header.setUint16(8, 0, true); // method 0: stored
+    header.setUint32(14, entry.crc, true);
+    header.setUint32(18, data.length, true);
+    header.setUint32(22, data.length, true);
+    header.setUint16(26, nameBytes.length, true);
+    push(new Uint8Array(header.buffer));
+    push(nameBytes);
+    push(data);
+    entries.push(entry);
+  }
+
+  const centralOffset = offset;
+  for (const entry of entries) {
+    const nameBytes = encoder.encode(entry.name);
+    const record = new DataView(new ArrayBuffer(46));
+    record.setUint32(0, 0x02014b50, true);
+    record.setUint16(4, 20, true);
+    record.setUint16(6, 20, true);
+    record.setUint16(8, 0, true);
+    record.setUint16(10, 0, true); // method 0: stored
+    record.setUint32(16, entry.crc, true);
+    record.setUint32(20, entry.compressed.length, true);
+    record.setUint32(24, entry.data.length, true);
+    record.setUint16(28, nameBytes.length, true);
+    record.setUint32(42, entry.offset, true);
+    push(new Uint8Array(record.buffer));
+    push(nameBytes);
+  }
+
+  const centralSize = offset - centralOffset;
+  const eocd = new DataView(new ArrayBuffer(22));
+  eocd.setUint32(0, 0x06054b50, true);
+  eocd.setUint16(8, entries.length, true);
+  eocd.setUint16(10, entries.length, true);
+  eocd.setUint32(12, centralSize, true);
+  eocd.setUint32(16, centralOffset, true);
+  push(new Uint8Array(eocd.buffer));
+
+  const total = new Uint8Array(offset);
+  let cursor = 0;
+  for (const chunk of chunks) {
+    total.set(chunk, cursor);
+    cursor += chunk.length;
+  }
+  return total.buffer;
+}

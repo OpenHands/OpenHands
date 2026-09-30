@@ -10,7 +10,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 const useWorkspaceSessionMock = vi.fn();
 vi.mock("#/hooks/query/use-workspace-session", async (importOriginal) => {
   const real =
-    await importOriginal<typeof import("#/hooks/query/use-workspace-session")>();
+    await importOriginal<
+      typeof import("#/hooks/query/use-workspace-session")
+    >();
   return {
     ...real,
     useWorkspaceSession: () => useWorkspaceSessionMock(),
@@ -33,6 +35,8 @@ vi.mock("#/api/backend-registry/active-store", () => ({
 }));
 
 import { OfficeArtifactPreview } from "#/components/features/chat/tool-visualizers/primitives/office-artifact-preview";
+import { MAX_OOXML_DOWNLOAD_BYTES } from "#/utils/ooxml-preview";
+import { I18nKey } from "#/i18n/declaration";
 import { makeZip } from "../../../../../helpers/make-ooxml-zip";
 
 const DOCX_XML = `<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>
@@ -143,6 +147,35 @@ describe("OfficeArtifactPreview", () => {
     expect(
       await screen.findByTestId("office-artifact-preview-error"),
     ).toBeInTheDocument();
+  });
+
+  it("refuses an oversized document before buffering it", async () => {
+    // The reader caps *unpacked* parts, but the container itself is downloaded
+    // whole — a declared length past the download cap must stop the fetch from
+    // being buffered into memory at all.
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({
+        "content-length": String(MAX_OOXML_DOWNLOAD_BYTES + 1),
+      }),
+      body: null,
+      arrayBuffer: async () => new ArrayBuffer(0),
+      blob: async () => new Blob([]),
+    });
+
+    render(<OfficeArtifactPreview path="huge.docx" />, {
+      wrapper: makeWrapper(),
+    });
+
+    // Translations are not loaded in the test env, so the rendered text is the
+    // i18n key: asserting the size-specific key proves the distinction, where
+    // the generic load-error key would mean the rejection was misclassified.
+    expect(
+      await screen.findByTestId("office-artifact-preview-error", undefined, {
+        timeout: 3000,
+      }),
+    ).toHaveTextContent(I18nKey.FILES$FILE_TOO_LARGE);
   });
 
   it("toggles the expanded height", async () => {
