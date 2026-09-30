@@ -62,12 +62,21 @@ export const MARKDOWN_SANITIZE_SCHEMA: Schema = {
     // "noopener noreferrer", which no token list matches — that would strip
     // the canonical safe-link value. A regexp is checked against each token
     // of a parsed (array-valued) `rel` and against the whole string
-    // otherwise, so it covers both shapes. Everything is allowed except
-    // `opener`: `target="_blank"` implies `noopener` in current browsers,
-    // and `rel="opener"` is the documented way to opt back *in*, handing
-    // the opened page a `window.opener` it can use to navigate this tab
-    // somewhere else (reverse tabnabbing). No other `rel` keyword grants a
-    // capability.
+    // otherwise, so it has to answer correctly for both shapes.
+    //
+    // Hence the token-boundary match rather than `^(?!opener$)`: anchored to
+    // the whole value, that only rejected a value that is exactly "opener",
+    // so the string shape "noreferrer opener" kept its `opener`. The string
+    // shape is all-or-nothing — sanitize cannot split a string, so a string
+    // carrying `opener` loses its other tokens too, which is the safe
+    // outcome. `noopener` is untouched: the `(?:^|\s)` prefix means the
+    // `opener` inside it is not a token.
+    //
+    // Everything is allowed except `opener`: `target="_blank"` implies
+    // `noopener` in current browsers, and `rel="opener"` is the documented
+    // way to opt back *in*, handing the opened page a `window.opener` it can
+    // use to navigate this tab somewhere else (reverse tabnabbing). No other
+    // `rel` keyword grants a capability.
     //
     // `target` is restricted to the two values a document legitimately
     // needs. An arbitrary value names a browsing context, so untrusted
@@ -77,7 +86,7 @@ export const MARKDOWN_SANITIZE_SCHEMA: Schema = {
       "href",
       "title",
       ["target", "_blank", "_self"],
-      ["rel", /^(?!opener$)/i],
+      ["rel", /^(?!.*(?:^|\s)opener(?:\s|$))/i],
     ],
     img: [
       ...(defaultSchema.attributes?.img ?? []),

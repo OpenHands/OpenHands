@@ -368,6 +368,55 @@ describe("MARKDOWN_SANITIZE_SCHEMA", () => {
     expect(rel).toBe("noreferrer");
   });
 
+  it("drops the whole rel when opener rides along in the string shape", () => {
+    // The array shape above is what the production rehype-raw pipeline
+    // produces today, but a hand-built HAST tree — which is exactly what the
+    // fc208bc regression above exercises — can carry `rel` as one string.
+    // sanitize applies the regexp to the whole string there and cannot split
+    // it, so the safe answer is to drop the value entirely rather than let
+    // `opener` through alongside another token.
+    const tree = sanitize(
+      makeAnchor({
+        href: "https://example.com",
+        target: "_blank",
+        rel: "noreferrer opener",
+      }),
+      MARKDOWN_SANITIZE_SCHEMA,
+    ) as Root;
+
+    const relProp = firstAnchor(tree)?.properties?.rel;
+    const rel = Array.isArray(relProp) ? relProp.join(" ") : relProp;
+    expect(rel ?? "").toBe("");
+  });
+
+  it("drops the string shape whichever end opener sits at, in any case", () => {
+    for (const value of ["opener noreferrer", "NOREFERRER OPENER", "OPENER"]) {
+      const tree = sanitize(
+        makeAnchor({ href: "https://example.com", rel: value }),
+        MARKDOWN_SANITIZE_SCHEMA,
+      ) as Root;
+
+      const relProp = firstAnchor(tree)?.properties?.rel;
+      const rel = Array.isArray(relProp) ? relProp.join(" ") : relProp;
+      expect(rel ?? "").toBe("");
+    }
+  });
+
+  it("keeps noopener, which merely contains the letters of opener", () => {
+    // The boundary is what separates the keyword from the word it is part
+    // of: `noopener` is the safe default and must survive in both shapes.
+    for (const value of ["noopener", "noopener noreferrer", "NOOPENER"]) {
+      const tree = sanitize(
+        makeAnchor({ href: "https://example.com", rel: value }),
+        MARKDOWN_SANITIZE_SCHEMA,
+      ) as Root;
+
+      const relProp = firstAnchor(tree)?.properties?.rel;
+      const rel = Array.isArray(relProp) ? relProp.join(" ") : relProp;
+      expect(rel).toBe(value);
+    }
+  });
+
   it("matches rel=opener case-insensitively", () => {
     const tree = sanitize(
       makeAnchor({ href: "https://example.com", rel: "OPENER" }),
