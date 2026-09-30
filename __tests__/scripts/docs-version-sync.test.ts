@@ -4,9 +4,9 @@
 // authoritative `versions.agentServer` pin in `config/defaults.json`.
 //
 // PR #670 bumped the central pin to 1.23.0 but left stale `1.22.1` examples in
-// AGENTS.md and several script JSDocs. This test fails when those references
-// drift from the central pin so the next bump cannot silently leave docs
-// behind.
+// contributor guidance and several script JSDocs. This test fails when those
+// references drift from the central pin so the next bump cannot silently leave
+// docs behind.
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -29,12 +29,14 @@ const agentServerVersion = config.versions.agentServer;
 const dockerImage = `${config.images.agentCanvas}:${config.versions.agentCanvas}`;
 
 describe("docs/example references stay in sync with config/defaults.json", () => {
-  it("AGENTS.md documents the current default version", () => {
-    const agentsMd = read("AGENTS.md");
-    expect(agentsMd).toContain(
+  it("the local-stack skill documents the current default version", () => {
+    const localStackGuide = read(
+      ".agents/skills/local-stack-runtime/references/guide.md",
+    );
+    expect(localStackGuide).toContain(
       `\`OH_AGENT_SERVER_VERSION\` — specific PyPI version (e.g., "${agentServerVersion}")`,
     );
-    expect(agentsMd).toContain(
+    expect(localStackGuide).toContain(
       `Default: released PyPI version \`${agentServerVersion}\` for agent-server SDK libraries`,
     );
   });
