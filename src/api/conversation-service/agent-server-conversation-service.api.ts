@@ -630,12 +630,20 @@ class AgentServerConversationService {
       return batchGetCloudConversations(ids);
     }
 
-    const data = await new ConversationClient(
+    const data: unknown = await new ConversationClient(
       getAgentServerClientOptions(),
     ).getConversations<DirectConversationInfo>(ids);
 
-    return requireDirectConversationItems(data).map((item) =>
-      toAppConversation(item),
+    if (!Array.isArray(data)) {
+      throw invalidConversationResponse();
+    }
+    // The agent-server answers `null` for ids it does not have (deleted, or
+    // a MARS sandbox that came back without them); that is "not found", not
+    // a malformed response.
+    return data.map((item) =>
+      item === null
+        ? null
+        : toAppConversation(requireDirectConversationInfo(item)),
     );
   }
 

@@ -37,6 +37,22 @@ import WebSocket from "ws";
 
 const REJECTION_BODY_MAX = 300;
 
+/**
+ * Application close codes harness-api uses on the port-forward socket.
+ * 4001 is terminal (the session is gone or the caller may not reach it);
+ * 4002 means the sandbox woke but nothing accepted the connection on the
+ * guest port; 4011 is a transient upstream failure.
+ */
+export const TUNNEL_CLOSE_SESSION_UNAVAILABLE = 4001;
+export const TUNNEL_CLOSE_GUEST_DIAL_FAILED = 4002;
+export const TUNNEL_CLOSE_UPSTREAM_ERROR = 4011;
+
+const RECORDED_CLOSE_CODES = new Set([
+  TUNNEL_CLOSE_SESSION_UNAVAILABLE,
+  TUNNEL_CLOSE_GUEST_DIAL_FAILED,
+  TUNNEL_CLOSE_UPSTREAM_ERROR,
+]);
+
 function buildTunnelWsUrl(apiUrl, sessionId, remotePort) {
   const url = new URL(apiUrl);
   if (url.protocol !== "http:" && url.protocol !== "https:") {
@@ -62,7 +78,7 @@ function buildTunnelWsUrl(apiUrl, sessionId, remotePort) {
  * @param {string} [options.address] Local bind address
  * @param {(message: string) => void} [options.log]
  * @param {typeof WebSocket} [options.WebSocketImpl] Override for tests
- * @returns {Promise<{sessionId: string, remotePort: number, localPort: number, stop: () => void}>}
+ * @returns {Promise<{sessionId: string, remotePort: number, localPort: number, getLastUpstreamFailure: () => UpstreamFailure | null, stop: () => void}>}
  */
 export async function startPortForwardTunnel({
   sessionId,
@@ -87,6 +103,15 @@ export async function startPortForwardTunnel({
   const wsUrl = buildTunnelWsUrl(apiUrl, sessionId, remotePort);
   const headers = { Authorization: `Bearer ${accessToken}` };
   const activeSockets = new Set();
+  /**
+   * Each local connection is its own upstream dial, so a failure never
+   * reaches whoever is reading the local socket — they only see it close.
+   * Keeping the most recent one lets callers explain why.
+   *
+   * @typedef {{ closeCode: number | null, httpStatus: number | null, message: string }} UpstreamFailure
+   * @type {UpstreamFailure | null}
+   */
+  let lastUpstreamFailure = null;
 
   function bridgeConnection(localSocket) {
     activeSockets.add(localSocket);
@@ -106,6 +131,11 @@ export async function startPortForwardTunnel({
       });
       res.on("end", () => {
         const message = body.trim().slice(0, REJECTION_BODY_MAX);
+        lastUpstreamFailure = {
+          closeCode: null,
+          httpStatus: res.statusCode ?? null,
+          message,
+        };
         log(
           `server rejected tunnel (${res.statusCode} ${res.statusMessage}): ${message}`,
         );
@@ -118,6 +148,7 @@ export async function startPortForwardTunnel({
     // slow consumer on either side can't make this process buffer an
     // unbounded amount of the stream in memory.
     ws.on("open", () => {
+      lastUpstreamFailure = null;
       localSocket.on("data", (chunk) => {
         localSocket.pause();
         ws.send(chunk, (err) => {
@@ -137,7 +168,16 @@ export async function startPortForwardTunnel({
       });
     });
 
-    ws.on("close", () => localSocket.end());
+    ws.on("close", (code, reason) => {
+      if (RECORDED_CLOSE_CODES.has(code)) {
+        lastUpstreamFailure = {
+          closeCode: code,
+          httpStatus: null,
+          message: reason?.toString() ?? "",
+        };
+      }
+      localSocket.end();
+    });
     ws.on("error", (err) => {
       // 'unexpected-response' already logged the rejection and its message;
       // 'ws' also emits a generic error for the same failure, which would
@@ -148,7 +188,10 @@ export async function startPortForwardTunnel({
     });
 
     localSocket.on("close", () => {
-      if (ws.readyState === WebSocketImpl.OPEN || ws.readyState === WebSocketImpl.CONNECTING) {
+      if (
+        ws.readyState === WebSocketImpl.OPEN ||
+        ws.readyState === WebSocketImpl.CONNECTING
+      ) {
         ws.close();
       }
     });
@@ -180,6 +223,7 @@ export async function startPortForwardTunnel({
         sessionId,
         remotePort,
         localPort: boundPort,
+        getLastUpstreamFailure: () => lastUpstreamFailure,
         stop() {
           for (const socket of activeSockets) {
             socket.destroy();

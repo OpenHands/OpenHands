@@ -75,6 +75,16 @@ export const SETUP_QUERY_KEYS = {
   capabilities: () => ["setup-capabilities"] as const,
 } as const;
 
+export const MARS_QUERY_KEYS = {
+  all: ["mars"] as const,
+  authState: ["mars", "auth-state"] as const,
+  /** Every connection's agent list, for invalidating after a change. */
+  allAgents: ["mars", "agents"] as const,
+  /** Keyed by connection so switching teams never shows another team's list. */
+  agents: (connectionId: string | null) =>
+    ["mars", "agents", connectionId] as const,
+} as const;
+
 export const APP_UPDATE_QUERY_KEYS = {
   /** Latest published @openhands/agent-canvas version (npm `latest` dist-tag). */
   latestVersion: ["agent-canvas-latest-version"] as const,

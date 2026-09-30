@@ -30,6 +30,7 @@ function fakeStartTunnel() {
       sessionId: options.sessionId,
       remotePort: options.remotePort,
       localPort: nextPort++,
+      getLastUpstreamFailure: () => null,
       stop: vi.fn(),
     };
   });
@@ -39,7 +40,10 @@ function fakeStartTunnel() {
 describe("createTunnelRegistry", () => {
   it("attaches a session and reports it connected", async () => {
     const { fn } = fakeStartTunnel();
-    const registry = createTunnelRegistry({ startTunnel: fn, ensureAwake: noopEnsureAwake });
+    const registry = createTunnelRegistry({
+      startTunnel: fn,
+      ensureAwake: noopEnsureAwake,
+    });
 
     const result = await registry.attach({
       sessionId: "sess_a",
@@ -54,10 +58,21 @@ describe("createTunnelRegistry", () => {
 
   it("reuses an existing tunnel instead of opening a duplicate", async () => {
     const { fn } = fakeStartTunnel();
-    const registry = createTunnelRegistry({ startTunnel: fn, ensureAwake: noopEnsureAwake });
+    const registry = createTunnelRegistry({
+      startTunnel: fn,
+      ensureAwake: noopEnsureAwake,
+    });
 
-    const first = await registry.attach({ sessionId: "sess_a", remotePort: 8000, accessToken: "t" });
-    const second = await registry.attach({ sessionId: "sess_a", remotePort: 8000, accessToken: "t" });
+    const first = await registry.attach({
+      sessionId: "sess_a",
+      remotePort: 8000,
+      accessToken: "t",
+    });
+    const second = await registry.attach({
+      sessionId: "sess_a",
+      remotePort: 8000,
+      accessToken: "t",
+    });
 
     expect(second.localPort).toBe(first.localPort);
     expect(fn).toHaveBeenCalledTimes(1);
@@ -67,12 +82,29 @@ describe("createTunnelRegistry", () => {
     const gate = deferred<void>();
     const fn = vi.fn(async (options) => {
       await gate.promise;
-      return { sessionId: options.sessionId, remotePort: options.remotePort, localPort: 41000, stop: vi.fn() };
+      return {
+        sessionId: options.sessionId,
+        remotePort: options.remotePort,
+        localPort: 41000,
+        getLastUpstreamFailure: () => null,
+        stop: vi.fn(),
+      };
     });
-    const registry = createTunnelRegistry({ startTunnel: fn, ensureAwake: noopEnsureAwake });
+    const registry = createTunnelRegistry({
+      startTunnel: fn,
+      ensureAwake: noopEnsureAwake,
+    });
 
-    const attempt1 = registry.attach({ sessionId: "sess_a", remotePort: 8000, accessToken: "t" });
-    const attempt2 = registry.attach({ sessionId: "sess_a", remotePort: 8000, accessToken: "t" });
+    const attempt1 = registry.attach({
+      sessionId: "sess_a",
+      remotePort: 8000,
+      accessToken: "t",
+    });
+    const attempt2 = registry.attach({
+      sessionId: "sess_a",
+      remotePort: 8000,
+      accessToken: "t",
+    });
     gate.resolve();
 
     const [r1, r2] = await Promise.all([attempt1, attempt2]);
@@ -82,24 +114,51 @@ describe("createTunnelRegistry", () => {
 
   it("gives independent sessions independent, non-colliding ports", async () => {
     const { fn } = fakeStartTunnel();
-    const registry = createTunnelRegistry({ startTunnel: fn, ensureAwake: noopEnsureAwake });
+    const registry = createTunnelRegistry({
+      startTunnel: fn,
+      ensureAwake: noopEnsureAwake,
+    });
 
     const [a, b] = await Promise.all([
-      registry.attach({ sessionId: "sess_a", remotePort: 8000, accessToken: "t" }),
-      registry.attach({ sessionId: "sess_b", remotePort: 8000, accessToken: "t" }),
+      registry.attach({
+        sessionId: "sess_a",
+        remotePort: 8000,
+        accessToken: "t",
+      }),
+      registry.attach({
+        sessionId: "sess_b",
+        remotePort: 8000,
+        accessToken: "t",
+      }),
     ]);
 
     expect(a.localPort).not.toBe(b.localPort);
     expect(fn).toHaveBeenCalledTimes(2);
-    expect(registry.list().map((e) => e.sessionId).sort()).toEqual(["sess_a", "sess_b"]);
+    expect(
+      registry
+        .list()
+        .map((e) => e.sessionId)
+        .sort(),
+    ).toEqual(["sess_a", "sess_b"]);
   });
 
   it("detach() tears down only the targeted session", async () => {
     const { fn } = fakeStartTunnel();
-    const registry = createTunnelRegistry({ startTunnel: fn, ensureAwake: noopEnsureAwake });
+    const registry = createTunnelRegistry({
+      startTunnel: fn,
+      ensureAwake: noopEnsureAwake,
+    });
 
-    const a = await registry.attach({ sessionId: "sess_a", remotePort: 8000, accessToken: "t" });
-    await registry.attach({ sessionId: "sess_b", remotePort: 8000, accessToken: "t" });
+    await registry.attach({
+      sessionId: "sess_a",
+      remotePort: 8000,
+      accessToken: "t",
+    });
+    await registry.attach({
+      sessionId: "sess_b",
+      remotePort: 8000,
+      accessToken: "t",
+    });
 
     await registry.detach("sess_a");
 
@@ -111,10 +170,21 @@ describe("createTunnelRegistry", () => {
 
   it("detachAll() tears down every session", async () => {
     const { fn } = fakeStartTunnel();
-    const registry = createTunnelRegistry({ startTunnel: fn, ensureAwake: noopEnsureAwake });
+    const registry = createTunnelRegistry({
+      startTunnel: fn,
+      ensureAwake: noopEnsureAwake,
+    });
 
-    await registry.attach({ sessionId: "sess_a", remotePort: 8000, accessToken: "t" });
-    await registry.attach({ sessionId: "sess_b", remotePort: 8000, accessToken: "t" });
+    await registry.attach({
+      sessionId: "sess_a",
+      remotePort: 8000,
+      accessToken: "t",
+    });
+    await registry.attach({
+      sessionId: "sess_b",
+      remotePort: 8000,
+      accessToken: "t",
+    });
 
     await registry.detachAll();
 
@@ -131,29 +201,58 @@ describe("createTunnelRegistry", () => {
       if (options.sessionId === "sess_bad") {
         badAttempts += 1;
         if (badAttempts === 1) {
-          throw new Error("server rejected tunnel (403 Forbidden): invalid token");
+          throw new Error(
+            "server rejected tunnel (403 Forbidden): invalid token",
+          );
         }
       }
-      return { sessionId: options.sessionId, remotePort: options.remotePort, localPort: 42000, stop: vi.fn() };
+      return {
+        sessionId: options.sessionId,
+        remotePort: options.remotePort,
+        localPort: 42000,
+        getLastUpstreamFailure: () => null,
+        stop: vi.fn(),
+      };
     });
-    const registry = createTunnelRegistry({ startTunnel: fn, ensureAwake: noopEnsureAwake });
+    const registry = createTunnelRegistry({
+      startTunnel: fn,
+      ensureAwake: noopEnsureAwake,
+    });
 
-    await registry.attach({ sessionId: "sess_ok", remotePort: 8000, accessToken: "t" });
+    await registry.attach({
+      sessionId: "sess_ok",
+      remotePort: 8000,
+      accessToken: "t",
+    });
     await expect(
-      registry.attach({ sessionId: "sess_bad", remotePort: 8000, accessToken: "wrong" }),
+      registry.attach({
+        sessionId: "sess_bad",
+        remotePort: 8000,
+        accessToken: "wrong",
+      }),
     ).rejects.toThrow(/invalid token/);
 
     expect(registry.get("sess_ok")).toMatchObject({ status: "connected" });
-    expect(registry.get("sess_bad")).toMatchObject({ status: "error", error: expect.stringMatching(/invalid token/) });
+    expect(registry.get("sess_bad")).toMatchObject({
+      status: "error",
+      error: expect.stringMatching(/invalid token/),
+    });
 
     // Retrying (e.g. after the user fixes their token) opens a fresh attempt.
-    const retried = await registry.attach({ sessionId: "sess_bad", remotePort: 8000, accessToken: "t" });
+    const retried = await registry.attach({
+      sessionId: "sess_bad",
+      remotePort: 8000,
+      accessToken: "t",
+    });
     expect(retried.status).toBe("connected");
   });
 
   it("rejects when sessionId is missing", async () => {
     const { fn } = fakeStartTunnel();
-    const registry = createTunnelRegistry({ startTunnel: fn, ensureAwake: noopEnsureAwake });
+    const registry = createTunnelRegistry({
+      startTunnel: fn,
+      ensureAwake: noopEnsureAwake,
+    });
     await expect(
       // @ts-expect-error deliberately omitting a required field to test runtime validation
       registry.attach({ remotePort: 8000, accessToken: "t" }),
@@ -169,11 +268,21 @@ describe("createTunnelRegistry", () => {
     const { fn } = fakeStartTunnel();
     fn.mockImplementation(async (options) => {
       order.push("startTunnel");
-      return { sessionId: options.sessionId, remotePort: options.remotePort, localPort: 43000, stop: vi.fn() };
+      return {
+        sessionId: options.sessionId,
+        remotePort: options.remotePort,
+        localPort: 43000,
+        getLastUpstreamFailure: () => null,
+        stop: vi.fn(),
+      };
     });
     const registry = createTunnelRegistry({ startTunnel: fn, ensureAwake });
 
-    await registry.attach({ sessionId: "sess_a", remotePort: 8000, accessToken: "t" });
+    await registry.attach({
+      sessionId: "sess_a",
+      remotePort: 8000,
+      accessToken: "t",
+    });
 
     expect(order).toEqual(["ensureAwake", "startTunnel"]);
     expect(ensureAwake).toHaveBeenCalledWith(
@@ -183,13 +292,19 @@ describe("createTunnelRegistry", () => {
 
   it("surfaces a failure to wake the session without ever dialing the tunnel", async () => {
     const ensureAwake = vi.fn(async () => {
-      throw new Error("Session sess_a is SESSION_STATUS_FAILED and cannot be connected to.");
+      throw new Error(
+        "Session sess_a is SESSION_STATUS_FAILED and cannot be connected to.",
+      );
     });
     const { fn } = fakeStartTunnel();
     const registry = createTunnelRegistry({ startTunnel: fn, ensureAwake });
 
     await expect(
-      registry.attach({ sessionId: "sess_a", remotePort: 8000, accessToken: "t" }),
+      registry.attach({
+        sessionId: "sess_a",
+        remotePort: 8000,
+        accessToken: "t",
+      }),
     ).rejects.toThrow(/SESSION_STATUS_FAILED/);
 
     expect(fn).not.toHaveBeenCalled();
@@ -207,7 +322,11 @@ describe("createTunnelRegistry", () => {
  * against the real tunnel client, not just a stub.
  */
 describe("createTunnelRegistry (real tunnel client)", () => {
-  function startFakeHarness(sessionId: string, remotePort: number, expectToken: string) {
+  function startFakeHarness(
+    sessionId: string,
+    remotePort: number,
+    expectToken: string,
+  ) {
     const expectedPath = `/v2/agents/sessions/${sessionId}/port-forward/${remotePort}`;
     const sessionPath = `/v2/agents/sessions/${sessionId}`;
     const httpServer = createServer((req, res) => {
@@ -217,7 +336,11 @@ describe("createTunnelRegistry (real tunnel client)", () => {
       // (covered separately in mars-session.test.ts).
       if (req.method === "GET" && req.url === sessionPath) {
         res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ session: { session_id: sessionId, status: "SESSION_STATUS_READY" } }));
+        res.end(
+          JSON.stringify({
+            session: { session_id: sessionId, status: "SESSION_STATUS_READY" },
+          }),
+        );
         return;
       }
       res.writeHead(404).end();
@@ -225,20 +348,33 @@ describe("createTunnelRegistry (real tunnel client)", () => {
     const wss = new WebSocketServer({ noServer: true });
 
     httpServer.on("upgrade", (req, socket, head) => {
-      if (req.url !== expectedPath || req.headers.authorization !== `Bearer ${expectToken}`) {
+      if (
+        req.url !== expectedPath ||
+        req.headers.authorization !== `Bearer ${expectToken}`
+      ) {
         socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
         socket.destroy();
         return;
       }
       wss.handleUpgrade(req, socket, head, (ws) => {
-        ws.on("message", (data) => ws.send(Buffer.concat([Buffer.from(`echo:${sessionId}:`), data as Buffer])));
+        ws.on("message", (data) =>
+          ws.send(
+            Buffer.concat([Buffer.from(`echo:${sessionId}:`), data as Buffer]),
+          ),
+        );
       });
     });
 
     return new Promise<{ port: number; close: () => void }>((resolve) => {
       httpServer.listen(0, "127.0.0.1", () => {
         const { port } = httpServer.address() as net.AddressInfo;
-        resolve({ port, close: () => { wss.close(); httpServer.close(); } });
+        resolve({
+          port,
+          close: () => {
+            wss.close();
+            httpServer.close();
+          },
+        });
       });
     });
   }
@@ -246,7 +382,9 @@ describe("createTunnelRegistry (real tunnel client)", () => {
   it("bridges two concurrently attached sessions to their own independent guests", async () => {
     const harnessA = await startFakeHarness("sess_a", 8000, "token-a");
     const harnessB = await startFakeHarness("sess_b", 8000, "token-b");
-    const registry = createTunnelRegistry({ startTunnel: startPortForwardTunnel });
+    const registry = createTunnelRegistry({
+      startTunnel: startPortForwardTunnel,
+    });
 
     try {
       const [a, b] = await Promise.all([
@@ -268,7 +406,9 @@ describe("createTunnelRegistry (real tunnel client)", () => {
 
       const send = (port: number, payload: string) =>
         new Promise<Buffer>((resolve, reject) => {
-          const socket = net.connect({ port, host: "127.0.0.1" }, () => socket.write(payload));
+          const socket = net.connect({ port, host: "127.0.0.1" }, () =>
+            socket.write(payload),
+          );
           socket.once("data", (data: Buffer) => {
             socket.end();
             resolve(data);

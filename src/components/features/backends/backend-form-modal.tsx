@@ -4,6 +4,9 @@ import { useTranslation } from "react-i18next";
 import { ChevronDown, Globe, Info, Monitor } from "lucide-react";
 import { ServerClient } from "@openhands/typescript-client/clients";
 import OpenHandsLogoWhite from "#/assets/branding/openhands-logo-white.svg?react";
+import DigitalOceanLogo from "#/assets/branding/digitalocean-logo.svg?react";
+import { getMarsBridge } from "#/api/mars/mars-tunnel-backend";
+import { DigitalOceanConnectPanel } from "./managed-agents/digitalocean-connect-panel";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import {
   MODAL_MAX_WIDTH_VIEWPORT,
@@ -155,7 +158,7 @@ const DEPLOYMENT_OPTIONS_URL =
 export type BackendConnectionMethod = "manual" | "cloud_login";
 
 export type BackendAddedSource = CloudConnectionSource;
-type AddBackendOption = "cloud" | "agent-server";
+type AddBackendOption = "cloud" | "agent-server" | "digitalocean";
 type AgentServerLocation = "local" | "remote";
 
 function getConnectionTestFailedTitle(
@@ -1135,7 +1138,7 @@ function BackendOptionTab({
       onClick={() => onSelect(value)}
       className={cn(
         "relative flex min-h-16 w-full cursor-pointer items-center gap-3 px-3 py-3 text-left transition-colors",
-        "first:border-r first:border-r-[var(--oh-border)]",
+        "not-last:border-r not-last:border-r-[var(--oh-border)]",
         "focus-visible:z-10 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-300",
         isSelected
           ? "bg-[var(--oh-surface-raised)] text-white after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-primary"
@@ -1336,6 +1339,7 @@ function AgentServerGuidance({ location }: { location: AgentServerLocation }) {
 
 function AddBackendChooser({
   onConnected,
+  onClose,
   source,
 }: {
   onConnected: (
@@ -1343,6 +1347,7 @@ function AddBackendChooser({
     connectionMethod: BackendConnectionMethod,
     metadata?: BackendConnectionTestMetadata,
   ) => void;
+  onClose: () => void;
   source: BackendAddedSource;
 }) {
   const { t } = useTranslation("openhands");
@@ -1353,13 +1358,93 @@ function AddBackendChooser({
   const panelId = "add-backend-selected-panel";
   const selectedTabId = `add-backend-option-${selectedOption}-tab`;
   const isCloudSelected = selectedOption === "cloud";
+  const canUseDigitalOcean = getMarsBridge() !== null;
+
+  let panel: React.ReactNode;
+  if (selectedOption === "digitalocean") {
+    panel = <DigitalOceanConnectPanel onConnected={onClose} />;
+  } else if (isCloudSelected) {
+    /* Padding keeps the CTA and Advanced host field from hugging the
+       border; when Advanced expands the panel grows with the content
+       instead of squeezing it into the reserved min-height. */
+    panel = (
+      <div
+        data-testid="add-backend-cloud-panel"
+        className={cn(
+          "relative isolate flex min-h-[13.5rem] w-full items-center justify-center rounded-xl border border-[var(--oh-border)] px-5 py-6",
+          // A soft greyscale halo sits behind the CTA; -z-10 keeps it under the
+          // content rather than washing over it.
+          "before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:rounded-xl",
+          "before:bg-[radial-gradient(75%_75%_at_50%_50%,rgba(255,255,255,0.1)_0%,rgba(255,255,255,0)_70%)]",
+        )}
+      >
+        <CloudLoginColumn
+          onConnected={onConnected}
+          testIdRoot="add-backend"
+          analyticsSource={source}
+          showBranding={false}
+        />
+      </div>
+    );
+  } else {
+    panel = (
+      <div
+        data-testid="add-backend-agent-server-panel"
+        className="mx-auto w-full max-w-xl"
+      >
+        {/* Rules on either side center the toggle and read as a
+            divider between the chooser and the connection form. */}
+        <div className="flex items-center gap-3">
+          <span className="h-px flex-1 bg-[var(--oh-border)]" aria-hidden />
+          <SegmentedToggle<AgentServerLocation>
+            value={agentServerLocation}
+            options={[
+              {
+                value: "local",
+                label: t(I18nKey.BACKEND$KIND_LOCAL),
+                icon: <Monitor aria-hidden />,
+              },
+              {
+                value: "remote",
+                label: t(I18nKey.BACKEND$KIND_REMOTE),
+                icon: <Globe aria-hidden />,
+              },
+            ]}
+            onChange={setAgentServerLocation}
+            ariaLabel={t(I18nKey.BACKEND$AGENT_SERVER_LOCATION)}
+            testId="add-backend-location"
+          />
+          <span className="h-px flex-1 bg-[var(--oh-border)]" aria-hidden />
+        </div>
+
+        <div className="mt-4 flex flex-col gap-4">
+          <AgentServerGuidance
+            key={agentServerLocation}
+            location={agentServerLocation}
+          />
+          <ManualConnectionColumn
+            onConnected={onConnected}
+            testIdRoot="add-backend"
+            requireApiKey={agentServerLocation === "remote"}
+            submitLabel={t(I18nKey.BACKEND$CONNECT)}
+            submittingLabel={t(I18nKey.ONBOARDING$BACKEND_STATUS_CHECKING)}
+            fixedKind="local"
+            showKindSelector={false}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div data-testid="add-backend-chooser" className="flex flex-col">
       <div
         role="tablist"
         aria-label={t(I18nKey.BACKEND$CHOOSER_TITLE)}
-        className="grid grid-cols-2 overflow-hidden rounded-lg border border-[var(--oh-border)]"
+        className={cn(
+          "grid overflow-hidden rounded-lg border border-[var(--oh-border)]",
+          canUseDigitalOcean ? "grid-cols-3" : "grid-cols-2",
+        )}
       >
         <BackendOptionTab
           value="cloud"
@@ -1387,6 +1472,18 @@ function AddBackendChooser({
           panelId={panelId}
           testId="add-backend-option-agent-server"
         />
+        {canUseDigitalOcean ? (
+          <BackendOptionTab
+            value="digitalocean"
+            selectedValue={selectedOption}
+            title={t(I18nKey.DO_AGENTS$BADGE)}
+            description={t(I18nKey.DO_AGENTS$TAB_DESCRIPTION)}
+            icon={<DigitalOceanLogo width={28} height={28} />}
+            onSelect={setSelectedOption}
+            panelId={panelId}
+            testId="add-backend-option-digitalocean"
+          />
+        ) : null}
       </div>
 
       <div className="mt-6">
@@ -1397,82 +1494,7 @@ function AddBackendChooser({
             aria-labelledby={selectedTabId}
             className="min-w-0"
           >
-            {isCloudSelected ? (
-              /* Padding keeps the CTA and Advanced host field from hugging the
-                 border; when Advanced expands the panel grows with the content
-                 instead of squeezing it into the reserved min-height. */
-              <div
-                data-testid="add-backend-cloud-panel"
-                className={cn(
-                  "relative isolate flex min-h-[13.5rem] w-full items-center justify-center rounded-xl border border-[var(--oh-border)] px-5 py-6",
-                  // A soft greyscale halo sits behind the CTA; -z-10 keeps it under the
-                  // content rather than washing over it.
-                  "before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:rounded-xl",
-                  "before:bg-[radial-gradient(75%_75%_at_50%_50%,rgba(255,255,255,0.1)_0%,rgba(255,255,255,0)_70%)]",
-                )}
-              >
-                <CloudLoginColumn
-                  onConnected={onConnected}
-                  testIdRoot="add-backend"
-                  analyticsSource={source}
-                  showBranding={false}
-                />
-              </div>
-            ) : (
-              <div
-                data-testid="add-backend-agent-server-panel"
-                className="mx-auto w-full max-w-xl"
-              >
-                {/* Rules on either side center the toggle and read as a
-                    divider between the chooser and the connection form. */}
-                <div className="flex items-center gap-3">
-                  <span
-                    className="h-px flex-1 bg-[var(--oh-border)]"
-                    aria-hidden
-                  />
-                  <SegmentedToggle<AgentServerLocation>
-                    value={agentServerLocation}
-                    options={[
-                      {
-                        value: "local",
-                        label: t(I18nKey.BACKEND$KIND_LOCAL),
-                        icon: <Monitor aria-hidden />,
-                      },
-                      {
-                        value: "remote",
-                        label: t(I18nKey.BACKEND$KIND_REMOTE),
-                        icon: <Globe aria-hidden />,
-                      },
-                    ]}
-                    onChange={setAgentServerLocation}
-                    ariaLabel={t(I18nKey.BACKEND$AGENT_SERVER_LOCATION)}
-                    testId="add-backend-location"
-                  />
-                  <span
-                    className="h-px flex-1 bg-[var(--oh-border)]"
-                    aria-hidden
-                  />
-                </div>
-
-                <div className="mt-4 flex flex-col gap-4">
-                  <AgentServerGuidance
-                    key={agentServerLocation}
-                    location={agentServerLocation}
-                  />
-                  <ManualConnectionColumn
-                    onConnected={onConnected}
-                    testIdRoot="add-backend"
-                    requireApiKey={agentServerLocation === "remote"}
-                    submitLabel={t(I18nKey.BACKEND$CONNECT)}
-                    submittingLabel={t(
-                      I18nKey.ONBOARDING$BACKEND_STATUS_CHECKING,
-                    )}
-                    fixedKind="local"
-                    showKindSelector={false}
-                  />
-                </div>
-              </div>
-            )}
+            {panel}
           </section>
         </AnimatedPanelHeight>
       </div>
@@ -1523,7 +1545,13 @@ function AddBackendConnectionOptions({
     );
   }
 
-  return <AddBackendChooser onConnected={handleConnected} source={source} />;
+  return (
+    <AddBackendChooser
+      onConnected={handleConnected}
+      onClose={onClose}
+      source={source}
+    />
+  );
 }
 
 // ── Modal wrappers ──────────────────────────────────────────────────
