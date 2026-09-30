@@ -28,7 +28,7 @@ const mocks = vi.hoisted(() => ({
   backendKind: "local" as "local" | "cloud",
   canManage: true,
   navigate: vi.fn(),
-  useAutomations: vi.fn(),
+  usePaginatedAutomations: vi.fn(),
   useAutomationRunSummaries: vi.fn(),
   toggle: vi.fn(),
   remove: vi.fn(),
@@ -88,9 +88,9 @@ vi.mock("#/hooks/query/use-automation-health", () => ({
 }));
 
 vi.mock("#/hooks/query/use-automations", () => ({
-  useAutomations: (options: unknown) => {
-    mocks.useAutomations(options);
-    return mocks.automationsState;
+  usePaginatedAutomations: (options: unknown) => {
+    mocks.usePaginatedAutomations(options);
+    return { ...mocks.automationsState, hasNextPage: false };
   },
   useToggleAutomation: () => ({ mutate: mocks.toggle }),
   useDeleteAutomation: () => ({ mutate: mocks.remove }),
@@ -530,9 +530,7 @@ describe("automations list states", () => {
     expect(screen.getAllByTestId("automation-skeleton")).toHaveLength(3);
     // The header copy comes from the admitted interface manifest.
     expect(screen.getByText("Widget automations")).toBeInTheDocument();
-    expect(mocks.useAutomations).toHaveBeenCalledWith({
-      limit: 50,
-      offset: 0,
+    expect(mocks.usePaginatedAutomations).toHaveBeenCalledWith({
       enabled: false,
     });
     expect(mocks.useTranslation).toHaveBeenCalledWith("openhands");
@@ -565,9 +563,7 @@ describe("automations list states", () => {
     expect(
       screen.queryByRole("button", { name: "retry-list" }),
     ).not.toBeInTheDocument();
-    expect(mocks.useAutomations).toHaveBeenCalledWith({
-      limit: 50,
-      offset: 0,
+    expect(mocks.usePaginatedAutomations).toHaveBeenCalledWith({
       enabled: true,
     });
   });
@@ -1099,37 +1095,5 @@ describe("automations list interactions", () => {
     expect(window.localStorage.getItem("openhands-automations-view")).toBe(
       "grid",
     );
-  });
-
-  it("loads the next page size while more automations remain", async () => {
-    mocks.automationsState.data = {
-      automations: [makeAutomation()],
-      total: 51,
-    };
-    const user = userEvent.setup();
-
-    renderList();
-    await user.click(
-      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$LOAD_MORE }),
-    );
-
-    expect(mocks.useAutomations).toHaveBeenLastCalledWith({
-      limit: 100,
-      offset: 0,
-      enabled: true,
-    });
-  });
-
-  it("does not offer another page when the total is already displayed", () => {
-    mocks.automationsState.data = {
-      automations: [makeAutomation()],
-      total: 1,
-    };
-
-    renderList();
-
-    expect(
-      screen.queryByRole("button", { name: I18nKey.AUTOMATIONS$LOAD_MORE }),
-    ).not.toBeInTheDocument();
   });
 });

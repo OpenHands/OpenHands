@@ -503,3 +503,101 @@ describe("AutomationsList — list freshness on remount", () => {
     await screen.findByText(newAutomation.name);
   });
 });
+
+describe("AutomationsList — Load more", () => {
+  // Mirrors GET /api/automation/v1: newest first, `limit` capped at 100.
+  function serveAutomations(automations: Automation[]) {
+    vi.mocked(AutomationService.getAutomations)
+      .mockReset()
+      .mockImplementation(async (limit = 50, offset = 0) => {
+        if (limit > 100) throw new Error("422: limit must be <= 100");
+        return {
+          automations: automations.slice(offset, offset + limit),
+          total: automations.length,
+        };
+      });
+  }
+
+  function makeAutomations(count: number): Automation[] {
+    return Array.from({ length: count }, (_, index) => ({
+      ...automation,
+      id: `auto-${index + 1}`,
+      name: `Automation ${index + 1}`,
+    }));
+  }
+
+  it("pages through more automations than one request may return", async () => {
+    // Arrange
+    serveAutomations(makeAutomations(120));
+    const user = userEvent.setup();
+    renderList();
+    await screen.findByText("Automation 50");
+
+    // Act
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$LOAD_MORE }),
+    );
+    await screen.findByText("Automation 100");
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$LOAD_MORE }),
+    );
+
+    // Assert
+    await screen.findByText("Automation 120");
+    expect(vi.mocked(AutomationService.getAutomations).mock.calls).toEqual([
+      [50, 0],
+      [50, 50],
+      [50, 100],
+    ]);
+    expect(
+      screen.queryByRole("button", { name: I18nKey.AUTOMATIONS$LOAD_MORE }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("holds Load more while the list refreshes after a change", async () => {
+    // Arrange — turning an automation off refetches the loaded pages; keep
+    // that refetch in flight so a Load more click would cancel it.
+    serveAutomations(makeAutomations(60));
+    const user = userEvent.setup();
+    renderList();
+    await screen.findByText("Automation 50");
+    vi.mocked(AutomationService.getAutomations).mockReturnValue(
+      new Promise(() => {}),
+    );
+
+    // Act
+    await user.click(
+      screen.getAllByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU)[0],
+    );
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$TURN_OFF }),
+    );
+
+    // Assert
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: I18nKey.AUTOMATIONS$LOAD_MORE }),
+      ).toBeDisabled(),
+    );
+  });
+
+  it("lists an automation once when it shifts onto the next page", async () => {
+    // Arrange — a new automation lands between the two requests, pushing
+    // the last row of page one onto page two.
+    const [first, ...rest] = makeAutomations(61);
+    serveAutomations(rest);
+    const user = userEvent.setup();
+    renderList();
+    await screen.findByText("Automation 51");
+    serveAutomations([first, ...rest]);
+
+    // Act
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$LOAD_MORE }),
+    );
+
+    // Assert
+    await screen.findByText("Automation 61");
+    expect(screen.getAllByText("Automation 51")).toHaveLength(1);
+  });
+});

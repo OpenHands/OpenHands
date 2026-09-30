@@ -9,7 +9,7 @@ import {
 } from "#/utils/custom-toast-handlers";
 import { getApiErrorMessage } from "#/utils/api-error-message";
 import {
-  useAutomations,
+  usePaginatedAutomations,
   useToggleAutomation,
   useDeleteAutomation,
   useDispatchAutomation,
@@ -71,8 +71,6 @@ import { ManifestOverviewTiles } from "#/components/features/manifest/manifest-o
 import { ManifestSubpageLayout } from "#/components/features/manifest/manifest-subpage-layout";
 import { cn, downloadBlob } from "#/utils/utils";
 
-const PAGE_SIZE = 50;
-
 /**
  * The page renders the interface manifest's copy, so without an admitted
  * manifest there is nothing to render: a 404, which the layout's error
@@ -107,7 +105,6 @@ export default function AutomationsList() {
   const [viewMode, setViewMode] = useState<AutomationViewMode>(() =>
     readStoredAutomationViewMode(),
   );
-  const [limit, setLimit] = useState(PAGE_SIZE);
   const [deleteTarget, setDeleteTarget] = useState<{
     id: string;
     name: string;
@@ -132,11 +129,15 @@ export default function AutomationsList() {
   const isBackendHealthy = healthData?.status === "ok";
 
   // Only fetch automations if the backend is healthy
-  const { data, isLoading, isError, refetch } = useAutomations({
-    limit,
-    offset: 0,
-    enabled: isBackendHealthy,
-  });
+  const {
+    data,
+    isLoading,
+    isError,
+    refetch,
+    hasNextPage,
+    fetchNextPage,
+    isFetching,
+  } = usePaginatedAutomations({ enabled: isBackendHealthy });
   // One runs query per listed automation — dashboard mode only.
   const runSummaries = useAutomationRunSummaries(data?.automations ?? [], {
     enabled: isBackendHealthy && dashboard !== null,
@@ -327,7 +328,6 @@ export default function AutomationsList() {
       </div>
     );
 
-  const hasMore = data ? data.total > data.automations.length : false;
   const hasNoAutomations =
     !isLoading && !isError && data?.automations.length === 0;
 
@@ -487,11 +487,12 @@ export default function AutomationsList() {
                 insights={groupInsights}
               />
 
-              {hasMore && (
+              {hasNextPage && (
                 <button
                   type="button"
-                  onClick={() => setLimit((prev) => prev + PAGE_SIZE)}
-                  className="self-center rounded-lg border border-border px-6 py-2 text-sm text-contrast hover:bg-surface-raised"
+                  onClick={() => fetchNextPage()}
+                  disabled={isFetching}
+                  className="self-center rounded-lg border border-border px-6 py-2 text-sm text-contrast hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {t(I18nKey.AUTOMATIONS$LOAD_MORE)}
                 </button>

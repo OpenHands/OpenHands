@@ -1,8 +1,17 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useTracking } from "#/hooks/use-tracking";
-import type { Automation, AutomationSpec } from "#/types/automation";
+import type {
+  Automation,
+  AutomationSpec,
+  AutomationsResponse,
+} from "#/types/automation";
 import {
   AUTOMATION_DETAIL_QUERY_KEY,
   AUTOMATION_RUNS_QUERY_KEY,
@@ -27,6 +36,49 @@ export function useAutomations(options: UseAutomationsOptions = {}) {
       active.orgId,
     ],
     queryFn: () => AutomationService.getAutomations(limit, offset),
+    staleTime: 0,
+    enabled,
+  });
+}
+
+// The automation service caps `limit` at 100, so the list pages by offset.
+const AUTOMATIONS_PAGE_SIZE = 50;
+
+/**
+ * The Automations list page's query: fetches one page of 50 at a time and
+ * joins the loaded pages into one `AutomationsResponse`. An automation that
+ * shifts onto a later page between requests is listed once.
+ */
+export function usePaginatedAutomations(options: { enabled?: boolean } = {}) {
+  const { enabled = true } = options;
+  const active = useActiveBackend();
+  return useInfiniteQuery({
+    queryKey: [
+      ...AUTOMATIONS_QUERY_KEY,
+      "paginated",
+      active.backend.id,
+      active.orgId,
+    ],
+    queryFn: ({ pageParam }) =>
+      AutomationService.getAutomations(AUTOMATIONS_PAGE_SIZE, pageParam),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, _pages, lastOffset) => {
+      const nextOffset = lastOffset + lastPage.automations.length;
+      return lastPage.automations.length > 0 && nextOffset < lastPage.total
+        ? nextOffset
+        : undefined;
+    },
+    select: (data): AutomationsResponse => {
+      const seen = new Set<string>();
+      const automations = data.pages
+        .flatMap((page) => page.automations)
+        .filter((automation) => {
+          if (seen.has(automation.id)) return false;
+          seen.add(automation.id);
+          return true;
+        });
+      return { automations, total: data.pages.at(-1)?.total ?? 0 };
+    },
     staleTime: 0,
     enabled,
   });
