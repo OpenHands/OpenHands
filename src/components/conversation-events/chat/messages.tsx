@@ -40,6 +40,18 @@ interface MessagesProps {
  * measurement churn, and short conversations stay byte-identical.
  */
 const VIRTUALIZATION_THRESHOLD = 150;
+/**
+ * Dev-only escape hatch used by the capture harness in `.tmp/`: `?virtualize=0`
+ * raises the threshold so the same conversation can be filmed with and without
+ * virtualization. Never set in production builds, so behavior is unchanged.
+ */
+const virtualizationThreshold = () => {
+  if (!import.meta.env.DEV || typeof window === "undefined") {
+    return VIRTUALIZATION_THRESHOLD;
+  }
+  const flag = new URLSearchParams(window.location.search).get("virtualize");
+  return flag === "0" ? Number.POSITIVE_INFINITY : VIRTUALIZATION_THRESHOLD;
+};
 /** Rows to keep mounted beyond the viewport on each side. */
 const OVERSCAN = 8;
 /** Pre-measurement row height guess, corrected once rows mount. */
@@ -180,7 +192,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     // every row for a frame.
     const shouldVirtualize = Boolean(
       scrollParent !== undefined &&
-      renderedItems.length >= VIRTUALIZATION_THRESHOLD,
+      renderedItems.length >= virtualizationThreshold(),
     );
 
     const rowVirtualizer = useVirtualizer({
