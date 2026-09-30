@@ -6,6 +6,7 @@ and batch operations using SQLite as a mock database.
 """
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from typing import AsyncGenerator
 from uuid import uuid4
 
@@ -1003,3 +1004,96 @@ class TestSQLAppConversationInfoService:
         assert parent_id in all_ids
         for sub_info in sub_conversations:
             assert sub_info.id in all_ids
+
+
+def _stats_with_prompt_tokens(prompt_tokens: int):
+    """Build a ConversationStats carrying an 'agent' Metrics with given tokens."""
+    from openhands.sdk.conversation.conversation_stats import ConversationStats
+    from openhands.sdk.llm.utils.metrics import Metrics, TokenUsage
+
+    metrics = Metrics(
+        accumulated_cost=1.23,
+        accumulated_token_usage=TokenUsage(
+            prompt_tokens=prompt_tokens,
+            completion_tokens=7_392_526,
+            cache_read_tokens=1,
+            cache_write_tokens=1,
+            reasoning_tokens=9_864_593,
+            context_window=200_000,
+            per_turn_token=72_614,
+        ),
+    )
+    return ConversationStats(usage_to_metrics={'agent': metrics})
+
+
+class TestConversationStatisticsUpdate:
+    """Regression tests for the conversation-statistics update path.
+
+    Covers the incident where a cumulative token count exceeded the int32
+    range, failing the write and leaving the session unusable (a sustained
+    stream of 500s for that conversation).
+    """
+
+    @pytest.mark.asyncio
+    async def test_update_statistics_persists_tokens_beyond_int32(
+        self,
+        service: SQLAppConversationInfoService,
+        sample_conversation_info: AppConversationInfo,
+    ):
+        """Token counters must accept values above the int32 max."""
+        await service.save_app_conversation_info(sample_conversation_info)
+
+        # 2,147,682,851 > int32 max (2,147,483,647): the value from the incident.
+        big_prompt_tokens = 2_147_682_851
+        stats = _stats_with_prompt_tokens(big_prompt_tokens)
+
+        await service.update_conversation_statistics(
+            sample_conversation_info.id, stats
+        )
+
+        info = await service.get_app_conversation_info(sample_conversation_info.id)
+        assert info is not None
+        assert info.metrics is not None
+        assert (
+            info.metrics.accumulated_token_usage.prompt_tokens == big_prompt_tokens
+        )
+
+    @pytest.mark.asyncio
+    async def test_process_stats_event_rolls_back_and_recovers_on_error(
+        self,
+        service: SQLAppConversationInfoService,
+        sample_conversation_info: AppConversationInfo,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """A failed stats update must roll back so the session stays usable.
+
+        Without the rollback, the reused session would stay in a
+        PendingRollbackError state and every following event would 500.
+        """
+        await service.save_app_conversation_info(sample_conversation_info)
+
+        rollback_calls = {'count': 0}
+        real_rollback = service.db_session.rollback
+
+        async def counting_rollback():
+            rollback_calls['count'] += 1
+            return await real_rollback()
+
+        monkeypatch.setattr(service.db_session, 'rollback', counting_rollback)
+
+        async def failing_update(*_args, **_kwargs):
+            raise RuntimeError('simulated flush failure')
+
+        monkeypatch.setattr(service, 'update_conversation_statistics', failing_update)
+
+        event = SimpleNamespace(value=_stats_with_prompt_tokens(10))
+
+        # Must not raise: process_stats_event swallows and rolls back.
+        await service.process_stats_event(event, sample_conversation_info.id)
+
+        assert rollback_calls['count'] == 1
+
+        # The session must remain usable for subsequent work.
+        info = await service.get_app_conversation_info(sample_conversation_info.id)
+        assert info is not None
+

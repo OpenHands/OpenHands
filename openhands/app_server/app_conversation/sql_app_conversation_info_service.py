@@ -26,11 +26,11 @@ from uuid import UUID
 
 from fastapi import Request
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     Column,
     DateTime,
     Float,
-    Integer,
     Select,
     String,
     func,
@@ -83,17 +83,20 @@ class StoredConversationMetadata(Base):  # type: ignore
     trigger = Column(String, nullable=True)
     pr_number = Column(create_json_type_decorator(list[int]))
 
-    # Cost and token metrics
+    # Cost and token metrics.
+    # Token counters use BigInteger (int64): cumulative usage on long-running or
+    # expensive conversations can exceed the PostgreSQL Integer (int32) max of
+    # 2,147,483,647, which otherwise raises asyncpg DataError on write.
     accumulated_cost = Column(Float, default=0.0)
-    prompt_tokens = Column(Integer, default=0)
-    completion_tokens = Column(Integer, default=0)
-    total_tokens = Column(Integer, default=0)
+    prompt_tokens = Column(BigInteger, default=0)
+    completion_tokens = Column(BigInteger, default=0)
+    total_tokens = Column(BigInteger, default=0)
     max_budget_per_task = Column(Float, nullable=True)
-    cache_read_tokens = Column(Integer, default=0)
-    cache_write_tokens = Column(Integer, default=0)
-    reasoning_tokens = Column(Integer, default=0)
-    context_window = Column(Integer, default=0)
-    per_turn_token = Column(Integer, default=0)
+    cache_read_tokens = Column(BigInteger, default=0)
+    cache_write_tokens = Column(BigInteger, default=0)
+    reasoning_tokens = Column(BigInteger, default=0)
+    context_window = Column(BigInteger, default=0)
+    per_turn_token = Column(BigInteger, default=0)
 
     # LLM model used for the conversation
     llm_model = Column(String, nullable=True)
@@ -491,6 +494,18 @@ class SQLAppConversationInfoService(AppConversationInfoService):
                 conversation_id,
                 stack_info=True,
             )
+            # Roll back so a failed flush (e.g. a bad value) does not leave the
+            # session in a PendingRollbackError state. Without this, every
+            # subsequent statement on the reused session raises immediately,
+            # turning a single bad event into a sustained stream of 500s.
+            try:
+                await self.db_session.rollback()
+            except Exception:
+                logger.exception(
+                    'Failed to roll back session after statistics error for '
+                    'conversation %s',
+                    conversation_id,
+                )
 
     async def _secure_select(self):
         query = select(StoredConversationMetadata).where(
