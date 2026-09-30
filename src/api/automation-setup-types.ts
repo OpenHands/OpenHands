@@ -60,8 +60,6 @@ export interface AutomationSetupDraft {
   serverDraftId?: string;
   materializedAutomationId?: string | null;
   form?: AutomationSetupFormPatch;
-  serverDraftId?: string;
-  materializedAutomationId?: string | null;
   fieldMetadata?: Partial<
     Record<AutomationSetupField, AutomationSetupFieldMetadata>
   >;

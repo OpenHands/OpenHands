@@ -21,6 +21,7 @@ import {
 } from "#/components/features/automations/setup/automation-setup-panel";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import {
+  PENDING_AUTOMATION_SETUP_ID,
   getAutomationFormSession,
   initializeAutomationFormSession,
 } from "#/api/automation-form-session";
@@ -1379,6 +1380,31 @@ describe("AutomationSetupPanel", () => {
           }),
         ),
       );
+    });
+
+    it("stores the server draft id in the pending setup session after saving", async () => {
+      vi.mocked(AutomationService.createServerDraft).mockResolvedValue(
+        dispatchableDraft,
+      );
+
+      const user = userEvent.setup();
+      renderPanel(undefined, PENDING_AUTOMATION_SETUP_ID, null);
+
+      await user.click(screen.getByTestId("automation-setup-save-draft"));
+
+      await waitFor(() =>
+        expect(getAutomationFormSession(PENDING_AUTOMATION_SETUP_ID)).toEqual(
+          expect.objectContaining({
+            serverDraftId: "draft-1",
+            form: expect.objectContaining({
+              prompt: "Review every pull request",
+            }),
+          }),
+        ),
+      );
+      expect(
+        AgentServerConversationService.updateConversationTags,
+      ).not.toHaveBeenCalled();
     });
 
     it("hydrates a tagged server draft when the panel opens", async () => {
