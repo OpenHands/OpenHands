@@ -203,12 +203,20 @@ export function MetaLlmSettingsView() {
     providerConnectionId: string | null,
   ) => {
     const shouldActivateAfterCreate = view === "create" && active === null;
+    // Creating the first router (0 → 1) is the moment "Run on first message"
+    // becomes useful, so flip it on by default — but only if the user hasn't
+    // already enabled it. Subsequent router creations leave the preference
+    // untouched.
+    const isFirstRouter = view === "create" && metaProfiles.length === 0;
     try {
       if (view === "create" && providerConnectionId) {
         setIsCreatingRouterProfiles(true);
         await createMissingRouterLlmProfiles(config, providerConnectionId);
       }
       await saveMetaProfile.mutateAsync({ name, config });
+      if (isFirstRouter && !settings?.run_router_at_conversation_start) {
+        saveSettings({ run_router_at_conversation_start: true });
+      }
       if (shouldActivateAfterCreate) {
         await activateMetaProfile.mutateAsync(name);
       }

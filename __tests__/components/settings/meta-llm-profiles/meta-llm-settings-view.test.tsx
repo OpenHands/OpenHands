@@ -68,7 +68,9 @@ const mockProviderConnections = [
 function mockMutation<T>(mutateAsync: Mock, overrides: Partial<T> = {}): T {
   return {
     mutateAsync,
-    mutate: vi.fn(),
+    // Component code uses `mutate` (fire-and-forget) for settings saves, so
+    // route it through the same mock as `mutateAsync` to stay observable.
+    mutate: mutateAsync,
     isPending: false,
     isError: false,
     isSuccess: false,
@@ -84,6 +86,7 @@ function mockMutation<T>(mutateAsync: Mock, overrides: Partial<T> = {}): T {
 describe("MetaLlmSettingsView", () => {
   const activateMutateAsync = vi.fn();
   const saveMutateAsync = vi.fn();
+  const saveSettingsMutate = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -129,7 +132,7 @@ describe("MetaLlmSettingsView", () => {
       error: null,
     } as never);
     vi.mocked(useSaveSettingsHook.useSaveSettings).mockReturnValue(
-      mockMutation(vi.fn()),
+      mockMutation(saveSettingsMutate),
     );
     vi.mocked(ProfilesService.getProfile).mockResolvedValue({
       name: "minimax",
@@ -330,6 +333,67 @@ describe("MetaLlmSettingsView", () => {
     await waitFor(() =>
       expect(activateMutateAsync).toHaveBeenCalledWith("pareto"),
     );
+  });
+
+  it("auto-enables 'Run on first message' when the first router is created", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useMetaProfilesHook.useMetaProfiles).mockReturnValue({
+      data: { meta_profiles: [], active_meta_profile: null },
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<typeof useMetaProfilesHook.useMetaProfiles>);
+    saveMutateAsync.mockResolvedValue({ name: "pareto" });
+    activateMutateAsync.mockResolvedValue({ name: "pareto" });
+    renderWithProviders(<MetaLlmSettingsView />);
+
+    await openRouterProTemplate(user);
+    await user.clear(screen.getByTestId("meta-profile-name-input"));
+    await user.type(screen.getByTestId("meta-profile-name-input"), "pareto");
+    fireEvent.change(screen.getByTestId("meta-profile-classifier-input"), {
+      target: { value: "minimax" },
+    });
+    fireEvent.change(screen.getByTestId("meta-profile-prompt-template"), {
+      target: { value: "Task:\n{{ instance_text }}" },
+    });
+    fireEvent.change(screen.getByTestId("meta-profile-model-table"), {
+      target: { value: "" },
+    });
+    await user.click(screen.getByTestId("meta-profile-save"));
+
+    await waitFor(() =>
+      expect(saveSettingsMutate).toHaveBeenCalledWith({
+        run_router_at_conversation_start: true,
+      }),
+    );
+  });
+
+  it("does not touch 'Run on first message' when creating a router while others exist", async () => {
+    const user = userEvent.setup();
+    // A router already exists (and is active), so this is not a 0 → 1 create.
+    vi.mocked(useMetaProfilesHook.useMetaProfiles).mockReturnValue({
+      data: { meta_profiles: mockMetaProfiles, active_meta_profile: "balanced" },
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<typeof useMetaProfilesHook.useMetaProfiles>);
+    saveMutateAsync.mockResolvedValue({ name: "pareto" });
+    renderWithProviders(<MetaLlmSettingsView />);
+
+    await openRouterProTemplate(user);
+    await user.clear(screen.getByTestId("meta-profile-name-input"));
+    await user.type(screen.getByTestId("meta-profile-name-input"), "pareto");
+    fireEvent.change(screen.getByTestId("meta-profile-classifier-input"), {
+      target: { value: "minimax" },
+    });
+    fireEvent.change(screen.getByTestId("meta-profile-prompt-template"), {
+      target: { value: "Task:\n{{ instance_text }}" },
+    });
+    fireEvent.change(screen.getByTestId("meta-profile-model-table"), {
+      target: { value: "" },
+    });
+    await user.click(screen.getByTestId("meta-profile-save"));
+
+    await waitFor(() => expect(saveMutateAsync).toHaveBeenCalled());
+    expect(saveSettingsMutate).not.toHaveBeenCalled();
   });
 
   it("does not auto-activate a newly-created meta-profile when one is already active", async () => {
