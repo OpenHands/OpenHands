@@ -157,6 +157,12 @@ function normalizeDraft(value: AutomationSetupDraft): AutomationSetupDraft {
   };
   const normalizedPlugins = pluginSources;
   const fieldMetadata = normalizeFieldMetadata(value.fieldMetadata);
+  const serverDraftId =
+    typeof value.serverDraftId === "string" ? value.serverDraftId.trim() : "";
+  const materializedAutomationId =
+    typeof value.materializedAutomationId === "string"
+      ? value.materializedAutomationId.trim()
+      : null;
   const appliedAgentEventIds = Array.isArray(value.appliedAgentEventIds)
     ? [
         ...new Set(
@@ -170,6 +176,8 @@ function normalizeDraft(value: AutomationSetupDraft): AutomationSetupDraft {
     kind,
     ...(normalizedPlugins.length > 0 ? { plugins: normalizedPlugins } : {}),
     form: normalizedForm,
+    ...(serverDraftId ? { serverDraftId } : {}),
+    ...(materializedAutomationId ? { materializedAutomationId } : {}),
     ...(fieldMetadata ? { fieldMetadata } : {}),
     ...(appliedAgentEventIds && appliedAgentEventIds.length > 0
       ? { appliedAgentEventIds }

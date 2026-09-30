@@ -586,6 +586,27 @@ export function AutomationSetupPanel({
     });
   }, [conversationId, conversationTags]);
 
+  const saveDraftInFormSession = useCallback(
+    (
+      saved: AutomationDraftApiResponse,
+      nextForm: AutomationSetupFormValues,
+    ) => {
+      if (!conversationId) return;
+      initializeAutomationFormSession(conversationId, {
+        ...draft,
+        prompt: nextForm.prompt ?? draft.prompt,
+        kind: nextForm.kind ?? draft.kind,
+        form: nextForm,
+        fieldMetadata,
+        serverDraftId: saved.id,
+        ...(saved.materializedAutomationId
+          ? { materializedAutomationId: saved.materializedAutomationId }
+          : {}),
+      });
+    },
+    [conversationId, draft, fieldMetadata],
+  );
+
   const updateConversationDraftTags = useCallback(
     async (draftId: string | null) => {
       if (!conversationId) return;
@@ -617,12 +638,7 @@ export function AutomationSetupPanel({
         setServerDraft(saved);
         setDraftRuns([]);
         setForm(nextForm);
-        if (conversationId) {
-          initializeAutomationFormSession(conversationId, {
-            ...draft,
-            form: nextForm,
-          });
-        }
+        saveDraftInFormSession(saved, nextForm);
       })
       .catch((error: unknown) => {
         if (cancelled) return;
@@ -640,7 +656,13 @@ export function AutomationSetupPanel({
     return () => {
       cancelled = true;
     };
-  }, [conversationId, draft, serverDraft?.id, taggedServerDraftId]);
+  }, [
+    conversationId,
+    draft,
+    saveDraftInFormSession,
+    serverDraft?.id,
+    taggedServerDraftId,
+  ]);
 
   const {
     kind,
@@ -1100,6 +1122,7 @@ export function AutomationSetupPanel({
       ? await AutomationService.updateServerDraft(serverDraftId, request)
       : await AutomationService.createServerDraft(request);
     setServerDraft(saved);
+    saveDraftInFormSession(saved, form);
     setIsTaggedDraftMissing(false);
     await updateConversationDraftTags(saved.id);
     return saved;

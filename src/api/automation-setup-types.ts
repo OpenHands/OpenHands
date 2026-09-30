@@ -57,6 +57,8 @@ export interface AutomationSetupDraft {
   kind: AutomationSetupKind;
   plugins?: string[];
   form?: AutomationSetupFormPatch;
+  serverDraftId?: string;
+  materializedAutomationId?: string | null;
   fieldMetadata?: Partial<
     Record<AutomationSetupField, AutomationSetupFieldMetadata>
   >;
