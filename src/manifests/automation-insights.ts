@@ -22,6 +22,7 @@ import {
 } from "#/types/automation";
 import { getAutomationRunDisplay } from "#/utils/automation-run-display";
 import type {
+  DashboardCreatedByValue,
   DashboardSortValue,
   DashboardStatusValue,
   DashboardTriggerValue,
@@ -203,6 +204,18 @@ const TRIGGER_PREDICATES: Record<
   schedule: (automation) => automation.trigger.type !== "event",
 };
 
+// A null caller id never matches, so "me" is empty and "others" keeps
+// everything (including creator-less automations) until identity resolves.
+const CREATED_BY_PREDICATES: Record<
+  Exclude<DashboardCreatedByValue, "all">,
+  (automation: Automation, currentUserId: string | null) => boolean
+> = {
+  me: (automation, currentUserId) =>
+    currentUserId !== null && automation.user_id === currentUserId,
+  others: (automation, currentUserId) =>
+    currentUserId === null || automation.user_id !== currentUserId,
+};
+
 function runCount(automation: Automation, byId: Summaries): number {
   return byId.get(automation.id)?.summary?.total ?? 0;
 }
@@ -229,6 +242,9 @@ export interface DashboardViewState {
   search: string;
   status: DashboardStatusValue;
   trigger: DashboardTriggerValue;
+  createdBy: DashboardCreatedByValue;
+  /** The signed-in user the creator filter compares against. */
+  currentUserId: string | null;
   sort: DashboardSortValue;
 }
 
@@ -253,6 +269,12 @@ export function applyDashboardView(
       if (
         view.trigger !== "all" &&
         !TRIGGER_PREDICATES[view.trigger](automation)
+      ) {
+        return false;
+      }
+      if (
+        view.createdBy !== "all" &&
+        !CREATED_BY_PREDICATES[view.createdBy](automation, view.currentUserId)
       ) {
         return false;
       }

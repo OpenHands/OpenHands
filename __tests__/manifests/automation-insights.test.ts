@@ -316,6 +316,8 @@ describe("applyDashboardView", () => {
     search: "",
     status: "all",
     trigger: "all",
+    createdBy: "all",
+    currentUserId: null,
     sort: "name",
   } as const;
 
@@ -349,6 +351,64 @@ describe("applyDashboardView", () => {
       scheduled: scheduled.map((a) => a.id),
       events: events.map((a) => a.id),
     }).toEqual({ scheduled: ["healthy", "failing"], events: ["evented"] });
+  });
+
+  it("splits automations by creator, counting a missing creator as someone else's", () => {
+    // Arrange
+    const mine = createAutomation({
+      id: "mine",
+      name: "A mine",
+      user_id: "me",
+    });
+    const theirs = createAutomation({
+      id: "theirs",
+      name: "B theirs",
+      user_id: "teammate",
+    });
+    const unowned = createAutomation({ id: "unowned", name: "C unowned" });
+    const automations = [unowned, theirs, mine];
+
+    // Act
+    const view = (createdBy: "all" | "me" | "others") =>
+      applyDashboardView(
+        automations,
+        { ...neutral, createdBy, currentUserId: "me" },
+        byId,
+      ).map((a) => a.id);
+
+    // Assert
+    expect({
+      all: view("all"),
+      me: view("me"),
+      others: view("others"),
+    }).toEqual({
+      all: ["mine", "theirs", "unowned"],
+      me: ["mine"],
+      others: ["theirs", "unowned"],
+    });
+  });
+
+  it("claims no automation as the caller's while their identity is unknown", () => {
+    // Arrange
+    const unowned = createAutomation({ id: "unowned", name: "A unowned" });
+
+    // Act
+    const mine = applyDashboardView(
+      [unowned],
+      { ...neutral, createdBy: "me", currentUserId: null },
+      byId,
+    );
+    const others = applyDashboardView(
+      [unowned],
+      { ...neutral, createdBy: "others", currentUserId: null },
+      byId,
+    );
+
+    // Assert
+    expect({
+      mine: mine.map((a) => a.id),
+      others: others.map((a) => a.id),
+    }).toEqual({ mine: [], others: ["unowned"] });
   });
 
   it("orders by lifetime run count under the runs sort", () => {

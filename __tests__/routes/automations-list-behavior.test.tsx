@@ -70,6 +70,7 @@ vi.mock("#/manifests/manifest-sources", async (importOriginal) => {
 
 vi.mock("#/hooks/use-automation-permissions", () => ({
   useAutomationPermissions: () => ({ canManage: mocks.canManage }),
+  useAutomationCreatorFilterUserId: () => null,
 }));
 
 vi.mock("#/context/navigation-context", () => ({

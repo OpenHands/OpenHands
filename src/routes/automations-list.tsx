@@ -38,7 +38,10 @@ import { ImportAutomationModal } from "#/components/features/automations/import-
 import { RecommendedAutomationsLauncher } from "#/components/features/automations/recommended-automations-launcher";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { useTracking } from "#/hooks/use-tracking";
-import { useAutomationPermissions } from "#/hooks/use-automation-permissions";
+import {
+  useAutomationCreatorFilterUserId,
+  useAutomationPermissions,
+} from "#/hooks/use-automation-permissions";
 import type { Automation, AutomationSpec } from "#/types/automation";
 import {
   getAutomationExportFilename,
@@ -58,6 +61,7 @@ import {
 } from "#/manifests/automation-insights";
 import { interpolateValues } from "#/manifests/manifest-template";
 import type {
+  DashboardCreatedByValue,
   DashboardSortValue,
   DashboardStatusValue,
   DashboardTriggerValue,
@@ -99,6 +103,8 @@ export default function AutomationsList() {
   const [statusFilter, setStatusFilter] = useState<DashboardStatusValue>("all");
   const [triggerFilter, setTriggerFilter] =
     useState<DashboardTriggerValue>("all");
+  const [createdByFilter, setCreatedByFilter] =
+    useState<DashboardCreatedByValue>("all");
   const [sortValue, setSortValue] = useState<DashboardSortValue>(
     dashboardSpec?.sort.default ?? "last-run",
   );
@@ -119,6 +125,7 @@ export default function AutomationsList() {
   // Git Sync is org-level config, so its entry point requires
   // manage_automations (admins/owners) on every backend kind.
   const { canManage } = useAutomationPermissions();
+  const creatorFilterUserId = useAutomationCreatorFilterUserId();
 
   const {
     data: healthData,
@@ -162,6 +169,10 @@ export default function AutomationsList() {
         search: searchQuery,
         status: statusFilter,
         trigger: triggerFilter,
+        // A selection made on a team workspace must not linger once the
+        // filter is hidden (local backend or personal workspace).
+        createdBy: creatorFilterUserId ? createdByFilter : "all",
+        currentUserId: creatorFilterUserId,
         sort: sortValue,
       },
       runSummaries,
@@ -172,6 +183,8 @@ export default function AutomationsList() {
     searchQuery,
     statusFilter,
     triggerFilter,
+    createdByFilter,
+    creatorFilterUserId,
     sortValue,
     runSummaries,
   ]);
@@ -288,6 +301,7 @@ export default function AutomationsList() {
     setSearchQuery("");
     setStatusFilter("all");
     setTriggerFilter("all");
+    setCreatedByFilter("all");
   };
 
   const overviewTiles = useMemo(() => {
@@ -419,9 +433,12 @@ export default function AutomationsList() {
             spec={dashboard.spec}
             status={statusFilter}
             trigger={triggerFilter}
+            createdBy={createdByFilter}
+            canFilterByCreator={creatorFilterUserId !== null}
             sort={sortValue}
             onStatusChange={setStatusFilter}
             onTriggerChange={setTriggerFilter}
+            onCreatedByChange={setCreatedByFilter}
             onSortChange={setSortValue}
           />
         )}
