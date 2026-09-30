@@ -920,6 +920,48 @@ describe("static-server.mjs", () => {
       expect(body).toContain('"/canvas"');
     });
 
+    it("handles asset replacement without restarting the server", async () => {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      const assetsDir = path.join(buildDir, "assets");
+      mkdirSync(assetsDir);
+      writeFileSync(path.join(buildDir, "index.html"), "<main>app</main>");
+
+      const initialAssetPath = path.join(assetsDir, "bundle-old.js");
+      writeFileSync(initialAssetPath, "console.log('old');\n");
+
+      const origin = await startServer(buildDir);
+
+      // Initial asset is served with immutable cache header
+      const initialResponse = await fetch(`${origin}/assets/bundle-old.js`);
+      expect(initialResponse.status).toBe(200);
+      expect(initialResponse.headers.get("cache-control")).toBe(
+        "public, max-age=31536000, immutable",
+      );
+      await expect(initialResponse.text()).resolves.toContain("old");
+
+      // Simulate rebuild: remove old asset and write replacement asset
+      rmSync(initialAssetPath);
+      const replacementAssetPath = path.join(assetsDir, "bundle-new.js");
+      writeFileSync(replacementAssetPath, "console.log('new');\n");
+
+      // Requesting the removed asset returns 404 without crashing the server
+      const removedResponse = await fetch(`${origin}/assets/bundle-old.js`);
+      expect(removedResponse.status).toBe(404);
+
+      // Replacement asset is served immediately without restarting
+      const replacementResponse = await fetch(`${origin}/assets/bundle-new.js`);
+      expect(replacementResponse.status).toBe(200);
+      expect(replacementResponse.headers.get("cache-control")).toBe(
+        "public, max-age=31536000, immutable",
+      );
+      await expect(replacementResponse.text()).resolves.toContain("new");
+
+      // Server remains healthy for SPA requests
+      const indexResponse = await fetch(`${origin}/`);
+      expect(indexResponse.status).toBe(200);
+    });
+
     it("serves static assets from underneath the mount", async () => {
       const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
       tempDirs.push(buildDir);
@@ -1011,6 +1053,33 @@ describe("static-server.mjs", () => {
 
     expect(response.status).not.toBe(200);
     await expect(response.text()).resolves.not.toContain("secret");
+  });
+
+  it("does not serve dotfiles like .env but allows .well-known", async () => {
+    const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+    tempDirs.push(buildDir);
+    writeFileSync(path.join(buildDir, "index.html"), "<main>app</main>");
+    writeFileSync(path.join(buildDir, ".env"), "SECRET=leaked\n");
+    writeFileSync(path.join(buildDir, ".gitignore"), "node_modules\n");
+
+    const wellKnownDir = path.join(buildDir, ".well-known");
+    mkdirSync(wellKnownDir);
+    writeFileSync(
+      path.join(wellKnownDir, "security.txt"),
+      "Contact: security@example.com\n",
+    );
+
+    const origin = await startServer(buildDir);
+
+    const envRes = await fetch(`${origin}/.env`);
+    expect(envRes.status).toBe(404);
+
+    const gitignoreRes = await fetch(`${origin}/.gitignore`);
+    expect(gitignoreRes.status).toBe(404);
+
+    const wellKnownRes = await fetch(`${origin}/.well-known/security.txt`);
+    expect(wellKnownRes.status).toBe(200);
+    await expect(wellKnownRes.text()).resolves.toContain("security@example.com");
   });
 
   it("returns 502 when backend target URL is invalid", async () => {
