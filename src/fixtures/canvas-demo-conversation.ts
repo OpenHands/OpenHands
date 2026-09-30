@@ -280,7 +280,7 @@ export const CANVAS_DEMO_EVENTS: OpenHandsEvent[] = [
   createMessage(
     "canvas-demo-agent",
     "assistant",
-    "I generated the project canvas, an HTML report, an SVG chart, a PNG and a PDF. All of them preview inline above.",
+    "I generated the project canvas, an HTML report, an SVG chart, a PNG, a PDF and Word / Excel / PowerPoint documents. All of them preview inline above.",
     20,
   ),
 ];

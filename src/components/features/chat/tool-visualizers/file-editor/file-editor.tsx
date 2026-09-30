@@ -32,6 +32,7 @@ import { FilePathChip } from "../primitives/file-path-chip";
 import { getArtifactPreviewKind } from "#/utils/is-previewable-file-path";
 import { MarkdownFilePreview } from "../primitives/markdown-file-preview";
 import { ArtifactPreview } from "../primitives/artifact-preview";
+import { OfficeArtifactPreview } from "../primitives/office-artifact-preview";
 
 type FileEditorCardProps = VisualizerProps<
   FileEditorAction | StrReplaceEditorAction,
@@ -116,6 +117,20 @@ function FileEditorCardBody({
             content={content}
             path={path}
             sourcePath={previewSource}
+            onView={onOpenFile}
+          />
+        ),
+      };
+    }
+    // Office documents are unpacked client-side and shown as an outline.
+    if (previewKind === "ooxml") {
+      return {
+        chip: null as React.ReactNode,
+        body: (
+          <OfficeArtifactPreview
+            path={path}
+            sourcePath={previewSource}
+            content={content}
             onView={onOpenFile}
           />
         ),
