@@ -246,6 +246,16 @@ describe("getSettingsFieldConstraints", () => {
     });
   });
 
+  it("returns a 0 floor for the condenser max size", () => {
+    const constraints = getSettingsFieldConstraints(
+      "condenser.condenser_max_size",
+    );
+    expect(constraints).toEqual({
+      min: 0,
+      step: 1,
+    });
+  });
+
   it("returns undefined for unknown fields", () => {
     const constraints = getSettingsFieldConstraints("unknown.field");
     expect(constraints).toBeUndefined();
