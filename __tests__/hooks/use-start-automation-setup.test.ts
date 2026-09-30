@@ -160,6 +160,48 @@ describe("useStartAutomationSetup", () => {
     expect(mocks.navigate).toHaveBeenCalledWith("/conversations/conv-draft");
   });
 
+  it("tags an edited automation after the user sends a prompt", async () => {
+    const draft = {
+      prompt: "Existing prompt",
+      kind: "prompt" as const,
+      editingAutomationId: "auto-1",
+      form: { name: "Existing automation", prompt: "Existing prompt" },
+    };
+    mocks.getAutomationFormSession.mockReturnValue(draft);
+    mocks.mutate.mockImplementation(async (_payload, options) => {
+      await options?.onSuccess?.({ conversation_id: "conv-edit" });
+    });
+    const { result } = renderHook(() => useStartAutomationSetup());
+
+    result.current.startConversationFromPrompt("  Adjust this automation  ");
+
+    expect(mocks.mutate).toHaveBeenCalledWith(
+      {
+        query: "Adjust this automation",
+        automationSetup: true,
+        entryPoint: "automation_edit",
+      },
+      expect.any(Object),
+    );
+    expect(mocks.initializeAutomationFormSession).toHaveBeenCalledWith(
+      "conv-edit",
+      draft,
+    );
+    await waitFor(() =>
+      expect(
+        AgentServerConversationService.updateConversationTags,
+      ).toHaveBeenCalledWith(
+        "conv-edit",
+        expect.objectContaining({
+          existing: "tag",
+          automationsetup: "draft",
+          automationeditid: "auto-1",
+        }),
+      ),
+    );
+    expect(mocks.navigate).toHaveBeenCalledWith("/conversations/conv-edit");
+  });
+
   it("does not create a conversation from an empty prompt", () => {
     const { result } = renderHook(() => useStartAutomationSetup());
 
