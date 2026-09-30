@@ -455,16 +455,24 @@ describe("AutomationsList — Edit from the row kebab", () => {
       screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
     );
 
-    // Assert — edit opens the setup page for this automation instead of the
-    // modal, carrying the row's prompt so the form can be seeded from it.
-    expect(mocks.createConversationMutate).toHaveBeenCalledWith(
+    // Assert — edit opens the collapsed setup form without starting or
+    // seeding an agent conversation.
+    expect(mocks.createConversationMutate).not.toHaveBeenCalled();
+    expect(mocks.initializeAutomationFormSession).toHaveBeenCalledWith(
+      "pending-new-automation",
       expect.objectContaining({
-        automationSetup: true,
-        entryPoint: "automation_edit",
-        query: automation.prompt,
+        prompt: automation.prompt,
+        kind: "prompt",
+        editingAutomationId: automation.id,
+        form: expect.objectContaining({
+          name: automation.name,
+          prompt: automation.prompt,
+          repository: automation.repository,
+          model: automation.model,
+        }),
       }),
-      expect.any(Object),
     );
+    expect(mocks.navigate).toHaveBeenCalledWith("/automations/setup");
     expect(
       screen.queryByTestId("edit-automation-name"),
     ).not.toBeInTheDocument();
@@ -489,16 +497,18 @@ describe("AutomationsList — Edit from the row kebab", () => {
       screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
     );
 
-    // Assert — cloud uses the same setup page; the permission model decides
-    // whether Edit is offered, not which editor opens.
-    expect(mocks.createConversationMutate).toHaveBeenCalledWith(
+    // Assert — cloud uses the same collapsed setup form; the permission model
+    // decides whether Edit is offered, not which editor opens.
+    expect(mocks.createConversationMutate).not.toHaveBeenCalled();
+    expect(mocks.initializeAutomationFormSession).toHaveBeenCalledWith(
+      "pending-new-automation",
       expect.objectContaining({
-        automationSetup: true,
-        entryPoint: "automation_edit",
-        query: automation.prompt,
+        prompt: automation.prompt,
+        kind: "prompt",
+        editingAutomationId: automation.id,
       }),
-      expect.any(Object),
     );
+    expect(mocks.navigate).toHaveBeenCalledWith("/automations/setup");
     expect(
       screen.queryByTestId("edit-automation-name"),
     ).not.toBeInTheDocument();

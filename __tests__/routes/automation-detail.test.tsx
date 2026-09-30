@@ -62,11 +62,21 @@ vi.mock("#/api/cloud/organization-service.api", async (importOriginal) => ({
 
 const detailMocks = vi.hoisted(() => ({
   createConversationMutate: vi.fn(),
+  navigate: vi.fn(),
 }));
 
 vi.mock("#/hooks/mutation/use-create-conversation", () => ({
   useCreateConversation: () => ({
     mutate: detailMocks.createConversationMutate,
+  }),
+}));
+
+vi.mock("#/context/navigation-context", () => ({
+  useNavigation: () => ({
+    currentPath: "/automations/auto-1",
+    conversationId: null,
+    isNavigating: false,
+    navigate: detailMocks.navigate,
   }),
 }));
 
@@ -145,6 +155,8 @@ beforeEach(() => {
     profiles: [],
     active_profile: null,
   });
+  detailMocks.createConversationMutate.mockReset();
+  detailMocks.navigate.mockReset();
   setRegisteredBackends([localBackend, cloudBackend]);
   setActiveSelection({ backendId: localBackend.id });
 });
@@ -190,18 +202,14 @@ describe("AutomationDetail — Edit in the kebab menu", () => {
       screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
     );
 
-    // Assert — Edit opens the setup page for this automation. The permission
-    // model (mocked to canManage above) decides whether the action exists,
-    // not the backend kind.
-    expect(detailMocks.createConversationMutate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        automationSetup: true,
-        entryPoint: "automation_edit",
-        query: automation.prompt,
-      }),
-      expect.any(Object),
-    );
-    expect(screen.queryByTestId("edit-automation-name")).not.toBeInTheDocument();
+    // Assert — Edit opens the setup form without starting or seeding an agent
+    // conversation. The permission model (mocked to canManage above) decides
+    // whether the action exists, not the backend kind.
+    expect(detailMocks.createConversationMutate).not.toHaveBeenCalled();
+    expect(detailMocks.navigate).toHaveBeenCalledWith("/automations/setup");
+    expect(
+      screen.queryByTestId("edit-automation-name"),
+    ).not.toBeInTheDocument();
   });
 });
 

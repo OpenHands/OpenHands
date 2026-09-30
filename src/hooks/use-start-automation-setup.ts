@@ -11,7 +11,10 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useNavigation } from "#/context/navigation-context";
 import { useCreateAutomationSetupConversation } from "#/hooks/use-create-automation-setup-conversation";
 import { useTracking } from "#/hooks/use-tracking";
-import { buildAutomationDraftTags } from "#/utils/automation-draft-tags";
+import {
+  buildAutomationDraftTags,
+  buildAutomationEditTags,
+} from "#/utils/automation-draft-tags";
 
 /**
  * Open a new automation on the setup form.
@@ -38,29 +41,43 @@ export function useStartAutomationSetup() {
         prompt: "",
         kind: "prompt" as const,
       };
+      const editingAutomationId = draft.editingAutomationId?.trim() || null;
+      let entryPoint:
+        | "automations_add"
+        | "automation_edit"
+        | "automation_draft_resume" = "automations_add";
+      if (editingAutomationId) {
+        entryPoint = "automation_edit";
+      } else if (draft.serverDraftId) {
+        entryPoint = "automation_draft_resume";
+      }
       startAutomationSetupConversation({
         query: prompt,
-        entryPoint: draft.serverDraftId
-          ? "automation_draft_resume"
-          : "automations_add",
+        entryPoint,
         onSuccess: async (conversation) => {
           const conversationId = conversation.conversation_id;
           initializeAutomationFormSession(conversationId, draft);
           markAutomationSetupHandoff(conversationId);
           clearAutomationFormSession(PENDING_AUTOMATION_SETUP_ID);
-          if (draft.serverDraftId) {
+          if (editingAutomationId || draft.serverDraftId) {
             try {
               const [conversationDetails] =
                 await AgentServerConversationService.batchGetAppConversations([
                   conversationId,
                 ]);
+              const tags = editingAutomationId
+                ? buildAutomationEditTags(
+                    conversationDetails?.tags ?? null,
+                    editingAutomationId,
+                  )
+                : buildAutomationDraftTags(
+                    conversationDetails?.tags ?? null,
+                    draft.serverDraftId ?? "",
+                    draft.materializedAutomationId,
+                  );
               await AgentServerConversationService.updateConversationTags(
                 conversationId,
-                buildAutomationDraftTags(
-                  conversationDetails?.tags ?? null,
-                  draft.serverDraftId,
-                  draft.materializedAutomationId,
-                ),
+                tags,
               );
             } catch {
               // The in-memory form draft still opens for this navigation.
