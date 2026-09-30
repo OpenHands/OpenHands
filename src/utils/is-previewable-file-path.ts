@@ -21,6 +21,9 @@ const IMAGE_PREVIEW_EXTS = new Set([
 
 const PDF_PREVIEW_EXTS = new Set(["pdf"]);
 
+/** OOXML packages we can unpack and outline without a renderer dependency. */
+const OOXML_PREVIEW_EXTS = new Set(["docx", "xlsx", "pptx"]);
+
 /**
  * How an artifact should be previewed inline, or `null` when it gets no rich
  * preview and stays on the plain CodeBlock / DiffView path.
@@ -29,8 +32,14 @@ const PDF_PREVIEW_EXTS = new Set(["pdf"]);
  * - `frame`    — sandboxed iframe pointed at the workspace fileserver
  * - `image`    — `<img>` pointed at the workspace fileserver
  * - `pdf`      — unsandboxed iframe so Chromium's PDF viewer can instantiate
+ * - `ooxml`    — unpacked and outlined by `readOoxmlPreview`
  */
-export type ArtifactPreviewKind = "markdown" | "frame" | "image" | "pdf";
+export type ArtifactPreviewKind =
+  | "markdown"
+  | "frame"
+  | "image"
+  | "pdf"
+  | "ooxml";
 
 export function getFileExtension(path: string): string {
   const idx = path.lastIndexOf(".");
@@ -46,6 +55,7 @@ export function getArtifactPreviewKind(
   if (FRAME_PREVIEW_EXTS.has(ext)) return "frame";
   if (IMAGE_PREVIEW_EXTS.has(ext)) return "image";
   if (PDF_PREVIEW_EXTS.has(ext)) return "pdf";
+  if (OOXML_PREVIEW_EXTS.has(ext)) return "ooxml";
   return null;
 }
 
@@ -60,9 +70,15 @@ export function isFramePreviewablePath(path: string): boolean {
   return FRAME_PREVIEW_EXTS.has(getFileExtension(path));
 }
 
+/** True for `.docx` / `.xlsx` / `.pptx`. */
+export function isOfficePreviewablePath(path: string): boolean {
+  return OOXML_PREVIEW_EXTS.has(getFileExtension(path));
+}
+
 /**
  * True for any artifact path that gets a rich inline preview in the chat —
- * the markdown card, the sandboxed frame, a raster image, or a PDF.
+ * the markdown card, the sandboxed frame, a raster image, a PDF, or an
+ * unpacked Office document.
  */
 export function isPreviewableArtifactPath(path: string): boolean {
   return getArtifactPreviewKind(path) !== null;

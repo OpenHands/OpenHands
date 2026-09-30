@@ -414,10 +414,10 @@ export const CONVERSATION_HANDLERS = [
           headers: { "Content-Type": "image/svg+xml; charset=utf-8" },
         });
       }
-      // Binary artifacts (PNG / PDF) are served from the same workspace URL
-      // the inline preview points at, so the PNG `<img>` and the PDF viewer
-      // frame resolve like a real workspace. The payloads are base64 in the
-      // fixture.
+      // Binary artifacts (PNG / PDF / docx / xlsx / pptx) are served from the
+      // same workspace URL the inline preview points at, so the PNG `<img>`,
+      // the PDF viewer frame, and `readOoxmlPreview`'s fetch all resolve like
+      // a real workspace. The payloads are base64 in the fixture.
       if (conversationId === CANVAS_DEMO_CONVERSATION_ID) {
         const artifactPath = Object.keys(ARTIFACT_DEMO_BYTES).find((path) =>
           url.pathname.endsWith(`/${path}`),

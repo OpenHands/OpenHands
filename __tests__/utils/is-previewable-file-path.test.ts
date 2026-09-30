@@ -3,6 +3,7 @@ import {
   getArtifactPreviewKind,
   getFileExtension,
   isFramePreviewablePath,
+  isOfficePreviewablePath,
   isPreviewableArtifactPath,
 } from "#/utils/is-previewable-file-path";
 
@@ -43,12 +44,26 @@ describe("getArtifactPreviewKind", () => {
     expect(getArtifactPreviewKind("photo.jpg")).toBe("image");
     expect(getArtifactPreviewKind("photo.jpeg")).toBe("image");
     expect(getArtifactPreviewKind("spec.pdf")).toBe("pdf");
+    expect(getArtifactPreviewKind("design.docx")).toBe("ooxml");
+    expect(getArtifactPreviewKind("budget.xlsx")).toBe("ooxml");
+    expect(getArtifactPreviewKind("deck.pptx")).toBe("ooxml");
   });
 
   it("returns null for paths with no rich preview", () => {
     expect(getArtifactPreviewKind("app.tsx")).toBe(null);
     expect(getArtifactPreviewKind("Makefile")).toBe(null);
     expect(getArtifactPreviewKind("archive.zip")).toBe(null);
+  });
+});
+
+describe("isOfficePreviewablePath", () => {
+  it("accepts only the OOXML packages we can unpack", () => {
+    expect(isOfficePreviewablePath("design.docx")).toBe(true);
+    expect(isOfficePreviewablePath("budget.xlsx")).toBe(true);
+    expect(isOfficePreviewablePath("deck.pptx")).toBe(true);
+    // Legacy binary Office formats are not OOXML and are not supported.
+    expect(isOfficePreviewablePath("design.doc")).toBe(false);
+    expect(isOfficePreviewablePath("budget.csv")).toBe(false);
   });
 });
 
@@ -59,6 +74,7 @@ describe("isPreviewableArtifactPath", () => {
     expect(isPreviewableArtifactPath("icon.svg")).toBe(true);
     expect(isPreviewableArtifactPath("logo.png")).toBe(true);
     expect(isPreviewableArtifactPath("spec.pdf")).toBe(true);
+    expect(isPreviewableArtifactPath("design.docx")).toBe(true);
   });
 
   it("rejects plain source files", () => {

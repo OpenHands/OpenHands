@@ -677,7 +677,7 @@ describe("mock conversation handlers", () => {
     expect(conversation?.title).toBe("Generated canvas demo");
     expect(conversation?.workspace?.working_dir?.trim()).toBeTruthy();
     // The base demo conversation has 8 events; the binary artifact fixture adds
-    // an action/observation pair for each format.
+    // an action/observation pair for each of the five formats.
     expect(page.items).toHaveLength(
       8 + Object.keys(ARTIFACT_DEMO_PATHS).length * 2,
     );
@@ -745,13 +745,22 @@ describe("mock conversation handlers", () => {
         `${API_BASE}/api/conversations/${CANVAS_DEMO_CONVERSATION_ID}/workspace/${path}`,
       );
       expect(response.status).toBe(200);
-      expect(response.headers.get("content-type")).toContain(kind);
+      expect(response.headers.get("content-type")).toContain(
+        kind === "docx"
+          ? "wordprocessingml"
+          : kind === "xlsx"
+            ? "spreadsheetml"
+            : kind === "pptx"
+              ? "presentationml"
+              : kind,
+      );
       const bytes = new Uint8Array(await response.arrayBuffer());
       expect(bytes.length).toBeGreaterThan(0);
-      // PNG and PDF each carry their own magic bytes.
+      // OOXML packages are ZIP containers; PNG and PDF carry their own magic.
       const magic = String.fromCharCode(...bytes.slice(0, 4));
       if (kind === "png") expect(magic).toBe("\x89PNG");
-      else expect(magic).toBe("%PDF");
+      else if (kind === "pdf") expect(magic).toBe("%PDF");
+      else expect(magic).toBe("PK\x03\x04");
     }
   });
   it("serves the generated canvas SVG artifact", async () => {
