@@ -66,8 +66,7 @@ export function SetupFormField({
 
   // Listing a user's repositories is a cloud-backend capability: `GitService`
   // answers with an empty page on any other backend, so the picker would offer
-  // a source that can never respond. Recommended automations are themselves
-  // local-only, which makes that the common case rather than the edge one.
+  // a source that can never respond.
   const canListRepositories = backend.kind === "cloud";
 
   // The format hint is host copy: a manifest states the format of everything it

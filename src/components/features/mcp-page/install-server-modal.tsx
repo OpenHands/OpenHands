@@ -6,6 +6,9 @@ import { ModalCloseButton } from "#/components/shared/modals/modal-close-button"
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { SettingsInput } from "#/components/features/settings/settings-input";
 import { SaveAsSecretToggle } from "#/components/features/mcp-page/save-as-secret-toggle";
+import { NativeIntegrationPanel } from "#/components/features/mcp-page/native-integration-panel";
+import { TabButton } from "#/components/features/conversation-panel/system-message-modal/tab-button";
+import { BrandBadge } from "#/components/shared/badge";
 import { I18nKey } from "#/i18n/declaration";
 import type {
   IntegrationCatalogEntry as MarketplaceEntry,
@@ -17,6 +20,7 @@ import type { MCPAuthCredential } from "#/types/mcp-auth";
 import { seedMcpServerHealth } from "#/api/mcp-health/probe-mcp-server-health";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useAddMcpServer } from "#/hooks/mutation/use-add-mcp-server";
+import { useNativeGitIntegrations } from "#/hooks/query/use-native-git-integrations";
 import { useTestMcpServer } from "#/hooks/mutation/use-test-mcp-server";
 import { displaySuccessToast } from "#/utils/custom-toast-handlers";
 import {
@@ -175,6 +179,18 @@ export function InstallServerModal({
   // stdio servers on cloud backends get a synthetic test success (they only
   // run inside the sandbox); never seed card health from it.
   const isSyntheticTest = isCloudBackend && template?.kind === "stdio";
+
+  // A git entry the cloud instance can also connect natively offers that as
+  // the recommended option next to the MCP server; an entry with no MCP
+  // option (Bitbucket) offers only the native one.
+  const { getNativeIntegration } = useNativeGitIntegrations();
+  const native = getNativeIntegration(entry.id);
+  const [selectedConnection, setSelectedConnection] = React.useState<
+    "native" | "mcp"
+  >("native");
+  const showConnectionTabs = !!native && !!option;
+  const isNativeSelected =
+    !!native && (!option || selectedConnection === "native");
 
   const isPending =
     isTesting || isAuthorizingOAuth || isAdding || isFinalizingInstall;
@@ -696,40 +712,90 @@ export function InstallServerModal({
           </a>
         )}
 
-        <div className="flex flex-col gap-3">{renderFields()}</div>
-
-        {globalError && (
-          <p
-            data-testid="mcp-install-modal-error"
-            className="text-sm text-red-500 whitespace-pre-wrap"
-          >
-            {globalError}
-          </p>
+        {showConnectionTabs && (
+          <div role="tablist" className="flex border-b border-border">
+            <TabButton
+              isActive={selectedConnection === "native"}
+              onClick={() => setSelectedConnection("native")}
+              disabled={isPending}
+              className="flex items-center gap-2"
+            >
+              <span data-testid="mcp-install-tab-native">
+                {t(I18nKey.MCP$NATIVE_TAB, { name: entry.name })}
+              </span>
+              <BrandBadge className="shrink-0 whitespace-nowrap px-2.5 py-1 text-xs">
+                {t(I18nKey.SETTINGS$SKILLS_RECOMMENDED)}
+              </BrandBadge>
+            </TabButton>
+            <TabButton
+              isActive={selectedConnection === "mcp"}
+              onClick={() => setSelectedConnection("mcp")}
+            >
+              <span data-testid="mcp-install-tab-mcp">
+                {t(I18nKey.MCP$MCP_TAB, { name: entry.name })}
+              </span>
+            </TabButton>
+          </div>
         )}
 
-        <div className="flex justify-end gap-2 mt-2">
-          <BrandButton
-            type="button"
-            variant="secondary"
-            onClick={onClose}
-            testId="mcp-install-cancel"
-            isDisabled={isPending}
-          >
-            {t(I18nKey.BUTTON$CANCEL)}
-          </BrandButton>
-          <BrandButton
-            type="submit"
-            variant="primary"
-            isDisabled={isPending}
-            testId="mcp-install-submit"
-          >
-            {isTesting || isAuthorizingOAuth
-              ? t(I18nKey.MCP$VERIFYING)
-              : isAdding || isFinalizingInstall
-                ? t(I18nKey.SETTINGS$SAVING)
-                : t(I18nKey.MCP$INSTALL_BUTTON)}
-          </BrandButton>
-        </div>
+        {isNativeSelected && native ? (
+          <NativeIntegrationPanel
+            entry={entry}
+            native={native}
+            onConnected={() => {
+              onSuccess?.(entry);
+              onClose();
+            }}
+          />
+        ) : (
+          <>
+            {showConnectionTabs && (
+              <div className="flex flex-col gap-1">
+                <h3 className="text-sm font-semibold text-contrast">
+                  {t(I18nKey.MCP$MCP_TAB, { name: entry.name })}
+                </h3>
+                <p className="text-xs text-tertiary-light">
+                  {t(I18nKey.MCP$MCP_DESCRIPTION, { name: entry.name })}
+                </p>
+              </div>
+            )}
+
+            <div className="flex flex-col gap-3">{renderFields()}</div>
+
+            {globalError && (
+              <p
+                data-testid="mcp-install-modal-error"
+                className="text-sm text-red-500 whitespace-pre-wrap"
+              >
+                {globalError}
+              </p>
+            )}
+
+            <div className="flex justify-end gap-2 mt-2">
+              <BrandButton
+                type="button"
+                variant="secondary"
+                onClick={onClose}
+                testId="mcp-install-cancel"
+                isDisabled={isPending}
+              >
+                {t(I18nKey.BUTTON$CANCEL)}
+              </BrandButton>
+              <BrandButton
+                type="submit"
+                variant="primary"
+                isDisabled={isPending}
+                testId="mcp-install-submit"
+              >
+                {isTesting || isAuthorizingOAuth
+                  ? t(I18nKey.MCP$VERIFYING)
+                  : isAdding || isFinalizingInstall
+                    ? t(I18nKey.SETTINGS$SAVING)
+                    : t(I18nKey.MCP$INSTALL_BUTTON)}
+              </BrandButton>
+            </div>
+          </>
+        )}
       </form>
     </ModalBackdrop>
   );
