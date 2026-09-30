@@ -1,17 +1,15 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import {
   setupConversationPanelTest,
   createMockConversation,
-  onCloseMock,
   renderConversationPanel,
 } from "./conversation-panel-test-utils";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { ExecutionStatus } from "#/types/agent-server/core";
 import { useArchivedConversationsStore } from "#/stores/archived-conversations-store";
 import { useConversationPanelPreferencesStore } from "#/stores/conversation-panel-preferences-store";
-import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 const mockStopConversationMutate = vi.fn();
 vi.mock("#/hooks/mutation/use-unified-stop-conversation", () => ({
@@ -57,11 +55,12 @@ describe("ConversationPanel conversation actions", () => {
 
   it("should delete a conversation", async () => {
     const user = userEvent.setup();
-    const mockData: import("#/api/conversation-service/agent-server-conversation-service.types").AppConversation[] = [
-      createMockConversation({ id: "1", title: "Conversation 1" }),
-      createMockConversation({ id: "2", title: "Conversation 2" }),
-      createMockConversation({ id: "3", title: "Conversation 3" }),
-    ];
+    const mockData: import("#/api/conversation-service/agent-server-conversation-service.types").AppConversation[] =
+      [
+        createMockConversation({ id: "1", title: "Conversation 1" }),
+        createMockConversation({ id: "2", title: "Conversation 2" }),
+        createMockConversation({ id: "3", title: "Conversation 3" }),
+      ];
 
     const searchConversationsSpy = vi.spyOn(
       AgentServerConversationService,
@@ -291,6 +290,7 @@ describe("ConversationPanel conversation actions", () => {
     expect(mockStopConversationMutate).toHaveBeenCalledWith({
       conversationId: "1",
     });
+    expect(mockStopConversationMutate).toHaveBeenCalledTimes(1);
   });
 
   it("should only show stop button for STARTING or RUNNING conversations", async () => {

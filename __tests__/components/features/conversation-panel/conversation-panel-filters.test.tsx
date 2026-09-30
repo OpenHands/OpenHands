@@ -4,12 +4,10 @@ import { describe, expect, it, vi } from "vitest";
 import {
   setupConversationPanelTest,
   createMockConversation,
-  mockConversations,
   openAdvancedOptions,
   renderConversationPanel,
 } from "./conversation-panel-test-utils";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
-import { ExecutionStatus } from "#/types/agent-server/core";
 import { useConversationPanelPreferencesStore } from "#/stores/conversation-panel-preferences-store";
 import { useArchivedConversationsStore } from "#/stores/archived-conversations-store";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
@@ -445,7 +443,7 @@ describe("ConversationPanel filters and pagination", () => {
       const deleteAllRow = screen.getByTestId("delete-all-conversations");
       expect(deleteAllRow.querySelector("svg")).toBeInTheDocument();
       expect(deleteAllRow).toHaveClass("text-danger");
-      expect(deleteAllRow).not.toHaveClass("text-[var(--oh-foreground)]");
+      expect(deleteAllRow).not.toHaveClass("text-foreground");
 
       // The older-conversations toggle lives in the Advanced options modal.
       await user.click(screen.getByTestId("advanced-options-row"));
