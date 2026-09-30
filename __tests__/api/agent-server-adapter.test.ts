@@ -857,6 +857,20 @@ describe("buildStartConversationRequest", () => {
       ]);
     });
 
+    it("adds the automation setup tag to local conversation requests", () => {
+      const payload = buildStartConversationRequest({
+        settings: DEFAULT_SETTINGS,
+        automationSetup: true,
+      });
+
+      expect(payload.tags).toEqual(
+        expect.objectContaining({
+          automationsetup: "draft",
+          clientsource: "agentcanvas",
+        }),
+      );
+    });
+
     it.each([
       {
         automationSetup: false,
