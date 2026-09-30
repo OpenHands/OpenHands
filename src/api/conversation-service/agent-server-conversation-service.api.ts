@@ -409,6 +409,11 @@ export interface CreateConversationOptions {
    * by the caller from the warmed meta-profiles query.
    */
   hasActiveMetaProfile?: boolean;
+  // The LLM profile pinned to the launched agent profile (llm_profile_ref).
+  // When set and no explicit title_llm_profile preference exists, title
+  // generation uses this profile so both the agent and its title use the
+  // same model.
+  agentLlmProfileRef?: string | null;
 }
 
 class AgentServerConversationService {
@@ -464,6 +469,7 @@ class AgentServerConversationService {
       sandboxId,
       agentProfileId,
       agentProfileKind,
+      agentLlmProfileRef,
     } = options;
 
     if (getActiveBackend().backend.kind === "cloud") {
@@ -516,6 +522,7 @@ class AgentServerConversationService {
     const titleLlmProfile = resolveTitleLlmProfile(
       settings.title_llm_profile,
       profiles,
+      agentLlmProfileRef,
     );
     const conversationId = uuidv4();
     const { workingDir, hooksProjectDir, isolated } =
