@@ -448,6 +448,41 @@ describe("MetaLlmSettingsView", () => {
     ).toBeDisabled();
   });
 
+  it("does not clear a saved on preference while the meta-profiles query is still loading", () => {
+    // Regression guard for the load-time effect that destroyed the toggle:
+    // ``useMetaProfiles`` returns ``active_meta_profile: null`` until the
+    // fetch resolves, so a mount-time guard must NOT fire saveSettings to
+    // clear a persisted ``true``. The launch paths gate on the active
+    // meta-profile instead, so the preference is preserved for when a router
+    // is active again.
+    const saveSettingsMock = vi.fn();
+    const base = mockMutation(vi.fn()) as Record<string, unknown>;
+    vi.mocked(useSaveSettingsHook.useSaveSettings).mockReturnValue({
+      ...base,
+      mutate: saveSettingsMock,
+    } as never);
+    vi.mocked(useMetaProfilesHook.useMetaProfiles).mockReturnValue({
+      // Loading: data not yet resolved, so active is null.
+      data: undefined,
+      isLoading: true,
+      error: null,
+    } as unknown as ReturnType<typeof useMetaProfilesHook.useMetaProfiles>);
+    vi.mocked(useSettingsHook.useSettings).mockReturnValue({
+      data: { run_router_at_conversation_start: true } as never,
+      isLoading: false,
+      error: null,
+    } as never);
+
+    renderWithProviders(<MetaLlmSettingsView />);
+
+    // The switch renders off (no active router) but the persisted preference
+    // is left intact — saveSettings must not be called to clear it.
+    expect(
+      screen.getByTestId("meta-profile-run-at-conversation-start-switch"),
+    ).not.toBeChecked();
+    expect(saveSettingsMock).not.toHaveBeenCalled();
+  });
+
   it("persists the Run-at-conversation-start toggle through useSaveSettings", async () => {
     const saveSettingsMock = vi.fn();
     const base = mockMutation(vi.fn()) as Record<string, unknown>;

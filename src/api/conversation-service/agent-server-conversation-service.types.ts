@@ -92,7 +92,7 @@ export interface AppConversationStartRequest {
    * forwards `system_message_suffix_append` to the resolved agent's
    * system-message suffix, mirroring the SDK's `AgentLaunchAdditions`. Used
    * here to route the first message through the Model Router when the user
-   * enables "Run on first message".
+   * enables "Run at conversation start".
    */
   agent_launch_additions?: {
     system_message_suffix_append?: string | null;

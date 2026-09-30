@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { HttpError } from "@openhands/typescript-client";
 import { BrandButton } from "#/components/features/settings/brand-button";
@@ -237,25 +237,21 @@ export function MetaLlmSettingsView() {
     !!settings?.run_router_at_conversation_start;
   // The toggle only does something when a router is actually active: with no
   // active meta-profile the `route_task_to_model` tool is not attached, so
-  // routing the first message would be a no-op. Disable it then so the state
-  // can't silently drift from what the agent will actually do. The launch
-  // paths trust this stored toggle, so keeping it off without an active
-  // router is what prevents the route-at-start instruction from being sent
-  // when no tool backs it.
+  // routing the first message would be a no-op. Disable it then, and render
+  // it off, so the switch reflects what the agent will actually do. We do NOT
+  // auto-clear the persisted preference here: ``useMetaProfiles`` has no
+  // ``initialData``/``placeholderData``, so ``active`` is ``null`` on every
+  // mount until the fetch resolves, and a load-time effect would fire
+  // ``saveSettings({ run_router_at_conversation_start: false })`` in that
+  // window — silently destroying a user's saved preference before the
+  // meta-profiles response can prove a router is active. Instead the launch
+  // paths gate on the active meta-profile at the single suffix-emission
+  // point (``buildRouterAtStartSystemSuffix``), so a stale ``true`` with no
+  // router can never emit the ``route_task_to_model`` instruction.
   const canRunRouterAtStart = active !== null;
   const handleToggleRunAtConversationStart = (value: boolean) => {
     saveSettings({ run_router_at_conversation_start: value });
   };
-
-  // Keep the persisted toggle in sync with the active-router guard: if the
-  // active meta-profile is removed (deleted), clear the toggle so the switch
-  // — which already renders off when no router is active — doesn't silently
-  // re-enable routing the next time a profile is activated.
-  useEffect(() => {
-    if (active === null && settings?.run_router_at_conversation_start) {
-      saveSettings({ run_router_at_conversation_start: false });
-    }
-  }, [active, settings?.run_router_at_conversation_start, saveSettings]);
 
   if (isUnsupportedBackend) {
     return (
