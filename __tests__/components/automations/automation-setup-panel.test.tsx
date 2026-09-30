@@ -199,7 +199,7 @@ function renderPanel(
     kind: "prompt",
   },
   conversationId = "conv-1",
-  conversationTags: Record<string, string> | null = null,
+  conversationTags: Record<string, string> | null | undefined = null,
 ) {
   const value: NavigationContextValue = {
     currentPath: `/conversations/${conversationId}`,
@@ -1105,6 +1105,32 @@ describe("AutomationSetupPanel", () => {
       );
     });
 
+    it("does not overwrite tags before conversation tags have loaded", async () => {
+      const value: NavigationContextValue = {
+        currentPath: "/conversations/conv-1",
+        conversationId: "conv-1",
+        isNavigating: false,
+        navigate: mockNavigate,
+      };
+
+      render(
+        <NavigationProvider value={value}>
+          <AutomationSetupPanel
+            draft={{ prompt: "Edit automation", kind: "prompt" }}
+            conversationId="conv-1"
+          />
+        </NavigationProvider>,
+      );
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(
+        AgentServerConversationService.updateConversationTags,
+      ).not.toHaveBeenCalled();
+    });
+
     it("omits an empty prompt when saving a partial prompt draft", async () => {
       vi.mocked(AutomationService.createServerDraft).mockResolvedValue({
         ...dispatchableDraft,
@@ -1113,6 +1139,7 @@ describe("AutomationSetupPanel", () => {
       });
 
       const user = userEvent.setup();
+
       renderPanel({ prompt: "", kind: "prompt" });
 
       await user.click(screen.getByTestId("automation-setup-save-draft"));
