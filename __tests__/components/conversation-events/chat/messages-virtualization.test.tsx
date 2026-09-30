@@ -91,6 +91,19 @@ describe("Messages virtualization", () => {
     expect(screen.getAllByTestId(/^event-message-/)).toHaveLength(400);
   });
 
+  it("keeps the virtualized shell at its full scroll height", () => {
+    const events = buildEvents(400);
+
+    renderMessages(events);
+
+    const list = screen.getByTestId("virtualized-message-list");
+    // The rows are absolutely positioned, so the shell has no in-flow content.
+    // As a flex child of the scrolling column it must opt out of shrinking, or
+    // it collapses to the viewport and the history can never scroll.
+    expect(list).toHaveStyle({ flexShrink: "0", position: "relative" });
+    expect(list.style.height).not.toBe("");
+  });
+
   it("does not remount already-visible rows when a new event is appended", () => {
     const events = buildEvents(400);
     const { rerender } = renderMessages(events);
@@ -108,8 +121,8 @@ describe("Messages virtualization", () => {
     );
 
     expect(screen.getByTestId("event-message-message-0")).toBe(firstRowBefore);
-    expect(screen.getAllByTestId("virtualized-message-row").length).toBeLessThan(
-      100,
-    );
+    expect(
+      screen.getAllByTestId("virtualized-message-row").length,
+    ).toBeLessThan(100);
   });
 });

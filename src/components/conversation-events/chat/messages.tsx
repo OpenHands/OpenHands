@@ -219,6 +219,11 @@ export const Messages: React.FC<MessagesProps> = React.memo(
             height: rowVirtualizer.getTotalSize(),
             width: "100%",
             position: "relative",
+            // The rows are absolutely positioned, so this container has no
+            // in-flow content and `min-height: auto` collapses to 0 — as a
+            // flex child of the scrolling column it would then be shrunk back
+            // to the viewport and the list could never scroll.
+            flexShrink: 0,
           }}
         >
           {rowVirtualizer.getVirtualItems().map((virtualRow) => {
