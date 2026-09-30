@@ -169,9 +169,10 @@ export default function AutomationsList() {
         search: searchQuery,
         status: statusFilter,
         trigger: triggerFilter,
-        // A selection made on a team workspace must not linger once the
-        // filter is hidden (local backend or personal workspace).
-        createdBy: creatorFilterUserId ? createdByFilter : "all",
+        // The creator filter is inert until identity resolves, so
+        // neither "me" nor "others" can mislabel anything while it loads.
+
+        createdBy: createdByFilter,
         currentUserId: creatorFilterUserId,
         sort: sortValue,
       },

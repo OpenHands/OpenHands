@@ -204,16 +204,15 @@ const TRIGGER_PREDICATES: Record<
   schedule: (automation) => automation.trigger.type !== "event",
 };
 
-// A null caller id never matches, so "me" is empty and "others" keeps
-// everything (including creator-less automations) until identity resolves.
+// The caller's id is non-null whenever these run; applyDashboardView skips the
+// creator check until identity resolves, so "me" is an exact match and
+// "others" is everything else, including creator-less automations.
 const CREATED_BY_PREDICATES: Record<
   Exclude<DashboardCreatedByValue, "all">,
-  (automation: Automation, currentUserId: string | null) => boolean
+  (automation: Automation, currentUserId: string) => boolean
 > = {
-  me: (automation, currentUserId) =>
-    currentUserId !== null && automation.user_id === currentUserId,
-  others: (automation, currentUserId) =>
-    currentUserId === null || automation.user_id !== currentUserId,
+  me: (automation, currentUserId) => automation.user_id === currentUserId,
+  others: (automation, currentUserId) => automation.user_id !== currentUserId,
 };
 
 function runCount(automation: Automation, byId: Summaries): number {
@@ -272,7 +271,11 @@ export function applyDashboardView(
       ) {
         return false;
       }
+      // While the caller's id is unknown, neither "me" nor "others" can
+      // claim anything, so leave the creator filter inert until it resolves.
+
       if (
+        view.currentUserId !== null &&
         view.createdBy !== "all" &&
         !CREATED_BY_PREDICATES[view.createdBy](automation, view.currentUserId)
       ) {

@@ -388,27 +388,33 @@ describe("applyDashboardView", () => {
     });
   });
 
-  it("claims no automation as the caller's while their identity is unknown", () => {
+  it("leaves the creator filter inert while the caller's identity is unknown", () => {
     // Arrange
-    const unowned = createAutomation({ id: "unowned", name: "A unowned" });
+    const mine = createAutomation({
+      id: "mine",
+      name: "A mine",
+      user_id: "me",
+    });
+    const automations = [mine];
 
     // Act
-    const mine = applyDashboardView(
-      [unowned],
+    const askingForMe = applyDashboardView(
+      automations,
       { ...neutral, createdBy: "me", currentUserId: null },
       byId,
     );
-    const others = applyDashboardView(
-      [unowned],
+    const askingForOthers = applyDashboardView(
+      automations,
       { ...neutral, createdBy: "others", currentUserId: null },
       byId,
     );
 
-    // Assert
+    // Assert — no identity means neither bucket can claim anything, so it
+    // behaves exactly like "all".
     expect({
-      mine: mine.map((a) => a.id),
-      others: others.map((a) => a.id),
-    }).toEqual({ mine: [], others: ["unowned"] });
+      me: askingForMe.map((a) => a.id),
+      others: askingForOthers.map((a) => a.id),
+    }).toEqual({ me: ["mine"], others: ["mine"] });
   });
 
   it("orders by lifetime run count under the runs sort", () => {
