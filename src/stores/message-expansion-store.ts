@@ -14,8 +14,14 @@ import { create } from "zustand";
 interface MessageExpansionState {
   expanded: Record<string, boolean>;
   setExpanded: (key: string, value: boolean) => void;
-  /** Drop keys not in `keys` so a shrinking history does not leak entries. */
-  prune: (keys: Set<string>) => void;
+  /**
+   * Drop entries whose row is no longer in `rowKeys` so a shrinking history
+   * does not leak entries. Membership is decided on the row part of the key,
+   * never on the whole key: a key also carries the nested control's identity
+   * (see {@link messageExpansionKey}), so a raw set lookup would reject every
+   * entry the moment any control key is present.
+   */
+  prune: (rowKeys: Set<string>) => void;
 }
 
 export const useMessageExpansionStore = create<MessageExpansionState>(
@@ -23,12 +29,12 @@ export const useMessageExpansionStore = create<MessageExpansionState>(
     expanded: {},
     setExpanded: (key, value) =>
       set((state) => ({ expanded: { ...state.expanded, [key]: value } })),
-    prune: (keys) =>
+    prune: (rowKeys) =>
       set((state) => {
         const next: Record<string, boolean> = {};
         let changed = false;
         for (const [key, value] of Object.entries(state.expanded)) {
-          if (keys.has(key)) next[key] = value;
+          if (rowKeys.has(expandedRowKey(key))) next[key] = value;
           else changed = true;
         }
         return changed ? { expanded: next } : state;
@@ -43,6 +49,12 @@ export const useMessageExpansionStore = create<MessageExpansionState>(
  */
 export const messageExpansionKey = (rowKey: string, controlKey: string) =>
   `${rowKey}::${controlKey}`;
+
+/** The row part of a {@link messageExpansionKey}, for pruning by row. */
+export const expandedRowKey = (key: string): string => {
+  const separator = key.indexOf("::");
+  return separator === -1 ? key : key.slice(0, separator);
+};
 
 /**
  * Expansion flag that survives a row unmounting and remounting. With no `key`

@@ -208,6 +208,38 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       pruneExpansion(new Set(rowKeys));
     }, [rowKeys, pruneExpansion]);
 
+    // The virtualizer's scroll element is the chat column, which also holds
+    // content *before* this list (top-anchored /model cards, the older-history
+    // spinner). TanStack compares the container's `scrollTop` against item
+    // starts, so without the list's own offset it believes the list starts at
+    // 0 and mounts the wrong rows — leaving blank space near the top once the
+    // preceding content is taller than the overscan. Measure the shell's
+    // offset within the scroll element and pass it as `scrollMargin`.
+    const [scrollMargin, setScrollMargin] = React.useState(0);
+    const shellRef = React.useCallback(
+      (node: HTMLDivElement | null) => {
+        if (!node || !scrollParent) return;
+        const measure = () => {
+          const containerTop = scrollParent.getBoundingClientRect().top;
+          const nodeTop = node.getBoundingClientRect().top;
+          setScrollMargin(
+            Math.round(nodeTop - containerTop + scrollParent.scrollTop),
+          );
+        };
+        measure();
+        // Preceding siblings can grow after mount (a /model card expands), so
+        // re-measure when their box changes. jsdom has no ResizeObserver; the
+        // one-shot measurement above still runs there.
+        if (typeof ResizeObserver === "undefined") return;
+        const observer = new ResizeObserver(measure);
+        observer.observe(node);
+        Array.from(node.parentElement?.children ?? []).forEach((sibling) => {
+          if (sibling !== node) observer.observe(sibling);
+        });
+      },
+      [scrollParent],
+    );
+
     const rowVirtualizer = useVirtualizer({
       count: renderedItems.length,
       getScrollElement: () => scrollParent ?? null,
@@ -215,6 +247,10 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       estimateSize: () => ESTIMATED_ROW_HEIGHT,
       overscan: OVERSCAN,
       enabled: shouldVirtualize,
+      // Offsets are relative to the scroll element, so tell the virtualizer
+      // where this list begins inside it and shift each row back by the same
+      // amount (see the transform below).
+      scrollMargin,
       // Row heights are unknown until they mount (code blocks, images,
       // expanded output), so measure the live DOM and let the virtualizer
       // correct the offsets. The gap is added here because absolutely
@@ -239,6 +275,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     return (
       <>
         <div
+          ref={shellRef}
           data-testid="virtualized-message-list"
           style={{
             height: rowVirtualizer.getTotalSize(),
@@ -264,7 +301,10 @@ export const Messages: React.FC<MessagesProps> = React.memo(
                   top: 0,
                   left: 0,
                   width: "100%",
-                  transform: `translateY(${virtualRow.start}px)`,
+                  // `virtualRow.start` is measured from the scroll element
+                  // and so includes the scroll margin; subtract it to place
+                  // rows relative to this container.
+                  transform: `translateY(${virtualRow.start - scrollMargin}px)`,
                 }}
               >
                 {/* Remounted rows read their expansion state back from the

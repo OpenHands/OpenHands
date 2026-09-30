@@ -194,9 +194,66 @@ describe("Messages virtualization", () => {
     ).toHaveLength(1);
 
     // A collapsed history no longer contains message-0, so its entry must go.
-    rerender(<Harness events={buildEvents(300)} withScrollParent />);
+    const withoutMessageZero = events.slice(1);
+    rerender(<Harness events={withoutMessageZero} withScrollParent />);
     await waitFor(() =>
       expect(useMessageExpansionStore.getState().expanded).toEqual({}),
     );
+  });
+
+  it("keeps an expanded row's state when history is appended", () => {
+    const events = buildEvents(400);
+    const { rerender } = renderMessages(events);
+
+    fireEvent.click(screen.getByTestId("toggle-message-0"));
+
+    // A streamed event appends: `renderedItems` changes, which reruns the prune
+    // effect. The expanded row is still in history, so its entry must survive —
+    // pruning on the whole key (row + control) would delete it here.
+    rerender(
+      <Harness
+        events={[...events, createUserMessageEvent("message-400")]}
+        withScrollParent
+      />,
+    );
+
+    expect(useMessageExpansionStore.getState().expanded).toEqual({
+      "single-message-0::evt": true,
+    });
+    expect(screen.getByTestId("toggle-message-0")).toHaveTextContent(
+      "expanded",
+    );
+  });
+
+  it("shifts rows back by the list's measured scroll margin", () => {
+    const rectAt = (top: number): DOMRect =>
+      ({
+        width: 800,
+        height: 600,
+        top,
+        left: 0,
+        right: 800,
+        bottom: top + 600,
+        x: 0,
+        y: top,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    // The list does not start at the scroll container's origin (top-anchored
+    // /model cards precede it). Report a 300px offset for the list only.
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: Element) {
+        const isList =
+          this.getAttribute("data-testid") === "virtualized-message-list";
+        return rectAt(isList ? 300 : 0);
+      },
+    );
+
+    renderMessages(buildEvents(400));
+
+    // The virtualizer's `start` includes the scroll margin, so without
+    // subtracting it the first row would render 300px down inside a container
+    // that already begins 300px down — pushing visible rows out of the range.
+    const firstRow = screen.getAllByTestId("virtualized-message-row")[0];
+    expect(firstRow.style.transform).toBe("translateY(0px)");
   });
 });

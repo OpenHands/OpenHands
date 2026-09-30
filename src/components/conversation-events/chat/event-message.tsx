@@ -122,6 +122,7 @@ const renderUserMessageWithSkillReady = (
         <GenericEventMessageWrapper
           event={skillReadyEvent}
           isLastMessage={isLastMessage}
+          expansionId={`skill-ready-${String(skillReadyEvent.id ?? "")}`}
         />
       </>
     );
@@ -235,7 +236,11 @@ function EventMessageComponent({
   // the card shape, success indicator and markdown rendering all match.
   if (isACPToolCallEvent(event)) {
     return (
-      <GenericEventMessageWrapper event={event} isLastMessage={isLastMessage} />
+      <GenericEventMessageWrapper
+        event={event}
+        isLastMessage={isLastMessage}
+        expansionId={`event-${String(event.id ?? "")}`}
+      />
     );
   }
 
@@ -296,6 +301,7 @@ function EventMessageComponent({
         <GenericEventMessageWrapper
           event={event}
           isLastMessage={isLastMessage}
+          expansionId={`event-${String(event.id ?? "")}`}
         />
       </>
     );
@@ -358,6 +364,7 @@ function EventMessageComponent({
         <GenericEventMessageWrapper
           event={event}
           isLastMessage={isLastMessage}
+          expansionId={`event-${String(event.id ?? "")}`}
           correspondingAction={
             correspondingAction && isActionEvent(correspondingAction)
               ? correspondingAction
@@ -393,7 +400,11 @@ function EventMessageComponent({
 
   // Generic fallback for all other events
   return (
-    <GenericEventMessageWrapper event={event} isLastMessage={isLastMessage} />
+    <GenericEventMessageWrapper
+      event={event}
+      isLastMessage={isLastMessage}
+      expansionId={`event-${String(event.id ?? "")}`}
+    />
   );
 }
 
