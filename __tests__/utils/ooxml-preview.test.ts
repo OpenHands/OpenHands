@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { makeZip } from "../helpers/make-ooxml-zip";
-import { readOoxmlPreview } from "#/utils/ooxml-preview";
+import { makeStoredZip, makeZip } from "../helpers/make-ooxml-zip";
+import {
+  MAX_INFLATED_PART_BYTES,
+  readOoxmlPreview,
+} from "#/utils/ooxml-preview";
 
 // jsdom has neither DecompressionStream nor DOMParser's XML support, so the
 // reader's two platform primitives are stubbed from Node's own implementations.
@@ -142,6 +145,19 @@ describe("readOoxmlPreview", () => {
     await expect(
       readOoxmlPreview("docx", await makeZip(parts)),
     ).rejects.toThrow(/expands beyond/i);
+  });
+
+  it("caps a stored (uncompressed) part, which bypasses inflation", async () => {
+    // `makeZip` always deflates, so build a stored entry by hand: a small
+    // archive that *claims* a huge stored part must be refused, not handed to
+    // `DOMParser` as an oversized string.
+    const stored = makeStoredZip({
+      "word/document.xml": "A".repeat(MAX_INFLATED_PART_BYTES + 1),
+    });
+
+    await expect(readOoxmlPreview("docx", stored)).rejects.toThrow(
+      /expands beyond/i,
+    );
   });
 
   it("rejects a buffer that is not a ZIP archive", async () => {
