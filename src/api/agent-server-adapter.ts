@@ -551,10 +551,11 @@ export const AUTOMATION_TAG_KEYS: readonly string[] = [
  *   stay out of it — and users can't edit or spoof automation classification.
  * - ``localplannerparent`` → internal routing for the local planner; already
  *   surfaced by the hidden-from-list planner filter
- * - ``automationsetup`` / ``automationdraftid`` →
- *   ``automationmaterializeddraftid`` → internal routing for resuming
- *   server-backed automation setup drafts (the last one links a resumed
- *   conversation to the automation materialized from its draft)
+ * - ``automationsetup`` → user-visible setup-mode marker so users can find
+ *   setup conversations and filter by them
+ * - ``automationdraftid`` / ``automationmaterializeddraftid`` → internal
+ *   routing for resuming server-backed automation setup drafts (the last one
+ *   links a resumed conversation to the automation materialized from its draft)
  * - ``automationeditid`` → the saved automation this setup page is editing
  */
 export const RESERVED_CONVERSATION_TAG_KEYS: ReadonlySet<string> = new Set([
@@ -564,7 +565,6 @@ export const RESERVED_CONVERSATION_TAG_KEYS: ReadonlySet<string> = new Set([
   AUTOMATION_ID_TAG_KEY,
   AUTOMATION_NAME_TAG_KEY,
   AUTOMATION_RUN_ID_TAG_KEY,
-  AUTOMATION_SETUP_TAG_KEY,
   AUTOMATION_DRAFT_ID_TAG_KEY,
   AUTOMATION_MATERIALIZED_DRAFT_ID_TAG_KEY,
   AUTOMATION_EDIT_ID_TAG_KEY,
@@ -582,10 +582,14 @@ export const RESERVED_CONVERSATION_TAG_KEYS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * High-signal tag keys shown first in the chip row (before A–Z). Automations
- * often stamp ``origin``; remaining free-form tags sort alphabetically.
+ * High-signal tag keys shown first in the chip row (before A–Z). Automation
+ * setup mode should be easy to spot and filter; automations often stamp
+ * ``origin``; remaining free-form tags sort alphabetically.
  */
-export const PRIORITY_CONVERSATION_TAG_KEYS: readonly string[] = ["origin"];
+export const PRIORITY_CONVERSATION_TAG_KEYS: readonly string[] = [
+  AUTOMATION_SETUP_TAG_KEY,
+  "origin",
+];
 
 /**
  * User-facing subset of a conversation's server-side tags: everything except
