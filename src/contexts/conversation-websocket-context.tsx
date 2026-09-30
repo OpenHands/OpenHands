@@ -32,6 +32,7 @@ import {
   isGoalConversationStateUpdateEvent,
   isExecuteBashActionEvent,
   isExecuteBashObservationEvent,
+  isACPToolCallEvent,
   isDisplayableErrorEvent,
   isPlanningFileEditorObservationEvent,
   isBrowserObservationEvent,
@@ -47,8 +48,13 @@ import {
   StreamingDeltaBatcher,
 } from "#/utils/streaming-delta-batcher";
 import { handleCanvasUIAction } from "#/services/canvas-ui";
+import {
+  getACPTerminalInput,
+  getACPTerminalOutput,
+} from "#/components/conversation-events/chat/event-content-helpers/get-acp-tool-call-content";
 import { handleLaunchChildConversationAction } from "#/services/child-conversation-launch";
 import { ConversationStateUpdateEventStats } from "#/types/agent-server/core/events/conversation-state-event";
+import type { OpenHandsEvent } from "#/types/agent-server/core";
 import type {
   ConversationErrorEvent,
   ServerErrorEvent,
@@ -211,6 +217,13 @@ export function ConversationWebSocketProvider({
     conversationId: string;
   } | null>(null);
 
+  // ACP emits one started event and one terminal event per ``tool_call_id``.
+  // The terminal panel must append the command once and the output once, so
+  // track which ids already fed each direction (#17777). Reset on conversation
+  // switch — the command store is cleared there too.
+  const acpInputSeenRef = useRef<Set<string>>(new Set());
+  const acpOutputSeenRef = useRef<Set<string>>(new Set());
+
   const handleNonErrorEvent = useCallback(() => {
     // A normal event means connectivity recovered: clear a transient connection
     // error, but keep sticky conversation errors (e.g. a wrong API key).
@@ -277,6 +290,36 @@ export function ConversationWebSocketProvider({
       });
     },
     [],
+  );
+
+  // ACP surfaces tool calls as two events per ``tool_call_id`` (a started
+  // event, then a terminal one), so feed the terminal panel the command once
+  // and the output once, mirroring the ExecuteBashAction→Observation pair
+  // (#17777). Replayed events skip via the ``isDuplicateEvent`` guard above.
+
+  const handleACPExecuteToolCall = useCallback(
+    (event: OpenHandsEvent) => {
+      if (!isACPToolCallEvent(event) || event.tool_kind !== "execute") {
+        return;
+      }
+      const input = getACPTerminalInput(event);
+      if (input && !acpInputSeenRef.current.has(event.tool_call_id)) {
+        acpInputSeenRef.current.add(event.tool_call_id);
+        appendInput(input);
+      }
+      if (
+        event.status === "completed" ||
+        event.status === "failed" ||
+        event.status === null
+      ) {
+        const output = getACPTerminalOutput(event);
+        if (output && !acpOutputSeenRef.current.has(event.tool_call_id)) {
+          acpOutputSeenRef.current.add(event.tool_call_id);
+          appendOutput(output);
+        }
+      }
+    },
+    [appendInput, appendOutput],
   );
 
   // Initial REST history load: fetch the most recent events and seed the
@@ -528,8 +571,10 @@ export function ConversationWebSocketProvider({
   useEffect(() => {
     hasConnectedRefMain.current = false;
     hasConnectedRefPlanning.current = false;
-    // Reset the tracked event ref when conversation changes
+    // Reset the tracked event refs when conversation changes
     latestPlanningFileEventRef.current = null;
+    acpInputSeenRef.current = new Set();
+    acpOutputSeenRef.current = new Set();
   }, [conversationId]);
 
   // Drop buffered deltas on conversation switch/unmount: the store is cleared on
@@ -689,6 +734,10 @@ export function ConversationWebSocketProvider({
             appendOutput(textContent);
           }
 
+          // Handle ACPToolCall execute events - feed the terminal panel the
+          // command + output, mirroring ExecuteBashAction/Observation (#17777.
+          handleACPExecuteToolCall(event);
+
           // Handle BrowserObservation events - update browser store with screenshot
           if (isBrowserObservationEvent(event)) {
             const { screenshot_data: screenshotData } = event.observation;
@@ -804,6 +853,7 @@ export function ConversationWebSocketProvider({
       setExecutionStatus,
       appendInput,
       appendOutput,
+      handleACPExecuteToolCall,
       updateMetricsFromStats,
       handleNonErrorEvent,
     ],
@@ -968,6 +1018,10 @@ export function ConversationWebSocketProvider({
             appendOutput(textContent);
           }
 
+          // Handle ACPToolCall execute events - feed the terminal panel the
+          // command + output, mirroring ExecuteBashAction/Observation (#17777.
+          handleACPExecuteToolCall(event);
+
           // Handle PlanningFileEditorObservation - only update plan for Plan.md
           if (isPlanningFileEditorObservationEvent(event)) {
             const { path } = event.observation;
@@ -1021,6 +1075,7 @@ export function ConversationWebSocketProvider({
       setExecutionStatus,
       appendInput,
       appendOutput,
+      handleACPExecuteToolCall,
       readConversationFile,
       setPlanContent,
       updateMetricsFromStats,
