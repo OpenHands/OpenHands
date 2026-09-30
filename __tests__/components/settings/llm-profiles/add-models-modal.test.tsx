@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AddModelsModal } from "#/components/features/settings/llm-profiles/add-models-modal";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
 import ConfigService from "#/api/config-service/config-service.api";
+import type { LLMModelPage } from "#/api/config-service/config-service.types";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 vi.mock("react-i18next", () => ({
@@ -78,7 +79,7 @@ const httpError = (status: number, detail?: string) => {
   });
 };
 
-const MODELS = {
+const MODELS: LLMModelPage = {
   items: [
     {
       provider: "openhands",
