@@ -1287,6 +1287,44 @@ describe("AutomationSetupPanel", () => {
       );
     });
 
+    it("shows draft details when returning with a session server draft id", async () => {
+      vi.mocked(AutomationService.getServerDraft).mockResolvedValue({
+        ...dispatchableDraft,
+        name: "Session Draft",
+        draft: {
+          prompt: "Prompt restored from the server draft",
+          trigger: {
+            type: "cron",
+            schedule: "0 9 * * *",
+            timezone: "UTC",
+          },
+        },
+      });
+
+      renderPanel(
+        {
+          prompt: "Prompt restored from form session",
+          kind: "prompt",
+          serverDraftId: "draft-1",
+          form: { prompt: "Prompt restored from form session" },
+        },
+        "conv-1",
+        { automationsetup: "draft" },
+      );
+
+      await waitFor(() =>
+        expect(AutomationService.getServerDraft).toHaveBeenCalledWith(
+          "draft-1",
+        ),
+      );
+      expect(
+        screen.getByTestId("automation-setup-draft-details"),
+      ).toBeInTheDocument();
+      expect(screen.getByTestId("automation-setup-prompt")).toHaveValue(
+        "Prompt restored from the server draft",
+      );
+    });
+
     it("does not let the setup-mode tag write clobber a saved draft id", async () => {
       vi.mocked(AutomationService.createServerDraft).mockResolvedValue(
         dispatchableDraft,

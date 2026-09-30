@@ -556,9 +556,10 @@ export function AutomationSetupPanel({
   );
   const propTaggedServerDraftId =
     getAutomationDraftIdFromTags(conversationTags);
-  const [currentTaggedServerDraftId, setCurrentTaggedServerDraftId] = useState(
-    propTaggedServerDraftId,
-  );
+  const sessionServerDraftId = draft.serverDraftId?.trim() || null;
+  const initialServerDraftId = propTaggedServerDraftId ?? sessionServerDraftId;
+  const [currentTaggedServerDraftId, setCurrentTaggedServerDraftId] =
+    useState(initialServerDraftId);
   const taggedServerDraftId = currentTaggedServerDraftId;
   const serverDraftId =
     serverDraft?.id ?? (isTaggedDraftMissing ? null : taggedServerDraftId);
@@ -581,8 +582,10 @@ export function AutomationSetupPanel({
   }, [conversationTags]);
 
   useEffect(() => {
-    setCurrentTaggedServerDraftId(propTaggedServerDraftId);
-  }, [propTaggedServerDraftId]);
+    setCurrentTaggedServerDraftId(
+      propTaggedServerDraftId ?? sessionServerDraftId,
+    );
+  }, [propTaggedServerDraftId, sessionServerDraftId]);
 
   const updateConversationTags = useCallback(
     async (
