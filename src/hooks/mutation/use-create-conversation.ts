@@ -32,6 +32,7 @@ import {
 export interface CreateConversationVariables {
   query?: string;
   automationSetup?: boolean;
+  automationSetupTags?: Record<string, string>;
   repository?: {
     name: string;
     gitProvider: Provider;
@@ -84,6 +85,7 @@ export const useCreateConversation = () => {
       const {
         query,
         automationSetup,
+        automationSetupTags,
         conversationInstructions,
         plugins,
         repository,
@@ -256,6 +258,7 @@ export const useCreateConversation = () => {
         await AgentServerConversationService.createConversation({
           initialUserMsg: query,
           automationSetup,
+          ...(automationSetupTags ? { automationSetupTags } : {}),
           conversationInstructions,
           plugins,
           metadata: repository

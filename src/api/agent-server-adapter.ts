@@ -1181,6 +1181,7 @@ export interface StartConversationOptions {
   settings: Settings;
   query?: string;
   automationSetup?: boolean;
+  automationSetupTags?: Record<string, string>;
   conversationInstructions?: string;
   plugins?: PluginSpec[];
   conversationId?: string;
@@ -1334,7 +1335,7 @@ export function buildStartConversationRequest(
   // A profile launch resolves the ACP server server-side, so don't stamp the
   // tag from current settings (it may not match the launched profile).
   const baseTags = options.automationSetup
-    ? buildAutomationSetupModeTags(null)
+    ? buildAutomationSetupModeTags(options.automationSetupTags)
     : {};
   if (!options.agentProfileId && acpServerTag) {
     payload.tags = {
@@ -1678,6 +1679,7 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
   settings: Settings;
   query?: string;
   automationSetup?: boolean;
+  automationSetupTags?: Record<string, string>;
   conversationInstructions?: string;
   plugins?: PluginSpec[];
   conversationId?: string;

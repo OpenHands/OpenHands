@@ -1423,6 +1423,10 @@ describe("AgentServerConversationService", () => {
       await AgentServerConversationService.createConversation({
         initialUserMsg: "Create a daily report automation",
         automationSetup: true,
+        automationSetupTags: {
+          automationdraftid: "draft-1",
+          automationmaterializeddraftid: "auto-1",
+        },
         agentProfileKind: "openhands",
       });
 
@@ -1432,7 +1436,11 @@ describe("AgentServerConversationService", () => {
         tags?: Record<string, string>;
         client_tools: Array<{ name: string }>;
       };
-      expect(body.tags).toEqual({ automationsetup: "draft" });
+      expect(body.tags).toEqual({
+        automationsetup: "draft",
+        automationdraftid: "draft-1",
+        automationmaterializeddraftid: "auto-1",
+      });
       expect(body.client_tools.map((tool) => tool.name)).toEqual([
         "canvas_ui_control",
         "launch_child_conversation",
