@@ -362,20 +362,52 @@ export function ConversationWebSocketProvider({
   ]);
 
   /**
-   * Timestamp of the latest event we already have from REST. Used as
-   * `after_timestamp` when opening the WebSocket so the server only resends
-   * events strictly after this point. `null` until the first REST page lands
-   * (the WS connection is gated on that — see `wsUrl` below). During
-   * background refetches `preloadedHistory` keeps the last-known page, so the
-   * anchor holds steady instead of flipping to null; reconnects read the
-   * freshest value from the options ref at connect time.
+   * Timestamp of the latest durable event the client already holds. The REST
+   * preload seeds this value, then live WebSocket events advance it. Reconnects
+   * read the freshest query params from useWebSocket's options ref, so keeping
+   * this anchor current prevents the server from replaying the whole session.
+   *
+   * Streaming deltas are intentionally ignored: they are transient, are not
+   * persisted in the server event log, and therefore must never move the
+   * durable resend cursor past an event that still needs to be delivered.
    */
+  const latestStoredEventTimestamp = useEventStore((state) => {
+    if (state.loadedConversationId !== (conversationId ?? null)) {
+      return null;
+    }
+
+    for (let index = state.events.length - 1; index >= 0; index -= 1) {
+      const event = state.events[index];
+      if (
+        event &&
+        !isStreamingDeltaEvent(event) &&
+        "timestamp" in event &&
+        event.timestamp
+      ) {
+        return event.timestamp;
+      }
+    }
+    return null;
+  });
+
   const initialAfterTimestamp = useMemo<string | null>(() => {
     const events = preloadedHistory?.events ?? [];
-    const latest = events[events.length - 1];
-    if (!latest || !("timestamp" in latest) || !latest.timestamp) return null;
-    return latest.timestamp;
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+      const event = events[index];
+      if (
+        event &&
+        !isStreamingDeltaEvent(event) &&
+        "timestamp" in event &&
+        event.timestamp
+      ) {
+        return event.timestamp;
+      }
+    }
+    return null;
   }, [preloadedHistory]);
+
+  const reconnectAfterTimestamp =
+    latestStoredEventTimestamp ?? initialAfterTimestamp;
 
   // Build WebSocket URL from props.
   //
@@ -1036,8 +1068,8 @@ export function ConversationWebSocketProvider({
     // events at all (brand-new conversation), fall back to `'all'` so any
     // events that may have been written between the REST call and the WS
     // handshake still show up. Dedup in the event store handles overlap.
-    const queryParams: Record<string, string | boolean> = initialAfterTimestamp
-      ? { resend_mode: "since", after_timestamp: initialAfterTimestamp }
+    const queryParams: Record<string, string | boolean> = reconnectAfterTimestamp
+      ? { resend_mode: "since", after_timestamp: reconnectAfterTimestamp }
       : { resend_mode: "all" };
 
     return {
@@ -1066,7 +1098,7 @@ export function ConversationWebSocketProvider({
     setErrorMessage,
     clearConnectionError,
     sessionApiKey,
-    initialAfterTimestamp,
+    reconnectAfterTimestamp,
   ]);
 
   // Separate WebSocket options for planning agent connection

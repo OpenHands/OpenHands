@@ -249,6 +249,51 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     );
   });
 
+  it("advances the reconnect anchor when durable live events arrive", async () => {
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ConversationWebSocketProvider
+          conversationId="conv-anchor"
+          conversationUrl="http://localhost/api"
+        >
+          <div />
+        </ConversationWebSocketProvider>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(wsCapture.mainOnMessage).not.toBeNull());
+    const initialAnchor = String(
+      wsCapture.mainOptions?.queryParams?.after_timestamp,
+    );
+    const liveTimestamp = new Date(
+      Date.parse(initialAnchor) + 1_000,
+    ).toISOString();
+
+    act(() => {
+      wsCapture.mainOnMessage!({
+        data: JSON.stringify({
+          id: "live-anchor-event",
+          timestamp: liveTimestamp,
+          source: "agent",
+          llm_message: {
+            role: "assistant",
+            content: [{ type: "text", text: "new live event" }],
+          },
+          activated_skills: [],
+          extended_content: [],
+        }),
+      });
+    });
+
+    await waitFor(() =>
+      expect(wsCapture.mainOptions?.queryParams).toMatchObject({
+        resend_mode: "since",
+        after_timestamp: liveTimestamp,
+      }),
+    );
+    expect(liveTimestamp).not.toBe(initialAnchor);
+  });
+
   it("keeps the events socket up, with its `since` anchor, across background history refetches", async () => {
     // Arrange: the initial history load resolves; the background refetch stays
     // in flight so the query sits in `isFetching` while the socket is already
