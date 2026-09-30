@@ -135,10 +135,17 @@ export function MetaProfileEditor({
     showRouterConnectionPicker,
   ]);
 
-  const profileItems = useMemo(
-    () => availableProfiles.map((p) => ({ key: p, label: p })),
-    [availableProfiles],
-  );
+  const profileItems = useMemo(() => {
+    const classifier = startingConfig.classifier_model?.trim();
+    const items = availableProfiles.map((p) => ({ key: p, label: p }));
+    if (
+      classifier &&
+      !items.some((item) => item.key.toLowerCase() === classifier.toLowerCase())
+    ) {
+      items.push({ key: classifier, label: classifier });
+    }
+    return items;
+  }, [availableProfiles, startingConfig.classifier_model]);
   const routerConnectionItems = useMemo(
     () => [
       {
