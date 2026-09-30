@@ -6,7 +6,6 @@ import {
   initializeAutomationFormSession,
 } from "#/api/automation-form-session";
 import { markAutomationSetupHandoff } from "#/api/automation-setup-handoff-store";
-import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useNavigation } from "#/context/navigation-context";
 import { useCreateAutomationSetupConversation } from "#/hooks/use-create-automation-setup-conversation";
@@ -46,43 +45,30 @@ export function useStartAutomationSetup() {
         | "automations_add"
         | "automation_edit"
         | "automation_draft_resume" = "automations_add";
+      let automationSetupTags: Record<string, string> | undefined;
       if (editingAutomationId) {
         entryPoint = "automation_edit";
+        automationSetupTags = buildAutomationEditTags(
+          null,
+          editingAutomationId,
+        );
       } else if (draft.serverDraftId) {
         entryPoint = "automation_draft_resume";
+        automationSetupTags = buildAutomationDraftTags(
+          null,
+          draft.serverDraftId,
+          draft.materializedAutomationId,
+        );
       }
       startAutomationSetupConversation({
         query: prompt,
         entryPoint,
-        onSuccess: async (conversation) => {
+        automationSetupTags,
+        onSuccess: (conversation) => {
           const conversationId = conversation.conversation_id;
           initializeAutomationFormSession(conversationId, draft);
           markAutomationSetupHandoff(conversationId);
           clearAutomationFormSession(PENDING_AUTOMATION_SETUP_ID);
-          if (editingAutomationId || draft.serverDraftId) {
-            try {
-              const [conversationDetails] =
-                await AgentServerConversationService.batchGetAppConversations([
-                  conversationId,
-                ]);
-              const tags = editingAutomationId
-                ? buildAutomationEditTags(
-                    conversationDetails?.tags ?? null,
-                    editingAutomationId,
-                  )
-                : buildAutomationDraftTags(
-                    conversationDetails?.tags ?? null,
-                    draft.serverDraftId ?? "",
-                    draft.materializedAutomationId,
-                  );
-              await AgentServerConversationService.updateConversationTags(
-                conversationId,
-                tags,
-              );
-            } catch {
-              // The in-memory form draft still opens for this navigation.
-            }
-          }
           navigate?.(`/conversations/${conversationId}`);
         },
       });

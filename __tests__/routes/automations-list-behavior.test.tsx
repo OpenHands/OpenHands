@@ -883,13 +883,8 @@ describe("automations list interactions", () => {
       screen.getByRole("button", { name: `edit-${automation.id}` }),
     );
 
-    expect(mocks.createConversation).toHaveBeenCalledWith(
-      expect.objectContaining({
-        automationSetup: true,
-        entryPoint: "automation_edit",
-      }),
-      expect.any(Object),
-    );
+    expect(mocks.createConversation).not.toHaveBeenCalled();
+    expect(mocks.navigate).toHaveBeenCalledWith("/automations/setup");
     expect(screen.queryByTestId("edit-modal")).not.toBeInTheDocument();
   });
 

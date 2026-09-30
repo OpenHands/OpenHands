@@ -1,7 +1,6 @@
-import { renderHook, waitFor } from "@testing-library/react";
+import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useStartAutomationSetup } from "#/hooks/use-start-automation-setup";
-import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -35,16 +34,6 @@ vi.mock("#/api/automation-setup-handoff-store", () => ({
     mocks.markAutomationSetupHandoff(...args),
 }));
 
-vi.mock(
-  "#/api/conversation-service/agent-server-conversation-service.api",
-  () => ({
-    default: {
-      batchGetAppConversations: vi.fn(),
-      updateConversationTags: vi.fn(),
-    },
-  }),
-);
-
 vi.mock("#/contexts/active-backend-context", () => ({
   useActiveBackend: () => ({ backend: { kind: "local" } }),
 }));
@@ -69,15 +58,6 @@ describe("useStartAutomationSetup", () => {
     mocks.initializeAutomationFormSession.mockReset();
     mocks.clearAutomationFormSession.mockReset();
     mocks.markAutomationSetupHandoff.mockReset();
-    vi.mocked(
-      AgentServerConversationService.batchGetAppConversations,
-    ).mockReset();
-    vi.mocked(
-      AgentServerConversationService.updateConversationTags,
-    ).mockReset();
-    vi.mocked(
-      AgentServerConversationService.batchGetAppConversations,
-    ).mockResolvedValue([{ tags: { existing: "tag" } }] as never);
     mocks.isPending = false;
   });
 
@@ -116,7 +96,7 @@ describe("useStartAutomationSetup", () => {
     expect(mocks.navigate).toHaveBeenCalledWith("/conversations/conv-prompt");
   });
 
-  it("tags a resumed saved draft after the user sends a prompt", async () => {
+  it("sends saved draft tags with the initial prompt", () => {
     const draft = {
       prompt: "Draft prompt",
       kind: "prompt" as const,
@@ -136,6 +116,11 @@ describe("useStartAutomationSetup", () => {
       {
         query: "Refine the cadence",
         automationSetup: true,
+        automationSetupTags: {
+          automationsetup: "draft",
+          automationdraftid: "draft-1",
+          automationmaterializeddraftid: "auto-draft-1",
+        },
         entryPoint: "automation_draft_resume",
       },
       expect.any(Object),
@@ -144,23 +129,10 @@ describe("useStartAutomationSetup", () => {
       "conv-draft",
       draft,
     );
-    await waitFor(() =>
-      expect(
-        AgentServerConversationService.updateConversationTags,
-      ).toHaveBeenCalledWith(
-        "conv-draft",
-        expect.objectContaining({
-          existing: "tag",
-          automationsetup: "draft",
-          automationdraftid: "draft-1",
-          automationmaterializeddraftid: "auto-draft-1",
-        }),
-      ),
-    );
     expect(mocks.navigate).toHaveBeenCalledWith("/conversations/conv-draft");
   });
 
-  it("tags an edited automation after the user sends a prompt", async () => {
+  it("sends edited automation tags with the initial prompt", () => {
     const draft = {
       prompt: "Existing prompt",
       kind: "prompt" as const,
@@ -179,6 +151,10 @@ describe("useStartAutomationSetup", () => {
       {
         query: "Adjust this automation",
         automationSetup: true,
+        automationSetupTags: {
+          automationsetup: "draft",
+          automationeditid: "auto-1",
+        },
         entryPoint: "automation_edit",
       },
       expect.any(Object),
@@ -186,18 +162,6 @@ describe("useStartAutomationSetup", () => {
     expect(mocks.initializeAutomationFormSession).toHaveBeenCalledWith(
       "conv-edit",
       draft,
-    );
-    await waitFor(() =>
-      expect(
-        AgentServerConversationService.updateConversationTags,
-      ).toHaveBeenCalledWith(
-        "conv-edit",
-        expect.objectContaining({
-          existing: "tag",
-          automationsetup: "draft",
-          automationeditid: "auto-1",
-        }),
-      ),
     );
     expect(mocks.navigate).toHaveBeenCalledWith("/conversations/conv-edit");
   });

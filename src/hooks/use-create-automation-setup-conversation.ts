@@ -12,6 +12,7 @@ interface AutomationSetupConversation {
 interface StartAutomationSetupConversationOptions {
   query: string;
   entryPoint: "automations_add" | "automation_edit" | "automation_draft_resume";
+  automationSetupTags?: Record<string, string>;
   onSuccess: (
     conversation: AutomationSetupConversation,
   ) => void | Promise<void>;
@@ -26,6 +27,7 @@ export function useCreateAutomationSetupConversation() {
     ({
       query,
       entryPoint,
+      automationSetupTags,
       onSuccess,
       onSettled,
     }: StartAutomationSetupConversationOptions) => {
@@ -36,6 +38,7 @@ export function useCreateAutomationSetupConversation() {
         {
           query: text,
           automationSetup: true,
+          ...(automationSetupTags ? { automationSetupTags } : {}),
           entryPoint,
         },
         {
