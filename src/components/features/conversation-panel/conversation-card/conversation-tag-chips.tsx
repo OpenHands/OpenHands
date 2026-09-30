@@ -7,7 +7,7 @@ import {
   computeVisibleTagChipCount,
   formatConversationTagTooltip,
   getConversationTagLabel,
-  isAutomationSetupTagKey,
+  getConversationTagValueLabel,
   truncateTagChipValue,
 } from "./conversation-tag-display";
 import {
@@ -340,9 +340,9 @@ export function ConversationTagChips({ tags }: ConversationTagChipsProps) {
                   </dt>
                   <dd
                     className="m-0 whitespace-normal break-words text-left leading-4 text-foreground"
-                    title={isAutomationSetupTagKey(key) ? undefined : value}
+                    title={value}
                   >
-                    {isAutomationSetupTagKey(key) ? "" : value}
+                    {getConversationTagValueLabel(key, value, t)}
                   </dd>
                 </div>
               ))}

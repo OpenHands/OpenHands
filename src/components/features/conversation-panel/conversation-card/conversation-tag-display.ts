@@ -4,7 +4,10 @@
  */
 
 import { I18nKey } from "#/i18n/declaration";
-import { AUTOMATION_SETUP_TAG_KEY } from "#/utils/automation-draft-tags";
+import {
+  AUTOMATION_SETUP_TAG_KEY,
+  AUTOMATION_SETUP_TAG_VALUE,
+} from "#/utils/automation-draft-tags";
 
 export function isAutomationSetupTagKey(key: string): boolean {
   return key.trim().toLowerCase() === AUTOMATION_SETUP_TAG_KEY;
@@ -125,7 +128,18 @@ export function getConversationTagLabel(
   }
 }
 
-/** ``Branch: main`` — used by chip ``title`` tooltips. Bare tags (empty
+export function getConversationTagValueLabel(
+  key: string,
+  value: string,
+  t: (key: I18nKey) => string,
+): string {
+  if (isAutomationSetupTagKey(key) && value === AUTOMATION_SETUP_TAG_VALUE) {
+    return t(I18nKey.AUTOMATIONS$DETAIL$DRAFT);
+  }
+  return value;
+}
+
+/** ``Branch: main`` - used by chip ``title`` tooltips. Bare tags (empty
  * value) show the label alone, no dangling colon. */
 export function formatConversationTagTooltip(
   key: string,
@@ -133,10 +147,8 @@ export function formatConversationTagTooltip(
   t: (key: I18nKey) => string,
 ): string {
   const label = getConversationTagLabel(key, t);
-  if (isAutomationSetupTagKey(key)) {
-    return label;
-  }
-  return value ? `${label}: ${value}` : label;
+  const valueLabel = getConversationTagValueLabel(key, value, t);
+  return valueLabel ? `${label}: ${valueLabel}` : label;
 }
 
 /**
