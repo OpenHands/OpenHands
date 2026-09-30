@@ -169,9 +169,9 @@ export default function AutomationsList() {
         search: searchQuery,
         status: statusFilter,
         trigger: triggerFilter,
-        // The creator filter is inert until identity resolves, so
-        // neither "me" nor "others" can mislabel anything while it loads.
-
+        // A null id (local backend, personal workspace, or /me loading)
+        // leaves the creator filter inert, so a selection made on a team
+        // workspace does not linger once the filter is hidden.
         createdBy: createdByFilter,
         currentUserId: creatorFilterUserId,
         sort: sortValue,

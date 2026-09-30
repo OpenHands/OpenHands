@@ -273,7 +273,6 @@ export function applyDashboardView(
       }
       // While the caller's id is unknown, neither "me" nor "others" can
       // claim anything, so leave the creator filter inert until it resolves.
-
       if (
         view.currentUserId !== null &&
         view.createdBy !== "all" &&
