@@ -306,4 +306,22 @@ describe("fileEditorVisualizer", () => {
       selectedConversationId: "test-conversation-id",
     });
   });
+
+  it("does not show a binary create's status output as artifact content", () => {
+    // `file_editor create` on a binary file reports only a status line
+    // ("Created docs/plan.docx"). Feeding that to the preview card would let
+    // Copy put the status message on the clipboard in place of the document.
+    const { container } = renderVisualizer(
+      <Body
+        observation={fileEditorObservation({
+          command: "create",
+          path: "/workspace/docs/plan.docx",
+          output: "Created docs/plan.docx",
+        })}
+      />,
+    );
+
+    expect(container).toHaveTextContent("/workspace/docs/plan.docx");
+    expect(container).not.toHaveTextContent("Created docs/plan.docx");
+  });
 });
