@@ -51,9 +51,3 @@ export function consumeAutomationSetupHandoff(
   if (!conversationId) return false;
   return readHandoffs()[conversationId] === true;
 }
-
-export function clearAutomationSetupHandoff(conversationId: string) {
-  const handoffs = readHandoffs();
-  delete handoffs[conversationId];
-  writeHandoffs(handoffs);
-}
