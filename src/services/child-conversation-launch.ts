@@ -400,13 +400,14 @@ async function launchCloudChild(
   // The cloud child path bypasses `createConversation`, so read the
   // "Run on first message" toggle here to stamp the router instruction
   // onto the launch additions (the local child path reads it inside its own
-  // settings fetch via the encrypted-settings builder). Fetch the active
-  // meta-profile alongside so the suffix is only emitted when a router is
-  // actually attached — failing closed if the endpoint is unreachable.
-  const [cloudSettings, cloudMetaProfiles] = await Promise.all([
-    SettingsService.getSettings(),
-    MetaProfilesService.listMetaProfiles().catch(() => null),
-  ]);
+  // settings fetch via the encrypted-settings builder). The meta-profiles
+  // fetch is gated on the toggle so the default-off path issues no extra
+  // request; when on, the suffix is only emitted if a router is actually
+  // attached — failing closed if the endpoint is unreachable.
+  const cloudSettings = await SettingsService.getSettings();
+  const cloudMetaProfiles = cloudSettings.run_router_at_conversation_start
+    ? await MetaProfilesService.listMetaProfiles().catch(() => null)
+    : null;
   const routerAtStartSuffix = buildRouterAtStartSystemSuffix(
     cloudSettings.run_router_at_conversation_start,
     !!cloudMetaProfiles?.active_meta_profile,
