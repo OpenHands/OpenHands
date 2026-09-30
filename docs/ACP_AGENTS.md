@@ -168,15 +168,15 @@ spawn time. For ACP this resolution runs **off the event loop**
 (software-agent-sdk#3510), so the loopback fetch does not self-deadlock. The
 SDK's `acp_file_secrets` defaults then:
 
-- materialise `CODEX_AUTH_JSON` back to `auth.json` under `CODEX_HOME` and point
+- materialize `CODEX_AUTH_JSON` back to `auth.json` under `CODEX_HOME` and point
   Codex at it;
-- materialise `GOOGLE_APPLICATION_CREDENTIALS_JSON` to a file referenced by
+- materialize `GOOGLE_APPLICATION_CREDENTIALS_JSON` to a file referenced by
   `GOOGLE_APPLICATION_CREDENTIALS` and route Gemini through Vertex AI;
 - export the rest (`CLAUDE_CODE_OAUTH_TOKEN`, project/location, API keys) as env
   vars for the CLI.
 
 Canvas just sends the secrets — it does **not** hand-roll the file
-materialisation. The `npx -y <pkg>` command is rewritten to the pinned
+materialization. The `npx -y <pkg>` command is rewritten to the pinned
 pre-installed binary inside the container by the SDK, so no command change is
 needed.
 
