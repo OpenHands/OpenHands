@@ -5,7 +5,12 @@ let useConversationStore: (typeof import("#/stores/conversation-store"))["useCon
 const defaultConversationState: {
   selectedTab: "files";
   unpinnedTabs: string[];
-  conversationMode: "code" | "plan";
+  conversationMode: "code" | "plan" | "deep-plan";
+  deepPlan?: {
+    activePhase: string | null;
+    confirmed: string[];
+    documents: Record<string, string>;
+  };
 } = {
   selectedTab: "files" as const,
   unpinnedTabs: [] as string[],
@@ -137,6 +142,91 @@ describe("conversation store", () => {
 
       expect(useConversationStore.getState().conversationMode).toBe("code");
       expect(mockGetConversationState).toHaveBeenCalledWith(CONV_ID);
+    });
+  });
+
+  describe("deep plan", () => {
+    it("starts on the first phase, switches mode, and persists the machine", () => {
+      useConversationStore.getState().startDeepPlan();
+
+      expect(useConversationStore.getState().conversationMode).toBe(
+        "deep-plan",
+      );
+      expect(useConversationStore.getState().deepPlan.activePhase).toBe(
+        "analysis",
+      );
+      expect(mockSetConversationState).toHaveBeenCalledWith(CONV_ID, {
+        deepPlan: expect.objectContaining({ activePhase: "analysis" }),
+      });
+    });
+
+    it("blocks entering a later phase until its predecessors are confirmed", () => {
+      useConversationStore.getState().startDeepPlan();
+      useConversationStore.getState().setDeepPlanPhase("database");
+
+      expect(useConversationStore.getState().deepPlan.activePhase).toBe(
+        "analysis",
+      );
+    });
+
+    it("advances the phase when the reference chain is valid", () => {
+      const store = useConversationStore.getState();
+      store.startDeepPlan();
+      store.setDeepPlanDocument(
+        "requirements",
+        "## 3.1 Authentication\n",
+      );
+      store.confirmDeepPlanPhase("analysis");
+
+      const result = useConversationStore
+        .getState()
+        .confirmDeepPlanPhase("requirements");
+
+      expect(result).toEqual({ ok: true });
+      expect(useConversationStore.getState().deepPlan.activePhase).toBe(
+        "database",
+      );
+    });
+
+    it("refuses a checkpoint whose chain cites a section that does not exist", () => {
+      const store = useConversationStore.getState();
+      store.startDeepPlan();
+      store.setDeepPlanDocument("requirements", "## 3.1 Authentication\n");
+      store.confirmDeepPlanPhase("analysis");
+      store.confirmDeepPlanPhase("requirements");
+      // Requirements are confirmed; the database document now cites a section
+      // that no requirement defines.
+      store.setDeepPlanDocument("database", "## 2.1 Users [Req 9.9]\n");
+
+      const result = useConversationStore
+        .getState()
+        .confirmDeepPlanPhase("database");
+
+      expect(result.ok).toBe(false);
+      expect(result.error).toContain("[Req 9.9]");
+      expect(useConversationStore.getState().deepPlan.activePhase).toBe(
+        "database",
+      );
+    });
+
+    it("restores the phase machine from persisted state on load", async () => {
+      mockGetConversationState.mockReturnValue({
+        selectedTab: "files",
+        unpinnedTabs: [],
+        conversationMode: "deep-plan",
+        deepPlan: {
+          activePhase: "backend",
+          confirmed: ["analysis", "requirements", "database"],
+          documents: {},
+        },
+      });
+      vi.resetModules();
+      const { useConversationStore: freshStore } = await import(
+        "#/stores/conversation-store"
+      );
+
+      expect(freshStore.getState().deepPlan.activePhase).toBe("backend");
+      expect(freshStore.getState().conversationMode).toBe("deep-plan");
     });
   });
 

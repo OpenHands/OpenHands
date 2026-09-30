@@ -4,6 +4,14 @@ import {
   getConversationState,
   setConversationState,
 } from "#/utils/conversation-local-storage";
+import {
+  EMPTY_DEEP_PLAN_STATE,
+  canEnterPhase,
+  confirmPhase,
+  startDeepPlan as createDeepPlanState,
+  type DeepPlanState,
+} from "#/utils/deep-plan-machine";
+import type { DeepPlanPhaseId } from "#/utils/deep-plan";
 
 export type ConversationTab =
   | "files"
@@ -14,7 +22,7 @@ export type ConversationTab =
   | "tasklist"
   | "usage";
 
-export type ConversationMode = "code" | "plan";
+export type ConversationMode = "code" | "plan" | "deep-plan";
 
 export type CommitsPaneSection = "uncommitted";
 
@@ -46,6 +54,8 @@ interface ConversationState {
   hasRightPanelToggled: boolean;
   planContent: string | null;
   conversationMode: ConversationMode;
+  /** Deep Planning phase machine state; the store is its only writer. */
+  deepPlan: DeepPlanState;
   subConversationTaskId: string | null; // Task ID for cloud sub-conversation creation
   localPlanningConversationId: string | null;
 }
@@ -85,6 +95,15 @@ interface ConversationActions {
   setSubConversationTaskId: (taskId: string | null) => void;
   setLocalPlanningConversationId: (conversationId: string | null) => void;
   setPlanContent: (planContent: string | null) => void;
+  startDeepPlan: () => void;
+  setDeepPlanPhase: (phase: DeepPlanPhaseId) => void;
+  setDeepPlanDocument: (phase: DeepPlanPhaseId, content: string) => void;
+  /** Runs the reference validator; returns the error when the checkpoint fails. */
+  confirmDeepPlanPhase: (phase: DeepPlanPhaseId) => {
+    ok: boolean;
+    error?: string;
+  };
+  resetDeepPlan: () => void;
 }
 
 type ConversationStore = ConversationState & ConversationActions;
@@ -110,6 +129,32 @@ const getInitialConversationMode = (): ConversationMode => {
 
   const state = getConversationState(conversationId);
   return state.conversationMode;
+};
+
+/**
+ * Restores the phase machine across a refresh. Without this the user would
+ * come back to phase 1 with their confirmations gone, even though the
+ * documents are still on disk.
+ */
+const getInitialDeepPlanState = (): DeepPlanState => {
+  if (typeof window === "undefined") {
+    return EMPTY_DEEP_PLAN_STATE;
+  }
+
+  const conversationId = getConversationIdFromLocation();
+  if (!conversationId) {
+    return EMPTY_DEEP_PLAN_STATE;
+  }
+
+  return getConversationState(conversationId).deepPlan ?? EMPTY_DEEP_PLAN_STATE;
+};
+
+/** Persists the phase machine for the conversation in the current URL. */
+const persistDeepPlan = (deepPlan: DeepPlanState): void => {
+  const conversationId = getConversationIdFromLocation();
+  if (conversationId) {
+    setConversationState(conversationId, { deepPlan });
+  }
 };
 
 export const useConversationStore = create<ConversationStore>()(
@@ -145,6 +190,7 @@ export const useConversationStore = create<ConversationStore>()(
       hasRightPanelToggled: false,
       planContent: null,
       conversationMode: getInitialConversationMode(),
+      deepPlan: getInitialDeepPlanState(),
       subConversationTaskId: null,
       localPlanningConversationId: null,
 
@@ -357,6 +403,7 @@ export const useConversationStore = create<ConversationStore>()(
           {
             shouldHideSuggestions: false,
             conversationMode: getInitialConversationMode(),
+            deepPlan: EMPTY_DEEP_PLAN_STATE,
             subConversationTaskId: null,
             localPlanningConversationId: null,
             planContent: null,
@@ -388,6 +435,67 @@ export const useConversationStore = create<ConversationStore>()(
 
       setPlanContent: (planContent) =>
         set({ planContent }, false, "setPlanContent"),
+
+      startDeepPlan: () => {
+        const deepPlan = createDeepPlanState();
+        persistDeepPlan(deepPlan);
+        set(
+          { deepPlan, conversationMode: "deep-plan" as ConversationMode },
+          false,
+          "startDeepPlan",
+        );
+      },
+
+      setDeepPlanPhase: (phase) =>
+        set(
+          (state) => {
+            if (!canEnterPhase(state.deepPlan, phase)) return {};
+            const deepPlan = { ...state.deepPlan, activePhase: phase };
+            persistDeepPlan(deepPlan);
+            return { deepPlan };
+          },
+          false,
+          "setDeepPlanPhase",
+        ),
+
+      setDeepPlanDocument: (phase, content) =>
+        set(
+          (state) => {
+            const deepPlan = {
+              ...state.deepPlan,
+              documents: { ...state.deepPlan.documents, [phase]: content },
+            };
+            persistDeepPlan(deepPlan);
+            return { deepPlan };
+          },
+          false,
+          "setDeepPlanDocument",
+        ),
+
+      confirmDeepPlanPhase: (phase) => {
+        const result = confirmPhase(
+          useConversationStore.getState().deepPlan,
+          phase,
+        );
+        if (!result.ok) {
+          return { ok: false, error: result.error };
+        }
+        persistDeepPlan(result.state);
+        set({ deepPlan: result.state }, false, "confirmDeepPlanPhase");
+        return { ok: true };
+      },
+
+      resetDeepPlan: () => {
+        persistDeepPlan(EMPTY_DEEP_PLAN_STATE);
+        set(
+          {
+            deepPlan: EMPTY_DEEP_PLAN_STATE,
+            conversationMode: getInitialConversationMode(),
+          },
+          false,
+          "resetDeepPlan",
+        );
+      },
     }),
     {
       name: "conversation-store",

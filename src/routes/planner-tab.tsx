@@ -11,6 +11,8 @@ import { planComponents } from "#/components/features/markdown/plan-components";
 import { useHandlePlanClick } from "#/hooks/use-handle-plan-click";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useReadConversationFile } from "#/hooks/mutation/use-read-conversation-file";
+import { isPlanningMode } from "#/utils/conversation-mode";
+import { DeepPlanPanel } from "#/components/features/chat/deep-plan-panel";
 
 function PlannerTab() {
   const { t } = useTranslation("openhands");
@@ -64,9 +66,16 @@ function PlannerTab() {
       scrollDomToBottom();
     }
   }, [planContent, autoScroll, scrollDomToBottom]);
-  const isPlanMode = conversationMode === "plan";
+  const isPlanMode = isPlanningMode(conversationMode);
+  const isDeepPlanMode = conversationMode === "deep-plan";
   const { handlePlanClick, hasPlanner, isCreatingConversation } =
     useHandlePlanClick();
+
+  // Deep Planning renders its own phase rail; PLAN.md has no meaning until the
+  // chain reaches the implementation phase.
+  if (isDeepPlanMode) {
+    return <DeepPlanPanel />;
+  }
 
   if (planContent !== null && planContent !== undefined) {
     return (

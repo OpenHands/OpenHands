@@ -35,6 +35,7 @@ import { ContextMenuListItem } from "../../context-menu/context-menu-list-item";
 import { ContextMenu } from "#/ui/context-menu";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { cn } from "#/utils/utils";
+import { CONVERSATION_MODE_LABEL_KEYS } from "#/utils/constants";
 import {
   chatInputIconButtonClassName,
   formControlTransitionClassName,
@@ -308,11 +309,7 @@ export function ChatInputActions({
           >
             <ToolsContextMenuIconText
               icon={<CodePillIcon className="h-2.75 w-2.75" />}
-              text={
-                conversationMode === "code"
-                  ? t(I18nKey.COMMON$CODE)
-                  : t(I18nKey.COMMON$PLAN)
-              }
+              text={t(I18nKey[CONVERSATION_MODE_LABEL_KEYS[conversationMode]])}
               rightIcon={<CarretRightFillIcon width={10} height={10} />}
             />
           </ContextMenuListItem>

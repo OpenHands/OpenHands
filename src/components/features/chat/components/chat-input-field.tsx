@@ -4,6 +4,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { useConversationStore } from "#/stores/conversation-store";
 import { focusContentEditableAtEnd } from "#/components/features/chat/utils/chat-input.utils";
 import { cn } from "#/utils/utils";
+import { isPlanningMode } from "#/utils/conversation-mode";
 
 interface ChatInputFieldProps {
   chatInputRef: React.RefObject<HTMLDivElement | null>;
@@ -37,7 +38,7 @@ export function ChatInputField({
     (state) => state.conversationMode,
   );
 
-  const isPlanMode = conversationMode === "plan";
+  const isPlanMode = isPlanningMode(conversationMode);
 
   React.useEffect(() => {
     if (!disabled) {

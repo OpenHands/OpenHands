@@ -159,7 +159,7 @@ function renderButton(overrides: RenderOverrides = {}) {
 
 function getModeButton() {
   return screen.getByRole("button", {
-    name: /COMMON\$(CODE|PLAN)/,
+    name: /COMMON\$(CODE|PLAN|DEEP_PLAN)/,
   });
 }
 
@@ -347,6 +347,22 @@ describe("ChangeAgentButton mode selection", () => {
     });
 
     expect(codeEvent.defaultPrevented).toBe(true);
+    await waitFor(() => {
+      expect(getModeButton()).toHaveTextContent("COMMON$DEEP_PLAN");
+    });
+    expect(mocks.handlePlanClick).toHaveBeenCalledTimes(1);
+
+    const wrapEvent = new KeyboardEvent("keydown", {
+      key: "Tab",
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    act(() => {
+      document.dispatchEvent(wrapEvent);
+    });
+
+    expect(wrapEvent.defaultPrevented).toBe(true);
     expect(getModeButton()).toHaveTextContent("COMMON$CODE");
     expect(mocks.handlePlanClick).toHaveBeenCalledTimes(1);
   });

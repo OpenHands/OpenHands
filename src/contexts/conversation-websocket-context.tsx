@@ -62,6 +62,7 @@ import type {
 import EventService from "#/api/event-service/event-service.api";
 import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
 import { useConversationStore } from "#/stores/conversation-store";
+import { isPlanningMode } from "#/utils/conversation-mode";
 import { trackError } from "#/utils/error-handler";
 import { useReadConversationFile } from "#/hooks/mutation/use-read-conversation-file";
 import useMetricsStore, { type MetricsState } from "#/stores/metrics-store";
@@ -1145,7 +1146,7 @@ export function ConversationWebSocketProvider({
   const reconnect = useCallback(() => {
     removeErrorMessage();
     const currentMode = useConversationStore.getState().conversationMode;
-    if (currentMode === "plan" && planningAgentWsUrl) {
+    if (isPlanningMode(currentMode) && planningAgentWsUrl) {
       reconnectPlanning();
       return;
     }
@@ -1162,10 +1163,12 @@ export function ConversationWebSocketProvider({
   const sendMessage = useCallback(
     async (message: SendMessageRequest): Promise<SendMessageResult> => {
       const currentMode = useConversationStore.getState().conversationMode;
-      const currentSocket =
-        currentMode === "plan" ? planningAgentSocket : mainSocket;
-      const targetConversationId =
-        currentMode === "plan" ? planningConversationId : conversationId;
+      const currentSocket = isPlanningMode(currentMode)
+        ? planningAgentSocket
+        : mainSocket;
+      const targetConversationId = isPlanningMode(currentMode)
+        ? planningConversationId
+        : conversationId;
 
       if (currentSocket?.readyState !== WebSocket.OPEN) {
         // WebSocket not connected - queue message via REST API
@@ -1175,7 +1178,7 @@ export function ConversationWebSocketProvider({
           // target the message would run in the code agent, which is exactly
           // the boundary plan mode exists to enforce.
           const error = new Error(
-            currentMode === "plan"
+            isPlanningMode(currentMode)
               ? "Planning conversation is not ready yet"
               : "No conversation ID available",
           );
