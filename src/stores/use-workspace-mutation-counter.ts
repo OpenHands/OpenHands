@@ -37,6 +37,13 @@ export const useWorkspaceMutationCounter =
  * Append the current mutation counter as a `v=<n>` query parameter so the
  * browser refetches the URL after every agent-side edit. Returns `null` if
  * the input is `null` so callers can pass through optional URLs untouched.
+ *
+ * The counter is a *query* parameter, which only means anything for a real
+ * fileserver URL. Cloud conversations serve text artifacts as base64 `data:`
+ * URLs (see `useWorkspaceFileContent`); appending `?v=1` to one of those edits
+ * the encoded payload, so the browser can no longer decode the document. Data
+ * URLs are returned unchanged — the hook's query key already carries the
+ * counter, so a mutation still produces a fresh data URL.
  */
 export function withWorkspaceCacheBuster(url: string, version: number): string;
 export function withWorkspaceCacheBuster(
@@ -48,6 +55,7 @@ export function withWorkspaceCacheBuster(
   version: number,
 ): string | null {
   if (url === null) return null;
+  if (url.startsWith("data:")) return url;
   const sep = url.includes("?") ? "&" : "?";
   return `${url}${sep}v=${version}`;
 }

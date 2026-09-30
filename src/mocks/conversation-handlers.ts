@@ -13,8 +13,18 @@ import {
   CANVAS_DEMO_CONVERSATION_ID,
   CANVAS_DEMO_EVENTS,
   CANVAS_DEMO_FILE_PATH,
+  CANVAS_DEMO_HTML,
+  CANVAS_DEMO_HTML_FILE_PATH,
+  CANVAS_DEMO_HTML_STYLES,
+  CANVAS_DEMO_HTML_STYLES_PATH,
   CANVAS_DEMO_MARKDOWN,
+  CANVAS_DEMO_SVG,
+  CANVAS_DEMO_SVG_FILE_PATH,
 } from "#/fixtures/canvas-demo-conversation";
+import {
+  ARTIFACT_DEMO_BYTES,
+  ARTIFACT_DEMO_MIME,
+} from "#/fixtures/artifact-formats-demo";
 
 /** Map from conversation id → events returned by GET /events/search */
 const CONVERSATION_EVENTS: Record<string, unknown[]> = {
@@ -376,6 +386,53 @@ export const CONVERSATION_HANDLERS = [
         return HttpResponse.text(CANVAS_DEMO_MARKDOWN, {
           headers: { "Content-Type": "text/markdown; charset=utf-8" },
         });
+      }
+      // The HTML artifact and its sibling stylesheet are served from the same
+      // workspace URL the sandboxed preview frame points at, so the relative
+      // `./report.css` reference inside the HTML resolves like a real workspace.
+      if (
+        conversationId === CANVAS_DEMO_CONVERSATION_ID &&
+        url.pathname.endsWith(`/${CANVAS_DEMO_HTML_FILE_PATH}`)
+      ) {
+        return HttpResponse.text(CANVAS_DEMO_HTML, {
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        });
+      }
+      if (
+        conversationId === CANVAS_DEMO_CONVERSATION_ID &&
+        url.pathname.endsWith(`/${CANVAS_DEMO_HTML_STYLES_PATH}`)
+      ) {
+        return HttpResponse.text(CANVAS_DEMO_HTML_STYLES, {
+          headers: { "Content-Type": "text/css; charset=utf-8" },
+        });
+      }
+      if (
+        conversationId === CANVAS_DEMO_CONVERSATION_ID &&
+        url.pathname.endsWith(`/${CANVAS_DEMO_SVG_FILE_PATH}`)
+      ) {
+        return HttpResponse.text(CANVAS_DEMO_SVG, {
+          headers: { "Content-Type": "image/svg+xml; charset=utf-8" },
+        });
+      }
+      // Binary artifacts (PNG / PDF) are served from the same workspace URL
+      // the inline preview points at, so the PNG `<img>` and the PDF viewer
+      // frame resolve like a real workspace. The payloads are base64 in the
+      // fixture.
+      if (conversationId === CANVAS_DEMO_CONVERSATION_ID) {
+        const artifactPath = Object.keys(ARTIFACT_DEMO_BYTES).find((path) =>
+          url.pathname.endsWith(`/${path}`),
+        );
+        if (artifactPath) {
+          const binary = Uint8Array.from(
+            atob(ARTIFACT_DEMO_BYTES[artifactPath]),
+            (char) => char.charCodeAt(0),
+          );
+          return new HttpResponse(binary, {
+            headers: {
+              "Content-Type": ARTIFACT_DEMO_MIME[artifactPath],
+            },
+          });
+        }
       }
       // Leave every other workspace-file GET on its previous bypass behavior
       // so this fixture handler does not force 404s for unrelated mocks.

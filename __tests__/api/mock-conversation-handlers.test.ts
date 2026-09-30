@@ -7,9 +7,16 @@ import EventService from "#/api/event-service/event-service.api";
 import {
   CANVAS_DEMO_CONVERSATION_ID,
   CANVAS_DEMO_FILE_PATH,
+  CANVAS_DEMO_HTML,
+  CANVAS_DEMO_HTML_FILE_PATH,
+  CANVAS_DEMO_HTML_STYLES,
+  CANVAS_DEMO_HTML_STYLES_PATH,
   CANVAS_DEMO_MARKDOWN,
+  CANVAS_DEMO_SVG,
+  CANVAS_DEMO_SVG_FILE_PATH,
 } from "#/fixtures/canvas-demo-conversation";
 import { TABLE_DEMO_CONVERSATION_ID } from "#/fixtures/table-demo-conversation";
+import { ARTIFACT_DEMO_PATHS } from "#/fixtures/artifact-formats-demo";
 import { server } from "#/mocks/node";
 import { ExecutionStatus } from "#/types/agent-server/core";
 
@@ -669,7 +676,11 @@ describe("mock conversation handlers", () => {
 
     expect(conversation?.title).toBe("Generated canvas demo");
     expect(conversation?.workspace?.working_dir?.trim()).toBeTruthy();
-    expect(page.items).toHaveLength(4);
+    // The base demo conversation has 8 events; the binary artifact fixture adds
+    // an action/observation pair for each format.
+    expect(page.items).toHaveLength(
+      8 + Object.keys(ARTIFACT_DEMO_PATHS).length * 2,
+    );
     expect(page.items).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -678,6 +689,26 @@ describe("mock conversation handlers", () => {
             path: CANVAS_DEMO_FILE_PATH,
           }),
         }),
+        expect.objectContaining({
+          observation: expect.objectContaining({
+            kind: "FileEditorObservation",
+            path: CANVAS_DEMO_HTML_FILE_PATH,
+          }),
+        }),
+        expect.objectContaining({
+          observation: expect.objectContaining({
+            kind: "FileEditorObservation",
+            path: CANVAS_DEMO_SVG_FILE_PATH,
+          }),
+        }),
+        ...Object.values(ARTIFACT_DEMO_PATHS).map((path) =>
+          expect.objectContaining({
+            observation: expect.objectContaining({
+              kind: "FileEditorObservation",
+              path,
+            }),
+          }),
+        ),
       ]),
     );
   });
@@ -689,5 +720,47 @@ describe("mock conversation handlers", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/markdown");
     await expect(response.text()).resolves.toBe(CANVAS_DEMO_MARKDOWN);
+  });
+  it("serves the generated canvas HTML and its sibling stylesheet", async () => {
+    // eslint-disable-next-line local/no-direct-agent-server-fetch -- Verify the bytes the sandboxed preview frame fetches, including the relative asset.
+    const html = await fetch(
+      `${API_BASE}/api/conversations/${CANVAS_DEMO_CONVERSATION_ID}/workspace/${CANVAS_DEMO_HTML_FILE_PATH}`,
+    );
+    expect(html.status).toBe(200);
+    expect(html.headers.get("content-type")).toContain("text/html");
+    await expect(html.text()).resolves.toBe(CANVAS_DEMO_HTML);
+
+    // eslint-disable-next-line local/no-direct-agent-server-fetch -- The relative `./report.css` in the HTML must resolve against the same workspace base.
+    const css = await fetch(
+      `${API_BASE}/api/conversations/${CANVAS_DEMO_CONVERSATION_ID}/workspace/${CANVAS_DEMO_HTML_STYLES_PATH}`,
+    );
+    expect(css.status).toBe(200);
+    expect(css.headers.get("content-type")).toContain("text/css");
+    await expect(css.text()).resolves.toBe(CANVAS_DEMO_HTML_STYLES);
+  });
+  it("serves the binary artifact bytes with their declared MIME types", async () => {
+    for (const [kind, path] of Object.entries(ARTIFACT_DEMO_PATHS)) {
+      // eslint-disable-next-line local/no-direct-agent-server-fetch -- Verify the bytes the inline previews fetch at the HTTP boundary.
+      const response = await fetch(
+        `${API_BASE}/api/conversations/${CANVAS_DEMO_CONVERSATION_ID}/workspace/${path}`,
+      );
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toContain(kind);
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      expect(bytes.length).toBeGreaterThan(0);
+      // PNG and PDF each carry their own magic bytes.
+      const magic = String.fromCharCode(...bytes.slice(0, 4));
+      if (kind === "png") expect(magic).toBe("\x89PNG");
+      else expect(magic).toBe("%PDF");
+    }
+  });
+  it("serves the generated canvas SVG artifact", async () => {
+    // eslint-disable-next-line local/no-direct-agent-server-fetch -- Verify the bytes the sandboxed preview frame fetches.
+    const svg = await fetch(
+      `${API_BASE}/api/conversations/${CANVAS_DEMO_CONVERSATION_ID}/workspace/${CANVAS_DEMO_SVG_FILE_PATH}`,
+    );
+    expect(svg.status).toBe(200);
+    expect(svg.headers.get("content-type")).toContain("image/svg+xml");
+    await expect(svg.text()).resolves.toBe(CANVAS_DEMO_SVG);
   });
 });
