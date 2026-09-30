@@ -5,7 +5,10 @@ import {
   isPlanningFileEditorObservationEvent,
 } from "#/types/agent-server/type-guards";
 import { isMarkdownFileEditorEvent } from "#/components/features/chat/tool-visualizers/primitives/markdown-file-preview";
-import { getThoughtSourceAction } from "./event-thought-helpers";
+import {
+  buildActionById,
+  getThoughtSourceAction,
+} from "./event-thought-helpers";
 
 /** Minimum run-length before consecutive actions get folded into a single
  *  collapsible group. Even pairs are folded so the chat scroll stays compact
@@ -59,6 +62,17 @@ export type RenderedItem =
   | { kind: "group"; events: OpenHandsEvent[]; startIndex: number };
 
 /**
+ * Stable identity for a rendered item. Shared by the plain and virtualized
+ * lists so React keys and virtualizer item keys agree.
+ */
+export const renderedItemKey = (item: RenderedItem): string => {
+  if (item.kind === "single") return `single-${item.event.id}`;
+  if (item.kind === "thought") return `thought-${item.action.id}`;
+  const groupKey = item.events[0]?.id ?? `group-${item.startIndex}`;
+  return `group-${groupKey}`;
+};
+
+/**
  * Walk a list of UI events and bucket consecutive groupable events into
  * `group` items. Anything that breaks the run, or runs shorter than
  * `EVENT_GROUP_MIN_SIZE`, is emitted as `single` items so they keep rendering
@@ -85,6 +99,7 @@ export const groupEvents = (
 
   const items: RenderedItem[] = [];
   const emittedThoughtActionIds = new Set<string>();
+  const actionById = buildActionById(allEvents);
   let run: { events: OpenHandsEvent[]; startIndex: number } | null = null;
 
   const flushRun = () => {
@@ -105,13 +120,14 @@ export const groupEvents = (
 
   events.forEach((event, index) => {
     const correspondingAction = isObservationEvent(event)
-      ? allEvents.find(
-          (candidate): candidate is ActionEvent =>
-            isActionEvent(candidate) && candidate.id === event.action_id,
-        )
+      ? (actionById.get(event.action_id ?? "") ?? undefined)
       : undefined;
     if (isGroupableEvent(event, correspondingAction)) {
-      const thoughtAction = getThoughtSourceAction(event, allEvents);
+      const thoughtAction = getThoughtSourceAction(
+        event,
+        allEvents,
+        actionById,
+      );
       if (thoughtAction && !emittedThoughtActionIds.has(thoughtAction.id)) {
         flushRun();
         emittedThoughtActionIds.add(thoughtAction.id);

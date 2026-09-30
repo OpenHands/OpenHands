@@ -1,4 +1,5 @@
 import React from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { ActionEvent, OpenHandsEvent } from "#/types/agent-server/core";
 import {
   isActionEvent,
@@ -6,7 +7,7 @@ import {
 } from "#/types/agent-server/type-guards";
 import { EventMessage } from "./event-message";
 import { usePlanPreviewEvents } from "./hooks/use-plan-preview-events";
-import { groupEvents } from "./group-events";
+import { groupEvents, renderedItemKey, RenderedItem } from "./group-events";
 import { EventGroup } from "./event-message-components/event-group";
 import { ThoughtEventMessage } from "./event-message-components/thought-event-message";
 import { useModelStore } from "#/stores/model-store";
@@ -17,13 +18,44 @@ import { ConversationConfirmationButtons } from "#/components/shared/buttons/con
 interface MessagesProps {
   messages: OpenHandsEvent[]; // UI events (actions replaced by observations)
   allEvents: OpenHandsEvent[]; // Full event history (for action lookup)
+  /**
+   * The chat scroll container element. When provided and the conversation is
+   * long enough, rows are virtualized against it so only a viewport's worth of
+   * message DOM is mounted. Omit it (shared/read-only views, isolated mounts)
+   * to always render the plain list.
+   *
+   * This is the *element*, not a ref: the virtualizer only attaches once the
+   * element exists, and a ref owned by an ancestor never re-renders this
+   * component when it is populated. `undefined` means "no virtualization
+   * context"; `null` means "context exists, element not mounted yet" — the
+   * virtualized shell renders (empty for one frame) instead of falling back to
+   * the full plain list, so a long conversation never pays for a full render.
+   */
+  scrollParent?: HTMLDivElement | null;
 }
+
+/**
+ * Row count at which the list switches from plain rendering to virtualization.
+ * Below this, rendering every row is cheaper than the virtualizer's
+ * measurement churn, and short conversations stay byte-identical.
+ */
+const VIRTUALIZATION_THRESHOLD = 150;
+/** Rows to keep mounted beyond the viewport on each side. */
+const OVERSCAN = 8;
+/** Pre-measurement row height guess, corrected once rows mount. */
+const ESTIMATED_ROW_HEIGHT = 120;
+/**
+ * Vertical gap between rows, matching the plain list's `gap-2`. Absolutely
+ * positioned virtual rows drop out of flex flow, so the gap has to be part of
+ * each measured row instead of the container.
+ */
+const ROW_GAP_PX = 8;
 
 const getLastEventId = (events: OpenHandsEvent[]) => events.at(-1)?.id;
 const getLastEvent = (events: OpenHandsEvent[]) => events.at(-1);
 
 export const Messages: React.FC<MessagesProps> = React.memo(
-  ({ messages, allEvents }) => {
+  ({ messages, allEvents, scrollParent }) => {
     const { conversationId } = useOptionalConversationId();
     // Get the set of event IDs that should render PlanPreview
     // This ensures only one preview per user message "phase"
@@ -96,55 +128,120 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       />
     );
 
+    const renderItem = (item: RenderedItem, itemIndex: number) => {
+      if (item.kind === "single") {
+        return (
+          <>
+            {/* Thoughts for singles are also hoisted as their own
+                "thought" item, so suppress the inline render to avoid
+                duplication. */}
+            {renderEventMessage(item.event, item.index, true)}
+            {maybeRenderModelMessages(item.event.id)}
+          </>
+        );
+      }
+
+      if (item.kind === "thought") {
+        return (
+          <>
+            <ThoughtEventMessage event={item.action} />
+            {maybeRenderModelMessages(item.action.id)}
+          </>
+        );
+      }
+
+      // A group is "finalized" once another rendered item appears after
+      // it, signalling the agent has moved on. While the group is still
+      // the live tail, it keeps showing the latest action title as its
+      // prominent summary.
+      const isFinalized = itemIndex < renderedItems.length - 1;
+      return (
+        <>
+          <EventGroup
+            events={item.events}
+            allEvents={allEvents}
+            isFinalized={isFinalized}
+          >
+            {item.events.map((event, offset) =>
+              renderEventMessage(event, item.startIndex + offset, true),
+            )}
+          </EventGroup>
+          {item.events.map((event) => (
+            <React.Fragment key={`model-${event.id}`}>
+              {maybeRenderModelMessages(event.id)}
+            </React.Fragment>
+          ))}
+        </>
+      );
+    };
+
+    // `null` (not `undefined`) means the caller has a scroll container but the
+    // element is not mounted yet: virtualize the shell rather than rendering
+    // every row for a frame.
+    const shouldVirtualize = Boolean(
+      scrollParent !== undefined &&
+      renderedItems.length >= VIRTUALIZATION_THRESHOLD,
+    );
+
+    const rowVirtualizer = useVirtualizer({
+      count: renderedItems.length,
+      getScrollElement: () => scrollParent ?? null,
+      getItemKey: (index) => renderedItemKey(renderedItems[index]),
+      estimateSize: () => ESTIMATED_ROW_HEIGHT,
+      overscan: OVERSCAN,
+      enabled: shouldVirtualize,
+      // Row heights are unknown until they mount (code blocks, images,
+      // expanded output), so measure the live DOM and let the virtualizer
+      // correct the offsets. The gap is added here because absolutely
+      // positioned rows are outside the container's flex `gap`.
+      measureElement: (element) =>
+        Math.round(element.getBoundingClientRect().height) + ROW_GAP_PX,
+    });
+
+    if (!shouldVirtualize) {
+      return (
+        <>
+          {renderedItems.map((item, itemIndex) => (
+            <React.Fragment key={renderedItemKey(item)}>
+              {renderItem(item, itemIndex)}
+            </React.Fragment>
+          ))}
+          <ConversationConfirmationButtons />
+        </>
+      );
+    }
+
     return (
       <>
-        {renderedItems.map((item, itemIndex) => {
-          if (item.kind === "single") {
+        <div
+          data-testid="virtualized-message-list"
+          style={{
+            height: rowVirtualizer.getTotalSize(),
+            width: "100%",
+            position: "relative",
+          }}
+        >
+          {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+            const item = renderedItems[virtualRow.index];
             return (
-              <React.Fragment key={`single-${item.event.id}`}>
-                {/* Thoughts for singles are also hoisted as their own
-                    "thought" item, so suppress the inline render to avoid
-                    duplication. */}
-                {renderEventMessage(item.event, item.index, true)}
-                {maybeRenderModelMessages(item.event.id)}
-              </React.Fragment>
-            );
-          }
-
-          if (item.kind === "thought") {
-            return (
-              <React.Fragment key={`thought-${item.action.id}`}>
-                <ThoughtEventMessage event={item.action} />
-                {maybeRenderModelMessages(item.action.id)}
-              </React.Fragment>
-            );
-          }
-
-          // A group is "finalized" once another rendered item appears after
-          // it, signalling the agent has moved on. While the group is still
-          // the live tail, it keeps showing the latest action title as its
-          // prominent summary.
-          const isFinalized = itemIndex < renderedItems.length - 1;
-          const groupKey = item.events[0]?.id ?? `group-${item.startIndex}`;
-          return (
-            <React.Fragment key={`group-${groupKey}`}>
-              <EventGroup
-                events={item.events}
-                allEvents={allEvents}
-                isFinalized={isFinalized}
+              <div
+                key={virtualRow.key}
+                data-index={virtualRow.index}
+                ref={rowVirtualizer.measureElement}
+                data-testid="virtualized-message-row"
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  transform: `translateY(${virtualRow.start}px)`,
+                }}
               >
-                {item.events.map((event, offset) =>
-                  renderEventMessage(event, item.startIndex + offset, true),
-                )}
-              </EventGroup>
-              {item.events.map((event) => (
-                <React.Fragment key={`model-${event.id}`}>
-                  {maybeRenderModelMessages(event.id)}
-                </React.Fragment>
-              ))}
-            </React.Fragment>
-          );
-        })}
+                {renderItem(item, virtualRow.index)}
+              </div>
+            );
+          })}
+        </div>
         <ConversationConfirmationButtons />
       </>
     );
@@ -152,6 +249,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
   (prevProps, nextProps) =>
     prevProps.messages.length === nextProps.messages.length &&
     prevProps.allEvents.length === nextProps.allEvents.length &&
+    prevProps.scrollParent === nextProps.scrollParent &&
     getLastEventId(prevProps.messages) === getLastEventId(nextProps.messages) &&
     getLastEventId(prevProps.allEvents) ===
       getLastEventId(nextProps.allEvents) &&
