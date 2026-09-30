@@ -298,17 +298,18 @@ describe("conversation-panel-list-helpers", () => {
     ]);
 
     expect([
+      ...getGroupDiscoveryConversationIds(items, pageByConversationId, "local"),
+    ]).toEqual(["none-1", "alpha-1"]);
+
+    expect([
       ...getGroupDiscoveryConversationIds(
         items,
         pageByConversationId,
         "local",
+        {
+          forceIncludeConversationId: "none-2",
+        },
       ),
-    ]).toEqual(["none-1", "alpha-1"]);
-
-    expect([
-      ...getGroupDiscoveryConversationIds(items, pageByConversationId, "local", {
-        forceIncludeConversationId: "none-2",
-      }),
     ]).toEqual(["none-1", "alpha-1", "none-2"]);
 
     const grouped = groupConversations(items, "local", "updated", {
@@ -737,6 +738,7 @@ describe("conversation-panel-list-helpers", () => {
           title: "internal title stamp",
           automationname: "Nightly Audit",
           automationtrigger: "cron",
+          automationsetup: "draft",
         },
       },
       {
@@ -751,15 +753,20 @@ describe("conversation-panel-list-helpers", () => {
       { ...base, id: "t4", title: "t4", tags: null },
     ];
     expect(collectTagFacets(conversations)).toEqual([
+      "automationsetup=draft",
       "origin=slack",
       "owner=alice",
       "project=fracture",
     ]);
   });
 
-  it("formats bare-tag facets (empty value) as just the key", () => {
+  it("formats bare-tag facets (empty value) and setup facets readably", () => {
+    const t = () => "Automation setup";
     expect(formatTagFacetLabel("work=")).toBe("work");
     expect(formatTagFacetLabel("project=fracture")).toBe("project=fracture");
+    expect(formatTagFacetLabel("automationsetup=draft", t)).toBe(
+      "Automation setup",
+    );
   });
 
   const tagFilterFixtures: AppConversation[] = [

@@ -209,7 +209,7 @@ describe("getConversationTagLabel", () => {
       "Automation setup",
     );
     expect(formatConversationTagTooltip("automationsetup", "draft", t)).toBe(
-      "Automation setup: draft",
+      "Automation setup",
     );
     expect(getConversationTagLabel("Appmode", t)).toBe("App mode");
     expect(getConversationTagLabel("worktools", t)).toBe("Work tools");
