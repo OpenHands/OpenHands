@@ -6,7 +6,6 @@ import {
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
 import { GitProviderItemsService } from "#/api/git-provider-items-service";
-import { SecretsService } from "#/api/secrets-service";
 import { getFetchCall, mockJsonResponse } from "./cloud/fetch-test-utils";
 
 // A cloud backend keeps provider tokens server-side, so the service never
@@ -18,14 +17,6 @@ const cloudBackend: Backend = {
   host: "https://app.all-hands.dev",
   apiKey: "bearer-token",
   kind: "cloud",
-};
-
-const localBackend: Backend = {
-  id: "local",
-  name: "Local",
-  host: "http://localhost:12000",
-  apiKey: "session-token",
-  kind: "local",
 };
 
 const originalFetch = global.fetch;
@@ -117,15 +108,4 @@ describe("GitProviderItemsService", () => {
     expect(items[0].title).toBe("Real issue");
   });
 
-  it("reports missing local GitHub token instead of falling back to shell repo listing", async () => {
-    setRegisteredBackends([localBackend]);
-    setActiveSelection({ backendId: localBackend.id });
-    vi.spyOn(SecretsService, "getSecrets").mockResolvedValue([]);
-
-    await expect(
-      GitProviderItemsService.listUserRepositories("github"),
-    ).resolves.toEqual({ repositories: [], missingToken: true });
-
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
 });

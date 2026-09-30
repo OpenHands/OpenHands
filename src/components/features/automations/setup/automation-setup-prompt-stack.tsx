@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Info, Plus, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { getActiveBackend } from "#/api/backend-registry/active-store";
-import { GitProviderItemsService } from "#/api/git-provider-items-service";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { SettingsInput } from "#/components/features/settings/settings-input";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
@@ -397,58 +396,26 @@ export function AutomationSetupPromptStack({
     () => setIsRepositoryMenuOpen(false),
     repositoryAddRef,
   );
+  const isLocalBackend = getActiveBackend().backend.kind === "local";
   const { providers } = useUserProviders();
   const repositoryProvider: Provider | null = providers.includes("github")
     ? "github"
-    : (providers[0] ?? null);
+    : (providers[0] ?? (isLocalBackend ? "github" : null));
   const repositoryQuery = useGitRepositories({
     provider: repositoryProvider,
     enabled: isRepositoryMenuOpen && repositoryProvider !== null,
+    allowMissingProvider: isLocalBackend,
   });
   const repositories = parseRepositories(repository);
-  const isLocalBackend = getActiveBackend().backend.kind === "local";
-  const [localRepositoryNames, setLocalRepositoryNames] = useState<string[]>(
-    [],
-  );
-  const [isLocalRepositoryListLoading, setIsLocalRepositoryListLoading] =
-    useState(false);
-  const [isLocalGithubTokenMissing, setIsLocalGithubTokenMissing] =
-    useState(false);
-  useEffect(() => {
-    if (!isRepositoryMenuOpen || !isLocalBackend) return undefined;
-    let cancelled = false;
-    setIsLocalRepositoryListLoading(true);
-    setIsLocalGithubTokenMissing(false);
-    GitProviderItemsService.listUserRepositories("github")
-      .then((result) => {
-        if (!cancelled) {
-          setLocalRepositoryNames(result.repositories);
-          setIsLocalGithubTokenMissing(result.missingToken);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setLocalRepositoryNames([]);
-          setIsLocalGithubTokenMissing(false);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setIsLocalRepositoryListLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [isRepositoryMenuOpen, isLocalBackend]);
-  const isRepositoryListLoading = isLocalBackend
-    ? isLocalRepositoryListLoading
-    : repositoryQuery.isLoading;
-  const cloudRepositoryNames = (repositoryQuery.data?.pages ?? [])
+  const repositoryPages = repositoryQuery.data?.pages ?? [];
+  const isLocalGithubTokenMissing =
+    isLocalBackend && repositoryPages.some((page) => page.missing_token);
+  const isRepositoryListLoading = repositoryQuery.isLoading;
+  const repositoryNames = repositoryPages
     .flatMap((page) => page.items)
     .map((repo) => repo.full_name);
   const repositorySearchText = repositorySearch.trim().toLowerCase();
-  const listedRepositoryNames = (
-    isLocalBackend ? localRepositoryNames : cloudRepositoryNames
-  ).filter(
+  const listedRepositoryNames = repositoryNames.filter(
     (name, index, names) =>
       !repositories.includes(name) && names.indexOf(name) === index,
   );
