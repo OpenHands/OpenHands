@@ -74,7 +74,7 @@ export function AcpAuthStatusBanner({
     return (
       <div
         data-testid={`${testIdPrefix}-checking`}
-        className="flex items-center gap-2 text-sm text-[var(--oh-muted)]"
+        className="flex items-center gap-2 text-sm text-muted"
       >
         <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
         <span>

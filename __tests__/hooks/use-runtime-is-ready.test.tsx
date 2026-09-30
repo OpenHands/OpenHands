@@ -57,6 +57,43 @@ describe("useRuntimeIsReady", () => {
     expect(result.current).toBe(false);
   });
 
+  it.each([ExecutionStatus.ERROR, ExecutionStatus.STUCK])(
+    "allows read-only diagnostics for execution status %s only when requested",
+    (execution_status) => {
+      vi.mocked(useActiveConversation).mockReturnValue(
+        asMockReturnValue<ReturnType<typeof useActiveConversation>>({
+          data: { ...makeConversation(), execution_status },
+        }),
+      );
+      vi.mocked(useAgentState).mockReturnValue({
+        curAgentState: AgentState.ERROR,
+      });
+      const { result } = renderHook(() => ({
+        normal: useRuntimeIsReady(),
+        diagnostics: useRuntimeIsReady({ allowAgentError: true }),
+      }));
+      expect(result.current).toEqual({ normal: false, diagnostics: true });
+    },
+  );
+
+  it("keeps a paused runtime unavailable even for diagnostics", () => {
+    vi.mocked(useActiveConversation).mockReturnValue(
+      asMockReturnValue<ReturnType<typeof useActiveConversation>>({
+        data: {
+          ...makeConversation(),
+          execution_status: ExecutionStatus.PAUSED,
+        },
+      }),
+    );
+    vi.mocked(useAgentState).mockReturnValue({
+      curAgentState: AgentState.ERROR,
+    });
+    const { result } = renderHook(() =>
+      useRuntimeIsReady({ allowAgentError: true }),
+    );
+    expect(result.current).toBe(false);
+  });
+
   it("allows runtime-backed tabs to stay ready when the agent errors", () => {
     vi.mocked(useAgentState).mockReturnValue({
       curAgentState: AgentState.ERROR,

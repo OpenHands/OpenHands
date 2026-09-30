@@ -72,7 +72,7 @@ export function ChatInputModelMenuContent({
               ContextMenu <ul> without exposing the section label as a
               selectable menu item (the label text is still announced). */}
           <li role="presentation" className="px-2 pt-1 pb-0.5">
-            <Typography.Text className="text-[11px] font-medium text-[var(--oh-text-dim)] uppercase tracking-wide leading-4">
+            <Typography.Text className="text-[11px] font-medium text-text-dim uppercase tracking-wide leading-4">
               {t(I18nKey.MODEL$AVAILABLE_MODELS)}
             </Typography.Text>
           </li>
@@ -89,7 +89,7 @@ export function ChatInputModelMenuContent({
                 }}
                 className={cn(
                   "flex items-center gap-2",
-                  isSelected && "bg-[var(--oh-interactive-hover)]",
+                  isSelected && "bg-interactive-hover",
                 )}
               >
                 <span
@@ -112,7 +112,7 @@ export function ChatInputModelMenuContent({
         </>
       ) : model.displayModel ? (
         <li className="text-sm">
-          <div className="p-2 leading-5 text-[var(--oh-foreground)] break-all">
+          <div className="p-2 leading-5 text-foreground break-all">
             {model.displayModel}
           </div>
         </li>
@@ -123,7 +123,7 @@ export function ChatInputModelMenuContent({
           to={model.destinationPath}
           onClick={onClose}
           className={cn(
-            "flex h-[30px] items-center gap-2 rounded p-2 leading-5 text-[var(--oh-foreground)] hover:bg-[var(--oh-interactive-hover)] transition-colors",
+            "flex h-7.5 items-center gap-2 rounded p-2 leading-5 text-foreground hover:bg-interactive-hover transition-colors",
             settingsLinkClassName,
           )}
         >
@@ -191,7 +191,7 @@ export function ChatInputModel() {
           position="top"
           alignment="left"
           spacing="none"
-          className="z-[60] mb-2 min-w-[200px] max-w-[320px] overflow-y-auto"
+          className="z-[60] mb-2 min-w-50 max-w-80 overflow-y-auto"
           style={maxHeight !== undefined ? { maxHeight } : undefined}
         >
           <ChatInputModelMenuContent

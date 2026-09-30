@@ -34,7 +34,7 @@ export function ImagePreview({
         <RemoveButton
           onClick={onRemove}
           aria-label={t(I18nKey.BUTTON$REMOVE_IMAGE)}
-          className="absolute right-[3px] top-[3px] cursor-pointer"
+          className="absolute right-0.75 top-0.75 cursor-pointer"
         />
       )}
       {isExpanded && (
