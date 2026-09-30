@@ -20,6 +20,8 @@ import {
   AGENT_SERVER_GUEST_PORT,
   DEFAULT_MARS_API_BASE_URL,
   MarsApiError,
+  OPENHANDS_AGENT,
+  buildOpenHandsManifest,
   createMarsApiClient,
   readManifestAgent,
 } from "./mars-api.mjs";
@@ -43,6 +45,7 @@ export const MARS_TUNNEL_IPC = {
   listSessions: "mars:listSessions",
   listAgentConfigs: "mars:listAgentConfigs",
   listConfigSessions: "mars:listConfigSessions",
+  createOpenHandsAgent: "mars:createOpenHandsAgent",
   createSession: "mars:createSession",
   pauseSession: "mars:pauseSession",
   resumeSession: "mars:resumeSession",
@@ -238,6 +241,33 @@ export function createMarsTunnelBridge({
     resumeSession: (sessionId) => client.resumeSession(sessionId),
 
     /**
+     * Create an OpenHands Agent Config. The manifest is built here rather
+     * than accepted over IPC so the renderer can only ever create OpenHands
+     * agents; it contributes just the name and an optional LLM key.
+     */
+    async createOpenHandsAgent({ name, llmApiKey } = {}) {
+      const trimmedName = name?.trim() ?? "";
+      if (!trimmedName) {
+        throw new MarsApiError("Give the agent a name.", { status: 400 });
+      }
+      const created = await client.createAgentConfig(
+        trimmedName,
+        buildOpenHandsManifest({ llmApiKey: llmApiKey?.trim() || undefined }),
+      );
+      if (!created?.id) {
+        throw new MarsApiError("DigitalOcean returned no agent.");
+      }
+      agentByConfigId.set(created.id, OPENHANDS_AGENT);
+      return {
+        id: created.id,
+        name: created.name ?? trimmedName,
+        created_by: created.created_by ?? null,
+        updated_at: created.updated_at ?? null,
+        agent: OPENHANDS_AGENT,
+      };
+    },
+
+    /**
      * Launch a session from an agent config and resolve only once it is
      * READY, so the caller can tunnel to it directly. A created session
      * starts PROVISIONING, which ensureSessionAwake already polls through.
@@ -300,6 +330,9 @@ export function createMarsTunnelBridge({
       );
       handle(MARS_TUNNEL_IPC.listConfigSessions, (configId, options) =>
         this.listConfigSessions(configId, options),
+      );
+      handle(MARS_TUNNEL_IPC.createOpenHandsAgent, (payload) =>
+        this.createOpenHandsAgent(payload),
       );
       handle(MARS_TUNNEL_IPC.createSession, (configId, name) =>
         this.createSession(configId, name),

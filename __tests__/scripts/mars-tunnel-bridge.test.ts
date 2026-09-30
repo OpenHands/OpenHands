@@ -66,7 +66,9 @@ function fakeApi() {
       nextPageToken: null,
     })),
     getAgentConfig: vi.fn(
-      async (id: string): Promise<{ id: string; manifest: unknown } | null> => ({
+      async (
+        id: string,
+      ): Promise<{ id: string; manifest: unknown } | null> => ({
         id,
         manifest: null,
       }),
@@ -74,6 +76,10 @@ function fakeApi() {
     listConfigSessions: vi.fn(async () => ({
       sessions: [],
       nextPageToken: null,
+    })),
+    createAgentConfig: vi.fn(async (name: string) => ({
+      id: "cfg_new",
+      name,
     })),
     createSessionFromConfig: vi.fn(async () => ({
       session_id: "sess_new",
@@ -219,6 +225,41 @@ describe("createMarsTunnelBridge", () => {
       }),
     );
     expect(session).toMatchObject({ status: "SESSION_STATUS_READY" });
+  });
+
+  it("createOpenHandsAgent creates a config from the OpenHands manifest and lists it without re-reading", async () => {
+    // Arrange
+    const { api, ipcMain } = setup();
+    await ipcMain.invoke(MARS_TUNNEL_IPC.savePat, { token: VALID_PAT });
+    api.listAgentConfigs.mockResolvedValue({
+      configs: [{ id: "cfg_new", name: "my-agent" }],
+      nextPageToken: null,
+    });
+
+    // Act
+    const created = await ipcMain.invoke(MARS_TUNNEL_IPC.createOpenHandsAgent, {
+      name: " my-agent ",
+      llmApiKey: "sk-test",
+    });
+    const page = await ipcMain.invoke(MARS_TUNNEL_IPC.listAgentConfigs);
+
+    // Assert
+    expect(api.createAgentConfig).toHaveBeenCalledWith(
+      "my-agent",
+      [
+        "agent: openhands",
+        "template: openhands-poc",
+        "secrets:",
+        "  OPENHANDS_LLM_API_KEY:",
+        '    value: "sk-test"',
+        "",
+      ].join("\n"),
+    );
+    expect(created).toMatchObject({ id: "cfg_new", agent: "openhands" });
+    expect(page).toMatchObject({
+      configs: [{ id: "cfg_new", agent: "openhands" }],
+    });
+    expect(api.getAgentConfig).not.toHaveBeenCalled();
   });
 
   it("listAgentConfigs names each config's agent from its manifest, reading each once", async () => {

@@ -80,6 +80,19 @@ export function isOpenHandsConfig(config: MarsAgentConfig): boolean {
   return config.agent === OPENHANDS_AGENT;
 }
 
+export interface NewMarsAgentInput {
+  name: string;
+  /** Stored as the agent's `OPENHANDS_LLM_API_KEY` DigitalOcean secret. */
+  llmApiKey?: string;
+}
+
+/** harness-api's Agent Config name rule. */
+const AGENT_NAME_PATTERN = /^[A-Za-z0-9]([A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$/;
+
+export function isValidAgentName(name: string): boolean {
+  return AGENT_NAME_PATTERN.test(name);
+}
+
 export interface MarsAgentConfigPage {
   configs: MarsAgentConfig[];
   nextPageToken: string | null;
@@ -133,6 +146,7 @@ export interface MarsBridge {
     configId: string,
     options?: ListOptions,
   ) => Promise<MarsSessionPage>;
+  createOpenHandsAgent: (input: NewMarsAgentInput) => Promise<MarsAgentConfig>;
   /** Resolves once the new session is READY. */
   createSession: (configId: string, name: string) => Promise<MarsSession>;
   pauseSession: (sessionId: string) => Promise<void>;

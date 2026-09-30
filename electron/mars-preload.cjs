@@ -31,6 +31,9 @@ contextBridge.exposeInMainWorld("marsBridge", {
     ipcRenderer.invoke("mars:listAgentConfigs", options),
   listConfigSessions: (configId, options) =>
     ipcRenderer.invoke("mars:listConfigSessions", configId, options),
+  /** `{name, llmApiKey?}`; the main process owns the OpenHands manifest. */
+  createOpenHandsAgent: (payload) =>
+    ipcRenderer.invoke("mars:createOpenHandsAgent", payload),
   /** Resolves once the new session is READY. */
   createSession: (configId, name) =>
     ipcRenderer.invoke("mars:createSession", configId, name),

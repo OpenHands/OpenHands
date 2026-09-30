@@ -44,6 +44,34 @@ export function isTerminalSessionStatus(status) {
   return TERMINAL_STATUSES.has(status);
 }
 
+export const OPENHANDS_AGENT = "openhands";
+const OPENHANDS_TEMPLATE = "openhands-poc";
+const OPENHANDS_LLM_API_KEY_SECRET = "OPENHANDS_LLM_API_KEY";
+
+/**
+ * Flat agents.yaml for an OpenHands agent. `template` must stay explicit:
+ * harness-api has no agent kind that derives an OpenHands sandbox template,
+ * so omitting it would boot a sandbox with no agent-server on :8000. The LLM key uses the object form so a value that happens to start
+ * with `oauth/` is never read as an OAuth slot reference.
+ *
+ * @param {{ llmApiKey?: string }} [options]
+ * @returns {string}
+ */
+export function buildOpenHandsManifest({ llmApiKey } = {}) {
+  const lines = [
+    `agent: ${OPENHANDS_AGENT}`,
+    `template: ${OPENHANDS_TEMPLATE}`,
+  ];
+  if (llmApiKey) {
+    lines.push(
+      "secrets:",
+      `  ${OPENHANDS_LLM_API_KEY_SECRET}:`,
+      `    value: ${JSON.stringify(llmApiKey)}`,
+    );
+  }
+  return `${lines.join("\n")}\n`;
+}
+
 /**
  * The coding agent a config's manifest runs (`agent: openhands`), lowercased.
  * Manifests are written either flat or as `{apiVersion, kind, spec}`, and
@@ -187,6 +215,18 @@ export function createMarsApiClient({
         configs: Array.isArray(body?.configs) ? body.configs : [],
         nextPageToken: body?.next_page_token || null,
       };
+    },
+
+    /**
+     * Create an immutable Agent Config. Secret values travel inside the
+     * manifest (`secrets.<NAME>.value`), are extracted server-side, and are
+     * never returned.
+     */
+    async createAgentConfig(name, manifestYaml) {
+      const body = await request("POST", CONFIGS_PATH, {
+        body: { name, manifest_yaml: manifestYaml },
+      });
+      return body?.config ?? null;
     },
 
     /** Full config, including the parsed `manifest` the list omits. */

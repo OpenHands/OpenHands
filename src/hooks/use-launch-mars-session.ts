@@ -9,6 +9,7 @@ import {
   isConnectableSession,
   type MarsAgentConfig,
   type MarsSession,
+  type NewMarsAgentInput,
 } from "#/api/mars/mars-tunnel-backend";
 import { buildMarsBackendName } from "#/components/features/backends/managed-agents/managed-agents-labels";
 import { MARS_QUERY_KEYS } from "#/hooks/query/query-keys";
@@ -16,11 +17,14 @@ import type { MarsAgentGroup } from "#/hooks/query/use-mars-agents";
 import { useConnectMarsSession } from "#/hooks/use-connect-mars-session";
 import { I18nKey } from "#/i18n/declaration";
 
-/** Creating the session failed, as opposed to connecting to it afterwards. */
-class MarsSessionCreateError extends Error {
-  constructor(readonly original: unknown) {
+/** Creating an agent or session failed, as opposed to connecting afterwards. */
+class MarsCreateError extends Error {
+  constructor(
+    readonly original: unknown,
+    readonly fallbackKey: I18nKey,
+  ) {
     super(getMarsErrorMessage(original) ?? "");
-    this.name = "MarsSessionCreateError";
+    this.name = "MarsCreateError";
   }
 }
 
@@ -40,6 +44,7 @@ export function useLaunchMarsSession() {
   const [launchingConfigId, setLaunchingConfigId] = React.useState<
     string | null
   >(null);
+  const [isCreatingAgent, setIsCreatingAgent] = React.useState(false);
 
   const open = React.useCallback(
     (session: MarsSession, config?: MarsAgentConfig) =>
@@ -61,7 +66,10 @@ export function useLaunchMarsSession() {
           buildNewSessionName(config.name),
         );
       } catch (error) {
-        throw new MarsSessionCreateError(error);
+        throw new MarsCreateError(
+          error,
+          I18nKey.BACKEND$DIGITALOCEAN_SESSION_CREATE_FAILED,
+        );
       } finally {
         setLaunchingConfigId(null);
       }
@@ -71,6 +79,28 @@ export function useLaunchMarsSession() {
       return open(session, config);
     },
     [open, queryClient],
+  );
+
+  /**
+   * Create an OpenHands agent and wait for the list to include it, so the
+   * caller can launch its first session from a row that is already visible.
+   */
+  const createAgent = React.useCallback(
+    async (input: NewMarsAgentInput) => {
+      setIsCreatingAgent(true);
+      try {
+        const config = await getMarsBridge()!.createOpenHandsAgent(input);
+        await queryClient.invalidateQueries({
+          queryKey: MARS_QUERY_KEYS.allAgents,
+        });
+        return config;
+      } catch (error) {
+        throw new MarsCreateError(error, I18nKey.DO_AGENTS$AGENT_CREATE_FAILED);
+      } finally {
+        setIsCreatingAgent(false);
+      }
+    },
+    [queryClient],
   );
 
   /** Resume the agent's most recent live session, or start its first. */
@@ -84,8 +114,8 @@ export function useLaunchMarsSession() {
 
   const describeError = React.useCallback(
     (error: unknown) =>
-      error instanceof MarsSessionCreateError
-        ? error.message || t(I18nKey.BACKEND$DIGITALOCEAN_SESSION_CREATE_FAILED)
+      error instanceof MarsCreateError
+        ? error.message || t(error.fallbackKey)
         : describeConnectError(error),
     [describeConnectError, t],
   );
@@ -93,10 +123,13 @@ export function useLaunchMarsSession() {
   return {
     open,
     launch,
+    createAgent,
     openAgent,
     connecting,
     launchingConfigId,
-    isBusy: connecting !== null || launchingConfigId !== null,
+    isCreatingAgent,
+    isBusy:
+      connecting !== null || launchingConfigId !== null || isCreatingAgent,
     describeError,
   };
 }
