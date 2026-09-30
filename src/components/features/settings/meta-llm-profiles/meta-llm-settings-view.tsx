@@ -24,10 +24,10 @@ import { MetaProfileEditor } from "./meta-profile-editor";
 import { MetaProfileRow } from "./meta-profile-row";
 import { DeleteMetaProfileModal } from "./delete-meta-profile-modal";
 import {
-  DEFAULT_MAX_SCORE_PARETO_META_PROFILE_DEFAULT,
-  DEFAULT_MAX_SCORE_PARETO_META_PROFILE_NAME,
-  DEFAULT_MIN_COST_PARETO_META_PROFILE_DEFAULT,
-  DEFAULT_MIN_COST_PARETO_META_PROFILE_NAME,
+  DEFAULT_ROUTER_PRO_META_PROFILE_DEFAULT,
+  DEFAULT_ROUTER_PRO_META_PROFILE_NAME,
+  DEFAULT_ROUTER_FLASH_META_PROFILE_DEFAULT,
+  DEFAULT_ROUTER_FLASH_META_PROFILE_NAME,
 } from "./default-meta-profile";
 import {
   buildRouterModel,
@@ -35,7 +35,7 @@ import {
 } from "./router-profiles";
 
 type ViewMode = "list" | "create" | "edit";
-type RouterTemplate = "max-score-pareto" | "min-cost-pareto" | "custom";
+type RouterTemplate = "router-pro" | "router-flash" | "custom";
 
 interface EditingMetaProfile {
   name: string;
@@ -64,7 +64,7 @@ export function MetaLlmSettingsView() {
     null,
   );
   // Whether the create editor should pre-select a provider connection to
-  // populate the router's LLM profiles (true for the built-in Pareto templates,
+  // populate the router's LLM profiles (true for the built-in router templates,
   // false for a blank custom profile).
   const [createRouterProfilesByDefault, setCreateRouterProfilesByDefault] =
     useState(true);
@@ -126,16 +126,16 @@ export function MetaLlmSettingsView() {
   };
 
   const handleChooseTemplate = (template: RouterTemplate) => {
-    if (template === "max-score-pareto") {
+    if (template === "router-pro") {
       setCreateInitial({
-        name: DEFAULT_MAX_SCORE_PARETO_META_PROFILE_NAME,
-        config: DEFAULT_MAX_SCORE_PARETO_META_PROFILE_DEFAULT,
+        name: DEFAULT_ROUTER_PRO_META_PROFILE_NAME,
+        config: DEFAULT_ROUTER_PRO_META_PROFILE_DEFAULT,
       });
       setCreateRouterProfilesByDefault(true);
-    } else if (template === "min-cost-pareto") {
+    } else if (template === "router-flash") {
       setCreateInitial({
-        name: DEFAULT_MIN_COST_PARETO_META_PROFILE_NAME,
-        config: DEFAULT_MIN_COST_PARETO_META_PROFILE_DEFAULT,
+        name: DEFAULT_ROUTER_FLASH_META_PROFILE_NAME,
+        config: DEFAULT_ROUTER_FLASH_META_PROFILE_DEFAULT,
       });
       setCreateRouterProfilesByDefault(true);
     } else {
@@ -351,22 +351,22 @@ export function MetaLlmSettingsView() {
           className="flex flex-col gap-3"
         >
           <BrandButton
-            testId="meta-profile-template-max-score"
+            testId="meta-profile-template-router-pro"
             type="button"
             variant="secondary"
             className="justify-start"
-            onClick={() => handleChooseTemplate("max-score-pareto")}
+            onClick={() => handleChooseTemplate("router-pro")}
           >
-            {t(I18nKey.SETTINGS$META_PROFILE_TEMPLATE_MAX_SCORE)}
+            {t(I18nKey.SETTINGS$META_PROFILE_TEMPLATE_ROUTER_PRO)}
           </BrandButton>
           <BrandButton
-            testId="meta-profile-template-min-cost"
+            testId="meta-profile-template-router-flash"
             type="button"
             variant="secondary"
             className="justify-start"
-            onClick={() => handleChooseTemplate("min-cost-pareto")}
+            onClick={() => handleChooseTemplate("router-flash")}
           >
-            {t(I18nKey.SETTINGS$META_PROFILE_TEMPLATE_MIN_COST)}
+            {t(I18nKey.SETTINGS$META_PROFILE_TEMPLATE_ROUTER_FLASH)}
           </BrandButton>
           <BrandButton
             testId="meta-profile-template-custom"

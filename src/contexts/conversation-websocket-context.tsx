@@ -799,7 +799,7 @@ export function ConversationWebSocketProvider({
             invalidateConversationQueries(queryClient, conversationId);
           }
 
-          // Router-driven model switch (Pareto/meta-profile classifier).
+          // Router-driven model switch (Router/meta-profile classifier).
           // Same UI semantics as SwitchLLMObservation: update the combobox,
           // stamp the active profile, record the inline "Switched to"
           // message. Per the SDK wire contract, `model` is the saved LLM

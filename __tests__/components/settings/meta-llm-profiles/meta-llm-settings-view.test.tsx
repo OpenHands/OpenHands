@@ -13,10 +13,10 @@ import * as useDeleteMetaProfileHook from "#/hooks/mutation/use-delete-meta-prof
 import MetaProfilesService from "#/api/meta-profiles-service/meta-profiles-service.api";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
 import {
-  DEFAULT_MAX_SCORE_PARETO_META_PROFILE_DEFAULT,
-  DEFAULT_MAX_SCORE_PARETO_META_PROFILE_NAME,
-  DEFAULT_MIN_COST_PARETO_META_PROFILE_DEFAULT,
-  DEFAULT_MIN_COST_PARETO_META_PROFILE_NAME,
+  DEFAULT_ROUTER_PRO_META_PROFILE_DEFAULT,
+  DEFAULT_ROUTER_PRO_META_PROFILE_NAME,
+  DEFAULT_ROUTER_FLASH_META_PROFILE_DEFAULT,
+  DEFAULT_ROUTER_FLASH_META_PROFILE_NAME,
 } from "#/components/features/settings/meta-llm-profiles/default-meta-profile";
 import { collectRequiredRouterModelNames } from "#/components/features/settings/meta-llm-profiles/router-profiles";
 
@@ -169,11 +169,11 @@ describe("MetaLlmSettingsView", () => {
     ).toBeInTheDocument();
   });
 
-  const openMaxScoreTemplate = async (
+  const openRouterProTemplate = async (
     user: ReturnType<typeof userEvent.setup>,
   ) => {
     await user.click(screen.getByTestId("add-meta-profile"));
-    await user.click(screen.getByTestId("meta-profile-template-max-score"));
+    await user.click(screen.getByTestId("meta-profile-template-router-pro"));
   };
 
   it("opens the template chooser when clicking Add Model Router", async () => {
@@ -185,38 +185,42 @@ describe("MetaLlmSettingsView", () => {
     expect(
       screen.getByTestId("meta-profile-template-modal"),
     ).toBeInTheDocument();
-    expect(screen.getByTestId("meta-profile-template-max-score")).toBeEnabled();
-    expect(screen.getByTestId("meta-profile-template-min-cost")).toBeEnabled();
+    expect(
+      screen.getByTestId("meta-profile-template-router-pro"),
+    ).toBeEnabled();
+    expect(
+      screen.getByTestId("meta-profile-template-router-flash"),
+    ).toBeEnabled();
     expect(screen.getByTestId("meta-profile-template-custom")).toBeEnabled();
   });
 
-  it("opens the max-score default editor from the template chooser", async () => {
+  it("opens the Router Pro default editor from the template chooser", async () => {
     const user = userEvent.setup();
     renderWithProviders(<MetaLlmSettingsView />);
 
-    await openMaxScoreTemplate(user);
+    await openRouterProTemplate(user);
 
     expect(screen.getByTestId("meta-profile-editor")).toBeInTheDocument();
     expect(screen.getByTestId("meta-profile-name-input")).toHaveValue(
-      DEFAULT_MAX_SCORE_PARETO_META_PROFILE_NAME,
+      DEFAULT_ROUTER_PRO_META_PROFILE_NAME,
     );
   });
 
-  it("opens the min-cost default editor from the template chooser", async () => {
+  it("opens the Router Flash default editor from the template chooser", async () => {
     const user = userEvent.setup();
     renderWithProviders(<MetaLlmSettingsView />);
 
     await user.click(screen.getByTestId("add-meta-profile"));
-    await user.click(screen.getByTestId("meta-profile-template-min-cost"));
+    await user.click(screen.getByTestId("meta-profile-template-router-flash"));
 
     expect(screen.getByTestId("meta-profile-name-input")).toHaveValue(
-      DEFAULT_MIN_COST_PARETO_META_PROFILE_NAME,
+      DEFAULT_ROUTER_FLASH_META_PROFILE_NAME,
     );
     expect(screen.getByTestId("meta-profile-prompt-template")).toHaveValue(
-      DEFAULT_MIN_COST_PARETO_META_PROFILE_DEFAULT.prompt_template,
+      DEFAULT_ROUTER_FLASH_META_PROFILE_DEFAULT.prompt_template,
     );
     expect(screen.getByTestId("meta-profile-model-table")).toHaveValue(
-      DEFAULT_MIN_COST_PARETO_META_PROFILE_DEFAULT.model_table,
+      DEFAULT_ROUTER_FLASH_META_PROFILE_DEFAULT.model_table,
     );
     // The built-in templates pre-select the first provider connection so the
     // router's LLM profiles are created on save.
@@ -244,16 +248,16 @@ describe("MetaLlmSettingsView", () => {
 
   it("creates missing router LLM profiles linked to the selected provider connection", async () => {
     const user = userEvent.setup();
-    saveMutateAsync.mockResolvedValue({ name: "default-max-score-pareto" });
+    saveMutateAsync.mockResolvedValue({ name: "openhands-router-pro" });
     renderWithProviders(<MetaLlmSettingsView />);
 
-    await openMaxScoreTemplate(user);
+    await openRouterProTemplate(user);
     await user.click(screen.getByTestId("meta-profile-save"));
 
     // Every model in the built-in table (plus the classifier) that is not
     // already a saved profile is created, linked to the connection.
     const expectedNames = collectRequiredRouterModelNames(
-      DEFAULT_MAX_SCORE_PARETO_META_PROFILE_DEFAULT,
+      DEFAULT_ROUTER_PRO_META_PROFILE_DEFAULT,
     ).filter((n) => !["minimax", "gpt", "deepseek"].includes(n.toLowerCase()));
 
     await waitFor(() =>
@@ -286,7 +290,7 @@ describe("MetaLlmSettingsView", () => {
     activateMutateAsync.mockResolvedValue({ name: "pareto" });
     renderWithProviders(<MetaLlmSettingsView />);
 
-    await openMaxScoreTemplate(user);
+    await openRouterProTemplate(user);
     await user.clear(screen.getByTestId("meta-profile-name-input"));
     await user.type(screen.getByTestId("meta-profile-name-input"), "pareto");
     fireEvent.change(screen.getByTestId("meta-profile-classifier-input"), {
@@ -321,7 +325,7 @@ describe("MetaLlmSettingsView", () => {
     saveMutateAsync.mockResolvedValue({ name: "pareto" });
     renderWithProviders(<MetaLlmSettingsView />);
 
-    await openMaxScoreTemplate(user);
+    await openRouterProTemplate(user);
     await user.clear(screen.getByTestId("meta-profile-name-input"));
     await user.type(screen.getByTestId("meta-profile-name-input"), "pareto");
     fireEvent.change(screen.getByTestId("meta-profile-classifier-input"), {

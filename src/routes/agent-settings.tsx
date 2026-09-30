@@ -1,9 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Navigate } from "react-router";
 import { useTranslation } from "react-i18next";
-import { AxiosError } from "axios";
 import { useSettings } from "#/hooks/query/use-settings";
-import { useSaveSettings } from "#/hooks/mutation/use-save-settings";
 import { useAgentSettingsSchema } from "#/hooks/query/use-agent-settings-schema";
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
 import { SettingsInput } from "#/components/features/settings/settings-input";
@@ -25,14 +23,8 @@ import {
   normalizeFieldValue,
 } from "#/utils/sdk-settings-schema";
 import {
-  displayErrorToast,
-  displaySuccessToast,
-} from "#/utils/custom-toast-handlers";
-import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
-import {
   ACP_PROVIDERS,
   ACP_CUSTOM_PRESET_KEY,
-  buildAcpAgentSettingsDiff,
   getAcpPreferredDefaultModel,
   getAcpProvider,
   getAcpProviderSecrets,
@@ -243,8 +235,8 @@ export function buildAgentProfileFields(
 }
 
 /**
- * Handle the embedded form exposes to its parent (the Agent-profile editor) so
- * it can read the current state and persist it as an AgentProfile.
+ * Handle the form exposes to the Agent-profile editor so it can read the
+ * current state and persist it as an AgentProfile.
  */
 export interface AgentSettingsSaveControl {
   agentType: AgentType;
@@ -266,34 +258,17 @@ export interface AgentSettingsSaveControl {
 }
 
 interface AgentSettingsScreenProps {
-  /**
-   * Embedded mode reuses this form as the Agent-profile editor: it hides the
-   * page header + the global Save button, seeds from `agentSettingsOverride`
-   * instead of the live global settings, and reports its state through
-   * `onSaveControlChange` so the parent can persist it as an AgentProfile.
-   */
-  embedded?: boolean;
-  /**
-   * When set (embedded mode), seed the form from this `agent_settings`-shaped
-   * object instead of the live global settings — lets the editor open on a
-   * stored profile's fields.
-   */
+  /** `agent_settings`-shaped profile fields the form opens on. */
   agentSettingsOverride?: Record<string, SettingsValue> | null;
-  onSaveControlChange?: (control: AgentSettingsSaveControl) => void;
+  onSaveControlChange: (control: AgentSettingsSaveControl) => void;
 }
 
 export function AgentSettingsScreen({
-  embedded = false,
   agentSettingsOverride = null,
   onSaveControlChange,
-}: AgentSettingsScreenProps = {}) {
+}: AgentSettingsScreenProps) {
   const { t } = useTranslation("openhands");
   const { data: settings, isLoading } = useSettings();
-  // In embedded (profile-editor) mode the parent seeds the form from a stored
-  // profile via `agentSettingsOverride`; otherwise use the live global settings.
-  const agentSettingsSource: Record<string, SettingsValue> | null =
-    agentSettingsOverride ?? settings?.agent_settings ?? null;
-  const { mutate: saveSettings, isPending: isSaving } = useSaveSettings();
   const { data: schema } = useAgentSettingsSchema(
     settings?.agent_settings_schema,
   );
@@ -306,22 +281,23 @@ export function AgentSettingsScreen({
   // --- Parallel tool calls (OpenHands path) ---
   // Surfaced only when the backend schema exposes the field, so older
   // agent-servers that predate ``tool_concurrency_limit`` hide it cleanly.
+
   const toolConcurrencyField = fields?.find(
     (field) => field.key === TOOL_CONCURRENCY_FIELD_KEY,
   );
   const initialToolConcurrency = React.useMemo(() => {
     if (!toolConcurrencyField) return "";
-    const raw = agentSettingsSource?.[TOOL_CONCURRENCY_FIELD_KEY];
+    const raw = agentSettingsOverride?.[TOOL_CONCURRENCY_FIELD_KEY];
     return normalizeFieldValue(toolConcurrencyField, raw);
-  }, [toolConcurrencyField, agentSettingsSource]);
+  }, [toolConcurrencyField, agentSettingsOverride]);
   const [toolConcurrency, setToolConcurrency] = useState<string | boolean>(
     initialToolConcurrency,
   );
 
   // --- Tools (OpenHands only) ---
   const initialTools = React.useMemo(
-    () => readProfileTools(agentSettingsSource?.[TOOLS_KEY]),
-    [agentSettingsSource],
+    () => readProfileTools(agentSettingsOverride?.[TOOLS_KEY]),
+    [agentSettingsOverride],
   );
   const [toolsMode, setToolsMode] = useState<ProfileScopeMode>(
     initialTools.mode,
@@ -333,9 +309,9 @@ export function AgentSettingsScreen({
     data: toolCatalog,
     isError: toolCatalogFailed,
     refetch: refetchToolCatalog,
-  } = useToolCatalog({ enabled: embedded });
+  } = useToolCatalog();
   // Only a loaded catalog may write `tools`.
-  const toolCatalogLoaded = embedded && toolCatalog !== undefined;
+  const toolCatalogLoaded = toolCatalog !== undefined;
   const standardToolNames = React.useMemo(
     () =>
       toolCatalog
@@ -372,13 +348,9 @@ export function AgentSettingsScreen({
   );
 
   // --- MCP servers (both variants; a base-model field) ---
-  // Only the profile editor shows this: the global agent-settings page saves
-  // ``agent_settings``, which has no refs — it carries the resolved
-  // ``mcp_config`` itself.
-  const showProfileScopeFields = embedded;
   const initialMcpRefs = React.useMemo(
-    () => readProfileScope(agentSettingsSource?.[MCP_SERVER_REFS_KEY]),
-    [agentSettingsSource],
+    () => readProfileScope(agentSettingsOverride?.[MCP_SERVER_REFS_KEY]),
+    [agentSettingsOverride],
   );
   const [mcpMode, setMcpMode] = useState<ProfileScopeMode>(initialMcpRefs.mode);
   const [selectedMcpServers, setSelectedMcpServers] = useState<string[]>(
@@ -422,11 +394,11 @@ export function AgentSettingsScreen({
   // --- Secret scope (both variants; a base-model field) ---
   const secretRefsSupportedOnProfile = agentProfileSupportsSecretRefs();
   const { data: savedSecrets } = useSearchSecrets({
-    enabled: embedded && secretRefsSupportedOnProfile,
+    enabled: secretRefsSupportedOnProfile,
   });
   const initialSecretRefs = React.useMemo(
-    () => readProfileScope(agentSettingsSource?.[SECRET_REFS_KEY]),
-    [agentSettingsSource],
+    () => readProfileScope(agentSettingsOverride?.[SECRET_REFS_KEY]),
+    [agentSettingsOverride],
   );
   const [secretsMode, setSecretsMode] = useState<ProfileScopeMode>(
     initialSecretRefs.mode,
@@ -469,8 +441,8 @@ export function AgentSettingsScreen({
   const [acpModel, setAcpModel] = useState("");
   const [isCustomAcpModel, setIsCustomAcpModel] = useState(false);
 
-  // ACP credentials live alongside the agent spec, so the page owns the
-  // credential form and a single Save persists both. Called unconditionally
+  // ACP credentials live alongside the agent spec, so the form owns the
+  // credential form and hands it to the editor's Save. Called unconditionally
   // (no-ops to empty fields for a non-ACP / custom command) to keep hook order
   // stable across the ``isLoading`` early-return below; ``detectPreset`` is a
   // cheap pure lookup.
@@ -510,46 +482,34 @@ export function AgentSettingsScreen({
     [secretCatalog, selectedSecrets],
   );
 
-  const lastInitializedSettingsRef = useRef<unknown>(null);
-  const loadedAcpServerRef = useRef<string | null>(null);
-  const loadedCommandTextRef = useRef<string>("");
   const [loadedSnapshot, setLoadedSnapshot] = useState<AgentSettingsSnapshot>(
     EMPTY_AGENT_SETTINGS_SNAPSHOT,
   );
 
   useEffect(() => {
-    // Seed from the profile override (embedded) or the live global settings.
-    const source = agentSettingsOverride ?? settings?.agent_settings ?? null;
-    if (!source && !settings) return;
-    const initIdentity = agentSettingsOverride ?? settings;
-    if (lastInitializedSettingsRef.current === initIdentity) return;
-
-    lastInitializedSettingsRef.current = initIdentity;
-    const kind = source?.agent_kind;
+    const kind = agentSettingsOverride?.agent_kind;
 
     if (kind === "acp") {
       setAgentType("acp");
 
-      const rawAcpServer = source?.acp_server;
+      const rawAcpServer = agentSettingsOverride?.acp_server;
       const acpServer =
         typeof rawAcpServer === "string" ? rawAcpServer : undefined;
       const provider = getAcpProvider(acpServer);
-      const storedCommand = toStringArray(source?.acp_command);
+      const storedCommand = toStringArray(agentSettingsOverride?.acp_command);
       const effectiveBaseCommand =
         storedCommand.length > 0
           ? storedCommand
           : (provider?.default_command ?? []);
       const tokens = [
         ...effectiveBaseCommand,
-        ...toStringArray(source?.acp_args),
+        ...toStringArray(agentSettingsOverride?.acp_args),
       ];
       const renderedCommandText =
         tokens.length > 0 ? formatCommand(tokens) : "";
       setCommandText(renderedCommandText);
-      loadedAcpServerRef.current = acpServer ?? null;
-      loadedCommandTextRef.current = renderedCommandText;
 
-      const savedModel = source?.acp_model;
+      const savedModel = agentSettingsOverride?.acp_model;
       const normalizedSavedModel =
         typeof savedModel === "string" ? savedModel.trim() : "";
       const nextAcpModel =
@@ -569,12 +529,10 @@ export function AgentSettingsScreen({
       setAgentType("openhands");
       setCommandText("");
       setAcpModel("");
-      loadedAcpServerRef.current = null;
-      loadedCommandTextRef.current = "";
       setIsCustomAcpModel(false);
       setLoadedSnapshot(EMPTY_AGENT_SETTINGS_SNAPSHOT);
     }
-  }, [settings, agentSettingsOverride]);
+  }, [agentSettingsOverride]);
 
   // Sync the parallel-tool-calls input when settings reload
   useEffect(() => {
@@ -614,7 +572,7 @@ export function AgentSettingsScreen({
     setSelectedSecrets(initialSecretRefs.selected);
   }, [initialSecretRefs]);
 
-  // --- Embedded (Agent-profile editor) save control ---
+  // --- Save control ---
   // Ref-backed so the exposed builder/credential fns read the freshest state at
   // call time without re-emitting the control on every keystroke (mirrors
   // ``sdk-section-page``). The body is (re)assigned during render below.
@@ -666,7 +624,6 @@ export function AgentSettingsScreen({
     toolsMode === "custom" &&
     selectedTools === null;
   useEffect(() => {
-    if (!embedded || !onSaveControlChange) return;
     onSaveControlChange({
       agentType,
       isValid: !acpCommandEmpty && !customToolsUninitialized,
@@ -679,7 +636,6 @@ export function AgentSettingsScreen({
       },
     });
   }, [
-    embedded,
     onSaveControlChange,
     agentType,
     acpCommandEmpty,
@@ -695,7 +651,6 @@ export function AgentSettingsScreen({
 
   const isAcp = agentType === "acp";
   const commandTokens = parseCommand(commandText);
-  const isAcpInvalid = isAcp && commandTokens.length === 0;
   const selectedPreset = detectPreset(commandText, ACP_PROVIDERS);
   const selectedProvider = getAcpProvider(selectedPreset);
   const modelSuggestions = selectedProvider?.available_models ?? [];
@@ -712,7 +667,7 @@ export function AgentSettingsScreen({
     formatCommand(ACP_PROVIDERS[0]?.default_command ?? []) ||
     COMMAND_PLACEHOLDER_FALLBACK;
 
-  // Assign the embedded control's field builder from the live render state.
+  // Assign the control's field builder from the live render state.
   // The mapping itself lives in the pure `buildAgentProfileFields` (unit-
   // tested); this closure just snapshots the current state. Throws only when
   // called (at save time), never during render.
@@ -736,132 +691,13 @@ export function AgentSettingsScreen({
       toolCatalogLoaded,
     });
 
-  const isSavingAny = isSaving || acpCredentialForm.isSaving;
-
-  const handleSave = async () => {
-    // Persist ACP credentials first (if any were typed) so they exist when the
-    // agent spec is applied. When the spec is also changing, save silently so
-    // the settings save below owns the single "Saved" toast (otherwise the user
-    // sees it twice); a credentials-only save shows its own toast. Errors always
-    // toast and abort.
-    if (acpCredentialForm.isDirty) {
-      const ok = await acpCredentialForm.save({ silent: settingsDirty });
-      if (!ok) return;
-      acpCredentialForm.reset();
-    }
-
-    // Only write the agent spec when it actually changed — a credentials-only
-    // edit must not re-push unchanged settings (or double-toast).
-    if (!settingsDirty) return;
-
-    if (isAcp) {
-      const useDefault = !!(selectedProvider && isDefaultProviderCommand);
-      const loadedServer = loadedAcpServerRef.current;
-      const commandUnchanged = commandText === loadedCommandTextRef.current;
-      const loadedServerIsUnknown =
-        !!loadedServer &&
-        loadedServer !== ACP_CUSTOM_PRESET_KEY &&
-        !ACP_PROVIDERS.some((p) => p.key === loadedServer);
-      const preserveUnknownServer =
-        isAcp && commandUnchanged && loadedServerIsUnknown;
-      const providerKey = preserveUnknownServer
-        ? (loadedServer as string)
-        : selectedProvider && isDefaultProviderCommand
-          ? selectedProvider.key
-          : ACP_CUSTOM_PRESET_KEY;
-      // ``model: undefined`` lets buildAcpAgentSettingsDiff seed the
-      // provider's preferred default for built-in keys; for the custom preset
-      // it falls through to ``null`` since custom has no default.
-      const agentSettingsDiff = buildAcpAgentSettingsDiff(providerKey, {
-        command: useDefault ? [] : commandTokens,
-        model: acpModel.trim() || undefined,
-        allowUnknownServer: preserveUnknownServer,
-      });
-
-      if (!agentSettingsDiff) return;
-
-      saveSettings(
-        { agent_settings_diff: agentSettingsDiff },
-        {
-          onError: (error) => {
-            const message = retrieveAxiosErrorMessage(error as AxiosError);
-            displayErrorToast(message || t(I18nKey.ERROR$GENERIC));
-          },
-          onSuccess: () => {
-            displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
-            setLoadedSnapshot({
-              agentType,
-              commandText,
-              acpModel,
-              isCustomAcpModel,
-            });
-            loadedCommandTextRef.current = commandText;
-          },
-        },
-      );
-    } else {
-      const agentSettingsDiff: Record<string, SettingsValue> = {
-        agent_kind: "openhands",
-      };
-
-      if (toolConcurrencyField) {
-        let coerced: SettingsValue;
-        try {
-          // Reuse the schema-driven coercion + min/max validation rather than
-          // re-implementing it; throws a user-facing message on bad input.
-          coerced = coerceFieldValue(toolConcurrencyField, toolConcurrency);
-        } catch (error) {
-          displayErrorToast(
-            error instanceof Error ? error.message : t(I18nKey.ERROR$GENERIC),
-          );
-          return;
-        }
-        // ``tool_concurrency_limit`` is a non-nullable int (default 1); skip an
-        // empty input rather than sending ``null`` the backend would reject.
-        if (coerced != null) {
-          agentSettingsDiff[TOOL_CONCURRENCY_FIELD_KEY] = coerced;
-        }
-      }
-
-      saveSettings(
-        {
-          agent_settings_diff: agentSettingsDiff,
-        },
-        {
-          onError: (error) => {
-            const message = retrieveAxiosErrorMessage(error as AxiosError);
-            displayErrorToast(message || t(I18nKey.ERROR$GENERIC));
-          },
-          onSuccess: () => {
-            displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
-            setLoadedSnapshot({
-              agentType: "openhands",
-              commandText: "",
-              acpModel: "",
-              isCustomAcpModel: false,
-            });
-          },
-        },
-      );
-    }
-  };
+  const isSaving = acpCredentialForm.isSaving;
 
   return (
     <div
       data-testid="agent-settings-screen"
       className="flex flex-col gap-6 pb-8 max-w-2xl"
     >
-      {!embedded && (
-        <div>
-          <Typography.H2 className="mb-2">
-            {t(I18nKey.SETTINGS$NAV_AGENT)}
-          </Typography.H2>
-          <Typography.Paragraph className="text-sm text-[#A3A3A3]">
-            {t(I18nKey.SETTINGS$AGENT_PAGE_DESCRIPTION)}
-          </Typography.Paragraph>
-        </div>
-      )}
-
       <SettingsDropdownInput
         testId="agent-type-selector"
         name="agent-type"
@@ -902,90 +738,11 @@ export function AgentSettingsScreen({
         <SchemaField
           field={toolConcurrencyField}
           value={toolConcurrency}
-          isDisabled={isSavingAny}
+          isDisabled={isSaving}
           onChange={setToolConcurrency}
         />
       ) : null}
-
-      {showProfileScopeFields ? (
-        <div className="flex flex-col gap-2.5">
-          <Typography.Text className="text-sm">
-            {t(I18nKey.SETTINGS$AGENT_PROFILE_MCP)}
-          </Typography.Text>
-          <SettingsDropdownInput
-            testId="agent-settings-mcp-mode"
-            name="agent-mcp-mode"
-            label=""
-            items={[
-              {
-                key: "standard",
-                label: t(I18nKey.SETTINGS$AGENT_PROFILE_MCP_ALL),
-              },
-              {
-                key: "custom",
-                label: t(I18nKey.SETTINGS$AGENT_PROFILE_MCP_CHOOSE),
-              },
-            ]}
-            selectedKey={mcpMode}
-            isDisabled={isSavingAny}
-            onSelectionChange={(key) => {
-              if (!key) return;
-              const mode = key as ProfileScopeMode;
-              setMcpMode(mode);
-              // Seed a first switch to custom from the default — every
-              // configured server — so turning the control on narrows from what
-              // the agent had rather than cutting it off from all of them.
-              if (mode === "custom" && selectedMcpServers.length === 0) {
-                setSelectedMcpServers(
-                  configuredMcpNames.map(({ name }) => name),
-                );
-              }
-            }}
-          />
-          {mcpCatalog.length > 0 ? (
-            <ProfileScopeList
-              testId="agent-settings-mcp"
-              items={mcpCatalog}
-              selected={
-                mcpMode === "custom"
-                  ? orderedSelectedMcpServers
-                  : mcpCatalog.map(({ name }) => name)
-              }
-              isDisabled={isSavingAny || mcpMode === "standard"}
-              onToggle={(name, checked) =>
-                setSelectedMcpServers((prev) =>
-                  checked
-                    ? [...prev, name]
-                    : prev.filter((entry) => entry !== name),
-                )
-              }
-            />
-          ) : (
-            <Typography.Text className="text-xs text-tertiary-alt">
-              {t(I18nKey.SETTINGS$AGENT_PROFILE_MCP_NONE)}
-            </Typography.Text>
-          )}
-          {danglingMcpRefs.length > 0 ? (
-            <Typography.Text
-              testId="agent-settings-mcp-dangling"
-              className="text-xs text-danger"
-            >
-              {t(I18nKey.SETTINGS$AGENT_PROFILE_MCP_DANGLING, {
-                names: danglingMcpRefs.join(", "),
-              })}
-            </Typography.Text>
-          ) : null}
-          <Typography.Text className="text-xs text-tertiary-alt">
-            {t(
-              mcpMode === "custom"
-                ? I18nKey.SETTINGS$AGENT_PROFILE_MCP_CHOOSE_HINT
-                : I18nKey.SETTINGS$AGENT_PROFILE_MCP_ALL_HINT,
-            )}
-          </Typography.Text>
-        </div>
-      ) : null}
-
-      {showProfileScopeFields && !isAcp ? (
+      {!isAcp ? (
         <div className="flex flex-col gap-2.5">
           <Typography.Text className="text-sm">
             {t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS)}
@@ -1005,7 +762,7 @@ export function AgentSettingsScreen({
               },
             ]}
             selectedKey={toolsMode}
-            isDisabled={isSavingAny || standardToolNames === undefined}
+            isDisabled={isSaving || standardToolNames === undefined}
             onSelectionChange={(key) => {
               if (!key) return;
               setToolsMode(key as ProfileScopeMode);
@@ -1045,7 +802,7 @@ export function AgentSettingsScreen({
               testId="agent-settings-tool"
               items={toolPickerCatalog}
               selected={orderedSelectedTools}
-              isDisabled={isSavingAny}
+              isDisabled={isSaving}
               onToggle={(name, checked) =>
                 setSelectedTools((prev) =>
                   checked
@@ -1065,7 +822,81 @@ export function AgentSettingsScreen({
         </div>
       ) : null}
 
-      {showProfileScopeFields && secretRefsSupportedOnProfile ? (
+      <div className="flex flex-col gap-2.5">
+        <Typography.Text className="text-sm">
+          {t(I18nKey.SETTINGS$AGENT_PROFILE_MCP)}
+        </Typography.Text>
+        <SettingsDropdownInput
+          testId="agent-settings-mcp-mode"
+          name="agent-mcp-mode"
+          label=""
+          items={[
+            {
+              key: "standard",
+              label: t(I18nKey.SETTINGS$AGENT_PROFILE_MCP_ALL),
+            },
+            {
+              key: "custom",
+              label: t(I18nKey.SETTINGS$AGENT_PROFILE_MCP_CHOOSE),
+            },
+          ]}
+          selectedKey={mcpMode}
+          isDisabled={isSaving}
+          onSelectionChange={(key) => {
+            if (!key) return;
+            const mode = key as ProfileScopeMode;
+            setMcpMode(mode);
+            // Seed a first switch to custom from the default — every
+            // configured server — so turning the control on narrows from what
+            // the agent had rather than cutting it off from all of them.
+            if (mode === "custom" && selectedMcpServers.length === 0) {
+              setSelectedMcpServers(configuredMcpNames.map(({ name }) => name));
+            }
+          }}
+        />
+        {mcpCatalog.length > 0 ? (
+          <ProfileScopeList
+            testId="agent-settings-mcp"
+            items={mcpCatalog}
+            selected={
+              mcpMode === "custom"
+                ? orderedSelectedMcpServers
+                : mcpCatalog.map(({ name }) => name)
+            }
+            isDisabled={isSaving || mcpMode === "standard"}
+            onToggle={(name, checked) =>
+              setSelectedMcpServers((prev) =>
+                checked
+                  ? [...prev, name]
+                  : prev.filter((entry) => entry !== name),
+              )
+            }
+          />
+        ) : (
+          <Typography.Text className="text-xs text-tertiary-alt">
+            {t(I18nKey.SETTINGS$AGENT_PROFILE_MCP_NONE)}
+          </Typography.Text>
+        )}
+        {danglingMcpRefs.length > 0 ? (
+          <Typography.Text
+            testId="agent-settings-mcp-dangling"
+            className="text-xs text-danger"
+          >
+            {t(I18nKey.SETTINGS$AGENT_PROFILE_MCP_DANGLING, {
+              names: danglingMcpRefs.join(", "),
+            })}
+          </Typography.Text>
+        ) : null}
+        <Typography.Text className="text-xs text-tertiary-alt">
+          {t(
+            mcpMode === "custom"
+              ? I18nKey.SETTINGS$AGENT_PROFILE_MCP_CHOOSE_HINT
+              : I18nKey.SETTINGS$AGENT_PROFILE_MCP_ALL_HINT,
+          )}
+        </Typography.Text>
+      </div>
+
+      {secretRefsSupportedOnProfile ? (
         <div className="flex flex-col gap-2.5">
           <Typography.Text className="text-sm">
             {t(I18nKey.SETTINGS$AGENT_PROFILE_SECRETS)}
@@ -1085,7 +916,7 @@ export function AgentSettingsScreen({
               },
             ]}
             selectedKey={secretsMode}
-            isDisabled={isSavingAny}
+            isDisabled={isSaving}
             onSelectionChange={(key) => {
               if (!key) return;
               const mode = key as ProfileScopeMode;
@@ -1103,7 +934,7 @@ export function AgentSettingsScreen({
                   ? orderedSelectedSecrets
                   : secretCatalog.map(({ name }) => name)
               }
-              isDisabled={isSavingAny || secretsMode === "standard"}
+              isDisabled={isSaving || secretsMode === "standard"}
               onToggle={(name, checked) =>
                 setSelectedSecrets((prev) =>
                   checked
@@ -1268,22 +1099,6 @@ export function AgentSettingsScreen({
           />
         </>
       )}
-
-      {!embedded && (
-        <div>
-          <BrandButton
-            testId="agent-save-button"
-            type="button"
-            variant="primary"
-            isDisabled={isSavingAny || !isAnyDirty || isAcpInvalid}
-            onClick={handleSave}
-          >
-            {isSavingAny
-              ? t(I18nKey.SETTINGS$SAVING)
-              : t(I18nKey.SETTINGS$SAVE_CHANGES)}
-          </BrandButton>
-        </div>
-      )}
     </div>
   );
 }
@@ -1297,8 +1112,8 @@ export function AgentSettingsScreen({
  * Note: This is a route file; only the router should import the default export.
  * React Router's Vite plugin wraps a route's default export with
  * `withComponentProps`, which invokes it with route props and drops any props
- * passed by a parent — so embedded consumers (the Agent-profile editor) MUST
- * import the named `AgentSettingsScreen` export instead, or `embedded` /
+ * passed by a parent — so the Agent-profile editor MUST import the named
+ * `AgentSettingsScreen` export instead, or `agentSettingsOverride` /
  * `onSaveControlChange` never arrive. Mirrors `LlmSettingsRoute`.
  */
 export default function AgentSettingsRoute() {
