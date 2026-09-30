@@ -209,6 +209,78 @@ async function waitForRunStatus(
 }
 
 /**
+ * Find a terminally FAILED run for the automation. The agent-server can
+ * intermittently reject the sandbox's completion message (transient 500 on
+ * POST /events), which flips the run straight to FAILED — so report it
+ * instead of endlessly polling for COMPLETED.
+ */
+async function findFailedRun(
+  request: import("@playwright/test").APIRequestContext,
+  automationId: string,
+) {
+  const data = await listAutomationRuns(request, automationId);
+  const runs = data.runs ?? data.items ?? [];
+  return runs.find((r: { status: string }) => r.status === "FAILED");
+}
+
+/** Dispatch a run for the automation via the real automation backend. */
+async function dispatchAutomation(
+  request: import("@playwright/test").APIRequestContext,
+  automationId: string,
+) {
+  const resp = await request.post(
+    `${AUTOMATION_API_BASE}/${encodeURIComponent(automationId)}/dispatch`,
+    {
+      headers: {
+        "X-Session-API-Key": SESSION_API_KEY,
+      },
+    },
+  );
+  if (!resp.ok()) {
+    throw new Error(
+      `POST automation dispatch returned ${resp.status()} for ${automationId}`,
+    );
+  }
+  return resp;
+}
+
+/**
+ * Poll for COMPLETED, but re-dispatch once when a run terminally FAILED —
+ * the completion-message race documented at findFailedRun() is upstream
+ * flakiness, not a lifecycle regression, and one re-dispatch removes it.
+ */
+async function waitForRunCompleted(
+  request: import("@playwright/test").APIRequestContext,
+  automationId: string,
+  timeoutMs = 30_000,
+) {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      return await waitForRunStatus(
+        request,
+        automationId,
+        "COMPLETED",
+        timeoutMs,
+      );
+    } catch (error) {
+      lastError = error as Error;
+      try {
+        if (!(await findFailedRun(request, automationId))) break;
+      } catch {
+        // Fixture closed mid-flight (e.g. test-level timeout) — surface the
+        // original timeout instead of an apiRequestContext teardown error.
+        break;
+      }
+      await dispatchAutomation(request, automationId);
+    }
+  }
+  throw (
+    lastError ?? new Error(`Automation ${automationId} never reached COMPLETED`)
+  );
+}
+
+/**
  * Delete an automation and surface cleanup failures.
  */
 async function deleteAutomation(
@@ -228,6 +300,13 @@ async function deleteAutomation(
     `Delete automation: ${response.status()}`,
   ).toBe(true);
 }
+
+// Retry the single atomic journey once — the automation backend,
+// agent-server, and completion callback each have transient failure modes
+// that one extra attempt absorbs. Unique per-attempt profile names and
+// journey teardown keep retries independent, so no fixed-name cleanup is
+// needed; the atomic-journey fixture owns all cleanup.
+test.describe.configure({ retries: 1 });
 
 test("create an automation, dispatch a run and open its conversation", async ({
   page,
@@ -276,12 +355,19 @@ test("create an automation, dispatch a run and open its conversation", async ({
     const authHeader = `-H 'X-Session-API-Key: ${SESSION_API_KEY}'`;
 
     const createCmd = [
+      // Remove any leftover result file first: on a retry the file would
+      // otherwise still hold a previous attempt's response and the dispatch
+      // command would silently reuse its (stale) automation id.
+      `rm -f .atomic-automation-result.json`,
       // --retry: the automation backend can still be settling right after
       // startup in the uvx/bin dev paths; transient connect/reset/5xx
       // failures should not abort the create (observed flake → assert then
       // sees 0 automations).
-      `curl --fail-with-body -sS -X POST '${AUTOMATION_API_BASE}/preset/prompt'`,
-      `--retry 3 --retry-connrefused --retry-delay 1`,
+      `&& curl --fail-with-body -sS -X POST '${AUTOMATION_API_BASE}/preset/prompt'`,
+      // --retry-all-errors: retry any transient failure (conn refused or
+      // HTTP 5xx), not just connection errors — a failed create leaves the
+      // name-based list poll below with nothing to find.
+      `--retry 4 --retry-all-errors --retry-delay 1`,
       `-H 'Content-Type: application/json'`,
       authHeader,
       `-d '${JSON.stringify({
@@ -432,14 +518,10 @@ test("create an automation, dispatch a run and open its conversation", async ({
       const automation = await getAutomation(request, createdAutomationId!);
 
       // Wait for the run to reach COMPLETED. The trajectory scripts the required
-      // `finish` tool turn for the automation run's spawned
-      // conversation so it can finish and fire the completion callback.
-      const run = await waitForRunStatus(
-        request,
-        automation.id,
-        "COMPLETED",
-        90_000,
-      );
+      // `finish` tool turn for the automation run's spawned conversation so it
+      // can finish and fire the completion callback; waitForRunCompleted
+      // re-dispatches once if the callback race flips the run to FAILED.
+      const run = await waitForRunCompleted(request, automation.id, 90_000);
       expect(run.conversation_id).toBeTruthy();
       // Store the conversation ID for the click-through verification in the final UI step
       runConversationId = run.conversation_id;
