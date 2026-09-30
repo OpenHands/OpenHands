@@ -30,8 +30,7 @@ import {
 import { Typography } from "#/ui/typography";
 import { getFileExtension } from "#/utils/is-previewable-file-path";
 import {
-  MAX_OOXML_DOWNLOAD_BYTES,
-  readBoundedArrayBuffer,
+  fetchOoxmlPreview,
   readOoxmlPreview,
   type OoxmlKind,
   type OoxmlPreview,
@@ -215,10 +214,17 @@ export function OfficeArtifactPreview({
 
   const [expanded, setExpanded] = React.useState(false);
   const [inView, setInView] = React.useState(false);
-  const [preview, setPreview] = React.useState<OoxmlPreview | null>(null);
-  const [failure, setFailure] = React.useState<"error" | "too-large" | null>(
-    null,
-  );
+  // Both results are tagged with the `staticUrl` they were produced from, so a
+  // changed URL invalidates them without a separate reset effect (which would
+  // flash the loading state on every mutation-counter tick).
+  const [preview, setPreview] = React.useState<{
+    url: string;
+    value: OoxmlPreview;
+  } | null>(null);
+  const [failure, setFailure] = React.useState<{
+    url: string;
+    reason: "error" | "too-large" | "unavailable";
+  } | null>(null);
   const [copied, setCopied] = React.useState(false);
   const containerRef = React.useRef<HTMLDivElement>(null);
 
@@ -290,35 +296,57 @@ export function OfficeArtifactPreview({
   }, [staticUrl, fileName]);
 
   React.useEffect(() => {
-    if (!inView || !staticUrl || !kind || preview || failure) return undefined;
+    // Re-parse whenever the cache-busted URL changes. The result is tagged with
+    // the URL it came from, so an agent-side rewrite (which bumps the mutation
+    // counter) clears a previous outline *or* a previous error instead of being
+    // skipped — otherwise a document first seen as "Draft" keeps showing
+    // "Draft" after the agent writes "Final", and a 404 stays a 404 after the
+    // file is created.
+    if (!inView || !staticUrl || !kind || !query.data) return undefined;
+    if (preview?.url === staticUrl || failure?.url === staticUrl)
+      return undefined;
     let cancelled = false;
     (async () => {
       try {
-        const response = await fetch(staticUrl, { credentials: "include" });
-        if (!response.ok) throw new Error(String(response.status));
-        // Bound the download before it is buffered: the reader only caps the
-        // *unpacked* parts, so a huge container would otherwise be pulled into
-        // memory whole.
-        const parsed = await readOoxmlPreview(
-          kind,
-          await readBoundedArrayBuffer(response, MAX_OOXML_DOWNLOAD_BYTES),
-        );
-        if (!cancelled) setPreview(parsed);
+        // Cloud serves file content as a UTF-8-decoded *string*, so a binary
+        // container's ZIP bytes are already destroyed and re-encoding them
+        // cannot restore them. Withhold the outline rather than showing a
+        // parse error for a document that is fine — the card still offers
+        // Download (and View), which are the useful actions there.
+        if (query.data.bytesLossy) {
+          if (!cancelled) setFailure({ url: staticUrl, reason: "unavailable" });
+          return;
+        }
+        // Oversized: the hook refused the body on its declared length, so there
+        // are no bytes to parse and the reason is size, not a parse failure.
+        if (query.data.bytesTooLarge) {
+          if (!cancelled) setFailure({ url: staticUrl, reason: "too-large" });
+          return;
+        }
+        // Prefer the bytes the file-content hook already fetched: re-using them
+        // avoids downloading every Office document twice.
+        const parsed =
+          query.data.bytes != null
+            ? await readOoxmlPreview(kind, query.data.bytes)
+            : await fetchOoxmlPreview(kind, staticUrl);
+        if (!cancelled) setPreview({ url: staticUrl, value: parsed });
       } catch (error) {
         if (cancelled) return;
         // A size rejection is actionable ("too large"), not a generic load
         // failure, so surface the distinction rather than a misleading error.
-        setFailure(
-          error instanceof Error && /exceeds|too large/i.test(error.message)
-            ? "too-large"
-            : "error",
-        );
+        setFailure({
+          url: staticUrl,
+          reason:
+            error instanceof Error && /exceeds|too large/i.test(error.message)
+              ? "too-large"
+              : "error",
+        });
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [inView, staticUrl, kind, preview, failure]);
+  }, [inView, staticUrl, kind, preview, failure, query.data]);
 
   return (
     <div
@@ -333,16 +361,19 @@ export function OfficeArtifactPreview({
           expanded ? "max-h-[32rem]" : "max-h-48",
         )}
       >
-        {failure || (query.isError && !preview) ? (
+        {failure?.url === staticUrl ||
+        (query.isError && preview?.url !== staticUrl) ? (
           <Typography.Text
             className="text-xs text-muted"
             testId="office-artifact-preview-error"
           >
-            {failure === "too-large"
+            {failure?.reason === "too-large"
               ? t(I18nKey.FILES$FILE_TOO_LARGE)
-              : t(I18nKey.FILES$LOAD_ERROR)}
+              : failure?.reason === "unavailable"
+                ? t(I18nKey.FILES$BINARY_FALLBACK)
+                : t(I18nKey.FILES$LOAD_ERROR)}
           </Typography.Text>
-        ) : !preview ? (
+        ) : preview?.url !== staticUrl ? (
           <Typography.Text
             className="text-xs text-muted"
             testId="office-artifact-preview-pending"
@@ -351,16 +382,16 @@ export function OfficeArtifactPreview({
           </Typography.Text>
         ) : (
           <>
-            {preview.kind === "docx" ? (
-              <WordOutline blocks={preview.blocks} />
+            {preview.value.kind === "docx" ? (
+              <WordOutline blocks={preview.value.blocks} />
             ) : null}
-            {preview.kind === "xlsx" ? (
-              <SheetGrid sheets={preview.sheets} />
+            {preview.value.kind === "xlsx" ? (
+              <SheetGrid sheets={preview.value.sheets} />
             ) : null}
-            {preview.kind === "pptx" ? (
-              <SlideOutline slides={preview.slides} />
+            {preview.value.kind === "pptx" ? (
+              <SlideOutline slides={preview.value.slides} />
             ) : null}
-            {preview.truncated ? (
+            {preview.value.truncated ? (
               <Typography.Text className="mt-2 block text-xs text-muted">
                 …
               </Typography.Text>

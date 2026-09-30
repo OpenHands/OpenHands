@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { readBoundedArrayBuffer } from "#/utils/ooxml-preview";
 
 const streamOf = (...chunks: Uint8Array[]): ReadableStream<Uint8Array> =>
@@ -11,15 +11,19 @@ const streamOf = (...chunks: Uint8Array[]): ReadableStream<Uint8Array> =>
 
 describe("readBoundedArrayBuffer", () => {
   it("rejects from the declared content-length without reading the body", async () => {
+    const cancel = vi.fn().mockResolvedValue(undefined);
     const response = {
       headers: new Headers({ "content-length": "5000" }),
-      body: streamOf(new Uint8Array(10)),
+      body: { cancel },
       arrayBuffer: async () => new ArrayBuffer(10),
     } as unknown as Response;
 
     await expect(readBoundedArrayBuffer(response, 1000)).rejects.toThrow(
       /exceeds 1000 bytes/,
     );
+    // The early reject never touches the stream, so it must be cancelled or the
+    // browser keeps downloading a file the caller will never parse.
+    expect(cancel).toHaveBeenCalled();
   });
 
   it("rejects a body that outgrows the cap while streaming", async () => {

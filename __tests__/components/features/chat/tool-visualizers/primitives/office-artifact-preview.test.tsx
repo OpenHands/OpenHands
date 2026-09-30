@@ -1,6 +1,6 @@
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -34,9 +34,16 @@ vi.mock("#/api/backend-registry/active-store", () => ({
   getActiveBackend: () => getActiveBackendMock(),
 }));
 
+const readCloudConversationFileMock = vi.fn();
+vi.mock("#/api/cloud/conversation-service.api", () => ({
+  readCloudConversationFile: (...args: unknown[]) =>
+    readCloudConversationFileMock(...args),
+}));
+
 import { OfficeArtifactPreview } from "#/components/features/chat/tool-visualizers/primitives/office-artifact-preview";
 import { MAX_OOXML_DOWNLOAD_BYTES } from "#/utils/ooxml-preview";
 import { I18nKey } from "#/i18n/declaration";
+import { useWorkspaceMutationCounter } from "#/stores/use-workspace-mutation-counter";
 import { makeZip } from "../../../../../helpers/make-ooxml-zip";
 
 const DOCX_XML = `<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>
@@ -151,15 +158,16 @@ describe("OfficeArtifactPreview", () => {
 
   it("refuses an oversized document before buffering it", async () => {
     // The reader caps *unpacked* parts, but the container itself is downloaded
-    // whole — a declared length past the download cap must stop the fetch from
-    // being buffered into memory at all.
+    // whole — a declared length past the download cap must stop the body from
+    // being buffered at all (the file-content hook owns that bound now).
+    const cancel = vi.fn().mockResolvedValue(undefined);
     fetchMock.mockResolvedValue({
       ok: true,
       status: 200,
       headers: new Headers({
         "content-length": String(MAX_OOXML_DOWNLOAD_BYTES + 1),
       }),
-      body: null,
+      body: { cancel },
       arrayBuffer: async () => new ArrayBuffer(0),
       blob: async () => new Blob([]),
     });
@@ -176,6 +184,48 @@ describe("OfficeArtifactPreview", () => {
         timeout: 3000,
       }),
     ).toHaveTextContent(I18nKey.FILES$FILE_TOO_LARGE);
+    // Rejecting on the declared length happens before the body is read, so the
+    // stream must be cancelled or the browser keeps downloading a file the
+    // preview will never parse.
+    expect(cancel).toHaveBeenCalled();
+  });
+
+  it("re-parses when the cache-busted URL changes", async () => {
+    // An agent-side rewrite bumps the mutation counter, which changes the URL.
+    // The outline must follow it: skipping the re-parse once a result exists
+    // leaves the card showing the pre-edit document (or a stale 404).
+    const first = await makeZip({ "word/document.xml": DOCX_XML });
+    const second = await makeZip({
+      "word/document.xml": DOCX_XML.replace("Body text", "Edited text"),
+    });
+    // The file-content hook is the only fetcher now: it classifies the file
+    // (initial request) and refetches after the mutation bump, so the second
+    // response is the edited document the outline must switch to.
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        arrayBuffer: async () => first,
+        blob: async () => new Blob([first]),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        arrayBuffer: async () => second,
+        blob: async () => new Blob([second]),
+      });
+
+    render(<OfficeArtifactPreview path="notes.docx" />, {
+      wrapper: makeWrapper(),
+    });
+    await screen.findByText("Body text", undefined, { timeout: 3000 });
+
+    act(() => useWorkspaceMutationCounter.getState().bump());
+
+    expect(
+      await screen.findByText("Edited text", undefined, { timeout: 3000 }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Body text")).not.toBeInTheDocument();
   });
 
   it("toggles the expanded height", async () => {
@@ -226,6 +276,34 @@ describe("OfficeArtifactPreview", () => {
     expect(
       screen.queryByTestId("office-artifact-preview-view"),
     ).not.toBeInTheDocument();
+  });
+
+  it("does not run the outline on cloud, where binary bytes are lossy", async () => {
+    // The Cloud file API returns content as a UTF-8-decoded string, so a ZIP
+    // container's bytes are already destroyed. The card must withhold the
+    // outline (rather than show a parse failure) and still offer Download.
+    getActiveBackendMock.mockReturnValue({
+      backend: { id: "cloud-1", kind: "cloud" },
+      orgId: null,
+    });
+    // A string containing a NUL survives the hook's binary sniff, which is the
+    // path that produces the lossy-bytes result.
+    readCloudConversationFileMock.mockResolvedValue("PK\u0000lossy");
+
+    render(<OfficeArtifactPreview path="notes.docx" />, {
+      wrapper: makeWrapper(),
+    });
+
+    expect(
+      await screen.findByTestId("office-artifact-preview-error", undefined, {
+        timeout: 3000,
+      }),
+    ).toHaveTextContent(I18nKey.FILES$BINARY_FALLBACK);
+    expect(
+      screen.getByTestId("office-artifact-preview-download"),
+    ).toBeInTheDocument();
+    // No byte-accurate fetch is attempted on this path.
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("offers Copy and Download like the other artifact cards", async () => {

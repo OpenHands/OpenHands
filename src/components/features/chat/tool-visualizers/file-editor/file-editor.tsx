@@ -81,12 +81,12 @@ function FileEditorCardBody({
     <FilePathChip path={path} range={range} onClick={onOpenFile} />
   ) : null;
 
-  const renderFileContent = (content: string) => {
-    // Only *created* artifacts get a rich preview — `view` returns `cat -n`
-    // numbered snippets that must stay in a CodeBlock.
-    const previewKind =
-      path && command === "create" ? getArtifactPreviewKind(path) : null;
+  // Only *created* artifacts get a rich preview — `view` returns `cat -n`
+  // numbered snippets that must stay in a CodeBlock.
+  const previewKind =
+    path && command === "create" ? getArtifactPreviewKind(path) : null;
 
+  const renderFileContent = (content: string) => {
     // Artifacts own their card (clipped preview + optional View), so skip the
     // separate path chip to avoid a duplicate filename affordance.
     if (previewKind === "markdown") {
@@ -160,9 +160,12 @@ function FileEditorCardBody({
       // `view` returns the snippet the agent saw in `content` (the `cat -n`
       // output) rather than `output`/`new_content`, so fall back to it.
       // Mirrors the markdown path's "prefer content for view" handling.
+      // A binary create carries no source text: its `output` is a status line
+      // ("Created docs/plan.docx"). That must not reach a preview card as if it
+      // were content, or Copy would put the status message on the clipboard.
       const content =
         obs.new_content ||
-        obs.output ||
+        (previewKind ? "" : obs.output) ||
         (obs.content ? textFromContent(obs.content) : "");
       if (content) {
         const rendered = renderFileContent(content);

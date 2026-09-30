@@ -83,6 +83,14 @@ export async function readBoundedArrayBuffer(
 ): Promise<ArrayBuffer> {
   const declared = Number(response.headers?.get?.("content-length") ?? "");
   if (Number.isFinite(declared) && declared > maxBytes) {
+    // Rejecting on the declared length happens before we ever read the body, so
+    // the response stream is still open. Cancel it (best effort) or the browser
+    // keeps downloading a file this preview will never parse.
+    try {
+      await response.body?.cancel();
+    } catch {
+      // The size error is the actionable outcome; a failed cancel is not.
+    }
     throw new Error(`File exceeds ${maxBytes} bytes`);
   }
 
@@ -338,8 +346,11 @@ async function readDocx(entries: Map<string, ZipEntry>): Promise<OoxmlPreview> {
         if (block) blocks.push(block);
       } else if (child.localName === "tbl") {
         // Tables become one paragraph per row so the cell text stays visible
-        // without pretending to reconstruct the grid.
+        // without pretending to reconstruct the grid. A single table can hold
+        // thousands of rows, so the cap is checked inside the row loop too —
+        // otherwise one table emits the whole document into the chat.
         for (const row of Array.from(child.getElementsByTagName("w:tr"))) {
+          if (blocks.length >= MAX_BLOCKS) break;
           const cells = Array.from(row.getElementsByTagName("w:tc"))
             .map((cell) => textOfRuns(cell).trim())
             .filter(Boolean);
@@ -589,4 +600,24 @@ export async function readOoxmlPreview(
     case "pptx":
       return readPptx(entries);
   }
+}
+
+/**
+ * Download an OOXML container from a same-origin static URL and read it with
+ * {@link readOoxmlPreview}. The caller decides *which* URL to hand over — the
+ * workspace fileserver route (session-aware) or a Cloud binary endpoint — so
+ * the download policy stays with the transport owner and the byte-accurate
+ * `fetch` + size bound stays in one place.
+ */
+export async function fetchOoxmlPreview(
+  kind: OoxmlKind,
+  url: string,
+  maxBytes: number = MAX_OOXML_DOWNLOAD_BYTES,
+): Promise<OoxmlPreview> {
+  const response = await fetch(url, { credentials: "include" });
+  if (!response.ok) throw new Error(String(response.status));
+  return readOoxmlPreview(
+    kind,
+    await readBoundedArrayBuffer(response, maxBytes),
+  );
 }
