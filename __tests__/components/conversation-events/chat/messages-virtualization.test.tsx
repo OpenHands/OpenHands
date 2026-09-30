@@ -256,4 +256,72 @@ describe("Messages virtualization", () => {
     const firstRow = screen.getAllByTestId("virtualized-message-row")[0];
     expect(firstRow.style.transform).toBe("translateY(0px)");
   });
+
+  it("watches the list's parent for siblings inserted above it", () => {
+    // A late sibling (the older-history spinner) appears above the list without
+    // resizing it, so a ResizeObserver never fires. The shell must watch the
+    // parent's child list, or the measured scroll margin goes stale and the
+    // virtualizer mounts the wrong rows.
+    const observe = vi.fn();
+    const Original = window.MutationObserver;
+    class Tracked extends Original {
+      constructor(callback: MutationCallback) {
+        super(callback);
+        this.observe = observe;
+      }
+    }
+    vi.stubGlobal("MutationObserver", Tracked);
+
+    renderMessages(buildEvents(400));
+
+    const list = screen.getByTestId("virtualized-message-list");
+    expect(observe).toHaveBeenCalledWith(list.parentElement, {
+      childList: true,
+    });
+  });
+
+  it("disconnects its observers when the virtualized shell unmounts", () => {
+    // TanStack Virtual creates its own ResizeObserver for the scroll element, so
+    // track instances and identify the one that observed the shell node — that
+    // is the observer this component owns and must tear down.
+    type Instance = { observed: Element[]; disconnected: boolean };
+    const instances: Instance[] = [];
+    const Original = window.ResizeObserver;
+    class Tracked extends Original {
+      private readonly record: Instance = {
+        observed: [],
+        disconnected: false,
+      };
+
+      constructor(callback: ResizeObserverCallback) {
+        super(callback);
+        instances.push(this.record);
+        const originalObserve = this.observe.bind(this);
+        this.observe = (target: Element, options?: ResizeObserverOptions) => {
+          this.record.observed.push(target);
+          originalObserve(target, options);
+        };
+        const originalDisconnect = this.disconnect.bind(this);
+        this.disconnect = () => {
+          this.record.disconnected = true;
+          originalDisconnect();
+        };
+      }
+    }
+    vi.stubGlobal("ResizeObserver", Tracked);
+
+    const { unmount } = renderMessages(buildEvents(400));
+    const list = screen.getByTestId("virtualized-message-list");
+    const shellObservers = instances.filter((instance) =>
+      instance.observed.includes(list),
+    );
+    expect(shellObservers.length).toBeGreaterThan(0);
+
+    unmount();
+
+    // A leaked observer keeps its callback (and the whole detached tree) alive.
+    expect(shellObservers.every((instance) => instance.disconnected)).toBe(
+      true,
+    );
+  });
 });

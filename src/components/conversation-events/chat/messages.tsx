@@ -218,7 +218,8 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     const [scrollMargin, setScrollMargin] = React.useState(0);
     const shellRef = React.useCallback(
       (node: HTMLDivElement | null) => {
-        if (!node || !scrollParent) return;
+        if (!node || !scrollParent) return undefined;
+        const parent = node.parentElement;
         const measure = () => {
           const containerTop = scrollParent.getBoundingClientRect().top;
           const nodeTop = node.getBoundingClientRect().top;
@@ -227,15 +228,29 @@ export const Messages: React.FC<MessagesProps> = React.memo(
           );
         };
         measure();
-        // Preceding siblings can grow after mount (a /model card expands), so
-        // re-measure when their box changes. jsdom has no ResizeObserver; the
-        // one-shot measurement above still runs there.
-        if (typeof ResizeObserver === "undefined") return;
-        const observer = new ResizeObserver(measure);
-        observer.observe(node);
-        Array.from(node.parentElement?.children ?? []).forEach((sibling) => {
-          if (sibling !== node) observer.observe(sibling);
-        });
+        // Preceding siblings can grow *after* mount (a /model card expands) or
+        // appear late (the older-history spinner), so re-measure when their box
+        // changes. Observing a node only tracks that node's own size, so a
+        // MutationObserver watches the parent's child list too — otherwise a
+        // newly-inserted sibling silently invalidates the margin. jsdom has
+        // neither observer; the one-shot measurement above still runs there.
+        const observers: { disconnect: () => void }[] = [];
+        if (typeof ResizeObserver !== "undefined") {
+          const resize = new ResizeObserver(measure);
+          resize.observe(node);
+          Array.from(parent?.children ?? []).forEach((sibling) => {
+            if (sibling !== node) resize.observe(sibling);
+          });
+          observers.push(resize);
+        }
+        if (typeof MutationObserver !== "undefined" && parent) {
+          const mutation = new MutationObserver(measure);
+          mutation.observe(parent, { childList: true });
+          observers.push(mutation);
+        }
+        // React 19 calls this cleanup when the ref detaches (unmount or a
+        // changed ref identity), so the observers do not outlive the shell.
+        return () => observers.forEach((observer) => observer.disconnect());
       },
       [scrollParent],
     );
