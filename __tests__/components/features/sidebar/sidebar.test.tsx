@@ -16,6 +16,13 @@ import {
   type NavigationContextValue,
 } from "#/context/navigation-context";
 import { getPinnedHomeRouteKey } from "#/hooks/use-pinned-home-route";
+import {
+  SIDEBAR_DEFAULT_WIDTH_PX,
+  SIDEBAR_MAX_WIDTH_PX,
+  SIDEBAR_MIN_WIDTH_PX,
+  SIDEBAR_RESIZE_HANDLE_TEST_ID,
+  SIDEBAR_WIDTH_STORAGE_KEY,
+} from "#/components/features/sidebar/sidebar-width.constants";
 import translations from "#/i18n/translation.json";
 
 // The global `useTranslation` mock in `vitest.setup.ts` returns the key
@@ -536,5 +543,80 @@ describe("Sidebar", () => {
     expect(window.localStorage.getItem(pinKey)).not.toBe(
       JSON.stringify("/customize"),
     );
+  });
+
+  describe("resize handle", () => {
+    it("exposes a grippable resize handle on the sidebar's right edge when expanded", () => {
+      renderSidebar("/conversations");
+
+      expect(
+        screen.getByTestId(SIDEBAR_RESIZE_HANDLE_TEST_ID),
+      ).toBeInTheDocument();
+      expect(getDesktopSidebar(false)).toHaveStyle({
+        width: `${SIDEBAR_DEFAULT_WIDTH_PX}px`,
+      });
+    });
+
+    it("hides the resize handle when the sidebar is collapsed", () => {
+      useSidebarStore.setState({ collapsed: true });
+      renderSidebar("/conversations");
+
+      expect(
+        screen.queryByTestId(SIDEBAR_RESIZE_HANDLE_TEST_ID),
+      ).not.toBeInTheDocument();
+    });
+
+    it("persists the dragged width to localStorage so it survives a remount", () => {
+      const { unmount } = renderSidebar("/conversations");
+
+      const sidebar = getDesktopSidebar(false);
+      // The hook computes the new width from `event.clientX - containerRect.left`,
+      // so we pin the aside at x=0 and drag the pointer to a known clientX.
+      sidebar.getBoundingClientRect = () =>
+        ({ left: 0, right: SIDEBAR_DEFAULT_WIDTH_PX }) as DOMRect;
+
+      const handle = screen
+        .getByTestId(SIDEBAR_RESIZE_HANDLE_TEST_ID)
+        .querySelector('[class*="cursor-ew-resize"]') as HTMLElement;
+      expect(handle).not.toBeNull();
+
+      fireEvent.mouseDown(handle);
+      fireEvent.mouseMove(document, { clientX: 400 });
+      fireEvent.mouseUp(document);
+
+      expect(sidebar).toHaveStyle({ width: "400px" });
+      expect(window.localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY)).toBe(
+        "400",
+      );
+
+      // Choice survives a remount via localStorage.
+      unmount();
+      renderSidebar("/conversations");
+      expect(getDesktopSidebar(false)).toHaveStyle({ width: "400px" });
+    });
+
+    it("clamps the persisted width to the configured min/max bounds", () => {
+      renderSidebar("/conversations");
+
+      const sidebar = getDesktopSidebar(false);
+      sidebar.getBoundingClientRect = () =>
+        ({ left: 0, right: SIDEBAR_DEFAULT_WIDTH_PX }) as DOMRect;
+
+      const handle = screen
+        .getByTestId(SIDEBAR_RESIZE_HANDLE_TEST_ID)
+        .querySelector('[class*="cursor-ew-resize"]') as HTMLElement;
+
+      // Drag well past the max: width should saturate at SIDEBAR_MAX_WIDTH_PX.
+      fireEvent.mouseDown(handle);
+      fireEvent.mouseMove(document, { clientX: SIDEBAR_MAX_WIDTH_PX + 500 });
+      fireEvent.mouseUp(document);
+      expect(sidebar).toHaveStyle({ width: `${SIDEBAR_MAX_WIDTH_PX}px` });
+
+      // And drag well below the min: width should saturate at SIDEBAR_MIN_WIDTH_PX.
+      fireEvent.mouseDown(handle);
+      fireEvent.mouseMove(document, { clientX: 0 });
+      fireEvent.mouseUp(document);
+      expect(sidebar).toHaveStyle({ width: `${SIDEBAR_MIN_WIDTH_PX}px` });
+    });
   });
 });
