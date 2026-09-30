@@ -15,8 +15,7 @@ export const DEFAULT_MAX_SCORE_PARETO_META_PROFILE_MODEL_TABLE = `- gpt-5.4: swe
 - kimi-k2.5: swe-bench: 68.80%/$0.41; swt-bench: 61.90%/$0.42; swe-bench-multimodal: 32.80%/$1.62; commit0: 18.80%/$1.26; gaia: 63.60%/$0.38
 - kimi-k2.6: swe-bench: 74.60%/$0.67; swt-bench: 70.40%/$0.33; swe-bench-multimodal: 41.20%/$0.64; commit0: 25.00%/$1.52; gaia: 74.50%/$0.42
 - deepseek-v3.2-reasoner: swe-bench: 71.60%/$0.16; swt-bench: 53.60%/$0.12; swe-bench-multimodal: 27.90%/$0.19; commit0: 25.00%/$0.57; gaia: 50.30%/$0.06
-- claude-sonnet-4-5: swe-bench: 74.20%/$1.19; swt-bench: 68.80%/$0.98; swe-bench-multimodal: 36.80%/$1.89; commit0: 12.50%/$3.23; gaia: 72.70%/$0.87
-- gpt-5.2-codex: swe-bench: 73.80%/$0.94; swt-bench: 67.00%/$0.66; swe-bench-multimodal: 35.90%/$2.97; commit0: 43.80%/$5.50; gaia: 70.90%/$0.55`;
+- claude-sonnet-4-5: swe-bench: 74.20%/$1.19; swt-bench: 68.80%/$0.98; swe-bench-multimodal: 36.80%/$1.89; commit0: 12.50%/$3.23; gaia: 72.70%/$0.87`;
 
 export const DEFAULT_MAX_SCORE_PARETO_META_PROFILE_PROMPT = `You are a model router for an autonomous software agent. Your job is to pick exactly one model for the task below. Do not solve the task; never answer it.
 
