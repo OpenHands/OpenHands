@@ -223,11 +223,15 @@ describe("ingress.mjs CLI", () => {
     });
 
     await waitForPort(port, child);
+    for (let i = 0; i < 30 && !output.includes(port.toString()); i++) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+
     await stopChild(child);
 
     expect(output).toContain(port.toString());
   });
-
+  
   it("parses --route arguments correctly", async () => {
     const port = await getFreePort();
     const child = spawn(

@@ -34,7 +34,8 @@ describe("custom automation setup actions", () => {
 
   it.each(customAutomationFixture.scenarios)(
     "derives the $id preflight and create payloads",
-    (scenario) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (scenario?: any) => {
       expect(customAutomation).toBeDefined();
       const formValues = scenario.formValues as unknown as SetupFormValues;
       const createBody = scenario.create.request
