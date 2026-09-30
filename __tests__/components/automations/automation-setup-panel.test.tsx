@@ -19,7 +19,10 @@ import {
   AutomationSetupPanel,
 } from "#/components/features/automations/setup/automation-setup-panel";
 import AutomationService from "#/api/automation-service/automation-service.api";
-import { initializeAutomationFormSession } from "#/api/automation-form-session";
+import {
+  getAutomationFormSession,
+  initializeAutomationFormSession,
+} from "#/api/automation-form-session";
 import type { AutomationSetupDraft } from "#/api/automation-setup-types";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { packTarGzip } from "#/utils/tar-gzip";
@@ -1256,6 +1259,14 @@ describe("AutomationSetupPanel", () => {
       expect(
         screen.getByTestId("automation-setup-draft-details"),
       ).toBeInTheDocument();
+      expect(getAutomationFormSession("conv-1")).toEqual(
+        expect.objectContaining({
+          serverDraftId: "draft-1",
+          form: expect.objectContaining({
+            prompt: "Use the persisted draft body",
+          }),
+        }),
+      );
     });
 
     it("shows a missing-draft message and creates a fresh draft after a tagged draft was deleted", async () => {
