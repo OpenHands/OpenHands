@@ -12,6 +12,7 @@ interface CanvasExtensionCardProps {
   extension: InstalledCanvasExtensionInfo;
   isBusy: boolean;
   onToggle: () => void;
+  onRefresh: () => void;
   onUninstall: () => void;
 }
 
@@ -19,6 +20,7 @@ export function CanvasExtensionCard({
   extension,
   isBusy,
   onToggle,
+  onRefresh,
   onUninstall,
 }: CanvasExtensionCardProps) {
   const { t } = useTranslation("openhands");
@@ -109,6 +111,15 @@ export function CanvasExtensionCard({
       ) : null}
 
       <footer className="flex justify-end gap-2 border-t border-border pt-3">
+        <BrandButton
+          type="button"
+          variant="secondary"
+          testId={`canvas-extension-refresh-${extension.name}`}
+          isDisabled={isBusy}
+          onClick={onRefresh}
+        >
+          {t(I18nKey.SETTINGS$PLUGINS_REFRESH)}
+        </BrandButton>
         <BrandButton
           type="button"
           variant="ghost-danger"
