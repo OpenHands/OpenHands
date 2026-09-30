@@ -11,7 +11,7 @@ Run 2026-09-29 on a native `npm run dev:minimal` stack (no Docker) with the agen
 | Create profile with `tools` unset | 201; stored `tools=null`; no `enable_*` switch keys |
 | Create profile with `[terminal, glob]` | 201; stored as given |
 | GET an unset-tools profile, set `[terminal, glob]`, save under a new name | 201; `[terminal, glob]` (no `switch_llm` re-added) |
-| Save a profile carrying `enable_sub_agents` | 422 `extra_forbidden` |
+| Save a profile carrying `enable_sub_agents` | accepted as deprecated input and folded into `tools` (adds `task_tool_set`); switch not stored. Since SDK `b3eb043`; covered by SDK unit tests, not re-run live |
 | Stored v2 profile, `tools=null` + `enable_sub_agents=true` | loads as v3 `[terminal, file_editor, task_tracker, browser_tool_set, task_tool_set, switch_llm]`; re-save writes v3 without switches |
 | Stored v2 profile, `[terminal, glob]` + `enable_switch_llm_tool=false` | loads as `[terminal, glob]`; re-save writes v3 without switches |
 | Stored v2 profile with string switches (`"false"`/`"true"`) | coerced; `[terminal, switch_llm]` |

@@ -76,7 +76,9 @@ g3b = c.get("/api/agent-profiles/e2e-copy2").json()["profile"]
 check("b.roundtrip-copy", r3b.status_code == 201 and names(g3b["tools"]) == ["terminal", "glob"],
       f"{r3b.status_code}; tools={names(g3b['tools'])}")
 r4 = prof("e2e-flag", ..., enable_sub_agents=True)
-check("b.flag-rejected", r4.status_code == 422, f"{r4.status_code}; {r4.text[:160]}")
+g4 = c.get("/api/agent-profiles/e2e-flag").json()["profile"]
+check("b.flag-folded", r4.status_code == 201 and "task_tool_set" in names(g4["tools"])
+      and "enable_sub_agents" not in g4, f"{r4.status_code}; tools={names(g4['tools'])}")
 
 # d. materialize
 r5 = c.post("/api/agent-profiles/e2e-bogus/materialize", json={"profile": {
