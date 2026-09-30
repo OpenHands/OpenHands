@@ -1105,6 +1105,28 @@ describe("AutomationSetupPanel", () => {
       );
     });
 
+    it("omits an empty prompt when saving a partial prompt draft", async () => {
+      vi.mocked(AutomationService.createServerDraft).mockResolvedValue({
+        ...dispatchableDraft,
+        draft: { name: "New Automation" } as never,
+        validationErrors: null,
+      });
+
+      const user = userEvent.setup();
+      renderPanel({ prompt: "", kind: "prompt" });
+
+      await user.click(screen.getByTestId("automation-setup-save-draft"));
+
+      await waitFor(() =>
+        expect(AutomationService.createServerDraft).toHaveBeenCalledWith(
+          expect.objectContaining({
+            endpoint: "/v1/preset/prompt",
+            draft: expect.not.objectContaining({ prompt: expect.any(String) }),
+          }),
+        ),
+      );
+    });
+
     it("creates a server draft on Save draft and updates it on the next save", async () => {
       vi.mocked(AutomationService.createServerDraft).mockResolvedValue({
         ...dispatchableDraft,

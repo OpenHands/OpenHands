@@ -934,9 +934,10 @@ export function AutomationSetupPanel({
           timezone: timezone.trim() || DEFAULT_TIMEZONE,
         };
   const buildPresetBody = (): SetupRequestBody => {
+    const trimmedPrompt = prompt.trim();
     const body: SetupRequestBody = {
       name: normalizedName(),
-      prompt: prompt.trim(),
+      ...(trimmedPrompt ? { prompt: trimmedPrompt } : {}),
       trigger: buildTrigger(),
       enabled: false,
     } as SetupRequestBody;
