@@ -11,6 +11,7 @@ import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   CalendarDays,
   ChevronDown,
@@ -69,6 +70,10 @@ import {
 import { Divider } from "#/ui/divider";
 import { cn } from "#/utils/utils";
 import { useDeploymentCapabilities } from "#/hooks/query/use-manifest-capabilities";
+import {
+  invalidateConversationQueries,
+  patchConversationInCache,
+} from "#/hooks/mutation/conversation-mutation-utils";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { useNavigation } from "#/context/navigation-context";
 import type {
@@ -544,6 +549,11 @@ export function AutomationSetupPanel({
     "idle" | "saving" | "saved" | "error"
   >("idle");
   const [isTaggedDraftMissing, setIsTaggedDraftMissing] = useState(false);
+  const queryClient = useQueryClient();
+  const latestConversationTagsRef = useRef(conversationTags);
+  const conversationTagUpdateQueueRef = useRef<Promise<void>>(
+    Promise.resolve(),
+  );
   const propTaggedServerDraftId =
     getAutomationDraftIdFromTags(conversationTags);
   const [currentTaggedServerDraftId, setCurrentTaggedServerDraftId] = useState(
@@ -567,8 +577,47 @@ export function AutomationSetupPanel({
   const processQueuedStreamsRef = useRef<() => void>(() => {});
 
   useEffect(() => {
+    latestConversationTagsRef.current = conversationTags;
+  }, [conversationTags]);
+
+  useEffect(() => {
     setCurrentTaggedServerDraftId(propTaggedServerDraftId);
   }, [propTaggedServerDraftId]);
+
+  const updateConversationTags = useCallback(
+    async (
+      buildNextTags: (
+        tags: Record<string, string> | null | undefined,
+      ) => Record<string, string>,
+    ) => {
+      if (!conversationId) return null;
+
+      const update = conversationTagUpdateQueueRef.current
+        .catch(() => undefined)
+        .then(async () => {
+          const nextTags = buildNextTags(latestConversationTagsRef.current);
+          const updatedConversation =
+            await AgentServerConversationService.updateConversationTags(
+              conversationId,
+              nextTags,
+            );
+          const savedTags = updatedConversation.tags ?? nextTags;
+          latestConversationTagsRef.current = savedTags;
+          patchConversationInCache(queryClient, conversationId, {
+            tags: savedTags,
+          });
+          invalidateConversationQueries(queryClient, conversationId);
+          return updatedConversation;
+        });
+
+      conversationTagUpdateQueueRef.current = update.then(
+        () => undefined,
+        () => undefined,
+      );
+      return update;
+    },
+    [conversationId, queryClient],
+  );
 
   useEffect(() => {
     if (
@@ -578,13 +627,12 @@ export function AutomationSetupPanel({
     ) {
       return;
     }
-    AgentServerConversationService.updateConversationTags(
-      conversationId,
-      buildAutomationSetupModeTags(conversationTags),
-    ).catch((error: unknown) => {
-      displayErrorToast(error instanceof Error ? error.message : null);
-    });
-  }, [conversationId, conversationTags]);
+    updateConversationTags((tags) => buildAutomationSetupModeTags(tags)).catch(
+      (error: unknown) => {
+        displayErrorToast(error instanceof Error ? error.message : null);
+      },
+    );
+  }, [conversationId, conversationTags, updateConversationTags]);
 
   const saveDraftInFormSession = useCallback(
     (
@@ -610,16 +658,14 @@ export function AutomationSetupPanel({
   const updateConversationDraftTags = useCallback(
     async (draftId: string | null) => {
       if (!conversationId) return;
-      const nextTags = draftId
-        ? buildAutomationDraftTags(conversationTags, draftId)
-        : removeAutomationDraftTags(conversationTags);
-      await AgentServerConversationService.updateConversationTags(
-        conversationId,
-        nextTags,
+      await updateConversationTags((tags) =>
+        draftId
+          ? buildAutomationDraftTags(tags, draftId)
+          : removeAutomationDraftTags(tags),
       );
       setCurrentTaggedServerDraftId(draftId);
     },
-    [conversationId, conversationTags],
+    [conversationId, updateConversationTags],
   );
 
   useEffect(() => {

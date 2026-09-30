@@ -7,6 +7,7 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HttpError } from "@openhands/typescript-client";
 import {
@@ -89,7 +90,11 @@ vi.mock(
   "#/api/conversation-service/agent-server-conversation-service.api",
   () => ({
     default: {
-      updateConversationTags: vi.fn().mockResolvedValue({ tags: {} }),
+      updateConversationTags: vi.fn(
+        async (_conversationId: string, tags: Record<string, string>) => ({
+          tags,
+        }),
+      ),
     },
   }),
 );
@@ -210,15 +215,20 @@ function renderPanel(
     isNavigating: false,
     navigate: mockNavigate,
   };
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
 
   return render(
-    <NavigationProvider value={value}>
-      <AutomationSetupPanel
-        draft={draft}
-        conversationId={conversationId}
-        conversationTags={conversationTags}
-      />
-    </NavigationProvider>,
+    <QueryClientProvider client={queryClient}>
+      <NavigationProvider value={value}>
+        <AutomationSetupPanel
+          draft={draft}
+          conversationId={conversationId}
+          conversationTags={conversationTags}
+        />
+      </NavigationProvider>
+    </QueryClientProvider>,
   );
 }
 
@@ -238,7 +248,7 @@ describe("AutomationSetupPanel", () => {
     );
     vi.mocked(
       AgentServerConversationService.updateConversationTags,
-    ).mockResolvedValue({ tags: {} } as never);
+    ).mockImplementation(async (_conversationId, tags) => ({ tags }) as never);
     vi.mocked(GitProviderItemsService.listUserRepositories).mockResolvedValue({
       repositories: ["OpenHands/OpenHands", "OpenHands/software-agent-sdk"],
       missingToken: false,
@@ -1115,14 +1125,22 @@ describe("AutomationSetupPanel", () => {
         isNavigating: false,
         navigate: mockNavigate,
       };
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
 
       render(
-        <NavigationProvider value={value}>
-          <AutomationSetupPanel
-            draft={{ prompt: "Edit automation", kind: "prompt" }}
-            conversationId="conv-1"
-          />
-        </NavigationProvider>,
+        <QueryClientProvider client={queryClient}>
+          <NavigationProvider value={value}>
+            <AutomationSetupPanel
+              draft={{ prompt: "Edit automation", kind: "prompt" }}
+              conversationId="conv-1"
+            />
+          </NavigationProvider>
+        </QueryClientProvider>,
       );
 
       await act(async () => {
@@ -1265,6 +1283,62 @@ describe("AutomationSetupPanel", () => {
           form: expect.objectContaining({
             prompt: "Use the persisted draft body",
           }),
+        }),
+      );
+    });
+
+    it("does not let the setup-mode tag write clobber a saved draft id", async () => {
+      vi.mocked(AutomationService.createServerDraft).mockResolvedValue(
+        dispatchableDraft,
+      );
+      let resolveSetupTagWrite: (value: {
+        tags: Record<string, string>;
+      }) => void;
+      const setupTagWrite = new Promise<{ tags: Record<string, string> }>(
+        (resolve) => {
+          resolveSetupTagWrite = resolve;
+        },
+      );
+      vi.mocked(AgentServerConversationService.updateConversationTags)
+        .mockImplementationOnce(() => setupTagWrite as never)
+        .mockImplementationOnce(
+          async (_conversationId, tags) => ({ tags }) as never,
+        );
+
+      const user = userEvent.setup();
+      renderPanel(undefined, "conv-1", { existing: "tag" });
+
+      await waitFor(() =>
+        expect(
+          AgentServerConversationService.updateConversationTags,
+        ).toHaveBeenCalledTimes(1),
+      );
+
+      await user.click(screen.getByTestId("automation-setup-save-draft"));
+      await waitFor(() =>
+        expect(AutomationService.createServerDraft).toHaveBeenCalled(),
+      );
+      expect(
+        AgentServerConversationService.updateConversationTags,
+      ).toHaveBeenCalledTimes(1);
+
+      resolveSetupTagWrite!({
+        tags: { existing: "tag", automationsetup: "draft" },
+      });
+
+      await waitFor(() =>
+        expect(
+          AgentServerConversationService.updateConversationTags,
+        ).toHaveBeenCalledTimes(2),
+      );
+      expect(
+        vi.mocked(AgentServerConversationService.updateConversationTags).mock
+          .calls[1][1],
+      ).toEqual(
+        expect.objectContaining({
+          existing: "tag",
+          automationsetup: "draft",
+          automationdraftid: "draft-1",
         }),
       );
     });
