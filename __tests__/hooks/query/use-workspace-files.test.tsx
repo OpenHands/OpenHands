@@ -50,7 +50,11 @@ vi.mock("#/hooks/query/use-active-conversation", () => ({
 
 const useRuntimeIsReadyMock = vi.fn();
 vi.mock("#/hooks/use-runtime-is-ready", () => ({
-  useRuntimeIsReady: () => useRuntimeIsReadyMock(),
+  useRuntimeIsReady: (...args: unknown[]) => useRuntimeIsReadyMock(...args),
+}));
+
+vi.mock("#/hooks/use-agent-state", () => ({
+  useAgentState: () => ({ curAgentState: "error" }),
 }));
 
 const useOptionalConversationIdMock = vi.fn();
@@ -108,6 +112,27 @@ afterEach(() => {
 describe("useWorkspaceFiles — local backend", () => {
   beforeEach(() => {
     storeBackendKind = "local";
+  });
+
+  it("lists diagnostic files while the conversation is in Error", async () => {
+    const { useRuntimeIsReady } = await vi.importActual<
+      typeof import("#/hooks/use-runtime-is-ready")
+    >("#/hooks/use-runtime-is-ready");
+    useRuntimeIsReadyMock.mockImplementation(useRuntimeIsReady);
+    useActiveConversationMock.mockReturnValue({
+      data: { ...conversation, execution_status: "error" },
+    });
+    executeCommandSpy.mockResolvedValue({
+      exit_code: 0,
+      stdout: "./evidence/checkpoint.json\n",
+      stderr: "",
+    });
+    const { result } = renderHook(() => useWorkspaceFiles(), {
+      wrapper: makeWrapper(),
+    });
+    await waitFor(() =>
+      expect(result.current.data).toEqual(["evidence/checkpoint.json"]),
+    );
   });
 
   it("lists files via bash find and does not touch git changes", async () => {
