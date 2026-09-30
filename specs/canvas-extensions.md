@@ -139,8 +139,11 @@ Agent Server bridge contract are available:
   `CanvasExtensionsClient.createAppBackendSession()` and
   `revokeAppBackendSession()`.
 
-Extensions call `host.appBackendView.mount({ container })`; they never receive
-an Agent Server session key, inspect local storage, construct an ingress origin,
+Extensions call `host.appBackendView.mount({ container, query? })`; an explicitly
+selected workspace may use `query: { folder: absolutePath }`. The only currently
+allowed query key is `folder`; credential-like or unknown keys are rejected, and
+values are never session credentials. Extensions never receive an Agent Server
+session key, inspect local storage, construct an ingress origin,
 or derive one from `window.location`. Canvas requests a short-lived session from
 the discovered ingress, validates that the returned URL has the same origin,
 and renders it in an iframe using only the server-provided allowlisted sandbox

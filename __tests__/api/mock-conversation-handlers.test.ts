@@ -617,7 +617,6 @@ describe("mock conversation handlers", () => {
       interrupted,
       run,
       agentAnswer,
-      vscode,
       skills,
       pendingMessage,
     ] = await Promise.all([
@@ -637,7 +636,6 @@ describe("mock conversation handlers", () => {
       requestJson<{ response: string }>("/api/conversations/1/ask_agent", {
         method: "POST",
       }),
-      requestJson<{ url: string | null }>("/api/vscode/url"),
       requestJson<{ skills: unknown[] }>("/api/skills", { method: "POST" }),
       requestJson<{ id: string; position: number }>(
         "/api/v1/conversations/1/pending-messages",
@@ -651,7 +649,6 @@ describe("mock conversation handlers", () => {
     expect(interrupted.body).toEqual({ success: true });
     expect(run.body).toEqual({ success: true });
     expect(agentAnswer.body).toEqual({ response: "Mock agent response" });
-    expect(vscode.body).toEqual({ url: null });
     expect(skills.body).toEqual({ skills: [] });
     expect(pendingMessage.body).toEqual({ id: "mock-pending-id", position: 0 });
   });

@@ -27,7 +27,6 @@ interface ConversationCardContextMenuProps {
   onDisplayCost?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onShowAgentTools?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onShowSkills?: (event: React.MouseEvent<HTMLButtonElement>) => void;
-  onDownloadViaVSCode?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDownloadConversation?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   position?: "top" | "bottom";
   /**
@@ -49,7 +48,6 @@ export function ConversationCardContextMenu({
   onDisplayCost,
   onShowAgentTools,
   onShowSkills,
-  onDownloadViaVSCode,
   onDownloadConversation,
   position = "bottom",
   floatingStyle,
@@ -180,18 +178,6 @@ export function ConversationCardContextMenu({
               <ConversationNameContextMenuIconText
                 icon={<CloseIcon width={16} height={16} />}
                 text={t(stopLabelKey)}
-              />
-            </ContextMenuListItem>
-          ),
-          onDownloadViaVSCode && (
-            <ContextMenuListItem
-              key="download-vscode-button"
-              testId="download-vscode-button"
-              onClick={onDownloadViaVSCode}
-            >
-              <ConversationNameContextMenuIconText
-                icon={<DownloadIcon width={16} height={16} />}
-                text={t(I18nKey.BUTTON$DOWNLOAD_VIA_VSCODE)}
               />
             </ContextMenuListItem>
           ),
