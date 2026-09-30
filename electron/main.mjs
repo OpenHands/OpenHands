@@ -40,6 +40,7 @@ import {
   ipcMain,
   nativeImage,
   nativeTheme,
+  safeStorage,
   shell,
 } from "electron";
 import { chmodSync, existsSync } from "node:fs";
@@ -675,7 +676,11 @@ app.whenReady().then(async () => {
   const { createMarsTunnelBridge } = await import(
     pathToFileURL(join(scriptsDir, "mars-tunnel-bridge.mjs")).href
   );
-  marsTunnelBridge = createMarsTunnelBridge();
+  marsTunnelBridge = createMarsTunnelBridge({
+    userDataPath: app.getPath("userData"),
+    safeStorage,
+    openExternal: (url) => shell.openExternal(url),
+  });
   marsTunnelBridge.registerIpc(ipcMain);
 
   if (!uvxAvailable()) {
@@ -725,7 +730,10 @@ app.whenReady().then(async () => {
     const errorTail = recentServiceErrors.length
       ? `\n\nRecent service errors:\n${recentServiceErrors.join("\n")}`
       : "";
-    dialog.showErrorBox("OpenHands Agent Canvas failed to start", summary + errorTail);
+    dialog.showErrorBox(
+      "OpenHands Agent Canvas failed to start",
+      summary + errorTail,
+    );
     app.quit();
   }
 });

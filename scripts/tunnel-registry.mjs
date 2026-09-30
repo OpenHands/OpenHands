@@ -56,6 +56,7 @@ import { ensureSessionAwake } from "./mars-session.mjs";
  *   remotePort: number,
  *   localPort: number | undefined,
  *   error: string | undefined,
+ *   upstreamFailure: { closeCode: number | null, httpStatus: number | null, message: string } | null,
  * }} TunnelEntrySnapshot
  */
 
@@ -80,6 +81,7 @@ export function createTunnelRegistry({
       remotePort: entry.remotePort,
       localPort: entry.tunnel?.localPort,
       error: entry.error?.message,
+      upstreamFailure: entry.tunnel?.getLastUpstreamFailure?.() ?? null,
     };
   }
 
@@ -98,7 +100,13 @@ export function createTunnelRegistry({
    *   pick a new one.
    * @returns {Promise<TunnelEntrySnapshot>}
    */
-  async function attach({ sessionId, remotePort, accessToken, apiUrl, localPort }) {
+  async function attach({
+    sessionId,
+    remotePort,
+    accessToken,
+    apiUrl,
+    localPort,
+  }) {
     if (!sessionId) {
       throw new Error("sessionId is required");
     }
@@ -113,12 +121,24 @@ export function createTunnelRegistry({
         // settles (either way), re-run attach() to either reuse the tunnel
         // it produced or retry after its failure.
         await existing.promise.catch(() => {});
-        return attach({ sessionId, remotePort, accessToken, apiUrl, localPort });
+        return attach({
+          sessionId,
+          remotePort,
+          accessToken,
+          apiUrl,
+          localPort,
+        });
       }
       // status === "error": fall through and retry below.
     }
 
-    const entry = { status: "connecting", remotePort, tunnel: null, error: null, promise: null };
+    const entry = {
+      status: "connecting",
+      remotePort,
+      tunnel: null,
+      error: null,
+      promise: null,
+    };
     entries.set(sessionId, entry);
 
     entry.promise = (async () => {
@@ -127,7 +147,13 @@ export function createTunnelRegistry({
       // being attached to for the first time in a while may need waking
       // before dialing it can succeed at all.
       await ensureAwake({ apiUrl, sessionId, accessToken });
-      const tunnel = await startTunnel({ sessionId, remotePort, accessToken, apiUrl, localPort });
+      const tunnel = await startTunnel({
+        sessionId,
+        remotePort,
+        accessToken,
+        apiUrl,
+        localPort,
+      });
       entry.tunnel = tunnel;
       entry.status = "connected";
     })().catch((err) => {
@@ -164,7 +190,9 @@ export function createTunnelRegistry({
   }
 
   async function detachAll() {
-    await Promise.all([...entries.keys()].map((sessionId) => detach(sessionId)));
+    await Promise.all(
+      [...entries.keys()].map((sessionId) => detach(sessionId)),
+    );
   }
 
   return { attach, get, list, detach, detachAll };

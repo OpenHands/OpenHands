@@ -32,7 +32,8 @@ const DEFAULT_TIMEOUT_MS = 120_000;
 function sessionUrl(apiUrl, sessionId, suffix = "") {
   const url = new URL(apiUrl);
   url.pathname =
-    url.pathname.replace(/\/$/, "") + `/v2/agents/sessions/${sessionId}${suffix}`;
+    url.pathname.replace(/\/$/, "") +
+    `/v2/agents/sessions/${sessionId}${suffix}`;
   return url.toString();
 }
 
@@ -53,7 +54,9 @@ async function resumeSession(apiUrl, sessionId, accessToken, fetchImpl) {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) {
-    throw new Error(`Failed to resume session ${sessionId}: HTTP ${res.status}`);
+    throw new Error(
+      `Failed to resume session ${sessionId}: HTTP ${res.status}`,
+    );
   }
 }
 

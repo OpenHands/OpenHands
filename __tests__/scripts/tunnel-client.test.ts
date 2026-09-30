@@ -136,7 +136,13 @@ describe("startPortForwardTunnel", () => {
         resolve((rawHarness.address() as net.AddressInfo).port),
       );
     });
-    harness = { port: rawPort, close: () => { wss.close(); rawHarness.close(); } };
+    harness = {
+      port: rawPort,
+      close: () => {
+        wss.close();
+        rawHarness.close();
+      },
+    };
 
     tunnel = await startPortForwardTunnel({
       sessionId,
@@ -153,7 +159,10 @@ describe("startPortForwardTunnel", () => {
     for (let i = 0; i < payload.length; i += 1) payload[i] = i % 256;
 
     const received = await new Promise<Buffer>((resolve, reject) => {
-      const socket = net.connect({ port: tunnel!.localPort, host: "127.0.0.1" });
+      const socket = net.connect({
+        port: tunnel!.localPort,
+        host: "127.0.0.1",
+      });
       const chunks: Buffer[] = [];
       let total = 0;
       socket.on("connect", () => socket.end(payload));
@@ -190,10 +199,62 @@ describe("startPortForwardTunnel", () => {
       );
       socket.once("close", () => resolve());
       socket.once("error", () => resolve());
-      setTimeout(() => reject(new Error("timed out waiting for rejection")), 5_000);
+      setTimeout(
+        () => reject(new Error("timed out waiting for rejection")),
+        5_000,
+      );
     });
 
-    expect(logs.join("\n")).toMatch(/server rejected tunnel \(403.*invalid token/);
+    expect(logs.join("\n")).toMatch(
+      /server rejected tunnel \(403.*invalid token/,
+    );
+    expect(tunnel.getLastUpstreamFailure()).toMatchObject({ httpStatus: 403 });
+  });
+
+  it("records a guest-port close code so callers can explain the failure", async () => {
+    const wss = new WebSocketServer({ noServer: true });
+    const closingHarness = createServer((_req, res) =>
+      res.writeHead(404).end(),
+    );
+    closingHarness.on("upgrade", (req, socket, head) => {
+      wss.handleUpgrade(req, socket, head, (ws) =>
+        ws.close(4002, "guest dial failed"),
+      );
+    });
+    const port = await new Promise<number>((resolve) => {
+      closingHarness.listen(0, "127.0.0.1", () =>
+        resolve((closingHarness.address() as net.AddressInfo).port),
+      );
+    });
+    harness = {
+      port,
+      close: () => {
+        wss.close();
+        closingHarness.close();
+      },
+    };
+    tunnel = await startPortForwardTunnel({
+      sessionId,
+      remotePort,
+      accessToken: "test-token",
+      apiUrl: `http://127.0.0.1:${port}`,
+      log: () => {},
+    });
+
+    await new Promise<void>((resolve) => {
+      const socket = net.connect({
+        port: tunnel!.localPort,
+        host: "127.0.0.1",
+      });
+      socket.once("close", () => resolve());
+      socket.once("error", () => resolve());
+    });
+
+    expect(tunnel.getLastUpstreamFailure()).toEqual({
+      closeCode: 4002,
+      httpStatus: null,
+      message: "guest dial failed",
+    });
   });
 
   it("closes active connections and stops accepting new ones on stop()", async () => {
