@@ -8,7 +8,10 @@ import {
   AUTOMATION_TAG_KEYS,
   getDisplayConversationTags,
 } from "#/api/agent-server-adapter";
-import { getConversationTagLabel } from "./conversation-card/conversation-tag-display";
+import {
+  getConversationTagLabel,
+  getConversationTagValueLabel,
+} from "./conversation-card/conversation-tag-display";
 import {
   AUTOMATION_SETUP_TAG_KEY,
   AUTOMATION_SETUP_TAG_VALUE,
@@ -329,7 +332,11 @@ export function formatTagFacetLabel(
     key.trim().toLowerCase() === AUTOMATION_SETUP_TAG_KEY &&
     value === AUTOMATION_SETUP_TAG_VALUE
   ) {
-    return t ? getConversationTagLabel(key, t) : "Automation setup";
+    const label = t ? getConversationTagLabel(key, t) : "Automation setup";
+    const valueLabel = t
+      ? getConversationTagValueLabel(key, value, t)
+      : "Draft";
+    return `${label}: ${valueLabel}`;
   }
   return facet.endsWith("=") ? facet.slice(0, -1) : facet;
 }
