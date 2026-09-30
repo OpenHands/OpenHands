@@ -29,6 +29,7 @@ import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 const homeMocks = vi.hoisted(() => ({
   createConversationMutate: vi.fn(),
+  navigate: vi.fn(),
 }));
 
 vi.mock("#/hooks/mutation/use-create-conversation", () => ({
@@ -160,7 +161,7 @@ function renderHomeAutomations(ui: React.ReactElement) {
           currentPath: "/",
           conversationId: null,
           isNavigating: false,
-          navigate: vi.fn(),
+          navigate: homeMocks.navigate,
         }}
       >
         {ui}
@@ -598,15 +599,11 @@ describe("home automations on a cloud backend", () => {
     await user.click(screen.getByTestId("running-automation-menu-auto-1"));
     await user.click(screen.getByTestId("running-automation-edit-auto-1"));
 
-    // Assert — Edit starts the setup page for this row rather than the modal.
-    expect(homeMocks.createConversationMutate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        automationSetup: true,
-        entryPoint: "automation_edit",
-        query: "Summarize yesterday's PRs",
-      }),
-      expect.any(Object),
-    );
-    expect(screen.queryByTestId("edit-automation-name")).not.toBeInTheDocument();
+    // Assert — Edit opens the setup form for this row rather than the modal.
+    expect(homeMocks.createConversationMutate).not.toHaveBeenCalled();
+    expect(homeMocks.navigate).toHaveBeenCalledWith("/automations/setup");
+    expect(
+      screen.queryByTestId("edit-automation-name"),
+    ).not.toBeInTheDocument();
   });
 });
