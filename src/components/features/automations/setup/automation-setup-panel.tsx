@@ -571,7 +571,13 @@ export function AutomationSetupPanel({
   }, [propTaggedServerDraftId]);
 
   useEffect(() => {
-    if (!conversationId || hasAutomationSetupModeTag(conversationTags)) return;
+    if (
+      !conversationId ||
+      conversationTags === undefined ||
+      hasAutomationSetupModeTag(conversationTags)
+    ) {
+      return;
+    }
     AgentServerConversationService.updateConversationTags(
       conversationId,
       buildAutomationSetupModeTags(conversationTags),
