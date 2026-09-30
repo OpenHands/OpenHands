@@ -103,9 +103,14 @@ export function ChatInterface() {
   const scrollRef = React.useRef<HTMLDivElement>(null);
   // The message list virtualizes against this element, so it needs the DOM
   // node itself (a ref owned here would never re-render `Messages` once
-  // populated). Set via the ref callback below.
+  // populated). The callback is stable so React attaches it once per mount
+  // instead of detaching and re-attaching it on every render.
   const [scrollElement, setScrollElement] =
     React.useState<HTMLDivElement | null>(null);
+  const setScrollNode = React.useCallback((node: HTMLDivElement | null) => {
+    scrollRef.current = node;
+    setScrollElement(node);
+  }, []);
   const {
     scrollDomToBottom,
     onChatBodyScroll,
@@ -530,10 +535,7 @@ export function ChatInterface() {
           {/* Note: We only hide chat suggestions when there's a user message */}
 
           <div
-            ref={(node) => {
-              scrollRef.current = node;
-              setScrollElement(node);
-            }}
+            ref={setScrollNode}
             data-testid="chat-scroll-container"
             onScroll={(e) => {
               onChatBodyScroll(e.currentTarget);
