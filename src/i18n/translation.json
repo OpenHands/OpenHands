@@ -45184,5 +45184,39 @@
     "de": "Diese Adresse passt zu keiner Seite. Prüfe die URL oder kehre zur Startseite zurück.",
     "uk": "Ця адреса не відповідає жодній сторінці. Перевірте URL або поверніться на головну сторінку.",
     "ca": "Aquesta adreça no correspon a cap pàgina. Comprova l'URL o torna a la pàgina d'inici."
+  },
+  "BUTTON$DOWNLOAD": {
+    "en": "Download",
+    "ja": "ダウンロード",
+    "zh-CN": "下载",
+    "zh-TW": "下載",
+    "ko-KR": "다운로드",
+    "fr": "Télécharger",
+    "es": "Descargar",
+    "de": "Herunterladen",
+    "it": "Scarica",
+    "pt": "Baixar",
+    "ar": "تنزيل",
+    "no": "Last ned",
+    "tr": "İndir",
+    "uk": "Завантажити",
+    "ca": "Baixa"
+  },
+  "ARTIFACT$LARGE_FILE_EXPAND_TO_PREVIEW": {
+    "en": "Large file — Expand to preview",
+    "ja": "大きいファイル — 展開してプレビュー",
+    "zh-CN": "大文件 — 展开以预览",
+    "zh-TW": "大檔案 — 展開以預覽",
+    "ko-KR": "큰 파일 — 펼쳐서 미리보기",
+    "fr": "Fichier volumineux — Développer pour prévisualiser",
+    "es": "Archivo grande — Expandir para previsualizar",
+    "de": "Große Datei — Zum Anzeigen erweitern",
+    "it": "File di grandi dimensioni — Espandi per l'anteprima",
+    "pt": "Arquivo grande — Expandir para pré-visualizar",
+    "ar": "ملف كبير — وسّع للمعاينة",
+    "no": "Stor fil — Utvid for å forhåndsvise",
+    "tr": "Büyük dosya — Önizlemek için genişlet",
+    "uk": "Великий файл — Розгорніть для перегляду",
+    "ca": "Fitxer gran — Amplia per previsualitzar"
   }
 }
