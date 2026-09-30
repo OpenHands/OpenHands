@@ -1,11 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
-import { useConversationId } from "../use-conversation-id";
+import { useOptionalConversationId } from "../use-conversation-id";
 import { AgentState } from "#/types/agent-state";
 import { useAgentState } from "#/hooks/use-agent-state";
 
-export const useConversationHooks = () => {
-  const { conversationId } = useConversationId();
+export const useConversationHooks = (
+  conversationIdOverride?: string | null,
+) => {
+  const { conversationId: routeConversationId } = useOptionalConversationId();
+  const conversationId = conversationIdOverride ?? routeConversationId;
   const { curAgentState } = useAgentState();
   return useQuery({
     queryKey: ["conversation", conversationId, "hooks"],

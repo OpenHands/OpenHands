@@ -21,7 +21,7 @@ vi.mock("#/hooks/use-agent-state", () => ({
 }));
 
 vi.mock("#/hooks/use-conversation-id", () => ({
-  useConversationId: mockUseConversationId,
+  useOptionalConversationId: mockUseConversationId,
 }));
 
 interface RenderOptions {
