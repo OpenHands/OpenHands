@@ -10,6 +10,10 @@ import {
   useWorkspaceSession,
 } from "#/hooks/query/use-workspace-session";
 import { useWorkspaceMutationCounter } from "#/stores/use-workspace-mutation-counter";
+import {
+  MAX_OOXML_DOWNLOAD_BYTES,
+  readBoundedArrayBuffer,
+} from "#/utils/ooxml-preview";
 
 // Magic-number sniff for common binary formats we can render via iframe.
 const IMAGE_EXTENSIONS = new Set([
@@ -33,6 +37,26 @@ export interface WorkspaceFileContent {
   kind: WorkspaceFileKind;
   /** Decoded text contents — only populated when kind === "text". */
   text: string | null;
+  /**
+   * Raw bytes — only populated when kind === "binary" and the transport could
+   * return them. Binary consumers that need to parse the file (the Office
+   * outline reader) take the bytes from here rather than re-fetching
+   * `staticUrl`, which both halves the transfer and lets the Cloud path be
+   * refused explicitly instead of parsing a text-decoded string.
+   */
+  bytes?: ArrayBuffer | null;
+  /**
+   * True when `bytes` is known to be lossy: the Cloud file API returns file
+   * content as a *string*, so a binary file has already been through a UTF-8
+   * decode and cannot round-trip. Parsers must not be run on these bytes.
+   */
+  bytesLossy?: boolean;
+  /**
+   * True when the file's declared length exceeded {@link MAX_OOXML_DOWNLOAD_BYTES}
+   * and the body was never buffered. Consumers that would parse the bytes
+   * (the Office outline) report "too large" instead of a parse failure.
+   */
+  bytesTooLarge?: boolean;
   /**
    * URL pointing at the file on the agent server's static workspace
    * fileserver (the `/api/conversations/{id}/workspace/...` route minted
@@ -211,6 +235,10 @@ export function useWorkspaceFileContent(relativePath: string | null) {
               path: relativePath,
               kind: "binary",
               text: null,
+              // The bytes come from re-encoding a UTF-8-decoded string, so
+              // they are lossy: `readOoxmlPreview` must not run on them.
+              bytes: buf.buffer,
+              bytesLossy: true,
               staticUrl: `data:application/octet-stream;base64,${arrayBufferToBase64(buf.buffer)}`,
               mimeType: "application/octet-stream",
             };
@@ -279,12 +307,35 @@ export function useWorkspaceFileContent(relativePath: string | null) {
         throw new Error(`Failed to read ${relativePath}: ${response.status}`);
       }
 
-      const buffer = await response.arrayBuffer();
-      if (isLikelyBinary(buffer)) {
+      // Bound the body before buffering it: the OOXML reader only caps the
+      // *unpacked* parts, so a huge container would otherwise be pulled into
+      // memory whole just to be classified as binary.
+      let buffer: ArrayBuffer;
+      let tooLarge = false;
+      try {
+        buffer = await readBoundedArrayBuffer(
+          response,
+          MAX_OOXML_DOWNLOAD_BYTES,
+        );
+      } catch (error) {
+        if (!(error instanceof Error) || !/exceeds/i.test(error.message)) {
+          throw error;
+        }
+        // Oversized: report the size rather than a parse failure. A consumer
+        // that would parse the bytes (Office outline) renders "too large".
+        tooLarge = true;
+        buffer = new ArrayBuffer(0);
+      }
+      if (tooLarge || isLikelyBinary(buffer)) {
         return {
           path: relativePath,
           kind: "binary",
           text: null,
+          // Hand the bytes on so a binary parser (the Office outline) does not
+          // re-download the same file. Skipped when oversized: the body was
+          // never buffered, and `bytesTooLarge` tells the parser to say so.
+          bytes: tooLarge ? null : buffer,
+          bytesTooLarge: tooLarge,
           staticUrl,
           mimeType: "application/octet-stream",
         };

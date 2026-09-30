@@ -165,4 +165,23 @@ describe("readOoxmlPreview", () => {
       readOoxmlPreview("docx", new TextEncoder().encode("not a zip").buffer),
     ).rejects.toThrow(/not a zip|end-of-central-directory/i);
   });
+
+  it("stops at the block cap inside a single large table", async () => {
+    // One table can hold thousands of rows, so the cap has to be enforced in
+    // the row loop — checking it only after the table finishes would let a
+    // single table emit the whole document into the chat.
+    const rows = Array.from(
+      { length: 1000 },
+      (_, i) =>
+        `<w:tr><w:tc><w:p><w:r><w:t>Row ${i}</w:t></w:r></w:p></w:tc></w:tr>`,
+    ).join("");
+    const bytes = await makeZip({
+      "word/document.xml": `<?xml version="1.0"?><w:document ${W_NS}><w:body><w:tbl>${rows}</w:tbl></w:body></w:document>`,
+    });
+
+    const preview = await readOoxmlPreview("docx", bytes);
+
+    expect(preview.blocks).toHaveLength(400);
+    expect(preview.truncated).toBe(true);
+  });
 });

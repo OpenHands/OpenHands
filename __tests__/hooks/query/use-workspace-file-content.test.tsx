@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useWorkspaceFileContent } from "#/hooks/query/use-workspace-file-content";
 import { useWorkspaceMutationCounter } from "#/stores/use-workspace-mutation-counter";
+import { MAX_OOXML_DOWNLOAD_BYTES } from "#/utils/ooxml-preview";
 
 const useWorkspaceSessionMock = vi.fn();
 vi.mock("#/hooks/query/use-workspace-session", async (importOriginal) => {
@@ -217,7 +218,39 @@ describe("useWorkspaceFileContent", () => {
       text: null,
       mimeType: "application/octet-stream",
       staticUrl: `${BASE_URL}data/blob.bin`,
+      // The raw bytes ride along so a binary parser (the Office outline) does
+      // not have to download the same file a second time.
+      bytes: binary,
     });
+  });
+
+  it("flags an oversized file instead of buffering the body", async () => {
+    // The OOXML reader caps *unpacked* parts, but the container is downloaded
+    // whole, so the download itself must be bounded before it is buffered.
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({
+        "content-length": String(MAX_OOXML_DOWNLOAD_BYTES + 1),
+      }),
+      body: { cancel },
+      arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+    });
+
+    const { result } = renderHook(
+      () => useWorkspaceFileContent("docs/huge.docx"),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.data).toMatchObject({
+      kind: "binary",
+      bytes: null,
+      bytesTooLarge: true,
+    });
+    expect(cancel).toHaveBeenCalled();
   });
 
   it("refetches text content after a workspace mutation tick", async () => {
