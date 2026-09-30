@@ -34,9 +34,9 @@ import { parseCommand } from "#/utils/acp-command";
 type ViewMode = "list" | "create" | "edit";
 
 /**
- * Build the `agent_settings`-shaped seed the embedded {@link AgentSettingsScreen}
- * consumes for an existing profile. The stored ACP command is a shell string;
- * the form's init logic expects a token array, so split it here.
+ * Build the `agent_settings`-shaped seed the {@link AgentSettingsScreen}
+ * profile form consumes for an existing profile. The stored ACP command is a
+ * shell string; the form's init logic expects a token array, so split it here.
  */
 function toAgentSettingsOverride(
   profile: AgentProfile,
@@ -75,7 +75,7 @@ function toAgentSettingsOverride(
 /**
  * AgentProfilesLocalView mirrors {@link LlmSettingsLocalView}: a list of the
  * user's Agent profiles, with a create/edit view that reuses the existing Agent
- * settings form (embedded) plus a profile name and — for OpenHands profiles —
+ * settings form plus a profile name and — for OpenHands profiles —
  * an LLM-profile picker. Available on local backends only.
  */
 export function AgentProfilesLocalView() {
@@ -191,7 +191,7 @@ export function AgentProfilesLocalView() {
   const handleSave = useCallback(async () => {
     if (!saveControl || !isNameValid) return;
 
-    // Build the variant-specific fields from the embedded form (may throw on
+    // Build the variant-specific fields from the profile form (may throw on
     // invalid input, e.g. a bad concurrency value).
     let input: AgentProfileSaveInput;
     try {
@@ -327,10 +327,9 @@ export function AgentProfilesLocalView() {
         isRequired
       />
 
-      {/* Reuse the existing Agent settings form to define the agent. */}
+      {/* Reuse the Agent settings form to define the agent. */}
       <AgentSettingsScreen
         key={viewMode === "edit" ? `edit-${editingProfile?.id}` : "new-profile"}
-        embedded
         agentSettingsOverride={override}
         onSaveControlChange={setSaveControl}
       />
