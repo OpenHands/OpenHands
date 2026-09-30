@@ -19,18 +19,26 @@ interface ProviderConnectionsManagerProps {
   linkedCountById: Record<string, number>;
   isLoading: boolean;
   loadError: Error | null;
+  /**
+   * Called when a connection's "..." bulk-add action is clicked. The parent
+   * owns the single shared AddModelsModal and opens it preselected to this
+   * connection, so there is one modal for both entry points.
+   */
+  onAddModels: (connection: ProviderConnection) => void;
 }
 
 /**
  * Manages shared provider connections: a shared API key + optional base URL
  * that LLM profiles reference by id. Rendered only for the local agent-server,
- * which is the only backend exposing the endpoints.
+ * which is the only backend exposing the endpoints. Each connection row carries
+ * its own "add models" action that bulk-creates profiles linked to it.
  */
 export function ProviderConnectionsManager({
   connections,
   linkedCountById,
   isLoading,
   loadError,
+  onAddModels,
 }: ProviderConnectionsManagerProps) {
   const { t } = useTranslation("openhands");
   const [isCreating, setIsCreating] = useState(false);
@@ -80,6 +88,7 @@ export function ProviderConnectionsManager({
             key={connection.id}
             connection={connection}
             linkedProfileCount={linkedCountById[connection.id] ?? 0}
+            onAddModels={onAddModels}
             onEdit={setConnectionToEdit}
             onDelete={setConnectionToDelete}
           />
