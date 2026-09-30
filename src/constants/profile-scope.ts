@@ -2,12 +2,12 @@
 export type ProfileScopeMode = "standard" | "custom";
 
 /**
- * Read a stored profile's `mcp_server_refs` into picker state.
+ * Read a stored profile's named scope (MCP servers or secrets) into picker state.
  *
  * Tri-state on the wire: `null`/absent = every configured server, an array =
  * only those keys (`[]` = none).
  */
-export function readProfileMcpRefs(value: unknown): {
+export function readProfileScope(value: unknown): {
   mode: ProfileScopeMode;
   selected: string[];
 } {

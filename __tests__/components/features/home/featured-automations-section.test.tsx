@@ -276,7 +276,7 @@ describe("home automations composer layout", () => {
     );
   });
 
-  it("lists enabled automations with live run status and conversation links", async () => {
+  it("lists enabled automations with live run status and automation links", async () => {
     vi.mocked(AutomationService.getAutomations).mockResolvedValue({
       automations: [
         makeAutomation({ id: "auto-1", name: "Daily digest" }),
@@ -320,7 +320,7 @@ describe("home automations composer layout", () => {
 
     expect(screen.getByRole("link", { name: /Daily digest/ })).toHaveAttribute(
       "href",
-      "/conversations/conv-1",
+      "/automations/auto-1",
     );
     expect(screen.getByRole("link", { name: /PR review/ })).toHaveAttribute(
       "href",
@@ -436,7 +436,7 @@ describe("home automations composer layout", () => {
     );
     expect(pinnedCard.className).toContain("extension-module-card-interactive");
     expect(pinnedCard.className).toContain("bg-base-secondary");
-    expect(pinnedCard.className).not.toContain("border-[var(--oh-border)]");
+    expect(pinnedCard.className).not.toContain("border-border");
     expect(pinnedCard).toBeInTheDocument();
     expect(
       within(dashboard).getByTestId("pinned-automation-pills-auto-1-wrap"),

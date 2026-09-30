@@ -40,11 +40,14 @@ import {
   AGENT_CANVAS_CLIENT_SOURCE,
   AGENT_CANVAS_CLIENT_VERSION,
 } from "#/api/client-source";
+import type { BackendKind } from "#/api/backend-registry/types";
 import {
   getBackendTelemetryProperties,
   getCloudTelemetryProperties,
+  getDeploymentKindForBackend,
   type BackendTelemetryContextInput,
   type CloudTelemetryContextInput,
+  type DeploymentKind,
 } from "#/services/telemetry-context";
 
 const TELEMETRY_CONSENT_KEY = "openhands-telemetry-consent";
@@ -133,6 +136,20 @@ const CANVAS_EVENT_PROPERTIES = Object.freeze({
   package_version: packageJson.version,
 });
 
+function getExplicitDeploymentKind(value: unknown): DeploymentKind | null {
+  return value === "remote" || value === "local" ? value : null;
+}
+
+function getEventDeploymentKind(
+  properties: Record<string, unknown>,
+): DeploymentKind | null {
+  return (
+    getDeploymentKindForBackend(
+      properties.backend_kind as BackendKind | null,
+    ) ?? getExplicitDeploymentKind(properties.deployment_kind)
+  );
+}
+
 let telemetryBackendContext = getBackendTelemetryProperties({});
 let telemetryCloudContext = getCloudTelemetryProperties();
 
@@ -153,12 +170,17 @@ function addCanvasEventProperties(
 ): CaptureResult | null {
   if (!event) return null;
 
+  const properties = {
+    ...telemetryBackendContext,
+    ...telemetryCloudContext,
+    ...event.properties,
+  };
+
   return {
     ...event,
     properties: {
-      ...telemetryBackendContext,
-      ...telemetryCloudContext,
-      ...event.properties,
+      ...properties,
+      deployment_kind: getEventDeploymentKind(properties),
       ...CANVAS_EVENT_PROPERTIES,
     },
   };
@@ -377,7 +399,7 @@ export async function initializePostHogClient(
         consent_persistence_name: `${POSTHOG_INSTANCE_NAME}-consent`,
         person_profiles: "always",
         capture_pageview: POSTHOG_PAGEVIEW_CAPTURE_MODE,
-        autocapture: true,
+        autocapture: false,
         disable_session_recording: true,
         bootstrap: pendingBootstrap,
         before_send: addCanvasEventProperties,

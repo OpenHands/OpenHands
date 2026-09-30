@@ -268,9 +268,9 @@ uninstall. Until the pinned agent-server ships the endpoints, the spec serves
 the API contract from `src/fixtures/canvas-extensions/demo-page` through
 Playwright route interception; once it does, the stub is removed and the same
 steps run against the real backend.
-Changing the mock-LLM feature layout or mapping requires updating `AGENTS.md` in
-the same change. Before merge, run `npm run lint`, `npm test`, `npm run build`,
-and `npm run build:lib`.
+Changing the mock-LLM feature layout or mapping requires updating
+`.agents/skills/e2e-testing/references/guide.md` in the same change. Before merge,
+run `npm run lint`, `npm test`, `npm run build`, and `npm run build:lib`.
 
 ## Explicit non-goals for v1
 
