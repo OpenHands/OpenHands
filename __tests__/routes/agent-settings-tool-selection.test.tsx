@@ -42,7 +42,6 @@ it.each([false, true])(
           }
         >
           <AgentSettingsScreen
-            embedded
             agentSettingsOverride={{
               agent_kind: "openhands",
               tools: clearWhilePending ? [] : null,
@@ -92,7 +91,6 @@ it.each(["saved", "cleared"] as const)(
           }
         >
           <AgentSettingsScreen
-            embedded
             agentSettingsOverride={{
               agent_kind: "openhands",
               tools: selection === "saved" ? [] : null,
@@ -147,8 +145,8 @@ it("reports a failed catalog load and recovers on retry", async () => {
         }
       >
         <AgentSettingsScreen
-          embedded
           agentSettingsOverride={{ agent_kind: "openhands", tools: null }}
+          onSaveControlChange={() => {}}
         />
       </QueryClientProvider>
     </MemoryRouter>,
