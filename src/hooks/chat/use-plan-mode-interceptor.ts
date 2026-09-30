@@ -68,8 +68,10 @@ export const usePlanModeInterceptor = (
         if (isPlanningAgentRunning || !isWebSocketConnected) {
           return;
         }
-        // Entering deep planning resets the phase machine to phase 1 — the
-        // command means "start this workflow", not "resume where I left off".
+        // Entering deep planning opens the phase machine, but keeps an
+        // in-progress chain: `/deep-plan` mid-workflow must not silently
+        // discard confirmed phases and documents. Restarting is explicit
+        // (`resetDeepPlan`).
         startDeepPlan();
         const task = trimmed.slice(DEEP_PLAN_COMMAND.length).trim();
         if (task && hasPlanner) {

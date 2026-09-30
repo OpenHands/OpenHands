@@ -61,6 +61,19 @@ describe("extractDefinedSections", () => {
   it("ignores body text that is not a heading", () => {
     expect([...extractDefinedSections("See 9.9 for details.")]).toEqual([]);
   });
+
+  it("does not count a heading's upstream citation as a defined section", () => {
+    // `## 2.1 Users [Req 3.1]` defines 2.1 only. Counting 3.1 as well would let
+    // a downstream `[DB 3.1]` resolve against a section the database document
+    // never defines, defeating the whole traceability guarantee.
+    expect([...extractDefinedSections("## 2.1 Users [Req 3.1]")]).toEqual([
+      "2.1",
+    ]);
+  });
+
+  it("still reads a section from a heading that spells its own label out", () => {
+    expect([...extractDefinedSections("## [Req 3.1] Users")]).toEqual(["3.1"]);
+  });
 });
 
 describe("extractReferences", () => {

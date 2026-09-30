@@ -141,6 +141,25 @@ export const DEEP_PLAN_LABEL_TO_PHASE: Readonly<
 export const getDeepPlanPhase = (id: DeepPlanPhaseId): DeepPlanPhase =>
   DEEP_PLAN_PHASES[DEEP_PLAN_PHASE_IDS.indexOf(id)];
 
+/**
+ * Maps a file the planner wrote to the phase that owns it, by basename, so the
+ * reference validator has the documents to check at a checkpoint. Returns
+ * `null` for any path that is not a phase output (e.g. `PLAN.md`).
+ */
+export function matchDeepPlanDocumentFile(
+  path: string | null | undefined,
+): DeepPlanPhaseId | null {
+  if (!path) return null;
+  const normalized = path.replace(/\\/g, "/").toUpperCase();
+  const basename = normalized.slice(normalized.lastIndexOf("/") + 1);
+  const phase = DEEP_PLAN_PHASES.find(
+    (candidate) =>
+      candidate.outputFile !== null &&
+      candidate.outputFile.toUpperCase() === basename,
+  );
+  return phase?.id ?? null;
+}
+
 /** The phases a document is allowed to cite, in order. */
 export const upstreamPhasesOf = (id: DeepPlanPhaseId): DeepPlanPhaseId[] =>
   DEEP_PLAN_PHASE_IDS.slice(0, DEEP_PLAN_PHASE_IDS.indexOf(id));

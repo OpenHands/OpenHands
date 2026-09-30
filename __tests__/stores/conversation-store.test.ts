@@ -157,7 +157,98 @@ describe("conversation store", () => {
       );
       expect(mockSetConversationState).toHaveBeenCalledWith(CONV_ID, {
         deepPlan: expect.objectContaining({ activePhase: "analysis" }),
+        conversationMode: "deep-plan",
       });
+    });
+
+    it("persists the mode alongside the machine so a refresh stays in deep plan", () => {
+      // `startDeepPlan` flips `conversationMode` in memory. The route's
+      // mount-time reset re-derives the mode from storage, so unless the mode
+      // is persisted too, a refresh lands the user back in `code` mode with a
+      // restored machine they can no longer see or use.
+      useConversationStore.getState().startDeepPlan();
+
+      expect(mockSetConversationState).toHaveBeenCalledWith(
+        CONV_ID,
+        expect.objectContaining({ conversationMode: "deep-plan" }),
+      );
+
+      mockGetConversationState.mockReturnValue({
+        selectedTab: "files",
+        unpinnedTabs: [],
+        conversationMode: "deep-plan",
+        deepPlan: {
+          activePhase: "analysis",
+          confirmed: [],
+          documents: {},
+        },
+      });
+      useConversationStore.getState().resetConversationState();
+
+      expect(useConversationStore.getState().conversationMode).toBe(
+        "deep-plan",
+      );
+    });
+
+    it("clears the mode when the machine is reset, without re-persisting it", () => {
+      // `resetDeepPlan` shares the persistence helper. It must not inherit the
+      // "persist deep-plan" behavior, or cancelling would immediately re-arm
+      // the mode it just cleared.
+      useConversationStore.getState().startDeepPlan();
+      mockSetConversationState.mockClear();
+      mockGetConversationState.mockReturnValue({
+        selectedTab: "files",
+        unpinnedTabs: [],
+        conversationMode: "code",
+      });
+
+      useConversationStore.getState().resetDeepPlan();
+
+      expect(useConversationStore.getState().conversationMode).toBe("code");
+      expect(useConversationStore.getState().deepPlan.activePhase).toBeNull();
+      expect(mockSetConversationState).toHaveBeenCalledWith(CONV_ID, {
+        deepPlan: expect.objectContaining({ activePhase: null }),
+      });
+    });
+
+    it("keeps an in-progress chain when Deep Plan is entered again", () => {
+      // Shift+Tab, the context menu and `/deep-plan` all call `startDeepPlan`.
+      // Re-entering must not wipe confirmations and documents the user already
+      // built, or an accidental second entry silently destroys the chain.
+      const store = useConversationStore.getState();
+      store.startDeepPlan();
+      store.setDeepPlanDocument("requirements", "## 3.1 Authentication\n");
+      store.confirmDeepPlanPhase("analysis");
+      store.confirmDeepPlanPhase("requirements");
+      expect(useConversationStore.getState().deepPlan.activePhase).toBe(
+        "database",
+      );
+
+      useConversationStore.getState().startDeepPlan();
+
+      expect(useConversationStore.getState().deepPlan.activePhase).toBe(
+        "database",
+      );
+      expect(useConversationStore.getState().deepPlan.confirmed).toEqual([
+        "analysis",
+        "requirements",
+      ]);
+      expect(
+        useConversationStore.getState().deepPlan.documents.requirements,
+      ).toBe("## 3.1 Authentication\n");
+      expect(useConversationStore.getState().conversationMode).toBe(
+        "deep-plan",
+      );
+    });
+
+    it("starts a fresh chain when there is no chain yet", () => {
+      expect(useConversationStore.getState().deepPlan.activePhase).toBeNull();
+
+      useConversationStore.getState().startDeepPlan();
+
+      expect(useConversationStore.getState().deepPlan.activePhase).toBe(
+        "analysis",
+      );
     });
 
     it("blocks entering a later phase until its predecessors are confirmed", () => {

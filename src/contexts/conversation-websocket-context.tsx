@@ -78,6 +78,10 @@ import {
   updateConversationLlmModelInCache,
 } from "#/hooks/mutation/conversation-mutation-utils";
 import { isPlanFilePath } from "#/utils/plan-file";
+import {
+  matchDeepPlanDocumentFile,
+  type DeepPlanPhaseId,
+} from "#/utils/deep-plan";
 
 export type WebSocketConnectionState =
   | "CONNECTING"
@@ -195,7 +199,7 @@ export function ConversationWebSocketProvider({
     number | null
   >(null);
 
-  const { setPlanContent } = useConversationStore();
+  const { setPlanContent, setDeepPlanDocument } = useConversationStore();
 
   useEffect(() => {
     setPlanContent(null);
@@ -211,6 +215,13 @@ export function ConversationWebSocketProvider({
     path: string;
     conversationId: string;
   } | null>(null);
+
+  // Deep-plan phase documents the planner has written, keyed by phase. The
+  // reference validator reads these at a checkpoint, so a document produced
+  // during history replay has to be re-read from disk afterwards.
+  const latestDeepPlanFileEventsRef = useRef<
+    Map<DeepPlanPhaseId, { path: string; conversationId: string }>
+  >(new Map());
 
   const handleNonErrorEvent = useCallback(() => {
     // A normal event means connectivity recovered: clear a transient connection
@@ -515,6 +526,30 @@ export function ConversationWebSocketProvider({
       latestPlanningFileEventRef.current = null;
     }
   }, [isLoadingHistoryPlanning, readConversationFile, setPlanContent]);
+
+  // Same for deep-plan phase documents: re-read the latest write of each so the
+  // reference validator has the chain after a reload, not just for writes that
+  // happen to stream in live.
+  useEffect(() => {
+    if (isLoadingHistoryPlanning) return;
+    const pending = latestDeepPlanFileEventsRef.current;
+    if (pending.size === 0) return;
+    latestDeepPlanFileEventsRef.current = new Map();
+    for (const [
+      phase,
+      { path, conversationId: planningConversationId },
+    ] of pending) {
+      readConversationFile(
+        { conversationId: planningConversationId, filePath: path },
+        {
+          onSuccess: (fileContent) => setDeepPlanDocument(phase, fileContent),
+          onError: (error) => {
+            console.warn("Failed to read deep-plan document:", error);
+          },
+        },
+      );
+    }
+  }, [isLoadingHistoryPlanning, readConversationFile, setDeepPlanDocument]);
 
   useEffect(() => {
     hasConnectedRefMain.current = false;
@@ -969,13 +1004,34 @@ export function ConversationWebSocketProvider({
             appendOutput(textContent);
           }
 
-          // Handle PlanningFileEditorObservation - only update plan for Plan.md
+          // Handle PlanningFileEditorObservation - update the plan for Plan.md,
+          // and the phase document for a deep-plan output file.
           if (isPlanningFileEditorObservationEvent(event)) {
             const { path } = event.observation;
-            if (isPlanFilePath(path)) {
-              const planningAgentConversation = subConversations?.[0];
-              const planningConversationId = planningAgentConversation?.id;
+            const planningAgentConversation = subConversations?.[0];
+            const planningConversationId = planningAgentConversation?.id;
+            const deepPlanPhase = matchDeepPlanDocumentFile(path);
 
+            if (deepPlanPhase && planningConversationId && path) {
+              if (isLoadingHistoryPlanning) {
+                // Only the newest write per phase matters.
+                latestDeepPlanFileEventsRef.current.set(deepPlanPhase, {
+                  path,
+                  conversationId: planningConversationId,
+                });
+              } else {
+                readConversationFile(
+                  { conversationId: planningConversationId, filePath: path },
+                  {
+                    onSuccess: (fileContent) =>
+                      setDeepPlanDocument(deepPlanPhase, fileContent),
+                    onError: (error) => {
+                      console.warn("Failed to read deep-plan document:", error);
+                    },
+                  },
+                );
+              }
+            } else if (isPlanFilePath(path)) {
               if (planningConversationId && path) {
                 if (isLoadingHistoryPlanning) {
                   latestPlanningFileEventRef.current = {
@@ -1024,6 +1080,7 @@ export function ConversationWebSocketProvider({
       appendOutput,
       readConversationFile,
       setPlanContent,
+      setDeepPlanDocument,
       updateMetricsFromStats,
       handleNonErrorEvent,
     ],

@@ -85,7 +85,8 @@ export function ChatInputActions({
   const showChangeAgentButton = isCloud && !modelState.isAcpContext;
   const webSocketStatus = useUnifiedWebSocketStatus();
   const { curAgentState } = useAgentState();
-  const { conversationMode, setConversationMode } = useConversationStore();
+  const { conversationMode, setConversationMode, startDeepPlan } =
+    useConversationStore();
   const { handlePlanClick, isCreatingConversation } = useHandlePlanClick();
 
   const actionsRowRef = React.useRef<HTMLDivElement>(null);
@@ -357,6 +358,26 @@ export function ChatInputActions({
                       />
                     }
                     text={t(I18nKey.COMMON$PLAN)}
+                  />
+                </ContextMenuListItem>
+                <ContextMenuListItem
+                  testId="overflow-agent-deep-plan"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    startDeepPlan();
+                    closeOverflowMenus();
+                  }}
+                >
+                  <ToolsContextMenuIconText
+                    icon={
+                      <LessonPlanIcon
+                        width={16}
+                        height={16}
+                        color="currentColor"
+                      />
+                    }
+                    text={t(I18nKey.COMMON$DEEP_PLAN)}
                   />
                 </ContextMenuListItem>
               </ContextMenu>

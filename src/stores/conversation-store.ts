@@ -149,11 +149,24 @@ const getInitialDeepPlanState = (): DeepPlanState => {
   return getConversationState(conversationId).deepPlan ?? EMPTY_DEEP_PLAN_STATE;
 };
 
-/** Persists the phase machine for the conversation in the current URL. */
-const persistDeepPlan = (deepPlan: DeepPlanState): void => {
+/**
+ * Persists the phase machine for the conversation in the current URL.
+ *
+ * `conversationMode` is only passed by callers that also change the mode.
+ * `startDeepPlan` flips the mode in memory, and the mount-time reset
+ * re-derives it from storage — so without persisting it a refresh restores
+ * the machine but drops the user back to `code`, unable to see it.
+ */
+const persistDeepPlan = (
+  deepPlan: DeepPlanState,
+  conversationMode?: ConversationMode,
+): void => {
   const conversationId = getConversationIdFromLocation();
   if (conversationId) {
-    setConversationState(conversationId, { deepPlan });
+    setConversationState(
+      conversationId,
+      conversationMode ? { deepPlan, conversationMode } : { deepPlan },
+    );
   }
 };
 
@@ -441,8 +454,13 @@ export const useConversationStore = create<ConversationStore>()(
         set({ planContent }, false, "setPlanContent"),
 
       startDeepPlan: () => {
-        const deepPlan = createDeepPlanState();
-        persistDeepPlan(deepPlan);
+        // Re-entering the mode (Shift+Tab, the context menu, `/deep-plan`)
+        // must not discard a chain the user already advanced; only open a
+        // fresh one when there is nothing to keep.
+        const existing = useConversationStore.getState().deepPlan;
+        const deepPlan =
+          existing.activePhase === null ? createDeepPlanState() : existing;
+        persistDeepPlan(deepPlan, "deep-plan");
         set(
           { deepPlan, conversationMode: "deep-plan" as ConversationMode },
           false,

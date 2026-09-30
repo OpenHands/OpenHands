@@ -46,6 +46,8 @@ export interface RefReport {
 const REFERENCE_PATTERN = /\[(Req|DB|BE|FE)\s+([0-9]+(?:\.[0-9]+)*)\]/g;
 const HEADING_PATTERN = /^#{1,6}\s+(.*)$/;
 const NUMBER_TOKEN = /\b[0-9]+(?:\.[0-9]+)*\b/g;
+/** A bracketed citation, e.g. `[Req 3.1]`, removed before scanning a heading. */
+const CITATION_IN_TEXT = /\[(?:Req|DB|BE|FE)\s+[0-9]+(?:\.[0-9]+)*\]/g;
 
 export type DeepPlanDocuments = Partial<Record<DeepPlanPhaseId, string>>;
 
@@ -53,13 +55,24 @@ export type DeepPlanDocuments = Partial<Record<DeepPlanPhaseId, string>>;
  * Section numbers a document defines, taken from its numbered headings
  * (`## 3.1 Authentication` defines `3.1`; `### 3.1.1 Login` defines `3.1.1`).
  * A heading may also spell the label out (`## [Req 3.1] Authentication`).
+ *
+ * Upstream citations are not definitions: in `## 2.1 Users [Req 3.1]` the
+ * document defines `2.1`, and `3.1` is the requirement it satisfies — counting
+ * it as defined here would let a downstream `[DB 3.1]` resolve against a
+ * section this document never defines. A heading that spells its own label out
+ * (`## [Req 3.1] Users`) has no number left once citations are removed, so it
+ * falls back to the citation's number.
  */
 export function extractDefinedSections(content: string): Set<string> {
   const sections = new Set<string>();
   for (const line of content.split("\n")) {
     const heading = HEADING_PATTERN.exec(line);
     if (!heading) continue;
-    for (const token of heading[1].match(NUMBER_TOKEN) ?? []) {
+    const title = heading[1];
+    const withoutCitations = title.replace(CITATION_IN_TEXT, " ");
+    const tokens =
+      withoutCitations.match(NUMBER_TOKEN) ?? title.match(NUMBER_TOKEN) ?? [];
+    for (const token of tokens) {
       sections.add(token);
     }
   }
