@@ -292,6 +292,13 @@ export const headersFromMcpAuth = (
 /**
  * Convert SDK `auth` credentials to the cloud's header-only storage shape.
  *
+ * An `oauth2` credential is the exception and is sent as-is: the app server
+ * stores its token state under `auth.state` (restoring redacted parts by
+ * key) and the sandbox refreshes the access token from it. Flattening it to
+ * a bearer header drops the refresh token, so the server stops working once
+ * the access token expires. A header the old flattening stored is tombstoned
+ * like any other header the credential no longer produces.
+ *
  * Only the entries in `value` are converted. The cloud `POST /api/v1/settings`
  * applies an `mcp_config` map WITHOUT a `null` entry as a full-catalog
  * replacement and only a map WITH a `null` entry (delete / rename) as a
@@ -359,7 +366,10 @@ const cloudCompatibleMcpConfig = async (
       }
       if (!isRecord(server.auth)) return [name, server];
 
-      const authHeaders = headersFromMcpAuth(server.auth);
+      const keepsAuth = server.auth.strategy === "oauth2";
+      const authHeaders: Record<string, string> | null = keepsAuth
+        ? {}
+        : headersFromMcpAuth(server.auth);
       if (authHeaders === null) return [name, server];
 
       const nextServer = { ...server };
@@ -376,7 +386,7 @@ const cloudCompatibleMcpConfig = async (
         }
       }
 
-      delete nextServer.auth;
+      if (!keepsAuth) delete nextServer.auth;
       if (Object.keys(mergedHeaders).length > 0) {
         nextServer.headers = mergedHeaders;
       } else {

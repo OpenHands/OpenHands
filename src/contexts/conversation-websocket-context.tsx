@@ -37,6 +37,7 @@ import {
   isBrowserObservationEvent,
   isBrowserNavigateActionEvent,
   isSwitchLLMObservationEvent,
+  isClassifyAndSwitchLLMObservationEvent,
   isCanvasUIActionEvent,
   isStreamingDeltaEvent,
   isLaunchChildConversationActionEvent,
@@ -576,6 +577,8 @@ export function ConversationWebSocketProvider({
           const switchLLMObservation = isSwitchLLMObservationEvent(event)
             ? event
             : null;
+          const classifyAndSwitchLLMObservation =
+            isClassifyAndSwitchLLMObservationEvent(event) ? event : null;
           addEvent(event);
           if (isDuplicateEvent) {
             return;
@@ -728,6 +731,42 @@ export function ConversationWebSocketProvider({
                 queryClient,
                 conversationId,
                 switchLLMObservation.observation.active_model,
+              );
+            }
+
+            invalidateConversationQueries(queryClient, conversationId);
+          }
+
+          // Router-driven model switch (Pareto/meta-profile classifier).
+          // Same UI semantics as SwitchLLMObservation: update the combobox,
+          // stamp the active profile, record the inline "Switched to"
+          // message. Per the SDK wire contract, `model` is the saved LLM
+          // profile name that was activated and `active_model` is the
+          // underlying model string — so the profile stamp and inline
+          // message use `model` (mirroring SwitchLLMObservation.profile_name),
+          // while the combobox cache update uses `active_model`.
+          if (
+            conversationId &&
+            classifyAndSwitchLLMObservation &&
+            !classifyAndSwitchLLMObservation.observation.is_error &&
+            classifyAndSwitchLLMObservation.observation.model
+          ) {
+            const profileName =
+              classifyAndSwitchLLMObservation.observation.model;
+
+            recordModelSwitchMessage(conversationId, profileName);
+
+            stampActiveLlmProfile(
+              conversationId,
+              profileName,
+              classifyAndSwitchLLMObservation.timestamp,
+            );
+
+            if (classifyAndSwitchLLMObservation.observation.active_model) {
+              updateConversationLlmModelInCache(
+                queryClient,
+                conversationId,
+                classifyAndSwitchLLMObservation.observation.active_model,
               );
             }
 

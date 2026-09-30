@@ -609,7 +609,7 @@ describe("SettingsService", () => {
     });
   });
 
-  it("converts OAuth token state to headers when saving mcp_config to cloud", async () => {
+  it("keeps the OAuth credential and its token state when saving mcp_config to cloud", async () => {
     setRegisteredBackends([cloudBackend]);
     setActiveSelection({ backendId: cloudBackend.id });
 
@@ -643,9 +643,62 @@ describe("SettingsService", () => {
           notion: {
             transport: "http",
             url: "https://mcp.example.com/mcp",
-            headers: {
-              Authorization: "Bearer oauth-access-token",
+            auth: {
+              strategy: "oauth2",
+              authentication: {
+                type: "oauth",
+                client_auth_method: "client_secret_post",
+              },
+              state: {
+                tokens: {
+                  access_token: "oauth-access-token",
+                },
+              },
             },
+          },
+        },
+      },
+    });
+  });
+
+  it("tombstones a legacy bearer header when a cloud MCP keeps its OAuth credential", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+    // Stored by the flattening earlier Canvas versions applied on cloud saves.
+    mockFetchCloudSettings.mockResolvedValue({
+      agent_settings: {
+        mcp_config: {
+          gitlab: {
+            url: "https://gitlab.example/api/v4/mcp",
+            headers: { Authorization: "**********" },
+          },
+        },
+      },
+    });
+    const auth = {
+      strategy: "oauth2" as const,
+      authentication: {
+        type: "oauth" as const,
+        client_auth_method: "none" as const,
+      },
+      state: {
+        tokens: {
+          access_token: "fresh-access-token",
+          refresh_token: "fresh-refresh-token",
+        },
+      },
+    };
+
+    await SettingsService.patchMcpServer("gitlab", { auth });
+
+    expect(mockSaveCloudSettings).toHaveBeenCalledTimes(1);
+    expect(mockSaveCloudSettings).toHaveBeenCalledWith({
+      agent_settings_diff: {
+        mcp_config: {
+          gitlab: {
+            url: "https://gitlab.example/api/v4/mcp",
+            headers: {},
+            auth,
           },
         },
       },
