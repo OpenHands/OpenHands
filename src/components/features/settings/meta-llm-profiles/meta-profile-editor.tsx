@@ -12,8 +12,8 @@ import { I18nKey } from "#/i18n/declaration";
 import type { MetaProfile } from "#/api/meta-profiles-service/meta-profiles-service.api";
 import type { ProviderConnection } from "#/api/provider-connections-service/provider-connections-service.api";
 import {
-  DEFAULT_MAX_SCORE_PARETO_META_PROFILE_DEFAULT,
-  DEFAULT_MAX_SCORE_PARETO_META_PROFILE_NAME,
+  DEFAULT_ROUTER_PRO_META_PROFILE_DEFAULT,
+  DEFAULT_ROUTER_PRO_META_PROFILE_NAME,
 } from "./default-meta-profile";
 
 // Dropdown key that means "don't create any router profiles" (i.e. all the
@@ -91,10 +91,10 @@ export function MetaProfileEditor({
   const isEdit = mode === "edit";
   const startingConfig = normalizeConfig(
     initialConfig ??
-      (isEdit ? EMPTY_CONFIG : DEFAULT_MAX_SCORE_PARETO_META_PROFILE_DEFAULT),
+      (isEdit ? EMPTY_CONFIG : DEFAULT_ROUTER_PRO_META_PROFILE_DEFAULT),
   );
   const [name, setName] = useState(
-    initialName ?? (isEdit ? "" : DEFAULT_MAX_SCORE_PARETO_META_PROFILE_NAME),
+    initialName ?? (isEdit ? "" : DEFAULT_ROUTER_PRO_META_PROFILE_NAME),
   );
   const [config, setConfig] = useState<MetaProfile>(() => startingConfig);
   const [createdProviderConnections, setCreatedProviderConnections] = useState<

@@ -10,6 +10,9 @@ import { useProviderConnections } from "#/hooks/query/use-provider-connections";
 import { useSaveMetaProfile } from "#/hooks/mutation/use-save-meta-profile";
 import { useSaveLlmProfile } from "#/hooks/mutation/use-save-llm-profile";
 import { useActivateMetaProfile } from "#/hooks/mutation/use-activate-meta-profile";
+import { useSettings } from "#/hooks/query/use-settings";
+import { useSaveSettings } from "#/hooks/mutation/use-save-settings";
+import { SettingsSwitch } from "#/components/features/settings/settings-switch";
 import MetaProfilesService, {
   type MetaProfile,
 } from "#/api/meta-profiles-service/meta-profiles-service.api";
@@ -24,10 +27,10 @@ import { MetaProfileEditor } from "./meta-profile-editor";
 import { MetaProfileRow } from "./meta-profile-row";
 import { DeleteMetaProfileModal } from "./delete-meta-profile-modal";
 import {
-  DEFAULT_MAX_SCORE_PARETO_META_PROFILE_DEFAULT,
-  DEFAULT_MAX_SCORE_PARETO_META_PROFILE_NAME,
-  DEFAULT_MIN_COST_PARETO_META_PROFILE_DEFAULT,
-  DEFAULT_MIN_COST_PARETO_META_PROFILE_NAME,
+  DEFAULT_ROUTER_PRO_META_PROFILE_DEFAULT,
+  DEFAULT_ROUTER_PRO_META_PROFILE_NAME,
+  DEFAULT_ROUTER_FLASH_META_PROFILE_DEFAULT,
+  DEFAULT_ROUTER_FLASH_META_PROFILE_NAME,
 } from "./default-meta-profile";
 import {
   buildRouterModel,
@@ -35,7 +38,7 @@ import {
 } from "./router-profiles";
 
 type ViewMode = "list" | "create" | "edit";
-type RouterTemplate = "max-score-pareto" | "min-cost-pareto" | "custom";
+type RouterTemplate = "router-pro" | "router-flash" | "custom";
 
 interface EditingMetaProfile {
   name: string;
@@ -57,6 +60,8 @@ export function MetaLlmSettingsView() {
   const saveMetaProfile = useSaveMetaProfile();
   const saveLlmProfile = useSaveLlmProfile();
   const activateMetaProfile = useActivateMetaProfile();
+  const { data: settings } = useSettings();
+  const { mutate: saveSettings } = useSaveSettings();
 
   const [view, setView] = useState<ViewMode>("list");
   const [editing, setEditing] = useState<EditingMetaProfile | null>(null);
@@ -64,7 +69,7 @@ export function MetaLlmSettingsView() {
     null,
   );
   // Whether the create editor should pre-select a provider connection to
-  // populate the router's LLM profiles (true for the built-in Pareto templates,
+  // populate the router's LLM profiles (true for the built-in router templates,
   // false for a blank custom profile).
   const [createRouterProfilesByDefault, setCreateRouterProfilesByDefault] =
     useState(true);
@@ -126,16 +131,16 @@ export function MetaLlmSettingsView() {
   };
 
   const handleChooseTemplate = (template: RouterTemplate) => {
-    if (template === "max-score-pareto") {
+    if (template === "router-pro") {
       setCreateInitial({
-        name: DEFAULT_MAX_SCORE_PARETO_META_PROFILE_NAME,
-        config: DEFAULT_MAX_SCORE_PARETO_META_PROFILE_DEFAULT,
+        name: DEFAULT_ROUTER_PRO_META_PROFILE_NAME,
+        config: DEFAULT_ROUTER_PRO_META_PROFILE_DEFAULT,
       });
       setCreateRouterProfilesByDefault(true);
-    } else if (template === "min-cost-pareto") {
+    } else if (template === "router-flash") {
       setCreateInitial({
-        name: DEFAULT_MIN_COST_PARETO_META_PROFILE_NAME,
-        config: DEFAULT_MIN_COST_PARETO_META_PROFILE_DEFAULT,
+        name: DEFAULT_ROUTER_FLASH_META_PROFILE_NAME,
+        config: DEFAULT_ROUTER_FLASH_META_PROFILE_DEFAULT,
       });
       setCreateRouterProfilesByDefault(true);
     } else {
@@ -226,6 +231,26 @@ export function MetaLlmSettingsView() {
     setView("list");
     setEditing(null);
     setCreateInitial(null);
+  };
+
+  const runRouterAtConversationStart =
+    !!settings?.run_router_at_conversation_start;
+  // The toggle only does something when a router is actually active: with no
+  // active meta-profile the `route_task_to_model` tool is not attached, so
+  // routing the first message would be a no-op. Disable it then, and render
+  // it off, so the switch reflects what the agent will actually do. We do NOT
+  // auto-clear the persisted preference here: ``useMetaProfiles`` has no
+  // ``initialData``/``placeholderData``, so ``active`` is ``null`` on every
+  // mount until the fetch resolves, and a load-time effect would fire
+  // ``saveSettings({ run_router_at_conversation_start: false })`` in that
+  // window — silently destroying a user's saved preference before the
+  // meta-profiles response can prove a router is active. Instead the launch
+  // paths gate on the active meta-profile at the single suffix-emission
+  // point (``buildRouterAtStartSystemSuffix``), so a stale ``true`` with no
+  // router can never emit the ``route_task_to_model`` instruction.
+  const canRunRouterAtStart = active !== null;
+  const handleToggleRunAtConversationStart = (value: boolean) => {
+    saveSettings({ run_router_at_conversation_start: value });
   };
 
   if (isUnsupportedBackend) {
@@ -324,6 +349,25 @@ export function MetaLlmSettingsView() {
             ))}
           </div>
         ) : null}
+
+        <div
+          className="flex flex-col gap-1 border-t border-border pt-4"
+          data-testid="meta-profile-run-at-conversation-start"
+        >
+          <SettingsSwitch
+            testId="meta-profile-run-at-conversation-start-switch"
+            isToggled={
+              canRunRouterAtStart ? runRouterAtConversationStart : false
+            }
+            isDisabled={!canRunRouterAtStart}
+            onToggle={handleToggleRunAtConversationStart}
+          >
+            {t(I18nKey.SETTINGS$META_PROFILE_RUN_AT_CONVERSATION_START)}
+          </SettingsSwitch>
+          <p className="text-xs leading-4 text-tertiary-light">
+            {t(I18nKey.SETTINGS$META_PROFILE_RUN_AT_CONVERSATION_START_HELP)}
+          </p>
+        </div>
       </div>
 
       <DeleteMetaProfileModal
@@ -351,22 +395,22 @@ export function MetaLlmSettingsView() {
           className="flex flex-col gap-3"
         >
           <BrandButton
-            testId="meta-profile-template-max-score"
+            testId="meta-profile-template-router-pro"
             type="button"
             variant="secondary"
             className="justify-start"
-            onClick={() => handleChooseTemplate("max-score-pareto")}
+            onClick={() => handleChooseTemplate("router-pro")}
           >
-            {t(I18nKey.SETTINGS$META_PROFILE_TEMPLATE_MAX_SCORE)}
+            {t(I18nKey.SETTINGS$META_PROFILE_TEMPLATE_ROUTER_PRO)}
           </BrandButton>
           <BrandButton
-            testId="meta-profile-template-min-cost"
+            testId="meta-profile-template-router-flash"
             type="button"
             variant="secondary"
             className="justify-start"
-            onClick={() => handleChooseTemplate("min-cost-pareto")}
+            onClick={() => handleChooseTemplate("router-flash")}
           >
-            {t(I18nKey.SETTINGS$META_PROFILE_TEMPLATE_MIN_COST)}
+            {t(I18nKey.SETTINGS$META_PROFILE_TEMPLATE_ROUTER_FLASH)}
           </BrandButton>
           <BrandButton
             testId="meta-profile-template-custom"

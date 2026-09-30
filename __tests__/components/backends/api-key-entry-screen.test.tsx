@@ -18,7 +18,7 @@ vi.mock("@openhands/typescript-client/clients", () => ({
   }),
   // ServerClient needed by useBackendsHealth (imported transitively)
   ServerClient: vi.fn(function ServerClientMock() {
-    return { getServerInfo: vi.fn().mockResolvedValue({ version: "1.28.0" }) };
+    return { getServerInfo: vi.fn().mockResolvedValue({ version: "1.48.0" }) };
   }),
 }));
 
