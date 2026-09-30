@@ -18,7 +18,6 @@ import AgentServerConversationService from "#/api/conversation-service/agent-ser
 import type { AppConversationStartTask } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { buildRouterAtStartSystemSuffix } from "#/api/agent-server-adapter";
 import SettingsService from "#/api/settings-service/settings-service.api";
-import MetaProfilesService from "#/api/meta-profiles-service/meta-profiles-service.api";
 import {
   CHILD_CONVERSATION_ISOLATIONS,
   CHILD_CONVERSATION_RESULT_PREFIX,
@@ -398,18 +397,12 @@ async function launchCloudChild(
 
   const parentMetadata = getStoredConversationMetadata(parentConversationId);
   // The cloud child path bypasses `createConversation`, so read the
-  // "Run at conversation start" toggle here to stamp the router instruction
-  // onto the launch additions (the local child path reads it inside its own
-  // settings fetch via the encrypted-settings builder). Fetch the active
-  // meta-profile alongside so the suffix is only emitted when a router is
-  // actually attached — failing closed if the endpoint is unreachable.
-  const [cloudSettings, cloudMetaProfiles] = await Promise.all([
-    SettingsService.getSettings(),
-    MetaProfilesService.listMetaProfiles().catch(() => null),
-  ]);
+  // "Run on first message" toggle here to stamp the router instruction onto
+  // the launch additions (the local child path reads it inside its own
+  // settings fetch via the encrypted-settings builder).
+  const cloudSettings = await SettingsService.getSettings();
   const routerAtStartSuffix = buildRouterAtStartSystemSuffix(
     cloudSettings.run_router_at_conversation_start,
-    !!cloudMetaProfiles?.active_meta_profile,
   );
   const startTask = await createCloudAppConversation(
     {

@@ -238,7 +238,10 @@ export function MetaLlmSettingsView() {
   // The toggle only does something when a router is actually active: with no
   // active meta-profile the `route_task_to_model` tool is not attached, so
   // routing the first message would be a no-op. Disable it then so the state
-  // can't silently drift from what the agent will actually do.
+  // can't silently drift from what the agent will actually do. The launch
+  // paths trust this stored toggle, so keeping it off without an active
+  // router is what prevents the route-at-start instruction from being sent
+  // when no tool backs it.
   const canRunRouterAtStart = active !== null;
   const handleToggleRunAtConversationStart = (value: boolean) => {
     saveSettings({ run_router_at_conversation_start: value });
@@ -247,8 +250,7 @@ export function MetaLlmSettingsView() {
   // Keep the persisted toggle in sync with the active-router guard: if the
   // active meta-profile is removed (deleted), clear the toggle so the switch
   // — which already renders off when no router is active — doesn't silently
-  // re-enable routing the next time a profile is activated. The launch paths
-  // also gate on an active router, so this is defense-in-depth against drift.
+  // re-enable routing the next time a profile is activated.
   useEffect(() => {
     if (active === null && settings?.run_router_at_conversation_start) {
       saveSettings({ run_router_at_conversation_start: false });

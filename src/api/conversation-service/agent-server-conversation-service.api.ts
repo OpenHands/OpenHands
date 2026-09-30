@@ -400,15 +400,6 @@ export interface CreateConversationOptions {
    * path.
    */
   runRouterAtConversationStart?: boolean;
-  /**
-   * Whether a Model Router meta-profile is currently active. The
-   * route-at-start suffix is only emitted when this is true AND
-   * ``runRouterAtConversationStart`` is on — without an active meta-profile
-   * the agent-server does not attach ``route_task_to_model``, so the
-   * instruction would tell the agent to call a tool it lacks. Threaded in
-   * by the caller from the warmed meta-profiles query.
-   */
-  hasActiveMetaProfile?: boolean;
 }
 
 class AgentServerConversationService {
@@ -474,12 +465,11 @@ class AgentServerConversationService {
       // round-trip — the cloud backend holds secrets server-side.
       // When launching from a profile, send `agent_profile_id`; the backend
       // resolves it to agent_settings server-side.
-      // The "Run at conversation start" toggle is threaded in by the caller
+      // The "Run on first message" toggle is threaded in by the caller
       // (from the warmed settings query) to avoid a settings round-trip on
       // this hot path; the local path reads it from its own settings fetch.
       const routerAtStartSuffix = buildRouterAtStartSystemSuffix(
         options.runRouterAtConversationStart ?? false,
-        options.hasActiveMetaProfile ?? false,
       );
       const request: AppConversationStartRequest = {
         initial_message: initialUserMsg
