@@ -163,7 +163,11 @@ const TRIGGER_PROPERTIES: Record<SetupTriggerKind, readonly string[]> = {
   event: ["source", "on"],
 };
 
-const OPTIONAL_CREATE_PROPERTIES = ["model", "timeout"] as const;
+const OPTIONAL_CREATE_PROPERTIES = [
+  "model",
+  "timeout",
+  "agent_profile_id",
+] as const;
 
 /**
  * Repository properties a form field may fill, read the same way
@@ -271,6 +275,7 @@ function optionalCreateProperties(
 ): SetupRequestBody {
   return Object.fromEntries(
     OPTIONAL_CREATE_PROPERTIES.flatMap((name) => {
+      if (name === "model" && values.agent_profile_id) return [];
       const field = collectFields(setup, null, selectedAction)[name];
       const value = fieldPayloadValue(field?.type, values[name]);
       return hasPayloadValue(value) ? [[name, value]] : [];
@@ -496,7 +501,7 @@ function buildTrigger(
 
   const filter = entry.setup.filter
     ? interpolateText(entry.setup.filter, {
-        form: values,
+        form: filterFormValues(values),
         automation: entry,
       })
     : undefined;
@@ -511,6 +516,23 @@ function buildTrigger(
       ...(hasPayloadValue(filter) && { filter }),
     }),
   };
+}
+
+/**
+ * The form as a filter reads it. A filter is a JMESPath expression, so a
+ * multi-value answer inside it is a list literal - `['a/b', 'c/d']`, as the
+ * reference renderer writes one - rather than the list of names it reads as
+ * inside a sentence.
+ */
+function filterFormValues(values: SetupFormValues): SetupFormValues {
+  return Object.fromEntries(
+    Object.entries(values).map(([name, value]) => [
+      name,
+      Array.isArray(value)
+        ? `[${value.map((item) => `'${item}'`).join(", ")}]`
+        : value,
+    ]),
+  );
 }
 
 /**
@@ -535,6 +557,7 @@ function buildBundlePayload(
 
   const payload: SetupRequestBody = {
     name: deriveName(entry, values),
+    ...optionalCreateProperties(entry.setup, values),
   };
 
   const trigger = buildTrigger(entry, values, selectedTrigger);

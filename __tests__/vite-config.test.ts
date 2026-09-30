@@ -22,6 +22,56 @@ describe("vite optimizeDeps", () => {
   });
 });
 
+describe("vitest environment projects", () => {
+  const getProjects = async () => {
+    const config = await viteConfig({ mode: "test", command: "serve" });
+
+    return (config.test?.projects ?? []) as Array<{
+      test?: {
+        name?: string;
+        environment?: string;
+        setupFiles?: string[];
+        include?: string[];
+        exclude?: string[];
+      };
+    }>;
+  };
+
+  const findProject = (
+    projects: Awaited<ReturnType<typeof getProjects>>,
+    name: string,
+  ) => projects.find((project) => project.test?.name === name)?.test;
+
+  it("runs the DOM-free pilot suites in the Node environment without the jsdom setup", async () => {
+    const nodeProject = findProject(await getProjects(), "node");
+
+    expect(nodeProject?.environment).toBe("node");
+    // The pilot suites are pure functions: no DOM, no Web Storage, no MSW.
+    expect(nodeProject?.setupFiles).toEqual([]);
+    expect(nodeProject?.include).toEqual([
+      "__tests__/utils/file-language.test.ts",
+      "__tests__/utils/format-model-name.test.ts",
+      "__tests__/utils/parse-terminal-output.test.ts",
+    ]);
+  });
+
+  it("keeps every other suite in jsdom with the shared setup", async () => {
+    const jsdomProject = findProject(await getProjects(), "jsdom");
+
+    expect(jsdomProject?.environment).toBe("jsdom");
+    expect(jsdomProject?.setupFiles).toEqual(["vitest.setup.ts"]);
+  });
+
+  it("excludes the pilot suites from jsdom so they run exactly once", async () => {
+    const projects = await getProjects();
+    const nodeInclude = findProject(projects, "node")?.include ?? [];
+    const jsdomExclude = findProject(projects, "jsdom")?.exclude ?? [];
+
+    expect(nodeInclude.length).toBeGreaterThan(0);
+    expect(jsdomExclude).toEqual(expect.arrayContaining(nodeInclude));
+  });
+});
+
 describe("vite path resolution", () => {
   it("uses Vite's native tsconfig paths support", async () => {
     const config = await viteConfig({ mode: "development", command: "serve" });

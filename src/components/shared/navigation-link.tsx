@@ -3,6 +3,7 @@ import {
   useNavigation,
   type NavigationOptions,
 } from "#/context/navigation-context";
+import { buildAgentCanvasPath } from "#/utils/base-path";
 
 interface NavigationLinkClassNameState {
   isActive: boolean;
@@ -91,7 +92,7 @@ export const NavigationLink = React.forwardRef<
       <a
         {...props}
         ref={ref}
-        href={to}
+        href={buildAgentCanvasPath(to)}
         target={target}
         rel={rel}
         onClick={handleClick}

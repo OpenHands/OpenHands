@@ -79,7 +79,7 @@ export function HookExecutionEventMessage({
     <span>
       {icon} {t(I18nKey.HOOK$HOOK_LABEL)}: {event.hook_event_type}
       {event.tool_name && (
-        <span className="text-[var(--oh-muted)] ml-2">({event.tool_name})</span>
+        <span className="text-muted ml-2">({event.tool_name})</span>
       )}
       <span className={cn("ml-2 px-1 py-0.5 rounded text-xs", statusClassName)}>
         {statusText}
@@ -88,28 +88,24 @@ export function HookExecutionEventMessage({
   );
 
   const details = (
-    <div className="flex flex-col gap-2 text-[var(--oh-muted)]">
+    <div className="flex flex-col gap-2 text-muted">
       <div>
-        <span className="text-[var(--oh-text-subtle)]">
-          {t(I18nKey.HOOK$COMMAND)}:
-        </span>{" "}
-        <code className="text-xs bg-[var(--oh-surface)] px-1 py-0.5 rounded">
+        <span className="text-text-subtle">{t(I18nKey.HOOK$COMMAND)}:</span>{" "}
+        <code className="text-xs bg-surface px-1 py-0.5 rounded">
           {formatHookCommand(event.hook_command)}
         </code>
       </div>
 
       {event.exit_code !== null && (
         <div>
-          <span className="text-[var(--oh-text-subtle)]">
-            {t(I18nKey.HOOK$EXIT_CODE)}:
-          </span>{" "}
+          <span className="text-text-subtle">{t(I18nKey.HOOK$EXIT_CODE)}:</span>{" "}
           {event.exit_code}
         </div>
       )}
 
       {event.blocked && event.reason && (
         <div className="text-amber-400">
-          <span className="text-[var(--oh-text-subtle)]">
+          <span className="text-text-subtle">
             {t(I18nKey.HOOK$BLOCKED_REASON)}:
           </span>{" "}
           {event.reason}
@@ -118,28 +114,22 @@ export function HookExecutionEventMessage({
 
       {event.additional_context && (
         <div>
-          <span className="text-[var(--oh-text-subtle)]">
-            {t(I18nKey.HOOK$CONTEXT)}:
-          </span>{" "}
+          <span className="text-text-subtle">{t(I18nKey.HOOK$CONTEXT)}:</span>{" "}
           {event.additional_context}
         </div>
       )}
 
       {event.error && (
         <div className="text-red-400">
-          <span className="text-[var(--oh-text-subtle)]">
-            {t(I18nKey.HOOK$ERROR)}:
-          </span>{" "}
+          <span className="text-text-subtle">{t(I18nKey.HOOK$ERROR)}:</span>{" "}
           {event.error}
         </div>
       )}
 
       {event.stdout && (
         <div>
-          <span className="text-[var(--oh-text-subtle)]">
-            {t(I18nKey.HOOK$OUTPUT)}:
-          </span>
-          <pre className="text-xs bg-[var(--oh-surface)] p-2 rounded mt-1 overflow-x-auto max-h-40 overflow-y-auto">
+          <span className="text-text-subtle">{t(I18nKey.HOOK$OUTPUT)}:</span>
+          <pre className="text-xs bg-surface p-2 rounded mt-1 overflow-x-auto max-h-40 overflow-y-auto">
             {event.stdout}
           </pre>
         </div>
@@ -147,10 +137,8 @@ export function HookExecutionEventMessage({
 
       {event.stderr && (
         <div>
-          <span className="text-[var(--oh-text-subtle)]">
-            {t(I18nKey.HOOK$STDERR)}:
-          </span>
-          <pre className="text-xs bg-[var(--oh-surface)] p-2 rounded mt-1 overflow-x-auto max-h-40 overflow-y-auto text-amber-300">
+          <span className="text-text-subtle">{t(I18nKey.HOOK$STDERR)}:</span>
+          <pre className="text-xs bg-surface p-2 rounded mt-1 overflow-x-auto max-h-40 overflow-y-auto text-amber-300">
             {event.stderr}
           </pre>
         </div>

@@ -191,9 +191,7 @@ export function GitSyncOverviewSection({
           icon={<ClockIcon className="size-3.5" />}
           label={t(I18nKey.AUTOMATIONS$GIT_SYNC$PENDING_CHANGES)}
         >
-          <span
-            className={cn(status.dirty_count > 0 && "text-[var(--oh-warning)]")}
-          >
+          <span className={cn(status.dirty_count > 0 && "text-warning")}>
             {status.dirty_count}
           </span>
         </ConfigField>

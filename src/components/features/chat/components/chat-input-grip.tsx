@@ -41,7 +41,7 @@ export function ChatInputGrip({
       <div
         ref={gripRef}
         className={cn(
-          "pointer-events-none absolute top-0 left-0 w-full h-px bg-white z-[2] transition-opacity duration-200",
+          "pointer-events-none absolute top-0 left-0 w-full h-px bg-contrast z-[2] transition-opacity duration-200",
           !canResize && "opacity-0",
           canResize &&
             (isGripVisible || isGripDragging

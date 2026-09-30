@@ -10,6 +10,7 @@ import {
   isBackendRequestTimeoutMessage,
   isCorsOrNetworkErrorMessage,
 } from "./user-facing-error";
+import { buildAgentCanvasPath } from "#/utils/base-path";
 
 // react-hot-toast accepts only CSSProperties via the style option — cannot use className
 const TOAST_STYLE: CSSProperties = {
@@ -126,7 +127,10 @@ export const displaySuccessToastWithLink = (
   toast.success(
     <span className="[word-break:break-word] [overflow-wrap:anywhere]">
       {message}{" "}
-      <a className="underline hover:no-underline" href={href}>
+      <a
+        className="underline hover:no-underline"
+        href={buildAgentCanvasPath(href)}
+      >
         {linkLabel}
       </a>
     </span>,

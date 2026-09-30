@@ -17,8 +17,8 @@ describe("ChangeAgentContextMenu", () => {
     const codeOption = screen.getByTestId("code-option");
     const planOption = screen.getByTestId("plan-option");
 
-    expect(codeOption).toHaveClass("bg-[var(--oh-interactive-hover)]");
-    expect(planOption).not.toHaveClass("bg-[var(--oh-interactive-hover)]");
+    expect(codeOption).toHaveClass("bg-interactive-hover");
+    expect(planOption).not.toHaveClass("bg-interactive-hover");
     expect(codeOption.querySelectorAll("svg")).toHaveLength(2);
     expect(planOption.querySelectorAll("svg")).toHaveLength(1);
   });
@@ -36,8 +36,8 @@ describe("ChangeAgentContextMenu", () => {
     const codeOption = screen.getByTestId("code-option");
     const planOption = screen.getByTestId("plan-option");
 
-    expect(planOption).toHaveClass("bg-[var(--oh-interactive-hover)]");
-    expect(codeOption).not.toHaveClass("bg-[var(--oh-interactive-hover)]");
+    expect(planOption).toHaveClass("bg-interactive-hover");
+    expect(codeOption).not.toHaveClass("bg-interactive-hover");
     expect(planOption.querySelectorAll("svg")).toHaveLength(2);
   });
 
