@@ -129,10 +129,7 @@ export function DeepPlanPanel() {
         )}
 
         {report.uncovered.length > 0 && (
-          <Typography.Text
-            className="text-xs"
-            data-testid="deep-plan-uncovered"
-          >
+          <Typography.Text className="text-xs" testId="deep-plan-uncovered">
             {t(I18nKey.COMMON$DEEP_PLAN_UNCOVERED, {
               sections: report.uncovered.join(", "),
             })}
@@ -140,7 +137,7 @@ export function DeepPlanPanel() {
         )}
 
         {error && (
-          <Typography.Text className="text-xs" data-testid="deep-plan-error">
+          <Typography.Text className="text-xs" testId="deep-plan-error">
             {error}
           </Typography.Text>
         )}

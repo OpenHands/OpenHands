@@ -172,10 +172,7 @@ describe("conversation store", () => {
     it("advances the phase when the reference chain is valid", () => {
       const store = useConversationStore.getState();
       store.startDeepPlan();
-      store.setDeepPlanDocument(
-        "requirements",
-        "## 3.1 Authentication\n",
-      );
+      store.setDeepPlanDocument("requirements", "## 3.1 Authentication\n");
       store.confirmDeepPlanPhase("analysis");
 
       const result = useConversationStore
@@ -221,12 +218,39 @@ describe("conversation store", () => {
         },
       });
       vi.resetModules();
-      const { useConversationStore: freshStore } = await import(
-        "#/stores/conversation-store"
-      );
+      const { useConversationStore: freshStore } =
+        await import("#/stores/conversation-store");
 
       expect(freshStore.getState().deepPlan.activePhase).toBe("backend");
       expect(freshStore.getState().conversationMode).toBe("deep-plan");
+    });
+
+    it("keeps the persisted phase across the mount-time reset", () => {
+      // The conversation route calls `resetConversationState()` on every
+      // mount. If that reset writes the empty machine, a refresh drops the
+      // user back to phase 1 even though the confirmations are on disk.
+      useConversationStore.getState().startDeepPlan();
+      mockGetConversationState.mockReturnValue({
+        selectedTab: "files",
+        unpinnedTabs: [],
+        conversationMode: "deep-plan",
+        deepPlan: {
+          activePhase: "backend",
+          confirmed: ["analysis", "requirements", "database"],
+          documents: { requirements: "## 1.1 Login\n" },
+        },
+      });
+
+      useConversationStore.getState().resetConversationState();
+
+      expect(useConversationStore.getState().deepPlan.activePhase).toBe(
+        "backend",
+      );
+      expect(useConversationStore.getState().deepPlan.confirmed).toEqual([
+        "analysis",
+        "requirements",
+        "database",
+      ]);
     });
   });
 

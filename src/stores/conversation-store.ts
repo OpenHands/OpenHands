@@ -403,7 +403,11 @@ export const useConversationStore = create<ConversationStore>()(
           {
             shouldHideSuggestions: false,
             conversationMode: getInitialConversationMode(),
-            deepPlan: EMPTY_DEEP_PLAN_STATE,
+            // Re-derive from storage, exactly like `conversationMode`: this
+            // runs on every conversation mount, so resetting to the empty
+            // machine would discard the persisted phase and drop the user
+            // back to phase 1 on refresh.
+            deepPlan: getInitialDeepPlanState(),
             subConversationTaskId: null,
             localPlanningConversationId: null,
             planContent: null,
