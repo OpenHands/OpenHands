@@ -94,7 +94,6 @@ interface AutomationSetupPanelProps {
   draft: AutomationSetupDraft;
   toolbarPortal?: HTMLElement | null;
   showInlineHeader?: boolean;
-  onClose: () => void;
   reserveComposerSpace?: boolean;
 }
 
@@ -160,7 +159,6 @@ export function AutomationSetupPanel({
   draft,
   toolbarPortal,
   showInlineHeader = true,
-  onClose: _onClose,
   reserveComposerSpace = false,
 }: AutomationSetupPanelProps) {
   const [model, setModel] = useState("");

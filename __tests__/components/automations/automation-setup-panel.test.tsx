@@ -84,7 +84,7 @@ function renderPanel(
 
   return render(
     <NavigationProvider value={value}>
-      <AutomationSetupPanel draft={draft} onClose={vi.fn()} />
+      <AutomationSetupPanel draft={draft} />
     </NavigationProvider>,
   );
 }

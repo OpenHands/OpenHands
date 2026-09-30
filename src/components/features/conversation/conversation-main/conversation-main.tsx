@@ -14,10 +14,7 @@ import { useResizablePanels } from "#/hooks/use-resizable-panels";
 import { useConversationStore } from "#/stores/conversation-store";
 import { AUTOMATION_SETUP_SHOW_AGENT_EVENT } from "#/components/features/automations/setup/automation-setup-agent-request";
 import { AutomationSetupPanel } from "#/components/features/automations/setup/automation-setup-panel";
-import {
-  clearAutomationSetupHandoff,
-  consumeAutomationSetupHandoff,
-} from "#/api/automation-setup-handoff-store";
+import { consumeAutomationSetupHandoff } from "#/api/automation-setup-handoff-store";
 import type { AutomationSetupDraft } from "#/api/automation-setup-types";
 import { useConversationId } from "#/hooks/use-conversation-id";
 import {
@@ -132,12 +129,6 @@ export function ConversationMain() {
       setIsAutomationAgentHidden(false);
     }
   }, [automationSetupDraft]);
-
-  const closeAutomationSetup = () => {
-    if (conversationId) clearAutomationSetupHandoff(conversationId);
-    setIsAutomationSetupMode(false);
-    setIsRightPanelShown(false);
-  };
 
   const handleBackToSplash = () => {
     navigate(SPLASH_ROUTE);
@@ -379,7 +370,6 @@ export function ConversationMain() {
               draft={automationSetupDraft}
               toolbarPortal={automationToolbarElement}
               showInlineHeader={false}
-              onClose={closeAutomationSetup}
               reserveComposerSpace
             />
             <AutomationSetupDockedComposer onTarget={setComposerDockTarget} />
@@ -416,7 +406,6 @@ export function ConversationMain() {
                     draft={automationSetupDraft}
                     toolbarPortal={automationToolbarElement}
                     showInlineHeader={false}
-                    onClose={closeAutomationSetup}
                     reserveComposerSpace={showDockedComposer}
                   />
                 ) : (

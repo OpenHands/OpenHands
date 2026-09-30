@@ -17,7 +17,6 @@ let mockHasAutomationSetupHandoff = false;
 const mockNavigate = vi.fn();
 const mockSetHasRightPanelToggled = vi.fn();
 const mockSetIsRightPanelShown = vi.fn();
-const mockClearAutomationSetupHandoff = vi.fn();
 
 // Track ChatInterface unmount via vi.fn()
 const chatInterfaceUnmount = vi.fn();
@@ -51,8 +50,6 @@ vi.mock("#/stores/conversation-store", () => ({
 
 vi.mock("#/api/automation-setup-handoff-store", () => ({
   consumeAutomationSetupHandoff: () => mockHasAutomationSetupHandoff,
-  clearAutomationSetupHandoff: (...args: unknown[]) =>
-    mockClearAutomationSetupHandoff(...args),
 }));
 
 vi.mock("#/hooks/query/use-active-conversation", () => ({
@@ -197,7 +194,6 @@ describe("ConversationMain - Layout Transition Stability", () => {
     mockNavigate.mockClear();
     mockSetHasRightPanelToggled.mockClear();
     mockSetIsRightPanelShown.mockClear();
-    mockClearAutomationSetupHandoff.mockClear();
   });
 
   it.each([
