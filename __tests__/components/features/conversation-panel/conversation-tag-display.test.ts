@@ -181,6 +181,10 @@ describe("getConversationTagLabel", () => {
         return "Branch";
       case I18nKey.CONVERSATION_PANEL$PREVIEW_WORKSPACE:
         return "Workspace";
+      case I18nKey.AUTOMATION_SETUP$TITLE:
+        return "Automation setup";
+      case I18nKey.AUTOMATIONS$DETAIL$DRAFT:
+        return "Draft";
       case I18nKey.CONVERSATION_PANEL$PREVIEW_APP_MODE:
         return "App mode";
       case I18nKey.CONVERSATION_PANEL$PREVIEW_WORK_TOOLS:
@@ -197,6 +201,12 @@ describe("getConversationTagLabel", () => {
     expect(getConversationTagLabel("repo_name", t)).toBe("Repo");
     expect(getConversationTagLabel("archiveworkspacepath", t)).toBe(
       "Workspace",
+    );
+    expect(getConversationTagLabel("automationsetup", t)).toBe(
+      "Automation setup",
+    );
+    expect(formatConversationTagTooltip("automationsetup", "draft", t)).toBe(
+      "Automation setup: Draft",
     );
     expect(getConversationTagLabel("Appmode", t)).toBe("App mode");
     expect(getConversationTagLabel("worktools", t)).toBe("Work tools");

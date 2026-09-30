@@ -2,11 +2,20 @@ import type { AppConversation } from "#/api/conversation-service/agent-server-co
 import type { BackendKind } from "#/api/backend-registry/types";
 import type { LocalWorkspace } from "#/types/workspace";
 import type { Provider } from "#/types/settings";
+import type { I18nKey } from "#/i18n/declaration";
 import {
   AUTOMATION_NAME_TAG_KEY,
   AUTOMATION_TAG_KEYS,
   getDisplayConversationTags,
 } from "#/api/agent-server-adapter";
+import {
+  getConversationTagLabel,
+  getConversationTagValueLabel,
+} from "./conversation-card/conversation-tag-display";
+import {
+  AUTOMATION_SETUP_TAG_KEY,
+  AUTOMATION_SETUP_TAG_VALUE,
+} from "#/utils/automation-draft-tags";
 
 export type ConversationSortField = "created" | "updated";
 export type ThreadScope = "all" | "relevant";
@@ -312,7 +321,23 @@ export function collectTagFacets(
  * renders as just the key. Matching keeps the raw `key=value` form — this is
  * label-only.
  */
-export function formatTagFacetLabel(facet: string): string {
+export function formatTagFacetLabel(
+  facet: string,
+  t?: (key: I18nKey) => string,
+): string {
+  const separatorIndex = facet.indexOf("=");
+  const key = separatorIndex === -1 ? facet : facet.slice(0, separatorIndex);
+  const value = separatorIndex === -1 ? "" : facet.slice(separatorIndex + 1);
+  if (
+    key.trim().toLowerCase() === AUTOMATION_SETUP_TAG_KEY &&
+    value === AUTOMATION_SETUP_TAG_VALUE
+  ) {
+    const label = t ? getConversationTagLabel(key, t) : "Automation setup";
+    const valueLabel = t
+      ? getConversationTagValueLabel(key, value, t)
+      : "Draft";
+    return `${label}: ${valueLabel}`;
+  }
   return facet.endsWith("=") ? facet.slice(0, -1) : facet;
 }
 
