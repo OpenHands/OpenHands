@@ -6,6 +6,10 @@
 import { I18nKey } from "#/i18n/declaration";
 import { AUTOMATION_SETUP_TAG_KEY } from "#/utils/automation-draft-tags";
 
+export function isAutomationSetupTagKey(key: string): boolean {
+  return key.trim().toLowerCase() === AUTOMATION_SETUP_TAG_KEY;
+}
+
 /** Max characters shown on a chip before hard truncation with an ellipsis. */
 export const TAG_CHIP_VALUE_MAX_LENGTH = 14;
 
@@ -129,6 +133,9 @@ export function formatConversationTagTooltip(
   t: (key: I18nKey) => string,
 ): string {
   const label = getConversationTagLabel(key, t);
+  if (isAutomationSetupTagKey(key)) {
+    return label;
+  }
   return value ? `${label}: ${value}` : label;
 }
 
