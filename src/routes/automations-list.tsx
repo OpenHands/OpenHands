@@ -144,7 +144,16 @@ export default function AutomationsList() {
     hasNextPage,
     fetchNextPage,
     isFetching,
-  } = useAutomations({ enabled: isBackendHealthy });
+  } = useAutomations({
+    enabled: isBackendHealthy,
+    // The server filters by creator so pages and `total` cover only matches;
+    // the client predicate in applyDashboardView stays as the fallback for
+    // an automation service that ignores the param.
+    createdBy:
+      creatorFilterUserId !== null && createdByFilter !== "all"
+        ? createdByFilter
+        : undefined,
+  });
   // One runs query per listed automation — dashboard mode only.
   const runSummaries = useAutomationRunSummaries(data?.automations ?? [], {
     enabled: isBackendHealthy && dashboard !== null,

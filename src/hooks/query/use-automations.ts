@@ -10,6 +10,7 @@ import { useTracking } from "#/hooks/use-tracking";
 import { uniqueById } from "#/utils/unique-by-id";
 import type {
   Automation,
+  AutomationCreatedByFilter,
   AutomationSpec,
   AutomationsResponse,
 } from "#/types/automation";
@@ -38,6 +39,8 @@ function joinAutomationPages(
 interface UseAutomationsOptions {
   /** Automations per request; at most 100. A count-only caller passes 1. */
   pageSize?: number;
+  /** Narrows the list on the server, so pages and `total` cover only matches. */
+  createdBy?: AutomationCreatedByFilter;
   enabled?: boolean;
 }
 
@@ -48,17 +51,21 @@ interface UseAutomationsOptions {
  * listed once.
  */
 export function useAutomations(options: UseAutomationsOptions = {}) {
-  const { pageSize = AUTOMATIONS_PAGE_SIZE, enabled = true } = options;
+  const {
+    pageSize = AUTOMATIONS_PAGE_SIZE,
+    createdBy,
+    enabled = true,
+  } = options;
   const active = useActiveBackend();
   return useInfiniteQuery({
     queryKey: [
       ...AUTOMATIONS_QUERY_KEY,
-      { pageSize },
+      { pageSize, createdBy: createdBy ?? "all" },
       active.backend.id,
       active.orgId,
     ],
     queryFn: ({ pageParam }) =>
-      AutomationService.getAutomations(pageSize, pageParam),
+      AutomationService.getAutomations(pageSize, pageParam, createdBy),
     initialPageParam: 0,
     getNextPageParam: (lastPage, _pages, lastOffset) => {
       const nextOffset = lastOffset + lastPage.automations.length;

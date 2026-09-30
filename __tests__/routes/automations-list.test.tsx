@@ -545,9 +545,9 @@ describe("AutomationsList — Load more", () => {
     // Assert
     await screen.findByText("Automation 120");
     expect(vi.mocked(AutomationService.getAutomations).mock.calls).toEqual([
-      [50, 0],
-      [50, 50],
-      [50, 100],
+      [50, 0, undefined],
+      [50, 50, undefined],
+      [50, 100, undefined],
     ]);
     expect(
       screen.queryByRole("button", { name: I18nKey.AUTOMATIONS$LOAD_MORE }),

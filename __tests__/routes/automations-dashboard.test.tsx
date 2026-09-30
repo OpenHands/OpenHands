@@ -483,6 +483,42 @@ describe("AutomationsList — created-by filter on cloud workspaces", () => {
     ).toHaveTextContent("1");
   });
 
+  it("asks the server for my automations when they are past the first page", async () => {
+    // Arrange — the newest page is all teammates'; mine is older. The server
+    // honours created_by, so only a server-side filter can find it.
+    const teammates = Array.from({ length: 50 }, (_, index) =>
+      createAutomation({
+        id: `a-teammate-${index}`,
+        name: `Teammate widget ${index}`,
+        user_id: "user-teammate",
+      }),
+    );
+    vi.mocked(AutomationService.getAutomations).mockImplementation(
+      async (_limit, _offset, createdBy) =>
+        createdBy === "me"
+          ? { automations: [mine], total: 1 }
+          : { automations: teammates, total: 51 },
+    );
+    const user = userEvent.setup();
+    selectWorkspace(TEAM_ORG_ID);
+    renderAt("/automations", <AutomationsList />);
+    await screen.findByTestId("automation-card-a-teammate-0");
+    await openFiltersMenu(user);
+
+    // Act
+    await pickCreatedBy(user, "me");
+
+    // Assert
+    await waitFor(() => {
+      expect(visibleCardIds()).toEqual(["automation-card-a-mine"]);
+    });
+    expect(AutomationService.getAutomations).toHaveBeenLastCalledWith(
+      50,
+      0,
+      "me",
+    );
+  });
+
   it("returns to every creator from Reset all and from Clear filters", async () => {
     // Arrange
     const user = userEvent.setup();
@@ -546,6 +582,11 @@ describe("AutomationsList — created-by filter on cloud workspaces", () => {
     expect(
       screen.queryByTestId("automations-filter-created-by"),
     ).not.toBeInTheDocument();
+    expect(AutomationService.getAutomations).toHaveBeenLastCalledWith(
+      50,
+      0,
+      undefined,
+    );
   });
 });
 

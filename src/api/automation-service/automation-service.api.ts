@@ -8,6 +8,7 @@ import {
 } from "#/services/telemetry";
 import type {
   Automation,
+  AutomationCreatedByFilter,
   AutomationRun,
   AutomationSpec,
   AutomationTrigger,
@@ -273,32 +274,49 @@ class AutomationService {
   }
 
   static async listAutomations(
-    params: { limit?: number; offset?: number } = {},
+    params: {
+      limit?: number;
+      offset?: number;
+      createdBy?: AutomationCreatedByFilter;
+    } = {},
   ): Promise<AutomationsResponse> {
-    const { limit = 50, offset = 0 } = params;
+    const { limit = 50, offset = 0, createdBy } = params;
     const active = getActiveBackend().backend;
 
     if (active.kind === "cloud") {
+      const query = new URLSearchParams(buildPaginationQuery(limit, offset));
+      if (createdBy) query.set("created_by", createdBy);
       return callCloudProxy<AutomationsResponse>({
         backend: active,
         method: "GET",
-        path: `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}?${buildPaginationQuery(limit, offset)}`,
+        path: `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}?${query.toString()}`,
         headers: await buildAutomationRequestHeaders(),
       });
     }
 
     const { data } = await localAutomationAxios.get<AutomationsResponse>(
       `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}`,
-      { params: { limit, offset } },
+      {
+        params: {
+          limit,
+          offset,
+          ...(createdBy ? { created_by: createdBy } : {}),
+        },
+      },
     );
     return data;
   }
 
+  /**
+   * One page of the org's automations. `createdBy` narrows it on the server;
+   * an automation service that predates the param ignores it.
+   */
   static async getAutomations(
     limit = 50,
     offset = 0,
+    createdBy?: AutomationCreatedByFilter,
   ): Promise<AutomationsResponse> {
-    return AutomationService.listAutomations({ limit, offset });
+    return AutomationService.listAutomations({ limit, offset, createdBy });
   }
 
   static async getAutomation(id: string): Promise<Automation> {
