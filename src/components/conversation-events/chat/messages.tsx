@@ -14,6 +14,8 @@ import { useModelStore } from "#/stores/model-store";
 import { ModelMessages } from "#/components/features/chat/model-messages";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { ConversationConfirmationButtons } from "#/components/shared/buttons/conversation-confirmation-buttons";
+import { RowExpansionContext } from "#/components/features/chat/row-expansion-context";
+import { useMessageExpansionStore } from "#/stores/message-expansion-store";
 
 interface MessagesProps {
   messages: OpenHandsEvent[]; // UI events (actions replaced by observations)
@@ -195,6 +197,17 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       renderedItems.length >= virtualizationThreshold(),
     );
 
+    // A collapsed history (or a switch to another conversation) must not keep
+    // stale expansion entries for rows that no longer exist.
+    const rowKeys = React.useMemo(
+      () => renderedItems.map(renderedItemKey),
+      [renderedItems],
+    );
+    const pruneExpansion = useMessageExpansionStore((s) => s.prune);
+    React.useEffect(() => {
+      pruneExpansion(new Set(rowKeys));
+    }, [rowKeys, pruneExpansion]);
+
     const rowVirtualizer = useVirtualizer({
       count: renderedItems.length,
       getScrollElement: () => scrollParent ?? null,
@@ -254,7 +267,11 @@ export const Messages: React.FC<MessagesProps> = React.memo(
                   transform: `translateY(${virtualRow.start}px)`,
                 }}
               >
-                {renderItem(item, virtualRow.index)}
+                {/* Remounted rows read their expansion state back from the
+                    store instead of starting collapsed. */}
+                <RowExpansionContext.Provider value={renderedItemKey(item)}>
+                  {renderItem(item, virtualRow.index)}
+                </RowExpansionContext.Provider>
               </div>
             );
           })}

@@ -1,15 +1,39 @@
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { screen } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { Messages } from "#/components/conversation-events/chat/messages";
 import { createUserMessageEvent, renderWithProviders } from "test-utils";
 import type { OpenHandsEvent } from "#/types/agent-server/core";
+import { useMessageExpansionStore } from "#/stores/message-expansion-store";
 
-vi.mock("#/components/conversation-events/chat/event-message", () => ({
-  EventMessage: ({ event }: { event: OpenHandsEvent }) => (
-    <div data-testid={`event-message-${event.id}`} />
-  ),
-}));
+// Each row renders an expander whose state is persisted by row key, so the
+// scroll-out/scroll-back cases below can observe whether the state survived.
+vi.mock("#/components/conversation-events/chat/event-message", async () => {
+  const ReactModule = await import("react");
+  const { useRowExpansionKey } =
+    await import("#/components/features/chat/row-expansion-context");
+  const { usePersistentExpansion } =
+    await import("#/stores/message-expansion-store");
+  function PersistentRow({ eventId }: { eventId: string }) {
+    const key = useRowExpansionKey("evt");
+    const [expanded, toggle] = usePersistentExpansion(key, false);
+    return ReactModule.createElement(
+      "div",
+      { "data-testid": `event-message-${eventId}` },
+      ReactModule.createElement(
+        "button",
+        { "data-testid": `toggle-${eventId}`, onClick: toggle },
+        expanded ? "expanded" : "collapsed",
+      ),
+    );
+  }
+  return {
+    EventMessage: ({ event }: { event: OpenHandsEvent }) =>
+      ReactModule.createElement(PersistentRow, {
+        eventId: String(event.id ?? ""),
+      }),
+  };
+});
 
 const buildEvents = (count: number): OpenHandsEvent[] =>
   Array.from({ length: count }, (_, index) =>
@@ -124,5 +148,55 @@ describe("Messages virtualization", () => {
     expect(
       screen.getAllByTestId("virtualized-message-row").length,
     ).toBeLessThan(100);
+  });
+
+  it("restores a row's expanded state after it scrolls out and back", () => {
+    const events = buildEvents(400);
+    renderMessages(events);
+
+    fireEvent.click(screen.getByTestId("toggle-message-0"));
+    expect(screen.getByTestId("toggle-message-0")).toHaveTextContent(
+      "expanded",
+    );
+
+    // Scroll far away: the virtualizer unmounts row 0 entirely.
+    const scrollParent = screen.getByTestId("scroll-parent");
+    scrollParent.scrollTop = 12000;
+    fireEvent.scroll(scrollParent);
+    expect(screen.queryByTestId("event-message-message-0")).toBeNull();
+
+    // Scroll back: the remounted row must remember it was expanded.
+    scrollParent.scrollTop = 0;
+    fireEvent.scroll(scrollParent);
+    expect(screen.getByTestId("toggle-message-0")).toHaveTextContent(
+      "expanded",
+    );
+  });
+
+  it("keeps the plain list's expansion local so the store stays empty", () => {
+    const events = buildEvents(100);
+    renderMessages(events, false);
+
+    fireEvent.click(screen.getByTestId("toggle-message-0"));
+    expect(screen.getByTestId("toggle-message-0")).toHaveTextContent(
+      "expanded",
+    );
+    expect(useMessageExpansionStore.getState().expanded).toEqual({});
+  });
+
+  it("drops expansion state for rows that leave the history", async () => {
+    const events = buildEvents(400);
+    const { rerender } = renderMessages(events);
+
+    fireEvent.click(screen.getByTestId("toggle-message-0"));
+    expect(
+      Object.keys(useMessageExpansionStore.getState().expanded),
+    ).toHaveLength(1);
+
+    // A collapsed history no longer contains message-0, so its entry must go.
+    rerender(<Harness events={buildEvents(300)} withScrollParent />);
+    await waitFor(() =>
+      expect(useMessageExpansionStore.getState().expanded).toEqual({}),
+    );
   });
 });
