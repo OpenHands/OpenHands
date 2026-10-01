@@ -284,7 +284,10 @@ class AutomationService {
     const active = getActiveBackend().backend;
 
     if (active.kind === "cloud") {
-      const query = new URLSearchParams(buildPaginationQuery(limit, offset));
+      const query = new URLSearchParams({
+        limit: String(limit),
+        offset: String(offset),
+      });
       if (createdBy) query.set("created_by", createdBy);
       return callCloudProxy<AutomationsResponse>({
         backend: active,

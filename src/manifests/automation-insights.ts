@@ -271,8 +271,8 @@ export function applyDashboardView(
       ) {
         return false;
       }
-      // While the caller's id is unknown, neither "me" nor "others" can
-      // claim anything, so leave the creator filter inert until it resolves.
+      // With no caller id (local backend, personal workspace, or /me
+      // loading), the creator filter is inert.
       if (
         view.currentUserId !== null &&
         view.createdBy !== "all" &&
