@@ -54,9 +54,6 @@ const LOCAL_AGENT_SERVER_SUBDIRS = [
   "openhands-workspace",
 ];
 const DEFAULT_AGENT_SERVER_VERSION = SHARED_DEFAULTS.versions.agentServer;
-// Temporary transitive-dep pin: hold acp <0.11 until a fixed SDK ships. See config/defaults.json.
-const AGENT_CLIENT_PROTOCOL_CONSTRAINT =
-  SHARED_DEFAULTS.constraints?.agentClientProtocol;
 // Temporary transitive-dep pin: uvx resolves latest `mcp` (2.x) which broke
 // browser-use's MCP Server API. Hold mcp==1.26.0 until the SDK constrains it.
 // See config/defaults.json and OpenHands/OpenHands#17383.
@@ -71,21 +68,12 @@ const FRONTEND_REQUIRED_BINS = ["cross-env", "react-router"];
 /**
  * Append uvx `--with` pins that must apply regardless of agent-server source.
  *
- * ACP stays opt-in (PyPI-only today) because git/local SDK checkouts already
- * constrain `agent-client-protocol` in pyproject.toml. `mcp` is not declared
- * there, so every source — including local/git, which still pull browser-use
- * from PyPI — needs the pin.
+ * Only `mcp` is pinned here:the SDK constrains `agent-client-protocol` itself,
+ * so an additional `--with` bound conflicts with a pinned SDK version..
  *
  * @param {string[]} uvxArgs
- * @param {{ includeAcp?: boolean }} [options]
  */
-function pushAgentServerTransitiveConstraints(
-  uvxArgs,
-  { includeAcp = false } = {},
-) {
-  if (includeAcp && AGENT_CLIENT_PROTOCOL_CONSTRAINT) {
-    uvxArgs.push("--with", AGENT_CLIENT_PROTOCOL_CONSTRAINT);
-  }
+function pushAgentServerTransitiveConstraints(uvxArgs) {
   if (MCP_CONSTRAINT) {
     uvxArgs.push("--with", MCP_CONSTRAINT);
   }
@@ -523,7 +511,7 @@ export function buildAgentServerCommand(env = process.env) {
       "--with",
       `openhands-workspace==${version}`,
     );
-    pushAgentServerTransitiveConstraints(uvxArgs, { includeAcp: true });
+    pushAgentServerTransitiveConstraints(uvxArgs);
     source = `PyPI (${version})`;
   } else {
     // Default to released PyPI version
@@ -538,7 +526,7 @@ export function buildAgentServerCommand(env = process.env) {
       "--with",
       `openhands-workspace==${DEFAULT_AGENT_SERVER_VERSION}`,
     );
-    pushAgentServerTransitiveConstraints(uvxArgs, { includeAcp: true });
+    pushAgentServerTransitiveConstraints(uvxArgs);
     source = `PyPI (${DEFAULT_AGENT_SERVER_VERSION}, default)`;
   }
 
