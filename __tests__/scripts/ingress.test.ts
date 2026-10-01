@@ -424,7 +424,7 @@ describe("ingress proxy functionality", () => {
   it("adds runtime_services to proxied /server_info", async () => {
     const serverInfoBackend = createServer((_req, res) => {
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ version: "1.48.0" }));
+      res.end(JSON.stringify({ version: "1.50.1" }));
     });
     const serverInfoBackendPort = await listenOnLoopback(serverInfoBackend);
     const runtimeIngressPort = await getFreePort();
@@ -464,7 +464,7 @@ describe("ingress proxy functionality", () => {
       };
 
       expect(response.status).toBe(200);
-      expect(body.version).toBe("1.48.0");
+      expect(body.version).toBe("1.50.1");
       expect(body.runtime_services).toEqual(JSON.parse(runtimeServicesInfo));
     } finally {
       await stopChild(runtimeIngress);
