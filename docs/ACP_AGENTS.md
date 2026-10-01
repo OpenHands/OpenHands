@@ -237,10 +237,13 @@ Open **Settings → Agent** at any time:
   override. Built-in providers save a concrete model rather than leaving it
   blank.
 
-Saving writes an `agent_settings_diff` (`agent_kind`, `acp_server`,
-`acp_command`, `acp_model`) to `PATCH /api/settings`. A running conversation
-keeps the agent it started with; the new choice applies to conversations you
-start afterward.
+The profile editor saves a reusable Agent Profile. An unchanged built-in
+command is saved as `acp_command: null`, so the backend resolves its current
+registry default; a custom command is saved explicitly. Onboarding uses an
+`agent_settings_diff` with `acp_command: []` for the same default-resolution
+semantics. This also applies to OpenCode: its default CLI command is displayed,
+not pinned into durable settings. A running conversation keeps the agent it
+started with; the new choice applies to conversations you start afterward.
 
 ## Custom ACP servers
 

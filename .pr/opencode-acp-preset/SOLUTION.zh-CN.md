@@ -32,23 +32,17 @@ OpenCode 的命令、模型列表和凭证定义仍由 `@openhands/typescript-cl
 
 测试会直接对比 Canvas 与共享注册表中的数据。如果未来上游命令或模型发生变化，而 Canvas 没有正确读取，测试会立即失败。
 
-### 2. 保存后的 Preset 必须能够自解释
+### 2. 默认命令仍由注册表负责
 
-用户选择 OpenCode 时，`buildAcpAgentSettingsDiff()` 会把共享注册表的精确 `default_command` 写入 `acp_command`。这里复制的是运行时数据，不是在 Canvas 代码中重新硬编码一遍命令。
+评审提醒我，复制默认命令到持久化设置会把 CLI 版本固化。我已移除 OpenCode 的特殊分支：引导保存 `acp_command: []`，与其他内置 Preset 一致；最新主线的 Profile 编辑器保存 `acp_command: null`，由后端解析当前注册表默认值。
 
-这样做是为了让设置页刷新后仍能展示完整命令，并重新识别这是 OpenCode Preset：
+刷新后编辑器仍展开当前默认命令并识别 OpenCode，但升级注册表不会被旧命令绑住。引导保存的 Diff 是：
 
 ```json
 {
   "agent_kind": "acp",
   "acp_server": "opencode",
-  "acp_command": [
-    "npx",
-    "-y",
-    "--prefer-offline",
-    "opencode-ai@1.18.23",
-    "acp"
-  ],
+  "acp_command": [],
   "acp_args": [],
   "acp_model": "opencode/big-pickle"
 }
@@ -75,7 +69,7 @@ OpenCode 的命令、模型列表和凭证定义仍由 `@openhands/typescript-cl
 | Provider 展示 | 将 OpenCode 加入 UI 可见映射                                     | 让已支持的 Provider 可发现，同时不暴露全部实验条目 |
 | 品牌系统      | 为 `AgentBrandIcon` 增加 OpenCode 图标                           | 不再把正式支持的 Provider 显示成匿名终端命令       |
 | 首次引导      | 增加 OpenCode 卡片与凭证步骤                                     | 与其他一等 Provider 保持一致的首次使用路径         |
-| 设置持久化    | 保存注册表命令与首选模型，并清空旧 `acp_args`                    | 确保保存、刷新和重新识别不丢信息                   |
+| 设置持久化    | 保存 Provider 与首选模型、委托默认命令解析，并清空旧 `acp_args`                    | 确保保存、刷新和重新识别不丢信息                   |
 | 多语言        | 补齐 15 种语言描述                                               | 保持翻译完整性门禁通过                             |
 | 真实测试      | Live ACP Harness 增加 OpenCode、认证型本地 Server 与可配置工作区 | 验证 Canvas 自己的请求构造链路，而不是只测 UI      |
 | 文档          | 更新 ACP 使用说明与测试矩阵                                      | 让支持范围和证据可被维护者复核                     |
@@ -84,7 +78,7 @@ OpenCode 的命令、模型列表和凭证定义仍由 `@openhands/typescript-cl
 
 - 没有顺手开放 Kimi Code 和 Pi；这不是“一次性展示所有注册表条目”的改动。
 - 没有改变 Codex、Claude Code、Gemini CLI 的命令持久化语义。
-- 没有修改 Agent Server 接口或最低版本。
+- 没有新增 Agent Server 接口。合入最新主线后，最低版本为 **1.47.0**；OpenCode 在 1.45.0 才进入后端的闭合类型。我保留了主线更高的门槛。
 - 没有让 Canvas 接管 Provider 的模型目录或凭证所有权。
 - 默认真实验证不强制要求 OpenCode API Key。
 
@@ -98,11 +92,11 @@ OpenCode 的命令、模型列表和凭证定义仍由 `@openhands/typescript-cl
 
 - 注册表一致性：校验展示名、命令、模型和 Secret 定义均来自共享 Client Registry。
 - 首次引导：校验可见性、选择行为、品牌图标、Settings Diff、本地跳过和云端凭证门禁。
-- 设置持久化：校验保存与刷新，包括精确命令和 `opencode/big-pickle`。
+- 设置持久化：验证 Profile 展示当前命令与模型，默认命令保存为 `null` 后仍能重新识别；引导测试验证空命令 Diff；兼容性测试拒绝 1.28.0 与 1.44.99。
 - 多语言：校验 15 种语言全部包含新增文案。
 - Live ACP Harness：加入 OpenCode，并支持带 Session API Key 的本地 Agent Server。
 
-### 自动化结果
+### 9 月 28 日原始自动化结果（历史记录，非修订后的 Head）
 
 ```text
 Test Files  750 passed (750)
@@ -111,7 +105,7 @@ Build       PASS
 Translations PASS
 ```
 
-### 真实应用链路
+### 9 月 28 日原始应用链路（历史记录）
 
 我启动了 Agent Server 1.49.6 与 Agent Canvas 1.24.0，通过应用实际使用的 Settings Builder 保存 OpenCode Preset，创建新会话，并等待执行进入终态。
 
@@ -145,7 +139,7 @@ PASS
 
 ## 回滚方案
 
-改动集中在 Canvas 展示映射、OpenCode 专属的命令持久化逻辑、图标文案和测试。如果需要撤回，只要从 UI 可见映射中移除 OpenCode，就可以重新隐藏入口，不需要修改共享注册表或 Agent Server；已有 Custom ACP 配置仍然能够继续使用。
+改动集中在 Canvas 展示映射、图标文案、文档和测试。OpenCode 使用现有注册表默认命令语义。如果需要撤回，只要从 UI 可见映射中移除 OpenCode，就可以重新隐藏入口，不需要修改共享注册表或 Agent Server；已有 Custom ACP 配置仍然能够继续使用。
 
 ## 验收标准
 
@@ -153,7 +147,15 @@ PASS
 - OpenCode 图标与本地化描述正确展示。
 - 凭证步骤只展示 `OPENCODE_API_KEY`。
 - 本地环境无 Key 可继续，云端环境无 Key 不可继续。
-- 保存后得到 `opencode`、注册表默认命令和 `opencode/big-pickle`。
+- 保存 `opencode` 与 `opencode/big-pickle`，但不把默认命令复制到持久化设置。
 - 刷新后配置不丢失，并能重新识别为 OpenCode Preset。
 - 其他已展示 Provider 的行为保持不变。
 - 真实 App-path 会话进入 `finished` 并返回预期的 OpenCode 回复。
+
+## 10 月 1 日评审修订
+
+已合入 `a8c05584e` 主线，保留 1.47.0 最低版本，移除默认命令固化。详见含对比图的[修订文档](./REVIEW-REVISION.html)，以及新采集的[Profile 截图](./opencode-revision-model.jpg)与[真实回复](./opencode-revision-reply.jpg)。
+
+183 条针对性测试通过；lint 零错误、应用构建、SDK 构建与翻译完整性通过。全量：763 个文件、8,061 条测试通过，7 条 todo；macOS Bash 3.2 下两条 Docker shell-policy 测试失败。直接执行未改动的主线片段可复现同样的 exit 127：`set -u` 下空数组报 unbound variable。我没有把全量测试写成全绿。
+
+真实链路使用 Agent Server 1.49.6、OpenCode 1.18.23、`opencode/big-pickle`；空命令 Diff 成功启动并进入 finished。真实生产界面完成选择、跳过本地密钥、得到回复、保存 Profile、刷新并重新打开；SDK 读取确认 `acp_command: null`。没有在真实后端模拟注册表升级，默认解析语义由回归测试覆盖。

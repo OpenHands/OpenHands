@@ -30,7 +30,7 @@
     <text x="464" y="255" class="p">surface allow-list</text>
     <text x="464" y="280" class="p">OpenCode brand mark + locale copy</text>
     <text x="464" y="305" class="p">buildAcpAgentSettingsDiff()</text>
-    <text x="464" y="330" class="p">exact registry values copied on save</text>
+    <text x="464" y="330" class="p">provider + model; default command deferred</text>
 
     <rect x="830" y="122" width="240" height="120" rx="18" fill="#152238" stroke="#38bdf8"/>
     <text x="854" y="164" class="tag">ENTRY POINT 01</text>
@@ -46,7 +46,7 @@
     <text x="464" y="512" class="tag">PERSISTED CONTRACT</text>
     <text x="464" y="548" class="h">Agent settings diff</text>
     <text x="464" y="578" class="p">acp_server = opencode</text>
-    <text x="464" y="602" class="p">command + model survive reload</text>
+    <text x="464" y="602" class="p">registry command resolved on reload</text>
 
     <rect x="830" y="470" width="240" height="154" rx="20" fill="#172033" stroke="#475569"/>
     <text x="854" y="512" class="tag">RUNTIME BOUNDARY</text>

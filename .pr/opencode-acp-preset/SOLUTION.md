@@ -32,23 +32,17 @@ Canvas does not own OpenCode's command, model catalog, or credential schema. Tho
 
 Tests compare the Canvas configuration with the shared registry so drift fails loudly.
 
-### 2. Make the saved preset self-describing
+### 2. Keep default commands registry-owned
 
-For OpenCode, `buildAcpAgentSettingsDiff()` copies the registry's exact `default_command` into `acp_command` when the user selects the preset. It does not duplicate the command literal in Canvas source code.
+I removed the OpenCode-only command-persistence exception after review. Onboarding now saves `acp_command: []`, like every other built-in preset; the current Agent Profile editor saves `acp_command: null` for an unchanged default. Agent Server resolves the command from its registry.
 
-This is deliberate: reloading Settings should still show the exact provider command and re-detect the OpenCode preset. The saved shape is:
+This avoids pinning an obsolete CLI when the registry upgrades. Reloading the editor expands the current default for display and still identifies OpenCode. The onboarding diff is:
 
 ```json
 {
   "agent_kind": "acp",
   "acp_server": "opencode",
-  "acp_command": [
-    "npx",
-    "-y",
-    "--prefer-offline",
-    "opencode-ai@1.18.23",
-    "acp"
-  ],
+  "acp_command": [],
   "acp_args": [],
   "acp_model": "opencode/big-pickle"
 }
@@ -73,7 +67,7 @@ No Agent Server endpoint or protocol changes are introduced. Canvas persists the
 | Provider presentation | Add OpenCode to the surfaced-provider UI map                                                         | Makes a registry-backed provider discoverable without exposing every experimental entry     |
 | Brand system          | Add the OpenCode mark to `AgentBrandIcon`                                                            | Avoids presenting a supported provider as an anonymous terminal command                     |
 | Onboarding            | Render an enabled OpenCode tile and credential step                                                  | Gives first-time users the same path as other first-class providers                         |
-| Settings persistence  | Save registry command and preferred model; reset stale `acp_args`                                    | Makes save/reload lossless and prevents old arguments from being concatenated at spawn time |
+| Settings persistence  | Save provider and preferred model; delegate the default command; reset stale `acp_args`                                    | Makes save/reload lossless and prevents old arguments from being concatenated at spawn time |
 | Localization          | Add the description to all 15 locales                                                                | Keeps translation completeness intact                                                       |
 | Live harness          | Add an OpenCode plan, authenticated local Agent Server support, and a configurable working directory | Exercises the application request builder against a real process                            |
 | Documentation         | Update ACP setup and the testing matrix                                                              | Makes the supported behavior and its evidence discoverable                                  |
@@ -82,7 +76,7 @@ No Agent Server endpoint or protocol changes are introduced. Canvas persists the
 
 - Kimi Code and Pi remain hidden; this PR is not a blanket switch that exposes every registry entry.
 - Existing provider command semantics remain unchanged.
-- The Agent Server API and minimum version remain unchanged.
+- No Agent Server API is added. After merging main, the shared minimum Agent Server version is **1.47.0**; OpenCode's closed server kind first exists in 1.45.0. I preserved main's higher floor rather than lowering it.
 - Canvas does not take ownership of provider credentials or model catalogs.
 - No OpenCode API key is required for the default live smoke test.
 
@@ -96,11 +90,11 @@ The change is verified in layers so a green UI test cannot hide a broken runtime
 
 - Registry fidelity tests verify display name, command, models, and secret definitions against the shared client registry.
 - Onboarding tests verify visibility, selection, brand icon, settings diff, local skip behavior, and cloud credential gating.
-- Settings tests verify save and reload, including the exact OpenCode command and `opencode/big-pickle` model.
+- Profile tests verify selection and reload, display of the current command/model, and `null` command persistence. Onboarding tests assert the empty-command diff; compatibility tests reject 1.28.0 and 1.44.99.
 - Translation completeness covers all 15 locales.
 - The reusable live ACP harness now accepts OpenCode and an authenticated local Agent Server.
 
-### Results
+### Original September 28 results (historical; not the revised head)
 
 ```text
 Test Files  750 passed (750)
@@ -109,7 +103,7 @@ Build       PASS
 Translations PASS
 ```
 
-### Real app-path run
+### Original September 28 app-path run (historical)
 
 I started Agent Server 1.49.6 and Agent Canvas 1.24.0, saved the OpenCode preset through the same settings builder the app uses, created a new conversation, and waited for the terminal execution state.
 
@@ -143,7 +137,7 @@ I will not reuse the earlier screenshot that showed a stale successful conversat
 
 ## Rollback
 
-The change is isolated to the Canvas presentation map, OpenCode-specific command persistence, copy/icon assets, and tests. If the preset must be withdrawn, removing OpenCode from the surfaced UI map hides the entry again without changing the shared registry or Agent Server. Existing Custom ACP setups continue to work.
+The change is isolated to the Canvas presentation map, copy/icon assets, docs and tests. OpenCode uses the existing registry-default command semantics. If the preset must be withdrawn, removing OpenCode from the surfaced UI map hides the entry again without changing the shared registry or Agent Server. Existing Custom ACP setups continue to work.
 
 ## Acceptance criteria
 
@@ -151,7 +145,15 @@ The change is isolated to the Canvas presentation map, OpenCode-specific command
 - Its icon and localized description render correctly.
 - Only `OPENCODE_API_KEY` is offered as a secret.
 - Local onboarding can continue without a key; cloud onboarding cannot.
-- Saving selects `opencode`, the registry command, and `opencode/big-pickle`.
+- Saving selects `opencode` and `opencode/big-pickle`, without copying the default command into durable settings.
 - Reloading preserves and re-detects the preset.
 - Existing surfaced providers behave unchanged.
 - A real app-path conversation reaches `finished` and returns the expected OpenCode reply.
+
+## October 1 review revision
+
+I merged main at `a8c05584e`, kept its 1.47.0 minimum, and removed the default-command exception. The updated [review document with before/after diagram](./REVIEW-REVISION.html) and fresh [Profile screenshot](./opencode-revision-model.jpg) / [real reply](./opencode-revision-reply.jpg) cover this revision.
+
+Validation: 183 focused tests passed; lint (0 errors), application build, library build and translation coverage passed. Full suite: 763 files passed, 8,061 tests passed, 7 todo; two Docker shell-policy tests fail on macOS Bash 3.2. I reproduced the same exit 127 (`unbound variable` on an empty array under `set -u`) directly from unchanged upstream main. I have not described the full suite as green.
+
+The real app-path turn ran on Agent Server 1.49.6 / OpenCode 1.18.23 / `opencode/big-pickle`, saved `acp_command: []`, and reached `finished`. In the real production UI I selected OpenCode, skipped the local key step, got a reply, saved the default Profile and reopened it after a page reload. A typed-client read confirmed `acp_command: null`. No registry-version migration was simulated in the live server; regression tests cover default delegation.
