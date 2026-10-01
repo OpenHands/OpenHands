@@ -442,6 +442,7 @@ describe("deriveErrorMap", () => {
       "template.config.trigger_reviewer": ["triggerReviewer"],
       "template.config.review_tone": ["reviewTone"],
       "template.config.maintainers": ["maintainers"],
+      "template.config.max_new_per_run": ["maxNewPerRun"],
     });
   });
 });

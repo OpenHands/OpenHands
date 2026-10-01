@@ -16,6 +16,16 @@ import type {
   SetupFormValue,
 } from "#/manifests/types";
 
+// The git providers the user has connected natively on the active backend.
+const connected = vi.hoisted(() => ({ providers: [] as string[] }));
+
+vi.mock("#/hooks/use-user-providers", () => ({
+  useUserProviders: () => ({
+    providers: connected.providers,
+    isLoadingSettings: false,
+  }),
+}));
+
 const LOCAL_BACKEND: Backend = {
   id: "local-1",
   name: "Local",
@@ -106,6 +116,7 @@ const REPOSITORIES_FIELD: SetupFormFieldDefinition = {
 
 beforeEach(() => {
   __resetActiveStoreForTests();
+  connected.providers = [];
 });
 
 afterEach(() => {
@@ -267,13 +278,36 @@ describe("SetupFormField repo-picker", () => {
     ]);
   });
 
-  it("browses the account's repositories on a cloud backend", () => {
-    // Arrange / Act
+  it("browses the account's repositories on a cloud backend with the provider connected", () => {
+    // Arrange
+    connected.providers = ["github"];
+
+    // Act
     renderRepositoryField(CLOUD_BACKEND);
 
     // Assert — the picker stays the way a repository is chosen wherever it can
     // actually answer, so there is nothing to type into.
     expect(screen.getByTestId("git-repo-dropdown")).toBeInTheDocument();
     expect(screen.queryByTestId("setup-field-repository")).toBeNull();
+  });
+
+  it("lets a repository be typed on a cloud backend when its provider is not connected natively", async () => {
+    // Arrange — GitLab reached through an MCP server: the instance has no
+    // native GitLab token to list repositories with, only a GitHub one.
+    connected.providers = ["github"];
+    const { onValueChange, user } = renderRepositoryField(CLOUD_BACKEND, {
+      field: { ...REPOSITORY_FIELD, provider: "gitlab" },
+    });
+
+    // Act
+    await user.type(
+      screen.getByTestId("setup-field-repository"),
+      "group/project",
+    );
+
+    // Assert — the required field stays answerable instead of offering a list
+    // that cannot load.
+    expect(screen.queryByTestId("git-repo-dropdown")).toBeNull();
+    expect(onValueChange).toHaveBeenLastCalledWith("group/project");
   });
 });
