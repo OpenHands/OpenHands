@@ -36,6 +36,7 @@ export const APP_PREFERENCE_FIELDS = [
   "title_llm_profile",
   "disabled_skills",
   "enabled_skills",
+  "run_router_at_conversation_start",
 ] as const;
 
 export type AppPreferenceField = (typeof APP_PREFERENCE_FIELDS)[number];

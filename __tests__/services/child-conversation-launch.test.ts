@@ -23,6 +23,8 @@ const {
   mockGetCloudStartTask,
   mockPickCloudBackend,
   mockGetCachedAgentServerVersion,
+  mockGetSettings,
+  mockListMetaProfiles,
 } = vi.hoisted(() => ({
   mockCreateConversation: vi.fn(),
   mockResolveWorkingDir: vi.fn(),
@@ -32,6 +34,8 @@ const {
   mockGetCloudStartTask: vi.fn(),
   mockPickCloudBackend: vi.fn(),
   mockGetCachedAgentServerVersion: vi.fn(),
+  mockGetSettings: vi.fn(),
+  mockListMetaProfiles: vi.fn(),
 }));
 
 vi.mock(
@@ -68,6 +72,14 @@ vi.mock("#/api/agent-server-compatibility", () => ({
 vi.mock("#/utils/custom-toast-handlers", () => ({
   displayErrorToast: vi.fn(),
   displaySuccessToastWithLink: vi.fn(),
+}));
+
+vi.mock("#/api/settings-service/settings-service.api", () => ({
+  default: { getSettings: mockGetSettings },
+}));
+
+vi.mock("#/api/meta-profiles-service/meta-profiles-service.api", () => ({
+  default: { listMetaProfiles: mockListMetaProfiles },
 }));
 
 const PARENT_ID = "parent-conversation-id";
@@ -133,6 +145,13 @@ describe("handleLaunchChildConversationAction", () => {
     mockUpdateTitle.mockResolvedValue(undefined);
     mockSendMessage.mockResolvedValue(undefined);
     mockGetCachedAgentServerVersion.mockReturnValue("1.37.1");
+    mockGetSettings.mockResolvedValue({
+      run_router_at_conversation_start: false,
+    });
+    mockListMetaProfiles.mockResolvedValue({
+      meta_profiles: [],
+      active_meta_profile: null,
+    });
   });
 
   describe("parameter validation", () => {
@@ -431,6 +450,58 @@ describe("handleLaunchChildConversationAction", () => {
           // conversation to link the child to — and a dangling id would hide
           // the child from the Cloud conversation list.
           parent_conversation_id: null,
+        }),
+        cloudBackend,
+      );
+    });
+
+    it("skips the meta-profiles fetch and launch additions when the router toggle is off", async () => {
+      mockCreateCloudAppConversation.mockResolvedValue({
+        id: "start-task-id",
+        app_conversation_id: "cloud-child-id",
+        status: "READY",
+      });
+
+      await handleLaunchChildConversationAction(
+        action({ target: "cloud" }),
+        PARENT_ID,
+        nextToolCallId(),
+      );
+
+      expect(mockListMetaProfiles).not.toHaveBeenCalled();
+      const [request] = mockCreateCloudAppConversation.mock.calls.at(-1) as [
+        Record<string, unknown>,
+      ];
+      expect(request).not.toHaveProperty("agent_launch_additions");
+    });
+
+    it("stamps the router instruction when the toggle is on and a meta-profile is active", async () => {
+      mockGetSettings.mockResolvedValue({
+        run_router_at_conversation_start: true,
+      });
+      mockListMetaProfiles.mockResolvedValue({
+        meta_profiles: [{ name: "router" }],
+        active_meta_profile: "router",
+      });
+      mockCreateCloudAppConversation.mockResolvedValue({
+        id: "start-task-id",
+        app_conversation_id: "cloud-child-id",
+        status: "READY",
+      });
+
+      await handleLaunchChildConversationAction(
+        action({ target: "cloud" }),
+        PARENT_ID,
+        nextToolCallId(),
+      );
+
+      expect(mockCreateCloudAppConversation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agent_launch_additions: {
+            system_message_suffix_append: expect.stringContaining(
+              "route_task_to_model",
+            ),
+          },
         }),
         cloudBackend,
       );

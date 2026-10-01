@@ -87,6 +87,16 @@ export interface AppConversationStartRequest {
   // POST /api/v1/app-conversations; the local path uses the encrypted
   // agent_settings builder instead, which threads its own agentProfileId.
   agent_profile_id?: string | null;
+  /**
+   * Deployment context applied after agent resolution. The cloud app-server
+   * forwards `system_message_suffix_append` to the resolved agent's
+   * system-message suffix, mirroring the SDK's `AgentLaunchAdditions`. Used
+   * here to route the first message through the Model Router when the user
+   * enables "Run at conversation start".
+   */
+  agent_launch_additions?: {
+    system_message_suffix_append?: string | null;
+  } | null;
 }
 
 export type AppConversationStartTaskStatus =
