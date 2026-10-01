@@ -265,4 +265,37 @@ describe("MetaProfileEditor", () => {
     await user.click(screen.getByTestId("meta-profile-cancel"));
     expect(onCancel).toHaveBeenCalled();
   });
+
+  it("preselects the template classifier when no LLM profiles exist yet", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    renderWithProviders(
+      <MetaProfileEditor
+        mode="create"
+        providerConnections={CONNECTIONS}
+        selectRouterConnectionByDefault
+        availableProfiles={[]}
+        isSaving={false}
+        onSave={onSave}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    // The classifier named by the template must be shown even before any LLM
+    // profile exists, so it survives into the saved config and gets created.
+    expect(screen.getByTestId("meta-profile-classifier-input")).toHaveValue(
+      DEFAULT_ROUTER_PRO_META_PROFILE_DEFAULT.classifier_model,
+    );
+    expect(screen.getByTestId("meta-profile-save")).toBeEnabled();
+
+    await user.click(screen.getByTestId("meta-profile-save"));
+    expect(onSave).toHaveBeenCalledWith(
+      DEFAULT_ROUTER_PRO_META_PROFILE_NAME,
+      expect.objectContaining({
+        classifier_model:
+          DEFAULT_ROUTER_PRO_META_PROFILE_DEFAULT.classifier_model,
+      }),
+      "conn-openhands",
+    );
+  });
 });
