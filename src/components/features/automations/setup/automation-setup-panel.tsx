@@ -286,6 +286,15 @@ function onceCron(scheduleDateTime: string): string {
   return `${minute} ${hour} ${day} ${month} *`;
 }
 
+function eventKeyPayload(value: string): string | string[] {
+  const keys = value
+    .split(",")
+    .map((key) => key.trim())
+    .filter(Boolean);
+  if (keys.length <= 1) return keys[0] ?? DEFAULT_EVENT_KEY;
+  return keys;
+}
+
 function cronWeekday(weekday: string): number {
   const value = Number(weekday);
   if (!Number.isInteger(value) || value < 0 || value > 6) return 1;
@@ -1175,7 +1184,7 @@ export function AutomationSetupPanel({
       ? {
           type: "event",
           source: eventSource.trim() || DEFAULT_EVENT_SOURCE,
-          on: eventKey.trim() || DEFAULT_EVENT_KEY,
+          on: eventKeyPayload(eventKey),
           ...(eventFilter.trim() ? { filter: eventFilter.trim() } : {}),
         }
       : {
@@ -1681,16 +1690,6 @@ export function AutomationSetupPanel({
 
   const handleTestExisting = async () => {
     if (!validateRequiredFields()) return;
-    if (
-      triggerKind === "event" &&
-      parseEventTestPayload(eventTestPayload) === null
-    ) {
-      setStatusMessage({
-        kind: "error",
-        text: t(I18nKey.AUTOMATION_SETUP$TEST_EVENT_PAYLOAD_INVALID),
-      });
-      return;
-    }
     setIsSubmitting(true);
     setSaveState("saving");
     try {
@@ -2094,6 +2093,7 @@ export function AutomationSetupPanel({
                   eventTypeOptions={eventTypeOptions}
                   customWebhook={customWebhook}
                   customWebhookRegistration={customWebhookRegistration}
+                  usesExistingAutomationTestPayload={isEditingExisting}
                   updatedSuffixes={{
                     eventSource: agentUpdatedSuffix("eventSource"),
                     eventKey: agentUpdatedSuffix("eventKey"),
@@ -3012,6 +3012,7 @@ function EventFields({
   eventTypeOptions,
   customWebhook,
   customWebhookRegistration,
+  usesExistingAutomationTestPayload,
   updatedSuffixes,
   streamingField,
   setEventSource,
@@ -3028,6 +3029,7 @@ function EventFields({
   eventTypeOptions: string[];
   customWebhook: CustomWebhookFormState;
   customWebhookRegistration: CustomWebhookCreateResponse | null;
+  usesExistingAutomationTestPayload: boolean;
   updatedSuffixes: Partial<
     Record<"eventSource" | "eventKey" | "eventFilter", string | undefined>
   >;
@@ -3368,45 +3370,60 @@ function EventFields({
           </div>
         ) : null}
         <div className="@min-[640px]:col-span-2">
-          <button
-            type="button"
-            data-testid="automation-setup-event-test-payload-toggle"
-            aria-expanded={isTestPayloadOpen}
-            aria-controls="automation-setup-event-test-payload-panel"
-            onClick={() => setIsTestPayloadOpen((open) => !open)}
-            className="flex w-full items-center gap-2 text-left text-sm"
-          >
-            <ChevronDown
-              className={cn(
-                "size-4 shrink-0 text-[var(--oh-muted)] transition-transform duration-200 motion-reduce:transition-none",
-                isTestPayloadOpen && "rotate-180",
-              )}
-              aria-hidden
-            />
-            {t(I18nKey.AUTOMATION_SETUP$TEST_EVENT_PAYLOAD)}
-          </button>
-          {isTestPayloadOpen ? (
-            <div
-              id="automation-setup-event-test-payload-panel"
-              className="flex flex-col gap-2 pt-2"
+          {usesExistingAutomationTestPayload ? (
+            <p
+              role="note"
+              data-testid="automation-setup-existing-test-payload-note"
+              className="flex items-start gap-1.5 rounded-lg border border-[var(--oh-border)] bg-[var(--oh-surface)] p-3 text-xs leading-5 text-[var(--oh-muted)]"
             >
-              <textarea
-                data-testid="automation-setup-event-test-payload"
-                value={eventTestPayload}
-                onChange={(event) => setEventTestPayload(event.target.value)}
-                className={cn(
-                  formControlMultilineFieldClassName,
-                  "min-h-44 font-mono",
-                )}
-                placeholder={t(
-                  I18nKey.AUTOMATION_SETUP$TEST_EVENT_PAYLOAD_PLACEHOLDER,
-                )}
-              />
-              <p className="text-xs leading-5 text-[var(--oh-muted)]">
-                {t(I18nKey.AUTOMATION_SETUP$TEST_EVENT_PAYLOAD_DESCRIPTION)}
-              </p>
-            </div>
-          ) : null}
+              <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              {t(I18nKey.AUTOMATION_SETUP$EXISTING_TEST_PAYLOAD_NOTICE)}
+            </p>
+          ) : (
+            <>
+              <button
+                type="button"
+                data-testid="automation-setup-event-test-payload-toggle"
+                aria-expanded={isTestPayloadOpen}
+                aria-controls="automation-setup-event-test-payload-panel"
+                onClick={() => setIsTestPayloadOpen((open) => !open)}
+                className="flex w-full items-center gap-2 text-left text-sm"
+              >
+                <ChevronDown
+                  className={cn(
+                    "size-4 shrink-0 text-[var(--oh-muted)] transition-transform duration-200 motion-reduce:transition-none",
+                    isTestPayloadOpen && "rotate-180",
+                  )}
+                  aria-hidden
+                />
+                {t(I18nKey.AUTOMATION_SETUP$TEST_EVENT_PAYLOAD)}
+              </button>
+              {isTestPayloadOpen ? (
+                <div
+                  id="automation-setup-event-test-payload-panel"
+                  className="flex flex-col gap-2 pt-2"
+                >
+                  <textarea
+                    data-testid="automation-setup-event-test-payload"
+                    value={eventTestPayload}
+                    onChange={(event) =>
+                      setEventTestPayload(event.target.value)
+                    }
+                    className={cn(
+                      formControlMultilineFieldClassName,
+                      "min-h-44 font-mono",
+                    )}
+                    placeholder={t(
+                      I18nKey.AUTOMATION_SETUP$TEST_EVENT_PAYLOAD_PLACEHOLDER,
+                    )}
+                  />
+                  <p className="text-xs leading-5 text-[var(--oh-muted)]">
+                    {t(I18nKey.AUTOMATION_SETUP$TEST_EVENT_PAYLOAD_DESCRIPTION)}
+                  </p>
+                </div>
+              ) : null}
+            </>
+          )}
         </div>
       </section>
     </div>

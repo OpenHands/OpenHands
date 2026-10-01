@@ -1943,6 +1943,87 @@ describe("AutomationSetupPanel", () => {
     expect(mockNavigate).toHaveBeenCalledWith("/automations");
   });
 
+  it("preserves multi-event trigger keys when saving an existing automation", async () => {
+    vi.mocked(AutomationService.updateAutomation).mockResolvedValue({
+      id: "auto-1",
+    } as never);
+
+    const user = userEvent.setup();
+    renderPanel(
+      setupDraftFromAutomation({
+        id: "auto-1",
+        name: "Triage",
+        prompt: "Triage it",
+        enabled: true,
+        created_at: "2026-01-01T00:00:00.000Z",
+        updated_at: "2026-01-01T00:00:00.000Z",
+        trigger: {
+          type: "event",
+          source: "github",
+          on: ["pull_request", "issues"],
+        },
+      }),
+    );
+
+    await user.click(screen.getByTestId("automation-setup-save"));
+
+    await waitFor(() =>
+      expect(AutomationService.updateAutomation).toHaveBeenCalledWith(
+        "auto-1",
+        expect.objectContaining({
+          trigger: expect.objectContaining({
+            on: ["pull_request", "issues"],
+          }),
+        }),
+      ),
+    );
+  });
+
+  it("explains existing event automation tests use the backend payload", async () => {
+    vi.mocked(AutomationService.updateAutomation).mockResolvedValue({
+      id: "auto-1",
+    } as never);
+    vi.mocked(AutomationService.dispatchAutomation).mockResolvedValue({
+      id: "run-1",
+    } as never);
+
+    const user = userEvent.setup();
+    renderPanel(
+      setupDraftFromAutomation({
+        id: "auto-1",
+        name: "Triage",
+        prompt: "Triage it",
+        enabled: true,
+        created_at: "2026-01-01T00:00:00.000Z",
+        updated_at: "2026-01-01T00:00:00.000Z",
+        trigger: {
+          type: "event",
+          source: "github",
+          on: "issues",
+        },
+      }),
+    );
+
+    expect(
+      screen.getByTestId("automation-setup-existing-test-payload-note"),
+    ).toHaveTextContent("AUTOMATION_SETUP$EXISTING_TEST_PAYLOAD_NOTICE");
+    expect(
+      screen.queryByTestId("automation-setup-event-test-payload-toggle"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automation-setup-event-test-payload"),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("automation-setup-test"));
+
+    await waitFor(() =>
+      expect(AutomationService.dispatchAutomation).toHaveBeenCalledWith(
+        "auto-1",
+      ),
+    );
+    expect(AutomationService.dispatchServerDraft).not.toHaveBeenCalled();
+  });
+
   it("shows existing custom bundle metadata without replacing it on save", async () => {
     vi.mocked(AutomationService.updateAutomation).mockResolvedValue({
       id: "auto-1",

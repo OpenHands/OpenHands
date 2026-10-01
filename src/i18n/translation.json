@@ -45219,6 +45219,23 @@
     "tr": "Bu olay otomasyonunu test etmeden önce geçerli bir JSON nesnesi girin.",
     "uk": "Введіть дійсний JSON-об’єкт перед тестуванням цієї автоматизації події."
   },
+  "AUTOMATION_SETUP$EXISTING_TEST_PAYLOAD_NOTICE": {
+    "en": "Existing automation tests use the backend’s default synthetic event payload. To test a custom payload, create or edit through a draft first. Support for testing existing automations with custom payloads is coming soon.",
+    "ja": "既存のオートメーションのテストでは、バックエンドのデフォルトの合成イベントペイロードが使用されます。カスタムペイロードをテストするには、まずドラフトで作成または編集してください。既存のオートメーションをカスタムペイロードでテストするサポートは近日対応予定です。",
+    "zh-CN": "现有自动化测试使用后端的默认合成事件载荷。若要测试自定义载荷，请先通过草稿创建或编辑。即将支持使用自定义载荷测试现有自动化。",
+    "zh-TW": "現有自動化測試會使用後端的預設合成事件酬載。若要測試自訂酬載，請先透過草稿建立或編輯。即將支援使用自訂酬載測試現有自動化。",
+    "ko-KR": "Existing automation tests use the backend’s default synthetic event payload. To test a custom payload, create or edit through a draft first. Support for testing existing automations with custom payloads is coming soon.",
+    "no": "Existing automation tests use the backend’s default synthetic event payload. To test a custom payload, create or edit through a draft first. Support for testing existing automations with custom payloads is coming soon.",
+    "ar": "Existing automation tests use the backend’s default synthetic event payload. To test a custom payload, create or edit through a draft first. Support for testing existing automations with custom payloads is coming soon.",
+    "de": "Tests bestehender Automationen verwenden die standardmäßige synthetische Ereignisnutzlast des Backends. Um eine benutzerdefinierte Nutzlast zu testen, erstellen oder bearbeiten Sie zuerst über einen Entwurf. Unterstützung für Tests bestehender Automationen mit benutzerdefinierten Nutzlasten folgt in Kürze.",
+    "fr": "Les tests des automatisations existantes utilisent la charge utile d’événement synthétique par défaut du backend. Pour tester une charge utile personnalisée, créez ou modifiez d’abord via un brouillon. La prise en charge du test des automatisations existantes avec des charges utiles personnalisées arrive bientôt.",
+    "it": "Existing automation tests use the backend’s default synthetic event payload. To test a custom payload, create or edit through a draft first. Support for testing existing automations with custom payloads is coming soon.",
+    "pt": "Existing automation tests use the backend’s default synthetic event payload. To test a custom payload, create or edit through a draft first. Support for testing existing automations with custom payloads is coming soon.",
+    "es": "Las pruebas de automatizaciones existentes usan la carga útil de evento sintética predeterminada del backend. Para probar una carga personalizada, crea o edita primero mediante un borrador. La compatibilidad para probar automatizaciones existentes con cargas personalizadas llegará pronto.",
+    "ca": "Existing automation tests use the backend’s default synthetic event payload. To test a custom payload, create or edit through a draft first. Support for testing existing automations with custom payloads is coming soon.",
+    "tr": "Existing automation tests use the backend’s default synthetic event payload. To test a custom payload, create or edit through a draft first. Support for testing existing automations with custom payloads is coming soon.",
+    "uk": "Existing automation tests use the backend’s default synthetic event payload. To test a custom payload, create or edit through a draft first. Support for testing existing automations with custom payloads is coming soon."
+  },
   "AUTOMATION_SETUP$CUSTOM_WEBHOOK_TITLE": {
     "en": "Register this as a custom webhook source",
     "ja": "カスタム Webhook ソースとして登録",
