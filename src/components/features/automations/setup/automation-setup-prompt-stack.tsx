@@ -411,6 +411,7 @@ export function AutomationSetupPromptStack({
   const isLocalGithubTokenMissing =
     isLocalBackend && repositoryPages.some((page) => page.missing_token);
   const isRepositoryListLoading = repositoryQuery.isLoading;
+  const isRepositoryListError = repositoryQuery.isError;
   const repositoryNames = repositoryPages
     .flatMap((page) => page.items)
     .map((repo) => repo.full_name);
@@ -597,8 +598,15 @@ export function AutomationSetupPromptStack({
                         }
                       }}
                     >
-                      {isRepositoryListLoading &&
-                      visibleRepositoryNames.length === 0 ? (
+                      {isRepositoryListError ? (
+                        <p
+                          data-testid="automation-setup-repository-error"
+                          className="px-2 py-2 text-sm text-[var(--oh-warning)]"
+                        >
+                          {t(I18nKey.HOME$FAILED_TO_LOAD_REPOSITORIES)}
+                        </p>
+                      ) : isRepositoryListLoading &&
+                        visibleRepositoryNames.length === 0 ? (
                         <div
                           data-testid="automation-setup-repository-loading"
                           className="flex items-center justify-center py-3"
@@ -624,6 +632,7 @@ export function AutomationSetupPromptStack({
                       )}
                       {repositorySearchText &&
                       !isRepositoryListLoading &&
+                      !isRepositoryListError &&
                       visibleRepositoryNames.length === 0 ? (
                         <p className="px-2 py-2 text-sm text-muted italic">
                           {t(I18nKey.GITHUB$NO_RESULTS)}

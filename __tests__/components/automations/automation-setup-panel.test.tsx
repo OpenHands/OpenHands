@@ -12,6 +12,12 @@ import { packTarGzip } from "#/utils/tar-gzip";
 
 const mockNavigate = vi.fn();
 const mockToastSuccess = vi.fn();
+const mockUseGitRepositories = vi.fn(() => ({
+  data: { pages: [] },
+  isError: false,
+  isLoading: false,
+  onLoadMore: vi.fn(),
+}));
 
 vi.mock("react-hot-toast", () => ({
   default: { success: (...args: unknown[]) => mockToastSuccess(...args) },
@@ -66,7 +72,7 @@ vi.mock("#/hooks/use-user-providers", () => ({
 }));
 
 vi.mock("#/hooks/query/use-git-repositories", () => ({
-  useGitRepositories: () => ({ data: { pages: [] }, isLoading: false }),
+  useGitRepositories: () => mockUseGitRepositories(),
 }));
 
 function renderPanel(
@@ -92,6 +98,12 @@ function renderPanel(
 describe("AutomationSetupPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseGitRepositories.mockReturnValue({
+      data: { pages: [] },
+      isError: false,
+      isLoading: false,
+      onLoadMore: vi.fn(),
+    });
   });
 
   it("switches between prompt, plugin, and custom form types", async () => {
@@ -190,6 +202,27 @@ describe("AutomationSetupPanel", () => {
         }),
       ),
     );
+  });
+
+  it("shows a repository loading error in the repository picker", async () => {
+    mockUseGitRepositories.mockReturnValue({
+      data: { pages: [] },
+      isError: true,
+      isLoading: false,
+      onLoadMore: vi.fn(),
+    });
+
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(screen.getByTestId("automation-setup-repository-add"));
+
+    expect(
+      screen.getByTestId("automation-setup-repository-error"),
+    ).toHaveTextContent("HOME$FAILED_TO_LOAD_REPOSITORIES");
+    expect(
+      screen.queryByTestId("automation-setup-repository-loading"),
+    ).not.toBeInTheDocument();
   });
 
   it("creates plugin drafts with the selected plugin source", async () => {
