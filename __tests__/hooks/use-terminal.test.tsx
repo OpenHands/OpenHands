@@ -197,6 +197,33 @@ describe("useTerminal", () => {
     );
   });
 
+  it("should reset rendered history when the command store is cleared and reseeded in one update", () => {
+    const originalCommands: Command[] = [
+      { content: "echo hello", type: "input" },
+      { content: "hello", type: "output" },
+    ];
+    useCommandStore.setState({ commands: originalCommands });
+
+    renderWithProviders(<TestTerminalComponent />);
+    expect(mockTerminal.writeln).toHaveBeenCalledTimes(2);
+
+    mockTerminal.reset.mockClear();
+    mockTerminal.writeln.mockClear();
+    act(() => {
+      useCommandStore.getState().clearTerminal();
+      useCommandStore.getState().appendInput("echo fresh");
+      useCommandStore.getState().appendOutput("fresh");
+    });
+
+    expect(mockTerminal.reset).toHaveBeenCalledOnce();
+    expect(mockTerminal.writeln).toHaveBeenCalledTimes(2);
+    expect(mockTerminal.writeln).toHaveBeenNthCalledWith(1, "echo fresh");
+    expect(mockTerminal.writeln).toHaveBeenNthCalledWith(2, "fresh");
+    expect(mockTerminal.reset.mock.invocationCallOrder[0]).toBeLessThan(
+      mockTerminal.writeln.mock.invocationCallOrder[0],
+    );
+  });
+
   it("should not call fit() when terminal.element is null", () => {
     // Temporarily set element to null to simulate terminal not being opened
     const originalElement = mockTerminal.element;

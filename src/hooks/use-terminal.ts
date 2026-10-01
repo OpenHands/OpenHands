@@ -94,6 +94,8 @@ export const useTerminal = () => {
   const fitAddon = React.useRef<FitAddon | null>(null);
   const ref = React.useRef<HTMLDivElement>(null);
   const lastCommandIndex = React.useRef(0);
+  const clearVersion = useCommandStore((state) => state.clearVersion);
+  const lastClearVersion = React.useRef(clearVersion);
   const isDisposed = React.useRef(false);
 
   const createTerminal = (host: HTMLDivElement) =>
@@ -177,7 +179,10 @@ export const useTerminal = () => {
   }, [colorTheme]);
 
   React.useEffect(() => {
-    if (commands.length < lastCommandIndex.current) {
+    const wasCleared = clearVersion !== lastClearVersion.current;
+    lastClearVersion.current = clearVersion;
+
+    if (wasCleared) {
       if (terminal.current) {
         terminal.current.reset();
         // Reset restores the default cursor visibility.
@@ -199,7 +204,7 @@ export const useTerminal = () => {
       }
       lastCommandIndex.current = commands.length;
     }
-  }, [commands]);
+  }, [commands, clearVersion]);
 
   React.useEffect(() => {
     let resizeObserver: ResizeObserver | null = null;
