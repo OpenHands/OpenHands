@@ -50,7 +50,7 @@ export function useWorkspaceSession(): {
   error: Error | null;
 } {
   const { data: conversation } = useActiveConversation();
-  const runtimeIsReady = useRuntimeIsReady();
+  const runtimeIsReady = useRuntimeIsReady({ allowAgentError: true });
 
   const conversationId = conversation?.id;
   const conversationUrl = conversation?.conversation_url;

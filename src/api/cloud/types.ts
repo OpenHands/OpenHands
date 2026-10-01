@@ -7,6 +7,13 @@ export interface CloudOrganization {
   id: string;
   name: string;
   is_personal?: boolean;
+  /**
+   * Whether the org should be offered in the UI. The cloud sets this per org
+   * from its `HIDE_PERSONAL_WORKSPACES` policy. Optional on purpose: an
+   * app-server that predates the field omits it, and an absent flag means
+   * "visible" — only an explicit `false` hides an org.
+   */
+  is_visible?: boolean;
 }
 
 export interface CloudOrganizationsResponse {

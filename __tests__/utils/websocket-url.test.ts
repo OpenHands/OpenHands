@@ -64,7 +64,7 @@ describe("websocket-url utilities", () => {
         "conv-123",
         "https://example.com/api/conversations/conv-123",
       );
-      expect(result).toBe("wss://example.com/sockets/events/conv-123");
+      expect(result).toBe("wss://example.com/sockets/session/conv-123");
     });
 
     it("should build WebSocket URL with path prefix for proxy deployment", () => {
@@ -73,7 +73,7 @@ describe("websocket-url utilities", () => {
         "https://openhands.example.com/runtime/55313/api/conversations/abc123",
       );
       expect(result).toBe(
-        "wss://openhands.example.com/runtime/55313/sockets/events/abc123",
+        "wss://openhands.example.com/runtime/55313/sockets/session/abc123",
       );
     });
 
@@ -87,7 +87,7 @@ describe("websocket-url utilities", () => {
         "conv-123",
         "http://localhost:3000/api/conversations/conv-123",
       );
-      expect(result).toBe("ws://localhost:3000/sockets/events/conv-123");
+      expect(result).toBe("ws://localhost:3000/sockets/session/conv-123");
     });
 
     it("should use ws for a remote HTTP page served by the local ingress", () => {
@@ -102,13 +102,13 @@ describe("websocket-url utilities", () => {
         "http://localhost:8000/api/conversations/conv-123",
       );
       expect(result).toBe(
-        "ws://spark-1874.tailae62af.ts.net:8000/sockets/events/conv-123",
+        "ws://spark-1874.tailae62af.ts.net:8000/sockets/session/conv-123",
       );
     });
 
     it("should fallback to window.location.host for null URL", () => {
       const result = buildWebSocketUrl("conv-123", null);
-      expect(result).toBe("wss://localhost:3001/sockets/events/conv-123");
+      expect(result).toBe("wss://localhost:3001/sockets/session/conv-123");
     });
 
     it("should handle complex path prefixes", () => {
@@ -117,7 +117,7 @@ describe("websocket-url utilities", () => {
         "https://app.example.com/org/team/runtime/12345/api/conversations/test-conv",
       );
       expect(result).toBe(
-        "wss://app.example.com/org/team/runtime/12345/sockets/events/test-conv",
+        "wss://app.example.com/org/team/runtime/12345/sockets/session/test-conv",
       );
     });
   });

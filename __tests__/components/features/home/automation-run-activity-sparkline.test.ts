@@ -92,7 +92,7 @@ describe("formatDurationForTitle", () => {
 describe("barColorClassForStatus", () => {
   it("uses a pulsing success green for running bars", () => {
     const classes = barColorClassForStatus(AutomationRunStatus.RUNNING);
-    expect(classes).toContain("bg-[var(--oh-status-success)]");
+    expect(classes).toContain("bg-status-success");
     expect(classes).toContain("animate-pulse");
   });
 
@@ -104,17 +104,11 @@ describe("barColorClassForStatus", () => {
   });
 
   it("uses warning color for blocked task outcomes", () => {
-    expect(barColorClassForStatus("blocked")).toContain(
-      "bg-[var(--oh-warning)]",
-    );
+    expect(barColorClassForStatus("blocked")).toContain("bg-warning");
   });
 
   it("uses warning color for partial and unknown task outcomes", () => {
-    expect(barColorClassForStatus("partial_success")).toContain(
-      "bg-[var(--oh-warning)]",
-    );
-    expect(barColorClassForStatus("unknown")).toContain(
-      "bg-[var(--oh-warning)]",
-    );
+    expect(barColorClassForStatus("partial_success")).toContain("bg-warning");
+    expect(barColorClassForStatus("unknown")).toContain("bg-warning");
   });
 });
