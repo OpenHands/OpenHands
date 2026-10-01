@@ -61,7 +61,8 @@ export function MetaLlmSettingsView() {
   const saveLlmProfile = useSaveLlmProfile();
   const activateMetaProfile = useActivateMetaProfile();
   const { data: settings } = useSettings();
-  const { mutate: saveSettings } = useSaveSettings();
+  const { mutate: saveSettings, mutateAsync: saveSettingsAsync } =
+    useSaveSettings();
 
   const [view, setView] = useState<ViewMode>("list");
   const [editing, setEditing] = useState<EditingMetaProfile | null>(null);
@@ -215,7 +216,17 @@ export function MetaLlmSettingsView() {
       }
       await saveMetaProfile.mutateAsync({ name, config });
       if (isFirstRouter && !settings?.run_router_at_conversation_start) {
-        saveSettings({ run_router_at_conversation_start: true });
+        // Await the preference write so we observe its outcome: on success
+        // `useSaveSettings`'s onSuccess invalidates the settings cache and the
+        // switch flips on (matching the server); on failure we surface an
+        // error but keep the router creation intact, and the switch stays off
+        // to match the unchanged server value. This must not abort the primary
+        // create/activate flow, so it has its own try/catch.
+        try {
+          await saveSettingsAsync({ run_router_at_conversation_start: true });
+        } catch {
+          displayErrorToast(t(I18nKey.ERROR$GENERIC));
+        }
       }
       if (shouldActivateAfterCreate) {
         await activateMetaProfile.mutateAsync(name);
