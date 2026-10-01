@@ -618,16 +618,33 @@ describe("Telemetry Service", () => {
   });
 
   describe("clearTelemetryData", () => {
-    it("clears all telemetry data from localStorage", async () => {
+    it("clears all telemetry data from browser storage", async () => {
       await setTelemetryConsent("granted");
       await setTelemetryIdentity("user-a");
       localStorage.setItem("openhands-telemetry-first-use", "true");
+      localStorage.setItem(
+        "posthog_bootstrap:consumed_nonces",
+        JSON.stringify({ "nonce-a": Date.now() + 60_000 }),
+      );
+      localStorage.setItem("posthog_bootstrap:legacy", "legacy");
+      sessionStorage.setItem(
+        "posthog_bootstrap",
+        JSON.stringify({
+          bootstrap: { distinctID: "website-anon", sessionID: "session-a" },
+          attribution: { cta_surface: "docs_link" },
+        }),
+      );
 
       await clearTelemetryData();
 
       expect(localStorage.getItem("openhands-telemetry-consent")).toBeNull();
       expect(getPendingCloudTelemetryConsent()).toBeNull();
       expect(localStorage.getItem("openhands-telemetry-first-use")).toBeNull();
+      expect(
+        localStorage.getItem("posthog_bootstrap:consumed_nonces"),
+      ).toBeNull();
+      expect(localStorage.getItem("posthog_bootstrap:legacy")).toBeNull();
+      expect(sessionStorage.getItem("posthog_bootstrap")).toBeNull();
       expect(mockPosthog.reset).toHaveBeenCalledWith(true);
       expect(mockPosthog.opt_out_capturing).toHaveBeenCalled();
       await expect(getTelemetryDistinctIdForConsentSync()).resolves.toBe(
