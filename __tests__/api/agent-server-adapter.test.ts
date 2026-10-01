@@ -41,6 +41,7 @@ const {
   mockGetServerInfo,
   mockGetActiveBackend,
   mockLoadHooks,
+  mockListMetaProfiles,
 } = vi.hoisted(() => ({
   mockGetAgentServerWorkingDir: vi.fn(() => "/workspace/project/agent-canvas"),
   mockIsAgentServerToolAvailable: vi.fn((_toolName: string) => true),
@@ -63,6 +64,7 @@ const {
     },
   })),
   mockLoadHooks: vi.fn(),
+  mockListMetaProfiles: vi.fn(),
 }));
 
 vi.mock("@openhands/typescript-client/clients", () => ({
@@ -73,6 +75,9 @@ vi.mock("@openhands/typescript-client/clients", () => ({
   }),
   HooksClient: vi.fn(function HooksClientMock() {
     return { loadHooks: mockLoadHooks };
+  }),
+  MetaProfilesClient: vi.fn(function MetaProfilesClientMock() {
+    return { listMetaProfiles: mockListMetaProfiles };
   }),
 }));
 
@@ -697,6 +702,77 @@ describe("buildStartConversationRequest", () => {
     };
 
     expect(payload.agent_settings.agent_context?.secrets).toBeUndefined();
+  });
+
+  it("appends the route-at-conversation-start suffix when the toggle is on and a meta-profile is active (OpenHands agent)", () => {
+    const payload = buildStartConversationRequest({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        run_router_at_conversation_start: true,
+      },
+      hasActiveMetaProfile: true,
+    }) as {
+      agent_settings: { agent_context?: { system_message_suffix?: string } };
+    };
+
+    const suffix = payload.agent_settings.agent_context?.system_message_suffix;
+    expect(suffix).toContain("ROUTE_AT_CONVERSATION_START");
+    expect(suffix).toContain("route_task_to_model");
+  });
+
+  it("appends the route-at-conversation-start suffix for an inline ACP launch when the toggle is on and a meta-profile is active", () => {
+    const payload = buildStartConversationRequest({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        agent_settings: {
+          ...DEFAULT_SETTINGS.agent_settings,
+          agent_kind: "acp",
+          acp_server: "claude-code",
+          acp_command: ["npx", "-y", "@agentclientprotocol/claude-agent-acp"],
+        },
+        run_router_at_conversation_start: true,
+      },
+      hasActiveMetaProfile: true,
+    }) as {
+      agent_settings: { agent_context?: { system_message_suffix?: string } };
+    };
+
+    expect(
+      payload.agent_settings.agent_context?.system_message_suffix,
+    ).toContain("ROUTE_AT_CONVERSATION_START");
+  });
+
+  it("does not add the router suffix when the toggle is on but no meta-profile is active", () => {
+    // With no active meta-profile the agent-server does not attach
+    // `route_task_to_model`, so the instruction must not be emitted even if
+    // the toggle was left on (e.g. the active profile was just deleted).
+    const payload = buildStartConversationRequest({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        run_router_at_conversation_start: true,
+      },
+      hasActiveMetaProfile: false,
+    }) as {
+      agent_settings: { agent_context?: { system_message_suffix?: string } };
+    };
+
+    const suffix =
+      payload.agent_settings.agent_context?.system_message_suffix ?? "";
+    expect(suffix).not.toContain("ROUTE_AT_CONVERSATION_START");
+  });
+
+  it("does not add a system_message_suffix for the router when the toggle is off (default)", () => {
+    const payload = buildStartConversationRequest({
+      settings: DEFAULT_SETTINGS,
+    }) as {
+      agent_settings: { agent_context?: { system_message_suffix?: string } };
+    };
+
+    // The suffix may be undefined (no runtime-services block either); assert
+    // specifically that the router sentinel is absent when present.
+    const suffix =
+      payload.agent_settings.agent_context?.system_message_suffix ?? "";
+    expect(suffix).not.toContain("ROUTE_AT_CONVERSATION_START");
   });
 
   describe("ACP secret delivery", () => {
@@ -1890,6 +1966,12 @@ describe("buildStartConversationRequestWithEncryptedSettings", () => {
         skillEnablement: { disabledSkills: [] },
       });
     secretsSpy = vi.spyOn(SecretsService, "getSecrets").mockResolvedValue([]);
+    // Default: no active meta-profile so the route-at-start suffix is off.
+    mockListMetaProfiles.mockReset();
+    mockListMetaProfiles.mockResolvedValue({
+      meta_profiles: [],
+      active_meta_profile: null,
+    });
   });
 
   // vitest is not configured with `restoreMocks`, so restore explicitly.
@@ -1947,5 +2029,77 @@ describe("buildStartConversationRequestWithEncryptedSettings", () => {
 
     expect(payload.hook_config).toBeUndefined();
     expect(payload.agent_settings).toBeDefined();
+  });
+
+  it("stamps the route-at-start suffix when the toggle is on and a meta-profile is active", async () => {
+    mockListMetaProfiles.mockResolvedValue({
+      meta_profiles: [],
+      active_meta_profile: {
+        llm_router_profile_id: "router-1",
+        name: "Model Router",
+        routing_strategy: "classification",
+        routing_models: [],
+        router_model: null,
+        fallback_model: null,
+      },
+    });
+
+    const payload = (await buildStartConversationRequestWithEncryptedSettings({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        run_router_at_conversation_start: true,
+      },
+      hooksProjectDir: "/workspace/my-project",
+    })) as {
+      agent_settings: {
+        agent_context?: { system_message_suffix?: string };
+      };
+    };
+
+    expect(
+      payload.agent_settings?.agent_context?.system_message_suffix,
+    ).toContain("ROUTE_AT_CONVERSATION_START");
+  });
+
+  it("omits the route-at-start suffix when the toggle is on but no meta-profile is active", async () => {
+    // active_meta_profile is null by default (see beforeEach). Even with the
+    // toggle on, no suffix should be emitted since the agent-server won't
+    // attach `route_task_to_model` without an active profile.
+    const payload = (await buildStartConversationRequestWithEncryptedSettings({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        run_router_at_conversation_start: true,
+      },
+      hooksProjectDir: "/workspace/my-project",
+    })) as {
+      agent_settings: {
+        agent_context?: { system_message_suffix?: string };
+      };
+    };
+
+    expect(
+      payload.agent_settings?.agent_context?.system_message_suffix ?? "",
+    ).not.toContain("ROUTE_AT_CONVERSATION_START");
+  });
+
+  it("omits the route-at-start suffix when the meta-profiles endpoint fails (fails closed)", async () => {
+    mockListMetaProfiles.mockRejectedValue(new Error("503 Service Unavailable"));
+
+    const payload = (await buildStartConversationRequestWithEncryptedSettings({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        run_router_at_conversation_start: true,
+      },
+      hooksProjectDir: "/workspace/my-project",
+    })) as {
+      agent_settings: {
+        agent_context?: { system_message_suffix?: string };
+      };
+    };
+
+    // If we can't confirm a router is active, fail closed: no instruction.
+    expect(
+      payload.agent_settings?.agent_context?.system_message_suffix ?? "",
+    ).not.toContain("ROUTE_AT_CONVERSATION_START");
   });
 });
