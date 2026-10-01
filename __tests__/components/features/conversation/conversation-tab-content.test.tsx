@@ -3,10 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
 import { ConversationTabContent } from "#/components/features/conversation/conversation-tabs/conversation-tab-content/conversation-tab-content";
-import {
-  CONVERSATION_TAB_PANEL_ID,
-  conversationTabId,
-} from "#/components/features/conversation/conversation-tabs/conversation-tab-ids";
+import { CONVERSATION_TAB_PANEL_ID } from "#/components/features/conversation/conversation-tabs/conversation-tab-ids";
 import {
   useConversationStore,
   ConversationTab,
@@ -103,17 +100,16 @@ describe("ConversationTabContent", () => {
       });
     });
 
-    it("should expose the content area as the tab strip's panel", () => {
+    it("should expose the content area as a panel named after the selected tab", () => {
       setSelectedTab("browser");
 
       render(<ConversationTabContent />, { wrapper: createWrapper() });
 
-      const panel = screen.getByRole("tabpanel");
+      // Named directly rather than by reference: the selected tab's button is
+      // not in the DOM when a narrow drawer pushes it into the overflow menu.
+      const panel = screen.getByRole("tabpanel", { name: "COMMON$BROWSER" });
       expect(panel).toHaveAttribute("id", CONVERSATION_TAB_PANEL_ID);
-      expect(panel).toHaveAttribute(
-        "aria-labelledby",
-        conversationTabId("browser"),
-      );
+      expect(panel).not.toHaveAttribute("aria-labelledby");
     });
 
     it("should render files tab when selectedTab is null", async () => {

@@ -699,6 +699,29 @@ describe("ConversationTabs localStorage behavior", () => {
       );
     });
 
+    it("keeps the selected tab marked, and on the tab stop, while the drawer is closed", () => {
+      // The strip stays in the accessibility tree when the drawer collapses,
+      // so the tab the drawer will reopen on must still read as selected.
+      seedConversationState(REAL_CONVERSATION_ID, { selectedTab: "terminal" });
+      useConversationStore.setState({
+        selectedTab: "terminal",
+        isRightPanelShown: false,
+        hasRightPanelToggled: false,
+      });
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      const terminalTab = screen.getByTestId("conversation-tab-terminal");
+      expect(terminalTab).toHaveAttribute("aria-selected", "true");
+      expect(terminalTab).toHaveAttribute("tabindex", "0");
+      expect(screen.getByTestId("conversation-tab-files")).toHaveAttribute(
+        "tabindex",
+        "-1",
+      );
+    });
+
     it("names every tab, including the ones rendering icon-only", () => {
       setActiveTabState("files");
 

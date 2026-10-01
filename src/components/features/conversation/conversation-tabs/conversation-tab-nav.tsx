@@ -1,10 +1,7 @@
 import { ComponentType, KeyboardEvent, Ref } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "#/utils/utils";
-import {
-  CONVERSATION_TAB_PANEL_ID,
-  conversationTabId,
-} from "./conversation-tab-ids";
+import { CONVERSATION_TAB_PANEL_ID } from "./conversation-tab-ids";
 
 const TAB_LABEL_MAX_WIDTH_PX = 160;
 
@@ -17,7 +14,14 @@ type ConversationTabNavProps = {
   tabValue: string;
   icon: ComponentType<{ className: string }>;
   onClick(): void;
+  /** Selected and showing: drives the highlight and the expanded label. */
   isActive?: boolean;
+  /**
+   * Selected, whether or not the drawer is open. The strip stays in the
+   * accessibility tree while the drawer is collapsed, so `aria-selected`
+   * follows this rather than `isActive`.
+   */
+  isSelected?: boolean;
   label?: string;
   className?: string;
   /** Omit test id (e.g. offscreen width measurement clones). */
@@ -35,6 +39,7 @@ export function ConversationTabNav({
   icon: Icon,
   onClick,
   isActive,
+  isSelected,
   label,
   className,
   measureOnly,
@@ -55,12 +60,9 @@ export function ConversationTabNav({
   const tabProps = measureOnly
     ? ({ "data-tab-measure": "true", tabIndex: -1 } as const)
     : ({
-        // The tab's DOM id and its test id are the same string — the panel's
-        // `aria-labelledby` and the tests address a tab the same way.
-        "data-testid": conversationTabId(tabValue),
-        id: conversationTabId(tabValue),
+        "data-testid": `conversation-tab-${tabValue}`,
         role: "tab",
-        "aria-selected": Boolean(isActive),
+        "aria-selected": Boolean(isSelected),
         "aria-controls": CONVERSATION_TAB_PANEL_ID,
         "aria-label": label,
         tabIndex,

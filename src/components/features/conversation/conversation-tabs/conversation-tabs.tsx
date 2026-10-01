@@ -259,16 +259,18 @@ export function ConversationTabs({
   const safeInlineTabCount = Math.min(inlineTabCount, visibleTabs.length);
   const inlineTabs = visibleTabs.slice(0, safeInlineTabCount);
 
-  // Roving tabindex: the strip is a single tab stop. It sits on the open tab,
-  // or — with the drawer closed, when nothing is selected — on the tab the
-  // user last arrowed to.
-  const activeTabIndex = inlineTabs.findIndex((tab) => tab.isActive);
+  // Roving tabindex: the strip is a single tab stop. It sits on the selected
+  // tab — drawer open or not, since the strip stays in the accessibility tree
+  // while the drawer is collapsed — until the user arrows elsewhere.
+  const selectedTabIndex = inlineTabs.findIndex(
+    (tab) => tab.tabValue === selectedTab,
+  );
   const [rovingTabIndex, setRovingTabIndex] = useState(0);
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   useEffect(() => {
-    if (activeTabIndex >= 0) setRovingTabIndex(activeTabIndex);
-  }, [activeTabIndex]);
+    if (selectedTabIndex >= 0) setRovingTabIndex(selectedTabIndex);
+  }, [selectedTabIndex]);
 
   const tabStopIndex = Math.min(
     rovingTabIndex,
@@ -386,6 +388,7 @@ export function ConversationTabs({
                           icon={icon}
                           onClick={onClick}
                           isActive={isActive}
+                          isSelected={selectedTab === tabValue}
                           label={label}
                           className={cn(tabClassName, "shrink-0")}
                           suppressLayoutAnimation={isPanelResizing}

@@ -91,7 +91,7 @@
           drawer tabs need accessible semantics and collision-aware overflow.
         </p>
         <p class="stats">
-          base cf1cc69f · head 5b85f7c2 · 10 files · +444 / −53
+          base cf1cc69f · 10 code files · updated after the first review
         </p>
       </header>
 
@@ -297,6 +297,7 @@ setPortalStyle({
   className?: string;
   measureOnly?: boolean;
   suppressLayoutAnimation?: boolean;
+  <b>isSelected?: boolean;</b>
   <b>tabIndex?: number;</b>
   <b>onKeyDown?(event: KeyboardEvent&lt;HTMLButtonElement&gt;): void;</b>
   <b>buttonRef?: Ref&lt;HTMLButtonElement&gt;;</b>
@@ -305,16 +306,35 @@ setPortalStyle({
       </div>
 
       <h3>New module: <code>conversation-tab-ids.ts</code></h3>
-<pre class="card">export const CONVERSATION_TAB_PANEL_ID = "conversation-tab-panel";
-
-export const conversationTabId = (tabValue: string) =&gt;
-  `conversation-tab-${tabValue}`;</pre>
+<pre class="card">export const CONVERSATION_TAB_PANEL_ID = "conversation-tab-panel";</pre>
       <p class="note">
-        Both the strip and the panel need the same two identifiers, and the tab's
-        DOM id is the string the tests already address it by. The desktop drawer
-        and the mobile <code>/panel</code> route each render one strip and one
-        panel and never mount together, so a constant panel id is unambiguous.
+        Every tab's <code>aria-controls</code> and the panel's <code>id</code>
+        need the same identifier. The desktop drawer and the mobile
+        <code>/panel</code> route each render one strip and one panel and never
+        mount together, so a constant panel id is unambiguous.
       </p>
+
+      <h3>Two states the first revision got wrong (fixed after review)</h3>
+      <ul>
+        <li>
+          <strong>Drawer closed.</strong> The collapsed drawer is only
+          <code>w-0 translate-x-full opacity-0</code>, so the strip stays in the
+          accessibility tree. <code>aria-selected</code> and the roving tab stop
+          were derived from <code>isTabActive</code> (selected <em>and</em> drawer
+          open), which left the tablist with no selected tab. They now follow
+          <code>selectedTab</code> through a separate <code>isSelected</code> prop;
+          <code>isActive</code> still drives only the highlight and the expanded
+          label, so nothing changes visually.
+        </li>
+        <li>
+          <strong>Selected tab in the overflow menu.</strong> The panel was named
+          with <code>aria-labelledby</code> pointing at the selected tab's button,
+          which is not in the DOM when a narrow drawer pushes that tab into the
+          overflow menu. The panel now carries the tab's name as
+          <code>aria-label</code>, which holds in every overflow state — including
+          the one where no tab fits inline at all.
+        </li>
+      </ul>
 
       <h2>4 · Files</h2>
       <table>
@@ -331,8 +351,9 @@ export const conversationTabId = (tabValue: string) =&gt;
             <td class="path">conversation-tabs/conversation-tab-nav.tsx</td>
             <td><span class="tag">changed</span></td>
             <td>
-              Real tabs get <code>role="tab"</code>, <code>aria-selected</code>,
-              <code>id</code>, <code>aria-controls</code>, an explicit
+              Real tabs get <code>role="tab"</code>, <code>aria-selected</code>
+              (from the new <code>isSelected</code>, independent of the drawer being
+              open), <code>aria-controls</code>, an explicit
               <code>aria-label</code>, and the roving <code>tabIndex</code> /
               <code>onKeyDown</code> / <code>ref</code>. Measurement clones get
               <code>tabIndex=-1</code> and no role, so the offscreen
@@ -359,13 +380,16 @@ export const conversationTabId = (tabValue: string) =&gt;
             <td><span class="tag">changed</span></td>
             <td>
               Becomes the <code>role="tabpanel"</code> with the shared id and an
-              <code>aria-labelledby</code> pointing at the open tab.
+              <code>aria-label</code> carrying the selected tab's name.
             </td>
           </tr>
           <tr>
             <td class="path">conversation-tab-content/conversation-tab-content.tsx</td>
-            <td><span class="tag">mechanical</span></td>
-            <td>Passes <code>labelledBy={conversationTabId(selectedTab)}</code>.</td>
+            <td><span class="tag">changed</span></td>
+            <td>
+              <code>TAB_CONFIG</code> gains a <code>labelKey</code> per tab; passes
+              <code>label={t(activeTab.labelKey)}</code> to the panel.
+            </td>
           </tr>
           <tr>
             <td class="path">src/i18n/translation.json</td>
@@ -380,10 +404,11 @@ export const conversationTabId = (tabValue: string) =&gt;
             <td class="path">__tests__/…/conversation-tabs.test.tsx</td>
             <td><span class="tag">changed</span></td>
             <td>
-              Six cases: tablist + <code>aria-selected</code> +
-              <code>aria-controls</code>; icon-only tabs are named; the open tab
-              holds the only tab stop; arrows move focus without changing the open
-              tab; <kbd>Enter</kbd> activates; the trigger's name.
+              Seven cases: tablist + <code>aria-selected</code> +
+              <code>aria-controls</code>; the selected tab stays marked and on the
+              tab stop with the drawer closed; icon-only tabs are named; the open
+              tab holds the only tab stop; arrows move focus without changing the
+              open tab; <kbd>Enter</kbd> activates; the trigger's name.
             </td>
           </tr>
           <tr>
@@ -398,7 +423,7 @@ export const conversationTabId = (tabValue: string) =&gt;
           <tr>
             <td class="path">__tests__/…/conversation-tab-content.test.tsx</td>
             <td><span class="tag">changed</span></td>
-            <td>The content area is the <code>tabpanel</code> labelled by the open tab.</td>
+            <td>The content area is the <code>tabpanel</code>, named after the selected tab without an id reference.</td>
           </tr>
         </tbody>
       </table>
