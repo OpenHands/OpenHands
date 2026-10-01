@@ -519,6 +519,41 @@ describe("AutomationsList — created-by filter on cloud workspaces", () => {
     );
   });
 
+  it("keeps Load more under the filtered empty state when a service ignores the creator filter", async () => {
+    // Arrange — an automation service without created_by returns every
+    // creator, newest first; mine is only on the second page.
+    const teammates = Array.from({ length: 50 }, (_, index) =>
+      createAutomation({
+        id: `a-teammate-${index}`,
+        name: `Teammate widget ${index}`,
+        user_id: "user-teammate",
+      }),
+    );
+    vi.mocked(AutomationService.getAutomations).mockImplementation(
+      async (_limit, offset) =>
+        offset === 0
+          ? { automations: teammates, total: 51 }
+          : { automations: [mine], total: 51 },
+    );
+    const user = userEvent.setup();
+    selectWorkspace(TEAM_ORG_ID);
+    renderAt("/automations", <AutomationsList />);
+    await screen.findByTestId("automation-card-a-teammate-0");
+    await openFiltersMenu(user);
+    await pickCreatedBy(user, "me");
+    await screen.findByTestId("automations-filtered-empty");
+
+    // Act
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$LOAD_MORE }),
+    );
+
+    // Assert
+    await waitFor(() => {
+      expect(visibleCardIds()).toEqual(["automation-card-a-mine"]);
+    });
+  });
+
   it("offers Clear filters when the server finds none of my automations", async () => {
     // Arrange — the org has automations, but none are the caller's.
     vi.mocked(AutomationService.getAutomations).mockImplementation(

@@ -484,46 +484,50 @@ export default function AutomationsList() {
         {!isLoading &&
           !isListError &&
           data &&
-          (data.automations.length > 0 || serverCreatedBy) &&
-          (dashboard && visible.length === 0 ? (
-            <AutomationsFilteredEmptyState onClear={handleClearFilters} />
-          ) : (
+          (data.automations.length > 0 || serverCreatedBy) && (
             <>
-              <AutomationGroup
-                title={t(I18nKey.AUTOMATIONS$ACTIVE)}
-                count={activeAutomations.length}
-                automations={activeAutomations}
-                view={viewMode}
-                onToggle={handleToggle}
-                onRunNow={handleRunNow}
-                runPendingId={
-                  dispatchMutation.isPending
-                    ? (dispatchMutation.variables ?? null)
-                    : null
-                }
-                onDelete={handleDeleteRequest}
-                onExport={handleExport}
-                onEdit={handleEditRequest}
-                insights={groupInsights}
-              />
-              <AutomationGroup
-                title={t(I18nKey.AUTOMATIONS$INACTIVE)}
-                count={inactive.length}
-                automations={inactive}
-                view={viewMode}
-                onToggle={handleToggle}
-                onRunNow={handleRunNow}
-                runPendingId={
-                  dispatchMutation.isPending
-                    ? (dispatchMutation.variables ?? null)
-                    : null
-                }
-                onDelete={handleDeleteRequest}
-                onExport={handleExport}
-                onEdit={handleEditRequest}
-                insights={groupInsights}
-              />
-
+              {dashboard && visible.length === 0 ? (
+                <AutomationsFilteredEmptyState onClear={handleClearFilters} />
+              ) : (
+                <>
+                  <AutomationGroup
+                    title={t(I18nKey.AUTOMATIONS$ACTIVE)}
+                    count={activeAutomations.length}
+                    automations={activeAutomations}
+                    view={viewMode}
+                    onToggle={handleToggle}
+                    onRunNow={handleRunNow}
+                    runPendingId={
+                      dispatchMutation.isPending
+                        ? (dispatchMutation.variables ?? null)
+                        : null
+                    }
+                    onDelete={handleDeleteRequest}
+                    onExport={handleExport}
+                    onEdit={handleEditRequest}
+                    insights={groupInsights}
+                  />
+                  <AutomationGroup
+                    title={t(I18nKey.AUTOMATIONS$INACTIVE)}
+                    count={inactive.length}
+                    automations={inactive}
+                    view={viewMode}
+                    onToggle={handleToggle}
+                    onRunNow={handleRunNow}
+                    runPendingId={
+                      dispatchMutation.isPending
+                        ? (dispatchMutation.variables ?? null)
+                        : null
+                    }
+                    onDelete={handleDeleteRequest}
+                    onExport={handleExport}
+                    onEdit={handleEditRequest}
+                    insights={groupInsights}
+                  />
+                </>
+              )}
+              {/* Also under the filtered empty state: the matches may be on a
+                  page that is not loaded yet. */}
               {hasNextPage && (
                 <button
                   type="button"
@@ -535,7 +539,7 @@ export default function AutomationsList() {
                 </button>
               )}
             </>
-          ))}
+          )}
       </div>
 
       {/* The launcher lives on the templates sub-page in dashboard mode */}
