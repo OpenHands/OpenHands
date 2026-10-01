@@ -130,10 +130,21 @@ function getAutomationSdkVersionFromResponse(
   );
 }
 
-function buildPaginationQuery(limit: number, offset: number): string {
+/**
+ * The query string for a paged list request. `extra` adds params such as
+ * filters; keys whose value is undefined are left out.
+ */
+function buildPaginationQuery(
+  limit: number,
+  offset: number,
+  extra: Record<string, string | undefined> = {},
+): string {
   const params = new URLSearchParams();
   params.set("limit", String(limit));
   params.set("offset", String(offset));
+  for (const [key, value] of Object.entries(extra)) {
+    if (value !== undefined) params.set(key, value);
+  }
   return params.toString();
 }
 
@@ -284,28 +295,17 @@ class AutomationService {
     const active = getActiveBackend().backend;
 
     if (active.kind === "cloud") {
-      const query = new URLSearchParams({
-        limit: String(limit),
-        offset: String(offset),
-      });
-      if (createdBy) query.set("created_by", createdBy);
       return callCloudProxy<AutomationsResponse>({
         backend: active,
         method: "GET",
-        path: `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}?${query.toString()}`,
+        path: `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}?${buildPaginationQuery(limit, offset, { created_by: createdBy })}`,
         headers: await buildAutomationRequestHeaders(),
       });
     }
 
     const { data } = await localAutomationAxios.get<AutomationsResponse>(
       `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}`,
-      {
-        params: {
-          limit,
-          offset,
-          ...(createdBy ? { created_by: createdBy } : {}),
-        },
-      },
+      { params: { limit, offset, created_by: createdBy } },
     );
     return data;
   }
