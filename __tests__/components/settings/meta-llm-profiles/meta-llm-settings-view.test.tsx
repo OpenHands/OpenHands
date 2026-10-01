@@ -444,7 +444,9 @@ describe("MetaLlmSettingsView", () => {
     await waitFor(() =>
       expect(activateMutateAsync).toHaveBeenCalledWith("pareto"),
     );
-    expect(vi.mocked(displaySuccessToast)).toHaveBeenCalled();
+    // The success toast is suppressed on this path so the user sees a single
+    // unambiguous error rather than a success and an error for one action.
+    expect(vi.mocked(displaySuccessToast)).not.toHaveBeenCalled();
   });
 
   it("does not auto-activate a newly-created meta-profile when one is already active", async () => {

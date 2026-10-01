@@ -209,6 +209,7 @@ export function MetaLlmSettingsView() {
     // already enabled it. Subsequent router creations leave the preference
     // untouched.
     const isFirstRouter = view === "create" && metaProfiles.length === 0;
+    let autoEnableFailed = false;
     try {
       if (view === "create" && providerConnectionId) {
         setIsCreatingRouterProfiles(true);
@@ -221,17 +222,22 @@ export function MetaLlmSettingsView() {
         // switch flips on (matching the server); on failure we surface an
         // error but keep the router creation intact, and the switch stays off
         // to match the unchanged server value. This must not abort the primary
-        // create/activate flow, so it has its own try/catch.
+        // create/activate flow, so it has its own try/catch. The success toast
+        // is suppressed on this path so the user isn't shown both a success
+        // and an error for one action.
         try {
           await saveSettingsAsync({ run_router_at_conversation_start: true });
         } catch {
+          autoEnableFailed = true;
           displayErrorToast(t(I18nKey.ERROR$GENERIC));
         }
       }
       if (shouldActivateAfterCreate) {
         await activateMetaProfile.mutateAsync(name);
       }
-      displaySuccessToast(t(I18nKey.SETTINGS$META_PROFILE_SAVED, { name }));
+      if (!autoEnableFailed) {
+        displaySuccessToast(t(I18nKey.SETTINGS$META_PROFILE_SAVED, { name }));
+      }
       setView("list");
       setEditing(null);
       setCreateInitial(null);
