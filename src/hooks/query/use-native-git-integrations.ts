@@ -19,7 +19,7 @@ export interface NativeGitIntegration {
 
 /** Whether a catalog entry is one a cloud instance may connect natively. */
 export function isNativeGitCandidate(entryId: string): boolean {
-  return entryId in NATIVE_PROVIDER_BY_ENTRY_ID;
+  return Object.hasOwn(NATIVE_PROVIDER_BY_ENTRY_ID, entryId);
 }
 
 /**
