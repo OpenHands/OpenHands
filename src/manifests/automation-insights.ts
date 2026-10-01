@@ -242,7 +242,6 @@ export interface DashboardViewState {
   status: DashboardStatusValue;
   trigger: DashboardTriggerValue;
   createdBy: DashboardCreatedByValue;
-  /** The signed-in user the creator filter compares against. */
   currentUserId: string | null;
   sort: DashboardSortValue;
 }

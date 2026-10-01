@@ -39,7 +39,6 @@ function joinAutomationPages(
 interface UseAutomationsOptions {
   /** Automations per request; at most 100. A count-only caller passes 1. */
   pageSize?: number;
-  /** Narrows the list on the server, so pages and `total` cover only matches. */
   createdBy?: AutomationCreatedByFilter;
   enabled?: boolean;
 }
@@ -60,7 +59,7 @@ export function useAutomations(options: UseAutomationsOptions = {}) {
   return useInfiniteQuery({
     queryKey: [
       ...AUTOMATIONS_QUERY_KEY,
-      { pageSize, createdBy: createdBy ?? "all" },
+      { pageSize, createdBy },
       active.backend.id,
       active.orgId,
     ],

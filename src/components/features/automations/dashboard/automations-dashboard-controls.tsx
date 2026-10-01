@@ -42,10 +42,6 @@ interface AutomationsDashboardControlsProps {
   status: DashboardStatusValue;
   trigger: DashboardTriggerValue;
   createdBy: DashboardCreatedByValue;
-  /**
-   * False on local backends, personal workspaces, and while the caller's id
-   * loads; hides the created-by filter.
-   */
   canFilterByCreator: boolean;
   sort: DashboardSortValue;
   onStatusChange: (value: DashboardStatusValue) => void;
