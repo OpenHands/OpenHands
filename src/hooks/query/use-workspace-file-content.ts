@@ -30,6 +30,16 @@ const IMAGE_EXTENSIONS = new Set([
 
 const PDF_EXTENSIONS = new Set(["pdf"]);
 
+// Containers the Office outline unpacks. The download bound below exists for
+// these (the reader only caps *unpacked* parts, so the container would
+// otherwise be buffered whole); other paths must not inherit the OOXML cap.
+const OOXML_EXTENSIONS = new Set(["docx", "xlsx", "pptx"]);
+
+// A larger ceiling for non-OOXML files. Still bounded, so an accidental huge
+// file cannot be pulled into memory, but generous enough that ordinary large
+// source files and logs are read as text rather than mislabelled binary.
+const MAX_TEXT_DOWNLOAD_BYTES = 64 * 1024 * 1024;
+
 export type WorkspaceFileKind = "text" | "image" | "pdf" | "binary";
 
 export interface WorkspaceFileContent {
@@ -52,11 +62,20 @@ export interface WorkspaceFileContent {
    */
   bytesLossy?: boolean;
   /**
-   * True when the file's declared length exceeded {@link MAX_OOXML_DOWNLOAD_BYTES}
-   * and the body was never buffered. Consumers that would parse the bytes
-   * (the Office outline) report "too large" instead of a parse failure.
+   * True when the file's declared length exceeded the OOXML download bound
+   * ({@link MAX_OOXML_DOWNLOAD_BYTES}) and the body was never buffered.
+   * Consumers that would parse the bytes (the Office outline) report "too
+   * large" instead of a parse failure. Only set for OOXML paths; a large
+   * non-OOXML file is sniffed and reported by its own kind.
    */
   bytesTooLarge?: boolean;
+  /**
+   * The workspace mutation counter the `bytes` were fetched at. A consumer that
+   * caches a parse keyed on the cache-busted `staticUrl` (the Office outline)
+   * must also compare this, so bytes fetched before an agent-side edit can
+   * never be accepted as the parse of the edited document.
+   */
+  bytesVersion?: number;
   /**
    * URL pointing at the file on the agent server's static workspace
    * fileserver (the `/api/conversations/{id}/workspace/...` route minted
@@ -289,6 +308,9 @@ export function useWorkspaceFileContent(relativePath: string | null) {
         };
       }
 
+      // OOXML containers get the tighter download bound below; other paths
+      // keep the larger text ceiling.
+      const isOoxml = OOXML_EXTENSIONS.has(getExtension(relativePath));
       // For our own fetch we also rely on the workspace-session cookie
       // (it travels because we opt in to credentialed requests). This
       // matches the auth path the iframe / <img> uses, and avoids a CORS
@@ -307,16 +329,17 @@ export function useWorkspaceFileContent(relativePath: string | null) {
         throw new Error(`Failed to read ${relativePath}: ${response.status}`);
       }
 
-      // Bound the body before buffering it: the OOXML reader only caps the
-      // *unpacked* parts, so a huge container would otherwise be pulled into
-      // memory whole just to be classified as binary.
+      // Bound the body before buffering it. The OOXML reader only caps the
+      // *unpacked* parts, so an Office container would otherwise be pulled
+      // into memory whole; other files get a larger ceiling and are not
+      // reclassified as binary merely for being big.
+      const maxBytes = isOoxml
+        ? MAX_OOXML_DOWNLOAD_BYTES
+        : MAX_TEXT_DOWNLOAD_BYTES;
       let buffer: ArrayBuffer;
       let tooLarge = false;
       try {
-        buffer = await readBoundedArrayBuffer(
-          response,
-          MAX_OOXML_DOWNLOAD_BYTES,
-        );
+        buffer = await readBoundedArrayBuffer(response, maxBytes);
       } catch (error) {
         if (!(error instanceof Error) || !/exceeds/i.test(error.message)) {
           throw error;
@@ -326,16 +349,33 @@ export function useWorkspaceFileContent(relativePath: string | null) {
         tooLarge = true;
         buffer = new ArrayBuffer(0);
       }
-      if (tooLarge || isLikelyBinary(buffer)) {
+
+      // Only an OOXML container is reported as `bytesTooLarge`: its parser
+      // needs the bytes and must say "too large" instead of failing. A large
+      // non-OOXML file is classified by content below — treating it as binary
+      // here would hide a readable log behind an unsupported-file message.
+      if (tooLarge && isOoxml) {
+        return {
+          path: relativePath,
+          kind: "binary",
+          text: null,
+          // The body was never buffered; `bytesTooLarge` tells the parser so.
+          bytes: null,
+          bytesTooLarge: true,
+          staticUrl,
+          mimeType: "application/octet-stream",
+        };
+      }
+
+      if (isLikelyBinary(buffer)) {
         return {
           path: relativePath,
           kind: "binary",
           text: null,
           // Hand the bytes on so a binary parser (the Office outline) does not
-          // re-download the same file. Skipped when oversized: the body was
-          // never buffered, and `bytesTooLarge` tells the parser to say so.
-          bytes: tooLarge ? null : buffer,
-          bytesTooLarge: tooLarge,
+          // re-download the same file.
+          bytes: buffer,
+          bytesVersion: workspaceMutationCount,
           staticUrl,
           mimeType: "application/octet-stream",
         };

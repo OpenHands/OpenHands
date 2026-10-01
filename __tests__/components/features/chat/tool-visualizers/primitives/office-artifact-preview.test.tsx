@@ -103,6 +103,9 @@ describe("OfficeArtifactPreview", () => {
       backend: { id: "local-1", kind: "local", host: "http://localhost:8000" },
       orgId: null,
     });
+    // The mutation counter is module-global; reset it so a bump in one test
+    // cannot leave the next test's bytes tagged with a stale version.
+    useWorkspaceMutationCounter.setState({ count: 0 });
   });
 
   it("unpacks a Word document fetched from the workspace fileserver", async () => {
@@ -117,7 +120,7 @@ describe("OfficeArtifactPreview", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Title")).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
-      `${BASE_URL}notes.docx`,
+      `${BASE_URL}notes.docx?v=0`,
       expect.objectContaining({ credentials: "include" }),
     );
   });
@@ -135,7 +138,7 @@ describe("OfficeArtifactPreview", () => {
 
     await screen.findByText("Body text", undefined, { timeout: 3000 });
     expect(fetchMock).toHaveBeenCalledWith(
-      `${BASE_URL}report.docx`,
+      `${BASE_URL}report.docx?v=0`,
       expect.objectContaining({ credentials: "include" }),
     );
     expect(fetchMock).not.toHaveBeenCalledWith(
@@ -224,6 +227,34 @@ describe("OfficeArtifactPreview", () => {
 
     expect(
       await screen.findByText("Edited text", undefined, { timeout: 3000 }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Body text")).not.toBeInTheDocument();
+  });
+
+  it("never shows pre-edit bytes as the edited document's version", async () => {
+    // The hook refetches under a new counter after an edit, and the card must
+    // not label the previous version's bytes with the new URL. With the refetch
+    // still in flight the card shows its pending state — never the stale
+    // outline dressed up as the edited document.
+    const stale = await makeZip({ "word/document.xml": DOCX_XML });
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      arrayBuffer: async () => stale,
+      blob: async () => new Blob([stale]),
+    });
+
+    render(<OfficeArtifactPreview path="notes.docx" />, {
+      wrapper: makeWrapper(),
+    });
+    await screen.findByText("Body text", undefined, { timeout: 3000 });
+
+    // Hold the refetch open so the version-0 bytes are all the hook can offer.
+    fetchMock.mockReturnValue(new Promise(() => {}));
+    act(() => useWorkspaceMutationCounter.getState().bump());
+
+    expect(
+      await screen.findByTestId("office-artifact-preview-pending"),
     ).toBeInTheDocument();
     expect(screen.queryByText("Body text")).not.toBeInTheDocument();
   });

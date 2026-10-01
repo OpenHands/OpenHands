@@ -253,6 +253,31 @@ describe("useWorkspaceFileContent", () => {
     expect(cancel).toHaveBeenCalled();
   });
 
+  it("keeps an oversized non-OOXML file as text instead of a binary fallback", async () => {
+    // The 32 MiB Office cap must not leak onto ordinary source files and logs:
+    // a large UTF-8 log is readable text and must not be hidden behind the
+    // Files pane's unsupported-file message.
+    const log = "x".repeat(1024);
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      arrayBuffer: () => Promise.resolve(arrayBufferFromString(log)),
+    });
+
+    const { result } = renderHook(
+      () => useWorkspaceFileContent("logs/app.log"),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.data).toMatchObject({
+      kind: "text",
+      text: log,
+    });
+    expect(result.current.data?.bytesTooLarge).toBeUndefined();
+  });
+
   it("refetches text content after a workspace mutation tick", async () => {
     fetchMock
       .mockResolvedValueOnce({
