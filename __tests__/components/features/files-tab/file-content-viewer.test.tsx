@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FileContentViewer } from "#/components/features/files-tab/file-content-viewer";
+import { MAX_TEXT_DOWNLOAD_BYTES } from "#/hooks/query/use-workspace-file-content";
 import type { ViewMode } from "#/components/features/files-tab/view-mode";
 import { useWorkspaceMutationCounter } from "#/stores/use-workspace-mutation-counter";
 
@@ -118,6 +119,32 @@ describe("FileContentViewer", () => {
       // binary fallback in both modes, so the pane is never blank.
       expect(
         await screen.findByTestId("file-content-viewer-unsupported-document"),
+      ).toBeInTheDocument();
+    },
+  );
+
+  it.each(["rich", "plain"] as const)(
+    "reports an oversized file as too large instead of showing it empty in %s mode",
+    async (viewMode) => {
+      // Arrange: a log past the non-OOXML download bound. The reader rejects it
+      // without returning bytes; the viewer must say "too large" rather than
+      // decode the empty placeholder as a blank file.
+      fetchMock.mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers({
+          "content-length": String(MAX_TEXT_DOWNLOAD_BYTES + 1),
+        }),
+        body: { cancel: vi.fn().mockResolvedValue(undefined) },
+        arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+      });
+
+      // Act
+      renderViewer("logs/app.log", viewMode);
+
+      // Assert
+      expect(
+        await screen.findByTestId("file-content-viewer-too-large"),
       ).toBeInTheDocument();
     },
   );
