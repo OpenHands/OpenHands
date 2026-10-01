@@ -1236,23 +1236,17 @@ describe("AutomationSetupPanel", () => {
       expect(AutomationService.createServerDraft).toHaveBeenCalledTimes(1);
     });
 
-    it("keeps a saved custom server draft clean after uploading its bundle", async () => {
-      vi.mocked(AutomationService.uploadAutomationTarball).mockResolvedValue(
-        "oh-internal://uploads/custom-archive",
-      );
-      vi.mocked(AutomationService.createServerDraft).mockImplementation(
-        async (request) => ({
-          ...dispatchableDraft,
-          id: "draft-custom",
-          endpoint: request.endpoint,
-          name: request.name ?? "",
-          draft: request.draft as never,
-          validationErrors: null,
-        }),
-      );
+    it("uploads fresh custom bundles and keeps the saved draft clean", async () => {
+      vi.mocked(AutomationService.uploadAutomationTarball)
+        .mockResolvedValueOnce("oh-internal://uploads/custom-draft-1")
+        .mockResolvedValueOnce("oh-internal://uploads/custom-draft-2");
+      mockSavedDraftEcho({ validationErrors: null });
 
       const user = userEvent.setup();
-      renderPanel({ prompt: "Run a custom security check", kind: "custom" });
+      renderPanel({
+        prompt: "Run generated Python",
+        kind: "custom",
+      });
 
       await user.click(screen.getByTestId("automation-setup-save-draft"));
 
@@ -1261,7 +1255,9 @@ describe("AutomationSetupPanel", () => {
           expect.objectContaining({
             endpoint: "/v1",
             draft: expect.objectContaining({
-              tarball_path: "oh-internal://uploads/custom-archive",
+              tarball_path: "oh-internal://uploads/custom-draft-1",
+              entrypoint: "python3 main.py",
+              setup_script_path: "setup.sh",
             }),
           }),
         ),
@@ -1274,6 +1270,29 @@ describe("AutomationSetupPanel", () => {
       expect(
         screen.getByTestId("automation-setup-save-state"),
       ).not.toHaveTextContent("AUTOMATION_SETUP$UNSAVED_CHANGES");
+      expect(AutomationService.uploadAutomationTarball).toHaveBeenCalledTimes(
+        1,
+      );
+      expect(packTarGzip).toHaveBeenCalledWith([
+        expect.objectContaining({ name: "main.py", mode: 0o644 }),
+        expect.objectContaining({ name: "setup.sh", mode: 0o755 }),
+      ]);
+
+      await user.click(screen.getByTestId("automation-setup-save-draft"));
+
+      await waitFor(() =>
+        expect(AutomationService.updateServerDraft).toHaveBeenCalledWith(
+          "draft-1",
+          expect.objectContaining({
+            draft: expect.objectContaining({
+              tarball_path: "oh-internal://uploads/custom-draft-2",
+            }),
+          }),
+        ),
+      );
+      expect(AutomationService.uploadAutomationTarball).toHaveBeenCalledTimes(
+        2,
+      );
     });
 
     it("opens test runs from the draft status and returns to the form", async () => {
