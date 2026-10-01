@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="520" viewBox="0 0 980 520" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="15">
+<rect width="980" height="520" rx="8" fill="#0d1117"/>
+<circle cx="28" cy="24" r="6" fill="#ff5f56"/>
+<circle cx="48" cy="24" r="6" fill="#ffbd2e"/>
+<circle cx="68" cy="24" r="6" fill="#27c93f"/>
+<text x="26" y="65" fill="#7d8590" xml:space="preserve"># Verification for PR #16328: Consolidate src/context/ into src/contexts/</text>
+<text x="26" y="95" fill="#58a6ff" xml:space="preserve">$ git grep -n "#/context/" src</text>
+<text x="26" y="125" fill="#3fb950" font-weight="600" xml:space="preserve">✔ No matches found (acceptance criteria met)</text>
+<text x="26" y="165" fill="#58a6ff" xml:space="preserve">$ npm run typecheck &amp;&amp; npm run lint</text>
+<text x="26" y="195" fill="#7d8590" xml:space="preserve">> react-router typegen &amp;&amp; tsc</text>
+<text x="26" y="225" fill="#7d8590" xml:space="preserve">> eslint src &amp;&amp; prettier --check src/**/*.{ts,tsx}</text>
+<text x="26" y="255" fill="#3fb950" font-weight="600" xml:space="preserve">✔ All matched files use Prettier code style and pass ESLint rules</text>
+<text x="26" y="295" fill="#58a6ff" xml:space="preserve">$ npx vitest run $(git diff --name-only upstream/main -- '__tests__/*')</text>
+<text x="26" y="325" fill="#3fb950" font-weight="600" xml:space="preserve"> Test Files  42 passed (42)</text>
+<text x="26" y="355" fill="#3fb950" font-weight="600" xml:space="preserve">      Tests  515 passed (515)</text>
+<text x="26" y="395" fill="#58a6ff" xml:space="preserve">$ npm run dev</text>
+<text x="26" y="425" fill="#e6edf3" xml:space="preserve">Agent Canvas + Automation Development Stack</text>
+<text x="26" y="455" fill="#3fb950" xml:space="preserve">✔ uvx found  ✔ npm found  ✔ frontend dependencies found</text>
+<text x="26" y="485" fill="#3fb950" font-weight="600" xml:space="preserve">✔ [agent-server] Starting on port 18000 (app boots cleanly)</text>
+</svg>

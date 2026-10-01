@@ -263,6 +263,13 @@ export default [
                 "Use typed @openhands/typescript-client clients instead of constructing HttpClient directly.",
             },
           ],
+          patterns: [
+            {
+              group: ["\\#/context/*"],
+              message:
+                "Import from '#/contexts/*' instead. The singular src/context/ directory has been consolidated into src/contexts/.",
+            },
+          ],
         },
       ],
       // All agent-server API access must go through the typed
