@@ -6,7 +6,7 @@
     "automation": "1.16.0"
   },
   "compatibility": {
-    "minimumAgentServer": "1.47.0"
+    "minimumAgentServer": "1.50.1"
   },
   "images": {
     "agentServer": "ghcr.io/openhands/agent-server",
