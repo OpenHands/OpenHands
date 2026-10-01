@@ -126,6 +126,12 @@ export default function AutomationsList() {
   // manage_automations (admins/owners) on every backend kind.
   const { canManage } = useAutomationPermissions();
   const creatorFilterUserId = useAutomationCreatorFilterUserId();
+  // The creator the server filters by; undefined while the filter is hidden
+  // or set to "all".
+  const serverCreatedBy =
+    creatorFilterUserId !== null && createdByFilter !== "all"
+      ? createdByFilter
+      : undefined;
 
   const {
     data: healthData,
@@ -149,10 +155,7 @@ export default function AutomationsList() {
     // The server filters by creator so pages and `total` cover only matches;
     // the client predicate in applyDashboardView stays as the fallback for
     // an automation service that ignores the param.
-    createdBy:
-      creatorFilterUserId !== null && createdByFilter !== "all"
-        ? createdByFilter
-        : undefined,
+    createdBy: serverCreatedBy,
   });
   // One runs query per listed automation — dashboard mode only.
   const runSummaries = useAutomationRunSummaries(data?.automations ?? [], {
@@ -354,8 +357,13 @@ export default function AutomationsList() {
 
   // A failed refetch or Load more keeps the loaded rows; Load more retries.
   const isListError = isError && !data;
+  // An empty filtered response says nothing matched, not that the org has no
+  // automations, so it shows the filtered empty state with Clear filters.
   const hasNoAutomations =
-    !isLoading && !isListError && data?.automations.length === 0;
+    !isLoading &&
+    !isListError &&
+    !serverCreatedBy &&
+    data?.automations.length === 0;
 
   // Show loading state while checking health
   if (isHealthLoading) {
@@ -476,7 +484,7 @@ export default function AutomationsList() {
         {!isLoading &&
           !isListError &&
           data &&
-          data.automations.length > 0 &&
+          (data.automations.length > 0 || serverCreatedBy) &&
           (dashboard && visible.length === 0 ? (
             <AutomationsFilteredEmptyState onClear={handleClearFilters} />
           ) : (

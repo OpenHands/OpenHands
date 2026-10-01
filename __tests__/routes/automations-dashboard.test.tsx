@@ -519,6 +519,33 @@ describe("AutomationsList — created-by filter on cloud workspaces", () => {
     );
   });
 
+  it("offers Clear filters when the server finds none of my automations", async () => {
+    // Arrange — the org has automations, but none are the caller's.
+    vi.mocked(AutomationService.getAutomations).mockImplementation(
+      async (_limit, _offset, createdBy) =>
+        createdBy === "me"
+          ? { automations: [], total: 0 }
+          : { automations: [theirs, unowned], total: 2 },
+    );
+    const user = userEvent.setup();
+    selectWorkspace(TEAM_ORG_ID);
+    renderAt("/automations", <AutomationsList />);
+    await screen.findByTestId("automation-card-a-theirs");
+    await openFiltersMenu(user);
+    await pickCreatedBy(user, "me");
+
+    // Act
+    await user.click(await screen.findByTestId("automations-clear-filters"));
+
+    // Assert
+    await waitFor(() => {
+      expect(visibleCardIds()).toEqual([
+        "automation-card-a-theirs",
+        "automation-card-a-unowned",
+      ]);
+    });
+  });
+
   it("returns to every creator from Reset all and from Clear filters", async () => {
     // Arrange
     const user = userEvent.setup();
