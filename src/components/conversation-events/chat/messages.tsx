@@ -231,20 +231,44 @@ export const Messages: React.FC<MessagesProps> = React.memo(
         // Preceding siblings can grow *after* mount (a /model card expands) or
         // appear late (the older-history spinner), so re-measure when their box
         // changes. Observing a node only tracks that node's own size, so a
-        // MutationObserver watches the parent's child list too — otherwise a
-        // newly-inserted sibling silently invalidates the margin. jsdom has
-        // neither observer; the one-shot measurement above still runs there.
+        // MutationObserver watches the parent's child list too. A sibling that
+        // appears *after* mount must also be observed: a late /model card that
+        // later expands changes its height without adding a child, so a
+        // one-shot observe at mount would never see the growth. Reconcile the
+        // observed set on every child-list change. jsdom has neither observer;
+        // the one-shot measurement above still runs there.
         const observers: { disconnect: () => void }[] = [];
-        if (typeof ResizeObserver !== "undefined") {
-          const resize = new ResizeObserver(measure);
-          resize.observe(node);
-          Array.from(parent?.children ?? []).forEach((sibling) => {
-            if (sibling !== node) resize.observe(sibling);
+        let resize: ResizeObserver | undefined;
+        const observed = new Set<Element>();
+        const reconcile = () => {
+          measure();
+          if (!resize) return;
+          const siblings = new Set<Element>(
+            Array.from(parent?.children ?? []).filter(
+              (sibling) => sibling !== node,
+            ),
+          );
+          siblings.forEach((sibling) => {
+            if (!observed.has(sibling)) {
+              resize?.observe(sibling);
+              observed.add(sibling);
+            }
           });
+          observed.forEach((sibling) => {
+            if (!siblings.has(sibling)) {
+              resize?.unobserve(sibling);
+              observed.delete(sibling);
+            }
+          });
+        };
+        if (typeof ResizeObserver !== "undefined") {
+          resize = new ResizeObserver(measure);
+          resize.observe(node);
           observers.push(resize);
+          reconcile();
         }
         if (typeof MutationObserver !== "undefined" && parent) {
-          const mutation = new MutationObserver(measure);
+          const mutation = new MutationObserver(reconcile);
           mutation.observe(parent, { childList: true });
           observers.push(mutation);
         }

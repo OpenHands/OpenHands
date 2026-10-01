@@ -1,6 +1,6 @@
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { Messages } from "#/components/conversation-events/chat/messages";
 import { createUserMessageEvent, renderWithProviders } from "test-utils";
 import type { OpenHandsEvent } from "#/types/agent-server/core";
@@ -278,6 +278,70 @@ describe("Messages virtualization", () => {
     expect(observe).toHaveBeenCalledWith(list.parentElement, {
       childList: true,
     });
+  });
+
+  it("observes a sibling inserted above the list so its later growth re-measures", () => {
+    // A late /model card is inserted above the shell and is not a sibling at
+    // mount, so a one-shot observe never tracks it. Expanding that card grows
+    // its height without adding a parent child — only a resize of the *card*
+    // can re-measure the shell. The shell must therefore start observing a
+    // newly-inserted sibling when the parent's child list changes.
+    type ResizeInstance = { observed: Element[] };
+    const resizeInstances: ResizeInstance[] = [];
+    const OriginalResize = window.ResizeObserver;
+    class TrackedResize extends OriginalResize {
+      private readonly record: ResizeInstance = { observed: [] };
+
+      constructor(callback: ResizeObserverCallback) {
+        super(callback);
+        resizeInstances.push(this.record);
+        const originalObserve = this.observe.bind(this);
+        this.observe = (target: Element, options?: ResizeObserverOptions) => {
+          this.record.observed.push(target);
+          originalObserve(target, options);
+        };
+      }
+    }
+    vi.stubGlobal("ResizeObserver", TrackedResize);
+
+    // Capture the component's MutationObserver so the child-list change can be
+    // delivered deterministically instead of relying on jsdom microtask timing.
+    const mutations: { target: Element; callback: MutationCallback }[] = [];
+    const OriginalMutation = window.MutationObserver;
+    class TrackedMutation extends OriginalMutation {
+      constructor(callback: MutationCallback) {
+        super(callback);
+        const originalObserve = this.observe.bind(this);
+        this.observe = (target: Node, options?: MutationObserverInit) => {
+          mutations.push({ target: target as Element, callback });
+          originalObserve(target, options);
+        };
+      }
+    }
+    vi.stubGlobal("MutationObserver", TrackedMutation);
+
+    renderMessages(buildEvents(400));
+
+    const list = screen.getByTestId("virtualized-message-list");
+    const parent = list.parentElement as HTMLElement;
+    const lateCard = document.createElement("div");
+    act(() => {
+      parent.insertBefore(lateCard, list);
+    });
+
+    const shellObserver = resizeInstances.find((instance) =>
+      instance.observed.includes(list),
+    );
+    expect(shellObserver).toBeDefined();
+
+    // Deliver the parent's child-list mutation the way the browser would.
+    const parentWatcher = mutations.find(
+      (watcher) => watcher.target === parent,
+    );
+    expect(parentWatcher).toBeDefined();
+    act(() => parentWatcher?.callback([], parentWatcher as never));
+
+    expect(shellObserver?.observed).toContain(lateCard);
   });
 
   it("disconnects its observers when the virtualized shell unmounts", () => {
