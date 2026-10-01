@@ -48,20 +48,26 @@ const HEADING_PATTERN = /^#{1,6}\s+(.*)$/;
 const NUMBER_TOKEN = /\b[0-9]+(?:\.[0-9]+)*\b/g;
 /** A bracketed citation, e.g. `[Req 3.1]`, removed before scanning a heading. */
 const CITATION_IN_TEXT = /\[(?:Req|DB|BE|FE)\s+[0-9]+(?:\.[0-9]+)*\]/g;
+/**
+ * A heading that spells its own label out at the start, e.g.
+ * `## [Req 3.1] Users` — the citation *is* the section number here.
+ */
+const OWN_LABEL_HEADING = /^\s*\[(?:Req|DB|BE|FE)\s+([0-9]+(?:\.[0-9]+)*)\]/;
 
 export type DeepPlanDocuments = Partial<Record<DeepPlanPhaseId, string>>;
 
 /**
  * Section numbers a document defines, taken from its numbered headings
  * (`## 3.1 Authentication` defines `3.1`; `### 3.1.1 Login` defines `3.1.1`).
- * A heading may also spell the label out (`## [Req 3.1] Authentication`).
+ * A heading may also spell its own label out (`## [Req 3.1] Authentication`).
  *
- * Upstream citations are not definitions: in `## 2.1 Users [Req 3.1]` the
+ * Upstream citations are not definitions. In `## 2.1 Users [Req 3.1]` the
  * document defines `2.1`, and `3.1` is the requirement it satisfies — counting
  * it as defined here would let a downstream `[DB 3.1]` resolve against a
- * section this document never defines. A heading that spells its own label out
- * (`## [Req 3.1] Users`) has no number left once citations are removed, so it
- * falls back to the citation's number.
+ * section this document never defines. The citation's number is only a
+ * definition when the heading *leads* with it (`## [Req 3.1] Users`); an
+ * unnumbered heading that merely cites upstream (`## Users [Req 3.1]`) defines
+ * nothing.
  */
 export function extractDefinedSections(content: string): Set<string> {
   const sections = new Set<string>();
@@ -70,11 +76,15 @@ export function extractDefinedSections(content: string): Set<string> {
     if (!heading) continue;
     const title = heading[1];
     const withoutCitations = title.replace(CITATION_IN_TEXT, " ");
-    const tokens =
-      withoutCitations.match(NUMBER_TOKEN) ?? title.match(NUMBER_TOKEN) ?? [];
-    for (const token of tokens) {
-      sections.add(token);
+    const tokens = withoutCitations.match(NUMBER_TOKEN);
+    if (tokens) {
+      for (const token of tokens) {
+        sections.add(token);
+      }
+      continue;
     }
+    const ownLabel = OWN_LABEL_HEADING.exec(title);
+    if (ownLabel) sections.add(ownLabel[1]);
   }
   return sections;
 }

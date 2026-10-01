@@ -74,6 +74,13 @@ describe("extractDefinedSections", () => {
   it("still reads a section from a heading that spells its own label out", () => {
     expect([...extractDefinedSections("## [Req 3.1] Users")]).toEqual(["3.1"]);
   });
+
+  it("does not define a section from an unnumbered heading's citation", () => {
+    // `## Users [Req 3.1]` has no number of its own, so it defines nothing.
+    // Treating the citation as a definition would let a downstream
+    // `[DB 3.1]` resolve against a database section that never exists.
+    expect([...extractDefinedSections("## Users [Req 3.1]")]).toEqual([]);
+  });
 });
 
 describe("extractReferences", () => {
@@ -143,6 +150,25 @@ describe("validateDocumentChain", () => {
     expect(report.ok).toBe(false);
     expect(report.issues).toEqual([
       { from: "backend", ref: "DB 2.5.1", reason: "missing-document" },
+    ]);
+  });
+
+  it("rejects a citation to a section only an unnumbered heading cites", () => {
+    // Reviewer scenario: the database document's heading has no number of its
+    // own — it only cites the requirement it satisfies. A backend citation of
+    // `[DB 3.1]` must not resolve against that upstream citation.
+    const documents: DeepPlanDocuments = {
+      requirements: "## 3.1 Authentication",
+      database: "## Users [Req 3.1]",
+      backend: "## 4.1 API [DB 3.1]",
+      tasks: "# Tasks",
+    };
+
+    const report = validateDocumentChain(documents);
+
+    expect(report.ok).toBe(false);
+    expect(report.issues).toEqual([
+      { from: "backend", ref: "DB 3.1", reason: "dangling" },
     ]);
   });
 
