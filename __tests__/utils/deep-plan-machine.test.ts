@@ -3,6 +3,7 @@ import {
   canEnterPhase,
   confirmPhase,
   EMPTY_DEEP_PLAN_STATE,
+  invalidateFrom,
   isPhaseConfirmed,
   startDeepPlan,
   type DeepPlanState,
@@ -112,5 +113,44 @@ describe("confirmPhase", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.state.activePhase).toBe("backend");
+  });
+});
+
+describe("invalidateFrom", () => {
+  const confirmedChain: DeepPlanState = {
+    activePhase: "tasks",
+    confirmed: ["analysis", "requirements", "database", "backend"],
+    documents: { requirements, database },
+  };
+
+  it("drops the rewritten phase and every later confirmation", () => {
+    const state = invalidateFrom(confirmedChain, "requirements");
+
+    expect(state.confirmed).toEqual(["analysis"]);
+  });
+
+  it("pulls the active phase back to the rewritten one", () => {
+    // The chain can no longer be trusted past the edit, so continuing at
+    // `tasks` would build on unconfirmed documents.
+    const state = invalidateFrom(confirmedChain, "requirements");
+
+    expect(state.activePhase).toBe("requirements");
+  });
+
+  it("keeps earlier confirmations and the active phase when a later doc is edited", () => {
+    const state = invalidateFrom(confirmedChain, "backend");
+
+    expect(state.confirmed).toEqual([
+      "analysis",
+      "requirements",
+      "database",
+    ]);
+    expect(state.activePhase).toBe("backend");
+  });
+
+  it("is a no-op for a phase that was never confirmed", () => {
+    const state = invalidateFrom(confirmedChain, "tasks");
+
+    expect(state).toBe(confirmedChain);
   });
 });

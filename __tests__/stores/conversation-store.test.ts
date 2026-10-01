@@ -297,6 +297,53 @@ describe("conversation store", () => {
       );
     });
 
+    it("drops confirmations built on a document that is rewritten", () => {
+      // A checkpoint vouches for the chain it saw. Rewriting an upstream
+      // document must re-open the checkpoints that depend on it, or the chain
+      // would keep reporting "confirmed" for documents it never re-validated.
+      const store = useConversationStore.getState();
+      store.startDeepPlan();
+      store.setDeepPlanDocument("requirements", "## 3.1 Authentication\n");
+      store.confirmDeepPlanPhase("analysis");
+      store.confirmDeepPlanPhase("requirements");
+      store.setDeepPlanDocument("database", "## 2.1 Users [Req 3.1]\n");
+      store.confirmDeepPlanPhase("database");
+      expect(useConversationStore.getState().deepPlan.activePhase).toBe(
+        "backend",
+      );
+
+      // The agent rewrites requirements, changing a section the database cites.
+      useConversationStore
+        .getState()
+        .setDeepPlanDocument("requirements", "## 3.2 Sessions\n");
+
+      expect(useConversationStore.getState().deepPlan.confirmed).toEqual([
+        "analysis",
+      ]);
+      expect(useConversationStore.getState().deepPlan.activePhase).toBe(
+        "requirements",
+      );
+    });
+
+    it("keeps confirmations when replay re-hydrates an unchanged document", () => {
+      // Reload replays the same writes from history; identical bytes are not an
+      // edit, so the confirmations restored from disk must survive.
+      const store = useConversationStore.getState();
+      store.startDeepPlan();
+      store.setDeepPlanDocument("requirements", "## 3.1 Authentication\n");
+      store.confirmDeepPlanPhase("analysis");
+      store.confirmDeepPlanPhase("requirements");
+
+      useConversationStore
+        .getState()
+        .setDeepPlanDocument("requirements", "## 3.1 Authentication\n");
+
+      expect(useConversationStore.getState().deepPlan.confirmed).toEqual([
+        "analysis",
+        "requirements",
+      ]);
+    });
+
     it("restores the phase machine from persisted state on load", async () => {
       mockGetConversationState.mockReturnValue({
         selectedTab: "files",

@@ -59,6 +59,30 @@ export function canEnterPhase(
   );
 }
 
+/**
+ * Drop `phase`'s confirmation and every later one. A checkpoint only vouches
+ * for the documents it saw; once an upstream document is rewritten the
+ * confirmations built on it are no longer evidence that the chain is valid, so
+ * they must be re-earned rather than silently kept.
+ */
+export function invalidateFrom(
+  state: DeepPlanState,
+  phase: DeepPlanPhaseId,
+): DeepPlanState {
+  const index = DEEP_PLAN_PHASE_IDS.indexOf(phase);
+  const confirmed = state.confirmed.filter(
+    (confirmedPhase) => DEEP_PLAN_PHASE_IDS.indexOf(confirmedPhase) < index,
+  );
+  if (confirmed.length === state.confirmed.length) return state;
+  // The active phase may have been one of the invalidated ones; send the user
+  // back to the edited phase so they re-walk the chain from where it broke.
+  const activeIndex = state.activePhase
+    ? DEEP_PLAN_PHASE_IDS.indexOf(state.activePhase)
+    : -1;
+  const activePhase = activeIndex >= index ? phase : state.activePhase;
+  return { ...state, confirmed, activePhase };
+}
+
 export type ConfirmResult =
   | { ok: true; state: DeepPlanState }
   | { ok: false; error: string };

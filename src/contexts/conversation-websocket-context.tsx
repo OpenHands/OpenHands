@@ -1277,7 +1277,8 @@ export function ConversationWebSocketProvider({
   const reconnect = useCallback(() => {
     removeErrorMessage();
     const currentMode = useConversationStore.getState().conversationMode;
-    if (isPlanningMode(currentMode) && planningAgentWsUrl) {
+    const currentPhase = useConversationStore.getState().deepPlan.activePhase;
+    if (isPlanningMode(currentMode, currentPhase) && planningAgentWsUrl) {
       reconnectPlanning();
       return;
     }
@@ -1294,10 +1295,10 @@ export function ConversationWebSocketProvider({
   const sendMessage = useCallback(
     async (message: SendMessageRequest): Promise<SendMessageResult> => {
       const currentMode = useConversationStore.getState().conversationMode;
-      const currentSocket = isPlanningMode(currentMode)
-        ? planningAgentSocket
-        : mainSocket;
-      const targetConversationId = isPlanningMode(currentMode)
+      const currentPhase = useConversationStore.getState().deepPlan.activePhase;
+      const routesToPlanner = isPlanningMode(currentMode, currentPhase);
+      const currentSocket = routesToPlanner ? planningAgentSocket : mainSocket;
+      const targetConversationId = routesToPlanner
         ? planningConversationId
         : conversationId;
 
@@ -1309,7 +1310,7 @@ export function ConversationWebSocketProvider({
           // target the message would run in the code agent, which is exactly
           // the boundary plan mode exists to enforce.
           const error = new Error(
-            isPlanningMode(currentMode)
+            routesToPlanner
               ? "Planning conversation is not ready yet"
               : "No conversation ID available",
           );

@@ -37,8 +37,11 @@ export function ChatInputField({
   const conversationMode = useConversationStore(
     (state) => state.conversationMode,
   );
+  const deepPlanPhase = useConversationStore(
+    (state) => state.deepPlan.activePhase,
+  );
 
-  const isPlanMode = isPlanningMode(conversationMode);
+  const isPlanMode = isPlanningMode(conversationMode, deepPlanPhase);
 
   React.useEffect(() => {
     if (!disabled) {

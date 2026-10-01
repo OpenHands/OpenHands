@@ -8,6 +8,7 @@ import {
   EMPTY_DEEP_PLAN_STATE,
   canEnterPhase,
   confirmPhase,
+  invalidateFrom,
   startDeepPlan as createDeepPlanState,
   type DeepPlanState,
 } from "#/utils/deep-plan-machine";
@@ -480,19 +481,32 @@ export const useConversationStore = create<ConversationStore>()(
           "setDeepPlanPhase",
         ),
 
-      setDeepPlanDocument: (phase, content) =>
+      setDeepPlanDocument: (phase, content) => {
+        // History replay re-reads the persisted documents after a refresh;
+        // re-hydrating identical bytes is not an edit, so it must not drop the
+        // confirmations the user already earned. Only a real change invalidates
+        // the phase and everything built on it.
+        if (
+          useConversationStore.getState().deepPlan.documents[phase] === content
+        ) {
+          return;
+        }
         set(
           (state) => {
-            const deepPlan = {
-              ...state.deepPlan,
-              documents: { ...state.deepPlan.documents, [phase]: content },
-            };
+            const deepPlan = invalidateFrom(
+              {
+                ...state.deepPlan,
+                documents: { ...state.deepPlan.documents, [phase]: content },
+              },
+              phase,
+            );
             persistDeepPlan(deepPlan);
             return { deepPlan };
           },
           false,
           "setDeepPlanDocument",
-        ),
+        );
+      },
 
       confirmDeepPlanPhase: (phase) => {
         const result = confirmPhase(

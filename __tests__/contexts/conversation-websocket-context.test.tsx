@@ -442,7 +442,10 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     });
 
     afterEach(() => {
-      useConversationStore.setState({ conversationMode: "code" });
+      useConversationStore.setState({
+        conversationMode: "code",
+        deepPlan: { activePhase: null, confirmed: [], documents: {} },
+      });
     });
 
     it("queues the first prompt to the planner, not the parent code agent", async () => {
@@ -479,6 +482,53 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
       // Falling back to `conv-parent` here would run a planning prompt in the
       // code agent — the boundary plan mode exists to enforce.
       expect(sendEventMock).not.toHaveBeenCalled();
+    });
+
+    it("routes a Deep Planning Implementation message to the code agent", async () => {
+      // Implementation is the one phase the planner cannot run: its boundaries
+      // forbid executing code, yet the phase instruction says to implement.
+      // The message must go to the parent code agent, not the planner helper.
+      const getContext = renderPlanMode(["planning-1"]);
+      await waitFor(() => expect(getContext()).not.toBeNull());
+      useConversationStore.setState({
+        conversationMode: "deep-plan",
+        deepPlan: { activePhase: "implementation", confirmed: [], documents: {} },
+      });
+
+      await act(async () => {
+        await getContext().sendMessage({
+          role: "user",
+          content: [{ type: "text", text: "implement task 1" }],
+        });
+      });
+
+      expect(sendEventMock).toHaveBeenCalledWith(
+        "conv-parent",
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+
+    it("still routes a Deep Planning design message to the planner", async () => {
+      const getContext = renderPlanMode(["planning-1"]);
+      await waitFor(() => expect(getContext()).not.toBeNull());
+      useConversationStore.setState({
+        conversationMode: "deep-plan",
+        deepPlan: { activePhase: "database", confirmed: [], documents: {} },
+      });
+
+      await act(async () => {
+        await getContext().sendMessage({
+          role: "user",
+          content: [{ type: "text", text: "design the schema" }],
+        });
+      });
+
+      expect(sendEventMock).toHaveBeenCalledWith(
+        "planning-1",
+        expect.anything(),
+        expect.anything(),
+      );
     });
   });
 
