@@ -3,7 +3,10 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useWorkspaceFileContent } from "#/hooks/query/use-workspace-file-content";
+import {
+  MAX_TEXT_DOWNLOAD_BYTES,
+  useWorkspaceFileContent,
+} from "#/hooks/query/use-workspace-file-content";
 import { useWorkspaceMutationCounter } from "#/stores/use-workspace-mutation-counter";
 import { MAX_OOXML_DOWNLOAD_BYTES } from "#/utils/ooxml-preview";
 
@@ -253,10 +256,10 @@ describe("useWorkspaceFileContent", () => {
     expect(cancel).toHaveBeenCalled();
   });
 
-  it("keeps an oversized non-OOXML file as text instead of a binary fallback", async () => {
-    // The 32 MiB Office cap must not leak onto ordinary source files and logs:
-    // a large UTF-8 log is readable text and must not be hidden behind the
-    // Files pane's unsupported-file message.
+  it("keeps a large but under-bound non-OOXML file as text", async () => {
+    // The Office download cap must not leak onto ordinary source files and
+    // logs: a large UTF-8 log is readable text and must not be hidden behind
+    // the Files pane's unsupported-file message.
     const log = "x".repeat(1024);
     fetchMock.mockResolvedValue({
       ok: true,
@@ -276,6 +279,37 @@ describe("useWorkspaceFileContent", () => {
       text: log,
     });
     expect(result.current.data?.bytesTooLarge).toBeUndefined();
+  });
+
+  it("flags an oversized non-OOXML file instead of decoding it as empty", async () => {
+    // Past the 64 MiB bound the body is never buffered. Continuing to the
+    // content sniff would decode the empty placeholder and hand the viewer
+    // `text: ""`, showing a huge log as a blank file.
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({
+        "content-length": String(MAX_TEXT_DOWNLOAD_BYTES + 1),
+      }),
+      body: { cancel },
+      arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+    });
+
+    const { result } = renderHook(
+      () => useWorkspaceFileContent("logs/app.log"),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.data).toMatchObject({
+      kind: "binary",
+      text: null,
+      bytes: null,
+      bytesTooLarge: true,
+    });
+    expect(cancel).toHaveBeenCalled();
   });
 
   it("refetches text content after a workspace mutation tick", async () => {

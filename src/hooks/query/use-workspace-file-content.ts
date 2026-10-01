@@ -38,7 +38,7 @@ const OOXML_EXTENSIONS = new Set(["docx", "xlsx", "pptx"]);
 // A larger ceiling for non-OOXML files. Still bounded, so an accidental huge
 // file cannot be pulled into memory, but generous enough that ordinary large
 // source files and logs are read as text rather than mislabelled binary.
-const MAX_TEXT_DOWNLOAD_BYTES = 64 * 1024 * 1024;
+export const MAX_TEXT_DOWNLOAD_BYTES = 64 * 1024 * 1024;
 
 export type WorkspaceFileKind = "text" | "image" | "pdf" | "binary";
 
@@ -62,11 +62,11 @@ export interface WorkspaceFileContent {
    */
   bytesLossy?: boolean;
   /**
-   * True when the file's declared length exceeded the OOXML download bound
-   * ({@link MAX_OOXML_DOWNLOAD_BYTES}) and the body was never buffered.
-   * Consumers that would parse the bytes (the Office outline) report "too
-   * large" instead of a parse failure. Only set for OOXML paths; a large
-   * non-OOXML file is sniffed and reported by its own kind.
+   * True when the file exceeded its download bound
+   * ({@link MAX_OOXML_DOWNLOAD_BYTES} for OOXML,
+   * {@link MAX_TEXT_DOWNLOAD_BYTES} otherwise) and the body was never
+   * buffered. Consumers that would parse or decode the bytes report "too
+   * large" instead of rendering the empty placeholder as the file's contents.
    */
   bytesTooLarge?: boolean;
   /**
@@ -350,16 +350,18 @@ export function useWorkspaceFileContent(relativePath: string | null) {
         buffer = new ArrayBuffer(0);
       }
 
-      // Only an OOXML container is reported as `bytesTooLarge`: its parser
-      // needs the bytes and must say "too large" instead of failing. A large
-      // non-OOXML file is classified by content below — treating it as binary
-      // here would hide a readable log behind an unsupported-file message.
-      if (tooLarge && isOoxml) {
+      // An oversized body is reported as `bytesTooLarge` for every path, not
+      // just OOXML. `readBoundedArrayBuffer` rejects without returning any
+      // bytes, so continuing to the content sniff would classify the empty
+      // placeholder as text and render a huge file as blank — the worst
+      // possible answer, because it looks like the file is empty.
+      if (tooLarge) {
         return {
           path: relativePath,
           kind: "binary",
           text: null,
-          // The body was never buffered; `bytesTooLarge` tells the parser so.
+          // The body was never buffered; `bytesTooLarge` tells consumers to
+          // report "too large" instead of parsing or decoding the placeholder.
           bytes: null,
           bytesTooLarge: true,
           staticUrl,
