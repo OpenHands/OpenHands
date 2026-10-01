@@ -74,11 +74,12 @@ export function useAutomations(options: UseAutomationsOptions = {}) {
     staleTime: 0,
     // A new filter keeps the last list on screen until its first page lands;
     // another backend or org starts empty, so its list never shows foreign rows.
-    placeholderData: (previousData, previousQuery) =>
-      previousQuery?.queryKey[2] === active.backend.id &&
-      previousQuery?.queryKey[3] === active.orgId
+    placeholderData: (previousData, previousQuery) => {
+      const [, , backendId, orgId] = previousQuery?.queryKey ?? [];
+      return backendId === active.backend.id && orgId === active.orgId
         ? previousData
-        : undefined,
+        : undefined;
+    },
     enabled,
   });
 }

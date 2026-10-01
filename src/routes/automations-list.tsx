@@ -170,7 +170,7 @@ export default function AutomationsList() {
       ]),
     [orgData?.automations, data?.automations],
   );
-  // One runs query per listed automation — dashboard mode only.
+  // One runs query per automation in either list — dashboard mode only.
   const runSummaries = useAutomationRunSummaries(runSummaryAutomations, {
     enabled: isBackendHealthy && dashboard !== null,
   });
@@ -196,7 +196,7 @@ export default function AutomationsList() {
         trigger: triggerFilter,
         // A null id (local backend, personal workspace, or /me loading)
         // leaves the creator filter inert, so a selection made on a team
-        // workspace does not linger once the filter is hidden.
+        // workspace has no effect while the filter is hidden.
         createdBy: createdByFilter,
         currentUserId: creatorFilterUserId,
         sort: sortValue,

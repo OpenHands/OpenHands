@@ -600,7 +600,9 @@ describe("AutomationsList — created-by filter on cloud workspaces", () => {
     await waitFor(() => {
       expect(visibleCardIds()).toEqual(["automation-card-a-mine"]);
     });
-    expect(screen.queryByTestId("automation-card-skeleton")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automation-card-skeleton"),
+    ).not.toBeInTheDocument();
   });
 
   it("shows loading, not a false no-match, while my page loads past the first page", async () => {
@@ -722,7 +724,7 @@ describe("AutomationsList — created-by filter on cloud workspaces", () => {
     });
   });
 
-  it("drops a creator selection once the workspace hides the filter", async () => {
+  it("ignores a creator selection while the workspace hides the filter", async () => {
     // Arrange
     const user = userEvent.setup();
     selectWorkspace(TEAM_ORG_ID);
