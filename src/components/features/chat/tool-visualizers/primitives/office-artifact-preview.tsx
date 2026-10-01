@@ -30,7 +30,6 @@ import {
 import { Typography } from "#/ui/typography";
 import { getFileExtension } from "#/utils/is-previewable-file-path";
 import {
-  fetchOoxmlPreview,
   readOoxmlPreview,
   type OoxmlKind,
   type OoxmlPreview,
@@ -323,12 +322,23 @@ export function OfficeArtifactPreview({
           if (!cancelled) setFailure({ url: staticUrl, reason: "too-large" });
           return;
         }
-        // Prefer the bytes the file-content hook already fetched: re-using them
-        // avoids downloading every Office document twice.
-        const parsed =
-          query.data.bytes != null
-            ? await readOoxmlPreview(kind, query.data.bytes)
-            : await fetchOoxmlPreview(kind, staticUrl);
+        // Parse the bytes the file-content hook fetched — the hook owns the
+        // (typed, bounded, cache-busted) transport, so the card never downloads
+        // the document a second time over a raw fetch. `bytes` is always
+        // populated for a local binary file; a null `bytes` with no size flag
+        // means the transport could not supply them (e.g. a Cloud data: URI),
+        // which is reported as a plain load failure.
+        if (query.data.bytes == null) {
+          if (!cancelled) setFailure({ url: staticUrl, reason: "error" });
+          return;
+        }
+        // The bytes must belong to the version this URL names. After an edit the
+        // query refetches under the new counter, but `query.data` still holds
+        // the previous version's bytes until it resolves; parsing those and
+        // tagging them with the new URL would show a stale outline. Wait for the
+        // refetched bytes instead.
+        if (query.data.bytesVersion !== mutationCounter) return;
+        const parsed = await readOoxmlPreview(kind, query.data.bytes);
         if (!cancelled) setPreview({ url: staticUrl, value: parsed });
       } catch (error) {
         if (cancelled) return;

@@ -161,16 +161,26 @@ function FileEditorCardBody({
       // output) rather than `output`/`new_content`, so fall back to it.
       // Mirrors the markdown path's "prefer content for view" handling.
       // A binary create carries no source text: its `output` is a status line
-      // ("Created docs/plan.docx"). That must not reach a preview card as if it
-      // were content, or Copy would put the status message on the clipboard.
-      const content =
-        obs.new_content ||
-        (previewKind ? "" : obs.output) ||
-        (obs.content ? textFromContent(obs.content) : "");
-      if (content) {
-        const rendered = renderFileContent(content);
+      // ("Created docs/plan.docx"), which must never reach a preview card as if
+      // it were content, or Copy would put the status message on the clipboard.
+      const sourceText =
+        obs.new_content || (obs.content ? textFromContent(obs.content) : "");
+      const render = (text: string) => {
+        const rendered = renderFileContent(text);
         leadingChip = rendered.chip;
         body = rendered.body;
+      };
+      if (previewKind === "markdown") {
+        if (sourceText) render(sourceText);
+      } else if (previewKind) {
+        // A binary artifact (Office / image / PDF / frame) fetches its own
+        // bytes from the workspace, so a successful create still mounts its
+        // card even when it carries no source text. Passing "" (rather than the
+        // status `output`) keeps Copy disabled instead of copying the status.
+        render(sourceText);
+      } else {
+        const content = obs.new_content || obs.output || sourceText;
+        if (content) render(content);
       }
     }
     return (

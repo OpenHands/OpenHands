@@ -601,23 +601,3 @@ export async function readOoxmlPreview(
       return readPptx(entries);
   }
 }
-
-/**
- * Download an OOXML container from a same-origin static URL and read it with
- * {@link readOoxmlPreview}. The caller decides *which* URL to hand over — the
- * workspace fileserver route (session-aware) or a Cloud binary endpoint — so
- * the download policy stays with the transport owner and the byte-accurate
- * `fetch` + size bound stays in one place.
- */
-export async function fetchOoxmlPreview(
-  kind: OoxmlKind,
-  url: string,
-  maxBytes: number = MAX_OOXML_DOWNLOAD_BYTES,
-): Promise<OoxmlPreview> {
-  const response = await fetch(url, { credentials: "include" });
-  if (!response.ok) throw new Error(String(response.status));
-  return readOoxmlPreview(
-    kind,
-    await readBoundedArrayBuffer(response, maxBytes),
-  );
-}
