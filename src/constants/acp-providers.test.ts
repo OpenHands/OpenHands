@@ -113,7 +113,10 @@ describe("surfaced ACP providers", () => {
       client.api_key_env_var,
     ]);
     expect(buildAcpAgentSettingsDiff("opencode")).toMatchObject({
-      acp_command: [...client.default_command],
+      acp_server: "opencode",
+      acp_command: [],
+      acp_args: [],
+      acp_model: client.default_model,
     });
   });
 

@@ -185,14 +185,6 @@ export const ACP_PROVIDERS: ACPProviderConfig[] = Object.entries(
 
 export const ACP_CUSTOM_PRESET_KEY = "custom";
 
-// OpenCode's first-class preset deliberately persists the registry command in
-// settings. Unlike the older presets (whose empty command delegates resolution
-// to the backend registry), this is part of the product contract for the
-// OpenCode rollout: a saved preset must remain self-describing and round-trip
-// the exact command shown in Settings. The tokens still come from the shared
-// client registry above; Canvas does not duplicate the command literal.
-const ACP_PRESETS_WITH_EXPLICIT_DEFAULT_COMMAND = new Set(["opencode"]);
-
 /**
  * A credential an ACP provider authenticates with, surfaced during onboarding
  * so the user can populate it without leaving the flow. The {@link name} is
@@ -491,34 +483,16 @@ export function labelForAcpModel(
  * Build the ``agent_settings_diff`` payload PATCH /api/settings expects
  * for the agent-kind/provider choice the user just made.
  *
- * Used by both the Settings → Agent page and the onboarding "choose
- * agent" step — keeping the shape in one helper means a future change
- * (e.g. always seeding ``acp_command`` from the registry instead of
- * sending ``[]``, or adding new ``acp_*`` reset fields) lands in both
- * surfaces atomically. Existing presets delegate their default command to the
- * backend by saving ``[]``. OpenCode saves a copy of its client-registry
- * default so its first-class preset is self-describing and reloads losslessly.
+ * Built-in presets (including OpenCode) leave command resolution to the
+ * server registry. Copying its current command into durable settings would
+ * pin an old CLI after the registry is upgraded.
  *
- * Returns ``null`` for an unknown ACP provider key by default — the
- * caller can skip the save (the UI shouldn't surface unknown options,
- * but the defensive path keeps a buggy preset list from corrupting
- * settings).
- *
- * Pass ``allowUnknownServer: true`` to opt into pass-through for keys
- * that aren't in {@link ACP_PROVIDERS} or ``ACP_CUSTOM_PRESET_KEY``.
- * The Settings → Agent page uses this when the user opens settings
- * that already carry an ``acp_server`` value canvas's registry
- * doesn't know about (e.g. set out-of-band via the API for a provider
- * we haven't mirrored yet) and saves without changing the command —
- * otherwise the original key would be silently demoted to ``"custom"``.
+ * Returns ``null`` for an unknown ACP provider key — the caller can skip
+ * the save (the UI shouldn't surface unknown options, but the defensive
+ * path keeps a buggy preset list from corrupting settings).
  */
 export function buildAcpAgentSettingsDiff(
   providerKey: string,
-  options: {
-    command?: string[];
-    model?: string | null;
-    allowUnknownServer?: boolean;
-  } = {},
 ): Record<string, unknown> | null {
   if (providerKey === "openhands") {
     // Switching back to OpenHands. The agent-server's ``Settings.update``
@@ -529,36 +503,20 @@ export function buildAcpAgentSettingsDiff(
   }
 
   const isCustom = providerKey === ACP_CUSTOM_PRESET_KEY;
-  const provider = isCustom ? undefined : getAcpProvider(providerKey);
-  if (!isCustom && !provider && !options.allowUnknownServer) {
+  if (!isCustom && !getAcpProvider(providerKey)) {
     return null;
   }
 
-  // Undefined model → the *preferred* default (Vertex-safe for Gemini), not
-  // the raw registry default — see getAcpPreferredDefaultModel.
-  const model =
-    options.model === undefined
-      ? getAcpPreferredDefaultModel(providerKey)
-      : options.model;
-
-  const command =
-    provider &&
-    ACP_PRESETS_WITH_EXPLICIT_DEFAULT_COMMAND.has(providerKey) &&
-    (!options.command || options.command.length === 0)
-      ? [...provider.default_command]
-      : (options.command ?? []);
-
   // ``acp_args: []`` resets any API-set ``acp_args`` that would
   // otherwise survive and concatenate to ``acp_command`` at spawn time
-  // (the agent-server merges the two before exec). Callers building the
-  // payload from a textarea that already shows the merged command
-  // (Settings → Agent) round-trip correctly — the merged tokens land in
-  // ``acp_command`` here, so no args are lost.
+  // (the agent-server merges the two before exec).
   return {
     agent_kind: "acp",
     acp_server: providerKey,
-    acp_command: command,
+    acp_command: [],
     acp_args: [],
-    acp_model: model ?? null,
+    // The *preferred* default (Vertex-safe for Gemini), not the raw registry
+    // default — see getAcpPreferredDefaultModel.
+    acp_model: getAcpPreferredDefaultModel(providerKey) ?? null,
   };
 }

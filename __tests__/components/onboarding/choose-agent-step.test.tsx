@@ -220,6 +220,10 @@ describe("ChooseAgentStep", () => {
     expect(
       (call.agent_settings_diff as Record<string, unknown>).acp_model,
     ).toBe(getAcpPreferredDefaultModel(expected));
+    expect(call.agent_settings_diff).toMatchObject({
+      acp_command: [],
+      acp_args: [],
+    });
   });
 
   it("rebuilds the diff cleanly when the user flips between ACP providers", async () => {

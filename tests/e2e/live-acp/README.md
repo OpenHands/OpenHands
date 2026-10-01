@@ -8,9 +8,10 @@ provider API calls. It's the "it actually works" companion to the unit tests in
 `__tests__/api/agent-server-adapter.test.ts` — those assert the request shape;
 this asserts a real agent reply.
 
-> **Requires `agent-server:1.25.0-python` or newer** (software-agent-sdk#3510):
-> the ACP credentials ride as loopback LookupSecrets, and only #3510 resolves
-> them off the event loop. An older image deadlocks the first turn.
+> **Use Canvas's supported Agent Server version** from `config/defaults.json`
+> (currently 1.50.1; minimum 1.47.0). OpenCode first enters the server's
+> `ACPServerKind` in 1.45.0. The historical 1.25.0 result below proves only the
+> off-event-loop LookupSecret fix, not today's Canvas/OpenCode compatibility.
 
 It is **not** part of `npm test` (it lives under `tests/`, which Vitest excludes,
 and needs a running container + real host credentials).
@@ -18,12 +19,12 @@ and needs a running container + real host credentials).
 ## Run it
 
 ```bash
-# 1. Agent-server container. v1.28.0 adds the client_tools API used by Canvas.
+# 1. Agent-server container. Match the current Canvas release's server pin.
 #    The Python mount keeps pre-migration conversation state loadable.
 docker run -d --name oh-acp -p 8010:8000 \
   -v oh-acp-data:/workspace \
   -v "$(pwd)/tools:/canvas-tools:ro" -e OH_EXTRA_PYTHON_PATH=/canvas-tools \
-  ghcr.io/openhands/agent-server:1.28.0-python
+  ghcr.io/openhands/agent-server:1.50.1-python
 
 # 2. Run the e2e (all providers, or a subset).
 npx vite-node -c tests/e2e/live-acp/vite-node.config.mts \

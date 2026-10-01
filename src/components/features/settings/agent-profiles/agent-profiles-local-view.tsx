@@ -330,7 +330,6 @@ export function AgentProfilesLocalView() {
       {/* Reuse the existing Agent settings form to define the agent. */}
       <AgentSettingsScreen
         key={viewMode === "edit" ? `edit-${editingProfile?.id}` : "new-profile"}
-        embedded
         agentSettingsOverride={override}
         onSaveControlChange={setSaveControl}
       />

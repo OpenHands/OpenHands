@@ -20,9 +20,11 @@ const mockClearAllFiles = vi.fn();
 const enqueueHomeTaskPendingMessage = vi.fn();
 const mockDisplayErrorToast = vi.fn();
 const mockUseLlmConfigured = vi.fn();
+const mockUseConversationWorkspace = vi.fn();
 
 let mockImages: File[] = [];
 let mockFiles: File[] = [];
+let mockIsolated = false;
 
 vi.mock("#/utils/send-message-with-attachments", () => ({
   sendMessageWithAttachments: (...args: unknown[]) =>
@@ -71,6 +73,10 @@ vi.mock("#/contexts/active-backend-context", () => ({
 
 vi.mock("#/hooks/use-llm-configured", () => ({
   useLlmConfigured: () => mockUseLlmConfigured(),
+}));
+
+vi.mock("#/hooks/query/use-conversation-workspace", () => ({
+  useConversationWorkspace: () => mockUseConversationWorkspace(),
 }));
 
 vi.mock("#/hooks/use-is-creating-conversation", () => ({
@@ -316,11 +322,16 @@ describe("HomeChatLauncher", () => {
     vi.clearAllMocks();
     mockImages = [];
     mockFiles = [];
+    mockIsolated = false;
     mockUseActiveBackend.mockReturnValue(localBackend);
     mockUseLlmConfigured.mockReturnValue({
       isConfigured: true,
       isLoading: false,
     });
+    mockUseConversationWorkspace.mockImplementation(() => ({
+      isolated: mockIsolated,
+      unsupportedMessage: mockIsolated ? "isolated-unsupported" : null,
+    }));
     enqueueHomeTaskPendingMessage.mockResolvedValue(undefined);
     sendMessageWithAttachments.mockResolvedValue({
       text: "hello world",
@@ -425,6 +436,42 @@ describe("HomeChatLauncher", () => {
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith("/conversations/conv-ws"),
     );
+  });
+
+  it("omits a stale host workspace override on an isolated backend", async () => {
+    // A host folder selected while the backend looked like a normal local
+    // backend must not be forwarded once the backend advertises isolation: the
+    // server rejects it and the user sees an error toast for a selection the
+    // launcher already deems unsupported. `isolated` is read per render, so
+    // flipping the mocked value and forcing a re-render models the backend
+    // changing under the user.
+    mockUseConversationWorkspace.mockImplementation(() => ({
+      isolated: mockIsolated,
+      unsupportedMessage: mockIsolated ? "isolated-unsupported" : null,
+    }));
+    const createSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue(
+        makeConversationResponse({ app_conversation_id: "conv-iso" }),
+      );
+
+    renderLauncher();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId("open-workspace-button"));
+    await user.click(
+      await screen.findByTestId("stub-workspace-dialog-confirm"),
+    );
+
+    mockIsolated = true;
+    await user.click(screen.getByTestId("stub-workspace-mode-new-worktree"));
+    await user.click(screen.getByTestId("stub-chat-submit"));
+
+    await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
+    expect(createSpy).toHaveBeenCalledWith({
+      initialUserMsg: "hello world",
+      metadata: null,
+    });
   });
 
   it("passes the picked workspace path with new-worktree mode when selected", async () => {

@@ -68,13 +68,15 @@ async function run(plan: ProviderPlan): Promise<boolean> {
   }
 
   // 2) choose-agent step — persist ACP agent settings via the app's diff builder.
-  const diff = buildAcpAgentSettingsDiff(plan.acpServer, { model: plan.model });
+  const diff = buildAcpAgentSettingsDiff(plan.acpServer);
   if (!diff) throw new Error(`no settings diff for ${plan.acpServer}`);
+  diff.acp_model = plan.model;
   if (plan.sessionMode) diff.acp_session_mode = plan.sessionMode;
   await settingsClient.updateSettings({ agent_settings_diff: diff });
   console.log(
     `   PATCHed agent settings: ${JSON.stringify({
       acp_server: diff.acp_server,
+      acp_command: diff.acp_command,
       acp_model: diff.acp_model,
       ...(plan.sessionMode ? { acp_session_mode: plan.sessionMode } : {}),
     })}`,
