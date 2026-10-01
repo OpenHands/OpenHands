@@ -17,19 +17,25 @@ export interface NativeGitIntegration {
   isConnected: boolean;
 }
 
+/** Whether a catalog entry is one a cloud instance may connect natively. */
+export function isNativeGitCandidate(entryId: string): boolean {
+  return entryId in NATIVE_PROVIDER_BY_ENTRY_ID;
+}
+
 /**
  * Resolves whether an integration catalog entry can use the active cloud
  * instance's native git integration (Settings > Integrations) instead of an
  * MCP server. `getNativeIntegration` returns null — meaning MCP is the only
  * option — on local backends, for non-git entries, and for providers the
- * instance has not enabled.
+ * instance has not enabled. While `isLoading`, the instance's providers are
+ * not known yet and null means nothing: wait rather than decide on it.
  */
 export function useNativeGitIntegrations() {
   const { backend } = useActiveBackend();
   const isCloud = backend.kind === "cloud";
   const { providers: connectedProviders } = useUserProviders();
 
-  const { data: configuredProviders } = useQuery({
+  const { data: configuredProviders, isLoading } = useQuery({
     queryKey: [
       "cloud-providers-configured",
       backend.id,
@@ -53,5 +59,5 @@ export function useNativeGitIntegrations() {
     [isCloud, configuredProviders, connectedProviders],
   );
 
-  return { getNativeIntegration };
+  return { getNativeIntegration, isLoading };
 }

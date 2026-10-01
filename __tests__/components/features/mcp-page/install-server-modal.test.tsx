@@ -1215,6 +1215,27 @@ describe("InstallServerModal", () => {
       expect(screen.queryByTestId("mcp-install-field-api_key")).toBeNull();
     });
 
+    it("waits for the instance's providers instead of showing the MCP form first", async () => {
+      // Arrange
+      activateCloudBackend({ providersConfigured: ["github"] });
+
+      // Act
+      renderWith(
+        <InstallServerModal
+          existingServers={[]}
+          entry={github}
+          onClose={vi.fn()}
+        />,
+      );
+
+      // Assert — nothing to type into until it is known which option leads,
+      // so the form is not swapped out from under the user.
+      expect(screen.getByTestId("mcp-install-resolving")).toBeInTheDocument();
+      expect(screen.queryByTestId("mcp-install-field-api_key")).toBeNull();
+      expect(await screen.findByTestId("mcp-native-panel")).toBeInTheDocument();
+      expect(screen.queryByTestId("mcp-install-resolving")).toBeNull();
+    });
+
     it("opens the instance's integrations page to connect natively", async () => {
       // Arrange
       activateCloudBackend({ providersConfigured: ["github"] });

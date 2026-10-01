@@ -8,6 +8,7 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useSettings } from "#/hooks/query/use-settings";
 import type { NativeGitIntegration } from "#/hooks/query/use-native-git-integrations";
 import { I18nKey } from "#/i18n/declaration";
+import { cloudIntegrationsUrl } from "#/utils/cloud-integrations-url";
 import { convertRawProvidersToList } from "#/utils/convert-raw-providers-to-list";
 
 interface NativeIntegrationPanelProps {
@@ -44,11 +45,8 @@ export function NativeIntegrationPanel({
   }
 
   const openIntegrations = () => {
-    // `org` is consumed by the cloud settings loader so the page opens on the
-    // org that is active here instead of the cloud's last-used org.
-    const orgQuery = orgId ? `?org=${encodeURIComponent(orgId)}` : "";
     window.open(
-      `${backend.host.replace(/\/+$/, "")}/settings/integrations${orgQuery}`,
+      cloudIntegrationsUrl(backend, orgId),
       "_blank",
       "noopener,noreferrer",
     );

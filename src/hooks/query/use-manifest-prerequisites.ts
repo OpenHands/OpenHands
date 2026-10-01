@@ -45,7 +45,8 @@ export function useSetupPrerequisites(
 ): SetupPrerequisitesResult {
   const integrations = entry.requires.integrations;
   const { data: settings, isLoading } = useSettings();
-  const { getNativeIntegration } = useNativeGitIntegrations();
+  const { getNativeIntegration, isLoading: isNativeIntegrationsLoading } =
+    useNativeGitIntegrations();
 
   const installedServers = useMemo(
     () =>
@@ -80,6 +81,6 @@ export function useSetupPrerequisites(
     blockingIntegrations,
     warningIntegrations,
     isBlocked: blockingIntegrations.length > 0,
-    isLoading,
+    isLoading: isLoading || isNativeIntegrationsLoading,
   };
 }

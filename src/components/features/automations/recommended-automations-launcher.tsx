@@ -94,7 +94,8 @@ export function RecommendedAutomationsLauncher({
   const isRail = variant === "rail";
   const { data: automationsData, isLoading: isAutomationsLoading } =
     useAutomations({ enabled: isRail });
-  const { getNativeIntegration } = useNativeGitIntegrations();
+  const { getNativeIntegration, isLoading: isNativeIntegrationsLoading } =
+    useNativeGitIntegrations();
 
   const installedMcpConfig = useMemo(
     () =>
@@ -280,6 +281,11 @@ export function RecommendedAutomationsLauncher({
   if (!hasAutomationInterface()) return null;
 
   if (isRail && isAutomationsLoading) return null;
+
+  // Which integrations a card still needs depends on what the cloud instance
+  // connects natively; a card shown before that is known could be launched
+  // with the wrong install queue.
+  if (isNativeIntegrationsLoading) return null;
 
   return (
     <>

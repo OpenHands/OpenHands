@@ -924,14 +924,15 @@ describe("recommended automations", () => {
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledTimes(1));
   });
 
-  it("shows the recommended automations section on cloud backends", () => {
+  it("shows the recommended automations section on cloud backends", async () => {
     setRegisteredBackends([cloudBackend]);
     setActiveSelection({ backendId: cloudBackend.id });
 
     renderLauncher({ withBackendProvider: true });
 
+    // The section waits for the instance's native providers to be known.
     expect(
-      screen.getByTestId("recommended-automations-section"),
+      await screen.findByTestId("recommended-automations-section"),
     ).toBeInTheDocument();
   });
 
@@ -940,7 +941,7 @@ describe("recommended automations", () => {
     await activateCloudBackend({ settings: settingsWithGithubMcp() });
     renderLauncher({ withBackendProvider: true });
     await within(
-      screen.getByTestId(
+      await screen.findByTestId(
         "recommended-automation-pills-github-repo-monitor-wrap",
       ),
     ).findByText("RECOMMENDED_AUTOMATIONS$CONNECTED");
@@ -970,7 +971,7 @@ describe("recommended automations", () => {
     });
     renderLauncher({ withBackendProvider: true });
     await within(
-      screen.getByTestId(
+      await screen.findByTestId(
         "recommended-automation-pills-github-repo-monitor-wrap",
       ),
     ).findByText("RECOMMENDED_AUTOMATIONS$CONNECTED");
@@ -994,7 +995,7 @@ describe("recommended automations", () => {
     await activateCloudBackend({ providersConfigured: ["bitbucket"] });
     renderLauncher({ withBackendProvider: true });
     await within(
-      screen.getByTestId(
+      await screen.findByTestId(
         "recommended-automation-pills-jira-issue-to-bitbucket-pr-wrap",
       ),
     ).findByText("RECOMMENDED_AUTOMATIONS$MISSING_CONNECT:1");
