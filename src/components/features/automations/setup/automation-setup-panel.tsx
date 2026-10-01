@@ -57,6 +57,7 @@ import { I18nKey } from "#/i18n/declaration";
 import SparkleIcon from "#/icons/sparkle.svg?react";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { BackNavButton } from "#/components/shared/buttons/back-nav-button";
+import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { OptionalTag } from "#/components/features/settings/optional-tag";
 import { AutomationSetupPromptStack } from "#/components/features/automations/setup/automation-setup-prompt-stack";
 import { ContextMenuListItem } from "#/components/features/context-menu/context-menu-list-item";
@@ -311,6 +312,17 @@ function toCron(
 
 function buildStarterPython(prompt: string): string {
   return `import json\nimport os\nimport urllib.request\n\n\ndef fire_callback(status="COMPLETED", error=None):\n    url = os.environ.get("AUTOMATION_CALLBACK_URL", "")\n    if not url:\n        return\n    body = {"status": status, "run_id": os.environ.get("AUTOMATION_RUN_ID", "")}\n    if error:\n        body["error"] = error\n    request = urllib.request.Request(\n        url,\n        data=json.dumps(body).encode(),\n        headers={\n            "Content-Type": "application/json",\n            "Authorization": f"Bearer {os.environ.get('AUTOMATION_CALLBACK_API_KEY', '')}",\n        },\n    )\n    urllib.request.urlopen(request, timeout=10)\n\n\ndef main():\n    prompt = ${JSON.stringify(prompt)}\n    print(f"Automation prompt: {prompt}")\n\n\nif __name__ == "__main__":\n    try:\n        main()\n        fire_callback("COMPLETED")\n    except Exception as exc:\n        fire_callback("FAILED", str(exc))\n        raise\n`;
+}
+
+function existingTarballDisplayName(path: string): string {
+  const trimmed = path.trim();
+  if (!trimmed) return "";
+  const name = trimmed.split("/").filter(Boolean).pop() ?? trimmed;
+  try {
+    return decodeURIComponent(name);
+  } catch {
+    return name;
+  }
 }
 
 function sortFieldsByRenderOrder(
@@ -698,6 +710,9 @@ export function AutomationSetupPanel({
     getAutomationEditIdFromTags(conversationTags) ||
     "";
   const isEditingExisting = editingAutomationId.length > 0;
+  const [existingCustomTarballPath, setExistingCustomTarballPath] = useState(
+    draft.existingCustomTarballPath ?? "",
+  );
   const streamQueueRef = useRef<
     {
       field: AutomationSetupField;
@@ -719,6 +734,10 @@ export function AutomationSetupPanel({
   useEffect(() => {
     setCurrentTaggedServerDraftId(propTaggedServerDraftId);
   }, [propTaggedServerDraftId]);
+
+  useEffect(() => {
+    setExistingCustomTarballPath(draft.existingCustomTarballPath ?? "");
+  }, [draft.existingCustomTarballPath]);
 
   const updateConversationTags = useCallback(
     async (
@@ -814,6 +833,7 @@ export function AutomationSetupPanel({
         const next = setupDraftFromAutomation(automation);
         const nextForm = buildInitialForm(next);
         initializeAutomationFormSession(conversationId, next);
+        setExistingCustomTarballPath(next.existingCustomTarballPath ?? "");
         setForm(nextForm);
       })
       .catch((error: unknown) => {
@@ -895,6 +915,9 @@ export function AutomationSetupPanel({
     showTimeout,
     timeoutSeconds,
   } = form;
+  const hasExistingCustomBundle = Boolean(
+    isEditingExisting && kind === "custom" && existingCustomTarballPath.trim(),
+  );
 
   useEffect(() => {
     if (isEventTestPayloadDirty) return;
@@ -1024,6 +1047,7 @@ export function AutomationSetupPanel({
         if (!nextDraft) return;
         const nextForm = buildInitialForm(nextDraft);
         const nextMetadata = nextDraft.fieldMetadata ?? {};
+        setExistingCustomTarballPath(nextDraft.existingCustomTarballPath ?? "");
         const agentFields = sortFieldsByRenderOrder(
           (result?.applied ?? []).filter(
             (field) => nextMetadata[field]?.updatedBy === "agent",
@@ -1387,7 +1411,7 @@ export function AutomationSetupPanel({
       });
       return false;
     }
-    if (kind === "custom" && !customCode.trim()) {
+    if (kind === "custom" && !hasExistingCustomBundle && !customCode.trim()) {
       setStatusMessage({
         kind: "error",
         text: t(I18nKey.AUTOMATION_SETUP$CODE_REQUIRED),
@@ -1401,14 +1425,18 @@ export function AutomationSetupPanel({
       });
       return false;
     }
-    if (kind === "custom" && !setupScriptPath.trim()) {
+    if (
+      kind === "custom" &&
+      !hasExistingCustomBundle &&
+      !setupScriptPath.trim()
+    ) {
       setStatusMessage({
         kind: "error",
         text: t(I18nKey.AUTOMATION_SETUP$SETUP_SCRIPT_PATH_REQUIRED),
       });
       return false;
     }
-    if (kind === "custom" && !setupScript.trim()) {
+    if (kind === "custom" && !hasExistingCustomBundle && !setupScript.trim()) {
       setStatusMessage({
         kind: "error",
         text: t(I18nKey.AUTOMATION_SETUP$SETUP_SCRIPT_REQUIRED),
@@ -1623,8 +1651,10 @@ export function AutomationSetupPanel({
     if (configuredPlugins.length > 0) body.plugins = configuredPlugins;
     if (kind === "custom") {
       body.entrypoint = entrypoint.trim();
-      body.setup_script_path = setupScriptPath.trim();
-      body.tarball_path = await uploadCustomArchive();
+      if (!hasExistingCustomBundle) {
+        body.setup_script_path = setupScriptPath.trim();
+        body.tarball_path = await uploadCustomArchive();
+      }
     }
     return body as Partial<Automation>;
   };
@@ -1957,6 +1987,10 @@ export function AutomationSetupPanel({
                       onAgentProfileChange={(value) =>
                         updateField("agentProfileId", value)
                       }
+                    />
+                  ) : hasExistingCustomBundle ? (
+                    <ExistingCustomBundleSummary
+                      tarballPath={existingCustomTarballPath}
                     />
                   ) : (
                     <CustomCodeFields
@@ -2353,6 +2387,41 @@ function SetupKindCrossfade({
           {children}
         </motion.div>
       </AnimatePresence>
+    </div>
+  );
+}
+
+function ExistingCustomBundleSummary({ tarballPath }: { tarballPath: string }) {
+  const { t } = useTranslation("openhands");
+  const bundleName = existingTarballDisplayName(tarballPath) || tarballPath;
+  const helpText = t(I18nKey.AUTOMATION_SETUP$EXISTING_BUNDLE_HELP);
+
+  return (
+    <div
+      data-testid="automation-setup-existing-bundle"
+      className="rounded-[15px] border border-[var(--oh-border)] bg-[var(--oh-surface)] p-4"
+    >
+      <div className="mb-2 flex items-center gap-2 text-sm text-content">
+        <span>{t(I18nKey.AUTOMATION_SETUP$EXISTING_BUNDLE)}</span>
+        <StyledTooltip content={helpText} placement="top">
+          <button
+            type="button"
+            aria-label={helpText}
+            data-testid="automation-setup-existing-bundle-info"
+            className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-[var(--oh-muted)]"
+            onMouseDown={(event) => event.preventDefault()}
+          >
+            <Info className="size-4" aria-hidden />
+          </button>
+        </StyledTooltip>
+      </div>
+      <div
+        data-testid="automation-setup-existing-bundle-name"
+        title={tarballPath}
+        className="truncate rounded-lg border border-[var(--oh-border)] bg-[var(--oh-surface-raised)] px-3 py-2 font-mono text-sm text-content"
+      >
+        {bundleName}
+      </div>
     </div>
   );
 }

@@ -79,6 +79,10 @@ export interface Automation {
    * detail page uses it to point out which bundle file is the script.
    */
   entrypoint?: string;
+  /** Service-owned upload identifier/path for custom automation bundles. */
+  tarball_path?: string | null;
+  /** Optional setup script path inside the custom automation bundle. */
+  setup_script_path?: string | null;
   branch?: string;
   plugins?: string[];
   notification?: string;

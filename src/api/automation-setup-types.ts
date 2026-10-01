@@ -59,6 +59,7 @@ export interface AutomationSetupDraft {
   editingAutomationId?: string;
   serverDraftId?: string;
   materializedAutomationId?: string | null;
+  existingCustomTarballPath?: string;
   form?: AutomationSetupFormPatch;
   fieldMetadata?: Partial<
     Record<AutomationSetupField, AutomationSetupFieldMetadata>
