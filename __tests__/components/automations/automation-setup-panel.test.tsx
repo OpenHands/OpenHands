@@ -1256,6 +1256,56 @@ describe("AutomationSetupPanel", () => {
       expect(AutomationService.createServerDraft).toHaveBeenCalledTimes(1);
     });
 
+    it("uploads a fresh custom bundle when saving and updating a server draft", async () => {
+      vi.mocked(AutomationService.uploadAutomationTarball)
+        .mockResolvedValueOnce("oh-internal://uploads/custom-draft-1")
+        .mockResolvedValueOnce("oh-internal://uploads/custom-draft-2");
+      mockSavedDraftEcho({ validationErrors: null });
+
+      const user = userEvent.setup();
+      renderPanel({
+        prompt: "Run generated Python",
+        kind: "custom",
+      });
+
+      await user.click(screen.getByTestId("automation-setup-save-draft"));
+
+      await waitFor(() =>
+        expect(AutomationService.createServerDraft).toHaveBeenCalledWith(
+          expect.objectContaining({
+            draft: expect.objectContaining({
+              tarball_path: "oh-internal://uploads/custom-draft-1",
+              entrypoint: "python3 main.py",
+              setup_script_path: "setup.sh",
+            }),
+          }),
+        ),
+      );
+      expect(AutomationService.uploadAutomationTarball).toHaveBeenCalledTimes(
+        1,
+      );
+      expect(packTarGzip).toHaveBeenCalledWith([
+        expect.objectContaining({ name: "main.py", mode: 0o644 }),
+        expect.objectContaining({ name: "setup.sh", mode: 0o755 }),
+      ]);
+
+      await user.click(screen.getByTestId("automation-setup-save-draft"));
+
+      await waitFor(() =>
+        expect(AutomationService.updateServerDraft).toHaveBeenCalledWith(
+          "draft-1",
+          expect.objectContaining({
+            draft: expect.objectContaining({
+              tarball_path: "oh-internal://uploads/custom-draft-2",
+            }),
+          }),
+        ),
+      );
+      expect(AutomationService.uploadAutomationTarball).toHaveBeenCalledTimes(
+        2,
+      );
+    });
+
     it("opens test runs from the draft status and returns to the form", async () => {
       mockSavedDraftEcho({ validationErrors: null });
       vi.mocked(AutomationService.getServerDraft).mockResolvedValue(

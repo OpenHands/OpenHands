@@ -1459,7 +1459,9 @@ export function AutomationSetupPanel({
     setSaveState("saving");
     try {
       if (!(await ensureCustomWebhookSource())) return;
-      await persistServerDraft();
+      const tarballPath =
+        kind === "custom" ? await uploadCustomArchive() : undefined;
+      await persistServerDraft(tarballPath);
       setSaveState("saved");
       setStatusMessage(null);
       toast.success(t(I18nKey.AUTOMATION_SETUP$DRAFT_SAVED));
