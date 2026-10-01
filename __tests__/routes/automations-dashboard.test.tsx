@@ -554,6 +554,55 @@ describe("AutomationsList — created-by filter on cloud workspaces", () => {
     });
   });
 
+  it("keeps the overview tiles on the whole list when filtering by creator", async () => {
+    // Arrange — the server honours created_by.
+    vi.mocked(AutomationService.getAutomations).mockImplementation(
+      async (_limit, _offset, createdBy) =>
+        createdBy === "me"
+          ? { automations: [mine], total: 1 }
+          : { automations: [mine, theirs, unowned], total: 3 },
+    );
+    const user = userEvent.setup();
+    selectWorkspace(TEAM_ORG_ID);
+    renderAt("/automations", <AutomationsList />);
+    await screen.findByTestId("automation-card-a-unowned");
+    await openFiltersMenu(user);
+
+    // Act
+    await pickCreatedBy(user, "me");
+
+    // Assert
+    await waitFor(() => {
+      expect(visibleCardIds()).toEqual(["automation-card-a-mine"]);
+    });
+    const tile = screen.getByTestId("overview-tile-automations");
+    expect(within(tile).getByText("3", { exact: true })).toBeInTheDocument();
+  });
+
+  it("keeps the loaded list on screen while the creator-filtered page loads", async () => {
+    // Arrange — the created_by=me request never settles.
+    vi.mocked(AutomationService.getAutomations).mockImplementation(
+      (_limit, _offset, createdBy) =>
+        createdBy === "me"
+          ? new Promise(() => {})
+          : Promise.resolve({ automations: [mine, theirs, unowned], total: 3 }),
+    );
+    const user = userEvent.setup();
+    selectWorkspace(TEAM_ORG_ID);
+    renderAt("/automations", <AutomationsList />);
+    await screen.findByTestId("automation-card-a-unowned");
+    await openFiltersMenu(user);
+
+    // Act
+    await pickCreatedBy(user, "me");
+
+    // Assert — the loaded rows, narrowed on the client, instead of skeletons.
+    await waitFor(() => {
+      expect(visibleCardIds()).toEqual(["automation-card-a-mine"]);
+    });
+    expect(screen.queryByTestId("automation-skeleton")).not.toBeInTheDocument();
+  });
+
   it("offers Clear filters when the server finds none of my automations", async () => {
     // Arrange — the org has automations, but none are the caller's.
     vi.mocked(AutomationService.getAutomations).mockImplementation(

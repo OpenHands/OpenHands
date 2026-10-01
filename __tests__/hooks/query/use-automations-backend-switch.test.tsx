@@ -165,6 +165,26 @@ describe("automation hooks — backend switch", () => {
     });
   });
 
+  it("useAutomations shows no automations of the previous backend while the next one loads", async () => {
+    // Arrange — the local backend's list is loaded; the cloud one never settles.
+    const { result } = renderHook(() => useAutomations(), {
+      wrapper: makeWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    vi.mocked(AutomationService.getAutomations).mockReturnValue(
+      new Promise(() => {}),
+    );
+
+    // Act
+    act(() => setActiveSelection({ backendId: cloudBackend.id }));
+
+    // Assert
+    await waitFor(() =>
+      expect(AutomationService.getAutomations).toHaveBeenCalledTimes(2),
+    );
+    expect(result.current.data).toBeUndefined();
+  });
+
   it("useAutomationDetail refetches when the active backend changes", async () => {
     const { result } = renderHook(() => useAutomationDetail({ id: "auto-1" }), {
       wrapper: makeWrapper(),

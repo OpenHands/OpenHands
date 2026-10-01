@@ -74,6 +74,7 @@ import { MANIFEST_ICON_BY_SLUG } from "#/components/features/manifest/manifest-i
 import { ManifestOverviewTiles } from "#/components/features/manifest/manifest-overview-tiles";
 import { ManifestSubpageLayout } from "#/components/features/manifest/manifest-subpage-layout";
 import { cn, downloadBlob } from "#/utils/utils";
+import { uniqueById } from "#/utils/unique-by-id";
 
 /**
  * The page renders the interface manifest's copy, so without an admitted
@@ -157,8 +158,19 @@ export default function AutomationsList() {
     // an automation service that ignores the param.
     createdBy: serverCreatedBy,
   });
+  // The overview tiles summarize the org list above the filters, so they read
+  // it unfiltered; with no creator selected this is the same query as above.
+  const { data: orgData } = useAutomations({ enabled: isBackendHealthy });
+  const runSummaryAutomations = useMemo(
+    () =>
+      uniqueById([
+        ...(orgData?.automations ?? []),
+        ...(data?.automations ?? []),
+      ]),
+    [orgData?.automations, data?.automations],
+  );
   // One runs query per listed automation — dashboard mode only.
-  const runSummaries = useAutomationRunSummaries(data?.automations ?? [], {
+  const runSummaries = useAutomationRunSummaries(runSummaryAutomations, {
     enabled: isBackendHealthy && dashboard !== null,
   });
   const { trackPrebuiltAutomationEnabled, trackAutomationExported } =
@@ -319,7 +331,7 @@ export default function AutomationsList() {
 
   const overviewTiles = useMemo(() => {
     if (!dashboardSpec) return [];
-    const automations = data?.automations ?? [];
+    const automations = orgData?.automations ?? [];
     return dashboardSpec.overview.tiles.map((tile) => {
       const value = computeOverviewTile(tile.metric, automations, runSummaries);
       const template =
@@ -332,7 +344,7 @@ export default function AutomationsList() {
         Icon: MANIFEST_ICON_BY_SLUG[tile.icon],
       };
     });
-  }, [dashboardSpec, data?.automations, runSummaries]);
+  }, [dashboardSpec, orgData?.automations, runSummaries]);
 
   const groupInsights = dashboard
     ? { spec: dashboard.spec.insights, byId: runSummaries }
