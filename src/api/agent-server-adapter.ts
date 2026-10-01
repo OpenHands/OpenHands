@@ -1314,9 +1314,15 @@ export function buildStartConversationRequest(
   );
   // Folded into ``agent_settings`` on the inline path; on the profile path it
   // has to ride ``agent_launch_additions`` instead (see below).
-  const runtimeServicesSuffix = buildRuntimeServicesSystemSuffix(
-    options.runtimeServicesInfo,
-  );
+  const profileLaunchSuffix = [
+    buildRuntimeServicesSystemSuffix(options.runtimeServicesInfo),
+    buildRouterAtStartSystemSuffix(
+      options.settings.run_router_at_conversation_start ?? false,
+      options.hasActiveMetaProfile ?? false,
+    ),
+  ]
+    .filter((suffix): suffix is string => Boolean(suffix))
+    .join("\n\n");
   const acpServerTag = acpMode
     ? getAcpServerTag(sourceAgentSettings)
     : undefined;
@@ -1350,12 +1356,12 @@ export function buildStartConversationRequest(
     // Finish/Think). The Canvas UI tool is a top-level client tool and
     // therefore works on both inline-agent and profile launch paths.
     //
-    // ``RUNTIME_SERVICES`` is the one enrichment only the client can compute —
-    // the sandbox-facing URLs of this local stack — so it rides
-    // ``agent_launch_additions``, which the server appends after resolving the
-    // profile (software-agent-sdk#4030). Without it a profile-launched
-    // conversation cannot find the local automation backend and falls through
-    // to the Cloud default (#16205).
+    // ``RUNTIME_SERVICES`` (the sandbox-facing URLs of this local stack) and
+    // the router-at-start instruction are suffixes only the client can
+    // compute, so they ride ``agent_launch_additions``, which the server
+    // appends after resolving the profile (software-agent-sdk#4030). Without
+    // it a profile-launched conversation cannot find the local automation
+    // backend and falls through to the Cloud default (#16205).
     //
     // Persistent memory is NOT on that boundary: ``load_memory`` is a global
     // user preference, so the agent-server stamps the stored
@@ -1367,10 +1373,10 @@ export function buildStartConversationRequest(
     ...(options.agentProfileId
       ? {
           agent_profile_id: options.agentProfileId,
-          ...(runtimeServicesSuffix
+          ...(profileLaunchSuffix
             ? {
                 agent_launch_additions: {
-                  system_message_suffix_append: runtimeServicesSuffix,
+                  system_message_suffix_append: profileLaunchSuffix,
                 },
               }
             : {}),

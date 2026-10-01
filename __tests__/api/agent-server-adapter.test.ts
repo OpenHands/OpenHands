@@ -1619,6 +1619,22 @@ describe("agent_settings runtime services suffix", () => {
     ).toContain("http://localhost:18001");
   });
 
+  it("carries the route-at-conversation-start suffix on the profile path too", () => {
+    const payload = buildStartConversationRequest({
+      settings: { ...DEFAULT_SETTINGS, run_router_at_conversation_start: true },
+      hasActiveMetaProfile: true,
+      query: "hello",
+      agentProfileId: "profile-openhands",
+      agentProfileKind: "openhands",
+    }) as {
+      agent_launch_additions?: { system_message_suffix_append?: string };
+    };
+
+    expect(
+      payload.agent_launch_additions?.system_message_suffix_append,
+    ).toContain("ROUTE_AT_CONVERSATION_START");
+  });
+
   it("omits the additions entirely when there is no runtime services info", () => {
     // A deployment without them must send no deployment context at all, not an
     // empty string the server would append as a blank line.
