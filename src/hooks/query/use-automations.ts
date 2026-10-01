@@ -48,9 +48,7 @@ export function useAutomations(options: UseAutomationsOptions = {}) {
     initialPageParam: 0,
     getNextPageParam: (lastPage, _pages, lastOffset) => {
       const nextOffset = lastOffset + lastPage.automations.length;
-      return lastPage.automations.length > 0 && nextOffset < lastPage.total
-        ? nextOffset
-        : undefined;
+      return nextOffset < lastPage.total ? nextOffset : undefined;
     },
     select: (data): AutomationsResponse => {
       const seen = new Set<string>();
