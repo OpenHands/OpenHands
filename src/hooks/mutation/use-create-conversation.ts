@@ -6,6 +6,8 @@ import { Provider } from "#/types/settings";
 import { useTracking } from "#/hooks/use-tracking";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useAgentProfiles } from "#/hooks/query/use-agent-profiles";
+import { useSettings } from "#/hooks/query/use-settings";
+import { useMetaProfiles } from "#/hooks/query/use-meta-profiles";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
 import AgentProfilesService, {
@@ -74,6 +76,15 @@ export const useCreateConversation = () => {
   // wrong agent.
   const { backend, orgId } = useActiveBackend();
   useAgentProfiles();
+  // Read the "Run on first message" toggle from the warmed settings
+  // query so the cloud path can stamp the router instruction without a
+  // settings round-trip at conversation creation. The local path reads the
+  // toggle from its own settings fetch inside the encrypted-settings builder.
+  const { data: settings } = useSettings();
+  // The active meta-profile gates the suffix on the cloud path: with no
+  // active router the agent-server does not attach `route_task_to_model`, so
+  // emitting the instruction would tell the agent to call a tool it lacks.
+  const { data: metaProfiles } = useMetaProfiles();
 
   return useMutation({
     mutationKey: CREATE_CONVERSATION_MUTATION_KEY,
@@ -273,6 +284,17 @@ export const useCreateConversation = () => {
                 // Let title generation use the same LLM as the agent profile
                 // so the title and the agent steps share a model (#16885).
                 agentLlmProfileRef: resolvedAgentProfile?.llm_profile_ref,
+              }
+            : {}),
+          // Only stamp the toggle when it's on so the default path stays
+          // byte-identical to the legacy launch (and the e2e snapshot tests
+          // that assert the exact createConversation payload). The active
+          // meta-profile gates the suffix: no router attached means no
+          // route-at-start instruction, even if the toggle was left on.
+          ...(settings?.run_router_at_conversation_start
+            ? {
+                runRouterAtConversationStart: true,
+                hasActiveMetaProfile: !!metaProfiles?.active_meta_profile,
               }
             : {}),
         });
