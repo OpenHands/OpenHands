@@ -697,21 +697,6 @@ export function InstallServerModal({
           </div>
         </div>
 
-        {entry.installHint && (
-          <p className="text-xs text-tertiary-light">{entry.installHint}</p>
-        )}
-
-        {entry.docsUrl && (
-          <a
-            href={entry.docsUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="text-xs text-muted hover:text-contrast hover:underline self-start transition-colors"
-          >
-            {t(I18nKey.MCP$VIEW_DOCS)}
-          </a>
-        )}
-
         {showConnectionTabs && (
           <div role="tablist" className="flex border-b border-border">
             <TabButton
@@ -758,6 +743,23 @@ export function InstallServerModal({
                   {t(I18nKey.MCP$MCP_DESCRIPTION, { name: entry.name })}
                 </p>
               </div>
+            )}
+
+            {/* The entry's hint and documentation describe its MCP server, so
+                they belong to the MCP option rather than above both. */}
+            {entry.installHint && (
+              <p className="text-xs text-tertiary-light">{entry.installHint}</p>
+            )}
+
+            {entry.docsUrl && (
+              <a
+                href={entry.docsUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-muted hover:text-contrast hover:underline self-start transition-colors"
+              >
+                {t(I18nKey.MCP$VIEW_DOCS)}
+              </a>
             )}
 
             <div className="flex flex-col gap-3">{renderFields()}</div>

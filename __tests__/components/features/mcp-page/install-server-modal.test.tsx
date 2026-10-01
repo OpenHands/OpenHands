@@ -1259,6 +1259,28 @@ describe("InstallServerModal", () => {
       expect(screen.queryByTestId("mcp-native-panel")).toBeNull();
     });
 
+    it("keeps the MCP server's documentation with the MCP option", async () => {
+      // Arrange
+      activateCloudBackend({ providersConfigured: ["github"] });
+      renderWith(
+        <InstallServerModal
+          existingServers={[]}
+          entry={github}
+          onClose={vi.fn()}
+        />,
+      );
+      await screen.findByTestId("mcp-native-panel");
+
+      // Assert — it describes the MCP server, so the native option omits it.
+      expect(screen.queryByText("MCP$VIEW_DOCS")).toBeNull();
+
+      // Act
+      fireEvent.click(screen.getByTestId("mcp-install-tab-mcp"));
+
+      // Assert
+      expect(screen.getByText("MCP$VIEW_DOCS")).toBeInTheDocument();
+    });
+
     it("says the native integration is not connected yet when continuing too early", async () => {
       // Arrange
       activateCloudBackend({ providersConfigured: ["github"] });
