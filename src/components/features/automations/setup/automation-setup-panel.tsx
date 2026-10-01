@@ -1688,11 +1688,9 @@ export function AutomationSetupPanel({
         showTimeout && timeoutSeconds.trim() ? Number(timeoutSeconds) : null,
     };
     if (kind !== "custom") body.prompt = prompt.trim();
-    if (repositories[0]) body.repository = repositories[0];
-    if (repositories.length > 0) {
-      body.repos = repositories.map((url) => ({ url, provider: "github" }));
-    }
-    if (configuredPlugins.length > 0) body.plugins = configuredPlugins;
+    body.repository = repositories[0] ?? null;
+    body.repos = repositories.map((url) => ({ url, provider: "github" }));
+    body.plugins = configuredPlugins;
     if (kind === "custom") {
       body.entrypoint = entrypoint.trim();
       if (!hasExistingCustomBundle) {

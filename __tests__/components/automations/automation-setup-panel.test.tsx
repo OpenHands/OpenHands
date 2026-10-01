@@ -2044,6 +2044,46 @@ describe("AutomationSetupPanel", () => {
     expect(AutomationService.dispatchServerDraft).not.toHaveBeenCalled();
   });
 
+  it("sends explicit clears when removing repository and plugins while editing", async () => {
+    vi.mocked(AutomationService.updateAutomation).mockResolvedValue({
+      id: "auto-1",
+    } as never);
+
+    const user = userEvent.setup();
+    renderPanel(
+      setupDraftFromAutomation({
+        id: "auto-1",
+        name: "Reviewer",
+        prompt: "Review PRs",
+        enabled: true,
+        created_at: "2026-01-01T00:00:00.000Z",
+        updated_at: "2026-01-01T00:00:00.000Z",
+        repository: "OpenHands/OpenHands",
+        plugins: ["github:OpenHands/extensions/plugins/pr-review"],
+        trigger: {
+          type: "cron",
+          schedule: "0 9 * * *",
+          timezone: "UTC",
+        },
+      }),
+    );
+
+    await user.click(screen.getByTestId("automation-setup-repository-remove"));
+    await user.click(screen.getByTestId("automation-setup-plugin-remove"));
+    await user.click(screen.getByTestId("automation-setup-save"));
+
+    await waitFor(() =>
+      expect(AutomationService.updateAutomation).toHaveBeenCalledWith(
+        "auto-1",
+        expect.objectContaining({
+          repository: null,
+          repos: [],
+          plugins: [],
+        }),
+      ),
+    );
+  });
+
   it("shows existing custom bundle metadata without replacing it on save", async () => {
     vi.mocked(AutomationService.updateAutomation).mockResolvedValue({
       id: "auto-1",
