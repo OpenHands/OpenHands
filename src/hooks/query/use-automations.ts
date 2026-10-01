@@ -6,6 +6,7 @@ import {
 import AutomationService from "#/api/automation-service/automation-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useTracking } from "#/hooks/use-tracking";
+import { uniqueById } from "#/utils/unique-by-id";
 import type {
   Automation,
   AutomationSpec,
@@ -50,17 +51,11 @@ export function useAutomations(options: UseAutomationsOptions = {}) {
       const nextOffset = lastOffset + lastPage.automations.length;
       return nextOffset < lastPage.total ? nextOffset : undefined;
     },
-    select: (data): AutomationsResponse => {
-      const seen = new Set<string>();
-      const automations = data.pages
-        .flatMap((page) => page.automations)
-        .filter((automation) => {
-          if (seen.has(automation.id)) return false;
-          seen.add(automation.id);
-          return true;
-        });
-      return { automations, total: data.pages.at(-1)?.total ?? 0 };
-    },
+    select: (data): AutomationsResponse => ({
+      automations: uniqueById(data.pages.flatMap((page) => page.automations)),
+      // The last page has the newest count.
+      total: data.pages.at(-1)?.total ?? 0,
+    }),
     staleTime: 0,
     enabled,
   });
