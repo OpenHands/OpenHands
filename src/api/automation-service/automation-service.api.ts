@@ -134,7 +134,7 @@ function getAutomationSdkVersionFromResponse(
  * The query string for a paged list request. `extra` adds params such as
  * filters; keys whose value is undefined are left out.
  */
-function buildPaginationQuery(
+function buildListQuery(
   limit: number,
   offset: number,
   extra: Record<string, string | undefined> = {},
@@ -298,7 +298,7 @@ class AutomationService {
       return callCloudProxy<AutomationsResponse>({
         backend: active,
         method: "GET",
-        path: `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}?${buildPaginationQuery(limit, offset, { created_by: createdBy })}`,
+        path: `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}?${buildListQuery(limit, offset, { created_by: createdBy })}`,
         headers: await buildAutomationRequestHeaders(),
       });
     }
@@ -497,7 +497,7 @@ class AutomationService {
       return callCloudProxy<AutomationRunsResponse>({
         backend: active,
         method: "GET",
-        path: `${basePath}?${buildPaginationQuery(limit, offset)}`,
+        path: `${basePath}?${buildListQuery(limit, offset)}`,
         headers: await buildAutomationRequestHeaders(),
       });
     }
