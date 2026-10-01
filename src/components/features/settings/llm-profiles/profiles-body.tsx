@@ -30,6 +30,7 @@ interface ProfilesBodyProps {
   onDuplicate: (profile: ProfileInfo) => void;
   onDelete: (profile: ProfileInfo) => void;
   isActivating: boolean;
+  isModelUnlisted?: (model: string | null | undefined) => boolean;
 }
 
 interface ProfileGroup {
@@ -92,6 +93,7 @@ export function ProfilesBody({
   onDuplicate,
   onDelete,
   isActivating,
+  isModelUnlisted,
 }: ProfilesBodyProps) {
   const { t } = useTranslation("openhands");
 
@@ -107,6 +109,7 @@ export function ProfilesBody({
       onDuplicate={onDuplicate}
       onDelete={onDelete}
       isActivating={isActivating}
+      isModelUnlisted={isModelUnlisted?.(profile.model)}
     />
   );
 

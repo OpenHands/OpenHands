@@ -70,6 +70,7 @@ import {
   getVSCodeAdvertiseArgs,
   resolveAutomationKvSecret,
 } from "./dev-with-automation.mjs";
+import { applySessionKeyPolicy, bindHostArgs } from "./bind-host.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, "..");
@@ -118,6 +119,7 @@ export function parseArgs(argv = process.argv.slice(2)) {
     automationRepo: null,
     skipBuild: false,
     verbose: false,
+    host: null,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -125,6 +127,10 @@ export function parseArgs(argv = process.argv.slice(2)) {
       case "-p":
       case "--port":
         config.port = parseInt(argv[++i], 10);
+        break;
+      case "-H":
+      case "--host":
+        config.host = argv[++i];
         break;
       case "--automation-ref":
         config.automationGitRef = argv[++i];
@@ -162,6 +168,7 @@ USAGE:
 
 OPTIONS:
   -p, --port <port>           Ingress port (default: 8000)
+  -H, --host <host>           Bind address for ingress/static (default: 127.0.0.1)
   --automation-ref <ref>      Git ref for automation backend (default: main)
   --automation-repo <url>     Git repo URL for automation
   --skip-build                Reuse existing build/ directory (faster restart)
@@ -430,14 +437,25 @@ function startStaticServer(config) {
       join(config.canvasPath, "build"),
       "--port",
       String(config.vitePort),
+      ...bindHostArgs(config.bindHost),
       ...(process.env.VITE_BASE_PATH
         ? ["--base-path", process.env.VITE_BASE_PATH]
         : []),
-      // Inject the API key so the pre-built frontend can authenticate
-      // to the agent-server without a baked-in VITE_SESSION_API_KEY.
-      ...(config.sessionApiKey
-        ? ["--session-api-key", config.sessionApiKey]
-        : []),
+      ...(() => {
+        const policy = applySessionKeyPolicy({
+          host: config.bindHost,
+          sessionApiKey: config.sessionApiKey,
+          warn: (msg) => logService("static", msg, c.yellow),
+        });
+        const flags = [];
+        if (policy.sessionApiKey) {
+          flags.push("--session-api-key", policy.sessionApiKey);
+        }
+        if (policy.authRequired) {
+          flags.push("--auth-required");
+        }
+        return flags;
+      })(),
       "--runtime-services-info",
       runtimeServicesInfo,
       ...buildLocalServiceRouteArgs(config),
@@ -472,6 +490,7 @@ function startIngress(config) {
       ingressScript,
       "--port",
       config.ingressPort.toString(),
+      ...bindHostArgs(config.bindHost),
       "--runtime-services-info",
       runtimeServicesInfo,
       ...buildLocalServiceRouteArgs(config),

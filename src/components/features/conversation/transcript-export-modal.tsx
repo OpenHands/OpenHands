@@ -152,10 +152,10 @@ export function TranscriptExportModal({
         </div>
 
         <fieldset className="flex w-full flex-col gap-2">
-          <legend className="mb-2 text-sm font-medium text-white">
+          <legend className="mb-2 text-sm font-medium text-contrast">
             {t(I18nKey.TRANSCRIPT_EXPORT$FORMAT)}
           </legend>
-          <label className="flex cursor-pointer items-center gap-3 rounded-md border border-border px-3 py-2 text-sm text-white">
+          <label className="flex cursor-pointer items-center gap-3 rounded-md border border-border px-3 py-2 text-sm text-contrast">
             <input
               type="radio"
               name={TRANSCRIPT_FORMAT_RADIO_NAME}
@@ -166,7 +166,7 @@ export function TranscriptExportModal({
             />
             {t(I18nKey.TRANSCRIPT_EXPORT$MARKDOWN)}
           </label>
-          <label className="flex cursor-pointer items-center gap-3 rounded-md border border-border px-3 py-2 text-sm text-white">
+          <label className="flex cursor-pointer items-center gap-3 rounded-md border border-border px-3 py-2 text-sm text-contrast">
             <input
               type="radio"
               name={TRANSCRIPT_FORMAT_RADIO_NAME}
@@ -179,7 +179,7 @@ export function TranscriptExportModal({
           </label>
         </fieldset>
 
-        <div className="flex w-full flex-col gap-3 text-sm text-white">
+        <div className="flex w-full flex-col gap-3 text-sm text-contrast">
           <label className="flex cursor-pointer items-center gap-3">
             <input
               type="checkbox"

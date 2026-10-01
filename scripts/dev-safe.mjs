@@ -16,6 +16,7 @@ import process from "node:process";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { applySessionKeyPolicy } from "./bind-host.mjs";
 import {
   getProcessTreeSpawnOptions,
   isProcessRunning,
@@ -53,11 +54,6 @@ const LOCAL_AGENT_SERVER_SUBDIRS = [
   "openhands-workspace",
 ];
 const DEFAULT_AGENT_SERVER_VERSION = SHARED_DEFAULTS.versions.agentServer;
-// Temporary transitive-dep pin: openhands-sdk 1.40.1 leaves agent-client-protocol
-// unbounded (>=0.10.1), but acp 0.11.0 reordered the ACP prompt() args and breaks
-// the SDK's ACP client. Hold acp <0.11 until a fixed SDK ships. See config/defaults.json.
-const AGENT_CLIENT_PROTOCOL_CONSTRAINT =
-  SHARED_DEFAULTS.constraints?.agentClientProtocol;
 const DEFAULT_AGENT_SERVER_TELEMETRY_POSTHOG_API_KEY =
   SHARED_DEFAULTS.telemetry.posthogApiKey;
 const DEFAULT_AGENT_SERVER_TELEMETRY_POSTHOG_HOST =
@@ -426,7 +422,7 @@ export const AGENT_SERVER_IMPORT_MODULES = "canvas_ui_tool";
  *   edits are picked up without a manual reinstall. The agent-server itself
  *   is rebuilt from local source on each invocation (--reinstall).
  * - OH_AGENT_SERVER_GIT_REF: Git commit SHA or branch name
- * - OH_AGENT_SERVER_VERSION: Specific PyPI version (e.g., "1.49.3")
+ * - OH_AGENT_SERVER_VERSION: Specific PyPI version (e.g., "1.50.1")
  *
  * If none are set, defaults to the released version specified by
  * DEFAULT_AGENT_SERVER_VERSION. Set OH_AGENT_SERVER_GIT_REF to use a
@@ -504,9 +500,6 @@ export function buildAgentServerCommand(env = process.env) {
       "--with",
       `openhands-workspace==${version}`,
     );
-    if (AGENT_CLIENT_PROTOCOL_CONSTRAINT) {
-      uvxArgs.push("--with", AGENT_CLIENT_PROTOCOL_CONSTRAINT);
-    }
     uvxArgs.push("--with", AGENT_SERVER_POSTHOG_CONSTRAINT);
     uvxArgs.push("agent-server");
     source = `PyPI (${version})`;
@@ -523,9 +516,6 @@ export function buildAgentServerCommand(env = process.env) {
       "--with",
       `openhands-workspace==${DEFAULT_AGENT_SERVER_VERSION}`,
     );
-    if (AGENT_CLIENT_PROTOCOL_CONSTRAINT) {
-      uvxArgs.push("--with", AGENT_CLIENT_PROTOCOL_CONSTRAINT);
-    }
     uvxArgs.push("--with", AGENT_SERVER_POSTHOG_CONSTRAINT);
     uvxArgs.push("agent-server");
     source = `PyPI (${DEFAULT_AGENT_SERVER_VERSION}, default)`;
@@ -579,6 +569,15 @@ export function buildSafeDevConfig(cwd = process.cwd(), env = process.env) {
   const vscodePort = parsePort(env.OH_CANVAS_SAFE_VSCODE_PORT, backendPort + 1);
 
   return buildConfigFromPorts({ backendPort, vscodePort }, cwd, env);
+}
+
+export function getViteSessionApiKey(config, env = process.env) {
+  return (
+    applySessionKeyPolicy({
+      host: env.VITE_BIND_HOST || "127.0.0.1",
+      sessionApiKey: config.sessionApiKey,
+    }).sessionApiKey || ""
+  );
 }
 
 /**
@@ -1106,8 +1105,7 @@ async function main() {
       VITE_BACKEND_HOST: config.backendHost,
       VITE_BACKEND_BASE_URL: config.backendBaseUrl,
       VITE_WORKING_DIR: config.workingDir,
-      // Pass session API key so frontend can authenticate with agent-server
-      VITE_SESSION_API_KEY: config.sessionApiKey,
+      VITE_SESSION_API_KEY: getViteSessionApiKey(config),
       // This mode has no static server or ingress in front of Vite, so Vite's
       // own proxy is the only thing that can serve the editor prefix on the
       // frontend origin. The editor is a separate process on a port of its

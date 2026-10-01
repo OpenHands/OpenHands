@@ -267,8 +267,8 @@ export function CloudNewConversationMenu({
                       "flex items-center gap-1 rounded border px-2 py-1 text-xs",
                       dropdownInstantColorClassName,
                       isActive
-                        ? "border-border-subtle bg-interactive-hover text-white"
-                        : "border-transparent text-text-secondary hover:text-white",
+                        ? "border-border-subtle bg-interactive-hover text-contrast"
+                        : "border-transparent text-text-secondary hover:text-contrast",
                     )}
                   >
                     <GitProviderIcon gitProvider={provider} />
@@ -295,7 +295,7 @@ export function CloudNewConversationMenu({
                 placeholder={t(I18nKey.COMMON$SEARCH_REPOSITORIES)}
                 disabled={!selectedProvider}
                 className={cn(
-                  "w-full border-0 bg-transparent py-1.5 pl-6 pr-0 text-sm text-white",
+                  "w-full border-0 bg-transparent py-1.5 pl-6 pr-0 text-sm text-contrast",
                   "outline-none placeholder:text-muted",
                   "focus:outline-none focus:ring-0",
                   "disabled:cursor-not-allowed disabled:opacity-60",

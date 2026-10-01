@@ -71,7 +71,7 @@ function PublicShareToggle({
         aria-hidden
         className={cn(
           "inline-flex h-3.5 w-7 items-center rounded-full px-0.5 py-px transition-colors duration-200 ease-in-out",
-          isPublic ? "bg-white" : "bg-base-secondary",
+          isPublic ? "bg-contrast" : "bg-base-secondary",
         )}
       >
         <span

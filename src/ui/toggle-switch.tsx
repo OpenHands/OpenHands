@@ -25,8 +25,8 @@ export function ToggleSwitchVisual({
         compact ? "h-3.5 w-6 p-0.75" : "h-5.5 w-10 border",
         enabled
           ? compact
-            ? "bg-white"
-            : "border-white bg-white"
+            ? "bg-contrast"
+            : "border-contrast bg-contrast"
           : compact
             ? "bg-border"
             : "border-border bg-surface-raised",

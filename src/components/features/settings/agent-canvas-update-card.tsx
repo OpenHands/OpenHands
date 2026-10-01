@@ -95,8 +95,8 @@ function UpdateCommandTabs() {
             className={cn(
               "inline-flex items-center gap-1.5 px-3 pb-2 text-sm font-medium",
               selectedTab === tab
-                ? "border-b border-white text-white"
-                : "text-muted hover:text-white",
+                ? "border-b border-contrast text-contrast"
+                : "text-muted hover:text-contrast",
             )}
           >
             <UpdateCommandTabIcon tab={tab} />
@@ -111,7 +111,7 @@ function UpdateCommandTabs() {
               ? "agent-canvas-update-command-npm"
               : "agent-canvas-update-command-docker"
           }
-          className="min-w-0 flex-1 overflow-visible whitespace-nowrap font-mono text-sm text-white"
+          className="min-w-0 flex-1 overflow-visible whitespace-nowrap font-mono text-sm text-contrast"
         >
           {command}
         </code>
@@ -125,7 +125,7 @@ function UpdateCommandTabs() {
               : I18nKey.SETTINGS$VERSION_COPY_COMMAND,
           )}
           disabled={copied}
-          className="shrink-0 text-muted hover:text-white disabled:hover:text-muted"
+          className="shrink-0 text-muted hover:text-contrast disabled:hover:text-muted"
         >
           {copied ? (
             <Check className="size-4 text-status-success" aria-hidden />
@@ -176,7 +176,7 @@ function AgentCanvasUpdateModal({
             <span className="text-text-dim">
               {t(I18nKey.SETTINGS$APP_UPDATE_VERSION_LABEL)}
             </span>
-            <span className="text-white">{AGENT_CANVAS_CLIENT_VERSION}</span>
+            <span className="text-contrast">{AGENT_CANVAS_CLIENT_VERSION}</span>
           </div>
         </div>
 
@@ -216,7 +216,7 @@ function AgentCanvasUpdateModal({
                     href={AGENT_CANVAS_RELEASE_NOTES_URL}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 whitespace-nowrap font-medium text-white hover:text-[var(--oh-text)]"
+                    className="inline-flex items-center gap-1.5 whitespace-nowrap font-medium text-contrast hover:text-[var(--oh-text)]"
                   >
                     {t(I18nKey.SETTINGS$VERSION_RELEASE_NOTES)}
                     <ExternalLink className="size-3.5 shrink-0" aria-hidden />
@@ -233,7 +233,7 @@ function AgentCanvasUpdateModal({
                     href={AGENT_CANVAS_RELEASE_NOTES_URL}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 whitespace-nowrap font-medium text-white hover:text-[var(--oh-text)]"
+                    className="inline-flex items-center gap-1.5 whitespace-nowrap font-medium text-contrast hover:text-[var(--oh-text)]"
                   >
                     {t(I18nKey.SETTINGS$VERSION_RELEASE_NOTES)}
                     <ExternalLink className="size-3.5 shrink-0" aria-hidden />
@@ -249,7 +249,7 @@ function AgentCanvasUpdateModal({
 
           {updateAvailable ? (
             <div className="flex w-full flex-col border-t border-border pt-3">
-              <span className="text-sm font-medium text-white">
+              <span className="text-sm font-medium text-contrast">
                 {t(I18nKey.SETTINGS$APP_UPDATE_HOW_TO_UPDATE)}
               </span>
               <span className="mt-1 mb-4 text-sm text-text-dim">
@@ -309,7 +309,7 @@ export function AgentCanvasUpdateCard({
           className="flex w-full cursor-pointer flex-col gap-1 rounded-md border border-border bg-base-secondary px-3 py-2 text-left hover:bg-surface-raised"
         >
           <span className="flex w-full items-center gap-2">
-            <span className="flex-1 truncate text-sm font-semibold leading-5 text-white">
+            <span className="flex-1 truncate text-sm font-semibold leading-5 text-contrast">
               {t(I18nKey.SETTINGS$APP_UPDATE_CARD_TITLE)}
             </span>
             {comparison !== null && (
@@ -338,7 +338,7 @@ export function AgentCanvasUpdateCard({
 
           <span className="flex items-center gap-1.5 text-xs leading-5 text-muted">
             <span>{t(I18nKey.SETTINGS$APP_UPDATE_VERSION_LABEL)}</span>
-            <span className="text-white">{AGENT_CANVAS_CLIENT_VERSION}</span>
+            <span className="text-contrast">{AGENT_CANVAS_CLIENT_VERSION}</span>
           </span>
         </button>
       </section>

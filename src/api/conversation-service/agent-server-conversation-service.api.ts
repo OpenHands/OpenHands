@@ -13,13 +13,8 @@ import {
 import { v4 as uuidv4 } from "uuid";
 import { AgentKind, Provider } from "#/types/settings";
 import type { ConversationRuntimeContext } from "#/api/conversation-file-upload.api";
-import { buildHttpBaseUrl } from "#/utils/websocket-url";
-import {
-  buildConversationWorkingDirForBackend,
-  getAgentServerWorkingDir,
-  getWorkspaceRootForBackend,
-} from "../agent-server-config";
-import { resolveAbsoluteAgentServerPath } from "../agent-server-home";
+import { getAgentServerWorkingDir } from "../agent-server-config";
+import { resolveNewConversationWorkspace } from "../conversation-workspace";
 import {
   getActiveBackend,
   getEffectiveLocalBackend,
@@ -40,6 +35,7 @@ import {
 import {
   DirectConversationInfo,
   assertSubscriptionAuthReady,
+  buildRouterAtStartSystemSuffix,
   buildStartConversationRequestWithEncryptedSettings,
   buildStartPlanningConversationRequestWithEncryptedSettings,
   emptyHooksResponse,
@@ -396,6 +392,28 @@ export interface CreateConversationOptions {
   // encrypted-settings builder; cloud sends it as a flat request field.
   agentProfileId?: string;
   agentProfileKind?: AgentKind;
+  /**
+   * Whether the first message should be routed through the active Model
+   * Router. Only consumed on the cloud path — the local path reads the
+   * toggle from its own settings fetch. Threaded in by the caller from the
+   * warmed settings query to avoid a settings round-trip on the cloud hot
+   * path.
+   */
+  runRouterAtConversationStart?: boolean;
+  /**
+   * Whether a Model Router meta-profile is currently active. The
+   * route-at-start suffix is only emitted when this is true AND
+   * ``runRouterAtConversationStart`` is on — without an active meta-profile
+   * the agent-server does not attach ``route_task_to_model``, so the
+   * instruction would tell the agent to call a tool it lacks. Threaded in
+   * by the caller from the warmed meta-profiles query.
+   */
+  hasActiveMetaProfile?: boolean;
+  // The LLM profile pinned to the launched agent profile (llm_profile_ref).
+  // When set and no explicit title_llm_profile preference exists, title
+  // generation uses this profile so both the agent and its title use the
+  // same model.
+  agentLlmProfileRef?: string | null;
 }
 
 class AgentServerConversationService {
@@ -409,6 +427,9 @@ class AgentServerConversationService {
     let sessionApiKey = runtime?.sessionApiKey ?? null;
 
     if (active.kind === "cloud") {
+      // Cloud runtimes live at a per-conversation host whose URL + session
+      // API key come from the App API. Resolve them first, then call the
+      // runtime directly (CORS allowlisted for the Canvas origin).
       if (!conversationUrl || !sessionApiKey) {
         const [conversation] = await batchGetCloudConversations([
           conversationId,
@@ -422,18 +443,6 @@ class AgentServerConversationService {
           "Conversation sandbox is still starting. Wait for it to finish, then try again.",
         );
       }
-
-      await callCloudProxy({
-        backend: active,
-        method: "POST",
-        hostOverride: buildHttpBaseUrl(conversationUrl),
-        path: `/api/conversations/${conversationId}/events`,
-        body: { ...message, run: true },
-        authMode: "session-api-key",
-        sessionApiKey,
-      });
-
-      return message;
     }
 
     await new ConversationClient(
@@ -460,6 +469,7 @@ class AgentServerConversationService {
       sandboxId,
       agentProfileId,
       agentProfileKind,
+      agentLlmProfileRef,
     } = options;
 
     if (getActiveBackend().backend.kind === "cloud") {
@@ -470,6 +480,13 @@ class AgentServerConversationService {
       // round-trip — the cloud backend holds secrets server-side.
       // When launching from a profile, send `agent_profile_id`; the backend
       // resolves it to agent_settings server-side.
+      // The "Run on first message" toggle is threaded in by the caller
+      // (from the warmed settings query) to avoid a settings round-trip on
+      // this hot path; the local path reads it from its own settings fetch.
+      const routerAtStartSuffix = buildRouterAtStartSystemSuffix(
+        options.runRouterAtConversationStart ?? false,
+        options.hasActiveMetaProfile ?? false,
+      );
       const request: AppConversationStartRequest = {
         initial_message: initialUserMsg
           ? {
@@ -486,6 +503,13 @@ class AgentServerConversationService {
         agent_type: agentType,
         sandbox_id: sandboxId ?? null,
         agent_profile_id: agentProfileId ?? null,
+        ...(routerAtStartSuffix
+          ? {
+              agent_launch_additions: {
+                system_message_suffix_append: routerAtStartSuffix,
+              },
+            }
+          : {}),
         trigger: "gui",
       };
       return createCloudAppConversation(request);
@@ -498,42 +522,16 @@ class AgentServerConversationService {
     const titleLlmProfile = resolveTitleLlmProfile(
       settings.title_llm_profile,
       profiles,
+      agentLlmProfileRef,
     );
     const conversationId = uuidv4();
-    // @spec WUP-001 — Send an absolute working_dir to the agent-server.
-    // The default is `workspace/project/<hex>` (relative); without
-    // resolving it here, `/api/file/upload` later prepends `/` and writes
-    // to `/workspace/...` (read-only on macOS and fresh containers). When
-    // the user picks an explicit workspace, `workingDirOverride` is
-    // already absolute (it comes from `search_subdirs`).
-    //
-    // Pick the base working dir per-backend:
-    //   1. explicit user workspace pick → use it as-is;
-    //   2. no pick, backend that served this frontend → the baked default
-    //      (honors a launcher-baked absolute `VITE_WORKING_DIR`);
-    //   3. no pick, any other backend → the backend-relative default.
-    // A baked absolute dir is a path on the host that served this frontend,
-    // so it is only valid on that backend. Using it for a different backend
-    // (e.g. a remote sandbox) makes the agent-server mkdir an unwritable path
-    // and the conversation fails at the first prompt (e.g. `Permission
-    // denied: '/Users'`). The relative default is anchored per-backend by
-    // `resolveAbsoluteAgentServerPath()` via `/api/file/home`. The gate keys
-    // on the active backend's host (not its id): the seeded `default-local`
-    // entry is mutable, so a user can edit it to point at a remote host while
-    // its id stays `default-local`.
-    const backendHost = getActiveBackend().backend.host;
-    const baseWorkingDir =
-      workingDirOverride ??
-      buildConversationWorkingDirForBackend(conversationId, backendHost);
-    const workingDir = await resolveAbsoluteAgentServerPath(baseWorkingDir);
-    // The agent-server checks `<project_dir>/.openhands/hooks.json` literally,
-    // so hooks need the workspace root: the per-conversation subdir below it is
-    // created only after this request (#16907). An explicit pick is the root.
-    const hooksProjectDir = workingDirOverride
-      ? workingDir
-      : await resolveAbsoluteAgentServerPath(
-          getWorkspaceRootForBackend(backendHost),
-        );
+    const { workingDir, hooksProjectDir, isolated } =
+      await resolveNewConversationWorkspace({
+        conversationId,
+        workingDir: workingDirOverride,
+        selectedRepository: metadata?.selected_repository,
+        parentConversationId,
+      });
     const resolvedWorkspaceMode =
       workspaceMode ?? (workingDirOverride ? "local_repo" : "new_worktree");
 
@@ -551,7 +549,7 @@ class AgentServerConversationService {
       parentConversationId,
       workingDir,
       hooksProjectDir,
-      worktree: resolvedWorkspaceMode === "new_worktree",
+      worktree: !isolated && resolvedWorkspaceMode === "new_worktree",
       agentProfileId,
       agentProfileKind,
       titleLlmProfile,
@@ -733,6 +731,7 @@ class AgentServerConversationService {
     // directly via the conversationUrl override.
     const vscodeUrl = await new VSCodeClient(
       getAgentServerClientOptions({
+        conversationId,
         conversationUrl,
         sessionApiKey,
       }),
@@ -846,7 +845,9 @@ class AgentServerConversationService {
       filePath ?? `${workingDir}/.agents_tmp/PLAN.md`,
       workingDir,
     );
-    return new FileClient(getAgentServerClientOptions()).downloadTextFile(path);
+    return new FileClient(
+      getAgentServerClientOptions({ conversationId, workingDir }),
+    ).downloadTextFile(path);
   }
 
   static async downloadConversation(conversationId: string): Promise<Blob> {
@@ -895,9 +896,9 @@ class AgentServerConversationService {
 
   /**
    * Force condensation ("compact") of the conversation history via
-   * `POST /api/conversations/{id}/condense`. Routed the same way as
-   * {@link sendMessage}: through the cloud proxy at the conversation's own
-   * runtime host for cloud backends, directly against that runtime otherwise.
+   * `POST /api/conversations/{id}/condense`. Calls the conversation's own
+   * runtime host directly (CORS allowlisted for the Canvas origin in cloud
+   * mode), the same path used for sending events.
    */
   static async condenseConversation(
     conversationId: string,
@@ -906,16 +907,15 @@ class AgentServerConversationService {
   ): Promise<void> {
     const active = getActiveBackend().backend;
 
-    if (active.kind === "cloud" && conversationUrl) {
-      await callCloudProxy({
-        backend: active,
-        method: "POST",
-        hostOverride: buildHttpBaseUrl(conversationUrl),
-        path: `/api/conversations/${conversationId}/condense`,
-        authMode: "session-api-key",
-        sessionApiKey,
-      });
-      return;
+    // Symmetric with every other cloud runtime call in this module: on cloud
+    // backends the condense endpoint lives on the per-conversation runtime
+    // host, so a missing conversation URL is a caller bug, not a "no backend
+    // configured" condition. Throw the specific message instead of letting
+    // `getAgentServerClientOptions` surface a generic `NoBackendAvailableError`.
+    if (active.kind === "cloud" && !conversationUrl) {
+      throw new Error(
+        "AgentServerConversationService.condenseConversation requires a conversation URL on cloud backends",
+      );
     }
 
     await new ConversationClient(

@@ -29,13 +29,13 @@ const GIT_ACTION_BUTTON_CLASSNAME = cn(
   GIT_ACTION_HOVER_TARGET_CLASSNAME,
   "absolute inset-0 inline-flex items-center justify-center",
   "rounded-md text-muted transition-opacity",
-  "hover:bg-white/10 hover:text-foreground",
+  "hover:bg-contrast/10 hover:text-foreground",
 );
 
 /** Full-row hover, cleared while the git commit control itself is hovered. */
 const DIFFS_ROW_CLASSNAME = cn(
   "flex items-center rounded-md transition-colors",
-  "hover:bg-white/5",
+  "hover:bg-contrast/5",
   `has-[.${GIT_ACTION_HOVER_TARGET_CLASSNAME}:hover]:bg-transparent`,
 );
 

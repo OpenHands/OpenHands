@@ -216,7 +216,7 @@ function SkillsSettingsScreen() {
                         type="button"
                         data-testid="skills-clear-filters"
                         onClick={handleClearFacets}
-                        className="cursor-pointer underline hover:text-white"
+                        className="cursor-pointer underline hover:text-contrast"
                       >
                         {t(I18nKey.SETTINGS$SKILLS_CLEAR_FILTERS)}
                       </button>

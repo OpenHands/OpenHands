@@ -69,6 +69,12 @@ export interface Automation {
   created_at: string;
   updated_at: string;
   prompt: string | null;
+  /**
+   * Shell command the automation service runs in the unpacked bundle's root
+   * (e.g. `python main.py`). Mirrors `AutomationResponse.entrypoint`; the
+   * detail page uses it to point out which bundle file is the script.
+   */
+  entrypoint?: string;
   branch?: string;
   plugins?: string[];
   notification?: string;
@@ -90,6 +96,7 @@ export type AutomationSpec = Omit<
   | "updated_at"
   | "last_triggered_at"
   | "preset_metadata"
+  | "entrypoint"
   | "disabled_reason"
   | "disabled_detail"
   | "disabled_at"
@@ -160,6 +167,14 @@ export interface AutomationRun {
    * dispatched (e.g. sandbox provisioning errors).
    */
   bash_command_id: string | null;
+  /**
+   * ID of the cloud sandbox that hosted the run. Script (deterministic)
+   * automations never create a conversation, so on cloud backends this is
+   * the only handle to the agent-server holding their logs. Null when the
+   * run failed before a sandbox was provisioned; absent entirely against an
+   * automation service that predates the field.
+   */
+  sandbox_id?: string | null;
   error_detail: string | null;
   status_detail?: AutomationRunStatusDetail | null;
   run_metadata?: AutomationRunMetadata | null;

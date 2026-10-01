@@ -26,6 +26,7 @@ import {
   formatMissingUvxGuidance,
   formatMissingFrontendDependenciesGuidance,
   getMissingFrontendDependencyBins,
+  getViteSessionApiKey,
   validateFrontendDependencies,
   validateLocalAgentServerPath,
   findFreePort,
@@ -492,22 +493,20 @@ describe("buildAgentServerCommand", () => {
     // Defaults to the released PyPI version with all SDK packages pinned to same version
     expect(cmd.args).toEqual([
       "--from",
-      "openhands-agent-server==1.49.3",
+      "openhands-agent-server==1.50.1",
       "--with",
-      "openhands-sdk==1.49.3",
+      "openhands-sdk==1.50.1",
       "--with",
-      "openhands-tools==1.49.3",
+      "openhands-tools==1.50.1",
       "--with",
-      "openhands-workspace==1.49.3",
-      "--with",
-      "agent-client-protocol<0.11",
+      "openhands-workspace==1.50.1",
       "--with",
       "posthog>=6,<7",
       "agent-server",
       "--import-modules",
       "canvas_ui_tool",
     ]);
-    expect(cmd.source).toBe("PyPI (1.49.3, default)");
+    expect(cmd.source).toBe("PyPI (1.50.1, default)");
   });
 
   it("uses specific PyPI version when OH_AGENT_SERVER_VERSION is set with all packages pinned", () => {
@@ -525,8 +524,6 @@ describe("buildAgentServerCommand", () => {
       "openhands-tools==1.18.0",
       "--with",
       "openhands-workspace==1.18.0",
-      "--with",
-      "agent-client-protocol<0.11",
       "--with",
       "posthog>=6,<7",
       "agent-server",
@@ -710,6 +707,20 @@ describe("validateLocalAgentServerPath", () => {
   it("throws when given a relative path", () => {
     expect(() => validateLocalAgentServerPath("./sdk")).toThrow(
       /must be an absolute path/,
+    );
+  });
+});
+
+describe("getViteSessionApiKey", () => {
+  it("only injects the key on loopback listeners", () => {
+    const config = { sessionApiKey: "local-secret" };
+
+    expect(getViteSessionApiKey(config, {})).toBe("local-secret");
+    expect(getViteSessionApiKey(config, { VITE_BIND_HOST: "127.0.0.1" })).toBe(
+      "local-secret",
+    );
+    expect(getViteSessionApiKey(config, { VITE_BIND_HOST: "0.0.0.0" })).toBe(
+      "",
     );
   });
 });

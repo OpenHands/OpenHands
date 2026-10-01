@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ConversationClient } from "@openhands/typescript-client/clients";
 import {
   __resetActiveStoreForTests,
   setActiveSelection,
@@ -7,6 +8,20 @@ import {
 import EventService from "#/api/event-service/event-service.api";
 import { callCloudProxy } from "#/api/cloud/proxy";
 import type { Backend } from "#/api/backend-registry/types";
+
+const { respondToConfirmationMock, getEventCountMock } = vi.hoisted(() => ({
+  respondToConfirmationMock: vi.fn(),
+  getEventCountMock: vi.fn(),
+}));
+
+vi.mock("@openhands/typescript-client/clients", () => ({
+  ConversationClient: vi.fn(function ConversationClientMock() {
+    return {
+      respondToConfirmation: respondToConfirmationMock,
+      getEventCount: getEventCountMock,
+    };
+  }),
+}));
 
 vi.mock("#/api/cloud/proxy", () => ({
   callCloudProxy: vi.fn(),
@@ -30,6 +45,9 @@ beforeEach(() => {
     items: [],
     next_page_id: null,
   });
+  vi.mocked(ConversationClient).mockClear();
+  respondToConfirmationMock.mockReset();
+  getEventCountMock.mockReset();
 });
 
 afterEach(() => {
@@ -97,9 +115,7 @@ describe("EventService.searchEvents — cloud branch", () => {
   });
 
   it("rethrows when a limit-only request (no filter params) fails", async () => {
-    vi.mocked(callCloudProxy).mockRejectedValueOnce(
-      new Error("Network error"),
-    );
+    vi.mocked(callCloudProxy).mockRejectedValueOnce(new Error("Network error"));
 
     await expect(
       EventService.searchEvents("conv-1", null, null, { limit: 50 }),
@@ -121,5 +137,41 @@ describe("EventService.searchEvents — cloud branch", () => {
 
     expect(result.items).toHaveLength(2);
     expect(result.next_page_id).toBeNull();
+  });
+});
+
+describe("EventService.respondToConfirmation — cloud branch", () => {
+  it("calls the runtime directly via ConversationClient, not the cloud proxy", async () => {
+    respondToConfirmationMock.mockResolvedValue({ success: true });
+
+    await EventService.respondToConfirmation(
+      "conv-1",
+      "https://abc123.prod-runtime.all-hands.dev/api/conversations/conv-1",
+      { accept: true },
+      "session-key",
+    );
+
+    expect(callCloudProxy).not.toHaveBeenCalled();
+    expect(ConversationClient).toHaveBeenCalledTimes(1);
+    expect(respondToConfirmationMock).toHaveBeenCalledWith("conv-1", {
+      accept: true,
+    });
+  });
+});
+
+describe("EventService.getEventCount — cloud branch", () => {
+  it("calls the runtime directly via ConversationClient, not the cloud proxy", async () => {
+    getEventCountMock.mockResolvedValue(42);
+
+    const count = await EventService.getEventCount(
+      "conv-1",
+      "https://abc123.prod-runtime.all-hands.dev/api/conversations/conv-1",
+      "session-key",
+    );
+
+    expect(callCloudProxy).not.toHaveBeenCalled();
+    expect(ConversationClient).toHaveBeenCalledTimes(1);
+    expect(getEventCountMock).toHaveBeenCalledWith("conv-1");
+    expect(count).toBe(42);
   });
 });

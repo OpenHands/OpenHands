@@ -8,7 +8,7 @@ export function h1({
   React.HTMLAttributes<HTMLHeadingElement> &
   ExtraProps) {
   return (
-    <h1 className="text-xl text-white font-medium leading-7 mb-3 mt-4 first:mt-0">
+    <h1 className="text-xl text-contrast font-medium leading-7 mb-3 mt-4 first:mt-0">
       {children}
     </h1>
   );
@@ -21,7 +21,7 @@ export function h2({
   React.HTMLAttributes<HTMLHeadingElement> &
   ExtraProps) {
   return (
-    <h2 className="text-lg font-medium leading-6 -tracking-[0.01em] text-white mb-2.5 mt-4 first:mt-0">
+    <h2 className="text-lg font-medium leading-6 -tracking-[0.01em] text-contrast mb-2.5 mt-4 first:mt-0">
       {children}
     </h2>
   );
@@ -34,7 +34,7 @@ export function h3({
   React.HTMLAttributes<HTMLHeadingElement> &
   ExtraProps) {
   return (
-    <h3 className="text-base font-medium text-white mb-2 mt-3 first:mt-0">
+    <h3 className="text-base font-medium text-contrast mb-2 mt-3 first:mt-0">
       {children}
     </h3>
   );
@@ -47,7 +47,7 @@ export function h4({
   React.HTMLAttributes<HTMLHeadingElement> &
   ExtraProps) {
   return (
-    <h4 className="text-sm font-medium text-white mb-1.5 mt-3 first:mt-0">
+    <h4 className="text-sm font-medium text-contrast mb-1.5 mt-3 first:mt-0">
       {children}
     </h4>
   );

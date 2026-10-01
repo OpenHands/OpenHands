@@ -188,7 +188,7 @@ describe("conversation group folder interactions", () => {
     expect(add).toHaveClass(
       "h-6",
       "text-inherit",
-      "hover:bg-white/10",
+      "hover:bg-contrast/10",
       "focus-visible:outline-none",
       "disabled:cursor-not-allowed",
     );

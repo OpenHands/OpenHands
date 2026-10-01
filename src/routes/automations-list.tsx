@@ -119,10 +119,8 @@ export default function AutomationsList() {
 
   const active = useActiveBackend();
   const { navigate } = useNavigation();
-  // Git Sync is only available on local backends.
-  const isLocalBackend = active.backend.kind === "local";
-  // Creating an automation requires manage_automations (no owner escape hatch
-  // — it's a new record, not a mutation of an existing one).
+  // Git Sync is org-level config, so its entry point requires
+  // manage_automations (admins/owners) on every backend kind.
   const { canManage } = useAutomationPermissions();
 
   const {
@@ -376,7 +374,10 @@ export default function AutomationsList() {
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap justify-end gap-2">
-          {isLocalBackend && (
+          {/* Git sync is org-level config, so it follows manage_automations
+              (admins/owners) on every backend kind, not the local-only edit
+              gate. */}
+          {canManage && (
             <BrandButton
               type="button"
               variant="secondary"
@@ -388,12 +389,10 @@ export default function AutomationsList() {
               {t(I18nKey.AUTOMATIONS$GIT_SYNC$NAV_BUTTON)}
             </BrandButton>
           )}
-          {canManage ? (
-            <AddAutomationMenu
-              onAdd={() => setIsAddAutomationOpen(true)}
-              onImport={() => setIsImportOpen(true)}
-            />
-          ) : null}
+          <AddAutomationMenu
+            onAdd={() => setIsAddAutomationOpen(true)}
+            onImport={() => setIsImportOpen(true)}
+          />
         </div>
       </div>
 
@@ -492,7 +491,7 @@ export default function AutomationsList() {
                 <button
                   type="button"
                   onClick={() => setLimit((prev) => prev + PAGE_SIZE)}
-                  className="self-center rounded-lg border border-border px-6 py-2 text-sm text-white hover:bg-surface-raised"
+                  className="self-center rounded-lg border border-border px-6 py-2 text-sm text-contrast hover:bg-surface-raised"
                 >
                   {t(I18nKey.AUTOMATIONS$LOAD_MORE)}
                 </button>

@@ -109,7 +109,7 @@ export function ManageWorkspacesModal({
                   >
                     <FolderIcon width={16} height={16} className="shrink-0" />
                     <div className="flex flex-col min-w-0 flex-1">
-                      <span className="text-sm text-white truncate">
+                      <span className="text-sm text-contrast truncate">
                         {workspace.name}
                       </span>
                       <span className="text-xs text-muted truncate">
@@ -129,7 +129,7 @@ export function ManageWorkspacesModal({
                       }
                       aria-label={t(I18nKey.HOME$REMOVE_WORKSPACE)}
                       data-testid={`manage-workspaces-remove-${workspace.name}`}
-                      className="flex items-center gap-1 px-2 py-1 rounded text-xs text-text-tertiary hover:bg-interactive-hover hover:text-white cursor-pointer"
+                      className="flex items-center gap-1 px-2 py-1 rounded text-xs text-text-tertiary hover:bg-interactive-hover hover:text-contrast cursor-pointer"
                     >
                       <CloseIcon width={12} height={12} />
                       <span>{t(I18nKey.HOME$REMOVE_WORKSPACE)}</span>
@@ -161,7 +161,7 @@ export function ManageWorkspacesModal({
                             className="shrink-0"
                           />
                           <div className="flex flex-col min-w-0 flex-1">
-                            <span className="text-sm text-white truncate">
+                            <span className="text-sm text-contrast truncate">
                               {parent.name}
                             </span>
                             <span className="text-xs text-muted truncate">
@@ -188,7 +188,7 @@ export function ManageWorkspacesModal({
                                 I18nKey.HOME$REMOVE_WORKSPACE_PARENT,
                               )}
                               data-testid={`manage-workspaces-remove-parent-${parent.name}`}
-                              className="flex items-center gap-1 px-2 py-1 rounded text-xs text-text-tertiary hover:bg-interactive-hover hover:text-white cursor-pointer"
+                              className="flex items-center gap-1 px-2 py-1 rounded text-xs text-text-tertiary hover:bg-interactive-hover hover:text-contrast cursor-pointer"
                             >
                               <CloseIcon width={12} height={12} />
                               <span>

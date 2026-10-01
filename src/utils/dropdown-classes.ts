@@ -22,12 +22,12 @@ export const dropdownTriggerShellClassName = cn(
   "flex items-center gap-2",
   formControlShellClassName,
   dropdownInstantColorClassName,
-  "group w-full gap-2 px-3 text-muted hover:text-white",
+  "group w-full gap-2 px-3 text-muted hover:text-contrast",
 );
 
 /** Standard white-label menu row. */
 export const dropdownMenuRowClassName = cn(
-  "group flex w-full cursor-pointer items-center rounded px-2 py-2 text-left text-sm font-normal text-white",
+  "group flex w-full cursor-pointer items-center rounded px-2 py-2 text-left text-sm font-normal text-contrast",
   dropdownMenuRowGapClassName,
   "hover:bg-interactive-hover disabled:cursor-not-allowed disabled:opacity-60",
   dropdownInstantColorClassName,
@@ -44,7 +44,7 @@ export const dropdownMenuRowForegroundClassName = cn(
 
 /** Icon inside a menu row — muted until row hover/focus. */
 export const dropdownMenuRowIconClassName = cn(
-  "shrink-0 text-muted group-hover:text-white group-focus-visible:text-white",
+  "shrink-0 text-muted group-hover:text-contrast group-focus-visible:text-contrast",
   dropdownInstantColorClassName,
 );
 
@@ -57,8 +57,8 @@ export const dropdownMenuRowIconWrapperClassName = cn(
 /** Enum/filter dropdown trigger chip. */
 export const dropdownFilterTriggerClassName = cn(
   "inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium",
-  "border-border bg-base-secondary text-white",
-  "focus-visible:border-white/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/20",
+  "border-border bg-base-secondary text-contrast",
+  "focus-visible:border-contrast/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-contrast/20",
   dropdownInstantColorClassName,
 );
 
@@ -83,7 +83,7 @@ export const dropdownMenuViewportScrollClassName = cn(
 
 /** Footer action row inside a dropdown panel. */
 export const dropdownFooterActionClassName = cn(
-  "group flex w-full items-center rounded-md px-2 py-2 text-sm font-normal text-white",
+  "group flex w-full items-center rounded-md px-2 py-2 text-sm font-normal text-contrast",
   dropdownMenuRowGapClassName,
   "hover:bg-interactive-hover",
   dropdownInstantColorClassName,

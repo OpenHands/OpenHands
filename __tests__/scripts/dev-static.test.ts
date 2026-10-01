@@ -6,7 +6,18 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   buildAutomationBackendEnv,
   buildLocalServiceRouteArgs,
+  parseArgs,
 } from "../../scripts/dev-static.mjs";
+import { buildFrontendEnv } from "../../scripts/static-build.mjs";
+
+describe("dev-static CLI", () => {
+  it.each([
+    [["--host", "0.0.0.0"], "0.0.0.0"],
+    [["-H", "::"], "::"],
+  ])("parses an explicit bind host", (argv, expected) => {
+    expect(parseArgs(argv).host).toBe(expected);
+  });
+});
 
 describe("dev-static", () => {
   const dirs: string[] = [];
@@ -61,6 +72,16 @@ describe("dev-static", () => {
     );
 
     expect(env.AUTOMATION_KV_SECRET).toBe("explicit-kv-secret");
+  });
+
+  it("keeps reusable frontend builds free of session credentials", () => {
+    const env = buildFrontendEnv(
+      { viteWorkingDir: "/tmp/workspace" },
+      { VITE_SESSION_API_KEY: "inherited-secret" },
+    );
+
+    expect(env.VITE_SESSION_API_KEY).toBe("");
+    expect(env.VITE_WORKING_DIR).toBe("/tmp/workspace");
   });
 
   it("points every local proxy route at the IPv4 loopback", () => {

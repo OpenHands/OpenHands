@@ -81,7 +81,7 @@ export function MenuRow({
         />
       ) : selected ? (
         <Check
-          className="ml-auto h-3.5 w-3.5 shrink-0 text-white"
+          className="ml-auto h-3.5 w-3.5 shrink-0 text-contrast"
           aria-hidden
         />
       ) : null}
