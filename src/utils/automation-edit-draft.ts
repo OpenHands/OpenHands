@@ -90,6 +90,7 @@ export function setupDraftFromAutomation(
     model: automation.model ?? "",
     agentProfileId: automation.agent_profile_id ?? "",
     entrypoint: automation.entrypoint ?? "",
+    setupScriptPath: automation.setup_script_path ?? "",
     ...(trigger.type === "event"
       ? {
           triggerKind: "event" as const,
@@ -112,6 +113,9 @@ export function setupDraftFromAutomation(
     prompt,
     kind,
     editingAutomationId: automation.id,
+    ...(kind === "custom" && automation.tarball_path
+      ? { existingCustomTarballPath: automation.tarball_path }
+      : {}),
     ...(plugins.length > 0 ? { plugins } : {}),
     form,
   };

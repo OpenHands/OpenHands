@@ -31,6 +31,7 @@ import { packTarGzip } from "#/utils/tar-gzip";
 import { handleAutomationFormUpdateAction } from "#/services/automation-form";
 import { AUTOMATION_FORM_UPDATE_ACTION_KIND } from "#/constants/automation-form";
 import { AUTOMATION_SETUP_SHOW_AGENT_EVENT } from "#/components/features/automations/setup/automation-setup-agent-request";
+import { setupDraftFromAutomation } from "#/utils/automation-edit-draft";
 import { useDeploymentCapabilities } from "#/hooks/query/use-manifest-capabilities";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import type { AutomationDraftApiResponse } from "#/manifests/types";
@@ -1960,5 +1961,66 @@ describe("AutomationSetupPanel", () => {
 
     await user.click(screen.getByTestId("automation-setup-close"));
     expect(mockNavigate).toHaveBeenCalledWith("/automations");
+  });
+
+  it("shows existing custom bundle metadata without replacing it on save", async () => {
+    vi.mocked(AutomationService.updateAutomation).mockResolvedValue({
+      id: "auto-1",
+    } as never);
+
+    const user = userEvent.setup();
+    renderPanel(
+      setupDraftFromAutomation({
+        id: "auto-1",
+        name: "Nightly scan",
+        prompt: null,
+        enabled: true,
+        created_at: "2026-01-01T00:00:00.000Z",
+        updated_at: "2026-01-01T00:00:00.000Z",
+        entrypoint: "python3 scan.py",
+        setup_script_path: "install.sh",
+        tarball_path: "oh-internal://uploads/REAL-user-code.tar.gz",
+        trigger: {
+          type: "cron",
+          schedule: "0 9 * * *",
+          timezone: "UTC",
+        },
+      }),
+    );
+
+    expect(
+      screen.getByTestId("automation-setup-existing-bundle"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("automation-setup-existing-bundle-name"),
+    ).toHaveTextContent("REAL-user-code.tar.gz");
+    expect(
+      screen.getByTestId("automation-setup-existing-bundle-info"),
+    ).toHaveAccessibleName("AUTOMATION_SETUP$EXISTING_BUNDLE_HELP");
+    expect(
+      screen.queryByTestId("automation-setup-custom-code"),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("automation-setup-save"));
+
+    await waitFor(() =>
+      expect(AutomationService.updateAutomation).toHaveBeenCalledWith(
+        "auto-1",
+        expect.objectContaining({
+          name: "Nightly scan",
+          entrypoint: "python3 scan.py",
+        }),
+      ),
+    );
+    expect(AutomationService.uploadAutomationTarball).not.toHaveBeenCalled();
+    expect(packTarGzip).not.toHaveBeenCalled();
+    expect(
+      vi.mocked(AutomationService.updateAutomation).mock.calls[0][1],
+    ).not.toEqual(expect.objectContaining({ tarball_path: expect.anything() }));
+    expect(
+      vi.mocked(AutomationService.updateAutomation).mock.calls[0][1],
+    ).not.toEqual(
+      expect.objectContaining({ setup_script_path: expect.anything() }),
+    );
   });
 });
