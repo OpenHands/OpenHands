@@ -40,7 +40,6 @@ import {
   isClassifyAndSwitchLLMObservationEvent,
   isCanvasUIActionEvent,
   isAutomationFormUpdateActionEvent,
-  isStreamingDeltaEvent,
   isLaunchChildConversationActionEvent,
 } from "#/types/agent-server/type-guards";
 import {
