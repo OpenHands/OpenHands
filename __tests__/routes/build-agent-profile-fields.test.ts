@@ -19,6 +19,9 @@ const baseAcp = {
   secretsMode: "standard" as const,
   selectedSecrets: [] as string[],
   secretRefsSupportedOnProfile: true,
+  systemPromptMode: "standard" as const,
+  systemPrompt: "",
+  systemPromptEditable: false,
 };
 
 const switchLlmToolField: SettingsFieldSchema = {
@@ -116,6 +119,9 @@ describe("buildAgentProfileFields — OpenHands", () => {
     secretsMode: "standard" as const,
     selectedSecrets: [] as string[],
     secretRefsSupportedOnProfile: true,
+    systemPromptMode: "standard" as const,
+    systemPrompt: "",
+    systemPromptEditable: false,
   };
 
   it("passes through enable_sub_agents and omits concurrency when the field is absent", () => {
@@ -230,6 +236,9 @@ describe("buildAgentProfileFields — mcp_server_refs", () => {
     secretsMode: "standard" as const,
     selectedSecrets: [] as string[],
     secretRefsSupportedOnProfile: true,
+    systemPromptMode: "standard" as const,
+    systemPrompt: "",
+    systemPromptEditable: false,
   };
 
   it("emits null in standard mode, so the profile inherits every server", () => {
@@ -284,6 +293,9 @@ describe("buildAgentProfileFields — secret scope", () => {
     secretsMode: "standard" as const,
     selectedSecrets: [] as string[],
     secretRefsSupportedOnProfile: true,
+    systemPromptMode: "standard" as const,
+    systemPrompt: "",
+    systemPromptEditable: false,
     mcpMode: "standard" as const,
     selectedMcpServers: [] as string[],
   };
@@ -330,5 +342,63 @@ describe("buildAgentProfileFields — secret scope", () => {
       secretRefsSupportedOnProfile: false,
     });
     expect(fields).not.toHaveProperty("secret_refs");
+  });
+});
+
+describe("buildAgentProfileFields — system prompt", () => {
+  const base = {
+    isAcp: false,
+    selectedPreset: "custom",
+    isDefaultProviderCommand: false,
+    commandTokens: [] as string[],
+    acpModel: "",
+    subAgentsEnabled: false,
+    switchLlmToolField: undefined,
+    switchLlmToolEnabled: false,
+    switchLlmToolSupportedOnProfile: true,
+    toolConcurrencyField: undefined,
+    toolConcurrency: "",
+    mcpMode: "standard" as const,
+    selectedMcpServers: [] as string[],
+    secretsMode: "standard" as const,
+    selectedSecrets: [] as string[],
+    secretRefsSupportedOnProfile: false,
+    systemPromptMode: "custom" as const,
+    systemPrompt: "You triage issues.",
+    systemPromptEditable: true,
+  };
+
+  it("persists the custom prompt verbatim", () => {
+    expect(buildAgentProfileFields(base)).toMatchObject({
+      system_prompt: "You triage issues.",
+    });
+  });
+
+  it("persists null for the OpenHands default, even with leftover text", () => {
+    expect(
+      buildAgentProfileFields({ ...base, systemPromptMode: "standard" }),
+    ).toMatchObject({ system_prompt: null });
+  });
+
+  it("persists null for a blank custom prompt", () => {
+    expect(
+      buildAgentProfileFields({ ...base, systemPrompt: "  \n " }),
+    ).toMatchObject({ system_prompt: null });
+  });
+
+  it("omits the key when the profile model or the section does not allow it", () => {
+    expect(
+      buildAgentProfileFields({ ...base, systemPromptEditable: false }),
+    ).not.toHaveProperty("system_prompt");
+  });
+
+  it("never rides the ACP variant", () => {
+    const fields = buildAgentProfileFields({
+      ...base,
+      isAcp: true,
+      selectedPreset: "claude-code",
+      commandTokens: ["npx", "claude-code-acp"],
+    });
+    expect(fields).not.toHaveProperty("system_prompt");
   });
 });

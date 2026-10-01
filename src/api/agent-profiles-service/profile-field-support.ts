@@ -42,12 +42,18 @@ export function agentProfileSupportsSwitchLlmTool(): boolean {
   return comparison >= 0;
 }
 
-/** Only offer a scope when the serving backend advertises enforcement. */
-export function agentProfileSupportsSecretRefs(): boolean {
+function localBackendAdvertises(capability: string): boolean {
   if (getActiveBackend().backend.kind === "cloud") return false;
   const capabilities = getCachedAgentServerInfo()?.capabilities;
-  return (
-    Array.isArray(capabilities) &&
-    capabilities.includes("profile_secret_scope_v1")
-  );
+  return Array.isArray(capabilities) && capabilities.includes(capability);
+}
+
+/** Only offer a scope when the serving backend advertises enforcement. */
+export function agentProfileSupportsSecretRefs(): boolean {
+  return localBackendAdvertises("profile_secret_scope_v1");
+}
+
+/** Only offer a system prompt when the serving backend's profile model accepts it. */
+export function agentProfileSupportsSystemPrompt(): boolean {
+  return localBackendAdvertises("profile_system_prompt_v1");
 }

@@ -12,7 +12,10 @@ import { useAcpCredentialForm } from "#/hooks/use-acp-credential-form";
 import { ProfileScopeList } from "#/components/features/settings/agent-profiles/profile-scope-list";
 import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
-import { formControlSwitchDescriptionClassName } from "#/utils/form-control-classes";
+import {
+  formControlMultilineFieldClassName,
+  formControlSwitchDescriptionClassName,
+} from "#/utils/form-control-classes";
 import { cn } from "#/utils/utils";
 import { SettingsFieldSchema, SettingsValue } from "#/types/settings";
 import {
@@ -42,6 +45,7 @@ import { parseMcpConfig } from "#/utils/mcp-config";
 import {
   agentProfileSupportsSecretRefs,
   agentProfileSupportsSwitchLlmTool,
+  agentProfileSupportsSystemPrompt,
 } from "#/api/agent-profiles-service/profile-field-support";
 import { useSearchSecrets } from "#/hooks/query/use-get-secrets";
 
@@ -61,6 +65,8 @@ const ENABLE_SWITCH_LLM_TOOL_FIELD_KEY = "enable_switch_llm_tool";
 const TOOL_CONCURRENCY_FIELD_KEY = "tool_concurrency_limit";
 const MCP_SERVER_REFS_KEY = "mcp_server_refs";
 const SECRET_REFS_KEY = "secret_refs";
+const SYSTEM_PROMPT_KEY = "system_prompt";
+const SYSTEM_PROMPT_MAX_LENGTH = 65536;
 const COMMAND_PLACEHOLDER_FALLBACK = "npx -y <package-name>";
 const ACP_CUSTOM_MODEL_KEY = "__custom_model__";
 const EMPTY_AGENT_SETTINGS_SNAPSHOT: AgentSettingsSnapshot = {
@@ -132,6 +138,7 @@ export type AgentProfileFieldsDraft =
       enable_switch_llm_tool?: boolean;
       tool_concurrency_limit?: number;
       secret_refs?: string[] | null;
+      system_prompt?: string | null;
     }
   | {
       agent_kind: "acp";
@@ -170,6 +177,10 @@ export interface AgentProfileFieldsInput {
   selectedSecrets: string[];
   /** Whether the backend's *profile* model accepts `secret_refs`. */
   secretRefsSupportedOnProfile: boolean;
+  systemPromptMode: ProfileScopeMode;
+  systemPrompt: string;
+  /** False when the profile model rejects `system_prompt` or the section is hidden. */
+  systemPromptEditable: boolean;
 }
 
 /**
@@ -210,6 +221,9 @@ export function buildAgentProfileFields(
     secretsMode,
     selectedSecrets,
     secretRefsSupportedOnProfile,
+    systemPromptMode,
+    systemPrompt,
+    systemPromptEditable,
   } = input;
   // Both are base-model fields, so they ride both variants. `mcp_server_refs`
   // needs no version gate — it has existed since agent profiles shipped, below
@@ -242,6 +256,12 @@ export function buildAgentProfileFields(
       enable_sub_agents: subAgentsEnabled,
       ...secretRefs,
     };
+  if (systemPromptEditable) {
+    fields.system_prompt =
+      systemPromptMode === "custom" && systemPrompt.trim()
+        ? systemPrompt
+        : null;
+  }
   if (switchLlmToolField && switchLlmToolSupportedOnProfile) {
     // Two conditions, two different questions. The schema tells us the field
     // is a real setting on this server; the version gate tells us its
@@ -294,11 +314,14 @@ interface AgentSettingsScreenProps {
   /** `agent_settings`-shaped profile fields the form opens on. */
   agentSettingsOverride?: Record<string, SettingsValue> | null;
   onSaveControlChange: (control: AgentSettingsSaveControl) => void;
+  /** Local launches route the `default` profile around its stored prompt. */
+  isDefaultProfile?: boolean;
 }
 
 export function AgentSettingsScreen({
   agentSettingsOverride = null,
   onSaveControlChange,
+  isDefaultProfile = false,
 }: AgentSettingsScreenProps) {
   const { t } = useTranslation("openhands");
   const { data: settings, isLoading } = useSettings();
@@ -359,6 +382,21 @@ export function AgentSettingsScreen({
   const [toolConcurrency, setToolConcurrency] = useState<string | boolean>(
     initialToolConcurrency,
   );
+
+  // --- System prompt (OpenHands path) ---
+  const systemPromptSupportedOnProfile = agentProfileSupportsSystemPrompt();
+  const showSystemPrompt = systemPromptSupportedOnProfile && !isDefaultProfile;
+  const initialSystemPrompt = React.useMemo(() => {
+    const raw = agentSettingsOverride?.[SYSTEM_PROMPT_KEY];
+    return typeof raw === "string" ? raw : "";
+  }, [agentSettingsOverride]);
+  const initialSystemPromptMode: ProfileScopeMode = initialSystemPrompt
+    ? "custom"
+    : "standard";
+  const [systemPromptMode, setSystemPromptMode] = useState<ProfileScopeMode>(
+    initialSystemPromptMode,
+  );
+  const [systemPrompt, setSystemPrompt] = useState(initialSystemPrompt);
 
   // --- MCP servers (both variants; a base-model field) ---
   const initialMcpRefs = React.useMemo(
@@ -562,6 +600,11 @@ export function AgentSettingsScreen({
     setToolConcurrency(initialToolConcurrency);
   }, [initialToolConcurrency]);
 
+  useEffect(() => {
+    setSystemPromptMode(initialSystemPrompt ? "custom" : "standard");
+    setSystemPrompt(initialSystemPrompt);
+  }, [initialSystemPrompt]);
+
   // Sync the MCP scope when settings reload
   useEffect(() => {
     setMcpMode(initialMcpRefs.mode);
@@ -605,6 +648,15 @@ export function AgentSettingsScreen({
   const secretScopeDirty =
     secretsMode !== initialSecretRefs.mode ||
     !sameScopeSelection(orderedSelectedSecrets, initialSecretRefs.selected);
+  const systemPromptDirty =
+    showSystemPrompt &&
+    (systemPromptMode !== initialSystemPromptMode ||
+      (systemPromptMode === "custom" && systemPrompt !== initialSystemPrompt));
+  const systemPromptMissing =
+    agentType === "openhands" &&
+    showSystemPrompt &&
+    systemPromptMode === "custom" &&
+    !systemPrompt.trim();
   const settingsDirty =
     agentType !== loadedSnapshot.agentType ||
     mcpScopeDirty ||
@@ -615,13 +667,15 @@ export function AgentSettingsScreen({
         isCustomAcpModel !== loadedSnapshot.isCustomAcpModel
       : subAgentsEnabled !== initialSubAgentsEnabled ||
         switchLlmToolEnabled !== initialSwitchLlmToolEnabled ||
-        toolConcurrency !== initialToolConcurrency);
+        toolConcurrency !== initialToolConcurrency ||
+        systemPromptDirty);
   const credentialsDirty = acpCredentialForm.isDirty;
   const isAnyDirty = settingsDirty || credentialsDirty;
+  const isFormValid = !acpCommandEmpty && !systemPromptMissing;
   useEffect(() => {
     onSaveControlChange({
       agentType,
-      isValid: !acpCommandEmpty,
+      isValid: isFormValid,
       isDirty: isAnyDirty,
       buildAgentProfileFields: stableBuildFields,
       credentials: {
@@ -633,7 +687,7 @@ export function AgentSettingsScreen({
   }, [
     onSaveControlChange,
     agentType,
-    acpCommandEmpty,
+    isFormValid,
     isAnyDirty,
     credentialsDirty,
     stableBuildFields,
@@ -683,6 +737,9 @@ export function AgentSettingsScreen({
       secretsMode,
       selectedSecrets: orderedSelectedSecrets,
       secretRefsSupportedOnProfile,
+      systemPromptMode,
+      systemPrompt,
+      systemPromptEditable: showSystemPrompt,
     });
 
   const isSaving = acpCredentialForm.isSaving;
@@ -755,6 +812,82 @@ export function AgentSettingsScreen({
           }
         }}
       />
+
+      {!isAcp && systemPromptSupportedOnProfile ? (
+        <div className="flex flex-col gap-2.5">
+          <Typography.Text className="text-sm">
+            {t(I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT)}
+          </Typography.Text>
+          {isDefaultProfile ? (
+            <Typography.Text
+              testId="agent-settings-system-prompt-default-profile"
+              className="text-xs text-tertiary-alt"
+            >
+              {t(I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_DEFAULT_PROFILE)}
+            </Typography.Text>
+          ) : (
+            <>
+              <SettingsDropdownInput
+                testId="agent-settings-system-prompt-mode"
+                name="agent-system-prompt-mode"
+                label=""
+                items={[
+                  {
+                    key: "standard",
+                    label: t(
+                      I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_STANDARD,
+                    ),
+                  },
+                  {
+                    key: "custom",
+                    label: t(
+                      I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_CUSTOM,
+                    ),
+                  },
+                ]}
+                selectedKey={systemPromptMode}
+                isDisabled={isSaving}
+                onSelectionChange={(key) => {
+                  if (key) setSystemPromptMode(key as ProfileScopeMode);
+                }}
+              />
+              {systemPromptMode === "custom" ? (
+                <textarea
+                  data-testid="agent-settings-system-prompt"
+                  aria-label={t(I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT)}
+                  className={cn(
+                    formControlMultilineFieldClassName,
+                    "min-h-48 font-mono placeholder:italic",
+                    "disabled:bg-surface-raised disabled:border-border-subtle",
+                  )}
+                  value={systemPrompt}
+                  maxLength={SYSTEM_PROMPT_MAX_LENGTH}
+                  placeholder={t(
+                    I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_PLACEHOLDER,
+                  )}
+                  disabled={isSaving}
+                  onChange={(e) => setSystemPrompt(e.target.value)}
+                />
+              ) : null}
+              {systemPromptMissing ? (
+                <Typography.Text
+                  testId="agent-settings-system-prompt-required"
+                  className="text-xs text-danger"
+                >
+                  {t(I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_REQUIRED)}
+                </Typography.Text>
+              ) : null}
+              <Typography.Text className="text-xs text-tertiary-alt">
+                {t(
+                  systemPromptMode === "custom"
+                    ? I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_CUSTOM_HINT
+                    : I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_STANDARD_HINT,
+                )}
+              </Typography.Text>
+            </>
+          )}
+        </div>
+      ) : null}
 
       {!isAcp && (
         <div className="flex flex-col gap-1.5">

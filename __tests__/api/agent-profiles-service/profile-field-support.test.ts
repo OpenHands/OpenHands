@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   MIN_AGENT_SERVER_VERSION_FOR_PROFILE_SWITCH_LLM_TOOL,
   agentProfileSupportsSecretRefs,
+  agentProfileSupportsSystemPrompt,
   agentProfileSupportsSwitchLlmTool,
 } from "#/api/agent-profiles-service/profile-field-support";
 
@@ -92,5 +93,34 @@ describe("agentProfileSupportsSecretRefs", () => {
       capabilities: ["profile_secret_scope_v1"],
     });
     expect(agentProfileSupportsSecretRefs()).toBe(false);
+  });
+});
+
+describe("agentProfileSupportsSystemPrompt", () => {
+  beforeEach(() => {
+    mockBackendKind.mockReturnValue("local");
+  });
+
+  it.each([null, {}, { capabilities: ["profile_secret_scope_v1"] }])(
+    "hides the field on a server that does not advertise it: %j",
+    (info) => {
+      mockServerInfo.mockReturnValue(info);
+      expect(agentProfileSupportsSystemPrompt()).toBe(false);
+    },
+  );
+
+  it("offers the field when the local server advertises it", () => {
+    mockServerInfo.mockReturnValue({
+      capabilities: ["profile_system_prompt_v1"],
+    });
+    expect(agentProfileSupportsSystemPrompt()).toBe(true);
+  });
+
+  it("stays off on Cloud until its profile store accepts the field", () => {
+    mockBackendKind.mockReturnValue("cloud");
+    mockServerInfo.mockReturnValue({
+      capabilities: ["profile_system_prompt_v1"],
+    });
+    expect(agentProfileSupportsSystemPrompt()).toBe(false);
   });
 });

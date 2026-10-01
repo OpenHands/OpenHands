@@ -29,9 +29,11 @@ vi.mock("#/hooks/query/use-acp-auth-status", () => ({
 // sides of that gate are reachable without a live server.
 const profileSupportsSwitchLlmToolMock = vi.hoisted(() => vi.fn(() => true));
 const profileSupportsSecretRefsMock = vi.hoisted(() => vi.fn(() => true));
+const profileSupportsSystemPromptMock = vi.hoisted(() => vi.fn(() => false));
 vi.mock("#/api/agent-profiles-service/profile-field-support", () => ({
   agentProfileSupportsSwitchLlmTool: () => profileSupportsSwitchLlmToolMock(),
   agentProfileSupportsSecretRefs: () => profileSupportsSecretRefsMock(),
+  agentProfileSupportsSystemPrompt: () => profileSupportsSystemPromptMock(),
 }));
 
 // The secret picker lists the user's saved secrets; stub the query so these
@@ -1147,5 +1149,136 @@ describe("AgentSettingsScreen — MCP scope dirty tracking", () => {
         screen.getByTestId("agent-settings-secrets-mode"),
       ).toBeInTheDocument();
     });
+  });
+});
+
+describe("AgentSettingsScreen — system prompt", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
+    vi.spyOn(SecretsService, "getSecrets").mockResolvedValue([]);
+    profileSupportsSystemPromptMock.mockReturnValue(true);
+  });
+
+  const OPENHANDS_PROFILE = {
+    agent_kind: "openhands",
+    enable_sub_agents: false,
+    mcp_server_refs: null,
+  };
+
+  async function chooseMode(name: string) {
+    const user = userEvent.setup();
+    const combo = screen.getByTestId("agent-settings-system-prompt-mode");
+    combo.focus();
+    await user.keyboard("{ArrowDown}");
+    await user.click(await screen.findByRole("option", { name }));
+    return user;
+  }
+
+  it("is hidden when the profile model does not accept the field", async () => {
+    profileSupportsSystemPromptMock.mockReturnValue(false);
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: OPENHANDS_PROFILE,
+    });
+    await screen.findByTestId("agent-settings-screen");
+
+    expect(
+      screen.queryByTestId("agent-settings-system-prompt-mode"),
+    ).not.toBeInTheDocument();
+    expect(control().buildAgentProfileFields()).not.toHaveProperty(
+      "system_prompt",
+    );
+  });
+
+  it("persists null for the OpenHands default", async () => {
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: OPENHANDS_PROFILE,
+    });
+    await screen.findByTestId("agent-settings-system-prompt-mode");
+
+    expect(
+      screen.queryByTestId("agent-settings-system-prompt"),
+    ).not.toBeInTheDocument();
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      system_prompt: null,
+    });
+  });
+
+  it("opens a stored prompt in custom mode, clean", async () => {
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: {
+        ...OPENHANDS_PROFILE,
+        system_prompt: "You triage issues.",
+      },
+    });
+
+    expect(
+      await screen.findByTestId("agent-settings-system-prompt"),
+    ).toHaveValue("You triage issues.");
+    expect(control().isDirty).toBe(false);
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      system_prompt: "You triage issues.",
+    });
+  });
+
+  it("blocks saving an empty custom prompt, then saves the typed one", async () => {
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: OPENHANDS_PROFILE,
+    });
+    await screen.findByTestId("agent-settings-system-prompt-mode");
+
+    const user = await chooseMode(
+      "SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_CUSTOM",
+    );
+    await waitFor(() => expect(control().isValid).toBe(false));
+    expect(
+      screen.getByTestId("agent-settings-system-prompt-required"),
+    ).toBeInTheDocument();
+
+    await user.type(
+      screen.getByTestId("agent-settings-system-prompt"),
+      "You review PRs.",
+    );
+    await waitFor(() => expect(control().isValid).toBe(true));
+    expect(control().isDirty).toBe(true);
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      system_prompt: "You review PRs.",
+    });
+  });
+
+  it("clears a stored prompt when switched back to the default", async () => {
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: {
+        ...OPENHANDS_PROFILE,
+        system_prompt: "You triage issues.",
+      },
+    });
+    await screen.findByTestId("agent-settings-system-prompt");
+
+    await chooseMode("SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_STANDARD");
+    await waitFor(() => expect(control().isDirty).toBe(true));
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      system_prompt: null,
+    });
+  });
+
+  it("explains instead of editing on the default profile, and leaves its prompt alone", async () => {
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: {
+        ...OPENHANDS_PROFILE,
+        system_prompt: "Set through the API.",
+      },
+      isDefaultProfile: true,
+    });
+
+    expect(
+      await screen.findByTestId("agent-settings-system-prompt-default-profile"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("agent-settings-system-prompt-mode"),
+    ).not.toBeInTheDocument();
+    expect(control().buildAgentProfileFields()).not.toHaveProperty(
+      "system_prompt",
+    );
   });
 });
