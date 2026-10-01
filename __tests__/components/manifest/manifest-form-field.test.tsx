@@ -11,20 +11,12 @@ import {
 import { SetupFormField } from "#/components/features/manifest/manifest-form-field";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import type { Backend } from "#/api/backend-registry/types";
+import SettingsService from "#/api/settings-service/settings-service.api";
+import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import type {
   SetupFormField as SetupFormFieldDefinition,
   SetupFormValue,
 } from "#/manifests/types";
-
-// The git providers the user has connected natively on the active backend.
-const connected = vi.hoisted(() => ({ providers: [] as string[] }));
-
-vi.mock("#/hooks/use-user-providers", () => ({
-  useUserProviders: () => ({
-    providers: connected.providers,
-    isLoadingSettings: false,
-  }),
-}));
 
 const LOCAL_BACKEND: Backend = {
   id: "local-1",
@@ -114,9 +106,17 @@ const REPOSITORIES_FIELD: SetupFormFieldDefinition = {
   multiple: true,
 };
 
+/** The git providers the user has connected natively on the active backend. */
+function connectNatively(...providers: string[]) {
+  vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
+    ...MOCK_DEFAULT_USER_SETTINGS,
+    provider_tokens_set: Object.fromEntries(providers.map((p) => [p, null])),
+  });
+}
+
 beforeEach(() => {
   __resetActiveStoreForTests();
-  connected.providers = [];
+  connectNatively();
 });
 
 afterEach(() => {
@@ -278,23 +278,23 @@ describe("SetupFormField repo-picker", () => {
     ]);
   });
 
-  it("browses the account's repositories on a cloud backend with the provider connected", () => {
+  it("browses the account's repositories on a cloud backend with the provider connected", async () => {
     // Arrange
-    connected.providers = ["github"];
+    connectNatively("github");
 
     // Act
     renderRepositoryField(CLOUD_BACKEND);
 
     // Assert — the picker stays the way a repository is chosen wherever it can
     // actually answer, so there is nothing to type into.
-    expect(screen.getByTestId("git-repo-dropdown")).toBeInTheDocument();
+    expect(await screen.findByTestId("git-repo-dropdown")).toBeInTheDocument();
     expect(screen.queryByTestId("setup-field-repository")).toBeNull();
   });
 
   it("lets a repository be typed on a cloud backend when its provider is not connected natively", async () => {
     // Arrange — GitLab reached through an MCP server: the instance has no
     // native GitLab token to list repositories with, only a GitHub one.
-    connected.providers = ["github"];
+    connectNatively("github");
     const { onValueChange, user } = renderRepositoryField(CLOUD_BACKEND, {
       field: { ...REPOSITORY_FIELD, provider: "gitlab" },
     });
