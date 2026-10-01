@@ -29,7 +29,6 @@ import AgentServerConversationService from "#/api/conversation-service/agent-ser
 import { packTarGzip } from "#/utils/tar-gzip";
 import { handleAutomationFormUpdateAction } from "#/services/automation-form";
 import { AUTOMATION_FORM_UPDATE_ACTION_KIND } from "#/constants/automation-form";
-import { GitProviderItemsService } from "#/api/git-provider-items-service";
 import { AUTOMATION_SETUP_SHOW_AGENT_EVENT } from "#/components/features/automations/setup/automation-setup-agent-request";
 import { useDeploymentCapabilities } from "#/hooks/query/use-manifest-capabilities";
 import type { AutomationDraftApiResponse } from "#/manifests/types";
@@ -54,6 +53,7 @@ const createGitRepositoriesQueryResult = () => ({
             is_public: true,
           },
         ],
+        missing_token: false,
         next_page_id: null,
       },
     ],
@@ -151,15 +151,6 @@ vi.mock("#/hooks/query/use-agent-profiles", () => ({
   }),
 }));
 
-vi.mock("#/api/git-provider-items-service", () => ({
-  GitProviderItemsService: {
-    listUserRepositories: vi.fn(async () => ({
-      repositories: ["OpenHands/OpenHands", "OpenHands/software-agent-sdk"],
-      missingToken: false,
-    })),
-  },
-}));
-
 vi.mock("#/hooks/use-user-providers", () => ({
   useUserProviders: () => ({
     providers: ["github"],
@@ -249,10 +240,6 @@ describe("AutomationSetupPanel", () => {
     vi.mocked(
       AgentServerConversationService.updateConversationTags,
     ).mockImplementation(async (_conversationId, tags) => ({ tags }) as never);
-    vi.mocked(GitProviderItemsService.listUserRepositories).mockResolvedValue({
-      repositories: ["OpenHands/OpenHands", "OpenHands/software-agent-sdk"],
-      missingToken: false,
-    });
     mockUseGitRepositories.mockReturnValue(createGitRepositoriesQueryResult());
   });
 
