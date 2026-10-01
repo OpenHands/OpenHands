@@ -938,7 +938,7 @@ class AutomationService {
   ): Promise<AutomationDraftListResponse> {
     const { limit = 50, offset = 0 } = params;
     const active = getActiveBackend().backend;
-    const path = `${AUTOMATION_BASE_PATH}/v1/drafts?${buildPaginationQuery(limit, offset)}`;
+    const path = `${AUTOMATION_BASE_PATH}/v1/drafts?${buildListQuery(limit, offset)}`;
 
     if (active.kind === "cloud") {
       const data = await callCloudProxy<AutomationDraftListResponse>({

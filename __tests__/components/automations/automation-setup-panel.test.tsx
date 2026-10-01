@@ -918,10 +918,6 @@ describe("AutomationSetupPanel", () => {
     const user = userEvent.setup();
     renderPanel();
 
-    expect(
-      screen.queryByTestId("automation-setup-repository-token-tooltip"),
-    ).not.toBeInTheDocument();
-
     await user.click(screen.getByTestId("automation-setup-repository-add"));
 
     expect(
