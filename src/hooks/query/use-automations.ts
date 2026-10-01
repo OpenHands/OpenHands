@@ -1,7 +1,6 @@
 import {
   useInfiniteQuery,
   useMutation,
-  useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
 import AutomationService from "#/api/automation-service/automation-service.api";
@@ -19,48 +18,33 @@ import {
 
 export const AUTOMATIONS_QUERY_KEY = ["automations"] as const;
 
+// The automation service caps `limit` at 100, so lists page by offset.
+const AUTOMATIONS_PAGE_SIZE = 50;
+
 interface UseAutomationsOptions {
-  limit?: number;
-  offset?: number;
+  /** Automations per request; at most 100. A count-only caller passes 1. */
+  pageSize?: number;
   enabled?: boolean;
 }
 
-export function useAutomations(options: UseAutomationsOptions = {}) {
-  const { limit = 50, offset = 0, enabled = true } = options;
-  const active = useActiveBackend();
-  return useQuery({
-    queryKey: [
-      ...AUTOMATIONS_QUERY_KEY,
-      { limit, offset },
-      active.backend.id,
-      active.orgId,
-    ],
-    queryFn: () => AutomationService.getAutomations(limit, offset),
-    staleTime: 0,
-    enabled,
-  });
-}
-
-// The automation service caps `limit` at 100, so the list pages by offset.
-const AUTOMATIONS_PAGE_SIZE = 50;
-
 /**
- * The Automations list page's query: fetches one page of 50 at a time and
- * joins the loaded pages into one `AutomationsResponse`. An automation that
- * shifts onto a later page between requests is listed once.
+ * The org's automations, newest first, one page at a time. `data` joins the
+ * loaded pages into one `AutomationsResponse` and `fetchNextPage` loads the
+ * next one. An automation that shifts onto a later page between requests is
+ * listed once.
  */
-export function usePaginatedAutomations(options: { enabled?: boolean } = {}) {
-  const { enabled = true } = options;
+export function useAutomations(options: UseAutomationsOptions = {}) {
+  const { pageSize = AUTOMATIONS_PAGE_SIZE, enabled = true } = options;
   const active = useActiveBackend();
   return useInfiniteQuery({
     queryKey: [
       ...AUTOMATIONS_QUERY_KEY,
-      "paginated",
+      { pageSize },
       active.backend.id,
       active.orgId,
     ],
     queryFn: ({ pageParam }) =>
-      AutomationService.getAutomations(AUTOMATIONS_PAGE_SIZE, pageParam),
+      AutomationService.getAutomations(pageSize, pageParam),
     initialPageParam: 0,
     getNextPageParam: (lastPage, _pages, lastOffset) => {
       const nextOffset = lastOffset + lastPage.automations.length;

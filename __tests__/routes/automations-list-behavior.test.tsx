@@ -28,7 +28,7 @@ const mocks = vi.hoisted(() => ({
   backendKind: "local" as "local" | "cloud",
   canManage: true,
   navigate: vi.fn(),
-  usePaginatedAutomations: vi.fn(),
+  useAutomations: vi.fn(),
   useAutomationRunSummaries: vi.fn(),
   toggle: vi.fn(),
   remove: vi.fn(),
@@ -88,8 +88,8 @@ vi.mock("#/hooks/query/use-automation-health", () => ({
 }));
 
 vi.mock("#/hooks/query/use-automations", () => ({
-  usePaginatedAutomations: (options: unknown) => {
-    mocks.usePaginatedAutomations(options);
+  useAutomations: (options: unknown) => {
+    mocks.useAutomations(options);
     return { ...mocks.automationsState, hasNextPage: false };
   },
   useToggleAutomation: () => ({ mutate: mocks.toggle }),
@@ -530,7 +530,7 @@ describe("automations list states", () => {
     expect(screen.getAllByTestId("automation-skeleton")).toHaveLength(3);
     // The header copy comes from the admitted interface manifest.
     expect(screen.getByText("Widget automations")).toBeInTheDocument();
-    expect(mocks.usePaginatedAutomations).toHaveBeenCalledWith({
+    expect(mocks.useAutomations).toHaveBeenCalledWith({
       enabled: false,
     });
     expect(mocks.useTranslation).toHaveBeenCalledWith("openhands");
@@ -563,7 +563,7 @@ describe("automations list states", () => {
     expect(
       screen.queryByRole("button", { name: "retry-list" }),
     ).not.toBeInTheDocument();
-    expect(mocks.usePaginatedAutomations).toHaveBeenCalledWith({
+    expect(mocks.useAutomations).toHaveBeenCalledWith({
       enabled: true,
     });
   });

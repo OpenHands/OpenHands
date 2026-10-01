@@ -9,7 +9,7 @@ import {
 } from "#/utils/custom-toast-handlers";
 import { getApiErrorMessage } from "#/utils/api-error-message";
 import {
-  usePaginatedAutomations,
+  useAutomations,
   useToggleAutomation,
   useDeleteAutomation,
   useDispatchAutomation,
@@ -137,7 +137,7 @@ export default function AutomationsList() {
     hasNextPage,
     fetchNextPage,
     isFetching,
-  } = usePaginatedAutomations({ enabled: isBackendHealthy });
+  } = useAutomations({ enabled: isBackendHealthy });
   // One runs query per listed automation — dashboard mode only.
   const runSummaries = useAutomationRunSummaries(data?.automations ?? [], {
     enabled: isBackendHealthy && dashboard !== null,
