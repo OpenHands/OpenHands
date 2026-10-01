@@ -63,8 +63,8 @@ describe("confirmPhase", () => {
       confirmed: ["analysis", "requirements"],
       documents: {
         requirements,
-        // [DB 9.9] does not exist upstream — the validator must block this.
-        backend: "## 4.2 Login [Req 3.1] [DB 9.9]",
+        // [Req 9.9] does not exist upstream — the validator must block this.
+        database: "## 2.1 Users [Req 9.9]",
       },
     };
 
@@ -72,7 +72,29 @@ describe("confirmPhase", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error).toContain("[DB 9.9]");
+    expect(result.error).toContain("[Req 9.9]");
+  });
+
+  it("does not let a stale downstream citation block an upstream phase", () => {
+    // The backend document still cites a section the database document has
+    // since dropped. The user is confirming `database` and cannot repair
+    // `backend` from that checkpoint, so it must not gate the transition.
+    const state: DeepPlanState = {
+      ...startDeepPlan(),
+      activePhase: "database",
+      confirmed: ["analysis", "requirements"],
+      documents: {
+        requirements,
+        database: "## 2.1 Users [Req 3.1]",
+        backend: "## 4.2 Login [DB 9.9]",
+      },
+    };
+
+    const result = confirmPhase(state, "database");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(isPhaseConfirmed(result.state, "database")).toBe(true);
   });
 
   it("refuses a phase whose predecessor is unconfirmed", () => {

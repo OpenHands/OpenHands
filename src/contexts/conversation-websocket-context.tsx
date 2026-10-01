@@ -212,6 +212,12 @@ export function ConversationWebSocketProvider({
   // Don't show errors until after first successful connection
   const hasConnectedRefMain = React.useRef(false);
   const hasConnectedRefPlanning = React.useRef(false);
+  // Which socket last raised the connection error. `reconnect` retries that one
+  // rather than guessing from the active mode: in Deep Planning's Implementation
+  // phase the composer routes to the main socket, yet a planner-socket failure
+  // is what puts the banner up, and retrying the main socket would leave the
+  // planner disconnected.
+  const connectionErrorSourceRef = useRef<"main" | "planning" | null>(null);
 
   const queryClient = useQueryClient();
   const addEvent = useEventStore((state) => state.addEvent);
@@ -1185,6 +1191,7 @@ export function ConversationWebSocketProvider({
         setMainConnectionState("CLOSED");
         // Only show error message if we've previously connected successfully
         if (hasConnectedRefMain.current) {
+          connectionErrorSourceRef.current = "main";
           setErrorMessage(SERVER_CONNECTION_ERROR_MESSAGE, "connection");
         }
       },
@@ -1250,6 +1257,7 @@ export function ConversationWebSocketProvider({
         setPlanningConnectionState("CLOSED");
         // Only show error message if we've previously connected successfully
         if (hasConnectedRefPlanning.current) {
+          connectionErrorSourceRef.current = "planning";
           setErrorMessage(SERVER_CONNECTION_ERROR_MESSAGE, "connection");
         }
       },
@@ -1276,9 +1284,19 @@ export function ConversationWebSocketProvider({
 
   const reconnect = useCallback(() => {
     removeErrorMessage();
-    const currentMode = useConversationStore.getState().conversationMode;
-    const currentPhase = useConversationStore.getState().deepPlan.activePhase;
-    if (isPlanningMode(currentMode, currentPhase) && planningAgentWsUrl) {
+    // Retry whichever socket is actually down. The error source is preferred
+    // because the mode alone misidentifies it in Implementation; the mode is
+    // the fallback for an error raised before either socket reported one.
+    const failed = connectionErrorSourceRef.current;
+    const source =
+      failed ??
+      (isPlanningMode(
+        useConversationStore.getState().conversationMode,
+        useConversationStore.getState().deepPlan.activePhase,
+      )
+        ? "planning"
+        : "main");
+    if (source === "planning" && planningAgentWsUrl) {
       reconnectPlanning();
       return;
     }

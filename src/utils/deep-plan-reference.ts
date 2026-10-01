@@ -13,6 +13,7 @@
 
 import {
   DEEP_PLAN_LABEL_TO_PHASE,
+  DEEP_PLAN_PHASE_IDS,
   DEEP_PLAN_PHASES,
   type DeepPlanLabel,
   type DeepPlanPhaseId,
@@ -100,9 +101,23 @@ export function extractReferences(
   return refs;
 }
 
-export function validateDocumentChain(documents: DeepPlanDocuments): RefReport {
+export function validateDocumentChain(
+  documents: DeepPlanDocuments,
+  /**
+   * Only validate documents up to and including this phase. A checkpoint
+   * validates the document it is confirming; later documents are validated at
+   * their own checkpoints. Validating the whole chain here would let a stale
+   * citation in a document the user has not reached block an upstream
+   * reconfirmation they have no way to repair from that checkpoint.
+   */
+  throughPhase?: DeepPlanPhaseId,
+): RefReport {
   const issues: RefIssue[] = [];
   const sectionsByPhase = new Map<DeepPlanPhaseId, Set<string>>();
+
+  const lastIndex = throughPhase
+    ? DEEP_PLAN_PHASE_IDS.indexOf(throughPhase)
+    : DEEP_PLAN_PHASE_IDS.length - 1;
 
   for (const phase of DEEP_PLAN_PHASES) {
     const content = documents[phase.id];
@@ -114,6 +129,7 @@ export function validateDocumentChain(documents: DeepPlanDocuments): RefReport {
   for (const phase of DEEP_PLAN_PHASES) {
     const content = documents[phase.id];
     if (content === undefined) continue;
+    if (DEEP_PLAN_PHASE_IDS.indexOf(phase.id) > lastIndex) continue;
 
     const upstream = new Set(upstreamPhasesOf(phase.id));
 
@@ -139,10 +155,14 @@ export function validateDocumentChain(documents: DeepPlanDocuments): RefReport {
   }
 
   // Requirements coverage: every requirement section must be cited by a task.
+  // Only meaningful once the tasks document is inside the validated range;
+  // before that, "uncovered" would flag requirements the user simply has not
+  // written tasks for yet.
   const uncovered: string[] = [];
   const requirementSections = sectionsByPhase.get("requirements");
   const tasks = documents.tasks;
-  if (requirementSections && tasks !== undefined) {
+  const tasksInRange = DEEP_PLAN_PHASE_IDS.indexOf("tasks") <= lastIndex;
+  if (requirementSections && tasks !== undefined && tasksInRange) {
     const citedByTasks = new Set(
       extractReferences(tasks)
         .filter((ref) => ref.label === "Req")

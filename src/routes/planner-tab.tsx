@@ -30,6 +30,9 @@ function PlannerTab() {
     localPlanningConversationId,
     setPlanContent,
   } = useConversationStore();
+  const deepPlanPhase = useConversationStore(
+    (state) => state.deepPlan.activePhase,
+  );
   const { data: conversation } = useActiveConversation();
   const { mutate: readConversationFile } = useReadConversationFile();
 
@@ -66,8 +69,10 @@ function PlannerTab() {
       scrollDomToBottom();
     }
   }, [planContent, autoScroll, scrollDomToBottom]);
-  const isPlanMode = isPlanningMode(conversationMode);
   const isDeepPlanMode = conversationMode === "deep-plan";
+  // Pass the active phase so Implementation is not treated as a planning phase
+  // once it routes to the code agent; the mode alone cannot tell.
+  const isPlanMode = isPlanningMode(conversationMode, deepPlanPhase);
   const { handlePlanClick, hasPlanner, isCreatingConversation } =
     useHandlePlanClick();
 

@@ -38,12 +38,15 @@ export function DeepPlanPanel() {
     useConversationStore();
   const [error, setError] = useState<string | null>(null);
 
-  const report = useMemo(
-    () => validateDocumentChain(deepPlan.documents),
-    [deepPlan.documents],
-  );
-
   const activePhase = deepPlan.activePhase;
+
+  // Validate only up to the active phase, matching the checkpoint. A citation
+  // in a document the user has not reached yet is not actionable from here, and
+  // showing it would contradict the checkpoint that lets them continue.
+  const report = useMemo(
+    () => validateDocumentChain(deepPlan.documents, activePhase ?? undefined),
+    [deepPlan.documents, activePhase],
+  );
 
   const handleConfirm = () => {
     if (!activePhase) return;

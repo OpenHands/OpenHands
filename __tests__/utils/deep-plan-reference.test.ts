@@ -189,6 +189,26 @@ describe("validateDocumentChain", () => {
 
     expect(validateDocumentChain(documents).uncovered).toEqual([]);
   });
+
+  it("ignores documents past the phase it is asked to validate", () => {
+    // Confirming `database` must not be blocked by a citation in `backend`,
+    // which the user has not reached and cannot repair from that checkpoint.
+    const documents = validChain();
+    documents.backend = "## 4.2 Login [DB 9.9]";
+
+    expect(validateDocumentChain(documents, "database").ok).toBe(true);
+    expect(validateDocumentChain(documents).ok).toBe(false);
+  });
+
+  it("does not report coverage before the tasks phase is in range", () => {
+    const documents = validChain();
+    // Requirements define `1` and `3.1`; the tasks cite only `3.1`.
+    documents.requirements = "## 1 Scope\n\n## 3.1 Authentication\n";
+    documents.tasks = "- [ ] T1 Login [Req 3.1]";
+
+    expect(validateDocumentChain(documents, "database").uncovered).toEqual([]);
+    expect(validateDocumentChain(documents, "tasks").uncovered).toEqual(["1"]);
+  });
 });
 
 describe("describeRefIssue", () => {

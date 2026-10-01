@@ -107,7 +107,10 @@ export function confirmPhase(
     };
   }
 
-  const report = validateDocumentChain(state.documents);
+  // Validate the chain only through the phase being confirmed. Later documents
+  // are still unreviewed at this checkpoint, so their citations must not gate
+  // it — they get their own checkpoint when the user reaches them.
+  const report = validateDocumentChain(state.documents, phase);
   if (!report.ok) {
     const [first] = report.issues;
     const extra =
