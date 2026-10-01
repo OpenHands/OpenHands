@@ -57,7 +57,14 @@ export function LlmProfilesManager({
   const [profileToDelete, setProfileToDelete] = useState<ProfileInfo | null>(
     null,
   );
+  // One AddModelsModal serves both entry points: the top "Add from provider
+  // connections" button (chooser — no preselect) and a connection row's "..."
+  // (preselect to that connection). `addModelsConnectionId` is null in chooser
+  // mode and the connection id in preselect mode.
   const [showAddModels, setShowAddModels] = useState(false);
+  const [addModelsConnectionId, setAddModelsConnectionId] = useState<
+    string | null
+  >(null);
 
   const profiles = data?.profiles ?? [];
   const active = data?.active_profile ?? null;
@@ -133,17 +140,21 @@ export function LlmProfilesManager({
             <h2 className="text-base font-medium text-contrast">
               {t(I18nKey.SETTINGS$AVAILABLE_PROFILES)}
             </h2>
-            {onAddProfile && canManage ? (
-              <>
+            <div className="ml-auto flex items-center gap-2">
+              {canManage && supportsConnections ? (
                 <BrandButton
                   testId="add-models-from-provider"
                   type="button"
                   variant="tertiary"
-                  className="ml-auto"
-                  onClick={() => setShowAddModels(true)}
+                  onClick={() => {
+                    setAddModelsConnectionId(null);
+                    setShowAddModels(true);
+                  }}
                 >
                   {t(I18nKey.SETTINGS$ADD_MODELS_FROM_PROVIDER)}
                 </BrandButton>
+              ) : null}
+              {onAddProfile && canManage ? (
                 <BrandButton
                   testId="add-llm-profile"
                   type="button"
@@ -152,8 +163,8 @@ export function LlmProfilesManager({
                 >
                   {t(I18nKey.SETTINGS$ADD_LLM_PROFILE)}
                 </BrandButton>
-              </>
-            ) : null}
+              ) : null}
+            </div>
           </div>
 
           <ProfilesBody
@@ -179,6 +190,10 @@ export function LlmProfilesManager({
             linkedCountById={linkedCountById}
             isLoading={isLoadingConnections}
             loadError={connectionsError ?? null}
+            onAddModels={(connection) => {
+              setAddModelsConnectionId(connection.id);
+              setShowAddModels(true);
+            }}
           />
         ) : null}
       </div>
@@ -193,6 +208,8 @@ export function LlmProfilesManager({
       />
       <AddModelsModal
         isOpen={showAddModels}
+        connections={connectionList}
+        initialConnectionId={addModelsConnectionId}
         existingNames={profiles.map((p) => p.name)}
         onClose={() => setShowAddModels(false)}
       />
