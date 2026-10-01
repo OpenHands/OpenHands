@@ -57,3 +57,8 @@ export function agentProfileSupportsSecretRefs(): boolean {
 export function agentProfileSupportsSystemPrompt(): boolean {
   return localBackendAdvertises("profile_system_prompt_v1");
 }
+
+/** Only offer profile instructions where launches apply them. */
+export function agentProfileSupportsInstructions(): boolean {
+  return getActiveBackend().backend.kind !== "cloud";
+}

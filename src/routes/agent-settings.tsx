@@ -45,6 +45,7 @@ import { parseMcpConfig } from "#/utils/mcp-config";
 import {
   agentProfileSupportsSecretRefs,
   agentProfileSupportsSwitchLlmTool,
+  agentProfileSupportsInstructions,
   agentProfileSupportsSystemPrompt,
 } from "#/api/agent-profiles-service/profile-field-support";
 import { useSearchSecrets } from "#/hooks/query/use-get-secrets";
@@ -66,6 +67,7 @@ const TOOL_CONCURRENCY_FIELD_KEY = "tool_concurrency_limit";
 const MCP_SERVER_REFS_KEY = "mcp_server_refs";
 const SECRET_REFS_KEY = "secret_refs";
 const SYSTEM_PROMPT_KEY = "system_prompt";
+const SYSTEM_MESSAGE_SUFFIX_KEY = "system_message_suffix";
 const SYSTEM_PROMPT_MAX_LENGTH = 65536;
 const COMMAND_PLACEHOLDER_FALLBACK = "npx -y <package-name>";
 const ACP_CUSTOM_MODEL_KEY = "__custom_model__";
@@ -117,6 +119,21 @@ function getEnableSwitchLlmToolValue(
   return field?.default === true;
 }
 
+export type SystemPromptMode = "standard" | "append" | "custom";
+
+/** A stored override wins over stored instructions; the editor models one choice. */
+export function readSystemPromptSeed(
+  override: Record<string, SettingsValue> | null | undefined,
+): { mode: SystemPromptMode; text: string } {
+  const prompt = override?.[SYSTEM_PROMPT_KEY];
+  if (typeof prompt === "string" && prompt)
+    return { mode: "custom", text: prompt };
+  const suffix = override?.[SYSTEM_MESSAGE_SUFFIX_KEY];
+  if (typeof suffix === "string" && suffix)
+    return { mode: "append", text: suffix };
+  return { mode: "standard", text: "" };
+}
+
 function isKnownAcpModel(
   provider: ACPProviderConfig | undefined,
   model: string,
@@ -139,6 +156,7 @@ export type AgentProfileFieldsDraft =
       tool_concurrency_limit?: number;
       secret_refs?: string[] | null;
       system_prompt?: string | null;
+      system_message_suffix?: string | null;
     }
   | {
       agent_kind: "acp";
@@ -177,10 +195,12 @@ export interface AgentProfileFieldsInput {
   selectedSecrets: string[];
   /** Whether the backend's *profile* model accepts `secret_refs`. */
   secretRefsSupportedOnProfile: boolean;
-  systemPromptMode: ProfileScopeMode;
-  systemPrompt: string;
-  /** False when the profile model rejects `system_prompt` or the section is hidden. */
+  systemPromptMode: SystemPromptMode;
+  systemPromptText: string;
+  /** False when the section is hidden, so neither prompt field is written. */
   systemPromptEditable: boolean;
+  /** Whether the backend's *profile* model accepts `system_prompt`. */
+  systemPromptOverrideSupported: boolean;
 }
 
 /**
@@ -222,8 +242,9 @@ export function buildAgentProfileFields(
     selectedSecrets,
     secretRefsSupportedOnProfile,
     systemPromptMode,
-    systemPrompt,
+    systemPromptText,
     systemPromptEditable,
+    systemPromptOverrideSupported,
   } = input;
   // Both are base-model fields, so they ride both variants. `mcp_server_refs`
   // needs no version gate — it has existed since agent profiles shipped, below
@@ -257,10 +278,11 @@ export function buildAgentProfileFields(
       ...secretRefs,
     };
   if (systemPromptEditable) {
-    fields.system_prompt =
-      systemPromptMode === "custom" && systemPrompt.trim()
-        ? systemPrompt
-        : null;
+    const text = systemPromptText.trim() ? systemPromptText : null;
+    fields.system_message_suffix = systemPromptMode === "append" ? text : null;
+    if (systemPromptOverrideSupported) {
+      fields.system_prompt = systemPromptMode === "custom" ? text : null;
+    }
   }
   if (switchLlmToolField && switchLlmToolSupportedOnProfile) {
     // Two conditions, two different questions. The schema tells us the field
@@ -384,19 +406,19 @@ export function AgentSettingsScreen({
   );
 
   // --- System prompt (OpenHands path) ---
-  const systemPromptSupportedOnProfile = agentProfileSupportsSystemPrompt();
-  const showSystemPrompt = systemPromptSupportedOnProfile && !isDefaultProfile;
-  const initialSystemPrompt = React.useMemo(() => {
-    const raw = agentSettingsOverride?.[SYSTEM_PROMPT_KEY];
-    return typeof raw === "string" ? raw : "";
-  }, [agentSettingsOverride]);
-  const initialSystemPromptMode: ProfileScopeMode = initialSystemPrompt
-    ? "custom"
-    : "standard";
-  const [systemPromptMode, setSystemPromptMode] = useState<ProfileScopeMode>(
-    initialSystemPromptMode,
+  const systemPromptOverrideSupported = agentProfileSupportsSystemPrompt();
+  const instructionsSupported = agentProfileSupportsInstructions();
+  const showSystemPrompt = instructionsSupported && !isDefaultProfile;
+  const initialSystemPrompt = React.useMemo(
+    () => readSystemPromptSeed(agentSettingsOverride),
+    [agentSettingsOverride],
   );
-  const [systemPrompt, setSystemPrompt] = useState(initialSystemPrompt);
+  const [systemPromptMode, setSystemPromptMode] = useState<SystemPromptMode>(
+    initialSystemPrompt.mode,
+  );
+  const [systemPromptText, setSystemPromptText] = useState(
+    initialSystemPrompt.text,
+  );
 
   // --- MCP servers (both variants; a base-model field) ---
   const initialMcpRefs = React.useMemo(
@@ -601,8 +623,8 @@ export function AgentSettingsScreen({
   }, [initialToolConcurrency]);
 
   useEffect(() => {
-    setSystemPromptMode(initialSystemPrompt ? "custom" : "standard");
-    setSystemPrompt(initialSystemPrompt);
+    setSystemPromptMode(initialSystemPrompt.mode);
+    setSystemPromptText(initialSystemPrompt.text);
   }, [initialSystemPrompt]);
 
   // Sync the MCP scope when settings reload
@@ -650,13 +672,14 @@ export function AgentSettingsScreen({
     !sameScopeSelection(orderedSelectedSecrets, initialSecretRefs.selected);
   const systemPromptDirty =
     showSystemPrompt &&
-    (systemPromptMode !== initialSystemPromptMode ||
-      (systemPromptMode === "custom" && systemPrompt !== initialSystemPrompt));
+    (systemPromptMode !== initialSystemPrompt.mode ||
+      (systemPromptMode !== "standard" &&
+        systemPromptText !== initialSystemPrompt.text));
   const systemPromptMissing =
     agentType === "openhands" &&
     showSystemPrompt &&
-    systemPromptMode === "custom" &&
-    !systemPrompt.trim();
+    systemPromptMode !== "standard" &&
+    !systemPromptText.trim();
   const settingsDirty =
     agentType !== loadedSnapshot.agentType ||
     mcpScopeDirty ||
@@ -738,8 +761,9 @@ export function AgentSettingsScreen({
       selectedSecrets: orderedSelectedSecrets,
       secretRefsSupportedOnProfile,
       systemPromptMode,
-      systemPrompt,
+      systemPromptText,
       systemPromptEditable: showSystemPrompt,
+      systemPromptOverrideSupported,
     });
 
   const isSaving = acpCredentialForm.isSaving;
@@ -813,7 +837,7 @@ export function AgentSettingsScreen({
         }}
       />
 
-      {!isAcp && systemPromptSupportedOnProfile ? (
+      {!isAcp && instructionsSupported ? (
         <div className="flex flex-col gap-2.5">
           <Typography.Text className="text-sm">
             {t(I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT)}
@@ -839,19 +863,29 @@ export function AgentSettingsScreen({
                     ),
                   },
                   {
-                    key: "custom",
+                    key: "append",
                     label: t(
-                      I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_CUSTOM,
+                      I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_APPEND,
                     ),
                   },
+                  ...(systemPromptOverrideSupported
+                    ? [
+                        {
+                          key: "custom",
+                          label: t(
+                            I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_CUSTOM,
+                          ),
+                        },
+                      ]
+                    : []),
                 ]}
                 selectedKey={systemPromptMode}
                 isDisabled={isSaving}
                 onSelectionChange={(key) => {
-                  if (key) setSystemPromptMode(key as ProfileScopeMode);
+                  if (key) setSystemPromptMode(key as SystemPromptMode);
                 }}
               />
-              {systemPromptMode === "custom" ? (
+              {systemPromptMode !== "standard" ? (
                 <textarea
                   data-testid="agent-settings-system-prompt"
                   aria-label={t(I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT)}
@@ -860,13 +894,15 @@ export function AgentSettingsScreen({
                     "min-h-48 font-mono placeholder:italic",
                     "disabled:bg-surface-raised disabled:border-border-subtle",
                   )}
-                  value={systemPrompt}
+                  value={systemPromptText}
                   maxLength={SYSTEM_PROMPT_MAX_LENGTH}
                   placeholder={t(
-                    I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_PLACEHOLDER,
+                    systemPromptMode === "custom"
+                      ? I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_PLACEHOLDER
+                      : I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_APPEND_PLACEHOLDER,
                   )}
                   disabled={isSaving}
-                  onChange={(e) => setSystemPrompt(e.target.value)}
+                  onChange={(e) => setSystemPromptText(e.target.value)}
                 />
               ) : null}
               {systemPromptMissing ? (
@@ -877,11 +913,19 @@ export function AgentSettingsScreen({
                   {t(I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_REQUIRED)}
                 </Typography.Text>
               ) : null}
-              <Typography.Text className="text-xs text-tertiary-alt">
+              <Typography.Text
+                testId="agent-settings-system-prompt-hint"
+                className="text-xs text-tertiary-alt"
+              >
                 {t(
-                  systemPromptMode === "custom"
-                    ? I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_CUSTOM_HINT
-                    : I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_STANDARD_HINT,
+                  {
+                    standard:
+                      I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_STANDARD_HINT,
+                    append:
+                      I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_APPEND_HINT,
+                    custom:
+                      I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_CUSTOM_HINT,
+                  }[systemPromptMode],
                 )}
               </Typography.Text>
             </>

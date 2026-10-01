@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   MIN_AGENT_SERVER_VERSION_FOR_PROFILE_SWITCH_LLM_TOOL,
+  agentProfileSupportsInstructions,
   agentProfileSupportsSecretRefs,
   agentProfileSupportsSystemPrompt,
   agentProfileSupportsSwitchLlmTool,
@@ -122,5 +123,17 @@ describe("agentProfileSupportsSystemPrompt", () => {
       capabilities: ["profile_system_prompt_v1"],
     });
     expect(agentProfileSupportsSystemPrompt()).toBe(false);
+  });
+});
+
+describe("agentProfileSupportsInstructions", () => {
+  it("offers instructions on a local backend", () => {
+    mockBackendKind.mockReturnValue("local");
+    expect(agentProfileSupportsInstructions()).toBe(true);
+  });
+
+  it("stays off on Cloud, whose launches do not apply them yet", () => {
+    mockBackendKind.mockReturnValue("cloud");
+    expect(agentProfileSupportsInstructions()).toBe(false);
   });
 });

@@ -72,6 +72,7 @@ function toAgentSettingsOverride(
     secret_refs: secretRefs,
     system_prompt:
       (profile as { system_prompt?: string | null }).system_prompt ?? null,
+    system_message_suffix: profile.system_message_suffix ?? null,
   };
 }
 

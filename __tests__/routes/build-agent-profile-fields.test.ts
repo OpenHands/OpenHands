@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { buildAgentProfileFields } from "#/routes/agent-settings";
+import {
+  buildAgentProfileFields,
+  readSystemPromptSeed,
+} from "#/routes/agent-settings";
 import type { SettingsFieldSchema } from "#/types/settings";
 
 const baseAcp = {
@@ -20,7 +23,8 @@ const baseAcp = {
   selectedSecrets: [] as string[],
   secretRefsSupportedOnProfile: true,
   systemPromptMode: "standard" as const,
-  systemPrompt: "",
+  systemPromptText: "",
+  systemPromptOverrideSupported: false,
   systemPromptEditable: false,
 };
 
@@ -120,7 +124,8 @@ describe("buildAgentProfileFields — OpenHands", () => {
     selectedSecrets: [] as string[],
     secretRefsSupportedOnProfile: true,
     systemPromptMode: "standard" as const,
-    systemPrompt: "",
+    systemPromptText: "",
+    systemPromptOverrideSupported: false,
     systemPromptEditable: false,
   };
 
@@ -237,7 +242,8 @@ describe("buildAgentProfileFields — mcp_server_refs", () => {
     selectedSecrets: [] as string[],
     secretRefsSupportedOnProfile: true,
     systemPromptMode: "standard" as const,
-    systemPrompt: "",
+    systemPromptText: "",
+    systemPromptOverrideSupported: false,
     systemPromptEditable: false,
   };
 
@@ -294,7 +300,8 @@ describe("buildAgentProfileFields — secret scope", () => {
     selectedSecrets: [] as string[],
     secretRefsSupportedOnProfile: true,
     systemPromptMode: "standard" as const,
-    systemPrompt: "",
+    systemPromptText: "",
+    systemPromptOverrideSupported: false,
     systemPromptEditable: false,
     mcpMode: "standard" as const,
     selectedMcpServers: [] as string[],
@@ -364,32 +371,65 @@ describe("buildAgentProfileFields — system prompt", () => {
     selectedSecrets: [] as string[],
     secretRefsSupportedOnProfile: false,
     systemPromptMode: "custom" as const,
-    systemPrompt: "You triage issues.",
+    systemPromptText: "You triage issues.",
     systemPromptEditable: true,
+    systemPromptOverrideSupported: true,
   };
 
-  it("persists the custom prompt verbatim", () => {
+  it("a custom prompt saves system_prompt and clears the instructions", () => {
     expect(buildAgentProfileFields(base)).toMatchObject({
       system_prompt: "You triage issues.",
+      system_message_suffix: null,
     });
   });
 
-  it("persists null for the OpenHands default, even with leftover text", () => {
+  it("instructions save system_message_suffix and clear the override", () => {
+    expect(
+      buildAgentProfileFields({ ...base, systemPromptMode: "append" }),
+    ).toMatchObject({
+      system_prompt: null,
+      system_message_suffix: "You triage issues.",
+    });
+  });
+
+  it("the OpenHands default clears both, even with leftover text", () => {
     expect(
       buildAgentProfileFields({ ...base, systemPromptMode: "standard" }),
-    ).toMatchObject({ system_prompt: null });
+    ).toMatchObject({ system_prompt: null, system_message_suffix: null });
   });
 
-  it("persists null for a blank custom prompt", () => {
-    expect(
-      buildAgentProfileFields({ ...base, systemPrompt: "  \n " }),
-    ).toMatchObject({ system_prompt: null });
+  it.each(["custom", "append"] as const)(
+    "a blank %s text clears both",
+    (mode) => {
+      expect(
+        buildAgentProfileFields({
+          ...base,
+          systemPromptMode: mode,
+          systemPromptText: "  \n ",
+        }),
+      ).toMatchObject({ system_prompt: null, system_message_suffix: null });
+    },
+  );
+
+  it("still saves instructions on a server whose profile model predates system_prompt", () => {
+    const fields = buildAgentProfileFields({
+      ...base,
+      systemPromptMode: "append",
+      systemPromptOverrideSupported: false,
+    });
+    expect(fields).toMatchObject({
+      system_message_suffix: "You triage issues.",
+    });
+    expect(fields).not.toHaveProperty("system_prompt");
   });
 
-  it("omits the key when the profile model or the section does not allow it", () => {
-    expect(
-      buildAgentProfileFields({ ...base, systemPromptEditable: false }),
-    ).not.toHaveProperty("system_prompt");
+  it("omits both keys when the section is hidden", () => {
+    const fields = buildAgentProfileFields({
+      ...base,
+      systemPromptEditable: false,
+    });
+    expect(fields).not.toHaveProperty("system_prompt");
+    expect(fields).not.toHaveProperty("system_message_suffix");
   });
 
   it("never rides the ACP variant", () => {
@@ -400,5 +440,27 @@ describe("buildAgentProfileFields — system prompt", () => {
       commandTokens: ["npx", "claude-code-acp"],
     });
     expect(fields).not.toHaveProperty("system_prompt");
+    expect(fields).not.toHaveProperty("system_message_suffix");
+  });
+});
+
+describe("readSystemPromptSeed", () => {
+  it.each([
+    [null, { mode: "standard", text: "" }],
+    [
+      { system_message_suffix: "Be terse." },
+      { mode: "append", text: "Be terse." },
+    ],
+    [{ system_prompt: "You triage." }, { mode: "custom", text: "You triage." }],
+    [
+      { system_prompt: "You triage.", system_message_suffix: "Be terse." },
+      { mode: "custom", text: "You triage." },
+    ],
+    [
+      { system_prompt: null, system_message_suffix: "" },
+      { mode: "standard", text: "" },
+    ],
+  ])("%j opens as %j", (override, expected) => {
+    expect(readSystemPromptSeed(override)).toEqual(expected);
   });
 });
