@@ -600,7 +600,62 @@ describe("AutomationsList — created-by filter on cloud workspaces", () => {
     await waitFor(() => {
       expect(visibleCardIds()).toEqual(["automation-card-a-mine"]);
     });
-    expect(screen.queryByTestId("automation-skeleton")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("automation-card-skeleton")).not.toBeInTheDocument();
+  });
+
+  it("shows loading, not a false no-match, while my page loads past the first page", async () => {
+    // Arrange — the loaded page has none of mine; created_by=me never settles.
+    vi.mocked(AutomationService.getAutomations).mockImplementation(
+      (_limit, _offset, createdBy) =>
+        createdBy === "me"
+          ? new Promise(() => {})
+          : Promise.resolve({ automations: [theirs, unowned], total: 3 }),
+    );
+    const user = userEvent.setup();
+    selectWorkspace(TEAM_ORG_ID);
+    renderAt("/automations", <AutomationsList />);
+    await screen.findByTestId("automation-card-a-theirs");
+    await openFiltersMenu(user);
+
+    // Act
+    await pickCreatedBy(user, "me");
+
+    // Assert
+    expect(
+      (await screen.findAllByTestId("automation-card-skeleton")).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.queryByTestId("automations-filtered-empty"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the first-run empty state when an empty org filters by creator", async () => {
+    // Arrange — the org has no automations at all.
+    vi.mocked(AutomationService.getAutomations).mockResolvedValue({
+      automations: [],
+      total: 0,
+    });
+    const user = userEvent.setup();
+    selectWorkspace(TEAM_ORG_ID);
+    renderAt("/automations", <AutomationsList />);
+    await screen.findByTestId("automations-empty");
+    await openFiltersMenu(user);
+
+    // Act
+    await pickCreatedBy(user, "me");
+
+    // Assert
+    await waitFor(() =>
+      expect(AutomationService.getAutomations).toHaveBeenLastCalledWith(
+        50,
+        0,
+        "me",
+      ),
+    );
+    expect(screen.getByTestId("automations-empty")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automations-filtered-empty"),
+    ).not.toBeInTheDocument();
   });
 
   it("offers Clear filters when the server finds none of my automations", async () => {

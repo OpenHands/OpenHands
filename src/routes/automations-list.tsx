@@ -151,6 +151,7 @@ export default function AutomationsList() {
     hasNextPage,
     fetchNextPage,
     isFetching,
+    isPlaceholderData,
   } = useAutomations({
     enabled: isBackendHealthy,
     // The server filters by creator so pages and `total` cover only matches;
@@ -369,13 +370,13 @@ export default function AutomationsList() {
 
   // A failed refetch or Load more keeps the loaded rows; Load more retries.
   const isListError = isError && !data;
-  // An empty filtered response says nothing matched, not that the org has no
-  // automations, so it shows the filtered empty state with Clear filters.
-  const hasNoAutomations =
-    !isLoading &&
-    !isListError &&
-    !serverCreatedBy &&
-    data?.automations.length === 0;
+  // Whether the org has any automations comes from the unfiltered list, so an
+  // empty filtered response shows the filtered empty state with Clear filters.
+  const hasNoAutomations = !isListError && orgData?.total === 0;
+  // The previous filter's rows stand in while the next page loads; when none
+  // of them match, show loading rather than a no-match that is not final.
+  const isListLoading =
+    isLoading || (isPlaceholderData && visible.length === 0);
 
   // Show loading state while checking health
   if (isHealthLoading) {
@@ -481,7 +482,7 @@ export default function AutomationsList() {
 
       {/* Content */}
       <div className={cn("flex flex-col gap-6", !dashboard && "mt-6")}>
-        {isLoading && (
+        {isListLoading && (
           <div className="flex flex-col gap-3">
             {Array.from({ length: 3 }).map((_, i) => (
               <AutomationCardSkeleton key={`skeleton-${String(i)}`} />
@@ -493,65 +494,62 @@ export default function AutomationsList() {
 
         {hasNoAutomations && <EmptyState />}
 
-        {!isLoading &&
-          !isListError &&
-          data &&
-          (data.automations.length > 0 || serverCreatedBy) && (
-            <>
-              {dashboard && visible.length === 0 ? (
-                <AutomationsFilteredEmptyState onClear={handleClearFilters} />
-              ) : (
-                <>
-                  <AutomationGroup
-                    title={t(I18nKey.AUTOMATIONS$ACTIVE)}
-                    count={activeAutomations.length}
-                    automations={activeAutomations}
-                    view={viewMode}
-                    onToggle={handleToggle}
-                    onRunNow={handleRunNow}
-                    runPendingId={
-                      dispatchMutation.isPending
-                        ? (dispatchMutation.variables ?? null)
-                        : null
-                    }
-                    onDelete={handleDeleteRequest}
-                    onExport={handleExport}
-                    onEdit={handleEditRequest}
-                    insights={groupInsights}
-                  />
-                  <AutomationGroup
-                    title={t(I18nKey.AUTOMATIONS$INACTIVE)}
-                    count={inactive.length}
-                    automations={inactive}
-                    view={viewMode}
-                    onToggle={handleToggle}
-                    onRunNow={handleRunNow}
-                    runPendingId={
-                      dispatchMutation.isPending
-                        ? (dispatchMutation.variables ?? null)
-                        : null
-                    }
-                    onDelete={handleDeleteRequest}
-                    onExport={handleExport}
-                    onEdit={handleEditRequest}
-                    insights={groupInsights}
-                  />
-                </>
-              )}
-              {/* Also under the filtered empty state: the matches may be on a
+        {!isListLoading && !isListError && data && !hasNoAutomations && (
+          <>
+            {dashboard && visible.length === 0 ? (
+              <AutomationsFilteredEmptyState onClear={handleClearFilters} />
+            ) : (
+              <>
+                <AutomationGroup
+                  title={t(I18nKey.AUTOMATIONS$ACTIVE)}
+                  count={activeAutomations.length}
+                  automations={activeAutomations}
+                  view={viewMode}
+                  onToggle={handleToggle}
+                  onRunNow={handleRunNow}
+                  runPendingId={
+                    dispatchMutation.isPending
+                      ? (dispatchMutation.variables ?? null)
+                      : null
+                  }
+                  onDelete={handleDeleteRequest}
+                  onExport={handleExport}
+                  onEdit={handleEditRequest}
+                  insights={groupInsights}
+                />
+                <AutomationGroup
+                  title={t(I18nKey.AUTOMATIONS$INACTIVE)}
+                  count={inactive.length}
+                  automations={inactive}
+                  view={viewMode}
+                  onToggle={handleToggle}
+                  onRunNow={handleRunNow}
+                  runPendingId={
+                    dispatchMutation.isPending
+                      ? (dispatchMutation.variables ?? null)
+                      : null
+                  }
+                  onDelete={handleDeleteRequest}
+                  onExport={handleExport}
+                  onEdit={handleEditRequest}
+                  insights={groupInsights}
+                />
+              </>
+            )}
+            {/* Also under the filtered empty state: the matches may be on a
                   page that is not loaded yet. */}
-              {hasNextPage && (
-                <button
-                  type="button"
-                  onClick={() => fetchNextPage()}
-                  disabled={isFetching}
-                  className="self-center rounded-lg border border-border px-6 py-2 text-sm text-contrast hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {t(I18nKey.AUTOMATIONS$LOAD_MORE)}
-                </button>
-              )}
-            </>
-          )}
+            {hasNextPage && (
+              <button
+                type="button"
+                onClick={() => fetchNextPage()}
+                disabled={isFetching}
+                className="self-center rounded-lg border border-border px-6 py-2 text-sm text-contrast hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {t(I18nKey.AUTOMATIONS$LOAD_MORE)}
+              </button>
+            )}
+          </>
+        )}
       </div>
 
       {/* The launcher lives on the templates sub-page in dashboard mode */}
