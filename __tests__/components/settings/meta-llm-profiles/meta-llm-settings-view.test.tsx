@@ -291,6 +291,46 @@ describe("MetaLlmSettingsView", () => {
     await waitFor(() => expect(saveMutateAsync).toHaveBeenCalled());
   });
 
+  it("creates the classifier model when no LLM profiles exist yet", async () => {
+    const user = userEvent.setup();
+    saveMutateAsync.mockResolvedValue({ name: "openhands-router-pro" });
+    // No saved LLM profiles and no active meta-profile (fresh install).
+    vi.mocked(useLlmProfilesHook.useLlmProfiles).mockReturnValue({
+      data: { profiles: [], active_profile: null },
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<typeof useLlmProfilesHook.useLlmProfiles>);
+    vi.mocked(useMetaProfilesHook.useMetaProfiles).mockReturnValue({
+      data: { meta_profiles: [], active_meta_profile: null },
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<typeof useMetaProfilesHook.useMetaProfiles>);
+
+    renderWithProviders(<MetaLlmSettingsView />);
+
+    await openRouterProTemplate(user);
+    await user.click(screen.getByTestId("meta-profile-save"));
+
+    // The classifier model must be created just like the routed models.
+    await waitFor(() =>
+      expect(ProfilesService.saveProfile).toHaveBeenCalledWith("minimax-m3", {
+        llm: {
+          model: "openhands/minimax-m3",
+          usage_id: "minimax-m3",
+          provider_connection_id: "conn-openhands",
+        },
+        include_secrets: true,
+      }),
+    );
+    // ...and every required model (table + classifier) is created.
+    const expectedNames = collectRequiredRouterModelNames(
+      DEFAULT_ROUTER_PRO_META_PROFILE_DEFAULT,
+    );
+    expect(ProfilesService.saveProfile).toHaveBeenCalledTimes(
+      expectedNames.length,
+    );
+  });
+
   it("activates the first meta-profile after creating it", async () => {
     const user = userEvent.setup();
     vi.mocked(useMetaProfilesHook.useMetaProfiles).mockReturnValue({
