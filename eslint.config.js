@@ -265,7 +265,7 @@ export default [
           ],
           patterns: [
             {
-              group: ["#/context/*"],
+              group: ["\\#/context/*"],
               message:
                 "Import from '#/contexts/*' instead. The singular src/context/ directory has been consolidated into src/contexts/.",
             },
