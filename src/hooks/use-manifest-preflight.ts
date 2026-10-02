@@ -1,7 +1,8 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import axios from "axios";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import { isSdkHttpStatusError } from "#/api/agent-server-compatibility";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 import {
   mapServiceErrors,
   normalizeServiceErrors,
@@ -15,9 +16,8 @@ import type {
   SetupEntry,
   SetupFormValues,
   SetupRequestBody,
+  ValidateDraftResponse,
 } from "#/manifests/types";
-
-const NO_ERRORS: MappedManifestErrors = { fieldErrors: {}, formErrors: [] };
 
 /** What a deployment that does not serve the validate endpoint answers with. */
 const NOT_IMPLEMENTED_STATUSES = [404, 501];
@@ -43,29 +43,139 @@ function isPreflightUnimplemented(error: unknown): boolean {
  * be sent. Errors come back addressed by payload path and are translated back to
  * fields through the map derived from that same builder.
  *
- * Resolves to null when there is no verdict — the entry has no draft to check,
- * the deployment does not implement preflight, a newer run has already
- * superseded this one, or the request failed. A missing preflight is not a
- * failure: local checks and the create response still stand between the user
- * and a bad configuration. Only a deployment without the endpoint is an
- * expected failure though, so any other one is reported.
+ * Resolves to null only when the entry has no service draft to check. A 404 or
+ * 501 is the explicit legacy-deployment advisory path. An older endpoint that
+ * explicitly rejects the additive `requirements` field gets one legacy-body
+ * retry and is also advisory only when that retry validates the draft.
+ * Malformed responses, transport errors, and service failures return an
+ * unavailable outcome that blocks creation. Superseded requests return stale
+ * so an older response can never overwrite the latest verdict.
  */
-export function useSetupPreflight(entry: SetupEntry) {
-  const latestRequestRef = useRef(0);
+export type SetupPreflightOutcome =
+  | { status: "passed" }
+  | { status: "failed"; errors: MappedManifestErrors }
+  | { status: "unsupported" }
+  | { status: "unavailable" }
+  | { status: "stale" };
 
-  return useCallback(
+function hasMappedErrors(errors: MappedManifestErrors): boolean {
+  return (
+    errors.formErrors.length > 0 ||
+    Object.keys(errors.fieldErrors).length > 0 ||
+    Object.values(errors.stepErrors).some((messages) => messages?.length)
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+/**
+ * Older validate endpoints reject the additive `requirements` envelope field
+ * with Pydantic's explicit extra-field error. Only that exact shape is safe to
+ * retry without the field; a different 422 remains a real service failure.
+ */
+function isRequirementsSchemaError(error: unknown): boolean {
+  const status = axios.isAxiosError(error)
+    ? error.response?.status
+    : isSdkHttpStatusError(error, 422)
+      ? 422
+      : undefined;
+  if (status !== 422) return false;
+
+  const body = axios.isAxiosError(error)
+    ? error.response?.data
+    : isRecord(error)
+      ? error.response
+      : undefined;
+  const detail = isRecord(body) && "detail" in body ? body.detail : body;
+  if (!Array.isArray(detail)) return false;
+
+  return detail.some((item) => {
+    if (!isRecord(item)) return false;
+    const loc = item.loc;
+    const type = item.type;
+    return (
+      Array.isArray(loc) &&
+      loc.length === 2 &&
+      loc[0] === "body" &&
+      loc[1] === "requirements" &&
+      (type === "extra_forbidden" || type === "value_error.extra")
+    );
+  });
+}
+
+function withoutRequirements(body: SetupRequestBody): SetupRequestBody {
+  return Object.fromEntries(
+    Object.entries(body).filter(([key]) => key !== "requirements"),
+  );
+}
+
+async function validateDraftWithCompatibility(
+  body: SetupRequestBody,
+  isStale: () => boolean,
+): Promise<{ result: ValidateDraftResponse; usedLegacyContract: boolean }> {
+  try {
+    return {
+      result: await AutomationService.validateDraft(body),
+      usedLegacyContract: false,
+    };
+  } catch (error) {
+    if (!isRequirementsSchemaError(error) || isStale()) throw error;
+
+    return {
+      result: await AutomationService.validateDraft(withoutRequirements(body)),
+      usedLegacyContract: true,
+    };
+  }
+}
+
+export function useSetupPreflight(entry: SetupEntry) {
+  const { backend, orgId } = useActiveBackend();
+  const latestRequestRef = useRef(0);
+  useEffect(
+    () => () => {
+      latestRequestRef.current += 1;
+    },
+    [],
+  );
+  // Catalog entries are JSON-shaped data. A signature keeps equivalent
+  // rematerialized objects from invalidating a request, while still detecting
+  // a same-id entry whose setup contract was refreshed.
+  const entryKey = JSON.stringify(entry);
+  const currentEntryKeyRef = useRef(entryKey);
+  currentEntryKeyRef.current = entryKey;
+  const targetKey = JSON.stringify([
+    backend.id,
+    backend.kind,
+    backend.host,
+    backend.connectionRevision ?? 0,
+    orgId,
+  ]);
+  const currentTargetKeyRef = useRef(targetKey);
+  currentTargetKeyRef.current = targetKey;
+
+  const runPreflight = useCallback(
     async (
       formValues: SetupFormValues,
       selectedTrigger?: string | null,
       selectedAction?: string | null,
-    ): Promise<MappedManifestErrors | null> => {
+    ): Promise<SetupPreflightOutcome | null> => {
+      // Every invocation supersedes an earlier one, including an assisted
+      // entry that has no draft to send. This closes the old request before
+      // checking whether the current entry needs a service call.
+      latestRequestRef.current += 1;
+      const requestId = latestRequestRef.current;
+      const requestEntryKey = entryKey;
+      const requestTargetKey = targetKey;
+      const isStale = () =>
+        requestId !== latestRequestRef.current ||
+        requestEntryKey !== currentEntryKeyRef.current ||
+        requestTargetKey !== currentTargetKeyRef.current;
+
       try {
-        // Deriving the body is inside the guard too: a bundle entry resolves
-        // the create endpoint here, and an interface manifest published before
-        // bundles declares none. That is the same "cannot be checked" as a
-        // validator that will not answer, and left outside it rejected a
-        // promise no caller handles - which reads as a Continue button that
-        // does nothing at all.
+        // Older interface manifests may not declare the selected endpoint.
+        // Treat derivation failures as unavailable, never as a passing draft.
         const body = buildPreflightBody(
           entry,
           formValues,
@@ -74,27 +184,40 @@ export function useSetupPreflight(entry: SetupEntry) {
         );
         if (!body) return null;
 
-        latestRequestRef.current += 1;
-        const requestId = latestRequestRef.current;
+        const { result, usedLegacyContract } =
+          await validateDraftWithCompatibility(body, isStale);
+        if (isStale()) return { status: "stale" };
+        if (
+          result?.valid === true &&
+          Array.isArray(result.errors) &&
+          result.errors.length === 0
+        ) {
+          return {
+            status: usedLegacyContract ? "unsupported" : "passed",
+          };
+        }
 
-        const result = await AutomationService.validateDraft(body);
-        if (requestId !== latestRequestRef.current) return null;
-        if (result?.valid) return NO_ERRORS;
-
-        return mapServiceErrors(
+        const errors = mapServiceErrors(
           normalizeServiceErrors(result, body.draft as SetupRequestBody),
           deriveErrorMap(entry, selectedTrigger, selectedAction),
         );
-      } catch (error) {
-        // A broken validator and an unimplemented one degrade to the same
-        // advisory "no verdict", so the only thing that separates them is this
-        // line. Without it a service returning 500 on every draft is invisible.
-        if (!isPreflightUnimplemented(error)) {
-          console.warn("Automation setup preflight failed:", error);
+        if (result?.valid === false && hasMappedErrors(errors)) {
+          return { status: "failed", errors };
         }
-        return null;
+        return { status: "unavailable" };
+      } catch (error) {
+        if (isStale()) return { status: "stale" };
+        return isPreflightUnimplemented(error)
+          ? { status: "unsupported" }
+          : { status: "unavailable" };
       }
     },
-    [entry],
+    [entry, entryKey, targetKey],
   );
+
+  const invalidatePreflight = useCallback(() => {
+    latestRequestRef.current += 1;
+  }, []);
+
+  return { runPreflight, invalidatePreflight };
 }
