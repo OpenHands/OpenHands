@@ -227,6 +227,7 @@ describe("recommended automations", () => {
       "github-issue-triage",
       "upstream-fork-sync",
       "incident-retrospective-drafter",
+      "github-stale-ci-pr-closer",
     ]);
   });
 
@@ -250,7 +251,7 @@ describe("recommended automations", () => {
     expect(betaHeading).toHaveTextContent(
       I18nKey.RECOMMENDED_AUTOMATIONS$BETA_LABEL,
     );
-    expect(within(betaHeading).getByText("16")).toBeInTheDocument();
+    expect(within(betaHeading).getByText("17")).toBeInTheDocument();
 
     const betaSection = screen.getByTestId(
       "recommended-automations-beta-section",
