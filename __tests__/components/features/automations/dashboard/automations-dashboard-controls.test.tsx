@@ -4,71 +4,52 @@ import { describe, expect, it } from "vitest";
 import { AutomationsDashboardControls } from "#/components/features/automations/dashboard/automations-dashboard-controls";
 import type { DashboardSpec } from "#/manifests/automation-interface";
 import { createInterfaceManifestWithSubPages } from "../../../../manifests/manifest-test-data";
-import type {
-  DashboardCreatedByValue,
-  DashboardSortValue,
-  DashboardStatusValue,
-  DashboardTriggerValue,
-} from "#/manifests/types";
 
 describe("AutomationsDashboardControls — creator filter declaration", () => {
-  const status: DashboardStatusValue = "all";
-  const trigger: DashboardTriggerValue = "all";
-  const createdBy: DashboardCreatedByValue = "all";
-  const sort: DashboardSortValue = "name";
   const noop = () => {};
 
-  function renderWithSpec(spec: DashboardSpec) {
+  it("hides the creator field and its value when the manifest does not declare it", async () => {
+    // Arrange — a cloud team workspace, which offers the creator filter
+    // whenever the manifest declares it, and a manifest without created_by
+    // (as in a package before the filter was added). The creator value is
+    // not the default, so a badge or Reset all would come only from it.
+    const user = userEvent.setup();
+    const list = createInterfaceManifestWithSubPages().pages.list;
+    const spec: DashboardSpec = {
+      overview: list.overview!,
+      filters: list.filters!.filter((filter) => filter.id !== "created_by"),
+      sort: list.sort!,
+      insights: list.insights!,
+    };
     render(
       <AutomationsDashboardControls
         spec={spec}
-        status={status}
-        trigger={trigger}
-        createdBy={createdBy}
-        // A cloud team workspace:the host would offer the creator filter
-        // whenever the manifest declares it.
+        status="all"
+        trigger="all"
+        createdBy="me"
         canFilterByCreator
-        sort={sort}
+        sort={spec.sort.default}
         onStatusChange={noop}
         onTriggerChange={noop}
         onCreatedByChange={noop}
         onSortChange={noop}
       />,
     );
-  }
+    const filtersButton = within(
+      screen.getByTestId("automations-filters"),
+    ).getByTestId("dropdown-trigger");
 
-  it("keeps the creator field hidden when the manifest does not declare it", async () => {
-    // Today's shipped @openhands/extensions publishes only status and trigger
-    // filters, so the admitted manifest has no created_by filter. Even on a
-    // cloud team workspace, the field cannot render:there are no labels или
-    // options to show, and nothing counts toward the Filters badge.
+    // Act
+    await user.click(filtersButton);
 
-    const user = userEvent.setup();
-    const list = createInterfaceManifestWithSubPages().pages.list;
-    const spec: DashboardSpec = {
-      ...list,
-      filters: list.filters.filter((filter) => filter.id !== "created_by"),
-    };
-    renderWithSpec(spec);
-
-    await user.click(
-      within(screen.getByTestId("automations-filters")).getByTestId(
-        "dropdown-trigger",
-      ),
-    );
-
+    // Assert — no field, no active-filter badge, no Reset all.
+    const menu = screen.getByTestId("automations-filters-menu");
     expect(
-      within(screen.getByTestId("automations-filters-menu")).queryByTestId(
-        "automations-filter-created-by",
-      ),
-    ).toBeNull();
-    // With every filter on its default, nothing counts toward the badge and
-    // Reset all stays absent.
-
+      within(menu).queryByTestId("automations-filter-created-by"),
+    ).not.toBeInTheDocument();
     expect(
-      within(screen.getByTestId("automations-filters-menu")).queryByTestId(
-        "automations-filters-reset",
-      ),
-    ).toBeNull();
+      within(menu).queryByTestId("automations-filters-reset"),
+    ).not.toBeInTheDocument();
+    expect(within(filtersButton).queryByText(/^\d+$/)).not.toBeInTheDocument();
   });
 });
