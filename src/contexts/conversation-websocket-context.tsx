@@ -66,6 +66,7 @@ import type {
 import EventService from "#/api/event-service/event-service.api";
 import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
 import { useConversationStore } from "#/stores/conversation-store";
+import { isPlanningMode } from "#/utils/conversation-mode";
 import { trackError } from "#/utils/error-handler";
 import { useReadConversationFile } from "#/hooks/mutation/use-read-conversation-file";
 import useMetricsStore, { type MetricsState } from "#/stores/metrics-store";
@@ -81,6 +82,10 @@ import {
   updateConversationLlmModelInCache,
 } from "#/hooks/mutation/conversation-mutation-utils";
 import { isPlanFilePath } from "#/utils/plan-file";
+import {
+  matchDeepPlanDocumentFile,
+  type DeepPlanPhaseId,
+} from "#/utils/deep-plan";
 
 export type WebSocketConnectionState =
   | "CONNECTING"
@@ -207,6 +212,12 @@ export function ConversationWebSocketProvider({
   // Don't show errors until after first successful connection
   const hasConnectedRefMain = React.useRef(false);
   const hasConnectedRefPlanning = React.useRef(false);
+  // Which socket last raised the connection error. `reconnect` retries that one
+  // rather than guessing from the active mode: in Deep Planning's Implementation
+  // phase the composer routes to the main socket, yet a planner-socket failure
+  // is what puts the banner up, and retrying the main socket would leave the
+  // planner disconnected.
+  const connectionErrorSourceRef = useRef<"main" | "planning" | null>(null);
 
   const queryClient = useQueryClient();
   const addEvent = useEventStore((state) => state.addEvent);
@@ -259,7 +270,7 @@ export function ConversationWebSocketProvider({
     number | null
   >(null);
 
-  const { setPlanContent } = useConversationStore();
+  const { setPlanContent, setDeepPlanDocument } = useConversationStore();
 
   useEffect(() => {
     setPlanContent(null);
@@ -275,6 +286,13 @@ export function ConversationWebSocketProvider({
     path: string;
     conversationId: string;
   } | null>(null);
+
+  // Deep-plan phase documents the planner has written, keyed by phase. The
+  // reference validator reads these at a checkpoint, so a document produced
+  // during history replay has to be re-read from disk afterwards.
+  const latestDeepPlanFileEventsRef = useRef<
+    Map<DeepPlanPhaseId, { path: string; conversationId: string }>
+  >(new Map());
 
   const handleNonErrorEvent = useCallback(() => {
     // A normal event means connectivity recovered: clear a transient connection
@@ -577,6 +595,30 @@ export function ConversationWebSocketProvider({
       latestPlanningFileEventRef.current = null;
     }
   }, [isLoadingHistoryPlanning, readConversationFile, setPlanContent]);
+
+  // Same for deep-plan phase documents: re-read the latest write of each so the
+  // reference validator has the chain after a reload, not just for writes that
+  // happen to stream in live.
+  useEffect(() => {
+    if (isLoadingHistoryPlanning) return;
+    const pending = latestDeepPlanFileEventsRef.current;
+    if (pending.size === 0) return;
+    latestDeepPlanFileEventsRef.current = new Map();
+    for (const [
+      phase,
+      { path, conversationId: planningConversationId },
+    ] of pending) {
+      readConversationFile(
+        { conversationId: planningConversationId, filePath: path },
+        {
+          onSuccess: (fileContent) => setDeepPlanDocument(phase, fileContent),
+          onError: (error) => {
+            console.warn("Failed to read deep-plan document:", error);
+          },
+        },
+      );
+    }
+  }, [isLoadingHistoryPlanning, readConversationFile, setDeepPlanDocument]);
 
   useEffect(() => {
     hasConnectedRefMain.current = false;
@@ -1030,13 +1072,34 @@ export function ConversationWebSocketProvider({
             appendOutput(textContent);
           }
 
-          // Handle PlanningFileEditorObservation - only update plan for Plan.md
+          // Handle PlanningFileEditorObservation - update the plan for Plan.md,
+          // and the phase document for a deep-plan output file.
           if (isPlanningFileEditorObservationEvent(event)) {
             const { path } = event.observation;
-            if (isPlanFilePath(path)) {
-              const planningAgentConversation = subConversations?.[0];
-              const planningConversationId = planningAgentConversation?.id;
+            const planningAgentConversation = subConversations?.[0];
+            const planningConversationId = planningAgentConversation?.id;
+            const deepPlanPhase = matchDeepPlanDocumentFile(path);
 
+            if (deepPlanPhase && planningConversationId && path) {
+              if (isLoadingHistoryPlanning) {
+                // Only the newest write per phase matters.
+                latestDeepPlanFileEventsRef.current.set(deepPlanPhase, {
+                  path,
+                  conversationId: planningConversationId,
+                });
+              } else {
+                readConversationFile(
+                  { conversationId: planningConversationId, filePath: path },
+                  {
+                    onSuccess: (fileContent) =>
+                      setDeepPlanDocument(deepPlanPhase, fileContent),
+                    onError: (error) => {
+                      console.warn("Failed to read deep-plan document:", error);
+                    },
+                  },
+                );
+              }
+            } else if (isPlanFilePath(path)) {
               if (planningConversationId && path) {
                 if (isLoadingHistoryPlanning) {
                   latestPlanningFileEventRef.current = {
@@ -1085,6 +1148,7 @@ export function ConversationWebSocketProvider({
       appendOutput,
       readConversationFile,
       setPlanContent,
+      setDeepPlanDocument,
       updateMetricsFromStats,
       handleNonErrorEvent,
     ],
@@ -1127,6 +1191,7 @@ export function ConversationWebSocketProvider({
         setMainConnectionState("CLOSED");
         // Only show error message if we've previously connected successfully
         if (hasConnectedRefMain.current) {
+          connectionErrorSourceRef.current = "main";
           setErrorMessage(SERVER_CONNECTION_ERROR_MESSAGE, "connection");
         }
       },
@@ -1192,6 +1257,7 @@ export function ConversationWebSocketProvider({
         setPlanningConnectionState("CLOSED");
         // Only show error message if we've previously connected successfully
         if (hasConnectedRefPlanning.current) {
+          connectionErrorSourceRef.current = "planning";
           setErrorMessage(SERVER_CONNECTION_ERROR_MESSAGE, "connection");
         }
       },
@@ -1218,8 +1284,19 @@ export function ConversationWebSocketProvider({
 
   const reconnect = useCallback(() => {
     removeErrorMessage();
-    const currentMode = useConversationStore.getState().conversationMode;
-    if (currentMode === "plan" && planningAgentWsUrl) {
+    // Retry whichever socket is actually down. The error source is preferred
+    // because the mode alone misidentifies it in Implementation; the mode is
+    // the fallback for an error raised before either socket reported one.
+    const failed = connectionErrorSourceRef.current;
+    const source =
+      failed ??
+      (isPlanningMode(
+        useConversationStore.getState().conversationMode,
+        useConversationStore.getState().deepPlan.activePhase,
+      )
+        ? "planning"
+        : "main");
+    if (source === "planning" && planningAgentWsUrl) {
       reconnectPlanning();
       return;
     }
@@ -1236,10 +1313,12 @@ export function ConversationWebSocketProvider({
   const sendMessage = useCallback(
     async (message: SendMessageRequest): Promise<SendMessageResult> => {
       const currentMode = useConversationStore.getState().conversationMode;
-      const currentSocket =
-        currentMode === "plan" ? planningAgentSocket : mainSocket;
-      const targetConversationId =
-        currentMode === "plan" ? planningConversationId : conversationId;
+      const currentPhase = useConversationStore.getState().deepPlan.activePhase;
+      const routesToPlanner = isPlanningMode(currentMode, currentPhase);
+      const currentSocket = routesToPlanner ? planningAgentSocket : mainSocket;
+      const targetConversationId = routesToPlanner
+        ? planningConversationId
+        : conversationId;
 
       if (currentSocket?.readyState !== WebSocket.OPEN) {
         // WebSocket not connected - queue message via REST API
@@ -1249,7 +1328,7 @@ export function ConversationWebSocketProvider({
           // target the message would run in the code agent, which is exactly
           // the boundary plan mode exists to enforce.
           const error = new Error(
-            currentMode === "plan"
+            routesToPlanner
               ? "Planning conversation is not ready yet"
               : "No conversation ID available",
           );

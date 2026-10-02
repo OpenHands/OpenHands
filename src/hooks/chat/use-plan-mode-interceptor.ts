@@ -7,10 +7,15 @@ import {
 } from "#/hooks/use-unified-websocket-status";
 import { usePlanningAgentState } from "#/hooks/use-agent-state";
 import { AgentState } from "#/types/agent-state";
-import { PLAN_COMMAND, CODE_COMMAND } from "#/utils/constants";
+import {
+  PLAN_COMMAND,
+  CODE_COMMAND,
+  DEEP_PLAN_COMMAND,
+} from "#/utils/constants";
 
 const PLAN_PREFIX = `${PLAN_COMMAND} `;
 const CODE_PREFIX = `${CODE_COMMAND} `;
+const DEEP_PLAN_PREFIX = `${DEEP_PLAN_COMMAND} `;
 
 /**
  * Intercepts "/plan [task]" and "/code [task]" and toggles the conversation's
@@ -34,6 +39,7 @@ export const usePlanModeInterceptor = (
   const setConversationMode = useConversationStore(
     (s) => s.setConversationMode,
   );
+  const startDeepPlan = useConversationStore((s) => s.startDeepPlan);
   const { handlePlanClick, hasPlanner, isCreatingConversation } =
     useHandlePlanClick();
   const isMainWebSocketConnected = useMainWebSocketStatus() === "OPEN";
@@ -47,7 +53,9 @@ export const usePlanModeInterceptor = (
         trimmed === PLAN_COMMAND || trimmed.startsWith(PLAN_PREFIX);
       const isCode =
         trimmed === CODE_COMMAND || trimmed.startsWith(CODE_PREFIX);
-      if (!conversationId || (!isPlan && !isCode)) {
+      const isDeepPlan =
+        trimmed === DEEP_PLAN_COMMAND || trimmed.startsWith(DEEP_PLAN_PREFIX);
+      if (!conversationId || (!isPlan && !isCode && !isDeepPlan)) {
         onSubmit(message);
         return;
       }
@@ -56,7 +64,22 @@ export const usePlanModeInterceptor = (
         return;
       }
 
-      if (isPlan) {
+      if (isDeepPlan) {
+        if (isPlanningAgentRunning || !isWebSocketConnected) {
+          return;
+        }
+        // Entering deep planning opens the phase machine, but keeps an
+        // in-progress chain: `/deep-plan` mid-workflow must not silently
+        // discard confirmed phases and documents. Restarting is explicit
+        // (`resetDeepPlan`).
+        startDeepPlan();
+        const task = trimmed.slice(DEEP_PLAN_COMMAND.length).trim();
+        if (task && hasPlanner) {
+          onSubmit(task);
+        } else {
+          handlePlanClick(undefined, task || undefined, "deep-plan");
+        }
+      } else if (isPlan) {
         if (isPlanningAgentRunning || !isWebSocketConnected) {
           return;
         }
@@ -95,6 +118,7 @@ export const usePlanModeInterceptor = (
       onSubmit,
       handlePlanClick,
       setConversationMode,
+      startDeepPlan,
     ],
   );
 };

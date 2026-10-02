@@ -21,6 +21,7 @@ const typographyVariants = cva("", {
 interface TypographyProps extends VariantProps<typeof typographyVariants> {
   className?: string;
   testId?: string;
+  "data-testid"?: string;
   children: React.ReactNode;
 }
 
@@ -28,13 +29,14 @@ export function Typography({
   variant,
   className,
   testId,
+  "data-testid": dataTestId,
   children,
 }: TypographyProps) {
   const Tag = variant as keyof React.JSX.IntrinsicElements;
 
   return (
     <Tag
-      data-testid={testId}
+      data-testid={testId ?? dataTestId}
       className={cn(typographyVariants({ variant }), className)}
     >
       {children}

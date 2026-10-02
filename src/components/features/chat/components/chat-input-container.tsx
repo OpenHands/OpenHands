@@ -7,6 +7,7 @@ import { SlashCommandMenu } from "./slash-command-menu";
 import { useConversationStore } from "#/stores/conversation-store";
 import { cn } from "#/utils/utils";
 import { SlashCommandItem } from "#/hooks/chat/use-slash-command";
+import { isPlanningMode } from "#/utils/conversation-mode";
 
 interface ChatInputContainerProps {
   chatContainerRef: React.RefObject<HTMLDivElement | null>;
@@ -64,13 +65,17 @@ export function ChatInputContainer({
   const conversationMode = useConversationStore(
     (state) => state.conversationMode,
   );
+  const deepPlanPhase = useConversationStore(
+    (state) => state.deepPlan.activePhase,
+  );
 
   return (
     <div
       ref={chatContainerRef}
       className={cn(
         "bg-surface box-border content-stretch flex flex-col items-start justify-center p-4 relative rounded-[15px] w-full",
-        conversationMode === "plan" && "border border-[#597FF4]",
+        isPlanningMode(conversationMode, deepPlanPhase) &&
+          "border border-[#597FF4]",
       )}
       onDragOver={(e) => onDragOver(e, disabled)}
       onDragLeave={(e) => onDragLeave(e, disabled)}

@@ -11,6 +11,8 @@ import { planComponents } from "#/components/features/markdown/plan-components";
 import { useHandlePlanClick } from "#/hooks/use-handle-plan-click";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useReadConversationFile } from "#/hooks/mutation/use-read-conversation-file";
+import { isPlanningMode } from "#/utils/conversation-mode";
+import { DeepPlanPanel } from "#/components/features/chat/deep-plan-panel";
 
 function PlannerTab() {
   const { t } = useTranslation("openhands");
@@ -28,6 +30,9 @@ function PlannerTab() {
     localPlanningConversationId,
     setPlanContent,
   } = useConversationStore();
+  const deepPlanPhase = useConversationStore(
+    (state) => state.deepPlan.activePhase,
+  );
   const { data: conversation } = useActiveConversation();
   const { mutate: readConversationFile } = useReadConversationFile();
 
@@ -64,9 +69,18 @@ function PlannerTab() {
       scrollDomToBottom();
     }
   }, [planContent, autoScroll, scrollDomToBottom]);
-  const isPlanMode = conversationMode === "plan";
+  const isDeepPlanMode = conversationMode === "deep-plan";
+  // Pass the active phase so Implementation is not treated as a planning phase
+  // once it routes to the code agent; the mode alone cannot tell.
+  const isPlanMode = isPlanningMode(conversationMode, deepPlanPhase);
   const { handlePlanClick, hasPlanner, isCreatingConversation } =
     useHandlePlanClick();
+
+  // Deep Planning renders its own phase rail; PLAN.md has no meaning until the
+  // chain reaches the implementation phase.
+  if (isDeepPlanMode) {
+    return <DeepPlanPanel />;
+  }
 
   if (planContent !== null && planContent !== undefined) {
     return (

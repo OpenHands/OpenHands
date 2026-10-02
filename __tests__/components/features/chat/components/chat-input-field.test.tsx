@@ -3,6 +3,7 @@ import { screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { renderWithProviders } from "test-utils";
 import { ChatInputField } from "#/components/features/chat/components/chat-input-field";
+import { useConversationStore } from "#/stores/conversation-store";
 
 function Harness({
   disabled,
@@ -69,6 +70,36 @@ describe("ChatInputField placeholder", () => {
     expect(screen.getByTestId("chat-input")).toHaveAttribute(
       "data-placeholder",
       describeEngineeringTask(),
+    );
+  });
+
+  it("shows the plan hint while a Deep Planning phase routes to the planner", () => {
+    useConversationStore.setState({
+      conversationMode: "deep-plan",
+      deepPlan: { activePhase: "tasks", confirmed: [], documents: {} },
+    });
+
+    renderWithProviders(<Harness disabled={false} />);
+
+    expect(screen.getByTestId("chat-input")).toHaveAttribute(
+      "data-placeholder",
+      "COMMON$LET_S_WORK_ON_A_PLAN",
+    );
+  });
+
+  it("drops the plan hint once Deep Planning reaches Implementation", () => {
+    // Implementation is executed by the code agent, so the composer must ask
+    // for a build task instead of presenting itself as a planning conversation.
+    useConversationStore.setState({
+      conversationMode: "deep-plan",
+      deepPlan: { activePhase: "implementation", confirmed: [], documents: {} },
+    });
+
+    renderWithProviders(<Harness disabled={false} />);
+
+    expect(screen.getByTestId("chat-input")).toHaveAttribute(
+      "data-placeholder",
+      "SUGGESTIONS$WHAT_TO_BUILD",
     );
   });
 });

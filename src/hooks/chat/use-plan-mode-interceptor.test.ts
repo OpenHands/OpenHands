@@ -5,6 +5,7 @@ import { AgentState } from "#/types/agent-state";
 import type { WebSocketConnectionState } from "#/contexts/conversation-websocket-context";
 
 const setConversationMode = vi.fn();
+const startDeepPlan = vi.fn();
 const handlePlanClick = vi.fn();
 let isCreatingConversation = false;
 let hasPlanner = false;
@@ -14,7 +15,7 @@ let isPlanningAgentRunning = false;
 
 vi.mock("#/stores/conversation-store", () => ({
   useConversationStore: (selector: (s: unknown) => unknown) =>
-    selector({ setConversationMode }),
+    selector({ setConversationMode, startDeepPlan }),
 }));
 vi.mock("#/hooks/use-handle-plan-click", () => ({
   useHandlePlanClick: () => ({
@@ -185,5 +186,38 @@ describe("usePlanModeInterceptor", () => {
     expect(setConversationMode).not.toHaveBeenCalled();
     expect(onSubmit).not.toHaveBeenCalled();
     expect(handlePlanClick).not.toHaveBeenCalled();
+  });
+
+  it("opens deep plan mode for /deep-plan", () => {
+    const { intercept, onSubmit } = setup(CONV);
+    intercept("/deep-plan");
+    expect(startDeepPlan).toHaveBeenCalledOnce();
+    expect(handlePlanClick).toHaveBeenCalledWith(
+      undefined,
+      undefined,
+      "deep-plan",
+    );
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("creates the planner with the task for /deep-plan <task> when none exists", () => {
+    const { intercept, onSubmit } = setup(CONV);
+    intercept("/deep-plan   design the schema  ");
+    expect(startDeepPlan).toHaveBeenCalledOnce();
+    expect(handlePlanClick).toHaveBeenCalledWith(
+      undefined,
+      "design the schema",
+      "deep-plan",
+    );
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("swallows /deep-plan while a planning conversation is already being created", () => {
+    isCreatingConversation = true;
+    const { intercept, onSubmit } = setup(CONV);
+    intercept("/deep-plan");
+    expect(startDeepPlan).not.toHaveBeenCalled();
+    expect(handlePlanClick).not.toHaveBeenCalled();
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 });

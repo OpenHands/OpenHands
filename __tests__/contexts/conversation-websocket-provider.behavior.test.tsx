@@ -1742,6 +1742,115 @@ describe("Conversation websocket behavior", () => {
     expect(useConversationStore.getState().planContent).toBe("# Live plan");
   });
 
+  it("reads a deep-plan phase document into the store so a checkpoint can validate it", async () => {
+    vi.spyOn(EventService, "getEventCount").mockResolvedValue(0);
+    useConversationStore.setState({
+      deepPlan: { activePhase: null, confirmed: [], documents: {} },
+    });
+    socketCapture.readConversationFile.mockImplementation(
+      (_variables, callbacks) => callbacks.onSuccess("## 3.1 Authentication\n"),
+    );
+    renderProvider({
+      subConversations: [makeSubConversation()],
+      subConversationIds: ["conv-planning"],
+    });
+    await act(async () => {
+      await planningOptions().onOpen?.(new Event("open"));
+    });
+
+    dispatchPlanning(
+      makeObservationEvent(
+        "60",
+        {
+          kind: "PlanningFileEditorObservation",
+          content: [],
+          is_error: false,
+          command: "create",
+          path: "/workspace/requirements.md",
+          prev_exist: false,
+          old_content: null,
+          new_content: "## 3.1 Authentication\n",
+        },
+        "planning_file_editor",
+      ),
+    );
+
+    expect(socketCapture.readConversationFile).toHaveBeenCalledWith(
+      {
+        conversationId: "conv-planning",
+        filePath: "/workspace/requirements.md",
+      },
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    );
+    expect(
+      useConversationStore.getState().deepPlan.documents.requirements,
+    ).toBe("## 3.1 Authentication\n");
+    // A phase document must not also be treated as PLAN.md.
+    expect(useConversationStore.getState().planContent).toBeNull();
+  });
+
+  it("re-reads the newest deep-plan document of each phase after history replay", async () => {
+    vi.spyOn(EventService, "getEventCount").mockResolvedValue(2);
+    useConversationStore.setState({
+      deepPlan: { activePhase: null, confirmed: [], documents: {} },
+    });
+    socketCapture.readConversationFile.mockImplementation(
+      (_variables, callbacks) => callbacks.onSuccess("# Loaded database"),
+    );
+    renderProvider({
+      subConversations: [makeSubConversation()],
+      subConversationIds: ["conv-planning"],
+    });
+
+    await act(async () => {
+      await planningOptions().onOpen?.(new Event("open"));
+    });
+
+    const deepPlanObservation = (id: string, path: string) =>
+      makeObservationEvent(
+        id,
+        {
+          kind: "PlanningFileEditorObservation",
+          content: [{ type: "text", text: "history" }],
+          is_error: false,
+          command: "create",
+          path,
+          prev_exist: false,
+          old_content: null,
+          new_content: "history",
+        },
+        "planning_file_editor",
+      );
+
+    // While history is still replaying, writes are only remembered — the file
+    // may be overwritten again before the stream ends.
+    dispatchPlanning(
+      deepPlanObservation("61", "/workspace/database-design.md"),
+    );
+    expect(socketCapture.readConversationFile).not.toHaveBeenCalled();
+
+    // The second observation completes the replayed count, which ends the
+    // history load; both writes were for the same phase, so only the newest is
+    // re-read.
+    dispatchPlanning(
+      deepPlanObservation("62", "/workspace/database-design.md"),
+    );
+
+    await waitFor(() =>
+      expect(socketCapture.readConversationFile).toHaveBeenCalledWith(
+        {
+          conversationId: "conv-planning",
+          filePath: "/workspace/database-design.md",
+        },
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      ),
+    );
+    expect(socketCapture.readConversationFile).toHaveBeenCalledOnce();
+    expect(useConversationStore.getState().deepPlan.documents.database).toBe(
+      "# Loaded database",
+    );
+  });
+
   it("falls through planning history when event counting fails", async () => {
     vi.spyOn(EventService, "getEventCount").mockRejectedValue(
       new Error("count unavailable"),

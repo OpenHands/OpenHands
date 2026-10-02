@@ -255,6 +255,7 @@ describe("useSlashCommand", () => {
       "/goal",
       "/plan",
       "/code",
+      "/deep-plan",
     ]);
 
     mockSkills.isLoading = false;
@@ -267,6 +268,7 @@ describe("useSlashCommand", () => {
       "/goal",
       "/plan",
       "/code",
+      "/deep-plan",
     ]);
   });
 
@@ -304,6 +306,7 @@ describe("useSlashCommand", () => {
       "/goal",
       "/plan",
       "/code",
+      "/deep-plan",
       "/explicit",
       "/alias",
       "/derived",
@@ -442,6 +445,7 @@ describe("useSlashCommand", () => {
       "/goal",
       "/plan",
       "/code",
+      "/deep-plan",
       "/deploy",
     ]);
   });
@@ -489,6 +493,7 @@ describe("useSlashCommand", () => {
       "/goal",
       "/plan",
       "/code",
+      "/deep-plan",
     ]);
   });
 
@@ -548,6 +553,7 @@ describe("useSlashCommand", () => {
       "/goal",
       "/plan",
       "/code",
+      "/deep-plan",
     ]);
   });
 
@@ -724,14 +730,14 @@ describe("useSlashCommand", () => {
     const { result } = renderHook(() => useSlashCommand(ref));
     act(() => result.current.updateSlashMenu());
 
-    for (const expected of [1, 2, 3, 4, 0]) {
+    for (const expected of [1, 2, 3, 4, 5, 0]) {
       const event = makeKeyboardEvent("ArrowDown");
       act(() => expect(result.current.handleSlashKeyDown(event)).toBe(true));
       expect(event.preventDefault).toHaveBeenCalledOnce();
       expect(result.current.selectedIndex).toBe(expected);
     }
 
-    for (const expected of [4, 3]) {
+    for (const expected of [5, 4]) {
       const event = makeKeyboardEvent("ArrowUp");
       act(() => expect(result.current.handleSlashKeyDown(event)).toBe(true));
       expect(event.preventDefault).toHaveBeenCalledOnce();

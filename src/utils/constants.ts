@@ -1,4 +1,5 @@
 import { SlashCommandItem } from "#/hooks/chat/use-slash-command";
+import type { ConversationMode } from "#/stores/conversation-store";
 
 export const JSON_VIEW_THEME = {
   base00: "transparent", // background
@@ -49,6 +50,26 @@ export const PLAN_COMMAND = "/plan";
 
 /** The /code slash command — switches the conversation back to Code mode. */
 export const CODE_COMMAND = "/code";
+
+/** The /deep-plan slash command — switches the conversation into Deep Planning mode. */
+export const DEEP_PLAN_COMMAND = "/deep-plan";
+
+/** Display labels for the three conversation modes. */
+export const CONVERSATION_MODE_LABEL_KEYS = {
+  code: "COMMON$CODE",
+  plan: "COMMON$PLAN",
+  "deep-plan": "COMMON$DEEP_PLAN",
+} as const satisfies Record<ConversationMode, string>;
+
+/** Shift+Tab order for the mode switcher. */
+export const CONVERSATION_MODE_CYCLE: Record<
+  ConversationMode,
+  ConversationMode
+> = {
+  code: "plan",
+  plan: "deep-plan",
+  "deep-plan": "code",
+};
 
 /** Built-in slash commands surfaced in the menu for V1 conversations. */
 export const BUILT_IN_COMMANDS: SlashCommandItem[] = [
@@ -115,6 +136,17 @@ export const BUILT_IN_COMMANDS: SlashCommandItem[] = [
       triggers: [CODE_COMMAND],
     },
     command: CODE_COMMAND,
+  },
+  {
+    skill: {
+      name: "deep-plan",
+      type: "agentskills",
+      source: null,
+      content:
+        "Switch the conversation into Deep Planning mode: a gated chain of documents (requirements → database → backend → frontend → tasks) with a reference validator",
+      triggers: [DEEP_PLAN_COMMAND],
+    },
+    command: DEEP_PLAN_COMMAND,
   },
 ];
 

@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { useConversationStore } from "#/stores/conversation-store";
+import type { ConversationMode } from "#/stores/conversation-store";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import {
@@ -175,11 +176,12 @@ export const useHandlePlanClick = () => {
     (
       event?: MouseEvent<HTMLButtonElement> | KeyboardEvent,
       initialMessage?: string,
+      mode: ConversationMode = "plan",
     ) => {
       event?.preventDefault();
       event?.stopPropagation();
 
-      setConversationMode("plan");
+      setConversationMode(mode);
 
       if (backend.kind !== "cloud") {
         // Guard on the server-reported helper, the store, and the mutation's

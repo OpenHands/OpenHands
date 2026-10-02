@@ -4,6 +4,8 @@ import type {
   ConversationMode,
 } from "#/stores/conversation-store";
 import type { ViewMode } from "#/components/features/files-tab/view-mode";
+import type { DeepPlanState } from "#/utils/deep-plan-machine";
+import { DEEP_PLAN_PHASE_IDS, type DeepPlanPhaseId } from "#/utils/deep-plan";
 import {
   DEFAULT_UNPINNED_OVERVIEW_GIT_PARTS,
   DEFAULT_UNPINNED_OVERVIEW_SECTIONS,
@@ -40,6 +42,8 @@ export interface ConversationState {
   unpinnedOverviewSections?: string[];
   unpinnedOverviewGitParts?: string[];
   conversationMode: ConversationMode;
+  /** Deep Planning phase machine state, so a refresh restores the phase. */
+  deepPlan?: DeepPlanState;
   subConversationTaskId: string | null;
   draftMessage: string | null;
   rightPanelShown?: boolean;
@@ -201,7 +205,59 @@ function sanitizeStoredState(
     delete result.filesTabSelectedPath;
   }
 
+  if (
+    result.conversationMode != null &&
+    !VALID_CONVERSATION_MODES.has(result.conversationMode)
+  ) {
+    result = { ...result };
+    delete result.conversationMode;
+  }
+
+  if (result.deepPlan != null && !isValidDeepPlanState(result.deepPlan)) {
+    result = { ...result };
+    delete result.deepPlan;
+  }
+
   return result;
+}
+
+const VALID_CONVERSATION_MODES: ReadonlySet<string> = new Set([
+  "code",
+  "plan",
+  "deep-plan",
+]);
+
+const isPhaseId = (value: unknown): value is DeepPlanPhaseId =>
+  typeof value === "string" &&
+  (DEEP_PLAN_PHASE_IDS as readonly string[]).includes(value);
+
+/**
+ * A persisted phase machine is only trusted when its shape is intact —
+ * `JSON.parse` gives us `unknown`, and a half-written blob would otherwise
+ * put the UI in a phase it can never leave.
+ */
+function isValidDeepPlanState(value: unknown): value is DeepPlanState {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Partial<DeepPlanState>;
+  if (candidate.activePhase !== null && !isPhaseId(candidate.activePhase)) {
+    return false;
+  }
+  if (
+    !Array.isArray(candidate.confirmed) ||
+    !candidate.confirmed.every(isPhaseId)
+  ) {
+    return false;
+  }
+  if (
+    typeof candidate.documents !== "object" ||
+    candidate.documents === null ||
+    Array.isArray(candidate.documents)
+  ) {
+    return false;
+  }
+  return Object.entries(candidate.documents).every(
+    ([phase, content]) => isPhaseId(phase) && typeof content === "string",
+  );
 }
 
 /**

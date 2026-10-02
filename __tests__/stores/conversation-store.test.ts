@@ -5,7 +5,12 @@ let useConversationStore: (typeof import("#/stores/conversation-store"))["useCon
 const defaultConversationState: {
   selectedTab: "files";
   unpinnedTabs: string[];
-  conversationMode: "code" | "plan";
+  conversationMode: "code" | "plan" | "deep-plan";
+  deepPlan?: {
+    activePhase: string | null;
+    confirmed: string[];
+    documents: Record<string, string>;
+  };
 } = {
   selectedTab: "files" as const,
   unpinnedTabs: [] as string[],
@@ -137,6 +142,253 @@ describe("conversation store", () => {
 
       expect(useConversationStore.getState().conversationMode).toBe("code");
       expect(mockGetConversationState).toHaveBeenCalledWith(CONV_ID);
+    });
+  });
+
+  describe("deep plan", () => {
+    it("starts on the first phase, switches mode, and persists the machine", () => {
+      useConversationStore.getState().startDeepPlan();
+
+      expect(useConversationStore.getState().conversationMode).toBe(
+        "deep-plan",
+      );
+      expect(useConversationStore.getState().deepPlan.activePhase).toBe(
+        "analysis",
+      );
+      expect(mockSetConversationState).toHaveBeenCalledWith(CONV_ID, {
+        deepPlan: expect.objectContaining({ activePhase: "analysis" }),
+        conversationMode: "deep-plan",
+      });
+    });
+
+    it("persists the mode alongside the machine so a refresh stays in deep plan", () => {
+      // `startDeepPlan` flips `conversationMode` in memory. The route's
+      // mount-time reset re-derives the mode from storage, so unless the mode
+      // is persisted too, a refresh lands the user back in `code` mode with a
+      // restored machine they can no longer see or use.
+      useConversationStore.getState().startDeepPlan();
+
+      expect(mockSetConversationState).toHaveBeenCalledWith(
+        CONV_ID,
+        expect.objectContaining({ conversationMode: "deep-plan" }),
+      );
+
+      mockGetConversationState.mockReturnValue({
+        selectedTab: "files",
+        unpinnedTabs: [],
+        conversationMode: "deep-plan",
+        deepPlan: {
+          activePhase: "analysis",
+          confirmed: [],
+          documents: {},
+        },
+      });
+      useConversationStore.getState().resetConversationState();
+
+      expect(useConversationStore.getState().conversationMode).toBe(
+        "deep-plan",
+      );
+    });
+
+    it("clears the mode when the machine is reset, without re-persisting it", () => {
+      // `resetDeepPlan` shares the persistence helper. It must not inherit the
+      // "persist deep-plan" behavior, or cancelling would immediately re-arm
+      // the mode it just cleared.
+      useConversationStore.getState().startDeepPlan();
+      mockSetConversationState.mockClear();
+      mockGetConversationState.mockReturnValue({
+        selectedTab: "files",
+        unpinnedTabs: [],
+        conversationMode: "code",
+      });
+
+      useConversationStore.getState().resetDeepPlan();
+
+      expect(useConversationStore.getState().conversationMode).toBe("code");
+      expect(useConversationStore.getState().deepPlan.activePhase).toBeNull();
+      expect(mockSetConversationState).toHaveBeenCalledWith(CONV_ID, {
+        deepPlan: expect.objectContaining({ activePhase: null }),
+      });
+    });
+
+    it("keeps an in-progress chain when Deep Plan is entered again", () => {
+      // Shift+Tab, the context menu and `/deep-plan` all call `startDeepPlan`.
+      // Re-entering must not wipe confirmations and documents the user already
+      // built, or an accidental second entry silently destroys the chain.
+      const store = useConversationStore.getState();
+      store.startDeepPlan();
+      store.setDeepPlanDocument("requirements", "## 3.1 Authentication\n");
+      store.confirmDeepPlanPhase("analysis");
+      store.confirmDeepPlanPhase("requirements");
+      expect(useConversationStore.getState().deepPlan.activePhase).toBe(
+        "database",
+      );
+
+      useConversationStore.getState().startDeepPlan();
+
+      expect(useConversationStore.getState().deepPlan.activePhase).toBe(
+        "database",
+      );
+      expect(useConversationStore.getState().deepPlan.confirmed).toEqual([
+        "analysis",
+        "requirements",
+      ]);
+      expect(
+        useConversationStore.getState().deepPlan.documents.requirements,
+      ).toBe("## 3.1 Authentication\n");
+      expect(useConversationStore.getState().conversationMode).toBe(
+        "deep-plan",
+      );
+    });
+
+    it("starts a fresh chain when there is no chain yet", () => {
+      expect(useConversationStore.getState().deepPlan.activePhase).toBeNull();
+
+      useConversationStore.getState().startDeepPlan();
+
+      expect(useConversationStore.getState().deepPlan.activePhase).toBe(
+        "analysis",
+      );
+    });
+
+    it("blocks entering a later phase until its predecessors are confirmed", () => {
+      useConversationStore.getState().startDeepPlan();
+      useConversationStore.getState().setDeepPlanPhase("database");
+
+      expect(useConversationStore.getState().deepPlan.activePhase).toBe(
+        "analysis",
+      );
+    });
+
+    it("advances the phase when the reference chain is valid", () => {
+      const store = useConversationStore.getState();
+      store.startDeepPlan();
+      store.setDeepPlanDocument("requirements", "## 3.1 Authentication\n");
+      store.confirmDeepPlanPhase("analysis");
+
+      const result = useConversationStore
+        .getState()
+        .confirmDeepPlanPhase("requirements");
+
+      expect(result).toEqual({ ok: true });
+      expect(useConversationStore.getState().deepPlan.activePhase).toBe(
+        "database",
+      );
+    });
+
+    it("refuses a checkpoint whose chain cites a section that does not exist", () => {
+      const store = useConversationStore.getState();
+      store.startDeepPlan();
+      store.setDeepPlanDocument("requirements", "## 3.1 Authentication\n");
+      store.confirmDeepPlanPhase("analysis");
+      store.confirmDeepPlanPhase("requirements");
+      // Requirements are confirmed; the database document now cites a section
+      // that no requirement defines.
+      store.setDeepPlanDocument("database", "## 2.1 Users [Req 9.9]\n");
+
+      const result = useConversationStore
+        .getState()
+        .confirmDeepPlanPhase("database");
+
+      expect(result.ok).toBe(false);
+      expect(result.error).toContain("[Req 9.9]");
+      expect(useConversationStore.getState().deepPlan.activePhase).toBe(
+        "database",
+      );
+    });
+
+    it("drops confirmations built on a document that is rewritten", () => {
+      // A checkpoint vouches for the chain it saw. Rewriting an upstream
+      // document must re-open the checkpoints that depend on it, or the chain
+      // would keep reporting "confirmed" for documents it never re-validated.
+      const store = useConversationStore.getState();
+      store.startDeepPlan();
+      store.setDeepPlanDocument("requirements", "## 3.1 Authentication\n");
+      store.confirmDeepPlanPhase("analysis");
+      store.confirmDeepPlanPhase("requirements");
+      store.setDeepPlanDocument("database", "## 2.1 Users [Req 3.1]\n");
+      store.confirmDeepPlanPhase("database");
+      expect(useConversationStore.getState().deepPlan.activePhase).toBe(
+        "backend",
+      );
+
+      // The agent rewrites requirements, changing a section the database cites.
+      useConversationStore
+        .getState()
+        .setDeepPlanDocument("requirements", "## 3.2 Sessions\n");
+
+      expect(useConversationStore.getState().deepPlan.confirmed).toEqual([
+        "analysis",
+      ]);
+      expect(useConversationStore.getState().deepPlan.activePhase).toBe(
+        "requirements",
+      );
+    });
+
+    it("keeps confirmations when replay re-hydrates an unchanged document", () => {
+      // Reload replays the same writes from history; identical bytes are not an
+      // edit, so the confirmations restored from disk must survive.
+      const store = useConversationStore.getState();
+      store.startDeepPlan();
+      store.setDeepPlanDocument("requirements", "## 3.1 Authentication\n");
+      store.confirmDeepPlanPhase("analysis");
+      store.confirmDeepPlanPhase("requirements");
+
+      useConversationStore
+        .getState()
+        .setDeepPlanDocument("requirements", "## 3.1 Authentication\n");
+
+      expect(useConversationStore.getState().deepPlan.confirmed).toEqual([
+        "analysis",
+        "requirements",
+      ]);
+    });
+
+    it("restores the phase machine from persisted state on load", async () => {
+      mockGetConversationState.mockReturnValue({
+        selectedTab: "files",
+        unpinnedTabs: [],
+        conversationMode: "deep-plan",
+        deepPlan: {
+          activePhase: "backend",
+          confirmed: ["analysis", "requirements", "database"],
+          documents: {},
+        },
+      });
+      vi.resetModules();
+      const { useConversationStore: freshStore } =
+        await import("#/stores/conversation-store");
+
+      expect(freshStore.getState().deepPlan.activePhase).toBe("backend");
+      expect(freshStore.getState().conversationMode).toBe("deep-plan");
+    });
+
+    it("keeps the persisted phase across the mount-time reset", () => {
+      // The conversation route calls `resetConversationState()` on every
+      // mount. If that reset writes the empty machine, a refresh drops the
+      // user back to phase 1 even though the confirmations are on disk.
+      useConversationStore.getState().startDeepPlan();
+      mockGetConversationState.mockReturnValue({
+        selectedTab: "files",
+        unpinnedTabs: [],
+        conversationMode: "deep-plan",
+        deepPlan: {
+          activePhase: "backend",
+          confirmed: ["analysis", "requirements", "database"],
+          documents: { requirements: "## 1.1 Login\n" },
+        },
+      });
+
+      useConversationStore.getState().resetConversationState();
+
+      expect(useConversationStore.getState().deepPlan.activePhase).toBe(
+        "backend",
+      );
+      expect(useConversationStore.getState().deepPlan.confirmed).toEqual([
+        "analysis",
+        "requirements",
+        "database",
+      ]);
     });
   });
 

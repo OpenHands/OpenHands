@@ -7,6 +7,10 @@ import { ComboboxCaretInline } from "#/ui/combobox-caret";
 import LessonPlanIcon from "#/icons/lesson-plan.svg?react";
 import { CodePillIcon } from "#/icons/code-pill";
 import { useConversationStore } from "#/stores/conversation-store";
+import {
+  CONVERSATION_MODE_CYCLE,
+  CONVERSATION_MODE_LABEL_KEYS,
+} from "#/utils/constants";
 import { ChangeAgentContextMenu } from "./change-agent-context-menu";
 import { cn } from "#/utils/utils";
 import {
@@ -25,8 +29,12 @@ import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 export function ChangeAgentButton() {
   const [contextMenuOpen, setContextMenuOpen] = useState<boolean>(false);
 
-  const { conversationMode, setConversationMode, subConversationTaskId } =
-    useConversationStore();
+  const {
+    conversationMode,
+    setConversationMode,
+    subConversationTaskId,
+    startDeepPlan,
+  } = useConversationStore();
 
   const { conversationId } = useOptionalConversationId();
 
@@ -108,10 +116,12 @@ export function ChangeAgentButton() {
         event.preventDefault();
         event.stopPropagation();
 
-        // Cycle between modes: code -> plan -> code
-        const nextMode = conversationMode === "code" ? "plan" : "code";
+        // Cycle through modes: code -> plan -> deep-plan -> code
+        const nextMode = CONVERSATION_MODE_CYCLE[conversationMode];
         if (nextMode === "plan") {
           handlePlanClick(event);
+        } else if (nextMode === "deep-plan") {
+          startDeepPlan();
         } else {
           setConversationMode(nextMode);
         }
@@ -128,6 +138,7 @@ export function ChangeAgentButton() {
     conversationMode,
     setConversationMode,
     handlePlanClick,
+    startDeepPlan,
   ]);
 
   const handleButtonClick = (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -142,14 +153,18 @@ export function ChangeAgentButton() {
     setConversationMode("code");
   };
 
+  const handleDeepPlanClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    startDeepPlan();
+  };
+
   const isExecutionAgent = conversationMode === "code";
 
-  const buttonLabel = useMemo(() => {
-    if (isExecutionAgent) {
-      return t(I18nKey.COMMON$CODE);
-    }
-    return t(I18nKey.COMMON$PLAN);
-  }, [isExecutionAgent, t]);
+  const buttonLabel = useMemo(
+    () => t(I18nKey[CONVERSATION_MODE_LABEL_KEYS[conversationMode]]),
+    [conversationMode, t],
+  );
 
   const buttonIcon = useMemo(() => {
     if (isExecutionAgent) {
@@ -197,6 +212,7 @@ export function ChangeAgentButton() {
           onClose={() => setContextMenuOpen(false)}
           onCodeClick={handleCodeClick}
           onPlanClick={handlePlanClick}
+          onDeepPlanClick={handleDeepPlanClick}
         />
       )}
     </div>
