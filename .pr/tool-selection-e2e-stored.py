@@ -63,7 +63,7 @@ try:
           f"tools={t}; flag keys={[k for k in g if k in ('enable_sub_agents','enable_switch_llm_tool')]}")
     r = c.patch("/api/settings", json={"agent_settings_diff": {"tool_concurrency_limit": 1}})
     disk = json.loads(sp.read_text())["agent_settings"]
-    check("e.v6-settings-resave", r.status_code == 200 and disk["schema_version"] == 7
+    check("e.v6-settings-resave", r.status_code == 200 and disk["schema_version"] == 8
           and "enable_sub_agents" not in disk and "enable_switch_llm_tool" not in disk and names(disk["tools"]) == t,
           f"{r.status_code}; disk schema={disk['schema_version']}; disk tools={names(disk['tools'])}")
 finally:

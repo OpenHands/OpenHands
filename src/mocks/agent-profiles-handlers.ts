@@ -131,14 +131,6 @@ function notFound(name: string) {
   );
 }
 
-/**
- * Mock handlers for the agent-server `/api/agent-profiles` endpoints (the same
- * contract consumed by `AgentProfilesService` and the cloud proxy).
- *
- * Routes mirror `agent_profiles_router.py` in the agent-server. MSW anchors its
- * path matcher, so the list route never claims the `:name` routes below and no
- * extra path guarding is needed.
- */
 const MOCK_TOOL_CATALOG: ToolCatalogEntry[] = [
   ["terminal", true, "Run shell commands in a persistent terminal."],
   ["file_editor", true, "View, create and edit files."],
@@ -156,6 +148,14 @@ const MOCK_TOOL_CATALOG: ToolCatalogEntry[] = [
   description: description as string,
 }));
 
+/**
+ * Mock handlers for the agent-server `/api/agent-profiles` endpoints (the same
+ * contract consumed by `AgentProfilesService` and the cloud proxy).
+ *
+ * Routes mirror `agent_profiles_router.py` in the agent-server. MSW anchors its
+ * path matcher, so the list route never claims the `:name` routes below and no
+ * extra path guarding is needed.
+ */
 export const AGENT_PROFILES_HANDLERS = [
   http.get("*/api/tools/catalog", () =>
     HttpResponse.json({ tools: MOCK_TOOL_CATALOG }),

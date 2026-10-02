@@ -10,20 +10,8 @@ export const TOOL_CATALOG_PATH = "/api/tools/catalog";
 /**
  * A tool as offered for configuring an agent.
  *
- * @remarks Temporary local mirror of the agent-server's `ToolCatalogEntry`
- * (software-agent-sdk#5151). Per the repository contract order (Agent Server
- * contract → TypeScript client → Canvas), this belongs
- * in `@openhands/typescript-client`. The published client cannot be consumed
- * yet: software-agent-sdk#5151 is still open as of 2026-09-30,and the
- * npm `@openhands/typescript-client` (1.50.1) ships no catalog type for
- * the endpoint. Once the SDK release carrying #5151 is out, consume the
- * client's catalog modeland drop this interface(see Reply to review on
- * OpenHands/OpenHands#17516). Until then,the shape guard in
- * {@link ToolCatalogService.getCatalog} keeps a catalog entry that omits one
- * of the discriminator fields from silently truncating the picker: it fails
- * loudly instead. The fields are required on the wire;the server's pydantic
- * model defaults them, so a response always carries them;a variant that
- * omits one is malformed, not nullable.
+ * @remarks Mirrors the agent-server's `ToolCatalogEntry` until
+ * `@openhands/typescript-client` ships it.
  */
 export interface ToolCatalogEntry {
   name: string;

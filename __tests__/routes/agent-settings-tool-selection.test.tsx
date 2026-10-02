@@ -166,3 +166,64 @@ it("reports a failed catalog load and recovers on retry", async () => {
   ).not.toBeInTheDocument();
   expect(screen.getByTestId("agent-settings-tools-mode")).not.toBeDisabled();
 });
+
+it("locks a custom selection until the catalog loads", async () => {
+  vi.mocked(ToolCatalogService.getCatalog).mockReturnValue(
+    new Promise(() => {}),
+  );
+  render(
+    <MemoryRouter>
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <AgentSettingsScreen
+          agentSettingsOverride={{
+            agent_kind: "openhands",
+            tools: [{ name: "terminal", params: {} }],
+          }}
+          onSaveControlChange={() => {}}
+        />
+      </QueryClientProvider>
+    </MemoryRouter>,
+  );
+
+  expect(
+    await screen.findByTestId("agent-settings-tool-terminal"),
+  ).toBeDisabled();
+});
+
+it("describes a stored tool the picker would otherwise filter out", async () => {
+  vi.mocked(ToolCatalogService.getCatalog).mockResolvedValue([
+    ...CATALOG,
+    {
+      name: "browser_tool_set",
+      user_selectable: true,
+      usable: false,
+      in_default_set: true,
+      description: "Browse the web",
+    },
+  ]);
+  render(
+    <MemoryRouter>
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <AgentSettingsScreen
+          agentSettingsOverride={{
+            agent_kind: "openhands",
+            tools: [{ name: "browser_tool_set", params: {} }],
+          }}
+          onSaveControlChange={() => {}}
+        />
+      </QueryClientProvider>
+    </MemoryRouter>,
+  );
+
+  expect(
+    await screen.findByTestId("agent-settings-tool-list"),
+  ).toHaveTextContent("Browse the web");
+});

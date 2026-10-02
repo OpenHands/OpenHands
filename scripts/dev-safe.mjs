@@ -805,7 +805,7 @@ export function buildAgentServerEnv(config, options = {}) {
     ...buildAgentServerTelemetryEnv(env),
     ...conversationRuntimeEnv,
     ...(env.VITE_ENABLE_BROWSER_TOOLS === "false"
-      ? { OH_ENABLE_BROWSER: "false" }
+      ? { OH_ENABLE_BROWSER: env.OH_ENABLE_BROWSER || "false" }
       : {}),
     // Force Python to use UTF-8 for all file I/O and streams.
     //

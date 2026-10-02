@@ -319,18 +319,6 @@ export function AgentSettingsScreen({
         .map(({ name }) => name),
     [toolCatalog],
   );
-  /** Pickable tools this runtime can run, plus anything the profile stores. */
-  const toolPickerCatalog = React.useMemo(() => {
-    const items = (toolCatalog ?? [])
-      .filter(({ user_selectable: selectable, usable }) => selectable && usable)
-      .map(({ name, description }) => ({ name, description }));
-    // Stored names outside the catalog stay selectable so they are kept.
-    initialTools.selected.forEach((name) => {
-      if (!items.some((item) => item.name === name))
-        items.push({ name, description: undefined });
-    });
-    return items;
-  }, [toolCatalog, initialTools]);
   /** The server's blurb for a tool, by name. */
   const toolDescriptions = React.useMemo(
     () =>
@@ -339,6 +327,18 @@ export function AgentSettingsScreen({
       ),
     [toolCatalog],
   );
+  /** Pickable tools this runtime can run, plus anything the profile stores. */
+  const toolPickerCatalog = React.useMemo(() => {
+    const items = (toolCatalog ?? [])
+      .filter(({ user_selectable: selectable, usable }) => selectable && usable)
+      .map(({ name, description }) => ({ name, description }));
+    // Stored names outside the catalog stay selectable so they are kept.
+    initialTools.selected.forEach((name) => {
+      if (!items.some((item) => item.name === name))
+        items.push({ name, description: toolDescriptions.get(name) });
+    });
+    return items;
+  }, [toolCatalog, toolDescriptions, initialTools]);
   const orderedSelectedTools = React.useMemo(
     () =>
       toolPickerCatalog
@@ -802,7 +802,7 @@ export function AgentSettingsScreen({
               testId="agent-settings-tool"
               items={toolPickerCatalog}
               selected={orderedSelectedTools}
-              isDisabled={isSaving}
+              isDisabled={isSaving || !toolCatalogLoaded}
               onToggle={(name, checked) =>
                 setSelectedTools((prev) =>
                   checked
