@@ -25,7 +25,7 @@ jobs:
       IMAGE: openhands/agent-canvas:snapshot-update
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           token: ${{ secrets.OPENHANDS_BOT_GITHUB_PAT_PUBLIC }}
       - name: Select newest snapshot older than seven days

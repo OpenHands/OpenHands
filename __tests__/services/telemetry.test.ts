@@ -51,6 +51,7 @@ import {
   setTelemetryBackendContext,
   setTelemetryCloudContext,
   setTelemetryConsent,
+  setTelemetryWebsiteAttribution,
   setTelemetryIdentity,
   subscribeTelemetryConsent,
   trackEvent,
@@ -86,6 +87,7 @@ describe("Telemetry Service", () => {
     );
     await setTelemetryIdentity(null);
     setTelemetryBackendContext({});
+    setTelemetryWebsiteAttribution(undefined);
   });
 
   afterEach(() => {
@@ -156,6 +158,15 @@ describe("Telemetry Service", () => {
         agentServerVersion: "1.36.2",
         automationSdkVersion: "1.36.3",
       });
+      setTelemetryWebsiteAttribution({
+        utm_source: "newsletter",
+        utm_medium: "email",
+        utm_campaign: "launch",
+        landing_page_category: "home",
+        cta_id: "hero-cloud",
+        cta_surface: "homepage_hero",
+        referring_domain_category: "search",
+      });
       expect(
         config.before_send({
           event: "backend_context_event",
@@ -169,6 +180,13 @@ describe("Telemetry Service", () => {
           agent_server_version: "1.36.2",
           automation_sdk_version: "1.36.3",
           backend_version: "1.36.2",
+          utm_source: "newsletter",
+          utm_medium: "email",
+          utm_campaign: "launch",
+          landing_page_category: "home",
+          cta_id: "hero-cloud",
+          cta_surface: "homepage_hero",
+          referring_domain_category: "search",
           custom: "value",
         }),
       });
@@ -600,16 +618,33 @@ describe("Telemetry Service", () => {
   });
 
   describe("clearTelemetryData", () => {
-    it("clears all telemetry data from localStorage", async () => {
+    it("clears all telemetry data from browser storage", async () => {
       await setTelemetryConsent("granted");
       await setTelemetryIdentity("user-a");
       localStorage.setItem("openhands-telemetry-first-use", "true");
+      localStorage.setItem(
+        "posthog_bootstrap:consumed_nonces",
+        JSON.stringify({ "nonce-a": Date.now() + 60_000 }),
+      );
+      localStorage.setItem("posthog_bootstrap:legacy", "legacy");
+      sessionStorage.setItem(
+        "posthog_bootstrap",
+        JSON.stringify({
+          bootstrap: { distinctID: "website-anon", sessionID: "session-a" },
+          attribution: { cta_surface: "docs_link" },
+        }),
+      );
 
       await clearTelemetryData();
 
       expect(localStorage.getItem("openhands-telemetry-consent")).toBeNull();
       expect(getPendingCloudTelemetryConsent()).toBeNull();
       expect(localStorage.getItem("openhands-telemetry-first-use")).toBeNull();
+      expect(
+        localStorage.getItem("posthog_bootstrap:consumed_nonces"),
+      ).toBeNull();
+      expect(localStorage.getItem("posthog_bootstrap:legacy")).toBeNull();
+      expect(sessionStorage.getItem("posthog_bootstrap")).toBeNull();
       expect(mockPosthog.reset).toHaveBeenCalledWith(true);
       expect(mockPosthog.opt_out_capturing).toHaveBeenCalled();
       await expect(getTelemetryDistinctIdForConsentSync()).resolves.toBe(

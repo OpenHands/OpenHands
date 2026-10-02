@@ -113,8 +113,9 @@ export function CanvasExtensionsRuntimeProvider({
   // (e.g. when mounted without an <ActiveBackendProvider>), and refetches
   // produce new extension arrays with identical content. The activation effect
   // therefore keys on this value signature — backend identity plus the enabled
-  // inventory — and reads the current objects from refs, so referential churn
-  // never tears down and re-activates extensions.
+  // inventory, whose `installedAt` catches a same-version refresh — and reads
+  // the current objects from refs, so referential churn never tears down and
+  // re-activates extensions.
   const activationSignature = React.useMemo(
     () =>
       JSON.stringify({
@@ -126,6 +127,7 @@ export function CanvasExtensionsRuntimeProvider({
           name: extension.name,
           version: extension.version,
           resolvedRef: extension.resolved_ref ?? null,
+          installedAt: extension.installed_at,
           pages: extension.manifest?.contributes?.pages ?? [],
         })),
       }),

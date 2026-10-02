@@ -47,6 +47,7 @@ const {
   mockGetSettingsForConversation,
   mockGetProfile,
   mockActivateProfile,
+  mockListProfiles,
 } = vi.hoisted(() => ({
   mockHttpGet: vi.fn(),
   mockHttpPost: vi.fn(),
@@ -69,6 +70,7 @@ const {
   mockGetSettingsForConversation: vi.fn(),
   mockGetProfile: vi.fn(),
   mockActivateProfile: vi.fn(),
+  mockListProfiles: vi.fn(),
 }));
 
 vi.mock("@openhands/typescript-client/clients", async () => {
@@ -87,6 +89,7 @@ vi.mock("@openhands/typescript-client/clients", async () => {
       return {
         getProfile: mockGetProfile,
         activateProfile: mockActivateProfile,
+        listProfiles: mockListProfiles,
       };
     }),
     SettingsClient: vi.fn(function SettingsClientMock() {
@@ -216,6 +219,7 @@ describe("AgentServerConversationService", () => {
     mockHttpDelete.mockReset();
     mockGetProfile.mockReset();
     mockActivateProfile.mockReset();
+    mockListProfiles.mockReset();
     mockSwitchProfile.mockReset();
     mockSwitchLLM.mockReset();
     mockSendEvent.mockReset();
@@ -553,6 +557,146 @@ describe("AgentServerConversationService", () => {
   });
 
   describe("createConversation", () => {
+    // #16885 — A named agent profile's pinned LLM (llm_profile_ref) must reach
+    // the agent-server as `title_llm_profile` when no explicit preference is
+    // set, so the title uses the same model as the running agent. These cover
+    // the conversation-creation integration criterion at the service boundary
+    // (the POST /api/conversations payload), not just the resolver.
+    it("sends the agent profile's pinned LLM as title_llm_profile when no explicit preference is set", async () => {
+      mockGetSettings.mockResolvedValue({
+        title_llm_profile: null,
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockListProfiles.mockResolvedValue({
+        profiles: [
+          {
+            name: "fast",
+            model: "anthropic/claude-haiku",
+            base_url: null,
+            api_key_set: true,
+          },
+          {
+            name: "powerful",
+            model: "anthropic/claude-sonnet",
+            base_url: null,
+            api_key_set: true,
+          },
+        ],
+        active_profile: "fast",
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "ignored-server-id",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      await AgentServerConversationService.createConversation({
+        agentLlmProfileRef: "powerful",
+      });
+
+      expect(mockHttpPost).toHaveBeenCalledWith(
+        "/api/conversations",
+        expect.objectContaining({ title_llm_profile: "powerful" }),
+      );
+    });
+
+    it("keeps an explicit title_llm_profile preference over the agent profile's pinned LLM", async () => {
+      mockGetSettings.mockResolvedValue({
+        title_llm_profile: "Titles",
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockListProfiles.mockResolvedValue({
+        profiles: [
+          {
+            name: "Titles",
+            model: "anthropic/claude-haiku-3-5",
+            base_url: null,
+            api_key_set: true,
+          },
+          {
+            name: "powerful",
+            model: "anthropic/claude-sonnet",
+            base_url: null,
+            api_key_set: true,
+          },
+        ],
+        active_profile: "powerful",
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "ignored-server-id",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      await AgentServerConversationService.createConversation({
+        agentLlmProfileRef: "powerful",
+      });
+
+      expect(mockHttpPost).toHaveBeenCalledWith(
+        "/api/conversations",
+        expect.objectContaining({ title_llm_profile: "Titles" }),
+      );
+    });
+
+    it("falls back to the active profile when the agent profile's pinned LLM is no longer available", async () => {
+      mockGetSettings.mockResolvedValue({
+        title_llm_profile: null,
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockListProfiles.mockResolvedValue({
+        profiles: [
+          {
+            name: "fast",
+            model: "anthropic/claude-haiku",
+            base_url: null,
+            api_key_set: true,
+          },
+        ],
+        active_profile: "fast",
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "ignored-server-id",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      // "powerful" was deleted since the profile was saved, so the resolver
+      // must degrade to the account-wide active profile instead of sending an
+      // unresolvable name.
+      await AgentServerConversationService.createConversation({
+        agentLlmProfileRef: "powerful",
+      });
+
+      expect(mockHttpPost).toHaveBeenCalledWith(
+        "/api/conversations",
+        expect.objectContaining({ title_llm_profile: "fast" }),
+      );
+    });
+
     it("generates a unique conversation_id and isolated working_dir per call", async () => {
       mockGetSettings.mockResolvedValue({
         agent_settings: { llm: { model: "gpt-4o" } },

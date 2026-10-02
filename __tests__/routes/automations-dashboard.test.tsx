@@ -57,6 +57,14 @@ const localBackend: Backend = {
   kind: "local",
 };
 
+const cloudBackend: Backend = {
+  id: "cloud-1",
+  name: "Cloud 1",
+  host: "https://app.all-hands.dev",
+  apiKey: "cloud-key",
+  kind: "cloud",
+};
+
 function createAutomation(overrides: Partial<Automation>): Automation {
   return {
     id: "a-ok",
@@ -368,5 +376,18 @@ describe("AutomationTemplates — manifest-declared templates page", () => {
       description: screen.getByText("Pick a proven widget to start from."),
       launcher: await screen.findByTestId("recommended-automations-section"),
     }).toBeTruthy();
+  });
+
+  it("shows the templates navigation item on cloud backends", async () => {
+    // Arrange
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+
+    // Act
+    renderAt("/automations/templates", <AutomationTemplates />);
+
+    // Assert
+    const nav = await screen.findByTestId("automations-navbar-desktop");
+    expect(within(nav).getByText("Widget templates")).toBeInTheDocument();
   });
 });
