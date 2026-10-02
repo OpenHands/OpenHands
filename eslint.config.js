@@ -265,7 +265,7 @@ export default [
           ],
           patterns: [
             {
-              group: ["#/context/*"],
+              group: ["**/context/*"],
               message:
                 "React contexts belong in #/contexts; import them from that directory instead.",
             },
