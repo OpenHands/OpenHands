@@ -14,6 +14,7 @@ import { AddBackendModal } from "#/components/features/backends/add-backend-moda
 import * as telemetry from "#/services/telemetry";
 
 const getServerInfoMock = vi.hoisted(() => vi.fn());
+const getSettingsMock = vi.hoisted(() => vi.fn().mockResolvedValue({}));
 
 const deviceFlowMocks = vi.hoisted(() => ({
   startDeviceFlow: vi.fn(),
@@ -36,6 +37,11 @@ vi.mock("@openhands/typescript-client/clients", () => ({
   ServerClient: vi.fn(function ServerClientMock() {
     return {
       getServerInfo: getServerInfoMock,
+    };
+  }),
+  SettingsClient: vi.fn(function SettingsClientMock() {
+    return {
+      getSettings: getSettingsMock,
     };
   }),
 }));
@@ -77,7 +83,7 @@ beforeEach(() => {
   captureMock = vi.spyOn(telemetry, "trackEvent").mockResolvedValue(undefined);
   window.localStorage.clear();
   getServerInfoMock.mockReset();
-  getServerInfoMock.mockResolvedValue({ version: "1.28.0" });
+  getServerInfoMock.mockResolvedValue({ version: "1.48.0" });
   deviceFlowMocks.startDeviceFlow.mockReset();
   deviceFlowMocks.startDeviceFlow.mockResolvedValue({
     device_code: "device-code",
@@ -89,7 +95,7 @@ beforeEach(() => {
     interval: 5,
   });
   deviceFlowMocks.pollForToken.mockReset();
-  deviceFlowMocks.pollForToken.mockImplementation(() => new Promise(() => {}));
+  deviceFlowMocks.pollForToken.mockImplementation(() => new Promise(() => { }));
   __resetActiveStoreForTests();
 });
 
@@ -407,7 +413,7 @@ describe("AddBackendModal – connection chooser", () => {
     await user.click(screen.getByTestId("add-backend-submit"));
 
     expect(await screen.findByTestId("add-backend-error")).toHaveTextContent(
-      "Agent Canvas requires agent-server 1.28.0 or newer",
+      "Agent Canvas requires agent-server 1.47.0 or newer",
     );
     expect(onClose).not.toHaveBeenCalled();
   });

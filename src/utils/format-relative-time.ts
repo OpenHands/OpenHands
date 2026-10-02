@@ -9,6 +9,20 @@ export function formatDate(dateStr: string, locale: string): string {
   });
 }
 
+/**
+ * Whether a timestamp is one nothing can be computed from. Besides an
+ * unparseable string, that includes the epoch: the backend leaves unset
+ * datetimes at zero, and formatting one produces "Jan 1, 1970" rather than
+ * an honest "unknown".
+ */
+export function isInvalidTimestamp(
+  dateStr: string | null | undefined,
+): boolean {
+  if (!dateStr) return true;
+  const parsed = new Date(dateStr).getTime();
+  return Number.isNaN(parsed) || parsed === 0;
+}
+
 export function formatRelativeTime(
   dateStr: string,
   locale: string,

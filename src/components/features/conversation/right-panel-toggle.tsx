@@ -90,7 +90,7 @@ export function RightPanelToggle({ className }: RightPanelToggleProps) {
           mobileTopBarIconButtonClassName,
           "size-7 self-center",
           isArchivedConversation &&
-            "cursor-not-allowed opacity-50 hover:bg-transparent hover:text-[var(--oh-muted)]",
+            "cursor-not-allowed opacity-50 hover:bg-transparent hover:text-muted",
           className,
         )}
         aria-label={tooltipText}

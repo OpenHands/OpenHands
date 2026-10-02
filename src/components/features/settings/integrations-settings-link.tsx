@@ -12,17 +12,21 @@ import {
 } from "#/components/features/sidebar/sidebar-layout";
 
 /**
- * Renders only for cloud backends — local backends have no equivalent
- * hosted integrations settings page.
+ * Renders only for cloud backends — local backends have no equivalent hosted
+ * integrations settings page. In locked-to-Cloud deployments this sits beside
+ * "All Cloud Settings" as a direct shortcut to the Cloud integrations page.
  */
 export function IntegrationsSettingsLink() {
   const { t } = useTranslation("openhands");
   const { active } = useActiveBackendContext();
-  const { backend } = active;
+  const { backend, orgId } = active;
 
   if (isNoBackend(backend) || backend.kind !== "cloud") return null;
 
-  const integrationsUrl = `${backend.host.replace(/\/+$/, "")}/settings/integrations`;
+  // `org` is consumed by the cloud settings loader so the page opens on the
+  // org that is active here instead of the cloud's last-used org.
+  const orgQuery = orgId ? `?org=${encodeURIComponent(orgId)}` : "";
+  const integrationsUrl = `${backend.host.replace(/\/+$/, "")}/settings/integrations${orgQuery}`;
 
   return (
     <a
@@ -41,10 +45,7 @@ export function IntegrationsSettingsLink() {
       <span className={cn(sidebarNavLabelClassName(false), "flex-1")}>
         {t(I18nKey.SETTINGS$INTEGRATIONS_SETTINGS_LINK)}
       </span>
-      <ExternalLink
-        className="size-4 shrink-0 text-[var(--oh-muted)]"
-        aria-hidden
-      />
+      <ExternalLink className="size-4 shrink-0 text-muted" aria-hidden />
     </a>
   );
 }

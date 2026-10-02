@@ -34,6 +34,7 @@ import process from "node:process";
 import { pathToFileURL } from "node:url";
 import sirv from "sirv";
 
+import { applySessionKeyPolicy, DEFAULT_BIND_HOST } from "./bind-host.mjs";
 import {
   createProxyHandlers,
   createRouter,
@@ -77,20 +78,29 @@ const ASSET_LIKE_EXTENSIONS = new Set([
 // Args
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function parseArgs(argv = process.argv.slice(2)) {
+function isEnvFlagEnabled(value) {
+  if (typeof value !== "string") return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === "1" || normalized === "true";
+}
+
+export function parseArgs(argv = process.argv.slice(2), env = process.env) {
   const config = {
     port: 3001,
-    host: "::",
+    host: DEFAULT_BIND_HOST,
     dir: "build",
     routes: {},
     rejectPrefixes: [],
     noReferrerPrefixes: [],
     sessionApiKey: null,
     authRequired: false,
+    allowLanSessionKey: false,
     runtimeServicesInfo: null,
     lockToCloud: null,
     basePath: "/",
     vscodeBasePath: null,
+    // Also settable via the --disable-telemetry flag below.
+    disableTelemetry: isEnvFlagEnabled(env.AGENT_CANVAS_DISABLE_TELEMETRY),
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -148,6 +158,12 @@ export function parseArgs(argv = process.argv.slice(2)) {
 
       case "--auth-required":
         config.authRequired = true;
+        break;
+      case "--disable-telemetry":
+        config.disableTelemetry = true;
+        break;
+      case "--allow-lan-session-key":
+        config.allowLanSessionKey = true;
         break;
       case "--reject-prefix": {
         const prefix = argv[++i];
@@ -225,7 +241,10 @@ USAGE:
 
 OPTIONS:
   -p, --port  <port>           Port to bind (default: 3001)
-  -H, --host  <host>           Hostname to bind (default: :: dual-stack)
+  -H, --host  <host>           Hostname to bind (default: 127.0.0.1 loopback).
+                               Use 0.0.0.0 or :: to expose on the LAN; the
+                               session key is then not injected unless you also
+                               pass --allow-lan-session-key.
   -d, --dir   <dir>            Directory to serve (default: build)
   -r, --route <prefix=url>     Proxy <prefix> (and subpaths) to <url>;
                                may be repeated. WebSockets supported.
@@ -235,6 +254,8 @@ OPTIONS:
   --auth-required              Inject authRequired flag into index.html so the
                                pre-built frontend shows the API key entry screen
                                (public mode) without VITE_AUTH_REQUIRED baked in.
+  --allow-lan-session-key      Permit --session-api-key when --host is not
+                               loopback (Docker/container entrypoints only).
   --runtime-services-info <json>
                                Inject a JSON description of the local runtime
                                services into index.html so the pre-built
@@ -244,6 +265,12 @@ OPTIONS:
   --lock-to-cloud <cloud-url>  Lock backend setup to a single OpenHands Cloud
                                URL. Hides manual/local backend setup and the
                                custom Cloud URL field in the pre-built frontend.
+  --disable-telemetry          Disable all product telemetry (including the
+                               anonymous install event) in the pre-built
+                               frontend at runtime, without VITE_DO_NOT_TRACK
+                               baked in. Injects
+                               window.__AGENT_CANVAS_DO_NOT_TRACK__ = true.
+                               Equivalent to AGENT_CANVAS_DISABLE_TELEMETRY=1.
   --base-path <path>           Mount the SPA under <path> (default: /).
                                For example, --base-path /canvas serves
                                index.html and assets under /canvas.
@@ -321,7 +348,21 @@ ROUTING:
  *   editor control can render here at all. Absent means this origin serves no
  *   editor — which is the correct answer for the public-mode instance, whose
  *   route table deliberately omits it.
+ *
+ * - `disableTelemetry`: sets `window.__AGENT_CANVAS_DO_NOT_TRACK__ = true` so a
+ *   published bundle disables all telemetry (including the anonymous install
+ *   event) at runtime without VITE_DO_NOT_TRACK baked in. Read by
+ *   `isDoNotTrackEnabled()` in `#/services/telemetry`. Enabled by
+ *   AGENT_CANVAS_DISABLE_TELEMETRY=1 or the --disable-telemetry flag.
  */
+export function serializeForInlineScript(value) {
+  return JSON.stringify(value)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
+}
+
 function makeConfigInjectionScript(
   sessionApiKey,
   authRequired,
@@ -329,11 +370,12 @@ function makeConfigInjectionScript(
   lockToCloud,
   basePath,
   vscodeBasePath,
+  disableTelemetry,
 ) {
   const parts = [];
 
   if (sessionApiKey) {
-    const keyLiteral = JSON.stringify(sessionApiKey);
+    const keyLiteral = serializeForInlineScript(sessionApiKey);
     // Window global — read at module init by getBakedSessionApiKey().
     // Set first so it's available even if the localStorage write throws.
     parts.push(`window.__AGENT_CANVAS_SESSION_API_KEY__=${keyLiteral};`);
@@ -362,26 +404,30 @@ function makeConfigInjectionScript(
     // VITE_RUNTIME_SERVICES_INFO env var. JSON.stringify produces a safe JS
     // string literal for the inline <script>.
     parts.push(
-      `window.__AGENT_CANVAS_RUNTIME_SERVICES_INFO__=${JSON.stringify(runtimeServicesInfo)};`,
+      `window.__AGENT_CANVAS_RUNTIME_SERVICES_INFO__=${serializeForInlineScript(runtimeServicesInfo)};`,
     );
   }
 
   if (lockToCloud) {
     parts.push(
-      `window.__AGENT_CANVAS_LOCK_TO_CLOUD__=${JSON.stringify(lockToCloud)};`,
+      `window.__AGENT_CANVAS_LOCK_TO_CLOUD__=${serializeForInlineScript(lockToCloud)};`,
     );
   }
 
   if (basePath && basePath !== "/") {
     parts.push(
-      `window.__AGENT_CANVAS_BASE_PATH__=${JSON.stringify(basePath)};`,
+      `window.__AGENT_CANVAS_BASE_PATH__=${serializeForInlineScript(basePath)};`,
     );
   }
 
   if (vscodeBasePath) {
     parts.push(
-      `window.__AGENT_CANVAS_VSCODE_BASE_PATH__=${JSON.stringify(vscodeBasePath)};`,
+      `window.__AGENT_CANVAS_VSCODE_BASE_PATH__=${serializeForInlineScript(vscodeBasePath)};`,
     );
+  }
+
+  if (disableTelemetry) {
+    parts.push(`window.__AGENT_CANVAS_DO_NOT_TRACK__=true;`);
   }
 
   if (parts.length === 0) return "";
@@ -404,6 +450,7 @@ async function serveInjectedIndexHtml(
     lockToCloud,
     basePath,
     vscodeBasePath,
+    disableTelemetry,
   } = {},
 ) {
   let content;
@@ -420,6 +467,7 @@ async function serveInjectedIndexHtml(
     lockToCloud,
     basePath,
     vscodeBasePath,
+    disableTelemetry,
   );
   // Inject right before </head> so the key is available before any app code runs.
   // replace() targets the first (and only) </head> in well-formed HTML.
@@ -433,7 +481,7 @@ async function serveInjectedIndexHtml(
   res.writeHead(200, {
     "Content-Type": "text/html; charset=utf-8",
     "Content-Length": buf.length,
-    "Cache-Control": "no-cache",
+    "Cache-Control": sessionApiKey ? "no-store" : "no-cache",
   });
   if (req.method === "HEAD") {
     res.end();
@@ -469,6 +517,7 @@ function needsRuntimeInjection(injectionOpts) {
     injectionOpts.runtimeServicesInfo ||
     injectionOpts.lockToCloud ||
     injectionOpts.vscodeBasePath ||
+    injectionOpts.disableTelemetry ||
     (injectionOpts.basePath && injectionOpts.basePath !== "/"),
   );
 }
@@ -537,6 +586,8 @@ function setStaticHeaders(res, pathname) {
 
 function createStaticMiddleware(dirAbs) {
   return sirv(dirAbs, {
+    // Builds replace hashed assets while the local server is running.
+    dev: true,
     etag: true,
     single: false,
     setHeaders: setStaticHeaders,
@@ -607,13 +658,20 @@ export function startStaticServer(config) {
   const route = createRouter(config.routes);
   const proxy = createProxyHandlers({ label: `static:${config.port}` });
   const dirAbs = resolve(config.dir);
-  const injectionOpts = {
+  const policy = applySessionKeyPolicy({
+    host: config.host,
     sessionApiKey: config.sessionApiKey || null,
     authRequired: config.authRequired || false,
+    allowLanSessionKey: config.allowLanSessionKey || false,
+  });
+  const injectionOpts = {
+    sessionApiKey: policy.sessionApiKey,
+    authRequired: policy.authRequired,
     runtimeServicesInfo: config.runtimeServicesInfo || null,
     lockToCloud: config.lockToCloud || null,
     basePath: normalizeBasePath(config.basePath),
     vscodeBasePath: config.vscodeBasePath || null,
+    disableTelemetry: config.disableTelemetry || false,
   };
   const basePath = injectionOpts.basePath;
   const rejectPrefixes = config.rejectPrefixes ?? [];

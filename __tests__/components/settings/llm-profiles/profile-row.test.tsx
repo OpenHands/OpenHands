@@ -1,8 +1,9 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { ProfileRow } from "#/components/features/settings/llm-profiles/profile-row";
 import { ProfileInfo } from "#/api/profiles-service/profiles-service.api";
+import { useFreeModelsStore } from "#/stores/free-models-store";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -40,6 +41,13 @@ const defaultProps = {
 };
 
 describe("ProfileRow", () => {
+  afterEach(() => {
+    useFreeModelsStore.getState().setFlags({
+      freeModels: new Set(),
+      defaultModel: null,
+    });
+  });
+
   it("displays the profile name", () => {
     render(<ProfileRow {...defaultProps} />);
 
@@ -52,7 +60,11 @@ describe("ProfileRow", () => {
     expect(screen.getByText("openai/gpt-4")).toBeInTheDocument();
   });
 
-  it("labels a free OpenHands route without changing the raw title", () => {
+  it("labels a DB-flagged free OpenHands route without changing the raw title", () => {
+    useFreeModelsStore.getState().setFlags({
+      freeModels: new Set(["openhands/glm-5.2"]),
+      defaultModel: "openhands/glm-5.2",
+    });
     render(
       <ProfileRow
         {...defaultProps}
@@ -60,7 +72,7 @@ describe("ProfileRow", () => {
       />,
     );
 
-    expect(screen.getByText("OpenHands GLM-5.2 (free)")).toHaveAttribute(
+    expect(screen.getByText("openhands/glm-5.2 (free)")).toHaveAttribute(
       "title",
       "openhands/glm-5.2",
     );

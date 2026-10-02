@@ -9,6 +9,8 @@ import { HttpError } from "@openhands/typescript-client";
 import { I18nKey } from "#/i18n/declaration";
 
 import AutomationService from "#/api/automation-service/automation-service.api";
+import { getCloudOrganizationMe } from "#/api/cloud/organization-service.api";
+import ProfilesService from "#/api/profiles-service/profiles-service.api";
 import {
   __resetActiveStoreForTests,
   setActiveSelection,
@@ -35,10 +37,37 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
   },
 }));
 
+vi.mock("#/api/profiles-service/profiles-service.api", () => ({
+  default: {
+    listProfiles: vi.fn(),
+  },
+}));
+
 vi.mock("#/utils/custom-toast-handlers", () => ({
   displaySuccessToast: vi.fn(),
   displayErrorToast: vi.fn(),
 }));
+
+// Permissions come from the org's /me endpoint on cloud backends, so mock that
+// service rather than the hooks that read it; local backends never call it.
+vi.mock("#/api/cloud/organization-service.api", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("#/api/cloud/organization-service.api")
+  >()),
+  getCloudOrganizationMe: vi.fn(),
+}));
+
+const orgAdmin = {
+  orgId: "org-1",
+  userId: "user-1",
+  role: "admin",
+  permissions: ["view_automations", "manage_automations"],
+};
+const orgMember = {
+  ...orgAdmin,
+  role: "member",
+  permissions: ["view_automations"],
+};
 
 const localBackend: Backend = {
   id: "local-1",
@@ -77,7 +106,10 @@ function renderList(queryClient?: QueryClient) {
   const client =
     queryClient ??
     new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
     });
   return render(
     <QueryClientProvider client={client}>
@@ -99,6 +131,13 @@ beforeEach(() => {
   vi.mocked(AutomationService.getAutomations).mockResolvedValue(listResponse);
   vi.mocked(AutomationService.updateAutomation).mockReset();
   vi.mocked(AutomationService.dispatchAutomation).mockReset();
+  vi.mocked(ProfilesService.listProfiles).mockReset();
+  vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
+    profiles: [],
+    active_profile: null,
+  });
+  vi.mocked(getCloudOrganizationMe).mockReset();
+  vi.mocked(getCloudOrganizationMe).mockResolvedValue(orgAdmin);
   setRegisteredBackends([localBackend, cloudBackend]);
   setActiveSelection({ backendId: localBackend.id });
 });
@@ -108,7 +147,7 @@ afterEach(() => {
   __resetActiveStoreForTests();
 });
 
-describe("AutomationsList — Edit from the row kebab is local-only", () => {
+describe("AutomationsList — Edit from the row kebab", () => {
   it("opens the Edit modal pre-filled with the row's values when the active backend is local", async () => {
     // Arrange — local backend is active (default beforeEach); render the list
     // and wait for the row to appear.
@@ -135,10 +174,11 @@ describe("AutomationsList — Edit from the row kebab is local-only", () => {
     expect(nameInput.value).toBe(automation.name);
   });
 
-  it("hides Edit in the row kebab when the active backend is cloud", async () => {
-    // Arrange — switch to the cloud backend before mounting so the page sees
-    // it as the active backend on first render.
-    setActiveSelection({ backendId: cloudBackend.id });
+  it("opens the Edit modal pre-filled from the row kebab when the active backend is cloud", async () => {
+    // Arrange — switch to the cloud backend (with its org, which is what the
+    // permissions come from) before mounting so the page sees it as the
+    // active backend on first render.
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
     const user = userEvent.setup();
     renderList();
     await waitFor(() => {
@@ -146,18 +186,42 @@ describe("AutomationsList — Edit from the row kebab is local-only", () => {
     });
     await screen.findByText(automation.name);
 
-    // Act — open the row kebab. The aria-label resolves to the I18n key
-    // in tests because `t` is mocked to return the key itself.
+    // Act — open the row kebab and pick Edit. The aria-label resolves to
+    // the I18n key in tests because `t` is mocked to return the key itself.
     await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
+    );
 
-    // Assert — Edit must not appear on cloud; Delete still does, proving the
-    // menu actually opened and we didn't merely fail to render it.
+    // Assert — the same Edit modal mounts on cloud, wired to this row; the
+    // permission model decides, not the backend kind.
+    const nameInput = (await screen.findByTestId(
+      "edit-automation-name",
+    )) as HTMLInputElement;
+    expect(nameInput.value).toBe(automation.name);
+  });
+});
+
+describe("AutomationsList — Git Sync entry point follows manage_automations", () => {
+  it("shows the Git Sync button to an org admin on a cloud backend", async () => {
+    // Git sync is org-level config, not a local-only feature: an admin of the
+    // active org reaches it on any backend kind.
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
+    renderList();
+    await screen.findByText(automation.name);
+
+    expect(screen.getByTestId("automations-git-sync")).toBeInTheDocument();
+  });
+
+  it("hides the Git Sync button from a member", async () => {
+    vi.mocked(getCloudOrganizationMe).mockResolvedValue(orgMember);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
+    renderList();
+    await screen.findByText(automation.name);
+
     expect(
-      screen.queryByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
+      screen.queryByTestId("automations-git-sync"),
     ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$DELETE }),
-    ).toBeInTheDocument();
   });
 });
 
@@ -300,9 +364,7 @@ describe("AutomationsList — Run now toasts", () => {
     });
     const user = userEvent.setup();
     renderList();
-    await screen.findByTestId(
-      `automation-list-row-${disabledAutomation.id}`,
-    );
+    await screen.findByTestId(`automation-list-row-${disabledAutomation.id}`);
     const button = screen.getByTestId(
       `automation-run-now-${disabledAutomation.id}`,
     );
@@ -372,9 +434,9 @@ describe("AutomationsList — add automation menu", () => {
     ).not.toBeInTheDocument();
 
     await user.click(addTrigger);
-    expect(screen.getByTestId("automations-add-automation-menu")).not.toHaveClass(
-      "mt-2",
-    );
+    expect(
+      screen.getByTestId("automations-add-automation-menu"),
+    ).not.toHaveClass("mt-2");
     expect(
       screen.getByTestId("automations-import-automation"),
     ).toBeInTheDocument();
@@ -423,7 +485,10 @@ describe("AutomationsList — list freshness on remount", () => {
         total: 2,
       });
     const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
     });
 
     // Act — first mount lands on the original list, then unmount and remount

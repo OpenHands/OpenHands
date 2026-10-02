@@ -3,9 +3,12 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import type { Automation } from "#/types/automation";
-import { AutomationRunStatus } from "#/types/automation";
+import { getAutomationRunDisplay } from "#/utils/automation-run-display";
 import { KebabMenu } from "./kebab-menu";
-import { useHasPermission } from "#/hooks/use-has-permission";
+import {
+  useAutomationPermissions,
+  useIsAutomationOwner,
+} from "#/hooks/use-automation-permissions";
 import { useNavigation } from "#/context/navigation-context";
 import PlayIcon from "#/icons/play.svg?react";
 import { SkillCardPillRow } from "#/components/features/skills/skill-card-pill-row";
@@ -22,14 +25,16 @@ import {
   extensionModuleCardSurfaceClassName,
 } from "#/utils/extension-module-card-classes";
 import { toLatestRunState } from "./to-latest-run-state";
+import { RunPhase, shouldShowRunPhase } from "./detail/run-phase";
+import { resolveAutomationImpactStatement } from "#/utils/automation-catalog";
 import { RunStatusBadge } from "./detail/run-status-badge";
 import { AutomationRunActivitySparkline } from "#/components/features/home/featured-automations/automation-run-activity-sparkline";
 import type { RunSummaryState } from "#/manifests/automation-insights";
 import type { InterfaceListInsights } from "#/manifests/types";
 import {
   getLastRunTimestamp,
-  shortenAutomationErrorDetail,
-  shouldShowAutomationErrorHovercard,
+  shortenAutomationRunSummary,
+  shouldShowAutomationRunSummaryHovercard,
 } from "#/components/features/home/featured-automations/automation-run-health";
 
 /** Run insights shown when the manifest declares the dashboard surface. */
@@ -61,7 +66,12 @@ export function AutomationCard({
 }: AutomationCardProps) {
   const { navigate } = useNavigation();
   const { t, i18n } = useTranslation("openhands");
-  const canManage = useHasPermission("manage_automations");
+  const { canManage: hasManagePermission } = useAutomationPermissions();
+  const isOwner = useIsAutomationOwner(automation);
+  // Write actions on a specific automation: manage OR creator (escape hatch).
+  const canManage = hasManagePermission || isOwner;
+  // Non-creators may turn an automation off but not back on.
+  const canToggle = automation.enabled ? canManage : isOwner;
 
   const scheduleLabel =
     automation.trigger.schedule_human || automation.trigger.type;
@@ -78,6 +88,7 @@ export function AutomationCard({
     automation,
     t,
     canManage,
+    canToggle,
     onRunNow,
     isRunPending,
     onView: handleView,
@@ -88,19 +99,20 @@ export function AutomationCard({
   });
 
   const runState = toLatestRunState(insights?.state);
+  const impactStatement = resolveAutomationImpactStatement(
+    automation,
+    insights?.state?.summary?.completedTotal ?? null,
+  );
   const { latestRun, recentRuns, isLoading, isError } = runState;
   const timestamp = latestRun ? getLastRunTimestamp(latestRun) : null;
-  const errorDetail =
-    latestRun?.status === AutomationRunStatus.FAILED
-      ? latestRun.error_detail?.trim() || null
-      : null;
-  const shortErrorDetail = errorDetail
-    ? shortenAutomationErrorDetail(errorDetail)
-    : null;
-  const showErrorHovercard =
-    errorDetail != null &&
-    shortErrorDetail != null &&
-    shouldShowAutomationErrorHovercard(errorDetail, shortErrorDetail);
+  const display = latestRun ? getAutomationRunDisplay(latestRun) : null;
+  const summary = display?.summary ?? null;
+  const shortSummary = summary ? shortenAutomationRunSummary(summary) : null;
+  const showSummaryHovercard =
+    summary != null &&
+    shortSummary != null &&
+    shouldShowAutomationRunSummaryHovercard(summary, shortSummary);
+  const showPhase = shouldShowRunPhase(latestRun?.status);
   const disableAnimation = import.meta.env.MODE === "test";
 
   return (
@@ -120,7 +132,7 @@ export function AutomationCard({
     >
       <header className="flex flex-col gap-1.5">
         <div className="flex h-8 items-center justify-between gap-3">
-          <h3 className="min-w-0 flex-1 truncate text-sm font-semibold leading-none text-[var(--oh-foreground)]">
+          <h3 className="min-w-0 flex-1 truncate text-sm font-semibold leading-none text-foreground">
             {automation.name}
           </h3>
           <div className="flex shrink-0 items-center gap-0.5">
@@ -152,7 +164,7 @@ export function AutomationCard({
           </div>
         </div>
         {automation.prompt ? (
-          <p className="line-clamp-2 text-xs leading-relaxed text-[var(--oh-text-secondary)]">
+          <p className="line-clamp-2 text-xs leading-relaxed text-text-secondary">
             {automation.prompt}
           </p>
         ) : null}
@@ -194,41 +206,54 @@ export function AutomationCard({
             ) : null}
 
             {!isLoading && isError ? (
-              <p className="truncate text-[var(--oh-text-secondary)]">
+              <p className="truncate text-text-secondary">
                 {t(I18nKey.FEATURED_AUTOMATIONS$STATUS_UNAVAILABLE)}
               </p>
             ) : null}
 
             {!isLoading && !isError && !latestRun ? (
-              <p className="truncate text-[var(--oh-text-secondary)]">
+              <p className="truncate text-text-secondary">
                 {t(I18nKey.AUTOMATIONS$DETAIL$NO_RUNS)}
               </p>
             ) : null}
 
             {latestRun ? (
               <>
-                <RunStatusBadge status={latestRun.status} iconOnly showLabel />
+                <RunStatusBadge
+                  status={display?.badgeStatus ?? latestRun.status}
+                  iconOnly
+                  showLabel
+                />
 
-                {shortErrorDetail ? (
-                  showErrorHovercard && errorDetail ? (
+                {showPhase ? (
+                  <RunPhase
+                    status={latestRun.status}
+                    code={latestRun.phase_code}
+                    label={latestRun.phase_label}
+                    updatedAt={latestRun.phase_updated_at}
+                  />
+                ) : null}
+
+                {shortSummary ? (
+                  showSummaryHovercard && summary ? (
                     <Tooltip
                       content={
                         <p className="max-w-xs whitespace-pre-wrap break-words p-2 text-xs">
-                          {errorDetail}
+                          {summary}
                         </p>
                       }
                       placement="top"
                       closeDelay={100}
                       disableAnimation={disableAnimation}
-                      className="rounded-xl border border-[var(--oh-border)] bg-base-secondary p-0 text-white shadow-xl"
+                      className="rounded-xl border border-border bg-base-secondary p-0 text-contrast shadow-xl"
                     >
-                      <span className="min-w-0 flex-1 cursor-default truncate text-[var(--oh-status-error)]">
-                        {shortErrorDetail}
+                      <span className="min-w-0 flex-1 cursor-default truncate text-text-secondary">
+                        {shortSummary}
                       </span>
                     </Tooltip>
                   ) : (
-                    <p className="min-w-0 flex-1 truncate text-[var(--oh-status-error)]">
-                      {shortErrorDetail}
+                    <p className="min-w-0 flex-1 truncate text-text-secondary">
+                      {shortSummary}
                     </p>
                   )
                 ) : null}
@@ -239,12 +264,21 @@ export function AutomationCard({
           {timestamp ? (
             <span
               data-testid={`automation-last-run-${automation.id}`}
-              className="shrink-0 text-[var(--oh-text-secondary)]"
+              className="shrink-0 text-text-secondary"
             >
               {formatRelativeTime(timestamp, i18n.language, t)}
             </span>
           ) : null}
         </div>
+      ) : null}
+
+      {impactStatement ? (
+        <p
+          data-testid={`automation-impact-${automation.id}`}
+          className="mt-3 truncate text-xs text-text-secondary"
+        >
+          {impactStatement}
+        </p>
       ) : null}
 
       {insights ? (

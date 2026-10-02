@@ -12,7 +12,7 @@ export function EmptyState() {
       data-testid="automations-empty"
       className={extensionModuleEmptyStateClassName}
     >
-      <p className="text-sm text-white">{t(I18nKey.AUTOMATIONS$EMPTY)}</p>
+      <p className="text-sm text-contrast">{t(I18nKey.AUTOMATIONS$EMPTY)}</p>
 
       <div className="mt-4 flex justify-center">
         <CreateInstructions />

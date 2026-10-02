@@ -135,11 +135,25 @@ export type Settings = {
   enable_sound_notifications: boolean;
   enable_proactive_conversation_starters: boolean;
   enable_solvability_analysis: boolean;
+  /**
+   * When true and an active Model Router meta-profile is configured, the first
+   * user message of every new conversation is routed through the router (the
+   * `route_task_to_model` tool) before the agent proceeds. Default false so
+   * conversations behave exactly as before unless the user opts in.
+   */
+  run_router_at_conversation_start: boolean;
   user_consents_to_analytics: boolean | null;
   search_api_key?: string;
   is_new_user?: boolean;
   mcp_config?: MCPConfig;
+  /** Deny-list over user- and project-authored skills. */
   disabled_skills?: string[];
+  /**
+   * Allow-list over the bundled `@openhands/extensions` catalog. `undefined`
+   * means "never migrated", the only signal `migrateSkillEnablement` has, so
+   * it is deliberately absent from `DEFAULT_SETTINGS`.
+   */
+  enabled_skills?: string[];
   max_budget_per_task: number | null;
   email?: string;
   email_verified?: boolean;

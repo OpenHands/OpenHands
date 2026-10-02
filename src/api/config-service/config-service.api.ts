@@ -99,10 +99,15 @@ class ConfigService {
     const verifiedNames = new Set(
       provider ? (verifiedMap?.[provider] ?? []) : [],
     );
+    // The local agent-server has no model database, so it exposes no free /
+    // default metadata; both are always false here. Cloud backends embed the
+    // DB-driven flags natively on each item (handled above).
     const verifiedItems: LLMModel[] = [...verifiedNames].map((name) => ({
       provider,
       name,
       verified: true,
+      free: false,
+      default: false,
     }));
 
     const prefixedItems: LLMModel[] = provider
@@ -114,6 +119,8 @@ class ConfigService {
             provider,
             name,
             verified: false,
+            free: false,
+            default: false,
           }))
       : [];
 

@@ -5,8 +5,10 @@ const BUNDLE_FILES: Record<string, Record<string, string>> = {
   "widget-monitor": { "main.py": "print('watching')\n" },
 };
 
-vi.mock("@openhands/extensions/automations", () => ({
-  AUTOMATION_CATALOG: [],
+vi.mock("@openhands/extensions/automations", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@openhands/extensions/automations")
+  >()),
   getAutomationBundleFiles: (id: string) => BUNDLE_FILES[id],
 }));
 
@@ -72,6 +74,27 @@ function bundleEntry(overrides = {}) {
 }
 
 const VALUES = { repository: "OpenHands/automation", schedule: "*/15 * * * *" };
+
+describe("bundle profile selection", () => {
+  it("preserves the profile in preflight and create without a competing model", async () => {
+    const { buildCreatePayload, buildPreflightBody } =
+      await import("#/manifests/automation-setup");
+    const values = {
+      ...VALUES,
+      agent_profile_id: "11111111-1111-4111-8111-111111111111",
+      model: "another-model",
+    };
+    const entry = bundleEntry();
+    const create = buildCreatePayload(entry, values);
+    const preflight = buildPreflightBody(entry, values);
+    expect(create?.agent_profile_id).toBe(values.agent_profile_id);
+    expect(create).not.toHaveProperty("model");
+    expect(preflight?.draft).toMatchObject({
+      agent_profile_id: values.agent_profile_id,
+    });
+    expect(preflight?.draft).not.toHaveProperty("model");
+  });
+});
 
 describe("packBundle", () => {
   it("packs the entry's files with the config the form rendered", async () => {
