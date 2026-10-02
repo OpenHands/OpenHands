@@ -247,7 +247,7 @@ export function ConversationLayoutsMenu({
                 <MenuRow
                   key={facet}
                   icon={Tag}
-                  label={formatTagFacetLabel(facet)}
+                  label={formatTagFacetLabel(facet, t)}
                   selected={preferences.selectedTagFacets.includes(facet)}
                   testId={`tag-facet-row-${facet}`}
                   onClick={() => preferences.toggleTagFacet(facet)}

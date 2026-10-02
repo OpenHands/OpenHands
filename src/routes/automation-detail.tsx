@@ -44,6 +44,7 @@ import {
 } from "#/hooks/use-automation-permissions";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import type { Automation } from "#/types/automation";
+import { isDraftAutomation } from "#/utils/automation-state";
 import {
   getAutomationExportFilename,
   serializeAutomation,
@@ -235,8 +236,10 @@ export default function AutomationDetail() {
       creatorQuery.data?.email ??
       (creatorQuery.isError ? automation.user_id : null);
   }
-  // Non-creators may turn an automation off but not back on.
-  const canToggle = automation.enabled ? canManage : isOwner;
+  const isDraft = isDraftAutomation(automation);
+  // Non-creators may turn an automation off but not back on. Draft test
+  // artifacts are finalized through the draft setup flow, not this toggle.
+  const canToggle = isDraft ? false : automation.enabled ? canManage : isOwner;
 
   return (
     <div className="min-h-full">

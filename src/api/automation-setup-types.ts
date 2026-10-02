@@ -1,6 +1,7 @@
 export type AutomationSetupKind = "prompt" | "plugin" | "custom";
 export type AutomationSetupTriggerKind = "cron" | "event";
 export type AutomationSetupFrequency =
+  | "once"
   | "hourly"
   | "daily"
   | "weekdays"
@@ -15,6 +16,7 @@ export interface AutomationSetupFormValues {
   repository: string;
   pluginSource: string;
   pluginRef: string;
+  pluginList: string;
   customCode: string;
   entrypoint: string;
   setupScriptPath: string;
@@ -22,11 +24,15 @@ export interface AutomationSetupFormValues {
   triggerKind: AutomationSetupTriggerKind;
   frequency: AutomationSetupFrequency;
   time: string;
+  scheduleDateTime: string;
   timezone: string;
+  weekday: string;
   customSchedule: string;
   eventSource: string;
   eventKey: string;
   eventFilter: string;
+  model: string;
+  agentProfileId: string;
   showTimeout: boolean;
   timeoutSeconds: string;
 }
@@ -51,6 +57,8 @@ export interface AutomationSetupDraft {
   kind: AutomationSetupKind;
   plugins?: string[];
   form?: AutomationSetupFormPatch;
+  serverDraftId?: string;
+  materializedAutomationId?: string | null;
   fieldMetadata?: Partial<
     Record<AutomationSetupField, AutomationSetupFieldMetadata>
   >;

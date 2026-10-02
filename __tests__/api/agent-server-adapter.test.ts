@@ -923,6 +923,26 @@ describe("buildStartConversationRequest", () => {
       ]);
     });
 
+    it("adds automation setup tags to local conversation requests", () => {
+      const payload = buildStartConversationRequest({
+        settings: DEFAULT_SETTINGS,
+        automationSetup: true,
+        automationSetupTags: {
+          automationdraftid: "draft-1",
+          automationmaterializeddraftid: "auto-1",
+        },
+      });
+
+      expect(payload.tags).toEqual(
+        expect.objectContaining({
+          automationsetup: "draft",
+          automationdraftid: "draft-1",
+          automationmaterializeddraftid: "auto-1",
+          clientsource: "agentcanvas",
+        }),
+      );
+    });
+
     it.each([
       {
         automationSetup: false,
