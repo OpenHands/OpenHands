@@ -24,7 +24,7 @@ import {
 import { getInvokeSkillItems } from "../event-content-helpers/get-invoke-skill-items";
 import { SkillReadyContentList } from "./skill-ready-content-list";
 import SkillsIcon from "#/icons/skills.svg?react";
-import { isMarkdownFileEditorEvent } from "#/components/features/chat/tool-visualizers/primitives/markdown-file-preview";
+import { isPreviewableFileEditorEvent } from "#/components/features/chat/tool-visualizers/primitives/markdown-file-preview";
 
 interface GenericEventMessageWrapperProps {
   event: OpenHandsEvent | SkillReadyEvent;
@@ -102,11 +102,11 @@ export function GenericEventMessageWrapper({
     details
   );
 
-  // Markdown file-editor cards carry a clipped preview; expand them by
+  // Artifact file-editor cards carry a clipped preview; expand them by
   // default so the artifact is visible without an extra chevron click.
   const initiallyExpanded =
     !isSkillReadyEvent(event) &&
-    isMarkdownFileEditorEvent(event, correspondingAction);
+    isPreviewableFileEditorEvent(event, correspondingAction);
 
   return (
     <div>

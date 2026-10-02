@@ -106,8 +106,23 @@ export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
     );
   }
 
-  const { kind, text, staticUrl, mimeType } = query.data;
+  const { kind, text, staticUrl, mimeType, bytesTooLarge } = query.data;
   const bustedStaticUrl = withWorkspaceCacheBuster(staticUrl, mutationCounter);
+
+  // A file that exceeded the download bound was never buffered, so its bytes
+  // are not available in either view mode. Say so explicitly — falling through
+  // to the binary fallback would present a huge, readable log as an
+  // unopenable blob.
+  if (bytesTooLarge) {
+    return (
+      <div
+        className="flex h-full w-full items-center justify-center text-sm text-muted"
+        data-testid="file-content-viewer-too-large"
+      >
+        {t(I18nKey.FILES$FILE_TOO_LARGE)}
+      </div>
+    );
+  }
 
   // ----- Plain mode: raw source bytes, syntax-highlighted when we can
   // recognize the grammar (falls through to a `<pre>` otherwise). This

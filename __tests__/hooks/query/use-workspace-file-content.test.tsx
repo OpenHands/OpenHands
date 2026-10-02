@@ -3,8 +3,12 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useWorkspaceFileContent } from "#/hooks/query/use-workspace-file-content";
+import {
+  MAX_TEXT_DOWNLOAD_BYTES,
+  useWorkspaceFileContent,
+} from "#/hooks/query/use-workspace-file-content";
 import { useWorkspaceMutationCounter } from "#/stores/use-workspace-mutation-counter";
+import { MAX_OOXML_DOWNLOAD_BYTES } from "#/utils/ooxml-preview";
 
 const useWorkspaceSessionMock = vi.fn();
 vi.mock("#/hooks/query/use-workspace-session", async (importOriginal) => {
@@ -146,8 +150,10 @@ describe("useWorkspaceFileContent", () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
+    // The fetch is cache-busted with the mutation counter so an agent-side
+    // edit cannot be served from the browser's HTTP cache under the same URL.
     expect(fetchMock).toHaveBeenCalledWith(
-      `${BASE_URL}docs/readme.md`,
+      `${BASE_URL}docs/readme.md?v=0`,
       expect.objectContaining({ credentials: "include" }),
     );
     expect(result.current.data).toEqual({
@@ -214,7 +220,95 @@ describe("useWorkspaceFileContent", () => {
       text: null,
       mimeType: "application/octet-stream",
       staticUrl: `${BASE_URL}data/blob.bin`,
+      // The raw bytes ride along so a binary parser (the Office outline) does
+      // not have to download the same file a second time.
+      bytes: binary,
     });
+  });
+
+  it("flags an oversized file instead of buffering the body", async () => {
+    // The OOXML reader caps *unpacked* parts, but the container is downloaded
+    // whole, so the download itself must be bounded before it is buffered.
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({
+        "content-length": String(MAX_OOXML_DOWNLOAD_BYTES + 1),
+      }),
+      body: { cancel },
+      arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+    });
+
+    const { result } = renderHook(
+      () => useWorkspaceFileContent("docs/huge.docx"),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.data).toMatchObject({
+      kind: "binary",
+      bytes: null,
+      bytesTooLarge: true,
+    });
+    expect(cancel).toHaveBeenCalled();
+  });
+
+  it("keeps a large but under-bound non-OOXML file as text", async () => {
+    // The Office download cap must not leak onto ordinary source files and
+    // logs: a large UTF-8 log is readable text and must not be hidden behind
+    // the Files pane's unsupported-file message.
+    const log = "x".repeat(1024);
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      arrayBuffer: () => Promise.resolve(arrayBufferFromString(log)),
+    });
+
+    const { result } = renderHook(
+      () => useWorkspaceFileContent("logs/app.log"),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.data).toMatchObject({
+      kind: "text",
+      text: log,
+    });
+    expect(result.current.data?.bytesTooLarge).toBeUndefined();
+  });
+
+  it("flags an oversized non-OOXML file instead of decoding it as empty", async () => {
+    // Past the 64 MiB bound the body is never buffered. Continuing to the
+    // content sniff would decode the empty placeholder and hand the viewer
+    // `text: ""`, showing a huge log as a blank file.
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({
+        "content-length": String(MAX_TEXT_DOWNLOAD_BYTES + 1),
+      }),
+      body: { cancel },
+      arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+    });
+
+    const { result } = renderHook(
+      () => useWorkspaceFileContent("logs/app.log"),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.data).toMatchObject({
+      kind: "binary",
+      text: null,
+      bytes: null,
+      bytesTooLarge: true,
+    });
+    expect(cancel).toHaveBeenCalled();
   });
 
   it("refetches text content after a workspace mutation tick", async () => {

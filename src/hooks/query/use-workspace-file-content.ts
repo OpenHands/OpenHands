@@ -9,7 +9,14 @@ import {
   joinWorkspaceUrl,
   useWorkspaceSession,
 } from "#/hooks/query/use-workspace-session";
-import { useWorkspaceMutationCounter } from "#/stores/use-workspace-mutation-counter";
+import {
+  useWorkspaceMutationCounter,
+  withWorkspaceCacheBuster,
+} from "#/stores/use-workspace-mutation-counter";
+import {
+  MAX_OOXML_DOWNLOAD_BYTES,
+  readBoundedArrayBuffer,
+} from "#/utils/ooxml-preview";
 
 // Magic-number sniff for common binary formats we can render via iframe.
 const IMAGE_EXTENSIONS = new Set([
@@ -26,6 +33,16 @@ const IMAGE_EXTENSIONS = new Set([
 
 const PDF_EXTENSIONS = new Set(["pdf"]);
 
+// Containers the Office outline unpacks. The download bound below exists for
+// these (the reader only caps *unpacked* parts, so the container would
+// otherwise be buffered whole); other paths must not inherit the OOXML cap.
+const OOXML_EXTENSIONS = new Set(["docx", "xlsx", "pptx"]);
+
+// A larger ceiling for non-OOXML files. Still bounded, so an accidental huge
+// file cannot be pulled into memory, but generous enough that ordinary large
+// source files and logs are read as text rather than mislabelled binary.
+export const MAX_TEXT_DOWNLOAD_BYTES = 64 * 1024 * 1024;
+
 export type WorkspaceFileKind = "text" | "image" | "pdf" | "binary";
 
 export interface WorkspaceFileContent {
@@ -33,6 +50,35 @@ export interface WorkspaceFileContent {
   kind: WorkspaceFileKind;
   /** Decoded text contents — only populated when kind === "text". */
   text: string | null;
+  /**
+   * Raw bytes — only populated when kind === "binary" and the transport could
+   * return them. Binary consumers that need to parse the file (the Office
+   * outline reader) take the bytes from here rather than re-fetching
+   * `staticUrl`, which both halves the transfer and lets the Cloud path be
+   * refused explicitly instead of parsing a text-decoded string.
+   */
+  bytes?: ArrayBuffer | null;
+  /**
+   * True when `bytes` is known to be lossy: the Cloud file API returns file
+   * content as a *string*, so a binary file has already been through a UTF-8
+   * decode and cannot round-trip. Parsers must not be run on these bytes.
+   */
+  bytesLossy?: boolean;
+  /**
+   * True when the file exceeded its download bound
+   * ({@link MAX_OOXML_DOWNLOAD_BYTES} for OOXML,
+   * {@link MAX_TEXT_DOWNLOAD_BYTES} otherwise) and the body was never
+   * buffered. Consumers that would parse or decode the bytes report "too
+   * large" instead of rendering the empty placeholder as the file's contents.
+   */
+  bytesTooLarge?: boolean;
+  /**
+   * The workspace mutation counter the `bytes` were fetched at. A consumer that
+   * caches a parse keyed on the cache-busted `staticUrl` (the Office outline)
+   * must also compare this, so bytes fetched before an agent-side edit can
+   * never be accepted as the parse of the edited document.
+   */
+  bytesVersion?: number;
   /**
    * URL pointing at the file on the agent server's static workspace
    * fileserver (the `/api/conversations/{id}/workspace/...` route minted
@@ -209,6 +255,10 @@ export function useWorkspaceFileContent(relativePath: string | null) {
               path: relativePath,
               kind: "binary",
               text: null,
+              // The bytes come from re-encoding a UTF-8-decoded string, so
+              // they are lossy: `readOoxmlPreview` must not run on them.
+              bytes: buf.buffer,
+              bytesLossy: true,
               staticUrl: `data:application/octet-stream;base64,${arrayBufferToBase64(buf.buffer)}`,
               mimeType: "application/octet-stream",
             };
@@ -259,23 +309,76 @@ export function useWorkspaceFileContent(relativePath: string | null) {
         };
       }
 
+      // Fetch the cache-busted URL, not the bare `staticUrl`: a changed React
+      // Query key starts a new request but does NOT invalidate the browser HTTP
+      // cache for the same URL, so after an agent-side edit the same path would
+      // return the *old* body and the consumer would label it with the new
+      // version. `bytesVersion` records which version the bytes belong to.
+      const isOoxml = OOXML_EXTENSIONS.has(getExtension(relativePath));
+      const fetchUrl = withWorkspaceCacheBuster(
+        staticUrl,
+        workspaceMutationCount,
+      );
       // For our own fetch we also rely on the workspace-session cookie
       // (it travels because we opt in to credentialed requests). This
       // matches the auth path the iframe / <img> uses, and avoids a CORS
       // preflight for a custom header.
-      const response = await fetch(staticUrl, {
+      const response = await fetch(fetchUrl, {
         credentials: "include",
       });
       if (!response.ok) {
         throw new Error(`Failed to read ${relativePath}: ${response.status}`);
       }
 
-      const buffer = await response.arrayBuffer();
+      // Bound the body before buffering it. The OOXML reader only caps the
+      // *unpacked* parts, so an Office container would otherwise be pulled
+      // into memory whole; other files get a larger ceiling and are not
+      // reclassified as binary merely for being big.
+      const maxBytes = isOoxml
+        ? MAX_OOXML_DOWNLOAD_BYTES
+        : MAX_TEXT_DOWNLOAD_BYTES;
+      let buffer: ArrayBuffer;
+      let tooLarge = false;
+      try {
+        buffer = await readBoundedArrayBuffer(response, maxBytes);
+      } catch (error) {
+        if (!(error instanceof Error) || !/exceeds/i.test(error.message)) {
+          throw error;
+        }
+        // Oversized: report the size rather than a parse failure. A consumer
+        // that would parse the bytes (Office outline) renders "too large".
+        tooLarge = true;
+        buffer = new ArrayBuffer(0);
+      }
+
+      // An oversized body is reported as `bytesTooLarge` for every path, not
+      // just OOXML. `readBoundedArrayBuffer` rejects without returning any
+      // bytes, so continuing to the content sniff would classify the empty
+      // placeholder as text and render a huge file as blank — the worst
+      // possible answer, because it looks like the file is empty.
+      if (tooLarge) {
+        return {
+          path: relativePath,
+          kind: "binary",
+          text: null,
+          // The body was never buffered; `bytesTooLarge` tells consumers to
+          // report "too large" instead of parsing or decoding the placeholder.
+          bytes: null,
+          bytesTooLarge: true,
+          staticUrl,
+          mimeType: "application/octet-stream",
+        };
+      }
+
       if (isLikelyBinary(buffer)) {
         return {
           path: relativePath,
           kind: "binary",
           text: null,
+          // Hand the bytes on so a binary parser (the Office outline) does not
+          // re-download the same file.
+          bytes: buffer,
+          bytesVersion: workspaceMutationCount,
           staticUrl,
           mimeType: "application/octet-stream",
         };

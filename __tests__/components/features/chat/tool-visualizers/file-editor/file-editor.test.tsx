@@ -306,4 +306,28 @@ describe("fileEditorVisualizer", () => {
       selectedConversationId: "test-conversation-id",
     });
   });
+
+  it("mounts a binary create's preview card without showing the status output", () => {
+    // `file_editor create` on a binary file reports only a status line
+    // ("Created docs/plan.docx"). The card must still mount (it fetches the
+    // document's bytes itself), but the status line must never be fed to it as
+    // content — otherwise Copy would put the status message on the clipboard in
+    // place of the document.
+    const { container } = renderVisualizer(
+      <Body
+        observation={fileEditorObservation({
+          command: "create",
+          path: "/workspace/docs/plan.docx",
+          output: "Created docs/plan.docx",
+        })}
+      />,
+    );
+
+    // The Office card is mounted (it renders a Copy affordance), so the binary
+    // preview is not lost just because the create carried no source text.
+    expect(
+      container.querySelector('[data-testid="office-artifact-preview-copy"]'),
+    ).not.toBeNull();
+    expect(container).not.toHaveTextContent("Created docs/plan.docx");
+  });
 });
