@@ -53,6 +53,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   localStorage.clear();
+  sessionStorage.clear();
 });
 
 describe("ChatDictationButton", () => {
@@ -113,6 +114,7 @@ describe("ChatDictationButton", () => {
     const [url, init] = fetchSpy.mock.calls[0];
     expect(url).toBe("http://localhost:9000/v1/audio/transcriptions");
     expect(init?.headers).toEqual({ Authorization: "Bearer secret" });
+    expect(JSON.stringify({ ...localStorage })).not.toContain("secret");
     expect((init?.body as FormData).get("model")).toBe("whisper-1");
   });
 

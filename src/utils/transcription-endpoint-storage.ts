@@ -1,6 +1,10 @@
 export const TRANSCRIPTION_ENDPOINT_STORAGE_KEY =
   "openhands-transcription-endpoint";
 
+/** The API key lives in sessionStorage so it is not persisted at rest. */
+export const TRANSCRIPTION_API_KEY_STORAGE_KEY =
+  "openhands-transcription-api-key";
+
 export const DEFAULT_TRANSCRIPTION_MODEL = "whisper-1";
 
 /** OpenAI-compatible `/audio/transcriptions` provider, kept in this browser only. */
@@ -28,7 +32,9 @@ export function readTranscriptionEndpoint(): TranscriptionEndpoint {
     );
     return {
       baseUrl: readString(stored?.baseUrl),
-      apiKey: readString(stored?.apiKey),
+      apiKey: readString(
+        window.sessionStorage.getItem(TRANSCRIPTION_API_KEY_STORAGE_KEY),
+      ),
       model: readString(stored?.model),
     };
   } catch {
@@ -40,10 +46,12 @@ export function writeTranscriptionEndpoint(
   update: Partial<TranscriptionEndpoint>,
 ): void {
   try {
+    const { apiKey, ...rest } = { ...readTranscriptionEndpoint(), ...update };
     window.localStorage.setItem(
       TRANSCRIPTION_ENDPOINT_STORAGE_KEY,
-      JSON.stringify({ ...readTranscriptionEndpoint(), ...update }),
+      JSON.stringify(rest),
     );
+    window.sessionStorage.setItem(TRANSCRIPTION_API_KEY_STORAGE_KEY, apiKey);
   } catch {
     // Ignore storage failures; dictation falls back to browser recognition.
   }
