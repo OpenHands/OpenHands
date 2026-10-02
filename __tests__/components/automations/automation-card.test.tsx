@@ -18,7 +18,6 @@ import {
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import type { Backend } from "#/api/backend-registry/types";
 import { server } from "#/mocks/node";
-import { I18nKey } from "#/i18n/declaration";
 import type { InterfaceListInsights } from "#/manifests/types";
 
 vi.mock("react-i18next", () => ({
@@ -344,9 +343,7 @@ describe("AutomationCard — run phase", () => {
               conversation_id: null,
               bash_command_id: null,
               error_detail: null,
-              phase_code: "running_agent",
-              phase_label: null,
-              phase_updated_at: null,
+              current_phase: "Agent is working on the task",
               started_at: "2026-01-01T09:00:00Z",
               completed_at: null,
             },
@@ -360,7 +357,7 @@ describe("AutomationCard — run phase", () => {
     renderHarness();
 
     // Assert: the phase renders ...
-    await screen.findByText(I18nKey.AUTOMATIONS$DETAIL$PHASE_RUNNING_AGENT);
+    await screen.findByText("Agent is working on the task");
     // ... and exactly one request was made — the pre-existing insights
     // fetch, not a new one just for the phase.
     expect(callCount).toBe(1);
