@@ -35,6 +35,8 @@ import { ResizeHandle } from "#/components/ui/resize-handle";
 import RefreshIcon from "#/icons/u-refresh.svg?react";
 import LinkExternalIcon from "#/icons/link-external.svg?react";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
+import { useDownloadWorkspaceFile } from "#/hooks/use-download-workspace-file";
+import DownloadIcon from "#/icons/u-download.svg?react";
 
 /**
  * Workspace file browser. Diff/Commits live in the sibling Commits
@@ -50,6 +52,7 @@ function FilesTab() {
   const workspacePath = activeConversation?.workspace?.working_dir;
 
   const { conversationId } = useOptionalConversationId();
+  const download = useDownloadWorkspaceFile();
   const {
     state: persistedState,
     setFilesTabContentViewMode,
@@ -212,7 +215,7 @@ function FilesTab() {
             >
               {selectedPath ? (
                 <>
-                  <div className="flex items-center gap-3 px-3 py-1.5 border-b border-border">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1.5 border-b border-border">
                     <SegmentedToggle<ViewMode>
                       ariaLabel={t(I18nKey.FILES$RICH)}
                       testId="files-tab-content-mode-toggle"
@@ -223,6 +226,36 @@ function FilesTab() {
                       ]}
                       onChange={setFilesTabContentViewMode}
                     />
+                    {/* @spec FD-001 — Offer a visible download independently of preview support */}
+                    <button
+                      type="button"
+                      data-testid="files-tab-download"
+                      disabled={
+                        download.isPending ||
+                        !workspacePath ||
+                        !conversationId ||
+                        activeConversation?.id !== conversationId
+                      }
+                      onClick={() => {
+                        if (
+                          activeConversation?.id === conversationId &&
+                          selectedPath
+                        ) {
+                          download.mutate({
+                            conversation: activeConversation,
+                            path: selectedPath,
+                          });
+                        }
+                      }}
+                      className="ml-auto flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs text-contrast hover:enabled:bg-interactive-hover disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <DownloadIcon width={14} height={14} aria-hidden="true" />
+                      {t(
+                        download.isPending
+                          ? I18nKey.FILES$DOWNLOADING
+                          : I18nKey.FILES$DOWNLOAD,
+                      )}
+                    </button>
                     {selectedFileStaticUrl ? (
                       <a
                         href={selectedFileStaticUrl}
@@ -231,7 +264,7 @@ function FilesTab() {
                         aria-label={t(I18nKey.FILES$OPEN_IN_NEW_WINDOW)}
                         title={t(I18nKey.FILES$OPEN_IN_NEW_WINDOW)}
                         data-testid="files-tab-open-in-new-window"
-                        className="ml-auto flex items-center justify-center w-6.5 py-1 rounded-[7px] hover:bg-interactive-hover cursor-pointer text-contrast"
+                        className="flex shrink-0 items-center justify-center w-6.5 py-1 rounded-[7px] hover:bg-interactive-hover cursor-pointer text-contrast"
                       >
                         <LinkExternalIcon width={14} height={14} />
                       </a>
