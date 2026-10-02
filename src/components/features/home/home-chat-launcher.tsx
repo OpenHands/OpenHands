@@ -21,6 +21,7 @@ import { Branch, GitRepository } from "#/types/git";
 import { Provider } from "#/types/settings";
 import { LocalWorkspace } from "#/types/workspace";
 import { I18nKey } from "#/i18n/declaration";
+import { cn } from "#/utils/utils";
 import {
   displayErrorToast,
   TOAST_OPTIONS,
@@ -37,6 +38,10 @@ import { RecommendedAutomationsLauncher } from "#/components/features/automation
 import { PinnedAutomationsDashboard } from "./featured-automations/pinned-automations-dashboard";
 import { RunningAutomationsList } from "./featured-automations/running-automations-list";
 import { HomeHeaderTitle } from "./home-header/home-header-title";
+import {
+  HomeLauncherModeToggle,
+  type HomeLauncherMode,
+} from "./home-launcher-mode-toggle";
 import { OpenLauncherButton } from "./open-launcher-button";
 import { OpenWorkspaceDialog } from "./open-workspace-dialog";
 import { OpenRepositoryDialog } from "./open-repository-dialog";
@@ -60,6 +65,8 @@ export function HomeChatLauncher() {
   );
   const [selectedPlugins, setSelectedPlugins] = useState<PluginSpec[]>([]);
   const [isPluginPickerOpen, setIsPluginPickerOpen] = useState(false);
+  const [launcherMode, setLauncherMode] = useState<HomeLauncherMode>("code");
+  const isAutomateMode = launcherMode === "automate";
 
   const { mutateAsync: createConversation, isPending } =
     useCreateConversation();
@@ -245,12 +252,23 @@ export function HomeChatLauncher() {
           <HomeHeaderTitle />
         </div>
 
+        <div className="flex w-full justify-center">
+          <HomeLauncherModeToggle
+            mode={launcherMode}
+            onChange={setLauncherMode}
+          />
+        </div>
+
         <div className="w-full">
           <CustomChatInput
             onSubmit={handleSubmitWithModelGuard}
             onFilesPaste={handleUpload}
-            placeholder={t(I18nKey.HOME$DESCRIBE_ENGINEERING_TASK)}
             disabled={isCreating || llmBlocked}
+            placeholder={
+              isAutomateMode
+                ? t(I18nKey.HOME$AUTOMATE_PROMPT_PLACEHOLDER)
+                : t(I18nKey.SUGGESTIONS$WHAT_TO_BUILD)
+            }
           />
         </div>
 
@@ -270,7 +288,14 @@ export function HomeChatLauncher() {
             )}
           </p>
         )}
-        <div className="flex items-center justify-start gap-2">
+        <div
+          data-testid="home-composer-actions"
+          aria-disabled={isAutomateMode}
+          className={cn(
+            "flex items-center justify-start gap-2",
+            isAutomateMode && "pointer-events-none opacity-40",
+          )}
+        >
           {hasSelection ? (
             <HomeGitControlBarPreview
               workspace={pendingWorkspace}
@@ -286,22 +311,28 @@ export function HomeChatLauncher() {
             <OpenLauncherButton
               kind={isLocal ? "local" : "cloud"}
               onClick={() => setIsDialogOpen(true)}
-              disabled={isCreating || Boolean(workspacesUnsupportedMessage)}
+              disabled={
+                isCreating ||
+                isAutomateMode ||
+                Boolean(workspacesUnsupportedMessage)
+              }
               disabledTooltip={workspacesUnsupportedMessage}
             />
           )}
           <PluginPickerTrigger
             count={selectedPlugins.length}
             onClick={() => setIsPluginPickerOpen(true)}
-            disabled={isCreating}
+            disabled={isCreating || isAutomateMode}
           />
         </div>
 
-        <div className="mt-8 flex w-full flex-col gap-8">
-          <RecommendedAutomationsLauncher variant="rail" />
-          <PinnedAutomationsDashboard />
-          <RunningAutomationsList />
-        </div>
+        {isAutomateMode && (
+          <div className="mt-8 flex w-full flex-col gap-8">
+            <RecommendedAutomationsLauncher variant="rail" />
+            <PinnedAutomationsDashboard />
+            <RunningAutomationsList />
+          </div>
+        )}
       </div>
 
       {isLocal ? (
