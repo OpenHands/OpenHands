@@ -67,7 +67,7 @@ export function PendingUserMessages() {
       try {
         await send(
           createChatMessage(
-            message.text,
+            message.content,
             message.imageUrls,
             message.fileUrls,
             message.timestamp,
