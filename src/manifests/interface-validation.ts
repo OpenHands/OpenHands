@@ -70,7 +70,11 @@ const PLAIN_ENDPOINT_NAMES = [
 // pinning an older package - so they are checked only when present, and a
 // bundle entry, which is the only thing that needs them, fails on its own if
 // its manifest predates them.
-const OPTIONAL_PLAIN_ENDPOINT_NAMES = ["createBundle", "uploads"] as const;
+const OPTIONAL_PLAIN_ENDPOINT_NAMES = [
+  "createBundle",
+  "uploads",
+  "webhooks",
+] as const;
 const ID_ENDPOINT_NAMES = ["detail", "dispatch", "runs", "tarball"] as const;
 
 export interface InterfaceValidationContext {
@@ -139,7 +143,11 @@ function checkRoutes(
   mounted: InterfaceRoutes,
 ): void {
   if (!check.record(routes, "routes")) return;
-  check.closed(routes, ["list", "setup", "detail", "templates"], "routes");
+  check.closed(
+    routes,
+    ["list", "setup", "detail", "events", "templates"],
+    "routes",
+  );
 
   // The host serves what it has registrations for, so a declared route must be
   // exactly the mounted shape — the manifest owns link construction, not the
@@ -149,6 +157,9 @@ function checkRoutes(
       check.fail(`routes.${name}`, `must be "${mounted[name]}"`);
     }
   });
+  if (routes.events !== undefined && routes.events !== mounted.events) {
+    check.fail("routes.events", `must be "${mounted.events}"`);
+  }
   if (
     routes.templates !== undefined &&
     routes.templates !== mounted.templates
@@ -226,7 +237,11 @@ function checkNavigation(check: InterfaceChecker, navigation: unknown): void {
 
 function checkPages(check: InterfaceChecker, pages: unknown): void {
   if (!check.record(pages, "pages")) return;
-  check.closed(pages, ["list", "detail", "edit", "templates"], "pages");
+  check.closed(
+    pages,
+    ["list", "detail", "edit", "events", "templates"],
+    "pages",
+  );
 
   if (check.record(pages.list, "pages.list")) {
     check.closed(
@@ -258,7 +273,10 @@ function checkPages(check: InterfaceChecker, pages: unknown): void {
     check.copy(pages.edit.title, "pages.edit.title");
   }
   if (pages.templates !== undefined) {
-    checkTemplatesPage(check, pages.templates);
+    checkTemplatesPage(check, pages.templates, "pages.templates");
+  }
+  if (pages.events !== undefined) {
+    checkTemplatesPage(check, pages.events, "pages.events");
   }
 }
 
@@ -459,8 +477,11 @@ function checkInsights(check: InterfaceChecker, insights: unknown): void {
   );
 }
 
-function checkTemplatesPage(check: InterfaceChecker, templates: unknown): void {
-  const path = "pages.templates";
+function checkTemplatesPage(
+  check: InterfaceChecker,
+  templates: unknown,
+  path: string,
+): void {
   if (!check.record(templates, path)) return;
   check.closed(templates, ["title", "description"], path);
   check.copy(templates.title, `${path}.title`);
@@ -490,11 +511,30 @@ function checkSubPageGroup(check: InterfaceChecker, candidate: Rec): void {
   const missing = pieces
     .filter(([, value]) => value === undefined)
     .map(([name]) => name);
-  if (missing.length === 0 || missing.length === pieces.length) return;
-  check.fail(
-    "interface",
-    `the sub-page surface must be declared whole; missing ${missing.join(", ")}`,
-  );
+  if (missing.length !== 0 && missing.length !== pieces.length) {
+    check.fail(
+      "interface",
+      `the sub-page surface must be declared whole; missing ${missing.join(", ")}`,
+    );
+  }
+
+  const hasEventsNav =
+    Array.isArray(navigation.subPages) &&
+    navigation.subPages.some(
+      (item: unknown) => isRecord(item) && item.page === "events",
+    );
+  const eventsParts = [
+    routes.events !== undefined,
+    pages.events !== undefined,
+    hasEventsNav,
+    isRecord(candidate.endpoints) && candidate.endpoints.webhooks !== undefined,
+  ];
+  if (eventsParts.some(Boolean) && !eventsParts.every(Boolean)) {
+    check.fail(
+      "interface",
+      "events route, page, navigation and webhook endpoint must be declared together",
+    );
+  }
 }
 
 function checkAttribute(

@@ -42,6 +42,20 @@ vi.mock("#/api/cloud/proxy", () => ({
   callCloudProxy,
 }));
 
+vi.mock("#/manifests/automation-interface", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("#/manifests/automation-interface")>();
+  return {
+    ...actual,
+    getAutomationEndpoint: (name: string) =>
+      name === "webhooks"
+        ? "/v1/webhooks"
+        : actual.getAutomationEndpoint(
+            name as Parameters<typeof actual.getAutomationEndpoint>[0],
+          ),
+  };
+});
+
 vi.mock("#/services/telemetry", () => ({
   clearPendingLocalTelemetryRevocation,
   getTelemetryConsent,
@@ -482,6 +496,70 @@ describe("AutomationService git sync", () => {
 
     expect(localAxios.post).toHaveBeenCalledWith(
       "/api/automation/v1/git-sync/sync",
+    );
+  });
+});
+
+// @spec BM-002 — Custom event sources
+// Backend request routing is covered for both supported transports.
+describe("AutomationService webhooks", () => {
+  beforeEach(() => {
+    setRegisteredBackends([localBackend, cloudBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+  });
+
+  afterEach(() => {
+    setActiveSelection(null);
+    setRegisteredBackends([]);
+    vi.clearAllMocks();
+  });
+
+  it("lists and creates webhooks through the local sidecar", async () => {
+    const body = { name: "Deployments", source: "deployments" };
+    localAxios.get.mockResolvedValueOnce({ data: { webhooks: [], total: 0 } });
+    localAxios.post.mockResolvedValueOnce({
+      data: { id: "webhook-1", webhook_secret: "generated-secret" },
+    });
+
+    await AutomationService.listWebhooks({ limit: 50, offset: 50 });
+    await AutomationService.createWebhook(body);
+
+    expect(localAxios.get).toHaveBeenCalledWith("/api/automation/v1/webhooks", {
+      params: { limit: 50, offset: 50 },
+    });
+    expect(localAxios.post).toHaveBeenCalledWith(
+      "/api/automation/v1/webhooks",
+      body,
+      expect.any(Object),
+    );
+  });
+
+  it("routes cloud webhook requests to the org-scoped app API", async () => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-events" });
+    callCloudProxy.mockResolvedValue({ webhooks: [], total: 0 });
+    const body = { name: "Deployments", source: "deployments" };
+
+    await AutomationService.listWebhooks({ limit: 50, offset: 0 });
+    await AutomationService.createWebhook(body);
+
+    expect(callCloudProxy).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        backend: cloudBackend,
+        method: "GET",
+        path: "/api/automation/v1/webhooks?limit=50&offset=0",
+        headers: expect.objectContaining({ "X-Org-Id": "org-events" }),
+      }),
+    );
+    expect(callCloudProxy).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        backend: cloudBackend,
+        method: "POST",
+        path: "/api/automation/v1/webhooks",
+        body,
+        headers: expect.objectContaining({ "X-Org-Id": "org-events" }),
+      }),
     );
   });
 });

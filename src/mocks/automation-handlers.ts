@@ -6,6 +6,10 @@ import type {
   ValidateDraftResponse,
 } from "#/manifests/types";
 import type {
+  AutomationWebhook,
+  CreateAutomationWebhookRequest,
+} from "#/types/automation-webhook";
+import type {
   Automation,
   AutomationsResponse,
   AutomationRun,
@@ -96,14 +100,63 @@ const automations = new Map<string, Automation>(
   MOCK_AUTOMATIONS_RESPONSE.automations.map((a) => [a.id, { ...a }]),
 );
 
+const webhooks = new Map<string, AutomationWebhook>();
+
 export const resetAutomationMockData = () => {
+  webhooks.clear();
   automations.clear();
   MOCK_AUTOMATIONS_RESPONSE.automations.forEach((a) => {
     automations.set(a.id, { ...a });
   });
 };
 
+// @spec BM-002 — Custom event sources
+const webhookHandlers = [
+  http.get("*/api/automation/v1/webhooks", ({ request }) => {
+    const params = new URL(request.url).searchParams;
+    const limit = Number(params.get("limit") ?? 50);
+    const offset = Number(params.get("offset") ?? 0);
+    const all = Array.from(webhooks.values());
+    return HttpResponse.json({
+      webhooks: all.slice(offset, offset + limit),
+      total: all.length,
+    });
+  }),
+  http.post("*/api/automation/v1/webhooks", async ({ request }) => {
+    const body = (await request.json()) as CreateAutomationWebhookRequest;
+    if (
+      Array.from(webhooks.values()).some((item) => item.source === body.source)
+    ) {
+      return HttpResponse.json({ detail: "Source exists" }, { status: 409 });
+    }
+    const timestamp = new Date().toISOString();
+    const webhook: AutomationWebhook = {
+      id: crypto.randomUUID(),
+      name: body.name,
+      source: body.source,
+      webhook_url: `https://example.test/v1/events/mock-org/${body.source}`,
+      enabled: true,
+      event_key_expr: body.event_key_expr ?? "type",
+      signature_header: body.signature_header ?? "X-Signature-256",
+      signature_scheme: body.signature_scheme ?? "hmac_sha256_hex",
+      created_at: timestamp,
+      updated_at: timestamp,
+    };
+    webhooks.set(webhook.id, webhook);
+    return HttpResponse.json(
+      {
+        ...webhook,
+        ...(!body.webhook_secret
+          ? { webhook_secret: "mock-generated-signing-secret" }
+          : {}),
+      },
+      { status: 201 },
+    );
+  }),
+];
+
 export const AUTOMATION_HANDLERS = [
+  ...webhookHandlers,
   // GET /api/automation/health — Health check
   http.get("*/api/automation/health", async () => {
     await delay(100);
