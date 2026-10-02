@@ -1,7 +1,7 @@
 agent-canvas has been installed as release {{ .Release.Name }} in namespace {{ .Release.Namespace }}.
 
-1. Wait for the StatefulSet pod to be ready:
-   kubectl -n {{ .Release.Namespace }} rollout status statefulset/{{ include "agent-canvas.fullname" . }}
+1. Wait for the Deployment pod to be ready:
+   kubectl -n {{ .Release.Namespace }} rollout status deployment/{{ include "agent-canvas.fullname" . }}
 
 2. Access the UI:
 {{- if .Values.ingress.enabled }}
@@ -29,8 +29,8 @@ agent-canvas has been installed as release {{ .Release.Name }} in namespace {{ .
 {{- end }}
 
 3. Retrieve the auto-generated session API key (needed for direct API calls):
-   kubectl -n {{ .Release.Namespace }} exec {{ include "agent-canvas.fullname" . }}-0 -- \
-     cat {{ .Values.persistence.mountPath }}/session-api-key.txt
+   kubectl -n {{ .Release.Namespace }} exec deployment/{{ include "agent-canvas.fullname" . }} -- \
+     cat /home/openhands/.openhands/agent-canvas/api-key.txt
 
 {{- if .Values.rbac.enabled }}
 
