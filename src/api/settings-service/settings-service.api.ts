@@ -191,8 +191,8 @@ const basicAuthHeader = (username: string, password: string): string => {
 };
 
 // Basic Auth transmits credentials as reversible Base64, so it MUST only be
-// sent over HTTPS (or to localhost during local development). Otherwise the
-// credentials could be exposed to network intermediaries.
+// sent over HTTPS (or to a loopback address during local development).
+// Otherwise the credentials could be exposed to network intermediaries.
 const isSecureMcpUrl = (serverUrl: unknown): boolean => {
   if (typeof serverUrl !== "string") return false;
   try {
@@ -200,12 +200,19 @@ const isSecureMcpUrl = (serverUrl: unknown): boolean => {
     return (
       protocol === "https:" ||
       hostname === "localhost" ||
-      hostname === "127.0.0.1"
+      hostname === "127.0.0.1" ||
+      hostname === "::1" ||
+      hostname === "[::1]"
     );
   } catch {
     return false;
   }
 };
+
+export const MCP_BASIC_AUTH_REQUIRES_SECURE_URL_ERROR =
+  "Basic Auth credentials cannot be saved for an MCP server reachable only " +
+  "over an insecure (non-HTTPS) connection. Use an https:// URL, or switch " +
+  "to a different authentication method.";
 
 const headersFromMcpAuth = (
   auth: Record<string, unknown>,
@@ -230,10 +237,12 @@ const headersFromMcpAuth = (
     case "basic":
       if (
         typeof auth.username !== "string" ||
-        typeof auth.password !== "string" ||
-        !isSecureMcpUrl(serverUrl)
+        typeof auth.password !== "string"
       ) {
         return null;
+      }
+      if (!isSecureMcpUrl(serverUrl)) {
+        throw new Error(MCP_BASIC_AUTH_REQUIRES_SECURE_URL_ERROR);
       }
       return { Authorization: basicAuthHeader(auth.username, auth.password) };
     case "header":

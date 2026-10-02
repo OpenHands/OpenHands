@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { http, HttpResponse } from "msw";
 
-import SettingsService from "#/api/settings-service/settings-service.api";
+import SettingsService, {
+  MCP_BASIC_AUTH_REQUIRES_SECURE_URL_ERROR,
+} from "#/api/settings-service/settings-service.api";
 import {
   __resetActiveStoreForTests,
   setActiveSelection,
@@ -650,6 +652,97 @@ describe("SettingsService", () => {
         },
       },
     });
+  });
+
+  it("converts basic MCP auth to a Basic header when saving mcp_config to cloud over https", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+
+    await SettingsService.saveSettings({
+      agent_settings_diff: {
+        mcp_config: {
+          corp: {
+            transport: "http",
+            url: "https://corp.example.com/mcp",
+            auth: { strategy: "basic", username: "alice", password: "s3cr3t" },
+          },
+        },
+      },
+    });
+
+    expect(mockSaveCloudSettings).toHaveBeenCalledTimes(1);
+    expect(mockSaveCloudSettings).toHaveBeenCalledWith({
+      agent_settings_diff: {
+        mcp_config: {
+          corp: {
+            transport: "http",
+            url: "https://corp.example.com/mcp",
+            headers: {
+              Authorization: `Basic ${btoa("alice:s3cr3t")}`,
+            },
+          },
+        },
+      },
+    });
+  });
+
+  it("allows basic MCP auth over a loopback URL for local dev", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+
+    await SettingsService.saveSettings({
+      agent_settings_diff: {
+        mcp_config: {
+          local: {
+            transport: "http",
+            url: "http://127.0.0.1:8080/mcp",
+            auth: { strategy: "basic", username: "alice", password: "s3cr3t" },
+          },
+        },
+      },
+    });
+
+    expect(mockSaveCloudSettings).toHaveBeenCalledTimes(1);
+    expect(mockSaveCloudSettings).toHaveBeenCalledWith({
+      agent_settings_diff: {
+        mcp_config: {
+          local: {
+            transport: "http",
+            url: "http://127.0.0.1:8080/mcp",
+            headers: {
+              Authorization: `Basic ${btoa("alice:s3cr3t")}`,
+            },
+          },
+        },
+      },
+    });
+  });
+
+  it("rejects basic MCP auth over an insecure non-loopback URL without saving", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+
+    await expect(
+      SettingsService.saveSettings({
+        agent_settings_diff: {
+          mcp_config: {
+            corp: {
+              transport: "http",
+              url: "http://corp.example.com/mcp",
+              auth: {
+                strategy: "basic",
+                username: "alice",
+                password: "s3cr3t",
+              },
+            },
+          },
+        },
+      }),
+    ).rejects.toThrow(MCP_BASIC_AUTH_REQUIRES_SECURE_URL_ERROR);
+
+    // The credential must never be silently dropped into a half-converted
+    // request — the save should be aborted before any network call.
+    expect(mockSaveCloudSettings).not.toHaveBeenCalled();
   });
 
   it("clears cloud MCP credential headers when auth is explicitly cleared", async () => {
