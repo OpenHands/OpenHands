@@ -77,6 +77,9 @@ const BUILT_IN_INTEGRATION_ID_BY_AUTOMATION_ID: Record<string, string> = {
   "jira-issue-to-pr": "jira",
   "jira-issue-to-gitlab-mr": "jira",
   "jira-issue-to-bitbucket-pr": "jira",
+  "linear-issue-to-github-pr": "linear",
+  "linear-issue-to-gitlab-mr": "linear",
+  "linear-issue-to-bitbucket-pr": "linear",
 };
 
 export function RecommendedAutomationsLauncher({
@@ -116,6 +119,7 @@ export function RecommendedAutomationsLauncher({
   const {
     getNativeIntegration,
     isJiraEnabled,
+    isLinearEnabled,
     isLoading: isNativeIntegrationsLoading,
   } = useNativeGitIntegrations();
 
@@ -216,16 +220,17 @@ export function RecommendedAutomationsLauncher({
     setInstallQueue(missingEntries);
   };
 
+  const isBuiltInIntegrationEnabled = (entryId: string) => {
+    if (entryId === "jira") return isJiraEnabled;
+    if (entryId === "linear") return isLinearEnabled;
+    return getNativeIntegration(entryId) !== null;
+  };
+
   // The built-in integration that already gives the user this automation's
   // 'Issue to PR' workflow, when the cloud instance has it enabled.
   const getBuiltInIntegration = (automation: RecommendedAutomation) => {
     const entryId = BUILT_IN_INTEGRATION_ID_BY_AUTOMATION_ID[automation.id];
-    if (!entryId) return null;
-    const isEnabled =
-      entryId === "jira"
-        ? isJiraEnabled
-        : getNativeIntegration(entryId) !== null;
-    if (!isEnabled) return null;
+    if (!entryId || !isBuiltInIntegrationEnabled(entryId)) return null;
     return getMarketplaceEntryById(entryId, MCP_MARKETPLACE) ?? null;
   };
 
@@ -376,6 +381,7 @@ export function RecommendedAutomationsLauncher({
           existingServers={installedMcpConfig}
           onClose={cancelInstallFlow}
           onSuccess={handleInstallSuccess}
+          mcpOnly
         />
       )}
 

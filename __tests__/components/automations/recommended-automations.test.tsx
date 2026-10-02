@@ -157,17 +157,19 @@ function settingsWithGithubMcp() {
 
 /**
  * Activates the cloud backend with the given native git providers (and,
- * optionally, the built-in Jira integration) enabled and serves `settings`
- * through the real settings hook (the local cases mock the hook), so these
- * cases exercise the services the hooks rely on instead.
+ * optionally, the built-in Jira and Linear integrations) enabled and serves
+ * `settings` through the real settings hook (the local cases mock the hook),
+ * so these cases exercise the services the hooks rely on instead.
  */
 async function activateCloudBackend({
   providersConfigured = [],
   jiraEnabled = false,
+  linearEnabled = false,
   settings = {},
 }: {
   providersConfigured?: string[];
   jiraEnabled?: boolean;
+  linearEnabled?: boolean;
   settings?: object;
 } = {}) {
   setRegisteredBackends([cloudBackend]);
@@ -176,7 +178,10 @@ async function activateCloudBackend({
     http.get("*/api/v1/web-client/config", () =>
       HttpResponse.json({
         providers_configured: providersConfigured,
-        feature_flags: { enable_jira: jiraEnabled },
+        feature_flags: {
+          enable_jira: jiraEnabled,
+          enable_linear: linearEnabled,
+        },
       }),
     ),
   );
@@ -1026,6 +1031,9 @@ describe("recommended automations", () => {
     ["jira-issue-to-pr", "Jira", { jiraEnabled: true }],
     ["jira-issue-to-gitlab-mr", "Jira", { jiraEnabled: true }],
     ["jira-issue-to-bitbucket-pr", "Jira", { jiraEnabled: true }],
+    ["linear-issue-to-github-pr", "Linear", { linearEnabled: true }],
+    ["linear-issue-to-gitlab-mr", "Linear", { linearEnabled: true }],
+    ["linear-issue-to-bitbucket-pr", "Linear", { linearEnabled: true }],
   ])(
     "offers the built-in integration before setting up %s when the instance enables %s",
     async (automationId, integrationName, instance) => {
@@ -1078,12 +1086,14 @@ describe("recommended automations", () => {
     expect(mockCreateConversationMutate).not.toHaveBeenCalled();
   });
 
-  it("continues the template setup when the polling automation is chosen", async () => {
+  it("connects the integration through its MCP server when the polling automation is chosen", async () => {
     // Arrange
-    await activateCloudBackend({ jiraEnabled: true });
+    await activateCloudBackend({ providersConfigured: ["gitlab"] });
     renderLauncher({ withBackendProvider: true });
     fireEvent.click(
-      await screen.findByTestId("recommended-automation-card-jira-issue-to-pr"),
+      await screen.findByTestId(
+        "recommended-automation-card-gitlab-issue-to-mr",
+      ),
     );
 
     // Act
@@ -1092,10 +1102,40 @@ describe("recommended automations", () => {
     );
 
     // Assert
-    expect(await screen.findByTestId("mcp-install-modal")).toHaveAttribute(
-      "data-marketplace-id",
-      "atlassian-rovo",
+    const modal = await screen.findByTestId("mcp-install-modal");
+    expect(modal).toHaveAttribute("data-marketplace-id", "gitlab");
+    expect(
+      within(modal).queryByTestId("mcp-install-tab-native"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(modal).queryByTestId("mcp-native-panel"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("built-in-integration-choice-modal"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("connects a git provider through its MCP server for a template without a setup choice", async () => {
+    // Arrange
+    await activateCloudBackend({ providersConfigured: ["github"] });
+    renderLauncher({ withBackendProvider: true });
+
+    // Act
+    fireEvent.click(
+      await screen.findByTestId(
+        "recommended-automation-card-github-repo-monitor",
+      ),
     );
+
+    // Assert
+    const modal = await screen.findByTestId("mcp-install-modal");
+    expect(modal).toHaveAttribute("data-marketplace-id", "github");
+    expect(
+      within(modal).queryByTestId("mcp-install-tab-native"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(modal).queryByTestId("mcp-native-panel"),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByTestId("built-in-integration-choice-modal"),
     ).not.toBeInTheDocument();

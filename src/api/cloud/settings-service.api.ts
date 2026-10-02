@@ -235,13 +235,15 @@ export interface CloudIntegrationsConfig {
   providersConfigured: Provider[];
   /** Whether the built-in Jira Cloud integration is enabled. */
   isJiraEnabled: boolean;
+  /** Whether the built-in Linear integration is enabled. */
+  isLinearEnabled: boolean;
 }
 
 export async function fetchCloudIntegrationsConfig(): Promise<CloudIntegrationsConfig> {
   const backend = getActiveCloudBackend();
   const config = await callCloudProxy<{
     providers_configured?: Provider[];
-    feature_flags?: { enable_jira?: boolean };
+    feature_flags?: { enable_jira?: boolean; enable_linear?: boolean };
   }>({
     backend,
     method: "GET",
@@ -250,5 +252,6 @@ export async function fetchCloudIntegrationsConfig(): Promise<CloudIntegrationsC
   return {
     providersConfigured: config.providers_configured ?? [],
     isJiraEnabled: config.feature_flags?.enable_jira === true,
+    isLinearEnabled: config.feature_flags?.enable_linear === true,
   };
 }
