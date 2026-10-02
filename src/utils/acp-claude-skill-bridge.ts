@@ -144,16 +144,219 @@ function formatTruncationMarker(parts: {
   return `<!-- ${CANVAS_SKILLS_TRUNCATED_MARKER} ${attrs.join(" ")} -->`;
 }
 
+/** Skill #16905 targets — prioritized when packing under the 32 KiB cap. */
+export const AUTOMATION_SKILL_NAME = "openhands-automation";
+
+/** Sections that must survive truncation for schedule/lifecycle edits. */
+const AUTOMATION_MUST_KEEP_HEADINGS = [
+  "## Managing Automations",
+  "## Run Lifecycle",
+] as const;
+
+/** Useful but secondary automation sections (kept when budget allows). */
+const AUTOMATION_PREFERRED_HEADINGS = [
+  "## Automation Creation Process",
+  "## Creating Automations",
+  "## Trigger Types",
+  "## Authentication",
+] as const;
+
+interface MarkdownSection {
+  heading: string;
+  body: string;
+}
+
+/** Split markdown into leading intro + `##` sections (heading line included). */
+export function splitMarkdownSections(content: string): {
+  intro: string;
+  sections: MarkdownSection[];
+} {
+  const normalized = content.replace(/\r\n/g, "\n");
+  const matches = [...normalized.matchAll(/^## .+$/gm)];
+  if (matches.length === 0) {
+    return { intro: normalized.trimEnd(), sections: [] };
+  }
+  const intro = normalized.slice(0, matches[0].index).trimEnd();
+  const sections: MarkdownSection[] = [];
+  for (let i = 0; i < matches.length; i += 1) {
+    const start = matches[i].index ?? 0;
+    const end =
+      i + 1 < matches.length
+        ? (matches[i + 1].index ?? normalized.length)
+        : normalized.length;
+    const chunk = normalized.slice(start, end).trimEnd();
+    const nl = chunk.indexOf("\n");
+    const heading = nl === -1 ? chunk : chunk.slice(0, nl);
+    const body = nl === -1 ? "" : chunk.slice(nl + 1);
+    sections.push({ heading, body });
+  }
+  return { intro, sections };
+}
+
+function sectionBlock(section: MarkdownSection): string {
+  return section.body ? `${section.heading}\n${section.body}` : section.heading;
+}
+
+function countFenceMarkers(text: string): number {
+  return (text.match(/```/g) ?? []).length;
+}
+
+/**
+ * Truncate ``text`` to ``maxLen`` without leaving an open fenced code block.
+ * Prefers cutting on a newline; closes an odd fence with a trailing fence when
+ * needed so downstream markers stay outside code.
+ */
+export function fenceSafeTruncate(text: string, maxLen: number): string {
+  if (maxLen <= 0) return "";
+  if (text.length <= maxLen) {
+    if (countFenceMarkers(text) % 2 === 0) return text;
+    const closer = "\n```";
+    if (text.length + closer.length <= maxLen) return `${text}${closer}`;
+    return fenceSafeTruncate(
+      text.slice(0, Math.max(0, maxLen - closer.length)),
+      maxLen,
+    );
+  }
+
+  let slice = text.slice(0, maxLen);
+  const lastNl = slice.lastIndexOf("\n");
+  if (lastNl >= Math.floor(maxLen * 0.6)) {
+    slice = slice.slice(0, lastNl);
+  }
+
+  if (countFenceMarkers(slice) % 2 === 1) {
+    const closer = "\n```";
+    if (slice.length + closer.length <= maxLen) {
+      return `${slice}${closer}`;
+    }
+    const lastFence = slice.lastIndexOf("```");
+    if (lastFence >= 0) {
+      slice = slice.slice(0, lastFence).trimEnd();
+    }
+  }
+  return slice;
+}
+
+/**
+ * Rebuild automation skill body under ``maxLen`` by keeping schedule/lifecycle
+ * sections and dropping large reference sections first (not head-slicing).
+ */
+export function prioritizeAutomationContent(
+  content: string,
+  maxLen: number,
+): { content: string; truncated: boolean } {
+  const trimmed = content.trim();
+  if (trimmed.length <= maxLen) {
+    return { content: trimmed, truncated: false };
+  }
+
+  const { intro, sections } = splitMarkdownSections(trimmed);
+  if (sections.length === 0) {
+    const cut = fenceSafeTruncate(trimmed, maxLen);
+    return { content: cut, truncated: cut.length < trimmed.length };
+  }
+
+  const byHeading = new Map(
+    sections.map((section) => [section.heading, section]),
+  );
+  const must = AUTOMATION_MUST_KEEP_HEADINGS.map((h) =>
+    byHeading.get(h),
+  ).filter((s): s is MarkdownSection => s != null);
+  const preferred = AUTOMATION_PREFERRED_HEADINGS.map((h) =>
+    byHeading.get(h),
+  ).filter((s): s is MarkdownSection => s != null);
+  const used = new Set([...must, ...preferred].map((s) => s.heading));
+  const deferred = sections
+    .filter((s) => !used.has(s.heading))
+    .sort((a, b) => sectionBlock(a).length - sectionBlock(b).length);
+
+  const parts: string[] = [];
+  let truncated = false;
+
+  const tryAdd = (chunk: string): boolean => {
+    if (!chunk) return true;
+    const next =
+      parts.length === 0 ? chunk : `${parts.join("\n\n")}\n\n${chunk}`;
+    if (next.length <= maxLen) {
+      parts.push(chunk);
+      return true;
+    }
+    const remaining =
+      maxLen - (parts.length === 0 ? 0 : parts.join("\n\n").length + 2);
+    if (remaining >= MIN_TRUNCATED_SKILL_CHARS) {
+      const cut = fenceSafeTruncate(chunk, remaining);
+      if (cut.length > 0) {
+        parts.push(cut);
+        truncated = true;
+      } else {
+        truncated = true;
+      }
+    } else {
+      truncated = true;
+    }
+    return false;
+  };
+
+  if (intro) tryAdd(intro);
+  for (const section of must) {
+    if (!tryAdd(sectionBlock(section))) break;
+  }
+  for (const section of preferred) {
+    if (!tryAdd(sectionBlock(section))) break;
+  }
+  for (const section of deferred) {
+    if (!tryAdd(sectionBlock(section))) break;
+  }
+
+  const rebuilt = parts.join("\n\n");
+  if (!rebuilt) {
+    const cut = fenceSafeTruncate(trimmed, maxLen);
+    return { content: cut, truncated: true };
+  }
+  if (rebuilt.length > maxLen) {
+    return { content: fenceSafeTruncate(rebuilt, maxLen), truncated: true };
+  }
+  return {
+    content: rebuilt,
+    truncated: truncated || rebuilt.length < trimmed.length,
+  };
+}
+
+function prepareSkillBlock(
+  entry: CatalogSkillEntry,
+  allowance: number,
+): { block: string; truncated: boolean } {
+  const heading = `## ${entry.name}\n`;
+  const contentBudget = Math.max(0, allowance - heading.length);
+  if (entry.name === AUTOMATION_SKILL_NAME) {
+    const prepared = prioritizeAutomationContent(entry.content, contentBudget);
+    return {
+      block: `${heading}${prepared.content}`,
+      truncated: prepared.truncated,
+    };
+  }
+  const trimmed = entry.content.trim();
+  const full = `${heading}${trimmed}`;
+  if (full.length <= allowance) {
+    return { block: full, truncated: false };
+  }
+  if (allowance < MIN_TRUNCATED_SKILL_CHARS) {
+    return { block: "", truncated: true };
+  }
+  return {
+    block: fenceSafeTruncate(full, allowance),
+    truncated: true,
+  };
+}
+
 /**
  * Pack catalog skills into the launch-addition suffix.
  *
- * Invoked skills stay first. Remaining skills are ordered smallest-first and
- * packed under a reserved per-skill share of the 32 KiB budget so several
- * enabled catalog skills survive instead of one oversized skill silently
- * consuming the whole cap. Content that still cannot fit its share is
- * truncated (never dropped below ``MIN_TRUNCATED_SKILL_CHARS`` when the share
- * allows); when anything is truncated or omitted, a machine-readable
- * ``CANVAS_SKILLS_TRUNCATED`` marker listing those names is appended.
+ * Invoked skills stay first. ``openhands-automation`` (issue #16905) is packed
+ * next with section-priority truncation so Managing Automations / Run Lifecycle
+ * survive the 32 KiB cap. Remaining skills fill leftover budget (smallest-first).
+ * Truncation is fence-safe so ``CANVAS_SKILLS_TRUNCATED`` is not swallowed by an
+ * open code fence.
  */
 export function packClaudeAcpSkillSuffix(
   skills: readonly CatalogSkillEntry[],
@@ -169,9 +372,17 @@ export function packClaudeAcpSkillSuffix(
   const invoked = invokedName
     ? skills.find((entry) => entry.name === invokedName)
     : undefined;
-  const rest = skills.filter((entry) => entry.name !== invokedName);
+  const primary =
+    invoked?.name === AUTOMATION_SKILL_NAME
+      ? undefined
+      : skills.find((entry) => entry.name === AUTOMATION_SKILL_NAME);
+  const rest = skills.filter(
+    (entry) =>
+      entry.name !== invokedName && entry.name !== AUTOMATION_SKILL_NAME,
+  );
   const ordered = [
     ...(invoked ? [invoked] : []),
+    ...(primary ? [primary] : []),
     ...[...rest].sort((a, b) => {
       const sizeDelta = a.content.length - b.content.length;
       if (sizeDelta !== 0) return sizeDelta;
@@ -193,49 +404,49 @@ export function packClaudeAcpSkillSuffix(
 
   for (let i = 0; i < ordered.length; i += 1) {
     const entry = ordered[i];
-    const block = formatSkillBlock(entry);
     const separator = blocks.length > 0 ? "\n\n" : "";
-    const remainingSkills = ordered.length - i;
     const available = packBudget - used - separator.length;
     if (available <= 0) {
       omitted.push(entry.name);
       continue;
     }
-    // Reserved fair share of what is left for this and later skills.
-    const share = Math.floor(available / remainingSkills);
-    const allowance = Math.max(share, 0);
 
-    if (block.length <= available && block.length <= allowance) {
-      blocks.push(block);
-      used += separator.length + block.length;
+    const laterCount = ordered.length - i - 1;
+    // Keep a modest leftover so at least one other small skill can appear when
+    // packing the oversized automation skill — but never starve automation's
+    // must-keep sections (those need several KB).
+    const isPrimaryPack =
+      entry.name === AUTOMATION_SKILL_NAME ||
+      (entry.name === invokedName && entry.name === AUTOMATION_SKILL_NAME);
+    const leftoverReserve =
+      isPrimaryPack && laterCount > 0
+        ? Math.min(Math.floor(available * 0.2), laterCount * 512)
+        : 0;
+    const allowance = Math.max(
+      MIN_TRUNCATED_SKILL_CHARS,
+      available - leftoverReserve,
+    );
+
+    const prepared = prepareSkillBlock(entry, Math.min(available, allowance));
+    if (!prepared.block) {
+      omitted.push(entry.name);
+      continue;
+    }
+    if (prepared.block.length > available) {
+      const tight = prepareSkillBlock(entry, available);
+      if (!tight.block || tight.block.length > available) {
+        omitted.push(entry.name);
+        continue;
+      }
+      blocks.push(tight.block);
+      used += separator.length + tight.block.length;
+      if (tight.truncated) truncated.push(entry.name);
       continue;
     }
 
-    // Prefer a full skill when it fits the remaining budget even if above the
-    // equal share — leftover from smaller earlier skills funds this. Only do
-    // so for the last remaining skill, or when every later skill can still get
-    // MIN_TRUNCATED_SKILL_CHARS after taking the full block.
-    const laterCount = remainingSkills - 1;
-    const afterFull = available - block.length;
-    const canTakeFull =
-      block.length <= available &&
-      (laterCount === 0 || afterFull >= laterCount * MIN_TRUNCATED_SKILL_CHARS);
-
-    if (canTakeFull) {
-      blocks.push(block);
-      used += separator.length + block.length;
-      continue;
-    }
-
-    const truncateTo = Math.min(available, Math.max(allowance, share));
-    if (truncateTo >= MIN_TRUNCATED_SKILL_CHARS) {
-      blocks.push(block.slice(0, truncateTo));
-      used += separator.length + truncateTo;
-      truncated.push(entry.name);
-      continue;
-    }
-
-    omitted.push(entry.name);
+    blocks.push(prepared.block);
+    used += separator.length + prepared.block.length;
+    if (prepared.truncated) truncated.push(entry.name);
   }
 
   if (blocks.length === 0) return undefined;
@@ -251,14 +462,13 @@ export function packClaudeAcpSkillSuffix(
     const withMarker = `${body}\n\n${marker}`;
     if (wrapSkillSuffix(withMarker).length > maxLength) {
       const overflow = wrapSkillSuffix(withMarker).length - maxLength;
-      body = body.slice(0, Math.max(0, body.length - overflow));
+      body = fenceSafeTruncate(body, Math.max(0, body.length - overflow));
     }
     body = `${body}\n\n${marker}`;
-    // Final hard clamp — should be a no-op when reserve was accurate.
     const wrapped = wrapSkillSuffix(body);
     if (wrapped.length > maxLength) {
       const bodyBudget = maxLength - wrapPad;
-      body = body.slice(0, Math.max(0, bodyBudget));
+      body = fenceSafeTruncate(body, Math.max(0, bodyBudget));
       return wrapSkillSuffix(body);
     }
     return wrapSkillSuffix(body);

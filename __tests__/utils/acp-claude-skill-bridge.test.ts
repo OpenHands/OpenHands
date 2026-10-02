@@ -9,8 +9,10 @@ import {
   CANVAS_SKILLS_TRUNCATED_MARKER,
   CLAUDE_CODE_ACP_SERVER,
   buildClaudeAcpSkillSuffixAppend,
+  fenceSafeTruncate,
   isClaudeCodeAcpAgent,
   packClaudeAcpSkillSuffix,
+  prioritizeAutomationContent,
   selectClaudeAcpCatalogSkills,
 } from "#/utils/acp-claude-skill-bridge";
 
@@ -141,7 +143,7 @@ describe("buildClaudeAcpSkillSuffixAppend", () => {
     warn.mockRestore();
   });
 
-  it("keeps several DEFAULT_ENABLED skills under the 32KiB cap with a truncation marker", () => {
+  it("keeps automation schedule/lifecycle sections under the 32KiB default pack", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const suffix = buildClaudeAcpSkillSuffixAppend({
       enablement: { enabledSkills: [...DEFAULT_ENABLED_SKILL_NAMES] },
@@ -151,18 +153,45 @@ describe("buildClaudeAcpSkillSuffixAppend", () => {
     expect(suffix!.length).toBeLessThanOrEqual(
       AGENT_LAUNCH_SUFFIX_APPEND_MAX_LENGTH,
     );
+    expect(suffix).toContain(`## ${AUTOMATION}`);
+    // #16905 criterion 1 — schedule/lifecycle instructions must survive.
+    expect(suffix).toContain("## Managing Automations");
+    expect(suffix).toContain("## Run Lifecycle");
 
     const present = DEFAULT_ENABLED_SKILL_NAMES.filter((name) =>
       suffix!.includes(`## ${name}`),
     );
-    // Old largest-first packing kept only openhands-automation; reserved
-    // shares must keep multiple default-enabled headings alive.
-    expect(present.length).toBeGreaterThan(1);
     expect(present).toContain(AUTOMATION);
-    expect(present.length).toBe(DEFAULT_ENABLED_SKILL_NAMES.length);
+    // Other defaults may still appear when leftover budget allows, but the
+    // pack must not require every heading (that starved automation before).
+    expect(present.length).toBeGreaterThan(1);
 
     expect(suffix).toContain(CANVAS_SKILLS_TRUNCATED_MARKER);
     expect(suffix).toMatch(/truncated="/);
+
+    const markerIdx = suffix!.indexOf(CANVAS_SKILLS_TRUNCATED_MARKER);
+    const beforeMarker = suffix!.slice(0, markerIdx);
+    const fenceCount = (beforeMarker.match(/```/g) ?? []).length;
+    expect(fenceCount % 2).toBe(0);
     warn.mockRestore();
+  });
+});
+
+describe("fenceSafeTruncate", () => {
+  it("closes an odd fence so markers stay outside code", () => {
+    const src = "before\n```\ncode line\nmore";
+    const cut = fenceSafeTruncate(src, 24);
+    expect((cut.match(/```/g) ?? []).length % 2).toBe(0);
+  });
+});
+
+describe("prioritizeAutomationContent", () => {
+  it("keeps Managing Automations over Architecture when budget is tight", () => {
+    const full = SKILLS_CATALOG.find((e) => e.name === AUTOMATION)!.content;
+    const { content, truncated } = prioritizeAutomationContent(full, 8_000);
+    expect(truncated).toBe(true);
+    expect(content).toContain("## Managing Automations");
+    expect(content).toContain("## Run Lifecycle");
+    expect(content).not.toContain("## Architecture");
   });
 });
