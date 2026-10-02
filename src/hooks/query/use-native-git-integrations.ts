@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchCloudProvidersConfigured } from "#/api/cloud/settings-service.api";
+import { fetchCloudIntegrationsConfig } from "#/api/cloud/settings-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useUserProviders } from "#/hooks/use-user-providers";
 import type { Provider } from "#/types/settings";
@@ -29,24 +29,28 @@ export function isNativeGitCandidate(entryId: string): boolean {
  * option — on local backends, for non-git entries, and for providers the
  * instance has not enabled. While `isLoading`, the instance's providers are
  * not known yet and null means nothing: wait rather than decide on it.
+ * `isJiraEnabled` is whether the instance offers the built-in Jira Cloud
+ * integration there; it is not a git connection, so it never satisfies an
+ * integration requirement.
  */
 export function useNativeGitIntegrations() {
   const { backend } = useActiveBackend();
   const isCloud = backend.kind === "cloud";
   const { providers: connectedProviders } = useUserProviders();
 
-  const { data: configuredProviders, isLoading } = useQuery({
+  const { data: config, isLoading } = useQuery({
     queryKey: [
       "cloud-providers-configured",
       backend.id,
       backend.connectionRevision ?? 0,
     ],
-    queryFn: fetchCloudProvidersConfigured,
+    queryFn: fetchCloudIntegrationsConfig,
     enabled: isCloud,
     staleTime: 1000 * 60 * 5,
     retry: false,
     meta: { disableToast: true },
   });
+  const configuredProviders = config?.providersConfigured;
 
   const getNativeIntegration = useCallback(
     (entryId: string): NativeGitIntegration | null => {
@@ -59,5 +63,9 @@ export function useNativeGitIntegrations() {
     [isCloud, configuredProviders, connectedProviders],
   );
 
-  return { getNativeIntegration, isLoading };
+  return {
+    getNativeIntegration,
+    isJiraEnabled: isCloud && config?.isJiraEnabled === true,
+    isLoading,
+  };
 }
