@@ -120,6 +120,7 @@ export function HomeChatLauncher() {
     // query here would create a duplicate text-only initial_message.
     let variables: Parameters<typeof createConversation>[0] = {
       query: hasAttachments ? undefined : trimmed || undefined,
+      automationSetup: isAutomateMode,
       entryPoint: "home_chat_launcher",
     };
     // An isolated backend owns its workspace, so a host selection left over

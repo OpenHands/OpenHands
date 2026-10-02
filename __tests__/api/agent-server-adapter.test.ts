@@ -3,6 +3,7 @@ import type { MockInstance } from "vitest";
 import { getAcpProvider as getClientAcpProvider } from "@openhands/typescript-client";
 import { CANVAS_UI_CLIENT_TOOL_NAME } from "#/constants/canvas-ui";
 import { LAUNCH_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversation";
+import { AUTOMATION_FORM_UPDATE_TOOL_NAME } from "#/constants/automation-form";
 
 import {
   ACP_SERVER_TAG_KEY,
@@ -921,6 +922,36 @@ describe("buildStartConversationRequest", () => {
         LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
       ]);
     });
+
+    it.each([
+      {
+        automationSetup: false,
+        expectedTools: [
+          CANVAS_UI_CLIENT_TOOL_NAME,
+          LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
+        ],
+      },
+      {
+        automationSetup: true,
+        expectedTools: [
+          CANVAS_UI_CLIENT_TOOL_NAME,
+          LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
+          AUTOMATION_FORM_UPDATE_TOOL_NAME,
+        ],
+      },
+    ])(
+      "builds client tools for automationSetup=$automationSetup",
+      ({ automationSetup, expectedTools }) => {
+        const payload = buildStartConversationRequest({
+          settings: DEFAULT_SETTINGS,
+          automationSetup,
+        });
+
+        expect(payload.client_tools.map((tool) => tool.name)).toEqual(
+          expectedTools,
+        );
+      },
+    );
 
     it("sends the client tool when resuming a conversation", () => {
       const payload = buildStartConversationRequest({

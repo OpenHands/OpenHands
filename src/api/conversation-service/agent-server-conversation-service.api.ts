@@ -61,6 +61,10 @@ import {
 } from "../conversation-metadata-store";
 import { resolveTitleLlmProfile } from "#/utils/title-llm-profile";
 import { isPlannerConversationOf } from "#/utils/plan-file";
+import { buildAutomationSetupModeTags } from "#/utils/automation-draft-tags";
+import { AUTOMATION_FORM_UPDATE_CLIENT_TOOL } from "../automation-form-client-tool";
+import { CANVAS_UI_CLIENT_TOOL } from "../canvas-ui-client-tool";
+import { LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL } from "../launch-child-conversation-client-tool";
 import type {
   GetHooksResponse,
   PluginSpec,
@@ -378,6 +382,7 @@ function requireAppConversation(
  */
 export interface CreateConversationOptions {
   initialUserMsg?: string;
+  automationSetup?: boolean;
   conversationInstructions?: string;
   plugins?: PluginSpec[];
   metadata?: ConversationMetadata | null;
@@ -459,6 +464,7 @@ class AgentServerConversationService {
   ): Promise<AppConversationStartTask> {
     const {
       initialUserMsg,
+      automationSetup,
       conversationInstructions,
       plugins,
       metadata,
@@ -511,6 +517,18 @@ class AgentServerConversationService {
             }
           : {}),
         trigger: "gui",
+        ...(automationSetup
+          ? { tags: buildAutomationSetupModeTags(null) }
+          : {}),
+        ...(automationSetup && agentProfileKind !== "acp"
+          ? {
+              client_tools: [
+                CANVAS_UI_CLIENT_TOOL,
+                LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL,
+                AUTOMATION_FORM_UPDATE_CLIENT_TOOL,
+              ],
+            }
+          : {}),
       };
       return createCloudAppConversation(request);
     }
@@ -539,6 +557,7 @@ class AgentServerConversationService {
     const payload = await buildStartConversationRequestWithEncryptedSettings({
       settings,
       query: initialUserMsg,
+      automationSetup,
       conversationInstructions,
       plugins,
       conversationId,

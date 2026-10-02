@@ -1,0 +1,46 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  AUTOMATION_FORM_UPDATE_ACTION_KIND,
+  AUTOMATION_FORM_UPDATE_CLIENT_TOOL,
+  AUTOMATION_FORM_UPDATE_TOOL_NAME,
+} from "#/api/automation-form-client-tool";
+
+describe("automation_form_update client tool", () => {
+  it("defines the automation form update client tool contract", () => {
+    expect(AUTOMATION_FORM_UPDATE_TOOL_NAME).toBe("automation_form_update");
+    expect(AUTOMATION_FORM_UPDATE_ACTION_KIND).toBe(
+      "ClientAction_automation_form_update",
+    );
+    expect(AUTOMATION_FORM_UPDATE_CLIENT_TOOL).toMatchObject({
+      name: AUTOMATION_FORM_UPDATE_TOOL_NAME,
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          fields: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              kind: { enum: ["prompt", "plugin", "custom"] },
+              triggerKind: { enum: ["cron", "event"] },
+              frequency: {
+                enum: ["hourly", "daily", "weekdays", "weekly", "custom"],
+              },
+              customCode: { type: "string" },
+              setupScript: { type: "string" },
+            },
+          },
+          overwrite_user_edits: { type: "boolean" },
+        },
+        required: ["fields"],
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    });
+  });
+});
