@@ -34,6 +34,7 @@ import process from "node:process";
 import { pathToFileURL } from "node:url";
 import sirv from "sirv";
 
+import { applySessionKeyPolicy, DEFAULT_BIND_HOST } from "./bind-host.mjs";
 import {
   createProxyHandlers,
   createRouter,
@@ -86,13 +87,14 @@ function isEnvFlagEnabled(value) {
 export function parseArgs(argv = process.argv.slice(2), env = process.env) {
   const config = {
     port: 3001,
-    host: "::",
+    host: DEFAULT_BIND_HOST,
     dir: "build",
     routes: {},
     rejectPrefixes: [],
     noReferrerPrefixes: [],
     sessionApiKey: null,
     authRequired: false,
+    allowLanSessionKey: false,
     runtimeServicesInfo: null,
     lockToCloud: null,
     basePath: "/",
@@ -159,6 +161,9 @@ export function parseArgs(argv = process.argv.slice(2), env = process.env) {
         break;
       case "--disable-telemetry":
         config.disableTelemetry = true;
+        break;
+      case "--allow-lan-session-key":
+        config.allowLanSessionKey = true;
         break;
       case "--reject-prefix": {
         const prefix = argv[++i];
@@ -236,7 +241,10 @@ USAGE:
 
 OPTIONS:
   -p, --port  <port>           Port to bind (default: 3001)
-  -H, --host  <host>           Hostname to bind (default: :: dual-stack)
+  -H, --host  <host>           Hostname to bind (default: 127.0.0.1 loopback).
+                               Use 0.0.0.0 or :: to expose on the LAN; the
+                               session key is then not injected unless you also
+                               pass --allow-lan-session-key.
   -d, --dir   <dir>            Directory to serve (default: build)
   -r, --route <prefix=url>     Proxy <prefix> (and subpaths) to <url>;
                                may be repeated. WebSockets supported.
@@ -246,6 +254,8 @@ OPTIONS:
   --auth-required              Inject authRequired flag into index.html so the
                                pre-built frontend shows the API key entry screen
                                (public mode) without VITE_AUTH_REQUIRED baked in.
+  --allow-lan-session-key      Permit --session-api-key when --host is not
+                               loopback (Docker/container entrypoints only).
   --runtime-services-info <json>
                                Inject a JSON description of the local runtime
                                services into index.html so the pre-built
@@ -345,6 +355,14 @@ ROUTING:
  *   `isDoNotTrackEnabled()` in `#/services/telemetry`. Enabled by
  *   AGENT_CANVAS_DISABLE_TELEMETRY=1 or the --disable-telemetry flag.
  */
+export function serializeForInlineScript(value) {
+  return JSON.stringify(value)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
+}
+
 function makeConfigInjectionScript(
   sessionApiKey,
   authRequired,
@@ -357,7 +375,7 @@ function makeConfigInjectionScript(
   const parts = [];
 
   if (sessionApiKey) {
-    const keyLiteral = JSON.stringify(sessionApiKey);
+    const keyLiteral = serializeForInlineScript(sessionApiKey);
     // Window global — read at module init by getBakedSessionApiKey().
     // Set first so it's available even if the localStorage write throws.
     parts.push(`window.__AGENT_CANVAS_SESSION_API_KEY__=${keyLiteral};`);
@@ -386,25 +404,25 @@ function makeConfigInjectionScript(
     // VITE_RUNTIME_SERVICES_INFO env var. JSON.stringify produces a safe JS
     // string literal for the inline <script>.
     parts.push(
-      `window.__AGENT_CANVAS_RUNTIME_SERVICES_INFO__=${JSON.stringify(runtimeServicesInfo)};`,
+      `window.__AGENT_CANVAS_RUNTIME_SERVICES_INFO__=${serializeForInlineScript(runtimeServicesInfo)};`,
     );
   }
 
   if (lockToCloud) {
     parts.push(
-      `window.__AGENT_CANVAS_LOCK_TO_CLOUD__=${JSON.stringify(lockToCloud)};`,
+      `window.__AGENT_CANVAS_LOCK_TO_CLOUD__=${serializeForInlineScript(lockToCloud)};`,
     );
   }
 
   if (basePath && basePath !== "/") {
     parts.push(
-      `window.__AGENT_CANVAS_BASE_PATH__=${JSON.stringify(basePath)};`,
+      `window.__AGENT_CANVAS_BASE_PATH__=${serializeForInlineScript(basePath)};`,
     );
   }
 
   if (vscodeBasePath) {
     parts.push(
-      `window.__AGENT_CANVAS_VSCODE_BASE_PATH__=${JSON.stringify(vscodeBasePath)};`,
+      `window.__AGENT_CANVAS_VSCODE_BASE_PATH__=${serializeForInlineScript(vscodeBasePath)};`,
     );
   }
 
@@ -463,7 +481,7 @@ async function serveInjectedIndexHtml(
   res.writeHead(200, {
     "Content-Type": "text/html; charset=utf-8",
     "Content-Length": buf.length,
-    "Cache-Control": "no-cache",
+    "Cache-Control": sessionApiKey ? "no-store" : "no-cache",
   });
   if (req.method === "HEAD") {
     res.end();
@@ -568,6 +586,8 @@ function setStaticHeaders(res, pathname) {
 
 function createStaticMiddleware(dirAbs) {
   return sirv(dirAbs, {
+    // Builds replace hashed assets while the local server is running.
+    dev: true,
     etag: true,
     single: false,
     setHeaders: setStaticHeaders,
@@ -638,9 +658,15 @@ export function startStaticServer(config) {
   const route = createRouter(config.routes);
   const proxy = createProxyHandlers({ label: `static:${config.port}` });
   const dirAbs = resolve(config.dir);
-  const injectionOpts = {
+  const policy = applySessionKeyPolicy({
+    host: config.host,
     sessionApiKey: config.sessionApiKey || null,
     authRequired: config.authRequired || false,
+    allowLanSessionKey: config.allowLanSessionKey || false,
+  });
+  const injectionOpts = {
+    sessionApiKey: policy.sessionApiKey,
+    authRequired: policy.authRequired,
     runtimeServicesInfo: config.runtimeServicesInfo || null,
     lockToCloud: config.lockToCloud || null,
     basePath: normalizeBasePath(config.basePath),

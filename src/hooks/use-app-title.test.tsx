@@ -82,7 +82,7 @@ describe("useAppTitle", () => {
         // @ts-expect-error - only returning partial config for test
         data: { title: "My Conversation" },
       });
-      useConversationStateStore.getState().setExecutionStatus(status);
+      useConversationStateStore.getState().setExecutionStatus("123", status);
 
       const { result } = renderAppTitleHook();
 

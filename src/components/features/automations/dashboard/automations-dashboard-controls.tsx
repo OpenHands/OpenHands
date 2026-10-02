@@ -6,6 +6,7 @@ import { EnumFilterDropdown } from "#/components/shared/filters/enum-filter-drop
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import type { DashboardSpec } from "#/manifests/automation-interface";
 import type {
+  DashboardCreatedByValue,
   DashboardSortValue,
   DashboardStatusValue,
   DashboardTriggerValue,
@@ -40,25 +41,31 @@ interface AutomationsDashboardControlsProps {
   spec: DashboardSpec;
   status: DashboardStatusValue;
   trigger: DashboardTriggerValue;
+  createdBy: DashboardCreatedByValue;
+  canFilterByCreator: boolean;
   sort: DashboardSortValue;
   onStatusChange: (value: DashboardStatusValue) => void;
   onTriggerChange: (value: DashboardTriggerValue) => void;
+  onCreatedByChange: (value: DashboardCreatedByValue) => void;
   onSortChange: (value: DashboardSortValue) => void;
 }
 
 /**
- * One Filters trigger that nests the manifest-declared status, trigger, and
- * sort dropdowns. Which filters exist, their options, and every caption stay
- * the manifest's; the predicates and comparators behind the values stay the
- * host's.
+ * One Filters trigger that nests the manifest-declared status, trigger,
+ * created-by, and sort dropdowns. Which filters exist, their options, and
+ * every caption stay the manifest's; the predicates and comparators behind
+ * the values stay the host's.
  */
 export function AutomationsDashboardControls({
   spec,
   status,
   trigger,
+  createdBy,
+  canFilterByCreator,
   sort,
   onStatusChange,
   onTriggerChange,
+  onCreatedByChange,
   onSortChange,
 }: AutomationsDashboardControlsProps) {
   const { t } = useTranslation("openhands");
@@ -69,18 +76,24 @@ export function AutomationsDashboardControls({
 
   const statusFilter = spec.filters.find((filter) => filter.id === "status");
   const triggerFilter = spec.filters.find((filter) => filter.id === "trigger");
+  const createdByFilter = canFilterByCreator
+    ? spec.filters.find((filter) => filter.id === "created_by")
+    : undefined;
   const activeCount = [
     statusFilter && status !== statusFilter.options[0]?.value,
     triggerFilter && trigger !== triggerFilter.options[0]?.value,
+    createdByFilter && createdBy !== createdByFilter.options[0]?.value,
     sort !== spec.sort.default,
   ].filter(Boolean).length;
   const filtersLabel = t(I18nKey.AUTOMATIONS$FILTERS);
   const defaultStatus = statusFilter?.options[0]?.value;
   const defaultTrigger = triggerFilter?.options[0]?.value;
+  const defaultCreatedBy = createdByFilter?.options[0]?.value;
 
   const resetAll = () => {
     if (defaultStatus) onStatusChange(defaultStatus);
     if (defaultTrigger) onTriggerChange(defaultTrigger);
+    if (defaultCreatedBy) onCreatedByChange(defaultCreatedBy);
     onSortChange(spec.sort.default);
   };
 
@@ -100,13 +113,13 @@ export function AutomationsDashboardControls({
         className={cn(
           dropdownFilterTriggerClassName,
           "h-9 py-0",
-          activeCount > 0 && "border-white/60 bg-white/10",
+          activeCount > 0 && "border-contrast/60 bg-contrast/10",
         )}
       >
         <ListFilter className="h-4 w-4 shrink-0" aria-hidden />
         <span className="whitespace-nowrap">{filtersLabel}</span>
         {activeCount > 0 ? (
-          <span className="rounded-full bg-white px-1.5 text-[11px] font-medium text-black">
+          <span className="rounded-full bg-contrast px-1.5 text-[11px] font-medium text-contrast-foreground">
             {activeCount}
           </span>
         ) : null}
@@ -124,7 +137,7 @@ export function AutomationsDashboardControls({
           role="group"
           data-testid="automations-filters-menu"
           aria-label={filtersLabel}
-          className="absolute right-0 top-full z-50 mt-1 flex min-w-[16rem] w-max flex-col gap-3 overflow-visible rounded-[6px] bg-tertiary p-3 context-menu-box-shadow"
+          className="absolute right-0 top-full z-50 mt-1 flex min-w-[16rem] w-max flex-col gap-3 overflow-visible rounded-md bg-tertiary p-3 context-menu-box-shadow"
         >
           {statusFilter ? (
             <FilterField label={statusFilter.label}>
@@ -148,6 +161,19 @@ export function AutomationsDashboardControls({
                 options={triggerFilter.options.map((option) => option.value)}
                 labelByValue={toLabelMap(triggerFilter.options)}
                 ariaLabel={triggerFilter.label}
+                fullWidth
+              />
+            </FilterField>
+          ) : null}
+          {createdByFilter ? (
+            <FilterField label={createdByFilter.label}>
+              <EnumFilterDropdown
+                testId="automations-filter-created-by"
+                value={createdBy}
+                onChange={onCreatedByChange}
+                options={createdByFilter.options.map((option) => option.value)}
+                labelByValue={toLabelMap(createdByFilter.options)}
+                ariaLabel={createdByFilter.label}
                 fullWidth
               />
             </FilterField>

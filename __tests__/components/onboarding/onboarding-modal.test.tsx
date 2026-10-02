@@ -19,11 +19,17 @@ import { NavigationProvider } from "#/context/navigation-context";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { SecretsService } from "#/api/secrets-service";
 import { DEFAULT_SETTINGS } from "#/services/settings";
+import { useFreeModelsStore } from "#/stores/free-models-store";
 import * as telemetry from "#/services/telemetry";
 
 const llmSettingsScreenMock = vi.hoisted(() => vi.fn());
 const getServerInfoMock = vi.hoisted(() => vi.fn());
 const getSettingsMock = vi.hoisted(() => vi.fn().mockResolvedValue({}));
+const saveAgentProfileMock = vi.hoisted(() => vi.fn().mockResolvedValue({}));
+const getAgentProfileMock = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({ profile: { id: "default-profile-id" } }),
+);
+const activateAgentProfileMock = vi.hoisted(() => vi.fn().mockResolvedValue({}));
 let captureMock: MockInstance<typeof telemetry.trackEvent>;
 
 // Both the backend status badge in the embedded edit form and the
@@ -40,6 +46,13 @@ vi.mock("@openhands/typescript-client/clients", () => ({
   SettingsClient: vi.fn(function SettingsClientMock() {
     return {
       getSettings: vi.fn(() => getSettingsMock()),
+    };
+  }),
+  AgentProfilesClient: vi.fn(function AgentProfilesClientMock() {
+    return {
+      saveAgentProfile: vi.fn((...args) => saveAgentProfileMock(...args)),
+      getAgentProfile: vi.fn((...args) => getAgentProfileMock(...args)),
+      activateAgentProfile: vi.fn((...args) => activateAgentProfileMock(...args)),
     };
   }),
 }));
@@ -176,10 +189,7 @@ function seedCloudBackend() {
   return backend;
 }
 
-function renderModal(
-  onClose = vi.fn(),
-  options?: { initialStep?: number },
-) {
+function renderModal(onClose = vi.fn(), options?: { initialStep?: number }) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -210,6 +220,10 @@ beforeEach(() => {
   vi.stubEnv("VITE_BACKEND_BASE_URL", "http://localhost:9000");
   vi.stubEnv("VITE_SESSION_API_KEY", "session-key");
   __resetActiveStoreForTests();
+  useFreeModelsStore.getState().setFlags({
+    freeModels: new Set(),
+    defaultModel: null,
+  });
   // Clear accumulated spy/mock call history so per-test assertions (the
   // ACP secret-write checks and the LLM-defaults mock) don't see calls
   // leaked from a prior test. Covers `llmSettingsScreenMock` too.
@@ -219,7 +233,7 @@ beforeEach(() => {
     if (options?.host?.startsWith("https://127.0.0.1:8000")) {
       return Promise.reject(new Error("Failed to fetch"));
     }
-    return Promise.resolve({ version: "1.28.0" });
+    return Promise.resolve({ version: "1.48.0" });
   });
   // ChooseAgentStep's Next button now persists the selection via
   // saveSettings before advancing. Stub it so the rest of the flow
@@ -704,6 +718,24 @@ describe("OnboardingModal", () => {
     );
   });
 
+  it("pre-fills the LLM step with the DB-selected OpenHands default", () => {
+    useFreeModelsStore.getState().setFlags({
+      freeModels: new Set(["openhands/gpt-5.2"]),
+      defaultModel: "openhands/gpt-5.2",
+    });
+
+    renderModal();
+
+    expect(llmSettingsScreenMock).toHaveBeenCalledTimes(1);
+    expect(llmSettingsScreenMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        initialValueOverrides: {
+          "llm.model": "openhands/gpt-5.2",
+        },
+      }),
+    );
+  });
+
   it("does not show backend configuration when the configured backend is healthy", async () => {
     renderModal();
 
@@ -828,15 +860,17 @@ describe("OnboardingModal", () => {
     expect(settings.contains(next)).toBe(false);
   });
 
-  it("hides the Say Hello OR separator when recommended automations are unavailable on Cloud", () => {
+  it("shows the Say Hello OR separator and recommended automations on Cloud", () => {
     seedCloudBackend();
 
     renderModal();
 
-    expect(screen.queryByTestId("onboarding-hello-or-separator")).toBeNull();
     expect(
-      screen.queryByTestId("onboarding-recommended-automations"),
-    ).toBeNull();
+      screen.getByTestId("onboarding-hello-or-separator"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("onboarding-recommended-automations"),
+    ).toBeInTheDocument();
   });
 
   it("shows the setup slide with Gemini's credential fields", async () => {

@@ -50,6 +50,11 @@ vi.mock("#/hooks/use-agent-state", () => ({
   useAgentState: vi.fn(() => ({
     curAgentState: AgentState.AWAITING_USER_INPUT,
   })),
+  usePlanningAgentState: vi.fn(() => ({
+    localPlanningConversationId: null,
+    curPlanningAgentState: AgentState.AWAITING_USER_INPUT,
+    isPlanningAgentRunning: false,
+  })),
 }));
 
 vi.mock("#/components/features/chat/btw-messages", () => ({
@@ -108,7 +113,7 @@ describe("ChatInterface – message display continuity (spec 3.1)", () => {
       conversationId: "test-conversation-id",
     });
 
-    useOptimisticUserMessageStore.setState({ pendingMessages: [] });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
 
     (useConfig as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       data: { app_mode: "local" },
@@ -144,6 +149,7 @@ describe("ChatInterface – message display continuity (spec 3.1)", () => {
       vi.mocked(useConversationWebSocket).mockReturnValue({
         isLoadingHistory: true,
         connectionState: "OPEN",
+        mainConnectionState: "OPEN",
         sendMessage: vi.fn(),
         reconnect: vi.fn(),
       });
@@ -174,6 +180,7 @@ describe("ChatInterface – message display continuity (spec 3.1)", () => {
       vi.mocked(useConversationWebSocket).mockReturnValue({
         isLoadingHistory: true,
         connectionState: "OPEN",
+        mainConnectionState: "OPEN",
         sendMessage: vi.fn(),
         reconnect: vi.fn(),
       });
@@ -195,6 +202,7 @@ describe("ChatInterface – message display continuity (spec 3.1)", () => {
       vi.mocked(useConversationWebSocket).mockReturnValue({
         isLoadingHistory: true,
         connectionState: "OPEN",
+        mainConnectionState: "OPEN",
         sendMessage: vi.fn(),
         reconnect: vi.fn(),
       });
@@ -225,6 +233,7 @@ describe("ChatInterface – message display continuity (spec 3.1)", () => {
       vi.mocked(useConversationWebSocket).mockReturnValue({
         isLoadingHistory: false,
         connectionState: "OPEN",
+        mainConnectionState: "OPEN",
         sendMessage: vi.fn(),
         reconnect: vi.fn(),
       });
