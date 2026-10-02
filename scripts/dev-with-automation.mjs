@@ -723,13 +723,15 @@ function spawnService(name, command, args, options = {}) {
     emitServiceLog(name, `failed to start: ${error.message}`, "error");
   });
 
-  proc.on("exit", (code, _signal) => {
+  proc.on("exit", (code, signal) => {
     processes.delete(name);
-    if (code !== 0 && code !== null && !shuttingDown) {
-      logService(name, `Exited with code ${code}`, c.red);
-      emitServiceLog(name, `exited with code ${code}`, "error");
+    const failed = (code !== 0 && code !== null) || signal != null;
+    if (failed && !shuttingDown) {
+      const reason = signal ? `signal ${signal}` : `code ${code}`;
+      logService(name, `Exited with ${reason}`, c.red);
+      emitServiceLog(name, `exited with ${reason}`, "error");
       if (options.required) {
-        failService(name, code);
+        failService(name, reason);
       }
     }
   });
@@ -1153,12 +1155,12 @@ function shutdown({ exitCode = 0 } = {}) {
  * which is what lets `main()` bail out before starting ingress or printing the
  * banner.
  */
-function failService(name, code) {
+function failService(name, reason) {
   if (shuttingDown) return;
   logError(
-    `Required service "${name}" exited with code ${code}; stopping the stack.`,
+    `Required service "${name}" exited with ${reason}; stopping the stack.`,
   );
-  emitServiceLog(name, `required service exited with code ${code}`, "error");
+  emitServiceLog(name, `required service exited with ${reason}`, "error");
   shutdown({ exitCode: 1 });
 }
 
