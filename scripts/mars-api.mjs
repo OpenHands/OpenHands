@@ -45,7 +45,7 @@ export function isTerminalSessionStatus(status) {
 }
 
 export const OPENHANDS_AGENT = "openhands";
-const OPENHANDS_TEMPLATE = "openhands-poc";
+const OPENHANDS_TEMPLATE = "openhands";
 const OPENHANDS_LLM_API_KEY_SECRET = "OPENHANDS_LLM_API_KEY";
 
 /**

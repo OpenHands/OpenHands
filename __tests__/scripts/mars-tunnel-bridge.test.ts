@@ -248,7 +248,7 @@ describe("createMarsTunnelBridge", () => {
       "my-agent",
       [
         "agent: openhands",
-        "template: openhands-poc",
+        "template: openhands",
         "secrets:",
         "  OPENHANDS_LLM_API_KEY:",
         '    value: "sk-test"',
@@ -272,7 +272,7 @@ describe("createMarsTunnelBridge", () => {
       id,
       manifest:
         id === "cfg_flat"
-          ? { agent: "openhands", template: "openhands-poc" }
+          ? { agent: "openhands", template: "openhands" }
           : { kind: "Agent", spec: { agent: "Claude-Code" } },
     }));
 
