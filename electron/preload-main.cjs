@@ -13,8 +13,14 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("desktopShell", {
   platform: process.platform,
   /**
-   * Subscribe to native fullscreen transitions: cb(isFullScreen). The main
-   * process also replays the current state on load. Returns an unsubscribe fn.
+   * The window's current fullscreen state. A subscriber starts listening long
+   * after the window opened, so it can miss the transition it is already past:
+   * a reload of a window that is fullscreen reports no event at all.
+   */
+  getFullScreen: () => ipcRenderer.invoke("window:full-screen:get"),
+  /**
+   * Subscribe to native fullscreen transitions: cb(isFullScreen). Returns an
+   * unsubscribe fn.
    *
    * Chromium does not report `display-mode: fullscreen` for a natively
    * fullscreened BrowserWindow, so a CSS media query cannot see this.

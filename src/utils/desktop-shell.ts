@@ -8,6 +8,7 @@
 
 interface DesktopShellBridge {
   platform?: string;
+  getFullScreen?: () => Promise<boolean>;
   onFullScreenChange?: (cb: (isFullScreen: boolean) => void) => () => void;
 }
 
@@ -26,11 +27,35 @@ export function isMacDesktopShell(): boolean {
 }
 
 /**
- * Subscribe to native fullscreen transitions. Returns an unsubscribe function;
- * outside the desktop app it is a no-op, since a browser tab owns no window.
+ * Subscribe to native fullscreen transitions and report the current state once.
+ * Returns an unsubscribe function; outside the desktop app it is a no-op, since
+ * a browser tab owns no window.
+ *
+ * The current state has to be read rather than pushed: this runs after
+ * hydration, well past the point where the window could have announced a
+ * fullscreen it entered before the page loaded.
  */
 export function subscribeDesktopFullScreen(
   cb: (isFullScreen: boolean) => void,
 ): () => void {
-  return getDesktopShell()?.onFullScreenChange?.(cb) ?? (() => {});
+  const shell = getDesktopShell();
+  if (!shell) return () => {};
+
+  let initialReadIsCurrent = true;
+  const unsubscribe = shell.onFullScreenChange?.((isFullScreen) => {
+    initialReadIsCurrent = false;
+    cb(isFullScreen);
+  });
+
+  shell
+    .getFullScreen?.()
+    .then((isFullScreen) => {
+      if (initialReadIsCurrent) cb(Boolean(isFullScreen));
+    })
+    .catch(() => {});
+
+  return () => {
+    initialReadIsCurrent = false;
+    unsubscribe?.();
+  };
 }

@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRoutesStub, data, Link } from "react-router";
@@ -506,6 +512,7 @@ describe("fullscreen", () => {
   type FsWindow = Window & {
     desktopShell?: {
       platform?: string;
+      getFullScreen?: () => Promise<boolean>;
       onFullScreenChange?: (cb: (v: boolean) => void) => () => void;
     };
   };
@@ -555,5 +562,24 @@ describe("fullscreen", () => {
     await act(async () => emit?.(false));
 
     expect(screen.getByTestId("titlebar-drag-region")).toBeInTheDocument();
+  });
+
+  it("adds no band when the window is already fullscreen on load, as after a reload", async () => {
+    (window as FsWindow).desktopShell = {
+      platform: "darwin",
+      getFullScreen: () => Promise.resolve(true),
+      onFullScreenChange: () => () => {},
+    };
+
+    renderMainApp();
+
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("titlebar-drag-region"),
+      ).not.toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("root-layout")).not.toHaveClass(
+      "oh-titlebar-inset",
+    );
   });
 });
