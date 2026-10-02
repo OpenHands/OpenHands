@@ -1503,7 +1503,7 @@ describe("buildRuntimeServicesSystemSuffix", () => {
 
   it("fetches runtime services from cached server_info when available", async () => {
     mockGetCachedAgentServerInfo.mockReturnValue({
-      version: "1.48.0",
+      version: "1.50.1",
       runtime_services: {
         mode: "docker",
         services: {
@@ -1528,7 +1528,7 @@ describe("buildRuntimeServicesSystemSuffix", () => {
 
   it("fetches runtime services from /server_info when there is no cached probe", async () => {
     mockGetServerInfo.mockResolvedValue({
-      version: "1.48.0",
+      version: "1.50.1",
       runtime_services: {
         mode: "dev:automation",
         services: {

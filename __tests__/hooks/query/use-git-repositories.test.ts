@@ -261,6 +261,17 @@ describe("useGitRepositories", () => {
     expect(config().enabled).toBe(false);
   });
 
+  it("can query local repositories before provider settings report a token", () => {
+    setupMocks();
+    mocks.providers = [];
+
+    renderHook(() =>
+      useGitRepositories({ provider: "github", allowMissingProvider: true }),
+    );
+
+    expect(config().enabled).toBe(true);
+  });
+
   it("loads more only when another page exists and no request is active", () => {
     setupMocks();
     mocks.providers = ["github"];

@@ -1,3 +1,4 @@
+import { GitClient } from "@openhands/typescript-client/clients";
 import { RemoteWorkspace } from "@openhands/typescript-client/workspace/remote-workspace";
 import { RepositoryPage, BranchPage, InstallationPage } from "#/types/git";
 import { Provider } from "#/types/settings";
@@ -31,6 +32,31 @@ const EMPTY_INSTALLATION_PAGE: InstallationPage = {
   next_page_id: null,
 };
 
+function normalizeRepositoryPage(page: RepositoryPage): RepositoryPage {
+  return {
+    items: page.items.map((repo) => ({
+      ...repo,
+      git_provider: safeProvider(repo.git_provider),
+    })),
+    next_page_id: page.next_page_id ?? null,
+    ...(page.missing_token !== undefined
+      ? { missing_token: page.missing_token }
+      : {}),
+  };
+}
+
+async function searchAgentServerRepositories(args: {
+  provider: string;
+  query?: string;
+  limit?: number;
+  pageId?: string;
+}): Promise<RepositoryPage> {
+  const page = await new GitClient(
+    getAgentServerClientOptions(),
+  ).searchRepositories(args);
+  return normalizeRepositoryPage(page as RepositoryPage);
+}
+
 class GitService {
   static async searchGitRepositories(
     query: string,
@@ -39,8 +65,16 @@ class GitService {
     pageId?: string,
     installationId?: string,
   ): Promise<RepositoryPage> {
-    if (isInvalidProvider(provider) || !isCloudActive()) {
+    if (isInvalidProvider(provider)) {
       return EMPTY_REPOSITORY_PAGE;
+    }
+    if (!isCloudActive()) {
+      return searchAgentServerRepositories({
+        provider,
+        query: query || undefined,
+        limit,
+        pageId,
+      });
     }
     return searchCloudRepositories({
       provider: safeProvider(provider),
@@ -57,8 +91,15 @@ class GitService {
     limit = 30,
     installationId?: string,
   ): Promise<RepositoryPage> {
-    if (isInvalidProvider(provider) || !isCloudActive()) {
+    if (isInvalidProvider(provider)) {
       return EMPTY_REPOSITORY_PAGE;
+    }
+    if (!isCloudActive()) {
+      return searchAgentServerRepositories({
+        provider,
+        limit,
+        pageId,
+      });
     }
     return searchCloudRepositories({
       provider: safeProvider(provider),

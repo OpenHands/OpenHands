@@ -675,7 +675,7 @@ const MOCK_VERIFIED_MODELS_BY_PROVIDER = MOCK_MODELS.reduce<
 // advertised fields (`enable_switch_llm_tool`) that the mocked server's own
 // profile model would have rejected, and version-gated UI hid controls the
 // rest of the mocks were serving.
-const MOCK_AGENT_SERVER_VERSION = "1.48.0";
+const MOCK_AGENT_SERVER_VERSION = "1.50.1";
 
 // --- Handlers for options/config/settings ---
 // Uses wildcard "*" prefix to match both relative paths and absolute URLs

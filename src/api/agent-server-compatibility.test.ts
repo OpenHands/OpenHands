@@ -83,7 +83,7 @@ describe("agent-server version compatibility", () => {
     });
   });
 
-  it.each(["0.99.99", "1.27.999", "1.47.0-rc.1"])(
+  it.each(["0.99.99", "1.27.999", "1.47.1", "1.50.1-rc.1"])(
     "rejects older version %s",
     (version) => {
       const error = getThrownError(() =>
@@ -101,10 +101,10 @@ describe("agent-server version compatibility", () => {
 
   it.each([
     MINIMUM_COMPATIBLE_AGENT_SERVER_VERSION,
-    "1.47.1",
-    "1.48.0",
+    "1.50.2",
+    "1.51.0",
     "2.0.0",
-    " v1.47.0+build.7 ",
+    " v1.50.1+build.7 ",
   ])("accepts compatible version %s", (version) => {
     expect(() =>
       assertAgentServerVersionIsSupported(serverInfo(version)),
@@ -115,9 +115,9 @@ describe("agent-server version compatibility", () => {
     { version: undefined, display: null },
     { version: "unknown", display: null },
     { version: "dev-build", display: null },
-    { version: "1.47.0", display: "1.47.0" },
-    { version: " v1.47.0+build.7 ", display: "v1.47.0+build.7" },
-    { version: "1.47.0-rc.1", display: "1.47.0-rc.1" },
+    { version: "1.50.1", display: "1.50.1" },
+    { version: " v1.50.1+build.7 ", display: "v1.50.1+build.7" },
+    { version: "1.50.1-rc.1", display: "1.50.1-rc.1" },
   ])("displays $version as $display", ({ version, display }) => {
     expect(getDisplayAgentServerVersion(serverInfo(version))).toBe(display);
   });
