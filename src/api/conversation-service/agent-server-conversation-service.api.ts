@@ -35,6 +35,7 @@ import {
 import {
   DirectConversationInfo,
   assertSubscriptionAuthReady,
+  buildRouterAtStartSystemSuffix,
   buildStartConversationRequestWithEncryptedSettings,
   buildStartPlanningConversationRequestWithEncryptedSettings,
   emptyHooksResponse,
@@ -391,6 +392,23 @@ export interface CreateConversationOptions {
   // encrypted-settings builder; cloud sends it as a flat request field.
   agentProfileId?: string;
   agentProfileKind?: AgentKind;
+  /**
+   * Whether the first message should be routed through the active Model
+   * Router. Only consumed on the cloud path — the local path reads the
+   * toggle from its own settings fetch. Threaded in by the caller from the
+   * warmed settings query to avoid a settings round-trip on the cloud hot
+   * path.
+   */
+  runRouterAtConversationStart?: boolean;
+  /**
+   * Whether a Model Router meta-profile is currently active. The
+   * route-at-start suffix is only emitted when this is true AND
+   * ``runRouterAtConversationStart`` is on — without an active meta-profile
+   * the agent-server does not attach ``route_task_to_model``, so the
+   * instruction would tell the agent to call a tool it lacks. Threaded in
+   * by the caller from the warmed meta-profiles query.
+   */
+  hasActiveMetaProfile?: boolean;
   // The LLM profile pinned to the launched agent profile (llm_profile_ref).
   // When set and no explicit title_llm_profile preference exists, title
   // generation uses this profile so both the agent and its title use the
@@ -462,6 +480,13 @@ class AgentServerConversationService {
       // round-trip — the cloud backend holds secrets server-side.
       // When launching from a profile, send `agent_profile_id`; the backend
       // resolves it to agent_settings server-side.
+      // The "Run on first message" toggle is threaded in by the caller
+      // (from the warmed settings query) to avoid a settings round-trip on
+      // this hot path; the local path reads it from its own settings fetch.
+      const routerAtStartSuffix = buildRouterAtStartSystemSuffix(
+        options.runRouterAtConversationStart ?? false,
+        options.hasActiveMetaProfile ?? false,
+      );
       const request: AppConversationStartRequest = {
         initial_message: initialUserMsg
           ? {
@@ -478,6 +503,13 @@ class AgentServerConversationService {
         agent_type: agentType,
         sandbox_id: sandboxId ?? null,
         agent_profile_id: agentProfileId ?? null,
+        ...(routerAtStartSuffix
+          ? {
+              agent_launch_additions: {
+                system_message_suffix_append: routerAtStartSuffix,
+              },
+            }
+          : {}),
         trigger: "gui",
       };
       return createCloudAppConversation(request);

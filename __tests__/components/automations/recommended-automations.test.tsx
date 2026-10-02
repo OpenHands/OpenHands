@@ -8,6 +8,8 @@ import {
   within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { http, HttpResponse } from "msw";
+import { server } from "#/mocks/node";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import McpService from "#/api/mcp-service/mcp-service.api";
 import { SecretsService } from "#/api/secrets-service";
@@ -24,6 +26,7 @@ import {
   type NavigationContextValue,
 } from "#/context/navigation-context";
 import type { Backend } from "#/api/backend-registry/types";
+import type { Settings } from "#/types/settings";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import { RecommendedAutomationsLauncher } from "#/components/features/automations/recommended-automations-launcher";
 import {
@@ -152,6 +155,34 @@ function settingsWithGithubMcp() {
   });
 }
 
+/**
+ * Activates the cloud backend with the given native git providers enabled and
+ * serves `settings` through the real settings hook (the local cases mock the
+ * hook), so these cases exercise the services the hooks rely on instead.
+ */
+async function activateCloudBackend({
+  providersConfigured = [],
+  settings = {},
+}: {
+  providersConfigured?: string[];
+  settings?: object;
+} = {}) {
+  setRegisteredBackends([cloudBackend]);
+  setActiveSelection({ backendId: cloudBackend.id });
+  server.use(
+    http.get("*/api/v1/web-client/config", () =>
+      HttpResponse.json({ providers_configured: providersConfigured }),
+    ),
+  );
+  vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+    settings as Settings,
+  );
+  const { useSettings } = await vi.importActual<
+    typeof import("#/hooks/query/use-settings")
+  >("#/hooks/query/use-settings");
+  mockUseSettings.mockImplementation(useSettings);
+}
+
 function continueGithubResponderLocally() {
   fireEvent.click(
     screen.getByTestId("recommended-automation-card-github-repo-monitor"),
@@ -227,6 +258,7 @@ describe("recommended automations", () => {
       "github-issue-triage",
       "upstream-fork-sync",
       "incident-retrospective-drafter",
+      "github-stale-ci-pr-closer",
     ]);
   });
 
@@ -250,7 +282,7 @@ describe("recommended automations", () => {
     expect(betaHeading).toHaveTextContent(
       I18nKey.RECOMMENDED_AUTOMATIONS$BETA_LABEL,
     );
-    expect(within(betaHeading).getByText("16")).toBeInTheDocument();
+    expect(within(betaHeading).getByText("17")).toBeInTheDocument();
 
     const betaSection = screen.getByTestId(
       "recommended-automations-beta-section",
@@ -892,15 +924,117 @@ describe("recommended automations", () => {
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledTimes(1));
   });
 
-  it("hides the recommended automations section on cloud backends", () => {
+  it("shows the recommended automations section on cloud backends", async () => {
     setRegisteredBackends([cloudBackend]);
     setActiveSelection({ backendId: cloudBackend.id });
 
     renderLauncher({ withBackendProvider: true });
 
+    // The section waits for the instance's native providers to be known.
     expect(
-      screen.queryByTestId("recommended-automations-section"),
+      await screen.findByTestId("recommended-automations-section"),
+    ).toBeInTheDocument();
+  });
+
+  it("launches a responder on cloud backends without the deployment choice", async () => {
+    // Arrange
+    await activateCloudBackend({ settings: settingsWithGithubMcp() });
+    renderLauncher({ withBackendProvider: true });
+    await within(
+      await screen.findByTestId(
+        "recommended-automation-pills-github-repo-monitor-wrap",
+      ),
+    ).findByText("RECOMMENDED_AUTOMATIONS$CONNECTED");
+
+    // Act
+    fireEvent.click(
+      screen.getByTestId("recommended-automation-card-github-repo-monitor"),
+    );
+
+    // Assert
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith(
+        "/automations/new/github-repo-monitor",
+      ),
+    );
+    expect(
+      screen.queryByTestId("responder-deployment-modal"),
     ).not.toBeInTheDocument();
+    expect(mockCreateSecret).not.toHaveBeenCalled();
+  });
+
+  it("does not ask for the GitHub MCP when native GitHub is connected on cloud", async () => {
+    // Arrange
+    await activateCloudBackend({
+      providersConfigured: ["github"],
+      settings: { provider_tokens_set: { github: null } },
+    });
+    renderLauncher({ withBackendProvider: true });
+    await within(
+      await screen.findByTestId(
+        "recommended-automation-pills-github-repo-monitor-wrap",
+      ),
+    ).findByText("RECOMMENDED_AUTOMATIONS$CONNECTED");
+
+    // Act
+    fireEvent.click(
+      screen.getByTestId("recommended-automation-card-github-repo-monitor"),
+    );
+
+    // Assert
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith(
+        "/automations/new/github-repo-monitor",
+      ),
+    );
+    expect(screen.queryByTestId("mcp-install-modal")).not.toBeInTheDocument();
+  });
+
+  it("asks to connect native Bitbucket on cloud when the instance enables it", async () => {
+    // Arrange
+    await activateCloudBackend({ providersConfigured: ["bitbucket"] });
+    renderLauncher({ withBackendProvider: true });
+    await within(
+      await screen.findByTestId(
+        "recommended-automation-pills-jira-issue-to-bitbucket-pr-wrap",
+      ),
+    ).findByText("RECOMMENDED_AUTOMATIONS$MISSING_CONNECT:1");
+
+    // Act
+    fireEvent.click(
+      screen.getByTestId(
+        "recommended-automation-card-jira-issue-to-bitbucket-pr",
+      ),
+    );
+
+    // Assert
+    const modal = await screen.findByTestId("mcp-install-modal");
+    expect(modal).toHaveAttribute("data-marketplace-id", "bitbucket");
+    expect(within(modal).getByTestId("mcp-native-panel")).toBeInTheDocument();
+    expect(mockCreateConversationMutate).not.toHaveBeenCalled();
+  });
+
+  it("shows a natively connected integration as connected on its card", () => {
+    // Arrange & Act
+    render(
+      <RecommendedAutomationsSection
+        backendKind="cloud"
+        installedServers={[]}
+        getNativeIntegration={(id) =>
+          id === "github" ? { provider: "github", isConnected: true } : null
+        }
+        onSelect={vi.fn()}
+      />,
+    );
+
+    // Assert
+    const pills = screen.getByTestId(
+      "recommended-automation-pills-github-repo-monitor-wrap",
+    );
+    expect(pills).toHaveTextContent("RECOMMENDED_AUTOMATIONS$CONNECTED");
+    expect(pills).not.toHaveTextContent(
+      "RECOMMENDED_AUTOMATIONS$MISSING_CONNECT",
+    );
   });
 
   it("renders the compact rail instead of the catalog section", async () => {
