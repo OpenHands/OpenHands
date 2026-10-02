@@ -3,6 +3,7 @@ import AcpService, {
   type AcpAuthStatus,
 } from "#/api/acp-service/acp-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
+import { useCodexAuthStatus } from "./use-codex-auth-status";
 
 export type { AcpAuthStatus };
 
@@ -11,11 +12,9 @@ export type { AcpAuthStatus };
  * (local) agent-server — by a subscription login (Claude Pro/Max, ChatGPT,
  * Google) or a pre-set API key.
  *
- * Detection is entirely client-side: {@link AcpService.getAuthStatus} runs the
- * provider's own status command (Claude: ``claude auth status``; Codex:
- * ``codex login status``; Gemini: a credentials-file check) through the
- * agent-server bash endpoint and classifies the output — no dedicated
- * endpoint, no prompt, no model tokens. Anything it can't classify (CLI not
+ * Claude and Gemini use {@link AcpService.getAuthStatus} through the
+ * agent-server bash endpoint. Codex uses the server-owned OAuth status via
+ * {@link useCodexAuthStatus}. Anything the CLI probe can't classify (CLI not
  * installed, unexpected output, the bash call failing) is ``unknown``.
  */
 async function probeAcpAuth(providerKey: string): Promise<AcpAuthStatus> {
@@ -40,7 +39,7 @@ interface UseAcpAuthStatusOptions {
 }
 
 /**
- * React Query wrapper around {@link probeAcpAuth}.
+ * React Query wrapper around the provider's authentication status.
  *
  * Gated to **local backends only**: the detection command runs wherever the
  * agent-server runs, and a provider CLI / credentials file is only reliably
@@ -53,7 +52,7 @@ interface UseAcpAuthStatusOptions {
  * unknown ``providerKey`` simply classifies as ``"unknown"``. The caller renders
  * this hook only for ACP providers, so any local backend is probeable.
  *
- * The probe runs a subprocess on the agent-server, so the result is cached for
+ * The Claude/Gemini probe runs a subprocess, so its result is cached for
  * the session (``staleTime: Infinity``, no refetch on focus/mount) — one probe
  * per provider per backend.
  */
@@ -63,9 +62,11 @@ export function useAcpAuthStatus(
 ) {
   const { enabled = true } = options;
   const active = useActiveBackend();
+  const codex = useCodexAuthStatus(enabled && providerKey === "codex");
   const isLocal = active.backend.kind === "local";
   const isSupported = isLocal;
-  const queryEnabled = enabled && isSupported && !!providerKey;
+  const queryEnabled =
+    enabled && isSupported && !!providerKey && providerKey !== "codex";
 
   const query = useQuery<AcpAuthStatus, Error>({
     // ``providerKey`` both discriminates the cache (so switching providers
@@ -87,6 +88,18 @@ export function useAcpAuthStatus(
     refetchOnWindowFocus: false,
     refetchOnMount: false,
   });
+
+  if (providerKey === "codex" && isLocal) {
+    return {
+      status: codex.data?.connected
+        ? ("authenticated" as const)
+        : codex.data
+          ? ("unauthenticated" as const)
+          : ("unknown" as const),
+      isChecking: enabled && codex.isLoading,
+      isSupported: true,
+    };
+  }
 
   return {
     status: query.data ?? "unknown",

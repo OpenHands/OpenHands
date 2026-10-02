@@ -12,6 +12,17 @@ export const QUERY_KEYS = {
   MAIN_APP_COOKIE_AUTH: ["main-app-cookie-auth"] as const,
 } as const;
 
+export const CODEX_AUTH_QUERY_KEYS = {
+  status: (backendId: string, revision = 0) =>
+    ["codex-auth", backendId, revision] as const,
+} as const;
+
+export const SECRETS_QUERY_KEYS = {
+  all: ["secrets"] as const,
+  byBackend: (backendId: string, orgId: string | null) =>
+    ["secrets", backendId, orgId] as const,
+} as const;
+
 export const SETTINGS_QUERY_KEYS = {
   all: ["settings"] as const,
   byScope: (scope: SettingsScope) => ["settings", scope] as const,

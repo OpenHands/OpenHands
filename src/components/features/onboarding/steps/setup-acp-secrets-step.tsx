@@ -4,6 +4,7 @@ import { BrandButton } from "#/components/features/settings/brand-button";
 import { AcpConflictWarnings } from "#/components/features/settings/acp-conflict-warnings";
 import { AcpAuthStatusBanner } from "#/components/features/settings/acp-auth-status-banner";
 import { AcpSecretField } from "#/components/features/settings/acp-secret-field";
+import { CodexAuthCard } from "#/components/features/settings/codex-auth-card";
 import { I18nKey } from "#/i18n/declaration";
 import { useAcpAuthStatus } from "#/hooks/query/use-acp-auth-status";
 import { useAcpCredentialForm } from "#/hooks/use-acp-credential-form";
@@ -168,27 +169,52 @@ export function SetupAcpSecretsStep({
         )}
       </header>
 
-      <AcpAuthStatusBanner
-        status={authStatus}
-        isChecking={isCheckingAuth}
-        credentialsConfigured={credentialsConfigured}
-        providerName={providerName}
-        testIdPrefix="onboarding-acp-auth"
-      />
+      {providerKey === "codex" && <CodexAuthCard enabled={isActive} />}
+      {(providerKey !== "codex" ||
+        (credentialsConfigured && authStatus !== "authenticated")) && (
+        <AcpAuthStatusBanner
+          status={authStatus}
+          isChecking={isCheckingAuth}
+          credentialsConfigured={credentialsConfigured}
+          providerName={providerName}
+          testIdPrefix="onboarding-acp-auth"
+        />
+      )}
 
       <div className="flex flex-col gap-5">
-        {fields.map((field) => (
-          <AcpSecretField
-            key={field.name}
-            field={field}
-            value={values[field.name] ?? ""}
-            onChange={(value) => setValue(field.name, value)}
-            alreadySet={secretExists(field.name)}
-            testId={`onboarding-acp-secret-${field.name}`}
-            showOptionalTag
-          />
-        ))}
+        {fields
+          .filter((field) => providerKey !== "codex" || !field.multiline)
+          .map((field) => (
+            <AcpSecretField
+              key={field.name}
+              field={field}
+              value={values[field.name] ?? ""}
+              onChange={(value) => setValue(field.name, value)}
+              alreadySet={secretExists(field.name)}
+              testId={`onboarding-acp-secret-${field.name}`}
+              showOptionalTag
+            />
+          ))}
       </div>
+
+      {providerKey === "codex" && (
+        <details>
+          <summary>{t(I18nKey.SETTINGS$CODEX_MANUAL_AUTH)}</summary>
+          {fields
+            .filter((field) => field.multiline)
+            .map((field) => (
+              <AcpSecretField
+                key={field.name}
+                field={field}
+                value={values[field.name] ?? ""}
+                onChange={(value) => setValue(field.name, value)}
+                alreadySet={secretExists(field.name)}
+                testId={`onboarding-acp-secret-${field.name}`}
+                showOptionalTag
+              />
+            ))}
+        </details>
+      )}
 
       <AcpConflictWarnings conflicts={conflicts} />
 

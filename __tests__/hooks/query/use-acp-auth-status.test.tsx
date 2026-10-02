@@ -4,6 +4,7 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useAcpAuthStatus } from "#/hooks/query/use-acp-auth-status";
+import { CodexAuthService } from "#/api/codex-auth-service";
 
 // Active backend is swapped per-test (local vs cloud) via this mutable holder.
 const backendMock = vi.hoisted(() => ({
@@ -56,12 +57,30 @@ describe("useAcpAuthStatus", () => {
   });
 
   it("reports unauthenticated when the probe says so", async () => {
-    getAuthStatus.mockResolvedValue("unauthenticated");
+    const status = vi.spyOn(CodexAuthService, "getStatus").mockResolvedValue({
+      connected: false,
+      state: "disconnected",
+      expires_at: null,
+    });
 
     const { result } = renderHook(() => useAcpAuthStatus("codex"), { wrapper });
 
     await waitFor(() => expect(result.current.status).toBe("unauthenticated"));
-    expect(getAuthStatus).toHaveBeenCalledWith("codex");
+    expect(status).toHaveBeenCalledWith(backendMock.current.backend);
+    expect(getAuthStatus).not.toHaveBeenCalled();
+    status.mockRestore();
+  });
+
+  it("reports Codex connected from the server-owned credentials", async () => {
+    const status = vi.spyOn(CodexAuthService, "getStatus").mockResolvedValue({
+      connected: true,
+      state: "connected",
+      expires_at: null,
+    });
+    const { result } = renderHook(() => useAcpAuthStatus("codex"), { wrapper });
+    await waitFor(() => expect(result.current.status).toBe("authenticated"));
+    expect(getAuthStatus).not.toHaveBeenCalled();
+    status.mockRestore();
   });
 
   it("falls back to unknown when the probe call rejects", async () => {

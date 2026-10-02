@@ -1,5 +1,6 @@
 import { FILE_SERVICE_HANDLERS } from "./file-service-handlers";
 import { SECRETS_HANDLERS } from "./secrets-handlers";
+import { CODEX_AUTH_HANDLERS } from "./codex-auth-handlers";
 import {
   AGENT_PROFILES_HANDLERS,
   resetMockAgentProfiles,
@@ -32,6 +33,7 @@ import {
 export const handlers = [
   ...FILE_SERVICE_HANDLERS,
   ...SECRETS_HANDLERS,
+  ...CODEX_AUTH_HANDLERS,
   ...AGENT_PROFILES_HANDLERS,
   ...GIT_REPOSITORY_HANDLERS,
   ...SETTINGS_HANDLERS,
