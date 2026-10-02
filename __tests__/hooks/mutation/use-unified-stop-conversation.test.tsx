@@ -45,7 +45,7 @@ vi.mock("react-i18next", () => ({
   useTranslation: (namespace: string) => useTranslationMock(namespace),
 }));
 
-vi.mock("#/context/navigation-context", () => ({
+vi.mock("#/contexts/navigation-context", () => ({
   useNavigation: () => ({
     conversationId: navigationState.conversationId,
     navigate: navigateMock,
