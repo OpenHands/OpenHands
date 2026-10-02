@@ -796,7 +796,9 @@ function spawnService(name, command, args, options = {}) {
       if (options.required) {
         failService(name, reason);
       } else {
-        options.onUnexpectedExit?.(reason);
+        // Keep upstream's onUnexpectedExit contract: a bare exit code, or
+        // `signal <name>` when the process was killed by a signal.
+        options.onUnexpectedExit?.(code ?? `signal ${signal}`);
       }
     }
   });
@@ -1485,12 +1487,12 @@ export function superviseService(
  * which is what lets `main()` bail out before starting ingress or printing the
  * banner.
  */
-function failService(name, code) {
+function failService(name, reason) {
   if (shuttingDown) return;
   logError(
-    `Required service "${name}" exited with code ${code}; stopping the stack.`,
+    `Required service "${name}" exited with ${reason}; stopping the stack.`,
   );
-  emitServiceLog(name, `required service exited with code ${code}`, "error");
+  emitServiceLog(name, `required service exited with ${reason}`, "error");
   shutdown({ exitCode: 1 });
 }
 
