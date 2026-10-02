@@ -631,8 +631,8 @@ describe("AutomationsList — Load more", () => {
     expect(
       vi.mocked(AutomationService.getAutomations).mock.calls.slice(1),
     ).toEqual([
-      [50, 50],
-      [50, 50],
+      [50, 50, undefined],
+      [50, 50, undefined],
     ]);
   });
 });
