@@ -1,5 +1,5 @@
 <!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Codex sign-in owned by the Agent Server</title><style>:root{--fg:#202126;--muted:#626770;--subtle:#899099;--bg:#fdfdfb;--card:#fff;--rule:#deded7;--accent:#2b4eaa;--accent-soft:#eef2fc;--warn:#b25b0e}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 system-ui,sans-serif}.wrap{max-width:1280px;margin:auto;padding:40px;display:grid;grid-template-columns:260px minmax(0,1fr);gap:36px}nav{position:sticky;top:20px;align-self:start;font-size:12px;overflow-wrap:anywhere}nav a{display:block;margin:8px 0}a{color:var(--accent)}h1{font-size:36px;line-height:1.2}h2{margin-top:36px}h3{font-size:18px;overflow-wrap:anywhere}.callout{border-left:4px solid var(--warn);padding:16px;background:var(--accent-soft)}article{border-top:1px solid var(--rule);padding:20px 0}.ba{display:grid;grid-template-columns:1fr 1fr;gap:18px}svg{width:100%;height:auto}.existing{fill:var(--card);stroke:var(--subtle);stroke-dasharray:6 4}.new{fill:var(--accent-soft);stroke:var(--warn);stroke-width:2}.node-title{fill:var(--fg);font:18px ui-monospace,monospace}.node-detail{fill:var(--muted);font:14px system-ui,sans-serif}figure{margin:12px 0}figcaption,.src{font:12px ui-monospace,monospace;overflow-wrap:anywhere}table{border-collapse:collapse;width:100%}td,th{padding:10px;text-align:left;border-bottom:1px solid var(--rule)}pre{overflow:auto;background:var(--accent-soft);padding:16px;font-size:12px}small{color:var(--muted)}@media(max-width:850px){.wrap{display:block;padding:20px}nav{position:static}.ba{display:block}}</style><div class="wrap"><nav><strong>Changed-file index</strong><a href="#f0">__tests__/components/settings/codex-auth-card.test.tsx<br><small>logic · +206/−0</small></a><a href="#f1">__tests__/hooks/query/use-acp-auth-status.test.tsx<br><small>logic · +21/−2</small></a><a href="#f2">specs/codex-oauth.md<br><small>mechanical · +15/−0</small></a><a href="#f3">src/api/codex-auth-service.ts<br><small>logic · +34/−0</small></a><a href="#f4">src/components/features/onboarding/steps/setup-acp-secrets-step.tsx<br><small>logic · +44/−18</small></a><a href="#f5">src/components/features/settings/acp-credentials-section.tsx<br><small>logic · +44/−18</small></a><a href="#f6">src/components/features/settings/codex-auth-card.tsx<br><small>logic · +247/−0</small></a><a href="#f7">src/hooks/query/query-keys.ts<br><small>mechanical · +11/−0</small></a><a href="#f8">src/hooks/query/use-acp-auth-status.ts<br><small>logic · +21/−8</small></a><a href="#f9">src/hooks/query/use-codex-auth-status.ts<br><small>logic · +21/−0</small></a><a href="#f10">src/hooks/query/use-get-secrets.ts<br><small>mechanical · +2/−1</small></a><a href="#f11">src/i18n/translation.json<br><small>mechanical · +68/−0</small></a><a href="#f12">src/mocks/codex-auth-handlers.ts<br><small>logic · +46/−0</small></a><a href="#f13">src/mocks/handlers.ts<br><small>mechanical · +2/−0</small></a><a href="#f14">src/mocks/settings-handlers.ts<br><small>logic · +2/−0</small></a></nav><main><header><small>OPENHANDS #17372 · DRAFT · https://github.com/OpenHands/OpenHands/pull/17851</small><h1>Codex sign-in owned by the Agent Server</h1><p>Review the server-owned device flow and the changes that let Canvas initiate it without handling OAuth credentials.</p></header><div class="callout">★ The Canvas implementation requires the first published client/server release and corresponding exact dependency/minimum-server pins. Human authorization, real Codex turns, restart persistence and actual refresh passed on Windows using a local launcher workaround. See <a href="validation.md">validation scope</a> and <a href="codex-live-results.json">credential-free results</a>. Browser reload/disconnect and Docker/remote checks remain pending. Cloud App API support is separate from hosted Agent Servers.</div><h2>Before → after</h2><div class="ba"><figure><svg viewBox="0 0 700 124" role="img" aria-label="Codex detection uses the host CLI probe">
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 system-ui,sans-serif}.wrap{max-width:1280px;margin:auto;padding:40px;display:grid;grid-template-columns:260px minmax(0,1fr);gap:36px}nav{position:sticky;top:20px;align-self:start;font-size:12px;overflow-wrap:anywhere}nav a{display:block;margin:8px 0}a{color:var(--accent)}h1{font-size:36px;line-height:1.2}h2{margin-top:36px}h3{font-size:18px;overflow-wrap:anywhere}.callout{border-left:4px solid var(--warn);padding:16px;background:var(--accent-soft)}article{border-top:1px solid var(--rule);padding:20px 0}.ba{display:grid;grid-template-columns:1fr 1fr;gap:18px}svg{width:100%;height:auto}.existing{fill:var(--card);stroke:var(--subtle);stroke-dasharray:6 4}.new{fill:var(--accent-soft);stroke:var(--warn);stroke-width:2}.node-title{fill:var(--fg);font:18px ui-monospace,monospace}.node-detail{fill:var(--muted);font:14px system-ui,sans-serif}figure{margin:12px 0}figcaption,.src{font:12px ui-monospace,monospace;overflow-wrap:anywhere}table{border-collapse:collapse;width:100%}td,th{padding:10px;text-align:left;border-bottom:1px solid var(--rule)}pre{overflow:auto;background:var(--accent-soft);padding:16px;font-size:12px}small{color:var(--muted)}@media(max-width:850px){.wrap{display:block;padding:20px}nav{position:static}.ba{display:block}}</style><div class="wrap"><nav><strong>Changed-file index</strong><a href="#f0">__tests__/components/settings/codex-auth-card.test.tsx<br><small>logic · +206/−0</small></a><a href="#f1">__tests__/hooks/query/use-acp-auth-status.test.tsx<br><small>logic · +21/−2</small></a><a href="#f2">specs/codex-oauth.md<br><small>mechanical · +15/−0</small></a><a href="#f3">src/api/codex-auth-service.ts<br><small>logic · +34/−0</small></a><a href="#f4">src/components/features/onboarding/steps/setup-acp-secrets-step.tsx<br><small>logic · +44/−18</small></a><a href="#f5">src/components/features/settings/acp-credentials-section.tsx<br><small>logic · +44/−18</small></a><a href="#f6">src/components/features/settings/codex-auth-card.tsx<br><small>logic · +247/−0</small></a><a href="#f7">src/hooks/query/query-keys.ts<br><small>mechanical · +11/−0</small></a><a href="#f8">src/hooks/query/use-acp-auth-status.ts<br><small>logic · +21/−8</small></a><a href="#f9">src/hooks/query/use-codex-auth-status.ts<br><small>logic · +21/−0</small></a><a href="#f10">src/hooks/query/use-get-secrets.ts<br><small>mechanical · +2/−1</small></a><a href="#f11">src/i18n/translation.json<br><small>mechanical · +68/−0</small></a><a href="#f12">src/mocks/codex-auth-handlers.ts<br><small>logic · +46/−0</small></a><a href="#f13">src/mocks/handlers.ts<br><small>mechanical · +2/−0</small></a><a href="#f14">src/mocks/settings-handlers.ts<br><small>logic · +2/−0</small></a></nav><main><header><small>OPENHANDS #17372 · DRAFT · https://github.com/OpenHands/OpenHands/pull/17851</small><h1>Codex sign-in owned by the Agent Server</h1><p>Review the server-owned device flow and the changes that let Canvas initiate it without handling OAuth credentials.</p></header><div class="callout">★ The Canvas implementation requires the first published client/server release and corresponding exact dependency/minimum-server pins. Five real Windows Codex turns passed, including the restored default preset and recovered conversation. Restart, actual refresh and browser reload passed. Hosted Linux: 594 backend/ACP tests and 348 client tests passed. Canonical Docker and hosted Linux HTTP acceptance passed; remote account consent/model use remains unverified. Candidate files are published in the fork; official registry release remains gated. See validation.md for exact scope. Cloud App API support is separate from hosted Agent Servers.</div><h2>Before → after</h2><div class="ba"><figure><svg viewBox="0 0 700 124" role="img" aria-label="Codex detection uses the host CLI probe">
     <title>Codex detection uses the host CLI probe</title><desc>export function useAcpAuthStatus at the linked source location.</desc>
     <g><rect class="existing" x="10" y="8" width="680" height="100" rx="8"/>
     <text x="30" y="45" class="node-title">export function useAcpAuthStatus</text>
@@ -9,12 +9,12 @@
     <g><rect class="new" x="10" y="8" width="680" height="100" rx="8"/>
     <text x="30" y="45" class="node-title">export function useAcpAuthStatus</text>
     <text x="30" y="77" class="node-detail">Codex detection uses the persisted server credential</text></g></svg>
-    <figcaption><a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/src/hooks/query/use-acp-auth-status.ts#L59">src/hooks/query/use-acp-auth-status.ts:59</a></figcaption></figure></div><h2>API and compatibility</h2><p>Before: Codex CLI status probe and manual credential fields. After: typed <code>CodexAuthClient</code> operations, a shared login card, backend-scoped status and advanced manual fallback. Other providers retain their status probes.</p><p>Source manifest: implementation revision <code>d4f8b9392b63df74ecf1b5434be83f70388866d1</code>; merge-base <code>2414d6ee5e31bede2e78211f72b58e9949575a75</code>. Per-file links and diffs below are immutable evidence for this verified PR head.</p><h2>Observed validation</h2><p>46 focused UI tests, complete lint/typecheck/formatting, app/library builds and 15 locales passed. Real built Canvas + native Agent Server (MSW disabled) initiated an actual OpenAI challenge with HTTP 200, displayed/copied the code and cancelled it. No account authorization/model call occurred. See <a href="https://github.com/luxleader/OpenHands/blob/feat/codex-oauth-17372/.pr/validation.md">validation notes</a> for commands, environment and limits.</p><h2>Changed files</h2><article id="f0"><h3>__tests__/components/settings/codex-auth-card.test.tsx</h3><p>Observable sign-in/copy/logout, cancel/reload and backend switch. <a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/__tests__/components/settings/codex-auth-card.test.tsx#L78">__tests__/components/settings/codex-auth-card.test.tsx:78</a></p><details><summary>Source manifest</summary><br><a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/__tests__/components/settings/codex-auth-card.test.tsx#L78">__tests__/components/settings/codex-auth-card.test.tsx:78</a></details><small>Added file: no before-state implementation.</small><figure><svg viewBox="0 0 700 124" role="img" aria-label="Observable sign-in/copy/logout, cancel/reload and backend switch">
+    <figcaption><a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/src/hooks/query/use-acp-auth-status.ts#L59">src/hooks/query/use-acp-auth-status.ts:59</a></figcaption></figure></div><h2>API and compatibility</h2><p>Before: Codex CLI status probe and manual credential fields. After: typed <code>CodexAuthClient</code> operations, a shared login card, backend-scoped status and advanced manual fallback. Other providers retain their status probes.</p><p>Source manifest: implementation revision <code>63af25aa0824dddb615668f4da50e8323f89d9d6</code>; merge-base <code>2414d6ee5e31bede2e78211f72b58e9949575a75</code>. Per-file links and diffs below are immutable evidence for this verified PR head.</p><h2>Observed validation</h2><p>46 focused UI tests, complete lint/typecheck/formatting, app/library builds and 15 locales passed. Real built Canvas + packaged Agent Server (MSW disabled) completed human ChatGPT authorization. Five real Codex turns returned OK without an API key, including the default Windows preset and recovery of the original failed conversation. Server restart, actual token refresh and browser reload passed. See <a href="validation.md">validation notes</a> for commands, environment and limits.</p><h2>Changed files</h2><article id="f0"><h3>__tests__/components/settings/codex-auth-card.test.tsx</h3><p>Observable sign-in/copy/logout, cancel/reload and backend switch. <a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/__tests__/components/settings/codex-auth-card.test.tsx#L78">__tests__/components/settings/codex-auth-card.test.tsx:78</a></p><details><summary>Source manifest</summary><br><a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/__tests__/components/settings/codex-auth-card.test.tsx#L78">__tests__/components/settings/codex-auth-card.test.tsx:78</a></details><small>Added file: no before-state implementation.</small><figure><svg viewBox="0 0 700 124" role="img" aria-label="Observable sign-in/copy/logout, cancel/reload and backend switch">
     <title>Observable sign-in/copy/logout, cancel/reload and backend switch</title><desc>it(&quot;opens verification at the linked source location.</desc>
     <g><rect class="new" x="10" y="8" width="680" height="100" rx="8"/>
     <text x="30" y="45" class="node-title">it(&quot;opens verification</text>
     <text x="30" y="77" class="node-detail">Observable sign-in/copy/logout, cancel/reload and backend switch</text></g></svg>
-    <figcaption><a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/__tests__/components/settings/codex-auth-card.test.tsx#L78">__tests__/components/settings/codex-auth-card.test.tsx:78</a></figcaption></figure><details><summary>Review diff (+206/−0)</summary><pre>diff --git a/__tests__/components/settings/codex-auth-card.test.tsx b/__tests__/components/settings/codex-auth-card.test.tsx
+    <figcaption><a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/__tests__/components/settings/codex-auth-card.test.tsx#L78">__tests__/components/settings/codex-auth-card.test.tsx:78</a></figcaption></figure><details><summary>Review diff (+206/−0)</summary><pre>diff --git a/__tests__/components/settings/codex-auth-card.test.tsx b/__tests__/components/settings/codex-auth-card.test.tsx
 new file mode 100644
 index 0000000..89b446d
 --- /dev/null
@@ -226,7 +226,7 @@ index 0000000..89b446d
 +    screen.getByRole(&quot;button&quot;, { name: &quot;Sign in with ChatGPT&quot; }),
 +  ).toBeEnabled();
 +});
-</pre></details></article><article id="f1"><h3>__tests__/hooks/query/use-acp-auth-status.test.tsx</h3><p>Codex expects server status and no CLI probe. <a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/__tests__/hooks/query/use-acp-auth-status.test.tsx#L59">__tests__/hooks/query/use-acp-auth-status.test.tsx:59</a></p><details><summary>Source manifest</summary><a class="src" href="https://github.com/OpenHands/OpenHands/blob/2414d6ee5e31bede2e78211f72b58e9949575a75/__tests__/hooks/query/use-acp-auth-status.test.tsx#L58">__tests__/hooks/query/use-acp-auth-status.test.tsx:58</a><br><a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/__tests__/hooks/query/use-acp-auth-status.test.tsx#L59">__tests__/hooks/query/use-acp-auth-status.test.tsx:59</a></details><div class="ba"><figure><svg viewBox="0 0 700 124" role="img" aria-label="Codex expected AcpService.getAuthStatus">
+</pre></details></article><article id="f1"><h3>__tests__/hooks/query/use-acp-auth-status.test.tsx</h3><p>Codex expects server status and no CLI probe. <a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/__tests__/hooks/query/use-acp-auth-status.test.tsx#L59">__tests__/hooks/query/use-acp-auth-status.test.tsx:59</a></p><details><summary>Source manifest</summary><a class="src" href="https://github.com/OpenHands/OpenHands/blob/2414d6ee5e31bede2e78211f72b58e9949575a75/__tests__/hooks/query/use-acp-auth-status.test.tsx#L58">__tests__/hooks/query/use-acp-auth-status.test.tsx:58</a><br><a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/__tests__/hooks/query/use-acp-auth-status.test.tsx#L59">__tests__/hooks/query/use-acp-auth-status.test.tsx:59</a></details><div class="ba"><figure><svg viewBox="0 0 700 124" role="img" aria-label="Codex expected AcpService.getAuthStatus">
     <title>Codex expected AcpService.getAuthStatus</title><desc>reports unauthenticated when at the linked source location.</desc>
     <g><rect class="existing" x="10" y="8" width="680" height="100" rx="8"/>
     <text x="30" y="45" class="node-title">reports unauthenticated when</text>
@@ -236,21 +236,21 @@ index 0000000..89b446d
     <g><rect class="new" x="10" y="8" width="680" height="100" rx="8"/>
     <text x="30" y="45" class="node-title">reports unauthenticated when</text>
     <text x="30" y="77" class="node-detail">Codex expects server status and no CLI probe</text></g></svg>
-    <figcaption><a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/__tests__/hooks/query/use-acp-auth-status.test.tsx#L59">__tests__/hooks/query/use-acp-auth-status.test.tsx:59</a></figcaption></figure></div><details><summary>Review diff (+21/−2)</summary><pre>diff --git a/__tests__/hooks/query/use-acp-auth-status.test.tsx b/__tests__/hooks/query/use-acp-auth-status.test.tsx
+    <figcaption><a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/__tests__/hooks/query/use-acp-auth-status.test.tsx#L59">__tests__/hooks/query/use-acp-auth-status.test.tsx:59</a></figcaption></figure></div><details><summary>Review diff (+21/−2)</summary><pre>diff --git a/__tests__/hooks/query/use-acp-auth-status.test.tsx b/__tests__/hooks/query/use-acp-auth-status.test.tsx
 index a9642c4..b2d7da5 100644
 --- a/__tests__/hooks/query/use-acp-auth-status.test.tsx
 +++ b/__tests__/hooks/query/use-acp-auth-status.test.tsx
 @@ -4,6 +4,7 @@ import { renderHook, waitFor } from &quot;@testing-library/react&quot;;
  import { beforeEach, describe, expect, it, vi } from &quot;vitest&quot;;
- 
+
  import { useAcpAuthStatus } from &quot;#/hooks/query/use-acp-auth-status&quot;;
 +import { CodexAuthService } from &quot;#/api/codex-auth-service&quot;;
- 
+
  // Active backend is swapped per-test (local vs cloud) via this mutable holder.
  const backendMock = vi.hoisted(() =&gt; ({
 @@ -56,12 +57,30 @@ describe(&quot;useAcpAuthStatus&quot;, () =&gt; {
    });
- 
+
    it(&quot;reports unauthenticated when the probe says so&quot;, async () =&gt; {
 -    getAuthStatus.mockResolvedValue(&quot;unauthenticated&quot;);
 +    const status = vi.spyOn(CodexAuthService, &quot;getStatus&quot;).mockResolvedValue({
@@ -258,9 +258,9 @@ index a9642c4..b2d7da5 100644
 +      state: &quot;disconnected&quot;,
 +      expires_at: null,
 +    });
- 
+
      const { result } = renderHook(() =&gt; useAcpAuthStatus(&quot;codex&quot;), { wrapper });
- 
+
      await waitFor(() =&gt; expect(result.current.status).toBe(&quot;unauthenticated&quot;));
 -    expect(getAuthStatus).toHaveBeenCalledWith(&quot;codex&quot;);
 +    expect(status).toHaveBeenCalledWith(backendMock.current.backend);
@@ -279,9 +279,9 @@ index a9642c4..b2d7da5 100644
 +    expect(getAuthStatus).not.toHaveBeenCalled();
 +    status.mockRestore();
    });
- 
+
    it(&quot;falls back to unknown when the probe call rejects&quot;, async () =&gt; {
-</pre></details></article><article id="f2"><h3>specs/codex-oauth.md</h3><p>CAO-001 through CAO-004 record behaviors and release dependency. <a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/specs/codex-oauth.md#L3">specs/codex-oauth.md:3</a></p><details><summary>Source manifest</summary><br><a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/specs/codex-oauth.md#L3">specs/codex-oauth.md:3</a></details><table><tr><th>Before</th><th>After</th></tr><tr><td>No Codex OAuth specification </td><td>CAO-001 through CAO-004 record behaviors and release dependency <a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/specs/codex-oauth.md#L3">specs/codex-oauth.md:3</a></td></tr></table><details><summary>Review diff (+15/−0)</summary><pre>diff --git a/specs/codex-oauth.md b/specs/codex-oauth.md
+</pre></details></article><article id="f2"><h3>specs/codex-oauth.md</h3><p>CAO-001 through CAO-004 record behaviors and release dependency. <a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/specs/codex-oauth.md#L3">specs/codex-oauth.md:3</a></p><details><summary>Source manifest</summary><br><a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/specs/codex-oauth.md#L3">specs/codex-oauth.md:3</a></details><table><tr><th>Before</th><th>After</th></tr><tr><td>No Codex OAuth specification </td><td>CAO-001 through CAO-004 record behaviors and release dependency <a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/specs/codex-oauth.md#L3">specs/codex-oauth.md:3</a></td></tr></table><details><summary>Review diff (+15/−0)</summary><pre>diff --git a/specs/codex-oauth.md b/specs/codex-oauth.md
 new file mode 100644
 index 0000000..c604642
 --- /dev/null
@@ -302,12 +302,12 @@ index 0000000..c604642
 +The Agent Server and TypeScript client implementation belongs to
 +OpenHands/software-agent-sdk. The Canvas PR depends on its released client and
 +server version; compatibility pins must be updated to that release before merge.
-</pre></details></article><article id="f3"><h3>src/api/codex-auth-service.ts</h3><p>Captured backend config goes through typed CodexAuthClient. <a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/src/api/codex-auth-service.ts#L11">src/api/codex-auth-service.ts:11</a></p><details><summary>Source manifest</summary><br><a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/src/api/codex-auth-service.ts#L11">src/api/codex-auth-service.ts:11</a></details><small>Added file: no before-state implementation.</small><figure><svg viewBox="0 0 700 124" role="img" aria-label="Captured backend config goes through typed CodexAuthClient">
+</pre></details></article><article id="f3"><h3>src/api/codex-auth-service.ts</h3><p>Captured backend config goes through typed CodexAuthClient. <a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/src/api/codex-auth-service.ts#L11">src/api/codex-auth-service.ts:11</a></p><details><summary>Source manifest</summary><br><a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/src/api/codex-auth-service.ts#L11">src/api/codex-auth-service.ts:11</a></details><small>Added file: no before-state implementation.</small><figure><svg viewBox="0 0 700 124" role="img" aria-label="Captured backend config goes through typed CodexAuthClient">
     <title>Captured backend config goes through typed CodexAuthClient</title><desc>async function withClient at the linked source location.</desc>
     <g><rect class="new" x="10" y="8" width="680" height="100" rx="8"/>
     <text x="30" y="45" class="node-title">async function withClient</text>
     <text x="30" y="77" class="node-detail">Captured backend config goes through typed CodexAuthClient</text></g></svg>
-    <figcaption><a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/src/api/codex-auth-service.ts#L11">src/api/codex-auth-service.ts:11</a></figcaption></figure><details><summary>Review diff (+34/−0)</summary><pre>diff --git a/src/api/codex-auth-service.ts b/src/api/codex-auth-service.ts
+    <figcaption><a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/src/api/codex-auth-service.ts#L11">src/api/codex-auth-service.ts:11</a></figcaption></figure><details><summary>Review diff (+34/−0)</summary><pre>diff --git a/src/api/codex-auth-service.ts b/src/api/codex-auth-service.ts
 new file mode 100644
 index 0000000..eedba93
 --- /dev/null
@@ -347,7 +347,7 @@ index 0000000..eedba93
 +    withClient(backend, (c) =&gt; c.cancelDeviceLogin(handle)),
 +  logout: (backend: Backend) =&gt; withClient(backend, (c) =&gt; c.logout()),
 +};
-</pre></details></article><article id="f4"><h3>src/components/features/onboarding/steps/setup-acp-secrets-step.tsx</h3><p>Active slide owns CodexAuthCard; connected status satisfies gate. <a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/src/components/features/onboarding/steps/setup-acp-secrets-step.tsx#L59">src/components/features/onboarding/steps/setup-acp-secrets-step.tsx:59</a></p><details><summary>Source manifest</summary><a class="src" href="https://github.com/OpenHands/OpenHands/blob/2414d6ee5e31bede2e78211f72b58e9949575a75/src/components/features/onboarding/steps/setup-acp-secrets-step.tsx#L58">src/components/features/onboarding/steps/setup-acp-secrets-step.tsx:58</a><br><a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/src/components/features/onboarding/steps/setup-acp-secrets-step.tsx#L59">src/components/features/onboarding/steps/setup-acp-secrets-step.tsx:59</a></details><div class="ba"><figure><svg viewBox="0 0 700 124" role="img" aria-label="Status banner and manual fields on the ACP slide">
+</pre></details></article><article id="f4"><h3>src/components/features/onboarding/steps/setup-acp-secrets-step.tsx</h3><p>Active slide owns CodexAuthCard; connected status satisfies gate. <a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/src/components/features/onboarding/steps/setup-acp-secrets-step.tsx#L59">src/components/features/onboarding/steps/setup-acp-secrets-step.tsx:59</a></p><details><summary>Source manifest</summary><a class="src" href="https://github.com/OpenHands/OpenHands/blob/2414d6ee5e31bede2e78211f72b58e9949575a75/src/components/features/onboarding/steps/setup-acp-secrets-step.tsx#L58">src/components/features/onboarding/steps/setup-acp-secrets-step.tsx:58</a><br><a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/src/components/features/onboarding/steps/setup-acp-secrets-step.tsx#L59">src/components/features/onboarding/steps/setup-acp-secrets-step.tsx:59</a></details><div class="ba"><figure><svg viewBox="0 0 700 124" role="img" aria-label="Status banner and manual fields on the ACP slide">
     <title>Status banner and manual fields on the ACP slide</title><desc>export function SetupAcpSecretsStep at the linked source location.</desc>
     <g><rect class="existing" x="10" y="8" width="680" height="100" rx="8"/>
     <text x="30" y="45" class="node-title">export function SetupAcpSecretsStep</text>
@@ -357,7 +357,7 @@ index 0000000..eedba93
     <g><rect class="new" x="10" y="8" width="680" height="100" rx="8"/>
     <text x="30" y="45" class="node-title">export function SetupAcpSecretsStep</text>
     <text x="30" y="77" class="node-detail">Active slide owns CodexAuthCard; connected status satisfies gate</text></g></svg>
-    <figcaption><a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/src/components/features/onboarding/steps/setup-acp-secrets-step.tsx#L59">src/components/features/onboarding/steps/setup-acp-secrets-step.tsx:59</a></figcaption></figure></div><details><summary>Review diff (+44/−18)</summary><pre>diff --git a/src/components/features/onboarding/steps/setup-acp-secrets-step.tsx b/src/components/features/onboarding/steps/setup-acp-secrets-step.tsx
+    <figcaption><a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/src/components/features/onboarding/steps/setup-acp-secrets-step.tsx#L59">src/components/features/onboarding/steps/setup-acp-secrets-step.tsx:59</a></figcaption></figure></div><details><summary>Review diff (+44/−18)</summary><pre>diff --git a/src/components/features/onboarding/steps/setup-acp-secrets-step.tsx b/src/components/features/onboarding/steps/setup-acp-secrets-step.tsx
 index 7f8dbb1..ec72695 100644
 --- a/src/components/features/onboarding/steps/setup-acp-secrets-step.tsx
 +++ b/src/components/features/onboarding/steps/setup-acp-secrets-step.tsx
@@ -372,7 +372,7 @@ index 7f8dbb1..ec72695 100644
 @@ -168,28 +169,53 @@ export function SetupAcpSecretsStep({
          )}
        &lt;/header&gt;
- 
+
 -      &lt;AcpAuthStatusBanner
 -        status={authStatus}
 -        isChecking={isCheckingAuth}
@@ -391,7 +391,7 @@ index 7f8dbb1..ec72695 100644
 +          testIdPrefix=&quot;onboarding-acp-auth&quot;
 +        /&gt;
 +      )}
- 
+
        &lt;div className=&quot;flex flex-col gap-5&quot;&gt;
 -        {fields.map((field) =&gt; (
 -          &lt;AcpSecretField
@@ -418,7 +418,7 @@ index 7f8dbb1..ec72695 100644
 +            /&gt;
 +          ))}
        &lt;/div&gt;
- 
+
 +      {providerKey === &quot;codex&quot; &amp;&amp; (
 +        &lt;details&gt;
 +          &lt;summary&gt;{t(I18nKey.SETTINGS$CODEX_MANUAL_AUTH)}&lt;/summary&gt;
@@ -439,9 +439,9 @@ index 7f8dbb1..ec72695 100644
 +      )}
 +
        &lt;AcpConflictWarnings conflicts={conflicts} /&gt;
- 
+
        {blockNext ? (
-</pre></details></article><article id="f5"><h3>src/components/features/settings/acp-credentials-section.tsx</h3><p>Shared CodexAuthCard; manual JSON is advanced. <a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/src/components/features/settings/acp-credentials-section.tsx#L20">src/components/features/settings/acp-credentials-section.tsx:20</a></p><details><summary>Source manifest</summary><a class="src" href="https://github.com/OpenHands/OpenHands/blob/2414d6ee5e31bede2e78211f72b58e9949575a75/src/components/features/settings/acp-credentials-section.tsx#L19">src/components/features/settings/acp-credentials-section.tsx:19</a><br><a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/src/components/features/settings/acp-credentials-section.tsx#L20">src/components/features/settings/acp-credentials-section.tsx:20</a></details><div class="ba"><figure><svg viewBox="0 0 700 124" role="img" aria-label="CLI status banner plus flat credential fields">
+</pre></details></article><article id="f5"><h3>src/components/features/settings/acp-credentials-section.tsx</h3><p>Shared CodexAuthCard; manual JSON is advanced. <a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/src/components/features/settings/acp-credentials-section.tsx#L20">src/components/features/settings/acp-credentials-section.tsx:20</a></p><details><summary>Source manifest</summary><a class="src" href="https://github.com/OpenHands/OpenHands/blob/2414d6ee5e31bede2e78211f72b58e9949575a75/src/components/features/settings/acp-credentials-section.tsx#L19">src/components/features/settings/acp-credentials-section.tsx:19</a><br><a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/src/components/features/settings/acp-credentials-section.tsx#L20">src/components/features/settings/acp-credentials-section.tsx:20</a></details><div class="ba"><figure><svg viewBox="0 0 700 124" role="img" aria-label="CLI status banner plus flat credential fields">
     <title>CLI status banner plus flat credential fields</title><desc>AcpCredentialsSection at the linked source location.</desc>
     <g><rect class="existing" x="10" y="8" width="680" height="100" rx="8"/>
     <text x="30" y="45" class="node-title">AcpCredentialsSection</text>
@@ -451,7 +451,7 @@ index 7f8dbb1..ec72695 100644
     <g><rect class="new" x="10" y="8" width="680" height="100" rx="8"/>
     <text x="30" y="45" class="node-title">AcpCredentialsSection</text>
     <text x="30" y="77" class="node-detail">Shared CodexAuthCard; manual JSON is advanced</text></g></svg>
-    <figcaption><a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/src/components/features/settings/acp-credentials-section.tsx#L20">src/components/features/settings/acp-credentials-section.tsx:20</a></figcaption></figure></div><details><summary>Review diff (+44/−18)</summary><pre>diff --git a/src/components/features/settings/acp-credentials-section.tsx b/src/components/features/settings/acp-credentials-section.tsx
+    <figcaption><a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/src/components/features/settings/acp-credentials-section.tsx#L20">src/components/features/settings/acp-credentials-section.tsx:20</a></figcaption></figure></div><details><summary>Review diff (+44/−18)</summary><pre>diff --git a/src/components/features/settings/acp-credentials-section.tsx b/src/components/features/settings/acp-credentials-section.tsx
 index 6da74b7..5e24f80 100644
 --- a/src/components/features/settings/acp-credentials-section.tsx
 +++ b/src/components/features/settings/acp-credentials-section.tsx
@@ -466,7 +466,7 @@ index 6da74b7..5e24f80 100644
 @@ -48,28 +49,53 @@ export function AcpCredentialsSection({
          &lt;/Typography.Text&gt;
        &lt;/div&gt;
- 
+
 -      &lt;AcpAuthStatusBanner
 -        status={authStatus}
 -        isChecking={isChecking}
@@ -485,7 +485,7 @@ index 6da74b7..5e24f80 100644
 +          testIdPrefix=&quot;settings-acp-auth&quot;
 +        /&gt;
 +      )}
- 
+
        &lt;div className=&quot;flex flex-col gap-5&quot;&gt;
 -        {fields.map((field) =&gt; (
 -          &lt;AcpSecretField
@@ -512,7 +512,7 @@ index 6da74b7..5e24f80 100644
 +            /&gt;
 +          ))}
        &lt;/div&gt;
- 
+
 +      {providerKey === &quot;codex&quot; &amp;&amp; (
 +        &lt;details&gt;
 +          &lt;summary&gt;{t(I18nKey.SETTINGS$CODEX_MANUAL_AUTH)}&lt;/summary&gt;
@@ -535,12 +535,12 @@ index 6da74b7..5e24f80 100644
        &lt;AcpConflictWarnings conflicts={conflicts} /&gt;
      &lt;/div&gt;
    );
-</pre></details></article><article id="f6"><h3>src/components/features/settings/codex-auth-card.tsx</h3><p>Poll, cancel and disconnect are bound to backend and generation. <a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/src/components/features/settings/codex-auth-card.tsx#L29">src/components/features/settings/codex-auth-card.tsx:29</a></p><details><summary>Source manifest</summary><br><a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/src/components/features/settings/codex-auth-card.tsx#L29">src/components/features/settings/codex-auth-card.tsx:29</a></details><small>Added file: no before-state implementation.</small><figure><svg viewBox="0 0 700 124" role="img" aria-label="Poll, cancel and disconnect are bound to backend and generation">
+</pre></details></article><article id="f6"><h3>src/components/features/settings/codex-auth-card.tsx</h3><p>Poll, cancel and disconnect are bound to backend and generation. <a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/src/components/features/settings/codex-auth-card.tsx#L29">src/components/features/settings/codex-auth-card.tsx:29</a></p><details><summary>Source manifest</summary><br><a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/src/components/features/settings/codex-auth-card.tsx#L29">src/components/features/settings/codex-auth-card.tsx:29</a></details><small>Added file: no before-state implementation.</small><figure><svg viewBox="0 0 700 124" role="img" aria-label="Poll, cancel and disconnect are bound to backend and generation">
     <title>Poll, cancel and disconnect are bound to backend and generation</title><desc>function CodexAuthCardForBackend at the linked source location.</desc>
     <g><rect class="new" x="10" y="8" width="680" height="100" rx="8"/>
     <text x="30" y="45" class="node-title">function CodexAuthCardForBackend</text>
     <text x="30" y="77" class="node-detail">Poll, cancel and disconnect are bound to backend and generation</text></g></svg>
-    <figcaption><a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/src/components/features/settings/codex-auth-card.tsx#L29">src/components/features/settings/codex-auth-card.tsx:29</a></figcaption></figure><details><summary>Review diff (+247/−0)</summary><pre>diff --git a/src/components/features/settings/codex-auth-card.tsx b/src/components/features/settings/codex-auth-card.tsx
+    <figcaption><a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/src/components/features/settings/codex-auth-card.tsx#L29">src/components/features/settings/codex-auth-card.tsx:29</a></figcaption></figure><details><summary>Review diff (+247/−0)</summary><pre>diff --git a/src/components/features/settings/codex-auth-card.tsx b/src/components/features/settings/codex-auth-card.tsx
 new file mode 100644
 index 0000000..2fdc8e7
 --- /dev/null
@@ -793,14 +793,14 @@ index 0000000..2fdc8e7
 +    &lt;/section&gt;
 +  );
 +}
-</pre></details></article><article id="f7"><h3>src/hooks/query/query-keys.ts</h3><p>Named secret keys preserve shape; add Codex status namespace. <a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/src/hooks/query/query-keys.ts#L15">src/hooks/query/query-keys.ts:15</a></p><details><summary>Source manifest</summary><br><a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/src/hooks/query/query-keys.ts#L15">src/hooks/query/query-keys.ts:15</a></details><table><tr><th>Before</th><th>After</th></tr><tr><td>Literal secret cache keys </td><td>Named secret keys preserve shape; add Codex status namespace <a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/src/hooks/query/query-keys.ts#L15">src/hooks/query/query-keys.ts:15</a></td></tr></table><details><summary>Review diff (+11/−0)</summary><pre>diff --git a/src/hooks/query/query-keys.ts b/src/hooks/query/query-keys.ts
+</pre></details></article><article id="f7"><h3>src/hooks/query/query-keys.ts</h3><p>Named secret keys preserve shape; add Codex status namespace. <a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/src/hooks/query/query-keys.ts#L15">src/hooks/query/query-keys.ts:15</a></p><details><summary>Source manifest</summary><br><a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/src/hooks/query/query-keys.ts#L15">src/hooks/query/query-keys.ts:15</a></details><table><tr><th>Before</th><th>After</th></tr><tr><td>Literal secret cache keys </td><td>Named secret keys preserve shape; add Codex status namespace <a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/src/hooks/query/query-keys.ts#L15">src/hooks/query/query-keys.ts:15</a></td></tr></table><details><summary>Review diff (+11/−0)</summary><pre>diff --git a/src/hooks/query/query-keys.ts b/src/hooks/query/query-keys.ts
 index 6ddba7e..dad3947 100644
 --- a/src/hooks/query/query-keys.ts
 +++ b/src/hooks/query/query-keys.ts
 @@ -12,6 +12,17 @@ export const QUERY_KEYS = {
    MAIN_APP_COOKIE_AUTH: [&quot;main-app-cookie-auth&quot;] as const,
  } as const;
- 
+
 +export const CODEX_AUTH_QUERY_KEYS = {
 +  status: (backendId: string, revision = 0) =&gt;
 +    [&quot;codex-auth&quot;, backendId, revision] as const,
@@ -815,7 +815,7 @@ index 6ddba7e..dad3947 100644
  export const SETTINGS_QUERY_KEYS = {
    all: [&quot;settings&quot;] as const,
    byScope: (scope: SettingsScope) =&gt; [&quot;settings&quot;, scope] as const,
-</pre></details></article><article id="f8"><h3>src/hooks/query/use-acp-auth-status.ts</h3><p>Codex status uses useCodexAuthStatus; other probes remain. <a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/src/hooks/query/use-acp-auth-status.ts#L59">src/hooks/query/use-acp-auth-status.ts:59</a></p><details><summary>Source manifest</summary><a class="src" href="https://github.com/OpenHands/OpenHands/blob/2414d6ee5e31bede2e78211f72b58e9949575a75/src/hooks/query/use-acp-auth-status.ts#L60">src/hooks/query/use-acp-auth-status.ts:60</a><br><a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/src/hooks/query/use-acp-auth-status.ts#L59">src/hooks/query/use-acp-auth-status.ts:59</a></details><div class="ba"><figure><svg viewBox="0 0 700 124" role="img" aria-label="Codex status uses the bash/CLI probe">
+</pre></details></article><article id="f8"><h3>src/hooks/query/use-acp-auth-status.ts</h3><p>Codex status uses useCodexAuthStatus; other probes remain. <a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/src/hooks/query/use-acp-auth-status.ts#L59">src/hooks/query/use-acp-auth-status.ts:59</a></p><details><summary>Source manifest</summary><a class="src" href="https://github.com/OpenHands/OpenHands/blob/2414d6ee5e31bede2e78211f72b58e9949575a75/src/hooks/query/use-acp-auth-status.ts#L60">src/hooks/query/use-acp-auth-status.ts:60</a><br><a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/src/hooks/query/use-acp-auth-status.ts#L59">src/hooks/query/use-acp-auth-status.ts:59</a></details><div class="ba"><figure><svg viewBox="0 0 700 124" role="img" aria-label="Codex status uses the bash/CLI probe">
     <title>Codex status uses the bash/CLI probe</title><desc>export function useAcpAuthStatus at the linked source location.</desc>
     <g><rect class="existing" x="10" y="8" width="680" height="100" rx="8"/>
     <text x="30" y="45" class="node-title">export function useAcpAuthStatus</text>
@@ -825,7 +825,7 @@ index 6ddba7e..dad3947 100644
     <g><rect class="new" x="10" y="8" width="680" height="100" rx="8"/>
     <text x="30" y="45" class="node-title">export function useAcpAuthStatus</text>
     <text x="30" y="77" class="node-detail">Codex status uses useCodexAuthStatus; other probes remain</text></g></svg>
-    <figcaption><a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/src/hooks/query/use-acp-auth-status.ts#L59">src/hooks/query/use-acp-auth-status.ts:59</a></figcaption></figure></div><details><summary>Review diff (+21/−8)</summary><pre>diff --git a/src/hooks/query/use-acp-auth-status.ts b/src/hooks/query/use-acp-auth-status.ts
+    <figcaption><a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/src/hooks/query/use-acp-auth-status.ts#L59">src/hooks/query/use-acp-auth-status.ts:59</a></figcaption></figure></div><details><summary>Review diff (+21/−8)</summary><pre>diff --git a/src/hooks/query/use-acp-auth-status.ts b/src/hooks/query/use-acp-auth-status.ts
 index 7e7ed1b..d9f7842 100644
 --- a/src/hooks/query/use-acp-auth-status.ts
 +++ b/src/hooks/query/use-acp-auth-status.ts
@@ -834,9 +834,9 @@ index 7e7ed1b..d9f7842 100644
  } from &quot;#/api/acp-service/acp-service.api&quot;;
  import { useActiveBackend } from &quot;#/contexts/active-backend-context&quot;;
 +import { useCodexAuthStatus } from &quot;./use-codex-auth-status&quot;;
- 
+
  export type { AcpAuthStatus };
- 
+
 @@ -11,11 +12,9 @@ export type { AcpAuthStatus };
   * (local) agent-server — by a subscription login (Claude Pro/Max, ChatGPT,
   * Google) or a pre-set API key.
@@ -854,7 +854,7 @@ index 7e7ed1b..d9f7842 100644
  async function probeAcpAuth(providerKey: string): Promise&lt;AcpAuthStatus&gt; {
 @@ -40,7 +39,7 @@ interface UseAcpAuthStatusOptions {
  }
- 
+
  /**
 - * React Query wrapper around {@link probeAcpAuth}.
 + * React Query wrapper around the provider&#x27;s authentication status.
@@ -880,13 +880,13 @@ index 7e7ed1b..d9f7842 100644
 -  const queryEnabled = enabled &amp;&amp; isSupported &amp;&amp; !!providerKey;
 +  const queryEnabled =
 +    enabled &amp;&amp; isSupported &amp;&amp; !!providerKey &amp;&amp; providerKey !== &quot;codex&quot;;
- 
+
    const query = useQuery&lt;AcpAuthStatus, Error&gt;({
      // ``providerKey`` both discriminates the cache (so switching providers
 @@ -88,6 +89,18 @@ export function useAcpAuthStatus(
      refetchOnMount: false,
    });
- 
+
 +  if (providerKey === &quot;codex&quot; &amp;&amp; isLocal) {
 +    return {
 +      status: codex.data?.connected
@@ -902,12 +902,12 @@ index 7e7ed1b..d9f7842 100644
    return {
      status: query.data ?? &quot;unknown&quot;,
      /** True while the first probe for this provider is in flight. */
-</pre></details></article><article id="f9"><h3>src/hooks/query/use-codex-auth-status.ts</h3><p>Backend id/revision key; status rechecks on mount and interval. <a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/src/hooks/query/use-codex-auth-status.ts#L6">src/hooks/query/use-codex-auth-status.ts:6</a></p><details><summary>Source manifest</summary><br><a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/src/hooks/query/use-codex-auth-status.ts#L6">src/hooks/query/use-codex-auth-status.ts:6</a></details><small>Added file: no before-state implementation.</small><figure><svg viewBox="0 0 700 124" role="img" aria-label="Backend id/revision key; status rechecks on mount and interval">
+</pre></details></article><article id="f9"><h3>src/hooks/query/use-codex-auth-status.ts</h3><p>Backend id/revision key; status rechecks on mount and interval. <a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/src/hooks/query/use-codex-auth-status.ts#L6">src/hooks/query/use-codex-auth-status.ts:6</a></p><details><summary>Source manifest</summary><br><a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/src/hooks/query/use-codex-auth-status.ts#L6">src/hooks/query/use-codex-auth-status.ts:6</a></details><small>Added file: no before-state implementation.</small><figure><svg viewBox="0 0 700 124" role="img" aria-label="Backend id/revision key; status rechecks on mount and interval">
     <title>Backend id/revision key; status rechecks on mount and interval</title><desc>export function useCodexAuthStatus at the linked source location.</desc>
     <g><rect class="new" x="10" y="8" width="680" height="100" rx="8"/>
     <text x="30" y="45" class="node-title">export function useCodexAuthStatus</text>
     <text x="30" y="77" class="node-detail">Backend id/revision key; status rechecks on mount and interval</text></g></svg>
-    <figcaption><a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/src/hooks/query/use-codex-auth-status.ts#L6">src/hooks/query/use-codex-auth-status.ts:6</a></figcaption></figure><details><summary>Review diff (+21/−0)</summary><pre>diff --git a/src/hooks/query/use-codex-auth-status.ts b/src/hooks/query/use-codex-auth-status.ts
+    <figcaption><a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/src/hooks/query/use-codex-auth-status.ts#L6">src/hooks/query/use-codex-auth-status.ts:6</a></figcaption></figure><details><summary>Review diff (+21/−0)</summary><pre>diff --git a/src/hooks/query/use-codex-auth-status.ts b/src/hooks/query/use-codex-auth-status.ts
 new file mode 100644
 index 0000000..9dda6a1
 --- /dev/null
@@ -934,7 +934,7 @@ index 0000000..9dda6a1
 +    meta: { disableToast: true, backendId: backend.id },
 +  });
 +}
-</pre></details></article><article id="f10"><h3>src/hooks/query/use-get-secrets.ts</h3><p>Same key through SECRETS_QUERY_KEYS.byBackend. <a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/src/hooks/query/use-get-secrets.ts#L23">src/hooks/query/use-get-secrets.ts:23</a></p><details><summary>Source manifest</summary><a class="src" href="https://github.com/OpenHands/OpenHands/blob/2414d6ee5e31bede2e78211f72b58e9949575a75/src/hooks/query/use-get-secrets.ts#L22">src/hooks/query/use-get-secrets.ts:22</a><br><a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/src/hooks/query/use-get-secrets.ts#L23">src/hooks/query/use-get-secrets.ts:23</a></details><table><tr><th>Before</th><th>After</th></tr><tr><td>Literal secrets/backend/org key <a class="src" href="https://github.com/OpenHands/OpenHands/blob/2414d6ee5e31bede2e78211f72b58e9949575a75/src/hooks/query/use-get-secrets.ts#L22">src/hooks/query/use-get-secrets.ts:22</a></td><td>Same key through SECRETS_QUERY_KEYS.byBackend <a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/src/hooks/query/use-get-secrets.ts#L23">src/hooks/query/use-get-secrets.ts:23</a></td></tr></table><details><summary>Review diff (+2/−1)</summary><pre>diff --git a/src/hooks/query/use-get-secrets.ts b/src/hooks/query/use-get-secrets.ts
+</pre></details></article><article id="f10"><h3>src/hooks/query/use-get-secrets.ts</h3><p>Same key through SECRETS_QUERY_KEYS.byBackend. <a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/src/hooks/query/use-get-secrets.ts#L23">src/hooks/query/use-get-secrets.ts:23</a></p><details><summary>Source manifest</summary><a class="src" href="https://github.com/OpenHands/OpenHands/blob/2414d6ee5e31bede2e78211f72b58e9949575a75/src/hooks/query/use-get-secrets.ts#L22">src/hooks/query/use-get-secrets.ts:22</a><br><a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/src/hooks/query/use-get-secrets.ts#L23">src/hooks/query/use-get-secrets.ts:23</a></details><table><tr><th>Before</th><th>After</th></tr><tr><td>Literal secrets/backend/org key <a class="src" href="https://github.com/OpenHands/OpenHands/blob/2414d6ee5e31bede2e78211f72b58e9949575a75/src/hooks/query/use-get-secrets.ts#L22">src/hooks/query/use-get-secrets.ts:22</a></td><td>Same key through SECRETS_QUERY_KEYS.byBackend <a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/src/hooks/query/use-get-secrets.ts#L23">src/hooks/query/use-get-secrets.ts:23</a></td></tr></table><details><summary>Review diff (+2/−1)</summary><pre>diff --git a/src/hooks/query/use-get-secrets.ts b/src/hooks/query/use-get-secrets.ts
 index 381d754..5e12c20 100644
 --- a/src/hooks/query/use-get-secrets.ts
 +++ b/src/hooks/query/use-get-secrets.ts
@@ -943,19 +943,19 @@ index 381d754..5e12c20 100644
  import { CustomSecretWithoutValue } from &quot;#/api/secrets-service.types&quot;;
  import { useActiveBackend } from &quot;#/contexts/active-backend-context&quot;;
 +import { SECRETS_QUERY_KEYS } from &quot;./query-keys&quot;;
- 
+
  interface UseSearchSecretsOptions {
    nameContains?: string;
 @@ -19,7 +20,7 @@ export const useSearchSecrets = (options: UseSearchSecretsOptions = {}) =&gt; {
    const active = useActiveBackend();
- 
+
    const query = useQuery&lt;CustomSecretWithoutValue[], Error&gt;({
 -    queryKey: [&quot;secrets&quot;, active.backend.id, active.orgId],
 +    queryKey: SECRETS_QUERY_KEYS.byBackend(active.backend.id, active.orgId),
      queryFn: SecretsService.getSecrets,
      enabled,
      staleTime: 1000 * 60 * 5,
-</pre></details></article><article id="f11"><h3>src/i18n/translation.json</h3><p>Four messages in all 15 locales. <a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/src/i18n/translation.json#L43607">src/i18n/translation.json:43607</a></p><details><summary>Source manifest</summary><br><a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/src/i18n/translation.json#L43607">src/i18n/translation.json:43607</a></details><table><tr><th>Before</th><th>After</th></tr><tr><td>No Codex sign-in text </td><td>Four messages in all 15 locales <a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/src/i18n/translation.json#L43607">src/i18n/translation.json:43607</a></td></tr></table><details><summary>Review diff (+68/−0)</summary><pre>diff --git a/src/i18n/translation.json b/src/i18n/translation.json
+</pre></details></article><article id="f11"><h3>src/i18n/translation.json</h3><p>Four messages in all 15 locales. <a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/src/i18n/translation.json#L43607">src/i18n/translation.json:43607</a></p><details><summary>Source manifest</summary><br><a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/src/i18n/translation.json#L43607">src/i18n/translation.json:43607</a></details><table><tr><th>Before</th><th>After</th></tr><tr><td>No Codex sign-in text </td><td>Four messages in all 15 locales <a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/src/i18n/translation.json#L43607">src/i18n/translation.json:43607</a></td></tr></table><details><summary>Review diff (+68/−0)</summary><pre>diff --git a/src/i18n/translation.json b/src/i18n/translation.json
 index 763713a..3d86f4c 100644
 --- a/src/i18n/translation.json
 +++ b/src/i18n/translation.json
@@ -1034,12 +1034,12 @@ index 763713a..3d86f4c 100644
    &quot;AUTOMATIONS$GIT_SYNC$NOT_LOCAL_MESSAGE&quot;: {
      &quot;en&quot;: &quot;Git Sync is only available when connected to a local OpenHands backend.&quot;,
      &quot;ja&quot;: &quot;Git同期はローカルのOpenHandsバックエンドに接続している場合のみ利用できます。&quot;,
-</pre></details></article><article id="f12"><h3>src/mocks/codex-auth-handlers.ts</h3><p>MSW supplies token-free device/status/logout fixture endpoints. <a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/src/mocks/codex-auth-handlers.ts#L19">src/mocks/codex-auth-handlers.ts:19</a></p><details><summary>Source manifest</summary><br><a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/src/mocks/codex-auth-handlers.ts#L19">src/mocks/codex-auth-handlers.ts:19</a></details><small>Added file: no before-state implementation.</small><figure><svg viewBox="0 0 700 124" role="img" aria-label="MSW supplies token-free device/status/logout fixture endpoints">
+</pre></details></article><article id="f12"><h3>src/mocks/codex-auth-handlers.ts</h3><p>MSW supplies token-free device/status/logout fixture endpoints. <a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/src/mocks/codex-auth-handlers.ts#L19">src/mocks/codex-auth-handlers.ts:19</a></p><details><summary>Source manifest</summary><br><a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/src/mocks/codex-auth-handlers.ts#L19">src/mocks/codex-auth-handlers.ts:19</a></details><small>Added file: no before-state implementation.</small><figure><svg viewBox="0 0 700 124" role="img" aria-label="MSW supplies token-free device/status/logout fixture endpoints">
     <title>MSW supplies token-free device/status/logout fixture endpoints</title><desc>export const CODEX_AUTH_HANDLERS at the linked source location.</desc>
     <g><rect class="new" x="10" y="8" width="680" height="100" rx="8"/>
     <text x="30" y="45" class="node-title">export const CODEX_AUTH_HANDLERS</text>
     <text x="30" y="77" class="node-detail">MSW supplies token-free device/status/logout fixture endpoints</text></g></svg>
-    <figcaption><a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/src/mocks/codex-auth-handlers.ts#L19">src/mocks/codex-auth-handlers.ts:19</a></figcaption></figure><details><summary>Review diff (+46/−0)</summary><pre>diff --git a/src/mocks/codex-auth-handlers.ts b/src/mocks/codex-auth-handlers.ts
+    <figcaption><a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/src/mocks/codex-auth-handlers.ts#L19">src/mocks/codex-auth-handlers.ts:19</a></figcaption></figure><details><summary>Review diff (+46/−0)</summary><pre>diff --git a/src/mocks/codex-auth-handlers.ts b/src/mocks/codex-auth-handlers.ts
 new file mode 100644
 index 0000000..9c3db06
 --- /dev/null
@@ -1091,7 +1091,7 @@ index 0000000..9c3db06
 +    return HttpResponse.json(status());
 +  }),
 +];
-</pre></details></article><article id="f13"><h3>src/mocks/handlers.ts</h3><p>Register CODEX_AUTH_HANDLERS. <a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/src/mocks/handlers.ts#L33">src/mocks/handlers.ts:33</a></p><details><summary>Source manifest</summary><a class="src" href="https://github.com/OpenHands/OpenHands/blob/2414d6ee5e31bede2e78211f72b58e9949575a75/src/mocks/handlers.ts#L32">src/mocks/handlers.ts:32</a><br><a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/src/mocks/handlers.ts#L33">src/mocks/handlers.ts:33</a></details><table><tr><th>Before</th><th>After</th></tr><tr><td>Existing handler registry <a class="src" href="https://github.com/OpenHands/OpenHands/blob/2414d6ee5e31bede2e78211f72b58e9949575a75/src/mocks/handlers.ts#L32">src/mocks/handlers.ts:32</a></td><td>Register CODEX_AUTH_HANDLERS <a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/src/mocks/handlers.ts#L33">src/mocks/handlers.ts:33</a></td></tr></table><details><summary>Review diff (+2/−0)</summary><pre>diff --git a/src/mocks/handlers.ts b/src/mocks/handlers.ts
+</pre></details></article><article id="f13"><h3>src/mocks/handlers.ts</h3><p>Register CODEX_AUTH_HANDLERS. <a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/src/mocks/handlers.ts#L33">src/mocks/handlers.ts:33</a></p><details><summary>Source manifest</summary><a class="src" href="https://github.com/OpenHands/OpenHands/blob/2414d6ee5e31bede2e78211f72b58e9949575a75/src/mocks/handlers.ts#L32">src/mocks/handlers.ts:32</a><br><a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/src/mocks/handlers.ts#L33">src/mocks/handlers.ts:33</a></details><table><tr><th>Before</th><th>After</th></tr><tr><td>Existing handler registry <a class="src" href="https://github.com/OpenHands/OpenHands/blob/2414d6ee5e31bede2e78211f72b58e9949575a75/src/mocks/handlers.ts#L32">src/mocks/handlers.ts:32</a></td><td>Register CODEX_AUTH_HANDLERS <a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/src/mocks/handlers.ts#L33">src/mocks/handlers.ts:33</a></td></tr></table><details><summary>Review diff (+2/−0)</summary><pre>diff --git a/src/mocks/handlers.ts b/src/mocks/handlers.ts
 index 5972f4f..8b638a4 100644
 --- a/src/mocks/handlers.ts
 +++ b/src/mocks/handlers.ts
@@ -1110,7 +1110,7 @@ index 5972f4f..8b638a4 100644
    ...AGENT_PROFILES_HANDLERS,
    ...GIT_REPOSITORY_HANDLERS,
    ...SETTINGS_HANDLERS,
-</pre></details></article><article id="f14"><h3>src/mocks/settings-handlers.ts</h3><p>Also reset the Codex fixture to avoid cross-test state. <a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/src/mocks/settings-handlers.ts#L591">src/mocks/settings-handlers.ts:591</a></p><details><summary>Source manifest</summary><a class="src" href="https://github.com/OpenHands/OpenHands/blob/2414d6ee5e31bede2e78211f72b58e9949575a75/src/mocks/settings-handlers.ts#L590">src/mocks/settings-handlers.ts:590</a><br><a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/src/mocks/settings-handlers.ts#L591">src/mocks/settings-handlers.ts:591</a></details><div class="ba"><figure><svg viewBox="0 0 700 124" role="img" aria-label="Reset settings, profiles and LLM subscription fixture">
+</pre></details></article><article id="f14"><h3>src/mocks/settings-handlers.ts</h3><p>Also reset the Codex fixture to avoid cross-test state. <a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/src/mocks/settings-handlers.ts#L591">src/mocks/settings-handlers.ts:591</a></p><details><summary>Source manifest</summary><a class="src" href="https://github.com/OpenHands/OpenHands/blob/2414d6ee5e31bede2e78211f72b58e9949575a75/src/mocks/settings-handlers.ts#L590">src/mocks/settings-handlers.ts:590</a><br><a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/src/mocks/settings-handlers.ts#L591">src/mocks/settings-handlers.ts:591</a></details><div class="ba"><figure><svg viewBox="0 0 700 124" role="img" aria-label="Reset settings, profiles and LLM subscription fixture">
     <title>Reset settings, profiles and LLM subscription fixture</title><desc>export const resetTestHandlersMockSettings at the linked source location.</desc>
     <g><rect class="existing" x="10" y="8" width="680" height="100" rx="8"/>
     <text x="30" y="45" class="node-title">export const resetTestHandlersMockSettings</text>
@@ -1120,7 +1120,7 @@ index 5972f4f..8b638a4 100644
     <g><rect class="new" x="10" y="8" width="680" height="100" rx="8"/>
     <text x="30" y="45" class="node-title">export const resetTestHandlersMockSettings</text>
     <text x="30" y="77" class="node-detail">Also reset the Codex fixture to avoid cross-test state</text></g></svg>
-    <figcaption><a class="src" href="https://github.com/luxleader/OpenHands/blob/d4f8b9392b63df74ecf1b5434be83f70388866d1/src/mocks/settings-handlers.ts#L591">src/mocks/settings-handlers.ts:591</a></figcaption></figure></div><details><summary>Review diff (+2/−0)</summary><pre>diff --git a/src/mocks/settings-handlers.ts b/src/mocks/settings-handlers.ts
+    <figcaption><a class="src" href="https://github.com/luxleader/OpenHands/blob/63af25aa0824dddb615668f4da50e8323f89d9d6/src/mocks/settings-handlers.ts#L591">src/mocks/settings-handlers.ts:591</a></figcaption></figure></div><details><summary>Review diff (+2/−0)</summary><pre>diff --git a/src/mocks/settings-handlers.ts b/src/mocks/settings-handlers.ts
 index 607a09d..4c2fcd5 100644
 --- a/src/mocks/settings-handlers.ts
 +++ b/src/mocks/settings-handlers.ts
@@ -1138,6 +1138,6 @@ index 607a09d..4c2fcd5 100644
    mockOpenAISubscriptionConnected = false;
 +  resetMockCodexAuth();
  };
- 
+
  // Mock model data used by provider/model endpoints
 </pre></details></article><h2>Before merge</h2><p>Remove the temporary .pr directory manually from this fork PR. Both repositories have PR-artifact cleanup workflows; automatic approval cleanup applies to same-repository branches.</p></main></div></html>

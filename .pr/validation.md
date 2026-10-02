@@ -82,21 +82,57 @@ access/refresh tokens changed and the running server remained connected. This
 is not a naturally expired-token or prolonged-use test. The observations are
 available as [credential-free live results](codex-live-results.json).
 
-Default bare `npx` launch failed with `[WinError 2]` on this Windows host.
-The local test profile now invokes installed `node.exe` and npm's `npx-cli.js`
-with the same pinned adapter and the existing isolated npm cache. This profile
-workaround does not fix the default Windows launcher. Browser reload and real
-account disconnect remain pending; the human's connection was kept available.
-The public fixture video above still demonstrates fixture behavior only.
+The original Windows default-launch failure is fixed by SDK commit
+`5ab913acbc8d938f21a18e981dd9aa3224eaf2ca`. The packaged SDK launches the installed
+npm shim through Node for both cache warming and ACP startup, preserving the
+built-in command and arguments. Two native offline launch tests pass.
+The local profile's custom command was removed. A new default-preset
+conversation and the recovered original failed conversation both returned
+`OK`, bringing the real-account total to five successful turns. The actual
+Canvas was reloaded, then its default profile showed **Codex**, the default
+bare `npx` command and **Connected to ChatGPT**, with blank API fields.
+The human remains connected; actual account disconnect and natural expiry
+have not been repeated. Public fixture media remain synthetic OAuth evidence.
+
+The isolated hosted Linux runner passed 594 backend/ACP tests (two native
+Windows cases skipped) and all 348 TypeScript client tests; all Python
+candidate packages and the TypeScript package built successfully.
+The canonical Docker image and real container HTTP acceptance also passed.
+This is separate from upstream PR CI and official registry publication.
+
+
+## Docker / hosted Linux acceptance and candidate publication
+
+The [successful cloud-hosted Linux run](https://github.com/luxleader/software-agent-sdk/actions/runs/37023860358) built the canonical Agent Server
+`source-minimal` Docker target through the SDK's sdist-based builder, with the
+pinned Codex ACP provider. The image ran as its normal non-root user, exposed
+only a host-loopback port and used a fresh named volume and test session key.
+Real HTTP requests verified session authentication, device pending/success,
+credential-free responses, encrypted storage, restart persistence, refresh,
+logout deletion and cancellation of an in-flight login. These lifecycle checks
+replace only OpenAI's OAuth transport with synthetic tokens. The restarted
+unmocked image also initiated and cancelled an actual OpenAI device challenge;
+its code and handle were never included in public output. No human account
+credentials were sent to the runner and no remote model request was made.
+See [credential-free container results](codex-remote-results.json).
+
+Four Python wheels/sdists, the TypeScript tarball, source manifest, checksums
+and the acceptance report are published as a [fork candidate prerelease](https://github.com/luxleader/software-agent-sdk/releases/tag/codex-oauth-17372-candidate-5ab913ac).
+The changed SDK/server modules match production commit `5ab913ac` (line endings
+normalized). Package metadata remains the development version `1.50.1`; this
+does not mean that PyPI/npm's `1.50.1` contains this feature. Candidate publication
+does not replace the official OpenHands release or downstream exact pins.
 
 ## Remaining acceptance and merge gates
 
-- Real account browser reload and disconnect validation.
-- Docker and remotely hosted Agent Server validation.
+- Real account disconnect and natural expiry validation.
+- Human authorization and a real model turn on a remotely hosted Agent Server
+  remain unverified; hosted Docker/HTTP acceptance passed as scoped above.
 - SDK/Agent Server release, then exact client/lock updates and minimum server
   compatibility version in Canvas. No speculative version bump is committed.
 - OpenHands Cloud App API requires a separate user-scoped integration; existing
   fallback behavior remains, and hosted Agent Server URLs are supported by the
   Agent Server contract.
-- Human-only PR testing note required by the repository template.
+- The author authorized an AI-assisted HUMAN summary; assistance is disclosed
+  and the latest PR description check passed.
 - Remove `.pr/` manually before merging this fork PR.

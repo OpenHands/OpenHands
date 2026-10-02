@@ -1,0 +1,18 @@
+{
+  "real_account_credentials_used": false,
+  "real_model_turn": false,
+  "session_auth_enforced": true,
+  "docker_fixture_login": true,
+  "fixture_token_refresh": true,
+  "encrypted_persistence": true,
+  "packaged_imports": true,
+  "restart_persistence": true,
+  "logout_cancels_pending_and_deletes_credentials": true,
+  "real_openai_device_start": true,
+  "real_openai_device_cancel": true,
+  "scope": "Hosted Linux runner, canonical source-minimal Docker image, real session-authenticated HTTP. Lifecycle uses synthetic OAuth transport; separate live OpenAI initiation/cancel. No remote human account consent or model turn.",
+  "passed": true,
+  "run": "https://github.com/luxleader/software-agent-sdk/actions/runs/37023860358",
+  "production_commit": "5ab913acbc8d938f21a18e981dd9aa3224eaf2ca",
+  "validation_commit": "a2c4ebc74c7e2c5cb7d053ce22609561a9c10c08"
+}
