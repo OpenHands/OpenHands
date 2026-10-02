@@ -364,8 +364,11 @@ export default function AutomationsList() {
   return renderShell(
     <>
       {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0 flex-1 basis-64">
+      <div
+        data-testid="automations-header"
+        className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"
+      >
+        <div className="min-w-0">
           <h1 className="text-xl font-semibold text-content">
             {interfaceCopy.listTitle}
           </h1>
@@ -373,7 +376,7 @@ export default function AutomationsList() {
             {interfaceCopy.listSubtitle}
           </p>
         </div>
-        <div className="flex shrink-0 flex-wrap justify-end gap-2">
+        <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end">
           {/* Git sync is org-level config, so it follows manage_automations
               (admins/owners) on every backend kind, not the local-only edit
               gate. */}

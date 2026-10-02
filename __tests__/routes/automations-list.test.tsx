@@ -503,3 +503,33 @@ describe("AutomationsList — list freshness on remount", () => {
     await screen.findByText(newAutomation.name);
   });
 });
+
+describe("AutomationsList — responsive header layout", () => {
+  it("stacks header controls on mobile and arranges them side-by-side above sm breakpoint", async () => {
+    renderList();
+    await screen.findByText(automation.name);
+    const header = screen.getByTestId("automations-header");
+    expect(header.className).toContain("flex-col");
+    expect(header.className).toContain("sm:flex-row");
+    expect(header.className).toContain("sm:items-start");
+    expect(header.className).toContain("sm:justify-between");
+
+    // Title container has min-w-0 without restrictive shrink or fixed basis
+    const heading = within(header).getByRole("heading", { level: 1 });
+    const titleContainer = heading.parentElement;
+    expect(titleContainer?.className).toContain("min-w-0");
+    expect(titleContainer?.className).not.toContain("basis-64");
+
+    // Action controls remain reachable and wrap on narrow screens
+    const gitSyncBtn = screen.getByTestId("automations-git-sync");
+    const addMenuBtn = screen.getByTestId("automations-add-automation");
+    expect(gitSyncBtn).toBeVisible();
+    expect(addMenuBtn).toBeVisible();
+
+    const actionsContainer = gitSyncBtn.parentElement;
+    expect(actionsContainer?.className).toContain("flex-wrap");
+    expect(actionsContainer?.className).toContain("sm:shrink-0");
+    expect(actionsContainer?.className).toContain("sm:justify-end");
+  });
+});
+
