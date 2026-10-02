@@ -260,7 +260,9 @@ export async function waitForSuccessfulBashObservation(
     );
     if (resp.ok()) {
       const body = (await resp.json()) as { items?: unknown[] };
-      const verdict = evaluateBashObservation(body.items ?? [], expected);
+      // The page is newest-first; the oracle reads runs oldest-first.
+      const events = [...(body.items ?? [])].reverse();
+      const verdict = evaluateBashObservation(events, expected);
       if (verdict.status === "success") return;
       if (verdict.status === "failed") {
         throw new Error(

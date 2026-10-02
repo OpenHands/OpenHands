@@ -390,20 +390,21 @@ def _is_preflight_ping(body: dict) -> bool:
 def _is_title_request(body: dict) -> bool:
     """Match the agent-server's conversation title generation.
 
-    It is a tool-less completion whose user turn starts with the SDK's
-    "Generate a title (maximum N characters) ..." prompt.
+    It is a tool-less completion of exactly two messages: the SDK's title
+    system prompt, then a user turn starting with "Generate a title (maximum
+    N characters) ..." (``generate_title_with_llm`` in openhands-sdk).
     """
     if body.get("tools"):
         return False
     messages = body.get("messages")
-    if not isinstance(messages, list):
+    if not isinstance(messages, list) or len(messages) != 2:
         return False
-    return any(
-        isinstance(message, dict)
-        and message.get("role") == "user"
-        and _message_text(message).startswith(TITLE_PROMPT_PREFIX)
-        for message in messages
-    )
+    system, user = messages
+    if not isinstance(system, dict) or system.get("role") != "system":
+        return False
+    if not isinstance(user, dict) or user.get("role") != "user":
+        return False
+    return _message_text(user).startswith(TITLE_PROMPT_PREFIX)
 
 
 def _message_text(message: dict) -> str:

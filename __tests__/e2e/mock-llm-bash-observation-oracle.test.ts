@@ -138,6 +138,29 @@ describe("evaluateBashObservation", () => {
     expect(verdict.status).toBe("success");
   });
 
+  it("keeps waiting while a retry of a failed command is still running", () => {
+    const events = [
+      terminalObservation({ exitCode: 1 }),
+      terminalObservation({ exitCode: -1, texts: [] }),
+    ];
+
+    const verdict = evaluateBashObservation(events, EXPECTED);
+
+    expect(verdict.status).toBe("pending");
+  });
+
+  it("reports the most recent failure once every run has finished", () => {
+    const events = [
+      terminalObservation({ exitCode: 1 }),
+      terminalObservation({ exitCode: 2 }),
+    ];
+
+    const verdict = evaluateBashObservation(events, EXPECTED);
+
+    expect(verdict.status).toBe("failed");
+    expect(verdict.detail).toMatch(/exit code 2/);
+  });
+
   it("ignores malformed events", () => {
     const events = [null, "text", 42, {}, { observation: null }];
 

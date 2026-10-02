@@ -88,12 +88,14 @@ function isFinished(run: TerminalObservation): boolean {
 }
 
 /**
- * Evaluate a page of conversation events against the expected bash run.
+ * Evaluate a page of conversation events, oldest first, against the expected
+ * bash run.
  *
  * - `success`: an observation for exactly `expected.command` finished with
  *   exit code 0, no error/timeout flag, and `expected.token` in its output.
- * - `failed`: the command finished but none of its runs succeeded.
- * - `pending`: the command has not produced a finished observation yet.
+ * - `failed`: every run of the command has finished and none succeeded; the
+ *   detail is the most recent run's failure.
+ * - `pending`: the command has not run yet, or a run of it is still going.
  */
 export function evaluateBashObservation(
   events: readonly unknown[],
@@ -110,16 +112,18 @@ export function evaluateBashObservation(
     return { status: "success", detail: `${expected.command} succeeded` };
   }
 
-  const finished = runs.filter(isFinished);
-  if (finished.length > 0) {
-    const reason = failureReason(finished[finished.length - 1], expected.token);
-    return { status: "failed", detail: `${expected.command} ${reason}` };
+  // A run still in flight may be a retry of an earlier failure, so the command
+  // has not definitively failed until every run of it has finished.
+  const unfinished = runs.filter((run) => !isFinished(run));
+  if (runs.length === 0 || unfinished.length > 0) {
+    return {
+      status: "pending",
+      detail:
+        `${events.length} events, ${unfinished.length} unfinished ` +
+        `observation(s) for ${expected.command}`,
+    };
   }
 
-  return {
-    status: "pending",
-    detail:
-      `${events.length} events, ${runs.length} unfinished ` +
-      `observation(s) for ${expected.command}`,
-  };
+  const reason = failureReason(runs[runs.length - 1], expected.token);
+  return { status: "failed", detail: `${expected.command} ${reason}` };
 }
