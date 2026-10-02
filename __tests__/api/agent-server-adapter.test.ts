@@ -1619,6 +1619,36 @@ describe("agent_settings runtime services suffix", () => {
     ).toContain("http://localhost:18001");
   });
 
+  it("sends the same enabled skills on the profile path as the inline path injects", () => {
+    // The profile path carries no agent_settings, and the server resolves
+    // public skills from a clone this client does not rely on, so they ride
+    // agent_launch_additions instead (software-agent-sdk#3979).
+    const inline = buildStartConversationRequest({
+      settings: DEFAULT_SETTINGS,
+      query: "hello",
+    }) as unknown as {
+      agent_settings: { agent_context: { skills: { name: string }[] } };
+    };
+    const inlineNames = inline.agent_settings.agent_context.skills
+      .map((skill) => skill.name)
+      .sort();
+
+    const viaProfile = buildStartConversationRequest({
+      settings: DEFAULT_SETTINGS,
+      query: "hello",
+      agentProfileId: "profile-openhands",
+      agentProfileKind: "openhands",
+    }) as {
+      agent_launch_additions?: { skills?: { name: string }[] };
+    };
+    const profileNames = (viaProfile.agent_launch_additions?.skills ?? [])
+      .map((skill) => skill.name)
+      .sort();
+
+    expect(profileNames.length).toBeGreaterThan(0);
+    expect(profileNames).toEqual(inlineNames);
+  });
+
   it("carries the route-at-conversation-start suffix on the profile path too", () => {
     const payload = buildStartConversationRequest({
       settings: { ...DEFAULT_SETTINGS, run_router_at_conversation_start: true },
@@ -1643,8 +1673,13 @@ describe("agent_settings runtime services suffix", () => {
       query: "hello",
       agentProfileId: "profile-openhands",
       agentProfileKind: "openhands",
-    }) as { agent_launch_additions?: unknown };
-    expect(payload.agent_launch_additions).toBeUndefined();
+    }) as {
+      agent_launch_additions?: { system_message_suffix_append?: string };
+    };
+    // Skills still ride along; only the deployment context is absent.
+    expect(
+      payload.agent_launch_additions?.system_message_suffix_append,
+    ).toBeUndefined();
   });
 });
 
