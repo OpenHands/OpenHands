@@ -73,4 +73,4 @@ TOOL_SELECTION_ISOLATED=1 TOOL_SELECTION_SERVER_URL=http://127.0.0.1:18300 \
   TOOL_SELECTION_WORKSPACE=$E2E/workspace node .pr/tool-selection-smoke.mjs
 ```
 
-Restart the stack with `VITE_ENABLE_BROWSER_TOOLS=false` and run `tool-selection-e2e-api.py` with `E2E_EXPECT_BROWSER=0` for the browser-off checks. Launch payloads must carry `schema_version: 7`; a payload without one is read as the oldest schema and migrated. The Python scripts need `httpx` (the SDK venv has it). `tool-selection-e2e-stored.py` writes v2 profiles and a v6 `settings.json` into the persistence dir and restores `settings.json` afterwards. Use a disposable stack only.
+Restart the stack with `VITE_ENABLE_BROWSER_TOOLS=false` and run `tool-selection-e2e-api.py` with `E2E_EXPECT_BROWSER=0` for the browser-off checks. Launch payloads must carry `schema_version: 8`; a payload without one is read as the oldest schema and migrated. The Python scripts need `httpx` (the SDK venv has it). `tool-selection-e2e-stored.py` writes v2 profiles and a v6 `settings.json` into the persistence dir and restores `settings.json` afterwards. Use a disposable stack only.

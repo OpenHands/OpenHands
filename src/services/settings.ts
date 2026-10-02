@@ -33,7 +33,7 @@ export const DEFAULT_SETTINGS: Settings = {
   title_llm_profile: null,
   agent_settings_schema: null,
   agent_settings: {
-    schema_version: 7,
+    schema_version: 8,
     agent_kind: "openhands",
     agent: "CodeActAgent",
     llm: {

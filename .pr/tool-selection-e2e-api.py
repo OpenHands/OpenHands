@@ -144,7 +144,7 @@ def run_conv(label, **launch):
 
 
 def llm_settings():
-    return {"schema_version": 7, "agent_kind": "openhands",
+    return {"schema_version": 8, "agent_kind": "openhands",
             "llm": {"model": "openai/mock-test-model", "base_url": f"{MOCK}/v1", "api_key": "mock"}}
 
 
