@@ -37,6 +37,7 @@ export const APP_PREFERENCE_FIELDS = [
   "disabled_skills",
   "enabled_skills",
   "run_router_at_conversation_start",
+  "workspace_file_discovery",
 ] as const;
 
 export type AppPreferenceField = (typeof APP_PREFERENCE_FIELDS)[number];
