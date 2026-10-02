@@ -374,9 +374,11 @@ export default function AutomationsList() {
   // empty filtered response shows the filtered empty state with Clear filters.
   const hasNoAutomations = !isListError && orgData?.total === 0;
   // The previous filter's rows stand in while the next page loads; when none
-  // of them match, show loading rather than a no-match that is not final.
+  // of them match, show loading rather than a no-match that is not final. An
+  // empty org keeps its empty state instead.
   const isListLoading =
-    isLoading || (isPlaceholderData && visible.length === 0);
+    !hasNoAutomations &&
+    (isLoading || (isPlaceholderData && visible.length === 0));
 
   // Show loading state while checking health
   if (isHealthLoading) {

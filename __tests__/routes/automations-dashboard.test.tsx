@@ -632,11 +632,18 @@ describe("AutomationsList — created-by filter on cloud workspaces", () => {
   });
 
   it("keeps the first-run empty state when an empty org filters by creator", async () => {
-    // Arrange — the org has no automations at all.
-    vi.mocked(AutomationService.getAutomations).mockResolvedValue({
-      automations: [],
-      total: 0,
-    });
+    // Arrange — the org has no automations at all; the "me" page is held
+    // until the test sends it.
+    const empty = { automations: [], total: 0 };
+    let sendMine: (page: typeof empty) => void = () => {};
+    vi.mocked(AutomationService.getAutomations).mockImplementation(
+      async (_limit, _offset, createdBy) =>
+        createdBy === "me"
+          ? new Promise((resolve) => {
+              sendMine = resolve;
+            })
+          : empty,
+    );
     const user = userEvent.setup();
     selectWorkspace(TEAM_ORG_ID);
     renderAt("/automations", <AutomationsList />);
@@ -646,7 +653,7 @@ describe("AutomationsList — created-by filter on cloud workspaces", () => {
     // Act
     await pickCreatedBy(user, "me");
 
-    // Assert
+    // Assert — while "me" loads, the empty state shows without skeletons.
     await waitFor(() =>
       expect(AutomationService.getAutomations).toHaveBeenLastCalledWith(
         50,
@@ -655,6 +662,20 @@ describe("AutomationsList — created-by filter on cloud workspaces", () => {
       ),
     );
     expect(screen.getByTestId("automations-empty")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automation-card-skeleton"),
+    ).not.toBeInTheDocument();
+
+    // Act
+    act(() => sendMine(empty));
+
+    // Assert
+    await waitFor(() =>
+      expect(screen.getByTestId("automations-empty")).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByTestId("automation-card-skeleton"),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByTestId("automations-filtered-empty"),
     ).not.toBeInTheDocument();
