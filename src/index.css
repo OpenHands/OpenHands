@@ -134,3 +134,21 @@ code {
 .environment-switch-overlay > div {
   animation: environment-switch-overlay-fade 980ms ease-in-out forwards;
 }
+
+/* ── macOS desktop title bar ──────────────────────────────────────────────
+   With `titleBarStyle: "hiddenInset"` the traffic lights float over the app
+   shell. The shell reserves a band of its own background for them, and that
+   band is the window's drag handle — the padding keeps it free of controls,
+   so no interactive element needs an `app-region: no-drag` opt-out. */
+:root {
+  --oh-titlebar-inset: 28px;
+}
+
+.oh-titlebar-inset {
+  padding-top: var(--oh-titlebar-inset);
+}
+
+.oh-titlebar-drag-region {
+  height: var(--oh-titlebar-inset);
+  -webkit-app-region: drag;
+}
