@@ -340,4 +340,26 @@ describe("ChatInputModel", () => {
       "/settings/agents",
     );
   });
+
+  // Pins the consumer wiring of useAvailablePopoverSpace: the popover must
+  // apply `maxHeight` even when the measured space is 0. jsdom reports the
+  // trigger at top:0, so an upward popover measures 0 available space; a
+  // truthiness guard (`maxHeight ? ...`) would drop the inline style and
+  // leave the menu unconstrained — re-introducing the off-screen clipping.
+  it("applies a maxHeight style to the popover even when measured space is 0", () => {
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-conversation-id",
+        llm_model: "openai/gpt-4o",
+      },
+    });
+
+    renderWithProviders(<ChatInputModel />);
+
+    fireEvent.click(screen.getByTestId("chat-input-llm-model"));
+    const popover = screen.getByTestId("chat-input-llm-model-popover");
+    // 0 is a valid, distinguishable measurement (not "unmeasured"): the
+    // consumer must still emit the style rather than treating 0 as falsy.
+    expect(popover.style.maxHeight).toBe("0px");
+  });
 });

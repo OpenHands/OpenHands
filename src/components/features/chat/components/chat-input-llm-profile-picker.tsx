@@ -5,6 +5,7 @@ import { ComboboxCaretInline } from "#/ui/combobox-caret";
 import SettingsGearIcon from "#/icons/settings-gear.svg?react";
 import CheckIcon from "#/icons/checkmark.svg?react";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import { useAvailablePopoverSpace } from "#/hooks/use-available-popover-space";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { ContextMenu } from "#/ui/context-menu";
 import { ContextMenuListItem } from "#/components/features/context-menu/context-menu-list-item";
@@ -180,36 +181,14 @@ export function ChatInputLlmProfilePicker() {
   const isModelUnlisted = useModelCatalogWarning();
   const [isPopoverOpen, setIsPopoverOpen] = React.useState(false);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
-  const [popoverMaxHeight, setPopoverMaxHeight] = React.useState<number>();
   const popoverRef = useClickOutsideElement<HTMLUListElement>(
     () => setIsPopoverOpen(false),
     triggerRef,
   );
-
-  React.useLayoutEffect(() => {
-    if (!isPopoverOpen) return undefined;
-    const measureAvailableSpace = () => {
-      const trigger = triggerRef.current;
-      if (!trigger) return;
-      // Leave room for the menu margin and an 8px viewport gutter.
-      setPopoverMaxHeight(
-        Math.max(
-          0,
-          Math.min(
-            window.innerHeight * 0.6,
-            trigger.getBoundingClientRect().top - 16,
-          ),
-        ),
-      );
-    };
-    measureAvailableSpace();
-    window.addEventListener("resize", measureAvailableSpace);
-    window.addEventListener("scroll", measureAvailableSpace, true);
-    return () => {
-      window.removeEventListener("resize", measureAvailableSpace);
-      window.removeEventListener("scroll", measureAvailableSpace, true);
-    };
-  }, [isPopoverOpen]);
+  const maxHeight = useAvailablePopoverSpace(triggerRef, {
+    open: isPopoverOpen,
+    direction: "up",
+  });
 
   // No LLM profiles yet (or the agent-server lacks the surface): stay out of
   // the way, exactly like the ACP/AgentProfile pickers.
@@ -249,11 +228,11 @@ export function ChatInputLlmProfilePicker() {
         <ContextMenu
           ref={popoverRef}
           testId="chat-input-llm-profile-popover"
-          style={{ maxHeight: popoverMaxHeight }}
           position="top"
           alignment="left"
           spacing="none"
-          className="z-[60] mb-2 min-w-50 max-w-80 max-h-[60vh] overflow-y-auto"
+          className="z-[60] mb-2 min-w-50 max-w-80 overflow-y-auto"
+          style={maxHeight !== undefined ? { maxHeight } : undefined}
         >
           <ChatInputLlmProfileMenuContent
             onClose={() => setIsPopoverOpen(false)}
