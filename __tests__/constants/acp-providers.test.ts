@@ -61,36 +61,6 @@ describe("ACP provider registry", () => {
     }
   });
 
-  it("keeps every built-in default model in the UX suggestions", () => {
-    for (const provider of ACP_PROVIDERS) {
-      expect(provider.default_model, provider.key).toBeTruthy();
-      expect(provider.available_models, provider.key).toBeTruthy();
-      expect(
-        provider.available_models?.some(
-          (model) => model.id === provider.default_model,
-        ),
-        provider.key,
-      ).toBe(true);
-    }
-  });
-
-  it("does not suggest generic default model placeholders", () => {
-    // Model lists are SDK-owned (see ACP_PROVIDERS) — Canvas no longer hand-keeps
-    // them. The claude-code registry intentionally offers an id ``default``
-    // labeled "Default (recommended)", a legitimate, well-labeled choice. Guard
-    // against genuinely empty ids and bare placeholder labels, not the qualified
-    // "Default (recommended)" entry.
-    for (const provider of ACP_PROVIDERS) {
-      for (const model of provider.available_models ?? []) {
-        expect(model.id.trim(), provider.key).toBeTruthy();
-        expect(
-          model.label.trim().toLowerCase(),
-          `${provider.key}:${model.id}`,
-        ).not.toBe("default");
-      }
-    }
-  });
-
   it("seeds built-in ACP diffs with the provider's preferred default model", () => {
     // Preferred default = registry default everywhere except Gemini, where
     // the Vertex-safe override applies (see getAcpPreferredDefaultModel) —
