@@ -11,9 +11,55 @@ import type {
 import { SecurityRisk } from "#/types/agent-server/core";
 import type { FileEditorAction } from "#/types/agent-server/core/base/action";
 import type { FileEditorObservation } from "#/types/agent-server/core/base/observation";
+import { createArtifactFormatEvents } from "#/fixtures/artifact-formats-demo";
 
 export const CANVAS_DEMO_CONVERSATION_ID = "canvas-demo";
 export const CANVAS_DEMO_FILE_PATH = "canvas.md";
+
+export const CANVAS_DEMO_HTML_FILE_PATH = "report.html";
+/** Sibling asset the HTML pulls in relatively, to prove `./…` resolves. */
+export const CANVAS_DEMO_HTML_STYLES_PATH = "report.css";
+
+export const CANVAS_DEMO_SVG_FILE_PATH = "chart.svg";
+
+export const CANVAS_DEMO_SVG = [
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 120" width="240" height="120">',
+  '  <rect width="240" height="120" fill="#f6f8fa" />',
+  '  <rect x="24" y="52" width="28" height="48" fill="#1f6feb" />',
+  '  <rect x="68" y="34" width="28" height="66" fill="#1f6feb" />',
+  '  <rect x="112" y="66" width="28" height="34" fill="#1f6feb" />',
+  '  <rect x="156" y="20" width="28" height="80" fill="#1f6feb" />',
+  '  <text x="24" y="114" font-family="system-ui" font-size="11" fill="#0d1117">SVG artifact</text>',
+  "</svg>",
+].join("\n");
+
+export const CANVAS_DEMO_HTML_STYLES = [
+  "body { font-family: system-ui, sans-serif; margin: 24px; color: #0d1117; }",
+  "h1 { color: #1f6feb; }",
+  "code { background: #f6f8fa; padding: 1px 4px; border-radius: 4px; }",
+].join("\n");
+
+export const CANVAS_DEMO_HTML = [
+  "<!doctype html>",
+  '<html lang="en">',
+  "<head>",
+  '  <meta charset="utf-8" />',
+  "  <title>Agent Canvas HTML demo</title>",
+  `  <link rel="stylesheet" href="./${CANVAS_DEMO_HTML_STYLES_PATH}" />`,
+  "</head>",
+  "<body>",
+  "  <h1>Inline HTML artifact</h1>",
+  "  <p>Rendered inside a sandboxed frame in the conversation.</p>",
+  "  <ul>",
+  `    <li>Relative stylesheet <code>./${CANVAS_DEMO_HTML_STYLES_PATH}</code> resolved</li>`,
+  "    <li>Scripts are inert (no <code>allow-scripts</code>)</li>",
+  "  </ul>",
+  // Runs only if the sandbox is misconfigured; the heading staying put is the
+  // visual proof that `allow-scripts` is absent.
+  "  <script>document.querySelector('h1').textContent = 'SCRIPT RAN';</script>",
+  "</body>",
+  "</html>",
+].join("\n");
 
 export const CANVAS_DEMO_MARKDOWN = [
   "# Agent Canvas Demo",
@@ -113,19 +159,128 @@ const createCanvasObservation: ObservationEvent<FileEditorObservation> = {
   },
 };
 
+const createHtmlAction: ActionEvent<FileEditorAction> = {
+  id: "canvas-demo-html-action",
+  timestamp: timestamp(3),
+  source: "agent",
+  thought: [],
+  thinking_blocks: [],
+  action: {
+    kind: "FileEditorAction",
+    command: "create",
+    path: CANVAS_DEMO_HTML_FILE_PATH,
+    file_text: CANVAS_DEMO_HTML,
+    old_str: null,
+    new_str: null,
+    insert_line: null,
+    view_range: null,
+  },
+  tool_name: "file_editor",
+  tool_call_id: "canvas-demo-html-tool-call",
+  tool_call: {
+    id: "canvas-demo-html-tool-call",
+    type: "function",
+    function: {
+      name: "file_editor",
+      arguments: JSON.stringify({
+        command: "create",
+        path: CANVAS_DEMO_HTML_FILE_PATH,
+      }),
+    },
+  },
+  llm_response_id: "canvas-demo-html-response",
+  security_risk: SecurityRisk.LOW,
+};
+
+const createHtmlObservation: ObservationEvent<FileEditorObservation> = {
+  id: "canvas-demo-html-observation",
+  timestamp: timestamp(4),
+  source: "environment",
+  tool_name: "file_editor",
+  tool_call_id: "canvas-demo-html-tool-call",
+  action_id: createHtmlAction.id,
+  observation: {
+    kind: "FileEditorObservation",
+    command: "create",
+    output: `Created ${CANVAS_DEMO_HTML_FILE_PATH}`,
+    path: CANVAS_DEMO_HTML_FILE_PATH,
+    prev_exist: false,
+    old_content: null,
+    new_content: CANVAS_DEMO_HTML,
+    error: null,
+  },
+};
+
+const createSvgAction: ActionEvent<FileEditorAction> = {
+  id: "canvas-demo-svg-action",
+  timestamp: timestamp(5),
+  source: "agent",
+  thought: [],
+  thinking_blocks: [],
+  action: {
+    kind: "FileEditorAction",
+    command: "create",
+    path: CANVAS_DEMO_SVG_FILE_PATH,
+    file_text: CANVAS_DEMO_SVG,
+    old_str: null,
+    new_str: null,
+    insert_line: null,
+    view_range: null,
+  },
+  tool_name: "file_editor",
+  tool_call_id: "canvas-demo-svg-tool-call",
+  tool_call: {
+    id: "canvas-demo-svg-tool-call",
+    type: "function",
+    function: {
+      name: "file_editor",
+      arguments: JSON.stringify({
+        command: "create",
+        path: CANVAS_DEMO_SVG_FILE_PATH,
+      }),
+    },
+  },
+  llm_response_id: "canvas-demo-svg-response",
+  security_risk: SecurityRisk.LOW,
+};
+
+const createSvgObservation: ObservationEvent<FileEditorObservation> = {
+  id: "canvas-demo-svg-observation",
+  timestamp: timestamp(6),
+  source: "environment",
+  tool_name: "file_editor",
+  tool_call_id: "canvas-demo-svg-tool-call",
+  action_id: createSvgAction.id,
+  observation: {
+    kind: "FileEditorObservation",
+    command: "create",
+    output: `Created ${CANVAS_DEMO_SVG_FILE_PATH}`,
+    path: CANVAS_DEMO_SVG_FILE_PATH,
+    prev_exist: false,
+    old_content: null,
+    new_content: CANVAS_DEMO_SVG,
+    error: null,
+  },
+};
+
 export const CANVAS_DEMO_EVENTS: OpenHandsEvent[] = [
   createMessage(
     "canvas-demo-user",
     "user",
-    "Create a concise project canvas as a Markdown report.",
+    "Create a concise project canvas as a Markdown report, then an HTML report.",
     0,
   ),
   createCanvasAction,
   createCanvasObservation,
+  createHtmlAction,
+  createHtmlObservation,
+  createSvgAction,
+  createSvgObservation,
+  ...createArtifactFormatEvents(8, timestamp),
   createMessage(
     "canvas-demo-agent",
     "assistant",
-    "I generated the project canvas. Open it from the file chip above.",
-    3,
+    "I generated the project canvas, an HTML report, an SVG chart, a PNG and a PDF. All of them preview inline above.",
+    20,
   ),
 ];

@@ -43450,5 +43450,22 @@
     "ca": "La sincronització de Git només està disponible en connectar-se a un backend local d'OpenHands.",
     "tr": "Git Senkronizasyonu yalnızca yerel bir OpenHands arka ucuna bağlıyken kullanılabilir.",
     "uk": "Git-синхронізація доступна лише при підключенні до локального бекенду OpenHands."
+  },
+  "BUTTON$DOWNLOAD": {
+    "en": "Download",
+    "ja": "ダウンロード",
+    "zh-CN": "下载",
+    "zh-TW": "下載",
+    "ko-KR": "다운로드",
+    "fr": "Télécharger",
+    "es": "Descargar",
+    "de": "Herunterladen",
+    "it": "Scarica",
+    "pt": "Baixar",
+    "ar": "تنزيل",
+    "no": "Last ned",
+    "tr": "İndir",
+    "uk": "Завантажити",
+    "ca": "Baixa"
   }
 }
