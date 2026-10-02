@@ -1,5 +1,7 @@
 import { isSdkHttpError } from "#/api/agent-server-compatibility";
 import type {
+  AutomationSetupDraft,
+  AutomationSetupFormPatch,
   AutomationSetupFormValues,
   AutomationSetupKind,
 } from "#/api/automation-setup-types";
@@ -52,6 +54,88 @@ function getPluginEntries(
   });
 }
 
+function kindForDraftEndpoint(
+  endpoint: AutomationDraftEndpoint,
+): AutomationSetupKind {
+  if (endpoint === "/v1") return "custom";
+  if (endpoint === "/v1/preset/plugin") return "plugin";
+  return "prompt";
+}
+
+export function setupDraftFromServerDraft(
+  saved: AutomationDraftApiResponse,
+): AutomationSetupDraft {
+  const body = saved.draft as Record<string, unknown>;
+  const trigger = asRecord(body.trigger);
+  const repo = getFirstObject(body, "repos");
+  const pluginEntries = getPluginEntries(body);
+  const kind = kindForDraftEndpoint(saved.endpoint);
+  const form: AutomationSetupFormPatch = { kind };
+
+  const savedName = saved.name ?? getStringField(body, "name");
+  if (savedName !== undefined) form.name = savedName;
+  const savedPrompt = getStringField(body, "prompt");
+  if (savedPrompt !== undefined) form.prompt = savedPrompt;
+  const savedRepository =
+    getStringField(repo ?? {}, "url") ??
+    (typeof body.repository === "string" ? body.repository : undefined);
+  if (savedRepository !== undefined) form.repository = savedRepository;
+  if (pluginEntries.length > 0) {
+    form.pluginSource = pluginEntries[0]?.source ?? "";
+    form.pluginRef = pluginEntries[0]?.ref ?? "";
+    form.pluginList = serializeAutomationSetupPluginList(pluginEntries);
+  }
+  const savedEntrypoint = getStringField(body, "entrypoint");
+  if (savedEntrypoint !== undefined) form.entrypoint = savedEntrypoint;
+  const savedSetupScriptPath = getStringField(body, "setup_script_path");
+  if (savedSetupScriptPath !== undefined) {
+    form.setupScriptPath = savedSetupScriptPath;
+  }
+  if (trigger) {
+    form.triggerKind =
+      getStringField(trigger, "type") === "event" ? "event" : "cron";
+    const schedule = getStringField(trigger, "schedule");
+    if (schedule) {
+      form.frequency = "custom";
+      form.customSchedule = schedule;
+    }
+    const savedTimezone = getStringField(trigger, "timezone");
+    if (savedTimezone !== undefined) form.timezone = savedTimezone;
+    const savedEventSource = getStringField(trigger, "source");
+    if (savedEventSource !== undefined) form.eventSource = savedEventSource;
+    const savedEventKey =
+      getStringField(trigger, "on") ??
+      (Array.isArray(trigger.on) && typeof trigger.on[0] === "string"
+        ? trigger.on[0]
+        : undefined);
+    if (savedEventKey !== undefined) form.eventKey = savedEventKey;
+    const savedEventFilter = getStringField(trigger, "filter");
+    if (savedEventFilter !== undefined) form.eventFilter = savedEventFilter;
+  }
+  const savedModel = getStringField(body, "model");
+  if (savedModel !== undefined) form.model = savedModel;
+  const savedAgentProfileId = getStringField(body, "agent_profile_id");
+  if (savedAgentProfileId !== undefined) {
+    form.agentProfileId = savedAgentProfileId;
+  }
+  if (typeof body.timeout === "number") {
+    form.showTimeout = true;
+    form.timeoutSeconds = String(body.timeout);
+  }
+
+  const prompt = form.prompt ?? "";
+  return {
+    prompt,
+    kind,
+    ...(pluginEntries.length > 0
+      ? { plugins: pluginEntries.map((entry) => entry.source).filter(Boolean) }
+      : {}),
+    form,
+    serverDraftId: saved.id,
+    materializedAutomationId: saved.materializedAutomationId,
+  };
+}
+
 export function formFromServerDraft(
   saved: AutomationDraftApiResponse,
   base: AutomationSetupFormValues,
@@ -69,12 +153,7 @@ export function formFromServerDraft(
           },
         ].filter((entry) => entry.source || entry.ref);
   const repo = getFirstObject(body, "repos");
-  const endpointKind: AutomationSetupKind =
-    saved.endpoint === "/v1"
-      ? "custom"
-      : saved.endpoint === "/v1/preset/plugin"
-        ? "plugin"
-        : "prompt";
+  const endpointKind = kindForDraftEndpoint(saved.endpoint);
 
   return {
     ...base,

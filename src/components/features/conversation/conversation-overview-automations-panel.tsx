@@ -1,14 +1,28 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { AutomationCardSkeleton } from "#/components/features/automations/automation-card-skeleton";
 import { AutomationGroup } from "#/components/features/automations/automation-group";
-import { AddAutomationModal } from "#/components/features/automations/add-automation-modal";
 import { BackendNotConfigured } from "#/components/features/automations/backend-not-configured";
 import { EmptyState } from "#/components/features/automations/empty-state";
 import { ErrorState } from "#/components/features/automations/error-state";
 import { useAutomations } from "#/hooks/query/use-automations";
 import { useAutomationHealth } from "#/hooks/query/use-automation-health";
+import { useStartAutomationSetup } from "#/hooks/use-start-automation-setup";
 import { I18nKey } from "#/i18n/declaration";
+
+/** Opens the setup page once when the drawer asks to add an automation. */
+function LaunchAutomationSetup() {
+  const { startSetup } = useStartAutomationSetup();
+  const launched = useRef(false);
+
+  useEffect(() => {
+    if (launched.current) return;
+    launched.current = true;
+    startSetup();
+  }, [startSetup]);
+
+  return null;
+}
 
 interface ConversationOverviewAutomationsPanelProps {
   openAdd: boolean;
@@ -21,7 +35,6 @@ export function ConversationOverviewAutomationsPanel({
   openAdd,
 }: ConversationOverviewAutomationsPanelProps) {
   const { t } = useTranslation("openhands");
-  const [isAddModalOpen, setIsAddModalOpen] = useState(openAdd);
   const {
     data: health,
     isLoading: isHealthLoading,
@@ -32,10 +45,6 @@ export function ConversationOverviewAutomationsPanel({
     offset: 0,
     enabled: health?.status === "ok",
   });
-
-  useEffect(() => {
-    if (openAdd) setIsAddModalOpen(true);
-  }, [openAdd]);
 
   // Every state renders inside the same panel container so the drawer's
   // DOM contract (one `conversation-overview-automations-panel` node) holds
@@ -51,10 +60,7 @@ export function ConversationOverviewAutomationsPanel({
     body = (
       <>
         <EmptyState />
-        <AddAutomationModal
-          isOpen={isAddModalOpen}
-          onClose={() => setIsAddModalOpen(false)}
-        />
+        {openAdd ? <LaunchAutomationSetup /> : null}
       </>
     );
   } else {
@@ -70,10 +76,7 @@ export function ConversationOverviewAutomationsPanel({
           onDelete={NOOP}
           onExport={NOOP}
         />
-        <AddAutomationModal
-          isOpen={isAddModalOpen}
-          onClose={() => setIsAddModalOpen(false)}
-        />
+        {openAdd ? <LaunchAutomationSetup /> : null}
       </>
     );
   }

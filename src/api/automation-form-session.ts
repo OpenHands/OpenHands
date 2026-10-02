@@ -16,6 +16,14 @@ import type {
 
 const AUTOMATION_FORM_SESSION_CHANGED_EVENT =
   "openhands:automation-form-session-changed";
+
+export const PENDING_AUTOMATION_SETUP_ID = "pending-new-automation";
+
+export function isPendingAutomationSetupId(
+  conversationId: string | null | undefined,
+): boolean {
+  return conversationId === PENDING_AUTOMATION_SETUP_ID;
+}
 const AUTOMATION_SETUP_KINDS: AutomationSetupKind[] = [
   "prompt",
   "plugin",
@@ -157,6 +165,10 @@ function normalizeDraft(value: AutomationSetupDraft): AutomationSetupDraft {
   };
   const normalizedPlugins = pluginSources;
   const fieldMetadata = normalizeFieldMetadata(value.fieldMetadata);
+  const editingAutomationId =
+    typeof value.editingAutomationId === "string"
+      ? value.editingAutomationId.trim()
+      : "";
   const serverDraftId =
     typeof value.serverDraftId === "string" ? value.serverDraftId.trim() : "";
   const materializedAutomationId =
@@ -176,6 +188,7 @@ function normalizeDraft(value: AutomationSetupDraft): AutomationSetupDraft {
     kind,
     ...(normalizedPlugins.length > 0 ? { plugins: normalizedPlugins } : {}),
     form: normalizedForm,
+    ...(editingAutomationId ? { editingAutomationId } : {}),
     ...(serverDraftId ? { serverDraftId } : {}),
     ...(materializedAutomationId ? { materializedAutomationId } : {}),
     ...(fieldMetadata ? { fieldMetadata } : {}),

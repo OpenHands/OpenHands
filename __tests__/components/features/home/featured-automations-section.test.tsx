@@ -27,6 +27,17 @@ import {
 } from "#/types/automation";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
+const homeMocks = vi.hoisted(() => ({
+  createConversationMutate: vi.fn(),
+  navigate: vi.fn(),
+}));
+
+vi.mock("#/hooks/mutation/use-create-conversation", () => ({
+  useCreateConversation: () => ({
+    mutate: homeMocks.createConversationMutate,
+  }),
+}));
+
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, options?: { name?: string; count?: number }) => {
@@ -150,7 +161,7 @@ function renderHomeAutomations(ui: React.ReactElement) {
           currentPath: "/",
           conversationId: null,
           isNavigating: false,
-          navigate: vi.fn(),
+          navigate: homeMocks.navigate,
         }}
       >
         {ui}
@@ -572,7 +583,7 @@ describe("home automations on a cloud backend", () => {
     __resetActiveStoreForTests();
   });
 
-  it("opens the Edit modal in place from a row menu instead of leaving the home surface", async () => {
+  it("opens the setup page from a row menu", async () => {
     // Arrange — make a cloud backend active before mounting.
     setRegisteredBackends([cloudBackend]);
     setActiveSelection({ backendId: cloudBackend.id });
@@ -588,11 +599,11 @@ describe("home automations on a cloud backend", () => {
     await user.click(screen.getByTestId("running-automation-menu-auto-1"));
     await user.click(screen.getByTestId("running-automation-edit-auto-1"));
 
-    // Assert — the editor opens pre-filled for this row rather than
-    // bouncing the user to the detail page.
-    const nameInput = (await screen.findByTestId(
-      "edit-automation-name",
-    )) as HTMLInputElement;
-    expect(nameInput.value).toBe("Daily digest");
+    // Assert — Edit opens the setup form for this row rather than the modal.
+    expect(homeMocks.createConversationMutate).not.toHaveBeenCalled();
+    expect(homeMocks.navigate).toHaveBeenCalledWith("/automations/setup");
+    expect(
+      screen.queryByTestId("edit-automation-name"),
+    ).not.toBeInTheDocument();
   });
 });

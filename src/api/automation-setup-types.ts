@@ -56,9 +56,11 @@ export interface AutomationSetupDraft {
   prompt: string;
   kind: AutomationSetupKind;
   plugins?: string[];
-  form?: AutomationSetupFormPatch;
+  editingAutomationId?: string;
   serverDraftId?: string;
   materializedAutomationId?: string | null;
+  existingCustomTarballPath?: string;
+  form?: AutomationSetupFormPatch;
   fieldMetadata?: Partial<
     Record<AutomationSetupField, AutomationSetupFieldMetadata>
   >;
