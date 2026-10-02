@@ -8,6 +8,7 @@ import {
 } from "#/services/telemetry";
 import type {
   Automation,
+  AutomationCreatedByFilter,
   AutomationRun,
   AutomationSpec,
   AutomationTrigger,
@@ -129,10 +130,21 @@ function getAutomationSdkVersionFromResponse(
   );
 }
 
-function buildPaginationQuery(limit: number, offset: number): string {
+/**
+ * The query string for a paged list request. `extra` adds params such as
+ * filters; keys whose value is undefined are left out.
+ */
+function buildListQuery(
+  limit: number,
+  offset: number,
+  extra: Record<string, string | undefined> = {},
+): string {
   const params = new URLSearchParams();
   params.set("limit", String(limit));
   params.set("offset", String(offset));
+  for (const [key, value] of Object.entries(extra)) {
+    if (value !== undefined) params.set(key, value);
+  }
   return params.toString();
 }
 
@@ -273,32 +285,41 @@ class AutomationService {
   }
 
   static async listAutomations(
-    params: { limit?: number; offset?: number } = {},
+    params: {
+      limit?: number;
+      offset?: number;
+      createdBy?: AutomationCreatedByFilter;
+    } = {},
   ): Promise<AutomationsResponse> {
-    const { limit = 50, offset = 0 } = params;
+    const { limit = 50, offset = 0, createdBy } = params;
     const active = getActiveBackend().backend;
 
     if (active.kind === "cloud") {
       return callCloudProxy<AutomationsResponse>({
         backend: active,
         method: "GET",
-        path: `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}?${buildPaginationQuery(limit, offset)}`,
+        path: `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}?${buildListQuery(limit, offset, { created_by: createdBy })}`,
         headers: await buildAutomationRequestHeaders(),
       });
     }
 
     const { data } = await localAutomationAxios.get<AutomationsResponse>(
       `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}`,
-      { params: { limit, offset } },
+      { params: { limit, offset, created_by: createdBy } },
     );
     return data;
   }
 
+  /**
+   * One page of the org's automations. `createdBy` narrows it on the server;
+   * an automation service that predates the param ignores it.
+   */
   static async getAutomations(
     limit = 50,
     offset = 0,
+    createdBy?: AutomationCreatedByFilter,
   ): Promise<AutomationsResponse> {
-    return AutomationService.listAutomations({ limit, offset });
+    return AutomationService.listAutomations({ limit, offset, createdBy });
   }
 
   static async getAutomation(id: string): Promise<Automation> {
@@ -476,7 +497,7 @@ class AutomationService {
       return callCloudProxy<AutomationRunsResponse>({
         backend: active,
         method: "GET",
-        path: `${basePath}?${buildPaginationQuery(limit, offset)}`,
+        path: `${basePath}?${buildListQuery(limit, offset)}`,
         headers: await buildAutomationRequestHeaders(),
       });
     }

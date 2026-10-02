@@ -177,3 +177,39 @@ export const focusContentEditableAtEnd = (
   selection.addRange(range);
   ensureCursorVisible(element);
 };
+
+/**
+ * Insert text at the caret (or the end when the caret is elsewhere), padded
+ * with spaces so it doesn't fuse with neighbouring words.
+ */
+export const insertTextAtCaret = (
+  element: HTMLElement | null,
+  text: string,
+): void => {
+  if (!element) {
+    return;
+  }
+
+  const selection = window.getSelection();
+  if (!selection) {
+    return;
+  }
+  if (selection.rangeCount === 0 || !element.contains(selection.anchorNode)) {
+    focusContentEditableAtEnd(element);
+  } else {
+    element.focus();
+  }
+
+  const caret = selection.getRangeAt(0);
+  const context = document.createRange();
+  context.selectNodeContents(element);
+  context.setEnd(caret.startContainer, caret.startOffset);
+  const lead = /\S$/.test(context.toString()) ? " " : "";
+  context.selectNodeContents(element);
+  context.setStart(caret.endContainer, caret.endOffset);
+  const trail = /^\S/.test(context.toString()) ? " " : "";
+
+  // Same path as plain-text paste: fires `input`, keeps undo, and is a no-op
+  // when the field is read-only.
+  document.execCommand("insertText", false, `${lead}${text}${trail}`);
+};
