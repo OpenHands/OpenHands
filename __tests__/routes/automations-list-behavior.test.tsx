@@ -569,6 +569,8 @@ describe("automations list states", () => {
   });
 
   it("offers another list request when loading fails", async () => {
+    // A failed first load has no data.
+    mocks.automationsState.data = undefined;
     mocks.automationsState.isError = true;
     const user = userEvent.setup();
 

@@ -600,4 +600,39 @@ describe("AutomationsList — Load more", () => {
     await screen.findByText("Automation 61");
     expect(screen.getAllByText("Automation 51")).toHaveLength(1);
   });
+
+  it("keeps the loaded rows when Load more fails, and Load more retries", async () => {
+    // Arrange — the next page fails once.
+    serveAutomations(makeAutomations(60));
+    const user = userEvent.setup();
+    renderList();
+    await screen.findByText("Automation 50");
+    vi.mocked(AutomationService.getAutomations).mockRejectedValueOnce(
+      new Error("503"),
+    );
+    const loadMore = () =>
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$LOAD_MORE });
+
+    // Act
+    await user.click(loadMore());
+    await waitFor(() => expect(loadMore()).toBeEnabled());
+
+    // Assert — the first page stays, with no full-page error.
+    expect(screen.getByText("Automation 50")).toBeInTheDocument();
+    expect(
+      screen.queryByText(I18nKey.AUTOMATIONS$ERROR_TITLE),
+    ).not.toBeInTheDocument();
+
+    // Act — Load more asks for the failed page again.
+    await user.click(loadMore());
+
+    // Assert
+    await screen.findByText("Automation 60");
+    expect(
+      vi.mocked(AutomationService.getAutomations).mock.calls.slice(1),
+    ).toEqual([
+      [50, 50],
+      [50, 50],
+    ]);
+  });
 });

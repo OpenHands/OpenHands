@@ -328,8 +328,10 @@ export default function AutomationsList() {
       </div>
     );
 
+  // A failed refetch or Load more keeps the loaded rows; Load more retries.
+  const isListError = isError && !data;
   const hasNoAutomations =
-    !isLoading && !isError && data?.automations.length === 0;
+    !isLoading && !isListError && data?.automations.length === 0;
 
   // Show loading state while checking health
   if (isHealthLoading) {
@@ -440,12 +442,12 @@ export default function AutomationsList() {
           </div>
         )}
 
-        {isError && !isLoading && <ErrorState onRetry={refetch} />}
+        {isListError && !isLoading && <ErrorState onRetry={refetch} />}
 
         {hasNoAutomations && <EmptyState />}
 
         {!isLoading &&
-          !isError &&
+          !isListError &&
           data &&
           data.automations.length > 0 &&
           (dashboard && visible.length === 0 ? (
