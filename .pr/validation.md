@@ -50,9 +50,10 @@ call was performed. The captured one-time attempt has been cancelled.
 - The actual-device-code video is kept locally and is not published because it
   contains a real one-time authorization code.
 
-The screenshots demonstrate rendering. The local recording predates the final SDK-only ID-token/account
-metadata tightening; the pictured UI and device-initiation operations are
-unchanged by that follow-up. Automated tests ran against the final SDK code.
+The screenshots demonstrate rendering. Real device initiation, copy/cancel
+and manual fallback were repeated against the final built Agent Server wheel
+after restarting the local server; no page errors occurred. The 46 focused
+frontend tests and 81 backend/cross tests also passed again.
 
 ## Public fixture video
 
