@@ -12,6 +12,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { LanguageInput } from "#/components/features/settings/app-settings/language-input";
 import { ThemeInput } from "#/components/features/settings/app-settings/theme-input";
 import { GettingStartedChecklistSwitch } from "#/components/features/settings/app-settings/getting-started-checklist-switch";
+import { VoiceInputSettings } from "#/components/features/settings/app-settings/voice-input-settings";
 import {
   displayErrorToast,
   displaySuccessToast,
@@ -257,6 +258,8 @@ export function AppSettingsScreen() {
               {t(I18nKey.SETTINGS$MANAGE_LLM_PROFILES)}
             </NavigationLink>
           </div>
+
+          <VoiceInputSettings />
 
           <div className="border-t border-border pt-6 mt-2">
             <h3 className="text-lg font-medium mb-2">

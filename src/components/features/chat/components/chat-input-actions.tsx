@@ -12,6 +12,7 @@ import {
 import { resolvePickerKind } from "./resolve-picker-kind";
 import { ChatAddFileButton } from "../chat-add-file-button";
 import { ChatSendButton } from "../chat-send-button";
+import { ChatDictationButton } from "../chat-dictation-button";
 import { ContextWindowMeter } from "./context-window-meter";
 import CarretRightFillIcon from "#/icons/carret-right-fill.svg?react";
 import LessonPlanIcon from "#/icons/lesson-plan.svg?react";
@@ -48,6 +49,9 @@ interface ChatInputActionsProps {
   showButton?: boolean;
   buttonClassName?: string;
   handleSubmit?: () => void;
+  onDictationTranscript?: (text: string) => void;
+  /** Tracks the text field's editability, not submit availability. */
+  isDictationDisabled?: boolean;
 }
 
 export function ChatInputActions({
@@ -58,6 +62,8 @@ export function ChatInputActions({
   showButton = true,
   buttonClassName = "",
   handleSubmit = () => {},
+  onDictationTranscript,
+  isDictationDisabled = false,
 }: ChatInputActionsProps) {
   const { t } = useTranslation("openhands");
   const unifiedPauseMutation = useUnifiedPauseConversation();
@@ -499,6 +505,12 @@ export function ChatInputActions({
           />
         )}
         <ContextWindowMeter />
+        {onDictationTranscript && (
+          <ChatDictationButton
+            onTranscript={onDictationTranscript}
+            disabled={isDictationDisabled}
+          />
+        )}
         {showButton && (
           <ChatSendButton
             buttonClassName={buttonClassName}
