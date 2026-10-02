@@ -330,7 +330,7 @@ describe("AgentProfilesLocalView save mapping", () => {
     ).toBe("true");
   });
 
-  it("seeds the editor with a stored system prompt and instructions", async () => {
+  it("seeds the editor with a stored persona and instructions", async () => {
     vi.mocked(AgentProfilesService.getProfile).mockResolvedValue({
       name: "default",
       profile: {
@@ -341,7 +341,7 @@ describe("AgentProfilesLocalView save mapping", () => {
         agent_kind: "openhands",
         llm_profile_ref: "default",
         enable_sub_agents: false,
-        system_prompt: "You triage issues.",
+        persona: "You triage issues.",
         system_message_suffix: "Be terse.",
       },
     } as never);
@@ -367,7 +367,7 @@ describe("AgentProfilesLocalView save mapping", () => {
         .getByTestId("mock-agent-settings")
         .getAttribute("data-override") as string,
     );
-    expect(seededOverride.system_prompt).toBe("You triage issues.");
+    expect(seededOverride.persona).toBe("You triage issues.");
     expect(seededOverride.system_message_suffix).toBe("Be terse.");
   });
 

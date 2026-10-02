@@ -70,8 +70,7 @@ function toAgentSettingsOverride(
     enable_switch_llm_tool: switchLlmToolEnabled,
     tool_concurrency_limit: profile.tool_concurrency_limit,
     secret_refs: secretRefs,
-    system_prompt:
-      (profile as { system_prompt?: string | null }).system_prompt ?? null,
+    persona: (profile as { persona?: string | null }).persona ?? null,
     system_message_suffix: profile.system_message_suffix ?? null,
   };
 }

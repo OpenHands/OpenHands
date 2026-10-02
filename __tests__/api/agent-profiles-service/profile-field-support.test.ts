@@ -3,7 +3,7 @@ import {
   MIN_AGENT_SERVER_VERSION_FOR_PROFILE_SWITCH_LLM_TOOL,
   agentProfileSupportsInstructions,
   agentProfileSupportsSecretRefs,
-  agentProfileSupportsSystemPrompt,
+  agentProfileSupportsPersona,
   agentProfileSupportsSwitchLlmTool,
 } from "#/api/agent-profiles-service/profile-field-support";
 
@@ -97,7 +97,7 @@ describe("agentProfileSupportsSecretRefs", () => {
   });
 });
 
-describe("agentProfileSupportsSystemPrompt", () => {
+describe("agentProfileSupportsPersona", () => {
   beforeEach(() => {
     mockBackendKind.mockReturnValue("local");
   });
@@ -106,23 +106,23 @@ describe("agentProfileSupportsSystemPrompt", () => {
     "hides the field on a server that does not advertise it: %j",
     (info) => {
       mockServerInfo.mockReturnValue(info);
-      expect(agentProfileSupportsSystemPrompt()).toBe(false);
+      expect(agentProfileSupportsPersona()).toBe(false);
     },
   );
 
   it("offers the field when the local server advertises it", () => {
     mockServerInfo.mockReturnValue({
-      capabilities: ["profile_system_prompt_v1"],
+      capabilities: ["profile_persona_v1"],
     });
-    expect(agentProfileSupportsSystemPrompt()).toBe(true);
+    expect(agentProfileSupportsPersona()).toBe(true);
   });
 
   it("stays off on Cloud until its profile store accepts the field", () => {
     mockBackendKind.mockReturnValue("cloud");
     mockServerInfo.mockReturnValue({
-      capabilities: ["profile_system_prompt_v1"],
+      capabilities: ["profile_persona_v1"],
     });
-    expect(agentProfileSupportsSystemPrompt()).toBe(false);
+    expect(agentProfileSupportsPersona()).toBe(false);
   });
 });
 

@@ -46,7 +46,7 @@ import {
   agentProfileSupportsSecretRefs,
   agentProfileSupportsSwitchLlmTool,
   agentProfileSupportsInstructions,
-  agentProfileSupportsSystemPrompt,
+  agentProfileSupportsPersona,
 } from "#/api/agent-profiles-service/profile-field-support";
 import { useSearchSecrets } from "#/hooks/query/use-get-secrets";
 
@@ -66,7 +66,7 @@ const ENABLE_SWITCH_LLM_TOOL_FIELD_KEY = "enable_switch_llm_tool";
 const TOOL_CONCURRENCY_FIELD_KEY = "tool_concurrency_limit";
 const MCP_SERVER_REFS_KEY = "mcp_server_refs";
 const SECRET_REFS_KEY = "secret_refs";
-const SYSTEM_PROMPT_KEY = "system_prompt";
+const PERSONA_KEY = "persona";
 const SYSTEM_MESSAGE_SUFFIX_KEY = "system_message_suffix";
 const SYSTEM_PROMPT_MAX_LENGTH = 65536;
 const COMMAND_PLACEHOLDER_FALLBACK = "npx -y <package-name>";
@@ -121,13 +121,13 @@ function getEnableSwitchLlmToolValue(
 
 export type SystemPromptMode = "standard" | "append" | "custom";
 
-/** A stored override wins over stored instructions; the editor models one choice. */
+/** A stored persona wins over stored instructions; the editor models one choice. */
 export function readSystemPromptSeed(
   override: Record<string, SettingsValue> | null | undefined,
 ): { mode: SystemPromptMode; text: string } {
-  const prompt = override?.[SYSTEM_PROMPT_KEY];
-  if (typeof prompt === "string" && prompt)
-    return { mode: "custom", text: prompt };
+  const persona = override?.[PERSONA_KEY];
+  if (typeof persona === "string" && persona)
+    return { mode: "custom", text: persona };
   const suffix = override?.[SYSTEM_MESSAGE_SUFFIX_KEY];
   if (typeof suffix === "string" && suffix)
     return { mode: "append", text: suffix };
@@ -155,7 +155,7 @@ export type AgentProfileFieldsDraft =
       enable_switch_llm_tool?: boolean;
       tool_concurrency_limit?: number;
       secret_refs?: string[] | null;
-      system_prompt?: string | null;
+      persona?: string | null;
       system_message_suffix?: string | null;
     }
   | {
@@ -199,8 +199,8 @@ export interface AgentProfileFieldsInput {
   systemPromptText: string;
   /** False when the section is hidden, so neither prompt field is written. */
   systemPromptEditable: boolean;
-  /** Whether the backend's *profile* model accepts `system_prompt`. */
-  systemPromptOverrideSupported: boolean;
+  /** Whether the backend's *profile* model accepts `persona`. */
+  personaSupported: boolean;
 }
 
 /**
@@ -244,7 +244,7 @@ export function buildAgentProfileFields(
     systemPromptMode,
     systemPromptText,
     systemPromptEditable,
-    systemPromptOverrideSupported,
+    personaSupported,
   } = input;
   // Both are base-model fields, so they ride both variants. `mcp_server_refs`
   // needs no version gate — it has existed since agent profiles shipped, below
@@ -280,8 +280,8 @@ export function buildAgentProfileFields(
   if (systemPromptEditable) {
     const text = systemPromptText.trim() ? systemPromptText : null;
     fields.system_message_suffix = systemPromptMode === "append" ? text : null;
-    if (systemPromptOverrideSupported) {
-      fields.system_prompt = systemPromptMode === "custom" ? text : null;
+    if (personaSupported) {
+      fields.persona = systemPromptMode === "custom" ? text : null;
     }
   }
   if (switchLlmToolField && switchLlmToolSupportedOnProfile) {
@@ -406,7 +406,7 @@ export function AgentSettingsScreen({
   );
 
   // --- System prompt (OpenHands path) ---
-  const systemPromptOverrideSupported = agentProfileSupportsSystemPrompt();
+  const personaSupported = agentProfileSupportsPersona();
   const instructionsSupported = agentProfileSupportsInstructions();
   const showSystemPrompt = instructionsSupported && !isDefaultProfile;
   const initialSystemPrompt = React.useMemo(
@@ -763,7 +763,7 @@ export function AgentSettingsScreen({
       systemPromptMode,
       systemPromptText,
       systemPromptEditable: showSystemPrompt,
-      systemPromptOverrideSupported,
+      personaSupported,
     });
 
   const isSaving = acpCredentialForm.isSaving;
@@ -868,7 +868,7 @@ export function AgentSettingsScreen({
                       I18nKey.SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_APPEND,
                     ),
                   },
-                  ...(systemPromptOverrideSupported
+                  ...(personaSupported
                     ? [
                         {
                           key: "custom",

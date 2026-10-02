@@ -53,9 +53,9 @@ export function agentProfileSupportsSecretRefs(): boolean {
   return localBackendAdvertises("profile_secret_scope_v1");
 }
 
-/** Only offer a system prompt when the serving backend's profile model accepts it. */
-export function agentProfileSupportsSystemPrompt(): boolean {
-  return localBackendAdvertises("profile_system_prompt_v1");
+/** Only offer a persona when the serving backend's profile model accepts it. */
+export function agentProfileSupportsPersona(): boolean {
+  return localBackendAdvertises("profile_persona_v1");
 }
 
 /** Only offer profile instructions where launches apply them. */

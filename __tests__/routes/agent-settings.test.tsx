@@ -29,12 +29,12 @@ vi.mock("#/hooks/query/use-acp-auth-status", () => ({
 // sides of that gate are reachable without a live server.
 const profileSupportsSwitchLlmToolMock = vi.hoisted(() => vi.fn(() => true));
 const profileSupportsSecretRefsMock = vi.hoisted(() => vi.fn(() => true));
-const profileSupportsSystemPromptMock = vi.hoisted(() => vi.fn(() => false));
+const profileSupportsPersonaMock = vi.hoisted(() => vi.fn(() => false));
 const profileSupportsInstructionsMock = vi.hoisted(() => vi.fn(() => false));
 vi.mock("#/api/agent-profiles-service/profile-field-support", () => ({
   agentProfileSupportsSwitchLlmTool: () => profileSupportsSwitchLlmToolMock(),
   agentProfileSupportsSecretRefs: () => profileSupportsSecretRefsMock(),
-  agentProfileSupportsSystemPrompt: () => profileSupportsSystemPromptMock(),
+  agentProfileSupportsPersona: () => profileSupportsPersonaMock(),
   agentProfileSupportsInstructions: () => profileSupportsInstructionsMock(),
 }));
 
@@ -1160,7 +1160,7 @@ describe("AgentSettingsScreen — system prompt", () => {
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
     vi.spyOn(SecretsService, "getSecrets").mockResolvedValue([]);
     profileSupportsInstructionsMock.mockReturnValue(true);
-    profileSupportsSystemPromptMock.mockReturnValue(true);
+    profileSupportsPersonaMock.mockReturnValue(true);
   });
 
   const OPENHANDS_PROFILE = {
@@ -1194,12 +1194,12 @@ describe("AgentSettingsScreen — system prompt", () => {
       screen.queryByTestId("agent-settings-system-prompt-mode"),
     ).not.toBeInTheDocument();
     const fields = control().buildAgentProfileFields();
-    expect(fields).not.toHaveProperty("system_prompt");
+    expect(fields).not.toHaveProperty("persona");
     expect(fields).not.toHaveProperty("system_message_suffix");
   });
 
-  it("offers a custom prompt only when the profile model accepts it", async () => {
-    profileSupportsSystemPromptMock.mockReturnValue(false);
+  it("offers a custom persona only when the profile model accepts it", async () => {
+    profileSupportsPersonaMock.mockReturnValue(false);
     renderAgentSettingsScreen({ agentSettingsOverride: OPENHANDS_PROFILE });
     await screen.findByTestId("agent-settings-system-prompt-mode");
 
@@ -1226,14 +1226,14 @@ describe("AgentSettingsScreen — system prompt", () => {
       screen.queryByTestId("agent-settings-system-prompt"),
     ).not.toBeInTheDocument();
     expect(control().buildAgentProfileFields()).toMatchObject({
-      system_prompt: null,
+      persona: null,
       system_message_suffix: null,
     });
   });
 
   it.each([
     ["system_message_suffix", "append"],
-    ["system_prompt", "custom"],
+    ["persona", "custom"],
   ])("opens a stored %s in %s mode, clean", async (field, mode) => {
     const { control } = renderAgentSettingsScreen({
       agentSettingsOverride: { ...OPENHANDS_PROFILE, [field]: "Stored text." },
@@ -1270,12 +1270,12 @@ describe("AgentSettingsScreen — system prompt", () => {
     );
     await waitFor(() => expect(control().isDirty).toBe(true));
     expect(control().buildAgentProfileFields()).toMatchObject({
-      system_prompt: null,
+      persona: null,
       system_message_suffix: "Be terse.",
     });
   });
 
-  it("blocks saving empty text, then saves the typed custom prompt", async () => {
+  it("blocks saving empty text, then saves the typed custom persona", async () => {
     const { control } = renderAgentSettingsScreen({
       agentSettingsOverride: OPENHANDS_PROFILE,
     });
@@ -1295,16 +1295,16 @@ describe("AgentSettingsScreen — system prompt", () => {
     );
     await waitFor(() => expect(control().isValid).toBe(true));
     expect(control().buildAgentProfileFields()).toMatchObject({
-      system_prompt: "You review PRs.",
+      persona: "You review PRs.",
       system_message_suffix: null,
     });
   });
 
-  it("clears a stored prompt when switched back to the default", async () => {
+  it("clears a stored persona when switched back to the default", async () => {
     const { control } = renderAgentSettingsScreen({
       agentSettingsOverride: {
         ...OPENHANDS_PROFILE,
-        system_prompt: "You triage issues.",
+        persona: "You triage issues.",
       },
     });
     await screen.findByTestId("agent-settings-system-prompt");
@@ -1312,7 +1312,7 @@ describe("AgentSettingsScreen — system prompt", () => {
     await chooseMode("SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_STANDARD");
     await waitFor(() => expect(control().isDirty).toBe(true));
     expect(control().buildAgentProfileFields()).toMatchObject({
-      system_prompt: null,
+      persona: null,
       system_message_suffix: null,
     });
   });
@@ -1321,7 +1321,7 @@ describe("AgentSettingsScreen — system prompt", () => {
     const { control } = renderAgentSettingsScreen({
       agentSettingsOverride: {
         ...OPENHANDS_PROFILE,
-        system_prompt: "Set through the API.",
+        persona: "Set through the API.",
         system_message_suffix: "Also set through the API.",
       },
       isDefaultProfile: true,
@@ -1334,7 +1334,7 @@ describe("AgentSettingsScreen — system prompt", () => {
       screen.queryByTestId("agent-settings-system-prompt-mode"),
     ).not.toBeInTheDocument();
     const fields = control().buildAgentProfileFields();
-    expect(fields).not.toHaveProperty("system_prompt");
+    expect(fields).not.toHaveProperty("persona");
     expect(fields).not.toHaveProperty("system_message_suffix");
   });
 });
