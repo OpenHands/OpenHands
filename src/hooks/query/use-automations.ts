@@ -1,4 +1,5 @@
 import {
+  type InfiniteData,
   useInfiniteQuery,
   useMutation,
   useQueryClient,
@@ -21,6 +22,18 @@ export const AUTOMATIONS_QUERY_KEY = ["automations"] as const;
 
 // The automation service caps `limit` at 100, so lists page by offset.
 const AUTOMATIONS_PAGE_SIZE = 50;
+
+// One response from the loaded pages. At module level, so React Query runs it
+// only when the pages change, not on every render.
+function joinAutomationPages(
+  data: InfiniteData<AutomationsResponse>,
+): AutomationsResponse {
+  return {
+    automations: uniqueById(data.pages.flatMap((page) => page.automations)),
+    // The last page has the newest count.
+    total: data.pages.at(-1)?.total ?? 0,
+  };
+}
 
 interface UseAutomationsOptions {
   /** Automations per request; at most 100. A count-only caller passes 1. */
@@ -51,11 +64,7 @@ export function useAutomations(options: UseAutomationsOptions = {}) {
       const nextOffset = lastOffset + lastPage.automations.length;
       return nextOffset < lastPage.total ? nextOffset : undefined;
     },
-    select: (data): AutomationsResponse => ({
-      automations: uniqueById(data.pages.flatMap((page) => page.automations)),
-      // The last page has the newest count.
-      total: data.pages.at(-1)?.total ?? 0,
-    }),
+    select: joinAutomationPages,
     staleTime: 0,
     enabled,
   });
