@@ -204,13 +204,36 @@ function findClientPinMismatch(pinnedVersion, expectedVersion) {
 }
 
 /**
- * Read the typescript-client pin from package.json.
+ * Read the typescript-client version from an exact registry pin, or from
+ * the matching integrity-locked HTTPS tarball entry. This also works in the
+ * version-sync workflow, which does not install node_modules.
  */
-function readClientPin() {
+function readClientPin(root = projectRoot) {
   const pkg = JSON.parse(
-    readFileSync(join(projectRoot, "package.json"), "utf-8"),
+    readFileSync(join(root, "package.json"), "utf-8"),
   );
-  return pkg.dependencies?.[CLIENT_PACKAGE_NAME] ?? null;
+  const pin = pkg.dependencies?.[CLIENT_PACKAGE_NAME] ?? null;
+  if (!pin?.startsWith("https://")) return pin;
+
+  try {
+    const url = new URL(pin);
+    if (url.username || url.password || url.search || url.hash || !url.pathname.endsWith(".tgz")) {
+      return pin;
+    }
+    const lock = JSON.parse(readFileSync(join(root, "package-lock.json"), "utf-8"));
+    const entry = lock.packages?.[`node_modules/${CLIENT_PACKAGE_NAME}`];
+    if (
+      lock.packages?.[""]?.dependencies?.[CLIENT_PACKAGE_NAME] === pin &&
+      entry?.resolved === pin &&
+      /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(entry.version ?? "") &&
+      /^sha512-[A-Za-z0-9+/]{86}==$/.test(entry.integrity ?? "")
+    ) {
+      return entry.version;
+    }
+  } catch {
+    // An absent or invalid lock cannot establish a fixed artifact version.
+  }
+  return pin; // Preserve the unresolved spec so the existing mismatch check fails.
 }
 
 /**

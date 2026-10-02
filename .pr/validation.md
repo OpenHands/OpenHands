@@ -40,6 +40,21 @@ Fresh-install Windows results (without replacing any installed client files):
 The new upstream Ubuntu full-suite and Windows build results are linked in
 the PR description after the pushed revision finishes CI.
 
+The first dependency correction (`0ab9403`) passed the upstream Windows build.
+Its newly triggered SDK Version Sync check rejected the tarball address as a
+numeric version. `readClientPin` now resolves the artifact version from the
+committed lockfile, requiring the root dependency spec and package source URL
+to match, an exact version, and full SHA-512 integrity. Invalid/missing metadata
+is still rejected by the existing mismatch check; ranges and version drift
+remain failures. No workflow step is skipped.
+
+The added regression failed before this resolver change. With the fix, the
+33 script helper tests pass, and the focused script/docs/package/API-guard
+selection passes 44 tests. The real `node scripts/check-sdk-version-sync.mjs`
+also passes against official PyPI metadata for automation `1.17.0` and SDK
+`1.50.1`. The fixture mocks only that imported CLI's PyPI transport; artifact
+metadata is read from real temporary package and lock files.
+
 This is a temporary stacked-PR dependency under the existing client stack-pin
 exemption in `__tests__/package-library.test.ts`. It differs from the normal
 released-npm policy and must be replaced by the official exact npm release
