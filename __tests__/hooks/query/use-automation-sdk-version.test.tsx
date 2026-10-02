@@ -3,8 +3,11 @@ import { QueryClient } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import type { ResolvedActiveBackend } from "#/api/backend-registry/types";
-import { useAutomationSdkVersion } from "#/hooks/query/use-automation-sdk-version";
-import { setQueryClient } from "#/query-client-config";
+import {
+  AUTOMATION_SDK_VERSION_CACHE_NAMESPACE,
+  useAutomationSdkVersion,
+} from "#/hooks/query/use-automation-sdk-version";
+import { getQueryClient, setQueryClient } from "#/query-client-config";
 
 vi.mock("#/api/automation-service/automation-service.api", () => ({
   default: {
@@ -29,6 +32,14 @@ vi.mock("#/contexts/active-backend-context", () => ({
   useActiveBackend: () => activeBackendMock.active,
 }));
 
+const localSdkVersionQueryKey = [
+  AUTOMATION_SDK_VERSION_CACHE_NAMESPACE,
+  "local-1",
+  "local",
+  "http://localhost:8000",
+  "",
+];
+
 describe("useAutomationSdkVersion", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -47,6 +58,61 @@ describe("useAutomationSdkVersion", () => {
       },
       orgId: null,
     };
+  });
+
+  it("settles lookup failures as a non-fatal null result", async () => {
+    vi.mocked(AutomationService.getSdkVersion).mockRejectedValue(
+      new Error("automation unavailable"),
+    );
+
+    const { result } = renderHook(() => useAutomationSdkVersion());
+
+    await waitFor(() =>
+      expect(getQueryClient().getQueryState(localSdkVersionQueryKey)).toEqual(
+        expect.objectContaining({ data: null, status: "success" }),
+      ),
+    );
+
+    expect(result.current).toBeNull();
+    expect(AutomationService.getSdkVersion).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not start a query when SDK version support is unavailable", () => {
+    const getSdkVersion = vi.mocked(AutomationService.getSdkVersion);
+    const getSdkVersionDescriptor = Object.getOwnPropertyDescriptor(
+      AutomationService,
+      "getSdkVersion",
+    );
+    if (!getSdkVersionDescriptor) {
+      throw new Error("Expected getSdkVersion to be defined");
+    }
+
+    Object.defineProperty(AutomationService, "getSdkVersion", {
+      configurable: true,
+      value: undefined,
+    });
+
+    try {
+      const hook = renderHook(() => useAutomationSdkVersion());
+
+      expect(hook.result.current).toBeNull();
+      expect(getSdkVersion).not.toHaveBeenCalled();
+      expect(getQueryClient().getQueryState(localSdkVersionQueryKey)).toEqual(
+        expect.objectContaining({
+          data: null,
+          fetchStatus: "idle",
+          status: "success",
+        }),
+      );
+
+      hook.unmount();
+    } finally {
+      Object.defineProperty(
+        AutomationService,
+        "getSdkVersion",
+        getSdkVersionDescriptor,
+      );
+    }
   });
 
   it("shares one request across consumers without a QueryClientProvider", async () => {

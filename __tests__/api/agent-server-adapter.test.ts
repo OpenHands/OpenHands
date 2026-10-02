@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MockInstance } from "vitest";
+import { getAcpProvider as getClientAcpProvider } from "@openhands/typescript-client";
 import { CANVAS_UI_CLIENT_TOOL_NAME } from "#/constants/canvas-ui";
 import { LAUNCH_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversation";
 
@@ -40,6 +41,7 @@ const {
   mockGetServerInfo,
   mockGetActiveBackend,
   mockLoadHooks,
+  mockListMetaProfiles,
 } = vi.hoisted(() => ({
   mockGetAgentServerWorkingDir: vi.fn(() => "/workspace/project/agent-canvas"),
   mockIsAgentServerToolAvailable: vi.fn((_toolName: string) => true),
@@ -62,6 +64,7 @@ const {
     },
   })),
   mockLoadHooks: vi.fn(),
+  mockListMetaProfiles: vi.fn(),
 }));
 
 vi.mock("@openhands/typescript-client/clients", () => ({
@@ -72,6 +75,9 @@ vi.mock("@openhands/typescript-client/clients", () => ({
   }),
   HooksClient: vi.fn(function HooksClientMock() {
     return { loadHooks: mockLoadHooks };
+  }),
+  MetaProfilesClient: vi.fn(function MetaProfilesClientMock() {
+    return { listMetaProfiles: mockListMetaProfiles };
   }),
 }));
 
@@ -698,6 +704,77 @@ describe("buildStartConversationRequest", () => {
     expect(payload.agent_settings.agent_context?.secrets).toBeUndefined();
   });
 
+  it("appends the route-at-conversation-start suffix when the toggle is on and a meta-profile is active (OpenHands agent)", () => {
+    const payload = buildStartConversationRequest({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        run_router_at_conversation_start: true,
+      },
+      hasActiveMetaProfile: true,
+    }) as {
+      agent_settings: { agent_context?: { system_message_suffix?: string } };
+    };
+
+    const suffix = payload.agent_settings.agent_context?.system_message_suffix;
+    expect(suffix).toContain("ROUTE_AT_CONVERSATION_START");
+    expect(suffix).toContain("route_task_to_model");
+  });
+
+  it("appends the route-at-conversation-start suffix for an inline ACP launch when the toggle is on and a meta-profile is active", () => {
+    const payload = buildStartConversationRequest({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        agent_settings: {
+          ...DEFAULT_SETTINGS.agent_settings,
+          agent_kind: "acp",
+          acp_server: "claude-code",
+          acp_command: ["npx", "-y", "@agentclientprotocol/claude-agent-acp"],
+        },
+        run_router_at_conversation_start: true,
+      },
+      hasActiveMetaProfile: true,
+    }) as {
+      agent_settings: { agent_context?: { system_message_suffix?: string } };
+    };
+
+    expect(
+      payload.agent_settings.agent_context?.system_message_suffix,
+    ).toContain("ROUTE_AT_CONVERSATION_START");
+  });
+
+  it("does not add the router suffix when the toggle is on but no meta-profile is active", () => {
+    // With no active meta-profile the agent-server does not attach
+    // `route_task_to_model`, so the instruction must not be emitted even if
+    // the toggle was left on (e.g. the active profile was just deleted).
+    const payload = buildStartConversationRequest({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        run_router_at_conversation_start: true,
+      },
+      hasActiveMetaProfile: false,
+    }) as {
+      agent_settings: { agent_context?: { system_message_suffix?: string } };
+    };
+
+    const suffix =
+      payload.agent_settings.agent_context?.system_message_suffix ?? "";
+    expect(suffix).not.toContain("ROUTE_AT_CONVERSATION_START");
+  });
+
+  it("does not add a system_message_suffix for the router when the toggle is off (default)", () => {
+    const payload = buildStartConversationRequest({
+      settings: DEFAULT_SETTINGS,
+    }) as {
+      agent_settings: { agent_context?: { system_message_suffix?: string } };
+    };
+
+    // The suffix may be undefined (no runtime-services block either); assert
+    // specifically that the router sentinel is absent when present.
+    const suffix =
+      payload.agent_settings.agent_context?.system_message_suffix ?? "";
+    expect(suffix).not.toContain("ROUTE_AT_CONVERSATION_START");
+  });
+
   describe("ACP secret delivery", () => {
     // Settings factory for a containerized ACP conversation.
     const acpSettings = (overrides: Record<string, unknown> = {}) => ({
@@ -995,6 +1072,30 @@ describe("toAppConversation", () => {
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
   };
+
+  it("uses the archived status for a missing runtime that cannot resume", () => {
+    const result = toAppConversation({
+      ...baseInfo,
+      runtime_info: {
+        runtime_status: "missing",
+        can_resume: false,
+      },
+    });
+
+    expect(result.sandbox_status).toBe("MISSING");
+  });
+
+  it("does not archive a missing runtime that can resume", () => {
+    const result = toAppConversation({
+      ...baseInfo,
+      runtime_info: {
+        runtime_status: "missing",
+        can_resume: true,
+      },
+    });
+
+    expect(result.sandbox_status).toBeNull();
+  });
 
   it("combines stats.usage_to_metrics into metrics when the backend doesn't set metrics directly (#16480)", () => {
     const result = toAppConversation({
@@ -1402,7 +1503,7 @@ describe("buildRuntimeServicesSystemSuffix", () => {
 
   it("fetches runtime services from cached server_info when available", async () => {
     mockGetCachedAgentServerInfo.mockReturnValue({
-      version: "1.28.0",
+      version: "1.48.0",
       runtime_services: {
         mode: "docker",
         services: {
@@ -1427,7 +1528,7 @@ describe("buildRuntimeServicesSystemSuffix", () => {
 
   it("fetches runtime services from /server_info when there is no cached probe", async () => {
     mockGetServerInfo.mockResolvedValue({
-      version: "1.28.0",
+      version: "1.48.0",
       runtime_services: {
         mode: "dev:automation",
         services: {
@@ -1548,6 +1649,22 @@ describe("agent_settings runtime services suffix", () => {
     expect(profileNames).toEqual(inlineNames);
   });
 
+  it("carries the route-at-conversation-start suffix on the profile path too", () => {
+    const payload = buildStartConversationRequest({
+      settings: { ...DEFAULT_SETTINGS, run_router_at_conversation_start: true },
+      hasActiveMetaProfile: true,
+      query: "hello",
+      agentProfileId: "profile-openhands",
+      agentProfileKind: "openhands",
+    }) as {
+      agent_launch_additions?: { system_message_suffix_append?: string };
+    };
+
+    expect(
+      payload.agent_launch_additions?.system_message_suffix_append,
+    ).toContain("ROUTE_AT_CONVERSATION_START");
+  });
+
   it("omits the additions entirely when there is no runtime services info", () => {
     // A deployment without them must send no deployment context at all, not an
     // empty string the server would append as a blank line.
@@ -1598,9 +1715,7 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     expect(payload.agent).toBeUndefined();
     expect(payload.agent_settings.agent_kind).toBe("acp");
     expect(payload.agent_settings.acp_command).toEqual([
-      "npx",
-      "-y",
-      "@agentclientprotocol/claude-agent-acp@0.63.0",
+      ...getClientAcpProvider("claude-code")!.default_command,
     ]);
     expect(payload.agent_settings.acp_model).toBe("claude-opus-4-5");
     // LLM-only fields must not leak into the ACP settings payload.
@@ -1750,9 +1865,7 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     };
 
     expect(payload.agent_settings.acp_command).toEqual([
-      "npx",
-      "-y",
-      "@agentclientprotocol/claude-agent-acp@0.63.0",
+      ...getClientAcpProvider("claude-code")!.default_command,
     ]);
   });
 
@@ -1772,9 +1885,7 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     };
 
     expect(payload.agent_settings.acp_command).toEqual([
-      "npx",
-      "-y",
-      "@agentclientprotocol/codex-acp@1.1.7",
+      ...getClientAcpProvider("codex")!.default_command,
     ]);
   });
 
@@ -1919,9 +2030,7 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
 
     expect(acpPayload.agent_settings.agent_kind).toBe("acp");
     expect(acpPayload.agent_settings.acp_command).toEqual([
-      "npx",
-      "-y",
-      "@agentclientprotocol/claude-agent-acp@0.63.0",
+      ...getClientAcpProvider("claude-code")!.default_command,
     ]);
     expect(acpPayload.agent_settings.acp_model).toBe("claude-opus-4-5");
     // acp_env is no longer a forwarded ACP setting — a stale value on saved
@@ -1952,6 +2061,12 @@ describe("buildStartConversationRequestWithEncryptedSettings", () => {
         skillEnablement: { disabledSkills: [] },
       });
     secretsSpy = vi.spyOn(SecretsService, "getSecrets").mockResolvedValue([]);
+    // Default: no active meta-profile so the route-at-start suffix is off.
+    mockListMetaProfiles.mockReset();
+    mockListMetaProfiles.mockResolvedValue({
+      meta_profiles: [],
+      active_meta_profile: null,
+    });
   });
 
   // vitest is not configured with `restoreMocks`, so restore explicitly.
@@ -2009,5 +2124,77 @@ describe("buildStartConversationRequestWithEncryptedSettings", () => {
 
     expect(payload.hook_config).toBeUndefined();
     expect(payload.agent_settings).toBeDefined();
+  });
+
+  it("stamps the route-at-start suffix when the toggle is on and a meta-profile is active", async () => {
+    mockListMetaProfiles.mockResolvedValue({
+      meta_profiles: [],
+      active_meta_profile: {
+        llm_router_profile_id: "router-1",
+        name: "Model Router",
+        routing_strategy: "classification",
+        routing_models: [],
+        router_model: null,
+        fallback_model: null,
+      },
+    });
+
+    const payload = (await buildStartConversationRequestWithEncryptedSettings({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        run_router_at_conversation_start: true,
+      },
+      hooksProjectDir: "/workspace/my-project",
+    })) as {
+      agent_settings: {
+        agent_context?: { system_message_suffix?: string };
+      };
+    };
+
+    expect(
+      payload.agent_settings?.agent_context?.system_message_suffix,
+    ).toContain("ROUTE_AT_CONVERSATION_START");
+  });
+
+  it("omits the route-at-start suffix when the toggle is on but no meta-profile is active", async () => {
+    // active_meta_profile is null by default (see beforeEach). Even with the
+    // toggle on, no suffix should be emitted since the agent-server won't
+    // attach `route_task_to_model` without an active profile.
+    const payload = (await buildStartConversationRequestWithEncryptedSettings({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        run_router_at_conversation_start: true,
+      },
+      hooksProjectDir: "/workspace/my-project",
+    })) as {
+      agent_settings: {
+        agent_context?: { system_message_suffix?: string };
+      };
+    };
+
+    expect(
+      payload.agent_settings?.agent_context?.system_message_suffix ?? "",
+    ).not.toContain("ROUTE_AT_CONVERSATION_START");
+  });
+
+  it("omits the route-at-start suffix when the meta-profiles endpoint fails (fails closed)", async () => {
+    mockListMetaProfiles.mockRejectedValue(new Error("503 Service Unavailable"));
+
+    const payload = (await buildStartConversationRequestWithEncryptedSettings({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        run_router_at_conversation_start: true,
+      },
+      hooksProjectDir: "/workspace/my-project",
+    })) as {
+      agent_settings: {
+        agent_context?: { system_message_suffix?: string };
+      };
+    };
+
+    // If we can't confirm a router is active, fail closed: no instruction.
+    expect(
+      payload.agent_settings?.agent_context?.system_message_suffix ?? "",
+    ).not.toContain("ROUTE_AT_CONVERSATION_START");
   });
 });

@@ -611,6 +611,7 @@ const MOCK_MODELS = [
   "openhands/claude-haiku-4-5-20251001",
   "openhands/claude-opus-4-5-20251101",
   "openai/gpt-5.6-sol",
+  "openai/gpt-6-astra",
   "openhands/deepseek-v4-flash",
   "openhands/glm-5.2",
   "sambanova/Meta-Llama-3.1-8B-Instruct",
@@ -626,6 +627,7 @@ const MOCK_VERIFIED_MODELS = new Set([
   "openhands/claude-opus-4-5-20251101",
   "openhands/claude-sonnet-4-5-20250929",
   "openai/gpt-5.6-sol",
+  "openai/gpt-6-astra",
   "openhands/deepseek-v4-flash",
   "openhands/glm-5.2",
 ]);
@@ -673,7 +675,7 @@ const MOCK_VERIFIED_MODELS_BY_PROVIDER = MOCK_MODELS.reduce<
 // advertised fields (`enable_switch_llm_tool`) that the mocked server's own
 // profile model would have rejected, and version-gated UI hid controls the
 // rest of the mocks were serving.
-const MOCK_AGENT_SERVER_VERSION = "1.36.1";
+const MOCK_AGENT_SERVER_VERSION = "1.48.0";
 
 // --- Handlers for options/config/settings ---
 // Uses wildcard "*" prefix to match both relative paths and absolute URLs

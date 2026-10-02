@@ -1,5 +1,5 @@
 import { render, screen, fireEvent } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   NavigationProvider,
   type NavigationContextValue,
@@ -32,6 +32,52 @@ function renderNavigationLink(
 }
 
 describe("NavigationLink", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("prefixes the href with the Canvas base path", () => {
+    // A modified click and the browser's own context menu follow `href`
+    // directly, so it must resolve inside Canvas rather than against the
+    // origin root, which may serve a different app.
+    vi.stubEnv("VITE_BASE_PATH", "/canvas");
+
+    renderNavigationLink("/settings/mcp");
+
+    expect(screen.getByRole("link", { name: "MCP" })).toHaveAttribute(
+      "href",
+      "/canvas/settings/mcp",
+    );
+  });
+
+  it("keeps the base path and query string together on the href", () => {
+    vi.stubEnv("VITE_BASE_PATH", "/canvas");
+
+    renderNavigationLink(
+      "/conversations/abc",
+      {},
+      "/conversations/abc?backend=local-1",
+    );
+
+    expect(screen.getByRole("link", { name: "MCP" })).toHaveAttribute(
+      "href",
+      "/canvas/conversations/abc?backend=local-1",
+    );
+  });
+
+  it("keeps the base path in the href while still marking the link active", () => {
+    vi.stubEnv("VITE_BASE_PATH", "/canvas");
+
+    renderNavigationLink("/settings/mcp");
+
+    // Active state is computed from the router's base-path-stripped pathname
+    // (`/settings/mcp`), not the base-prefixed href.
+    expect(screen.getByRole("link", { name: "MCP" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  });
+
   it("renders the destination href and active state from navigation context", () => {
     renderNavigationLink("/settings/mcp");
 

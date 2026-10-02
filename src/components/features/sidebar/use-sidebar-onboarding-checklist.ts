@@ -61,8 +61,7 @@ export function useSidebarOnboardingChecklist() {
   const { data: healthData } = useAutomationHealth();
   const isAutomationBackendHealthy = healthData?.status === "ok";
   const { data: automationsData } = useAutomations({
-    limit: 1,
-    offset: 0,
+    pageSize: 1,
     enabled: isAutomationBackendHealthy,
   });
 
