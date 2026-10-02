@@ -532,9 +532,33 @@ describe("handleLaunchChildConversationAction", () => {
         status: "launched",
         target: "cloud",
         conversation_id: "cloud-child-id",
-        url: "https://app.all-hands.dev/conversations/cloud-child-id",
+        url: "https://app.all-hands.dev/canvas/conversations/cloud-child-id",
         initial_status: "READY",
         parent_link: false,
+      });
+    });
+
+    // Cloud and self-hosted Enterprise serve the legacy UI at the host root and
+    // Agent Canvas under /canvas.
+    it("links the child to the backend's Agent Canvas, not its legacy UI", async () => {
+      mockPickCloudBackend.mockReturnValueOnce({
+        ...cloudBackend,
+        host: "https://openhands.example.com/",
+      });
+      mockCreateCloudAppConversation.mockResolvedValue({
+        id: "start-task-id",
+        app_conversation_id: "cloud-child-id",
+        status: "READY",
+      });
+
+      await handleLaunchChildConversationAction(
+        action({ target: "cloud" }),
+        PARENT_ID,
+        nextToolCallId(),
+      );
+
+      expect(reportedResult()).toMatchObject({
+        url: "https://openhands.example.com/canvas/conversations/cloud-child-id",
       });
     });
 

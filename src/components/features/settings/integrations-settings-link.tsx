@@ -3,6 +3,7 @@ import { ExternalLink, Puzzle } from "lucide-react";
 import { I18nKey } from "#/i18n/declaration";
 import { useActiveBackendContext } from "#/contexts/active-backend-context";
 import { isNoBackend } from "#/api/backend-registry/active-store";
+import { cloudIntegrationsUrl } from "#/utils/cloud-integrations-url";
 import { cn } from "#/utils/utils";
 import {
   SIDEBAR_ICON_SLOT_CLASS,
@@ -23,10 +24,7 @@ export function IntegrationsSettingsLink() {
 
   if (isNoBackend(backend) || backend.kind !== "cloud") return null;
 
-  // `org` is consumed by the cloud settings loader so the page opens on the
-  // org that is active here instead of the cloud's last-used org.
-  const orgQuery = orgId ? `?org=${encodeURIComponent(orgId)}` : "";
-  const integrationsUrl = `${backend.host.replace(/\/+$/, "")}/settings/integrations${orgQuery}`;
+  const integrationsUrl = cloudIntegrationsUrl(backend, orgId);
 
   return (
     <a

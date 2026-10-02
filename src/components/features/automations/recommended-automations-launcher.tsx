@@ -35,6 +35,7 @@ import {
 } from "#/utils/automation-catalog";
 import { isResponderAutomation } from "#/utils/responder-deployment";
 import { useAutomations } from "#/hooks/query/use-automations";
+import { useNativeGitIntegrations } from "#/hooks/query/use-native-git-integrations";
 import { RecommendedAutomationsRail } from "./recommended-automations-rail";
 import { RecommendedAutomationsSection } from "./recommended-automations-section";
 import { ResponderDeploymentModal } from "./responder-deployment-modal";
@@ -53,20 +54,14 @@ interface RecommendedAutomationsLauncherProps {
 }
 
 /**
- * The marketplace entries a launch waits on. An integration the automation is
- * willing to start without is deliberately absent, so it never queues an
+ * The marketplace entries a launch may wait on. An integration the automation
+ * is willing to start without is deliberately absent, so it never queues an
  * install modal the user has to dismiss.
- *
- * A required integration this backend cannot install as MCP (e.g. Jira's
- * HTTP-only option) is also excluded here — the install queue can't do
- * anything with it — but it is not silently dropped from the product: the
- * automation card keeps it visible and labels it as needing external setup.
  */
 function getRequiredEntries(automation: RecommendedAutomation) {
   return getRequiredIntegrationIds(automation)
     .map((id) => getMarketplaceEntryById(id, MCP_MARKETPLACE))
-    .filter((entry): entry is MarketplaceEntry => !!entry)
-    .filter(isMcpInstallableEntry);
+    .filter((entry): entry is MarketplaceEntry => !!entry);
 }
 
 export function RecommendedAutomationsLauncher({
@@ -98,9 +93,9 @@ export function RecommendedAutomationsLauncher({
     useState(false);
   const isRail = variant === "rail";
   const { data: automationsData, isLoading: isAutomationsLoading } =
-    useAutomations({
-      enabled: isRail && activeBackend.backend.kind === "local",
-    });
+    useAutomations({ enabled: isRail });
+  const { getNativeIntegration, isLoading: isNativeIntegrationsLoading } =
+    useNativeGitIntegrations();
 
   const installedMcpConfig = useMemo(
     () =>
@@ -172,12 +167,20 @@ export function RecommendedAutomationsLauncher({
     ],
   );
 
+  // A required integration is satisfied by an installed MCP server or a
+  // connected native integration. One this backend can connect neither way
+  // (e.g. Jira's HTTP-only option) is excluded — the install queue can't do
+  // anything with it — but the automation card keeps it visible and labels it
+  // as needing external setup.
   const getMissingEntries = useCallback(
     (automation: RecommendedAutomation) =>
-      getRequiredEntries(automation).filter(
-        (entry) => !findInstalledEntryMatch(entry, installedMcpConfig),
-      ),
-    [installedMcpConfig],
+      getRequiredEntries(automation).filter((entry) => {
+        if (findInstalledEntryMatch(entry, installedMcpConfig)) return false;
+        const native = getNativeIntegration(entry.id);
+        if (native) return !native.isConnected;
+        return isMcpInstallableEntry(entry);
+      }),
+    [getNativeIntegration, installedMcpConfig],
   );
 
   const proceedWithLocalLaunch = (automation: RecommendedAutomation) => {
@@ -203,8 +206,12 @@ export function RecommendedAutomationsLauncher({
     }
 
     // GitHub/Slack responders poll continuously; let the user choose where the
-    // responder runs before committing to the local setup flow.
-    if (isResponderAutomation(automation)) {
+    // responder runs before committing to the local setup flow. On a cloud
+    // backend the responder already runs in the cloud, so there is no choice.
+    if (
+      activeBackend.backend.kind === "local" &&
+      isResponderAutomation(automation)
+    ) {
       setDeploymentChoiceAutomation(automation);
       return;
     }
@@ -273,11 +280,12 @@ export function RecommendedAutomationsLauncher({
   // interface-manifest gate; New Chat mounts it outside the gated routes.
   if (!hasAutomationInterface()) return null;
 
-  // Recommended automations are a local-backend-only feature; cloud
-  // automations are managed elsewhere.
-  if (activeBackend.backend.kind === "cloud") return null;
-
   if (isRail && isAutomationsLoading) return null;
+
+  // Which integrations a card still needs depends on what the cloud instance
+  // connects natively; a card shown before that is known could be launched
+  // with the wrong install queue.
+  if (isNativeIntegrationsLoading) return null;
 
   return (
     <>
@@ -291,6 +299,7 @@ export function RecommendedAutomationsLauncher({
         <RecommendedAutomationsSection
           backendKind={activeBackend.backend.kind}
           installedServers={installedMcpConfig}
+          getNativeIntegration={getNativeIntegration}
           query={query}
           onSelect={handleSelectAutomation}
           scrollableGrid={scrollableGrid}

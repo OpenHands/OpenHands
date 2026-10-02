@@ -7,6 +7,7 @@ import { SlashCommandMenu } from "./slash-command-menu";
 import { useConversationStore } from "#/stores/conversation-store";
 import { cn } from "#/utils/utils";
 import { SlashCommandItem } from "#/hooks/chat/use-slash-command";
+import { insertTextAtCaret } from "../utils/chat-input.utils";
 
 interface ChatInputContainerProps {
   chatContainerRef: React.RefObject<HTMLDivElement | null>;
@@ -112,6 +113,10 @@ export function ChatInputContainer({
         showButton={showButton}
         buttonClassName={buttonClassName}
         handleSubmit={handleSubmit}
+        onDictationTranscript={(text) =>
+          insertTextAtCaret(chatInputRef.current, text)
+        }
+        isDictationDisabled={isNewConversationPending}
       />
     </div>
   );
