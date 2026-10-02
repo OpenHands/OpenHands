@@ -67,10 +67,31 @@ copy/cancel, successful status publication, reload detection and disconnect.
 It is evidence of integration behavior, and does not replace human account
 authorization or a real Codex model turn.
 
+## Authorized account verification — 2026-10-02
+
+The human completed device authorization in the real Canvas and observed
+**Connected to ChatGPT**. The final packaged backend confirmed `connected=true`.
+Three isolated conversations launched via the active Codex Agent Profile and
+`codex-acp@1.10.0` reached `finished` and returned `OK`: before restart, after
+server restart, and after actual OpenAI token refresh. These were real model
+requests with the human-authorized subscription, without an API key.
+
+Refresh was triggered by forcing only the expiry predicate in a local harness.
+The real OpenAI transport, encrypted store and versioned update were used;
+access/refresh tokens changed and the running server remained connected. This
+is not a naturally expired-token or prolonged-use test. The observations are
+available as [credential-free live results](codex-live-results.json).
+
+Default bare `npx` launch failed with `[WinError 2]` on this Windows host.
+The local test profile now invokes installed `node.exe` and npm's `npx-cli.js`
+with the same pinned adapter and the existing isolated npm cache. This profile
+workaround does not fix the default Windows launcher. Browser reload and real
+account disconnect remain pending; the human's connection was kept available.
+The public fixture video above still demonstrates fixture behavior only.
+
 ## Remaining acceptance and merge gates
 
-- Human ChatGPT authorization followed by a real Codex ACP turn, reload and
-  server restart, and disconnect validation.
+- Real account browser reload and disconnect validation.
 - Docker and remotely hosted Agent Server validation.
 - SDK/Agent Server release, then exact client/lock updates and minimum server
   compatibility version in Canvas. No speculative version bump is committed.

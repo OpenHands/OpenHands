@@ -1,0 +1,43 @@
+{
+  "date": "2026-10-02",
+  "platform": "Windows",
+  "codex_acp_version": "1.10.0",
+  "model": "gpt-5.6-sol",
+  "human_authorization": true,
+  "api_key_supplied": false,
+  "turns": [
+    {
+      "stage": "before_restart",
+      "reply": "OK",
+      "passed": true
+    },
+    {
+      "stage": "after_restart",
+      "reply": "OK",
+      "passed": true
+    },
+    {
+      "stage": "after_refresh",
+      "reply": "OK",
+      "passed": true
+    }
+  ],
+  "refresh": {
+    "expiry_predicate_forced": true,
+    "stored_version_changed": true,
+    "access_token_changed": true,
+    "refresh_token_rotated": true,
+    "last_refresh_changed": true,
+    "running_server_connected": true
+  },
+  "local_launch_workaround": "Installed Node executes npm's npx-cli.js with the existing test npm cache and the pinned adapter; bare npx failed with WinError 2.",
+  "pending": [
+    "natural_expiry",
+    "browser_reload",
+    "real_account_disconnect",
+    "Docker",
+    "remote_deployment",
+    "published_dependency_pins",
+    "Cloud_App_API"
+  ]
+}
