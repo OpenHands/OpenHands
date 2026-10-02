@@ -235,30 +235,11 @@ describe("recommended automations", () => {
           ?.replace("recommended-automation-card-", ""),
       );
 
-    expect(cardIds).toEqual([
-      "github-pr-reviewer",
-      "custom-automation",
-      "github-repo-monitor",
-      "github-issue-to-pr",
-      "slack-standup-digest",
-      "slack-channel-monitor",
-      "linear-triage-assistant",
-      "linear-issue-to-github-pr",
-      "gitlab-issue-to-mr",
-      "linear-issue-to-gitlab-mr",
-      "linear-issue-to-bitbucket-pr",
-      "jira-issue-to-pr",
-      "qa-changes",
-      "jira-issue-to-gitlab-mr",
-      "research-brief-writer",
-      "jira-issue-to-bitbucket-pr",
-      "github-agents-md-maintainer",
-      "github-delivery-watchdog",
-      "github-issue-triage",
-      "upstream-fork-sync",
-      "incident-retrospective-drafter",
-      "news-digest",
-    ]);
+    expect(cardIds).toEqual(
+      getAutomationsByPopularity(AUTOMATION_CATALOG).map(
+        (automation) => automation.id,
+      ),
+    );
   });
 
   it("renders one ungrouped grid without a Beta section", () => {
