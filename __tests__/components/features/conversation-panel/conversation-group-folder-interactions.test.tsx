@@ -98,6 +98,7 @@ const renderRow = ({
     onDrop: vi.fn(),
     onTogglePreviewExpanded: vi.fn(),
     onLaunchFromGroup: vi.fn(),
+    onLoadMoreGroup: vi.fn(),
     renderConversationCard: (conversation: AppConversation) => (
       <article key={conversation.id} data-testid="conversation-card">
         {conversation.title}
@@ -125,6 +126,8 @@ const renderRow = ({
     animateLayout: false,
     isCreatingConversationFlow: false,
     activeConversationId: null,
+    isLoadingMore: false,
+    hasMorePages: false,
     ...callbacks,
     ...propOverrides,
   };
@@ -294,6 +297,64 @@ describe("conversation group folder interactions", () => {
       "Conversation conversation-4",
       "Conversation conversation-6",
     ]);
+  });
+
+  it("renders a per-workspace Load more that fires the group handler when pages remain", async () => {
+    const { callbacks, user } = renderRow({
+      props: { expanded: true, hasMorePages: true },
+    });
+
+    const loadMore = screen.getByTestId(
+      "thread-folder-load-more-ws--workspace-alpha",
+    );
+    expect(loadMore).toHaveTextContent(I18nKey.CONVERSATION$LOAD_MORE);
+    await user.click(loadMore);
+    expect(callbacks.onLoadMoreGroup).toHaveBeenCalledOnce();
+  });
+
+  it("does not render the per-workspace Load more while loading more or when pages are exhausted", () => {
+    renderRow({
+      props: { expanded: true, hasMorePages: true, isLoadingMore: true },
+    });
+    expect(
+      screen.queryByTestId("thread-folder-load-more-ws--workspace-alpha"),
+    ).toBeNull();
+
+    renderRow({
+      props: { expanded: true, hasMorePages: false, isLoadingMore: false },
+    });
+    expect(
+      screen.queryByTestId("thread-folder-load-more-ws--workspace-alpha"),
+    ).toBeNull();
+  });
+
+  it("keeps the per-workspace Load more hidden behind a truncated preview", () => {
+    // Truncated preview (5 of 6 rows) — the "More" reveal link is shown,
+    // and the pagination control stays hidden so the two do not compete.
+    renderRow({
+      conversations: createConversations(6),
+      props: { expanded: true, hasMorePages: true },
+    });
+    expect(
+      screen.queryByTestId("thread-folder-load-more-ws--workspace-alpha"),
+    ).toBeNull();
+    expect(
+      screen.getByTestId("thread-folder-view-more-ws--workspace-alpha"),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the per-workspace Load more after the preview is fully expanded", () => {
+    renderRow({
+      conversations: createConversations(6),
+      props: {
+        expanded: true,
+        previewExpanded: true,
+        hasMorePages: true,
+      },
+    });
+    expect(
+      screen.getByTestId("thread-folder-load-more-ws--workspace-alpha"),
+    ).toBeInTheDocument();
   });
 
   it.each([
