@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { clearConversationLocalStorage } from "#/utils/conversation-local-storage";
+import { START_TASKS_QUERY_KEYS } from "#/hooks/query/query-keys";
 
 export const useDeleteConversation = () => {
   const queryClient = useQueryClient();
@@ -46,7 +47,7 @@ export const useDeleteConversation = () => {
       // conversations via useStartTasks, so invalidate that key too so the
       // panel refreshes regardless of whether the deleted item was a ready
       // conversation or a still-provisioning start task.
-      queryClient.invalidateQueries({ queryKey: ["start-tasks"] });
+      queryClient.invalidateQueries({ queryKey: START_TASKS_QUERY_KEYS.all });
     },
   });
 };
