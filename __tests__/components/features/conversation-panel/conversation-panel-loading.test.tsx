@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nextProvider } from "react-i18next";
 import i18n from "i18next";
 import { NavigationProvider } from "#/context/navigation-context";
+import { I18nKey } from "#/i18n/declaration";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { renderWithProviders } from "test-utils";
 import { describe, expect, it, vi } from "vitest";
@@ -198,6 +199,36 @@ describe("ConversationPanel list loading", () => {
 
     await screen.findByText("CONVERSATION$NO_CONVERSATIONS");
     expect(screen.getByTestId("load-more-conversations")).toBeInTheDocument();
+  });
+
+  it("lists a conversation once when it comes back on the next page", async () => {
+    // A conversation's updated_at moved between the two requests, so page 2
+    // repeats the last row of page 1.
+    const user = userEvent.setup();
+    const shifted = createMockConversation({ id: "shifted", title: "Shifted" });
+    const page1 = [
+      createMockConversation({ id: "first", title: "First" }),
+      shifted,
+    ];
+    const page2 = [
+      shifted,
+      createMockConversation({ id: "older", title: "Older" }),
+    ];
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockImplementation(async (_limit, pageId) =>
+      pageId === "page-2"
+        ? { items: page2, next_page_id: null }
+        : { items: page1, next_page_id: "page-2" },
+    );
+    renderConversationPanel();
+    await screen.findByText("Shifted");
+
+    await user.click(screen.getByTestId("load-more-conversations"));
+
+    await screen.findByText("Older");
+    expect(screen.getAllByText("Shifted")).toHaveLength(1);
   });
 
   it("can reach an unarchived conversation on the next page after archiving every loaded row", async () => {
@@ -467,9 +498,11 @@ describe("ConversationPanel list loading", () => {
       const [isOpen, setIsOpen] = React.useState(true);
       return (
         <>
-          <button type="button" onClick={() => setIsOpen((prev) => !prev)}>
-            Toggle
-          </button>
+          <button
+            type="button"
+            aria-label={i18n.t(I18nKey.COMMON$TOGGLE_MENU)}
+            onClick={() => setIsOpen((prev) => !prev)}
+          />
           {isOpen && <ConversationPanel onClose={onCloseMock} />}
         </>
       );
@@ -484,7 +517,9 @@ describe("ConversationPanel list loading", () => {
 
     renderWithProviders(<MyRouterStub />);
 
-    const toggleButton = screen.getByText("Toggle");
+    const toggleButton = screen.getByRole("button", {
+      name: i18n.t(I18nKey.COMMON$TOGGLE_MENU),
+    });
 
     // Initial render
     const cards = await screen.findAllByTestId("conversation-card");
@@ -650,7 +685,9 @@ describe("ConversationPanel list loading", () => {
     });
 
     it("renders pinned conversations only in the pinned section in grouped mode", async () => {
-      useConversationPanelPreferencesStore.setState({ organizeMode: "grouped" });
+      useConversationPanelPreferencesStore.setState({
+        organizeMode: "grouped",
+      });
       usePinnedConversationsStore
         .getState()
         .pinConversation("default-local", "2");
@@ -720,7 +757,9 @@ describe("ConversationPanel list loading", () => {
         within(pinnedSection).getAllByTestId("conversation-card"),
       ).toHaveLength(5);
       expect(
-        within(pinnedSection).getByTestId("conversation-panel-pinned-view-more"),
+        within(pinnedSection).getByTestId(
+          "conversation-panel-pinned-view-more",
+        ),
       ).toHaveTextContent("CONVERSATION_PANEL$MORE");
     });
   });
