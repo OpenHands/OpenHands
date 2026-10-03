@@ -554,6 +554,133 @@ describe("AgentServerConversationService", () => {
         expect.anything(),
       );
     });
+
+    // Windows drive-letter working dirs (issue #17774). The local backend on
+    // Windows reports working_dir with drive letters and backslashes; the
+    // containment guard must accept those while still rejecting escapes.
+    describe("Windows drive-letter working dirs", () => {
+      const arrangeLocalWindowsConversation = (
+        workingDir: string,
+        downloadImpl?: () => Promise<unknown>,
+      ) => {
+        const encodedPlan = new TextEncoder().encode("# PLAN content").buffer;
+        mockHttpGet.mockImplementation((url: string) => {
+          if (url === "/api/conversations") {
+            return Promise.resolve({
+              data: [
+                {
+                  id: "conv-win",
+                  created_at: "2024-01-01",
+                  updated_at: "2024-01-01",
+                  workspace: { working_dir: workingDir },
+                },
+              ],
+            });
+          }
+          return downloadImpl
+            ? downloadImpl()
+            : Promise.resolve({ data: encodedPlan });
+        });
+      };
+
+      it("downloads the plan from a backslash-separated scratch workspace", async () => {
+        arrangeLocalWindowsConversation(
+          "C:\\Users\\me\\.openhands\\agent-canvas\\workspaces\\b2a09b0a",
+        );
+
+        const content =
+          await AgentServerConversationService.readConversationFile("conv-win");
+
+        expect(content).toBe("# PLAN content");
+        expect(mockHttpGet).toHaveBeenCalledWith(
+          "/api/file/download",
+          expect.objectContaining({
+            params: {
+              path: "c:/Users/me/.openhands/agent-canvas/workspaces/b2a09b0a/.agents_tmp/PLAN.md",
+            },
+          }),
+        );
+      });
+
+      it("resolves mixed separators and a lowercase drive letter on an explicit path", async () => {
+        arrangeLocalWindowsConversation(
+          "C:\\Users\\me\\.openhands\\agent-canvas\\workspaces/b2a09b0a",
+        );
+
+        await AgentServerConversationService.readConversationFile(
+          "conv-win",
+          "c:\\Users\\me\\.openhands\\agent-canvas\\workspaces\\b2a09b0a\\.agents_tmp\\PLAN.md",
+        );
+
+        expect(mockHttpGet).toHaveBeenCalledWith(
+          "/api/file/download",
+          expect.objectContaining({
+            params: {
+              path: "c:/Users/me/.openhands/agent-canvas/workspaces/b2a09b0a/.agents_tmp/PLAN.md",
+            },
+          }),
+        );
+      });
+
+      it("downloads the plan from a drive-rooted open workspace", async () => {
+        arrangeLocalWindowsConversation("D:\\tese");
+
+        const content =
+          await AgentServerConversationService.readConversationFile("conv-win");
+
+        expect(content).toBe("# PLAN content");
+        expect(mockHttpGet).toHaveBeenCalledWith(
+          "/api/file/download",
+          expect.objectContaining({
+            params: {
+              path: "d:/tese/.agents_tmp/PLAN.md",
+            },
+          }),
+        );
+      });
+
+      it.each([
+        ["a path outside the workspace", "C:\\Users\\me\\other\\PLAN.md"],
+        [
+          ".. traversal escaping the workspace",
+          "C:\\Users\\me\\ws\\..\\evil\\PLAN.md",
+        ],
+        [
+          "a sibling dir sharing the workspace name prefix",
+          "C:\\Users\\me\\ws-evil\\PLAN.md",
+        ],
+        ["a path on a different drive", "D:\\Users\\me\\ws\\PLAN.md"],
+      ])("rejects %s", async (_label, filePath) => {
+        arrangeLocalWindowsConversation("C:\\Users\\me\\ws");
+
+        await expect(
+          AgentServerConversationService.readConversationFile(
+            "conv-win",
+            filePath,
+          ),
+        ).rejects.toThrow(
+          "Conversation file path must stay inside the workspace",
+        );
+        expect(mockHttpGet).not.toHaveBeenCalledWith(
+          "/api/file/download",
+          expect.anything(),
+        );
+      });
+
+      it("propagates the backend 404 for a missing Windows plan instead of the workspace guard", async () => {
+        const notFound = Object.assign(
+          new Error("Request failed with status code 404"),
+          { response: { status: 404 } },
+        );
+        arrangeLocalWindowsConversation("C:\\Users\\me\\ws", () =>
+          Promise.reject(notFound),
+        );
+
+        await expect(
+          AgentServerConversationService.readConversationFile("conv-win"),
+        ).rejects.toBe(notFound);
+      });
+    });
   });
 
   describe("createConversation", () => {
