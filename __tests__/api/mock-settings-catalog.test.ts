@@ -140,7 +140,7 @@ describe("mock agent-server discovery", () => {
     expect(verified.models.openhands).toEqual([
       "claude-sonnet-4-5-20250929",
       "claude-opus-4-5-20251101",
-      "deepseek-v4-flash",
+      "deepseek-v4.1-flash",
       "glm-5.2",
     ]);
 
