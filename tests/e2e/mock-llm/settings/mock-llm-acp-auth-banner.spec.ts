@@ -156,12 +156,6 @@ test.describe("mock-LLM ACP credentials-configured banner (#1244)", () => {
       new RegExp(CLAUDE_PROVIDER_NAME),
     );
 
-    // The Claude credential field renders for the built-in provider.
-    const tokenField = page.getByTestId(
-      `settings-acp-secret-${OAUTH_TOKEN_SECRET}`,
-    );
-    await expect(tokenField).toBeVisible({ timeout: 10_000 });
-
     // Let the host-login probe settle: wait for its bash response, then for
     // React Query to render the terminal banner state (the spinner clears).
     // The probe is gated to local backends and runs once per provider. If it
@@ -174,6 +168,14 @@ test.describe("mock-LLM ACP credentials-configured banner (#1244)", () => {
       "host-login probe reported a verified login; the credentials-configured " +
         "state only applies when the probe is inconclusive (Docker/cloud/CI)",
     );
+
+    // The Claude credential field renders for the built-in provider. Asserted
+    // after the skip above: a verified host login collapses these fields behind
+    // the "Advanced" toggle (#16296), which is exactly the state we skip on.
+    const tokenField = page.getByTestId(
+      `settings-acp-secret-${OAUTH_TOKEN_SECRET}`,
+    );
+    await expect(tokenField).toBeVisible({ timeout: 10_000 });
 
     // ── The seeded credential surfaces the neutral "configured" banner … ─
     await expect(configuredBanner).toBeVisible({ timeout: 10_000 });
