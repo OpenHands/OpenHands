@@ -76,7 +76,8 @@ export function parseRcaContext(input: unknown): RcaContext | null {
  */
 export function decodeRcaParam(encoded: string): RcaContext | null {
   try {
-    return parseRcaContext(JSON.parse(atob(encoded)));
+    const bytes = Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0));
+    return parseRcaContext(JSON.parse(new TextDecoder().decode(bytes)));
   } catch {
     return null;
   }

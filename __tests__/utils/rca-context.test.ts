@@ -179,4 +179,21 @@ describe("buildRcaLaunchPath", () => {
     const path = buildRcaLaunchPath(fullRca, [{ source: "github:owner/repo" }]);
     expect(new URLSearchParams(path.split("?")[1]).get("message")).toBeNull();
   });
+
+  it("round-trips non-ASCII payloads without throwing", () => {
+    const unicodeRca: RcaContext = {
+      summary: "CPU spike → pool exhaustion (café)",
+      evidence: ["Latência > 500ms", "错误日志显示连接超时"],
+      suspectedComponents: ["données-service"],
+      suspectedFiles: ["src/über/naïve.ts"],
+      recommendedAction: "Raise the pool limit — «urgent»",
+      source: "holmesgpt",
+    };
+    const path = buildRcaLaunchPath(
+      unicodeRca,
+      [{ source: "github:owner/repo" }],
+    );
+    const params = new URLSearchParams(path.split("?")[1]);
+    expect(decodeRcaParam(params.get("rca")!)).toEqual(unicodeRca);
+  });
 });

@@ -14,9 +14,16 @@ export function buildRcaLaunchPath(
   plugins: PluginSpec[],
   message?: string,
 ): string {
+  const toBase64 = (obj: unknown): string =>
+    btoa(
+      Array.from(new TextEncoder().encode(JSON.stringify(obj)), (b) =>
+        String.fromCharCode(b),
+      ).join(""),
+    );
+
   const params = new URLSearchParams({
-    plugins: btoa(JSON.stringify(plugins)),
-    rca: btoa(JSON.stringify(rca)),
+    plugins: toBase64(plugins),
+    rca: toBase64(rca),
   });
   if (message) {
     params.set("message", message);
