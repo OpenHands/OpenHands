@@ -55,6 +55,54 @@ describe("useBtwInterceptor", () => {
     expect(entries()[0].response).toBe("boom");
   });
 
+  it("retries a transient 500 once and resolves on recovery", async () => {
+    mockAskAgent
+      .mockRejectedValueOnce(
+        Object.assign(
+          new Error(
+            'HTTP request failed (500 Internal Server Error): {"exception":"cannot pickle \'generator\' object"}',
+          ),
+          { status: 500 },
+        ),
+      )
+      .mockResolvedValueOnce({ response: "recovered" });
+    const { result } = renderHook(() => useBtwInterceptor(CONV, vi.fn()));
+    act(() => result.current("/btw why?"));
+    await waitFor(() => expect(entries()[0].status).toBe("done"));
+    expect(mockAskAgent).toHaveBeenCalledTimes(2);
+    expect(entries()[0]).toMatchObject({
+      response: "recovered",
+      status: "done",
+    });
+  });
+
+  it("marks the entry as error after a persistent 500", async () => {
+    mockAskAgent.mockRejectedValue(
+      Object.assign(
+        new Error("HTTP request failed (500 Internal Server Error)"),
+        {
+          status: 500,
+        },
+      ),
+    );
+    const { result } = renderHook(() => useBtwInterceptor(CONV, vi.fn()));
+    act(() => result.current("/btw why?"));
+    await waitFor(() => expect(entries()[0].status).toBe("error"));
+    expect(mockAskAgent).toHaveBeenCalledTimes(2);
+  });
+
+  it("fails fast on a 4xx without retrying", async () => {
+    mockAskAgent.mockRejectedValue(
+      Object.assign(new Error("HTTP request failed (404 Not Found)"), {
+        status: 404,
+      }),
+    );
+    const { result } = renderHook(() => useBtwInterceptor(CONV, vi.fn()));
+    act(() => result.current("/btw why?"));
+    await waitFor(() => expect(entries()[0].status).toBe("error"));
+    expect(mockAskAgent).toHaveBeenCalledTimes(1);
+  });
+
   it("falls through when conversationId is null", () => {
     const onSubmit = vi.fn();
     const { result } = renderHook(() => useBtwInterceptor(null, onSubmit));
