@@ -29,9 +29,13 @@ vi.mock("#/hooks/query/use-acp-auth-status", () => ({
 // sides of that gate are reachable without a live server.
 const profileSupportsSwitchLlmToolMock = vi.hoisted(() => vi.fn(() => true));
 const profileSupportsSecretRefsMock = vi.hoisted(() => vi.fn(() => true));
+const profileSupportsPersonaMock = vi.hoisted(() => vi.fn(() => false));
+const profileSupportsInstructionsMock = vi.hoisted(() => vi.fn(() => false));
 vi.mock("#/api/agent-profiles-service/profile-field-support", () => ({
   agentProfileSupportsSwitchLlmTool: () => profileSupportsSwitchLlmToolMock(),
   agentProfileSupportsSecretRefs: () => profileSupportsSecretRefsMock(),
+  agentProfileSupportsPersona: () => profileSupportsPersonaMock(),
+  agentProfileSupportsInstructions: () => profileSupportsInstructionsMock(),
 }));
 
 // The secret picker lists the user's saved secrets; stub the query so these
@@ -1147,5 +1151,190 @@ describe("AgentSettingsScreen — MCP scope dirty tracking", () => {
         screen.getByTestId("agent-settings-secrets-mode"),
       ).toBeInTheDocument();
     });
+  });
+});
+
+describe("AgentSettingsScreen — system prompt", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
+    vi.spyOn(SecretsService, "getSecrets").mockResolvedValue([]);
+    profileSupportsInstructionsMock.mockReturnValue(true);
+    profileSupportsPersonaMock.mockReturnValue(true);
+  });
+
+  const OPENHANDS_PROFILE = {
+    agent_kind: "openhands",
+    enable_sub_agents: false,
+    mcp_server_refs: null,
+  };
+
+  async function openModes() {
+    const user = userEvent.setup();
+    const combo = screen.getByTestId("agent-settings-system-prompt-mode");
+    combo.focus();
+    await user.keyboard("{ArrowDown}");
+    return user;
+  }
+
+  async function chooseMode(name: string) {
+    const user = await openModes();
+    await user.click(await screen.findByRole("option", { name }));
+    return user;
+  }
+
+  it("is hidden where launches would not apply it", async () => {
+    profileSupportsInstructionsMock.mockReturnValue(false);
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: OPENHANDS_PROFILE,
+    });
+    await screen.findByTestId("agent-settings-screen");
+
+    expect(
+      screen.queryByTestId("agent-settings-system-prompt-mode"),
+    ).not.toBeInTheDocument();
+    const fields = control().buildAgentProfileFields();
+    expect(fields).not.toHaveProperty("persona");
+    expect(fields).not.toHaveProperty("system_message_suffix");
+  });
+
+  it("offers a custom persona only when the profile model accepts it", async () => {
+    profileSupportsPersonaMock.mockReturnValue(false);
+    renderAgentSettingsScreen({ agentSettingsOverride: OPENHANDS_PROFILE });
+    await screen.findByTestId("agent-settings-system-prompt-mode");
+
+    await openModes();
+    expect(
+      await screen.findByRole("option", {
+        name: "SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_APPEND",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", {
+        name: "SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_CUSTOM",
+      }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("persists null for both fields on the OpenHands default", async () => {
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: OPENHANDS_PROFILE,
+    });
+    await screen.findByTestId("agent-settings-system-prompt-mode");
+
+    expect(
+      screen.queryByTestId("agent-settings-system-prompt"),
+    ).not.toBeInTheDocument();
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      persona: null,
+      system_message_suffix: null,
+    });
+  });
+
+  it.each([
+    ["system_message_suffix", "append"],
+    ["persona", "custom"],
+  ])("opens a stored %s in %s mode, clean", async (field, mode) => {
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: { ...OPENHANDS_PROFILE, [field]: "Stored text." },
+    });
+
+    expect(
+      await screen.findByTestId("agent-settings-system-prompt"),
+    ).toHaveValue("Stored text.");
+    expect(
+      screen.getByTestId("agent-settings-system-prompt-hint"),
+    ).toHaveTextContent(
+      mode === "append"
+        ? "SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_APPEND_HINT"
+        : "SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_CUSTOM_HINT",
+    );
+    expect(control().isDirty).toBe(false);
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      [field]: "Stored text.",
+    });
+  });
+
+  it("saves typed instructions as the suffix, not an override", async () => {
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: OPENHANDS_PROFILE,
+    });
+    await screen.findByTestId("agent-settings-system-prompt-mode");
+
+    const user = await chooseMode(
+      "SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_APPEND",
+    );
+    await user.type(
+      screen.getByTestId("agent-settings-system-prompt"),
+      "Be terse.",
+    );
+    await waitFor(() => expect(control().isDirty).toBe(true));
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      persona: null,
+      system_message_suffix: "Be terse.",
+    });
+  });
+
+  it("blocks saving empty text, then saves the typed custom persona", async () => {
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: OPENHANDS_PROFILE,
+    });
+    await screen.findByTestId("agent-settings-system-prompt-mode");
+
+    const user = await chooseMode(
+      "SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_CUSTOM",
+    );
+    await waitFor(() => expect(control().isValid).toBe(false));
+    expect(
+      screen.getByTestId("agent-settings-system-prompt-required"),
+    ).toBeInTheDocument();
+
+    await user.type(
+      screen.getByTestId("agent-settings-system-prompt"),
+      "You review PRs.",
+    );
+    await waitFor(() => expect(control().isValid).toBe(true));
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      persona: "You review PRs.",
+      system_message_suffix: null,
+    });
+  });
+
+  it("clears a stored persona when switched back to the default", async () => {
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: {
+        ...OPENHANDS_PROFILE,
+        persona: "You triage issues.",
+      },
+    });
+    await screen.findByTestId("agent-settings-system-prompt");
+
+    await chooseMode("SETTINGS$AGENT_PROFILE_SYSTEM_PROMPT_STANDARD");
+    await waitFor(() => expect(control().isDirty).toBe(true));
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      persona: null,
+      system_message_suffix: null,
+    });
+  });
+
+  it("explains instead of editing on the default profile, and leaves both fields alone", async () => {
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: {
+        ...OPENHANDS_PROFILE,
+        persona: "Set through the API.",
+        system_message_suffix: "Also set through the API.",
+      },
+      isDefaultProfile: true,
+    });
+
+    expect(
+      await screen.findByTestId("agent-settings-system-prompt-default-profile"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("agent-settings-system-prompt-mode"),
+    ).not.toBeInTheDocument();
+    const fields = control().buildAgentProfileFields();
+    expect(fields).not.toHaveProperty("persona");
+    expect(fields).not.toHaveProperty("system_message_suffix");
   });
 });

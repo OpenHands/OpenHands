@@ -10,6 +10,7 @@ import {
   type AgentSettingsSaveControl,
 } from "#/routes/agent-settings";
 import AgentProfilesService, {
+  WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME,
   type AgentProfile,
   type AgentProfileSummary,
   type AgentProfileSaveInput,
@@ -69,6 +70,8 @@ function toAgentSettingsOverride(
     enable_switch_llm_tool: switchLlmToolEnabled,
     tool_concurrency_limit: profile.tool_concurrency_limit,
     secret_refs: secretRefs,
+    persona: (profile as { persona?: string | null }).persona ?? null,
+    system_message_suffix: profile.system_message_suffix ?? null,
   };
 }
 
@@ -332,6 +335,9 @@ export function AgentProfilesLocalView() {
         key={viewMode === "edit" ? `edit-${editingProfile?.id}` : "new-profile"}
         agentSettingsOverride={override}
         onSaveControlChange={setSaveControl}
+        isDefaultProfile={
+          profileName.trim() === WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME
+        }
       />
 
       {/* OpenHands profiles reference an LLM profile (required). */}

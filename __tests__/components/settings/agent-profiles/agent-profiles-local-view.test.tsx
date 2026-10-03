@@ -24,9 +24,11 @@ vi.mock("#/routes/agent-settings", () => {
   const MockAgentSettings = ({
     agentSettingsOverride,
     onSaveControlChange,
+    isDefaultProfile,
   }: {
     agentSettingsOverride?: Record<string, unknown> | null;
     onSaveControlChange?: (c: AgentSettingsSaveControl) => void;
+    isDefaultProfile?: boolean;
   }) => {
     useEffect(() => {
       if (emitControl) onSaveControlChange?.(emitControl);
@@ -37,6 +39,7 @@ vi.mock("#/routes/agent-settings", () => {
       <div
         data-testid="mock-agent-settings"
         data-override={JSON.stringify(agentSettingsOverride)}
+        data-default-profile={String(Boolean(isDefaultProfile))}
       />
     );
   };
@@ -106,6 +109,7 @@ vi.mock("#/utils/custom-toast-handlers");
 
 vi.mock("#/api/agent-profiles-service/agent-profiles-service.api", () => ({
   __esModule: true,
+  WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME: "default",
   default: { getProfile: vi.fn(), renameProfile: vi.fn() },
 }));
 
@@ -319,6 +323,64 @@ describe("AgentProfilesLocalView save mapping", () => {
         .getAttribute("data-override") as string,
     );
     expect(seededOverride.secret_refs).toEqual(["DATADOG_API_KEY"]);
+    expect(
+      screen
+        .getByTestId("mock-agent-settings")
+        .getAttribute("data-default-profile"),
+    ).toBe("true");
+  });
+
+  it("seeds the editor with a stored persona and instructions", async () => {
+    vi.mocked(AgentProfilesService.getProfile).mockResolvedValue({
+      name: "default",
+      profile: {
+        schema_version: 2,
+        id: "p-1",
+        name: "default",
+        revision: 3,
+        agent_kind: "openhands",
+        llm_profile_ref: "default",
+        enable_sub_agents: false,
+        persona: "You triage issues.",
+        system_message_suffix: "Be terse.",
+      },
+    } as never);
+    emitControl = {
+      agentType: "openhands",
+      isValid: true,
+      isDirty: false,
+      buildAgentProfileFields: () => ({
+        agent_kind: "openhands",
+        mcp_server_refs: null,
+        enable_sub_agents: false,
+      }),
+      credentials: { isDirty: false, save: vi.fn(), reset: vi.fn() },
+    };
+
+    render(<AgentProfilesLocalView />);
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("edit-agent-profile"));
+    await screen.findByTestId("mock-agent-settings");
+
+    const seededOverride = JSON.parse(
+      screen
+        .getByTestId("mock-agent-settings")
+        .getAttribute("data-override") as string,
+    );
+    expect(seededOverride.persona).toBe("You triage issues.");
+    expect(seededOverride.system_message_suffix).toBe("Be terse.");
+  });
+
+  it("does not flag a named profile as the default", async () => {
+    emitControl = null;
+    render(<AgentProfilesLocalView />);
+    await openCreateAndName("triage");
+
+    expect(
+      screen
+        .getByTestId("mock-agent-settings")
+        .getAttribute("data-default-profile"),
+    ).toBe("false");
   });
 
   it("edit-save persists an edited secret scope over the stored value", async () => {
