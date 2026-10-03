@@ -41,9 +41,9 @@ const BIN = join(PROJECT_ROOT, "bin/agent-canvas.mjs");
 //
 // Each instance needs a base port; createIsolatedEnv allocates +1, +2, +3
 // for sub-services.
-const CROSS_FE_PORT = "18370";
-const CROSS_BE_A_PORT = "18380";
-const CROSS_BE_B_PORT = "18390";
+const CROSS_FE_PORT = process.env.MOCK_LLM_CROSS_FE_PORT ?? "18370";
+const CROSS_BE_A_PORT = process.env.MOCK_LLM_CROSS_BE_A_PORT ?? "18380";
+const CROSS_BE_B_PORT = process.env.MOCK_LLM_CROSS_BE_B_PORT ?? "18390";
 
 // ── Helpers ────────────────────────────────────────────────────────────
 

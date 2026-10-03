@@ -116,6 +116,16 @@ test.describe("skill loading: project, user, and deletion", () => {
   const USER_SKILL_NAME = "e2e-test-user-skill";
   const USER_SKILL_TRIGGER = "xyzzy-user-e2e-test";
 
+  test.beforeAll(() => {
+    // Deterministic pre-clean of test skill fixtures
+    try {
+      removeProjectSkillRepo(PROJECT_SKILL_NAME);
+      removeUserSkill(USER_SKILL_NAME);
+    } catch (err) {
+      console.warn("Pre-clean skills warning:", err);
+    }
+  });
+
   test.beforeEach(async ({ page }) => {
     await seedLocalStorage(page);
   });
@@ -128,11 +138,13 @@ test.describe("skill loading: project, user, and deletion", () => {
       try {
         await deleteConversation(request, id);
         conversationIds.delete(id);
-      } catch {
-        // best-effort cleanup
+      } catch (err) {
+        console.warn(`Failed to cleanup conversation ${id}:`, err);
       }
     }
-    await resetMockLLM(request).catch(() => {});
+    await resetMockLLM(request).catch((err) => {
+      console.warn("Failed to reset mock LLM:", err);
+    });
   });
 
   // Track the agent-side workspace path for cleanup (may differ from
@@ -140,11 +152,21 @@ test.describe("skill loading: project, user, and deletion", () => {
   let projectSkillAgentDir = "";
 
   test.afterAll(async ({ request }) => {
-    removeProjectSkillRepo(PROJECT_SKILL_NAME);
-    removeUserSkill(USER_SKILL_NAME);
+    try {
+      removeProjectSkillRepo(PROJECT_SKILL_NAME);
+    } catch (err) {
+      console.warn(`Failed to remove project skill repo:`, err);
+    }
+    try {
+      removeUserSkill(USER_SKILL_NAME);
+    } catch (err) {
+      console.warn(`Failed to remove user skill:`, err);
+    }
     if (projectSkillAgentDir) {
       await removeWorkspaceFromServer(request, projectSkillAgentDir).catch(
-        () => {},
+        (err) => {
+          console.warn("Failed to remove workspace from server:", err);
+        },
       );
     }
   });

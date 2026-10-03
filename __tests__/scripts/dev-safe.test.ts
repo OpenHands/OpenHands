@@ -483,6 +483,20 @@ describe("buildAgentServerTelemetryEnv", () => {
       buildAgentServerEnv(agentServerConfig, { env: {} }),
     ).not.toHaveProperty("OH_CONVERSATION_RUNTIME");
   });
+
+  it("defaults OH_PERSISTENCE_DIR to the parent of stateDir", () => {
+    const env = buildAgentServerEnv(agentServerConfig, { env: {} });
+    expect(env.OH_PERSISTENCE_DIR).toBe(
+      path.dirname(agentServerConfig.stateDir),
+    );
+  });
+
+  it("preserves explicit OH_PERSISTENCE_DIR from environment", () => {
+    const env = buildAgentServerEnv(agentServerConfig, {
+      env: { OH_PERSISTENCE_DIR: "/custom/persistence" },
+    });
+    expect(env.OH_PERSISTENCE_DIR).toBe("/custom/persistence");
+  });
 });
 
 describe("buildAgentServerCommand", () => {

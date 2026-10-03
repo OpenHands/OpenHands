@@ -157,6 +157,10 @@ test.describe.configure({ mode: "serial" });
 test.describe("MCP Test Connection credential verification (Slack)", () => {
   test.beforeEach(async ({ page, request }) => {
     await seedLocalStorage(page);
+    // Reset MCP config deterministically before test
+    await patchMcpConfig(request, null).catch((err) => {
+      console.warn("Pre-clean MCP config warning:", err);
+    });
     // A configured LLM profile keeps the MCP page free of "not configured"
     // banners that could intercept clicks. Done via API for speed.
     await ensureMockLLMProfileViaAPI(request);
@@ -164,7 +168,11 @@ test.describe("MCP Test Connection credential verification (Slack)", () => {
 
   test.afterEach(async ({ request }) => {
     // Reset MCP config so each test starts from a clean installed list.
-    await patchMcpConfig(request, null).catch(() => {});
+    try {
+      await patchMcpConfig(request, null);
+    } catch (err) {
+      console.warn("MCP settings cleanup error:", err);
+    }
   });
 
   test("install: invalid Slack credentials are blocked with a credential-check error", async ({
