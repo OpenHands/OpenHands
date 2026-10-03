@@ -1,7 +1,7 @@
 # Using ACP agents
 
 Agent Canvas can drive your conversations with the built-in **OpenHands** agent or
-with an external **ACP agent** — Claude Code, Codex, or Gemini CLI. This guide
+with an external **ACP agent** — Claude Code, Codex, Gemini CLI, or OpenCode. This guide
 explains what ACP agents are, how to onboard one, and how to switch agents or
 models later.
 
@@ -43,6 +43,7 @@ changing a provider happens upstream in the SDK, not here.
 | **Claude Code** | `npx -y @agentclientprotocol/claude-agent-acp` |
 | **Codex** | `npx -y @agentclientprotocol/codex-acp` |
 | **Gemini CLI** | `npx -y @google/gemini-cli --acp` |
+| **OpenCode** | `npx -y --prefer-offline opencode-ai@1.18.23 acp` |
 
 See [Authentication](#authentication) for how each one authenticates.
 
@@ -69,8 +70,10 @@ needed instead.
 | **Claude Code** | A Claude Code login (Pro/Max), from Claude Code's own credential store: the **macOS Keychain**, or `~/.claude/.credentials.json` on Linux | `ANTHROPIC_API_KEY` *(onboarding)* |
 | **Codex** | A ChatGPT login (`codex login`) cached at `~/.codex/auth.json` | `OPENAI_API_KEY` *(onboarding)* |
 | **Gemini CLI** | Your Google login (`gemini`/`gemini --acp`) cached at `~/.gemini/oauth_creds.json` | `GEMINI_API_KEY` *(onboarding)* |
+| **OpenCode** | Provider credentials saved by `opencode auth login` in `~/.local/share/opencode/auth.json` | `OPENCODE_API_KEY` *(onboarding)* |
 
-All three collect an *optional* API key (+ base URL) in onboarding. As noted
+All four collect an *optional* API key in onboarding (and a base URL where the
+registry defines one). As noted
 above, **a subscription / OAuth login takes priority over an API key** — when the
 provider's CLI is signed in, a key set in the environment is not used. Verified
 per provider:
@@ -87,6 +90,10 @@ per provider:
   Claude Code's config directory (settings/history, not the token; e.g. for
   containers or multiple accounts) and signals the SDK to strip a conflicting
   `ANTHROPIC_API_KEY` / `ANTHROPIC_BASE_URL`.
+- **OpenCode** — `opencode auth login` stores provider credentials under the
+  standard OpenCode data directory. A local Agent Server launches the ACP
+  subprocess with the same home directory, so the preset reuses that existing
+  login automatically; `OPENCODE_API_KEY` remains the optional onboarding path.
 
 The one exception is the **base URL** (`*_BASE_URL`): a custom value points the
 CLI at a different endpoint (a proxy or gateway) and *does* take effect even
@@ -97,7 +104,7 @@ override, not needed for normal use.
 
 First-time users get a four-step onboarding modal. To onboard an ACP agent:
 
-1. **Choose agent** — pick Claude Code, Codex, or Gemini CLI instead of
+1. **Choose agent** — pick Claude Code, Codex, Gemini CLI, or OpenCode instead of
    OpenHands. The choice is saved immediately to your backend's settings.
 2. **Check backend** — confirms Agent Canvas can reach the Agent Server.
 3. **Set up credentials** — enter the provider's credentials. Beyond the API
@@ -108,12 +115,16 @@ First-time users get a four-step onboarding modal. To onboard an ACP agent:
    - **Gemini CLI** — `GOOGLE_APPLICATION_CREDENTIALS_JSON` (Vertex SA / ADC JSON)
      plus `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, and
      `GOOGLE_GENAI_USE_VERTEXAI`.
+   - **OpenCode** — `OPENCODE_API_KEY`. The shared provider registry does not
+     define a base-URL field for OpenCode; a local runtime may instead reuse an
+     existing `opencode auth login` session.
 
    On a **local** backend the step is optional (a host login is reused
    automatically); on a **Docker / cloud** backend it's **required**, because
    there's no host login to fall back on. When the login probe detects an
    existing session, the step shows a "you're already signed in" banner and
    stays skippable.
+
 4. **Say hello** — creates your first conversation and closes the modal.
 
 > [!NOTE]
@@ -217,7 +228,7 @@ grouping isolation is separate (agent-canvas#1016).
 Open **Settings → Agent** at any time:
 
 - **Agent** — switch between **OpenHands** and **ACP**.
-- **Preset** — pick a built-in provider (Claude Code, Codex, Gemini CLI) or
+- **Preset** — pick a built-in provider (Claude Code, Codex, Gemini CLI, OpenCode) or
   **Custom** to point at any other ACP server.
 - **Command** — the command line used to spawn the subprocess. Selecting a preset
   fills this in; editing it to match another preset re-detects that provider.
@@ -226,10 +237,13 @@ Open **Settings → Agent** at any time:
   override. Built-in providers save a concrete model rather than leaving it
   blank.
 
-Saving writes an `agent_settings_diff` (`agent_kind`, `acp_server`,
-`acp_command`, `acp_model`) to `PATCH /api/settings`. A running conversation
-keeps the agent it started with; the new choice applies to conversations you
-start afterward.
+The profile editor saves a reusable Agent Profile. An unchanged built-in
+command is saved as `acp_command: null`, so the backend resolves its current
+registry default; a custom command is saved explicitly. Onboarding uses an
+`agent_settings_diff` with `acp_command: []` for the same default-resolution
+semantics. This also applies to OpenCode: its default CLI command is displayed,
+not pinned into durable settings. A running conversation keeps the agent it
+started with; the new choice applies to conversations you start afterward.
 
 ## Custom ACP servers
 

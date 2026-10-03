@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   ACP_MANAGED_SENTINEL,
   ACP_PROVIDERS,
+  buildAcpAgentSettingsDiff,
   getAcpProviderSecrets,
   SURFACED_ACP_PROVIDERS,
   resolveEffectiveAcpModel,
@@ -90,12 +91,33 @@ describe("surfaced ACP providers", () => {
     (key) => !SURFACED_ACP_PROVIDERS.includes(key),
   );
 
-  it("surfaces only Claude Code, Codex and Gemini CLI", () => {
+  it("surfaces only the four Canvas-approved ACP presets", () => {
     expect([...SURFACED_ACP_PROVIDERS]).toEqual([
       "claude-code",
       "codex",
       "gemini-cli",
+      "opencode",
     ]);
+  });
+
+  it("sources OpenCode's command, default model, and credential from the client registry", () => {
+    const provider = ACP_PROVIDERS.find(({ key }) => key === "opencode");
+    const client = CLIENT_ACP_PROVIDERS.opencode;
+
+    expect(provider).toMatchObject({
+      display_name: client.display_name,
+      default_command: [...client.default_command],
+      default_model: client.default_model,
+    });
+    expect(getAcpProviderSecrets("opencode").map(({ name }) => name)).toEqual([
+      client.api_key_env_var,
+    ]);
+    expect(buildAcpAgentSettingsDiff("opencode")).toMatchObject({
+      acp_server: "opencode",
+      acp_command: [],
+      acp_args: [],
+      acp_model: client.default_model,
+    });
   });
 
   it("surfaces nothing the pinned client registry has dropped", () => {
@@ -110,5 +132,12 @@ describe("surfaced ACP providers", () => {
     unsurfaced.forEach((key) => {
       expect(getAcpProviderSecrets(key)).toEqual([]);
     });
+  });
+
+  it("keeps Kimi and Pi hidden from Canvas", () => {
+    expect(SURFACED_ACP_PROVIDERS).not.toContain("kimi-code");
+    expect(SURFACED_ACP_PROVIDERS).not.toContain("pi");
+    expect(getAcpProviderSecrets("kimi-code")).toEqual([]);
+    expect(getAcpProviderSecrets("pi")).toEqual([]);
   });
 });

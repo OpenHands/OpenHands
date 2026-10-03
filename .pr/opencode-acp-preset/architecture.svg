@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="720" viewBox="0 0 1400 720" role="img" aria-labelledby="title desc">
+  <title id="title">OpenCode first-class ACP preset architecture</title>
+  <desc id="desc">The shared client registry feeds the Canvas presentation layer, onboarding and settings, persisted agent settings, Agent Server, and the OpenCode ACP process.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0b1020"/><stop offset="1" stop-color="#111827"/></linearGradient>
+    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#2563eb"/><stop offset="1" stop-color="#0ea5e9"/></linearGradient>
+    <linearGradient id="green" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#15803d"/><stop offset="1" stop-color="#10b981"/></linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#020617" flood-opacity=".55"/></filter>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M0 0L12 6 0 12z" fill="#60a5fa"/></marker>
+    <style>
+      .title{font:700 34px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#f8fafc}.subtitle{font:400 17px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#94a3b8}.h{font:700 19px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#f8fafc}.p{font:400 14px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#cbd5e1}.tag{font:600 12px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#bfdbfe;letter-spacing:.08em}.line{fill:none;stroke:#60a5fa;stroke-width:3;marker-end:url(#arrow)}
+    </style>
+  </defs>
+  <rect width="1400" height="720" rx="28" fill="url(#bg)"/>
+  <text x="64" y="64" class="title">OpenCode as a first-class ACP preset</text>
+  <text x="64" y="94" class="subtitle">One source of truth, two product surfaces, one verified runtime path</text>
+
+  <g filter="url(#shadow)">
+    <rect x="64" y="160" width="280" height="190" rx="20" fill="#172033" stroke="#334155"/>
+    <rect x="64" y="160" width="280" height="8" rx="4" fill="url(#blue)"/>
+    <text x="88" y="205" class="tag">SOURCE OF TRUTH</text>
+    <text x="88" y="242" class="h">Shared ACP registry</text>
+    <text x="88" y="274" class="p">default_command</text>
+    <text x="88" y="299" class="p">default_model / available_models</text>
+    <text x="88" y="324" class="p">credential definitions</text>
+
+    <rect x="438" y="140" width="300" height="230" rx="20" fill="#172033" stroke="#2563eb"/>
+    <text x="464" y="184" class="tag">CANVAS ADAPTER</text>
+    <text x="464" y="221" class="h">Presentation, not duplication</text>
+    <text x="464" y="255" class="p">surface allow-list</text>
+    <text x="464" y="280" class="p">OpenCode brand mark + locale copy</text>
+    <text x="464" y="305" class="p">buildAcpAgentSettingsDiff()</text>
+    <text x="464" y="330" class="p">provider + model; default command deferred</text>
+
+    <rect x="830" y="122" width="240" height="120" rx="18" fill="#152238" stroke="#38bdf8"/>
+    <text x="854" y="164" class="tag">ENTRY POINT 01</text>
+    <text x="854" y="199" class="h">Onboarding</text>
+    <text x="854" y="224" class="p">Preset tile + credential step</text>
+
+    <rect x="830" y="276" width="240" height="120" rx="18" fill="#152238" stroke="#38bdf8"/>
+    <text x="854" y="318" class="tag">ENTRY POINT 02</text>
+    <text x="854" y="353" class="h">Settings</text>
+    <text x="854" y="378" class="p">Edit, save, reload, re-detect</text>
+
+    <rect x="438" y="470" width="300" height="154" rx="20" fill="#172033" stroke="#475569"/>
+    <text x="464" y="512" class="tag">PERSISTED CONTRACT</text>
+    <text x="464" y="548" class="h">Agent settings diff</text>
+    <text x="464" y="578" class="p">acp_server = opencode</text>
+    <text x="464" y="602" class="p">registry command resolved on reload</text>
+
+    <rect x="830" y="470" width="240" height="154" rx="20" fill="#172033" stroke="#475569"/>
+    <text x="854" y="512" class="tag">RUNTIME BOUNDARY</text>
+    <text x="854" y="548" class="h">Agent Server</text>
+    <text x="854" y="578" class="p">resolves LookupSecret</text>
+    <text x="854" y="602" class="p">spawns ACP process</text>
+
+    <rect x="1160" y="470" width="176" height="154" rx="20" fill="#102b25" stroke="#22c55e"/>
+    <text x="1184" y="512" class="tag" fill="#bbf7d0">REAL PROCESS</text>
+    <text x="1184" y="548" class="h">OpenCode</text>
+    <text x="1184" y="578" class="p">Big Pickle</text>
+    <text x="1184" y="602" class="p">real ACP reply</text>
+  </g>
+
+  <path d="M344 255H420" class="line"/>
+  <path d="M738 210C778 210 786 182 812 182" class="line"/>
+  <path d="M738 300C778 300 786 336 812 336" class="line"/>
+  <path d="M950 242V450H738" class="line"/>
+  <path d="M950 396V450H738" class="line"/>
+  <path d="M738 547H812" class="line"/>
+  <path d="M1070 547H1142" class="line"/>
+
+  <rect x="64" y="662" width="1272" height="2" fill="#243244"/>
+  <circle cx="78" cy="692" r="6" fill="#22c55e"/><text x="94" y="697" class="p">Canvas owns presentation</text>
+  <circle cx="334" cy="692" r="6" fill="#60a5fa"/><text x="350" y="697" class="p">Registry owns provider data</text>
+  <circle cx="654" cy="692" r="6" fill="#f59e0b"/><text x="670" y="697" class="p">Agent Server owns process isolation</text>
+</svg>

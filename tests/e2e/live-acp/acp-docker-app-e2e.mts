@@ -42,7 +42,12 @@ import {
 
 registerDockerBackend();
 
+const WORKING_DIR_BASE =
+  process.env.ACP_E2E_WORKING_DIR_BASE ?? "/workspace/app-e2e";
+const EXPECTED_REPLY = process.env.ACP_E2E_EXPECTED_REPLY;
+
 async function run(plan: ProviderPlan): Promise<boolean> {
+  const expectedReply = EXPECTED_REPLY ?? plan.expectedToken;
   const secrets = plan.collectSecrets();
   if (!secrets) {
     console.log(`⏭️  ${plan.id}: SKIP — credentials not present on host`);
@@ -63,13 +68,15 @@ async function run(plan: ProviderPlan): Promise<boolean> {
   }
 
   // 2) choose-agent step — persist ACP agent settings via the app's diff builder.
-  const diff = buildAcpAgentSettingsDiff(plan.acpServer, { model: plan.model });
+  const diff = buildAcpAgentSettingsDiff(plan.acpServer);
   if (!diff) throw new Error(`no settings diff for ${plan.acpServer}`);
+  diff.acp_model = plan.model;
   if (plan.sessionMode) diff.acp_session_mode = plan.sessionMode;
   await settingsClient.updateSettings({ agent_settings_diff: diff });
   console.log(
     `   PATCHed agent settings: ${JSON.stringify({
       acp_server: diff.acp_server,
+      acp_command: diff.acp_command,
       acp_model: diff.acp_model,
       ...(plan.sessionMode ? { acp_session_mode: plan.sessionMode } : {}),
     })}`,
@@ -77,10 +84,10 @@ async function run(plan: ProviderPlan): Promise<boolean> {
 
   // 3) conversation start — the app's own orchestrator. It re-reads settings +
   //    the saved secret names and emits each as a LookupSecret.
-  const workingDir = `/workspace/app-e2e/${plan.id}-${Date.now()}`;
+  const workingDir = `${WORKING_DIR_BASE}/${plan.id}-${Date.now()}`;
   const payload = (await buildStartConversationRequestWithEncryptedSettings({
     settings: undefined as any, // base settings come from the backend fetch
-    query: `Reply with exactly: ${plan.expectedToken}`,
+    query: `Reply with exactly: ${expectedReply}`,
     workingDir,
   })) as any;
 
@@ -107,11 +114,11 @@ async function run(plan: ProviderPlan): Promise<boolean> {
 
   const status = await pollUntilTerminal(id);
   const reply = await fetchFinalReply(id);
-  const ok = reply.includes(plan.expectedToken);
+  const ok = reply.includes(expectedReply);
   console.log(
     `   status=${status} reply=${JSON.stringify(reply.slice(0, 160))}`,
   );
-  console.log(`   ${ok ? "✅ PASS" : "❌ FAIL"} (expected "${plan.expectedToken}")`);
+  console.log(`   ${ok ? "✅ PASS" : "❌ FAIL"} (expected "${expectedReply}")`);
   return ok;
 }
 
@@ -119,7 +126,9 @@ async function main() {
   const args = process.argv.slice(2).filter((a) => a !== "--");
   const plan = args[0] ? getProviderPlan(args[0]) : undefined;
   if (!plan) {
-    console.error(`usage: ... acp-docker-app-e2e.mts -- <codex|claude|gemini>`);
+    console.error(
+      `usage: ... acp-docker-app-e2e.mts -- <codex|claude|gemini|opencode>`,
+    );
     process.exit(2);
   }
   console.log(`App-path e2e against ${BASE} — provider: ${plan.id}`);

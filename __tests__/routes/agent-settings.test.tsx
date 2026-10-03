@@ -16,6 +16,7 @@ import { ACP_PROVIDERS } from "#/constants/acp-providers";
 import { parseCommand } from "#/utils/acp-command";
 const CLAUDE_COMMAND = getClientAcpProvider("claude-code")!.default_command;
 const CODEX_COMMAND = getClientAcpProvider("codex")!.default_command;
+const OPENCODE_PROVIDER = getClientAcpProvider("opencode")!;
 
 // Stub the login-detection probe so the ACP credentials section doesn't spin a
 // subprocess; default to no detected session so existing tests are unaffected.
@@ -314,6 +315,66 @@ describe("AgentSettingsScreen", () => {
       acp_model: "haiku",
     });
   });
+
+  it("offers OpenCode and leaves its default command to the profile resolver", async () => {
+    const user = userEvent.setup();
+    const { control } = renderAgentSettingsScreen({
+      agentSettingsOverride: CLAUDE_PROFILE,
+    });
+    await screen.findByTestId("agent-command-input");
+    await user.click(screen.getByTestId("agent-preset-selector"));
+    await user.click(await screen.findByRole("option", { name: "OpenCode" }));
+
+    expect(screen.getByTestId("agent-command-input")).toHaveValue(
+      OPENCODE_PROVIDER.default_command.join(" "),
+    );
+    expect(screen.getByLabelText("SETTINGS$AGENT_MODEL")).toHaveValue(
+      OPENCODE_PROVIDER.available_models.find(
+        ({ id }) => id === OPENCODE_PROVIDER.default_model,
+      )?.label,
+    );
+
+    expect(control().buildAgentProfileFields()).toMatchObject({
+      agent_kind: "acp",
+      acp_server: "opencode",
+      acp_command: null,
+      acp_args: null,
+      acp_model: OPENCODE_PROVIDER.default_model,
+    });
+  });
+
+  it.each([null, [...OPENCODE_PROVIDER.default_command]])(
+    "reloads OpenCode with command %j without losing its preset or model",
+    async (command) => {
+      const { control } = renderAgentSettingsScreen({
+        agentSettingsOverride: {
+          agent_kind: "acp",
+          acp_server: "opencode",
+          acp_command: command,
+          acp_model: OPENCODE_PROVIDER.default_model,
+        },
+      });
+
+      expect(await screen.findByTestId("agent-preset-selector")).toHaveValue(
+        "OpenCode",
+      );
+      expect(screen.getByTestId("agent-command-input")).toHaveValue(
+        OPENCODE_PROVIDER.default_command.join(" "),
+      );
+      expect(screen.getByLabelText("SETTINGS$AGENT_MODEL")).toHaveValue(
+        OPENCODE_PROVIDER.available_models.find(
+          ({ id }) => id === OPENCODE_PROVIDER.default_model,
+        )?.label,
+      );
+      // Old explicit defaults are cleared on the next save; new profiles
+      // resolve the current registry command rather than pinning a CLI version.
+      expect(control().buildAgentProfileFields()).toMatchObject({
+        acp_server: "opencode",
+        acp_command: null,
+        acp_model: OPENCODE_PROVIDER.default_model,
+      });
+    },
+  );
 
   it("clears the model when switching from a built-in provider to Custom", async () => {
     // Picking Custom must not leak the built-in default model onto an

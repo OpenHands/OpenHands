@@ -83,7 +83,9 @@ describe("agent-server version compatibility", () => {
     });
   });
 
-  it.each(["0.99.99", "1.27.999", "1.47.0-rc.1"])(
+  // OpenCode enters ACPServerKind in 1.45.0. Reject pre-OpenCode servers
+  // before settings can be saved, even if they satisfy Canvas's former floor.
+  it.each(["0.99.99", "1.27.999", "1.28.0", "1.44.99", "1.47.0-rc.1"])(
     "rejects older version %s",
     (version) => {
       const error = getThrownError(() =>

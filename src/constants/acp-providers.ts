@@ -5,6 +5,7 @@ export type ACPProviderIcon =
   | "claude-code"
   | "codex"
   | "gemini"
+  | "opencode"
   | "cli-generic";
 
 export const ACP_PROVIDER_FALLBACK_ICON: ACPProviderIcon = "cli-generic";
@@ -141,6 +142,10 @@ const ACP_PROVIDER_UI: Record<
   "gemini-cli": {
     icon: "gemini",
     description_key: I18nKey.ONBOARDING$AGENT_GEMINI_CLI_DESCRIPTION,
+  },
+  opencode: {
+    icon: "opencode",
+    description_key: I18nKey.ONBOARDING$AGENT_OPENCODE_DESCRIPTION,
   },
 };
 
@@ -477,6 +482,10 @@ export function labelForAcpModel(
 /**
  * Build the ``agent_settings_diff`` payload PATCH /api/settings expects
  * for the agent-kind/provider choice the user just made.
+ *
+ * Built-in presets (including OpenCode) leave command resolution to the
+ * server registry. Copying its current command into durable settings would
+ * pin an old CLI after the registry is upgraded.
  *
  * Returns ``null`` for an unknown ACP provider key — the caller can skip
  * the save (the UI shouldn't surface unknown options, but the defensive
