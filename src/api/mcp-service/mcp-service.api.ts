@@ -242,7 +242,7 @@ class McpService {
   ): Promise<ExtendedMCPTestResponse> {
     const validation = getCredentialValidationForServer(server);
     const authHeaders = server.auth
-      ? headersFromMcpAuth({ ...server.auth })
+      ? headersFromMcpAuth({ ...server.auth }, server.url)
       : null;
     const headers = { ...server.headers, ...authHeaders };
     const name = server.id || server.name;

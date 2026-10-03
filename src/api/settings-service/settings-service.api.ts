@@ -249,8 +249,28 @@ const basicAuthHeader = (username: string, password: string): string => {
   return `Basic ${token}`;
 };
 
+/**
+ * Basic Auth only obscures credentials with Base64, so it must never be sent
+ * over an unencrypted connection. Loopback URLs are allowed for local
+ * agent-server development.
+ */
+const isSecureMcpUrl = (serverUrl?: string): boolean => {
+  if (!serverUrl) return true;
+  try {
+    const { protocol, hostname } = new URL(serverUrl);
+    return (
+      protocol === "https:" ||
+      hostname === "localhost" ||
+      hostname === "127.0.0.1"
+    );
+  } catch {
+    return false;
+  }
+};
+
 export const headersFromMcpAuth = (
   auth: Record<string, unknown>,
+  serverUrl?: string,
 ): Record<string, string> | null => {
   switch (auth.strategy) {
     case "none":
@@ -271,7 +291,8 @@ export const headersFromMcpAuth = (
     case "basic":
       if (
         typeof auth.username !== "string" ||
-        typeof auth.password !== "string"
+        typeof auth.password !== "string" ||
+        !isSecureMcpUrl(serverUrl)
       ) {
         return null;
       }
