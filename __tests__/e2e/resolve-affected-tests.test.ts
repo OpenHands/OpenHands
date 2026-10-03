@@ -28,7 +28,9 @@ function resolveAffectedTests(files: string[]) {
     { cwd: repoRoot, encoding: "utf-8" },
   ).trim();
 
-  return output.length > 0 ? output.split(/\s+/) : [];
+  return output.length > 0
+    ? output.split(/\s+/).map((p) => p.replaceAll("\\", "/"))
+    : [];
 }
 
 describe("mock-LLM E2E affected test resolver", () => {
