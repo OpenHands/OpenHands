@@ -73,9 +73,7 @@ test.describe("mock-LLM image upload", () => {
 
   // ── Main test ──────────────────────────────────────────────────────────────
 
-  // TODO: Restore after profile setup reliably returns from the edit form.
-  // https://github.com/OpenHands/OpenHands/issues/17872 tracks the failing setup.
-  test.fixme("attaching an image embeds it as base64 in the LLM completion call", async ({
+  test("attaching an image embeds it as base64 in the LLM completion call", async ({
     page,
     request,
   }) => {
