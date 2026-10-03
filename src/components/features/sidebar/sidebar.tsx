@@ -12,6 +12,15 @@ import { useSidebarMobileNav } from "./sidebar-mobile-nav-context";
 import { useSidebarStore } from "#/stores/sidebar-store";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { useBackendsHealth } from "#/hooks/query/use-backends-health";
+import { useResizableDrawerWidth } from "#/hooks/use-resizable-drawer-width";
+import { ResizeHandle } from "#/components/ui/resize-handle";
+import {
+  SIDEBAR_DEFAULT_WIDTH_PX,
+  SIDEBAR_MAX_WIDTH_PX,
+  SIDEBAR_MIN_WIDTH_PX,
+  SIDEBAR_RESIZE_HANDLE_TEST_ID,
+  SIDEBAR_WIDTH_STORAGE_KEY,
+} from "./sidebar-width.constants";
 // The LLM settings modal is only mounted when the settings query 404s and
 // LLM settings aren't hidden — keep it out of the sidebar's eager graph.
 const SettingsModal = React.lazy(() =>
@@ -73,6 +82,20 @@ export function Sidebar() {
   const collapsedBackendPopoverRef = useClickOutsideElement<HTMLDivElement>(
     () => setCollapsedBackendPopoverOpen(false),
   );
+  const sidebarRef = React.useRef<HTMLElement>(null);
+  const {
+    drawerWidth: sidebarWidth,
+    isDragging: isSidebarResizing,
+    handleMouseDown: handleSidebarResizeMouseDown,
+  } = useResizableDrawerWidth({
+    containerRef: sidebarRef,
+    defaultWidth: SIDEBAR_DEFAULT_WIDTH_PX,
+    minWidth: SIDEBAR_MIN_WIDTH_PX,
+    maxWidth: SIDEBAR_MAX_WIDTH_PX,
+    storageKey: SIDEBAR_WIDTH_STORAGE_KEY,
+    enabled: !collapsed,
+    edge: "left",
+  });
   const settingsErrorStatus = getErrorStatus(settingsError);
 
   React.useEffect(() => {
@@ -206,6 +229,7 @@ export function Sidebar() {
     <>
       {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- the aside acts as a hit-area for the collapsed rail; nested controls handle their own keyboard interactions. */}
       <aside
+        ref={sidebarRef}
         aria-label={t(I18nKey.SIDEBAR$NAVIGATION_LABEL)}
         data-collapsed={collapsed ? "true" : "false"}
         onClick={handleCollapsedRailClick}
@@ -218,13 +242,23 @@ export function Sidebar() {
           setCollapsedRailHovered(false);
         }}
         className={cn(
-          "max-md:hidden flex bg-base flex-col min-h-0 transition-[width,min-width] duration-200",
+          "max-md:hidden flex bg-base flex-col min-h-0",
+          // Skip the width transition while the user is actively dragging the
+          // resize handle — otherwise the aside animates behind the cursor.
+          isSidebarResizing
+            ? "transition-none"
+            : "transition-[width,min-width] duration-200",
           "md:border-r md:border-border md:h-full",
           collapsed
             ? "md:w-15 md:min-w-15 md:px-2.5"
-            : "md:w-75 md:min-w-75 pb-2 md:pl-2.5 md:pr-0",
+            : "pb-2 md:pl-2.5 md:pr-0",
           currentPath === "/" && "md:pb-3",
         )}
+        style={
+          collapsed
+            ? undefined
+            : { width: `${sidebarWidth}px`, minWidth: `${sidebarWidth}px` }
+        }
       >
         <SidebarRailBody
           collapsed={collapsed}
@@ -232,6 +266,14 @@ export function Sidebar() {
           {...railBodyProps}
         />
       </aside>
+      {!collapsed ? (
+        <ResizeHandle
+          testId={SIDEBAR_RESIZE_HANDLE_TEST_ID}
+          onMouseDown={handleSidebarResizeMouseDown}
+          isDragging={isSidebarResizing}
+          className="max-md:hidden"
+        />
+      ) : null}
 
       {mobileDrawerMounted ? (
         <>
