@@ -29,6 +29,7 @@
     "@react-router/serve": "7.18.2",
     "@tailwindcss/vite": "4.3.3",
     "@tanstack/react-query": "5.103.1",
+    "@tanstack/react-virtual": "3.11.3",
     "@types/shell-quote": "1.7.5",
     "@uidotdev/usehooks": "2.4.1",
     "@xterm/addon-fit": "0.11.0",

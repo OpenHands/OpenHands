@@ -85,16 +85,35 @@ export const splitInlineThink = (
 };
 
 /**
+ * Index action events by id so observation→action lookups are O(1) instead of
+ * scanning the whole history per event. Grouping a long conversation otherwise
+ * degrades to quadratic (see `getThoughtSourceAction`).
+ */
+export const buildActionById = (
+  allEvents: OpenHandsEvent[],
+): Map<string, ActionEvent> => {
+  const actions = new Map<string, ActionEvent>();
+  for (const event of allEvents) {
+    if (isActionEvent(event)) actions.set(event.id, event);
+  }
+  return actions;
+};
+
+/**
  * Find the `ActionEvent` whose thought should be rendered alongside the
  * given UI event. For an `ActionEvent` the thought belongs to itself; for
  * an `ObservationEvent` we look up the matching action in `allEvents`.
  *
  * `ThinkAction` is intentionally excluded because its thought IS the
  * action body and is rendered through a separate codepath.
+ *
+ * Pass `actionById` (from `buildActionById`) when resolving many events
+ * against the same history; otherwise the action is located by a linear scan.
  */
 export const getThoughtSourceAction = (
   event: OpenHandsEvent,
   allEvents: OpenHandsEvent[],
+  actionById?: Map<string, ActionEvent>,
 ): ActionEvent | null => {
   if (isActionEvent(event)) {
     if (event.action.kind === "ThinkAction") return null;
@@ -102,9 +121,11 @@ export const getThoughtSourceAction = (
   }
 
   if (isObservationEvent(event)) {
-    const action = allEvents.find(
-      (e): e is ActionEvent => isActionEvent(e) && e.id === event.action_id,
-    );
+    const action = actionById
+      ? (actionById.get(event.action_id ?? "") ?? null)
+      : (allEvents.find(
+          (e): e is ActionEvent => isActionEvent(e) && e.id === event.action_id,
+        ) ?? null);
     if (!action) return null;
     if (action.action.kind === "ThinkAction") return null;
     return hasNonEmptyThought(action) ? action : null;
