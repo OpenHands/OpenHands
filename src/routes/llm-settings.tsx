@@ -51,6 +51,7 @@ const LLM_EXCLUDED_KEYS = new Set([
   "llm.model",
   "llm.api_key",
   "llm.base_url",
+  "llm.stream",
   LLM_PROVIDER_CONNECTION_KEY,
   LLM_AUTH_TYPE_KEY,
   LLM_SUBSCRIPTION_VENDOR_KEY,
