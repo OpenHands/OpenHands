@@ -792,6 +792,7 @@ export function buildAgentServerEnv(config, options = {}) {
     [
       "OH_CONVERSATION_RUNTIME",
       "OH_CONVERSATION_IMAGE",
+      "OH_CONVERSATION_IMAGE_HAS_BROWSER",
       "OH_CONVERSATION_CONTAINER_MEMORY",
       "OH_CONVERSATION_CONTAINER_CPUS",
       "OH_CONVERSATION_CONTAINER_PIDS_LIMIT",
@@ -803,6 +804,9 @@ export function buildAgentServerEnv(config, options = {}) {
   return {
     ...buildAgentServerTelemetryEnv(env),
     ...conversationRuntimeEnv,
+    ...(env.VITE_ENABLE_BROWSER_TOOLS === "false"
+      ? { OH_ENABLE_BROWSER: env.OH_ENABLE_BROWSER || "false" }
+      : {}),
     // Force Python to use UTF-8 for all file I/O and streams.
     //
     // On Windows, Python defaults to the system ANSI codepage (e.g. cp1252).

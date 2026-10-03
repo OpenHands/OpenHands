@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AgentProfilesManager } from "./agent-profiles-manager";
+import { GlobalToolsNotice } from "./global-tools-notice";
 import { mergeAgentProfileSaveInput } from "./merge-agent-profile-save-input";
 import { ProfileNameInput } from "#/components/features/settings/llm-profiles/profile-name-input";
 import { BrandButton } from "#/components/features/settings/brand-button";
@@ -55,18 +56,12 @@ function toAgentSettingsOverride(
       acp_model: profile.acp_model ?? "",
     };
   }
-  // `enable_switch_llm_tool` rides untyped — the pinned ts-client predates it
-  // on the profile model (same pattern as `disabled_skills` in the merge
-  // fixtures). Fall back to the SDK default (true) when a stored profile
-  // predates the field.
-  const switchLlmToolEnabled =
-    (profile as { enable_switch_llm_tool?: boolean }).enable_switch_llm_tool ??
-    true;
+  // Untyped in the pinned ts-client, like `secret_refs` above.
+  const tools = (profile as { tools?: unknown }).tools;
   return {
     agent_kind: "openhands",
     mcp_server_refs: profile.mcp_server_refs ?? null,
-    enable_sub_agents: profile.enable_sub_agents,
-    enable_switch_llm_tool: switchLlmToolEnabled,
+    tools: (tools as SettingsValue) ?? null,
     tool_concurrency_limit: profile.tool_concurrency_limit,
     secret_refs: secretRefs,
   };
@@ -271,10 +266,13 @@ export function AgentProfilesLocalView() {
 
   if (viewMode === "list") {
     return (
-      <AgentProfilesManager
-        onAddProfile={handleAddProfile}
-        onEditProfile={handleEditProfile}
-      />
+      <div className="flex flex-col gap-4">
+        <GlobalToolsNotice />
+        <AgentProfilesManager
+          onAddProfile={handleAddProfile}
+          onEditProfile={handleEditProfile}
+        />
+      </div>
     );
   }
 
