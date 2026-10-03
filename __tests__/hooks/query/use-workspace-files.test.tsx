@@ -153,6 +153,77 @@ describe("useWorkspaceFiles — local backend", () => {
   });
 });
 
+describe("useWorkspaceFiles — local backend on a Windows host", () => {
+  const realUserAgent = window.navigator.userAgent;
+  const windowsConversation = {
+    ...conversation,
+    workspace: { working_dir: "C:\\work\\project" },
+  };
+
+  beforeEach(() => {
+    storeBackendKind = "local";
+    Object.defineProperty(window.navigator, "userAgent", {
+      value:
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+      configurable: true,
+    });
+    useActiveConversationMock.mockReturnValue({ data: windowsConversation });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(window.navigator, "userAgent", {
+      value: realUserAgent,
+      configurable: true,
+    });
+  });
+
+  it("lists files with a cmd-compatible command and normalizes absolute Windows paths", async () => {
+    executeCommandSpy.mockResolvedValue({
+      exit_code: 0,
+      stdout:
+        "C:\\work\\project\\hello.txt\r\nC:\\work\\project\\src\\index.ts\r\n",
+      stderr: "",
+    });
+
+    const { result } = renderHook(() => useWorkspaceFiles(), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() =>
+      expect(result.current.data).toEqual(["hello.txt", "src/index.ts"]),
+    );
+    const command = executeCommandSpy.mock.calls[0][2] as string;
+    expect(command).toContain("dir /b /s /a:-d");
+    expect(command).toContain("findstr /v /i");
+    expect(command).toContain('/c:"\\node_modules\\"');
+    expect(command).not.toContain("find .");
+  });
+
+  it("keeps the POSIX pipeline on non-Windows hosts", async () => {
+    executeCommandSpy.mockResolvedValue({
+      exit_code: 0,
+      stdout: "./hello.txt\n",
+      stderr: "",
+    });
+    useActiveConversationMock.mockReturnValue({ data: conversation });
+
+    // Non-Windows UA for this one only.
+    Object.defineProperty(window.navigator, "userAgent", {
+      value: realUserAgent,
+      configurable: true,
+    });
+
+    const { result } = renderHook(() => useWorkspaceFiles(), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.data).toEqual(["hello.txt"]));
+    const command = executeCommandSpy.mock.calls[0][2] as string;
+    expect(command).toContain("find .");
+    expect(command).not.toContain("dir /b /s");
+  });
+});
+
 describe("useWorkspaceFiles — cloud backend", () => {
   beforeEach(() => {
     storeBackendKind = "cloud";

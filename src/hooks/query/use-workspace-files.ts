@@ -39,16 +39,51 @@ const EXCLUDED_DIRS = [
 ];
 
 // Build a `find` invocation that lists files relative to the workspace root.
-function buildListCommand(): string {
+function buildPosixListCommand(): string {
   const pruneExpr = EXCLUDED_DIRS.map((dir) => `-name '${dir}' -prune`).join(
     " -o ",
   );
   return `find . \\( ${pruneExpr} \\) -o -type f -print 2>/dev/null | sort | head -n ${MAX_FILES}`;
 }
 
+// Windows equivalent for a Windows-hosted local backend: the agent-server runs
+// the command through cmd.exe, where `find` resolves to the text-search tool
+// and `head`/`/dev/null` don't exist, so the POSIX pipeline exits 255 and the
+// Files tab falls back to its empty state. `dir /s` prints absolute paths
+// (made relative client-side below) and findstr drops the excluded
+// directories. Windows has no `head`, so the MAX_FILES cap is applied
+// client-side in the parser (the Set + slice below already bounds results).
+function buildWindowsListCommand(): string {
+  const excludes = EXCLUDED_DIRS.map((dir) => `/c:"\\${dir}\\"`).join(" ");
+  return `dir /b /s /a:-d 2>nul | findstr /v /i ${excludes} | sort`;
+}
+
+function buildListCommand(isWindowsHost: boolean): string {
+  return isWindowsHost ? buildWindowsListCommand() : buildPosixListCommand();
+}
+
+// The local backend serves the UI from the same host the agent-server runs
+// on, so the browser's user agent reflects the host OS.
+function isWindowsHost(): boolean {
+  return (
+    typeof navigator !== "undefined" && /windows/i.test(navigator.userAgent)
+  );
+}
+
 function normalizePath(path: string): string {
   // Strip a leading "./" so paths render cleanly in the UI.
   return path.startsWith("./") ? path.slice(2) : path;
+}
+
+// `dir /s` returns absolute paths with backslashes; make them relative to the
+// working dir and forward-slashed so they match the POSIX output shape.
+function normalizeWindowsPath(path: string, workingDir: string): string {
+  const root = workingDir.replace(/[\\/]+$/, "");
+  let p = path;
+  if (p.toLowerCase().startsWith(`${root.toLowerCase()}\\`)) {
+    p = p.slice(root.length + 1);
+  }
+  return p.replace(/\\/g, "/");
 }
 
 /**
@@ -80,10 +115,11 @@ function useLocalWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
       workingDir,
     ],
     queryFn: async () => {
+      const onWindowsHost = isWindowsHost();
       const result = await AgentServerRuntimeService.executeCommand(
         conversationUrl,
         sessionApiKey,
-        buildListCommand(),
+        buildListCommand(onWindowsHost),
         workingDir,
         30,
         conversationId,
@@ -99,7 +135,11 @@ function useLocalWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
         .split(/\r?\n/)
         .map((line) => line.trim())
         .filter(Boolean)
-        .map(normalizePath);
+        .map((line) =>
+          onWindowsHost
+            ? normalizeWindowsPath(line, workingDir ?? "")
+            : normalizePath(line),
+        );
 
       // Defensive: keep results unique and bounded.
       return Array.from(new Set(lines)).slice(0, MAX_FILES);
