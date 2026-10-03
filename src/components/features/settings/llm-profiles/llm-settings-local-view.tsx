@@ -534,6 +534,10 @@ export function LlmSettingsLocalView() {
                 }
           }
           showProviderConnection={supportsConnections}
+          // The profile create/edit form is a focused flow: always open on
+          // the Basic tab instead of inheriting the global settings'
+          // inferred view (OpenHands/OpenHands#17801).
+          forceBasicInitialView
           onSaveControlChange={handleSaveControlChange}
         />
       )}
