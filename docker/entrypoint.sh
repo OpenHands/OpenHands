@@ -198,6 +198,8 @@ export OH_SECRET_KEY
 # API key — generate one if not provided so the image doesn't run wide-open
 # by default. LOCAL_BACKEND_API_KEY is the single user-facing env var.
 # Persisted so restarts reuse the same key.
+# >>> session-api-key: this block is extracted and executed by
+# >>> __tests__/scripts/docker-session-api-key.test.ts — keep the markers.
 API_KEY_FILE="${STATE_DIR}/api-key.txt"
 
 if [ -z "${LOCAL_BACKEND_API_KEY:-}" ] && [ -z "${OH_SESSION_API_KEYS_0:-}" ]; then
@@ -210,8 +212,11 @@ if [ -z "${LOCAL_BACKEND_API_KEY:-}" ] && [ -z "${OH_SESSION_API_KEYS_0:-}" ]; t
     chmod 600 "$API_KEY_FILE"
     log "Generated API key (persisted to $API_KEY_FILE)"
   fi
-  export OH_SESSION_API_KEYS_0="$LOCAL_BACKEND_API_KEY"
 fi
+
+# Ensure session API keys are exported to the environment so agent-server can authenticate
+export OH_SESSION_API_KEYS_0="${OH_SESSION_API_KEYS_0:-${LOCAL_BACKEND_API_KEY:-}}"
+# <<< session-api-key
 
 # Both backends share the same API key value and the same `X-Session-API-Key`
 # header for authentication.  Default OPENHANDS_AUTOMATION_API_KEY to the
