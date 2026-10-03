@@ -87,7 +87,9 @@
       "sources": [
         "src/components/features/skills/**",
         "src/routes/skills.tsx",
-        "src/api/skills-service.*"
+        "src/api/skills-service.*",
+        "src/utils/skill-enablement.ts",
+        "src/utils/acp-claude-skill-bridge.ts"
       ],
       "tests": ["skills"]
     },
