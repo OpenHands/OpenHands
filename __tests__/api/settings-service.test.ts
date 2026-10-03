@@ -609,6 +609,35 @@ describe("SettingsService", () => {
     });
   });
 
+  it("saves Unicode MCP Basic credentials as a UTF-8 Authorization header", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+
+    await SettingsService.saveSettings({
+      agent_settings_diff: {
+        mcp_config: {
+          translated_docs: {
+            transport: "http",
+            url: "https://mcp.example.com/mcp",
+            auth: { strategy: "basic", username: "用户", password: "päss🔑" },
+          },
+        },
+      },
+    });
+
+    expect(mockSaveCloudSettings).toHaveBeenCalledWith({
+      agent_settings_diff: {
+        mcp_config: {
+          translated_docs: {
+            transport: "http",
+            url: "https://mcp.example.com/mcp",
+            headers: { Authorization: "Basic 55So5oi3OnDDpHNz8J+UkQ==" },
+          },
+        },
+      },
+    });
+  });
+
   it("keeps the OAuth credential and its token state when saving mcp_config to cloud", async () => {
     setRegisteredBackends([cloudBackend]);
     setActiveSelection({ backendId: cloudBackend.id });

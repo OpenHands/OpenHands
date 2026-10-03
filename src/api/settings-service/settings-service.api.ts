@@ -245,7 +245,11 @@ const readCloudMcpCatalog = (stored: unknown): Record<string, unknown> => {
 };
 
 const basicAuthHeader = (username: string, password: string): string => {
-  const token = btoa(`${username}:${password}`);
+  // btoa accepts only Latin-1; encode Unicode credentials as UTF-8 first.
+  const bytes = new TextEncoder().encode(`${username}:${password}`);
+  const token = btoa(
+    Array.from(bytes, (byte) => String.fromCharCode(byte)).join(""),
+  );
   return `Basic ${token}`;
 };
 
