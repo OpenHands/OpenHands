@@ -615,6 +615,9 @@ const MOCK_MODELS = [
   "openhands/deepseek-v4-flash",
   "openhands/glm-5.2",
   "sambanova/Meta-Llama-3.1-8B-Instruct",
+  // An aggregator whose catalog is a strict subset of what it serves, so mock
+  // mode can exercise picking a model the provider list does not contain.
+  "openrouter/anthropic/claude-3.5",
 ];
 
 const MOCK_OPENAI_SUBSCRIPTION_MODELS = ["gpt-5.2", "gpt-5.3-codex"];
