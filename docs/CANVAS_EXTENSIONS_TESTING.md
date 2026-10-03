@@ -27,7 +27,7 @@ extension requests in the browser. The mock also covers the settings and server
 information probes needed to mark that backend healthy, so the Agent Server
 does not need the extension endpoints and does not need to be running.
 
-Open <http://localhost:3102/extensions>. Do not use the normal ingress URL at
+Open <http://localhost:3102/apps>. Do not use the normal ingress URL at
 `http://localhost:8000` for this test because its `/api` traffic goes directly
 to the unmodified Agent Server rather than through the mock browser session.
 
@@ -37,7 +37,7 @@ reload.
 
 ## Install and enable the fixture
 
-1. In **Customize -> Extensions**, select **Add extension**.
+1. In **Customize -> Apps**, select **Add app**.
 2. Enter this exact source:
 
    ```text
@@ -79,7 +79,7 @@ bare package imports or additional output chunks.
 
 ## What still requires the Agent Server
 
-Repeat this flow against `http://localhost:8000/extensions` after the backend
+Repeat this flow against `http://localhost:8000/apps` after the backend
 contract lands. That test must additionally verify:
 
 - Git and backend-local-path installation;
