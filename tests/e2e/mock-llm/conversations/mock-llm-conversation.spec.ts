@@ -36,6 +36,7 @@ import {
   waitForNonUserMessageText,
   waitForSuccessfulBashObservation,
   deleteConversation,
+  deleteProfileIfExists,
   resetMockLLM,
   setChatInput,
   ensureMockLLMAgentProfile,
@@ -68,20 +69,32 @@ test.describe("mock-LLM agent-server conversation", () => {
       try {
         await deleteConversation(request, id);
         conversationIds.delete(id);
-      } catch {
-        // best-effort cleanup
+      } catch (err) {
+        console.warn(`Failed to cleanup conversation ${id}:`, err);
       }
     }
   });
 
-  // Safety net: delete the shared step3 conversation after all tests complete.
-  test.afterAll(async ({ request }) => {
+  // Safety net: delete the shared step3 conversation and profile after all tests complete.
+  test.afterAll(async ({ browser, request }) => {
     if (step3ConversationId) {
       try {
         await deleteConversation(request, step3ConversationId);
-      } catch {
-        // best-effort
+      } catch (err) {
+        console.warn("Failed to cleanup step 3 conversation:", err);
       }
+    }
+    const page = await browser.newPage();
+    try {
+      await seedLocalStorage(page);
+      await routeSessionApiKey(page);
+      await page.goto("/settings/llm", { waitUntil: "domcontentloaded" });
+      await dismissAnalyticsModal(page);
+      await deleteProfileIfExists(page, PROFILE_NAME);
+    } catch (err) {
+      console.warn(`Failed to cleanup profile ${PROFILE_NAME}:`, err);
+    } finally {
+      await page.close();
     }
   });
 
@@ -96,6 +109,9 @@ test.describe("mock-LLM agent-server conversation", () => {
 
     // Wait for the profiles list to load
     await waitForTestId(page, "add-llm-profile");
+
+    // Deterministic pre-clean: ensure no leftover profile from a prior run exists
+    await deleteProfileIfExists(page, PROFILE_NAME);
 
     // Click "Add LLM Profile"
     await page.getByTestId("add-llm-profile").click();
@@ -140,10 +156,11 @@ test.describe("mock-LLM agent-server conversation", () => {
     // Verify the profile appears in the list
     const profileRows = page.getByTestId("profile-row");
     const profileTexts = await profileRows.allTextContents();
-    const hasProfile = profileTexts.some((text) =>
-      text.includes(PROFILE_NAME),
-    );
-    expect(hasProfile, `Profile "${PROFILE_NAME}" should appear in the list`).toBe(true);
+    const hasProfile = profileTexts.some((text) => text.includes(PROFILE_NAME));
+    expect(
+      hasProfile,
+      `Profile "${PROFILE_NAME}" should appear in the list`,
+    ).toBe(true);
   });
 
   // ── Step 2: Set the profile as active ───────────────────────────────
@@ -170,7 +187,10 @@ test.describe("mock-LLM agent-server conversation", () => {
         break;
       }
     }
-    expect(targetRow, `Could not find profile row for "${PROFILE_NAME}"`).not.toBeNull();
+    expect(
+      targetRow,
+      `Could not find profile row for "${PROFILE_NAME}"`,
+    ).not.toBeNull();
 
     // Open the actions menu for this profile
     await targetRow!.getByTestId("profile-menu-trigger").click();
@@ -205,9 +225,7 @@ test.describe("mock-LLM agent-server conversation", () => {
             const row = rows.nth(i);
             const text = await row.textContent();
             if (text?.includes(PROFILE_NAME)) {
-              if (
-                (await row.getByTestId("profile-active-badge").count()) > 0
-              ) {
+              if ((await row.getByTestId("profile-active-badge").count()) > 0) {
                 return true;
               }
               // Badge absent — re-attempt activation before the next poll.
@@ -240,7 +258,10 @@ test.describe("mock-LLM agent-server conversation", () => {
           "X-Expose-Secrets": "encrypted",
         },
       });
-      expect(settingsResp.ok(), `GET /api/settings returned ${settingsResp.status()}`).toBe(true);
+      expect(
+        settingsResp.ok(),
+        `GET /api/settings returned ${settingsResp.status()}`,
+      ).toBe(true);
       const settings = await settingsResp.json();
       const llmModel = settings?.agent_settings?.llm?.model;
       expect(
@@ -282,7 +303,9 @@ test.describe("mock-LLM agent-server conversation", () => {
     // the routeSessionApiKey interceptor (Playwright routes are LIFO and only
     // one handler can call continue/fulfill per request).
     let capturedConversationPayload: Record<string, unknown> | null = null;
-    const captureConversationPayload = (req: import("@playwright/test").Request) => {
+    const captureConversationPayload = (
+      req: import("@playwright/test").Request,
+    ) => {
       if (
         req.method() === "POST" &&
         new URL(req.url()).pathname === "/api/conversations"
@@ -330,7 +353,7 @@ test.describe("mock-LLM agent-server conversation", () => {
       expect(
         capturedConversationPayload,
         "POST /api/conversations payload was not captured — " +
-        "the page.on('request') listener may have missed the request",
+          "the page.on('request') listener may have missed the request",
       ).not.toBeNull();
       expect(
         capturedConversationPayload?.worktree,
@@ -348,7 +371,10 @@ test.describe("mock-LLM agent-server conversation", () => {
 
     await test.step("verify agent reply via conversation events API", async () => {
       await waitForAgentMessageContaining(
-        request, conversationId, REPLY_TOKEN, 30_000,
+        request,
+        conversationId,
+        REPLY_TOKEN,
+        30_000,
       );
     });
 
@@ -370,7 +396,7 @@ test.describe("mock-LLM agent-server conversation", () => {
       expect(
         hasUserMessage,
         `User message "${USER_MESSAGE}" should be visible in a user-message element. ` +
-        `Found: ${allUserText.map((t) => t.slice(0, 80)).join(" | ")}`,
+          `Found: ${allUserText.map((t) => t.slice(0, 80)).join(" | ")}`,
       ).toBe(true);
     });
 
@@ -397,7 +423,6 @@ test.describe("mock-LLM agent-server conversation", () => {
       // No .catch() — if the banner IS visible, this step must fail the test.
       await expect(errorBanner).not.toBeVisible({ timeout: 2_000 });
     });
-
   });
 
   // ── Step 4: Resume the conversation from the sidebar ────────────────
@@ -438,7 +463,9 @@ test.describe("mock-LLM agent-server conversation", () => {
     // Verify the user's original message is still visible
     await test.step("verify user message is still visible after resume", async () => {
       await expect(
-        page.locator('[data-testid="user-message"]').filter({ hasText: USER_MESSAGE }),
+        page
+          .locator('[data-testid="user-message"]')
+          .filter({ hasText: USER_MESSAGE }),
       ).toBeVisible({ timeout: 10_000 });
     });
 

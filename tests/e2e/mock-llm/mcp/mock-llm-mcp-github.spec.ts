@@ -43,21 +43,40 @@ async function openGitHubInstallModal(page: Page) {
 }
 
 test.describe("MCP GitHub server install flow", () => {
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page, request }) => {
     await seedLocalStorage(page);
-  });
-
-  test.afterEach(async ({ request }) => {
-    // Clear any MCP servers so subsequent tests start clean
-    await request
-      .patch(`${BACKEND_URL}/api/settings`, {
+    // Deterministic pre-clean of MCP configuration
+    try {
+      await request.patch(`${BACKEND_URL}/api/settings`, {
         headers: {
           "X-Session-API-Key": SESSION_API_KEY,
           "Content-Type": "application/json",
         },
         data: { agent_settings_diff: { mcp_config: null } },
-      })
-      .catch(() => {});
+      });
+    } catch (err) {
+      console.warn("Pre-clean MCP settings warning:", err);
+    }
+  });
+
+  test.afterEach(async ({ request }) => {
+    // Clear any MCP servers so subsequent tests start clean
+    try {
+      const resp = await request.patch(`${BACKEND_URL}/api/settings`, {
+        headers: {
+          "X-Session-API-Key": SESSION_API_KEY,
+          "Content-Type": "application/json",
+        },
+        data: { agent_settings_diff: { mcp_config: null } },
+      });
+      if (!resp.ok()) {
+        console.warn(
+          `MCP settings cleanup failed with status: ${resp.status()}`,
+        );
+      }
+    } catch (err) {
+      console.warn("MCP settings cleanup error:", err);
+    }
   });
 
   test("step 1: GitHub card is visible on the MCP marketplace page", async ({
@@ -338,7 +357,9 @@ test.describe("MCP GitHub server install flow", () => {
     await page.getByTestId("mcp-custom-editor-delete").click();
     await page.getByTestId("confirm-button").click();
     await expect(page.locator('[data-server-id="docs"]')).not.toBeVisible();
-    expect(mutationRequests.map(({ method, pathname }) => `${method} ${pathname}`)).toEqual([
+    expect(
+      mutationRequests.map(({ method, pathname }) => `${method} ${pathname}`),
+    ).toEqual([
       "POST /api/settings/mcp/docs",
       "PATCH /api/settings/mcp/docs",
       "DELETE /api/settings/mcp/docs",
