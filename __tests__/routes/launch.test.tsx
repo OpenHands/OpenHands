@@ -151,6 +151,57 @@ describe("LaunchRoute", () => {
       expect(screen.getByTestId("launch-error")).toBeInTheDocument();
       expect(screen.getByText("LAUNCH$ERROR_NO_PLUGINS")).toBeInTheDocument();
     });
+
+    it("should parse a valid base64 encoded rca param", () => {
+      const plugins = [{ source: "github:owner/repo" }];
+      const rca = {
+        summary: "Connection pool exhaustion",
+        suspected_files: ["src/db/pool.ts"],
+        source: "holmesgpt",
+      };
+
+      renderLaunchRoute(
+        `?plugins=${btoa(JSON.stringify(plugins))}&rca=${btoa(JSON.stringify(rca))}`,
+      );
+
+      expect(screen.getByTestId("plugin-launch-modal")).toBeInTheDocument();
+    });
+
+    it("should show error for an undecodable rca param", () => {
+      const plugins = [{ source: "github:owner/repo" }];
+
+      renderLaunchRoute(
+        `?plugins=${btoa(JSON.stringify(plugins))}&rca=not-valid-base64!!!`,
+      );
+
+      expect(screen.getByTestId("launch-error")).toBeInTheDocument();
+      expect(
+        screen.getByText("LAUNCH$ERROR_INVALID_FORMAT"),
+      ).toBeInTheDocument();
+    });
+
+    it("should show error for an rca payload missing a summary", () => {
+      const plugins = [{ source: "github:owner/repo" }];
+      const badRca = btoa(JSON.stringify({ evidence: ["x"] }));
+
+      renderLaunchRoute(
+        `?plugins=${btoa(JSON.stringify(plugins))}&rca=${badRca}`,
+      );
+
+      expect(screen.getByTestId("launch-error")).toBeInTheDocument();
+      expect(
+        screen.getByText("LAUNCH$ERROR_INVALID_FORMAT"),
+      ).toBeInTheDocument();
+    });
+
+    it("should still require plugins when only rca is provided", () => {
+      const rca = btoa(JSON.stringify({ summary: "Pool exhausted" }));
+
+      renderLaunchRoute(`?rca=${rca}`);
+
+      expect(screen.getByTestId("launch-error")).toBeInTheDocument();
+      expect(screen.getByText("LAUNCH$ERROR_NO_PLUGINS")).toBeInTheDocument();
+    });
   });
 
   describe("Message Sanitization", () => {
@@ -480,6 +531,46 @@ describe("LaunchRoute", () => {
             },
           ],
           query: "/city-weather:now Tokyo",
+          entryPoint: "launch_deeplink",
+        });
+      });
+    });
+
+    it("should pass parsed RCA context to createConversation", async () => {
+      const user = userEvent.setup();
+      const plugins = [{ source: "github:owner/repo" }];
+      const rca = {
+        summary: "Connection pool exhaustion",
+        suspected_files: ["src/db/pool.ts"],
+        source: "holmesgpt",
+      };
+
+      renderLaunchRoute(
+        `?plugins=${btoa(JSON.stringify(plugins))}&rca=${btoa(JSON.stringify(rca))}`,
+      );
+
+      await user.click(screen.getByTestId("trust-checkbox"));
+      await user.click(screen.getByTestId("start-conversation-button"));
+
+      await waitFor(() => {
+        expect(mockMutateAsync).toHaveBeenCalledWith({
+          plugins: [
+            {
+              source: "github:owner/repo",
+              ref: null,
+              repo_path: null,
+              parameters: null,
+            },
+          ],
+          query: undefined,
+          rcaContext: {
+            summary: "Connection pool exhaustion",
+            evidence: [],
+            suspectedComponents: [],
+            suspectedFiles: ["src/db/pool.ts"],
+            recommendedAction: undefined,
+            source: "holmesgpt",
+          },
           entryPoint: "launch_deeplink",
         });
       });

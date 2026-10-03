@@ -50,6 +50,10 @@ import {
   NoBackendAvailableError,
 } from "../agent-server-client-options";
 import SettingsService from "../settings-service/settings-service.api";
+import {
+  composeTaskWithRcaContext,
+  type RcaContext,
+} from "#/utils/rca-context";
 import { getTelemetryDistinctId } from "../../services/telemetry";
 import {
   ConversationMetadata,
@@ -378,6 +382,9 @@ function requireAppConversation(
  */
 export interface CreateConversationOptions {
   initialUserMsg?: string;
+  // Structured RCA context supplied by an external system; rendered into the
+  // first user message ahead of `initialUserMsg` on both local and cloud.
+  rcaContext?: RcaContext;
   conversationInstructions?: string;
   plugins?: PluginSpec[];
   metadata?: ConversationMetadata | null;
@@ -459,6 +466,7 @@ class AgentServerConversationService {
   ): Promise<AppConversationStartTask> {
     const {
       initialUserMsg,
+      rcaContext,
       conversationInstructions,
       plugins,
       metadata,
@@ -471,6 +479,10 @@ class AgentServerConversationService {
       agentProfileKind,
       agentLlmProfileRef,
     } = options;
+
+    // Fold RCA context into the first user message so every launch path
+    // (local encrypted settings, cloud flat request) carries it identically.
+    const initialMsg = composeTaskWithRcaContext(initialUserMsg, rcaContext);
 
     if (getActiveBackend().backend.kind === "cloud") {
       // Cloud path mirrors OpenHands' frontend: build a flat
@@ -488,10 +500,10 @@ class AgentServerConversationService {
         options.hasActiveMetaProfile ?? false,
       );
       const request: AppConversationStartRequest = {
-        initial_message: initialUserMsg
+        initial_message: initialMsg
           ? {
               role: "user",
-              content: [{ type: "text", text: initialUserMsg }],
+              content: [{ type: "text", text: initialMsg }],
             }
           : null,
         title: conversationInstructions ?? null,
@@ -538,7 +550,7 @@ class AgentServerConversationService {
     // Use encrypted settings to avoid exposing secrets in the browser
     const payload = await buildStartConversationRequestWithEncryptedSettings({
       settings,
-      query: initialUserMsg,
+      query: initialMsg,
       conversationInstructions,
       plugins,
       conversationId,
