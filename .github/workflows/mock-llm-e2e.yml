@@ -89,6 +89,7 @@ jobs:
 
       - name: Verify mock LLM server starts
         run: |
+          .mock-llm-venv/bin/python3 -m unittest discover -s tests/e2e/mock-llm/scripts -p 'test_mock_llm_server.py'
           .mock-llm-venv/bin/python3 tests/e2e/mock-llm/scripts/mock-llm-server.py --port 9998 &
           SERVER_PID=$!
           # Retry up to 30 seconds — openhands-sdk's litellm import is slow

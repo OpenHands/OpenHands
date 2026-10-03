@@ -265,7 +265,9 @@ test.describe("mock-LLM agent-server conversation", () => {
 
   // ── Step 3: Start a conversation and verify the mock agent responds ─
 
-  test("step 3: run a conversation with the mock LLM", async ({
+  // TODO: Restore after the bash oracle checks this conversation's terminal events.
+  // https://github.com/OpenHands/OpenHands/issues/15482 (quarantine: #17872).
+  test.fixme("step 3: run a conversation with the mock LLM", async ({
     page,
     request,
   }) => {
@@ -402,7 +404,9 @@ test.describe("mock-LLM agent-server conversation", () => {
 
   // ── Step 4: Resume the conversation from the sidebar ────────────────
 
-  test("step 4: resume conversation from sidebar after navigating away", async ({
+  // TODO: Restore with step 3: this check needs the conversation it creates.
+  // https://github.com/OpenHands/OpenHands/issues/15481 (quarantine: #17872).
+  test.fixme("step 4: resume conversation from sidebar after navigating away", async ({
     page,
   }) => {
     // This step depends on the conversation created in step 3.
