@@ -5,7 +5,6 @@
   "version": "0.1.0",
   "description": "A dependency-free fixture for the Canvas Extension page ABI.",
   "entrypoint": "extension.js",
-  "icon": "assets/pulse.svg",
   "contributes": {
     "pages": [
       {

@@ -1,6 +1,6 @@
 import React from "react";
 import { PanelsTopLeft } from "lucide-react";
-import CanvasExtensionsService from "#/api/canvas-extensions-service";
+import { useCanvasExtensionIcon } from "#/hooks/query/use-canvas-extension-icon";
 import type { InstalledCanvasExtensionInfo } from "#/types/canvas-extension";
 
 interface CanvasExtensionIconProps {
@@ -15,26 +15,21 @@ export function CanvasExtensionIcon({
   size,
   className,
 }: CanvasExtensionIconProps) {
-  const icon = extension.manifest?.icon;
+  const { data: icon } = useCanvasExtensionIcon(
+    extension.name,
+    Boolean(extension.manifest?.icon),
+  );
   const [src, setSrc] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    setSrc(null);
     if (!icon) return undefined;
-    let cancelled = false;
-    let objectUrl: string | null = null;
-    CanvasExtensionsService.fetchIcon(extension.name)
-      .then((blob) => {
-        if (cancelled) return;
-        objectUrl = URL.createObjectURL(blob);
-        setSrc(objectUrl);
-      })
-      .catch(() => {});
+    const url = URL.createObjectURL(icon);
+    setSrc(url);
     return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      URL.revokeObjectURL(url);
+      setSrc(null);
     };
-  }, [extension.name, icon]);
+  }, [icon]);
 
   if (!src) {
     return (

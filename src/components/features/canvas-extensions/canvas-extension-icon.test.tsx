@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import CanvasExtensionsService from "#/api/canvas-extensions-service";
@@ -22,6 +23,15 @@ function makeExtension(icon?: string): InstalledCanvasExtensionInfo {
   };
 }
 
+function renderIcon(icon?: string) {
+  const queryClient = new QueryClient();
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <CanvasExtensionIcon extension={makeExtension(icon)} size={18} />
+    </QueryClientProvider>,
+  );
+}
+
 describe("CanvasExtensionIcon", () => {
   beforeEach(() => {
     URL.createObjectURL = vi.fn(() => "blob:icon");
@@ -35,7 +45,7 @@ describe("CanvasExtensionIcon", () => {
   it("renders the default icon without fetching when no icon is declared", () => {
     const fetchIcon = vi.spyOn(CanvasExtensionsService, "fetchIcon");
 
-    render(<CanvasExtensionIcon extension={makeExtension()} size={18} />);
+    renderIcon();
 
     expect(
       screen.getByTestId("canvas-extension-default-icon"),
@@ -48,12 +58,7 @@ describe("CanvasExtensionIcon", () => {
       new Blob(["<svg/>"], { type: "image/svg+xml" }),
     );
 
-    const { unmount } = render(
-      <CanvasExtensionIcon
-        extension={makeExtension("assets/icon.svg")}
-        size={18}
-      />,
-    );
+    const { unmount } = renderIcon("assets/icon.svg");
 
     expect(await screen.findByTestId("canvas-extension-icon")).toHaveAttribute(
       "src",
@@ -71,12 +76,7 @@ describe("CanvasExtensionIcon", () => {
       new Error("404"),
     );
 
-    render(
-      <CanvasExtensionIcon
-        extension={makeExtension("assets/icon.svg")}
-        size={18}
-      />,
-    );
+    renderIcon("assets/icon.svg");
 
     await vi.waitFor(() =>
       expect(CanvasExtensionsService.fetchIcon).toHaveBeenCalled(),
