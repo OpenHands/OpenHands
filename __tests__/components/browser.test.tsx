@@ -8,12 +8,6 @@ vi.mock("#/hooks/use-conversation-id", () => ({
   useConversationId: () => ({ conversationId: "test-conversation-id" }),
 }));
 
-vi.mock("#/context/conversation-context", () => ({
-  useConversation: () => ({ conversationId: "test-conversation-id" }),
-  ConversationProvider: ({ children }: { children: React.ReactNode }) =>
-    children,
-}));
-
 vi.mock("react-i18next", async () => {
   const actual = await vi.importActual("react-i18next");
   return {

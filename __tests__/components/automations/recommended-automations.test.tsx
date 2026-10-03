@@ -24,7 +24,7 @@ import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import {
   NavigationProvider,
   type NavigationContextValue,
-} from "#/context/navigation-context";
+} from "#/contexts/navigation-context";
 import type { Backend } from "#/api/backend-registry/types";
 import type { Settings } from "#/types/settings";
 import AutomationService from "#/api/automation-service/automation-service.api";

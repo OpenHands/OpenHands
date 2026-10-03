@@ -258,6 +258,11 @@ export default [
         {
           paths: [
             {
+              name: "#/context/*",
+              message:
+                "All React contexts live under `#/contexts/`. Import from `#/contexts/` instead.",
+            },
+            {
               name: "@openhands/typescript-client/client/http-client",
               message:
                 "Use typed @openhands/typescript-client clients instead of constructing HttpClient directly.",

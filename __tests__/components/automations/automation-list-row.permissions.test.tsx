@@ -28,7 +28,7 @@ vi.mock("#/api/cloud/organization-service.api", async (importOriginal) => ({
   getCloudOrganizationMe: vi.fn(),
 }));
 
-vi.mock("#/context/navigation-context", () => ({
+vi.mock("#/contexts/navigation-context", () => ({
   useNavigation: () => ({ navigate: vi.fn(), currentPath: "/" }),
 }));
 
