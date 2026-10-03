@@ -36,7 +36,7 @@ import type {
   SetupRequestBody,
   ValidateDraftResponse,
 } from "#/manifests/types";
-import { downloadBlob } from "#/utils/utils";
+import { downloadBlob, buildSessionHeaders } from "#/utils/utils";
 import type { Backend, ResolvedActiveBackend } from "../backend-registry/types";
 import {
   getActiveBackend,
@@ -303,9 +303,18 @@ class AutomationService {
       });
     }
 
+    // Keep the existing call-site session header when passing the creator
+    // filter. The local axios interceptor also sets this header; this does
+    // not establish a fix for the production 401 reported in #17690.
+    const sessionHeaders = buildSessionHeaders(
+      getEffectiveLocalBackend()?.apiKey,
+    );
     const { data } = await localAutomationAxios.get<AutomationsResponse>(
       `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}`,
-      { params: { limit, offset, created_by: createdBy } },
+      {
+        params: { limit, offset, created_by: createdBy },
+        headers: sessionHeaders,
+      },
     );
     return data;
   }
