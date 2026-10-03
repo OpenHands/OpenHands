@@ -71,6 +71,7 @@ import {
   signalProcessTree,
 } from "./dev-process-utils.mjs";
 import { fileLog, stripAnsi } from "./logger.mjs";
+import { validateAttachedAgentServer } from "./agent-server-attachment.mjs";
 import {
   applySessionKeyPolicy,
   bindHostArgs,
@@ -264,6 +265,10 @@ OPTIONS:
 
 ENVIRONMENT VARIABLES:
   PORT                        Alternative to --port
+  OH_CANVAS_ATTACH_EXISTING_AGENT_SERVER=1
+                              Reuse the server on OH_CANVAS_SAFE_BACKEND_PORT.
+                              Requires its existing session key; never starts
+                              or stops that server or seeds its secrets.
   OH_BIND_HOST                Alternative to --host (default: 127.0.0.1)
   OH_AUTOMATION_GIT_REF       Git ref for automation (overrides default version)
   OH_AUTOMATION_VERSION       Specific PyPI version for automation (default: ${DEFAULT_AUTOMATION_VERSION})
@@ -415,8 +420,14 @@ async function buildConfig(args, env = process.env) {
     );
   }
 
+  const attachAgentServer = env.OH_CANVAS_ATTACH_EXISTING_AGENT_SERVER === "1";
+  if (frontendOnly && attachAgentServer) {
+    throw new Error(
+      "OH_CANVAS_ATTACH_EXISTING_AGENT_SERVER cannot be used with --frontend-only",
+    );
+  }
   const launchFrontend = !backendOnly;
-  const launchAgentServer = !frontendOnly;
+  const launchAgentServer = !frontendOnly && !attachAgentServer;
   const launchAutomation = !frontendOnly;
   const isPublic = args.public;
 
@@ -477,6 +488,12 @@ async function buildConfig(args, env = process.env) {
     OH_CANVAS_SAFE_VSCODE_PORT: vscodePort.toString(),
   });
   const sessionApiKey = safeConfig.sessionApiKey;
+  if (attachAgentServer) {
+    await validateAttachedAgentServer(
+      safeConfig,
+      SHARED_DEFAULTS.compatibility.minimumAgentServer,
+    );
+  }
 
   if (isPublic) {
     logService(
@@ -542,6 +559,7 @@ async function buildConfig(args, env = process.env) {
     backendOnly,
     launchFrontend,
     launchAgentServer,
+    attachAgentServer,
     launchAutomation,
 
     verbose: args.verbose,
@@ -787,7 +805,7 @@ function getLocalServiceRoutes(config) {
     ]);
   }
 
-  if (config.launchAgentServer) {
+  if (config.launchAgentServer || config.attachAgentServer) {
     for (const prefix of AGENT_SERVER_ROUTE_PREFIXES) {
       routes.push([prefix, getAgentServerBaseUrl(config)]);
     }
@@ -850,7 +868,7 @@ function getRejectPrefixes(config) {
   if (!config.launchAutomation) {
     prefixes.push(AUTOMATION_ROUTE_PREFIX);
   }
-  if (!config.launchAgentServer) {
+  if (!config.launchAgentServer && !config.attachAgentServer) {
     for (const prefix of AGENT_SERVER_ROUTE_PREFIXES) {
       prefixes.push(prefix);
     }
@@ -881,11 +899,12 @@ function buildViteBackendEnv(config, env = process.env) {
   // back to window.location.origin (same-origin) at runtime — matching the
   // behaviour of dev:static / agent-canvas and keeping the dev server
   // portable across localhost, LAN hosts, SSH tunnels, and ngrok.
-  const backendHost = config.launchAgentServer
-    ? `127.0.0.1:${config.ingressPort}`
-    : (env.VITE_BACKEND_HOST ??
-      env.VITE_BACKEND_BASE_URL?.replace(/^https?:\/\//, "") ??
-      "127.0.0.1:8000");
+  const backendHost =
+    config.launchAgentServer || config.attachAgentServer
+      ? `127.0.0.1:${config.ingressPort}`
+      : (env.VITE_BACKEND_HOST ??
+        env.VITE_BACKEND_BASE_URL?.replace(/^https?:\/\//, "") ??
+        "127.0.0.1:8000");
 
   const env_out = { VITE_BACKEND_HOST: backendHost };
 
@@ -894,6 +913,7 @@ function buildViteBackendEnv(config, env = process.env) {
   // Vite proxy forwards over TLS instead of plain HTTP.
   if (
     !config.launchAgentServer &&
+    !config.attachAgentServer &&
     env.VITE_BACKEND_BASE_URL?.startsWith("https://") &&
     env.VITE_USE_TLS === undefined
   ) {
@@ -1131,9 +1151,10 @@ function startIngress(config) {
 
   const ingressScript = join(projectRoot, "scripts", "ingress.mjs");
   const frontendBackend = getFrontendBackend(config);
-  const runtimeServicesInfo = config.launchAgentServer
-    ? JSON.stringify(buildAutomationRuntimeServicesInfo(config))
-    : null;
+  const runtimeServicesInfo =
+    config.launchAgentServer || config.attachAgentServer
+      ? JSON.stringify(buildAutomationRuntimeServicesInfo(config))
+      : null;
 
   spawnService(
     "ingress",
@@ -1227,10 +1248,12 @@ function buildViteFrontendEnv(config) {
   const policy = applySessionKeyPolicy({
     host: config.bindHost,
     sessionApiKey:
-      config.launchAgentServer && !config.isPublic
+      (config.launchAgentServer || config.attachAgentServer) && !config.isPublic
         ? config.sessionApiKey
         : null,
-    authRequired: Boolean(config.launchAgentServer && config.isPublic),
+    authRequired: Boolean(
+      (config.launchAgentServer || config.attachAgentServer) && config.isPublic,
+    ),
     warn: (msg) => logService("vite", msg, c.yellow),
   });
   if (policy.authRequired) {
@@ -1532,7 +1555,11 @@ async function main(options = {}) {
   // time allocating ports / generating keys / launching uvx with a path that
   // would only produce a cryptic build error. Mirrors dev-safe.mjs and
   // dev-extra-backend.mjs.
-  if (!args.frontendOnly && process.env.OH_AGENT_SERVER_LOCAL_PATH) {
+  if (
+    !args.frontendOnly &&
+    process.env.OH_CANVAS_ATTACH_EXISTING_AGENT_SERVER !== "1" &&
+    process.env.OH_AGENT_SERVER_LOCAL_PATH
+  ) {
     try {
       validateLocalAgentServerPath(process.env.OH_AGENT_SERVER_LOCAL_PATH);
     } catch (error) {
@@ -1597,7 +1624,14 @@ async function main(options = {}) {
   // Start services phase
   logStep("2/2", "Starting services...");
 
-  let agentServerReady = false;
+  let agentServerReady = config.attachAgentServer;
+  if (config.attachAgentServer) {
+    logService(
+      "agent-server",
+      `Attached to ${getAgentServerBaseUrl(config)}; external process and state remain operator-managed`,
+      c.blue,
+    );
+  }
 
   // 1. Start agent-server first (automation depends on it).
   //
@@ -1622,7 +1656,13 @@ async function main(options = {}) {
   // 2. Seed automation API key into agent-server secrets
   // This makes the key available to agents during conversations
   // Note: seedAutomationSecret has its own retry logic if server is still warming up
-  if (config.launchAutomation && agentServerReady) {
+  if (config.attachAgentServer) {
+    logService(
+      "secrets",
+      "Skipping secret seeding for the attached Agent Server",
+      c.dim,
+    );
+  } else if (config.launchAutomation && agentServerReady) {
     await seedAutomationSecret(config);
   } else if (config.launchAutomation) {
     logService(
@@ -1670,9 +1710,10 @@ function startStaticFrontend(config, staticDir) {
   // Build the runtime-services info JSON so static-server can append it to
   // /server_info. The static-server also injects the old window global for
   // compatibility with previously built frontend bundles.
-  const runtimeServicesInfo = config.launchAgentServer
-    ? JSON.stringify(buildAutomationRuntimeServicesInfo(config))
-    : null;
+  const runtimeServicesInfo =
+    config.launchAgentServer || config.attachAgentServer
+      ? JSON.stringify(buildAutomationRuntimeServicesInfo(config))
+      : null;
 
   const staticServerScript = join(projectRoot, "scripts", "static-server.mjs");
   spawnService(
@@ -1695,10 +1736,14 @@ function startStaticFrontend(config, staticDir) {
         const policy = applySessionKeyPolicy({
           host: config.bindHost,
           sessionApiKey:
-            config.launchAgentServer && !config.isPublic
+            (config.launchAgentServer || config.attachAgentServer) &&
+            !config.isPublic
               ? config.sessionApiKey
               : null,
-          authRequired: Boolean(config.launchAgentServer && config.isPublic),
+          authRequired: Boolean(
+            (config.launchAgentServer || config.attachAgentServer) &&
+            config.isPublic,
+          ),
           warn: (msg) => logService("static", msg, c.yellow),
         });
         const flags = [];

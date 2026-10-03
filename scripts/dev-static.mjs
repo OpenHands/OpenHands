@@ -176,6 +176,9 @@ OPTIONS:
 
 ENVIRONMENT VARIABLES:
   PORT                        Alternative to --port
+  OH_CANVAS_ATTACH_EXISTING_AGENT_SERVER=1
+                              Reuse the local Agent Server with its existing
+                              session key; skip server startup and lease cleanup.
   OH_AUTOMATION_GIT_REF       Alternative to --automation-ref
   OH_AGENT_SERVER_GIT_REF     Git ref for agent-server SDK
   OH_SECRET_KEY               Secret key for sessions
@@ -304,15 +307,15 @@ async function waitForService(name, url, timeoutMs = 30000) {
 // missing, so `/vscode` fell through to the SPA fallback and answered editor
 // requests with the canvas shell.
 //
-// This mode always launches both local backends (it never runs frontend-only),
-// so it asks for their routes unconditionally. Every target is IPv4 loopback:
+// This mode connects to both local backends (it never runs frontend-only).
+// An explicitly attached Agent Server remains operator-managed. Targets use IPv4:
 // the backends bind to `0.0.0.0`, which only accepts IPv4, but localhost can
 // resolve to ::1 first (notably on Windows).
 function buildLocalServiceRouteArgs(config) {
   return buildRouteArgs(
     getLocalServiceRoutes({
       ...config,
-      launchAgentServer: true,
+      launchAgentServer: !config.attachAgentServer,
       launchAutomation: true,
     }),
   );
@@ -594,9 +597,13 @@ async function main() {
   const { mkdirSync } = await import("node:fs");
   for (const dir of [
     config.stateDir,
-    join(config.stateDir, "dev_conversations"),
-    join(config.stateDir, "workspaces"),
-    join(config.stateDir, "bash_events"),
+    ...(!config.attachAgentServer
+      ? [
+          join(config.stateDir, "dev_conversations"),
+          join(config.stateDir, "workspaces"),
+          join(config.stateDir, "bash_events"),
+        ]
+      : []),
     join(config.stateDir, "storage"),
   ]) {
     mkdirSync(dir, { recursive: true });
@@ -617,30 +624,38 @@ async function main() {
   // Bail out if a live agent-server is already bound to our port (we'd
   // collide anyway), otherwise unlink the stale leases so the new server
   // can claim ownership immediately.
-  if (await isPortBusy(config.agentServerPort)) {
-    logError(
-      `Port ${config.agentServerPort} is already in use — another ` +
-        `agent-server is running. Stop it (e.g. quit \`npm run dev\`) ` +
-        `before running dev:static.`,
+  if (!config.attachAgentServer) {
+    if (await isPortBusy(config.agentServerPort)) {
+      logError(
+        `Port ${config.agentServerPort} is already in use — another ` +
+          `agent-server is running. Stop it (e.g. quit \`npm run dev\`) ` +
+          `before running dev:static.`,
+      );
+      process.exit(1);
+    }
+    const conversationsPath = join(config.stateDir, "dev_conversations");
+    const cleared = releaseStaleConversationLeases(conversationsPath);
+    if (cleared > 0) {
+      logService(
+        "agent-server",
+        `Released ${cleared} stale conversation lease(s) so the new ` +
+          `agent-server can resume ownership.`,
+        c.dim,
+      );
+    }
+
+    startAgentServer(config);
+    await waitForService(
+      "agent-server",
+      `${getAgentServerBaseUrl(config)}/server_info`,
     );
-    process.exit(1);
-  }
-  const conversationsPath = join(config.stateDir, "dev_conversations");
-  const cleared = releaseStaleConversationLeases(conversationsPath);
-  if (cleared > 0) {
+  } else {
     logService(
       "agent-server",
-      `Released ${cleared} stale conversation lease(s) so the new ` +
-        `agent-server can resume ownership.`,
-      c.dim,
+      `Attached to ${getAgentServerBaseUrl(config)}; skipping process startup and lease cleanup`,
+      c.blue,
     );
   }
-
-  startAgentServer(config);
-  await waitForService(
-    "agent-server",
-    `${getAgentServerBaseUrl(config)}/server_info`,
-  );
 
   startAutomationBackend(config);
 

@@ -6,6 +6,7 @@
 // http://localhost:3000/), breaking that resolution; the Node environment
 // has the standard WHATWG URL behavior that honors the file:// base.
 import net from "node:net";
+import http from "node:http";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -14,6 +15,8 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, it, afterEach } from "vitest";
+import { http as mockHttp, passthrough } from "msw";
+import { server as mockServer } from "#/mocks/node";
 import {
   buildAgentServerAutomationEnv,
   buildAutomationCommand,
@@ -350,6 +353,82 @@ describe("buildConfig", () => {
       config.vitePort,
     ]);
     expect(ports.size).toBe(4);
+  });
+
+  // @spec LA-001 — Explicit attachment preserves server ownership
+  it.each([false, true])(
+    "attaches without owning the server process or workspace (public=%s)",
+    async (isPublic) => {
+      const requests: string[] = [];
+      const server = http.createServer((req, res) => {
+        requests.push(`${req.method} ${req.url}`);
+        res.setHeader("Content-Type", "application/json");
+        if (req.url === "/api/settings") {
+          if (req.headers["x-session-api-key"] !== "attachment-test-key") {
+            res.writeHead(401).end("{}");
+            return;
+          }
+          res.end("{}");
+        } else if (req.url === "/server_info") {
+          res.end(JSON.stringify({ version: "1.50.1" }));
+        } else if (req.url === "/alive") {
+          res.end(JSON.stringify({ status: "ok" }));
+        } else {
+          res.writeHead(404).end("{}");
+        }
+      });
+      servers.push(server);
+      server.listen(0, "127.0.0.1");
+      await once(server, "listening");
+      const port = (server.address() as net.AddressInfo).port;
+      mockServer.use(
+        mockHttp.all(`http://127.0.0.1:${port}/*`, () => passthrough()),
+      );
+      const env = envWithIsolatedKeyPath({
+        OH_CANVAS_ATTACH_EXISTING_AGENT_SERVER: "1",
+        OH_CANVAS_SAFE_BACKEND_PORT: String(port),
+        LOCAL_BACKEND_API_KEY: "attachment-test-key",
+      });
+
+      const config = await buildConfig({ public: isPublic }, env);
+
+      expect(config.launchAgentServer).toBe(false);
+      expect(config.attachAgentServer).toBe(true);
+      expect(config.agentServerPort).toBe(port);
+      expect(config.viteWorkingDir).toBeUndefined();
+      expect(config.vscodeBasePath).toBeNull();
+      expect(getLocalServiceRoutes(config)).toContainEqual([
+        "/api",
+        `http://127.0.0.1:${port}`,
+      ]);
+      expect(getRejectPrefixes(config)).not.toContain("/api");
+      expect(buildViteFrontendEnv(config).VITE_SESSION_API_KEY).toBe(
+        isPublic ? undefined : "attachment-test-key",
+      );
+      expect(buildViteFrontendEnv(config).VITE_AUTH_REQUIRED).toBe(
+        isPublic ? "true" : undefined,
+      );
+      expect(buildViteBackendEnv(config)).toEqual({
+        VITE_BACKEND_HOST: `127.0.0.1:${config.ingressPort}`,
+      });
+      expect(requests.sort()).toEqual([
+        "GET /alive",
+        "GET /api/settings",
+        "GET /server_info",
+      ]);
+    },
+  );
+
+  // @spec LA-001 — Explicit attachment preserves server ownership
+  it("rejects attachment in frontend-only mode", async () => {
+    await expect(
+      buildConfig(
+        { frontendOnly: true },
+        envWithIsolatedKeyPath({
+          OH_CANVAS_ATTACH_EXISTING_AGENT_SERVER: "1",
+        }),
+      ),
+    ).rejects.toThrow(/cannot be used with --frontend-only/);
   });
 
   it("lets --automation-git-ref win over an exported OH_AUTOMATION_LOCAL_PATH", async () => {
