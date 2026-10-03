@@ -84,13 +84,19 @@ export function useSkillEnablement(): SkillEnablementController {
   const { backend } = useActiveBackend();
   const usesCatalogAllowList = backend.kind !== "cloud";
   const { data: settings, isLoading: settingsLoading } = useSettings();
-  const { mutate: saveSettings } = useSaveSettings();
+  const { mutate: saveSettings, isPending: isSavingSettings } =
+    useSaveSettings();
 
   const [enablement, setEnablement] = React.useState<SkillEnablement>({});
   const savedRef = React.useRef<string | null>(null);
 
   React.useEffect(() => {
     if (settingsLoading || !settings) return;
+    // Don't hydrate from a background refetch while a save is in flight.
+    // A refetch triggered by an earlier save's invalidation may return
+    // stale data that hasn't reflected the pending PATCH yet, which would
+    // revert the user's toggle (#15694).
+    if (isSavingSettings) return;
     const hydrated = readSkillEnablement(settings, usesCatalogAllowList);
     savedRef.current = snapshot(hydrated);
     setEnablement(hydrated);
@@ -99,6 +105,7 @@ export function useSkillEnablement(): SkillEnablementController {
     settings?.enabled_skills,
     settings?.disabled_skills,
     usesCatalogAllowList,
+    isSavingSettings,
   ]);
 
   React.useEffect(() => {
