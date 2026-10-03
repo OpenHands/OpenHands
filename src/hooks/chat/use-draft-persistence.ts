@@ -24,6 +24,20 @@ const DRAFT_SAVE_DEBOUNCE_MS = 500;
 export const HOME_PROMPT_DRAFT_KEY = "oh:home-prompt-draft";
 
 /**
+ * Queue an explicitly requested prompt for the home launcher. The home input's
+ * existing restore flow loads this value when the launcher mounts.
+ */
+export const queueHomePromptDraft = (prompt: string): void => {
+  if (!prompt.trim()) return;
+
+  try {
+    sessionStorage.setItem(HOME_PROMPT_DRAFT_KEY, prompt);
+  } catch {
+    // sessionStorage may be unavailable in embedded or restricted contexts.
+  }
+};
+
+/**
  * Hook for persisting draft messages.
  * Handles debounced saving on input, restoration on mount, and clearing on confirmed delivery.
  *
