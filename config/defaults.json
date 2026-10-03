@@ -8,6 +8,10 @@
   "compatibility": {
     "minimumAgentServer": "1.47.0"
   },
+  "constraints": {
+    "_comment": "Temporary transitive-dep pin applied when uvx installs agent-server. uvx has no lockfile, so it resolves latest browser-use (0.13.10+ requires mcp==2.1.1). mcp 2.x changed the Server API that browser-use's MCP server and openhands-tools CustomBrowserUseServer expect. browser-use 0.12.0–0.13.8 pin mcp==1.26.0; pinning the same version restores browser tooling (OpenHands/OpenHands#17383). Docker/agent-server images already lock mcp via uv.lock; this pin is for the npm/uvx launch path.",
+    "mcp": "mcp==1.26.0"
+  },
   "images": {
     "agentServer": "ghcr.io/openhands/agent-server",
     "agentCanvas": "ghcr.io/openhands/agent-canvas"
