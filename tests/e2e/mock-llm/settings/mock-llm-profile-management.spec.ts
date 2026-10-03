@@ -476,12 +476,14 @@ test.describe("OpenHands provider hidden base_url preservation", () => {
     });
 
     await test.step("switch to Basic view and save without changing model", async () => {
-      // Click the Basic toggle explicitly so the save path exercises the view
-      // that hides base_url without changing the selected model.
+      // This step claims to save from Basic view, so the switch is required
+      // rather than optional: skipping it when the toggle is absent would let
+      // the test pass while actually exercising Advanced view. Asserting
+      // aria-selected proves the form entered Basic view before saving.
       const basicToggle = page.getByTestId("sdk-section-basic-toggle");
-      if (await basicToggle.isVisible().catch(() => false)) {
-        await basicToggle.click();
-      }
+      await expect(basicToggle).toBeVisible({ timeout: 10_000 });
+      await basicToggle.click();
+      await expect(basicToggle).toHaveAttribute("aria-selected", "true");
 
       const apiKeyInput = page.getByTestId("llm-api-key-input");
       await expect(apiKeyInput).toBeVisible({ timeout: 10_000 });
