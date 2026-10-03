@@ -37,7 +37,21 @@ const saveSettingsMutationFn = async (settings: SettingsUpdate) => {
   const llmSettings = agentSettings?.llm as Record<string, unknown> | undefined;
   if (llmSettings && typeof llmSettings.api_key === "string") {
     const apiKey = llmSettings.api_key.trim();
-    llmSettings.api_key = apiKey === "" ? "" : apiKey;
+    if (apiKey === "") {
+      // The key input only shows a placeholder; an empty value means
+      // "no change", so drop it rather than wiping the stored key.
+
+      delete llmSettings.api_key;
+
+      // If the key was the only changed field, the diff has no real
+      // changes left — drop the empty llm object entirely,so the
+      // backend never sees a `llm: {}` replace/no-op patch.
+      if (Object.keys(llmSettings).length === 0) {
+        delete agentSettings?.llm;
+      }
+    } else {
+      llmSettings.api_key = apiKey;
+    }
   }
   if (agentSettings && Object.keys(agentSettings).length > 0) {
     settingsToSave.agent_settings_diff = agentSettings;
