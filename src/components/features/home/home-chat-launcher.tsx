@@ -20,6 +20,7 @@ import { useIsCreatingConversation } from "#/hooks/use-is-creating-conversation"
 import { Branch, GitRepository } from "#/types/git";
 import { Provider } from "#/types/settings";
 import { LocalWorkspace } from "#/types/workspace";
+import { getHomeLaunchScope } from "#/utils/home-launch-scope";
 import { I18nKey } from "#/i18n/declaration";
 import {
   displayErrorToast,
@@ -42,19 +43,41 @@ import { OpenWorkspaceDialog } from "./open-workspace-dialog";
 import { OpenRepositoryDialog } from "./open-repository-dialog";
 import { HomeGitControlBarPreview } from "./home-git-control-bar-preview";
 
+type HomeLaunchTarget =
+  | { kind: "workspace"; workspace: LocalWorkspace }
+  | {
+      kind: "repository";
+      repository: GitRepository;
+      branch: Branch;
+      provider: Provider;
+    };
+
 export function HomeChatLauncher() {
   const { t } = useTranslation("openhands");
-  const { backend } = useActiveBackend();
+  const active = useActiveBackend();
+  const { backend } = active;
+  const scope = getHomeLaunchScope(active);
   const { navigate } = useNavigation();
   const isLocal = backend.kind === "local";
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [pendingWorkspace, setPendingWorkspace] =
-    useState<LocalWorkspace | null>(null);
-  const [pendingRepository, setPendingRepository] =
-    useState<GitRepository | null>(null);
-  const [pendingBranch, setPendingBranch] = useState<Branch | null>(null);
-  const [pendingProvider, setPendingProvider] = useState<Provider | null>(null);
+  const [selection, setSelection] = useState<{
+    scope: string;
+    target: HomeLaunchTarget | null;
+  }>({ scope, target: null });
+  // @spec BM-002 — Clear the target before rendering or submitting in another scope
+  if (selection.scope !== scope) {
+    setSelection({ scope, target: null });
+    setIsDialogOpen(false);
+  }
+  const target = selection.scope === scope ? selection.target : null;
+  const pendingWorkspace =
+    target?.kind === "workspace" ? target.workspace : null;
+  const pendingRepository =
+    target?.kind === "repository" ? target.repository : null;
+  const pendingBranch = target?.kind === "repository" ? target.branch : null;
+  const pendingProvider =
+    target?.kind === "repository" ? target.provider : null;
   const [workspaceMode, setWorkspaceModeState] = useState<WorkspaceMode>(() =>
     readStoredLocalWorkspaceMode(),
   );
@@ -263,7 +286,7 @@ export function HomeChatLauncher() {
               <button
                 type="button"
                 className="ml-2 underline"
-                onClick={() => setPendingWorkspace(null)}
+                onClick={() => setSelection({ scope, target: null })}
               >
                 {t(I18nKey.HOME$CLEAR_HOST_WORKSPACE)}
               </button>
@@ -306,24 +329,28 @@ export function HomeChatLauncher() {
 
       {isLocal ? (
         <OpenWorkspaceDialog
+          key={scope}
           isOpen={isDialogOpen}
           onClose={() => setIsDialogOpen(false)}
           onConfirm={(workspace) => {
-            setPendingWorkspace(workspace);
-            setPendingRepository(null);
-            setPendingBranch(null);
-            setPendingProvider(null);
+            setSelection({ scope, target: { kind: "workspace", workspace } });
           }}
         />
       ) : (
         <OpenRepositoryDialog
+          key={scope}
           isOpen={isDialogOpen}
           onClose={() => setIsDialogOpen(false)}
           onConfirm={({ repository, branch, provider }) => {
-            setPendingRepository(repository);
-            setPendingBranch(branch);
-            setPendingProvider(provider ?? repository.git_provider);
-            setPendingWorkspace(null);
+            setSelection({
+              scope,
+              target: {
+                kind: "repository",
+                repository,
+                branch,
+                provider: provider ?? repository.git_provider,
+              },
+            });
             setWorkspaceModeState("local_repo");
           }}
         />

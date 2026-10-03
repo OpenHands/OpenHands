@@ -25,6 +25,8 @@ import { I18nKey } from "#/i18n/declaration";
 import RepoIcon from "#/icons/repo.svg?react";
 import { useHomeStore } from "#/stores/home-store";
 import { Typography } from "#/ui/typography";
+import { useActiveBackend } from "#/contexts/active-backend-context";
+import { getHomeLaunchScope } from "#/utils/home-launch-scope";
 
 export interface GitRepoDropdownProps {
   provider: Provider;
@@ -36,7 +38,12 @@ export interface GitRepoDropdownProps {
   onChange?: (repository?: GitRepository) => void;
 }
 
-export function GitRepoDropdown({
+export function GitRepoDropdown(props: GitRepoDropdownProps) {
+  const scope = getHomeLaunchScope(useActiveBackend());
+  return <ScopedGitRepoDropdown key={scope} {...props} scope={scope} />;
+}
+
+function ScopedGitRepoDropdown({
   provider,
   value,
   repositoryName,
@@ -44,9 +51,11 @@ export function GitRepoDropdown({
   className,
   disabled = false,
   onChange,
-}: GitRepoDropdownProps) {
+  scope,
+}: GitRepoDropdownProps & { scope: string }) {
   const { t } = useTranslation("openhands");
-  const { recentRepositories: storedRecentRepositories } = useHomeStore();
+  const { getRecentRepositories } = useHomeStore();
+  const storedRecentRepositories = getRecentRepositories(scope);
   const [inputValue, setInputValue] = useState("");
   const [localSelectedItem, setLocalSelectedItem] =
     useState<GitRepository | null>(null);

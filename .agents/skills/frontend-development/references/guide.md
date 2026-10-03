@@ -5,6 +5,10 @@ Public skills are loaded from the `@openhands/extensions` npm package at build t
 Bundled catalog skills use the persisted `enabled_skills` allow-list defaulted from `DEFAULT_ENABLED_SKILL_NAMES`. User and project skills remain enabled unless listed in `disabled_skills`. Keep this logic centralized in `src/utils/skill-enablement.ts`. The Agent Server no longer clones the extensions repository or uses `EXTENSIONS_REF` for public skills.
 
 
+## Home Launch State
+
+Home launch targets belong to one backend connection and organization. Use `getHomeLaunchScope()` for confirmed targets, picker state and persisted recent repositories. Reset picker state on scope changes without remounting the prompt editor. Legacy unscoped recents and workspace selections must not be attributed to the currently active backend. The Local workspace-mode preference remains browser-wide.
+
 ## No Magic Strings
 
 Avoid inline string literals when they represent reusable user-facing copy or shared program identifiers. The `i18next/no-literal-string` rule is set to `"error"` for configured JSX text and attributes, and targeted `no-restricted-syntax` rules enforce shared translation and query-key patterns. Do not claim broader lint enforcement than `eslint.config.js` provides.
