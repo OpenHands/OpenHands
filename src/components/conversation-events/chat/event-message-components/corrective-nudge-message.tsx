@@ -6,10 +6,6 @@ interface CorrectiveNudgeMessageProps {
   event: MessageEvent;
 }
 
-/**
- * Inline informational note for the SDK's empty-response corrective nudge, so
- * it does not read as a message the user typed.
- */
 export function CorrectiveNudgeMessage({ event }: CorrectiveNudgeMessageProps) {
   return (
     <div

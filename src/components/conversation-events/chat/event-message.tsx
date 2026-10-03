@@ -374,8 +374,6 @@ function EventMessageComponent({
   if (!isActionEvent(event) && !isObservationEvent(event)) {
     const messageEvent = event as MessageEvent;
 
-    // The SDK's empty-response corrective nudge is a framework note, not
-    // something the user typed, so it gets its own informational rendering.
     if (isCorrectiveNudge(messageEvent)) {
       return <CorrectiveNudgeMessage event={messageEvent} />;
     }

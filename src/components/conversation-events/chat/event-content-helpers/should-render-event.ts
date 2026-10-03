@@ -42,12 +42,7 @@ const isGoalLoopReprompt = (event: MessageEvent): boolean => {
   return GOAL_REPROMPT_PREFIXES.some((prefix) => text.startsWith(prefix));
 };
 
-// Prefix of the SDK's empty-response corrective nudge (`_send_corrective_nudge`
-// in openhands.sdk .../agent/response_dispatch.py). When an LLM response has
-// neither a tool call nor content, the framework injects it as a `user`-role
-// message with `source: "environment"`. The event carries no dedicated marker,
-// so we match the text to present it as a framework note rather than a chat
-// message. Brittle by design; keep in sync with the SDK text.
+// SDK empty-response nudge (`_send_corrective_nudge`); keep in sync with the SDK.
 const CORRECTIVE_NUDGE_PREFIX =
   "Your last response did not include a function call or a message.";
 
