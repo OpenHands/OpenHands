@@ -1,6 +1,8 @@
 import { render, screen, fireEvent } from "@testing-library/react";
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { KebabMenu } from "#/components/features/automations/kebab-menu";
+
+const DEFAULT_VIEWPORT_HEIGHT = window.innerHeight;
 
 const ITEMS = ["Run now", "View", "Export", "Edit", "Turn on", "Delete"].map(
   (label) => ({ label, icon: <span />, onClick: vi.fn() }),
@@ -26,7 +28,20 @@ function openMenuWithTriggerAt(top: number, bottom: number) {
   return document.querySelector<HTMLElement>('div[style*="position: fixed"]');
 }
 
+/** Shrink the viewport so neither side of the trigger can hold the menu. */
+function setViewportHeight(height: number) {
+  Object.defineProperty(window, "innerHeight", {
+    value: height,
+    writable: true,
+    configurable: true,
+  });
+}
+
 describe("KebabMenu", () => {
+  afterEach(() => {
+    setViewportHeight(DEFAULT_VIEWPORT_HEIGHT);
+  });
+
   it("opens the menu and invokes an item's onClick when selected", async () => {
     const onClick = vi.fn();
     render(
@@ -59,5 +74,19 @@ describe("KebabMenu", () => {
 
     expect(portal?.style.bottom).toBe("104px");
     expect(portal?.style.top).toBe("");
+  });
+
+  it("stays inside the viewport when the menu fits neither below nor above", () => {
+    // 216px of items in a 420px viewport: 196px of room below the trigger,
+    // 168px above it. Flipping would push the first items off the top.
+    setViewportHeight(420);
+    render(<KebabMenu items={ITEMS} />);
+
+    const portal = openMenuWithTriggerAt(180, 212);
+
+    expect(portal?.style.top).toBe("216px");
+    expect(portal?.style.bottom).toBe("");
+    expect(portal?.style.maxHeight).toBe("196px");
+    expect(portal?.style.overflowY).toBe("auto");
   });
 });
