@@ -7,6 +7,7 @@ import type {
 import demoManifestSource from "#/fixtures/canvas-extensions/demo-page/canvas-extension.json?raw";
 // eslint-disable-next-line import-x/extensions -- Vite requires the real filename before ?raw.
 import demoBundle from "#/fixtures/canvas-extensions/demo-page/extension.js?raw";
+import demoIcon from "#/fixtures/canvas-extensions/demo-page/assets/pulse.svg?raw";
 
 export const CANVAS_EXTENSION_DEMO_SOURCE =
   "src/fixtures/canvas-extensions/demo-page";
@@ -131,6 +132,14 @@ export const CANVAS_EXTENSIONS_HANDLERS = [
         "Content-Type": "application/javascript; charset=utf-8",
         "Cache-Control": "no-cache",
       },
+    });
+  }),
+
+  http.get("*/api/canvas-extensions/installed/:name/icon", ({ params }) => {
+    const name = getRequestedName(params.name);
+    if (!getInstalledExtension(name)) return extensionNotFound(name);
+    return new HttpResponse(demoIcon, {
+      headers: { "Content-Type": "image/svg+xml", "Cache-Control": "no-cache" },
     });
   }),
 
