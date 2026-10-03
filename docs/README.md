@@ -9,3 +9,5 @@ This directory contains the project documentation.
 - [Self-hosting guide](./SELF_HOSTING.md)
 - [Integrating DefenseClaw](./DefenseClaw.md): run the DefenseClaw security governance layer alongside the Agent Server.
 - [Testing matrix](./TESTING_MATRIX.md): release smoke-test coverage across installers, operating systems, and agents.
+- [Feature verification map](../.agents/skills/verify-openhands/features/README.md): user-facing recipes, prerequisites, and evidence expectations; start with the [verification skill](../.agents/skills/verify-openhands/SKILL.md) to launch and drive the real app.
+- [Weekly main verification](../.agents/skills/verify-openhands-weekly/SKILL.md): compare the prior baseline with main, reconcile merged PR intent, and maintain the feature map without hiding product defects.
