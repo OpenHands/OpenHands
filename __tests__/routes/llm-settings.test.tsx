@@ -199,6 +199,73 @@ describe("LlmSettingsScreen", () => {
     expect(llmPayload).not.toHaveProperty("base_url");
   });
 
+  const mockSettingsWithCustomBaseUrl = () =>
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        llm_model: "openai/gpt-4o",
+        llm_base_url: "https://custom.example/v1",
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          llm: {
+            model: "openai/gpt-4o",
+            api_key: null,
+            base_url: "https://custom.example/v1",
+          },
+        },
+      }),
+    );
+
+  it.each([
+    {
+      variant: "create",
+      initialValueOverrides: {
+        "llm.model": "openhands/kimi-k3",
+        "llm.api_key": "",
+        "llm.base_url": "",
+      },
+    },
+    {
+      variant: "edit",
+      initialValueOverrides: {
+        "llm.model": "openai/gpt-4o",
+        "llm.api_key": "",
+        "llm.base_url": "https://custom.example/v1",
+      },
+    },
+  ])(
+    "opens the embedded $variant profile form on the Basic tab despite a custom base URL (bug #17801)",
+    async ({ initialValueOverrides }) => {
+      mockSettingsWithCustomBaseUrl();
+
+      renderLlmSettingsScreen({
+        embedded: true,
+        hideSaveButton: true,
+        markInitialOverridesDirty: false,
+        initialValueOverrides,
+      });
+
+      await screen.findByTestId("llm-settings-screen");
+
+      expect(screen.getByTestId("sdk-section-basic-toggle")).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+    },
+  );
+
+  it("keeps the standalone settings screen on the All tab for a custom base URL", async () => {
+    mockSettingsWithCustomBaseUrl();
+
+    renderLlmSettingsScreen();
+
+    await screen.findByTestId("llm-settings-screen");
+
+    expect(screen.getByTestId("sdk-section-all-toggle")).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
   it("does not show a 'key set' indicator for a brand-new embedded profile even when a global key exists (bug #640)", async () => {
     // A global key exists, but a fresh profile form must look unset so the user
     // knows they have to enter one — otherwise the profile saves with no key.
