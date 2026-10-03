@@ -246,6 +246,13 @@ describe("getSettingsFieldConstraints", () => {
     });
   });
 
+  it("enforces the agent-server minimum for condenser max size", () => {
+    expect(getSettingsFieldConstraints("condenser.max_size")).toEqual({
+      min: 20,
+      step: 1,
+    });
+  });
+
   it("returns undefined for unknown fields", () => {
     const constraints = getSettingsFieldConstraints("unknown.field");
     expect(constraints).toBeUndefined();
