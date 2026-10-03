@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { SecretsService } from "#/api/secrets-service";
 import { CustomSecretWithoutValue } from "#/api/secrets-service.types";
 import { useActiveBackend } from "#/contexts/active-backend-context";
+import { SECRETS_QUERY_KEYS } from "./query-keys";
 
 interface UseSearchSecretsOptions {
   nameContains?: string;
@@ -19,7 +20,7 @@ export const useSearchSecrets = (options: UseSearchSecretsOptions = {}) => {
   const active = useActiveBackend();
 
   const query = useQuery<CustomSecretWithoutValue[], Error>({
-    queryKey: ["secrets", active.backend.id, active.orgId],
+    queryKey: SECRETS_QUERY_KEYS.byBackend(active.backend.id, active.orgId),
     queryFn: SecretsService.getSecrets,
     enabled,
     staleTime: 1000 * 60 * 5,

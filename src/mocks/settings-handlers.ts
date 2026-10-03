@@ -3,6 +3,7 @@ import { WebClientConfig } from "#/api/option-service/option.types";
 import type { SaveProfileRequest } from "#/api/profiles-service/profiles-service.api";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import { Settings, SettingsValue } from "#/types/settings";
+import { resetMockCodexAuth } from "./codex-auth-handlers";
 import {
   OPENAI_SUBSCRIPTION_DEVICE_POLL_PATH,
   OPENAI_SUBSCRIPTION_DEVICE_START_PATH,
@@ -592,6 +593,7 @@ export const resetTestHandlersMockSettings = () => {
   MOCK_LLM_PROFILES.profiles.clear();
   MOCK_LLM_PROFILES.activeProfile = null;
   mockOpenAISubscriptionConnected = false;
+  resetMockCodexAuth();
 };
 
 // Mock model data used by provider/model endpoints
