@@ -33,7 +33,7 @@ interface AppBackendSessionResponse {
 interface AppBackendSessionClient {
   createAppBackendSession: (
     name: string,
-    context?: { signal?: AbortSignal },
+    signal?: AbortSignal,
   ) => Promise<AppBackendSessionResponse>;
   revokeAppBackendSession: (name: string) => Promise<void>;
   close: () => void;
@@ -193,7 +193,7 @@ async function createAppBackendViewClient(
     createSession: async (signal) => {
       if (disposed) throw new Error("Canvas App backend view is disposed");
       const session = signal
-        ? await sessionClient.createAppBackendSession(name, { signal })
+        ? await sessionClient.createAppBackendSession(name, signal)
         : await sessionClient.createAppBackendSession(name);
       hasSession = true;
       const sessionUrl = parseHttpUrl(session.ingress_url);

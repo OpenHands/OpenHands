@@ -300,9 +300,10 @@ describe("CanvasExtensionsService", () => {
 
     await viewClient!.createSession(controller.signal);
 
-    expect(createAppBackendSession).toHaveBeenCalledWith(extension.name, {
-      signal: controller.signal,
-    });
+    expect(createAppBackendSession).toHaveBeenCalledWith(
+      extension.name,
+      controller.signal,
+    );
   });
 
   it("rejects and revokes a session outside the discovered ingress origin", async () => {
