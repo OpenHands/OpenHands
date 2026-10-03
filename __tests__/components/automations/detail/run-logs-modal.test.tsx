@@ -374,7 +374,34 @@ describe("RunLogsModal — run inspection summary", () => {
     expect(screen.getByText(/Sandbox timed out/)).toBeInTheDocument();
   });
 
-  it("falls back to a readable JSON block for custom task metadata", () => {
+  it("shows a failed run's agent summary separately from its system error", () => {
+    useBashCommandLogsMock.mockReturnValue(makeHookResult());
+
+    render(
+      <RunLogsModal
+        isOpen
+        conversationId="conv-1"
+        bashCommandId="cmd-1"
+        onClose={() => {}}
+        run={makeRun({
+          status: AutomationRunStatus.FAILED,
+          error_detail: "Sandbox timed out.",
+          run_metadata: {
+            finish_tool_response: {
+              outcome_summary: "The report was generated before the timeout.",
+            },
+          },
+        })}
+      />,
+    );
+
+    expect(
+      screen.getByText("The report was generated before the timeout."),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Sandbox timed out/)).toBeInTheDocument();
+  });
+
+  it("shows a successful task with readable custom metadata when no status was reported", () => {
     useBashCommandLogsMock.mockReturnValue(makeHookResult());
 
     render(
@@ -396,7 +423,7 @@ describe("RunLogsModal — run inspection summary", () => {
     );
 
     expect(
-      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$NEEDS_REVIEW),
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$SUCCESSFUL),
     ).toBeInTheDocument();
     expect(
       screen.getByText(I18nKey.AUTOMATIONS$DETAIL$CUSTOM_TASK_METADATA),
@@ -409,6 +436,33 @@ describe("RunLogsModal — run inspection summary", () => {
     expect(metadata).toHaveTextContent(
       '"next_action": "Ask user to pick a contact."',
     );
+  });
+
+  it("shows an outcome summary for a successful task with no reported status", () => {
+    useBashCommandLogsMock.mockReturnValue(makeHookResult());
+
+    render(
+      <RunLogsModal
+        isOpen
+        conversationId="conv-1"
+        bashCommandId="cmd-1"
+        onClose={() => {}}
+        run={makeRun({
+          run_metadata: {
+            finish_tool_response: {
+              outcome_summary: "Created and published the weekly report.",
+            },
+          },
+        })}
+      />,
+    );
+
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$SUCCESSFUL),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Created and published the weekly report."),
+    ).toBeInTheDocument();
   });
 });
 

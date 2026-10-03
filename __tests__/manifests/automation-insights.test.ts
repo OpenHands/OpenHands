@@ -122,7 +122,7 @@ describe("deriveAutomationHealth", () => {
       "failing",
     ],
     [
-      "a completed latest task with custom metadata is unknown",
+      "a completed latest task with custom metadata is healthy",
       createAutomation(),
       settled({
         latestRun: createRun({
@@ -131,7 +131,7 @@ describe("deriveAutomationHealth", () => {
           },
         }),
       }),
-      "unknown",
+      "healthy",
     ],
     [
       // Statuses the backend added after the dashboard's reference design:
