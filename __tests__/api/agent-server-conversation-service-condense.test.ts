@@ -118,4 +118,19 @@ describe("AgentServerConversationService.condenseConversation", () => {
     );
     expect(callCloudProxy).not.toHaveBeenCalled();
   });
+
+  it("allows summarization to outlast the client's 60s default timeout", async () => {
+    // Slow models (e.g. local Ollama on a long history) can take minutes to
+    // summarize; aborting at 60s reported failure for a condensation the
+    // server then completed (#17621).
+    await AgentServerConversationService.condenseConversation(
+      "conv-1",
+      RUNTIME_URL,
+      "sess-key",
+    );
+
+    expect(ConversationClient).toHaveBeenCalledWith(
+      expect.objectContaining({ timeout: 5 * 60 * 1000 }),
+    );
+  });
 });
