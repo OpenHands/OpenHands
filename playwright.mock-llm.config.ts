@@ -20,37 +20,132 @@
 
 import { defineConfig, devices } from "@playwright/test";
 import { randomBytes } from "node:crypto";
-import { dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
+import { findFreePorts } from "./scripts/dev-safe.mjs";
+
+// ── Unique run namespace & directory isolation ─────────────────────────
+const runId =
+  process.env.MOCK_LLM_RUN_ID?.trim() || randomBytes(4).toString("hex");
+process.env.MOCK_LLM_RUN_ID = runId;
+
+const RUN_ROOT = resolve(
+  process.env.MOCK_LLM_RUN_DIR ?? join(".tmp", `mock-llm-${runId}`),
+);
+process.env.MOCK_LLM_RUN_DIR = RUN_ROOT;
+
+const STATE_DIR = resolve(
+  process.env.OH_CANVAS_SAFE_STATE_DIR ?? join(RUN_ROOT, "state"),
+);
+process.env.OH_CANVAS_SAFE_STATE_DIR = STATE_DIR;
+
+// Persistence dir is parent of STATE_DIR, so here it is RUN_ROOT.
+// All profiles, secrets, agent-profiles live inside RUN_ROOT and stay isolated.
+const AUTOMATION_DB_DIR = resolve(
+  process.env.MOCK_LLM_AUTOMATION_DIR ?? join(RUN_ROOT, "automation"),
+);
+process.env.MOCK_LLM_AUTOMATION_DIR = AUTOMATION_DB_DIR;
+
+// Isolated test home for user-skills and user state so developer's
+// real ~/.openhands/skills is NEVER touched.
+const TEST_HOME = resolve(
+  process.env.MOCK_LLM_TEST_HOME ?? join(RUN_ROOT, "home"),
+);
+process.env.MOCK_LLM_TEST_HOME = TEST_HOME;
+
+const SKILL_REPOS_DIR = resolve(
+  process.env.MOCK_LLM_SKILL_REPOS_HOST_DIR ?? join(RUN_ROOT, "skill-repos"),
+);
+process.env.MOCK_LLM_SKILL_REPOS_HOST_DIR = SKILL_REPOS_DIR;
+
+const USER_SKILLS_DIR = resolve(
+  process.env.MOCK_LLM_USER_SKILLS_HOST_DIR ??
+    join(TEST_HOME, ".openhands", "skills"),
+);
+process.env.MOCK_LLM_USER_SKILLS_HOST_DIR = USER_SKILLS_DIR;
 
 // ── Port allocation (separate from live E2E / dev to avoid collisions) ─
-const MOCK_LLM_PORT = process.env.MOCK_LLM_PORT ?? "9999";
+const rawPorts = await findFreePorts([
+  {
+    name: "mockLlm",
+    preferred: parseInt(process.env.MOCK_LLM_PORT ?? "9999", 10),
+  },
+  {
+    name: "ingress",
+    preferred: parseInt(
+      process.env.MOCK_LLM_INGRESS_PORT ?? process.env.PORT ?? "18300",
+      10,
+    ),
+  },
+  {
+    name: "publicMode",
+    preferred: parseInt(process.env.MOCK_LLM_PUBLIC_MODE_PORT ?? "18301", 10),
+  },
+  {
+    name: "backend",
+    preferred: parseInt(process.env.OH_CANVAS_SAFE_BACKEND_PORT ?? "18000", 10),
+  },
+  {
+    name: "automation",
+    preferred: parseInt(
+      process.env.OH_CANVAS_SAFE_AUTOMATION_PORT ?? "18001",
+      10,
+    ),
+  },
+  {
+    name: "vite",
+    preferred: parseInt(process.env.OH_CANVAS_SAFE_VITE_PORT ?? "3001", 10),
+  },
+  {
+    name: "feOnly",
+    preferred: parseInt(process.env.MOCK_LLM_FE_ONLY_PORT ?? "18310", 10),
+  },
+  {
+    name: "beOnly",
+    preferred: parseInt(process.env.MOCK_LLM_BE_ONLY_PORT ?? "18320", 10),
+  },
+  {
+    name: "crossFe",
+    preferred: parseInt(process.env.MOCK_LLM_CROSS_FE_PORT ?? "18370", 10),
+  },
+  {
+    name: "crossBeA",
+    preferred: parseInt(process.env.MOCK_LLM_CROSS_BE_A_PORT ?? "18380", 10),
+  },
+  {
+    name: "crossBeB",
+    preferred: parseInt(process.env.MOCK_LLM_CROSS_BE_B_PORT ?? "18390", 10),
+  },
+]);
 
-// The agent-canvas binary exposes a single ingress port that routes:
-//   /api/automation/* → automation backend
-//   /api/*, /sockets  → agent-server
-//   /*                → static frontend
-// Tests use this single URL for both the browser (baseURL) and backend API
-// calls (the ingress proxies /api/* transparently).
-const INGRESS_PORT = process.env.MOCK_LLM_INGRESS_PORT ?? "18300";
+const MOCK_LLM_PORT = String(rawPorts.mockLlm);
+const INGRESS_PORT = String(rawPorts.ingress);
+const PUBLIC_MODE_PORT = String(rawPorts.publicMode);
+const BACKEND_PORT = String(rawPorts.backend);
+const AUTOMATION_PORT = String(rawPorts.automation);
+const VITE_PORT = String(rawPorts.vite);
+const FE_ONLY_PORT = String(rawPorts.feOnly);
+const BE_ONLY_PORT = String(rawPorts.beOnly);
+const CROSS_FE_PORT = String(rawPorts.crossFe);
+const CROSS_BE_A_PORT = String(rawPorts.crossBeA);
+const CROSS_BE_B_PORT = String(rawPorts.crossBeB);
 
-// A second static-server instance for public-mode auth tests. It serves
-// the same build/ directory with --auth-required (no baked session key)
-// and proxies to the same backend.
-const PUBLIC_MODE_PORT = process.env.MOCK_LLM_PUBLIC_MODE_PORT ?? "18301";
+process.env.MOCK_LLM_PORT = MOCK_LLM_PORT;
+process.env.MOCK_LLM_INGRESS_PORT = INGRESS_PORT;
+process.env.MOCK_LLM_PUBLIC_MODE_PORT = PUBLIC_MODE_PORT;
+process.env.OH_CANVAS_SAFE_BACKEND_PORT = BACKEND_PORT;
+process.env.OH_CANVAS_SAFE_AUTOMATION_PORT = AUTOMATION_PORT;
+process.env.OH_CANVAS_SAFE_VITE_PORT = VITE_PORT;
+process.env.MOCK_LLM_FE_ONLY_PORT = FE_ONLY_PORT;
+process.env.MOCK_LLM_BE_ONLY_PORT = BE_ONLY_PORT;
+process.env.MOCK_LLM_CROSS_FE_PORT = CROSS_FE_PORT;
+process.env.MOCK_LLM_CROSS_BE_A_PORT = CROSS_BE_A_PORT;
+process.env.MOCK_LLM_CROSS_BE_B_PORT = CROSS_BE_B_PORT;
 
 // ── Session API key ────────────────────────────────────────────────────
 const sessionApiKey =
   process.env.MOCK_LLM_SESSION_API_KEY?.trim() ||
   randomBytes(32).toString("hex");
 process.env.MOCK_LLM_SESSION_API_KEY = sessionApiKey;
-
-// ── State directory (isolated per test run) ────────────────────────────
-const STATE_DIR = resolve(".tmp/mock-llm-state");
-
-// Automation DB lives at $parent_of_STATE_DIR/automation/automations.db,
-// mirroring docker/entrypoint.sh which uses $HOME/.openhands/automation/automations.db.
-// Both STATE_DIR and AUTOMATION_DB_DIR must be cleaned between runs to avoid stale data.
-const AUTOMATION_DB_DIR = join(dirname(STATE_DIR), "automation");
 
 // ── URLs ───────────────────────────────────────────────────────────────
 const INGRESS_URL = `http://127.0.0.1:${INGRESS_PORT}/`;
@@ -64,7 +159,6 @@ const MOCK_LLM_PYTHON = process.env.MOCK_LLM_PYTHON ?? "python3";
 // Export for the test helpers — BACKEND_URL points to the ingress (API
 // calls are proxied to the agent-server, so no direct backend port needed).
 process.env.MOCK_LLM_BACKEND_URL = `http://127.0.0.1:${INGRESS_PORT}`;
-process.env.MOCK_LLM_PORT = MOCK_LLM_PORT;
 process.env.MOCK_LLM_PUBLIC_MODE_URL = `http://127.0.0.1:${PUBLIC_MODE_PORT}`;
 
 function shellQuote(value: string) {
@@ -94,6 +188,7 @@ export default defineConfig({
   workers: 1,
   timeout: 60_000,
   globalTimeout: process.env.CI ? ciGlobalTimeoutMs : 0, // 20 min hard cap in CI
+  globalTeardown: resolve("tests/e2e/mock-llm/utils/global-teardown.ts"),
   reporter: [
     ["line"],
     ["json", { outputFile: "test-results-mock-llm/results.json" }],
@@ -119,7 +214,7 @@ export default defineConfig({
       command: `${MOCK_LLM_PYTHON} tests/e2e/mock-llm/scripts/mock-llm-server.py --port ${MOCK_LLM_PORT}`,
       url: MOCK_LLM_URL,
       timeout: 30_000,
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: false,
       stdout: "pipe",
       stderr: "pipe",
     },
@@ -136,10 +231,8 @@ export default defineConfig({
     // kills children via process groups and exits cleanly.
     {
       command:
-        // Clean state dir and automation DB dir to avoid stale data between runs.
-        // Automation DB is stored outside STATE_DIR (at AUTOMATION_DB_DIR) so both
-        // must be cleaned; see scripts/dev-with-automation.mjs startAutomationBackend.
-        `node -e "const fs=require('node:fs'); fs.rmSync('${STATE_DIR}',{recursive:true,force:true}); fs.rmSync('${AUTOMATION_DB_DIR}',{recursive:true,force:true});" && ` +
+        // Clean isolated run root (or state dir and automation DB dir) before run
+        `node -e "const fs=require('node:fs'); fs.rmSync('${RUN_ROOT}',{recursive:true,force:true}); fs.rmSync('${STATE_DIR}',{recursive:true,force:true}); fs.rmSync('${AUTOMATION_DB_DIR}',{recursive:true,force:true});" && ` +
         // Build frontend if not already built (CI should pre-build for caching)
         "[ -f build/index.html ] || npm run build:app && " +
         [
@@ -147,6 +240,10 @@ export default defineConfig({
           envAssignment("OH_CANVAS_SAFE_STATE_DIR", STATE_DIR),
           envAssignment("PORT", INGRESS_PORT),
           envAssignment("LOCAL_BACKEND_API_KEY", sessionApiKey),
+          envAssignment("OH_CANVAS_SAFE_BACKEND_PORT", BACKEND_PORT),
+          envAssignment("OH_CANVAS_SAFE_AUTOMATION_PORT", AUTOMATION_PORT),
+          envAssignment("OH_CANVAS_SAFE_VITE_PORT", VITE_PORT),
+          envAssignment("HOME", TEST_HOME),
           "VITE_DO_NOT_TRACK=1",
           "VITE_ENABLE_BROWSER_TOOLS=false",
           // Bypass npm — exec directly into node so SIGTERM reaches
@@ -163,7 +260,7 @@ export default defineConfig({
       // auth on the list endpoint (confirmed in CI).
       url: `http://127.0.0.1:${INGRESS_PORT}/api/automation/v1`,
       timeout: 180_000, // allow extra time for build + agent-server + automation startup
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: false,
       // Without this, Playwright tears the webServer down with
       // process.kill(-pid, "SIGKILL"), which the stack cannot catch. Its
       // services are spawned detached (see scripts/dev-process-utils.mjs), so
@@ -176,9 +273,8 @@ export default defineConfig({
       gracefulShutdown: { signal: "SIGTERM", timeout: 15_000 },
     },
     // 3. Public-mode static server — same build/, same backend, but with
-    //    --auth-required (no session key injected). The agent-server's
-    //    internal ports are the defaults from config/defaults.json (18000
-    //    for agent-server, 18001 for automation).
+    //    --auth-required (no session key injected). Proxies to the dynamically
+    //    configured agent-server and automation ports.
     {
       command: [
         "exec node scripts/static-server.mjs",
@@ -186,14 +282,14 @@ export default defineConfig({
         `--port ${PUBLIC_MODE_PORT}`,
         "--host 127.0.0.1",
         "--auth-required",
-        "--route /api/automation=http://localhost:18001",
-        "--route /api=http://localhost:18000",
-        "--route /server_info=http://localhost:18000",
-        "--route /sockets=http://localhost:18000",
+        `--route /api/automation=http://localhost:${AUTOMATION_PORT}`,
+        `--route /api=http://localhost:${BACKEND_PORT}`,
+        `--route /server_info=http://localhost:${BACKEND_PORT}`,
+        `--route /sockets=http://localhost:${BACKEND_PORT}`,
       ].join(" "),
       url: `http://127.0.0.1:${PUBLIC_MODE_PORT}/`,
       timeout: 15_000,
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: false,
     },
   ],
 });

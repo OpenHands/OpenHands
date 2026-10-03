@@ -30,28 +30,103 @@
 import { defineConfig, devices } from "@playwright/test";
 import { randomBytes } from "node:crypto";
 import { mkdirSync } from "node:fs";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
+import { findFreePorts } from "./scripts/dev-safe.mjs";
 
 // ── Docker image ────────────────────────────────────────────────────────
 const DOCKER_IMAGE =
   process.env.MOCK_LLM_DOCKER_IMAGE ?? "ghcr.io/openhands/agent-canvas:latest";
 
+// ── Unique run namespace & directory isolation ─────────────────────────
+const runId =
+  process.env.MOCK_LLM_RUN_ID?.trim() || randomBytes(4).toString("hex");
+process.env.MOCK_LLM_RUN_ID = runId;
+
 // Container name for cleanup — unique per run to avoid collisions.
 const CONTAINER_NAME =
-  process.env.MOCK_LLM_CONTAINER_NAME ??
-  `agent-canvas-mock-llm-${randomBytes(4).toString("hex")}`;
+  process.env.MOCK_LLM_CONTAINER_NAME ?? `agent-canvas-mock-llm-${runId}`;
+
+const RUN_ROOT = resolve(
+  process.env.MOCK_LLM_RUN_DIR ?? join(".tmp", `mock-llm-docker-${runId}`),
+);
+process.env.MOCK_LLM_RUN_DIR = RUN_ROOT;
 
 // ── Port allocation (separate from live E2E / dev to avoid collisions) ─
-const MOCK_LLM_PORT = process.env.MOCK_LLM_PORT ?? "9999";
+const rawPorts = await findFreePorts([
+  {
+    name: "mockLlm",
+    preferred: parseInt(process.env.MOCK_LLM_PORT ?? "9999", 10),
+  },
+  {
+    name: "ingress",
+    preferred: parseInt(process.env.MOCK_LLM_INGRESS_PORT ?? "18300", 10),
+  },
+  {
+    name: "publicMode",
+    preferred: parseInt(process.env.MOCK_LLM_PUBLIC_MODE_PORT ?? "18301", 10),
+  },
+  {
+    name: "backend",
+    preferred: parseInt(
+      process.env.OH_CANVAS_SAFE_BACKEND_PORT ??
+        process.env.AGENT_SERVER_PORT ??
+        "18000",
+      10,
+    ),
+  },
+  {
+    name: "automation",
+    preferred: parseInt(
+      process.env.OH_CANVAS_SAFE_AUTOMATION_PORT ??
+        process.env.AUTOMATION_PORT ??
+        "18001",
+      10,
+    ),
+  },
+  {
+    name: "feOnly",
+    preferred: parseInt(process.env.MOCK_LLM_FE_ONLY_PORT ?? "18310", 10),
+  },
+  {
+    name: "beOnly",
+    preferred: parseInt(process.env.MOCK_LLM_BE_ONLY_PORT ?? "18320", 10),
+  },
+  {
+    name: "crossFe",
+    preferred: parseInt(process.env.MOCK_LLM_CROSS_FE_PORT ?? "18370", 10),
+  },
+  {
+    name: "crossBeA",
+    preferred: parseInt(process.env.MOCK_LLM_CROSS_BE_A_PORT ?? "18380", 10),
+  },
+  {
+    name: "crossBeB",
+    preferred: parseInt(process.env.MOCK_LLM_CROSS_BE_B_PORT ?? "18390", 10),
+  },
+]);
 
-// The Docker container exposes a single port for the unified ingress.
-// With --network host this is accessible at localhost directly.
-const INGRESS_PORT = process.env.MOCK_LLM_INGRESS_PORT ?? "18300";
+const MOCK_LLM_PORT = String(rawPorts.mockLlm);
+const INGRESS_PORT = String(rawPorts.ingress);
+const PUBLIC_MODE_PORT = String(rawPorts.publicMode);
+const BACKEND_PORT = String(rawPorts.backend);
+const AUTOMATION_PORT = String(rawPorts.automation);
+const FE_ONLY_PORT = String(rawPorts.feOnly);
+const BE_ONLY_PORT = String(rawPorts.beOnly);
+const CROSS_FE_PORT = String(rawPorts.crossFe);
+const CROSS_BE_A_PORT = String(rawPorts.crossBeA);
+const CROSS_BE_B_PORT = String(rawPorts.crossBeB);
 
-// Public-mode static server — runs inside the Docker container when
-// PUBLIC_MODE_PORT is set (see docker/entrypoint.sh). With --network host
-// the port is accessible from the host at localhost directly.
-const PUBLIC_MODE_PORT = process.env.MOCK_LLM_PUBLIC_MODE_PORT ?? "18301";
+process.env.MOCK_LLM_PORT = MOCK_LLM_PORT;
+process.env.MOCK_LLM_INGRESS_PORT = INGRESS_PORT;
+process.env.MOCK_LLM_PUBLIC_MODE_PORT = PUBLIC_MODE_PORT;
+process.env.OH_CANVAS_SAFE_BACKEND_PORT = BACKEND_PORT;
+process.env.OH_CANVAS_SAFE_AUTOMATION_PORT = AUTOMATION_PORT;
+process.env.MOCK_LLM_FE_ONLY_PORT = FE_ONLY_PORT;
+process.env.MOCK_LLM_BE_ONLY_PORT = BE_ONLY_PORT;
+process.env.MOCK_LLM_CROSS_FE_PORT = CROSS_FE_PORT;
+process.env.MOCK_LLM_CROSS_BE_A_PORT = CROSS_BE_A_PORT;
+process.env.MOCK_LLM_CROSS_BE_B_PORT = CROSS_BE_B_PORT;
+process.env.MOCK_LLM_CONTAINER_NAME = CONTAINER_NAME;
 
 // ── Session API key ────────────────────────────────────────────────────
 const sessionApiKey =
@@ -75,7 +150,6 @@ const MOCK_LLM_PYTHON = process.env.MOCK_LLM_PYTHON ?? "python3";
 // Export for the test helpers — BACKEND_URL points to the ingress (API
 // calls are proxied to the agent-server, so no direct backend port needed).
 process.env.MOCK_LLM_BACKEND_URL = `http://localhost:${INGRESS_PORT}`;
-process.env.MOCK_LLM_PORT = MOCK_LLM_PORT;
 process.env.MOCK_LLM_PUBLIC_MODE_URL = `http://localhost:${PUBLIC_MODE_PORT}`;
 process.env.MOCK_LLM_DOCKER_MODE = "true";
 process.env.VITE_SESSION_API_KEY = sessionApiKey;
@@ -93,14 +167,19 @@ if (!process.env.MOCK_LLM_AGENT_URL) {
 // We volume-mount these into the container so the agent-server can see them.
 
 // Project skills: host creates repos here, container sees them at a fixed path.
-const SKILL_REPOS_HOST_DIR = resolve(".tmp/mock-llm-skill-repos");
+const SKILL_REPOS_HOST_DIR = resolve(
+  process.env.MOCK_LLM_SKILL_REPOS_HOST_DIR ?? join(RUN_ROOT, "skill-repos"),
+);
 const SKILL_REPOS_CONTAINER_DIR = "/tmp/mock-llm-skill-repos";
 mkdirSync(SKILL_REPOS_HOST_DIR, { recursive: true });
 process.env.MOCK_LLM_SKILL_REPOS_CONTAINER_DIR = SKILL_REPOS_CONTAINER_DIR;
+process.env.MOCK_LLM_SKILL_REPOS_HOST_DIR = SKILL_REPOS_HOST_DIR;
 
 // User skills: host creates skill files here, container mounts them at
 // the agent-server's expected ~/.openhands/skills/ path.
-const USER_SKILLS_HOST_DIR = resolve(".tmp/mock-llm-user-skills");
+const USER_SKILLS_HOST_DIR = resolve(
+  process.env.MOCK_LLM_USER_SKILLS_HOST_DIR ?? join(RUN_ROOT, "user-skills"),
+);
 const USER_SKILLS_CONTAINER_DIR = "/home/openhands/.openhands/skills";
 mkdirSync(USER_SKILLS_HOST_DIR, { recursive: true });
 process.env.MOCK_LLM_USER_SKILLS_HOST_DIR = USER_SKILLS_HOST_DIR;
@@ -109,7 +188,10 @@ process.env.MOCK_LLM_USER_SKILLS_HOST_DIR = USER_SKILLS_HOST_DIR;
 // The folder-workspace test creates a temp directory on the host that the
 // agent-server's folder browser needs to list. Mount a shared directory into
 // the container at the same path so the agent-server can see it.
-const FOLDER_WORKSPACE_HOST_DIR = resolve(".tmp/e2e-folder-workspace-test");
+const FOLDER_WORKSPACE_HOST_DIR = resolve(
+  process.env.MOCK_LLM_FOLDER_WORKSPACE_HOST_DIR ??
+    join(RUN_ROOT, "folder-workspace"),
+);
 const FOLDER_WORKSPACE_CONTAINER_DIR = "/tmp/e2e-folder-workspace-test";
 mkdirSync(FOLDER_WORKSPACE_HOST_DIR, { recursive: true });
 process.env.MOCK_LLM_FOLDER_WORKSPACE_HOST_DIR = FOLDER_WORKSPACE_HOST_DIR;
@@ -149,6 +231,7 @@ export default defineConfig({
   workers: 1,
   timeout: 60_000,
   globalTimeout: process.env.CI ? ciGlobalTimeoutMs : 0, // 20 min hard cap in CI
+  globalTeardown: resolve("tests/e2e/mock-llm/utils/global-teardown.ts"),
   reporter: [
     ["line"],
     ["json", { outputFile: "test-results-mock-llm-docker/results.json" }],
@@ -180,7 +263,7 @@ export default defineConfig({
       command: `${MOCK_LLM_PYTHON} tests/e2e/mock-llm/scripts/mock-llm-server.py --port ${MOCK_LLM_PORT}`,
       url: MOCK_LLM_URL,
       timeout: 30_000,
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: false,
       stdout: "pipe",
       stderr: "pipe",
     },
@@ -214,6 +297,8 @@ export default defineConfig({
         // folder browser can list/navigate it inside the container.
         `-v ${FOLDER_WORKSPACE_HOST_DIR}:${FOLDER_WORKSPACE_CONTAINER_DIR}`,
         `-e PORT=${INGRESS_PORT}`,
+        `-e AGENT_SERVER_PORT=${BACKEND_PORT}`,
+        `-e AUTOMATION_PORT=${AUTOMATION_PORT}`,
         `-e SESSION_API_KEY=${sessionApiKey}`,
         `-e OH_SESSION_API_KEYS_0=${sessionApiKey}`,
         `-e PUBLIC_MODE_PORT=${PUBLIC_MODE_PORT}`,
@@ -228,7 +313,7 @@ export default defineConfig({
       // session-key auth on the list endpoint.
       url: `http://localhost:${INGRESS_PORT}/api/automation/v1`,
       timeout: 180_000, // Docker pull + all services startup
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: false,
     },
   ],
   // globalTeardown stops the Docker container when Playwright exits.
