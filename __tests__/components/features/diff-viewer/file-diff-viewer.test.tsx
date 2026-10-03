@@ -1,3 +1,4 @@
+import React from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -15,6 +16,66 @@ const MOCK_MD_DIFF = {
 let mockDiff = MOCK_DIFF;
 let mockIsSuccess = true;
 let mockIsLoading = false;
+const lifecycleEvents: string[] = [];
+
+function createMockModel(name: string) {
+  let disposed = false;
+
+  return {
+    isDisposed: () => disposed,
+    dispose: vi.fn(() => {
+      lifecycleEvents.push(name);
+      disposed = true;
+    }),
+  };
+}
+
+function createMockDiffEditor() {
+  const original = createMockModel("diff-original-model");
+  const modified = createMockModel("diff-modified-model");
+  const disposeListeners: (() => void)[] = [];
+  const editor = {
+    getOriginalEditor: () => ({
+      getContentHeight: () => 0,
+      onDidContentSizeChange: () => ({ dispose: vi.fn() }),
+    }),
+    getModifiedEditor: () => ({
+      getContentHeight: () => 0,
+      onDidContentSizeChange: () => ({ dispose: vi.fn() }),
+    }),
+    getModel: () => ({ original, modified }),
+    onDidDispose: (listener: () => void) => {
+      disposeListeners.push(listener);
+      return { dispose: vi.fn() };
+    },
+    dispose: () => {
+      lifecycleEvents.push("diff-editor");
+      disposeListeners.forEach((listener) => listener());
+    },
+  };
+
+  return editor;
+}
+
+function createMockCodeEditor() {
+  const model = createMockModel("single-model");
+  const disposeListeners: (() => void)[] = [];
+  const editor = {
+    getContentHeight: () => 0,
+    onDidContentSizeChange: () => ({ dispose: vi.fn() }),
+    getModel: () => model,
+    onDidDispose: (listener: () => void) => {
+      disposeListeners.push(listener);
+      return { dispose: vi.fn() };
+    },
+    dispose: () => {
+      lifecycleEvents.push("single-editor");
+      disposeListeners.forEach((listener) => listener());
+    },
+  };
+
+  return editor;
+}
 
 vi.mock("#/hooks/query/use-unified-git-diff", () => ({
   useUnifiedGitDiff: () => ({
@@ -26,12 +87,36 @@ vi.mock("#/hooks/query/use-unified-git-diff", () => ({
 }));
 
 vi.mock("@monaco-editor/react", () => ({
-  DiffEditor: (props: Record<string, unknown>) => (
-    <div data-testid="file-diff-viewer" data-original={props.original} data-modified={props.modified} />
-  ),
-  Editor: (props: Record<string, unknown>) => (
-    <div data-testid="file-single-viewer" data-value={props.value} />
-  ),
+  DiffEditor: (props: Record<string, unknown>) => {
+    React.useEffect(() => {
+      const editor = createMockDiffEditor();
+      const onMount = props.onMount as
+        | ((editor: ReturnType<typeof createMockDiffEditor>) => void)
+        | undefined;
+      onMount?.(editor);
+      return () => editor.dispose();
+    }, []);
+
+    return (
+      <div
+        data-testid="file-diff-viewer"
+        data-original={props.original}
+        data-modified={props.modified}
+      />
+    );
+  },
+  Editor: (props: Record<string, unknown>) => {
+    React.useEffect(() => {
+      const editor = createMockCodeEditor();
+      const onMount = props.onMount as
+        | ((editor: ReturnType<typeof createMockCodeEditor>) => void)
+        | undefined;
+      onMount?.(editor);
+      return () => editor.dispose();
+    }, []);
+
+    return <div data-testid="file-single-viewer" data-value={props.value} />;
+  },
 }));
 
 vi.mock("#/components/features/markdown/markdown-renderer", () => ({
@@ -49,6 +134,40 @@ describe("FileDiffViewer", () => {
     mockDiff = MOCK_DIFF;
     mockIsSuccess = true;
     mockIsLoading = false;
+    lifecycleEvents.length = 0;
+  });
+
+  it("disposes diff models after Monaco disposes the diff widget", async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(<FileDiffViewer path="src/index.ts" type="M" />);
+
+    await expand(user);
+    unmount();
+    await Promise.resolve();
+
+    expect(lifecycleEvents).toEqual([
+      "diff-editor",
+      "diff-original-model",
+      "diff-modified-model",
+    ]);
+  });
+
+  it("disposes single-view models after Monaco disposes the editor", async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(<FileDiffViewer path="src/index.ts" type="M" />);
+
+    await expand(user);
+    await user.click(screen.getByTestId("view-mode-new"));
+    unmount();
+    await Promise.resolve();
+
+    expect(lifecycleEvents).toEqual([
+      "diff-editor",
+      "diff-original-model",
+      "diff-modified-model",
+      "single-editor",
+      "single-model",
+    ]);
   });
 
   it("caps opened editor panes at 600px", () => {
