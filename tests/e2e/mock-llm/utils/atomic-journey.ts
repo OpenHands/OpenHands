@@ -182,6 +182,10 @@ export const test = base.extend<{ journey: AtomicJourney }>({
           errors.map((error) => error.message).join("; "),
         );
     },
-    { auto: true, timeout: 90_000 },
+    // Setup and teardown share this fixture budget. Setup alone can spend up
+    // to 60s on the cold-stack readiness poll, and teardown runs many
+    // sequential cleanup calls, so give the atomic-cleanup contract headroom
+    // beyond worst-case setup + teardown instead of aborting mid-cleanup.
+    { auto: true, timeout: 180_000 },
   ],
 });
