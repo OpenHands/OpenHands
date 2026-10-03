@@ -148,6 +148,13 @@ describe("ProfileActionsMenu", () => {
     expect(setActiveButton).toBeDisabled();
   });
 
+  it("disables Rename and Duplicate for the reserved Oracle profile", () => {
+    render(<ProfileActionsMenu {...defaultProps} isReserved />);
+
+    expect(screen.getByTestId("profile-rename")).toBeDisabled();
+    expect(screen.getByTestId("profile-duplicate")).toBeDisabled();
+  });
+
   it("keeps Delete enabled even when isActive is true", () => {
     // The active profile is deletable; useEnsureActiveProfile promotes another
     // profile to active afterwards so one is always active in local mode.

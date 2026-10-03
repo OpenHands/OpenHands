@@ -249,6 +249,17 @@ describe("LlmSettingsLocalView", () => {
     expect(screen.getByTestId("add-llm-profile")).toBeInTheDocument();
   });
 
+  it("locks the reserved Oracle name when configuration starts", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<LlmSettingsLocalView />);
+
+    await user.click(screen.getByTestId("configure-oracle-profile"));
+
+    expect(screen.getByTestId("profile-name-input")).toHaveValue("oracle");
+    expect(screen.getByTestId("profile-name-input")).toBeDisabled();
+    expect(screen.getByTestId("oracle-profile-name-hint")).toBeInTheDocument();
+  });
+
   it("switches to create view when Add button clicked", async () => {
     const user = userEvent.setup();
     renderWithProviders(<LlmSettingsLocalView />);
