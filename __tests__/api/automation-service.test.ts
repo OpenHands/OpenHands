@@ -229,9 +229,15 @@ describe("AutomationService", () => {
 
       await AutomationService.listAutomations({ createdBy: "others" });
 
-      expect(mockGet).toHaveBeenCalledWith("/api/automation/v1", {
-        params: { limit: 50, offset: 0, created_by: "others" },
-      });
+      expect(mockGet).toHaveBeenCalledWith(
+        "/api/automation/v1",
+        expect.objectContaining({
+          params: { limit: 50, offset: 0, created_by: "others" },
+          headers: expect.objectContaining({
+            "X-Session-API-Key": localBackend.apiKey,
+          }),
+        }),
+      );
     });
   });
 

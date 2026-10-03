@@ -303,18 +303,18 @@ class AutomationService {
       });
     }
 
-    // Attach `X-Session-API-Key` at the call site in addition to the
-    // local-axios interceptor. The sidebar onboarding poller calls this on
-    // every refresh of the active-backend context, and self-hosted users were
-    // seeing 401s with no header attached (issue #17690). Building the header
-    // explicitly here means the poller stays correct even if the interceptor
-    // is bypassed.
+    // Keep the existing call-site session header when passing the creator
+    // filter. The local axios interceptor also sets this header; this does
+    // not establish a fix for the production 401 reported in #17690.
     const sessionHeaders = buildSessionHeaders(
       getEffectiveLocalBackend()?.apiKey,
     );
     const { data } = await localAutomationAxios.get<AutomationsResponse>(
       `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}`,
-      { params: { limit, offset, created_by: createdBy }, headers: sessionHeaders },
+      {
+        params: { limit, offset, created_by: createdBy },
+        headers: sessionHeaders,
+      },
     );
     return data;
   }
