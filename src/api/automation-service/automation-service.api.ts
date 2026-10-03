@@ -16,6 +16,11 @@ import type {
   AutomationRunsResponse,
 } from "#/types/automation";
 import type {
+  AutomationWebhooksResponse,
+  CreateAutomationWebhookRequest,
+  CreatedAutomationWebhook,
+} from "#/types/automation-webhook";
+import type {
   GitSyncCheckResponse,
   GitSyncConfigUpdateRequest,
   GitSyncStatus,
@@ -236,6 +241,52 @@ async function buildPinnedCloudHeaders(active: ResolvedActiveBackend) {
 }
 
 class AutomationService {
+  static async listWebhooks({
+    limit = 50,
+    offset = 0,
+  }: {
+    limit?: number;
+    offset?: number;
+  } = {}): Promise<AutomationWebhooksResponse> {
+    const active = getActiveBackend();
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("webhooks")}`;
+    if (active.backend.kind === "cloud") {
+      return callCloudProxy<AutomationWebhooksResponse>({
+        backend: active.backend,
+        method: "GET",
+        path: `${path}?${buildListQuery(limit, offset)}`,
+        headers: await buildPinnedCloudHeaders(active),
+      });
+    }
+    const { data } = await localAutomationAxios.get<AutomationWebhooksResponse>(
+      path,
+      { params: { limit, offset } },
+    );
+    return data;
+  }
+
+  static async createWebhook(
+    body: CreateAutomationWebhookRequest,
+  ): Promise<CreatedAutomationWebhook> {
+    const active = getActiveBackend();
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("webhooks")}`;
+    if (active.backend.kind === "cloud") {
+      return callCloudProxy<CreatedAutomationWebhook>({
+        backend: active.backend,
+        method: "POST",
+        path,
+        body,
+        headers: await buildPinnedCloudHeaders(active),
+      });
+    }
+    const { data } = await localAutomationAxios.post<CreatedAutomationWebhook>(
+      path,
+      body,
+      await buildPinnedLocalConfig(active.backend),
+    );
+    return data;
+  }
+
   static async syncTelemetryConsent(
     consent: TelemetryConsent = getTelemetryConsent(),
   ): Promise<void> {
