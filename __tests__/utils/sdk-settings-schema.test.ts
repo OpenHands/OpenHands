@@ -197,6 +197,26 @@ const getSettingsForFields = (
 });
 
 describe("sdk settings schema helpers", () => {
+  it("rejects condenser max sizes below the SDK minimum", () => {
+    const field: SettingsFieldSchema = {
+      key: "condenser.max_size",
+      label: "Max size",
+      section: "condenser",
+      section_label: "Condenser",
+      value_type: "integer",
+      default: 240,
+      choices: [],
+      depends_on: ["condenser.enabled"],
+      prominence: "minor",
+      secret: false,
+      required: true,
+    };
+
+    expect(() => coerceFieldValue(field, "19")).toThrow(
+      "Max size must be at least 20",
+    );
+  });
+
   it("builds initial form values from the current settings", () => {
     expect(buildInitialSettingsFormValues(BASE_SETTINGS)).toEqual({
       "verification.critic_mode": "finish_and_message",
