@@ -1,17 +1,8 @@
+import { act } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi, afterEach } from "vitest";
 import { useTerminal } from "#/hooks/use-terminal";
 import { Command, useCommandStore } from "#/stores/command-store";
 import { renderWithProviders } from "../../test-utils";
-
-// Mock useActiveConversation
-vi.mock("#/hooks/query/use-active-conversation", () => ({
-  useActiveConversation: () => ({
-    data: {
-      id: "test-conversation-id",
-    },
-    isFetched: true,
-  }),
-}));
 
 // Mock useConversationWebSocket
 vi.mock("#/contexts/conversation-websocket-context", () => ({
@@ -23,6 +14,15 @@ function TestTerminalComponent() {
   return <div ref={ref} />;
 }
 
+function TestTerminalPair({ showFirst = true }: { showFirst?: boolean } = {}) {
+  return (
+    <>
+      {showFirst && <TestTerminalComponent key="first" />}
+      <TestTerminalComponent key="second" />
+    </>
+  );
+}
+
 // Terminal is read-only - no longer tests user input functionality
 const mockTerminal = vi.hoisted(() => ({
   loadAddon: vi.fn(),
@@ -30,6 +30,7 @@ const mockTerminal = vi.hoisted(() => ({
   write: vi.fn(),
   writeln: vi.fn(),
   dispose: vi.fn(),
+  reset: vi.fn(),
   element: document.createElement("div"),
 }));
 
@@ -50,6 +51,8 @@ vi.mock("@xterm/xterm", async (importOriginal) => ({
     writeln = mockTerminal.writeln;
 
     dispose = mockTerminal.dispose;
+
+    reset = mockTerminal.reset;
 
     element = mockTerminal.element;
   },
@@ -97,6 +100,128 @@ describe("useTerminal", () => {
 
     expect(mockTerminal.writeln).toHaveBeenNthCalledWith(1, "echo hello");
     expect(mockTerminal.writeln).toHaveBeenNthCalledWith(2, "hello");
+  });
+
+  it("should render new commands in every terminal instance", () => {
+    renderWithProviders(<TestTerminalPair />);
+
+    act(() => {
+      useCommandStore.setState({
+        commands: [{ content: "echo hello", type: "input" }],
+      });
+    });
+
+    expect(mockTerminal.writeln).toHaveBeenCalledTimes(2);
+    expect(mockTerminal.writeln).toHaveBeenNthCalledWith(1, "echo hello");
+    expect(mockTerminal.writeln).toHaveBeenNthCalledWith(2, "echo hello");
+  });
+
+  it("should initialize every terminal from preloaded commands", () => {
+    const commands: Command[] = [
+      { content: "echo hello", type: "input" },
+      { content: "hello", type: "output" },
+    ];
+    useCommandStore.setState({ commands });
+
+    renderWithProviders(<TestTerminalPair />);
+
+    expect(mockTerminal.writeln).toHaveBeenCalledTimes(4);
+  });
+
+  it("should not reset a sibling terminal's cursor when one unmounts", () => {
+    const commands: Command[] = [
+      { content: "echo hello", type: "input" },
+      { content: "hello", type: "output" },
+    ];
+    useCommandStore.setState({ commands });
+
+    const { rerender } = renderWithProviders(<TestTerminalPair />);
+    expect(mockTerminal.writeln).toHaveBeenCalledTimes(4);
+
+    mockTerminal.writeln.mockClear();
+    rerender(<TestTerminalPair showFirst={false} />);
+
+    act(() => {
+      useCommandStore.setState({
+        commands: [...commands, { content: "done", type: "output" }],
+      });
+    });
+
+    expect(mockTerminal.writeln).toHaveBeenCalledTimes(1);
+    expect(mockTerminal.writeln).toHaveBeenCalledWith("done");
+  });
+
+  it("should replay command history when a terminal remounts", () => {
+    const commands: Command[] = [
+      { content: "echo hello", type: "input" },
+      { content: "hello", type: "output" },
+    ];
+    useCommandStore.setState({ commands });
+
+    const firstRender = renderWithProviders(<TestTerminalComponent />);
+    expect(mockTerminal.writeln).toHaveBeenCalledTimes(2);
+
+    firstRender.unmount();
+    mockTerminal.writeln.mockClear();
+    renderWithProviders(<TestTerminalComponent />);
+
+    expect(mockTerminal.writeln).toHaveBeenCalledTimes(2);
+  });
+
+  it("should reset rendered history when the command store is cleared", () => {
+    const originalCommands: Command[] = [
+      { content: "echo hello", type: "input" },
+      { content: "hello", type: "output" },
+    ];
+    useCommandStore.setState({ commands: originalCommands });
+
+    renderWithProviders(<TestTerminalComponent />);
+    expect(mockTerminal.writeln).toHaveBeenCalledTimes(2);
+
+    mockTerminal.writeln.mockClear();
+    act(() => {
+      useCommandStore.getState().clearTerminal();
+    });
+    expect(mockTerminal.reset).toHaveBeenCalledOnce();
+
+    act(() => {
+      useCommandStore.getState().appendInput("echo fresh");
+      useCommandStore.getState().appendOutput("fresh");
+    });
+
+    expect(mockTerminal.writeln).toHaveBeenCalledTimes(2);
+    expect(mockTerminal.writeln).toHaveBeenNthCalledWith(1, "echo fresh");
+    expect(mockTerminal.writeln).toHaveBeenNthCalledWith(2, "fresh");
+    expect(mockTerminal.reset.mock.invocationCallOrder[0]).toBeLessThan(
+      mockTerminal.writeln.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("should reset rendered history when the command store is cleared and reseeded in one update", () => {
+    const originalCommands: Command[] = [
+      { content: "echo hello", type: "input" },
+      { content: "hello", type: "output" },
+    ];
+    useCommandStore.setState({ commands: originalCommands });
+
+    renderWithProviders(<TestTerminalComponent />);
+    expect(mockTerminal.writeln).toHaveBeenCalledTimes(2);
+
+    mockTerminal.reset.mockClear();
+    mockTerminal.writeln.mockClear();
+    act(() => {
+      useCommandStore.getState().clearTerminal();
+      useCommandStore.getState().appendInput("echo fresh");
+      useCommandStore.getState().appendOutput("fresh");
+    });
+
+    expect(mockTerminal.reset).toHaveBeenCalledOnce();
+    expect(mockTerminal.writeln).toHaveBeenCalledTimes(2);
+    expect(mockTerminal.writeln).toHaveBeenNthCalledWith(1, "echo fresh");
+    expect(mockTerminal.writeln).toHaveBeenNthCalledWith(2, "fresh");
+    expect(mockTerminal.reset.mock.invocationCallOrder[0]).toBeLessThan(
+      mockTerminal.writeln.mock.invocationCallOrder[0],
+    );
   });
 
   it("should not call fit() when terminal.element is null", () => {

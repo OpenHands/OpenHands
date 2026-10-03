@@ -87,17 +87,15 @@ function resolveTerminalForeground(host: HTMLElement): string {
   return getComputedStyle(host).color;
 }
 
-// Create a persistent reference that survives component unmounts
-// This ensures terminal history is preserved when navigating away and back
-const persistentLastCommandIndex = { current: 0 };
-
 export const useTerminal = () => {
   const colorTheme = useColorTheme();
   const commands = useCommandStore((state) => state.commands);
   const terminal = React.useRef<Terminal | null>(null);
   const fitAddon = React.useRef<FitAddon | null>(null);
   const ref = React.useRef<HTMLDivElement>(null);
-  const lastCommandIndex = persistentLastCommandIndex; // Use the persistent reference
+  const lastCommandIndex = React.useRef(0);
+  const clearVersion = useCommandStore((state) => state.clearVersion);
+  const lastClearVersion = React.useRef(clearVersion);
   const isDisposed = React.useRef(false);
 
   const createTerminal = (host: HTMLDivElement) =>
@@ -151,7 +149,7 @@ export const useTerminal = () => {
       // Render all commands in array
       // This happens when we just switch to Terminal from other tabs
       if (commands.length > 0) {
-        for (let i = 0; i < commands.length; i += 1) {
+        for (let i = lastCommandIndex.current; i < commands.length; i += 1) {
           if (commands[i].type === "input") {
             terminal.current.write("$ ");
           }
@@ -181,11 +179,21 @@ export const useTerminal = () => {
   }, [colorTheme]);
 
   React.useEffect(() => {
-    if (
-      terminal.current &&
-      commands.length > 0 &&
-      lastCommandIndex.current < commands.length
-    ) {
+    const wasCleared = clearVersion !== lastClearVersion.current;
+    lastClearVersion.current = clearVersion;
+
+    if (wasCleared) {
+      if (terminal.current) {
+        terminal.current.reset();
+        // Reset restores the default cursor visibility.
+        terminal.current.write("\x1b[?25l");
+      }
+      lastCommandIndex.current = 0;
+    }
+    if (commands.length === 0) {
+      return;
+    }
+    if (terminal.current && lastCommandIndex.current < commands.length) {
       for (let i = lastCommandIndex.current; i < commands.length; i += 1) {
         if (commands[i].type === "input") {
           terminal.current.write("$ ");
@@ -196,7 +204,7 @@ export const useTerminal = () => {
       }
       lastCommandIndex.current = commands.length;
     }
-  }, [commands]);
+  }, [commands, clearVersion]);
 
   React.useEffect(() => {
     let resizeObserver: ResizeObserver | null = null;

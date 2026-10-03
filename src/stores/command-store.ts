@@ -7,6 +7,7 @@ export type Command = {
 
 interface CommandState {
   commands: Command[];
+  clearVersion: number;
   appendInput: (content: string) => void;
   appendOutput: (content: string) => void;
   clearTerminal: () => void;
@@ -14,6 +15,7 @@ interface CommandState {
 
 export const useCommandStore = create<CommandState>((set) => ({
   commands: [],
+  clearVersion: 0,
   appendInput: (content: string) =>
     set((state) => ({
       commands: [...state.commands, { content, type: "input" }],
@@ -22,5 +24,9 @@ export const useCommandStore = create<CommandState>((set) => ({
     set((state) => ({
       commands: [...state.commands, { content, type: "output" }],
     })),
-  clearTerminal: () => set({ commands: [] }),
+  clearTerminal: () =>
+    set((state) => ({
+      commands: [],
+      clearVersion: state.clearVersion + 1,
+    })),
 }));
