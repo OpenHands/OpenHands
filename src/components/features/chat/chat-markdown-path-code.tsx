@@ -89,11 +89,12 @@ function ChatMarkdownPathLink({
   return (
     <button
       type="button"
+      dir="ltr"
       data-testid="markdown-file-path-link"
       title={path}
       className={cn(
         className,
-        "cursor-pointer rounded border border-surface-raised bg-surface-raised px-[0.4em] py-[0.2em] font-mono text-foreground hover:underline",
+        "cursor-pointer rounded border border-surface-raised bg-surface-raised px-[0.4em] py-[0.2em] text-left font-mono text-foreground hover:underline",
       )}
       onClick={(event) => {
         event.stopPropagation();

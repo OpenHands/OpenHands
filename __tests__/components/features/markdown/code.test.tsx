@@ -7,7 +7,8 @@ describe("code (markdown)", () => {
   it("should render inline code without a copy button", () => {
     render(<Code>inline snippet</Code>);
 
-    expect(screen.getByText("inline snippet")).toBeInTheDocument();
+    expect(screen.getByText("inline snippet")).toHaveAttribute("dir", "ltr");
+    expect(screen.getByText("inline snippet")).toHaveClass("text-left");
     expect(screen.queryByTestId("copy-to-clipboard")).not.toBeInTheDocument();
   });
 
@@ -15,12 +16,19 @@ describe("code (markdown)", () => {
     render(<Code>{"line1\nline2"}</Code>);
 
     expect(screen.getByText("line1 line2")).toBeInTheDocument();
+    expect(screen.getByText("line1 line2").closest("pre")).toHaveAttribute(
+      "dir",
+      "ltr",
+    );
     expect(screen.getByTestId("copy-to-clipboard")).toBeInTheDocument();
   });
 
   it("should render a syntax-highlighted block with a copy button", () => {
-    render(<Code className="language-js">{"console.log('hi')"}</Code>);
+    const { container } = render(
+      <Code className="language-js">{"console.log('hi')"}</Code>,
+    );
 
+    expect(container.querySelector('[dir="ltr"]')).toHaveClass("text-left");
     expect(screen.getByTestId("copy-to-clipboard")).toBeInTheDocument();
   });
 
