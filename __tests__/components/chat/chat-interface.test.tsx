@@ -1,4 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it, test, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  test,
+  vi,
+  type MockInstance,
+} from "vitest";
 import {
   fireEvent,
   render,
@@ -32,6 +41,7 @@ import { AgentState } from "#/types/agent-state";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useGoalStore } from "#/stores/goal-store";
 import { act } from "@testing-library/react";
+import AutomationService from "#/api/automation-service/automation-service.api";
 
 const mockSend = vi.fn();
 vi.mock("#/hooks/use-send-message", () => ({
@@ -88,10 +98,12 @@ vi.mock("#/hooks/use-agent-state", () => ({
 
 const trackInitialQuerySubmittedMock = vi.fn();
 const trackUserMessageSentMock = vi.fn();
+const trackAutomationCreatedButtonMock = vi.fn();
 vi.mock("#/hooks/use-tracking", () => ({
   useTracking: () => ({
     trackInitialQuerySubmitted: trackInitialQuerySubmittedMock,
     trackUserMessageSent: trackUserMessageSentMock,
+    trackAutomationCreatedButton: trackAutomationCreatedButtonMock,
   }),
 }));
 
@@ -1212,5 +1224,148 @@ describe("ChatInterface - Build plan keyboard shortcut", () => {
     await waitFor(() => {
       expect(sentBuildPrompt()).toBe(true);
     });
+  });
+});
+
+describe("ChatInterface - Turn this into an automation", () => {
+  let checkHealthSpy: MockInstance<typeof AutomationService.checkHealth>;
+
+  const agentReply = {
+    id: "agent-reply",
+    timestamp: "2026-08-12T00:00:10Z",
+    source: "agent",
+    llm_message: {
+      role: "assistant",
+      content: [{ type: "text", text: "Summarized this week's open PRs." }],
+    },
+  } as unknown as MessageEvent;
+
+  const seedFinishedTurn = () =>
+    useEventStore.setState({
+      events: [agentReply],
+      eventIds: new Set([agentReply.id]),
+      uiEvents: [agentReply],
+    });
+
+  // Absence is only meaningful once the health result has reached the cue.
+  const settleAutomationHealth = async () => {
+    await waitFor(() => expect(checkHealthSpy).toHaveResolved());
+    await act(async () => {
+      await new Promise((resolve) => {
+        setTimeout(resolve, 0);
+      });
+    });
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    checkHealthSpy = vi
+      .spyOn(AutomationService, "checkHealth")
+      .mockResolvedValue({ status: "ok" });
+    vi.mocked(useAgentState).mockReturnValue({
+      curAgentState: AgentState.AWAITING_USER_INPUT,
+    });
+    (useConfig as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      data: {},
+    });
+    (
+      useUnifiedUploadFiles as unknown as ReturnType<typeof vi.fn>
+    ).mockReturnValue({
+      mutateAsync: vi
+        .fn()
+        .mockResolvedValue({ skipped_files: [], uploaded_files: [] }),
+      isLoading: false,
+    });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
+    useConversationStore.setState({
+      messageToSend: null,
+      conversationMode: "code",
+    });
+    useEventStore.setState({ events: [], eventIds: new Set(), uiEvents: [] });
+    // jsdom has no layout, so it leaves `innerText` (which the composer reads
+    // to tell whether it holds a message) undefined.
+    Object.defineProperty(HTMLElement.prototype, "innerText", {
+      configurable: true,
+      get() {
+        return this.textContent;
+      },
+    });
+  });
+
+  afterEach(() => {
+    Reflect.deleteProperty(HTMLElement.prototype, "innerText");
+    checkHealthSpy.mockRestore();
+  });
+
+  it("seeds the composer with an editable automation request without sending it", async () => {
+    seedFinishedTurn();
+    renderChatInterfaceWithRouter();
+
+    fireEvent.click(await screen.findByTestId("turn-into-automation-cue"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("chat-input")).toHaveTextContent(
+        "AUTOMATIONS$TURN_INTO_AUTOMATION_PROMPT",
+      ),
+    );
+    expect(screen.getByTestId("submit-button")).toBeEnabled();
+    expect(trackAutomationCreatedButtonMock).toHaveBeenCalledWith({
+      backendKind: "local",
+      source: "conversation",
+    });
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  it("keeps a message the user is already typing", async () => {
+    seedFinishedTurn();
+    renderChatInterfaceWithRouter();
+    const cue = await screen.findByTestId("turn-into-automation-cue");
+    const composer = screen.getByTestId("chat-input");
+    composer.textContent = "Also flag the stale ones";
+    fireEvent.input(composer);
+
+    fireEvent.click(cue);
+    await act(async () => {});
+
+    expect(composer).toHaveTextContent("Also flag the stale ones");
+  });
+
+  it.each([
+    {
+      reason: "the agent is still working",
+      arrange: () => {
+        seedFinishedTurn();
+        vi.mocked(useAgentState).mockReturnValue({
+          curAgentState: AgentState.RUNNING,
+        });
+      },
+    },
+    {
+      reason: "the conversation has no agent work yet",
+      arrange: () => {},
+    },
+    {
+      reason: "the planning agent owns the conversation",
+      arrange: () => {
+        seedFinishedTurn();
+        useConversationStore.setState({ conversationMode: "plan" });
+      },
+    },
+    {
+      reason: "the automation backend is unavailable",
+      arrange: () => {
+        seedFinishedTurn();
+        checkHealthSpy.mockResolvedValue({ status: "error" });
+      },
+    },
+  ])("does not offer the action when $reason", async ({ arrange }) => {
+    arrange();
+    renderChatInterfaceWithRouter();
+
+    await settleAutomationHealth();
+
+    expect(
+      screen.queryByTestId("turn-into-automation-cue"),
+    ).not.toBeInTheDocument();
   });
 });

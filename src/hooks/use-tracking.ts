@@ -37,6 +37,9 @@ export type OnboardingLinkDestinationType =
 /** Onboarding surface that presented the link. */
 export type OnboardingLinkSurface = "landing_checklist" | "onboarding_modal";
 
+/** Surface that started automation creation, when it is not the Automations page. */
+export type AutomationCreateSource = "conversation";
+
 /**
  * Hook that provides tracking functions with automatic data collection
  * from available hooks (settings, etc.)
@@ -280,10 +283,15 @@ export const useTracking = () => {
 
   const trackAutomationCreatedButton = ({
     backendKind,
+    source,
   }: {
     backendKind: BackendKind;
+    source?: AutomationCreateSource;
   }) => {
-    track("automation_created_button", { backend_kind: backendKind });
+    track("automation_created_button", {
+      backend_kind: backendKind,
+      ...(source ? { source } : {}),
+    });
   };
 
   const trackAutomationExecuted = ({

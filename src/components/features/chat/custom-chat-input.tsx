@@ -163,9 +163,11 @@ export function CustomChatInput({
     },
     [setShouldHideSuggestions, clearAllFiles],
   );
+  // `messageToSend` is written straight into the DOM, with no input event, so
+  // a seeded prompt would otherwise leave the send button disabled.
   useEffect(() => {
     syncCanSubmit();
-  }, [syncCanSubmit, images.length, files.length]);
+  }, [syncCanSubmit, images.length, files.length, messageToSend]);
   return (
     <div className={cn("w-full", className)}>
       {/* Hidden file input */}
