@@ -79,6 +79,38 @@ describe("automation export files", () => {
     expect(parseAutomationFile(exported).timeout).toBe(900);
   });
 
+  it("preserves a selected agent profile through export and import", () => {
+    const profileId = "11111111-1111-4111-8111-111111111111";
+    const withProfile: Automation = {
+      ...cronAutomation,
+      agent_profile_id: profileId,
+    };
+
+    const exported = serializeAutomation(withProfile);
+
+    expect(exported.spec.agent_profile_id).toBe(profileId);
+    expect(parseAutomationFile(exported).agent_profile_id).toBe(profileId);
+  });
+
+  it("rejects a malformed agent_profile_id", () => {
+    const exported = serializeAutomation(cronAutomation);
+    const bad = {
+      ...exported,
+      spec: { ...exported.spec, agent_profile_id: 42 },
+    };
+
+    expect(() => parseAutomationFile(bad)).toThrow(
+      AutomationFileValidationError,
+    );
+    try {
+      parseAutomationFile(bad);
+    } catch (error) {
+      expect((error as AutomationFileValidationError).issues).toContain(
+        "spec.agent_profile_id: expected a non-empty string or null",
+      );
+    }
+  });
+
   it("reports every malformed field with its path", () => {
     const malformed = {
       version: 2,
