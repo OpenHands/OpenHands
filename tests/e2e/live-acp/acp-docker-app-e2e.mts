@@ -13,8 +13,10 @@
  * credentials round-trip through the backend store and the orchestrator emits
  * the right LookupSecrets, end-to-end, against a real container.
  *
- * Requires an agent-server with software-agent-sdk#3510 (first in v1.25.0) —
- * ACP credentials resolve off the event loop; an older image deadlocks.
+ * Requires agent-server >= v1.28.0 (config/defaults.json
+ * compatibility.minimumAgentServer); prefer versions.agentServer
+ * (1.44.1-python). Needs software-agent-sdk#3510 for off-loop
+ * LookupSecret resolution. An older image deadlocks.
  *
  *   npx vite-node -c tests/e2e/live-acp/vite-node.config.mts \
  *     tests/e2e/live-acp/acp-docker-app-e2e.mts -- codex
