@@ -3,7 +3,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import CanvasExtensionsService from "#/api/canvas-extensions-service";
-import { useInstallCanvasExtension } from "#/hooks/mutation/use-manage-canvas-extensions";
+import {
+  useInstallCanvasExtension,
+  useRefreshCanvasExtension,
+} from "#/hooks/mutation/use-manage-canvas-extensions";
 import { CORS_OR_NETWORK_ERROR_MESSAGE } from "#/utils/user-facing-error";
 
 const displayErrorToast = vi.fn();
@@ -75,5 +78,58 @@ describe("useInstallCanvasExtension", () => {
     expect(displayErrorToast).toHaveBeenCalledWith(
       CORS_OR_NETWORK_ERROR_MESSAGE,
     );
+  });
+});
+
+describe("useRefreshCanvasExtension", () => {
+  const installed = {
+    name: "demo",
+    version: "0.1.0",
+    enabled: true,
+    source: "github:example/apps",
+    requested_ref: "v1",
+    resolved_ref: "abc123",
+    repo_path: "demo",
+    installed_at: "2026-08-01T00:00:00Z",
+    install_path: "/tmp/demo",
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("force-reinstalls from the recorded source coordinates", async () => {
+    const install = vi
+      .spyOn(CanvasExtensionsService, "install")
+      .mockResolvedValue({} as never);
+
+    const { result } = renderHook(() => useRefreshCanvasExtension(), {
+      wrapper: createWrapper(),
+    });
+    result.current.mutate(installed);
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(install).toHaveBeenCalledWith({
+      source: "github:example/apps",
+      ref: "v1",
+      repo_path: "demo",
+      force: true,
+    });
+  });
+
+  it("surfaces the server's validation error", async () => {
+    const detail =
+      "entrypoint 'dist/missing.js' does not resolve to a file in the extension package";
+    vi.spyOn(CanvasExtensionsService, "install").mockRejectedValue(
+      new HttpError(422, detail),
+    );
+
+    const { result } = renderHook(() => useRefreshCanvasExtension(), {
+      wrapper: createWrapper(),
+    });
+    result.current.mutate(installed);
+
+    await waitFor(() => expect(displayErrorToast).toHaveBeenCalled());
+    expect(displayErrorToast).toHaveBeenCalledWith(detail);
   });
 });

@@ -373,6 +373,38 @@ describe("ConversationPanel", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("lists a conversation once when it comes back on the next page", async () => {
+    // Arrange — a conversation's updated_at moved between the two requests,
+    // so page 2 repeats the last row of page 1.
+    const user = userEvent.setup();
+    const shifted = createMockConversation({ id: "shifted", title: "Shifted" });
+    const page1 = [
+      createMockConversation({ id: "first", title: "First" }),
+      shifted,
+    ];
+    const page2 = [
+      shifted,
+      createMockConversation({ id: "older", title: "Older" }),
+    ];
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockImplementation(async (_limit, pageId) =>
+      pageId === "page-2"
+        ? { items: page2, next_page_id: null }
+        : { items: page1, next_page_id: "page-2" },
+    );
+    renderConversationPanel();
+    await screen.findByText("Shifted");
+
+    // Act
+    await user.click(screen.getByTestId("load-more-conversations"));
+
+    // Assert
+    await screen.findByText("Older");
+    expect(screen.getAllByText("Shifted")).toHaveLength(1);
+  });
+
   it("scopes the list to the automation filter mode across hide and only", async () => {
     // Arrange: two manual conversations plus one automation run recognized
     // by its tags (local backend) and one by its trigger (cloud backend).
