@@ -1,8 +1,9 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { Plus } from "lucide-react";
+import { Download, Plus, Upload } from "lucide-react";
 
 import { getLockedCloudHost } from "#/api/agent-server-config";
+import { setRegisteredBackends } from "#/api/backend-registry/active-store";
 import { type Backend } from "#/api/backend-registry/types";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { ConfirmationModal } from "#/components/shared/modals/confirmation-modal";
@@ -19,6 +20,15 @@ import { useCloudCurrentUserId } from "#/hooks/query/use-cloud-current-user-id";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 import { modalTitleLgClassName } from "#/utils/modal-classes";
+import {
+  mergePortableBackends,
+  parsePortableBackends,
+  serializePortableBackends,
+} from "#/utils/backend-config-portability";
+import {
+  displayErrorToast,
+  displaySuccessToast,
+} from "#/utils/custom-toast-handlers";
 import { BackendFormModal } from "./backend-form-modal";
 import { BackendRow } from "./backend-row";
 import { DeviceFlowAuth } from "./device-flow-auth";
@@ -94,6 +104,38 @@ export function ManageBackendsModal({
     null,
   );
   const [showAddForm, setShowAddForm] = React.useState(false);
+  const importInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleExportBackends = React.useCallback(() => {
+    const blob = new Blob([serializePortableBackends(backends)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "openhands-backends.json";
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }, [backends]);
+
+  const handleImportBackends = React.useCallback(
+    async (file: File) => {
+      try {
+        const imported = parsePortableBackends(await file.text());
+        setRegisteredBackends(mergePortableBackends(backends, imported));
+        displaySuccessToast("Backend configuration imported.");
+      } catch (error) {
+        displayErrorToast(
+          error instanceof Error
+            ? error.message
+            : "Unable to import backend configuration.",
+        );
+      } finally {
+        if (importInputRef.current) importInputRef.current.value = "";
+      }
+    },
+    [backends],
+  );
 
   const handleConfirmRemoval = () => {
     if (!pendingRemoval) return;
@@ -194,6 +236,49 @@ export function ManageBackendsModal({
               )}
             </div>
           </div>
+
+          {!isLockedToCloud && (
+            <div className="px-5 pt-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <BrandButton
+                  type="button"
+                  variant="secondary"
+                  onClick={handleExportBackends}
+                  testId="manage-backends-export"
+                  startContent={<Download width={14} height={14} />}
+                >
+                  {/* eslint-disable-next-line i18next/no-literal-string */}
+                  Export
+                </BrandButton>
+                <BrandButton
+                  type="button"
+                  variant="secondary"
+                  onClick={() => importInputRef.current?.click()}
+                  testId="manage-backends-import"
+                  startContent={<Upload width={14} height={14} />}
+                >
+                  {/* eslint-disable-next-line i18next/no-literal-string */}
+                  Import
+                </BrandButton>
+                <input
+                  ref={importInputRef}
+                  data-testid="manage-backends-import-input"
+                  type="file"
+                  accept="application/json,.json"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) void handleImportBackends(file);
+                  }}
+                />
+              </div>
+              {/* eslint-disable-next-line i18next/no-literal-string */}
+              <p className="mt-2 text-xs text-[var(--oh-text-secondary)]">
+                Exported backend files contain session API keys. Store and share
+                them like credentials.
+              </p>
+            </div>
+          )}
 
           <div className="flex justify-end gap-2 p-5">
             {isLockedToCloud ? (
