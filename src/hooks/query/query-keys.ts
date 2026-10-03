@@ -61,6 +61,20 @@ export const PLUGINS_QUERY_KEYS = {
   local: ["plugins-local"] as const,
 } as const;
 
+export const SKILLS_QUERY_KEYS = {
+  all: ["skills"] as const,
+  catalog: (
+    backendId: string,
+    orgId: string | null,
+    projectDir: string | null,
+  ) => ["skills", "catalog", backendId, orgId, projectDir] as const,
+  conversation: (
+    backendId: string,
+    orgId: string | null,
+    conversationId: string,
+  ) => ["skills", "conversation", backendId, orgId, conversationId] as const,
+} as const;
+
 export const CANVAS_EXTENSIONS_QUERY_KEYS = {
   all: ["canvas-extensions"] as const,
   installed: (
