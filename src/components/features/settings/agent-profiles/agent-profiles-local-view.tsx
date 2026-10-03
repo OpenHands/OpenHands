@@ -97,6 +97,7 @@ export function AgentProfilesLocalView() {
     SettingsValue
   > | null>(null);
   const [llmProfileRef, setLlmProfileRef] = useState("");
+  const [systemMessageSuffix, setSystemMessageSuffix] = useState("");
   const [saveControl, setSaveControl] =
     useState<AgentSettingsSaveControl | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -134,6 +135,7 @@ export function AgentProfilesLocalView() {
     setEditingProfile(null);
     setOverride({ agent_kind: "openhands" });
     setLlmProfileRef(defaultLlmProfileRef);
+    setSystemMessageSuffix("");
     setSaveControl(null);
     setViewMode("create");
   }, [defaultLlmProfileRef]);
@@ -153,6 +155,10 @@ export function AgentProfilesLocalView() {
         setEditingProfile(profile);
         setOverride(toAgentSettingsOverride(profile));
         if (profile.agent_kind === "openhands") {
+          setSystemMessageSuffix(
+            (profile as { system_message_suffix?: string | null })
+              .system_message_suffix ?? "",
+          );
           // A profile can reference an LLM profile that's since been deleted
           // (or renamed): the dropdown would render nothing selected while
           // `llmProfileRef` still holds the stale name and saves it straight
@@ -168,6 +174,7 @@ export function AgentProfilesLocalView() {
           );
         } else {
           setLlmProfileRef("");
+          setSystemMessageSuffix("");
         }
         setProfileName(profile.name);
         setSaveControl(null);
@@ -201,7 +208,11 @@ export function AgentProfilesLocalView() {
           displayErrorToast(t(I18nKey.SETTINGS$AGENT_PROFILE_LLM_REQUIRED));
           return;
         }
-        input = { ...fields, llm_profile_ref: llmProfileRef };
+        input = {
+          ...fields,
+          llm_profile_ref: llmProfileRef,
+          system_message_suffix: systemMessageSuffix.trim() || null,
+        } as AgentProfileSaveInput;
       } else {
         input = fields as AgentProfileSaveInput;
       }
@@ -260,6 +271,7 @@ export function AgentProfilesLocalView() {
     saveControl,
     isNameValid,
     llmProfileRef,
+    systemMessageSuffix,
     profileName,
     viewMode,
     editingProfile,
@@ -294,11 +306,21 @@ export function AgentProfilesLocalView() {
       : "";
   const llmRefDirty =
     viewMode === "edit" && isOpenHands && llmProfileRef !== loadedLlmRef;
+  const loadedSystemMessageSuffix =
+    editingProfile?.agent_kind === "openhands"
+      ? ((editingProfile as { system_message_suffix?: string | null })
+          .system_message_suffix ?? "")
+      : "";
+  const systemMessageSuffixDirty =
+    viewMode === "edit" &&
+    isOpenHands &&
+    systemMessageSuffix !== loadedSystemMessageSuffix;
   const hasUnsavedChanges =
     viewMode === "create" ||
     Boolean(saveControl?.isDirty) ||
     nameDirty ||
-    llmRefDirty;
+    llmRefDirty ||
+    systemMessageSuffixDirty;
 
   return (
     <div className="flex flex-col gap-6">
@@ -333,6 +355,31 @@ export function AgentProfilesLocalView() {
         agentSettingsOverride={override}
         onSaveControlChange={setSaveControl}
       />
+
+      {/* OpenHands profiles can append persistent instructions to the built-in
+          system prompt. Keep this outside the shared Agent settings form because
+          it is a profile-only field, not a global AgentSettings value. */}
+      {isOpenHands && (
+        <label className="flex flex-col gap-2">
+          {/* eslint-disable-next-line i18next/no-literal-string */}
+          <span className="text-sm font-medium text-foreground">
+            Custom instructions
+          </span>
+          <textarea
+            data-testid="agent-profile-system-message-suffix"
+            value={systemMessageSuffix}
+            onChange={(event) => setSystemMessageSuffix(event.target.value)}
+            rows={5}
+            // eslint-disable-next-line i18next/no-literal-string
+            placeholder="Persistent instructions appended to this Agent Profile's system prompt"
+            className="w-full resize-y rounded-lg border border-[var(--oh-border)] bg-transparent px-3 py-2 text-sm text-foreground outline-none focus:border-white/40"
+          />
+          {/* eslint-disable-next-line i18next/no-literal-string */}
+          <span className="text-xs text-tertiary-light">
+            Applies to new conversations started with this profile.
+          </span>
+        </label>
+      )}
 
       {/* OpenHands profiles reference an LLM profile (required). */}
       {isOpenHands &&

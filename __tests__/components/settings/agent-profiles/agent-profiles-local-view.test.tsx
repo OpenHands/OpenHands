@@ -154,7 +154,40 @@ describe("AgentProfilesLocalView save mapping", () => {
         mcp_server_refs: null,
         enable_sub_agents: true,
         llm_profile_ref: "default",
+        system_message_suffix: null,
       },
+    });
+  });
+
+  it("creates an OpenHands profile with custom system instructions", async () => {
+    emitControl = {
+      agentType: "openhands",
+      isValid: true,
+      isDirty: true,
+      buildAgentProfileFields: () => ({
+        agent_kind: "openhands",
+        mcp_server_refs: null,
+        enable_sub_agents: true,
+      }),
+      credentials: { isDirty: false, save: vi.fn(), reset: vi.fn() },
+    };
+
+    render(<AgentProfilesLocalView />);
+    const user = await openCreateAndName("instructed");
+    await user.type(
+      screen.getByTestId("agent-profile-system-message-suffix"),
+      "Always respond in English.",
+    );
+    await user.click(screen.getByTestId("save-agent-profile-btn"));
+
+    await waitFor(() => expect(saveMutate).toHaveBeenCalledTimes(1));
+    expect(saveMutate).toHaveBeenCalledWith({
+      name: "instructed",
+      profile: expect.objectContaining({
+        agent_kind: "openhands",
+        llm_profile_ref: "default",
+        system_message_suffix: "Always respond in English.",
+      }),
     });
   });
 
@@ -235,6 +268,9 @@ describe("AgentProfilesLocalView save mapping", () => {
     const user = userEvent.setup();
     await user.click(screen.getByTestId("edit-agent-profile"));
     await screen.findByTestId("mock-agent-settings");
+    expect(
+      screen.getByTestId("agent-profile-system-message-suffix"),
+    ).toHaveValue("Be terse.");
 
     // The embedded form is seeded from the stored profile — including
     // `enable_switch_llm_tool`, which the editor now models. (Asserted before
