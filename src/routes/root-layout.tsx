@@ -105,7 +105,7 @@ function MainAppContent() {
 
   if (config.isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-base">
+      <div className="min-h-screen flex items-center justify-center bg-canvas-base">
         <LoadingSpinner size="large" />
       </div>
     );
@@ -124,7 +124,7 @@ function MainAppContent() {
         <SidebarMobileNavProvider>
           <div
             data-testid="root-layout"
-            className="h-screen lg:min-w-5xl flex flex-col md:flex-row bg-base overflow-hidden p-0"
+            className="h-screen lg:min-w-5xl flex flex-col md:flex-row bg-canvas-base overflow-hidden p-0"
           >
             <title>{appTitle}</title>
             <Sidebar />

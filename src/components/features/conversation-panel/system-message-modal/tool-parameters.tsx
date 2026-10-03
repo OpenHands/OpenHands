@@ -16,7 +16,7 @@ export function ToolParameters({ parameters }: ToolParametersProps) {
       <Typography.Text className="text-sm font-semibold text-text-tertiary">
         {t(I18nKey.SYSTEM_MESSAGE_MODAL$PARAMETERS)}
       </Typography.Text>
-      <div className="text-sm mt-2 p-3 bg-base rounded-md overflow-auto text-text-tertiary max-h-100 border border-border">
+      <div className="text-sm mt-2 p-3 bg-canvas-base rounded-md overflow-auto text-text-tertiary max-h-100 border border-border">
         <ReactJsonView name={false} src={parameters} theme={JSON_VIEW_THEME} />
       </div>
     </div>

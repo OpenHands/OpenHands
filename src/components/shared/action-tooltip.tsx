@@ -35,7 +35,7 @@ export function ActionTooltip({ type, onClick }: ActionTooltipProps) {
           "rounded px-2 h-6.5 text-sm font-normal leading-5 cursor-pointer hover:opacity-80",
           type === "confirm"
             ? "bg-tertiary text-contrast"
-            : "bg-contrast text-base",
+            : "bg-contrast text-canvas-base",
         )}
         onClick={onClick}
       >
