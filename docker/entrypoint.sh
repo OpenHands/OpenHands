@@ -210,8 +210,15 @@ if [ -z "${LOCAL_BACKEND_API_KEY:-}" ] && [ -z "${OH_SESSION_API_KEYS_0:-}" ]; t
     chmod 600 "$API_KEY_FILE"
     log "Generated API key (persisted to $API_KEY_FILE)"
   fi
-  export OH_SESSION_API_KEYS_0="$LOCAL_BACKEND_API_KEY"
 fi
+
+# The agent server reads OH_SESSION_API_KEYS_0, not LOCAL_BACKEND_API_KEY.
+# Mirror the resolved key into it whenever it was not set directly, so a
+# custom LOCAL_BACKEND_API_KEY actually secures the agent server too (an
+# explicitly set OH_SESSION_API_KEYS_0 always wins). No SESSION_API_KEY alias
+# on purpose: the npm launcher deliberately omits it (the SDK's
+# sanitized_env() strips it from bash subprocesses anyway).
+export OH_SESSION_API_KEYS_0="${OH_SESSION_API_KEYS_0:-${LOCAL_BACKEND_API_KEY:-}}"
 
 # Both backends share the same API key value and the same `X-Session-API-Key`
 # header for authentication.  Default OPENHANDS_AUTOMATION_API_KEY to the
