@@ -233,7 +233,7 @@ beforeEach(() => {
     if (options?.host?.startsWith("https://127.0.0.1:8000")) {
       return Promise.reject(new Error("Failed to fetch"));
     }
-    return Promise.resolve({ version: "1.28.0" });
+    return Promise.resolve({ version: "1.48.0" });
   });
   // ChooseAgentStep's Next button now persists the selection via
   // saveSettings before advancing. Stub it so the rest of the flow
@@ -860,15 +860,17 @@ describe("OnboardingModal", () => {
     expect(settings.contains(next)).toBe(false);
   });
 
-  it("hides the Say Hello OR separator when recommended automations are unavailable on Cloud", () => {
+  it("shows the Say Hello OR separator and recommended automations on Cloud", () => {
     seedCloudBackend();
 
     renderModal();
 
-    expect(screen.queryByTestId("onboarding-hello-or-separator")).toBeNull();
     expect(
-      screen.queryByTestId("onboarding-recommended-automations"),
-    ).toBeNull();
+      screen.getByTestId("onboarding-hello-or-separator"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("onboarding-recommended-automations"),
+    ).toBeInTheDocument();
   });
 
   it("shows the setup slide with Gemini's credential fields", async () => {
