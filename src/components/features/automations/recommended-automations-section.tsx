@@ -24,7 +24,6 @@ import {
   getMarketplaceEntryById,
   isMcpInstallableEntry,
 } from "#/utils/mcp-marketplace-utils";
-import { getFeaturedAutomationIds } from "#/manifests/automation-interface";
 import {
   getAutomationIcon,
   getAutomationLaunchPrompt,
@@ -39,7 +38,6 @@ import {
   extensionModuleCardPillClassName,
   extensionModuleCardSurfaceClassName,
 } from "#/utils/extension-module-card-classes";
-import { StatusBadge } from "./status-badge";
 
 type GetNativeIntegration = (entryId: string) => NativeGitIntegration | null;
 
@@ -57,14 +55,6 @@ interface RecommendedAutomationsSectionProps {
 export { getAutomationsByPopularity };
 
 const RECOMMENDED_AUTOMATIONS = getAutomationsByPopularity(AUTOMATION_CATALOG);
-
-// Proven automations are featured above the Beta group. The set is owned by
-// the interface manifest (falling back to the host default), not derived from
-// popularityRank: slack-standup-digest@94 outranks slack-channel-monitor@92
-// yet is Beta.
-function isProvenAutomation(automation: RecommendedAutomation): boolean {
-  return getFeaturedAutomationIds().includes(automation.id);
-}
 
 export interface AutomationIntegration {
   id: string;
@@ -328,11 +318,6 @@ export function RecommendedAutomationsSection({
 
   if (visibleAutomations.length === 0) return null;
 
-  const provenAutomations = visibleAutomations.filter(isProvenAutomation);
-  const betaAutomations = visibleAutomations.filter(
-    (automation) => !isProvenAutomation(automation),
-  );
-
   return (
     <section
       data-testid="recommended-automations-section"
@@ -349,52 +334,20 @@ export function RecommendedAutomationsSection({
             "min-h-0 flex-1 overflow-y-auto custom-scrollbar-always",
         )}
       >
-        {provenAutomations.length > 0 && (
-          <>
-            <div className="flex items-center">
-              <h2 className="text-base font-semibold text-foreground">
-                {t(I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_TITLE)}
-              </h2>
-              <StatusBadge count={provenAutomations.length} />
-            </div>
-            <p className="mt-1 text-sm text-muted">
-              {t(I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_DESCRIPTION)}
-            </p>
+        <h2 className="text-base font-semibold text-foreground">
+          {t(I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_TITLE)}
+        </h2>
+        <p className="mt-1 text-sm text-muted">
+          {t(I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_DESCRIPTION)}
+        </p>
 
-            <AutomationCardGrid
-              automations={provenAutomations}
-              installedServers={installedServers}
-              getNativeIntegration={getNativeIntegration}
-              onSelect={onSelect}
-              translate={t}
-            />
-          </>
-        )}
-
-        {betaAutomations.length > 0 && (
-          <section
-            data-testid="recommended-automations-beta-section"
-            className={cn(provenAutomations.length > 0 && "mt-8")}
-          >
-            <div
-              data-testid="recommended-automations-beta-heading"
-              className="flex items-center"
-            >
-              <h2 className="text-base font-semibold text-foreground">
-                {t(I18nKey.RECOMMENDED_AUTOMATIONS$BETA_LABEL)}
-              </h2>
-              <StatusBadge count={betaAutomations.length} />
-            </div>
-
-            <AutomationCardGrid
-              automations={betaAutomations}
-              installedServers={installedServers}
-              getNativeIntegration={getNativeIntegration}
-              onSelect={onSelect}
-              translate={t}
-            />
-          </section>
-        )}
+        <AutomationCardGrid
+          automations={visibleAutomations}
+          installedServers={installedServers}
+          getNativeIntegration={getNativeIntegration}
+          onSelect={onSelect}
+          translate={t}
+        />
       </div>
     </section>
   );
