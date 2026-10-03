@@ -33,6 +33,10 @@ interface ConversationGroupFolderListProps {
   discoveryConversationIds: ReadonlySet<string> | null;
   onToggleGroupCollapsed: (groupId: string) => void;
   onToggleGroupPreviewExpanded: (groupId: string) => void;
+  onLoadMoreGroup: (groupId: string) => void;
+  hasNextPage: boolean;
+  isLoadingMoreGroup: (groupId: string) => boolean;
+
   isCreatingConversationFlow: boolean;
   activeConversationId?: string | null;
   onLaunchFromGroup: (launch: ConversationGroupLaunch) => void;
@@ -49,6 +53,10 @@ export function ConversationGroupFolderList({
   discoveryConversationIds,
   onToggleGroupCollapsed,
   onToggleGroupPreviewExpanded,
+  onLoadMoreGroup,
+  hasNextPage,
+  isLoadingMoreGroup,
+
   isCreatingConversationFlow,
   activeConversationId,
   onLaunchFromGroup,
@@ -182,6 +190,9 @@ export function ConversationGroupFolderList({
             handleDrop(group.id, computeDropPosition(event));
           }}
           onTogglePreviewExpanded={() => onToggleGroupPreviewExpanded(group.id)}
+          onLoadMore={() => onLoadMoreGroup(group.id)}
+          canLoadMore={hasNextPage}
+          isLoadingMore={isLoadingMoreGroup(group.id)}
           onLaunchFromGroup={() => onLaunchFromGroup(group.launch)}
           renderConversationCard={renderConversationCard}
         />
