@@ -12,6 +12,12 @@ export default defineConfig({
   resolve: {
     alias: [{ find: /^#\//, replacement: `${srcDir}/` }],
   },
+  // The request builder expects the same compile-time constant as the app
+  // build. The live harness does not consume bundled skill resources, so use
+  // the library-build fallback that reports the skill source as public.
+  define: {
+    __EXTENSIONS_SKILLS_DIR__: JSON.stringify(""),
+  },
   ssr: {
     noExternal: ["@openhands/typescript-client"],
   },
