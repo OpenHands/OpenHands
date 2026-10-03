@@ -5,6 +5,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MemoryRouter } from "react-router";
 
 import FilesTab from "#/routes/files-tab";
+import { downloadConversationFile } from "#/api/conversation-file-download.api";
+import { downloadBlob } from "#/utils/utils";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { useFilesTabStore } from "#/stores/files-tab-store";
 import { NavigationProvider } from "#/context/navigation-context";
 import {
@@ -16,6 +19,17 @@ import {
 const useWorkspaceFilesMock = vi.fn();
 const useWorkspaceFileContentMock = vi.fn();
 const useActiveConversationMock = vi.fn();
+
+vi.mock("#/api/conversation-file-download.api", () => ({
+  downloadConversationFile: vi.fn(),
+}));
+vi.mock("#/utils/utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#/utils/utils")>()),
+  downloadBlob: vi.fn(),
+}));
+vi.mock("#/utils/custom-toast-handlers", () => ({
+  displayErrorToast: vi.fn(),
+}));
 
 vi.mock("#/hooks/query/use-workspace-files", () => ({
   useWorkspaceFiles: () => useWorkspaceFilesMock(),
@@ -58,6 +72,9 @@ function openFile(path: string, conversationId: string | null = null) {
 
 describe("FilesTab", () => {
   beforeEach(() => {
+    vi.mocked(downloadConversationFile).mockReset();
+    vi.mocked(downloadBlob).mockClear();
+    vi.mocked(displayErrorToast).mockClear();
     useFilesTabStore.setState({
       selectedPath: null,
       selectedConversationId: null,
@@ -90,6 +107,70 @@ describe("FilesTab", () => {
         workspace: { working_dir: "/workspace/project" },
       },
     });
+  });
+
+  // @spec FD-001 — Download the selected file independently of its preview
+  it("downloads the clicked file even when the selection changes while waiting", async () => {
+    const user = userEvent.setup();
+    const conversation = {
+      id: "c1",
+      workspace: { working_dir: "/workspace/project" },
+    };
+    useActiveConversationMock.mockReturnValue({ data: conversation });
+    useWorkspaceFileContentMock.mockReturnValue({ isError: true });
+    let finish!: (blob: Blob) => void;
+    vi.mocked(downloadConversationFile).mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    openFile("nested/café data.bin", "c1");
+    renderTab("c1");
+
+    await user.click(screen.getByTestId("files-tab-download"));
+    expect(screen.getByTestId("files-tab-download")).toBeDisabled();
+    await user.click(screen.getByTestId("file-tree-file-README.md"));
+    const blob = new Blob([new Uint8Array([0, 255, 128])]);
+    finish(blob);
+
+    await waitFor(() =>
+      expect(downloadBlob).toHaveBeenCalledWith(blob, "café data.bin"),
+    );
+    expect(downloadConversationFile).toHaveBeenCalledWith(
+      conversation,
+      "nested/café data.bin",
+    );
+    expect(screen.getByTestId("files-tab-download")).toBeEnabled();
+  });
+
+  // @spec FD-001 — Download failures can be retried without saving an error file
+  it("shows an error and re-enables download after a failed request", async () => {
+    useActiveConversationMock.mockReturnValue({
+      data: { id: "c1", workspace: { working_dir: "/workspace/project" } },
+    });
+    vi.mocked(downloadConversationFile).mockRejectedValue(
+      new Error("unavailable"),
+    );
+    openFile("README.md", "c1");
+    renderTab("c1");
+
+    await userEvent.click(screen.getByTestId("files-tab-download"));
+
+    await waitFor(() => expect(displayErrorToast).toHaveBeenCalledOnce());
+    expect(downloadBlob).not.toHaveBeenCalled();
+    expect(screen.getByTestId("files-tab-download")).toBeEnabled();
+  });
+
+  // @spec FD-001 — Never download using stale conversation data
+  it("disables download until the selected conversation workspace is available", () => {
+    useActiveConversationMock.mockReturnValue({
+      data: { id: "old-conversation", workspace: { working_dir: "/old" } },
+    });
+    openFile("README.md", "c1");
+    renderTab("c1");
+
+    expect(screen.getByTestId("files-tab-download")).toBeDisabled();
+    expect(downloadConversationFile).not.toHaveBeenCalled();
   });
 
   it("renders the file browser without a Diff/Commits toggle", () => {
