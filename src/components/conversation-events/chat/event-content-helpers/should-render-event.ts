@@ -5,6 +5,7 @@ import {
   isObservationEvent,
   isMessageEvent,
   isAgentErrorEvent,
+  isConversationErrorEvent,
   isConversationStateUpdateEvent,
   isGoalConversationStateUpdateEvent,
   isHookExecutionEvent,
@@ -115,8 +116,8 @@ export const shouldRenderEvent = (event: OpenHandsEvent) => {
     return !isGoalLoopReprompt(event) && !isChildConversationResult(event);
   }
 
-  // Render agent error events
-  if (isAgentErrorEvent(event)) {
+  // @spec CE-001 — Conversation errors remain readable in chat history
+  if (isAgentErrorEvent(event) || isConversationErrorEvent(event)) {
     return true;
   }
 

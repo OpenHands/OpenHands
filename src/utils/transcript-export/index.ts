@@ -9,6 +9,7 @@ import {
   isACPToolCallEvent,
   isActionEvent,
   isAgentErrorEvent,
+  isConversationErrorEvent,
   isConversationStateUpdateEvent,
   isGoalConversationStateUpdateEvent,
   isHookExecutionEvent,
@@ -429,10 +430,11 @@ const buildTranscriptEntries = (
         continue;
       }
 
-      if (isAgentErrorEvent(event)) {
+      // @spec CE-002 — Transcript exports retain conversation error details
+      if (isAgentErrorEvent(event) || isConversationErrorEvent(event)) {
         entries.push({
           kind: "error",
-          content: event.error,
+          content: isConversationErrorEvent(event) ? event.detail : event.error,
           timestamp: event.timestamp ?? "",
         });
         continue;

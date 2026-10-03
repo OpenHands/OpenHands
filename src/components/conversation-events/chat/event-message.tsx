@@ -12,6 +12,7 @@ import {
   isActionEvent,
   isObservationEvent,
   isAgentErrorEvent,
+  isConversationErrorEvent,
   isUserMessageEvent,
   isPlanningFileEditorObservationEvent,
   isHookExecutionEvent,
@@ -220,8 +221,8 @@ function EventMessageComponent({
     return <GoalStatusContent status={event.value} />;
   }
 
-  // Agent error events
-  if (isAgentErrorEvent(event)) {
+  // @spec CE-001 — Conversation errors remain readable in chat history
+  if (isAgentErrorEvent(event) || isConversationErrorEvent(event)) {
     return <ErrorEventMessage event={event} {...commonProps} />;
   }
 
