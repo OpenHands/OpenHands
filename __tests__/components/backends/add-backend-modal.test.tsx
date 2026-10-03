@@ -95,7 +95,7 @@ beforeEach(() => {
     interval: 5,
   });
   deviceFlowMocks.pollForToken.mockReset();
-  deviceFlowMocks.pollForToken.mockImplementation(() => new Promise(() => { }));
+  deviceFlowMocks.pollForToken.mockImplementation(() => new Promise(() => {}));
   __resetActiveStoreForTests();
 });
 
@@ -564,5 +564,223 @@ describe("AddBackendModal – analytics", () => {
       ([event]) => event === "backend_added",
     );
     expect(backendAddedCalls).toHaveLength(1);
+  });
+});
+
+describe("AddBackendModal – DigitalOcean", () => {
+  const CONNECTION = {
+    id: "conn_1",
+    kind: "pat" as const,
+    label: "My team",
+    teamName: "Acme",
+    expiresAt: null,
+    isExpired: false,
+  };
+
+  function fakeMarsBridge({ signedIn }: { signedIn: boolean }) {
+    let active = signedIn ? CONNECTION : null;
+    const authState = () => ({
+      connections: active ? [active] : [],
+      active,
+      isPersistent: true,
+      canUseOAuth: false,
+    });
+    const configs: { id: string; name: string; agent: string | null }[] = [
+      { id: "cfg_oh", name: "Web agent", agent: "openhands" },
+      { id: "cfg_cc", name: "Claude agent", agent: "claude-code" },
+      { id: "cfg_legacy", name: "cursor-github-test", agent: null },
+    ];
+    const configSessions = [
+      {
+        session_id: "sess_1",
+        name: "fix-login",
+        status: "SESSION_STATUS_READY",
+        config_id: "cfg_oh",
+      },
+    ];
+    const bridge = {
+      getAuthState: vi.fn(async () => authState()),
+      savePat: vi.fn(async () => {
+        active = CONNECTION;
+        return authState();
+      }),
+      listAgentConfigs: vi.fn(async () => ({
+        configs: [...configs],
+        nextPageToken: null,
+      })),
+      listConfigSessions: vi.fn(async (configId: string) => ({
+        sessions: configSessions.filter((s) => s.config_id === configId),
+        nextPageToken: null,
+      })),
+      createOpenHandsAgent: vi.fn(async ({ name }: { name: string }) => {
+        const config = { id: "cfg_new", name, agent: "openhands" };
+        configs.push(config);
+        return config;
+      }),
+      createSession: vi.fn(async (configId: string, name: string) => ({
+        session_id: "sess_new",
+        name,
+        status: "SESSION_STATUS_READY",
+        config_id: configId,
+      })),
+      listSessions: vi.fn(async () => ({
+        sessions: [
+          {
+            session_id: "sess_codex",
+            status: "SESSION_STATUS_READY",
+            agent_kind: "AGENT_KIND_CODEX_CLI",
+          },
+          {
+            session_id: "sess_legacy",
+            status: "SESSION_STATUS_READY",
+            config_id: "cfg_legacy",
+          },
+        ],
+        nextPageToken: null,
+      })),
+      openTunnel: vi.fn(async ({ sessionId }: { sessionId: string }) => ({
+        sessionId,
+        status: "connected" as const,
+        remotePort: 8000,
+        localPort: 51001,
+        error: undefined,
+      })),
+      getTunnel: vi.fn(async () => undefined),
+      closeTunnel: vi.fn(async () => {}),
+    };
+    window.marsBridge = bridge as unknown as NonNullable<
+      typeof window.marsBridge
+    >;
+    return bridge;
+  }
+
+  afterEach(() => {
+    delete window.marsBridge;
+  });
+
+  it("signs in with a token and lists only the team's OpenHands agents", async () => {
+    // Arrange
+    fakeMarsBridge({ signedIn: false });
+    const user = userEvent.setup();
+    renderWithProviders(<AddBackendModal onClose={vi.fn()} />);
+
+    // Act
+    await user.click(screen.getByTestId("add-backend-option-digitalocean"));
+    await user.type(
+      await screen.findByTestId("managed-agents-token"),
+      `dop_v1_${"a".repeat(64)}`,
+    );
+    await user.click(screen.getByTestId("managed-agents-token-submit"));
+
+    // Assert
+    expect(
+      await screen.findByTestId("digitalocean-agent-cfg_oh"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("digitalocean-agent-cfg_cc")).toBeNull();
+    expect(screen.queryByTestId("digitalocean-agent-cfg_legacy")).toBeNull();
+    expect(screen.queryByText("sess_codex")).toBeNull();
+    expect(screen.queryByText("sess_legacy")).toBeNull();
+  });
+
+  it("opening an agent resumes its latest session and closes the modal", async () => {
+    // Arrange
+    const bridge = fakeMarsBridge({ signedIn: true });
+    const onClose = vi.fn();
+    const navigate = vi.fn();
+    renderWithProviders(<AddBackendModal onClose={onClose} />, {
+      currentPath: "/",
+      conversationId: null,
+      isNavigating: false,
+      navigate,
+    });
+
+    // Act
+    await userEvent.click(
+      screen.getByTestId("add-backend-option-digitalocean"),
+    );
+    await userEvent.click(
+      await screen.findByTestId("digitalocean-agent-open-cfg_oh"),
+    );
+
+    // Assert
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(bridge.openTunnel).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: "sess_1" }),
+    );
+    expect(navigate).toHaveBeenCalledWith(
+      expect.stringContaining("/conversations"),
+    );
+  });
+
+  it("New Agent creates an OpenHands agent and launches its first session", async () => {
+    // Arrange
+    const bridge = fakeMarsBridge({ signedIn: true });
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    renderWithProviders(<AddBackendModal onClose={onClose} />);
+    await user.click(screen.getByTestId("add-backend-option-digitalocean"));
+
+    // Act
+    await user.click(await screen.findByTestId("digitalocean-new-agent"));
+    const nameInput = screen.getByTestId("digitalocean-new-agent-name");
+    await user.clear(nameInput);
+    await user.type(nameInput, "team-agent");
+    await user.type(
+      screen.getByTestId("digitalocean-new-agent-llm-key"),
+      "sk-test",
+    );
+    await user.click(screen.getByTestId("digitalocean-new-agent-submit"));
+
+    // Assert
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(bridge.createOpenHandsAgent).toHaveBeenCalledWith({
+      name: "team-agent",
+      llmApiKey: "sk-test",
+    });
+    expect(bridge.createSession).toHaveBeenCalledWith(
+      "cfg_new",
+      expect.stringMatching(/^team-agent-/),
+    );
+    expect(bridge.openTunnel).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: "sess_new" }),
+    );
+  });
+
+  it("expanding an agent lists its sessions and opens the chosen one", async () => {
+    // Arrange
+    const bridge = fakeMarsBridge({ signedIn: true });
+    bridge.listConfigSessions.mockResolvedValue({
+      sessions: [
+        {
+          session_id: "sess_1",
+          name: "fix-login",
+          status: "SESSION_STATUS_READY",
+          config_id: "cfg_oh",
+        },
+        {
+          session_id: "sess_2",
+          name: "refactor-api",
+          status: "SESSION_STATUS_PAUSED",
+          config_id: "cfg_oh",
+        },
+      ],
+      nextPageToken: null,
+    });
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    renderWithProviders(<AddBackendModal onClose={onClose} />);
+    await user.click(screen.getByTestId("add-backend-option-digitalocean"));
+
+    // Act
+    await user.click(
+      await screen.findByTestId("digitalocean-agent-toggle-cfg_oh"),
+    );
+    await user.click(screen.getByTestId("digitalocean-session-sess_2"));
+
+    // Assert
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(bridge.openTunnel).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: "sess_2" }),
+    );
   });
 });

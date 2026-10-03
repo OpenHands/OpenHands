@@ -970,6 +970,21 @@ describe("AgentServerConversationService", () => {
       );
     });
 
+    it("reports ids the agent-server does not have as not found instead of malformed", async () => {
+      mockHttpGet.mockResolvedValue({
+        data: [null, { id: "conv-present", title: "Present" }],
+      });
+
+      const conversations =
+        await AgentServerConversationService.batchGetAppConversations([
+          "conv-gone",
+          "conv-present",
+        ]);
+
+      expect(conversations[0]).toBeNull();
+      expect(conversations[1]).toMatchObject({ id: "conv-present" });
+    });
+
     it("preserves sandbox_status from batchGetAppConversations response", async () => {
       mockHttpGet.mockResolvedValue({
         data: [

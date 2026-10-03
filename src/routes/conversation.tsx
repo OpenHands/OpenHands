@@ -12,6 +12,7 @@ import {
   clearLastConversationId,
   setLastConversationId,
 } from "#/api/backend-registry/last-conversation-store";
+import { BACKEND_QUERY_PARAM } from "#/api/backend-registry/url-selection";
 import { AgentState } from "#/types/agent-state";
 
 import { EventHandler } from "../wrapper/event-handler";
@@ -38,25 +39,44 @@ function AppContent() {
 
   const { isTask, taskStatus, taskDetail } = useTaskPollingController();
 
-  // The conversationId in the URL belongs to whichever backend was
-  // active when the route first mounted. If the user switches backends
-  // while this route is still mounted, the id is meaningless under the
-  // new backend — disable the active-conversation fetch (and its 404
-  // toast) so we don't fire a request that the BackendSelector's
-  // redirect will immediately navigate away from anyway. Mirrors the
-  // same guard in `routes/automation-detail.tsx`.
+  // The conversationId in the URL belongs to whichever backend was active
+  // when the route arrived at it, unless the URL pins its owner with
+  // `?backend=`. If the user switches backends while this route is still
+  // mounted, the id is meaningless under the new backend — disable the
+  // active-conversation fetch (and its 404 toast) so we don't fire a request
+  // that the BackendSelector's redirect will immediately navigate away from
+  // anyway. A navigation that lands on a conversation of the new backend
+  // (switching DigitalOcean sessions goes straight to one) re-anchors the
+  // owner instead of staying blank until a remount. Mirrors the same guard
+  // in `routes/automation-detail.tsx`.
   const active = useActiveBackend();
-  const mountedBackendId = React.useRef(active.backend.id);
-  const mountedOrgId = React.useRef(active.orgId);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const owner = React.useRef({
+    conversationId,
+    backendId: active.backend.id,
+    orgId: active.orgId,
+  });
+  const pinnedBackendId = new URLSearchParams(location.search).get(
+    BACKEND_QUERY_PARAM,
+  );
+  if (
+    owner.current.conversationId !== conversationId ||
+    pinnedBackendId === active.backend.id
+  ) {
+    owner.current = {
+      conversationId,
+      backendId: active.backend.id,
+      orgId: active.orgId,
+    };
+  }
   const backendChanged =
-    mountedBackendId.current !== active.backend.id ||
-    mountedOrgId.current !== active.orgId;
+    owner.current.backendId !== active.backend.id ||
+    owner.current.orgId !== active.orgId;
 
   const { data: conversation, isFetched } = useActiveConversation();
   const { data: isAuthed } = useIsAuthed();
   const { resetConversationState } = useConversationStore();
-  const navigate = useNavigate();
-  const location = useLocation();
   const clearTerminal = useCommandStore((state) => state.clearTerminal);
   const resetConversationRuntimeState = useConversationStateStore(
     (state) => state.reset,
