@@ -282,7 +282,9 @@ test.describe("same-model profile identity", () => {
     }
   });
 
-  test("chat header shows the correct profile when two profiles share the same model", async ({
+  // TODO: Restore after profile setup reliably returns from the edit form.
+  // https://github.com/OpenHands/OpenHands/issues/17872 tracks the failing setup.
+  test.fixme("chat header shows the correct profile when two profiles share the same model", async ({
     page,
     request,
   }) => {

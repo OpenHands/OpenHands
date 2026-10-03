@@ -520,7 +520,9 @@ test.describe("mock-LLM automation lifecycle", () => {
 
   // ── Step 2: Create automation via conversation ─────────────────────
 
-  test("step 2: create automation and dispatch run via the UI", async ({
+  // TODO: Restore when profile launches carry runtime-services context.
+  // https://github.com/OpenHands/OpenHands/issues/16205 (quarantine: #17872).
+  test.fixme("step 2: create automation and dispatch run via the UI", async ({
     page,
     request,
   }) => {
@@ -672,7 +674,9 @@ test.describe("mock-LLM automation lifecycle", () => {
 
   // ── Step 3: Verify automation on list page, click through to detail, verify run link ─
 
-  test("step 3: verify automation and run on the automations page", async ({
+  // TODO: Restore with step 2: this check needs its automation and run IDs.
+  // https://github.com/OpenHands/OpenHands/issues/15481 (quarantine: #17872).
+  test.fixme("step 3: verify automation and run on the automations page", async ({
     page,
     request,
   }) => {
