@@ -366,21 +366,30 @@ The convention:
 
 1. Write a **self-contained HTML** page (inline CSS/SVG, opens by double-click) that covers
    the code/API design and a **before/after** of your change, grounded to the actual code.
+   Keep it static, with no scripts: htmlpreview runs the page in the reviewer's browser.
 2. Commit it under the temporary **`.pr/`** directory, e.g. `.pr/design.html`. This directory
-   is for PR-only artifacts and is **removed automatically when the PR is approved**
-   (`.github/workflows/pr-artifacts.yml`), so it never lands in `main`.
-3. Link it near the top of the PR description via htmlpreview, pointing at the fork and branch
-   the PR is opened from so it renders before the PR is merged:
+   is for PR-only artifacts and must not land in `main`. For a same-repository PR it is
+   **removed automatically when the PR is approved** (`.github/workflows/pr-artifacts.yml`).
+   For a fork PR the workflow only posts a reminder, so delete `.pr/` yourself before merge.
+3. Link it near the top of the PR description via htmlpreview, at the commit that contains
+   the page (`git rev-parse HEAD` after you push it):
 
    ```
-   https://htmlpreview.github.io/?https://github.com/<your-fork>/<repo>/blob/<your-branch>/.pr/design.html
+   https://htmlpreview.github.io/?https://github.com/<your-fork>/<repo>/blob/<commit-sha>/.pr/design.html
    ```
+
+   Use the commit SHA, not the branch name. Approval cleanup removes `.pr/` from the branch,
+   so a branch link stops working while a SHA link keeps resolving. Refresh the link when the
+   page changes substantively.
+
+Keep the essentials in the PR description as well: the intent, the important before/after
+behavior or API shape, compatibility and risk, and code references. The page adds detail.
 
 Skip this for trivial PRs (a typo, a one-line guard, a dependency bump) — there, a design doc
 is just noise. htmlpreview only works for public repos and self-contained pages.
 
-The `pr-design-doc` skill in the [OpenHands extensions](https://github.com/OpenHands/extensions)
-repo can generate the page for you.
+The [`pr-design-doc`](../.agents/skills/pr-design-doc/SKILL.md) skill can generate the page
+for you.
 
 ## CSS isolation and host-app customization
 

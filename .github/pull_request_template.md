@@ -12,7 +12,7 @@ AGENT:
 Do not edit the HUMAN section.
 Write a concise summary of what changed and link any reviewer artifacts, such
 as files under `.pr/`. For HTML artifacts, include a rendered preview link:
-https://htmlpreview.github.io/?https://github.com/<owner>/<repo>/blob/<branch>/.pr/<file>.html
+https://htmlpreview.github.io/?https://github.com/<owner>/<repo>/blob/<commit-sha>/.pr/<file>.html
 In this AGENT section and the template fields below, provide evidence that the
 code runs properly end-to-end. Just running unit tests is NOT sufficient. Explain
 exactly what command you ran and include logs, screenshots, or reproduction notes.
@@ -57,11 +57,12 @@ is fine for non-UI bugs.
 <!--
 Optional, encouraged for non-trivial PRs. Add a self-contained HTML design doc under the
 temporary `.pr/` directory (e.g. `.pr/design.html`) covering the code/API design and a
-before/after of your change, then link it here via htmlpreview so reviewers see it at a glance:
+before/after of your change, then link it here via htmlpreview at the commit that contains it:
 
-  https://htmlpreview.github.io/?https://github.com/<your-fork>/<repo>/blob/<your-branch>/.pr/design.html
+  https://htmlpreview.github.io/?https://github.com/<your-fork>/<repo>/blob/<commit-sha>/.pr/design.html
 
-The `.pr/` directory is temporary — it is removed automatically when the PR is approved.
+Use the commit SHA, not the branch name: `.pr/` is removed from the branch when a
+same-repository PR is approved, and a branch link stops working then.
 See docs/DEVELOPMENT.md ("Design doc for non-trivial PRs") for details.
 -->
 
