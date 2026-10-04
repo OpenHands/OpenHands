@@ -175,8 +175,8 @@ function MainAppContent() {
           <div
             data-testid="root-layout"
             className={cn(
-              "h-screen lg:min-w-5xl flex flex-col md:flex-row bg-canvas-base overflow-hidden p-0",
-              showTitleBarBand && "pt-7",
+              "h-screen lg:min-w-5xl flex flex-col md:flex-row bg-canvas-base overflow-hidden",
+              showTitleBarBand ? "pt-7" : "oh-app-shell",
             )}
           >
             <DocumentTitle />

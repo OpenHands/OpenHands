@@ -22,6 +22,7 @@ export {
 export {
   applyColorTheme,
   COLOR_THEME_BOOTSTRAP_SCRIPT,
+  getColorThemeBaseColor,
   getColorThemeCss,
   getActiveColorTheme,
   persistColorTheme,
