@@ -78,12 +78,26 @@ test("role selectors carry name, exactness and state options", () => {
       "deepseek-pro (default)",
     ),
   );
-  assert.ok(!parseRole('option[name^="pro"]').options.name.test("deepseek-pro"));
-  assert.ok(parseRole('button[name*="SAVE"]').options.name.test("Save changes"));
+  assert.ok(
+    !parseRole('option[name^="pro"]').options.name.test("deepseek-pro"),
+  );
+  assert.ok(
+    parseRole('button[name*="SAVE"]').options.name.test("Save changes"),
+  );
   assert.throws(
     () => parseRole("button[colour=red]"),
     /Unsupported role attribute/,
   );
+});
+
+test("testid segments accept attribute filters", () => {
+  const loc = buildLocator(
+    recorder(),
+    'testid=onboarding-modal[data-current-step="1"]',
+  );
+  assert.deepEqual(loc.path, [
+    ["locator", '[data-testid="onboarding-modal"][data-current-step="1"]'],
+  ]);
 });
 
 test("quoted text is exact, bare text is partial, other segments pass through", () => {

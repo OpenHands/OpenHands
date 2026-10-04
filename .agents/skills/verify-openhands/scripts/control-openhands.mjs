@@ -614,14 +614,12 @@ async function cmdLaunch({ flags }) {
     String(ports.ingress),
   ];
   if (flags.public) launcherArgs.push("--public");
-  const logFd = openSync(join(priv, "stack.log"), "a", 0o600);
-  const child = spawn(process.execPath, launcherArgs, {
-    cwd: repoRoot,
-    env,
-    detached: true,
-    stdio: ["ignore", logFd, logFd],
+  const savedEnv = { ...env };
+  delete savedEnv.LOCAL_BACKEND_API_KEY;
+  delete savedEnv.OH_SECRET_KEY;
+  writeFileSync(join(priv, "launcher-env.json"), JSON.stringify(savedEnv), {
+    mode: 0o600,
   });
-  child.unref();
 
   const run = {
     runId,
@@ -633,8 +631,7 @@ async function cmdLaunch({ flags }) {
     mode: flags.public ? "public" : "local",
     baseUrl: `http://127.0.0.1:${ports.ingress}`,
     ports,
-    launcherPid: child.pid,
-    launcherPgid: child.pid,
+    launcherArgs,
     startedAt: new Date().toISOString(),
     pins: defaults().versions,
     overrides: Object.fromEntries(
@@ -643,6 +640,7 @@ async function cmdLaunch({ flags }) {
       ),
     ),
   };
+  spawnLauncher(run);
   saveRun(run);
   try {
     if (
@@ -657,45 +655,7 @@ async function cmdLaunch({ flags }) {
   symlinkSync(dir, join(verifyHome, "current"));
 
   // 4. Wait for readiness: authenticated settings, automation health and SPA.
-  const timeoutSec = intFlag(flags.timeout, 600);
-  const deadline = Date.now() + timeoutSec * 1000;
-  let last = "";
-  for (;;) {
-    if (!groupAlive(run.launcherPgid)) {
-      const tail = readFileSync(join(priv, "stack.log"), "utf8")
-        .split("\n")
-        .slice(-25)
-        .join("\n");
-      throw new CliError("The launcher exited before the stack became ready.", {
-        code: 3,
-        extra: { run: dir, logTail: tail.replace(/\x1b\[[0-9;]*m/g, "") },
-      });
-    }
-    try {
-      const [settings, automation, html] = await Promise.all([
-        http(run, "GET", "/api/settings", { timeout: 4000 }),
-        http(run, "GET", "/api/automation/health", { timeout: 4000 }),
-        http(run, "GET", "/", { auth: false, timeout: 4000 }),
-      ]);
-      last = `settings=${settings.status} automation=${automation.status} ui=${html.status}`;
-      if (
-        settings.status === 200 &&
-        automation.status === 200 &&
-        html.status === 200
-      )
-        break;
-    } catch (error) {
-      last = String(error.message);
-    }
-    if (Date.now() > deadline) {
-      throw new CliError(`Stack not ready after ${timeoutSec}s (${last}).`, {
-        code: 3,
-        hint: "Inspect <run>/private/stack.log; first launches download Python packages and can take minutes.",
-        extra: { run: dir },
-      });
-    }
-    await delay(1500);
-  }
+  await waitForStack(run, intFlag(flags.timeout, 600));
   const info = await http(run, "GET", "/server_info");
   run.versions = {
     agentServer: info.json?.version,
@@ -725,6 +685,231 @@ async function cmdLaunch({ flags }) {
         : "control-openhands onboard --skip",
     ],
   });
+}
+
+async function waitForStack(run, timeoutSec) {
+  const priv = join(run.dir, "private");
+  const deadline = Date.now() + timeoutSec * 1000;
+  let last = "";
+  for (;;) {
+    if (!groupAlive(run.launcherPgid)) {
+      const tail = readFileSync(join(priv, "stack.log"), "utf8")
+        .split("\n")
+        .slice(-25)
+        .join("\n");
+      throw new CliError("The launcher exited before the stack became ready.", {
+        code: 3,
+        extra: { run: run.dir, logTail: tail.replace(/\x1b\[[0-9;]*m/g, "") },
+      });
+    }
+    try {
+      const [settings, automation, html] = await Promise.all([
+        http(run, "GET", "/api/settings", { timeout: 4000 }),
+        http(run, "GET", "/api/automation/health", { timeout: 4000 }),
+        http(run, "GET", "/", { auth: false, timeout: 4000 }),
+      ]);
+      last = `settings=${settings.status} automation=${automation.status} ui=${html.status}`;
+      if (
+        settings.status === 200 &&
+        automation.status === 200 &&
+        html.status === 200
+      )
+        return;
+    } catch (error) {
+      last = String(error.message);
+    }
+    if (Date.now() > deadline) {
+      throw new CliError(`Stack not ready after ${timeoutSec}s (${last}).`, {
+        code: 3,
+        hint: "Inspect <run>/private/stack.log; first launches download Python packages and can take minutes.",
+        extra: { run: run.dir },
+      });
+    }
+    await delay(1500);
+  }
+}
+
+function spawnLauncher(run) {
+  // The saved environment holds no secrets; keys are re-read from private/.
+  const priv = join(run.dir, "private");
+  const env = JSON.parse(readFileSync(join(priv, "launcher-env.json"), "utf8"));
+  env.LOCAL_BACKEND_API_KEY = readFileSync(join(priv, "session-key"), "utf8");
+  env.OH_SECRET_KEY = readFileSync(join(priv, "encryption-key"), "utf8");
+  const logFd = openSync(join(priv, "stack.log"), "a", 0o600);
+  const child = spawn(process.execPath, run.launcherArgs, {
+    cwd: repoRoot,
+    env,
+    detached: true,
+    stdio: ["ignore", logFd, logFd],
+  });
+  child.unref();
+  run.launcherPid = child.pid;
+  run.launcherPgid = child.pid;
+  return child;
+}
+
+async function stopLauncher(run) {
+  const pgid = run.launcherPgid;
+  let forced = false;
+  const serviceGroups = new Set(
+    descendants(run.launcherPid)
+      .map((p) => p.pgid)
+      .filter((g) => g !== pgid),
+  );
+  if (groupAlive(pgid)) {
+    const cmd = commandLine(pgid);
+    if (cmd && !cmd.includes("agent-canvas.mjs")) {
+      throw new CliError(
+        `PID ${pgid} is no longer this run's launcher (${cmd.slice(0, 80)}); refusing to signal it.`,
+        { code: 3 },
+      );
+    }
+    process.kill(-pgid, "SIGTERM");
+    for (let i = 0; i < 60 && groupAlive(pgid); i += 1) await delay(500);
+    if (groupAlive(pgid)) {
+      process.kill(-pgid, "SIGKILL");
+      forced = true;
+      await delay(1000);
+    }
+  }
+  // The launcher shuts its services down itself; anything it left behind
+  // (for example after a forced kill) is signalled by its own group.
+  for (const group of serviceGroups) {
+    if (!groupAlive(group)) continue;
+    process.kill(-group, "SIGTERM");
+    for (let i = 0; i < 20 && groupAlive(group); i += 1) await delay(500);
+    if (groupAlive(group)) {
+      process.kill(-group, "SIGKILL");
+      forced = true;
+    }
+  }
+  // Give sockets a moment to close before callers check or reuse the ports.
+  for (const port of Object.values(run.ports)) {
+    for (let i = 0; i < 20 && (await portOpen(port)); i += 1) await delay(500);
+  }
+  return { stopped: !groupAlive(pgid), forced };
+}
+
+async function cmdRestart({ flags }) {
+  const run = loadRun(flags);
+  if (
+    !run.launcherArgs ||
+    !existsSync(join(run.dir, "private", "launcher-env.json"))
+  ) {
+    throw new CliError("This run predates restart support; launch a new one.", {
+      code: 3,
+    });
+  }
+  const stopped = await stopLauncher(run);
+  if (flags["rotate-key"]) {
+    writeFileSync(
+      join(run.dir, "private", "session-key"),
+      randomBytes(32).toString("hex"),
+      { mode: 0o600 },
+    );
+  }
+  spawnLauncher(run);
+  run.restartedAt = new Date().toISOString();
+  saveRun(run);
+  await waitForStack(run, intFlag(flags.timeout, 600));
+  out({
+    ok: true,
+    run: run.dir,
+    baseUrl: run.baseUrl,
+    stopped,
+    rotatedKey: Boolean(flags["rotate-key"]),
+    note: flags["rotate-key"]
+      ? "The browser still holds the old key: reload to reach the stale-key state (public mode shows the API-key prompt)."
+      : "Same state, keys and ports; reload the browser to reconnect.",
+  });
+}
+
+const SERVICES = {
+  automation:
+    /openhands-automation|automation[./](app|main|server)|uvicorn\S* .*automation/,
+  "agent-server":
+    /openhands-agent-server|openhands[./]agent_server|bin\/agent-server /,
+  frontend: /static-server\.mjs/,
+};
+
+// The launcher starts each service in its own process group, so services are
+// found by walking the process tree under the launcher, not by its group.
+function descendants(rootPid) {
+  const listing = spawnSync("ps", ["-eo", "pid=,ppid=,pgid=,args="], {
+    encoding: "utf8",
+  }).stdout;
+  const rows = listing
+    .split("\n")
+    .map((line) => line.trim().match(/^(\d+)\s+(\d+)\s+(\d+)\s+(.*)$/))
+    .filter(Boolean)
+    .map((m) => ({ pid: +m[1], ppid: +m[2], pgid: +m[3], args: m[4] }));
+  const found = [];
+  const frontier = [rootPid];
+  while (frontier.length) {
+    const parent = frontier.pop();
+    for (const row of rows) {
+      if (row.ppid === parent) {
+        found.push(row);
+        frontier.push(row.pid);
+      }
+    }
+  }
+  return found;
+}
+
+async function cmdService({ positional, flags }) {
+  const run = loadRun(flags);
+  const [sub, name] = positional;
+  const procs = descendants(run.launcherPid);
+  if (sub === "status") {
+    const services = {};
+    for (const [service, pattern] of Object.entries(SERVICES)) {
+      services[service] = procs
+        .filter((p) => pattern.test(p.args))
+        .map((p) => p.pid);
+    }
+    out({ ok: true, launcherAlive: groupAlive(run.launcherPgid), services });
+    return;
+  }
+  if (sub === "stop") {
+    const pattern = SERVICES[name];
+    if (!pattern) {
+      usage(
+        `Unknown service ${name}. Known: ${Object.keys(SERVICES).join(", ")}`,
+        "control-openhands service stop automation",
+      );
+    }
+    // Only processes inside this run's own process group are candidates.
+    const targets = procs.filter(
+      (p) => pattern.test(p.args) && p.pid !== run.launcherPid,
+    );
+    if (!targets.length) {
+      throw new CliError(
+        `No ${name} process found in this run's process group.`,
+        { hint: "control-openhands service status" },
+      );
+    }
+    // Signal each service's own process group (uv and its Python child).
+    for (const pgid of new Set(targets.map((t) => t.pgid))) {
+      try {
+        process.kill(-pgid, "SIGTERM");
+      } catch {
+        // already gone
+      }
+    }
+    await delay(2000);
+    out({
+      ok: true,
+      stopped: targets.map((t) => t.pid),
+      launcherAlive: groupAlive(run.launcherPgid),
+      next: "Drive the unavailable state, then `control-openhands restart` to bring the whole stack back.",
+    });
+    return;
+  }
+  usage(
+    "Usage: control-openhands service status | service stop automation|agent-server|frontend",
+    "control-openhands service stop automation",
+  );
 }
 
 async function cmdStatus({ flags }) {
@@ -876,22 +1061,8 @@ async function cmdStop({ flags }) {
   const result = { run: run.dir };
   result.browser = await stopBrowser(run);
   const pgid = run.launcherPgid;
-  if (groupAlive(pgid)) {
-    const cmd = commandLine(pgid);
-    if (cmd && !cmd.includes("agent-canvas.mjs")) {
-      throw new CliError(
-        `PID ${pgid} is no longer this run's launcher (${cmd.slice(0, 80)}); refusing to signal it.`,
-        { code: 3 },
-      );
-    }
-    process.kill(-pgid, "SIGTERM");
-    for (let i = 0; i < 60 && groupAlive(pgid); i += 1) await delay(500);
-    if (groupAlive(pgid)) {
-      process.kill(-pgid, "SIGKILL");
-      result.forced = true;
-      await delay(1000);
-    }
-  }
+  const launcher = await stopLauncher(run);
+  if (launcher.forced) result.forced = true;
   const ports = {};
   for (const [name, port] of Object.entries(run.ports))
     ports[name] = (await portOpen(port)) ? "still open" : "closed";
@@ -1234,6 +1405,16 @@ async function cmdLogin({ flags }) {
       return;
     }
     if (await visible(run, "testid=api-key-entry-screen")) {
+      // Connect stays disabled until Host Name is filled.
+      const name = await browserCall(run, "value", {
+        selector: "testid=api-key-entry-name",
+      }).catch(() => ({ value: "x" }));
+      if (!name.value) {
+        await browserCall(run, "fill", {
+          selector: "testid=api-key-entry-name",
+          value: "Local",
+        });
+      }
       await browserCall(run, "fill", {
         selector: "testid=api-key-entry-api-key",
         value: sessionKey(run),
@@ -1459,6 +1640,20 @@ async function cmdConversation({ positional, flags }) {
   if (sub === "status") {
     if (!id) usage("conversation status <id>");
     out({ ok: true, ...summarize(await conversationInfo(run, id)) });
+    return;
+  }
+  if (sub === "retract") {
+    if (!flags.feature)
+      usage("evidence retract needs --feature ID [--entry E] [--note why]");
+    const row = {
+      ts: new Date().toISOString(),
+      feature: flags.feature,
+      entry: flags.entry === true ? undefined : flags.entry,
+      retracted: true,
+      note: flags.note === true ? undefined : flags.note,
+    };
+    appendFileSync(ledger, `${JSON.stringify(row)}\n`);
+    out({ ok: true, retracted: row });
     return;
   }
   if (sub === "list") {
@@ -1718,12 +1913,29 @@ async function cmdBrowser({ positional, flags }) {
       });
       break;
     case "tooltip":
-      need(1, "control-openhands browser tooltip 'testid=chat-dictation-button'");
+      need(
+        1,
+        "control-openhands browser tooltip 'testid=chat-dictation-button'",
+      );
       result = await browserCall(run, "tooltip", { selector: sel, timeout });
       break;
     case "media":
       result = await browserCall(run, "media", { clear: Boolean(flags.clear) });
       break;
+    case "toasts":
+      result = await browserCall(run, "toasts", {});
+      break;
+    case "reset": {
+      // A fresh browser profile: first-run state, empty localStorage, no
+      // cached backend entries. The stack keeps running.
+      const stopped = await stopBrowser(run);
+      rmSync(join(run.dir, "private", "browser-profile"), {
+        recursive: true,
+        force: true,
+      });
+      result = { stopped, profileCleared: true, ...(await startBrowser(run)) };
+      break;
+    }
     case "network":
       result = await browserCall(run, "network", {
         clear: Boolean(flags.clear),
@@ -1972,8 +2184,16 @@ async function cmdEvidence({ positional, flags }) {
   }
   if (sub === "report") {
     const latest = new Map();
-    for (const row of rows)
-      latest.set(`${row.feature}|${row.entry ?? ""}`, row);
+    for (const row of rows) {
+      const key = `${row.feature}|${row.entry ?? ""}`;
+      if (row.retracted) {
+        // A retraction without --entry drops every row of that feature.
+        for (const k of [...latest.keys()]) {
+          if (k === key || (!row.entry && k.startsWith(`${row.feature}|`)))
+            latest.delete(k);
+        }
+      } else latest.set(key, row);
+    }
     const counts = Object.fromEntries(RESULTS.map((r) => [r, 0]));
     for (const row of latest.values()) counts[row.result] += 1;
     const lines = [
@@ -2016,6 +2236,8 @@ const REQUIRED_H2 = [
   "Gotchas",
 ];
 const KNOWN_COMMANDS = new Set([
+  "restart",
+  "service",
   "launch",
   "status",
   "doctor",
@@ -2081,6 +2303,8 @@ const BROWSER_VERBS = new Set([
   "tooltip",
   "media",
   "network",
+  "toasts",
+  "reset",
 ]);
 
 function featureFiles() {
@@ -2101,11 +2325,7 @@ function mapCheck({ only } = {}) {
   for (const file of files) {
     const text = readFileSync(join(mapDir, file), "utf8");
     // --file checks one entry while the index is being written by someone else.
-    if (
-      !only &&
-      !index.includes(`(${file})`) &&
-      !index.includes(`(./${file})`)
-    )
+    if (!only && !index.includes(`(${file})`) && !index.includes(`(./${file})`))
       problems.push(`${file}: not linked from README.md`);
     if (!/^# .+/m.test(text.split("\n")[0]))
       problems.push(`${file}: must start with an H1 title`);
@@ -2223,7 +2443,9 @@ async function cmdMap({ positional, flags }) {
   const [sub] = positional;
   if (sub === "check") {
     const only =
-      flags.file && flags.file !== true ? basename(String(flags.file)) : undefined;
+      flags.file && flags.file !== true
+        ? basename(String(flags.file))
+        : undefined;
     const result = mapCheck({ only });
     if (only) {
       result.problems = result.problems.filter(
@@ -2269,6 +2491,31 @@ async function cmdMap({ positional, flags }) {
 // Help and dispatch.
 // ---------------------------------------------------------------------------
 const HELP = {
+  login: `control-openhands login
+
+Public-mode runs only: types the run's session key into whichever prompt the UI
+shows (the onboarding "Add a backend" step, or api-key-entry-screen, filling
+Host Name when empty). Never prints the key. Local-mode runs need no login.
+`,
+  restart: `control-openhands restart [--rotate-key] [--timeout SEC]
+
+Stops this run's launcher process group and starts it again with the same
+state directory, ports and keys, then waits for readiness. --rotate-key writes
+a new session key first, so the browser's stored key becomes stale (public
+mode then shows the API-key prompt again). Reload the browser afterwards.
+`,
+  service: `control-openhands service status
+control-openhands service stop automation|agent-server|frontend
+
+Stops one service inside this run's own process group so unavailable/backend-down
+states can be driven through the UI. Bring everything back with restart.
+`,
+  status: `control-openhands status — ports, revision, launcher and browser liveness of the current run.
+`,
+  runs: `control-openhands runs — every run under $OH_VERIFY_HOME with liveness.
+`,
+  env: `control-openhands env — export lines (OH_VERIFY_RUN, OH_VERIFY_BASE_URL) for this run.
+`,
   _: `control-openhands — drive a real, isolated Agent Canvas stack like a user.
 
 Usage: control-openhands <command> [args] [--run <dir>]
@@ -2277,6 +2524,8 @@ Lifecycle
   launch        Build this checkout if needed, start an isolated stack + browser
   doctor        Read-only health check; run first and after any surprise
   status        Show the current run's ports, revision and liveness
+  restart       Restart this run's stack in place (same state); --rotate-key for stale-key states
+  service       status | stop automation|agent-server|frontend (drive backend-down states)
   stop          Stop this run's browser and launcher process group (keeps evidence)
   runs          List runs under $OH_VERIFY_HOME
   env           Print export lines for this run
@@ -2432,6 +2681,8 @@ Verbs
   storage [--session] [--values]         localStorage (or sessionStorage) keys; values only on request
   media [--clear]                        media playback recorded since load (sound features)
   network [--external] [--clear] [--last N]   requests by origin (privacy/telemetry checks)
+  toasts                                 texts of the toasts on screen now
+  reset                                  fresh browser profile (first-run state); the stack keeps running
   scroll <sel> --by PX                   scroll the element's scrollable container (settings, panels)
   scroll <sel> | scroll --by PX          bring into view | wheel at the mouse position
 
@@ -2442,6 +2693,7 @@ Failures return {ok:false,error,hint,failureScreenshot} and exit 1.
 `,
   evidence: `control-openhands evidence add --feature ID --result pass|fail|blocked|not-run
         [--entry "UI path"] [--expected TEXT] [--actual TEXT] [--artifact path[,path]] [--note TEXT]
+control-openhands evidence retract --feature ID [--entry "UI path"] [--note why]   drop a wrong row from the report
 control-openhands evidence list [--feature F05]
 control-openhands evidence report > report.md
 `,
@@ -2462,6 +2714,8 @@ const COMMANDS = {
   api: cmdApi,
   llm: cmdLlm,
   login: cmdLogin,
+  restart: cmdRestart,
+  service: cmdService,
   onboard: cmdOnboard,
   conversation: cmdConversation,
   fixture: cmdFixture,

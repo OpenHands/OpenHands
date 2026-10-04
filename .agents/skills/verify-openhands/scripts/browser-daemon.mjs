@@ -87,7 +87,8 @@ const context = await chromium.launchPersistentContext(
     acceptDownloads: true,
     // Opt-in for sandboxes whose TLS interception presents leaf-only chains
     // that SPKI pins cannot match. Never set it in CI.
-    ignoreHTTPSErrors: process.env.CONTROL_OPENHANDS_IGNORE_HTTPS_ERRORS === "1",
+    ignoreHTTPSErrors:
+      process.env.CONTROL_OPENHANDS_IGNORE_HTTPS_ERRORS === "1",
     args: extraArgs,
   },
 );
@@ -277,7 +278,20 @@ async function collectTestids(scopeSelector, includeHidden) {
         style.display !== "none";
       // Carousel slides and drawers parked beside the viewport are rendered
       // but not on screen; content below the fold still counts (scrollable).
-      const offscreen = rect.right <= 0 || rect.left >= window.innerWidth;
+      let offscreen = rect.right <= 0 || rect.left >= window.innerWidth;
+      // Also off screen when an overflow-clipping ancestor (a slide rail,
+      // a collapsed drawer) hides it entirely.
+      for (let a = el.parentElement; a && !offscreen; a = a.parentElement) {
+        const ov = getComputedStyle(a);
+        if (/hidden|clip/.test(ov.overflowX + ov.overflowY)) {
+          const r = a.getBoundingClientRect();
+          offscreen =
+            rect.right <= r.left ||
+            rect.left >= r.right ||
+            rect.bottom <= r.top ||
+            rect.top >= r.bottom;
+        }
+      }
       if ((!visible || offscreen) && !wantHidden) continue;
       const label =
         el.getAttribute("aria-label") ||
@@ -470,7 +484,8 @@ const handlers = {
           const target = node || document.scrollingElement;
           target.scrollBy(0, dy);
           return {
-            scrolled: target === document.scrollingElement ? "page" : "container",
+            scrolled:
+              target === document.scrollingElement ? "page" : "container",
             scrollTop: Math.round(target.scrollTop),
             scrollHeight: target.scrollHeight,
           };
@@ -704,6 +719,20 @@ const handlers = {
     };
     if (clear) requests.length = 0;
     return result;
+  },
+  async toasts() {
+    const toasts = await activePage.evaluate(() =>
+      [...document.querySelectorAll('[role="status"], [role="alert"]')]
+        .filter((el) => {
+          const r = el.getBoundingClientRect();
+          return r.width > 0 && r.height > 0 && el.innerText.trim();
+        })
+        .map((el) => ({
+          role: el.getAttribute("role"),
+          text: el.innerText.trim().slice(0, 300),
+        })),
+    );
+    return { toasts };
   },
   async media({ clear }) {
     const plays = await activePage.evaluate((reset) => {

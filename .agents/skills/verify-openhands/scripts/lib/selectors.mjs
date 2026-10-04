@@ -67,8 +67,15 @@ export function applySegment(scope, segment) {
   const engine = eq > 0 ? seg.slice(0, eq) : seg;
   const value = eq > 0 ? seg.slice(eq + 1) : "";
   switch (engine) {
-    case "testid":
+    case "testid": {
+      // testid=name[data-state="open"] narrows by extra attributes via CSS.
+      const bracket = value.indexOf("[");
+      if (bracket > 0) {
+        const id = unquote(value.slice(0, bracket)).text;
+        return scope.locator(`[data-testid="${id}"]${value.slice(bracket)}`);
+      }
       return scope.getByTestId(unquote(value).text);
+    }
     case "role": {
       const { role, options } = parseRole(value);
       return scope.getByRole(role, options);
