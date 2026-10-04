@@ -395,8 +395,8 @@ export default [
   // Rules: https://github.com/shadcn-ui/lint#rules
   // `no-arbitrary-values` stays at "warn": the remaining hits are one-offs
   // (raw hex, vh/vw, calc(), grid templates) with no theme-scale equivalent.
-  // Class existence does not need component contracts. Start at "warn" while
-  // genuine unknown utilities are reviewed; styling policy remains opt-in.
+  // Class existence does not need component contracts. With no remaining
+  // unknown utilities, new findings fail lint; styling policy remains opt-in.
   {
     files: ["src/**/*.{ts,tsx}"],
     plugins: { shadcn: shadcnPlugin },
@@ -407,7 +407,7 @@ export default [
       "shadcn/no-inline-styles": "off",
       "shadcn/require-static-classes": "off",
       "shadcn/no-unknown-classes": [
-        "warn",
+        "error",
         {
           allow: [
             // src/index.css owns the overlay animation outside the theme graph.

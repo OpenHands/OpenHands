@@ -37,7 +37,11 @@ assert.deepEqual(findings.map((m) => m.message.match(/^"([^"]+)"/)[1]).sort(), [
   "flex-cols",
   "hovr:flex",
 ]);
-for (const finding of findings) console.log(finding.message);
+for (const finding of findings) {
+  assert.equal(finding.severity, 2);
+  console.log(finding.message);
+}
+
 console.log(
-  "PASS: real theme/plugins accepted; typos reported; exceptions stay exact.",
+  "PASS: real theme/plugins accepted; typos are errors; exceptions stay exact.",
 );

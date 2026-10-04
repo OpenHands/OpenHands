@@ -2,7 +2,7 @@
 
 Base: `a3cfe98267c52937dc4e91a55644a6131c6c01bc`. Pinned linter: `@shadcn/lint@0.1.0`.
 
-The rule is enabled at warning level. Four inert class usages are also removed; generated styling and the DOM structure are preserved.
+The rule is enabled at error level now that its initial findings are resolved. Four inert class usages are also removed; generated styling and the DOM structure are preserved.
 
 ## Inventory
 
@@ -36,7 +36,7 @@ Observed output:
 "hovr:flex" ... Did you mean "hover:flex"?
 "flex-cols" ... Did you mean "flex-col"?
 "environment-switch-overla" ... no CSS is generated for it.
-PASS: real theme/plugins accepted; typos reported; exceptions stay exact.
+PASS: real theme/plugins accepted; typos are errors; exceptions stay exact.
 ```
 
 Accepted: Canvas surface/border/focus tokens, `prose`, `scrollbar-hide`, a HeroUI color with a data variant, and the two documented markers. This also detects the documented fallback mode that incorrectly accepts `hovr:flex`.
