@@ -129,6 +129,8 @@ return new ConversationClient(getAgentServerClientOptions()).someMethod(...);
 
 ## Backend and Contract Invariants
 
+- Local onboarding must create its LLM profile from the complete persisted settings after the form save succeeds. Fetch with `X-Expose-Secrets: encrypted` through `SettingsService.fetchSettingsFromApi("encrypted")` so unchanged endpoints, credentials and typed options survive the profile creation. A dirty-field settings diff is insufficient for the profile endpoint's complete LLM configuration. Cloud onboarding continues to use its settings save path.
+
 - Use `@openhands/typescript-client` classes directly for agent-server-backed REST/workspace/event/VS Code calls. Centralize host/session API key/working-directory option assembly through `src/api/agent-server-client-options.ts`; the backend fallback policy itself lives in `src/api/backend-registry/active-store.ts`.
 - Local verification/build gotchas:
   - `npm run typecheck` assumes generated translation types exist; run `npm run make-i18n` first if `src/i18n/declaration.ts` is missing.

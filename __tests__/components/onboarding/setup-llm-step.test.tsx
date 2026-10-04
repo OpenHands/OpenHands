@@ -8,26 +8,39 @@ import { renderWithProviders } from "../../../test-utils";
 const saveProfile = vi.hoisted(() => vi.fn());
 const activateProfile = vi.hoisted(() => vi.fn());
 const applyAgentProfile = vi.hoisted(() => vi.fn());
+const getSavedSettings = vi.hoisted(() => vi.fn());
 const displayErrorToast = vi.hoisted(() => vi.fn());
 let finishSettingsSave: (() => void) | undefined;
 const formState = vi.hoisted(() => ({
   llm: {} as Record<string, unknown>,
+  dirtyLlm: undefined as Record<string, unknown> | undefined,
+  backendKind: "local",
 }));
 
 vi.mock("#/contexts/active-backend-context", () => ({
-  useActiveBackend: () => ({ backend: { kind: "local" } }),
+  useActiveBackend: () => ({ backend: { kind: formState.backendKind } }),
 }));
 
-vi.mock("#/hooks/mutation/use-save-llm-profile", () => ({
-  useSaveLlmProfile: () => ({ mutateAsync: saveProfile }),
+vi.mock("#/api/profiles-service/profiles-service.api", () => ({
+  default: { saveProfile, activateProfile },
 }));
 
-vi.mock("#/hooks/mutation/use-activate-llm-profile", () => ({
-  useActivateLlmProfile: () => ({ mutateAsync: activateProfile }),
+vi.mock("#/api/settings-service/settings-service.api", () => ({
+  default: {
+    fetchSettingsFromApi: getSavedSettings,
+    invalidateCache: vi.fn(),
+  },
 }));
 
-vi.mock("#/hooks/mutation/use-apply-onboarding-agent-profile", () => ({
-  useApplyOnboardingAgentProfile: () => applyAgentProfile,
+vi.mock("#/api/agent-profiles-service/agent-profiles-service.api", () => ({
+  WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME: "default",
+  default: {
+    saveProfile: applyAgentProfile,
+    getProfile: vi
+      .fn()
+      .mockResolvedValue({ profile: { id: "onboarding-agent" } }),
+    activateProfile: vi.fn().mockResolvedValue(undefined),
+  },
 }));
 
 vi.mock("#/hooks/query/use-free-models", () => ({
@@ -66,9 +79,9 @@ vi.mock("#/routes/llm-settings", async () => {
             ]),
           ),
           view: "basic",
-          getDirtyPayload: () => ({ llm: canonicalLlm }),
+          getDirtyPayload: () => ({ llm: formState.dirtyLlm ?? canonicalLlm }),
           getSavePayload: () => ({
-            agent_settings_diff: { llm: canonicalLlm },
+            agent_settings_diff: { llm: formState.dirtyLlm ?? canonicalLlm },
           }),
         });
         onSaveControlChange(buildControl(true));
@@ -81,6 +94,8 @@ vi.mock("#/routes/llm-settings", async () => {
 describe("SetupLlmStep", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    formState.backendKind = "local";
+    formState.dirtyLlm = undefined;
     formState.llm = {
       model: "gpt-5.6-luna",
       auth_type: "subscription",
@@ -91,6 +106,9 @@ describe("SetupLlmStep", () => {
     saveProfile.mockResolvedValue(undefined);
     activateProfile.mockResolvedValue(undefined);
     applyAgentProfile.mockResolvedValue(undefined);
+    getSavedSettings.mockImplementation(async () => ({
+      agent_settings: { llm: formState.llm },
+    }));
   });
 
   it("persists and activates the canonically serialized subscription profile", async () => {
@@ -100,21 +118,18 @@ describe("SetupLlmStep", () => {
     await userEvent.click(await screen.findByTestId("onboarding-llm-next"));
 
     await waitFor(() => {
-      expect(saveProfile).toHaveBeenCalledWith({
-        name: "gpt-5.6-luna",
-        request: {
-          llm: {
-            model: "gpt-5.6-luna",
-            auth_type: "subscription",
-            subscription_vendor: "openai",
-            temperature: 0.2,
-          },
-          include_secrets: true,
+      expect(saveProfile).toHaveBeenCalledWith("gpt-5.6-luna", {
+        llm: {
+          model: "gpt-5.6-luna",
+          auth_type: "subscription",
+          subscription_vendor: "openai",
+          temperature: 0.2,
         },
+        include_secrets: true,
       });
     });
     expect(activateProfile).toHaveBeenCalledWith("gpt-5.6-luna");
-    expect(applyAgentProfile).toHaveBeenCalledWith({
+    expect(applyAgentProfile).toHaveBeenCalledWith("default", {
       agent_kind: "openhands",
       llm_profile_ref: "gpt-5.6-luna",
     });
@@ -138,20 +153,57 @@ describe("SetupLlmStep", () => {
     await userEvent.click(await screen.findByTestId("onboarding-llm-next"));
 
     await waitFor(() => {
-      expect(saveProfile).toHaveBeenCalledWith({
-        name: "gpt-4o-mini",
-        request: { llm: formState.llm, include_secrets: true },
+      expect(saveProfile).toHaveBeenCalledWith("gpt-4o-mini", {
+        llm: formState.llm,
+        include_secrets: true,
       });
     });
     expect(activateProfile).toHaveBeenCalledWith("gpt-4o-mini");
-    expect(applyAgentProfile).toHaveBeenCalledWith({
+    expect(applyAgentProfile).toHaveBeenCalledWith("default", {
       agent_kind: "openhands",
       llm_profile_ref: "gpt-4o-mini",
     });
     expect(onNext).toHaveBeenCalledTimes(1);
   });
 
+  it("preserves unchanged endpoint, credentials and options outside the settings diff", async () => {
+    formState.llm = {
+      model: "openai/mock-onboarding-model",
+      base_url: "http://localhost:19118/v1",
+      api_key: "encrypted:test-key",
+      temperature: 0.2,
+      timeout: 30,
+    };
+    formState.dirtyLlm = { model: formState.llm.model };
+    const onNext = vi.fn();
+    renderWithProviders(<SetupLlmStep onBack={vi.fn()} onNext={onNext} />);
+
+    await userEvent.click(await screen.findByTestId("onboarding-llm-next"));
+
+    await waitFor(() => expect(onNext).toHaveBeenCalledTimes(1));
+    expect(getSavedSettings).toHaveBeenCalledWith("encrypted");
+    expect(saveProfile).toHaveBeenCalledWith("mock-onboarding-model", {
+      llm: formState.llm,
+      include_secrets: true,
+    });
+  });
+
+  it("keeps Cloud onboarding on its settings save path", async () => {
+    formState.backendKind = "cloud";
+    const onNext = vi.fn();
+    renderWithProviders(<SetupLlmStep onBack={vi.fn()} onNext={onNext} />);
+
+    await userEvent.click(await screen.findByTestId("onboarding-llm-next"));
+
+    await waitFor(() => expect(onNext).toHaveBeenCalledTimes(1));
+    expect(getSavedSettings).not.toHaveBeenCalled();
+    expect(saveProfile).not.toHaveBeenCalled();
+    expect(activateProfile).not.toHaveBeenCalled();
+    expect(applyAgentProfile).not.toHaveBeenCalled();
+  });
+
   it.each([
+    ["saved settings read", getSavedSettings],
     ["profile save", saveProfile],
     ["profile activation", activateProfile],
   ])("does not advance when %s fails", async (_label, failingMutation) => {
