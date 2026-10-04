@@ -6,6 +6,7 @@ import {
 } from "#/api/backend-registry/active-store";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { SETTINGS_QUERY_KEYS } from "#/hooks/query/query-keys";
+import { getSettingsQueryFn } from "#/hooks/query/use-settings";
 import {
   normalizeFileDiscovery,
   type WorkspaceFileDiscovery,
@@ -26,7 +27,7 @@ export function useWorkspaceFileDiscovery(workingDir?: string) {
       active.backend.id,
       active.orgId,
     ],
-    queryFn: () => SettingsService.getSettings(),
+    queryFn: () => getSettingsQueryFn(),
     enabled: isLocal && !!workingDir,
     staleTime: 1000 * 60 * 5,
     meta: { disableToast: true },

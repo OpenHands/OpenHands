@@ -6,6 +6,7 @@ import { WorkspaceFileDiscoverySettings } from "#/components/features/files-tab/
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import { DEFAULT_FILE_DISCOVERY } from "#/utils/workspace-file-discovery";
+import { useSettings } from "#/hooks/query/use-settings";
 
 vi.mock("#/api/settings-service/settings-service.api", () => ({
   default: { getSettings: vi.fn(), saveSettings: vi.fn() },
@@ -19,7 +20,21 @@ let backend: keyof typeof snapshots = "local";
 vi.mock("#/api/backend-registry/active-store", () => ({
   subscribeActiveBackend: () => () => {},
   getSnapshot: () => snapshots[backend],
+  isNoBackend: () => false,
 }));
+
+vi.mock("#/contexts/active-backend-context", () => ({
+  useActiveBackend: () => snapshots[backend].active,
+}));
+
+function SettingsConsumer() {
+  const { data } = useSettings();
+  return (
+    <output aria-label="MCP settings">
+      {JSON.stringify(data?.mcp_config)}
+    </output>
+  );
+}
 
 function setup() {
   const client = new QueryClient({
@@ -128,5 +143,45 @@ describe("workspace discovery settings", () => {
       screen.queryByRole("button", { name: "FILES$DISCOVERY_SETTINGS" }),
     ).not.toBeInTheDocument();
     expect(SettingsService.saveSettings).not.toHaveBeenCalled();
+  });
+
+  it("preserves normalized settings when file discovery mounts and saves", async () => {
+    const mcpConfig = {
+      docs: { transport: "sse" as const, url: "https://docs.example.test/sse" },
+    };
+    vi.mocked(SettingsService.getSettings).mockResolvedValue({
+      ...DEFAULT_SETTINGS,
+      agent_settings: { mcp_config: mcpConfig },
+    });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const view = (showFiles: boolean) => (
+      <QueryClientProvider client={client}>
+        <SettingsConsumer />
+        {showFiles && <WorkspaceFileDiscoverySettings workingDir="/project" />}
+      </QueryClientProvider>
+    );
+    const rendered = render(view(false));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("status", { name: "MCP settings" }),
+      ).toHaveTextContent(JSON.stringify(mcpConfig)),
+    );
+
+    rendered.rerender(view(true));
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole("button", { name: "FILES$DISCOVERY_SETTINGS" }),
+    );
+    await user.click(screen.getByRole("button", { name: "BUTTON$SAVE" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+
+    expect(SettingsService.getSettings).toHaveBeenCalledTimes(2);
+    expect(
+      screen.getByRole("status", { name: "MCP settings" }),
+    ).toHaveTextContent(JSON.stringify(mcpConfig));
   });
 });
