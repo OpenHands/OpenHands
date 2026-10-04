@@ -1,13 +1,13 @@
 /** Bordered table container on base-secondary surfaces. */
 export const tableContainerClassName =
-  "overflow-hidden rounded-md border border-[var(--oh-border)] bg-base-secondary";
+  "overflow-hidden rounded-md border border-border bg-base-secondary";
 
 /** Fixed 44px row height for compact data tables (secrets, automations, MCP). */
 export const tableRowHeightClassName = "h-11";
 
 export const tableRowClassName = [
   tableRowHeightClassName,
-  "border-t border-[var(--oh-border)] transition-colors",
+  "border-t border-border transition-colors",
 ].join(" ");
 
 /** Subtle row highlight on base-secondary tables. */

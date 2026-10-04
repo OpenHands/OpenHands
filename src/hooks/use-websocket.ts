@@ -3,7 +3,14 @@ import { sendWebSocketAuth } from "#/utils/websocket-auth";
 import { startHandshakeWatchdog } from "#/utils/websocket-handshake";
 
 export interface WebSocketHookOptions {
-  queryParams?: Record<string, string | boolean>;
+  /**
+   * Query params for the socket URL. Pass a function when a value must be
+   * read at connect time rather than at render time — a resume cursor that
+   * advances on every frame would otherwise re-render the owner per event.
+   */
+  queryParams?:
+    | Record<string, string | boolean>
+    | (() => Record<string, string | boolean>);
   sessionApiKey?: string | null;
   onOpen?: (event: Event) => void;
   onClose?: (event: CloseEvent) => void;
@@ -39,10 +46,11 @@ export const useWebSocket = (url: string, options?: WebSocketHookOptions) => {
   const connectWebSocket = React.useCallback(() => {
     // Build URL with query parameters if provided
     let wsUrl = url;
-    if (optionsRef.current?.queryParams) {
-      const stringParams = Object.entries(
-        optionsRef.current.queryParams,
-      ).reduce(
+    const { queryParams } = optionsRef.current ?? {};
+    if (queryParams) {
+      const resolved =
+        typeof queryParams === "function" ? queryParams() : queryParams;
+      const stringParams = Object.entries(resolved).reduce(
         (acc, [key, value]) => {
           acc[key] = String(value);
           return acc;

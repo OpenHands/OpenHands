@@ -146,7 +146,7 @@ export function GoalStatusContent({ status }: { status: GoalStatus }) {
             {active ? (
               <span
                 data-testid="goal-spinner"
-                className="inline-block w-3.5 h-3.5 ml-1 rounded-full border-2 border-transparent border-t-[var(--oh-border-input)] animate-spin"
+                className="inline-block w-3.5 h-3.5 ml-1 rounded-full border-2 border-transparent border-t-border-input animate-spin"
               />
             ) : status.status === "complete" ? (
               <span data-testid="goal-done" className="inline-flex ml-1">
@@ -154,7 +154,7 @@ export function GoalStatusContent({ status }: { status: GoalStatus }) {
               </span>
             ) : (
               <span data-testid="goal-ended" className="inline-flex ml-1">
-                <XCircle className="w-3.5 h-3.5 fill-[var(--oh-muted)]" />
+                <XCircle className="w-3.5 h-3.5 fill-muted" />
               </span>
             )}
           </span>

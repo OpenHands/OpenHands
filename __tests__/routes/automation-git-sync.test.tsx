@@ -6,6 +6,7 @@ import { HttpError } from "@openhands/typescript-client";
 
 import { I18nKey } from "#/i18n/declaration";
 import AutomationService from "#/api/automation-service/automation-service.api";
+import { getCloudOrganizationMe } from "#/api/cloud/organization-service.api";
 import {
   __resetActiveStoreForTests,
   setActiveSelection,
@@ -33,12 +34,41 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
   displaySuccessToast: (message: string) => displaySuccessToast(message),
 }));
 
+// Permissions come from the org's /me endpoint on cloud backends; local
+// backends never call it.
+vi.mock("#/api/cloud/organization-service.api", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("#/api/cloud/organization-service.api")
+  >()),
+  getCloudOrganizationMe: vi.fn(),
+}));
+
+const orgAdmin = {
+  orgId: "org-1",
+  userId: "user-1",
+  role: "admin",
+  permissions: ["view_automations", "manage_automations"],
+};
+const orgMember = {
+  ...orgAdmin,
+  role: "member",
+  permissions: ["view_automations"],
+};
+
 const localBackend: Backend = {
   id: "local-1",
   name: "Local 1",
   host: "http://localhost:8000",
   apiKey: "session-key",
   kind: "local",
+};
+
+const cloudBackend: Backend = {
+  id: "cloud-1",
+  name: "Production",
+  host: "https://app.all-hands.dev",
+  apiKey: "bearer-key",
+  kind: "cloud",
 };
 
 const status: GitSyncStatus = {
@@ -89,7 +119,9 @@ beforeEach(() => {
   });
   displayErrorToast.mockReset();
   displaySuccessToast.mockReset();
-  setRegisteredBackends([localBackend]);
+  vi.mocked(getCloudOrganizationMe).mockReset();
+  vi.mocked(getCloudOrganizationMe).mockResolvedValue(orgAdmin);
+  setRegisteredBackends([localBackend, cloudBackend]);
   setActiveSelection({ backendId: localBackend.id });
 });
 
@@ -97,6 +129,32 @@ afterEach(() => {
   vi.useRealTimers();
   window.localStorage.clear();
   __resetActiveStoreForTests();
+});
+
+describe("AutomationGitSync — cloud backend", () => {
+  beforeEach(() => {
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
+  });
+
+  it("loads the org's status for an admin", async () => {
+    renderGitSync();
+
+    expect(
+      await screen.findByTestId("git-sync-repo-url-input"),
+    ).toBeInTheDocument();
+    expect(AutomationService.getGitSyncStatus).toHaveBeenCalled();
+  });
+
+  it("shows the no-access state to a member and never asks for the status", async () => {
+    vi.mocked(getCloudOrganizationMe).mockResolvedValue(orgMember);
+
+    renderGitSync();
+
+    expect(
+      await screen.findByText(I18nKey.AUTOMATIONS$GIT_SYNC$NO_ACCESS_TITLE),
+    ).toBeInTheDocument();
+    expect(AutomationService.getGitSyncStatus).not.toHaveBeenCalled();
+  });
 });
 
 describe("AutomationGitSync — backend without the git-sync API", () => {
