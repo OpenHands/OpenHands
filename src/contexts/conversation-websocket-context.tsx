@@ -76,6 +76,7 @@ import {
   seedModelSwitchesFromHistory,
   stampActiveLlmProfile,
 } from "#/hooks/chat/record-model-switch-message";
+import { shouldSeedHistoryErrorBanner } from "#/utils/history-error-banner";
 import {
   invalidateConversationQueries,
   updateConversationLlmModelInCache,
@@ -432,12 +433,47 @@ export function ConversationWebSocketProvider({
           );
         }
       }
+
+      // A run that ended in an LLM/tool failure is persisted server-side as a
+      // ConversationErrorEvent, but the failure banner lives in an in-memory
+      // store, so after a reload the failure becomes invisible: the user sees
+      // their message with no reply and no error. If the last outcome in the
+      // loaded history tail is an error (nothing recovered after it), re-seed
+      // the same banner the live WS path would have shown.
+      if (shouldSeedHistoryErrorBanner(preloadedHistory.events)) {
+        const lastError = [...preloadedHistory.events].reverse() as (
+          | ConversationErrorEvent
+          | ServerErrorEvent
+        )[];
+        const errorEvent = lastError.find((event) =>
+          isDisplayableErrorEvent(event),
+        );
+        if (errorEvent) {
+          const classification =
+            "classification" in errorEvent ? errorEvent.classification : null;
+          trackError({
+            source: "conversation",
+            metadata: {
+              eventId: errorEvent.id,
+              errorCode: errorEvent.code,
+            },
+            classification,
+          });
+          setErrorMessage(
+            errorEvent.detail,
+            "conversation",
+            errorEvent.code,
+            classification,
+          );
+        }
+      }
     }
   }, [
     preloadedHistory,
     addEvents,
     conversationId,
     consumeMatchingPendingMessage,
+    setErrorMessage,
   ]);
 
   // Build WebSocket URL from props.
