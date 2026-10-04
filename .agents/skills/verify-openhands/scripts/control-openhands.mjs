@@ -1620,6 +1620,47 @@ function eventText(event) {
     .slice(0, 160);
 }
 
+// The Open Workspace folder browser has no path field: walk it to PATH.
+async function openWorkspace(run, name, { stay } = {}) {
+  // A bare name resolves inside <run>/workspace, where fixtures live.
+  const inRun = join(run.dir, "workspace", name);
+  const path = !existsSync(name) && existsSync(inRun) ? inRun : name;
+  if (!existsSync(path))
+    throw new CliError(`No such folder: ${path}`, {
+      code: 2,
+      hint: "Create it first, for example: control-openhands fixture git-repo --name qa-repo",
+    });
+  const want = realpathSync(resolve(path));
+  if (!stay) await browserCall(run, "goto", { target: "/" });
+  await browserCall(run, "click", {
+    selector: "testid=open-workspace-button",
+    timeout: 30_000,
+  });
+  await browserCall(run, "click", { selector: "testid=workspace-dropdown" });
+  await browserCall(run, "click", { selector: "testid=add-workspaces-button" });
+  const walked = await browserCall(run, "pick-folder", {
+    path: want,
+    timeout: 30_000,
+  });
+  await browserCall(run, "click", { selector: "testid=folder-browser-use" });
+  await browserCall(run, "click", {
+    selector: "testid=workspace-launch-button",
+    timeout: 30_000,
+  });
+  return { workspace: want, steps: walked.steps };
+}
+
+async function cmdWorkspace({ positional, flags }) {
+  const run = loadRun(flags);
+  const [sub, path] = positional;
+  if (sub !== "open" || !path)
+    usage(
+      "Usage: control-openhands workspace open PATH [--stay]",
+      "control-openhands workspace open qa-repo   # a name resolves in <run>/workspace",
+    );
+  out({ ok: true, ...(await openWorkspace(run, path, { stay: flags.stay })) });
+}
+
 async function cmdConversation({ positional, flags }) {
   const run = loadRun(flags);
   const [sub, id] = positional;
@@ -1631,7 +1672,12 @@ async function cmdConversation({ positional, flags }) {
         "conversation start needs --prompt",
         'control-openhands conversation start --prompt "Create hello.py that prints hi, run it" --wait',
       );
-    if (!flags["stay"]) await browserCall(run, "goto", { target: "/" });
+    let picked;
+    if (flags.workspace && flags.workspace !== true)
+      picked = await openWorkspace(run, String(flags.workspace), {
+        stay: flags.stay,
+      });
+    else if (!flags["stay"]) await browserCall(run, "goto", { target: "/" });
     // Home and conversation pages share the composer: a contenteditable
     // testid=chat-input with testid=submit-button beside it.
     await browserCall(run, "wait", {
@@ -1648,7 +1694,12 @@ async function cmdConversation({ positional, flags }) {
       timeout: 60_000,
     });
     const conversationId = /\/conversations\/([^/?#]+)/.exec(url)[1];
-    const result = { ok: true, id: conversationId, url };
+    const result = {
+      ok: true,
+      id: conversationId,
+      url,
+      workspace: picked?.workspace,
+    };
     if (flags.wait)
       Object.assign(
         result,
@@ -1675,20 +1726,6 @@ async function cmdConversation({ positional, flags }) {
   if (sub === "status") {
     if (!id) usage("conversation status <id>");
     out({ ok: true, ...summarize(await conversationInfo(run, id)) });
-    return;
-  }
-  if (sub === "retract") {
-    if (!flags.feature)
-      usage("evidence retract needs --feature ID [--entry E] [--note why]");
-    const row = {
-      ts: new Date().toISOString(),
-      feature: flags.feature,
-      entry: flags.entry === true ? undefined : flags.entry,
-      retracted: true,
-      note: flags.note === true ? undefined : flags.note,
-    };
-    appendFileSync(ledger, `${JSON.stringify(row)}\n`);
-    out({ ok: true, retracted: row });
     return;
   }
   if (sub === "list") {
@@ -1829,11 +1866,18 @@ async function cmdFixture({ positional, flags }) {
     ]) {
       execFileSync("git", args, { cwd: dir, env: gitEnv });
     }
+    const remote =
+      flags.remote && flags.remote !== true ? String(flags.remote) : undefined;
+    // A remote URL lets the UI show repo/branch links and Pull/Push chips;
+    // nothing is fetched or pushed.
+    if (remote)
+      execFileSync("git", ["remote", "add", "origin", remote], { cwd: dir });
     out({
       ok: true,
       path: dir,
       files: ["README.md", "src/calc.py", "src/test_calc.py"],
       branch: "main",
+      remote,
     });
     return;
   }
@@ -1873,7 +1917,7 @@ async function cmdFixture({ positional, flags }) {
     return;
   }
   usage(
-    "Usage: control-openhands fixture git-repo|folder|image|file [--name N]",
+    "Usage: control-openhands fixture git-repo|folder|image|file [--name N] [--remote URL]",
     "control-openhands fixture git-repo --name qa-repo",
   );
 }
@@ -1881,6 +1925,38 @@ async function cmdFixture({ positional, flags }) {
 // ---------------------------------------------------------------------------
 // Commands: browser.
 // ---------------------------------------------------------------------------
+// Central-directory listing of a .zip download (names only).
+function zipEntries(buf, limit = 30) {
+  const eocd = buf.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+  if (eocd < 0 || eocd + 22 > buf.length) return undefined;
+  const count = buf.readUInt16LE(eocd + 10);
+  let off = buf.readUInt32LE(eocd + 16);
+  const names = [];
+  for (let i = 0; i < count && off + 46 <= buf.length; i += 1) {
+    if (buf.readUInt32LE(off) !== 0x02014b50) break;
+    const nameLen = buf.readUInt16LE(off + 28);
+    const extraLen = buf.readUInt16LE(off + 30);
+    const commentLen = buf.readUInt16LE(off + 32);
+    names.push(buf.toString("utf8", off + 46, off + 46 + nameLen));
+    off += 46 + nameLen + extraLen + commentLen;
+  }
+  return { count, names: names.slice(0, limit) };
+}
+
+function inspectDownload(path, needle) {
+  const buf = readFileSync(path);
+  const info = { bytes: buf.length };
+  const isZip = buf.length >= 4 && buf.readUInt32LE(0) === 0x04034b50;
+  if (isZip) info.zip = zipEntries(buf);
+  else if (!buf.subarray(0, 4096).includes(0))
+    info.head = buf.toString("utf8", 0, 600);
+  if (needle !== undefined)
+    info.contains = isZip
+      ? (zipEntries(buf, Infinity)?.names ?? []).some((n) => n.includes(needle))
+      : buf.toString("utf8").includes(needle);
+  return info;
+}
+
 async function cmdBrowser({ positional, flags }) {
   const run = loadRun(flags);
   const [verb, ...rest] = positional;
@@ -1911,9 +1987,23 @@ async function cmdBrowser({ positional, flags }) {
     case "forward":
     case "url":
     case "tabs":
-    case "downloads":
       result = await browserCall(run, verb);
       break;
+    case "downloads": {
+      result = await browserCall(run, verb);
+      const last = intFlag(flags.last, 0);
+      if (last) result.downloads = result.downloads.slice(-last);
+      if (flags.inspect || flags.contains) {
+        const needle =
+          flags.contains && flags.contains !== true
+            ? String(flags.contains)
+            : undefined;
+        for (const d of result.downloads)
+          if (d.path && existsSync(d.path))
+            d.inspect = inspectDownload(d.path, needle);
+      }
+      break;
+    }
     case "click":
     case "dblclick": {
       need(1, `control-openhands browser ${verb} 'testid=submit-button'`);
@@ -2200,7 +2290,26 @@ async function cmdEvidence({ positional, flags }) {
         : undefined,
     };
     appendFileSync(ledger, `${JSON.stringify(row)}\n`);
-    out({ ok: true, recorded: row });
+    const known = new Set(mapIdList().map((i) => i.id));
+    const warning =
+      known.has(row.feature) || /^BUG-/.test(row.feature)
+        ? undefined
+        : `${row.feature} is not a sub-feature ID in the map. Use an ID from the family's "## Sub-features" list (add it there first), or BUG-<id> for bug repros.`;
+    out({ ok: true, recorded: row, warning });
+    return;
+  }
+  if (sub === "retract") {
+    if (!flags.feature)
+      usage("evidence retract needs --feature ID [--entry E] [--note why]");
+    const row = {
+      ts: new Date().toISOString(),
+      feature: flags.feature,
+      entry: flags.entry === true ? undefined : flags.entry,
+      retracted: true,
+      note: flags.note === true ? undefined : flags.note,
+    };
+    appendFileSync(ledger, `${JSON.stringify(row)}\n`);
+    out({ ok: true, retracted: row });
     return;
   }
   const rows = existsSync(ledger)
@@ -2285,6 +2394,7 @@ const KNOWN_COMMANDS = new Set([
   "onboard",
   "conversation",
   "fixture",
+  "workspace",
   "browser",
   "evidence",
   "map",
@@ -2474,6 +2584,18 @@ function mapCoverage() {
   };
 }
 
+function mapIdList() {
+  const ids = [];
+  for (const file of featureFiles()) {
+    const text = readFileSync(join(mapDir, file), "utf8");
+    const section =
+      text.split(/^## /m).find((s) => s.startsWith("Sub-features")) ?? "";
+    for (const m of section.matchAll(/^- `(F\d{2}\.[a-z0-9-]+)`:?\s*(.*)$/gm))
+      ids.push({ id: m[1], file, summary: m[2].slice(0, 100) });
+  }
+  return ids;
+}
+
 async function cmdMap({ positional, flags }) {
   const [sub] = positional;
   if (sub === "check") {
@@ -2501,14 +2623,7 @@ async function cmdMap({ positional, flags }) {
     return;
   }
   if (sub === "ids") {
-    const ids = [];
-    for (const file of featureFiles()) {
-      const text = readFileSync(join(mapDir, file), "utf8");
-      const sub2 =
-        text.split(/^## /m).find((s) => s.startsWith("Sub-features")) ?? "";
-      for (const m of sub2.matchAll(/^- `(F\d{2}\.[a-z0-9-]+)`:?\s*(.*)$/gm))
-        ids.push({ id: m[1], file, summary: m[2].slice(0, 100) });
-    }
+    const ids = mapIdList();
     out({ ok: true, count: ids.length, ids });
     return;
   }
@@ -2573,7 +2688,8 @@ Arrange (preconditions, never UI proof)
 Essential pathways (driven through the real UI)
   login         Public mode: enter the session key on the API-key screen
   onboard       Telemetry consent + onboarding modal (--skip, or walk it with --agent)
-  conversation  start --prompt "..." [--wait] | wait | status | list | events
+  workspace     open PATH — pick a folder through Open Workspace (folder browser)
+  conversation  start --prompt "..." [--wait] [--workspace PATH] | wait | status | list | events
 
 Drive and observe
   browser       goto/click/fill/press/wait/text/snapshot/testids/screenshot/viewport/errors/...
@@ -2665,7 +2781,7 @@ Answers the telemetry consent form (analytics off by default) and then either
 skips the onboarding modal (--skip) or walks it: choose agent → keep current LLM
 settings → close at say-hello. Skipping is not proof that onboarding works.
 `,
-  conversation: `control-openhands conversation start --prompt TEXT [--wait] [--until STATES] [--timeout SEC] [--stay]
+  conversation: `control-openhands conversation start --prompt TEXT [--wait] [--until STATES] [--timeout SEC] [--stay] [--workspace PATH]
 control-openhands conversation wait ID [--until finished,idle] [--timeout SEC]
 control-openhands conversation status ID
 control-openhands conversation list
@@ -2673,17 +2789,33 @@ control-openhands conversation events ID [--last N] [--kinds MessageEvent,Action
 
 'start' types into the home composer (testid=chat-input), presses
 testid=submit-button and returns the new /conversations/<id>. --stay uses the
-current page's composer instead of navigating home first. 'wait' polls the
+current page's composer instead of navigating home first. --workspace PATH
+first picks that folder through Open Workspace (see 'workspace open'), so the
+conversation runs in it. 'wait' polls the
 conversation's execution_status until one of --until (default: any terminal).
 
 Examples:
   control-openhands conversation start --prompt "Create hello.py that prints hi and run it" --wait --timeout 300
   control-openhands conversation events <id> --last 10
 `,
-  fixture: `control-openhands fixture git-repo [--name qa-repo]   # git repo in <run>/workspace (README, src/calc.py, test)
+  fixture: `control-openhands fixture git-repo [--name qa-repo] [--remote https://github.com/qa-example/qa-repo.git]
+        # git repo in <run>/workspace (README, src/calc.py, test); --remote only sets origin
 control-openhands fixture folder [--name qa-folder]
 control-openhands fixture image [--name qa-image] [--width 160 --height 96]   # PNG under evidence/_fixtures
 control-openhands fixture file [--name qa-note.txt] [--content TEXT]
+`,
+  workspace: `control-openhands workspace open PATH|NAME [--stay]
+
+NAME (no slash) resolves inside <run>/workspace, where 'fixture' creates repos.
+
+Drives Home > Open Workspace > workspace dropdown > + Add Workspace, walks the
+folder browser (folder-browser-up / folder-browser-entry-<name>) to PATH,
+clicks Use and Launch. The composer then carries the workspace chip; follow
+with 'conversation start --stay', or use 'conversation start --workspace PATH'.
+
+Example:
+  control-openhands fixture git-repo --name qa-repo
+  control-openhands conversation start --workspace qa-repo --prompt "List the files" --wait
 `,
   browser: `control-openhands browser <verb> [selector] [args]
 
@@ -2700,7 +2832,7 @@ Verbs
   click|dblclick <sel> [--force] [--timeout MS] [--button left|middle|right]
         [--modifiers Control,Meta,Shift,Alt] [--position X,Y] (offset inside the element)
         [--expect-url REGEX] (wait for client-side navigation; click returns the old URL otherwise)
-        [--observe SEL [--observe-ms 3000]] (record transient states such as "Saving...")
+        [--observe SEL [--observe-ms 3000]] (record transient states such as "Saving..."; SEL uses the same syntax)
   hover|focus|check|uncheck <sel>        (hidden <input> switches: click their label instead)
   mouse-click X Y [--button B]          click at viewport coordinates (backdrops, overlays)
   tooltip <sel>                          hover and return the role=tooltip text
@@ -2714,12 +2846,14 @@ Verbs
   screenshot [<sel>] --feature ID --name N [--full-page]     PNG under evidence/<ID>/
   viewport desktop|phone|narrow|tablet|WxH                    1440x1000, 390x844, 320x700, 820x1180
   errors [--clear] [--all] [--app-only]                        page/console/HTTP errors since last clear
+                                         (--clear prints the list, then empties it: run it before the action)
   events [--kinds pageerror,dialog,download] [--last N]
   eval <js expression>                   read-only inspection; never mutate app state with it
-  tabs | tab <i> | close-tab <i> | dialogs [--policy accept|dismiss] | downloads
+  tabs | tab <i> | close-tab <i> | dialogs [--policy accept|dismiss]
+  downloads [--last N] [--inspect] [--contains TEXT]   saved files; --inspect adds a text head or zip entry names
   storage [--session] [--values]         localStorage (or sessionStorage) keys; values only on request
   media [--clear]                        media playback recorded since load (sound features)
-  network [--external] [--clear] [--last N]   requests by origin (privacy/telemetry checks)
+  network [--external] [--clear] [--last N]   requests by origin (privacy/telemetry checks; --clear as for errors)
   toasts                                 texts of the toasts on screen now
   reset                                  fresh browser profile (first-run state); the stack keeps running
   scroll <sel> --by PX                   scroll the element's scrollable container (settings, panels)
@@ -2758,6 +2892,7 @@ const COMMANDS = {
   onboard: cmdOnboard,
   conversation: cmdConversation,
   fixture: cmdFixture,
+  workspace: cmdWorkspace,
   browser: cmdBrowser,
   evidence: cmdEvidence,
   map: cmdMap,

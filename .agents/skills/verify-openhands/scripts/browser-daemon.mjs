@@ -19,7 +19,7 @@ import {
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildLocator } from "./lib/selectors.mjs";
+import { buildLocator, toCss } from "./lib/selectors.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, "../../../..");
@@ -360,32 +360,62 @@ const handlers = {
     observe,
     observeMs,
   }) {
+    // Record transient states (labels such as "Saving...", skeletons) of the
+    // observed elements while the click's effects play out: an in-page
+    // MutationObserver when the selector is plain CSS/testid, else polling.
     let observer;
-    if (observe) {
-      // Record transient states (labels such as "Saving...", skeletons) of
-      // the observed elements while the click's effects play out.
-      observer = await activePage.evaluateHandle((sel) => {
-        const log = [];
-        const snap = () => {
-          const els = [...document.querySelectorAll(sel)];
-          const entry = els.length
-            ? els.map((e) => (e.innerText || e.value || "").trim().slice(0, 80))
-            : ["<absent>"];
-          const key = JSON.stringify(entry);
-          if (log[log.length - 1]?.key !== key) {
-            log.push({ key, t: Math.round(performance.now()) });
+    let poller;
+    const css = observe ? toCss(observe) : null;
+    if (css) {
+      observer = await activePage
+        .evaluateHandle((sel) => {
+          document.querySelectorAll(sel);
+          const log = [];
+          const snap = () => {
+            const els = [...document.querySelectorAll(sel)];
+            const entry = els.length
+              ? els.map((e) =>
+                  (e.innerText || e.value || "").trim().slice(0, 80),
+                )
+              : ["<absent>"];
+            const key = JSON.stringify(entry);
+            if (log[log.length - 1]?.key !== key) {
+              log.push({ key, t: Math.round(performance.now()) });
+            }
+          };
+          snap();
+          const mo = new MutationObserver(snap);
+          mo.observe(document.body, {
+            subtree: true,
+            childList: true,
+            characterData: true,
+            attributes: true,
+          });
+          return { log, mo };
+        }, css)
+        .catch(() => undefined);
+    }
+    if (observe && !observer) {
+      const log = [];
+      const t0 = Date.now();
+      poller = { log, running: true };
+      poller.done = (async () => {
+        while (poller.running) {
+          let entry;
+          try {
+            const loc = locate(observe);
+            entry = (await loc.count())
+              ? (await loc.allInnerTexts()).map((s) => s.trim().slice(0, 80))
+              : ["<absent>"];
+          } catch {
+            entry = ["<unreadable>"];
           }
-        };
-        snap();
-        const mo = new MutationObserver(snap);
-        mo.observe(document.body, {
-          subtree: true,
-          childList: true,
-          characterData: true,
-          attributes: true,
-        });
-        return { log, mo };
-      }, observe);
+          const key = JSON.stringify(entry);
+          if (log[log.length - 1]?.key !== key)
+            log.push({ key, t: Date.now() - t0 });
+          await new Promise((r) => setTimeout(r, 20));
+        }
+      })();
     }
     await locate(selector).click({
       timeout,
@@ -398,15 +428,28 @@ const handlers = {
       await activePage.waitForURL(new RegExp(expectUrl), { timeout });
     }
     let observed;
-    if (observer) {
+    if (observer || poller) {
       await activePage.waitForTimeout(Number(observeMs ?? 3000));
+    }
+    if (observer) {
       observed = await observer.evaluate(({ log, mo }) => {
         mo.disconnect();
         const start = log[0]?.t ?? 0;
         return log.map((l) => ({ ms: l.t - start, state: JSON.parse(l.key) }));
       });
+    } else if (poller) {
+      poller.running = false;
+      await poller.done;
+      observed = poller.log.map((l) => ({
+        ms: l.t,
+        state: JSON.parse(l.key),
+      }));
     }
-    return { url: activePage.url(), observed };
+    return {
+      url: activePage.url(),
+      observed,
+      observedBy: observe ? (observer ? "mutation" : "poll-20ms") : undefined,
+    };
   },
   async dblclick({ selector, timeout, modifiers }) {
     await locate(selector).dblclick({ timeout, modifiers });
@@ -689,6 +732,46 @@ const handlers = {
       policy: dialogPolicy,
       dialogs: events.filter((e) => e.kind === "dialog").slice(-10),
     };
+  },
+  async "pick-folder"({ path: want, timeout }) {
+    // The Open Workspace folder browser has no path field; walk it with
+    // folder-browser-up / folder-browser-entry-<name> until PATH is current.
+    const label = activePage.getByTestId("folder-browser-current-path");
+    const current = async () => {
+      const text = (await label.innerText()).trim();
+      return text.length > 1 ? text.replace(/\/+$/, "") : text;
+    };
+    await label.waitFor({ timeout });
+    const deadline = Date.now() + (timeout ?? 30_000);
+    let cur = await current();
+    while (!cur && Date.now() < deadline) {
+      await activePage.waitForTimeout(100);
+      cur = await current();
+    }
+    const steps = [];
+    for (let i = 0; i < 60; i += 1) {
+      if (cur === want) return { path: cur, steps };
+      const prefix = cur === "/" ? "/" : `${cur}/`;
+      if (want.startsWith(prefix)) {
+        const seg = want.slice(prefix.length).split("/")[0];
+        await activePage
+          .getByTestId(`folder-browser-entry-${seg}`)
+          .click({ timeout: 15_000 });
+        steps.push(seg);
+      } else {
+        await activePage.getByTestId("folder-browser-up").click({
+          timeout: 15_000,
+        });
+        steps.push("..");
+      }
+      const before = cur;
+      const t0 = Date.now();
+      while ((cur = await current()) === before && Date.now() - t0 < 10_000) {
+        await activePage.waitForTimeout(100);
+      }
+      if (cur === before) throw new Error(`Folder browser stayed at ${cur}`);
+    }
+    throw new Error(`Could not reach ${want}; stopped at ${cur}`);
   },
   async downloads() {
     return {

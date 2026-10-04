@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { buildLocator, parseRole } from "./lib/selectors.mjs";
+import { buildLocator, parseRole, toCss } from "./lib/selectors.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const cli = join(here, "control-openhands.mjs");
@@ -177,4 +177,29 @@ test("map routes reads the route registry with nested settings paths", () => {
   ]) {
     assert.ok(paths.includes(path), `missing ${path}`);
   }
+});
+
+test("toCss keeps testid/CSS chains in-page and defers engines to Playwright", () => {
+  assert.equal(
+    toCss("testid=chat-pane-header >> testid=ellipsis-button"),
+    '[data-testid="chat-pane-header"] [data-testid="ellipsis-button"]',
+  );
+  assert.equal(
+    toCss('testid=switch[data-state="on"] >> span.label'),
+    '[data-testid="switch"][data-state="on"] span.label',
+  );
+  assert.equal(toCss('role=dialog >> role=button[name="Save"]'), null);
+  assert.equal(toCss("testid=list >> nth=0"), null);
+});
+
+test("evidence retract is an evidence verb, not a conversation verb", () => {
+  const res = spawnSync(process.execPath, [cli, "help", "evidence"], {
+    encoding: "utf8",
+  });
+  assert.match(res.stdout, /evidence retract --feature ID/);
+  const conv = spawnSync(process.execPath, [cli, "help", "conversation"], {
+    encoding: "utf8",
+  });
+  assert.doesNotMatch(conv.stdout, /retract/);
+  assert.match(conv.stdout, /--workspace PATH/);
 });

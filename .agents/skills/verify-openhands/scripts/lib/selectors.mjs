@@ -117,3 +117,26 @@ export function buildLocator(root, selector) {
     .split(/\s+>>\s+/)
     .reduce((scope, segment) => applySegment(scope, segment), root);
 }
+
+// Plain CSS for selectors made only of testid= and CSS segments (used by the
+// in-page MutationObserver of click --observe); null when Playwright engines
+// (role=, text=, nth= ...) are needed.
+export function toCss(selector) {
+  const parts = [];
+  for (const raw of String(selector).split(" >> ")) {
+    const seg = raw.trim();
+    if (seg.startsWith("testid=")) {
+      const value = seg.slice("testid=".length);
+      const bracket = value.indexOf("[");
+      const id = unquote(bracket > 0 ? value.slice(0, bracket) : value).text;
+      parts.push(
+        `[data-testid="${id.replace(/"/g, '\\"')}"]${bracket > 0 ? value.slice(bracket) : ""}`,
+      );
+    } else if (/^[a-z-]+=/.test(seg) || seg === "visible") {
+      return null;
+    } else {
+      parts.push(seg);
+    }
+  }
+  return parts.join(" ");
+}

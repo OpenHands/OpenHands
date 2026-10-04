@@ -41,6 +41,20 @@ that every row passes today; the run's evidence ledger is.
   viewport there, so take one screenshot per scroll position.
 - `conversation start` leaves the browser on the conversation page, which also
   has a `testid=submit-button`. `browser goto` the next page explicitly.
+- A conversation in a folder or repo: `control-openhands fixture git-repo --name
+  qa-repo [--remote https://github.com/qa-example/qa-repo.git]`, then
+  `control-openhands conversation start --workspace qa-repo --prompt ...`. It
+  drives Open Workspace and the folder browser, which has no path field
+  (`workspace open qa-repo` does only the picking). `--remote` only sets
+  `origin`, which is enough for the repo/branch links and Pull/Push chips.
+- Sidebar and row navigation can append `?backend=<id>`: end `--expect-url`
+  regexes with `(\?|$)`, not `$`.
+- Some confirmation buttons render without the `data-testid` their source
+  passes (`BrandButton` takes `testId`, not `data-testid`). When
+  `browser testids 'role=dialog'` lists nothing, use
+  `'role=dialog >> role=button[name="Confirm"]'`.
+- `browser errors --clear` and `browser network --clear` print the list, then
+  empty it: run them before the action, then read again after it.
 - When a label depends on the UI language or a toast may already be gone,
   assert the persisted state after `browser reload` instead of `wait-text`.
 - Pass `--timeout 5000` to waits for elements that may legitimately not appear;
@@ -64,7 +78,11 @@ that every row passes today; the run's evidence ledger is.
 - Visual checks: `browser screenshot --feature <ID> --name <label>` at the stated
   viewport, plus `browser bbox` for overflow/geometry claims.
 - After each family, `control-openhands browser errors --app-only` must not show
-  new page errors; count and report them even when the UI recovered.
+  new page errors; count and report them even when the UI recovered. Record the
+  sweep under the sub-feature whose page produced the errors (or the family's
+  page-level ID); `evidence add` warns about IDs that are not in the map.
+- Exports and downloads: `browser downloads --last 1 --inspect [--contains TEXT]`
+  shows a text file's head or a zip's entry names.
 - Record every check with `control-openhands evidence add --feature <ID> --result
   pass|fail|blocked|not-run`. A skipped entry point is never verified through a
   different one. Blocked rows name the missing prerequisite and the attempted path.

@@ -99,8 +99,9 @@ control-openhands stop                         # stops only this run; evidence s
   count as proof that the UI path works; the map says which steps are UI proof.
   Never intercept routes or add mock LLM responses to make a live check pass.
 - **Essential pathways** are single commands so recipes can start from a known
-  state: `onboard`, `llm preset|set`, `conversation start --prompt ... --wait`,
-  `conversation events <id>`, `fixture git-repo`.
+  state: `onboard`, `llm preset|set`, `conversation start --prompt ... --wait`
+  (add `--workspace qa-repo` to run it in a `fixture git-repo`),
+  `conversation events <id>`, `workspace open`.
 - **State control** reaches states a happy path never shows, without mocks:
   `browser reset` (fresh browser profile: first run again), `service stop
   automation|agent-server` (backend-down UI), `restart` (same state after a
