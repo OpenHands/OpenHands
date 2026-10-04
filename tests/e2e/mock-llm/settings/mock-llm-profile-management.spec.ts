@@ -282,9 +282,7 @@ test.describe("same-model profile identity", () => {
     }
   });
 
-  // TODO: Restore after setup launches with the selected profile instead of mock-llm.
-  // https://github.com/OpenHands/OpenHands/issues/17872 tracks this journey.
-  test.fixme("chat header shows the correct profile when two profiles share the same model", async ({
+  test("chat header shows the correct profile when two profiles share the same model", async ({
     page,
     request,
   }) => {
