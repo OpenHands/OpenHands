@@ -13,7 +13,10 @@ that every row passes today; the run's evidence ledger is.
 - `control-openhands onboard --skip` has answered telemetry consent and closed the
   onboarding modal, unless the recipe tests onboarding itself.
 - Model-backed recipes: `control-openhands llm preset deepseek` saved
-  `deepseek-flash` (active) and `deepseek-pro` from `DEEPSEEK_API_KEY`.
+  `deepseek-flash` (active) and `deepseek-pro` from `DEEPSEEK_API_KEY` (or
+  `--api-key-file PATH`). States that exist only while no LLM is configured
+  (the home banner, onboarding's LLM step) need a fresh `launch --new` and must
+  run before the preset.
 - The browser is at the desktop viewport (1440×1000) unless a recipe says
   otherwise; `control-openhands browser viewport phone` is 390×844.
 - Never drive an instance that this verification run did not start.
@@ -29,7 +32,21 @@ that every row passes today; the run's evidence ledger is.
 - Treat commands as literal. Fixture names start with `QA_` or `qa-` so cleanup
   and assertions never collide with real data.
 - UI navigation and direct URL entry are different entry points; record which
-  one a check used.
+  one a check used. After a navigating click, wait for the destination:
+  `browser click '<sel>' --expect-url '<regex>'`; the plain click returns the old URL.
+- Many settings switches are a hidden `<input>` inside a `<label>`: click the
+  label text (or the visible track) and read `.checked` with `browser eval`.
+- Settings and panels scroll inside a container: `browser scroll '<sel>' --by 600`
+  scrolls the right one, and `--full-page` screenshots capture only the
+  viewport there, so take one screenshot per scroll position.
+- `conversation start` leaves the browser on the conversation page, which also
+  has a `testid=submit-button`. `browser goto` the next page explicitly.
+- When a label depends on the UI language or a toast may already be gone,
+  assert the persisted state after `browser reload` instead of `wait-text`.
+- Pass `--timeout 5000` to waits for elements that may legitimately not appear;
+  the 30 s default adds up quickly.
+- Conversations created as fixtures may stay when no recipe in the family covers
+  deleting them; they vanish with the run's private state.
 - `control-openhands api ... --write`, `llm` and `fixture` arrange preconditions.
   They are never the proof step for the feature under test.
 

@@ -73,6 +73,13 @@ test("role selectors carry name, exactness and state options", () => {
   });
   const regex = parseRole('link[name="/^Docs/i"]').options.name;
   assert.ok(regex instanceof RegExp && regex.test("docs page"));
+  assert.ok(
+    parseRole('option[name^="deepseek-pro"]').options.name.test(
+      "deepseek-pro (default)",
+    ),
+  );
+  assert.ok(!parseRole('option[name^="pro"]').options.name.test("deepseek-pro"));
+  assert.ok(parseRole('button[name*="SAVE"]').options.name.test("Save changes"));
   assert.throws(
     () => parseRole("button[colour=red]"),
     /Unsupported role attribute/,

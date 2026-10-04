@@ -56,7 +56,7 @@ around a gap with an untracked one-off script the next agent cannot rerun.
 control-openhands launch                       # builds if needed; prints run dir, ports
 export OH_VERIFY_RUN=<run dir from launch>     # optional; 'current' symlink is the default
 control-openhands doctor                       # read-only; must be ok before driving
-control-openhands llm preset deepseek          # deepseek-flash (active) + deepseek-pro, key from $DEEPSEEK_API_KEY
+control-openhands llm preset deepseek          # deepseek-flash (active) + deepseek-pro; key from $DEEPSEEK_API_KEY or --api-key-file
 control-openhands onboard --skip               # consent + onboarding (walk it instead when F01 is under test)
 control-openhands browser goto /settings/secrets
 control-openhands browser testids              # discover handles on the current page
@@ -67,6 +67,11 @@ control-openhands evidence add --feature F05.secret-create --result pass --entry
 control-openhands stop                         # stops only this run; evidence stays
 ```
 
+- **Launch** refuses to start when less than about 2 GB of memory is free: each
+  run holds an Agent Server, automation, a static frontend and Chromium (about
+  1.5 GB together). Stop runs you are done with; several agents on one machine
+  should each `launch --new`, export their own `OH_VERIFY_RUN`, and never touch
+  another agent's run.
 - **Launch** starts `bin/agent-canvas.mjs` from this checkout with a private
   `HOME`, state, session key and free port block, so it never touches a user's
   `~/.openhands` or another run. `launch --new` starts a second independent run
@@ -82,7 +87,10 @@ control-openhands stop                         # stops only this run; evidence s
   `testid=`, `role=button[name="Save"]`, `label=`, `text=`, chained with ` >> `.
   Use `browser testids` and `browser snapshot` to find handles; prefer scoped
   test IDs and accessible names over CSS. Failures return a hint and a
-  screenshot path; read the screenshot before retrying.
+  screenshot path; read the screenshot before retrying. A click returns the URL
+  from *before* any client-side navigation: use `click ... --expect-url '<regex>'`
+  (or `browser wait-url`) after every navigating click, because many routes
+  redirect (`/settings` → `/settings/agents`, `/customize` → `/mcp`).
 - **Arrange, don't fake.** `llm`, `fixture` and `api ... --write` exist to set up
   preconditions (a configured profile, a git repo, a dummy secret). They never
   count as proof that the UI path works; the map says which steps are UI proof.

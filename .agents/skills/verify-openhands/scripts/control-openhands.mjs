@@ -21,8 +21,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createConnection } from "node:net";
-import { tmpdir } from "node:os";
-import { dirname, join, relative, resolve } from "node:path";
+import { freemem, tmpdir } from "node:os";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { deflateSync } from "node:zlib";
 
@@ -308,6 +308,19 @@ function defaults() {
   );
 }
 
+function availableMemoryBytes() {
+  // MemAvailable counts reclaimable cache; os.freemem() alone understates it.
+  try {
+    const line = readFileSync("/proc/meminfo", "utf8").match(
+      /^MemAvailable:\s+(\d+) kB/m,
+    );
+    if (line) return Number(line[1]) * 1024;
+  } catch {
+    // not Linux
+  }
+  return freemem();
+}
+
 function nodeMajor() {
   return Number(process.versions.node.split(".")[0]);
 }
@@ -444,6 +457,20 @@ async function cmdLaunch({ flags }) {
       {
         code: 3,
         hint: "Put a Node 24 binary first on PATH (see package.json engines) and rerun.",
+      },
+    );
+  }
+  // One run (Agent Server, automation, frontend, Chromium) needs about
+  // 1.5 GB. Several agents launching at once can exhaust a shared machine and
+  // take every run down with it, so refuse instead of overcommitting.
+  const availableMb = Math.round(availableMemoryBytes() / 1024 / 1024);
+  const minimumMb = intFlag(flags["min-free-mb"], 2000);
+  if (availableMb < minimumMb) {
+    throw new CliError(
+      `Only ${availableMb} MB of memory available; a run needs about 1500 MB.`,
+      {
+        code: 3,
+        hint: "Stop runs you no longer need (`control-openhands runs`, `stop --run <dir>`), wait for other agents, or lower --min-free-mb deliberately.",
       },
     );
   }
@@ -1658,7 +1685,52 @@ async function cmdBrowser({ positional, flags }) {
       result = await browserCall(run, verb);
       break;
     case "click":
-    case "dblclick":
+    case "dblclick": {
+      need(1, `control-openhands browser ${verb} 'testid=submit-button'`);
+      const position =
+        flags.position && flags.position !== true
+          ? (([x, y]) => ({ x: Number(x), y: Number(y) }))(
+              String(flags.position).split(","),
+            )
+          : undefined;
+      result = await browserCall(run, verb, {
+        selector: sel,
+        timeout,
+        force: Boolean(flags.force),
+        button: flags.button,
+        modifiers:
+          flags.modifiers && flags.modifiers !== true
+            ? String(flags.modifiers).split(",")
+            : undefined,
+        position,
+        expectUrl: flags["expect-url"],
+        observe: flags.observe,
+        observeMs: flags["observe-ms"],
+      });
+      break;
+    }
+    case "mouse-click":
+      need(2, "control-openhands browser mouse-click 20 400");
+      result = await browserCall(run, "mouse-click", {
+        x: rest[0],
+        y: rest[1],
+        button: flags.button,
+      });
+      break;
+    case "tooltip":
+      need(1, "control-openhands browser tooltip 'testid=chat-dictation-button'");
+      result = await browserCall(run, "tooltip", { selector: sel, timeout });
+      break;
+    case "media":
+      result = await browserCall(run, "media", { clear: Boolean(flags.clear) });
+      break;
+    case "network":
+      result = await browserCall(run, "network", {
+        clear: Boolean(flags.clear),
+        external: Boolean(flags.external),
+        last: flags.last,
+      });
+      break;
     case "hover":
     case "focus":
     case "check":
@@ -1821,7 +1893,10 @@ async function cmdBrowser({ positional, flags }) {
       result = await browserCall(run, "dialogs", { policy: flags.policy });
       break;
     case "storage":
-      result = await browserCall(run, "storage", { keysOnly: !flags.values });
+      result = await browserCall(run, "storage", {
+        keysOnly: !flags.values,
+        session: Boolean(flags.session),
+      });
       break;
     default:
       usage(
@@ -1851,6 +1926,13 @@ async function cmdEvidence({ positional, flags }) {
     const artifacts = [];
     const raw = flags.artifact;
     if (raw && raw !== true) artifacts.push(...String(raw).split(","));
+    const missing = artifacts.filter((a) => !existsSync(resolve(run.dir, a)));
+    if (missing.length) {
+      throw new CliError(`Artifact not found: ${missing.join(", ")}`, {
+        code: 2,
+        hint: "Paths are relative to the run directory (for example evidence/F14.list/list.png) or absolute.",
+      });
+    }
     const page = daemonInfo(run)
       ? await browserCall(run, "url").catch(() => ({}))
       : {};
@@ -1995,6 +2077,10 @@ const BROWSER_VERBS = new Set([
   "eval",
   "dialogs",
   "storage",
+  "mouse-click",
+  "tooltip",
+  "media",
+  "network",
 ]);
 
 function featureFiles() {
@@ -2004,7 +2090,7 @@ function featureFiles() {
     .sort();
 }
 
-function mapCheck() {
+function mapCheck({ only } = {}) {
   const problems = [];
   const ids = new Map();
   const index = existsSync(join(mapDir, "README.md"))
@@ -2014,7 +2100,12 @@ function mapCheck() {
   const files = featureFiles();
   for (const file of files) {
     const text = readFileSync(join(mapDir, file), "utf8");
-    if (!index.includes(`(${file})`) && !index.includes(`(./${file})`))
+    // --file checks one entry while the index is being written by someone else.
+    if (
+      !only &&
+      !index.includes(`(${file})`) &&
+      !index.includes(`(./${file})`)
+    )
       problems.push(`${file}: not linked from README.md`);
     if (!/^# .+/m.test(text.split("\n")[0]))
       problems.push(`${file}: must start with an H1 title`);
@@ -2128,10 +2219,17 @@ function mapCoverage() {
   };
 }
 
-async function cmdMap({ positional }) {
+async function cmdMap({ positional, flags }) {
   const [sub] = positional;
   if (sub === "check") {
-    const result = mapCheck();
+    const only =
+      flags.file && flags.file !== true ? basename(String(flags.file)) : undefined;
+    const result = mapCheck({ only });
+    if (only) {
+      result.problems = result.problems.filter(
+        (p) => p.startsWith(`${only}:`) || p.includes(`(also in ${only})`),
+      );
+    }
     out({ ok: result.problems.length === 0, ...result });
     if (result.problems.length) process.exitCode = 1;
     return;
@@ -2215,7 +2313,7 @@ Examples:
   control-openhands browser screenshot --feature F05.secret-create --name form
   control-openhands stop
 `,
-  launch: `control-openhands launch [--public] [--new] [--port N | --port-from N] [--build auto|always|never]
+  launch: `control-openhands launch [--public] [--new] [--port N | --port-from N] [--build auto|always|never] [--min-free-mb 2000]
                          [--no-browser] [--timeout SEC] [--sdk-path DIR | --sdk-ref REF]
                          [--automation-path DIR | --automation-ref REF] [--run-id ID]
 
@@ -2227,7 +2325,9 @@ automation health and the SPA, then starts the browser daemon.
 Idempotent: an alive current run is reused unless --new is given.
 
 Environment: OH_VERIFY_HOME, CONTROL_OPENHANDS_BROWSER (Chromium path),
-CONTROL_OPENHANDS_BROWSER_ARGS (extra Chromium flags), CONTROL_OPENHANDS_HEADED=1.
+CONTROL_OPENHANDS_BROWSER_ARGS (extra Chromium flags), CONTROL_OPENHANDS_HEADED=1,
+CONTROL_OPENHANDS_TRUST_CA=<pem>[,<pem>] (pin a TLS-intercepting proxy's CAs),
+CONTROL_OPENHANDS_IGNORE_HTTPS_ERRORS=1 (sandboxes with leaf-only interception; never in CI).
 
 Examples:
   control-openhands launch
@@ -2258,7 +2358,7 @@ Examples:
   control-openhands api DELETE /api/settings/secrets/QA_TMP --write
 `,
   llm: `control-openhands llm show
-control-openhands llm preset deepseek [--api-key-env DEEPSEEK_API_KEY]
+control-openhands llm preset deepseek [--api-key-env DEEPSEEK_API_KEY | --api-key-file PATH]
 control-openhands llm set --profile NAME --model MODEL (--api-key-env VAR | --api-key-file PATH) [--base-url URL] [--no-activate]
 control-openhands llm check --model MODEL (--api-key-env VAR | --api-key-file PATH) [--base-url URL]
 
@@ -2309,7 +2409,13 @@ Verbs
   start | stop                          daemon lifecycle (launch starts it)
   goto <path> [--allow-external]        navigate (run origin only by default)
   reload | back | forward | url
-  click|dblclick|hover|focus|check|uncheck <sel> [--force] [--timeout MS]
+  click|dblclick <sel> [--force] [--timeout MS] [--button left|middle|right]
+        [--modifiers Control,Meta,Shift,Alt] [--position X,Y] (offset inside the element)
+        [--expect-url REGEX] (wait for client-side navigation; click returns the old URL otherwise)
+        [--observe SEL [--observe-ms 3000]] (record transient states such as "Saving...")
+  hover|focus|check|uncheck <sel>        (hidden <input> switches: click their label instead)
+  mouse-click X Y [--button B]          click at viewport coordinates (backdrops, overlays)
+  tooltip <sel>                          hover and return the role=tooltip text
   fill|type <sel> <value> [--value-file F | --value-env VAR]
   press <Key> [--selector S]            e.g. Escape, Enter, Control+k, Meta+k
   select <sel> <value> | upload <sel> <file...> | scroll [<sel>] [--by PX]
@@ -2322,7 +2428,15 @@ Verbs
   errors [--clear] [--all] [--app-only]                        page/console/HTTP errors since last clear
   events [--kinds pageerror,dialog,download] [--last N]
   eval <js expression>                   read-only inspection; never mutate app state with it
-  tabs | tab <i> | close-tab <i> | dialogs [--policy accept|dismiss] | downloads | storage [--values]
+  tabs | tab <i> | close-tab <i> | dialogs [--policy accept|dismiss] | downloads
+  storage [--session] [--values]         localStorage (or sessionStorage) keys; values only on request
+  media [--clear]                        media playback recorded since load (sound features)
+  network [--external] [--clear] [--last N]   requests by origin (privacy/telemetry checks)
+  scroll <sel> --by PX                   scroll the element's scrollable container (settings, panels)
+  scroll <sel> | scroll --by PX          bring into view | wheel at the mouse position
+
+Long waits: pass --timeout 5000 for elements that may never appear; defaults are 30 s.
+Placeholders in map recipes use <angle-brackets> (for example <id> from conversation start).
 
 Failures return {ok:false,error,hint,failureScreenshot} and exit 1.
 `,
@@ -2331,7 +2445,7 @@ Failures return {ok:false,error,hint,failureScreenshot} and exit 1.
 control-openhands evidence list [--feature F05]
 control-openhands evidence report > report.md
 `,
-  map: `control-openhands map check      lint references/feature-map: four H2s, unique IDs, links, known commands
+  map: `control-openhands map check [--file Fnn-name.md]   lint the map (or one entry, skipping index links): four H2s, unique IDs, links, known commands
 control-openhands map coverage   routes in src/routes.ts and src/components/features/* dirs not yet mapped
 control-openhands map ids        every sub-feature ID with its file
 control-openhands map routes     the route registry as path → route module

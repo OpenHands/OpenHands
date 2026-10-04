@@ -1,7 +1,8 @@
 // ---------------------------------------------------------------------------
 // Selector grammar shared with the CLI help:
 //   segments joined by " >> "; each segment is one of
-//   testid=ID | role=ROLE[name="Name"][exact][checked=true]... | text=Text |
+//   testid=ID | role=ROLE[name="Name"][exact][checked=true]... (also
+//   [name^="Prefix"] and [name*="part"]) | text=Text |
 //   text="Exact" | label=Label | placeholder=Text | title=Text | alt=Text |
 //   nth=N | has-text=Text | visible | any Playwright/CSS selector.
 // ---------------------------------------------------------------------------
@@ -23,7 +24,15 @@ export function parseRole(spec) {
   for (const attr of match[2].matchAll(/\[([^\]=]+)(?:=([^\]]*))?\]/g)) {
     const key = attr[1].trim();
     const raw = attr[2];
-    if (key === "name") {
+    const escape = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (key === "name^" || key === "name*") {
+      // [name^="Start"] prefix match, [name*="part"] case-insensitive contains.
+      const { text } = unquote(raw ?? "");
+      options.name =
+        key === "name^"
+          ? new RegExp(`^${escape(text)}`)
+          : new RegExp(escape(text), "i");
+    } else if (key === "name") {
       const { text } = unquote(raw ?? "");
       if (text.startsWith("/") && text.lastIndexOf("/") > 0) {
         const end = text.lastIndexOf("/");

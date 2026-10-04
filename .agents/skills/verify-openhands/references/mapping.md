@@ -64,13 +64,17 @@ removed, mark it `retired` with the authorizing PR instead of deleting the row.
 
 A **sub-feature** is one observable behavior with its own pass/fail, such as
 "saving persists after reload" or "empty state explains what to do". IDs look
-like `F05.secret-create`: lowercase, hyphenated, unique across the map.
+like `F14.secret-create`: lowercase, hyphenated, unique across the map. Settle
+the IDs before taking evidence: screenshots and ledger rows are filed under
+them, and renaming later means re-shooting.
 
 ## 3. Write each entry
 
 Each file starts with an H1 title, one paragraph describing the user-visible
 behavior, and one `Source:` line with the main implementation paths (for drift
-checks; keep other implementation detail out). Then exactly four H2 sections, in
+checks; keep other implementation detail out). For a family spread over many
+files, list the route modules and top-level component directories, not every
+file. Then exactly four H2 sections, in
 this order:
 
 1. `## Sub-features`: one bullet per ID: `` - `F05.secret-create`: add a dummy secret; it persists after reload. ``
@@ -105,6 +109,8 @@ this order:
 Treat commands as literal: quote selectors, keep names unique to the run (prefix
 fixtures with `QA_`), and restore shared state after mutations (delete the secret,
 deactivate the profile) unless the next recipe depends on it, in which case say so.
+Values that differ per run (conversation and automation ids) are written as
+`<id>` placeholders next to the command that prints them.
 
 ## 4. Prove every recipe live
 
@@ -125,12 +131,16 @@ with the entry point, expected and actual result and artifacts.
 ## 5. Check the map
 
 ```sh
-control-openhands map check      # structure, unique IDs, links, valid commands
+control-openhands map check --file Fnn-name.md   # one entry while others are being written
+control-openhands map check      # whole map: structure, unique IDs, index links, valid commands
 control-openhands map coverage   # unmapped routes and feature component dirs
 control-openhands map ids        # every ID with its file, for the index tables
 ```
 
-Update the index ([feature-map/README.md](feature-map/README.md)): the families
-table with entry points and prerequisites, ID counts, and "Not mapped" reasons.
+Whoever owns the index ([feature-map/README.md](feature-map/README.md)) adds the
+new file to the families table with its entry points, prerequisites and ID
+count, and lists "Not mapped" reasons. When several agents map families in
+parallel, each edits only its own file and checks it with `--file`; one
+coordinator updates the index afterwards.
 Then hand the evidence ledger (`control-openhands evidence report`) to whoever
 asked, with fail/blocked rows first.

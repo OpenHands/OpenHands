@@ -9,8 +9,13 @@
 // `control-openhands browser start`, never by hand.
 
 import { createServer } from "node:http";
-import { randomBytes } from "node:crypto";
-import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { X509Certificate, createHash, randomBytes } from "node:crypto";
+import {
+  appendFileSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -37,10 +42,35 @@ const VIEWPORTS = {
   tablet: { width: 820, height: 1180 },
 };
 
+// Behind a TLS-intercepting proxy, pin its CA certificates by SPKI hash so the
+// page can reach external origins the way an ordinary browser would there.
+function spkiPins(files) {
+  const pins = [];
+  for (const file of files.split(/[,:]/).filter(Boolean)) {
+    const pem = readFileSync(file, "utf8");
+    for (const block of pem.match(
+      /-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/g,
+    ) ?? []) {
+      const der = new X509Certificate(block).publicKey.export({
+        type: "spki",
+        format: "der",
+      });
+      pins.push(createHash("sha256").update(der).digest("base64"));
+    }
+  }
+  return pins;
+}
+
+const trustPins = process.env.CONTROL_OPENHANDS_TRUST_CA
+  ? spkiPins(process.env.CONTROL_OPENHANDS_TRUST_CA)
+  : [];
 const extraArgs = [
   "--disable-background-networking",
   "--disable-component-update",
   "--no-first-run",
+  ...(trustPins.length
+    ? [`--ignore-certificate-errors-spki-list=${trustPins.join(",")}`]
+    : []),
   ...(process.env.CONTROL_OPENHANDS_BROWSER_ARGS || "")
     .split(/\s+/)
     .filter(Boolean),
@@ -55,12 +85,32 @@ const context = await chromium.launchPersistentContext(
     executablePath: executablePath || undefined,
     viewport: VIEWPORTS.desktop,
     acceptDownloads: true,
+    // Opt-in for sandboxes whose TLS interception presents leaf-only chains
+    // that SPKI pins cannot match. Never set it in CI.
+    ignoreHTTPSErrors: process.env.CONTROL_OPENHANDS_IGNORE_HTTPS_ERRORS === "1",
     args: extraArgs,
   },
 );
 
+// Instrumentation, not mocking: record media playback so sound features can
+// be observed (`browser media`); playback itself still happens.
+await context.addInitScript(() => {
+  const original = HTMLMediaElement.prototype.play;
+  window.__ohMediaPlays = [];
+  HTMLMediaElement.prototype.play = function play(...args) {
+    window.__ohMediaPlays.push({
+      src: this.currentSrc || this.src || "",
+      ts: new Date().toISOString(),
+    });
+    return original.apply(this, args);
+  };
+});
+
 let dialogPolicy = "dismiss";
 const events = [];
+// Request log by origin (no query strings or bodies), for privacy and
+// telemetry checks: which hosts did the page talk to?
+const requests = [];
 let markIndex = 0;
 let activePage = context.pages()[0] ?? (await context.newPage());
 
@@ -103,6 +153,27 @@ function watch(page) {
         url: msg.location()?.url || "",
       });
     }
+  });
+  page.on("request", (request) => {
+    let origin = "";
+    let path = "";
+    try {
+      const url = new URL(request.url());
+      origin = url.origin;
+      path = url.pathname.slice(0, 120);
+    } catch {
+      return;
+    }
+    if (!origin.startsWith("http")) return;
+    requests.push({
+      ts: new Date().toISOString(),
+      origin,
+      path,
+      method: request.method(),
+      type: request.resourceType(),
+      app: origin === baseUrl.origin,
+    });
+    if (requests.length > 5000) requests.splice(0, 1000);
   });
   page.on("requestfailed", (request) => {
     const failure = request.failure()?.errorText ?? "failed";
@@ -264,17 +335,85 @@ const handlers = {
       viewport: activePage.viewportSize(),
     };
   },
-  async click({ selector, timeout, force, button }) {
-    await locate(selector).click({ timeout, force, button });
+  async click({
+    selector,
+    timeout,
+    force,
+    button,
+    modifiers,
+    position,
+    expectUrl,
+    observe,
+    observeMs,
+  }) {
+    let observer;
+    if (observe) {
+      // Record transient states (labels such as "Saving...", skeletons) of
+      // the observed elements while the click's effects play out.
+      observer = await activePage.evaluateHandle((sel) => {
+        const log = [];
+        const snap = () => {
+          const els = [...document.querySelectorAll(sel)];
+          const entry = els.length
+            ? els.map((e) => (e.innerText || e.value || "").trim().slice(0, 80))
+            : ["<absent>"];
+          const key = JSON.stringify(entry);
+          if (log[log.length - 1]?.key !== key) {
+            log.push({ key, t: Math.round(performance.now()) });
+          }
+        };
+        snap();
+        const mo = new MutationObserver(snap);
+        mo.observe(document.body, {
+          subtree: true,
+          childList: true,
+          characterData: true,
+          attributes: true,
+        });
+        return { log, mo };
+      }, observe);
+    }
+    await locate(selector).click({
+      timeout,
+      force,
+      button,
+      modifiers,
+      position,
+    });
+    if (expectUrl) {
+      await activePage.waitForURL(new RegExp(expectUrl), { timeout });
+    }
+    let observed;
+    if (observer) {
+      await activePage.waitForTimeout(Number(observeMs ?? 3000));
+      observed = await observer.evaluate(({ log, mo }) => {
+        mo.disconnect();
+        const start = log[0]?.t ?? 0;
+        return log.map((l) => ({ ms: l.t - start, state: JSON.parse(l.key) }));
+      });
+    }
+    return { url: activePage.url(), observed };
+  },
+  async dblclick({ selector, timeout, modifiers }) {
+    await locate(selector).dblclick({ timeout, modifiers });
     return { url: activePage.url() };
   },
-  async dblclick({ selector, timeout }) {
-    await locate(selector).dblclick({ timeout });
+  async "mouse-click"({ x, y, button }) {
+    await activePage.mouse.click(Number(x), Number(y), { button });
     return { url: activePage.url() };
   },
   async hover({ selector, timeout }) {
     await locate(selector).hover({ timeout });
     return {};
+  },
+  async tooltip({ selector, timeout }) {
+    // Tooltips often ignore the first hover after a navigation: move away,
+    // hover, then wait for role=tooltip.
+    await activePage.mouse.move(0, 0);
+    await locate(selector).hover({ timeout });
+    const tip = activePage.getByRole("tooltip").first();
+    await tip.waitFor({ state: "visible", timeout: timeout ?? 5000 });
+    return { text: (await tip.innerText()).trim() };
   },
   async focus({ selector, timeout }) {
     await locate(selector).focus({ timeout });
@@ -312,12 +451,37 @@ const handlers = {
     return { files };
   },
   async scroll({ selector, by, timeout }) {
+    if (selector && by !== undefined) {
+      // Scroll the element's nearest scrollable container (settings and
+      // panels scroll inside a container, not the window).
+      return locate(selector)
+        .first()
+        .evaluate((el, dy) => {
+          let node = el;
+          while (
+            node &&
+            !(
+              node.scrollHeight > node.clientHeight &&
+              /auto|scroll/.test(getComputedStyle(node).overflowY)
+            )
+          ) {
+            node = node.parentElement;
+          }
+          const target = node || document.scrollingElement;
+          target.scrollBy(0, dy);
+          return {
+            scrolled: target === document.scrollingElement ? "page" : "container",
+            scrollTop: Math.round(target.scrollTop),
+            scrollHeight: target.scrollHeight,
+          };
+        }, Number(by));
+    }
     if (selector) {
       await locate(selector).scrollIntoViewIfNeeded({ timeout });
-    } else {
-      await activePage.mouse.wheel(0, Number(by ?? 600));
+      return { scrolled: "into-view" };
     }
-    return {};
+    await activePage.mouse.wheel(0, Number(by ?? 600));
+    return { scrolled: "wheel at mouse position" };
   },
   async wait({ selector, state, timeout }) {
     await locate(selector)
@@ -394,7 +558,11 @@ const handlers = {
     const tree = await loc.ariaSnapshot();
     let saved;
     if (feature || name) {
-      saved = evidencePath(feature, name, ".aria.txt");
+      saved = evidencePath(
+        feature,
+        String(name ?? "").replace(/(\.aria)?\.txt$/, ""),
+        ".aria.txt",
+      );
       writeFileSync(saved, `${activePage.url()}\n${tree}\n`);
     }
     const lines = tree.split("\n");
@@ -512,19 +680,38 @@ const handlers = {
       downloads: events.filter((e) => e.kind === "download").slice(-10),
     };
   },
-  async storage({ keysOnly }) {
-    // Lists localStorage keys (values only when explicitly requested) so that
+  async storage({ keysOnly, session }) {
+    // Lists storage keys (values only when explicitly requested) so that
     // persisted UI state can be checked without printing secrets by default.
-    const data = await activePage.evaluate(() =>
-      Object.fromEntries(
-        Object.keys(window.localStorage).map((k) => [
-          k,
-          window.localStorage.getItem(k),
-        ]),
-      ),
-    );
-    if (keysOnly !== false) return { keys: Object.keys(data).sort() };
-    return { storage: data };
+    const data = await activePage.evaluate((useSession) => {
+      const store = useSession ? window.sessionStorage : window.localStorage;
+      return Object.fromEntries(
+        Object.keys(store).map((k) => [k, store.getItem(k)]),
+      );
+    }, Boolean(session));
+    const area = session ? "sessionStorage" : "localStorage";
+    if (keysOnly !== false) return { area, keys: Object.keys(data).sort() };
+    return { area, storage: data };
+  },
+  async network({ clear, external, last }) {
+    const list = external ? requests.filter((r) => !r.app) : requests;
+    const byOrigin = {};
+    for (const r of list) byOrigin[r.origin] = (byOrigin[r.origin] ?? 0) + 1;
+    const result = {
+      total: list.length,
+      byOrigin,
+      recent: list.slice(-Number(last ?? 15)),
+    };
+    if (clear) requests.length = 0;
+    return result;
+  },
+  async media({ clear }) {
+    const plays = await activePage.evaluate((reset) => {
+      const list = window.__ohMediaPlays ?? [];
+      if (reset) window.__ohMediaPlays = [];
+      return list;
+    }, Boolean(clear));
+    return { plays };
   },
   async uiprobe({ target, timeout }) {
     // Read-only health probe in a throwaway tab: the driving tab keeps its URL.
