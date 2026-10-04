@@ -41,7 +41,9 @@ const extraArgs = [
   "--disable-background-networking",
   "--disable-component-update",
   "--no-first-run",
-  ...(process.env.CONTROL_OPENHANDS_BROWSER_ARGS || "").split(/\s+/).filter(Boolean),
+  ...(process.env.CONTROL_OPENHANDS_BROWSER_ARGS || "")
+    .split(/\s+/)
+    .filter(Boolean),
 ];
 const executablePath =
   process.env.CONTROL_OPENHANDS_BROWSER || process.env.QA_BROWSER_EXECUTABLE;
@@ -186,7 +188,9 @@ async function failureShot() {
 }
 
 async function collectTestids(scopeSelector, includeHidden) {
-  const scope = scopeSelector ? locate(scopeSelector) : activePage.locator(":root");
+  const scope = scopeSelector
+    ? locate(scopeSelector)
+    : activePage.locator(":root");
   return scope.first().evaluate((root, wantHidden) => {
     const seen = new Map();
     const nodes = [root, ...root.querySelectorAll("[data-testid]")];
@@ -230,13 +234,19 @@ const handlers = {
   },
   async goto({ target, allowExternal }) {
     const url = assertAppUrl(target ?? "/", allowExternal);
-    const response = await activePage.goto(url, { waitUntil: "domcontentloaded" });
-    await activePage.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => {});
+    const response = await activePage.goto(url, {
+      waitUntil: "domcontentloaded",
+    });
+    await activePage
+      .waitForLoadState("networkidle", { timeout: 10_000 })
+      .catch(() => {});
     return { url: activePage.url(), status: response?.status() };
   },
   async reload() {
     await activePage.reload({ waitUntil: "domcontentloaded" });
-    await activePage.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => {});
+    await activePage
+      .waitForLoadState("networkidle", { timeout: 10_000 })
+      .catch(() => {});
     return { url: activePage.url() };
   },
   async back() {
@@ -248,7 +258,11 @@ const handlers = {
     return { url: activePage.url() };
   },
   async url() {
-    return { url: activePage.url(), title: await activePage.title(), viewport: activePage.viewportSize() };
+    return {
+      url: activePage.url(),
+      title: await activePage.title(),
+      viewport: activePage.viewportSize(),
+    };
   },
   async click({ selector, timeout, force, button }) {
     await locate(selector).click({ timeout, force, button });
@@ -306,7 +320,9 @@ const handlers = {
     return {};
   },
   async wait({ selector, state, timeout }) {
-    await locate(selector).first().waitFor({ state: state ?? "visible", timeout });
+    await locate(selector)
+      .first()
+      .waitFor({ state: state ?? "visible", timeout });
     return { state: state ?? "visible" };
   },
   async "wait-url"({ pattern, timeout }) {
@@ -314,7 +330,10 @@ const handlers = {
     return { url: activePage.url() };
   },
   async "wait-text"({ text, timeout }) {
-    await activePage.getByText(text).first().waitFor({ state: "visible", timeout });
+    await activePage
+      .getByText(text)
+      .first()
+      .waitFor({ state: "visible", timeout });
     return { text };
   },
   async text({ selector, timeout }) {
@@ -358,18 +377,20 @@ const handlers = {
       viewport,
       insideViewport: Boolean(
         box &&
-          viewport &&
-          box.x >= 0 &&
-          box.y >= 0 &&
-          box.x + box.width <= viewport.width + 0.5 &&
-          box.y + box.height <= viewport.height + 0.5,
+        viewport &&
+        box.x >= 0 &&
+        box.y >= 0 &&
+        box.x + box.width <= viewport.width + 0.5 &&
+        box.y + box.height <= viewport.height + 0.5,
       ),
       overflow,
       pageHorizontalOverflow: docOverflowX,
     };
   },
   async snapshot({ selector, maxLines, feature, name }) {
-    const loc = selector ? locate(selector).first() : activePage.locator("body");
+    const loc = selector
+      ? locate(selector).first()
+      : activePage.locator("body");
     const tree = await loc.ariaSnapshot();
     let saved;
     if (feature || name) {
@@ -401,7 +422,8 @@ const handlers = {
     let next = preset;
     if (!next) {
       const match = /^(\d+)x(\d+)$/.exec(size ?? "");
-      if (!match) throw new Error("viewport needs desktop|phone|narrow|tablet|WxH");
+      if (!match)
+        throw new Error("viewport needs desktop|phone|narrow|tablet|WxH");
       next = { width: Number(match[1]), height: Number(match[2]) };
     }
     await activePage.setViewportSize(next);
@@ -435,14 +457,11 @@ const handlers = {
   },
   async eval({ expression }) {
     // Inspection only: the CLI documents that state must not be mutated here.
-    const value = await activePage.evaluate(
-      (source) => {
-        // eslint-disable-next-line no-new-func
-        const result = new Function(`return (${source});`)();
-        return result instanceof Promise ? result : Promise.resolve(result);
-      },
-      expression,
-    );
+    const value = await activePage.evaluate((source) => {
+      // eslint-disable-next-line no-new-func
+      const result = new Function(`return (${source});`)();
+      return result instanceof Promise ? result : Promise.resolve(result);
+    }, expression);
     return { value };
   },
   async tabs() {
@@ -471,7 +490,10 @@ const handlers = {
     if (pages.length === 1) throw new Error("Refusing to close the last tab");
     await page.close();
     if (page === activePage) activePage = context.pages()[0];
-    return { closed: Number(index), active: context.pages().indexOf(activePage) };
+    return {
+      closed: Number(index),
+      active: context.pages().indexOf(activePage),
+    };
   },
   async dialogs({ policy }) {
     if (policy) {
@@ -486,14 +508,19 @@ const handlers = {
     };
   },
   async downloads() {
-    return { downloads: events.filter((e) => e.kind === "download").slice(-10) };
+    return {
+      downloads: events.filter((e) => e.kind === "download").slice(-10),
+    };
   },
   async storage({ keysOnly }) {
     // Lists localStorage keys (values only when explicitly requested) so that
     // persisted UI state can be checked without printing secrets by default.
     const data = await activePage.evaluate(() =>
       Object.fromEntries(
-        Object.keys(window.localStorage).map((k) => [k, window.localStorage.getItem(k)]),
+        Object.keys(window.localStorage).map((k) => [
+          k,
+          window.localStorage.getItem(k),
+        ]),
       ),
     );
     if (keysOnly !== false) return { keys: Object.keys(data).sort() };
@@ -509,7 +536,9 @@ const handlers = {
         waitUntil: "domcontentloaded",
         timeout,
       });
-      await probe.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => {});
+      await probe
+        .waitForLoadState("networkidle", { timeout: 15_000 })
+        .catch(() => {});
       await probe.waitForTimeout(1500);
       const ids = await probe.evaluate(() =>
         [...document.querySelectorAll("[data-testid]")].map((e) =>
@@ -563,7 +592,9 @@ const server = createServer(async (req, res) => {
   const handler = handlers[payload.cmd];
   res.setHeader("content-type", "application/json");
   if (!handler) {
-    res.end(JSON.stringify({ ok: false, error: `unknown command ${payload.cmd}` }));
+    res.end(
+      JSON.stringify({ ok: false, error: `unknown command ${payload.cmd}` }),
+    );
     return;
   }
   try {
@@ -577,7 +608,7 @@ const server = createServer(async (req, res) => {
     let hint;
     if (/strict mode violation/.test(message)) {
       hint =
-        "Several elements match. Scope it (`testid=dialog >> role=button[name=\"Save\"]`) or add `>> nth=0` after checking `browser testids`.";
+        'Several elements match. Scope it (`testid=dialog >> role=button[name="Save"]`) or add `>> nth=0` after checking `browser testids`.';
     } else if (/Timeout/.test(message)) {
       hint =
         "Not found in time. Inspect the current page with `browser snapshot` or `browser testids`, then retry; check `browser errors` for crashes.";
@@ -598,7 +629,12 @@ server.listen(0, "127.0.0.1", () => {
   const { port } = server.address();
   writeFileSync(
     join(privateDir, "browser.json"),
-    JSON.stringify({ pid: process.pid, port, token, startedAt: new Date().toISOString() }),
+    JSON.stringify({
+      pid: process.pid,
+      port,
+      token,
+      startedAt: new Date().toISOString(),
+    }),
     { mode: 0o600 },
   );
   console.log(`browser-daemon ready on 127.0.0.1:${port}`);

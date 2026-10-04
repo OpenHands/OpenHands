@@ -14,7 +14,10 @@ const cli = join(here, "control-openhands.mjs");
 
 // A fake Playwright scope that records the locator chain it was asked for.
 function recorder(path = []) {
-  const step = (name) => (...args) => recorder([...path, [name, ...args]]);
+  const step =
+    (name) =>
+    (...args) =>
+      recorder([...path, [name, ...args]]);
   return {
     path,
     getByTestId: step("getByTestId"),
@@ -33,7 +36,12 @@ function recorder(path = []) {
 function run(args, env = {}) {
   const result = spawnSync(process.execPath, [cli, ...args], {
     encoding: "utf8",
-    env: { ...process.env, OH_VERIFY_HOME: mkdtempSync(join(tmpdir(), "cov-")), OH_VERIFY_RUN: "", ...env },
+    env: {
+      ...process.env,
+      OH_VERIFY_HOME: mkdtempSync(join(tmpdir(), "cov-")),
+      OH_VERIFY_RUN: "",
+      ...env,
+    },
   });
   let json;
   try {
@@ -45,7 +53,10 @@ function run(args, env = {}) {
 }
 
 test("scoped testid chain builds nested locators", () => {
-  const loc = buildLocator(recorder(), "testid=add-secret-form >> testid=submit-button");
+  const loc = buildLocator(
+    recorder(),
+    "testid=add-secret-form >> testid=submit-button",
+  );
   assert.deepEqual(loc.path, [
     ["getByTestId", "add-secret-form"],
     ["getByTestId", "submit-button"],
@@ -57,10 +68,15 @@ test("role selectors carry name, exactness and state options", () => {
     role: "button",
     options: { name: "Save", exact: true },
   });
-  assert.deepEqual(parseRole("checkbox[checked=false]").options, { checked: false });
+  assert.deepEqual(parseRole("checkbox[checked=false]").options, {
+    checked: false,
+  });
   const regex = parseRole('link[name="/^Docs/i"]').options.name;
   assert.ok(regex instanceof RegExp && regex.test("docs page"));
-  assert.throws(() => parseRole("button[colour=red]"), /Unsupported role attribute/);
+  assert.throws(
+    () => parseRole("button[colour=red]"),
+    /Unsupported role attribute/,
+  );
 });
 
 test("quoted text is exact, bare text is partial, other segments pass through", () => {
@@ -81,7 +97,15 @@ test("quoted text is exact, bare text is partial, other segments pass through", 
 test("--help lists every command family with examples", () => {
   const { status, stdout } = run(["--help"]);
   assert.equal(status, 0);
-  for (const word of ["launch", "doctor", "browser", "conversation", "evidence", "map", "Examples:"]) {
+  for (const word of [
+    "launch",
+    "doctor",
+    "browser",
+    "conversation",
+    "evidence",
+    "map",
+    "Examples:",
+  ]) {
     assert.match(stdout, new RegExp(word));
   }
   assert.match(run(["browser", "--help"]).stdout, /testids/);
@@ -103,9 +127,16 @@ test("keys are refused on argv before any request is made", () => {
   writeFileSync(join(dir, "private", "session-key"), "x".repeat(64));
   writeFileSync(
     join(dir, "run.json"),
-    JSON.stringify({ baseUrl: "http://127.0.0.1:9", ports: { ingress: 9 }, launcherPgid: 0 }),
+    JSON.stringify({
+      baseUrl: "http://127.0.0.1:9",
+      ports: { ingress: 9 },
+      launcherPgid: 0,
+    }),
   );
-  const result = run(["llm", "set", "--profile", "x", "--model", "m", "--api-key", "secret"], { OH_VERIFY_RUN: dir });
+  const result = run(
+    ["llm", "set", "--profile", "x", "--model", "m", "--api-key", "secret"],
+    { OH_VERIFY_RUN: dir },
+  );
   assert.equal(result.status, 2);
   assert.match(result.json.error, /Do not pass keys on the command line/);
   assert.doesNotMatch(result.stdout, /secret"/);
@@ -115,7 +146,14 @@ test("map routes reads the route registry with nested settings paths", () => {
   const { status, json } = run(["map", "routes"]);
   assert.equal(status, 0);
   const paths = json.routes.map((r) => r.path);
-  for (const path of ["/", "/settings", "/settings/llm", "/settings/secrets", "/automations/:automationId", "/shared/conversations/:conversationId"]) {
+  for (const path of [
+    "/",
+    "/settings",
+    "/settings/llm",
+    "/settings/secrets",
+    "/automations/:automationId",
+    "/shared/conversations/:conversationId",
+  ]) {
     assert.ok(paths.includes(path), `missing ${path}`);
   }
 });

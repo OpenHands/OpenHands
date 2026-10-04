@@ -135,7 +135,16 @@ function git(args, cwd = repoRoot) {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
 }
 
-const BUILD_INPUTS = ["src", "public", "package.json", "package-lock.json", "vite.config.ts", "react-router.config.ts", "tsconfig.json", "tailwind.config.js"];
+const BUILD_INPUTS = [
+  "src",
+  "public",
+  "package.json",
+  "package-lock.json",
+  "vite.config.ts",
+  "react-router.config.ts",
+  "tsconfig.json",
+  "tailwind.config.js",
+];
 
 function checkoutRevision() {
   return git(["rev-parse", "HEAD"]);
@@ -147,7 +156,11 @@ function checkoutRevision() {
 function buildId() {
   const tree = git(["ls-tree", "HEAD", "--", ...BUILD_INPUTS]);
   const dirty = git(["diff", "HEAD", "--", ...BUILD_INPUTS]);
-  const id = createHash("sha256").update(tree).update(dirty).digest("hex").slice(0, 16);
+  const id = createHash("sha256")
+    .update(tree)
+    .update(dirty)
+    .digest("hex")
+    .slice(0, 16);
   return dirty ? `${id}-dirty` : id;
 }
 
@@ -174,7 +187,9 @@ function groupAlive(pgid) {
 function commandLine(pid) {
   try {
     if (existsSync(`/proc/${pid}/cmdline`)) {
-      return readFileSync(`/proc/${pid}/cmdline`, "utf8").replace(/\0/g, " ").trim();
+      return readFileSync(`/proc/${pid}/cmdline`, "utf8")
+        .replace(/\0/g, " ")
+        .trim();
     }
     return execFileSync("ps", ["-o", "command=", "-p", String(pid)], {
       encoding: "utf8",
@@ -212,7 +227,9 @@ function tryClaim(base, runDir) {
     try {
       const owner = readFileSync(path, "utf8").trim();
       const ownerRun = join(owner, "run.json");
-      const alive = existsSync(ownerRun) && groupAlive(JSON.parse(readFileSync(ownerRun, "utf8")).launcherPgid);
+      const alive =
+        existsSync(ownerRun) &&
+        groupAlive(JSON.parse(readFileSync(ownerRun, "utf8")).launcherPgid);
       const age = Date.now() - lstatSync(path).mtimeMs;
       if (alive || (!existsSync(ownerRun) && age < 10 * 60_000)) return false;
       writeFileSync(path, runDir);
@@ -245,10 +262,18 @@ async function findPortBlock(start, runDir) {
   throw new CliError(`No free port block found from ${start}`, { code: 3 });
 }
 
-async function http(run, method, path, { body, auth = true, timeout = 15_000, headers = {} } = {}) {
+async function http(
+  run,
+  method,
+  path,
+  { body, auth = true, timeout = 15_000, headers = {} } = {},
+) {
   const url = new URL(path, run.baseUrl);
   if (url.origin !== new URL(run.baseUrl).origin) {
-    throw new CliError(`Refusing to send the session key outside ${run.baseUrl}`, { code: 2 });
+    throw new CliError(
+      `Refusing to send the session key outside ${run.baseUrl}`,
+      { code: 2 },
+    );
   }
   const response = await fetch(url, {
     method,
@@ -268,11 +293,19 @@ async function http(run, method, path, { body, auth = true, timeout = 15_000, he
   } catch {
     json = undefined;
   }
-  return { status: response.status, ok: response.ok, json, text, contentType: response.headers.get("content-type") };
+  return {
+    status: response.status,
+    ok: response.ok,
+    json,
+    text,
+    contentType: response.headers.get("content-type"),
+  };
 }
 
 function defaults() {
-  return JSON.parse(readFileSync(join(repoRoot, "config", "defaults.json"), "utf8"));
+  return JSON.parse(
+    readFileSync(join(repoRoot, "config", "defaults.json"), "utf8"),
+  );
 }
 
 function nodeMajor() {
@@ -299,7 +332,10 @@ async function browserCall(run, cmd, args = {}, { timeout = 120_000 } = {}) {
   }
   const response = await fetch(`http://127.0.0.1:${info.port}/`, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-control-token": info.token },
+    headers: {
+      "content-type": "application/json",
+      "x-control-token": info.token,
+    },
     body: JSON.stringify({ cmd, args }),
     signal: AbortSignal.timeout(timeout),
   });
@@ -343,7 +379,10 @@ async function startBrowser(run) {
     }
     if (!processAlive(child.pid)) break;
   }
-  const log = readFileSync(join(run.dir, "private", "browser.log"), "utf8").split("\n").slice(-15).join("\n");
+  const log = readFileSync(join(run.dir, "private", "browser.log"), "utf8")
+    .split("\n")
+    .slice(-15)
+    .join("\n");
   throw new CliError("Browser daemon failed to start.", {
     code: 3,
     hint: "Set CONTROL_OPENHANDS_BROWSER to a Chromium executable when Playwright's pinned browser is missing.",
@@ -369,31 +408,65 @@ async function stopBrowser(run) {
 // Commands: lifecycle.
 // ---------------------------------------------------------------------------
 const PASS_ENV = [
-  "PATH", "LANG", "LC_ALL", "TERM", "TZ", "TMPDIR", "USER", "LOGNAME", "SHELL",
-  "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy",
-  "SSL_CERT_FILE", "SSL_CERT_DIR", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE",
-  "NODE_EXTRA_CA_CERTS", "PIP_CERT", "UV_NATIVE_TLS", "UV_INDEX_URL",
-  "UV_EXTRA_INDEX_URL", "UV_PYTHON", "PLAYWRIGHT_BROWSERS_PATH", "TMUX_TMPDIR",
+  "PATH",
+  "LANG",
+  "LC_ALL",
+  "TERM",
+  "TZ",
+  "TMPDIR",
+  "USER",
+  "LOGNAME",
+  "SHELL",
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "NO_PROXY",
+  "http_proxy",
+  "https_proxy",
+  "no_proxy",
+  "SSL_CERT_FILE",
+  "SSL_CERT_DIR",
+  "REQUESTS_CA_BUNDLE",
+  "CURL_CA_BUNDLE",
+  "NODE_EXTRA_CA_CERTS",
+  "PIP_CERT",
+  "UV_NATIVE_TLS",
+  "UV_INDEX_URL",
+  "UV_EXTRA_INDEX_URL",
+  "UV_PYTHON",
+  "PLAYWRIGHT_BROWSERS_PATH",
+  "TMUX_TMPDIR",
 ];
 
 async function cmdLaunch({ flags }) {
   if (nodeMajor() < 24) {
-    throw new CliError(`Node >=24 is required by the launcher; this is ${process.version}.`, {
-      code: 3,
-      hint: "Put a Node 24 binary first on PATH (see package.json engines) and rerun.",
-    });
+    throw new CliError(
+      `Node >=24 is required by the launcher; this is ${process.version}.`,
+      {
+        code: 3,
+        hint: "Put a Node 24 binary first on PATH (see package.json engines) and rerun.",
+      },
+    );
   }
   const uvx = spawnSync("uvx", ["--version"], { encoding: "utf8" });
   if (uvx.status !== 0) {
-    throw new CliError("uvx is not on PATH; the launcher runs Agent Server and automation through it.", {
-      code: 3,
-      hint: "Install uv (https://docs.astral.sh/uv/) and rerun.",
-    });
+    throw new CliError(
+      "uvx is not on PATH; the launcher runs Agent Server and automation through it.",
+      {
+        code: 3,
+        hint: "Install uv (https://docs.astral.sh/uv/) and rerun.",
+      },
+    );
   }
 
   const existing = loadRun(flags, { required: false });
   if (existing && !flags.new && groupAlive(existing.launcherPgid)) {
-    out({ ok: true, alreadyRunning: true, run: existing.dir, baseUrl: existing.baseUrl, hint: "Pass --new for a second, independent run." });
+    out({
+      ok: true,
+      alreadyRunning: true,
+      run: existing.dir,
+      baseUrl: existing.baseUrl,
+      hint: "Pass --new for a second, independent run.",
+    });
     return;
   }
 
@@ -405,48 +478,91 @@ async function cmdLaunch({ flags }) {
   const buildMode = flags.build ?? "auto";
   const stamped = existsSync(marker) ? readFileSync(marker, "utf8").trim() : "";
   let built = false;
-  if (buildMode === "always" || (buildMode === "auto" && stamped !== currentBuildId)) {
+  if (
+    buildMode === "always" ||
+    (buildMode === "auto" && stamped !== currentBuildId)
+  ) {
     if (!existsSync(join(repoRoot, "node_modules"))) {
-      throw new CliError("node_modules is missing.", { code: 3, hint: "npm ci --ignore-scripts --no-audit --no-fund" });
+      throw new CliError("node_modules is missing.", {
+        code: 3,
+        hint: "npm ci --ignore-scripts --no-audit --no-fund",
+      });
     }
-    process.stderr.write(`building ${revision} (build inputs ${currentBuildId}; npm run build:app)...\n`);
+    process.stderr.write(
+      `building ${revision} (build inputs ${currentBuildId}; npm run build:app)...\n`,
+    );
     const result = spawnSync("npm", ["run", "build:app"], {
       cwd: repoRoot,
       stdio: ["ignore", 2, 2],
       env: { ...process.env, VITE_DO_NOT_TRACK: "1" },
     });
-    if (result.status !== 0) throw new CliError("npm run build:app failed", { code: 3 });
+    if (result.status !== 0)
+      throw new CliError("npm run build:app failed", { code: 3 });
     writeFileSync(marker, `${currentBuildId}\n`);
     built = true;
-  } else if (buildMode === "never" && !existsSync(join(buildDir, "index.html"))) {
-    throw new CliError("No build/ found and --build never was given.", { code: 3 });
+  } else if (
+    buildMode === "never" &&
+    !existsSync(join(buildDir, "index.html"))
+  ) {
+    throw new CliError("No build/ found and --build never was given.", {
+      code: 3,
+    });
   }
 
   // 2. Allocate a run directory and ports.
-  const runId = flags["run-id"] || `${new Date().toISOString().replace(/[:.]/g, "").slice(0, 15)}-${randomBytes(3).toString("hex")}`;
+  const runId =
+    flags["run-id"] ||
+    `${new Date().toISOString().replace(/[:.]/g, "").slice(0, 15)}-${randomBytes(3).toString("hex")}`;
   const dir = join(verifyHome, runId);
   const priv = join(dir, "private");
-  for (const d of [priv, join(priv, "home"), join(priv, "state"), join(dir, "evidence"), join(dir, "workspace")]) {
+  for (const d of [
+    priv,
+    join(priv, "home"),
+    join(priv, "state"),
+    join(dir, "evidence"),
+    join(dir, "workspace"),
+  ]) {
     mkdirSync(d, { recursive: true, mode: d.startsWith(priv) ? 0o700 : 0o755 });
   }
-  writeFileSync(join(priv, "session-key"), randomBytes(32).toString("hex"), { mode: 0o600 });
-  writeFileSync(join(priv, "encryption-key"), randomBytes(32).toString("hex"), { mode: 0o600 });
-  const base = flags.port ? intFlag(flags.port) : await findPortBlock(intFlag(flags["port-from"], 18800), dir);
+  writeFileSync(join(priv, "session-key"), randomBytes(32).toString("hex"), {
+    mode: 0o600,
+  });
+  writeFileSync(join(priv, "encryption-key"), randomBytes(32).toString("hex"), {
+    mode: 0o600,
+  });
+  const base = flags.port
+    ? intFlag(flags.port)
+    : await findPortBlock(intFlag(flags["port-from"], 18800), dir);
   if (flags.port) {
-    const busy = await Promise.all([base, base + 1, base + 2, base + 3, base + 1001].map((p) => portOpen(p)));
-    if (busy.some(Boolean)) throw new CliError(`Ports ${base}..${base + 3} or ${base + 1001} are busy`, { code: 3, hint: "Omit --port to pick a free block." });
+    const busy = await Promise.all(
+      [base, base + 1, base + 2, base + 3, base + 1001].map((p) => portOpen(p)),
+    );
+    if (busy.some(Boolean))
+      throw new CliError(
+        `Ports ${base}..${base + 3} or ${base + 1001} are busy`,
+        { code: 3, hint: "Omit --port to pick a free block." },
+      );
   }
-  const ports = { ingress: base, agentServer: base + 1, automation: base + 2, frontend: base + 3, vscode: base + 1001 };
+  const ports = {
+    ingress: base,
+    agentServer: base + 1,
+    automation: base + 2,
+    frontend: base + 3,
+    vscode: base + 1001,
+  };
 
   // 3. Start the repository's own production launcher, isolated.
   const env = {};
-  for (const name of PASS_ENV) if (process.env[name] !== undefined) env[name] = process.env[name];
+  for (const name of PASS_ENV)
+    if (process.env[name] !== undefined) env[name] = process.env[name];
   const realHome = process.env.HOME || "";
   Object.assign(env, {
     HOME: join(priv, "home"),
     // Reuse the operator's uv caches so each run does not re-download Python.
     UV_CACHE_DIR: process.env.UV_CACHE_DIR || join(realHome, ".cache", "uv"),
-    UV_PYTHON_INSTALL_DIR: process.env.UV_PYTHON_INSTALL_DIR || join(realHome, ".local", "share", "uv", "python"),
+    UV_PYTHON_INSTALL_DIR:
+      process.env.UV_PYTHON_INSTALL_DIR ||
+      join(realHome, ".local", "share", "uv", "python"),
     OH_CANVAS_SAFE_STATE_DIR: join(priv, "state"),
     OH_CANVAS_SAFE_BACKEND_PORT: String(ports.agentServer),
     OH_CANVAS_SAFE_AUTOMATION_PORT: String(ports.automation),
@@ -457,12 +573,19 @@ async function cmdLaunch({ flags }) {
     VITE_DO_NOT_TRACK: "1",
     OPENHANDS_SUPPRESS_BANNER: "1",
   });
-  if (flags["sdk-path"]) env.OH_AGENT_SERVER_LOCAL_PATH = resolve(flags["sdk-path"]);
+  if (flags["sdk-path"])
+    env.OH_AGENT_SERVER_LOCAL_PATH = resolve(flags["sdk-path"]);
   if (flags["sdk-ref"]) env.OH_AGENT_SERVER_GIT_REF = flags["sdk-ref"];
-  if (flags["automation-path"]) env.OH_AUTOMATION_LOCAL_PATH = resolve(flags["automation-path"]);
-  if (flags["automation-ref"]) env.OH_AUTOMATION_GIT_REF = flags["automation-ref"];
+  if (flags["automation-path"])
+    env.OH_AUTOMATION_LOCAL_PATH = resolve(flags["automation-path"]);
+  if (flags["automation-ref"])
+    env.OH_AUTOMATION_GIT_REF = flags["automation-ref"];
 
-  const launcherArgs = [join(repoRoot, "bin", "agent-canvas.mjs"), "--port", String(ports.ingress)];
+  const launcherArgs = [
+    join(repoRoot, "bin", "agent-canvas.mjs"),
+    "--port",
+    String(ports.ingress),
+  ];
   if (flags.public) launcherArgs.push("--public");
   const logFd = openSync(join(priv, "stack.log"), "a", 0o600);
   const child = spawn(process.execPath, launcherArgs, {
@@ -487,11 +610,18 @@ async function cmdLaunch({ flags }) {
     launcherPgid: child.pid,
     startedAt: new Date().toISOString(),
     pins: defaults().versions,
-    overrides: Object.fromEntries(Object.entries(env).filter(([k]) => /^OH_(AGENT_SERVER|AUTOMATION)_/.test(k))),
+    overrides: Object.fromEntries(
+      Object.entries(env).filter(([k]) =>
+        /^OH_(AGENT_SERVER|AUTOMATION)_/.test(k),
+      ),
+    ),
   };
   saveRun(run);
   try {
-    if (existsSync(join(verifyHome, "current")) || lstatSync(join(verifyHome, "current"), { throwIfNoEntry: false })) {
+    if (
+      existsSync(join(verifyHome, "current")) ||
+      lstatSync(join(verifyHome, "current"), { throwIfNoEntry: false })
+    ) {
       unlinkSync(join(verifyHome, "current"));
     }
   } catch {
@@ -505,8 +635,14 @@ async function cmdLaunch({ flags }) {
   let last = "";
   for (;;) {
     if (!groupAlive(run.launcherPgid)) {
-      const tail = readFileSync(join(priv, "stack.log"), "utf8").split("\n").slice(-25).join("\n");
-      throw new CliError("The launcher exited before the stack became ready.", { code: 3, extra: { run: dir, logTail: tail.replace(/\x1b\[[0-9;]*m/g, "") } });
+      const tail = readFileSync(join(priv, "stack.log"), "utf8")
+        .split("\n")
+        .slice(-25)
+        .join("\n");
+      throw new CliError("The launcher exited before the stack became ready.", {
+        code: 3,
+        extra: { run: dir, logTail: tail.replace(/\x1b\[[0-9;]*m/g, "") },
+      });
     }
     try {
       const [settings, automation, html] = await Promise.all([
@@ -515,17 +651,29 @@ async function cmdLaunch({ flags }) {
         http(run, "GET", "/", { auth: false, timeout: 4000 }),
       ]);
       last = `settings=${settings.status} automation=${automation.status} ui=${html.status}`;
-      if (settings.status === 200 && automation.status === 200 && html.status === 200) break;
+      if (
+        settings.status === 200 &&
+        automation.status === 200 &&
+        html.status === 200
+      )
+        break;
     } catch (error) {
       last = String(error.message);
     }
     if (Date.now() > deadline) {
-      throw new CliError(`Stack not ready after ${timeoutSec}s (${last}).`, { code: 3, hint: "Inspect <run>/private/stack.log; first launches download Python packages and can take minutes.", extra: { run: dir } });
+      throw new CliError(`Stack not ready after ${timeoutSec}s (${last}).`, {
+        code: 3,
+        hint: "Inspect <run>/private/stack.log; first launches download Python packages and can take minutes.",
+        extra: { run: dir },
+      });
     }
     await delay(1500);
   }
   const info = await http(run, "GET", "/server_info");
-  run.versions = { agentServer: info.json?.version, sdk: info.json?.sdk_version ?? undefined };
+  run.versions = {
+    agentServer: info.json?.version,
+    sdk: info.json?.sdk_version ?? undefined,
+  };
   run.readyAt = new Date().toISOString();
   saveRun(run);
 
@@ -545,7 +693,9 @@ async function cmdLaunch({ flags }) {
     next: [
       `export OH_VERIFY_RUN=${dir}`,
       "control-openhands doctor",
-      run.mode === "public" ? "control-openhands login" : "control-openhands onboard --skip",
+      run.mode === "public"
+        ? "control-openhands login"
+        : "control-openhands onboard --skip",
     ],
   });
 }
@@ -569,12 +719,22 @@ async function cmdStatus({ flags }) {
 async function cmdDoctor({ flags }) {
   const run = loadRun(flags);
   const checks = [];
-  const add = (name, ok, detail, severity = "fail") => checks.push({ name, ok, severity: ok ? "ok" : severity, detail });
+  const add = (name, ok, detail, severity = "fail") =>
+    checks.push({ name, ok, severity: ok ? "ok" : severity, detail });
 
   const alive = groupAlive(run.launcherPgid);
   const cmd = commandLine(run.launcherPid);
-  add("launcher process group alive", alive, alive ? cmd.slice(0, 120) : "launcher group is gone");
-  if (alive) add("launcher is this run's agent-canvas", cmd.includes("agent-canvas.mjs"), cmd.slice(0, 120));
+  add(
+    "launcher process group alive",
+    alive,
+    alive ? cmd.slice(0, 120) : "launcher group is gone",
+  );
+  if (alive)
+    add(
+      "launcher is this run's agent-canvas",
+      cmd.includes("agent-canvas.mjs"),
+      cmd.slice(0, 120),
+    );
   for (const [name, port] of Object.entries(run.ports)) {
     if (name === "vscode") continue;
     const open = await portOpen(port);
@@ -582,24 +742,64 @@ async function cmdDoctor({ flags }) {
   }
   if (alive) {
     try {
-      const marker = await http(run, "GET", "/verify-revision.txt", { auth: false });
+      const marker = await http(run, "GET", "/verify-revision.txt", {
+        auth: false,
+      });
       const served = marker.text.trim();
-      add("served build matches this checkout's build inputs", marker.status === 200 && served === run.buildId, `served=${served} run=${run.buildId} revision=${run.revision.slice(0, 12)}`);
+      add(
+        "served build matches this checkout's build inputs",
+        marker.status === 200 && served === run.buildId,
+        `served=${served} run=${run.buildId} revision=${run.revision.slice(0, 12)}`,
+      );
       const current = buildId();
-      add("checkout build inputs unchanged since launch", current === run.buildId, `now=${current}`, "warn");
+      add(
+        "checkout build inputs unchanged since launch",
+        current === run.buildId,
+        `now=${current}`,
+        "warn",
+      );
       const unauth = await http(run, "GET", "/api/settings", { auth: false });
-      add("unauthenticated API rejected", [401, 403].includes(unauth.status), `status=${unauth.status}`);
+      add(
+        "unauthenticated API rejected",
+        [401, 403].includes(unauth.status),
+        `status=${unauth.status}`,
+      );
       const settings = await http(run, "GET", "/api/settings");
-      add("authenticated settings readable", settings.status === 200 && Boolean(settings.json), `status=${settings.status}`);
+      add(
+        "authenticated settings readable",
+        settings.status === 200 && Boolean(settings.json),
+        `status=${settings.status}`,
+      );
       const llm = settings.json?.agent_settings?.llm;
       const llmReady = Boolean(llm?.model && llm?.api_key);
-      add("LLM configured", llmReady, llmReady ? `model=${llm.model}` : `model=${llm?.model ?? "none"} without an API key: \`control-openhands llm preset deepseek\``, "info");
+      add(
+        "LLM configured",
+        llmReady,
+        llmReady
+          ? `model=${llm.model}`
+          : `model=${llm?.model ?? "none"} without an API key: \`control-openhands llm preset deepseek\``,
+        "info",
+      );
       const info = await http(run, "GET", "/server_info");
       const pin = defaults().versions.agentServer;
-      add("agent-server reachable", info.status === 200, `version=${info.json?.version}`);
-      add("agent-server matches pin", info.json?.version === pin || Object.keys(run.overrides ?? {}).length > 0, `server=${info.json?.version} pin=${pin}`, "warn");
+      add(
+        "agent-server reachable",
+        info.status === 200,
+        `version=${info.json?.version}`,
+      );
+      add(
+        "agent-server matches pin",
+        info.json?.version === pin ||
+          Object.keys(run.overrides ?? {}).length > 0,
+        `server=${info.json?.version} pin=${pin}`,
+        "warn",
+      );
       const automation = await http(run, "GET", "/api/automation/health");
-      add("automation healthy", automation.status === 200, `status=${automation.status}`);
+      add(
+        "automation healthy",
+        automation.status === 200,
+        `status=${automation.status}`,
+      );
     } catch (error) {
       add("HTTP checks", false, String(error.message));
     }
@@ -607,14 +807,27 @@ async function cmdDoctor({ flags }) {
   if (!flags["skip-ui"]) {
     if (daemonInfo(run)) {
       try {
-        const probe = await browserCall(run, "uiprobe", { target: "/", timeout: 30_000 });
-        const wedged = probe.markers.length === 1 && probe.markers[0] === "loading-spinner";
-        add("UI loads without page errors", probe.pageErrors.length === 0 && !wedged, `markers=${probe.markers.join(",") || "none"} pageErrors=${probe.pageErrors.length} testids=${probe.testids}`);
+        const probe = await browserCall(run, "uiprobe", {
+          target: "/",
+          timeout: 30_000,
+        });
+        const wedged =
+          probe.markers.length === 1 && probe.markers[0] === "loading-spinner";
+        add(
+          "UI loads without page errors",
+          probe.pageErrors.length === 0 && !wedged,
+          `markers=${probe.markers.join(",") || "none"} pageErrors=${probe.pageErrors.length} testids=${probe.testids}`,
+        );
       } catch (error) {
         add("UI probe", false, String(error.message));
       }
     } else {
-      add("browser daemon running", false, "start it with `control-openhands browser start`", "warn");
+      add(
+        "browser daemon running",
+        false,
+        "start it with `control-openhands browser start`",
+        "warn",
+      );
     }
   }
   const failed = checks.filter((c) => c.severity === "fail");
@@ -623,7 +836,9 @@ async function cmdDoctor({ flags }) {
     run: run.dir,
     baseUrl: run.baseUrl,
     failed: failed.map((c) => `${c.name}: ${c.detail}`),
-    warnings: checks.filter((c) => ["warn", "info"].includes(c.severity)).map((c) => `${c.name}: ${c.detail}`),
+    warnings: checks
+      .filter((c) => ["warn", "info"].includes(c.severity))
+      .map((c) => `${c.name}: ${c.detail}`),
     passed: checks.filter((c) => c.ok).map((c) => `${c.name}: ${c.detail}`),
   });
   if (failed.length) process.exitCode = 3;
@@ -637,7 +852,10 @@ async function cmdStop({ flags }) {
   if (groupAlive(pgid)) {
     const cmd = commandLine(pgid);
     if (cmd && !cmd.includes("agent-canvas.mjs")) {
-      throw new CliError(`PID ${pgid} is no longer this run's launcher (${cmd.slice(0, 80)}); refusing to signal it.`, { code: 3 });
+      throw new CliError(
+        `PID ${pgid} is no longer this run's launcher (${cmd.slice(0, 80)}); refusing to signal it.`,
+        { code: 3 },
+      );
     }
     process.kill(-pgid, "SIGTERM");
     for (let i = 0; i < 60 && groupAlive(pgid); i += 1) await delay(500);
@@ -648,7 +866,8 @@ async function cmdStop({ flags }) {
     }
   }
   const ports = {};
-  for (const [name, port] of Object.entries(run.ports)) ports[name] = (await portOpen(port)) ? "still open" : "closed";
+  for (const [name, port] of Object.entries(run.ports))
+    ports[name] = (await portOpen(port)) ? "still open" : "closed";
   result.launcherStopped = !groupAlive(pgid);
   if (result.launcherStopped) releaseClaim(run);
   result.ports = ports;
@@ -657,17 +876,30 @@ async function cmdStop({ flags }) {
   const evidence = listFiles(join(run.dir, "evidence"));
   result.evidenceFiles = evidence.length;
   if (flags["purge-private"]) {
-    if (!result.launcherStopped) throw new CliError("Refusing to purge private state while processes are alive.", { code: 3 });
+    if (!result.launcherStopped)
+      throw new CliError(
+        "Refusing to purge private state while processes are alive.",
+        { code: 3 },
+      );
     const privateDir = join(run.dir, "private");
     const real = realpathSync(privateDir);
-    if (lstatSync(privateDir).isSymbolicLink() || dirname(real) !== realpathSync(run.dir)) {
-      throw new CliError("private/ is not a plain directory inside the run; not deleting.", { code: 3 });
+    if (
+      lstatSync(privateDir).isSymbolicLink() ||
+      dirname(real) !== realpathSync(run.dir)
+    ) {
+      throw new CliError(
+        "private/ is not a plain directory inside the run; not deleting.",
+        { code: 3 },
+      );
     }
     rmSync(real, { recursive: true, force: true });
     result.privatePurged = true;
-    result.evidenceFilesAfterPurge = listFiles(join(run.dir, "evidence")).length;
+    result.evidenceFilesAfterPurge = listFiles(
+      join(run.dir, "evidence"),
+    ).length;
   }
-  result.ok = result.launcherStopped && Object.values(ports).every((v) => v === "closed");
+  result.ok =
+    result.launcherStopped && Object.values(ports).every((v) => v === "closed");
   out(result);
   if (!result.ok) process.exitCode = 3;
 }
@@ -685,7 +917,9 @@ function listFiles(dir) {
 
 async function cmdEnv({ flags }) {
   const run = loadRun(flags);
-  process.stdout.write(`export OH_VERIFY_RUN=${run.dir}\nexport OH_VERIFY_BASE_URL=${run.baseUrl}\n`);
+  process.stdout.write(
+    `export OH_VERIFY_RUN=${run.dir}\nexport OH_VERIFY_BASE_URL=${run.baseUrl}\n`,
+  );
 }
 
 async function cmdRuns() {
@@ -695,7 +929,13 @@ async function cmdRuns() {
       const file = join(verifyHome, name, "run.json");
       if (name === "current" || !existsSync(file)) continue;
       const run = JSON.parse(readFileSync(file, "utf8"));
-      runs.push({ run: join(verifyHome, name), baseUrl: run.baseUrl, alive: groupAlive(run.launcherPgid), revision: run.revision, startedAt: run.startedAt });
+      runs.push({
+        run: join(verifyHome, name),
+        baseUrl: run.baseUrl,
+        alive: groupAlive(run.launcherPgid),
+        revision: run.revision,
+        startedAt: run.startedAt,
+      });
     }
   }
   out({ ok: true, home: verifyHome, runs });
@@ -708,13 +948,22 @@ async function cmdApi({ positional, flags }) {
   const run = loadRun(flags);
   const [method = "", path] = positional;
   const verb = method.toUpperCase();
-  if (!path || !path.startsWith("/")) usage("Usage: control-openhands api <METHOD> </path>", "control-openhands api GET /api/settings");
+  if (!path || !path.startsWith("/"))
+    usage(
+      "Usage: control-openhands api <METHOD> </path>",
+      "control-openhands api GET /api/settings",
+    );
   if (!["GET", "HEAD"].includes(verb) && !flags.write) {
-    usage(`${verb} changes state. Pass --write to arrange a precondition; it is never UI proof.`, `control-openhands api ${verb} ${path} --write --data '{...}'`);
+    usage(
+      `${verb} changes state. Pass --write to arrange a precondition; it is never UI proof.`,
+      `control-openhands api ${verb} ${path} --write --data '{...}'`,
+    );
   }
   let body;
   if (flags.data !== undefined) {
-    const raw = String(flags.data).startsWith("@") ? readFileSync(String(flags.data).slice(1), "utf8") : String(flags.data);
+    const raw = String(flags.data).startsWith("@")
+      ? readFileSync(String(flags.data).slice(1), "utf8")
+      : String(flags.data);
     body = JSON.parse(raw);
   }
   const response = await http(run, verb, path, { body });
@@ -723,50 +972,94 @@ async function cmdApi({ positional, flags }) {
     ok: response.ok,
     status: response.status,
     contentType: response.contentType,
-    body: response.json ?? (response.text.length > max ? `${response.text.slice(0, max)}…` : response.text),
+    body:
+      response.json ??
+      (response.text.length > max
+        ? `${response.text.slice(0, max)}…`
+        : response.text),
   });
   if (!response.ok) process.exitCode = 1;
 }
 
 function readApiKey(flags) {
-  if (flags["api-key-file"]) return readFileSync(resolve(String(flags["api-key-file"])), "utf8").trim();
-  const envName = flags["api-key-env"] && flags["api-key-env"] !== true ? flags["api-key-env"] : undefined;
+  if (flags["api-key-file"])
+    return readFileSync(resolve(String(flags["api-key-file"])), "utf8").trim();
+  const envName =
+    flags["api-key-env"] && flags["api-key-env"] !== true
+      ? flags["api-key-env"]
+      : undefined;
   if (envName) {
     const value = process.env[envName];
-    if (!value) throw new CliError(`Environment variable ${envName} is empty.`, { code: 3 });
+    if (!value)
+      throw new CliError(`Environment variable ${envName} is empty.`, {
+        code: 3,
+      });
     return value.trim();
   }
   if (flags["api-key"]) {
-    throw new CliError("Do not pass keys on the command line (they land in shell history and logs).", { code: 2, hint: "Use --api-key-env NAME or --api-key-file PATH." });
+    throw new CliError(
+      "Do not pass keys on the command line (they land in shell history and logs).",
+      { code: 2, hint: "Use --api-key-env NAME or --api-key-file PATH." },
+    );
   }
   return undefined;
 }
 
 async function validateLlm(run, name, llm) {
-  const result = await http(run, "POST", `/api/profiles/${encodeURIComponent(name)}/validate`, { body: { llm }, timeout: 120_000 });
-  if (!result.ok) throw new CliError(`Validation request failed: ${result.status} ${result.text.slice(0, 300)}`);
+  const result = await http(
+    run,
+    "POST",
+    `/api/profiles/${encodeURIComponent(name)}/validate`,
+    { body: { llm }, timeout: 120_000 },
+  );
+  if (!result.ok)
+    throw new CliError(
+      `Validation request failed: ${result.status} ${result.text.slice(0, 300)}`,
+    );
   if (!result.json?.valid) {
-    throw new CliError(`LLM settings for ${name} are invalid.`, { extra: { validation: result.json?.error } });
+    throw new CliError(`LLM settings for ${name} are invalid.`, {
+      extra: { validation: result.json?.error },
+    });
   }
   return result.json;
 }
 
 async function saveProfile(run, name, llm) {
-  const saved = await http(run, "POST", `/api/profiles/${encodeURIComponent(name)}`, { body: { llm, include_secrets: true } });
-  if (!saved.ok) throw new CliError(`Saving LLM profile ${name} failed: ${saved.status} ${saved.text.slice(0, 300)}`);
+  const saved = await http(
+    run,
+    "POST",
+    `/api/profiles/${encodeURIComponent(name)}`,
+    { body: { llm, include_secrets: true } },
+  );
+  if (!saved.ok)
+    throw new CliError(
+      `Saving LLM profile ${name} failed: ${saved.status} ${saved.text.slice(0, 300)}`,
+    );
   return saved;
 }
 
 async function activateProfile(run, name) {
-  const activated = await http(run, "POST", `/api/profiles/${encodeURIComponent(name)}/activate`, { body: {} });
-  if (!activated.ok) throw new CliError(`Activating LLM profile ${name} failed: ${activated.status} ${activated.text.slice(0, 300)}`);
+  const activated = await http(
+    run,
+    "POST",
+    `/api/profiles/${encodeURIComponent(name)}/activate`,
+    { body: {} },
+  );
+  if (!activated.ok)
+    throw new CliError(
+      `Activating LLM profile ${name} failed: ${activated.status} ${activated.text.slice(0, 300)}`,
+    );
 }
 
 const PRESETS = {
   deepseek: {
     envVar: "DEEPSEEK_API_KEY",
     profiles: [
-      { name: "deepseek-flash", model: "deepseek/deepseek-flash", activate: true },
+      {
+        name: "deepseek-flash",
+        model: "deepseek/deepseek-flash",
+        activate: true,
+      },
       { name: "deepseek-pro", model: "deepseek/deepseek-v4-pro" },
     ],
   },
@@ -781,31 +1074,54 @@ async function cmdLlm({ positional, flags }) {
     const llm = settings.json?.agent_settings?.llm ?? {};
     out({
       ok: true,
-      active: { model: llm.model, base_url: llm.base_url, api_key_set: Boolean(llm.api_key) },
+      active: {
+        model: llm.model,
+        base_url: llm.base_url,
+        api_key_set: Boolean(llm.api_key),
+      },
       profiles: profiles.json,
     });
     return;
   }
   if (sub === "set") {
-    const name = flags.profile && flags.profile !== true ? flags.profile : undefined;
+    const name =
+      flags.profile && flags.profile !== true ? flags.profile : undefined;
     const model = flags.model;
-    if (!name || !model || model === true) usage("llm set needs --profile and --model", "control-openhands llm set --profile deepseek-flash --model deepseek/deepseek-flash --api-key-env DEEPSEEK_API_KEY");
+    if (!name || !model || model === true)
+      usage(
+        "llm set needs --profile and --model",
+        "control-openhands llm set --profile deepseek-flash --model deepseek/deepseek-flash --api-key-env DEEPSEEK_API_KEY",
+      );
     const apiKey = readApiKey(flags);
-    if (!apiKey) usage("llm set needs --api-key-env NAME or --api-key-file PATH");
+    if (!apiKey)
+      usage("llm set needs --api-key-env NAME or --api-key-file PATH");
     const llm = { model, api_key: apiKey };
     if (flags["base-url"]) llm.base_url = flags["base-url"];
     if (!flags["no-validate"]) await validateLlm(run, name, llm);
     await saveProfile(run, name, llm);
     if (!flags["no-activate"]) await activateProfile(run, name);
     const settings = await http(run, "GET", "/api/settings");
-    out({ ok: true, profile: name, model, activated: !flags["no-activate"], activeModel: settings.json?.agent_settings?.llm?.model });
+    out({
+      ok: true,
+      profile: name,
+      model,
+      activated: !flags["no-activate"],
+      activeModel: settings.json?.agent_settings?.llm?.model,
+    });
     return;
   }
   if (sub === "preset") {
     const presetName = positional[1];
     const preset = PRESETS[presetName];
-    if (!preset) usage(`Unknown preset ${presetName}. Known: ${Object.keys(PRESETS).join(", ")}`, "control-openhands llm preset deepseek");
-    const apiKey = readApiKey({ ...flags, "api-key-env": flags["api-key-env"] ?? preset.envVar });
+    if (!preset)
+      usage(
+        `Unknown preset ${presetName}. Known: ${Object.keys(PRESETS).join(", ")}`,
+        "control-openhands llm preset deepseek",
+      );
+    const apiKey = readApiKey({
+      ...flags,
+      "api-key-env": flags["api-key-env"] ?? preset.envVar,
+    });
     const created = [];
     for (const profile of preset.profiles) {
       const llm = { model: profile.model, api_key: apiKey };
@@ -816,7 +1132,13 @@ async function cmdLlm({ positional, flags }) {
     const active = preset.profiles.find((p) => p.activate);
     if (active) await activateProfile(run, active.name);
     const settings = await http(run, "GET", "/api/settings");
-    out({ ok: true, preset: presetName, profiles: created, active: active?.name, activeModel: settings.json?.agent_settings?.llm?.model });
+    out({
+      ok: true,
+      preset: presetName,
+      profiles: created,
+      active: active?.name,
+      activeModel: settings.json?.agent_settings?.llm?.model,
+    });
     return;
   }
   if (sub === "check") {
@@ -824,13 +1146,20 @@ async function cmdLlm({ positional, flags }) {
     // endpoint, without saving anything.
     const model = flags.model;
     const apiKey = readApiKey(flags);
-    if (!model || model === true || !apiKey) usage("llm check needs --model and --api-key-env/--api-key-file", "control-openhands llm check --model deepseek/deepseek-flash --api-key-env DEEPSEEK_API_KEY");
+    if (!model || model === true || !apiKey)
+      usage(
+        "llm check needs --model and --api-key-env/--api-key-file",
+        "control-openhands llm check --model deepseek/deepseek-flash --api-key-env DEEPSEEK_API_KEY",
+      );
     const llm = { model, api_key: apiKey };
     if (flags["base-url"]) llm.base_url = flags["base-url"];
     out({ ok: true, model, ...(await validateLlm(run, "check", llm)) });
     return;
   }
-  usage("Usage: control-openhands llm show|set|preset|check", "control-openhands llm preset deepseek");
+  usage(
+    "Usage: control-openhands llm show|set|preset|check",
+    "control-openhands llm preset deepseek",
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -845,7 +1174,11 @@ async function visible(run, selector) {
 async function cmdLogin({ flags }) {
   const run = loadRun(flags);
   if (run.mode !== "public") {
-    out({ ok: true, skipped: true, reason: "local mode injects the session key; no login screen" });
+    out({
+      ok: true,
+      skipped: true,
+      reason: "local mode injects the session key; no login screen",
+    });
     return;
   }
   // Public mode asks for the key in one of two places: the first-run
@@ -854,16 +1187,38 @@ async function cmdLogin({ flags }) {
   await browserCall(run, "goto", { target: "/" });
   for (let i = 0; i < 20; i += 1) {
     if (await visible(run, "testid=onboarding-backend-api-key")) {
-      await browserCall(run, "fill", { selector: "testid=onboarding-backend-api-key", value: sessionKey(run) });
-      await browserCall(run, "click", { selector: "testid=onboarding-backend-next" });
-      await browserCall(run, "wait", { selector: "testid=onboarding-step-choose-agent", timeout: 30_000 });
-      out({ ok: true, loggedIn: true, via: "onboarding backend step", next: "control-openhands onboard (continues at Choose your agent)" });
+      await browserCall(run, "fill", {
+        selector: "testid=onboarding-backend-api-key",
+        value: sessionKey(run),
+      });
+      await browserCall(run, "click", {
+        selector: "testid=onboarding-backend-next",
+      });
+      await browserCall(run, "wait", {
+        selector: "testid=onboarding-step-choose-agent",
+        timeout: 30_000,
+      });
+      out({
+        ok: true,
+        loggedIn: true,
+        via: "onboarding backend step",
+        next: "control-openhands onboard (continues at Choose your agent)",
+      });
       return;
     }
     if (await visible(run, "testid=api-key-entry-screen")) {
-      await browserCall(run, "fill", { selector: "testid=api-key-entry-api-key", value: sessionKey(run) });
-      await browserCall(run, "click", { selector: "testid=api-key-entry-submit" });
-      await browserCall(run, "wait", { selector: "testid=api-key-entry-screen", state: "hidden", timeout: 30_000 });
+      await browserCall(run, "fill", {
+        selector: "testid=api-key-entry-api-key",
+        value: sessionKey(run),
+      });
+      await browserCall(run, "click", {
+        selector: "testid=api-key-entry-submit",
+      });
+      await browserCall(run, "wait", {
+        selector: "testid=api-key-entry-screen",
+        state: "hidden",
+        timeout: 30_000,
+      });
       out({ ok: true, loggedIn: true, via: "api-key-entry-screen" });
       return;
     }
@@ -873,7 +1228,12 @@ async function cmdLogin({ flags }) {
     }
     await delay(500);
   }
-  throw new CliError("Neither the onboarding backend step nor the API-key screen appeared.", { hint: "Inspect with `control-openhands browser testids` and `browser snapshot`." });
+  throw new CliError(
+    "Neither the onboarding backend step nor the API-key screen appeared.",
+    {
+      hint: "Inspect with `control-openhands browser testids` and `browser snapshot`.",
+    },
+  );
 }
 
 async function cmdOnboard({ flags }) {
@@ -884,9 +1244,17 @@ async function cmdOnboard({ flags }) {
   if (await visible(run, "testid=telemetry-consent-form")) {
     const analytics = flags.analytics === "on";
     const box = "testid=telemetry-consent-form >> role=checkbox";
-    const checked = (await browserCall(run, "eval", { expression: "document.querySelector('[data-testid=telemetry-consent-form] input[type=checkbox]')?.checked ?? null" })).value;
-    if (checked !== null && checked !== analytics) await browserCall(run, "click", { selector: box });
-    await browserCall(run, "click", { selector: "testid=confirm-telemetry-preferences" });
+    const checked = (
+      await browserCall(run, "eval", {
+        expression:
+          "document.querySelector('[data-testid=telemetry-consent-form] input[type=checkbox]')?.checked ?? null",
+      })
+    ).value;
+    if (checked !== null && checked !== analytics)
+      await browserCall(run, "click", { selector: box });
+    await browserCall(run, "click", {
+      selector: "testid=confirm-telemetry-preferences",
+    });
     steps.push(`telemetry consent: analytics ${analytics ? "on" : "off"}`);
     await delay(500);
   }
@@ -895,27 +1263,56 @@ async function cmdOnboard({ flags }) {
       await browserCall(run, "click", { selector: "testid=onboarding-skip" });
       steps.push("onboarding: skipped (not an onboarding-success proof)");
     } else {
-      const agent = flags.agent && flags.agent !== true ? flags.agent : "openhands";
-      await browserCall(run, "click", { selector: `testid=onboarding-agent-option-${agent}` });
-      await browserCall(run, "click", { selector: "testid=onboarding-agent-next" });
+      const agent =
+        flags.agent && flags.agent !== true ? flags.agent : "openhands";
+      await browserCall(run, "click", {
+        selector: `testid=onboarding-agent-option-${agent}`,
+      });
+      await browserCall(run, "click", {
+        selector: "testid=onboarding-agent-next",
+      });
       steps.push(`onboarding: chose ${agent}`);
-      await browserCall(run, "wait", { selector: "testid=onboarding-step-setup-llm" });
-      await browserCall(run, "click", { selector: "testid=onboarding-llm-next" });
+      await browserCall(run, "wait", {
+        selector: "testid=onboarding-step-setup-llm",
+      });
+      await browserCall(run, "click", {
+        selector: "testid=onboarding-llm-next",
+      });
       steps.push("onboarding: LLM step continued with the current settings");
-      await browserCall(run, "wait", { selector: "testid=onboarding-step-say-hello" });
-      await browserCall(run, "click", { selector: "testid=onboarding-hello-close" });
+      await browserCall(run, "wait", {
+        selector: "testid=onboarding-step-say-hello",
+      });
+      await browserCall(run, "click", {
+        selector: "testid=onboarding-hello-close",
+      });
       steps.push("onboarding: closed at say-hello");
     }
-    await browserCall(run, "wait", { selector: "testid=onboarding-modal", state: "hidden", timeout: 15_000 });
+    await browserCall(run, "wait", {
+      selector: "testid=onboarding-modal",
+      state: "hidden",
+      timeout: 15_000,
+    });
   }
-  if (!steps.length) steps.push("nothing to do: no consent form or onboarding modal shown");
+  if (!steps.length)
+    steps.push("nothing to do: no consent form or onboarding modal shown");
   out({ ok: true, steps, url: (await browserCall(run, "url")).url });
 }
 
-const TERMINAL = ["idle", "finished", "error", "stuck", "paused", "waiting_for_confirmation"];
+const TERMINAL = [
+  "idle",
+  "finished",
+  "error",
+  "stuck",
+  "paused",
+  "waiting_for_confirmation",
+];
 
 async function conversationInfo(run, id) {
-  const res = await http(run, "GET", `/api/conversations/${encodeURIComponent(id)}`);
+  const res = await http(
+    run,
+    "GET",
+    `/api/conversations/${encodeURIComponent(id)}`,
+  );
   if (!res.ok) throw new CliError(`Conversation ${id}: HTTP ${res.status}`);
   return res.json;
 }
@@ -927,7 +1324,9 @@ function summarize(info) {
     status: info.execution_status,
     model: info.current_model_id ?? info.agent?.llm?.model,
     workspace: info.workspace?.working_dir,
-    cost: info.metrics?.accumulated_cost ?? info.stats?.usage_to_metrics?.agent?.accumulated_cost,
+    cost:
+      info.metrics?.accumulated_cost ??
+      info.stats?.usage_to_metrics?.agent?.accumulated_cost,
     updatedAt: info.updated_at,
   };
 }
@@ -943,16 +1342,27 @@ async function waitConversation(run, id, { until, timeoutSec }) {
     const terminal = wanted.includes(info.execution_status);
     // A fresh conversation reports idle before its first step: wait for it
     // to actually run unless the caller only asked for "idle".
-    if (terminal && (sawRunning || until === "idle" || info.execution_status !== "idle")) {
+    if (
+      terminal &&
+      (sawRunning || until === "idle" || info.execution_status !== "idle")
+    ) {
       return { ...summarize(info), waitedFor: wanted };
     }
     await delay(2000);
   }
-  throw new CliError(`Conversation ${id} still ${info.execution_status} after ${timeoutSec}s`, { extra: summarize(info) });
+  throw new CliError(
+    `Conversation ${id} still ${info.execution_status} after ${timeoutSec}s`,
+    { extra: summarize(info) },
+  );
 }
 
 function eventText(event) {
-  const pick = (v) => (typeof v === "string" ? v : Array.isArray(v) ? v.map((p) => p.text ?? "").join(" ") : "");
+  const pick = (v) =>
+    typeof v === "string"
+      ? v
+      : Array.isArray(v)
+        ? v.map((p) => p.text ?? "").join(" ")
+        : "";
   return (
     pick(event.llm_message?.content) ||
     pick(event.message) ||
@@ -962,7 +1372,9 @@ function eventText(event) {
     pick(event.observation?.content) ||
     event.observation?.text ||
     ""
-  ).replace(/\s+/g, " ").slice(0, 160);
+  )
+    .replace(/\s+/g, " ")
+    .slice(0, 160);
 }
 
 async function cmdConversation({ positional, flags }) {
@@ -971,23 +1383,50 @@ async function cmdConversation({ positional, flags }) {
   const timeoutSec = intFlag(flags.timeout, 300);
   if (sub === "start") {
     const prompt = flags.prompt;
-    if (!prompt || prompt === true) usage("conversation start needs --prompt", "control-openhands conversation start --prompt \"Create hello.py that prints hi, run it\" --wait");
+    if (!prompt || prompt === true)
+      usage(
+        "conversation start needs --prompt",
+        'control-openhands conversation start --prompt "Create hello.py that prints hi, run it" --wait',
+      );
     if (!flags["stay"]) await browserCall(run, "goto", { target: "/" });
     // Home and conversation pages share the composer: a contenteditable
     // testid=chat-input with testid=submit-button beside it.
-    await browserCall(run, "wait", { selector: "testid=chat-input", timeout: 30_000 });
-    await browserCall(run, "fill", { selector: "testid=chat-input", value: prompt });
+    await browserCall(run, "wait", {
+      selector: "testid=chat-input",
+      timeout: 30_000,
+    });
+    await browserCall(run, "fill", {
+      selector: "testid=chat-input",
+      value: prompt,
+    });
     await browserCall(run, "click", { selector: "testid=submit-button" });
-    const { url } = await browserCall(run, "wait-url", { pattern: "/conversations/[^/?#]+", timeout: 60_000 });
+    const { url } = await browserCall(run, "wait-url", {
+      pattern: "/conversations/[^/?#]+",
+      timeout: 60_000,
+    });
     const conversationId = /\/conversations\/([^/?#]+)/.exec(url)[1];
     const result = { ok: true, id: conversationId, url };
-    if (flags.wait) Object.assign(result, await waitConversation(run, conversationId, { until: flags.until, timeoutSec }));
+    if (flags.wait)
+      Object.assign(
+        result,
+        await waitConversation(run, conversationId, {
+          until: flags.until,
+          timeoutSec,
+        }),
+      );
     out(result);
     return;
   }
   if (sub === "wait") {
-    if (!id) usage("conversation wait <id>", "control-openhands conversation wait <id> --until finished,idle --timeout 300");
-    out({ ok: true, ...(await waitConversation(run, id, { until: flags.until, timeoutSec })) });
+    if (!id)
+      usage(
+        "conversation wait <id>",
+        "control-openhands conversation wait <id> --until finished,idle --timeout 300",
+      );
+    out({
+      ok: true,
+      ...(await waitConversation(run, id, { until: flags.until, timeoutSec })),
+    });
     return;
   }
   if (sub === "status") {
@@ -998,26 +1437,49 @@ async function cmdConversation({ positional, flags }) {
   if (sub === "list") {
     const res = await http(run, "GET", "/api/conversations/search?limit=50");
     const items = res.json?.items ?? res.json ?? [];
-    out({ ok: res.ok, count: items.length, conversations: items.map(summarize) });
+    out({
+      ok: res.ok,
+      count: items.length,
+      conversations: items.map(summarize),
+    });
     return;
   }
   if (sub === "events") {
     if (!id) usage("conversation events <id> [--last N]");
     const last = intFlag(flags.last, 25);
-    const res = await http(run, "GET", `/api/conversations/${encodeURIComponent(id)}/events/search?limit=100&sort_order=TIMESTAMP_DESC`);
-    if (!res.ok) throw new CliError(`events: HTTP ${res.status} ${res.text.slice(0, 200)}`);
+    const res = await http(
+      run,
+      "GET",
+      `/api/conversations/${encodeURIComponent(id)}/events/search?limit=100&sort_order=TIMESTAMP_DESC`,
+    );
+    if (!res.ok)
+      throw new CliError(
+        `events: HTTP ${res.status} ${res.text.slice(0, 200)}`,
+      );
     const items = (res.json?.items ?? []).slice(0, last).reverse();
-    const kinds = flags.kinds && flags.kinds !== true ? String(flags.kinds).split(",") : null;
+    const kinds =
+      flags.kinds && flags.kinds !== true
+        ? String(flags.kinds).split(",")
+        : null;
     out({
       ok: true,
       count: items.length,
       events: items
         .filter((e) => !kinds || kinds.includes(e.kind))
-        .map((e) => ({ kind: e.kind, source: e.source, tool: e.tool_name ?? e.action?.kind, text: eventText(e), ts: e.timestamp })),
+        .map((e) => ({
+          kind: e.kind,
+          source: e.source,
+          tool: e.tool_name ?? e.action?.kind,
+          text: eventText(e),
+          ts: e.timestamp,
+        })),
     });
     return;
   }
-  usage("Usage: control-openhands conversation start|wait|status|list|events", "control-openhands conversation start --prompt \"...\" --wait");
+  usage(
+    "Usage: control-openhands conversation start|wait|status|list|events",
+    'control-openhands conversation start --prompt "..." --wait',
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -1073,7 +1535,10 @@ async function cmdFixture({ positional, flags }) {
   const run = loadRun(flags);
   const [kind] = positional;
   const workspace = join(run.dir, "workspace");
-  const name = flags.name && flags.name !== true ? String(flags.name).replace(/[^\w.-]+/g, "_") : undefined;
+  const name =
+    flags.name && flags.name !== true
+      ? String(flags.name).replace(/[^\w.-]+/g, "_")
+      : undefined;
   if (kind === "git-repo") {
     const dir = join(workspace, name ?? "qa-repo");
     if (existsSync(join(dir, ".git"))) {
@@ -1081,21 +1546,52 @@ async function cmdFixture({ positional, flags }) {
       return;
     }
     mkdirSync(join(dir, "src"), { recursive: true });
-    writeFileSync(join(dir, "README.md"), "# QA fixture repository\n\nDisposable repository created by control-openhands.\n");
-    writeFileSync(join(dir, "src", "calc.py"), "def add(a, b):\n    return a + b\n");
-    writeFileSync(join(dir, "src", "test_calc.py"), "from calc import add\n\n\ndef test_add():\n    assert add(2, 3) == 5\n");
-    const gitEnv = { ...process.env, GIT_AUTHOR_NAME: "QA Fixture", GIT_AUTHOR_EMAIL: "qa@example.invalid", GIT_COMMITTER_NAME: "QA Fixture", GIT_COMMITTER_EMAIL: "qa@example.invalid" };
-    for (const args of [["init", "-q", "-b", "main"], ["add", "."], ["commit", "-q", "-m", "Initial fixture commit"]]) {
+    writeFileSync(
+      join(dir, "README.md"),
+      "# QA fixture repository\n\nDisposable repository created by control-openhands.\n",
+    );
+    writeFileSync(
+      join(dir, "src", "calc.py"),
+      "def add(a, b):\n    return a + b\n",
+    );
+    writeFileSync(
+      join(dir, "src", "test_calc.py"),
+      "from calc import add\n\n\ndef test_add():\n    assert add(2, 3) == 5\n",
+    );
+    const gitEnv = {
+      ...process.env,
+      GIT_AUTHOR_NAME: "QA Fixture",
+      GIT_AUTHOR_EMAIL: "qa@example.invalid",
+      GIT_COMMITTER_NAME: "QA Fixture",
+      GIT_COMMITTER_EMAIL: "qa@example.invalid",
+    };
+    for (const args of [
+      ["init", "-q", "-b", "main"],
+      ["add", "."],
+      ["commit", "-q", "-m", "Initial fixture commit"],
+    ]) {
       execFileSync("git", args, { cwd: dir, env: gitEnv });
     }
-    out({ ok: true, path: dir, files: ["README.md", "src/calc.py", "src/test_calc.py"], branch: "main" });
+    out({
+      ok: true,
+      path: dir,
+      files: ["README.md", "src/calc.py", "src/test_calc.py"],
+      branch: "main",
+    });
     return;
   }
   if (kind === "image") {
     const dir = join(run.dir, "evidence", "_fixtures");
     mkdirSync(dir, { recursive: true });
     const path = join(dir, `${name ?? "qa-image"}.png`);
-    writeFileSync(path, pngBytes(intFlag(flags.width, 160), intFlag(flags.height, 96), [32, 120, 220]));
+    writeFileSync(
+      path,
+      pngBytes(
+        intFlag(flags.width, 160),
+        intFlag(flags.height, 96),
+        [32, 120, 220],
+      ),
+    );
     out({ ok: true, path, bytes: readFileSync(path).length });
     return;
   }
@@ -1103,7 +1599,12 @@ async function cmdFixture({ positional, flags }) {
     const dir = join(run.dir, "evidence", "_fixtures");
     mkdirSync(dir, { recursive: true });
     const path = join(dir, name ?? "qa-note.txt");
-    writeFileSync(path, flags.content && flags.content !== true ? String(flags.content) : "QA fixture file created by control-openhands.\n");
+    writeFileSync(
+      path,
+      flags.content && flags.content !== true
+        ? String(flags.content)
+        : "QA fixture file created by control-openhands.\n",
+    );
     out({ ok: true, path });
     return;
   }
@@ -1114,7 +1615,10 @@ async function cmdFixture({ positional, flags }) {
     out({ ok: true, path: dir });
     return;
   }
-  usage("Usage: control-openhands fixture git-repo|folder|image|file [--name N]", "control-openhands fixture git-repo --name qa-repo");
+  usage(
+    "Usage: control-openhands fixture git-repo|folder|image|file [--name N]",
+    "control-openhands fixture git-repo --name qa-repo",
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -1123,10 +1627,12 @@ async function cmdFixture({ positional, flags }) {
 async function cmdBrowser({ positional, flags }) {
   const run = loadRun(flags);
   const [verb, ...rest] = positional;
-  const timeout = flags.timeout !== undefined ? intFlag(flags.timeout) : undefined;
+  const timeout =
+    flags.timeout !== undefined ? intFlag(flags.timeout) : undefined;
   const sel = rest[0];
   const need = (n, example) => {
-    if (rest.length < n) usage(`browser ${verb} needs ${n} argument(s)`, example);
+    if (rest.length < n)
+      usage(`browser ${verb} needs ${n} argument(s)`, example);
   };
   let result;
   switch (verb) {
@@ -1138,7 +1644,10 @@ async function cmdBrowser({ positional, flags }) {
       break;
     case "goto":
     case "open":
-      result = await browserCall(run, "goto", { target: rest[0] ?? "/", allowExternal: Boolean(flags["allow-external"]) });
+      result = await browserCall(run, "goto", {
+        target: rest[0] ?? "/",
+        allowExternal: Boolean(flags["allow-external"]),
+      });
       break;
     case "reload":
     case "back":
@@ -1161,40 +1670,76 @@ async function cmdBrowser({ positional, flags }) {
     case "text":
     case "bbox":
       need(1, `control-openhands browser ${verb} 'testid=submit-button'`);
-      result = await browserCall(run, verb, { selector: sel, timeout, force: Boolean(flags.force), button: flags.button });
+      result = await browserCall(run, verb, {
+        selector: sel,
+        timeout,
+        force: Boolean(flags.force),
+        button: flags.button,
+      });
       break;
     case "fill":
     case "type": {
-      need(1, `control-openhands browser ${verb} 'testid=name-input' 'QA value'`);
+      need(
+        1,
+        `control-openhands browser ${verb} 'testid=name-input' 'QA value'`,
+      );
       let value = rest[1];
-      if (flags["value-file"]) value = readFileSync(resolve(flags["value-file"]), "utf8");
+      if (flags["value-file"])
+        value = readFileSync(resolve(flags["value-file"]), "utf8");
       if (flags["value-env"]) value = process.env[flags["value-env"]] ?? "";
-      if (value === undefined) usage(`browser ${verb} needs a value (or --value-file / --value-env)`);
+      if (value === undefined)
+        usage(`browser ${verb} needs a value (or --value-file / --value-env)`);
       result = await browserCall(run, verb, { selector: sel, value, timeout });
       break;
     }
     case "press":
       need(1, "control-openhands browser press Escape [--selector 'testid=x']");
-      result = await browserCall(run, "press", { key: rest[0], selector: flags.selector, timeout });
+      result = await browserCall(run, "press", {
+        key: rest[0],
+        selector: flags.selector,
+        timeout,
+      });
       break;
     case "select":
       need(2, "control-openhands browser select 'testid=x' value");
-      result = await browserCall(run, "select", { selector: sel, value: rest[1], timeout });
+      result = await browserCall(run, "select", {
+        selector: sel,
+        value: rest[1],
+        timeout,
+      });
       break;
     case "upload":
       need(2, "control-openhands browser upload 'input[type=file]' ./file.png");
-      result = await browserCall(run, "upload", { selector: sel, files: rest.slice(1).map((f) => resolve(f)), timeout });
+      result = await browserCall(run, "upload", {
+        selector: sel,
+        files: rest.slice(1).map((f) => resolve(f)),
+        timeout,
+      });
       break;
     case "scroll":
-      result = await browserCall(run, "scroll", { selector: sel, by: flags.by, timeout });
+      result = await browserCall(run, "scroll", {
+        selector: sel,
+        by: flags.by,
+        timeout,
+      });
       break;
     case "wait":
-      need(1, "control-openhands browser wait 'testid=x' [--state hidden] [--timeout 30000]");
-      result = await browserCall(run, "wait", { selector: sel, state: flags.state, timeout });
+      need(
+        1,
+        "control-openhands browser wait 'testid=x' [--state hidden] [--timeout 30000]",
+      );
+      result = await browserCall(run, "wait", {
+        selector: sel,
+        state: flags.state,
+        timeout,
+      });
       break;
     case "wait-url":
       need(1, "control-openhands browser wait-url '/settings/llm$'");
-      result = await browserCall(run, "wait-url", { pattern: rest[0], timeout });
+      result = await browserCall(run, "wait-url", {
+        pattern: rest[0],
+        timeout,
+      });
       break;
     case "wait-text":
       need(1, "control-openhands browser wait-text 'Saved'");
@@ -1202,32 +1747,66 @@ async function cmdBrowser({ positional, flags }) {
       break;
     case "attr":
       need(2, "control-openhands browser attr 'testid=x' aria-expanded");
-      result = await browserCall(run, "attr", { selector: sel, name: rest[1], timeout });
+      result = await browserCall(run, "attr", {
+        selector: sel,
+        name: rest[1],
+        timeout,
+      });
       break;
     case "snapshot":
-      result = await browserCall(run, "snapshot", { selector: sel, maxLines: flags["max-lines"], feature: flags.feature, name: flags.name });
+      result = await browserCall(run, "snapshot", {
+        selector: sel,
+        maxLines: flags["max-lines"],
+        feature: flags.feature,
+        name: flags.name,
+      });
       break;
     case "testids":
-      result = await browserCall(run, "testids", { selector: sel, includeHidden: Boolean(flags.hidden) });
-      if (flags.filter) result.testids = result.testids.filter((t) => t.testid.includes(flags.filter));
+      result = await browserCall(run, "testids", {
+        selector: sel,
+        includeHidden: Boolean(flags.hidden),
+      });
+      if (flags.filter)
+        result.testids = result.testids.filter((t) =>
+          t.testid.includes(flags.filter),
+        );
       result.count = result.testids.length;
       break;
     case "screenshot":
-      if (!flags.feature || !flags.name) usage("browser screenshot needs --feature <ID> and --name <label>", "control-openhands browser screenshot --feature F05.secret-create --name after-reload");
-      result = await browserCall(run, "screenshot", { feature: flags.feature, name: flags.name, selector: sel, fullPage: Boolean(flags["full-page"]) });
+      if (!flags.feature || !flags.name)
+        usage(
+          "browser screenshot needs --feature <ID> and --name <label>",
+          "control-openhands browser screenshot --feature F05.secret-create --name after-reload",
+        );
+      result = await browserCall(run, "screenshot", {
+        feature: flags.feature,
+        name: flags.name,
+        selector: sel,
+        fullPage: Boolean(flags["full-page"]),
+      });
       break;
     case "viewport":
-      need(1, "control-openhands browser viewport phone   # desktop|phone|narrow|tablet|WxH");
+      need(
+        1,
+        "control-openhands browser viewport phone   # desktop|phone|narrow|tablet|WxH",
+      );
       result = await browserCall(run, "viewport", { size: rest[0] });
       break;
     case "errors":
-      result = await browserCall(run, "errors", { clear: Boolean(flags.clear), all: Boolean(flags.all), appOnly: Boolean(flags["app-only"]) });
+      result = await browserCall(run, "errors", {
+        clear: Boolean(flags.clear),
+        all: Boolean(flags.all),
+        appOnly: Boolean(flags["app-only"]),
+      });
       break;
     case "events":
-      result = await browserCall(run, "events", { kinds: flags.kinds, last: flags.last });
+      result = await browserCall(run, "events", {
+        kinds: flags.kinds,
+        last: flags.last,
+      });
       break;
     case "eval":
-      need(1, "control-openhands browser eval \"document.title\"");
+      need(1, 'control-openhands browser eval "document.title"');
       result = await browserCall(run, "eval", { expression: rest[0] });
       break;
     case "tab":
@@ -1245,7 +1824,10 @@ async function cmdBrowser({ positional, flags }) {
       result = await browserCall(run, "storage", { keysOnly: !flags.values });
       break;
     default:
-      usage(`Unknown browser verb ${verb ?? ""}`, "control-openhands browser --help");
+      usage(
+        `Unknown browser verb ${verb ?? ""}`,
+        "control-openhands browser --help",
+      );
   }
   out({ ok: true, ...result });
 }
@@ -1261,12 +1843,17 @@ async function cmdEvidence({ positional, flags }) {
   const [sub] = positional;
   if (sub === "add") {
     if (!flags.feature || !RESULTS.includes(flags.result)) {
-      usage("evidence add needs --feature ID and --result pass|fail|blocked|not-run", "control-openhands evidence add --feature F05.secret-create --result pass --entry 'Settings > Secrets > Add' --expected 'row after reload' --actual 'row present' --artifact evidence/F05.secret-create/after-reload.png");
+      usage(
+        "evidence add needs --feature ID and --result pass|fail|blocked|not-run",
+        "control-openhands evidence add --feature F05.secret-create --result pass --entry 'Settings > Secrets > Add' --expected 'row after reload' --actual 'row present' --artifact evidence/F05.secret-create/after-reload.png",
+      );
     }
     const artifacts = [];
     const raw = flags.artifact;
     if (raw && raw !== true) artifacts.push(...String(raw).split(","));
-    const page = daemonInfo(run) ? await browserCall(run, "url").catch(() => ({})) : {};
+    const page = daemonInfo(run)
+      ? await browserCall(run, "url").catch(() => ({}))
+      : {};
     const row = {
       ts: new Date().toISOString(),
       feature: flags.feature,
@@ -1279,21 +1866,32 @@ async function cmdEvidence({ positional, flags }) {
       revision: run.revision,
       backend: `${run.mode} agent-server ${run.versions?.agentServer ?? "?"}`,
       url: page.url,
-      viewport: page.viewport ? `${page.viewport.width}x${page.viewport.height}` : undefined,
+      viewport: page.viewport
+        ? `${page.viewport.width}x${page.viewport.height}`
+        : undefined,
     };
     appendFileSync(ledger, `${JSON.stringify(row)}\n`);
     out({ ok: true, recorded: row });
     return;
   }
-  const rows = existsSync(ledger) ? readFileSync(ledger, "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l)) : [];
+  const rows = existsSync(ledger)
+    ? readFileSync(ledger, "utf8")
+        .trim()
+        .split("\n")
+        .filter(Boolean)
+        .map((l) => JSON.parse(l))
+    : [];
   if (sub === "list") {
-    const filtered = flags.feature ? rows.filter((r) => r.feature.startsWith(flags.feature)) : rows;
+    const filtered = flags.feature
+      ? rows.filter((r) => r.feature.startsWith(flags.feature))
+      : rows;
     out({ ok: true, count: filtered.length, rows: filtered });
     return;
   }
   if (sub === "report") {
     const latest = new Map();
-    for (const row of rows) latest.set(`${row.feature}|${row.entry ?? ""}`, row);
+    for (const row of rows)
+      latest.set(`${row.feature}|${row.entry ?? ""}`, row);
     const counts = Object.fromEntries(RESULTS.map((r) => [r, 0]));
     for (const row of latest.values()) counts[row.result] += 1;
     const lines = [
@@ -1306,55 +1904,154 @@ async function cmdEvidence({ positional, flags }) {
       "| Feature/check | Entry point | Expected → actual | Result | Evidence |",
       "|---|---|---|---|---|",
     ];
-    const cell = (v) => String(v ?? "").replace(/\|/g, "\\|").replace(/\n/g, " ");
-    for (const row of [...latest.values()].sort((a, b) => a.feature.localeCompare(b.feature))) {
-      lines.push(`| ${cell(row.feature)} | ${cell(row.entry)} | ${cell(row.expected)} → ${cell(row.actual)} | ${row.result} | ${row.artifacts.map((a) => `\`${cell(relative(run.dir, resolve(run.dir, a)))}\``).join(" ")} |`);
+    const cell = (v) =>
+      String(v ?? "")
+        .replace(/\|/g, "\\|")
+        .replace(/\n/g, " ");
+    for (const row of [...latest.values()].sort((a, b) =>
+      a.feature.localeCompare(b.feature),
+    )) {
+      lines.push(
+        `| ${cell(row.feature)} | ${cell(row.entry)} | ${cell(row.expected)} → ${cell(row.actual)} | ${row.result} | ${row.artifacts.map((a) => `\`${cell(relative(run.dir, resolve(run.dir, a)))}\``).join(" ")} |`,
+      );
     }
     process.stdout.write(`${lines.join("\n")}\n`);
     return;
   }
-  usage("Usage: control-openhands evidence add|list|report", "control-openhands evidence report > report.md");
+  usage(
+    "Usage: control-openhands evidence add|list|report",
+    "control-openhands evidence report > report.md",
+  );
 }
 
 // ---------------------------------------------------------------------------
 // Commands: feature-map tooling (index hygiene and coverage).
 // ---------------------------------------------------------------------------
-const REQUIRED_H2 = ["Sub-features", "How to get to it (user POV)", "Driving it with control-openhands", "Gotchas"];
-const KNOWN_COMMANDS = new Set(["launch", "status", "doctor", "stop", "env", "runs", "api", "llm", "login", "onboard", "conversation", "fixture", "browser", "evidence", "map", "help"]);
-const BROWSER_VERBS = new Set(["start", "stop", "goto", "open", "reload", "back", "forward", "url", "tabs", "tab", "close-tab", "downloads", "click", "dblclick", "hover", "focus", "check", "uncheck", "count", "visible", "enabled", "value", "text", "bbox", "fill", "type", "press", "select", "upload", "scroll", "wait", "wait-url", "wait-text", "attr", "snapshot", "testids", "screenshot", "viewport", "errors", "events", "eval", "dialogs", "storage"]);
+const REQUIRED_H2 = [
+  "Sub-features",
+  "How to get to it (user POV)",
+  "Driving it with control-openhands",
+  "Gotchas",
+];
+const KNOWN_COMMANDS = new Set([
+  "launch",
+  "status",
+  "doctor",
+  "stop",
+  "env",
+  "runs",
+  "api",
+  "llm",
+  "login",
+  "onboard",
+  "conversation",
+  "fixture",
+  "browser",
+  "evidence",
+  "map",
+  "help",
+]);
+const BROWSER_VERBS = new Set([
+  "start",
+  "stop",
+  "goto",
+  "open",
+  "reload",
+  "back",
+  "forward",
+  "url",
+  "tabs",
+  "tab",
+  "close-tab",
+  "downloads",
+  "click",
+  "dblclick",
+  "hover",
+  "focus",
+  "check",
+  "uncheck",
+  "count",
+  "visible",
+  "enabled",
+  "value",
+  "text",
+  "bbox",
+  "fill",
+  "type",
+  "press",
+  "select",
+  "upload",
+  "scroll",
+  "wait",
+  "wait-url",
+  "wait-text",
+  "attr",
+  "snapshot",
+  "testids",
+  "screenshot",
+  "viewport",
+  "errors",
+  "events",
+  "eval",
+  "dialogs",
+  "storage",
+]);
 
 function featureFiles() {
   if (!existsSync(mapDir)) return [];
-  return readdirSync(mapDir).filter((f) => f.endsWith(".md") && f !== "README.md").sort();
+  return readdirSync(mapDir)
+    .filter((f) => f.endsWith(".md") && f !== "README.md")
+    .sort();
 }
 
 function mapCheck() {
   const problems = [];
   const ids = new Map();
-  const index = existsSync(join(mapDir, "README.md")) ? readFileSync(join(mapDir, "README.md"), "utf8") : "";
+  const index = existsSync(join(mapDir, "README.md"))
+    ? readFileSync(join(mapDir, "README.md"), "utf8")
+    : "";
   if (!index) problems.push("references/feature-map/README.md is missing");
   const files = featureFiles();
   for (const file of files) {
     const text = readFileSync(join(mapDir, file), "utf8");
-    if (!index.includes(`(${file})`) && !index.includes(`(./${file})`)) problems.push(`${file}: not linked from README.md`);
-    if (!/^# .+/m.test(text.split("\n")[0])) problems.push(`${file}: must start with an H1 title`);
+    if (!index.includes(`(${file})`) && !index.includes(`(./${file})`))
+      problems.push(`${file}: not linked from README.md`);
+    if (!/^# .+/m.test(text.split("\n")[0]))
+      problems.push(`${file}: must start with an H1 title`);
     const h2 = [...text.matchAll(/^## (.+)$/gm)].map((m) => m[1].trim());
-    if (JSON.stringify(h2) !== JSON.stringify(REQUIRED_H2)) problems.push(`${file}: H2 sections must be exactly ${REQUIRED_H2.join(" / ")} (found ${h2.join(" / ")})`);
-    const sub = text.split(/^## /m).find((s) => s.startsWith("Sub-features")) ?? "";
-    const declared = [...sub.matchAll(/`(F\d{2}\.[a-z0-9-]+)`/g)].map((m) => m[1]);
-    if (!declared.length) problems.push(`${file}: no sub-feature IDs like \`F01.example\``);
+    if (JSON.stringify(h2) !== JSON.stringify(REQUIRED_H2))
+      problems.push(
+        `${file}: H2 sections must be exactly ${REQUIRED_H2.join(" / ")} (found ${h2.join(" / ")})`,
+      );
+    const sub =
+      text.split(/^## /m).find((s) => s.startsWith("Sub-features")) ?? "";
+    const declared = [...sub.matchAll(/`(F\d{2}\.[a-z0-9-]+)`/g)].map(
+      (m) => m[1],
+    );
+    if (!declared.length)
+      problems.push(`${file}: no sub-feature IDs like \`F01.example\``);
     for (const id of declared) {
-      if (ids.has(id)) problems.push(`${file}: duplicate ID ${id} (also in ${ids.get(id)})`);
+      if (ids.has(id))
+        problems.push(`${file}: duplicate ID ${id} (also in ${ids.get(id)})`);
       ids.set(id, file);
     }
-    const drive = text.split(/^## /m).find((s) => s.startsWith("Driving it")) ?? "";
-    if (!/^Preconditions:/m.test(drive)) problems.push(`${file}: Driving section must start with "Preconditions:"`);
+    const drive =
+      text.split(/^## /m).find((s) => s.startsWith("Driving it")) ?? "";
+    if (!/^Preconditions:/m.test(drive))
+      problems.push(
+        `${file}: Driving section must start with "Preconditions:"`,
+      );
     for (const m of drive.matchAll(/`(F\d{2}\.[a-z0-9-]+)`/g)) {
-      if (!declared.includes(m[1]) && !/^F\d{2}\.[a-z0-9-]+$/.test(m[1])) problems.push(`${file}: bad ID reference ${m[1]}`);
+      if (!declared.includes(m[1]) && !/^F\d{2}\.[a-z0-9-]+$/.test(m[1]))
+        problems.push(`${file}: bad ID reference ${m[1]}`);
     }
-    for (const m of text.matchAll(/control-openhands ([a-z-]+)(?: ([a-z-]+))?/g)) {
-      if (!KNOWN_COMMANDS.has(m[1])) problems.push(`${file}: unknown command \`control-openhands ${m[1]}\``);
-      if (m[1] === "browser" && m[2] && !BROWSER_VERBS.has(m[2])) problems.push(`${file}: unknown browser verb \`${m[2]}\``);
+    for (const m of text.matchAll(
+      /control-openhands ([a-z-]+)(?: ([a-z-]+))?/g,
+    )) {
+      if (!KNOWN_COMMANDS.has(m[1]))
+        problems.push(`${file}: unknown command \`control-openhands ${m[1]}\``);
+      if (m[1] === "browser" && m[2] && !BROWSER_VERBS.has(m[2]))
+        problems.push(`${file}: unknown browser verb \`${m[2]}\``);
     }
     for (const m of text.matchAll(/\]\((\.\.\/[^)#]+)/g)) {
       const target = resolve(mapDir, m[1]);
@@ -1362,7 +2059,8 @@ function mapCheck() {
     }
   }
   for (const m of index.matchAll(/\]\(\.?\/?([A-Za-z0-9-]+\.md)\)/g)) {
-    if (!existsSync(join(mapDir, m[1]))) problems.push(`README.md: links missing file ${m[1]}`);
+    if (!existsSync(join(mapDir, m[1])))
+      problems.push(`README.md: links missing file ${m[1]}`);
   }
   return { files: files.length, ids: ids.size, problems };
 }
@@ -1373,7 +2071,9 @@ function routePaths() {
   // route("settings", "routes/settings.tsx", [ ...children ]) nests by brackets.
   const parents = [];
   let lastRoutePath;
-  const tokens = source.matchAll(/(route|index)\(\s*(?:"([^"]*)"\s*,\s*)?"(routes\/[^"]+)"|\[|\]/g);
+  const tokens = source.matchAll(
+    /(route|index)\(\s*(?:"([^"]*)"\s*,\s*)?"(routes\/[^"]+)"|\[|\]/g,
+  );
   for (const t of tokens) {
     if (t[0] === "[") {
       parents.push(lastRoutePath);
@@ -1385,7 +2085,10 @@ function routePaths() {
       continue;
     }
     const prefix = parents.filter(Boolean).join("/");
-    const path = t[1] === "index" ? `/${prefix}` : `/${[prefix, t[2]].filter(Boolean).join("/")}`;
+    const path =
+      t[1] === "index"
+        ? `/${prefix}`
+        : `/${[prefix, t[2]].filter(Boolean).join("/")}`;
     routes.push({ path: path.replace(/\/+/g, "/"), file: `src/${t[3]}` });
     lastRoutePath = t[1] === "route" ? t[2] : undefined;
   }
@@ -1393,19 +2096,35 @@ function routePaths() {
 }
 
 function mapCoverage() {
-  const corpus = featureFiles().map((f) => readFileSync(join(mapDir, f), "utf8")).join("\n");
+  const corpus = featureFiles()
+    .map((f) => readFileSync(join(mapDir, f), "utf8"))
+    .join("\n");
   const routes = routePaths().map((r) => {
     const literal = r.path.replace(/\/:\w+\??/g, "/:").replace(/\*$/, "");
-    const pattern = new RegExp(`\`${literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\\\/:/g, "/:?[A-Za-z]*")}`);
+    const pattern = new RegExp(
+      `\`${literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\\\/:/g, "/:?[A-Za-z]*")}`,
+    );
     return { ...r, mapped: pattern.test(corpus) || corpus.includes(r.file) };
   });
-  const featureDirs = existsSync(join(repoRoot, "src", "components", "features"))
-    ? readdirSync(join(repoRoot, "src", "components", "features"), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name)
+  const featureDirs = existsSync(
+    join(repoRoot, "src", "components", "features"),
+  )
+    ? readdirSync(join(repoRoot, "src", "components", "features"), {
+        withFileTypes: true,
+      })
+        .filter((d) => d.isDirectory())
+        .map((d) => d.name)
     : [];
-  const components = featureDirs.map((name) => ({ dir: `src/components/features/${name}`, mapped: corpus.includes(`components/features/${name}`) }));
+  const components = featureDirs.map((name) => ({
+    dir: `src/components/features/${name}`,
+    mapped: corpus.includes(`components/features/${name}`),
+  }));
   return {
     routes: { total: routes.length, unmapped: routes.filter((r) => !r.mapped) },
-    featureComponentDirs: { total: components.length, unmapped: components.filter((c) => !c.mapped).map((c) => c.dir) },
+    featureComponentDirs: {
+      total: components.length,
+      unmapped: components.filter((c) => !c.mapped).map((c) => c.dir),
+    },
   };
 }
 
@@ -1419,7 +2138,9 @@ async function cmdMap({ positional }) {
   }
   if (sub === "coverage") {
     const result = mapCoverage();
-    const ok = result.routes.unmapped.length === 0 && result.featureComponentDirs.unmapped.length === 0;
+    const ok =
+      result.routes.unmapped.length === 0 &&
+      result.featureComponentDirs.unmapped.length === 0;
     out({ ok, ...result });
     if (!ok) process.exitCode = 1;
     return;
@@ -1428,8 +2149,10 @@ async function cmdMap({ positional }) {
     const ids = [];
     for (const file of featureFiles()) {
       const text = readFileSync(join(mapDir, file), "utf8");
-      const sub2 = text.split(/^## /m).find((s) => s.startsWith("Sub-features")) ?? "";
-      for (const m of sub2.matchAll(/^- `(F\d{2}\.[a-z0-9-]+)`:?\s*(.*)$/gm)) ids.push({ id: m[1], file, summary: m[2].slice(0, 100) });
+      const sub2 =
+        text.split(/^## /m).find((s) => s.startsWith("Sub-features")) ?? "";
+      for (const m of sub2.matchAll(/^- `(F\d{2}\.[a-z0-9-]+)`:?\s*(.*)$/gm))
+        ids.push({ id: m[1], file, summary: m[2].slice(0, 100) });
     }
     out({ ok: true, count: ids.length, ids });
     return;
@@ -1438,7 +2161,10 @@ async function cmdMap({ positional }) {
     out({ ok: true, routes: routePaths() });
     return;
   }
-  usage("Usage: control-openhands map check|coverage|ids|routes", "control-openhands map coverage");
+  usage(
+    "Usage: control-openhands map check|coverage|ids|routes",
+    "control-openhands map coverage",
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -1632,7 +2358,12 @@ const COMMANDS = {
 
 async function main() {
   const [command, ...rest] = process.argv.slice(2);
-  if (!command || command === "--help" || command === "-h" || command === "help") {
+  if (
+    !command ||
+    command === "--help" ||
+    command === "-h" ||
+    command === "help"
+  ) {
     process.stdout.write(HELP[rest[0]] ?? HELP._);
     return;
   }
@@ -1648,11 +2379,15 @@ async function main() {
 
 main().catch((error) => {
   if (error instanceof CliError) {
-    out({ ok: false, error: error.message, hint: error.hint, ...(error.extra ?? {}) });
+    out({
+      ok: false,
+      error: error.message,
+      hint: error.hint,
+      ...(error.extra ?? {}),
+    });
     process.exitCode = error.code;
     return;
   }
   out({ ok: false, error: String(error?.stack ?? error) });
   process.exitCode = 1;
 });
-

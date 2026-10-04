@@ -101,4 +101,3 @@ export function buildLocator(root, selector) {
     .split(/\s+>>\s+/)
     .reduce((scope, segment) => applySegment(scope, segment), root);
 }
-
