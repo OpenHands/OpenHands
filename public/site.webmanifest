@@ -1,6 +1,6 @@
 {
-  "name": "OpenHands Agent Canvas",
-  "short_name": "Agent Canvas",
+  "name": "OpenHands",
+  "short_name": "OpenHands",
   "description": "The self-hosted developer control center for coding agents and automations.",
   "lang": "en",
   "dir": "ltr",
