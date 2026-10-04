@@ -14,6 +14,11 @@ const baseAcp = {
   switchLlmToolSupportedOnProfile: true,
   toolConcurrencyField: undefined,
   toolConcurrency: "",
+  mcpMode: "standard" as const,
+  selectedMcpServers: [] as string[],
+  secretsMode: "standard" as const,
+  selectedSecrets: [] as string[],
+  secretRefsSupportedOnProfile: true,
 };
 
 const switchLlmToolField: SettingsFieldSchema = {
@@ -48,10 +53,12 @@ describe("buildAgentProfileFields — ACP", () => {
     const fields = buildAgentProfileFields(baseAcp);
     expect(fields).toEqual({
       agent_kind: "acp",
+      mcp_server_refs: null,
       acp_server: "claude-code",
       acp_model: "claude-opus-4-8",
       acp_command: null,
       acp_args: null,
+      secret_refs: null,
     });
   });
 
@@ -104,12 +111,19 @@ describe("buildAgentProfileFields — OpenHands", () => {
     switchLlmToolSupportedOnProfile: true,
     toolConcurrencyField: undefined,
     toolConcurrency: "",
+    mcpMode: "standard" as const,
+    selectedMcpServers: [] as string[],
+    secretsMode: "standard" as const,
+    selectedSecrets: [] as string[],
+    secretRefsSupportedOnProfile: true,
   };
 
   it("passes through enable_sub_agents and omits concurrency when the field is absent", () => {
     expect(buildAgentProfileFields(baseOh)).toEqual({
       agent_kind: "openhands",
+      mcp_server_refs: null,
       enable_sub_agents: true,
+      secret_refs: null,
     });
   });
 
@@ -195,5 +209,126 @@ describe("buildAgentProfileFields — OpenHands", () => {
         toolConcurrency: "abc",
       }),
     ).toThrow();
+  });
+});
+
+describe("buildAgentProfileFields — mcp_server_refs", () => {
+  const baseOh = {
+    isAcp: false,
+    selectedPreset: "custom",
+    isDefaultProviderCommand: false,
+    commandTokens: [],
+    acpModel: "",
+    subAgentsEnabled: false,
+    switchLlmToolField: undefined,
+    switchLlmToolEnabled: false,
+    switchLlmToolSupportedOnProfile: true,
+    toolConcurrencyField: undefined,
+    toolConcurrency: "",
+    mcpMode: "standard" as const,
+    selectedMcpServers: [],
+    secretsMode: "standard" as const,
+    selectedSecrets: [] as string[],
+    secretRefsSupportedOnProfile: true,
+  };
+
+  it("emits null in standard mode, so the profile inherits every server", () => {
+    expect(buildAgentProfileFields(baseOh).mcp_server_refs).toBeNull();
+    expect(
+      buildAgentProfileFields({ ...baseOh, isAcp: true }).mcp_server_refs,
+    ).toBeNull();
+  });
+
+  it("emits the selection in custom mode", () => {
+    const selected = ["fetch", "playwright"];
+    expect(
+      buildAgentProfileFields({
+        ...baseOh,
+        mcpMode: "custom",
+        selectedMcpServers: selected,
+      }).mcp_server_refs,
+    ).toEqual(selected);
+  });
+
+  it("distinguishes an empty selection from standard — [] means no servers", () => {
+    expect(
+      buildAgentProfileFields({ ...baseOh, mcpMode: "custom" }).mcp_server_refs,
+    ).toEqual([]);
+  });
+
+  it("rides both variants, since the field lives on the profile base", () => {
+    const acp = buildAgentProfileFields({
+      ...baseOh,
+      isAcp: true,
+      mcpMode: "custom",
+      selectedMcpServers: ["fetch"],
+    });
+    expect(acp.agent_kind).toBe("acp");
+    expect(acp.mcp_server_refs).toEqual(["fetch"]);
+  });
+});
+
+describe("buildAgentProfileFields — secret scope", () => {
+  const base = {
+    isAcp: false,
+    selectedPreset: "custom",
+    isDefaultProviderCommand: false,
+    commandTokens: [] as string[],
+    acpModel: "",
+    subAgentsEnabled: false,
+    switchLlmToolField: undefined,
+    switchLlmToolEnabled: false,
+    switchLlmToolSupportedOnProfile: true,
+    toolConcurrencyField: undefined,
+    toolConcurrency: "",
+    secretsMode: "standard" as const,
+    selectedSecrets: [] as string[],
+    secretRefsSupportedOnProfile: true,
+    mcpMode: "standard" as const,
+    selectedMcpServers: [] as string[],
+  };
+
+  it("persists null when every secret is allowed", () => {
+    expect(buildAgentProfileFields(base)).toMatchObject({ secret_refs: null });
+  });
+
+  it("persists the selection when secrets are scoped", () => {
+    const fields = buildAgentProfileFields({
+      ...base,
+      secretsMode: "custom",
+      selectedSecrets: ["DATADOG_API_KEY"],
+    });
+    expect(fields).toMatchObject({ secret_refs: ["DATADOG_API_KEY"] });
+  });
+
+  it("persists an empty list when no secret is selected", () => {
+    expect(
+      buildAgentProfileFields({ ...base, secretsMode: "custom" }),
+    ).toMatchObject({ secret_refs: [] });
+  });
+
+  it("rides the ACP variant too — it is a base-model field", () => {
+    const fields = buildAgentProfileFields({
+      ...base,
+      isAcp: true,
+      selectedPreset: "claude-code",
+      commandTokens: ["npx", "claude-code-acp"],
+      secretsMode: "custom",
+      selectedSecrets: ["DATADOG_API_KEY"],
+    });
+    expect(fields).toMatchObject({
+      agent_kind: "acp",
+      secret_refs: ["DATADOG_API_KEY"],
+    });
+  });
+
+  it("omits the key on a backend whose profile model predates it", () => {
+    const fields = buildAgentProfileFields({
+      ...base,
+      secretsMode: "custom",
+      selectedSecrets: ["DATADOG_API_KEY"],
+      secretRefsSupportedOnProfile: false,
+    });
+    expect(fields).not.toHaveProperty("secret_refs");
   });
 });
