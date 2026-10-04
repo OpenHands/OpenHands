@@ -10,12 +10,14 @@ value even when its screenshot shows only bullets.
 Record run ID and UTC interval, repository, BASE/TARGET full SHAs, baseline report,
 checkout cleanliness, build command, Node/browser/OS/font/theme versions, backend
 SDK and automation versions, actual ports, authorization/spend scope, and selected
-backend/platform capabilities. Explain bootstrap or comparison gaps.
+backend/platform capabilities. `control-openhands status` and `doctor` print most
+of these. Explain bootstrap or comparison gaps.
 
 ## Coverage ledger
 
 Use one row per exercised or required sub-feature and entry point. Do not roll up
-one passing example into a pass for its whole family.
+one passing example into a pass for its whole family. Record rows as you go with
+`control-openhands evidence add` and render them with `control-openhands evidence report`.
 
 | Feature/check + entry point | Revision/backend/viewport | Action or command | Expected → actual | Result | Evidence |
 |---|---|---|---|---|---|

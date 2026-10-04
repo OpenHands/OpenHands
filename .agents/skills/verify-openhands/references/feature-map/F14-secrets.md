@@ -1,0 +1,50 @@
+# F14 — Secrets
+
+Secrets are named values the agent can use during conversations. A user lists,
+adds, edits and deletes them under Settings → Secrets; saved values are never
+shown again, and every new conversation receives them as environment variables.
+
+Source: `src/routes/secrets-settings.tsx`, `src/components/features/settings/secrets-settings/`, `src/api/secrets-service.ts`.
+
+## Sub-features
+
+- `F14.list`: the Secrets page lists each secret's name and description with Edit and Delete actions; the launcher-seeded `OPENHANDS_AUTOMATION_API_KEY` is always present.
+- `F14.create`: adding a secret persists it; it is listed after a reload.
+- `F14.create-validation`: duplicate names, names that break `^[a-zA-Z][a-zA-Z0-9_]{0,63}$` and empty values are refused with a message.
+- `F14.edit`: editing the description with the value left blank keeps the stored value; Save stays disabled until something changes.
+- `F14.delete`: deleting asks for confirmation; Cancel keeps the row, Confirm removes it for good.
+- `F14.agent-access`: a conversation started after the secret was saved sees it as an environment variable.
+- `F14.phone`: the page and its forms fit a 390 px viewport without horizontal overflow.
+
+## How to get to it (user POV)
+
+- Sidebar settings gear (`backend-selector-settings-link`), then **Secrets** in the settings navigation (`sidebar-settings-/settings/secrets`).
+- Direct URL `/settings/secrets`.
+- Command menu (`Control+k` or `Meta+k`, or `command-menu-trigger` in the sidebar): search "Secrets", choose **Secrets settings**.
+
+## Driving it with control-openhands
+
+Preconditions:
+
+- Baseline state (launched, doctored, `onboard --skip` done).
+- No secret named `QA_TMP_SECRET` or `QA_AGENT_SECRET` exists (`control-openhands api GET /api/settings/secrets`).
+- `F14.agent-access` needs an active LLM profile (`control-openhands llm preset deepseek`).
+
+- **Open the list (`F14.list`).** Navigate from the sidebar. Run `control-openhands browser click 'testid=backend-selector-settings-link'`, `control-openhands browser click 'testid=sidebar-settings-/settings/secrets'`, then `control-openhands browser count 'testid=secret-item >> has-text=OPENHANDS_AUTOMATION_API_KEY'`. The count is `1` and the URL is `/settings/secrets`.
+- **Command-menu entry (`F14.list`).** From `/` run `control-openhands browser press Control+k`, `control-openhands browser type 'testid=command-menu >> role=combobox' Secrets`, `control-openhands browser press Enter`, then `control-openhands browser url`. The URL ends in `/settings/secrets`.
+- **Create (`F14.create`).** Run `control-openhands browser click 'testid=add-secret-button'`, `control-openhands browser fill 'testid=add-secret-form >> testid=name-input' QA_TMP_SECRET`, `control-openhands browser fill 'testid=add-secret-form >> testid=value-input' dummy-value-123`, `control-openhands browser fill 'testid=add-secret-form >> testid=description-input' 'QA dummy'`, `control-openhands browser click 'testid=add-secret-form >> testid=submit-button'`, then `control-openhands browser reload` and `control-openhands browser count 'testid=secret-item >> has-text=QA_TMP_SECRET'`. The count is `1` after the reload.
+- **Duplicate name (`F14.create-validation`).** Run `control-openhands browser click 'testid=add-secret-button'`, fill `name-input` with `QA_TMP_SECRET` and `value-input` with `other` as above, click `testid=add-secret-form >> testid=submit-button`, then `control-openhands browser snapshot 'testid=add-secret-form'`. The snapshot shows the paragraph `Secret already exists` and the form stays open.
+- **Invalid name (`F14.create-validation`).** In the same form run `control-openhands browser fill 'testid=add-secret-form >> testid=name-input' 'bad name!'`, click submit, then `control-openhands browser eval "document.querySelector('[data-testid=add-secret-form] [data-testid=name-input]').validationMessage"`. The value is the browser's pattern message (`Please match the requested format.` in Chromium) and no secret is created (`api GET /api/settings/secrets`). Close with `control-openhands browser click 'testid=add-secret-form >> testid=cancel-button'`.
+- **Edit keeps the value (`F14.edit`).** Run `control-openhands browser click 'testid=secret-item >> has-text=QA_TMP_SECRET >> testid=edit-secret-button'`, `control-openhands browser value 'testid=edit-secret-form >> testid=value-input'` (empty) and `control-openhands browser enabled 'testid=edit-secret-form >> testid=submit-button'` (`false`). Fill `testid=edit-secret-form >> testid=description-input` with `QA dummy edited`; `enabled` turns `true`. Click `testid=edit-secret-form >> testid=submit-button`, `control-openhands browser reload`, then `control-openhands browser text 'testid=secret-item >> has-text=QA_TMP_SECRET'`. The row reads `QA_TMP_SECRET	QA dummy edited`.
+- **Delete with confirmation (`F14.delete`).** Run `control-openhands browser click 'testid=secret-item >> has-text=QA_TMP_SECRET >> testid=delete-secret-button'`; the dialog `testid=confirmation-modal` reads `Are you sure you want to delete this key?`. Run `control-openhands browser click 'testid=confirmation-modal >> testid=cancel-button'`; the row count stays `1`. Repeat the delete click, then `control-openhands browser click 'testid=confirmation-modal >> testid=confirm-button'`, `control-openhands browser reload` and `control-openhands browser count 'testid=secret-item >> has-text=QA_TMP_SECRET'`. The count is `0`.
+- **Agent receives the secret (`F14.agent-access`).** Create `QA_AGENT_SECRET` with value `qa-dummy-4821` through the form as in Create. Run `control-openhands conversation start --prompt "Run exactly this command and reply with only its output: python3 -c \"import os; v=os.environ.get('QA_AGENT_SECRET',''); print(len(v), v[-4:])\"" --wait --timeout 240`, then `control-openhands conversation events <id> --kinds ObservationEvent,MessageEvent`. The observation and the agent's reply are `13 4821`. Delete `QA_AGENT_SECRET` afterwards through the UI.
+- **Phone layout (`F14.phone`).** Run `control-openhands browser viewport phone`, `control-openhands browser bbox 'testid=secrets-settings-screen'` and `control-openhands browser screenshot --feature F14.phone --name list`. `insideViewport` is `true` and `pageHorizontalOverflow` is `false`; the screenshot shows the table with Edit and Delete icons. Return with `control-openhands browser viewport desktop`.
+
+## Gotchas
+
+- The value editor is a plain `textarea`, not a password field: use dummy values only, and never ask the agent to print a real secret.
+- Edit forms intentionally show an empty value; that is not data loss.
+- The invalid-name check is native browser validation. It shows a tooltip that screenshots do not capture, and it leaves any earlier `Secret already exists` paragraph on screen. Assert with `validationMessage` and the API, not the paragraph.
+- Secrets reach only conversations started after the save. Reuse an older conversation and the variable is missing.
+- At 390 px the name column truncates long names (`OPEN…`); use `browser text` on the row rather than the screenshot to read a name.
+- `OPENHANDS_AUTOMATION_API_KEY` is seeded by the launcher for automations; deleting it breaks F18/F19 runs in the same stack.
