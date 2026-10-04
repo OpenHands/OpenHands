@@ -2,6 +2,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { readFileSync } from "node:fs";
+import { COLOR_THEMES } from "#/themes/color-themes";
+import { AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES } from "#/styles/agent-server-ui-style-scope";
+
 import { BackendSyncedSettingsBadge } from "#/components/features/settings/backend-synced-settings-badge";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import {
@@ -87,6 +91,69 @@ describe("BackendSyncedSettingsBadge", () => {
     window.localStorage.clear();
     __resetActiveStoreForTests();
   });
+
+  it.each(["openhands-neutral", "light-plus", "solarized-light"] as const)(
+    "keeps the rendered informational text readable in %s",
+    (key) => {
+      renderBadge();
+      const text = screen.getByTestId(
+        "backend-synced-settings-badge",
+      ).firstElementChild!;
+      const css = readFileSync("src/tailwind.css", "utf8");
+      const theme = COLOR_THEMES[key];
+      const tokens: Record<string, string> = {
+        ...AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES,
+        ...theme.scale,
+        ...theme.tokens,
+      };
+      const resolve = (value: string): string => {
+        const variable = /^var\((--[\w-]+)\)$/.exec(value);
+        return variable ? resolve(tokens[variable[1]]) : value;
+      };
+      // Resolve the utility actually rendered, so reverting the component to
+      // text-text-dim fails this test even if the palette remains unchanged.
+      const colors = Array.from(text.classList).flatMap((name) => {
+        if (!name.startsWith("text-")) return [];
+        const match = css.match(
+          new RegExp(`--color-${name.slice(5)}: ([^;]+);`),
+        );
+        return match ? [resolve(match[1])] : [];
+      });
+      expect(colors).toHaveLength(1);
+      const luminance = (hex: string) => {
+        const rgb = [1, 3, 5].map((offset) => {
+          const c = parseInt(hex.slice(offset, offset + 2), 16) / 255;
+          return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+        });
+        return rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
+      };
+      // The shared badge appears in navigation, hubs, and inset drawers.
+      for (const background of [
+        "--oh-background",
+        "--oh-surface",
+        "--oh-surface-deep",
+      ]) {
+        const [low, high] = [
+          luminance(colors[0]),
+          luminance(resolve(tokens[background])),
+        ].sort((a, b) => a - b);
+        const ratio = (high + 0.05) / (low + 0.05);
+        if (key === "openhands-neutral") {
+          expect(ratio).toBeGreaterThanOrEqual(4.5);
+        } else {
+          // Light palette remediation belongs to #17730. This local fix must
+          // improve, rather than regress, their existing informational text.
+          const [oldLow, oldHigh] = [
+            luminance(resolve(tokens["--oh-text-dim"])),
+            luminance(resolve(tokens[background])),
+          ].sort((a, b) => a - b);
+          expect(ratio).toBeGreaterThanOrEqual(
+            (oldHigh + 0.05) / (oldLow + 0.05),
+          );
+        }
+      }
+    },
+  );
 
   it("renders the seeded default local backend label and host URL without HTML-escaping", () => {
     // Arrange — no explicit setRegisteredBackends() in this test; the
