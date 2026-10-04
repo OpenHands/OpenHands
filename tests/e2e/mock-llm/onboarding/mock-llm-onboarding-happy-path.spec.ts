@@ -68,8 +68,7 @@ test.describe("onboarding happy path", () => {
   });
 
   // TODO: Restore after the post-launch mock reply reaches the conversation.
-  // No dedicated root-cause issue exists for the reply timeout yet.
-  // https://github.com/OpenHands/OpenHands/issues/17872 is the aggregate tracker.
+  // https://github.com/OpenHands/OpenHands/issues/17884
   test.fixme("completes the full onboarding flow and launches a conversation", async ({
     page,
     request,
