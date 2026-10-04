@@ -196,6 +196,26 @@ describe("ProfileActionsMenu", () => {
     expect(handleClose).toHaveBeenCalledTimes(1);
   });
 
+  it("does not call onClose when mousedown lands on the anchor trigger", () => {
+    const handleClose = vi.fn();
+    const anchorRef = { current: document.createElement("button") };
+    anchorRef.current.setAttribute("data-testid", "profile-menu-trigger");
+    document.body.appendChild(anchorRef.current);
+
+    render(
+      <ProfileActionsMenu
+        {...defaultProps}
+        onClose={handleClose}
+        anchorRef={anchorRef}
+      />,
+    );
+
+    fireEvent.mouseDown(anchorRef.current);
+
+    expect(handleClose).not.toHaveBeenCalled();
+    anchorRef.current.remove();
+  });
+
   it("calls onClose when Escape key is pressed", () => {
     const handleClose = vi.fn();
 

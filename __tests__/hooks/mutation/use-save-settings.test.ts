@@ -41,9 +41,9 @@ describe("useSaveSettings - MCP tracking", () => {
 
     await result.current.mutateAsync({
       mcp_config: {
-        sse_servers: [{ url: "http://sse1" }, { url: "http://sse2" }],
-        stdio_servers: [{ name: "stdio1", command: "cmd", args: [] }],
-        shttp_servers: [],
+        sse1: { transport: "sse", url: "http://sse1" },
+        sse2: { transport: "sse", url: "http://sse2" },
+        stdio1: { transport: "stdio", command: "cmd", args: [] },
       },
     });
 
@@ -66,11 +66,7 @@ describe("useSaveSettings - MCP tracking", () => {
   });
 
   it("does not call trackMcpConfigUpdated when mcp_config reference is unchanged", async () => {
-    const sharedConfig = {
-      sse_servers: [],
-      stdio_servers: [],
-      shttp_servers: [],
-    };
+    const sharedConfig = {};
     useSettingsMock.mockReturnValue({
       data: { mcp_config: sharedConfig },
     });
@@ -91,7 +87,7 @@ describe("useSaveSettings - MCP tracking", () => {
     });
 
     await result.current.mutateAsync({
-      mcp_config: { sse_servers: [], stdio_servers: [], shttp_servers: [] },
+      mcp_config: {},
     });
 
     await waitFor(() => {

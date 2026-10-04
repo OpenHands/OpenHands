@@ -236,9 +236,7 @@ test.describe("skill loading: project, user, and deletion", () => {
             const body = (await resp.json()) as { items?: unknown[] };
             for (const item of body.items ?? []) {
               const e = item as Record<string, unknown>;
-              const skills =
-                (e.activated_skills as string[] | undefined) ??
-                (e.activated_microagents as string[] | undefined);
+              const skills = e.activated_skills as string[] | undefined;
               if (skills?.includes(PROJECT_SKILL_NAME)) return "FOUND";
             }
             return "NOT_FOUND";
@@ -306,9 +304,7 @@ test.describe("skill loading: project, user, and deletion", () => {
             const body = (await resp.json()) as { items?: unknown[] };
             for (const item of body.items ?? []) {
               const e = item as Record<string, unknown>;
-              const skills =
-                (e.activated_skills as string[] | undefined) ??
-                (e.activated_microagents as string[] | undefined);
+              const skills = e.activated_skills as string[] | undefined;
               if (skills?.includes(USER_SKILL_NAME)) return "FOUND";
             }
             return "NOT_FOUND";
@@ -381,9 +377,7 @@ test.describe("skill loading: project, user, and deletion", () => {
 
             for (const item of items) {
               const e = item as Record<string, unknown>;
-              const skills =
-                (e.activated_skills as string[] | undefined) ??
-                (e.activated_microagents as string[] | undefined);
+              const skills = e.activated_skills as string[] | undefined;
               if (skills?.includes(USER_SKILL_NAME))
                 return `UNEXPECTEDLY_FOUND`;
             }

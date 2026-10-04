@@ -14,18 +14,26 @@ const mockProviders: LLMProvider[] = [
   { name: "vertex_ai", verified: false },
 ];
 
+const model = (partial: Partial<LLMModel> & Pick<LLMModel, "name">): LLMModel => ({
+  provider: null,
+  verified: false,
+  free: false,
+  default: false,
+  ...partial,
+});
+
 const mockModelsByProvider: Record<string, LLMModel[]> = {
   openai: [
-    { provider: "openai", name: "gpt-4o", verified: true },
-    { provider: "openai", name: "gpt-4o-mini", verified: true },
+    model({ provider: "openai", name: "gpt-4o", verified: true }),
+    model({ provider: "openai", name: "gpt-4o-mini", verified: true }),
   ],
   azure: [
-    { provider: "azure", name: "ada", verified: false },
-    { provider: "azure", name: "gpt-35-turbo", verified: false },
+    model({ provider: "azure", name: "ada" }),
+    model({ provider: "azure", name: "gpt-35-turbo" }),
   ],
   vertex_ai: [
-    { provider: "vertex_ai", name: "chat-bison", verified: false },
-    { provider: "vertex_ai", name: "chat-bison-32k", verified: false },
+    model({ provider: "vertex_ai", name: "chat-bison" }),
+    model({ provider: "vertex_ai", name: "chat-bison-32k" }),
   ],
 };
 

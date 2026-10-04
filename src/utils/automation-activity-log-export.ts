@@ -21,6 +21,10 @@ const CSV_COLUMNS = [
   "conversation_id",
   "conversation_url",
   "error",
+  // Appended rather than grouped with the other run metrics so existing
+  // consumers that read the CSV by column position keep working.
+  "cost",
+  "phase",
 ] as const;
 
 export function getActivityLogExportFilename(
@@ -98,6 +102,23 @@ export function mapAutomationRunToExportRow(
       conversationBaseUrl,
     ),
     error: run.error_detail,
+    // Exports carry the raw number and leave formatting to the consumer; the
+    // Activity Log row is the only place that renders it as USD.
+    cost: run.cost ?? null,
+    // Deliberately not filtered through `shouldShowRunPhase`: that predicate
+    // decides what is worth a user's attention on screen, and hides the phase
+    // of a run whose status already says everything. An export is a record,
+    // not a screen — a completed run's last phase is real data, and dropping
+    // it here would make the phase of a run that finished indistinguishable
+    // from one that never reported a phase at all.
+    //
+    // Falling back to the label: without it, a phase reported with only a
+    // label would export as an empty cell, indistinguishable from no phase.
+    // Trimmed rather than nullish-coalesced: the service stores a
+    // whitespace-only field as sent — it rejects only a phase blank on
+    // *both* — so `??` would let a blank code suppress a real label, which
+    // is exactly the empty cell this fallback exists to prevent.
+    phase: run.phase_code?.trim() || run.phase_label?.trim() || null,
   };
 }
 

@@ -31,11 +31,11 @@ export function SettingsDesktopSidebar({
     <aside
       data-testid="settings-navbar-desktop"
       className={cn(
-        "hidden md:flex md:w-[260px] md:shrink-0 md:flex-col md:gap-2",
+        "hidden md:flex md:w-65 md:shrink-0 md:flex-col md:gap-2",
         "md:sticky md:top-8 md:self-start md:pl-8",
       )}
     >
-      <Typography.Text className="px-2 text-sm font-normal text-white">
+      <Typography.Text className="px-2 text-sm font-normal text-contrast">
         {t(I18nKey.SETTINGS$TITLE)}
       </Typography.Text>
       <div className="flex flex-col gap-0.5 pt-0.5">
@@ -52,7 +52,7 @@ export function SettingsDesktopSidebar({
         <IntegrationsSettingsLink />
         <CloudSettingsLink />
       </div>
-      <div className="px-2 pt-3">
+      <div className="flex flex-col gap-2 px-2 pt-3">
         <AgentCanvasUpdateCard />
       </div>
       <div className="px-2 pt-3">

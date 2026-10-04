@@ -11,6 +11,7 @@ import type { Backend } from "#/api/backend-registry/types";
 import { server } from "#/mocks/node";
 import { resetTestHandlersMockSettings } from "#/mocks/settings-handlers";
 import type { Settings } from "#/types/settings";
+import { buildMcpServerPatch } from "#/utils/mcp-config";
 
 const mockSaveCloudSettings = vi.fn();
 const mockFetchCloudSettings = vi.fn();
@@ -52,7 +53,7 @@ describe("SettingsService", () => {
 
     // Should have normalized settings with derived fields
     expect(settings.agent).toBe("CodeActAgent");
-    expect(settings.llm_model).toBe("openhands/glm-5.2");
+    expect(settings.llm_model).toBe("openai/gpt-5.6-sol");
     expect(settings.confirmation_mode).toBe(false);
     expect(settings.security_analyzer).toBe("llm");
   });
@@ -318,13 +319,7 @@ describe("SettingsService", () => {
     expect(settings.provider_tokens_set).toEqual({});
   });
 
-  it("pre-clears mcp_config before writing the new value on the local backend", async () => {
-    // The agent-server PATCH applies agent_settings_diff via deep-merge,
-    // which cannot remove name-keyed entries from mcp_config.
-    // saveSettings must compensate by sending a {mcp_config: null} PATCH
-    // first so the follow-up PATCH effectively replaces the field. Without
-    // this, deleting a server leaves stale MCP server keys behind and
-    // shifted indices produce duplicate entries.
+  it("sends an mcp_config merge-patch in one request on the local backend", async () => {
     const patchBodies: Array<Record<string, unknown>> = [];
     server.use(
       http.patch("*/api/settings", async ({ request }) => {
@@ -344,10 +339,131 @@ describe("SettingsService", () => {
     });
 
     expect(patchBodies).toEqual([
-      { agent_settings_diff: { mcp_config: null } },
       {
         agent_settings_diff: {
           mcp_config: { only: { url: "https://x.example" } },
+        },
+      },
+    ]);
+  });
+
+  it("creates, patches, and deletes one named MCP entry with one local request each", async () => {
+    const requests: Array<{
+      method: string;
+      settingsKey: string;
+      body?: Record<string, unknown>;
+    }> = [];
+    const response = {
+      agent_settings: {},
+      conversation_settings: {},
+      llm_api_key_is_set: false,
+    };
+    server.use(
+      http.post(
+        "*/api/settings/mcp/:settingsKey",
+        async ({ params, request }) => {
+          requests.push({
+            method: "POST",
+            settingsKey: String(params.settingsKey),
+            body: (await request.json()) as Record<string, unknown>,
+          });
+          return HttpResponse.json(response, { status: 201 });
+        },
+      ),
+      http.patch(
+        "*/api/settings/mcp/:settingsKey",
+        async ({ params, request }) => {
+          requests.push({
+            method: "PATCH",
+            settingsKey: String(params.settingsKey),
+            body: (await request.json()) as Record<string, unknown>,
+          });
+          return HttpResponse.json(response);
+        },
+      ),
+      http.delete("*/api/settings/mcp/:settingsKey", ({ params }) => {
+        requests.push({
+          method: "DELETE",
+          settingsKey: String(params.settingsKey),
+        });
+        return HttpResponse.json(response);
+      }),
+    );
+
+    await SettingsService.createMcpServer("docs", {
+      transport: "http",
+      url: "https://docs.example/mcp",
+    });
+    await SettingsService.patchMcpServer("github", {
+      url: "https://github.example/v2/mcp",
+    });
+    await SettingsService.deleteMcpServer("old");
+
+    expect(requests).toEqual([
+      {
+        method: "POST",
+        settingsKey: "docs",
+        body: {
+          transport: "http",
+          url: "https://docs.example/mcp",
+        },
+      },
+      {
+        method: "PATCH",
+        settingsKey: "github",
+        body: { url: "https://github.example/v2/mcp" },
+      },
+      {
+        method: "DELETE",
+        settingsKey: "old",
+      },
+    ]);
+  });
+
+  it("sends auth replacement tombstones to the named MCP endpoint", async () => {
+    const patchBodies: Array<Record<string, unknown>> = [];
+    server.use(
+      http.patch("*/api/settings/mcp/:settingsKey", async ({ request }) => {
+        patchBodies.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json({
+          agent_settings: {},
+          conversation_settings: {},
+          llm_api_key_is_set: false,
+        });
+      }),
+    );
+
+    await SettingsService.patchMcpServer(
+      "mail",
+      buildMcpServerPatch(
+        {
+          transport: "http",
+          url: "https://mail.example/mcp",
+          auth: {
+            strategy: "oauth2",
+            authentication: { type: "oauth", scopes: "mail.read" },
+            state: { tokens: { access_token: "**********" } },
+          },
+        },
+        {
+          id: "mail",
+          type: "shttp",
+          name: "mail",
+          url: "https://mail.example/mcp",
+          auth: { strategy: "bearer", value: "replacement-token" },
+        },
+      ),
+    );
+
+    expect(patchBodies).toEqual([
+      {
+        transport: "http",
+        url: "https://mail.example/mcp",
+        auth: {
+          strategy: "bearer",
+          value: "replacement-token",
+          authentication: null,
+          state: null,
         },
       },
     ]);
@@ -404,7 +520,7 @@ describe("SettingsService", () => {
     ]);
   });
 
-  it("pre-clears mcp_config on the cloud backend before writing the new value", async () => {
+  it("sends an mcp_config merge-patch in one request on the cloud backend", async () => {
     setRegisteredBackends([cloudBackend]);
     setActiveSelection({ backendId: cloudBackend.id });
 
@@ -414,11 +530,8 @@ describe("SettingsService", () => {
       },
     });
 
-    expect(mockSaveCloudSettings).toHaveBeenCalledTimes(2);
-    expect(mockSaveCloudSettings).toHaveBeenNthCalledWith(1, {
-      agent_settings_diff: { mcp_config: null },
-    });
-    expect(mockSaveCloudSettings).toHaveBeenNthCalledWith(2, {
+    expect(mockSaveCloudSettings).toHaveBeenCalledTimes(1);
+    expect(mockSaveCloudSettings).toHaveBeenCalledWith({
       agent_settings_diff: {
         mcp_config: { only: { url: "https://x.example" } },
       },
@@ -458,10 +571,6 @@ describe("SettingsService", () => {
           integrations_hub: {
             url: "https://integrations.staging.all-hands.dev/api/mcp",
             headers: { Authorization: "Bearer new-key" },
-            // This is the one write that skips the pre-clear, so it lands as
-            // an RFC 7386 merge — `enabled` has to be spelled out because a
-            // merge cannot clear a persisted `enabled: false` by omission.
-            enabled: true,
           },
         },
       },
@@ -484,8 +593,8 @@ describe("SettingsService", () => {
       },
     });
 
-    expect(mockSaveCloudSettings).toHaveBeenCalledTimes(2);
-    expect(mockSaveCloudSettings).toHaveBeenNthCalledWith(2, {
+    expect(mockSaveCloudSettings).toHaveBeenCalledTimes(1);
+    expect(mockSaveCloudSettings).toHaveBeenCalledWith({
       agent_settings_diff: {
         mcp_config: {
           elevenlabs: {
@@ -500,7 +609,7 @@ describe("SettingsService", () => {
     });
   });
 
-  it("converts OAuth token state to headers when saving mcp_config to cloud", async () => {
+  it("keeps the OAuth credential and its token state when saving mcp_config to cloud", async () => {
     setRegisteredBackends([cloudBackend]);
     setActiveSelection({ backendId: cloudBackend.id });
 
@@ -527,15 +636,24 @@ describe("SettingsService", () => {
       },
     });
 
-    expect(mockSaveCloudSettings).toHaveBeenCalledTimes(2);
-    expect(mockSaveCloudSettings).toHaveBeenNthCalledWith(2, {
+    expect(mockSaveCloudSettings).toHaveBeenCalledTimes(1);
+    expect(mockSaveCloudSettings).toHaveBeenCalledWith({
       agent_settings_diff: {
         mcp_config: {
           notion: {
             transport: "http",
             url: "https://mcp.example.com/mcp",
-            headers: {
-              Authorization: "Bearer oauth-access-token",
+            auth: {
+              strategy: "oauth2",
+              authentication: {
+                type: "oauth",
+                client_auth_method: "client_secret_post",
+              },
+              state: {
+                tokens: {
+                  access_token: "oauth-access-token",
+                },
+              },
             },
           },
         },
@@ -543,11 +661,316 @@ describe("SettingsService", () => {
     });
   });
 
-  it("rolls back to the previous mcp_config when the second cloud PATCH fails", async () => {
-    // Reviewer-flagged data-loss scenario: the pre-clear succeeds, then
-    // the write fails (validation error, transient outage, etc.). The
-    // service must attempt to restore the previous mcp_config so the
-    // user isn't silently left with an empty MCP setup.
+  it("tombstones a legacy bearer header when a cloud MCP keeps its OAuth credential", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+    // Stored by the flattening earlier Canvas versions applied on cloud saves.
+    mockFetchCloudSettings.mockResolvedValue({
+      agent_settings: {
+        mcp_config: {
+          gitlab: {
+            url: "https://gitlab.example/api/v4/mcp",
+            headers: { Authorization: "**********" },
+          },
+        },
+      },
+    });
+    const auth = {
+      strategy: "oauth2" as const,
+      authentication: {
+        type: "oauth" as const,
+        client_auth_method: "none" as const,
+      },
+      state: {
+        tokens: {
+          access_token: "fresh-access-token",
+          refresh_token: "fresh-refresh-token",
+        },
+      },
+    };
+
+    await SettingsService.patchMcpServer("gitlab", { auth });
+
+    expect(mockSaveCloudSettings).toHaveBeenCalledTimes(1);
+    expect(mockSaveCloudSettings).toHaveBeenCalledWith({
+      agent_settings_diff: {
+        mcp_config: {
+          gitlab: {
+            url: "https://gitlab.example/api/v4/mcp",
+            headers: {},
+            auth,
+          },
+        },
+      },
+    });
+  });
+
+  it("clears cloud MCP credential headers when auth is explicitly cleared", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+
+    mockFetchCloudSettings.mockResolvedValue({
+      agent_settings: {
+        mcp_config: {
+          github: {
+            url: "https://github.example/mcp",
+            headers: { Authorization: "**********" },
+          },
+        },
+      },
+    });
+
+    await SettingsService.patchMcpServer("github", { auth: null });
+
+    expect(mockSaveCloudSettings).toHaveBeenCalledTimes(1);
+    // `auth: null` is explicit: an omitted `auth` makes the cloud restore the
+    // stored credential next to the cleared headers.
+    expect(mockSaveCloudSettings).toHaveBeenCalledWith({
+      agent_settings_diff: {
+        mcp_config: {
+          github: {
+            url: "https://github.example/mcp",
+            headers: null,
+            auth: null,
+          },
+        },
+      },
+    });
+  });
+
+  it("tombstones the old credential header when a cloud MCP switches auth strategy", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+
+    mockFetchCloudSettings.mockResolvedValue({
+      agent_settings: {
+        mcp_config: {
+          github: {
+            url: "https://github.example/mcp",
+            headers: { "X-API-Key": "stale-custom-header-secret" },
+          },
+        },
+      },
+    });
+
+    await SettingsService.patchMcpServer("github", {
+      auth: { strategy: "bearer", value: "new-bearer-token" },
+    });
+
+    expect(mockFetchCloudSettings).toHaveBeenCalledTimes(1);
+    expect(mockSaveCloudSettings).toHaveBeenCalledTimes(1);
+    // The stale header tombstone is resolved client-side: the cloud replaces
+    // the catalog for this map and rejects `null` header values.
+    expect(mockSaveCloudSettings).toHaveBeenCalledWith({
+      agent_settings_diff: {
+        mcp_config: {
+          github: {
+            url: "https://github.example/mcp",
+            headers: { Authorization: "Bearer new-bearer-token" },
+            auth: null,
+          },
+        },
+      },
+    });
+  });
+
+  it("keeps stored non-credential headers when a cloud MCP switches auth strategy", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+
+    mockFetchCloudSettings.mockResolvedValue({
+      agent_settings: {
+        mcp_config: {
+          github: {
+            url: "https://github.example/mcp",
+            headers: {
+              "X-API-Key": "stale-custom-header-secret",
+              "X-Trace": "on",
+            },
+          },
+        },
+      },
+    });
+
+    await SettingsService.patchMcpServer("github", {
+      auth: { strategy: "bearer", value: "new-bearer-token" },
+      headers: { "X-Trace": "on" },
+    });
+
+    expect(mockSaveCloudSettings).toHaveBeenCalledTimes(1);
+    expect(mockSaveCloudSettings).toHaveBeenCalledWith({
+      agent_settings_diff: {
+        mcp_config: {
+          github: {
+            url: "https://github.example/mcp",
+            headers: {
+              "X-Trace": "on",
+              Authorization: "Bearer new-bearer-token",
+            },
+            auth: null,
+          },
+        },
+      },
+    });
+  });
+
+  it("resends the stored cloud catalog when adding a server so siblings survive", async () => {
+    // OHE-3248: the cloud replaces the whole catalog for an `mcp_config` map
+    // without a `null` entry, so a one-key add would erase every other server.
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+
+    mockFetchCloudSettings.mockResolvedValue({
+      agent_settings: {
+        mcp_config: {
+          github: {
+            url: "https://github.example/mcp",
+            headers: { Authorization: "**********" },
+          },
+        },
+      },
+    });
+
+    await SettingsService.patchMcpConfig({
+      only: { url: "https://x.example" },
+    });
+
+    expect(mockFetchCloudSettings).toHaveBeenCalledTimes(1);
+    // The untouched sibling is resent verbatim, redaction included: the cloud
+    // restores its secret by key.
+    expect(mockSaveCloudSettings).toHaveBeenCalledWith({
+      agent_settings_diff: {
+        mcp_config: {
+          github: {
+            url: "https://github.example/mcp",
+            headers: { Authorization: "**********" },
+          },
+          only: { url: "https://x.example" },
+        },
+      },
+    });
+  });
+
+  it("merges a sparse cloud update onto the stored server and keeps its siblings", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+
+    mockFetchCloudSettings.mockResolvedValue({
+      agent_settings: {
+        mcp_config: {
+          github: {
+            url: "https://github.example/mcp",
+            auth: { strategy: "bearer", value: "**********" },
+          },
+          linear: {
+            url: "https://mcp.linear.app/mcp",
+            auth: { strategy: "bearer", value: "**********" },
+          },
+        },
+      },
+    });
+
+    await SettingsService.patchMcpServer("github", {
+      transport: "http",
+      url: "https://github.example/mcp",
+      enabled: false,
+    } as Parameters<typeof SettingsService.patchMcpServer>[1]);
+
+    expect(mockSaveCloudSettings).toHaveBeenCalledWith({
+      agent_settings_diff: {
+        mcp_config: {
+          github: {
+            url: "https://github.example/mcp",
+            auth: { strategy: "bearer", value: "**********" },
+            transport: "http",
+            enabled: false,
+          },
+          linear: {
+            url: "https://mcp.linear.app/mcp",
+            auth: { strategy: "bearer", value: "**********" },
+          },
+        },
+      },
+    });
+  });
+
+  it("fails a cloud add without saving when the stored catalog cannot be read", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+
+    mockFetchCloudSettings.mockRejectedValue(new Error("catalog unavailable"));
+
+    await expect(
+      SettingsService.createMcpServer("only", {
+        transport: "http",
+        url: "https://x.example",
+      }),
+    ).rejects.toThrow("catalog unavailable");
+
+    // Falling back to the one-key map would wipe the siblings.
+    expect(mockSaveCloudSettings).not.toHaveBeenCalled();
+  });
+
+  it("sends a sparse map without reading the catalog for a cloud delete or rename", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+
+    await SettingsService.deleteMcpServer("github");
+    await SettingsService.patchMcpConfig({
+      github: null,
+      hub: { transport: "http", url: "https://github.example/mcp" },
+    });
+
+    expect(mockFetchCloudSettings).not.toHaveBeenCalled();
+    expect(mockSaveCloudSettings).toHaveBeenNthCalledWith(1, {
+      agent_settings_diff: { mcp_config: { github: null } },
+    });
+    expect(mockSaveCloudSettings).toHaveBeenNthCalledWith(2, {
+      agent_settings_diff: {
+        mcp_config: {
+          github: null,
+          hub: { transport: "http", url: "https://github.example/mcp" },
+        },
+      },
+    });
+  });
+
+  it("tombstones stored credential headers when a cloud MCP auth becomes none", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+
+    mockFetchCloudSettings.mockResolvedValue({
+      agent_settings: {
+        mcp_config: {
+          github: {
+            url: "https://github.example/mcp",
+            headers: { Authorization: "Bearer stale-token" },
+          },
+        },
+      },
+    });
+
+    await SettingsService.patchMcpServer("github", {
+      auth: { strategy: "none" },
+    });
+
+    expect(mockSaveCloudSettings).toHaveBeenCalledTimes(1);
+    // `headers: {}` is required, not cosmetic: an omitted `headers` makes the
+    // cloud carry the stale Authorization header back.
+    expect(mockSaveCloudSettings).toHaveBeenCalledWith({
+      agent_settings_diff: {
+        mcp_config: {
+          github: {
+            url: "https://github.example/mcp",
+            headers: {},
+            auth: null,
+          },
+        },
+      },
+    });
+  });
+
+  it("does not mutate the prior cloud catalog before a failed merge-patch", async () => {
     setRegisteredBackends([cloudBackend]);
     setActiveSelection({ backendId: cloudBackend.id });
 
@@ -556,16 +979,9 @@ describe("SettingsService", () => {
       agent_settings: { mcp_config: previousMcpConfig },
     });
 
-    // Pre-clear succeeds, second write fails on all retries, rollback
-    // succeeds. withRetry runs three attempts by default — return the
-    // failure deterministically so the rollback path is exercised.
     mockSaveCloudSettings.mockImplementation(
       (args: { agent_settings_diff?: { mcp_config?: unknown } }) => {
         const mcp = args?.agent_settings_diff?.mcp_config;
-        if (mcp === null) return Promise.resolve(undefined); // pre-clear
-        // The full payload from the user contains the *new* mcp_config.
-        // Distinguish it from the rollback (which writes the previous
-        // value) by object identity on the server map.
         if (
           mcp &&
           typeof mcp === "object" &&
@@ -573,7 +989,7 @@ describe("SettingsService", () => {
         ) {
           return Promise.reject(new Error("validation failed"));
         }
-        return Promise.resolve(undefined); // rollback succeeds
+        return Promise.resolve(undefined);
       },
     );
 
@@ -585,21 +1001,14 @@ describe("SettingsService", () => {
       }),
     ).rejects.toThrow("validation failed");
 
-    // 3 attempts for the failed write (default withRetry retries) +
-    // 1 pre-clear + 1 rollback = 5 calls total. Last call MUST be the
-    // rollback with the previous mcp_config.
-    const lastCallArgs =
-      mockSaveCloudSettings.mock.calls[
-        mockSaveCloudSettings.mock.calls.length - 1
-      ][0];
-    expect(lastCallArgs).toEqual({
-      agent_settings_diff: { mcp_config: previousMcpConfig },
-    });
+    expect(mockFetchCloudSettings).not.toHaveBeenCalled();
+    expect(mockSaveCloudSettings).toHaveBeenCalledTimes(3);
+    expect(mockSaveCloudSettings.mock.calls).not.toContainEqual([
+      { agent_settings_diff: { mcp_config: null } },
+    ]);
   });
 
-  it("rolls back to the previous mcp_config when the second local PATCH fails", async () => {
-    // Same scenario as the cloud test but for the local agent-server
-    // path. We assert the rollback PATCH is the final request observed.
+  it("does not mutate the prior local catalog before a failed merge-patch", async () => {
     const patchBodies: Array<Record<string, unknown>> = [];
     const previousMcpConfig = {
       existing: { url: "https://old.example" },
@@ -621,8 +1030,6 @@ describe("SettingsService", () => {
           | { mcp_config?: unknown }
           | undefined;
         const mcp = agentDiff?.mcp_config;
-        // Pre-clear (mcp_config: null) and rollback (mcp_config: previous)
-        // both succeed; only the "new" write fails.
         if (
           mcp &&
           typeof mcp === "object" &&
@@ -649,33 +1056,20 @@ describe("SettingsService", () => {
       }),
     ).rejects.toBeDefined();
 
-    // Snapshot fetch must have happened before any destructive PATCH.
-    expect(getCount).toBeGreaterThanOrEqual(1);
-
-    // Final PATCH is the rollback, restoring the previous mcp_config.
-    const last = patchBodies[patchBodies.length - 1];
-    expect(last).toEqual({
-      agent_settings_diff: { mcp_config: previousMcpConfig },
-    });
-    // And we must have done the pre-clear too.
-    expect(patchBodies[0]).toEqual({
+    expect(getCount).toBe(0);
+    expect(patchBodies).toHaveLength(3);
+    expect(patchBodies).not.toContainEqual({
       agent_settings_diff: { mcp_config: null },
     });
   });
 
-  it("does not attempt rollback when the snapshot fetch returned no mcp_config", async () => {
-    // First-time install: there's nothing to roll back to. The original
-    // error must still propagate but we must not send a bogus rollback
-    // PATCH (e.g. `mcp_config: undefined`) that the backend would reject.
+  it("does not fetch a snapshot or issue a destructive clear when a cloud patch fails", async () => {
     setRegisteredBackends([cloudBackend]);
     setActiveSelection({ backendId: cloudBackend.id });
 
     mockFetchCloudSettings.mockResolvedValue({ agent_settings: {} });
     mockSaveCloudSettings.mockImplementation(
-      (args: { agent_settings_diff?: { mcp_config?: unknown } }) => {
-        if (args?.agent_settings_diff?.mcp_config === null) {
-          return Promise.resolve(undefined);
-        }
+      (_args: { agent_settings_diff?: { mcp_config?: unknown } }) => {
         return Promise.reject(new Error("validation failed"));
       },
     );
@@ -688,26 +1082,19 @@ describe("SettingsService", () => {
       }),
     ).rejects.toThrow("validation failed");
 
-    // 1 pre-clear + 3 failed write attempts = 4 calls. No rollback
-    // attempt because the snapshot was empty. Critically, we never
-    // send `mcp_config: undefined` as a "rollback" since that would
-    // be backend-rejected or, worse, silently no-op.
-    expect(mockSaveCloudSettings).toHaveBeenCalledTimes(4);
+    expect(mockFetchCloudSettings).not.toHaveBeenCalled();
+    expect(mockSaveCloudSettings).toHaveBeenCalledTimes(3);
     const sentMcpValues = mockSaveCloudSettings.mock.calls.map(
       (call) =>
         (call[0] as { agent_settings_diff?: { mcp_config?: unknown } })
           ?.agent_settings_diff?.mcp_config,
     );
-    // Every call's mcp_config is either the pre-clear null or the
-    // exact new value the caller asked us to write — no implicit
-    // rollback target leaked through.
     for (const mcp of sentMcpValues) {
-      const isPreClear = mcp === null;
       const isNewWrite =
         !!mcp &&
         typeof mcp === "object" &&
         !!(mcp as Record<string, unknown>).new;
-      expect(isPreClear || isNewWrite).toBe(true);
+      expect(isNewWrite).toBe(true);
     }
   });
 
@@ -724,5 +1111,200 @@ describe("SettingsService", () => {
     const settings = await SettingsService.getSettings();
 
     expect(settings.language).toBe("ja");
+  });
+});
+
+describe("SettingsService cache scoping", () => {
+  const backendA: Backend = {
+    id: "local-a",
+    name: "Local A",
+    host: "http://127.0.0.1:3101",
+    apiKey: "key-a",
+    kind: "local",
+  };
+  const backendB: Backend = {
+    id: "local-b",
+    name: "Local B",
+    host: "http://127.0.0.1:3102",
+    apiKey: "key-b",
+    kind: "local",
+  };
+
+  /**
+   * Answers /api/settings with a model naming the host that was asked. The
+   * host on `heldPort`, if given, answers only once `release()` is called.
+   */
+  const perHostSettings = (heldPort?: string) => {
+    const asked: string[] = [];
+    let release = () => {};
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.get("*/api/settings", async ({ request }) => {
+        const url = new URL(request.url);
+        if (url.pathname.split("/").filter(Boolean).length > 2) {
+          return undefined as never;
+        }
+        asked.push(url.port);
+        if (url.port === heldPort) await released;
+        return HttpResponse.json({
+          agent_settings: {
+            agent: "CodeActAgent",
+            llm: { model: `model-from-${url.port}` },
+          },
+          conversation_settings: {},
+          llm_api_key_is_set: true,
+        });
+      }),
+    );
+    return { asked, release };
+  };
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    resetTestHandlersMockSettings();
+    __resetActiveStoreForTests();
+    SettingsService.invalidateCache();
+    setRegisteredBackends([backendA, backendB]);
+  });
+
+  afterEach(() => {
+    __resetActiveStoreForTests();
+  });
+
+  it("does not answer for one backend with settings fetched from another", async () => {
+    // The cache was keyed on a timestamp alone, so within its five minutes a
+    // switch to another local backend was served the first one's settings —
+    // including the encrypted ones used to start conversations (#17416).
+    const { asked } = perHostSettings();
+
+    setActiveSelection({ backendId: backendA.id });
+    const fromA = await SettingsService.getSettings();
+
+    setActiveSelection({ backendId: backendB.id });
+    const fromB = await SettingsService.getSettings();
+
+    expect(fromA.llm_model).toBe("model-from-3101");
+    expect(fromB.llm_model).toBe("model-from-3102");
+    expect(asked).toEqual(["3101", "3102"]);
+  });
+
+  it("does not hand one backend's encrypted settings to another", async () => {
+    const { asked } = perHostSettings();
+
+    setActiveSelection({ backendId: backendA.id });
+    await SettingsService.getSettingsForConversation();
+
+    setActiveSelection({ backendId: backendB.id });
+    const forB = await SettingsService.getSettingsForConversation();
+
+    expect((forB.agentSettings.llm as { model: string }).model).toBe(
+      "model-from-3102",
+    );
+    expect(asked).toEqual(["3101", "3102"]);
+  });
+
+  it("does not keep one backend's encrypted settings beside another's", async () => {
+    // A read for B replaces only the redacted half, so the rest of A's entry
+    // has to go with it, or B's next conversation starts with A's settings.
+    const { asked } = perHostSettings();
+
+    setActiveSelection({ backendId: backendA.id });
+    await SettingsService.getSettingsForConversation();
+
+    setActiveSelection({ backendId: backendB.id });
+    await SettingsService.getSettings();
+    const forB = await SettingsService.getSettingsForConversation();
+
+    expect((forB.agentSettings.llm as { model: string }).model).toBe(
+      "model-from-3102",
+    );
+    expect(asked).toEqual(["3101", "3102", "3102"]);
+  });
+
+  it("does not reuse settings after the same backend's credentials change", async () => {
+    // `connectionRevision` changes whenever the connection credentials do —
+    // the host stays the same while what it answers with does not, which is
+    // why the query keys across the app already include it.
+    const { asked } = perHostSettings();
+
+    setActiveSelection({ backendId: backendA.id });
+    await SettingsService.getSettings();
+
+    setRegisteredBackends([
+      { ...backendA, apiKey: "rotated", connectionRevision: 1 },
+      backendB,
+    ]);
+    setActiveSelection({ backendId: backendA.id });
+    await SettingsService.getSettings();
+
+    expect(asked).toEqual(["3101", "3101"]);
+  });
+
+  it("still serves the same backend from cache", async () => {
+    // The accept control: the cache exists to avoid a request per read, and a
+    // fix that simply stopped caching would pass the two cells above.
+    const { asked } = perHostSettings();
+
+    setActiveSelection({ backendId: backendA.id });
+    await SettingsService.getSettings();
+    await SettingsService.getSettings();
+
+    expect(asked).toEqual(["3101"]);
+  });
+
+  it("does not file a response under a backend selected while it was in flight", async () => {
+    // The key used to be read after the request, so a switch from A to B
+    // while A's answer was on its way cached that answer as B's, and the next
+    // read for B was served A's settings without a request.
+    const { asked, release } = perHostSettings("3101");
+
+    setActiveSelection({ backendId: backendA.id });
+    const pending = SettingsService.getSettings();
+    await vi.waitFor(() => expect(asked).toEqual(["3101"]));
+
+    setActiveSelection({ backendId: backendB.id });
+    release();
+    expect((await pending).llm_model).toBe("model-from-3101");
+    const forB = await SettingsService.getSettings();
+
+    expect(forB.llm_model).toBe("model-from-3102");
+    expect(asked).toEqual(["3101", "3102"]);
+  });
+
+  it("does not file encrypted settings under a backend selected while they were in flight", async () => {
+    const { asked, release } = perHostSettings("3101");
+
+    setActiveSelection({ backendId: backendA.id });
+    const pending = SettingsService.getSettingsForConversation();
+    await vi.waitFor(() => expect(asked).toEqual(["3101"]));
+
+    setActiveSelection({ backendId: backendB.id });
+    release();
+    await pending;
+    const forB = await SettingsService.getSettingsForConversation();
+
+    expect((forB.agentSettings.llm as { model: string }).model).toBe(
+      "model-from-3102",
+    );
+    expect(asked).toEqual(["3101", "3102"]);
+  });
+
+  it("keeps the new backend's cache when the old one answers late", async () => {
+    const { asked, release } = perHostSettings("3101");
+
+    setActiveSelection({ backendId: backendA.id });
+    const pending = SettingsService.getSettings();
+    await vi.waitFor(() => expect(asked).toEqual(["3101"]));
+
+    setActiveSelection({ backendId: backendB.id });
+    await SettingsService.getSettings();
+    release();
+    await pending;
+    const again = await SettingsService.getSettings();
+
+    expect(again.llm_model).toBe("model-from-3102");
+    expect(asked).toEqual(["3101", "3102"]);
   });
 });

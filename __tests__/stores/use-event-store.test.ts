@@ -17,7 +17,7 @@ const mockUserMessageEvent: MessageEvent = {
     role: "user",
     content: [{ type: "text", text: "Hello, world!" }],
   },
-  activated_microagents: [],
+  activated_skills: [],
   extended_content: [],
 };
 
@@ -75,17 +75,15 @@ const mockObservationEvent: ObservationEvent = {
   action_id: "test-action-1",
 };
 
-const makeStreamingDeltaEvent = (
-  id: string,
-  content: string,
-): StreamingDeltaEvent => ({
-  id,
-  timestamp: `2024-03-01T00:00:0${id.at(-1) ?? "0"}Z`,
+const mockAgentMessageEvent: MessageEvent = {
+  ...mockUserMessageEvent,
+  id: "test-agent-message-1",
   source: "agent",
-  kind: "StreamingDeltaEvent",
-  content,
-  reasoning_content: null,
-});
+  llm_message: {
+    role: "assistant",
+    content: [{ type: "text", text: "partial text, finished" }],
+  },
+};
 
 const makeUserMessageEvent = (id: string, timestamp: string): MessageEvent => ({
   ...mockUserMessageEvent,
@@ -156,65 +154,86 @@ describe("useEventStore", () => {
     expect(result.current.events).toHaveLength(2);
   });
 
-  it("should compact consecutive streaming deltas in the raw event store", () => {
+  it("keeps streaming slots out of the durable event log and eventIds", () => {
     const { result } = renderHook(() => useEventStore());
-    const first = makeStreamingDeltaEvent("delta-1", "hello ");
-    const second = makeStreamingDeltaEvent("delta-2", "world");
 
     act(() => {
-      result.current.addEvent(first);
-      result.current.addEvent(second);
+      result.current.addEvent(mockUserMessageEvent);
+      result.current.openStreamingSlot({
+        type: "item_started",
+        item_id: "item-1",
+      });
+      for (let i = 0; i < 1000; i += 1) {
+        result.current.appendStreamingDeltas([
+          {
+            type: "delta",
+            item_id: "item-1",
+            attempt: 1,
+            order: i,
+            content: "x",
+          },
+        ]);
+      }
     });
 
-    expect(result.current.events).toEqual([
-      {
-        ...first,
-        content: "hello world",
-      },
-    ]);
-    expect(result.current.uiEvents).toEqual([
-      {
-        ...first,
-        content: "hello world",
-      },
-    ]);
-    expect(result.current.eventIds.has("delta-1")).toBe(true);
-    expect(result.current.eventIds.has("delta-2")).toBe(true);
+    // The slot renders, but `events` and `eventIds` only ever hold durable
+    // records — the slot's id IS the coming message's id, so tracking it would
+    // dedupe the real message away.
+    expect(result.current.events).toEqual([mockUserMessageEvent]);
+    expect(result.current.eventIds.size).toBe(1);
+    expect(result.current.uiEvents).toHaveLength(2);
+    expect(
+      (result.current.uiEvents[1] as StreamingDeltaEvent).content,
+    ).toHaveLength(1000);
   });
 
-  it("should compact streaming deltas during bulk add", () => {
+  it("retires a slot when the durable event with its id arrives", () => {
     const { result } = renderHook(() => useEventStore());
-    const first = makeStreamingDeltaEvent("delta-1", "hello ");
-    const second = makeStreamingDeltaEvent("delta-2", "world");
 
     act(() => {
-      result.current.addEvents([first, second]);
+      result.current.openStreamingSlot({
+        type: "item_started",
+        item_id: mockAgentMessageEvent.id,
+      });
+      result.current.appendStreamingDeltas([
+        {
+          type: "delta",
+          item_id: mockAgentMessageEvent.id,
+          attempt: 1,
+          order: 0,
+          content: "partial",
+        },
+      ]);
+      result.current.addEvent(mockAgentMessageEvent);
     });
 
-    expect(result.current.events).toHaveLength(1);
-    expect(result.current.events[0]).toMatchObject({
-      id: "delta-1",
-      content: "hello world",
-    });
-    expect(result.current.eventIds.has("delta-1")).toBe(true);
-    expect(result.current.eventIds.has("delta-2")).toBe(true);
+    expect(result.current.uiEvents).toEqual([mockAgentMessageEvent]);
+    expect(result.current.events).toEqual([mockAgentMessageEvent]);
   });
 
-  it("should not compact streaming deltas from different senders (#1656)", () => {
+  it("clears only the addressed socket's slots", () => {
     const { result } = renderHook(() => useEventStore());
-    const mainDelta = makeStreamingDeltaEvent("delta-1", "main ");
-    const planningDelta = {
-      ...makeStreamingDeltaEvent("delta-2", "planning"),
-      isFromPlanningAgent: true,
-    };
 
-    // A planning-agent delta after a main-agent delta must not concatenate.
     act(() => {
-      result.current.addEvent(mainDelta);
-      result.current.addEvent(planningDelta);
+      result.current.openStreamingSlot({
+        type: "item_started",
+        item_id: "main-item",
+      });
+      result.current.openStreamingSlot(
+        { type: "item_started", item_id: "plan-item" },
+        { isFromPlanningAgent: true },
+      );
+      result.current.clearStreamingSlots();
     });
 
-    expect(result.current.events).toEqual([mainDelta, planningDelta]);
+    expect(result.current.uiEvents.map((event) => event.id)).toEqual([
+      "plan-item",
+    ]);
+
+    act(() => {
+      result.current.clearStreamingSlots(true);
+    });
+    expect(result.current.uiEvents).toEqual([]);
   });
 
   it("should apply action-to-observation UI replacement during bulk add", () => {

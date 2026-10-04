@@ -13,7 +13,6 @@ import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "test-utils";
 import { formatTimeDelta } from "#/utils/format-time-delta";
 import { ConversationCard } from "#/components/features/conversation-panel/conversation-card/conversation-card";
-import { MAX_VISIBLE_TAG_CHIPS } from "#/components/features/conversation-panel/conversation-card/conversation-card-footer";
 import { clickOnEditButton } from "./utils";
 import { ConversationCardActions } from "#/components/features/conversation-panel/conversation-card/conversation-card-actions";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
@@ -24,6 +23,7 @@ import {
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import { useFreeModelsStore } from "#/stores/free-models-store";
 
 // We'll use the actual i18next implementation but override the translation function
 
@@ -134,6 +134,79 @@ describe("ConversationCard", () => {
     screen.getByTestId("conversation-card-selected-repository");
   });
 
+  it("styles repo and branch with the same raised pill chip as tags", () => {
+    renderWithProviders(
+      <ConversationCard
+        title="Conversation 1"
+        selectedRepository={{
+          selected_repository: "org/repo",
+          selected_branch: "main",
+          git_provider: "github",
+        }}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        showTags
+        tags={{ origin: "slack" }}
+      />,
+    );
+
+    const repo = screen.getByTestId("conversation-card-selected-repository");
+    const branch = screen.getByTestId("conversation-card-selected-branch");
+    const tag = screen.getByTestId("conversation-card-tag-chip");
+
+    expect(repo).toHaveClass("bg-surface-raised");
+    expect(branch).toHaveClass("bg-surface-raised");
+    expect(tag).toHaveClass("bg-surface-raised");
+
+    // Identical pill look. The one intentional difference is flex-shrink:
+    // repo and branch share a single overflow-hidden row, so they must shrink
+    // (otherwise a long repo name evicts the branch chip entirely), while a
+    // tag chip keeps its intrinsic width and folds behind "+N" instead.
+    const pillLook = (element: HTMLElement) =>
+      element.className
+        .split(/\s+/)
+        .filter((name) => name !== "shrink" && name !== "shrink-0")
+        .sort()
+        .join(" ");
+
+    expect(pillLook(repo)).toBe(pillLook(tag));
+    expect(pillLook(branch)).toBe(pillLook(tag));
+    expect(repo).toHaveClass("shrink");
+    expect(repo).not.toHaveClass("shrink-0");
+    expect(branch).toHaveClass("shrink");
+    expect(branch).not.toHaveClass("shrink-0");
+    expect(tag).toHaveClass("shrink-0");
+  });
+
+  it("stacks metadata as repo/branch, then model, then tags", () => {
+    renderWithProviders(
+      <ConversationCard
+        title="Conversation 1"
+        selectedRepository={{
+          selected_repository: "org/repo",
+          selected_branch: "main",
+          git_provider: "github",
+        }}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        llmModel="openhands/claude-opus-4-5-20251101"
+        showLlmProfiles
+        agentKind="openhands"
+        showTags
+        tags={{ origin: "slack" }}
+      />,
+    );
+
+    const repo = screen.getByTestId("conversation-card-selected-repository");
+    const model = screen.getByTestId("conversation-card-agent-chip");
+    const tags = screen.getByTestId("conversation-card-tag-chips");
+
+    expect(
+      repo.compareDocumentPosition(model) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      model.compareDocumentPosition(tags) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("renders the workspace folder name when no repository is selected", () => {
     renderWithProviders(
       <ConversationCard
@@ -150,6 +223,23 @@ describe("ConversationCard", () => {
     expect(
       screen.getByTitle("/workspace/project/agent-canvas"),
     ).toBeInTheDocument();
+  });
+
+  it("styles the no-repository label with the same raised pill chip", () => {
+    renderWithProviders(
+      <ConversationCard
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        showTags
+        tags={{ origin: "slack" }}
+      />,
+    );
+
+    const noRepo = screen.getByTestId("conversation-card-no-repository");
+    const tag = screen.getByTestId("conversation-card-tag-chip");
+    expect(noRepo).toHaveTextContent("No repository");
+    expect(noRepo.className).toBe(tag.className);
   });
 
   it("handles Windows workspace paths and falls back when the path is empty", () => {
@@ -227,6 +317,54 @@ describe("ConversationCard", () => {
     expect(onContextMenuToggle).toHaveBeenCalledWith(false);
   });
 
+  it("keeps the ellipsis clickable without hover via touch-first reveal classes", () => {
+    renderWithProviders(
+      <ConversationCard
+        onDelete={onDelete}
+        onChangeTitle={onChangeTitle}
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        contextMenuOpen={false}
+        onContextMenuToggle={vi.fn()}
+      />,
+    );
+
+    const ellipsisButton = screen.getByTestId("ellipsis-button");
+    const actionOverlay = ellipsisButton.parentElement;
+
+    expect(actionOverlay).toHaveClass("pointer-events-auto");
+    expect(actionOverlay?.className).toContain(
+      "[@media(hover:hover)_and_(pointer:fine)]:pointer-events-none",
+    );
+  });
+
+  it("closes the context menu when clicking outside", async () => {
+    const user = userEvent.setup();
+    const onContextMenuToggle = vi.fn();
+
+    renderWithProviders(
+      <div>
+        <div data-testid="outside">Outside</div>
+        <ConversationCard
+          onDelete={onDelete}
+          onChangeTitle={onChangeTitle}
+          title="Conversation 1"
+          selectedRepository={null}
+          lastUpdatedAt="2021-10-01T12:00:00Z"
+          contextMenuOpen
+          onContextMenuToggle={onContextMenuToggle}
+        />
+      </div>,
+    );
+
+    expect(screen.getByTestId("context-menu")).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("outside"));
+
+    expect(onContextMenuToggle).toHaveBeenCalledWith(false);
+  });
+
   it("should call onDelete when the delete button is clicked", async () => {
     const user = userEvent.setup();
     const onContextMenuToggle = vi.fn();
@@ -248,6 +386,30 @@ describe("ConversationCard", () => {
     await user.click(deleteButton);
 
     expect(onDelete).toHaveBeenCalled();
+    expect(onContextMenuToggle).toHaveBeenCalledWith(false);
+  });
+
+  it("should call onArchive when the archive button is clicked", async () => {
+    const user = userEvent.setup();
+    const onArchive = vi.fn();
+    const onContextMenuToggle = vi.fn();
+    renderWithProviders(
+      <ConversationCard
+        onDelete={onDelete}
+        onArchive={onArchive}
+        onChangeTitle={onChangeTitle}
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        contextMenuOpen
+        onContextMenuToggle={onContextMenuToggle}
+      />,
+    );
+
+    const menu = screen.getByTestId("context-menu");
+    await user.click(within(menu).getByTestId("archive-button"));
+
+    expect(onArchive).toHaveBeenCalled();
     expect(onContextMenuToggle).toHaveBeenCalledWith(false);
   });
 
@@ -592,8 +754,9 @@ describe("ConversationCard", () => {
   describe("Tag chips", () => {
     // Tag chips surface the agent-server's server-side conversation tags
     // (e.g. ``origin=slack`` stamped by an automation) and are gated by the
-    // conversation panel's "Tags" toggle (``showTags``).
-    it("renders non-reserved tags as key: value chips when showTags is on", () => {
+    // conversation panel's "Tags" toggle (``showTags``). Chips show a friendly
+    // ``key: value`` pair, with the full pair retained in the tooltip.
+    it("renders friendly key/value chips in priority and alphabetical order", () => {
       renderWithProviders(
         <ConversationCard
           title="Conversation 1"
@@ -605,28 +768,74 @@ describe("ConversationCard", () => {
       );
 
       const chips = screen.getAllByTestId("conversation-card-tag-chip");
-      // Chips are sorted by key ("origin" < "owner") for a stable order.
+      // ``origin`` is a priority key, so it leads; remaining keys sort A–Z.
       expect(chips).toHaveLength(2);
-      expect(chips[0]).toHaveTextContent("origin: slack");
-      expect(chips[1]).toHaveTextContent("owner: alice");
+      expect(chips[0]).toHaveTextContent("Origin: slack");
+      expect(chips[0]).toHaveAttribute("title", "Origin: slack");
+      expect(chips[1]).toHaveTextContent("Owner: alice");
+      expect(chips[1]).toHaveAttribute("title", "Owner: alice");
+      expect(
+        within(chips[0]).getByTestId("conversation-card-tag-chip-icon"),
+      ).toHaveAttribute("data-tag-key", "origin");
+      expect(
+        within(chips[1]).getByTestId("conversation-card-tag-chip-icon"),
+      ).toHaveAttribute("data-tag-key", "owner");
+      expect(
+        screen.queryByTestId("conversation-tags-indicator"),
+      ).not.toBeInTheDocument();
     });
 
     it("filters reserved tag keys out of the chip row", () => {
-      // ``acpserver`` is Canvas-internal routing state already surfaced via
-      // the agent chip — it must not double-render as a generic tag chip.
+      // Reserved keys already have a first-class UI source (ACP chip, title,
+      // repo/branch/workspace metadata) and must not double-render as tags.
       renderWithProviders(
         <ConversationCard
           title="Conversation 1"
           selectedRepository={null}
           lastUpdatedAt="2021-10-01T12:00:00Z"
           showTags
-          tags={{ acpserver: "claude-code", origin: "review" }}
+          tags={{
+            acpserver: "claude-code",
+            title: "ignored title tag",
+            git_provider: "github",
+            repo_name: "org/repo",
+            selected_branch: "main",
+            archiveworkspacepath: "/workspace/project",
+            origin: "review",
+          }}
         />,
       );
 
       const chips = screen.getAllByTestId("conversation-card-tag-chip");
       expect(chips).toHaveLength(1);
-      expect(chips[0]).toHaveTextContent("origin: review");
+      expect(chips[0]).toHaveTextContent("Origin: review");
+      expect(chips[0]).toHaveAttribute("title", "Origin: review");
+    });
+
+    it("hides every automation provenance chip", () => {
+      // The whole automation family is reserved: the SDK stamps it at
+      // creation and the panel's automation filter is its first-class UI
+      // source. Rendering it as tag chips would double-book the user-facing
+      // tag surface — and let user-authored tags spoof automation
+      // classification.
+      renderWithProviders(
+        <ConversationCard
+          title="Conversation 1"
+          selectedRepository={null}
+          lastUpdatedAt="2021-10-01T12:00:00Z"
+          showTags
+          tags={{
+            automationname: "Nightly Audit",
+            automationtrigger: "cron",
+            automationid: "3f2b6c1e-1111-4222-8333-abcdefabcdef",
+            automationrunid: "run-0001",
+          }}
+        />,
+      );
+
+      expect(
+        screen.queryByTestId("conversation-card-tag-chip"),
+      ).not.toBeInTheDocument();
     });
 
     it("hides the chips when showTags is omitted", () => {
@@ -644,39 +853,45 @@ describe("ConversationCard", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("caps visible chips at the display budget with a +N overflow chip", () => {
-      // Tags are API-controlled with no useful size bound, so the card must
-      // not grow with the tag count: first MAX_VISIBLE_TAG_CHIPS sorted keys
-      // render as chips, the rest fold into "+N" with a tooltip listing them.
+    it("renders no tag UI at all when the Tags preference is off", () => {
+      // The preference owns presence: off means nothing about tags on the
+      // card, not even the indicator. This is what keeps the preference and
+      // the card from ever disagreeing — there is no card-level control left
+      // that could put tags back on screen while the toggle reads off.
+      renderWithProviders(
+        <ConversationCard
+          title="Conversation 1"
+          selectedRepository={null}
+          lastUpdatedAt="2021-10-01T12:00:00Z"
+          tags={{ origin: "slack", owner: "alice" }}
+        />,
+      );
+
+      expect(
+        screen.queryByTestId("conversation-tags-indicator"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("conversation-card-tag-chip"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("renders no indicator when every tag is reserved", () => {
       renderWithProviders(
         <ConversationCard
           title="Conversation 1"
           selectedRepository={null}
           lastUpdatedAt="2021-10-01T12:00:00Z"
           showTags
-          tags={{
-            env: "prod",
-            origin: "slack",
-            owner: "alice",
-            repo: "goodday",
-            team: "infra",
-          }}
+          tags={{ acpserver: "claude-code" }}
         />,
       );
 
-      const chips = screen.getAllByTestId("conversation-card-tag-chip");
-      expect(chips).toHaveLength(MAX_VISIBLE_TAG_CHIPS);
-      expect(chips[0]).toHaveTextContent("env: prod");
-      expect(chips[1]).toHaveTextContent("origin: slack");
-      expect(chips[2]).toHaveTextContent("owner: alice");
-
-      const overflow = screen.getByTestId("conversation-card-tag-overflow");
-      expect(overflow).toHaveTextContent("+2");
-      // The hidden remainder stays reachable via the overflow tooltip.
-      expect(overflow).toHaveAttribute("title", "repo: goodday\nteam: infra");
+      expect(
+        screen.queryByTestId("conversation-tags-indicator"),
+      ).not.toBeInTheDocument();
     });
 
-    it("renders no overflow chip when tags fit the display budget", () => {
+    it("keeps chips on a single nowrap row", () => {
       renderWithProviders(
         <ConversationCard
           title="Conversation 1"
@@ -687,12 +902,26 @@ describe("ConversationCard", () => {
         />,
       );
 
-      expect(
-        screen.getAllByTestId("conversation-card-tag-chip"),
-      ).toHaveLength(3);
-      expect(
-        screen.queryByTestId("conversation-card-tag-overflow"),
-      ).not.toBeInTheDocument();
+      const row = screen.getByTestId("conversation-card-tag-row");
+      expect(row).toHaveClass("flex-nowrap");
+      expect(row).toHaveClass("overflow-hidden");
+    });
+
+    it("hard-truncates long chip values while keeping the full tooltip", () => {
+      const longValue = "abcdefghijklmnopqrstuvwxyz";
+      renderWithProviders(
+        <ConversationCard
+          title="Conversation 1"
+          selectedRepository={null}
+          lastUpdatedAt="2021-10-01T12:00:00Z"
+          showTags
+          tags={{ token: longValue }}
+        />,
+      );
+
+      const chip = screen.getByTestId("conversation-card-tag-chip");
+      expect(chip).toHaveTextContent("Token: abcdefghijklm…");
+      expect(chip).toHaveAttribute("title", `Token: ${longValue}`);
     });
 
     it("renders no chip row when every tag is reserved", () => {
@@ -779,7 +1008,7 @@ describe("ConversationCard", () => {
 
     it("shows the provider's picker label for a known model ID", () => {
       // When ``llm_model`` is a registry-known ID, the chip renders the
-      // human label ("Claude Opus 4.8 (1M)") instead of the raw ID — matching
+      // human label ("Claude Opus (1M)") instead of the raw ID — matching
       // what the Settings → Agent picker shows for the same value.
       renderWithProviders(
         <ConversationCard
@@ -794,11 +1023,8 @@ describe("ConversationCard", () => {
       );
 
       const chip = screen.getByTestId("conversation-card-agent-chip");
-      expect(chip).toHaveTextContent("Claude Opus 4.8 (1M)");
-      expect(chip).toHaveAttribute(
-        "title",
-        "Claude Code · Claude Opus 4.8 (1M)",
-      );
+      expect(chip).toHaveTextContent("Claude Opus (1M)");
+      expect(chip).toHaveAttribute("title", "Claude Code · Claude Opus (1M)");
     });
 
     it("falls back to the provider display name for an ACP conversation with no model", () => {
@@ -893,6 +1119,32 @@ describe("ConversationCard", () => {
       expect(
         within(chip).queryByTestId("agent-brand-icon-claude-code"),
       ).not.toBeInTheDocument();
+    });
+
+    it("labels a DB-flagged free OpenHands route on native conversation chips", () => {
+      useFreeModelsStore.getState().setFlags({
+        freeModels: new Set(["openhands/glm-5.2"]),
+        defaultModel: "openhands/glm-5.2",
+      });
+      renderWithProviders(
+        <ConversationCard
+          title="Conversation 1"
+          selectedRepository={null}
+          lastUpdatedAt="2021-10-01T12:00:00Z"
+          showLlmProfiles
+          agentKind="openhands"
+          llmModel="openhands/glm-5.2"
+        />,
+      );
+
+      const chip = screen.getByTestId("conversation-card-agent-chip");
+      expect(chip).toHaveTextContent("glm-5.2 (free)");
+      expect(chip).toHaveAttribute("title", "openhands/glm-5.2");
+
+      useFreeModelsStore.getState().setFlags({
+        freeModels: new Set(),
+        defaultModel: null,
+      });
     });
 
     it("hides the chip for OpenHands conversations with no model", () => {

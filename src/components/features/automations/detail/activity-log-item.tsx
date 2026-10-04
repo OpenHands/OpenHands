@@ -7,8 +7,12 @@ import {
   type Automation,
   type AutomationRun,
 } from "#/types/automation";
+import { isInvalidTimestamp } from "#/utils/format-relative-time";
+import { getAutomationRunDisplay } from "#/utils/automation-run-display";
 import { RunStatusBadge } from "./run-status-badge";
+import { RunPhase, shouldShowRunPhase } from "./run-phase";
 import { RunLogsModal } from "./run-logs-modal";
+import { buildAgentCanvasPath } from "#/utils/base-path";
 
 interface ActivityLogItemProps {
   run: AutomationRun;
@@ -27,15 +31,23 @@ function formatRunTimestamp(dateStr: string, locale: string): string {
   });
 }
 
-function isInvalidTimestamp(dateStr: string | null | undefined): boolean {
-  if (!dateStr) return true;
-  const t = new Date(dateStr).getTime();
-  return Number.isNaN(t) || t === 0;
+function getConversationUrl(conversationId: string): string {
+  // In agent-canvas, conversations are at /conversations/:id, under the base
+  // path when Canvas is mounted on a subpath.
+  return buildAgentCanvasPath(`/conversations/${conversationId}`);
 }
 
-function getConversationUrl(conversationId: string): string {
-  // In agent-canvas, conversations are at /conversations/:id
-  return `/conversations/${conversationId}`;
+/**
+ * Format the run's accumulated LLM cost, or return null when it is unknown.
+ *
+ * A genuine `0` is rendered (`$0.0000`) rather than hidden: the automation
+ * service records zero only when the SDK reported a real zero-cost run, and
+ * leaves the value null when the cost could not be determined. Matches the
+ * 4-decimal USD convention used by the conversation metrics modal.
+ */
+function formatRunCost(cost: number | null | undefined): string | null {
+  if (typeof cost !== "number" || !Number.isFinite(cost)) return null;
+  return `$${cost.toFixed(4)}`;
 }
 
 export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
@@ -50,8 +62,11 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
   // state.
   const isTerminal =
     run.status === AutomationRunStatus.COMPLETED ||
-    run.status === AutomationRunStatus.FAILED;
+    run.status === AutomationRunStatus.FAILED ||
+    run.status === AutomationRunStatus.CANCELLED ||
+    run.status === AutomationRunStatus.SKIPPED;
   const showNoConversationLabel = !hasConversation && isTerminal;
+  const showPhase = shouldShowRunPhase(run.status);
   const [logsOpen, setLogsOpen] = useState(false);
   // The backend leaves started_at unset (epoch/zero) while a run is Pending
   // and only populates it once execution begins. Show the user's local time
@@ -65,6 +80,8 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
     effectiveStartedAt,
     i18n.language,
   );
+  const formattedCost = formatRunCost(run.cost);
+  const display = getAutomationRunDisplay(run);
 
   const handleLogsClick = (
     e:
@@ -94,17 +111,46 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
 
   const content = (
     <>
-      <div className="flex items-center gap-3">
-        <span className="text-sm text-content">{formattedTimestamp}</span>
-        {showNoConversationLabel && (
-          <span className="text-xs text-muted">
-            {t(I18nKey.AUTOMATIONS$DETAIL$NO_CONVERSATION)}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-content">{formattedTimestamp}</span>
+          {showNoConversationLabel && (
+            <span className="text-xs text-muted">
+              {t(
+                hasBashCommand
+                  ? // A command ran but no agent did: a script automation.
+                    // Point at the logs button, the only place its output is.
+                    I18nKey.AUTOMATIONS$DETAIL$SCRIPT_RUN_NO_CONVERSATION
+                  : I18nKey.AUTOMATIONS$DETAIL$NO_CONVERSATION,
+              )}
+            </span>
+          )}
+        </div>
+        {display.summary ? (
+          <p className="mt-1 truncate text-xs text-muted">{display.summary}</p>
+        ) : null}
+      </div>
+      <div className="flex min-w-0 items-center gap-2">
+        {formattedCost && (
+          <span
+            data-testid="run-cost"
+            title={t(I18nKey.AUTOMATIONS$DETAIL$RUN_COST)}
+            className="text-xs tabular-nums text-muted"
+          >
+            {formattedCost}
           </span>
         )}
-      </div>
-      <div className="flex items-center gap-2">
         {logsButton}
-        <RunStatusBadge status={run.status} />
+        {showPhase && (
+          <RunPhase
+            status={run.status}
+            code={run.phase_code}
+            label={run.phase_label}
+            updatedAt={run.phase_updated_at}
+            wide
+          />
+        )}
+        <RunStatusBadge status={display.badgeStatus} />
       </div>
     </>
   );
@@ -115,7 +161,9 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
         <a
           href={getConversationUrl(run.conversation_id)}
           className="flex items-center justify-between px-5 py-3 transition-colors cursor-pointer hover:bg-surface-raised focus:bg-surface-raised focus:outline-none"
-          aria-label={`View conversation for run at ${formattedTimestamp}`}
+          aria-label={t(I18nKey.AUTOMATIONS$DETAIL$VIEW_CONVERSATION_FOR_RUN, {
+            timestamp: formattedTimestamp,
+          })}
         >
           {content}
         </a>
@@ -128,6 +176,7 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
       {hasBashCommand && (
         <RunLogsModal
           conversationId={run.conversation_id}
+          sandboxId={run.sandbox_id ?? null}
           bashCommandId={run.bash_command_id}
           isOpen={logsOpen}
           onClose={() => setLogsOpen(false)}

@@ -1,7 +1,13 @@
 import { useTranslation } from "react-i18next";
+import { Folder } from "lucide-react";
 import { I18nKey } from "#/i18n/declaration";
 import RepoForkedIcon from "#/icons/repo-forked.svg?react";
 import { getPathBasename } from "#/utils/path-utils";
+import {
+  CONVERSATION_CARD_META_CHIP_CLASSNAME,
+  CONVERSATION_CARD_META_CHIP_ICON_CLASSNAME,
+  CONVERSATION_CARD_META_CHIP_ICON_SLOT_CLASSNAME,
+} from "./conversation-card-meta-chip";
 
 interface NoRepositoryProps {
   workspaceWorkingDir?: string | null;
@@ -17,24 +23,37 @@ export function NoRepository({ workspaceWorkingDir }: NoRepositoryProps) {
   if (folderName) {
     return (
       <span
-        className="truncate min-w-0 text-xs text-[var(--oh-muted)] flex-1"
+        data-testid="conversation-card-workspace-folder"
+        className={CONVERSATION_CARD_META_CHIP_CLASSNAME}
         title={workspaceWorkingDir ?? undefined}
       >
-        {folderName}
+        <span
+          className={CONVERSATION_CARD_META_CHIP_ICON_SLOT_CLASSNAME}
+          aria-hidden
+        >
+          <Folder className={CONVERSATION_CARD_META_CHIP_ICON_CLASSNAME} />
+        </span>
+        <span className="truncate leading-4">{folderName}</span>
       </span>
     );
   }
 
   return (
-    <div className="flex items-center gap-1 text-xs text-[var(--oh-muted)] flex-1 min-w-0 overflow-hidden">
-      <RepoForkedIcon
-        width={14}
-        height={14}
-        className="text-[var(--oh-muted)]"
-      />
-      <span className="truncate min-w-0">
+    <span
+      data-testid="conversation-card-no-repository"
+      className={CONVERSATION_CARD_META_CHIP_CLASSNAME}
+    >
+      <span
+        className={CONVERSATION_CARD_META_CHIP_ICON_SLOT_CLASSNAME}
+        aria-hidden
+      >
+        <RepoForkedIcon
+          className={CONVERSATION_CARD_META_CHIP_ICON_CLASSNAME}
+        />
+      </span>
+      <span className="truncate leading-4">
         {t(I18nKey.COMMON$NO_REPOSITORY)}
       </span>
-    </div>
+    </span>
   );
 }

@@ -1,422 +1,1237 @@
 import { describe, expect, it } from "vitest";
+import type {
+  MCPConfig,
+  MCPServer,
+} from "@openhands/typescript-client";
 
-import { parseMcpConfig, toSdkMcpConfig } from "#/utils/mcp-config";
-import type { MCPConfig } from "#/types/settings";
+import {
+  allocateMcpSettingsKey,
+  buildMcpServerPatch,
+  buildRenameMcpConfigPatch,
+  getMcpServerEnabled,
+  getSdkMcpServerMap,
+  hasRedactedMcpSecretLeaf,
+  MCP_HEADER_REMOVAL_ERROR,
+  MCP_RENAME_CREDENTIAL_ERROR,
+  parseMcpConfig,
+  REDACTED_MCP_SECRET_VALUE,
+  stringRecord,
+  toCanonicalMcpServer,
+} from "#/utils/mcp-config";
+import { flattenMcpConfig } from "#/utils/mcp-installed-servers";
+import type { MCPServerConfig } from "#/types/mcp-server";
 
-describe("toSdkMcpConfig", () => {
-  it("uses bare base names when there are no collisions across server types", () => {
-    // The bug we're guarding against: a shared monotonic counter would
-    // emit "sse", "shttp_1", "myname_2" — bumping the stdio suffix every
-    // time another server type's count changes. With per-base collision
-    // suffixing, unrelated entries keep their bare names.
-    const config: MCPConfig = {
-      sse_servers: [{ url: "https://sse.example" }],
-      shttp_servers: [{ url: "https://shttp.example" }],
-      stdio_servers: [{ name: "myname", command: "/bin/run" }],
-    };
-
-    const out = toSdkMcpConfig(config);
-
-    expect(out).not.toBeNull();
-    expect(Object.keys(out!)).toEqual(["sse", "shttp", "myname"]);
+describe("getSdkMcpServerMap", () => {
+  it("returns null for non-record values", () => {
+    expect(getSdkMcpServerMap(null)).toBeNull();
+    expect(getSdkMcpServerMap(undefined)).toBeNull();
+    expect(getSdkMcpServerMap("string")).toBeNull();
+    expect(getSdkMcpServerMap(42)).toBeNull();
+    expect(getSdkMcpServerMap([])).toBeNull();
   });
 
-  it("only suffixes when the same base actually collides", () => {
-    const config: MCPConfig = {
-      sse_servers: [
-        { url: "https://a.example" },
-        { url: "https://b.example" },
-        { url: "https://c.example" },
-      ],
-      shttp_servers: [
-        { url: "https://d.example" },
-        { url: "https://e.example" },
-      ],
-      stdio_servers: [],
-    };
-
-    const out = toSdkMcpConfig(config);
-
-    expect(Object.keys(out!)).toEqual([
-      "sse",
-      "sse_1",
-      "sse_2",
-      "shttp",
-      "shttp_1",
-    ]);
-  });
-
-  it("preserves stdio names verbatim when distinct, even with sse/shttp present", () => {
-    // Adding sse/shttp servers must not rename existing stdio entries.
-    // This is the exact scenario the user reported: numbers appearing
-    // on their stdio MCP server names when they edit unrelated entries.
-    const config: MCPConfig = {
-      sse_servers: [{ url: "https://x" }, { url: "https://y" }],
-      shttp_servers: [{ url: "https://z" }],
-      stdio_servers: [
-        { name: "github", command: "/bin/gh" },
-        { name: "filesystem", command: "/bin/fs" },
-      ],
-    };
-
-    const out = toSdkMcpConfig(config);
-
-    expect(out!).toMatchObject({
-      sse: { url: "https://x" },
-      sse_1: { url: "https://y" },
-      shttp: { url: "https://z" },
-      github: { command: "/bin/gh" },
-      filesystem: { command: "/bin/fs" },
+  it("unwraps the mcpServers wrapper when it is a plain server map", () => {
+    const wrapped = { mcpServers: { docs: { url: "https://docs.example" } } };
+    expect(getSdkMcpServerMap(wrapped)).toEqual({
+      docs: { url: "https://docs.example" },
     });
   });
 
-  it("suffixes only colliding stdio names", () => {
-    const config: MCPConfig = {
-      sse_servers: [],
-      shttp_servers: [],
-      stdio_servers: [
-        { name: "tool", command: "/bin/a" },
-        { name: "tool", command: "/bin/b" },
-        { name: "other", command: "/bin/c" },
-      ],
-    };
+  it("treats a server-shaped mcpServers value as a flat map, not a wrapper", () => {
+    const urlServer = { mcpServers: { url: "https://meta.example" } };
+    expect(getSdkMcpServerMap(urlServer)).toEqual(urlServer);
 
-    const out = toSdkMcpConfig(config);
-
-    expect(Object.keys(out!)).toEqual(["tool", "tool_1", "other"]);
+    const commandServer = { mcpServers: { command: "npx" } };
+    expect(getSdkMcpServerMap(commandServer)).toEqual(commandServer);
   });
 
-  it("falls back to a 'stdio' base when a stdio entry has no name", () => {
-    const config: MCPConfig = {
-      sse_servers: [],
-      shttp_servers: [],
-      stdio_servers: [
-        { name: "", command: "/bin/a" },
-        { name: "", command: "/bin/b" },
-      ],
-    };
-
-    const out = toSdkMcpConfig(config);
-
-    expect(Object.keys(out!)).toEqual(["stdio", "stdio_1"]);
-  });
-
-  it("uses a user-given name as the sse/shttp dict key", () => {
-    const config: MCPConfig = {
-      sse_servers: [{ name: "my_search", url: "https://sse.example" }],
-      shttp_servers: [{ name: "my_docs", url: "https://shttp.example" }],
-      stdio_servers: [],
-    };
-
-    const out = toSdkMcpConfig(config);
-
-    expect(Object.keys(out!)).toEqual(["my_search", "my_docs"]);
-    expect(out!.my_search).toMatchObject({
-      url: "https://sse.example",
-      transport: "sse",
-    });
-  });
-
-  it("preserves valid hyphenated MCP server names as SDK keys", () => {
-    const config: MCPConfig = {
-      sse_servers: [
-        { name: "integrations-hub", url: "https://hub.example/mcp" },
-      ],
-      shttp_servers: [],
-      stdio_servers: [{ name: "docs-server", command: "npx" }],
-    };
-
-    const out = toSdkMcpConfig(config);
-
-    expect(Object.keys(out!)).toEqual([
-      "integrations-hub",
-      "docs-server",
-    ]);
-  });
-
-  it("falls back to the base name for unnamed sse/shttp entries", () => {
-    const config: MCPConfig = {
-      sse_servers: [{ name: "named", url: "https://a" }, { url: "https://b" }],
-      shttp_servers: [{ url: "https://c" }],
-      stdio_servers: [],
-    };
-
-    const out = toSdkMcpConfig(config);
-
-    expect(Object.keys(out!)).toEqual(["named", "sse", "shttp"]);
-  });
-
-  it("de-dups colliding user-given sse/shttp names with a suffix", () => {
-    const config: MCPConfig = {
-      sse_servers: [
-        { name: "search", url: "https://a" },
-        { name: "search", url: "https://b" },
-      ],
-      shttp_servers: [],
-      stdio_servers: [],
-    };
-
-    const out = toSdkMcpConfig(config);
-
-    expect(Object.keys(out!)).toEqual(["search", "search_1"]);
-  });
-
-  it("round-trips a user-given sse/shttp name through parse → write", () => {
-    const persisted = {
-      my_search: { url: "https://x", transport: "sse" },
-      my_docs: { url: "https://y" },
-    };
-
-    const parsed = parseMcpConfig(persisted);
-
-    expect(parsed.sse_servers).toEqual([
-      { name: "my_search", url: "https://x" },
-    ]);
-    expect(parsed.shttp_servers).toEqual([
-      { name: "my_docs", url: "https://y" },
-    ]);
-
-    const written = toSdkMcpConfig(parsed);
-    expect(Object.keys(written!).sort()).toEqual(["my_docs", "my_search"]);
-  });
-
-  it("parses cloud SDK MCPConfig wrapper shape", () => {
-    const persisted = {
-      mcpServers: {
-        "cloud-weather": {
-          url: "https://weather.example/mcp",
-          transport: "http",
-        },
-        "cloud-files": {
-          command: "uvx",
-          args: ["mcp-server-files"],
-        },
-      },
-    };
-
-    const parsed = parseMcpConfig(persisted);
-
-    expect(parsed.shttp_servers).toEqual([
-      { name: "cloud-weather", url: "https://weather.example/mcp" },
-    ]);
-    expect(parsed.stdio_servers).toEqual([
-      {
-        name: "cloud-files",
-        command: "uvx",
-        args: ["mcp-server-files"],
-      },
-    ]);
-  });
-
-  it("does not unwrap a valid server named mcpServers", () => {
-    const parsed = parseMcpConfig({
-      mcpServers: {
-        url: "https://meta.example/mcp",
-      },
-    });
-
-    expect(parsed.shttp_servers).toEqual([
-      { name: "mcpServers", url: "https://meta.example/mcp" },
-    ]);
-  });
-
-  it("does not surface auto-generated sse/shttp keys as user names", () => {
-    // Keys matching the fallback pattern carry no user intent, so parsing
-    // must leave `name` unset — otherwise the auto key would become a
-    // sticky, user-facing name on the next edit.
-    const persisted = {
-      sse: { url: "https://a", transport: "sse" },
-      sse_1: { url: "https://b", transport: "sse" },
-      shttp: { url: "https://c" },
-      shttp_2: { url: "https://d" },
-    };
-
-    const parsed = parseMcpConfig(persisted);
-
-    expect(parsed.sse_servers).toEqual([
-      { url: "https://a" },
-      { url: "https://b" },
-    ]);
-    expect(parsed.shttp_servers).toEqual([
-      { url: "https://c" },
-      { url: "https://d" },
-    ]);
-  });
-
-  it("returns null when there are no servers", () => {
+  it("keeps a server literally named mcpServers instead of discarding it", () => {
+    // Unwrapping a server-shaped `mcpServers` would strip the only name in the
+    // map, leaving `{ url: ... }` whose entries parse to nothing at all.
     expect(
-      toSdkMcpConfig({ sse_servers: [], shttp_servers: [], stdio_servers: [] }),
-    ).toBeNull();
-  });
+      parseMcpConfig({ mcpServers: { url: "https://meta.example" } }),
+    ).toEqual({
+      mcpServers: { transport: "http", url: "https://meta.example" },
+    });
 
-  it("serializes remote API keys through the FastMCP auth field", () => {
-    const config: MCPConfig = {
-      sse_servers: [
-        {
-          url: "https://sse.example",
-          auth: { strategy: "bearer", value: "sse-secret" },
-        },
-      ],
-      shttp_servers: [
-        {
-          url: "https://shttp.example",
-          auth: { strategy: "bearer", value: "shttp-secret" },
-        },
-      ],
-      stdio_servers: [],
-    };
-
-    const out = toSdkMcpConfig(config);
-
-    expect(out).toEqual({
-      sse: {
-        url: "https://sse.example",
-        transport: "sse",
-        auth: { strategy: "bearer", value: "sse-secret" },
-      },
-      shttp: {
-        url: "https://shttp.example",
-        transport: "http",
-        auth: { strategy: "bearer", value: "shttp-secret" },
-      },
+    expect(parseMcpConfig({ mcpServers: { command: "npx" } })).toEqual({
+      mcpServers: { transport: "stdio", command: "npx" },
     });
   });
 
-  it("keeps names stable across a parse → write round trip", () => {
-    // Simulates loading the user's persisted settings, parsing them,
-    // and re-serializing on save (which is what happens on every edit).
-    // The keys must not drift between trips.
-    const persisted = {
-      sse: { url: "https://x", transport: "sse" },
-      sse_1: { url: "https://y", transport: "sse" },
-      shttp: { url: "https://z" },
-      github: { command: "/bin/gh" },
-    };
-
-    const parsed = parseMcpConfig(persisted);
-    const written = toSdkMcpConfig(parsed);
-
-    expect(written).not.toBeNull();
-    expect(Object.keys(written!).sort()).toEqual(Object.keys(persisted).sort());
+  it("does not unwrap when mcpServers is not a record", () => {
+    const value = { mcpServers: "invalid" };
+    expect(getSdkMcpServerMap(value)).toEqual(value);
   });
 
-  it("does not bump the suffix on a stdio name when an sse server is added", () => {
-    // Concretely demonstrates the user's report: editing/adding an sse
-    // server must leave the stdio name untouched. The previous shared
-    // counter implementation would rename "myname" → "myname_2" here.
-    const before: MCPConfig = {
-      sse_servers: [{ url: "https://a" }],
-      shttp_servers: [],
-      stdio_servers: [{ name: "myname", command: "/bin/run" }],
-    };
-    const after: MCPConfig = {
-      sse_servers: [{ url: "https://a" }, { url: "https://b" }],
-      shttp_servers: [],
-      stdio_servers: [{ name: "myname", command: "/bin/run" }],
-    };
-
-    const out1 = toSdkMcpConfig(before)!;
-    const out2 = toSdkMcpConfig(after)!;
-
-    expect("myname" in out1).toBe(true);
-    expect("myname" in out2).toBe(true);
+  it("returns the value unchanged when there is no mcpServers key", () => {
+    const flat = { docs: { url: "https://docs.example" } };
+    expect(getSdkMcpServerMap(flat)).toBe(flat);
   });
 });
 
-describe("parseMcpConfig / toSdkMcpConfig — enabled flag", () => {
-  it("round-trips a disabled server without flagging its enabled siblings", () => {
-    // Every mutation re-serializes the whole map, so a disabled server has to
-    // survive edits made to unrelated entries. An *enabled* server must come
-    // back out with no flag at all — the SDK defaults `enabled` to true, and
-    // omitting it is what clears a previously persisted `enabled: false`.
-    const persisted = {
-      off_remote: { url: "https://off.example/mcp", enabled: false },
-      on_remote: { url: "https://on.example/mcp" },
-      off_stdio: { command: "/bin/off", enabled: false },
-    };
+describe("stringRecord", () => {
+  it("returns undefined for non-records", () => {
+    expect(stringRecord(null)).toBeUndefined();
+    expect(stringRecord(["a"])).toBeUndefined();
+    expect(stringRecord("x")).toBeUndefined();
+  });
 
-    const roundTripped = toSdkMcpConfig(parseMcpConfig(persisted));
+  it("keeps only string-valued entries", () => {
+    expect(stringRecord({ valid: "yes", count: 1, nested: {} })).toEqual({
+      valid: "yes",
+    });
+  });
 
-    expect(roundTripped).toEqual({
-      off_remote: {
-        url: "https://off.example/mcp",
-        transport: "http",
+  it("returns undefined when no entry is a string", () => {
+    expect(stringRecord({ count: 1, flag: true })).toBeUndefined();
+  });
+});
+
+describe("hasRedactedMcpSecretLeaf", () => {
+  it("detects the redaction marker the agent server actually sends", () => {
+    // The literal is the wire contract: the agent server replaces secrets with
+    // exactly this text, so matching it only symbolically would silently stop
+    // recognizing redacted values if the sentinel ever drifted.
+    expect(hasRedactedMcpSecretLeaf("**********")).toBe(true);
+    expect(hasRedactedMcpSecretLeaf(REDACTED_MCP_SECRET_VALUE)).toBe(true);
+  });
+
+  it("returns false for plain scalars", () => {
+    expect(hasRedactedMcpSecretLeaf("plain")).toBe(false);
+    expect(hasRedactedMcpSecretLeaf(123)).toBe(false);
+    expect(hasRedactedMcpSecretLeaf(null)).toBe(false);
+  });
+
+  it("recurses into arrays", () => {
+    expect(
+      hasRedactedMcpSecretLeaf(["plain", { nested: REDACTED_MCP_SECRET_VALUE }]),
+    ).toBe(true);
+    expect(hasRedactedMcpSecretLeaf(["plain", "other"])).toBe(false);
+  });
+
+  it("recurses into records", () => {
+    expect(
+      hasRedactedMcpSecretLeaf({ a: { b: REDACTED_MCP_SECRET_VALUE } }),
+    ).toBe(true);
+    expect(hasRedactedMcpSecretLeaf({ nested: ["plain"] })).toBe(false);
+  });
+});
+
+describe("getMcpServerEnabled", () => {
+  it("returns false only for an explicit disabled flag", () => {
+    expect(getMcpServerEnabled({ enabled: false } as unknown as MCPServer)).toBe(
+      false,
+    );
+  });
+
+  it("returns undefined when enabled is true or absent", () => {
+    expect(
+      getMcpServerEnabled({ enabled: true } as unknown as MCPServer),
+    ).toBeUndefined();
+    expect(getMcpServerEnabled({} as unknown as MCPServer)).toBeUndefined();
+  });
+});
+
+describe("parseMcpConfig", () => {
+  it("returns an empty config for non-record input", () => {
+    expect(parseMcpConfig("invalid")).toEqual({});
+    expect(parseMcpConfig(null)).toEqual({});
+  });
+
+  it("unwraps the cloud mcpServers wrapper", () => {
+    expect(
+      parseMcpConfig({
+        mcpServers: {
+          cloud: { url: "https://cloud.example", transport: "http" },
+        },
+      }),
+    ).toEqual({
+      cloud: { transport: "http", url: "https://cloud.example" },
+    });
+  });
+
+  it("normalizes a fully-populated stdio server", () => {
+    expect(
+      parseMcpConfig({
+        local: {
+          command: "npx",
+          args: ["a", "b"],
+          env: { TOKEN: "value", ignored: 2 },
+          cwd: "/tmp",
+          description: "desc",
+          icon: "icon",
+          timeout: 5,
+          enabled: false,
+        },
+      }),
+    ).toEqual({
+      local: {
+        transport: "stdio",
+        command: "npx",
+        args: ["a", "b"],
+        env: { TOKEN: "value" },
+        cwd: "/tmp",
+        description: "desc",
+        icon: "icon",
+        timeout: 5,
         enabled: false,
       },
-      on_remote: { url: "https://on.example/mcp", transport: "http" },
-      off_stdio: { command: "/bin/off", enabled: false },
+    });
+  });
+
+  it("omits stdio args when not every entry is a string", () => {
+    expect(
+      parseMcpConfig({ local: { command: "x", args: ["ok", 2] } }),
+    ).toEqual({ local: { transport: "stdio", command: "x" } });
+  });
+
+  it("normalizes remote transports and their optional fields", () => {
+    expect(
+      parseMcpConfig({
+        http_default: {
+          url: "https://http.example",
+          headers: { "X-Test": "yes", ignored: 1 },
+          auth: { strategy: "bearer", value: "token" },
+          description: "d",
+          icon: "i",
+          timeout: 0,
+          sse_read_timeout: 10,
+          keep_alive: true,
+          enabled: false,
+        },
+        sse_server: { url: "https://sse.example", transport: "sse" },
+        streamable: { url: "https://x.example", transport: "streamable-http" },
+        shttp_alias: { url: "https://y.example", transport: "shttp" },
+      }),
+    ).toEqual({
+      http_default: {
+        transport: "http",
+        url: "https://http.example",
+        headers: { "X-Test": "yes" },
+        auth: { strategy: "bearer", value: "token" },
+        description: "d",
+        icon: "i",
+        timeout: 0,
+        sse_read_timeout: 10,
+        keep_alive: true,
+        enabled: false,
+      },
+      sse_server: { transport: "sse", url: "https://sse.example" },
+      streamable: { transport: "streamable-http", url: "https://x.example" },
+      shttp_alias: { transport: "http", url: "https://y.example" },
+    });
+  });
+
+  it("drops invalid auth credentials while keeping the server", () => {
+    expect(
+      parseMcpConfig({
+        remote: {
+          url: "https://remote.example",
+          auth: { strategy: "not-a-real-strategy" },
+        },
+      }),
+    ).toEqual({
+      remote: { transport: "http", url: "https://remote.example" },
+    });
+  });
+
+  it("skips entries that are not usable server records", () => {
+    expect(
+      parseMcpConfig({
+        scalar: "nope",
+        null_entry: null,
+        empty_object: { foo: "bar" },
+        bad_transport: { url: "https://z.example", transport: "weird" },
+        stdio_transport_url: {
+          url: "https://s.example",
+          transport: "stdio",
+        },
+        keep: { url: "https://keep.example" },
+      }),
+    ).toEqual({
+      keep: { transport: "http", url: "https://keep.example" },
+    });
+  });
+
+  it("ignores optional fields whose types are wrong", () => {
+    expect(
+      parseMcpConfig({
+        stdio_bad: {
+          command: "c",
+          args: "not-array",
+          env: "not-record",
+          cwd: 1,
+          description: 2,
+          icon: 3,
+          timeout: "x",
+          enabled: "no",
+        },
+        remote_bad: {
+          url: "https://bad.example",
+          headers: "not-record",
+          auth: 123,
+          description: 1,
+          icon: 2,
+          timeout: "x",
+          sse_read_timeout: "y",
+          keep_alive: "z",
+          enabled: "no",
+        },
+      }),
+    ).toEqual({
+      stdio_bad: { transport: "stdio", command: "c" },
+      remote_bad: { transport: "http", url: "https://bad.example" },
     });
   });
 });
 
-describe("parseMcpConfig / toSdkMcpConfig — auth: oauth round-trip", () => {
-  it("round-trips auth metadata and state for remote OAuth servers", () => {
-    const persisted = {
-      superhuman_mail: {
-        url: "https://mcp.mail.superhuman.com/mcp",
-        transport: "http",
-        auth: {
-          strategy: "oauth2",
-          authentication: {
-            type: "oauth",
-            client_auth_method: "none",
-          },
-          state: {
-            tokens: { access_token: "gAAAAencrypted-access-token" },
-            token_expires_at: 12345,
-          },
+describe("canonical MCP configuration integration", () => {
+  // @spec MCP-003 — Settings map keys are stable MCP identities
+  it("preserves settings keys through parse and installed-server flattening", () => {
+    const config = parseMcpConfig({
+      github: { url: "https://github.example/mcp" },
+      filesystem: { command: "npx" },
+    });
+
+    expect(flattenMcpConfig(config).map(({ id }) => id).sort()).toEqual([
+      "filesystem",
+      "github",
+    ]);
+  });
+});
+
+describe("toCanonicalMcpServer", () => {
+  it("serializes a full stdio server", () => {
+    const server: MCPServerConfig = {
+      id: "local",
+      type: "stdio",
+      command: "npx",
+      args: ["server"],
+      env: { TOKEN: "value" },
+      enabled: false,
+    };
+    expect(toCanonicalMcpServer(server)).toEqual({
+      transport: "stdio",
+      command: "npx",
+      args: ["server"],
+      env: { TOKEN: "value" },
+      enabled: false,
+    });
+  });
+
+  it("omits empty stdio args and env", () => {
+    const server: MCPServerConfig = {
+      id: "local",
+      type: "stdio",
+      command: "uvx",
+      args: [],
+      env: {},
+    };
+    expect(toCanonicalMcpServer(server)).toEqual({
+      transport: "stdio",
+      command: "uvx",
+    });
+  });
+
+  it("serializes an sse server and ignores timeout", () => {
+    const server: MCPServerConfig = {
+      id: "events",
+      type: "sse",
+      url: "https://events.example",
+      headers: { "X-Test": "yes" },
+      auth: { strategy: "bearer", value: "secret" },
+      timeout: 5,
+    };
+    expect(toCanonicalMcpServer(server)).toEqual({
+      transport: "sse",
+      url: "https://events.example",
+      headers: { "X-Test": "yes" },
+      auth: { strategy: "bearer", value: "secret" },
+    });
+  });
+
+  it("serializes an shttp server and keeps its timeout", () => {
+    const server: MCPServerConfig = {
+      id: "http",
+      type: "shttp",
+      url: "https://http.example",
+      timeout: 15,
+    };
+    expect(toCanonicalMcpServer(server)).toEqual({
+      transport: "http",
+      url: "https://http.example",
+      timeout: 15,
+    });
+  });
+
+  it("omits empty headers and undefined timeout for remote servers", () => {
+    const server: MCPServerConfig = {
+      id: "http-min",
+      type: "shttp",
+      url: "https://http.example",
+      headers: {},
+    };
+    expect(toCanonicalMcpServer(server)).toStrictEqual({
+      transport: "http",
+      url: "https://http.example",
+    });
+  });
+
+  it("omits stdio args and env when they are absent", () => {
+    const server: MCPServerConfig = { id: "m", type: "stdio", command: "uvx" };
+    expect(toCanonicalMcpServer(server)).toEqual({
+      transport: "stdio",
+      command: "uvx",
+    });
+  });
+
+  it("keeps enabled:false on a remote server", () => {
+    const server: MCPServerConfig = {
+      id: "r",
+      type: "shttp",
+      url: "https://r.example",
+      enabled: false,
+    };
+    expect(toCanonicalMcpServer(server)).toEqual({
+      transport: "http",
+      url: "https://r.example",
+      enabled: false,
+    });
+  });
+});
+
+describe("buildMcpServerPatch", () => {
+  const stdioPrevious = { transport: "stdio", command: "old" } as MCPServer;
+
+  it("adds args and env for a stdio edit", () => {
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "stdio",
+      command: "npx",
+      args: ["a"],
+      env: { TOKEN: "value" },
+    };
+    expect(buildMcpServerPatch(stdioPrevious, edited)).toEqual({
+      transport: "stdio",
+      command: "npx",
+      args: ["a"],
+      env: { TOKEN: "value" },
+    });
+  });
+
+  it("nulls previously-set args that are removed on edit", () => {
+    const previous = {
+      transport: "stdio",
+      command: "c",
+      args: ["x"],
+    } as MCPServer;
+    const edited: MCPServerConfig = { id: "s", type: "stdio", command: "c" };
+    expect(buildMcpServerPatch(previous, edited)).toEqual({
+      transport: "stdio",
+      command: "c",
+      args: null,
+    });
+  });
+
+  it("skips redacted env values and nulls removed env keys", () => {
+    const previous = {
+      transport: "stdio",
+      command: "c",
+      env: { OLD: "1", KEEP: "2" },
+    } as MCPServer;
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "stdio",
+      command: "c",
+      env: { KEEP: REDACTED_MCP_SECRET_VALUE, NEW: "3" },
+    };
+    expect(buildMcpServerPatch(previous, edited)).toEqual({
+      transport: "stdio",
+      command: "c",
+      env: { NEW: "3", OLD: null },
+    });
+  });
+
+  // @spec MCP-002 — Secret patches preserve user intent
+  it("clears the entire stdio environment when all entries are removed", () => {
+    const previous: MCPServer = {
+      transport: "stdio",
+      command: "npx",
+      env: { API_KEY: "stored-secret" },
+    };
+    // The form omits env after the user removes every environment entry.
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "stdio",
+      command: "npx",
+    };
+
+    expect(buildMcpServerPatch(previous, edited)).toEqual({
+      transport: "stdio",
+      command: "npx",
+      env: null,
+    });
+  });
+
+  it("emits enabled:false when the edit disables the server", () => {
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "sse",
+      url: "https://e.example",
+      enabled: false,
+    };
+    expect(buildMcpServerPatch(stdioPrevious, edited)).toEqual({
+      transport: "sse",
+      url: "https://e.example",
+      enabled: false,
+    });
+  });
+
+  it("re-enables a previously disabled server", () => {
+    const previous = {
+      transport: "http",
+      url: "https://e.example",
+      enabled: false,
+    } as MCPServer;
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "shttp",
+      url: "https://e.example",
+    };
+    expect(buildMcpServerPatch(previous, edited)).toEqual({
+      transport: "http",
+      url: "https://e.example",
+      enabled: true,
+    });
+  });
+
+  it("sets and clears shttp timeout", () => {
+    const previousWithTimeout = {
+      transport: "http",
+      url: "https://u.example",
+      timeout: 10,
+    } as MCPServer;
+    const clearEdit: MCPServerConfig = {
+      id: "s",
+      type: "shttp",
+      url: "https://u.example",
+    };
+    expect(buildMcpServerPatch(previousWithTimeout, clearEdit)).toEqual({
+      transport: "http",
+      url: "https://u.example",
+      timeout: null,
+    });
+
+    const setEdit: MCPServerConfig = {
+      id: "s",
+      type: "shttp",
+      url: "https://u.example",
+      timeout: 5,
+    };
+    expect(buildMcpServerPatch(stdioPrevious, setEdit)).toEqual({
+      transport: "http",
+      url: "https://u.example",
+      timeout: 5,
+    });
+  });
+
+  it("clears remote auth when the edit removes it", () => {
+    const previous = {
+      transport: "http",
+      url: "https://u.example",
+      auth: { strategy: "bearer", value: "tok" },
+    } as MCPServer;
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "shttp",
+      url: "https://u.example",
+    };
+    expect(buildMcpServerPatch(previous, edited)).toEqual({
+      transport: "http",
+      url: "https://u.example",
+      auth: null,
+    });
+  });
+
+  it("writes a new non-oauth credential", () => {
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "sse",
+      url: "https://u.example",
+      auth: { strategy: "bearer", value: "tok" },
+    };
+    expect(buildMcpServerPatch(stdioPrevious, edited)).toEqual({
+      transport: "sse",
+      url: "https://u.example",
+      auth: { strategy: "bearer", value: "tok" },
+    });
+  });
+
+  // @spec MCP-002 — Secret patches preserve user intent
+  it("skips a redacted credential rather than persisting the mask", () => {
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "sse",
+      url: "https://u.example",
+      auth: { strategy: "bearer", value: REDACTED_MCP_SECRET_VALUE },
+    };
+    expect(buildMcpServerPatch(stdioPrevious, edited)).toEqual({
+      transport: "sse",
+      url: "https://u.example",
+    });
+  });
+
+  it("nulls fields that differ across a credential strategy replacement", () => {
+    const previous = {
+      transport: "http",
+      url: "https://u.example",
+      auth: { strategy: "bearer", value: "tok" },
+    } as MCPServer;
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "shttp",
+      url: "https://u.example",
+      auth: { strategy: "header", headers: { "X-One": "one" } },
+    };
+    expect(buildMcpServerPatch(previous, edited)).toEqual({
+      transport: "http",
+      url: "https://u.example",
+      auth: { strategy: "header", headers: { "X-One": "one" }, value: null },
+    });
+  });
+
+  // @spec MCP-002 — Secret patches preserve user intent
+  it("patches header auth by merging headers", () => {
+    const previous = {
+      transport: "http",
+      url: "https://u.example",
+      auth: { strategy: "header", headers: { A: "1" } },
+    } as MCPServer;
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "shttp",
+      url: "https://u.example",
+      auth: { strategy: "header", headers: { A: "1", B: "2" } },
+    };
+    expect(buildMcpServerPatch(previous, edited)).toEqual({
+      transport: "http",
+      url: "https://u.example",
+      auth: { strategy: "header", headers: { A: "1", B: "2" } },
+    });
+  });
+
+  // @spec MCP-002 — Secret patches preserve user intent
+  it("throws when a header removal is attempted", () => {
+    const previous = {
+      transport: "http",
+      url: "https://u.example",
+      auth: { strategy: "header", headers: { A: "1", B: "2" } },
+    } as MCPServer;
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "shttp",
+      url: "https://u.example",
+      auth: { strategy: "header", headers: { A: "1" } },
+    };
+    expect(() => buildMcpServerPatch(previous, edited)).toThrow(
+      MCP_HEADER_REMOVAL_ERROR,
+    );
+    // Asserting against the constant alone would still pass if it were emptied,
+    // because `toThrow("")` matches any error. Pin the actionable wording too.
+    expect(() => buildMcpServerPatch(previous, edited)).toThrow(
+      /replace the credential/i,
+    );
+  });
+
+  it("creates a new oauth credential and drops redacted state leaves", () => {
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "shttp",
+      url: "https://u.example",
+      auth: {
+        strategy: "oauth2",
+        authentication: {
+          type: "oauth",
+          client_id: "cid",
+          scopes: ["read", "write"],
+        },
+        state: {
+          token_expires_at: 5,
+          tokens: { access_token: REDACTED_MCP_SECRET_VALUE },
         },
       },
     };
+    expect(buildMcpServerPatch(stdioPrevious, edited)).toEqual({
+      transport: "http",
+      url: "https://u.example",
+      auth: {
+        strategy: "oauth2",
+        authentication: {
+          type: "oauth",
+          client_id: "cid",
+          scopes: ["read", "write"],
+        },
+        state: { token_expires_at: 5 },
+      },
+    });
+  });
 
-    const roundTripped = toSdkMcpConfig(parseMcpConfig(persisted));
+  it("nulls oauth authentication fields removed on edit", () => {
+    const previous = {
+      transport: "http",
+      url: "https://u.example",
+      auth: {
+        strategy: "oauth2",
+        authentication: { type: "oauth", client_id: "cid", scopes: ["a"] },
+      },
+    } as MCPServer;
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "shttp",
+      url: "https://u.example",
+      auth: {
+        strategy: "oauth2",
+        authentication: { type: "oauth", scopes: ["a"] },
+      },
+    };
+    expect(buildMcpServerPatch(previous, edited)).toEqual({
+      transport: "http",
+      url: "https://u.example",
+      auth: {
+        strategy: "oauth2",
+        authentication: { type: "oauth", client_id: null },
+      },
+    });
+  });
 
-    expect(roundTripped).toEqual({
-      superhuman_mail: {
-        url: "https://mcp.mail.superhuman.com/mcp",
-        transport: "http",
-        auth: {
-          strategy: "oauth2",
-          authentication: {
-            type: "oauth",
-            client_auth_method: "none",
-          },
-          state: {
-            tokens: { access_token: "gAAAAencrypted-access-token" },
-            token_expires_at: 12345,
-          },
+  // @spec MCP-002 — Secret patches preserve user intent
+  it("nulls every editable oauth authentication field the edit clears", () => {
+    const previous = {
+      transport: "http",
+      url: "https://u.example",
+      auth: {
+        strategy: "oauth2",
+        authentication: {
+          type: "oauth",
+          client_auth_method: "client_secret_post",
+          scopes: "mail.read",
+          client_id: "old-client",
+          client_secret: REDACTED_MCP_SECRET_VALUE,
+          client_name: "OpenHands Canvas",
+        },
+      },
+    } as MCPServer;
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "shttp",
+      url: "https://u.example",
+      auth: { strategy: "oauth2", authentication: { type: "oauth" } },
+    };
+    // Every user-editable field must be nulled individually: an emptied field
+    // list would silently leave the stale client registration in place.
+    expect(buildMcpServerPatch(previous, edited)).toEqual({
+      transport: "http",
+      url: "https://u.example",
+      auth: {
+        strategy: "oauth2",
+        authentication: {
+          type: "oauth",
+          client_auth_method: null,
+          scopes: null,
+          client_id: null,
+          client_secret: null,
         },
       },
     });
   });
 
-  it("keeps private_key_jwt OAuth client authentication metadata", () => {
-    const persisted = {
-      oauth: {
-        url: "https://mcp.example.com/mcp",
-        transport: "http",
-        auth: {
-          strategy: "oauth2",
-          authentication: {
-            type: "oauth",
-            client_auth_method: "private_key_jwt",
-          },
+  it("omits the auth key when an oauth credential is unchanged", () => {
+    const previous = {
+      transport: "http",
+      url: "https://u.example",
+      auth: {
+        strategy: "oauth2",
+        authentication: { type: "oauth", client_id: "cid" },
+        state: { token_expires_at: 5 },
+      },
+    } as MCPServer;
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "shttp",
+      url: "https://u.example",
+      auth: {
+        strategy: "oauth2",
+        authentication: { type: "oauth", client_id: "cid" },
+        state: { token_expires_at: 5 },
+      },
+    };
+    expect(buildMcpServerPatch(previous, edited)).toStrictEqual({
+      transport: "http",
+      url: "https://u.example",
+    });
+  });
+
+  it("omits the env patch when the only change is a redacted secret", () => {
+    const previous = {
+      transport: "stdio",
+      command: "c",
+      env: { SECRET: "real" },
+    } as MCPServer;
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "stdio",
+      command: "c",
+      env: { SECRET: REDACTED_MCP_SECRET_VALUE },
+    };
+    expect(buildMcpServerPatch(previous, edited)).toStrictEqual({
+      transport: "stdio",
+      command: "c",
+    });
+  });
+
+  it("ignores timeout for sse edits", () => {
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "sse",
+      url: "https://u.example",
+      timeout: 5,
+    };
+    expect(buildMcpServerPatch(stdioPrevious, edited)).toEqual({
+      transport: "sse",
+      url: "https://u.example",
+    });
+  });
+
+  it("does not clear timeout when the previous server was stdio", () => {
+    const previous = {
+      transport: "stdio",
+      command: "c",
+      timeout: 10,
+    } as MCPServer;
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "shttp",
+      url: "https://u.example",
+    };
+    expect(buildMcpServerPatch(previous, edited)).toEqual({
+      transport: "http",
+      url: "https://u.example",
+    });
+  });
+
+  it("uses stdio env/args baselines only when the previous server was stdio", () => {
+    const previous = {
+      transport: "http",
+      url: "https://u.example",
+      env: { X: "1" },
+      args: ["x"],
+    } as unknown as MCPServer;
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "stdio",
+      command: "c",
+      env: { Y: "2" },
+    };
+    expect(buildMcpServerPatch(previous, edited)).toEqual({
+      transport: "stdio",
+      command: "c",
+      env: { Y: "2" },
+    });
+  });
+
+  it("omits an unchanged-redacted credential field on a same-strategy edit", () => {
+    const previous = {
+      transport: "http",
+      url: "https://u.example",
+      auth: { strategy: "bearer", value: "old" },
+    } as MCPServer;
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "shttp",
+      url: "https://u.example",
+      auth: { strategy: "bearer" },
+    };
+    expect(buildMcpServerPatch(previous, edited)).toEqual({
+      transport: "http",
+      url: "https://u.example",
+      auth: { strategy: "bearer" },
+    });
+  });
+
+  it("replaces a header credential with a different strategy", () => {
+    const previous = {
+      transport: "http",
+      url: "https://u.example",
+      auth: { strategy: "header", headers: { A: "1" } },
+    } as MCPServer;
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "shttp",
+      url: "https://u.example",
+      auth: { strategy: "bearer", value: "x" },
+    };
+    expect(buildMcpServerPatch(previous, edited)).toEqual({
+      transport: "http",
+      url: "https://u.example",
+      auth: { strategy: "bearer", value: "x", headers: null },
+    });
+  });
+
+  // @spec MCP-002 — Secret patches preserve user intent
+  it("keeps the new secret when a strategy replacement reuses a field name", () => {
+    const previous = {
+      transport: "http",
+      url: "https://u.example",
+      auth: { strategy: "api_key", value: "old" },
+    } as MCPServer;
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "shttp",
+      url: "https://u.example",
+      auth: { strategy: "bearer", value: "new" },
+    };
+    // `value` exists on both strategies, so the stale-field deletes must skip
+    // it; nulling it would erase the credential the user just entered.
+    expect(buildMcpServerPatch(previous, edited)).toEqual({
+      transport: "http",
+      url: "https://u.example",
+      auth: { strategy: "bearer", value: "new" },
+    });
+  });
+
+  it("adds a header credential when the previous server was stdio", () => {
+    const previous = { transport: "stdio", command: "c" } as MCPServer;
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "shttp",
+      url: "https://u.example",
+      auth: { strategy: "header", headers: { A: "1" } },
+    };
+    expect(buildMcpServerPatch(previous, edited)).toEqual({
+      transport: "http",
+      url: "https://u.example",
+      auth: { strategy: "header", headers: { A: "1" } },
+    });
+  });
+
+  it("adds a header credential when the previous remote had no auth", () => {
+    const previous = {
+      transport: "http",
+      url: "https://u.example",
+    } as MCPServer;
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "shttp",
+      url: "https://u.example",
+      auth: { strategy: "header", headers: { A: "1" } },
+    };
+    expect(buildMcpServerPatch(previous, edited)).toEqual({
+      transport: "http",
+      url: "https://u.example",
+      auth: { strategy: "header", headers: { A: "1" } },
+    });
+  });
+
+  it("makes no header change when the edit only re-sends a redacted header", () => {
+    const previous = {
+      transport: "http",
+      url: "https://u.example",
+      auth: { strategy: "header", headers: { A: "1" } },
+    } as MCPServer;
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "shttp",
+      url: "https://u.example",
+      auth: { strategy: "header", headers: { A: REDACTED_MCP_SECRET_VALUE } },
+    };
+    expect(buildMcpServerPatch(previous, edited)).toStrictEqual({
+      transport: "http",
+      url: "https://u.example",
+    });
+  });
+
+  it("treats a non-oauth previous credential as having no oauth baseline", () => {
+    const previous = {
+      transport: "http",
+      url: "https://u.example",
+      auth: { strategy: "bearer", value: "old" },
+    } as MCPServer;
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "shttp",
+      url: "https://u.example",
+      auth: { strategy: "oauth2" },
+    };
+    expect(buildMcpServerPatch(previous, edited)).toEqual({
+      transport: "http",
+      url: "https://u.example",
+      auth: { strategy: "oauth2", value: null },
+    });
+  });
+
+  it("patches only oauth state when the authentication block is omitted", () => {
+    const previous = {
+      transport: "http",
+      url: "https://u.example",
+      auth: {
+        strategy: "oauth2",
+        authentication: { type: "oauth", client_id: "cid" },
+        state: { token_expires_at: 5 },
+      },
+    } as MCPServer;
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "shttp",
+      url: "https://u.example",
+      auth: { strategy: "oauth2", state: { token_expires_at: 9 } },
+    };
+    expect(buildMcpServerPatch(previous, edited)).toEqual({
+      transport: "http",
+      url: "https://u.example",
+      auth: { strategy: "oauth2", state: { token_expires_at: 9 } },
+    });
+  });
+
+  it("clears oauth authentication when it is set to null", () => {
+    const previous = {
+      transport: "http",
+      url: "https://u.example",
+      auth: {
+        strategy: "oauth2",
+        authentication: { type: "oauth", client_id: "cid" },
+      },
+    } as MCPServer;
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "shttp",
+      url: "https://u.example",
+      auth: { strategy: "oauth2", authentication: null },
+    };
+    expect(buildMcpServerPatch(previous, edited)).toEqual({
+      transport: "http",
+      url: "https://u.example",
+      auth: { strategy: "oauth2", authentication: null },
+    });
+  });
+
+  it("drops oauth scopes that contain a redacted secret", () => {
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "shttp",
+      url: "https://u.example",
+      auth: {
+        strategy: "oauth2",
+        authentication: {
+          type: "oauth",
+          client_id: "cid",
+          scopes: ["read", REDACTED_MCP_SECRET_VALUE],
         },
       },
     };
-
-    expect(toSdkMcpConfig(parseMcpConfig(persisted))).toEqual({
-      oauth: {
-        url: "https://mcp.example.com/mcp",
-        transport: "http",
-        auth: {
-          strategy: "oauth2",
-          authentication: {
-            type: "oauth",
-            client_auth_method: "private_key_jwt",
-          },
-        },
+    expect(buildMcpServerPatch(stdioPrevious, edited)).toEqual({
+      transport: "http",
+      url: "https://u.example",
+      auth: {
+        strategy: "oauth2",
+        authentication: { type: "oauth", client_id: "cid" },
       },
     });
+  });
+
+  it("does not resurrect previous oauth state when the edit omits it", () => {
+    const previous = {
+      transport: "http",
+      url: "https://u.example",
+      auth: {
+        strategy: "oauth2",
+        authentication: { type: "oauth", client_id: "cid" },
+        state: { token_expires_at: 5 },
+      },
+    } as MCPServer;
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "shttp",
+      url: "https://u.example",
+      auth: {
+        strategy: "oauth2",
+        authentication: { type: "oauth", client_id: "NEW" },
+      },
+    };
+    expect(buildMcpServerPatch(previous, edited)).toEqual({
+      transport: "http",
+      url: "https://u.example",
+      auth: {
+        strategy: "oauth2",
+        authentication: { type: "oauth", client_id: "NEW" },
+      },
+    });
+  });
+
+  it("keeps an explicit null oauth state", () => {
+    const previous = {
+      transport: "http",
+      url: "https://u.example",
+      auth: {
+        strategy: "oauth2",
+        authentication: { type: "oauth", client_id: "cid" },
+        state: null,
+      },
+    } as MCPServer;
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "shttp",
+      url: "https://u.example",
+      auth: {
+        strategy: "oauth2",
+        authentication: { type: "oauth", client_id: "cid" },
+        state: null,
+      },
+    };
+    expect(buildMcpServerPatch(previous, edited)).toEqual({
+      transport: "http",
+      url: "https://u.example",
+      auth: { strategy: "oauth2", state: null },
+    });
+  });
+});
+
+describe("buildRenameMcpConfigPatch", () => {
+  it("throws when a stdio credential is still redacted", () => {
+    const previous = {
+      transport: "stdio",
+      command: "c",
+      env: { TOKEN: REDACTED_MCP_SECRET_VALUE },
+    } as MCPServer;
+    const edited: MCPServerConfig = { id: "s", type: "stdio", command: "c" };
+    expect(() =>
+      buildRenameMcpConfigPatch("old", "new", previous, edited),
+    ).toThrow(MCP_RENAME_CREDENTIAL_ERROR);
+  });
+
+  it("throws when a remote credential is still redacted", () => {
+    const previous = {
+      transport: "http",
+      url: "https://u.example",
+      auth: { strategy: "bearer", value: REDACTED_MCP_SECRET_VALUE },
+    } as MCPServer;
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "shttp",
+      url: "https://u.example",
+    };
+    expect(() =>
+      buildRenameMcpConfigPatch("old", "new", previous, edited),
+    ).toThrow(MCP_RENAME_CREDENTIAL_ERROR);
+    // Asserting against the constant alone would still pass if it were emptied,
+    // because `toThrow("")` matches any error. Pin the actionable wording too.
+    expect(() =>
+      buildRenameMcpConfigPatch("old", "new", previous, edited),
+    ).toThrow(/before renaming this mcp server/i);
+  });
+
+  // @spec MCP-003 — Settings map keys are stable MCP identities
+  it("removes the old key and writes the merged server under the new key", () => {
+    const previous = {
+      transport: "http",
+      url: "https://old.example",
+      auth: { strategy: "bearer", value: "tok" },
+    } as MCPServer;
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "shttp",
+      url: "https://new.example",
+    };
+    expect(buildRenameMcpConfigPatch("old", "new", previous, edited)).toEqual({
+      old: null,
+      new: { transport: "http", url: "https://new.example" },
+    });
+  });
+
+  it("merges nested record fields when renaming", () => {
+    const previous = {
+      transport: "stdio",
+      command: "c",
+      env: { A: "1" },
+    } as MCPServer;
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "stdio",
+      command: "c",
+      env: { A: "1", B: "2" },
+    };
+    expect(buildRenameMcpConfigPatch("old", "new", previous, edited)).toEqual({
+      old: null,
+      new: { transport: "stdio", command: "c", env: { A: "1", B: "2" } },
+    });
+  });
+
+  // @spec MCP-003 — Settings map keys are stable MCP identities
+  it("preserves fields the edit does not touch", () => {
+    const previous = {
+      transport: "http",
+      url: "https://old.example",
+      description: "keep",
+      icon: "ico",
+    } as MCPServer;
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "shttp",
+      url: "https://new.example",
+    };
+    expect(buildRenameMcpConfigPatch("old", "new", previous, edited)).toEqual({
+      old: null,
+      new: {
+        transport: "http",
+        url: "https://new.example",
+        description: "keep",
+        icon: "ico",
+      },
+    });
+  });
+
+  it("deep-merges nested records so untouched secrets survive the rename", () => {
+    const previous = {
+      transport: "stdio",
+      command: "c",
+      env: { A: "1", SECRET: "real" },
+    } as MCPServer;
+    const edited: MCPServerConfig = {
+      id: "s",
+      type: "stdio",
+      command: "c",
+      env: { A: "1", SECRET: REDACTED_MCP_SECRET_VALUE },
+    };
+    expect(buildRenameMcpConfigPatch("old", "new", previous, edited)).toEqual({
+      old: null,
+      new: {
+        transport: "stdio",
+        command: "c",
+        env: { A: "1", SECRET: "real" },
+      },
+    });
+  });
+});
+
+describe("allocateMcpSettingsKey", () => {
+  it("normalizes the preferred name when it does not collide", () => {
+    expect(allocateMcpSettingsKey({}, "My Server", "sse")).toBe("My_Server");
+  });
+
+  it("falls back to the provided base when no name is given", () => {
+    expect(allocateMcpSettingsKey({}, undefined, "shttp")).toBe("shttp");
+  });
+
+  it("appends the first free numeric suffix on collision", () => {
+    const config = {
+      tool: {} as MCPServer,
+      tool_1: {} as MCPServer,
+    } satisfies MCPConfig;
+    expect(allocateMcpSettingsKey(config, "tool", "stdio")).toBe("tool_2");
+  });
+
+  it("uses a single suffix when only the base collides", () => {
+    const config = { tool: {} as MCPServer } satisfies MCPConfig;
+    expect(allocateMcpSettingsKey(config, "tool", "stdio")).toBe("tool_1");
   });
 });

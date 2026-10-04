@@ -2,7 +2,6 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigation } from "#/context/navigation-context";
 import { useActiveBackend } from "#/contexts/active-backend-context";
-import useMetricsStore from "#/stores/metrics-store";
 import { useDeleteConversation } from "./mutation/use-delete-conversation";
 import { useUnifiedPauseConversation } from "./mutation/use-unified-stop-conversation";
 import { useUpdateConversationPublicFlag } from "./mutation/use-update-conversation-public-flag";
@@ -11,6 +10,7 @@ import { useEventStore } from "#/stores/use-event-store";
 import { displaySuccessToast } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
 import { getStoredConversationMetadata } from "#/api/conversation-metadata-store";
+import { buildAgentCanvasUrl } from "#/utils/base-path";
 
 import { useDownloadConversation } from "./use-download-conversation";
 import {
@@ -19,6 +19,7 @@ import {
 } from "#/utils/system-message-adapter";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import { isExecutionActive } from "#/utils/status";
+import { useSelectConversationTab } from "./use-select-conversation-tab";
 
 interface UseConversationNameContextMenuProps {
   conversationId?: string;
@@ -41,9 +42,6 @@ export function useConversationNameContextMenu({
   const { mutate: stopConversation } = useUnifiedPauseConversation();
   const { mutate: updatePublicFlag } = useUpdateConversationPublicFlag();
   const { data: conversation } = useActiveConversation();
-  const metrics = useMetricsStore();
-
-  const [metricsModalVisible, setMetricsModalVisible] = React.useState(false);
   const [systemModalVisible, setSystemModalVisible] = React.useState(false);
   const [skillsModalVisible, setSkillsModalVisible] = React.useState(false);
   const [pluginsModalVisible, setPluginsModalVisible] = React.useState(false);
@@ -53,6 +51,7 @@ export function useConversationNameContextMenu({
   const [confirmStopModalVisible, setConfirmStopModalVisible] =
     React.useState(false);
   const { mutateAsync: downloadConversation } = useDownloadConversation();
+  const { navigateToTab } = useSelectConversationTab();
 
   const systemMessage: SystemMessageForModal | null =
     adaptSystemMessage(events);
@@ -114,7 +113,7 @@ export function useConversationNameContextMenu({
 
   const handleDisplayCost = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
-    setMetricsModalVisible(true);
+    navigateToTab("usage");
     onContextMenuToggle?.(false);
   };
 
@@ -161,7 +160,13 @@ export function useConversationNameContextMenu({
       backend.kind === "cloud"
         ? backend.host.replace(/\/+$/, "")
         : window.location.origin;
-    return `${origin}/shared/conversations/${conversationId}`;
+    // The base path matters here for the same reason it does on anchors: on a
+    // host that also serves the enterprise app, a bare `/shared/conversations`
+    // link resolves against that app and reports the conversation missing.
+    return buildAgentCanvasUrl(
+      `/shared/conversations/${conversationId}`,
+      origin,
+    );
   }, [conversationId, backend.kind, backend.host]);
 
   const handleCopyShareLink = (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -195,8 +200,6 @@ export function useConversationNameContextMenu({
     handleConfirmStop,
 
     // Modal states
-    metricsModalVisible,
-    setMetricsModalVisible,
     systemModalVisible,
     setSystemModalVisible,
     skillsModalVisible,
@@ -211,7 +214,6 @@ export function useConversationNameContextMenu({
     setConfirmStopModalVisible,
 
     // Data
-    metrics,
     systemMessage,
 
     shouldShowStop: isExecutionActive(executionStatus),

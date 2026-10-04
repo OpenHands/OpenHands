@@ -1,10 +1,16 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import React from "react";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { useConversationMetrics } from "#/hooks/query/use-conversation-metrics";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import {
+  __resetActiveStoreForTests,
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 
 const runtimeInfo = {
@@ -29,20 +35,103 @@ const runtimeInfo = {
   },
 };
 
-function makeWrapper() {
+function makeWrapper({ activeBackend = false } = {}) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return ({ children }: { children: React.ReactNode }) => (
-    <QueryClientProvider client={client}>{children}</QueryClientProvider>
-  );
+  return ({ children }: { children: React.ReactNode }) => {
+    const content = activeBackend ? (
+      <ActiveBackendProvider>{children}</ActiveBackendProvider>
+    ) : (
+      children
+    );
+    return <QueryClientProvider client={client}>{content}</QueryClientProvider>;
+  };
 }
 
 afterEach(() => {
   vi.restoreAllMocks();
+  window.localStorage.clear();
+  window.sessionStorage.clear();
+  __resetActiveStoreForTests();
+});
+
+beforeEach(() => {
+  vi.restoreAllMocks();
+  window.localStorage.clear();
+  window.sessionStorage.clear();
+  __resetActiveStoreForTests();
 });
 
 describe("useConversationMetrics", () => {
+  it("fires the query on cloud backends, fetching directly from the runtime URL", async () => {
+    // Arrange — the runtime REST fetch must work on cloud backends.
+    // getRuntimeConversation now fetches directly from the runtime
+    // sandbox URL (conversationUrl) instead of tunneling through the
+    // removed /api/cloud-proxy endpoint.
+    const spy = vi
+      .spyOn(AgentServerConversationService, "getRuntimeConversation")
+      .mockResolvedValue(runtimeInfo);
+
+    setRegisteredBackends([
+      {
+        id: "cloud-1",
+        name: "Cloud",
+        host: "https://app.example.com",
+        apiKey: "cloud-key",
+        kind: "cloud",
+      },
+    ]);
+    setActiveSelection({ backendId: "cloud-1", orgId: null });
+
+    // Act
+    const { result } = renderHook(
+      () =>
+        useConversationMetrics(
+          "conv-abc",
+          "https://runtime-abc.prod-runtime.all-hands.dev/api/conversations/conv-abc",
+          "session-key",
+          true,
+        ),
+      { wrapper: makeWrapper({ activeBackend: true }) },
+    );
+
+    // Assert — the query fires and resolves to the runtime data.
+    await waitFor(() => {
+      expect(result.current.data?.accumulated_cost).toBe(2.5);
+    });
+    expect(spy).toHaveBeenCalledWith(
+      "conv-abc",
+      "https://runtime-abc.prod-runtime.all-hands.dev/api/conversations/conv-abc",
+      "session-key",
+    );
+  });
+
+  it("waits for the runtime URL before polling metrics on cloud backends", async () => {
+    const spy = vi.spyOn(
+      AgentServerConversationService,
+      "getRuntimeConversation",
+    );
+    setRegisteredBackends([
+      {
+        id: "cloud-1",
+        name: "Cloud",
+        host: "https://app.example.com",
+        apiKey: "cloud-key",
+        kind: "cloud",
+      },
+    ]);
+    setActiveSelection({ backendId: "cloud-1", orgId: null });
+
+    const { result } = renderHook(
+      () => useConversationMetrics("conv-abc", null, "session-key", true),
+      { wrapper: makeWrapper({ activeBackend: true }) },
+    );
+
+    expect(result.current.data).toBeUndefined();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
   it("fires the query when sessionApiKey is null (local backends without auth)", async () => {
     // Arrange
     const spy = vi
@@ -137,9 +226,9 @@ describe("useConversationMetrics", () => {
 
     // Assert
     await waitFor(() => {
-      expect(
-        result.current.data?.accumulated_token_usage?.per_turn_token,
-      ).toBe(38826);
+      expect(result.current.data?.accumulated_token_usage?.per_turn_token).toBe(
+        38826,
+      );
     });
   });
 });

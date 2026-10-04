@@ -296,7 +296,7 @@ DefenseClaw's registry system (`defenseclaw registry add`) ingests external skil
 - [DefenseClaw CodeGuard Skill](https://github.com/cisco-ai-defense/defenseclaw/blob/main/skills/codeguard/SKILL.md)
 - [OpenHands Agent Server](https://github.com/OpenHands/software-agent-sdk/tree/main/openhands-agent-server)
 - [OpenHands SDK Security Analyzer](https://docs.openhands.dev/sdk/arch/security.md)
-- [Agent Canvas Self-Hosting](../SELF_HOSTING.md)
+- [Agent Canvas Self-Hosting](./SELF_HOSTING.md)
 
 ---
 

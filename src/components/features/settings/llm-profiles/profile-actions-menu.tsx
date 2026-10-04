@@ -85,9 +85,9 @@ export function ProfileActionsMenu({
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
-      if (menuRef.current && !menuRef.current.contains(target)) {
-        onClose();
-      }
+      if (menuRef.current?.contains(target)) return;
+      if (anchorElement?.contains(target)) return;
+      onClose();
     };
 
     const handleEscape = (event: KeyboardEvent) => {
@@ -103,7 +103,7 @@ export function ProfileActionsMenu({
       document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("keydown", handleEscape);
     };
-  }, [onClose]);
+  }, [anchorElement, onClose]);
 
   const handleAction = (action: () => void) => {
     action();
@@ -137,7 +137,7 @@ export function ProfileActionsMenu({
     <div
       ref={menuRef}
       className={cn(
-        "absolute right-0 top-full z-10 mt-2 w-[160px] rounded-md border border-[var(--oh-border-subtle)] bg-tertiary px-1 py-1 shadow-lg",
+        "absolute right-0 top-full z-10 mt-2 w-40 rounded-md border border-border-subtle bg-tertiary px-1 py-1 shadow-lg",
         dropdownMenuListClassName,
         isPortaled &&
           "!static !top-auto !bottom-auto !left-auto !right-auto !mt-0",

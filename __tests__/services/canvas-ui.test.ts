@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import ConversationService from "#/api/conversation-service/conversation-service.api";
 import {
   CANVAS_UI_CLIENT_ACTION_KIND,
   CANVAS_UI_CLIENT_TOOL_NAME,
   LEGACY_CANVAS_UI_TOOL_NAME,
 } from "#/constants/canvas-ui";
-import { handleCanvasUIAction } from "#/services/canvas-ui";
+import { handleCanvasUIAction, openWorkspaceFile } from "#/services/canvas-ui";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useFilesTabStore } from "#/stores/files-tab-store";
 import type { CanvasUIAction } from "#/types/agent-server/core";
@@ -19,9 +20,7 @@ function action(overrides: Partial<CanvasUIAction>): CanvasUIAction {
 
 describe("handleCanvasUIAction", () => {
   beforeEach(() => {
-    // Arrange (shared): collapsed right panel, no selected file. Lets us
-    // observe both the tab/panel toggling and the path mutation that the
-    // dispatcher performs.
+    ConversationService.setCurrentConversation(null);
     useConversationStore.setState({
       selectedTab: null,
       isRightPanelShown: false,
@@ -30,6 +29,7 @@ describe("handleCanvasUIAction", () => {
     useFilesTabStore.setState({
       selectedPath: null,
       selectedConversationId: null,
+      openPaths: [],
     });
   });
 
@@ -44,6 +44,7 @@ describe("handleCanvasUIAction", () => {
     expect(conv.isRightPanelShown).toBe(true);
     expect(useFilesTabStore.getState().selectedPath).toBe("docs/intro.html");
     expect(useFilesTabStore.getState().selectedConversationId).toBe("conv-1");
+    expect(useFilesTabStore.getState().openPaths).toEqual(["docs/intro.html"]);
   });
 
   it("show_preview selects the files tab and the requested path", () => {
@@ -93,6 +94,71 @@ describe("handleCanvasUIAction", () => {
 
     expect(useFilesTabStore.getState().selectedPath).toBe("previous.txt");
     expect(useConversationStore.getState().selectedTab).toBe("files");
+  });
+
+  it("strips the conversation working dir from absolute host paths", () => {
+    ConversationService.setCurrentConversation({
+      id: "conv-abs",
+      workspace: { working_dir: "/Users/me/ws" },
+    } as never);
+
+    handleCanvasUIAction(
+      action({
+        command: "navigate_to_file",
+        path: "/Users/me/ws/agentic_ai.docx",
+      }),
+      "conv-abs",
+    );
+
+    expect(useFilesTabStore.getState().selectedPath).toBe("agentic_ai.docx");
+  });
+
+  it("strips a nested /workspace working dir before selecting the file", () => {
+    ConversationService.setCurrentConversation({
+      id: "conv-nested",
+      workspace: { working_dir: "/workspace/project/packages/app" },
+    } as never);
+
+    handleCanvasUIAction(
+      action({
+        command: "navigate_to_file",
+        path: "/workspace/project/packages/app/src/index.ts",
+      }),
+      "conv-nested",
+    );
+
+    expect(useFilesTabStore.getState().selectedPath).toBe("src/index.ts");
+  });
+});
+
+describe("openWorkspaceFile", () => {
+  beforeEach(() => {
+    ConversationService.setCurrentConversation(null);
+    useConversationStore.setState({
+      selectedTab: null,
+      isRightPanelShown: false,
+      hasRightPanelToggled: false,
+    });
+    useFilesTabStore.setState({
+      selectedPath: null,
+      selectedConversationId: null,
+      openPaths: [],
+    });
+  });
+
+  it("delegates to navigate_to_file with the active conversation", () => {
+    ConversationService.setCurrentConversation({
+      id: "conv-1",
+      workspace: { working_dir: "/Users/me/project" },
+    } as never);
+
+    openWorkspaceFile("/Users/me/project/test.md");
+
+    expect(useConversationStore.getState().selectedTab).toBe("files");
+    expect(useConversationStore.getState().isRightPanelShown).toBe(true);
+    expect(useFilesTabStore.getState().selectedPath).toBe("test.md");
+    expect(useFilesTabStore.getState().selectedConversationId).toBe("conv-1");
+    expect(useFilesTabStore.getState().openPaths).toEqual(["test.md"]);
   });
 });
 

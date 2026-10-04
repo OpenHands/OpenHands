@@ -15,7 +15,17 @@ interface EnumFilterDropdownProps<T extends string> {
   value: T;
   onChange: (value: T) => void;
   options: readonly T[];
-  labelKeyByValue: Record<T, I18nKey>;
+  labelKeyByValue?: Record<T, I18nKey>;
+  /** Plain-string labels, e.g. manifest-supplied copy. Wins over the keys. */
+  labelByValue?: Record<T, string>;
+  ariaLabel?: string;
+  className?: string;
+  /** Overrides trigger chip colors, padding, and radius. Menu styles stay shared. */
+  triggerClassName?: string;
+  /** Stretch the trigger to the container width, e.g. inside a parent menu. */
+  fullWidth?: boolean;
+  /** Highlight the trigger when the value is not the first option. */
+  emphasizeNonDefault?: boolean;
 }
 
 export function EnumFilterDropdown<T extends string>({
@@ -24,6 +34,12 @@ export function EnumFilterDropdown<T extends string>({
   onChange,
   options,
   labelKeyByValue,
+  labelByValue,
+  ariaLabel,
+  className,
+  triggerClassName,
+  fullWidth = false,
+  emphasizeNonDefault = true,
 }: EnumFilterDropdownProps<T>) {
   const { t } = useTranslation("openhands");
   const [open, setOpen] = React.useState(false);
@@ -31,13 +47,23 @@ export function EnumFilterDropdown<T extends string>({
     setOpen(false),
   );
 
+  const getOptionLabel = (option: T): string =>
+    labelByValue?.[option] ??
+    (labelKeyByValue ? t(labelKeyByValue[option]) : option);
+  const resolvedAriaLabel =
+    ariaLabel ?? t(I18nKey.CONVERSATION_PANEL$FILTER_LABEL);
+
   const defaultOption = options[0];
-  const selectedLabel = t(labelKeyByValue[value]);
+  const selectedLabel = getOptionLabel(value);
 
   return (
     <div
       ref={containerRef}
-      className="relative shrink-0 w-auto"
+      className={cn(
+        "relative shrink-0",
+        fullWidth ? "w-full" : "w-auto",
+        className,
+      )}
       data-testid={testId}
     >
       <button
@@ -45,13 +71,16 @@ export function EnumFilterDropdown<T extends string>({
         data-testid="dropdown-trigger"
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={t(I18nKey.CONVERSATION_PANEL$FILTER_LABEL)}
+        aria-label={resolvedAriaLabel}
         onClick={() => setOpen((prev) => !prev)}
         className={cn(
           dropdownFilterTriggerClassName,
-          defaultOption &&
+          fullWidth && "w-full justify-between",
+          emphasizeNonDefault &&
+            defaultOption &&
             value !== defaultOption &&
-            "border-white/60 bg-white/10",
+            "border-contrast/60 bg-contrast/10",
+          triggerClassName,
         )}
       >
         <span className="whitespace-nowrap">{selectedLabel}</span>
@@ -68,10 +97,10 @@ export function EnumFilterDropdown<T extends string>({
         <div
           role="menu"
           data-testid={`${testId}-menu`}
-          aria-label={t(I18nKey.CONVERSATION_PANEL$FILTER_LABEL)}
+          aria-label={resolvedAriaLabel}
           className={cn(
             "absolute right-0 top-full z-50 mt-1 min-w-full w-max",
-            "max-h-60 overflow-auto rounded-[6px] bg-tertiary p-1 context-menu-box-shadow",
+            "max-h-60 overflow-auto rounded-md bg-tertiary p-1 context-menu-box-shadow",
             dropdownMenuListClassName,
           )}
         >
@@ -90,11 +119,11 @@ export function EnumFilterDropdown<T extends string>({
                 }}
                 className={cn(
                   dropdownMenuRowClassName,
-                  selected && "bg-[var(--oh-interactive-selected)]",
+                  selected && "bg-interactive-selected",
                 )}
               >
                 <span className="min-w-0 flex-1 truncate">
-                  {t(labelKeyByValue[option])}
+                  {getOptionLabel(option)}
                 </span>
                 {selected ? (
                   <Check className="h-4 w-4 shrink-0" aria-hidden />

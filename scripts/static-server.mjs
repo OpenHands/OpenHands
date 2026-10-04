@@ -34,6 +34,7 @@ import process from "node:process";
 import { pathToFileURL } from "node:url";
 import sirv from "sirv";
 
+import { applySessionKeyPolicy, DEFAULT_BIND_HOST } from "./bind-host.mjs";
 import {
   createProxyHandlers,
   createRouter,
@@ -77,18 +78,29 @@ const ASSET_LIKE_EXTENSIONS = new Set([
 // Args
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function parseArgs(argv = process.argv.slice(2)) {
+function isEnvFlagEnabled(value) {
+  if (typeof value !== "string") return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === "1" || normalized === "true";
+}
+
+export function parseArgs(argv = process.argv.slice(2), env = process.env) {
   const config = {
     port: 3001,
-    host: "::",
+    host: DEFAULT_BIND_HOST,
     dir: "build",
     routes: {},
     rejectPrefixes: [],
+    noReferrerPrefixes: [],
     sessionApiKey: null,
     authRequired: false,
+    allowLanSessionKey: false,
     runtimeServicesInfo: null,
     lockToCloud: null,
     basePath: "/",
+    vscodeBasePath: null,
+    // Also settable via the --disable-telemetry flag below.
+    disableTelemetry: isEnvFlagEnabled(env.AGENT_CANVAS_DISABLE_TELEMETRY),
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -133,9 +145,25 @@ export function parseArgs(argv = process.argv.slice(2)) {
       case "--base-path":
         config.basePath = normalizeBasePath(argv[++i]);
         break;
+      case "--vscode-base-path": {
+        const prefix = argv[++i];
+        if (!prefix || !prefix.startsWith("/")) {
+          throw new Error(
+            `--vscode-base-path value must start with '/': ${prefix ?? "(empty)"}`,
+          );
+        }
+        config.vscodeBasePath = prefix.replace(/\/+$/, "") || "/";
+        break;
+      }
 
       case "--auth-required":
         config.authRequired = true;
+        break;
+      case "--disable-telemetry":
+        config.disableTelemetry = true;
+        break;
+      case "--allow-lan-session-key":
+        config.allowLanSessionKey = true;
         break;
       case "--reject-prefix": {
         const prefix = argv[++i];
@@ -145,6 +173,16 @@ export function parseArgs(argv = process.argv.slice(2)) {
           );
         }
         config.rejectPrefixes.push(prefix);
+        break;
+      }
+      case "--no-referrer-prefix": {
+        const prefix = argv[++i];
+        if (!prefix || !prefix.startsWith("/")) {
+          throw new Error(
+            `--no-referrer-prefix value must start with '/': ${prefix ?? "(empty)"}`,
+          );
+        }
+        config.noReferrerPrefixes.push(prefix);
         break;
       }
       case "-h":
@@ -169,6 +207,20 @@ export function parseArgs(argv = process.argv.slice(2)) {
     process.exit(1);
   }
 
+  // Guard: advertising the editor and routing it are the same decision, so
+  // they cannot be allowed to drift. This flag is what the frontend gates the
+  // editor control on; if it named a prefix with no route behind it, the
+  // control would render and the navigation would fall through to the SPA —
+  // which is precisely the bug this flag exists to prevent.
+  if (config.vscodeBasePath && !config.routes[config.vscodeBasePath]) {
+    console.error(
+      `ERROR: --vscode-base-path ${config.vscodeBasePath} has no matching --route.\n` +
+        "  This server would advertise an editor it does not serve.\n" +
+        `  Add --route ${config.vscodeBasePath}=<editor-url>, or drop --vscode-base-path.`,
+    );
+    process.exit(1);
+  }
+
   return config;
 }
 
@@ -189,7 +241,10 @@ USAGE:
 
 OPTIONS:
   -p, --port  <port>           Port to bind (default: 3001)
-  -H, --host  <host>           Hostname to bind (default: :: dual-stack)
+  -H, --host  <host>           Hostname to bind (default: 127.0.0.1 loopback).
+                               Use 0.0.0.0 or :: to expose on the LAN; the
+                               session key is then not injected unless you also
+                               pass --allow-lan-session-key.
   -d, --dir   <dir>            Directory to serve (default: build)
   -r, --route <prefix=url>     Proxy <prefix> (and subpaths) to <url>;
                                may be repeated. WebSockets supported.
@@ -199,6 +254,8 @@ OPTIONS:
   --auth-required              Inject authRequired flag into index.html so the
                                pre-built frontend shows the API key entry screen
                                (public mode) without VITE_AUTH_REQUIRED baked in.
+  --allow-lan-session-key      Permit --session-api-key when --host is not
+                               loopback (Docker/container entrypoints only).
   --runtime-services-info <json>
                                Inject a JSON description of the local runtime
                                services into index.html so the pre-built
@@ -208,10 +265,26 @@ OPTIONS:
   --lock-to-cloud <cloud-url>  Lock backend setup to a single OpenHands Cloud
                                URL. Hides manual/local backend setup and the
                                custom Cloud URL field in the pre-built frontend.
+  --disable-telemetry          Disable all product telemetry (including the
+                               anonymous install event) in the pre-built
+                               frontend at runtime, without VITE_DO_NOT_TRACK
+                               baked in. Injects
+                               window.__AGENT_CANVAS_DO_NOT_TRACK__ = true.
+                               Equivalent to AGENT_CANVAS_DISABLE_TELEMETRY=1.
   --base-path <path>           Mount the SPA under <path> (default: /).
                                For example, --base-path /canvas serves
                                index.html and assets under /canvas.
+  --vscode-base-path <path>    Advertise to the frontend that this origin
+                               serves the editor under <path>, so the editor
+                               control renders here. Requires a matching
+                               --route; the server refuses to start otherwise,
+                               since advertising a prefix it does not route
+                               produces a control that opens the SPA. Omit on
+                               any origin without the editor route.
   --reject-prefix <prefix>     Return 503 for requests matching <prefix>
+  --no-referrer-prefix <p>     Send "Referrer-Policy: no-referrer" on proxied
+                               responses under <p>. For upstreams whose URL
+                               carries a credential in the query string.
                                instead of SPA-fallbacking to index.html;
                                may be repeated. Useful in --frontend-only
                                mode to cleanly reject API paths.
@@ -268,18 +341,41 @@ ROUTING:
  * - `basePath`: the path prefix the SPA is mounted under, exposed as
  *   `window.__AGENT_CANVAS_BASE_PATH__` so runtime static assets like locale
  *   files can resolve through the same subpath as the built bundle.
+ *
+ * - `vscodeBasePath`: the prefix *this origin* serves the editor under, exposed
+ *   as `window.__AGENT_CANVAS_VSCODE_BASE_PATH__`. Read by
+ *   `getOriginVSCodeBasePath()` in `#/utils/vscode-origin` to decide whether the
+ *   editor control can render here at all. Absent means this origin serves no
+ *   editor — which is the correct answer for the public-mode instance, whose
+ *   route table deliberately omits it.
+ *
+ * - `disableTelemetry`: sets `window.__AGENT_CANVAS_DO_NOT_TRACK__ = true` so a
+ *   published bundle disables all telemetry (including the anonymous install
+ *   event) at runtime without VITE_DO_NOT_TRACK baked in. Read by
+ *   `isDoNotTrackEnabled()` in `#/services/telemetry`. Enabled by
+ *   AGENT_CANVAS_DISABLE_TELEMETRY=1 or the --disable-telemetry flag.
  */
+export function serializeForInlineScript(value) {
+  return JSON.stringify(value)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
+}
+
 function makeConfigInjectionScript(
   sessionApiKey,
   authRequired,
   runtimeServicesInfo,
   lockToCloud,
   basePath,
+  vscodeBasePath,
+  disableTelemetry,
 ) {
   const parts = [];
 
   if (sessionApiKey) {
-    const keyLiteral = JSON.stringify(sessionApiKey);
+    const keyLiteral = serializeForInlineScript(sessionApiKey);
     // Window global — read at module init by getBakedSessionApiKey().
     // Set first so it's available even if the localStorage write throws.
     parts.push(`window.__AGENT_CANVAS_SESSION_API_KEY__=${keyLiteral};`);
@@ -308,20 +404,30 @@ function makeConfigInjectionScript(
     // VITE_RUNTIME_SERVICES_INFO env var. JSON.stringify produces a safe JS
     // string literal for the inline <script>.
     parts.push(
-      `window.__AGENT_CANVAS_RUNTIME_SERVICES_INFO__=${JSON.stringify(runtimeServicesInfo)};`,
+      `window.__AGENT_CANVAS_RUNTIME_SERVICES_INFO__=${serializeForInlineScript(runtimeServicesInfo)};`,
     );
   }
 
   if (lockToCloud) {
     parts.push(
-      `window.__AGENT_CANVAS_LOCK_TO_CLOUD__=${JSON.stringify(lockToCloud)};`,
+      `window.__AGENT_CANVAS_LOCK_TO_CLOUD__=${serializeForInlineScript(lockToCloud)};`,
     );
   }
 
   if (basePath && basePath !== "/") {
     parts.push(
-      `window.__AGENT_CANVAS_BASE_PATH__=${JSON.stringify(basePath)};`,
+      `window.__AGENT_CANVAS_BASE_PATH__=${serializeForInlineScript(basePath)};`,
     );
+  }
+
+  if (vscodeBasePath) {
+    parts.push(
+      `window.__AGENT_CANVAS_VSCODE_BASE_PATH__=${serializeForInlineScript(vscodeBasePath)};`,
+    );
+  }
+
+  if (disableTelemetry) {
+    parts.push(`window.__AGENT_CANVAS_DO_NOT_TRACK__=true;`);
   }
 
   if (parts.length === 0) return "";
@@ -343,6 +449,8 @@ async function serveInjectedIndexHtml(
     runtimeServicesInfo,
     lockToCloud,
     basePath,
+    vscodeBasePath,
+    disableTelemetry,
   } = {},
 ) {
   let content;
@@ -358,6 +466,8 @@ async function serveInjectedIndexHtml(
     runtimeServicesInfo,
     lockToCloud,
     basePath,
+    vscodeBasePath,
+    disableTelemetry,
   );
   // Inject right before </head> so the key is available before any app code runs.
   // replace() targets the first (and only) </head> in well-formed HTML.
@@ -371,7 +481,7 @@ async function serveInjectedIndexHtml(
   res.writeHead(200, {
     "Content-Type": "text/html; charset=utf-8",
     "Content-Length": buf.length,
-    "Cache-Control": "no-cache",
+    "Cache-Control": sessionApiKey ? "no-store" : "no-cache",
   });
   if (req.method === "HEAD") {
     res.end();
@@ -406,6 +516,8 @@ function needsRuntimeInjection(injectionOpts) {
     injectionOpts.authRequired ||
     injectionOpts.runtimeServicesInfo ||
     injectionOpts.lockToCloud ||
+    injectionOpts.vscodeBasePath ||
+    injectionOpts.disableTelemetry ||
     (injectionOpts.basePath && injectionOpts.basePath !== "/"),
   );
 }
@@ -474,6 +586,8 @@ function setStaticHeaders(res, pathname) {
 
 function createStaticMiddleware(dirAbs) {
   return sirv(dirAbs, {
+    // Builds replace hashed assets while the local server is running.
+    dev: true,
     etag: true,
     single: false,
     setHeaders: setStaticHeaders,
@@ -544,22 +658,39 @@ export function startStaticServer(config) {
   const route = createRouter(config.routes);
   const proxy = createProxyHandlers({ label: `static:${config.port}` });
   const dirAbs = resolve(config.dir);
-  const injectionOpts = {
+  const policy = applySessionKeyPolicy({
+    host: config.host,
     sessionApiKey: config.sessionApiKey || null,
     authRequired: config.authRequired || false,
+    allowLanSessionKey: config.allowLanSessionKey || false,
+  });
+  const injectionOpts = {
+    sessionApiKey: policy.sessionApiKey,
+    authRequired: policy.authRequired,
     runtimeServicesInfo: config.runtimeServicesInfo || null,
     lockToCloud: config.lockToCloud || null,
     basePath: normalizeBasePath(config.basePath),
+    vscodeBasePath: config.vscodeBasePath || null,
+    disableTelemetry: config.disableTelemetry || false,
   };
   const basePath = injectionOpts.basePath;
   const rejectPrefixes = config.rejectPrefixes ?? [];
+  const noReferrerPrefixes = config.noReferrerPrefixes ?? [];
   const staticMiddleware = createStaticMiddleware(dirAbs);
 
   const uninstallDiagnostics = proxy.installDiagnostics();
 
   const server = createServer((req, res) => {
-    const backend = route(req.url ?? "/");
+    const url = req.url ?? "/";
+    const backend = route(url);
     if (backend) {
+      // The editor is advertised as `<origin><prefix>/?tkn=<token>`, and that
+      // token is agent-server's session key. The workbench loads webviews,
+      // previews and extension content from that document, so without this a
+      // Referer carrying the key rides along on those subrequests.
+      if (matchesAnyPrefix(url, noReferrerPrefixes)) {
+        res.setHeader("Referrer-Policy", "no-referrer");
+      }
       if (
         config.runtimeServicesInfo &&
         isServerInfoRequest(req) &&

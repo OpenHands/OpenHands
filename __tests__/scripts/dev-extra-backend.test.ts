@@ -5,8 +5,13 @@
 // file:// base URLs (it falls back to its document base, e.g.
 // http://localhost:3000/), breaking that resolution; the Node environment
 // has the standard WHATWG URL behavior that honors the file:// base.
-import { mkdtempSync, rmSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import net from "node:net";
 import { tmpdir } from "node:os";
+import process from "node:process";
+import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -86,4 +91,121 @@ describe("buildExtraBackendConfig", () => {
       }),
     ).toThrow(/Invalid port/);
   });
+});
+
+describe("dev-extra-backend CLI shutdown", () => {
+  it.skipIf(process.platform === "win32")(
+    "cleans up the detached agent-server when the launcher receives SIGHUP",
+    async () => {
+      // The agent-server is spawned detached (getProcessTreeSpawnOptions), so
+      // killing the launcher does not kill it. Drive the real launcher with a
+      // stub agent-server, then SIGHUP the launcher and assert the stub's port
+      // is released rather than held by a survivor.
+      const stubDir = mkdtempSync(path.join(tmpdir(), "dev-extra-sighup-"));
+      const stubJs = path.join(stubDir, "stub-agent-server.mjs");
+      const uvxStub = path.join(stubDir, "uvx");
+
+      writeFileSync(
+        stubJs,
+        [
+          'import net from "node:net";',
+          'const portIndex = process.argv.indexOf("--port");',
+          "const port = Number(process.argv[portIndex + 1]);",
+          "const server = net.createServer(() => {});",
+          'server.listen(port, "127.0.0.1", () => {',
+          '  console.log("STUB_LISTENING", process.pid, port);',
+          "});",
+          "setInterval(() => {}, 1_000);",
+        ].join("\n"),
+      );
+      writeFileSync(
+        uvxStub,
+        `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(stubJs)} "$@"\n`,
+      );
+      chmodSync(uvxStub, 0o755);
+
+      const backendPort = await new Promise<number>((resolve, reject) => {
+        const probe = net.createServer();
+        probe.on("error", reject);
+        probe.listen(0, "127.0.0.1", () => {
+          const address = probe.address();
+          const port =
+            typeof address === "object" && address ? address.port : 0;
+          probe.close(() => resolve(port));
+        });
+      });
+
+      const isPortListening = async () =>
+        new Promise<boolean>((resolve) => {
+          const socket = net
+            .connect(backendPort, "127.0.0.1")
+            .on("connect", () => {
+              socket.destroy();
+              resolve(true);
+            })
+            .on("error", () => resolve(false));
+        });
+
+      const launcher = spawn(
+        process.execPath,
+        ["scripts/dev-extra-backend.mjs"],
+        {
+          cwd: repoRoot,
+          env: {
+            ...process.env,
+            PATH: `${stubDir}${path.delimiter}${process.env.PATH ?? ""}`,
+            OH_CANVAS_EXTRA_BACKEND_PORT: String(backendPort),
+          },
+          stdio: ["ignore", "pipe", "pipe"],
+        },
+      );
+
+      let output = "";
+      let stubPid: number | undefined;
+      const capture = (chunk: Buffer) => {
+        output += chunk.toString();
+        const stubMatch = output.match(/STUB_LISTENING (\d+)/);
+        if (stubMatch) stubPid = Number(stubMatch[1]);
+      };
+      launcher.stdout.on("data", capture);
+      launcher.stderr.on("data", capture);
+
+      try {
+        const readyDeadline = Date.now() + 20_000;
+        let listening = false;
+        while (!listening && Date.now() < readyDeadline) {
+          if (launcher.exitCode !== null) break;
+          listening = await isPortListening();
+          if (!listening) await delay(100);
+        }
+        expect(listening, output).toBe(true);
+
+        launcher.kill("SIGHUP");
+        await Promise.race([once(launcher, "exit"), delay(10_000)]);
+
+        // shutdown() forwards SIGTERM, then SIGKILLs after 3s.
+        const freeDeadline = Date.now() + 12_000;
+        let stillListening = true;
+        while (stillListening && Date.now() < freeDeadline) {
+          stillListening = await isPortListening();
+          if (stillListening) await delay(200);
+        }
+        expect(stillListening, output).toBe(false);
+      } finally {
+        if (launcher.exitCode === null) launcher.kill("SIGKILL");
+        // The stub is a detached process-group leader, so killing the launcher
+        // does not reap it. Without this, the regression path this test exists
+        // to catch would itself leave the stub holding its port indefinitely.
+        if (stubPid !== undefined) {
+          try {
+            process.kill(-stubPid, "SIGKILL");
+          } catch {
+            // Already gone, which is the passing path.
+          }
+        }
+        rmSync(stubDir, { recursive: true, force: true });
+      }
+    },
+    45_000,
+  );
 });

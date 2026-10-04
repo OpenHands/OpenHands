@@ -36,6 +36,7 @@ import prettierPlugin from "eslint-plugin-prettier";
 import prettierConfig from "eslint-config-prettier";
 import unusedImportsPlugin from "eslint-plugin-unused-imports";
 import tanstackQueryPlugin from "@tanstack/eslint-plugin-query";
+import { plugin as shadcnPlugin } from "@shadcn/lint";
 import globals from "globals";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -45,6 +46,54 @@ const compat = new FlatCompat({
   baseDirectory: __dirname,
   resolvePluginsRelativeTo: __dirname,
 });
+
+/**
+ * ESLint rule: forbid raw `fetch` calls that target an agent-server `/api/...`
+ * path, so API access goes through the typed @openhands/typescript-client
+ * clients. Only statically-resolvable agent-server paths are flagged; external
+ * URLs, dynamic identifiers, and non-`/api/` draws (cookie-auth static
+ * fileserver, OAuth device verification) are left alone.
+ */
+function createNoDirectAgentServerFetchRule() {
+  return {
+    meta: {
+      type: "problem",
+      docs: {
+        description:
+          "Use typed @openhands/typescript-client clients instead of global fetch for agent-server API calls.",
+      },
+      messages: {
+        noRawFetch:
+          "Use a typed @openhands/typescript-client client (or AgentServerClient.request) instead of global fetch for agent-server API calls.",
+      },
+    },
+    create(context) {
+      function resolveStaticUrl(node) {
+        if (node.type === "Literal" && typeof node.value === "string") {
+          return node.value;
+        }
+        if (node.type === "TemplateLiteral") {
+          return node.quasis
+            .map((q) => q.value.raw)
+            .join("");
+        }
+        return null;
+      }
+
+      return {
+        CallExpression(node) {
+          const callee = node.callee;
+          if (callee.type !== "Identifier" || callee.name !== "fetch") return;
+          const urlNode = node.arguments[0];
+          if (!urlNode) return;
+          const url = resolveStaticUrl(urlNode);
+          if (url === null || !url.includes("/api/")) return;
+          context.report({ node, messageId: "noRawFetch" });
+        },
+      };
+    },
+  };
+}
 
 export default [
   // Files / dirs we never want to lint.
@@ -60,6 +109,9 @@ export default [
       "test-results/**",
       "test-results-live/**",
       "public/mockServiceWorker.js",
+      // Self-contained browser ES module served to extensions at runtime;
+      // not part of the TypeScript project.
+      "src/fixtures/canvas-extensions/**/*.js",
       "src/i18n/declaration.d.ts",
     ],
   },
@@ -112,6 +164,14 @@ export default [
       // `// eslint-disable-next-line import/foo` comments keep working.
       import: importXPlugin,
       prettier: prettierPlugin,
+      // Local rule enforcing that agent-server API calls go through the typed
+      // @openhands/typescript-client clients instead of a raw `fetch`.
+      local: {
+        rules: {
+          "no-direct-agent-server-fetch":
+            createNoDirectAgentServerFetchRule(),
+        },
+      },
     },
     settings: {
       react: { version: "detect" },
@@ -205,6 +265,14 @@ export default [
           ],
         },
       ],
+      // All agent-server API access must go through the typed
+      // @openhands/typescript-client clients. A raw global `fetch` against an
+      // agent-server `/api/...` path bypasses the typed access layer, so it is
+      // banned here (see also src/api/no-direct-agent-server-calls.test.ts).
+      // Browser-cookie-auth and external (non-agent-server) fetches — e.g. the
+      // workspace static fileserver, OAuth device verification, and the npm
+      // registry version check — do not target `/api/...` and are unaffected.
+      "local/no-direct-agent-server-fetch": "error",
 
       // Allow `interface Foo extends Bar<"foo"> {}` — the codebase uses this
       // discriminated-union pattern in `src/types/agent-server/**` and the
@@ -320,6 +388,24 @@ export default [
       "react/no-array-index-key": "off",
       "react-hooks/exhaustive-deps": "off",
       "react/react-in-jsx-scope": "off",
+    },
+  },
+
+  // @shadcn/lint — design-system linter for Tailwind v4.
+  // Rules: https://github.com/shadcn-ui/lint#rules
+  // `no-arbitrary-values` stays at "warn": the remaining hits are one-offs
+  // (raw hex, vh/vw, calc(), grid templates) with no theme-scale equivalent.
+  // The other rules need per-component contracts before they are useful here.
+  {
+    files: ["src/**/*.{ts,tsx}"],
+    plugins: { shadcn: shadcnPlugin },
+    rules: {
+      "shadcn/no-arbitrary-values": "warn",
+      "shadcn/no-restyle": "off",
+      "shadcn/no-raw-colors": "off",
+      "shadcn/no-inline-styles": "off",
+      "shadcn/require-static-classes": "off",
+      "shadcn/no-unknown-classes": "off",
     },
   },
 ];

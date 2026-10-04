@@ -24,7 +24,14 @@ export function AcpCredentialsSection({
   providerKey: string;
 }) {
   const { t } = useTranslation("openhands");
-  const { fields, values, setValue, secretExists, conflicts } = form;
+  const {
+    fields,
+    values,
+    setValue,
+    secretExists,
+    conflicts,
+    credentialsConfigured,
+  } = form;
   const { status: authStatus, isChecking } = useAcpAuthStatus(providerKey);
   const providerName = getAcpProviderDisplayName(providerKey) ?? providerKey;
 
@@ -33,7 +40,7 @@ export function AcpCredentialsSection({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
-        <Typography.Text className="text-sm font-medium text-white">
+        <Typography.Text className="text-sm font-medium text-contrast">
           {t(I18nKey.SETTINGS$ACP_CREDENTIALS_TITLE)}
         </Typography.Text>
         <Typography.Text className="text-xs text-[#717888]">
@@ -44,6 +51,7 @@ export function AcpCredentialsSection({
       <AcpAuthStatusBanner
         status={authStatus}
         isChecking={isChecking}
+        credentialsConfigured={credentialsConfigured}
         providerName={providerName}
         testIdPrefix="settings-acp-auth"
       />

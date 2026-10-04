@@ -7,10 +7,8 @@ const sortedKeys = (record?: Record<string, string> | null): string[] =>
  * Stable identity for a server's health entry.
  *
  * Built from the server's structural, non-secret fields. Names are included
- * because persisted configs are keyed by name (`toSdkMcpConfig` suffixes
- * duplicates `github` → `github_1`), which makes the key unique per stored
- * server and stable across list reordering — unlike the positional
- * `sse-0`/`stdio-1` ids from `flattenMcpConfig`. Secret VALUES are excluded:
+ * because persisted configs are keyed by name, which makes the key unique per
+ * stored server and stable across list reordering. Secret VALUES are excluded:
  * the same credential legitimately appears as plaintext at install time,
  * `**********` in redacted settings, and ciphertext in test requests, so any
  * of them would make the key flap. A structural edit (URL, command, header

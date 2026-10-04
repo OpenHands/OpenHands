@@ -25,6 +25,7 @@ import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message"
 import { cn } from "#/utils/utils";
 import { modalTitleLgClassName } from "#/utils/modal-classes";
 import McpService from "#/api/mcp-service/mcp-service.api";
+import { MCP_RENAME_CREDENTIAL_ERROR } from "#/utils/mcp-config";
 
 interface CustomServerEditorProps {
   server: MCPServerConfig;
@@ -52,6 +53,7 @@ export function CustomServerEditor({
     mutate: testServer,
     isPending: isTesting,
     data: testResult,
+    variables: testedServer,
     reset: resetTest,
   } = useTestMcpServer();
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
@@ -59,12 +61,15 @@ export function CustomServerEditor({
     React.useState<ExtendedMCPTestResponse | null>(null);
   const [isOauthTesting, setIsOauthTesting] = React.useState(false);
 
-  // The MCP connectivity-test endpoint only exists on the local agent-server.
-  // For cloud backends `McpService.testServer` short-circuits with a synthetic
-  // success so the save still completes; we hide the manual "Test connection"
-  // button here so cloud users aren't shown a misleading "0 tools" result.
+  // stdio servers cannot be probed from a cloud backend (they spawn inside the
+  // sandbox): `McpService.testServer` short-circuits them with a synthetic
+  // success so the save still completes. Hide the manual "Test connection"
+  // button and the resulting message for them so cloud users aren't shown a
+  // misleading "0 tools" result. Remote servers are probed via the app server.
   const { backend } = useActiveBackend();
   const isCloudBackend = backend.kind === "cloud";
+  const isSyntheticTestResult =
+    isCloudBackend && !oauthTestResult && testedServer?.type === "stdio";
 
   const isEditing = !!server.id;
   const isPending = isAdding || isUpdating || isDeleting;
@@ -87,13 +92,14 @@ export function CustomServerEditor({
   }, [oauthTestResult, testResult, t]);
 
   // A save always follows a fresh successful probe of the exact config being
-  // saved, so publish that result to the card's health entry. On cloud
-  // backends the probe is synthetic — never present it as a health verdict.
+  // saved, so publish that result to the card's health entry. For stdio
+  // servers on cloud backends the probe is synthetic — never present it as a
+  // health verdict.
   const seedSavedServerHealth = (
     serverToSave: MCPServerConfig,
     result: ExtendedMCPTestResponse,
   ) => {
-    if (isCloudBackend) return;
+    if (isCloudBackend && serverToSave.type === "stdio") return;
     // When editing, the server's own entry must be overwritten, so only the
     // OTHER servers guard against a same-key collision.
     const otherServers = isEditing
@@ -107,6 +113,10 @@ export function CustomServerEditor({
   // had no `onError` and the modal closed even on a 4xx/5xx, leaving
   // the user to discover the failure on the next page load.
   const handleError = (err: unknown) => {
+    if (err instanceof Error && err.message === MCP_RENAME_CREDENTIAL_ERROR) {
+      displayErrorToast(err.message);
+      return;
+    }
     const message = retrieveAxiosErrorMessage(err as AxiosError);
     displayErrorToast(message || t(I18nKey.ERROR$GENERIC));
   };
@@ -181,7 +191,7 @@ export function CustomServerEditor({
 
   const handleTestClick = (payload: MCPServerConfig) => {
     setOauthTestResult(null);
-    if (payload.auth?.strategy === "oauth2" && !isCloudBackend) {
+    if (payload.auth?.strategy === "oauth2") {
       setIsOauthTesting(true);
       void McpService.authorizeOAuth(payload)
         .then(setOauthTestResult)
@@ -222,7 +232,7 @@ export function CustomServerEditor({
       >
         <div
           data-testid="mcp-custom-editor"
-          className="relative bg-base-secondary p-6 rounded-xl border border-[var(--oh-border)] w-[520px] max-w-[90vw] max-h-[90vh] overflow-y-auto custom-scrollbar"
+          className="relative bg-base-secondary p-6 rounded-xl border border-border w-130 max-w-[90vw] max-h-[90vh] overflow-y-auto custom-scrollbar"
         >
           <ModalCloseButton
             onClose={onClose}
@@ -242,9 +252,10 @@ export function CustomServerEditor({
             onCancel={onClose}
             onDelete={isEditing ? () => setShowDeleteConfirm(true) : undefined}
             isActionDisabled={isPending}
-            onTest={isCloudBackend ? undefined : handleTestClick}
+            onTest={handleTestClick}
             isTestPending={isTesting || isOauthTesting}
-            testMessage={isCloudBackend ? null : testMessage}
+            testMessage={isSyntheticTestResult ? null : testMessage}
+            isStdioTestUnavailable={isCloudBackend}
           />
         </div>
       </ModalBackdrop>

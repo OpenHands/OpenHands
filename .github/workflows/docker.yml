@@ -77,7 +77,7 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Log in to GHCR
-        uses: docker/login-action@v4.5.2
+        uses: docker/login-action@v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -196,6 +196,7 @@ jobs:
           tags: ${{ steps.prep.outputs.tags }}
           build-args: |
             AGENT_SERVER_IMAGE=${{ steps.prep.outputs.agent_server_image }}
+            AGENT_SERVER_VERSION=${{ steps.config.outputs.agent_server_version }}
             AUTOMATION_VERSION=${{ steps.prep.outputs.automation_version }}
             AGENT_CANVAS_VERSION=${{ steps.config.outputs.agent_canvas_version }}
             OPENHANDS_BUILD_GIT_SHA=${{ env.RELEVANT_SHA }}
@@ -277,7 +278,7 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Log in to GHCR
-        uses: docker/login-action@v4.5.2
+        uses: docker/login-action@v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}

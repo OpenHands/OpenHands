@@ -1,4 +1,6 @@
-import type { MCPAuthCredential } from "./mcp-auth";
+import type { MCPConfig } from "@openhands/typescript-client";
+export type { MCPConfig } from "@openhands/typescript-client";
+import type { SkillCategoryId } from "@openhands/extensions/skills";
 
 export const ProviderOptions = {
   github: "github",
@@ -14,37 +16,6 @@ export type Provider = keyof typeof ProviderOptions;
 export type ProviderToken = {
   token: string;
   host: string | null;
-};
-
-export type MCPSSEServer = {
-  name?: string;
-  url: string;
-  headers?: Record<string, string>;
-  auth?: MCPAuthCredential;
-  enabled?: boolean;
-};
-
-export type MCPStdioServer = {
-  name: string;
-  command: string;
-  args?: string[];
-  env?: Record<string, string>;
-  enabled?: boolean;
-};
-
-export type MCPSHTTPServer = {
-  name?: string;
-  url: string;
-  headers?: Record<string, string>;
-  timeout?: number;
-  auth?: MCPAuthCredential;
-  enabled?: boolean;
-};
-
-export type MCPConfig = {
-  sse_servers: (string | MCPSSEServer)[];
-  stdio_servers: MCPStdioServer[];
-  shttp_servers: (string | MCPSHTTPServer)[];
 };
 
 export type SettingsChoiceValue = boolean | number | string;
@@ -106,6 +77,11 @@ export type SkillInfo = {
   source: string | null;
   description?: string | null;
   triggers?: string[];
+  /**
+   * Topical category from the bundled `@openhands/extensions` catalog.
+   * Always absent for user/project skills: the agent-server's `/api/skills` response drops SKILL.md frontmatter metadata, so a local `category` cannot reach us.
+   */
+  category?: SkillCategoryId | null;
   version?: string;
   license?: string | null;
   compatibility?: string | null;
@@ -159,11 +135,25 @@ export type Settings = {
   enable_sound_notifications: boolean;
   enable_proactive_conversation_starters: boolean;
   enable_solvability_analysis: boolean;
+  /**
+   * When true and an active Model Router meta-profile is configured, the first
+   * user message of every new conversation is routed through the router (the
+   * `route_task_to_model` tool) before the agent proceeds. Default false so
+   * conversations behave exactly as before unless the user opts in.
+   */
+  run_router_at_conversation_start: boolean;
   user_consents_to_analytics: boolean | null;
   search_api_key?: string;
   is_new_user?: boolean;
   mcp_config?: MCPConfig;
+  /** Deny-list over user- and project-authored skills. */
   disabled_skills?: string[];
+  /**
+   * Allow-list over the bundled `@openhands/extensions` catalog. `undefined`
+   * means "never migrated", the only signal `migrateSkillEnablement` has, so
+   * it is deliberately absent from `DEFAULT_SETTINGS`.
+   */
+  enabled_skills?: string[];
   max_budget_per_task: number | null;
   email?: string;
   email_verified?: boolean;

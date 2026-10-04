@@ -1,11 +1,5 @@
-import {
-  useState,
-  useMemo,
-  useCallback,
-  useRef,
-  type ChangeEvent,
-} from "react";
-import { FileUp } from "lucide-react";
+import { useState, useMemo, useCallback, type ReactNode } from "react";
+import { RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import {
@@ -23,6 +17,7 @@ import {
 } from "#/hooks/query/use-automations";
 import { useAutomationHealth } from "#/hooks/query/use-automation-health";
 import { useActiveBackend } from "#/contexts/active-backend-context";
+import { useNavigation } from "#/context/navigation-context";
 import { SearchInput } from "#/components/features/automations/search-input";
 import { AutomationGroup } from "#/components/features/automations/automation-group";
 import { AutomationViewToggle } from "#/components/features/automations/automation-view-toggle";
@@ -37,11 +32,16 @@ import { ErrorState } from "#/components/features/automations/error-state";
 import { BackendNotConfigured } from "#/components/features/automations/backend-not-configured";
 import { DeleteConfirmationModal } from "#/components/features/automations/delete-confirmation-modal";
 import { EditAutomationModal } from "#/components/features/automations/detail/edit-automation-modal";
+import { AddAutomationMenu } from "#/components/features/automations/add-automation-menu";
 import { AddAutomationModal } from "#/components/features/automations/add-automation-modal";
 import { ImportAutomationModal } from "#/components/features/automations/import-automation-modal";
 import { RecommendedAutomationsLauncher } from "#/components/features/automations/recommended-automations-launcher";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { useTracking } from "#/hooks/use-tracking";
+import {
+  useAutomationCreatorFilterUserId,
+  useAutomationPermissions,
+} from "#/hooks/use-automation-permissions";
 import type { Automation, AutomationSpec } from "#/types/automation";
 import {
   getAutomationExportFilename,
@@ -50,20 +50,68 @@ import {
 } from "#/utils/automation-export";
 import {
   automationDetailPath,
+  getDashboardSpec,
   getInterfaceCopy,
+  hasAutomationInterface,
 } from "#/manifests/automation-interface";
-import { downloadBlob } from "#/utils/utils";
+import {
+  applyDashboardView,
+  computeOverviewTile,
+  matchesAutomationSearch,
+} from "#/manifests/automation-insights";
+import { interpolateValues } from "#/manifests/manifest-template";
+import type {
+  DashboardCreatedByValue,
+  DashboardSortValue,
+  DashboardStatusValue,
+  DashboardTriggerValue,
+} from "#/manifests/types";
+import { useAutomationRunSummaries } from "#/hooks/query/use-automation-run-summaries";
+import { useAutomationSubPageNav } from "#/components/features/automations/dashboard/use-automation-sub-page-nav";
+import { AutomationsDashboardControls } from "#/components/features/automations/dashboard/automations-dashboard-controls";
+import { AutomationsFilteredEmptyState } from "#/components/features/automations/dashboard/automations-filtered-empty-state";
+import { MANIFEST_ICON_BY_SLUG } from "#/components/features/manifest/manifest-icons";
+import { ManifestOverviewTiles } from "#/components/features/manifest/manifest-overview-tiles";
+import { ManifestSubpageLayout } from "#/components/features/manifest/manifest-subpage-layout";
+import { cn, downloadBlob } from "#/utils/utils";
+import { uniqueById } from "#/utils/unique-by-id";
 
-const PAGE_SIZE = 50;
+/**
+ * The page renders the interface manifest's copy, so without an admitted
+ * manifest there is nothing to render: a 404, which the layout's error
+ * boundary renders.
+ */
+export const clientLoader = () => {
+  if (!hasAutomationInterface()) {
+    throw new Response(null, { status: 404, statusText: "Not Found" });
+  }
+  return null;
+};
 
 export default function AutomationsList() {
   const { t } = useTranslation("openhands");
   const interfaceCopy = getInterfaceCopy();
+  // Admission is stable for the session; memo just keeps one identity.
+  const dashboardSpec = useMemo(() => getDashboardSpec(), []);
+  const subPageNav = useAutomationSubPageNav();
+  // The manifest's dashboard surface is all-or-nothing, so either both are
+  // present (dashboard mode) or neither is (today's plain list).
+  const dashboard =
+    dashboardSpec && subPageNav
+      ? { spec: dashboardSpec, nav: subPageNav }
+      : null;
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<DashboardStatusValue>("all");
+  const [triggerFilter, setTriggerFilter] =
+    useState<DashboardTriggerValue>("all");
+  const [createdByFilter, setCreatedByFilter] =
+    useState<DashboardCreatedByValue>("all");
+  const [sortValue, setSortValue] = useState<DashboardSortValue>(
+    dashboardSpec?.sort.default ?? "last-run",
+  );
   const [viewMode, setViewMode] = useState<AutomationViewMode>(() =>
     readStoredAutomationViewMode(),
   );
-  const [limit, setLimit] = useState(PAGE_SIZE);
   const [deleteTarget, setDeleteTarget] = useState<{
     id: string;
     name: string;
@@ -71,12 +119,20 @@ export default function AutomationsList() {
   const [editTarget, setEditTarget] = useState<Automation | null>(null);
   const [isAddAutomationOpen, setIsAddAutomationOpen] = useState(false);
   const [importSpec, setImportSpec] = useState<AutomationSpec | null>(null);
-  const importInputRef = useRef<HTMLInputElement>(null);
+  const [isImportOpen, setIsImportOpen] = useState(false);
 
   const active = useActiveBackend();
-  // Edit is a local-backend-only feature in MVP — cloud automations
-  // are managed elsewhere and we don't yet surface them here.
-  const canEdit = active.backend.kind === "local";
+  const { navigate } = useNavigation();
+  // Git Sync is org-level config, so its entry point requires
+  // manage_automations (admins/owners) on every backend kind.
+  const { canManage } = useAutomationPermissions();
+  const creatorFilterUserId = useAutomationCreatorFilterUserId();
+  // The creator the server filters by; undefined while the filter is hidden
+  // or set to "all".
+  const serverCreatedBy =
+    creatorFilterUserId !== null && createdByFilter !== "all"
+      ? createdByFilter
+      : undefined;
 
   const {
     data: healthData,
@@ -87,10 +143,36 @@ export default function AutomationsList() {
   const isBackendHealthy = healthData?.status === "ok";
 
   // Only fetch automations if the backend is healthy
-  const { data, isLoading, isError, refetch } = useAutomations({
-    limit,
-    offset: 0,
+  const {
+    data,
+    isLoading,
+    isError,
+    refetch,
+    hasNextPage,
+    fetchNextPage,
+    isFetching,
+    isPlaceholderData,
+  } = useAutomations({
     enabled: isBackendHealthy,
+    // The server filters by creator so pages and `total` cover only matches;
+    // the client predicate in applyDashboardView stays as the fallback for
+    // an automation service that ignores the param.
+    createdBy: serverCreatedBy,
+  });
+  // The overview tiles summarize the org list above the filters, so they read
+  // it unfiltered; with no creator selected this is the same query as above.
+  const { data: orgData } = useAutomations({ enabled: isBackendHealthy });
+  const runSummaryAutomations = useMemo(
+    () =>
+      uniqueById([
+        ...(orgData?.automations ?? []),
+        ...(data?.automations ?? []),
+      ]),
+    [orgData?.automations, data?.automations],
+  );
+  // One runs query per automation in either list — dashboard mode only.
+  const runSummaries = useAutomationRunSummaries(runSummaryAutomations, {
+    enabled: isBackendHealthy && dashboard !== null,
   });
   const { trackPrebuiltAutomationEnabled, trackAutomationExported } =
     useTracking();
@@ -99,27 +181,45 @@ export default function AutomationsList() {
   const dispatchMutation = useDispatchAutomation();
   const importMutation = useImportAutomation();
 
-  const filtered = useMemo(() => {
+  const visible = useMemo(() => {
     if (!data?.automations) return [];
-    const q = searchQuery.toLowerCase();
-    if (!q) return data.automations;
-    return data.automations.filter(
-      (a) =>
-        a.name.toLowerCase().includes(q) ||
-        (a.prompt ?? "").toLowerCase().includes(q) ||
-        a.repository?.toLowerCase().includes(q) ||
-        a.model?.toLowerCase().includes(q),
+    if (!dashboardSpec) {
+      return data.automations.filter((a) =>
+        matchesAutomationSearch(a, searchQuery),
+      );
+    }
+    return applyDashboardView(
+      data.automations,
+      {
+        search: searchQuery,
+        status: statusFilter,
+        trigger: triggerFilter,
+        // A null id (local backend, personal workspace, or /me loading)
+        // leaves the creator filter inert, so a selection made on a team
+        // workspace has no effect while the filter is hidden.
+        createdBy: createdByFilter,
+        currentUserId: creatorFilterUserId,
+        sort: sortValue,
+      },
+      runSummaries,
     );
-  }, [data?.automations, searchQuery]);
+  }, [
+    data?.automations,
+    dashboardSpec,
+    searchQuery,
+    statusFilter,
+    triggerFilter,
+    createdByFilter,
+    creatorFilterUserId,
+    sortValue,
+    runSummaries,
+  ]);
 
   const activeAutomations = useMemo(
-    () => filtered.filter((a) => a.enabled),
-    [filtered],
+    () => visible.filter((a) => a.enabled),
+    [visible],
   );
-  const inactive = useMemo(
-    () => filtered.filter((a) => !a.enabled),
-    [filtered],
-  );
+  const inactive = useMemo(() => visible.filter((a) => !a.enabled), [visible]);
 
   const handleToggle = (id: string, currentEnabled: boolean) => {
     const willEnable = !currentEnabled;
@@ -169,12 +269,7 @@ export default function AutomationsList() {
     trackAutomationExported({ backendKind: active.backend.kind });
   };
 
-  const handleImportFile = async (event: ChangeEvent<HTMLInputElement>) => {
-    const input = event.currentTarget;
-    const file = input.files?.[0];
-    input.value = "";
-    if (!file) return;
-
+  const handleImportFile = async (file: File) => {
     try {
       let parsed: unknown;
       try {
@@ -198,6 +293,7 @@ export default function AutomationsList() {
       { ...importSpec, enabled: false },
       {
         onSuccess: (created) => {
+          setIsImportOpen(false);
           setImportSpec(null);
           displaySuccessToastWithLink(
             t(I18nKey.AUTOMATIONS$IMPORT_SUCCESS, { name: created.name }),
@@ -226,198 +322,278 @@ export default function AutomationsList() {
     writeStoredAutomationViewMode(view);
   }, []);
 
-  const hasMore = data ? data.total > data.automations.length : false;
-  const hasNoAutomations =
-    !isLoading && !isError && data?.automations.length === 0;
+  // Resets what filters to nothing: search and the dropdowns, never the sort.
+  const handleClearFilters = () => {
+    setSearchQuery("");
+    setStatusFilter("all");
+    setTriggerFilter("all");
+    setCreatedByFilter("all");
+  };
+
+  const overviewTiles = useMemo(() => {
+    if (!dashboardSpec) return [];
+    const automations = orgData?.automations ?? [];
+    return dashboardSpec.overview.tiles.map((tile) => {
+      const value = computeOverviewTile(tile.metric, automations, runSummaries);
+      const template =
+        value.isZero && tile.zeroDetail ? tile.zeroDetail : tile.detail;
+      return {
+        key: tile.metric,
+        label: tile.label,
+        value: value.display,
+        detail: interpolateValues(template, value.placeholderValues),
+        Icon: MANIFEST_ICON_BY_SLUG[tile.icon],
+      };
+    });
+  }, [dashboardSpec, orgData?.automations, runSummaries]);
+
+  const groupInsights = dashboard
+    ? { spec: dashboard.spec.insights, byId: runSummaries }
+    : undefined;
+
+  // Dashboard mode wraps the page in the manifest's sub-page shell; without a
+  // manifest the wrapper — like everything else — is exactly today's.
+  const renderShell = (content: ReactNode) =>
+    dashboard ? (
+      <ManifestSubpageLayout
+        heading={dashboard.nav.heading}
+        navTestIdBase="automations-navbar"
+        items={dashboard.nav.items}
+      >
+        {content}
+      </ManifestSubpageLayout>
+    ) : (
+      <div className="min-h-full">
+        <div className="p-6 max-w-4xl mx-auto">{content}</div>
+      </div>
+    );
+
+  // A failed refetch or Load more keeps the loaded rows; Load more retries.
+  const isListError = isError && !data;
+  // Whether the org has any automations comes from the unfiltered list, so an
+  // empty filtered response shows the filtered empty state with Clear filters.
+  const hasNoAutomations = !isListError && orgData?.total === 0;
+  // The previous filter's rows stand in while the next page loads; when none
+  // of them match, show loading rather than a no-match that is not final. An
+  // empty org keeps its empty state instead.
+  const isListLoading =
+    !hasNoAutomations &&
+    (isLoading || (isPlaceholderData && visible.length === 0));
 
   // Show loading state while checking health
   if (isHealthLoading) {
-    return (
-      <div className="min-h-full">
-        <div className="p-6 max-w-4xl mx-auto">
-          <h1 className="text-xl font-medium text-content">
-            {interfaceCopy.listTitle ?? t(I18nKey.AUTOMATIONS$TITLE)}
-          </h1>
-          <p className="mt-1 text-sm text-muted">
-            {interfaceCopy.listSubtitle ?? t(I18nKey.AUTOMATIONS$SUBTITLE)}
-          </p>
-          <div className="mt-6 flex flex-col gap-3">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <AutomationCardSkeleton key={`skeleton-${String(i)}`} />
-            ))}
-          </div>
+    return renderShell(
+      <div>
+        <h1 className="text-xl font-medium text-content">
+          {interfaceCopy.listTitle}
+        </h1>
+        <p className="mt-1 text-sm text-muted">{interfaceCopy.listSubtitle}</p>
+        <div className="mt-6 flex flex-col gap-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <AutomationCardSkeleton key={`skeleton-${String(i)}`} />
+          ))}
         </div>
-      </div>
+      </div>,
     );
   }
 
   // Show backend not configured state if health check failed
   if (!isBackendHealthy) {
-    return (
-      <div className="min-h-full">
-        <div className="p-6 max-w-4xl mx-auto">
-          <h1 className="text-xl font-medium text-content">
-            {interfaceCopy.listTitle ?? t(I18nKey.AUTOMATIONS$TITLE)}
-          </h1>
-          <p className="mt-1 text-sm text-muted">
-            {interfaceCopy.listSubtitle ?? t(I18nKey.AUTOMATIONS$SUBTITLE)}
-          </p>
-          <BackendNotConfigured onRetry={refetchHealth} />
-        </div>
-      </div>
+    return renderShell(
+      <div>
+        <h1 className="text-xl font-medium text-content">
+          {interfaceCopy.listTitle}
+        </h1>
+        <p className="mt-1 text-sm text-muted">{interfaceCopy.listSubtitle}</p>
+        <BackendNotConfigured onRetry={refetchHealth} />
+      </div>,
     );
   }
 
-  return (
-    <div className="min-h-full">
-      <div className="p-6 max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h1 className="text-xl font-semibold text-content">
-              {interfaceCopy.listTitle ?? t(I18nKey.AUTOMATIONS$TITLE)}
-            </h1>
-            <p className="mt-1 text-sm text-muted">
-              {interfaceCopy.listSubtitle ?? t(I18nKey.AUTOMATIONS$SUBTITLE)}
-            </p>
-          </div>
-          <div className="flex shrink-0 flex-wrap justify-end gap-2">
-            <BrandButton
-              type="button"
-              variant="secondary"
-              testId="automations-import-automation"
-              className="whitespace-nowrap"
-              onClick={() => importInputRef.current?.click()}
-              startContent={<FileUp className="size-4" aria-hidden />}
-            >
-              {t(I18nKey.AUTOMATIONS$IMPORT)}
-            </BrandButton>
-            <input
-              ref={importInputRef}
-              type="file"
-              accept="application/json,.json"
-              className="hidden"
-              data-testid="automations-import-file"
-              onChange={handleImportFile}
-            />
-            <BrandButton
-              type="button"
-              variant="secondary"
-              testId="automations-add-automation"
-              className="whitespace-nowrap"
-              onClick={() => setIsAddAutomationOpen(true)}
-            >
-              {t(I18nKey.AUTOMATIONS$ADD_AUTOMATION)}
-            </BrandButton>
-          </div>
+  return renderShell(
+    <>
+      {/* Header */}
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 flex-1 basis-64">
+          <h1 className="text-xl font-semibold text-content">
+            {interfaceCopy.listTitle}
+          </h1>
+          <p className="mt-1 text-sm text-muted">
+            {interfaceCopy.listSubtitle}
+          </p>
         </div>
-
-        {/* Search */}
-        <div className="mt-6 flex items-stretch gap-2">
-          <SearchInput value={searchQuery} onChange={setSearchQuery} />
-          <AutomationViewToggle
-            view={viewMode}
-            onChange={handleViewModeChange}
-            disabled={hasNoAutomations}
+        <div className="flex shrink-0 flex-wrap justify-end gap-2">
+          {/* Git sync is org-level config, so it follows manage_automations
+              (admins/owners) on every backend kind, not the local-only edit
+              gate. */}
+          {canManage && (
+            <BrandButton
+              type="button"
+              variant="secondary"
+              testId="automations-git-sync"
+              className="whitespace-nowrap"
+              onClick={() => navigate?.("/automations/git-sync")}
+              startContent={<RefreshCw className="size-4" aria-hidden />}
+            >
+              {t(I18nKey.AUTOMATIONS$GIT_SYNC$NAV_BUTTON)}
+            </BrandButton>
+          )}
+          <AddAutomationMenu
+            onAdd={() => setIsAddAutomationOpen(true)}
+            onImport={() => setIsImportOpen(true)}
           />
         </div>
+      </div>
 
-        {/* Content */}
-        <div className="mt-6 flex flex-col gap-6">
-          {isLoading && (
-            <div className="flex flex-col gap-3">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <AutomationCardSkeleton key={`skeleton-${String(i)}`} />
-              ))}
-            </div>
-          )}
+      {/* Overview tiles — dashboard mode only */}
+      {dashboard && (
+        <ManifestOverviewTiles
+          label={dashboard.spec.overview.label}
+          tiles={overviewTiles}
+        />
+      )}
 
-          {isError && !isLoading && <ErrorState onRetry={refetch} />}
+      {/* Search */}
+      <div
+        className={cn(
+          "flex items-stretch gap-2",
+          dashboard ? "flex-wrap" : "mt-6",
+        )}
+      >
+        <SearchInput value={searchQuery} onChange={setSearchQuery} />
+        {dashboard && (
+          <AutomationsDashboardControls
+            spec={dashboard.spec}
+            status={statusFilter}
+            trigger={triggerFilter}
+            createdBy={createdByFilter}
+            canFilterByCreator={creatorFilterUserId !== null}
+            sort={sortValue}
+            onStatusChange={setStatusFilter}
+            onTriggerChange={setTriggerFilter}
+            onCreatedByChange={setCreatedByFilter}
+            onSortChange={setSortValue}
+          />
+        )}
+        <AutomationViewToggle
+          view={viewMode}
+          onChange={handleViewModeChange}
+          disabled={hasNoAutomations}
+        />
+      </div>
 
-          {hasNoAutomations && <EmptyState />}
+      {/* Content */}
+      <div className={cn("flex flex-col gap-6", !dashboard && "mt-6")}>
+        {isListLoading && (
+          <div className="flex flex-col gap-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <AutomationCardSkeleton key={`skeleton-${String(i)}`} />
+            ))}
+          </div>
+        )}
 
-          {!isLoading && !isError && data && data.automations.length > 0 && (
-            <>
-              <AutomationGroup
-                title={t(I18nKey.AUTOMATIONS$ACTIVE)}
-                count={activeAutomations.length}
-                automations={activeAutomations}
-                view={viewMode}
-                onToggle={handleToggle}
-                onRunNow={handleRunNow}
-                runPendingId={
-                  dispatchMutation.isPending
-                    ? (dispatchMutation.variables ?? null)
-                    : null
-                }
-                onDelete={handleDeleteRequest}
-                onExport={handleExport}
-                onEdit={canEdit ? handleEditRequest : undefined}
-              />
-              <AutomationGroup
-                title={t(I18nKey.AUTOMATIONS$INACTIVE)}
-                count={inactive.length}
-                automations={inactive}
-                view={viewMode}
-                onToggle={handleToggle}
-                onRunNow={handleRunNow}
-                runPendingId={
-                  dispatchMutation.isPending
-                    ? (dispatchMutation.variables ?? null)
-                    : null
-                }
-                onDelete={handleDeleteRequest}
-                onExport={handleExport}
-                onEdit={canEdit ? handleEditRequest : undefined}
-              />
+        {isListError && !isLoading && <ErrorState onRetry={refetch} />}
 
-              {hasMore && (
-                <button
-                  type="button"
-                  onClick={() => setLimit((prev) => prev + PAGE_SIZE)}
-                  className="self-center rounded-lg border border-[var(--oh-border)] px-6 py-2 text-sm text-white hover:bg-surface-raised"
-                >
-                  {t(I18nKey.AUTOMATIONS$LOAD_MORE)}
-                </button>
-              )}
-            </>
-          )}
-        </div>
+        {hasNoAutomations && <EmptyState />}
 
+        {!isListLoading && !isListError && data && !hasNoAutomations && (
+          <>
+            {dashboard && visible.length === 0 ? (
+              <AutomationsFilteredEmptyState onClear={handleClearFilters} />
+            ) : (
+              <>
+                <AutomationGroup
+                  title={t(I18nKey.AUTOMATIONS$ACTIVE)}
+                  count={activeAutomations.length}
+                  automations={activeAutomations}
+                  view={viewMode}
+                  onToggle={handleToggle}
+                  onRunNow={handleRunNow}
+                  runPendingId={
+                    dispatchMutation.isPending
+                      ? (dispatchMutation.variables ?? null)
+                      : null
+                  }
+                  onDelete={handleDeleteRequest}
+                  onExport={handleExport}
+                  onEdit={handleEditRequest}
+                  insights={groupInsights}
+                />
+                <AutomationGroup
+                  title={t(I18nKey.AUTOMATIONS$INACTIVE)}
+                  count={inactive.length}
+                  automations={inactive}
+                  view={viewMode}
+                  onToggle={handleToggle}
+                  onRunNow={handleRunNow}
+                  runPendingId={
+                    dispatchMutation.isPending
+                      ? (dispatchMutation.variables ?? null)
+                      : null
+                  }
+                  onDelete={handleDeleteRequest}
+                  onExport={handleExport}
+                  onEdit={handleEditRequest}
+                  insights={groupInsights}
+                />
+              </>
+            )}
+            {/* Also under the filtered empty state: the matches may be on a
+                  page that is not loaded yet. */}
+            {hasNextPage && (
+              <button
+                type="button"
+                onClick={() => fetchNextPage()}
+                disabled={isFetching}
+                className="self-center rounded-lg border border-border px-6 py-2 text-sm text-contrast hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {t(I18nKey.AUTOMATIONS$LOAD_MORE)}
+              </button>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* The launcher lives on the templates sub-page in dashboard mode */}
+      {!dashboard && (
         <div className="mt-6">
           <RecommendedAutomationsLauncher query={searchQuery} />
         </div>
+      )}
 
-        {/* Delete confirmation modal */}
-        <DeleteConfirmationModal
-          automationName={deleteTarget?.name ?? ""}
-          isOpen={deleteTarget !== null}
-          onConfirm={handleDeleteConfirm}
-          onCancel={() => setDeleteTarget(null)}
+      {/* Delete confirmation modal */}
+      <DeleteConfirmationModal
+        automationName={deleteTarget?.name ?? ""}
+        isOpen={deleteTarget !== null}
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setDeleteTarget(null)}
+      />
+
+      {/* Edit modal */}
+      {editTarget && (
+        <EditAutomationModal
+          automation={editTarget}
+          isOpen={editTarget !== null}
+          onClose={() => setEditTarget(null)}
         />
+      )}
 
-        {/* Edit modal — local backends only */}
-        {editTarget && (
-          <EditAutomationModal
-            automation={editTarget}
-            isOpen={editTarget !== null}
-            onClose={() => setEditTarget(null)}
-          />
-        )}
+      <AddAutomationModal
+        isOpen={isAddAutomationOpen}
+        onClose={() => setIsAddAutomationOpen(false)}
+      />
 
-        <AddAutomationModal
-          isOpen={isAddAutomationOpen}
-          onClose={() => setIsAddAutomationOpen(false)}
-        />
-
-        <ImportAutomationModal
-          isOpen={importSpec !== null}
-          spec={importSpec}
-          isImporting={importMutation.isPending}
-          onClose={() => setImportSpec(null)}
-          onImport={handleImportConfirm}
-        />
-      </div>
-    </div>
+      <ImportAutomationModal
+        isOpen={isImportOpen}
+        spec={importSpec}
+        isImporting={importMutation.isPending}
+        onClose={() => {
+          setIsImportOpen(false);
+          setImportSpec(null);
+        }}
+        onImport={handleImportConfirm}
+        onFile={handleImportFile}
+      />
+    </>,
   );
 }

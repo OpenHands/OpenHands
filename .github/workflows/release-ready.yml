@@ -14,5 +14,5 @@ jobs:
     secrets: inherit
     uses: OpenHands/release-actions/.github/workflows/release-ready.yml@main
     with:
-      product-name: Agent Canvas
+      product-name: OpenHands Agent Canvas
       slack-channel: '#proj-agent-canvas'

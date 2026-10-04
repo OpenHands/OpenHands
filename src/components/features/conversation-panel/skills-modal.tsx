@@ -1,15 +1,20 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
-import { ModalBody } from "#/components/shared/modals/modal-body";
+import {
+  MODAL_MAX_WIDTH_VIEWPORT,
+  ModalBody,
+} from "#/components/shared/modals/modal-body";
 import { I18nKey } from "#/i18n/declaration";
 import { getAgentServerWorkingDir } from "#/api/agent-server-config";
 import { useConversationSkills } from "#/hooks/query/use-conversation-skills";
+import { useSkillEnabledFilter } from "#/hooks/use-skill-enablement";
 import {
   groupSkillsByScope,
   SKILL_SCOPE_ORDER,
   type SkillScope,
 } from "#/utils/skill-scope";
+import { cn } from "#/utils/utils";
 import { SkillsModalHeader } from "./skills-modal-header";
 import { SkillsModalSection } from "./skills-modal-section";
 import { SkillsLoadingState } from "./skills-loading-state";
@@ -41,10 +46,18 @@ export function SkillsModal({ onClose }: SkillsModalProps) {
     refetch,
     isRefetching,
   } = useConversationSkills();
+  const isSkillEnabled = useSkillEnabledFilter();
+
+  // The modal reports what the conversation actually has, so it lists the
+  // enabled set rather than the whole catalog.
+  const visibleSkills = useMemo(
+    () => (skills ?? []).filter(isSkillEnabled),
+    [skills, isSkillEnabled],
+  );
 
   const groupedSkills = useMemo(
-    () => (skills ? groupSkillsByScope(skills, projectDir) : null),
-    [skills, projectDir],
+    () => groupSkillsByScope(visibleSkills, projectDir),
+    [visibleSkills, projectDir],
   );
 
   const toggleAgent = (agentName: string) => {
@@ -58,7 +71,10 @@ export function SkillsModal({ onClose }: SkillsModalProps) {
     <ModalBackdrop onClose={onClose}>
       <ModalBody
         width="lg"
-        className="relative max-h-[80vh] flex flex-col items-start border border-[var(--oh-border)]"
+        className={cn(
+          "relative max-h-[80vh] flex flex-col items-start border border-border",
+          MODAL_MAX_WIDTH_VIEWPORT,
+        )}
         testID="skills-modal"
       >
         <SkillsModalHeader
@@ -68,14 +84,14 @@ export function SkillsModal({ onClose }: SkillsModalProps) {
           onClose={onClose}
         />
 
-        <div className="w-full h-[60vh] overflow-auto rounded-md border border-[var(--oh-border)] bg-surface-raised custom-scrollbar-always">
+        <div className="w-full h-[60vh] overflow-auto rounded-md border border-border bg-surface-raised custom-scrollbar-always">
           {isLoading ? (
             <SkillsLoadingState />
-          ) : isError || !skills || skills.length === 0 ? (
+          ) : isError || !skills || visibleSkills.length === 0 ? (
             <SkillsEmptyState isError={isError} />
           ) : (
             groupedSkills && (
-              <div className="divide-y divide-[var(--oh-border)]">
+              <div className="divide-y divide-border">
                 {SKILL_SCOPE_ORDER.map((scope) => {
                   const scopedSkills = groupedSkills[scope];
                   if (scopedSkills.length === 0) {

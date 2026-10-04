@@ -16,7 +16,7 @@ import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import type { ExtendedMCPTestResponse, MCPServerConfig } from "#/types/mcp-server";
 
 const CUSTOM_SERVER: MCPServerConfig = {
-  id: "shttp-0",
+  id: "custom",
   type: "shttp",
   name: "custom",
   url: "https://mcp.example.com/mcp",
@@ -24,15 +24,23 @@ const CUSTOM_SERVER: MCPServerConfig = {
 
 /** Matches the catalog `github` entry (probe spec + docsUrl). */
 const GITHUB_SERVER: MCPServerConfig = {
-  id: "shttp-0",
+  id: "github",
   type: "shttp",
   name: "github",
   url: "https://api.githubcopilot.com/mcp/",
   auth: { strategy: "api_key", value: "github_pat_x" },
 };
 
+const STDIO_SERVER: MCPServerConfig = {
+  id: "local-tool",
+  type: "stdio",
+  name: "local-tool",
+  command: "npx",
+  args: ["-y", "local-tool"],
+};
+
 const OAUTH_SERVER: MCPServerConfig = {
-  id: "shttp-0",
+  id: "my-oauth",
   type: "shttp",
   name: "my-oauth",
   url: "https://mcp.oauth.example/mcp",
@@ -151,7 +159,7 @@ describe("InstalledServerCard connection health", () => {
     );
   });
 
-  it("renders no health section on cloud backends", () => {
+  it("renders the health section for remote servers on cloud backends", () => {
     setRegisteredBackends([
       {
         id: "cloud-1",
@@ -166,11 +174,44 @@ describe("InstalledServerCard connection health", () => {
     renderCard(CUSTOM_SERVER);
 
     expect(
-      screen.queryByTestId(`mcp-server-health-${CUSTOM_SERVER.id}`),
+      screen.getByTestId(`mcp-server-health-${CUSTOM_SERVER.id}`),
+    ).toBeInTheDocument();
+    expect(probeButton(CUSTOM_SERVER.id)).toBeInTheDocument();
+  });
+
+  it("renders no health section for stdio servers on cloud backends", () => {
+    setRegisteredBackends([
+      {
+        id: "cloud-1",
+        name: "Cloud",
+        host: "https://app.all-hands.dev",
+        apiKey: "k",
+        kind: "cloud",
+      },
+    ]);
+    setActiveSelection({ backendId: "cloud-1" });
+
+    renderCard(STDIO_SERVER);
+
+    expect(
+      screen.queryByTestId(`mcp-server-health-${STDIO_SERVER.id}`),
     ).not.toBeInTheDocument();
   });
 
   it("re-authorizes a failed OAuth server and persists the refreshed state", async () => {
+    vi.mocked(SettingsService.getSettings).mockResolvedValue({
+      ...MOCK_DEFAULT_USER_SETTINGS,
+      agent_settings: {
+        ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+        mcp_config: {
+          "my-oauth": {
+            transport: "http",
+            url: OAUTH_SERVER.url!,
+            auth: { strategy: "oauth2" },
+          },
+        },
+      },
+    });
     vi.spyOn(McpService, "testServer").mockResolvedValue({
       ok: false,
       error: "token expired",
@@ -181,8 +222,8 @@ describe("InstalledServerCard connection health", () => {
       tools: [],
       oauth_state: { tokens: { access_token: "fresh-access-token" } },
     });
-    const saveSpy = vi
-      .spyOn(SettingsService, "saveSettings")
+    const patchSpy = vi
+      .spyOn(SettingsService, "patchMcpServer")
       .mockResolvedValue(true);
     renderCard(OAUTH_SERVER);
 
@@ -200,8 +241,12 @@ describe("InstalledServerCard connection health", () => {
     );
     expect(McpService.authorizeOAuth).toHaveBeenCalledTimes(1);
     // The refreshed oauth_state is persisted, not dropped on the floor.
-    expect(saveSpy).toHaveBeenCalledTimes(1);
-    expect(JSON.stringify(saveSpy.mock.calls[0][0])).toContain(
+    await waitFor(() => expect(patchSpy).toHaveBeenCalledTimes(1));
+    expect(patchSpy).toHaveBeenCalledWith(
+      OAUTH_SERVER.id,
+      expect.objectContaining({ auth: expect.any(Object) }),
+    );
+    expect(JSON.stringify(patchSpy.mock.calls[0][1])).toContain(
       "fresh-access-token",
     );
   });

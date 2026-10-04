@@ -11,6 +11,7 @@ import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import OptionService from "#/api/option-service/option-service.api";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
+import AgentProfilesService from "#/api/agent-profiles-service/agent-profiles-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import { Settings } from "#/types/settings";
 import { WebClientConfig } from "#/api/option-service/option.types";
@@ -150,6 +151,25 @@ describe("LlmNotConfiguredBanner", () => {
 
   it("stays hidden for ACP agents, which own their LLM and need no key", async () => {
     // Arrange: ACP agent, no key — must not be nagged.
+    //
+    // The ACTIVE AGENT PROFILE is what decides this; `agent_settings` is only
+    // the fallback while the profile list loads. Both are set to ACP here so
+    // the case states its own intent — before the mock handlers covered
+    // /api/agent-profiles, this passed because the list request errored and
+    // left the hook on the settings fallback.
+    vi.spyOn(AgentProfilesService, "listProfiles").mockResolvedValue({
+      profiles: [
+        {
+          id: "acp-profile-id",
+          name: "acp",
+          agent_kind: "acp",
+          revision: 1,
+          llm_profile_ref: null,
+          mcp_server_refs: null,
+        },
+      ],
+      active_agent_profile_id: "acp-profile-id",
+    });
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
       buildSettings({
         llm_api_key_set: false,

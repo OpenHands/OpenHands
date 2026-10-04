@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { cn } from "#/utils/utils";
 import { I18nKey } from "#/i18n/declaration";
 import { MarkdownRenderer } from "../markdown/markdown-renderer";
+import { ChatAnchor, ChatCode, ChatStrong } from "./chat-markdown-path-code";
 
 const USER_MESSAGE_MAX_LINES = 5;
 const USER_MESSAGE_LENGTH_THRESHOLD = 360;
@@ -12,6 +13,9 @@ export const chatBubbleMarkdownComponents = {
   p: ({ children }: React.ComponentProps<"p">) => (
     <p className="m-0 leading-6">{children}</p>
   ),
+  code: ChatCode,
+  a: ChatAnchor,
+  strong: ChatStrong,
 };
 
 export function UserMessageBody({
@@ -98,7 +102,7 @@ export function UserMessageBody({
           <span
             data-testid="chat-message-view-more"
             className={cn(
-              "pointer-events-none absolute bottom-1 left-1/2 z-10 inline-flex -translate-x-1/2 items-center rounded-full border border-[var(--oh-border-subtle)] bg-[var(--oh-surface-raised)] px-2.5 py-0.5 text-xs font-normal text-[var(--oh-foreground)] transition-opacity duration-150",
+              "pointer-events-none absolute bottom-1 left-1/2 z-10 inline-flex -translate-x-1/2 items-center rounded-full border border-border-subtle bg-surface-raised px-2.5 py-0.5 text-xs font-normal text-foreground transition-opacity duration-150",
               isHovering ? "opacity-100" : "opacity-0",
             )}
           >

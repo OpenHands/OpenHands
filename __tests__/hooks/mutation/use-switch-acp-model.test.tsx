@@ -167,23 +167,23 @@ describe("useSwitchAcpModel", () => {
     });
   });
 
-  it("falls back to the agent-settings default when the profiles surface is unavailable", async () => {
+  it("does not persist to agent_settings when the profiles fetch fails", async () => {
+    // Discovery failure propagates instead of downgrading (#16523): an
+    // active-profile launch ignores agent_settings, so persisting the pick
+    // there would silently drop it.
     vi.mocked(AgentProfilesService.listProfiles).mockRejectedValue(
-      new Error("404"),
+      new Error("profile endpoint unavailable"),
     );
-    vi.mocked(SettingsService.saveSettings).mockResolvedValue(true);
 
     const { result } = renderSwitchHook();
 
     result.current.mutate({ conversationId: null, model: "gemini-2.5-pro" });
 
     await waitFor(() => {
-      expect(result.current.isSuccess).toBe(true);
+      expect(result.current.isError).toBe(true);
     });
 
-    expect(SettingsService.saveSettings).toHaveBeenCalledWith({
-      agent_settings_diff: { acp_model: "gemini-2.5-pro" },
-    });
+    expect(SettingsService.saveSettings).not.toHaveBeenCalled();
     expect(AgentProfilesService.saveProfile).not.toHaveBeenCalled();
   });
 

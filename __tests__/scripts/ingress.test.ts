@@ -424,7 +424,7 @@ describe("ingress proxy functionality", () => {
   it("adds runtime_services to proxied /server_info", async () => {
     const serverInfoBackend = createServer((_req, res) => {
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ version: "1.28.0" }));
+      res.end(JSON.stringify({ version: "1.48.0" }));
     });
     const serverInfoBackendPort = await listenOnLoopback(serverInfoBackend);
     const runtimeIngressPort = await getFreePort();
@@ -464,7 +464,7 @@ describe("ingress proxy functionality", () => {
       };
 
       expect(response.status).toBe(200);
-      expect(body.version).toBe("1.28.0");
+      expect(body.version).toBe("1.48.0");
       expect(body.runtime_services).toEqual(JSON.parse(runtimeServicesInfo));
     } finally {
       await stopChild(runtimeIngress);
@@ -736,5 +736,75 @@ describe("ingress socket-error resilience", () => {
     expect(ingressProcess.exitCode).toBeNull();
     expect(ingressProcess.signalCode).toBeNull();
     expect(ingressStderr).not.toContain("Unhandled 'error' event");
+  });
+});
+
+describe("ingress --no-referrer-prefix", () => {
+  // The editor is advertised as `<origin><prefix>/?tkn=<token>`, and
+  // agent-server derives that token from session_api_keys[0] — the same secret
+  // that authenticates /api. The workbench then loads webviews, previews and
+  // extension content from that document, so without a Referrer-Policy the
+  // token rides along on each of those subrequests.
+  let backend: Server | undefined;
+  let ingressProcess: ChildProcess | undefined;
+  let ingressPort: number;
+
+  beforeAll(async () => {
+    backend = createServer((req, res) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ path: req.url }));
+    });
+    const backendPort = await listenOnLoopback(backend);
+
+    ingressPort = await getFreePort();
+    ingressProcess = spawn(
+      process.execPath,
+      [
+        ingressScript,
+        "--port",
+        ingressPort.toString(),
+        "--route",
+        `/vscode=${originForPort(backendPort)}`,
+        "--route",
+        `/api=${originForPort(backendPort)}`,
+        "--no-referrer-prefix",
+        "/vscode",
+      ],
+      { cwd: repoRoot, stdio: ["ignore", "pipe", "pipe"] },
+    );
+
+    await waitForPort(ingressPort, ingressProcess);
+  });
+
+  afterAll(async () => {
+    await stopChild(ingressProcess);
+    await closeServer(backend);
+  });
+
+  it("sets no-referrer on the editor prefix", async () => {
+    const response = await fetch(
+      `${originForPort(ingressPort)}/vscode/?tkn=secret`,
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+  });
+
+  it("covers assets under the prefix, which is where the leak would happen", async () => {
+    const response = await fetch(
+      `${originForPort(ingressPort)}/vscode/static/out/vs/workbench/workbench.web.main.js`,
+    );
+
+    expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+  });
+
+  it("leaves other routes alone", async () => {
+    // Deliberately scoped rather than a blanket policy for the origin: the
+    // canvas itself is served here too, and its outbound requests are not the
+    // problem being solved.
+    const response = await fetch(`${originForPort(ingressPort)}/api/anything`);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("referrer-policy")).toBeNull();
   });
 });

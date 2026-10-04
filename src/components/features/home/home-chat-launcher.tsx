@@ -1,3 +1,4 @@
+import { useConversationWorkspace } from "#/hooks/query/use-conversation-workspace";
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
@@ -25,9 +26,14 @@ import {
   TOAST_OPTIONS,
 } from "#/utils/custom-toast-handlers";
 import { getWorkspacesUnsupportedMessage } from "#/utils/workspaces-compatibility";
+import {
+  readStoredLocalWorkspaceMode,
+  writeStoredLocalWorkspaceMode,
+} from "#/utils/workspace-mode";
 import type { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { PluginPickerModal } from "#/components/features/plugins/plugin-picker-modal";
 import { PluginPickerTrigger } from "#/components/features/plugins/plugin-picker-trigger";
+import { RecommendedAutomationsLauncher } from "#/components/features/automations/recommended-automations-launcher";
 import { PinnedAutomationsDashboard } from "./featured-automations/pinned-automations-dashboard";
 import { RunningAutomationsList } from "./featured-automations/running-automations-list";
 import { HomeHeaderTitle } from "./home-header/home-header-title";
@@ -49,8 +55,9 @@ export function HomeChatLauncher() {
     useState<GitRepository | null>(null);
   const [pendingBranch, setPendingBranch] = useState<Branch | null>(null);
   const [pendingProvider, setPendingProvider] = useState<Provider | null>(null);
-  const [workspaceMode, setWorkspaceMode] =
-    useState<WorkspaceMode>("local_repo");
+  const [workspaceMode, setWorkspaceModeState] = useState<WorkspaceMode>(() =>
+    readStoredLocalWorkspaceMode(),
+  );
   const [selectedPlugins, setSelectedPlugins] = useState<PluginSpec[]>([]);
   const [isPluginPickerOpen, setIsPluginPickerOpen] = useState(false);
 
@@ -67,9 +74,16 @@ export function HomeChatLauncher() {
     useConversationStore();
   const { handleUpload } = useChatAttachmentUpload();
   const { error: workspacesError } = useLocalWorkspaces({ enabled: isLocal });
-  const workspacesUnsupportedMessage = isLocal
-    ? getWorkspacesUnsupportedMessage(workspacesError, t)
-    : null;
+  const { isolated, unsupportedMessage: runtimeWorkspaceMessage } =
+    useConversationWorkspace();
+  const workspacesUnsupportedMessage =
+    runtimeWorkspaceMessage ??
+    (isLocal ? getWorkspacesUnsupportedMessage(workspacesError, t) : null);
+
+  const setWorkspaceMode = (mode: WorkspaceMode) => {
+    setWorkspaceModeState(mode);
+    if (isLocal) writeStoredLocalWorkspaceMode(mode);
+  };
 
   const hasSelection = isLocal
     ? !!pendingWorkspace
@@ -100,7 +114,12 @@ export function HomeChatLauncher() {
       query: hasAttachments ? undefined : trimmed || undefined,
       entryPoint: "home_chat_launcher",
     };
-    if (isLocal && pendingWorkspace) {
+    // An isolated backend owns its workspace, so a host selection left over
+    // from a non-isolated session must not be forwarded: the server rejects it
+    // (`HOME$ISOLATED_WORKSPACE_NOTICE`) and the user sees an error toast for a
+    // selection they may not have noticed. Creation proceeds isolated instead;
+    // the launcher still offers an explicit "clear" affordance for the UI.
+    if (isLocal && pendingWorkspace && !isolated) {
       variables = {
         ...variables,
         workingDir: pendingWorkspace.path,
@@ -221,7 +240,7 @@ export function HomeChatLauncher() {
       data-testid="home-chat-launcher"
       className="flex w-full flex-col items-center pt-[max(4rem,28vh)] pb-10"
     >
-      <div className="flex w-full max-w-[800px] flex-col gap-4 md:px-4">
+      <div className="flex w-full max-w-200 flex-col gap-4 md:px-4">
         <div className="flex w-full justify-center">
           <HomeHeaderTitle />
         </div>
@@ -230,10 +249,27 @@ export function HomeChatLauncher() {
           <CustomChatInput
             onSubmit={handleSubmitWithModelGuard}
             onFilesPaste={handleUpload}
+            placeholder={t(I18nKey.HOME$DESCRIBE_ENGINEERING_TASK)}
             disabled={isCreating || llmBlocked}
           />
         </div>
 
+        {isolated && (
+          <p role="status" className="text-xs text-[var(--oh-text-secondary)]">
+            {pendingWorkspace
+              ? runtimeWorkspaceMessage
+              : t(I18nKey.HOME$ISOLATED_WORKSPACE_NEW)}
+            {pendingWorkspace && (
+              <button
+                type="button"
+                className="ml-2 underline"
+                onClick={() => setPendingWorkspace(null)}
+              >
+                {t(I18nKey.HOME$CLEAR_HOST_WORKSPACE)}
+              </button>
+            )}
+          </p>
+        )}
         <div className="flex items-center justify-start gap-2">
           {hasSelection ? (
             <HomeGitControlBarPreview
@@ -262,6 +298,7 @@ export function HomeChatLauncher() {
         </div>
 
         <div className="mt-8 flex w-full flex-col gap-8">
+          <RecommendedAutomationsLauncher variant="rail" />
           <PinnedAutomationsDashboard />
           <RunningAutomationsList />
         </div>
@@ -276,7 +313,6 @@ export function HomeChatLauncher() {
             setPendingRepository(null);
             setPendingBranch(null);
             setPendingProvider(null);
-            setWorkspaceMode("local_repo");
           }}
         />
       ) : (
@@ -288,7 +324,7 @@ export function HomeChatLauncher() {
             setPendingBranch(branch);
             setPendingProvider(provider ?? repository.git_provider);
             setPendingWorkspace(null);
-            setWorkspaceMode("local_repo");
+            setWorkspaceModeState("local_repo");
           }}
         />
       )}

@@ -16,8 +16,10 @@ import {
   isObservationEvent,
   isStreamingDeltaEvent,
   isSwitchLLMObservationEvent,
+  isClassifyAndSwitchLLMObservationEvent,
 } from "#/types/agent-server/type-guards";
 import { handleEventForUI } from "#/utils/handle-event-for-ui";
+import { markdownFence } from "#/utils/markdown-fence";
 import { shouldRenderEvent } from "#/components/conversation-events/chat/event-content-helpers/should-render-event";
 import { parseMessageFromEvent } from "#/components/conversation-events/chat/event-content-helpers/parse-message-from-event";
 import { getActionContent } from "#/components/conversation-events/chat/event-content-helpers/get-action-content";
@@ -104,6 +106,7 @@ const SAFE_OBSERVATION_DETAIL_KINDS = new Set([
   "MCPToolObservation",
   "StrReplaceEditorObservation",
   "SwitchLLMObservation",
+  "ClassifyAndSwitchLLMObservation",
   "TaskTrackerObservation",
   "TaskObservation",
   "TerminalObservation",
@@ -280,6 +283,8 @@ const buildTranscriptEntries = (
   const renderableEvents = uiEvents.filter(
     (event) =>
       (isSwitchLLMObservationEvent(event) && !event.observation.is_error) ||
+      (isClassifyAndSwitchLLMObservationEvent(event) &&
+        !event.observation.is_error) ||
       shouldRenderEvent(event),
   );
   const renderedItems = groupEvents(
@@ -339,7 +344,34 @@ const buildTranscriptEntries = (
           ]
             .filter(Boolean)
             .join("\n"),
-          timestamp: event.timestamp,
+          timestamp: event.timestamp ?? "",
+        });
+        continue;
+      }
+
+      if (
+        isClassifyAndSwitchLLMObservationEvent(event) &&
+        !event.observation.is_error &&
+        event.observation.model
+      ) {
+        // Router-driven switch: surface the activated profile the same way
+        // as a manual `/model` switch, and tag the chosen classifier
+        // category as the reason so transcript readers can see *why* the
+        // router picked this model.
+        entries.push({
+          kind: "note",
+          summary: translatePlain(I18nKey.MODEL$SWITCHED_TO_PROFILE, {
+            name: event.observation.model,
+          }),
+          content: [
+            `${i18n.t(I18nKey.TRANSCRIPT_EXPORT$MODEL)}: ${event.observation.active_model}`,
+            event.observation.chosen_class
+              ? `${i18n.t(I18nKey.TRANSCRIPT_EXPORT$REASON)}: ${event.observation.chosen_class}`
+              : "",
+          ]
+            .filter(Boolean)
+            .join("\n"),
+          timestamp: event.timestamp ?? "",
         });
         continue;
       }
@@ -353,7 +385,7 @@ const buildTranscriptEntries = (
               kind: "message",
               author: "assistant",
               content,
-              timestamp: event.timestamp,
+              timestamp: event.timestamp ?? "",
             });
           });
         } else if (parsed) {
@@ -361,7 +393,7 @@ const buildTranscriptEntries = (
             kind: "message",
             author: "user",
             content: parsed,
-            timestamp: event.timestamp,
+            timestamp: event.timestamp ?? "",
           });
         }
         continue;
@@ -383,7 +415,7 @@ const buildTranscriptEntries = (
             kind: "message",
             author: "assistant",
             content: reasoningContent,
-            timestamp: event.timestamp,
+            timestamp: event.timestamp ?? "",
           });
         }
         if (message.trim()) {
@@ -391,7 +423,7 @@ const buildTranscriptEntries = (
             kind: "message",
             author: "assistant",
             content: message.trim(),
-            timestamp: event.timestamp,
+            timestamp: event.timestamp ?? "",
           });
         }
         continue;
@@ -401,7 +433,7 @@ const buildTranscriptEntries = (
         entries.push({
           kind: "error",
           content: event.error,
-          timestamp: event.timestamp,
+          timestamp: event.timestamp ?? "",
         });
         continue;
       }
@@ -414,7 +446,7 @@ const buildTranscriptEntries = (
               kind: "message",
               author: "assistant",
               content,
-              timestamp: event.timestamp,
+              timestamp: event.timestamp ?? "",
             });
           }
         } else {
@@ -422,7 +454,7 @@ const buildTranscriptEntries = (
             kind: "tool",
             summary: getActionSummary(event),
             details: includeToolDetails ? getSafeActionDetails(event) : "",
-            timestamp: event.timestamp,
+            timestamp: event.timestamp ?? "",
           });
         }
         continue;
@@ -436,7 +468,7 @@ const buildTranscriptEntries = (
           details: includeToolDetails
             ? getSafeObservationDetails(event, correspondingAction)
             : "",
-          timestamp: event.timestamp,
+          timestamp: event.timestamp ?? "",
         });
         continue;
       }
@@ -448,7 +480,7 @@ const buildTranscriptEntries = (
             stripRedundantTitlePrefix(event) ||
             i18n.t(I18nKey.ACTION_MESSAGE$ACP_TOOL),
           details: includeToolDetails ? getACPToolCallContent(event) : "",
-          timestamp: event.timestamp,
+          timestamp: event.timestamp ?? "",
         });
         continue;
       }
@@ -460,7 +492,7 @@ const buildTranscriptEntries = (
             command: truncate(cleanInlineText(event.hook_command), 100),
           }),
           details: includeToolDetails ? getHookDetails(event) : "",
-          timestamp: event.timestamp,
+          timestamp: event.timestamp ?? "",
         });
         continue;
       }
@@ -482,7 +514,7 @@ const buildTranscriptEntries = (
           content: [event.value.objective, event.value.verdict?.missing || ""]
             .filter(Boolean)
             .join("\n\n"),
-          timestamp: event.timestamp,
+          timestamp: event.timestamp ?? "",
         });
       }
     } catch {
@@ -501,15 +533,6 @@ const markdownTimestamp = (
   options.includeTimestamps
     ? `<sub>${escapeHtml(formatTimestamp(entry.timestamp))}</sub>\n\n`
     : "";
-
-const markdownFence = (content: string): string => {
-  const longestRun = Math.max(
-    0,
-    ...Array.from(content.matchAll(/`+/g), (match) => match[0].length),
-  );
-  const fence = "`".repeat(Math.max(3, longestRun + 1));
-  return `${fence}text\n${content}\n${fence}`;
-};
 
 export const eventsToMarkdown = (
   events: OpenHandsEvent[],
@@ -563,7 +586,7 @@ export const eventsToMarkdown = (
         "<details>",
         `<summary><strong>${escapeHtml(i18n.t(I18nKey.TRANSCRIPT_EXPORT$TOOL))}:</strong> ${escapeHtml(entry.summary)}</summary>`,
         "",
-        timestamp + markdownFence(entry.details),
+        timestamp + markdownFence(entry.details, "text"),
         "",
         "</details>",
         "",

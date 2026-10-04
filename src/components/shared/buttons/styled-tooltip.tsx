@@ -11,6 +11,7 @@ export interface StyledTooltipProps {
   closeDelay?: number;
   offset?: number;
   shouldFlip?: boolean;
+  isOpen?: TooltipProps["isOpen"];
 }
 
 function getTooltipTriggerChild(children: ReactNode) {
@@ -29,6 +30,7 @@ export function StyledTooltip({
   closeDelay = 100,
   shouldFlip,
   offset = 7,
+  isOpen,
 }: StyledTooltipProps) {
   const disableAnimation = import.meta.env.MODE === "test";
 
@@ -39,13 +41,14 @@ export function StyledTooltip({
       placement={placement}
       offset={offset}
       shouldFlip={shouldFlip}
-      className={cn("bg-white text-black", tooltipClassName)}
+      isOpen={isOpen}
+      className={cn("bg-contrast text-contrast-foreground", tooltipClassName)}
       showArrow={showArrow}
       disableAnimation={disableAnimation}
       classNames={{
         content: cn(
           "z-[9999] rounded-md px-2 py-1 text-xs font-medium shadow-md",
-          "!bg-white !text-black",
+          "!bg-contrast !text-contrast-foreground",
           tooltipClassName,
         ),
       }}

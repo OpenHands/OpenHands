@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom";
-import { ExternalLink, Share2 } from "lucide-react";
+import { ExternalLink, Gauge, Share2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
@@ -17,7 +17,6 @@ import SkillsIcon from "#/icons/skills.svg?react";
 import FishingHookIcon from "#/icons/fishing-hook.svg?react";
 import ToolsIcon from "#/icons/u-tools.svg?react";
 import DownloadIcon from "#/icons/u-download.svg?react";
-import CreditCardIcon from "#/icons/u-credit-card.svg?react";
 import CloseIcon from "#/icons/u-close.svg?react";
 import DeleteIcon from "#/icons/u-delete.svg?react";
 import CopyIcon from "#/icons/copy.svg?react";
@@ -72,7 +71,7 @@ function PublicShareToggle({
         aria-hidden
         className={cn(
           "inline-flex h-3.5 w-7 items-center rounded-full px-0.5 py-px transition-colors duration-200 ease-in-out",
-          isPublic ? "bg-white" : "bg-base-secondary",
+          isPublic ? "bg-contrast" : "bg-base-secondary",
         )}
       >
         <span
@@ -111,7 +110,7 @@ export function ConversationNameContextMenu({
   const { backend } = useActiveBackend();
   const { data: conversation } = useActiveConversation();
   const isArchivedConversation = useIsArchivedConversation();
-  const ref = useClickOutsideElement<HTMLUListElement>(onClose);
+  const ref = useClickOutsideElement<HTMLUListElement>(onClose, anchorRef);
 
   const anchorElement = anchorRef?.current ?? null;
   const [portalStyle, setPortalStyle] = React.useState<React.CSSProperties>();
@@ -267,18 +266,15 @@ export function ConversationNameContextMenu({
           onClick={onDisplayCost}
         >
           <ConversationNameContextMenuIconText
-            icon={<CreditCardIcon width={16} height={16} />}
+            icon={<Gauge size={16} />}
             text={t(I18nKey.BUTTON$DISPLAY_COST)}
           />
         </ContextMenuListItem>
       )}
 
       {shouldShowPublicSharing && onTogglePublic && (
-        <li className="flex w-full items-center gap-2 rounded px-2 py-2 hover:bg-[var(--oh-interactive-hover)]">
-          <span
-            className="flex shrink-0 items-center text-[var(--oh-muted)]"
-            aria-hidden
-          >
+        <li className="flex w-full items-center gap-2 rounded px-2 py-2 hover:bg-interactive-hover">
+          <span className="flex shrink-0 items-center text-muted" aria-hidden>
             <Share2 size={16} />
           </span>
           <span className="min-w-0 flex-1 truncate text-sm">
@@ -291,7 +287,7 @@ export function ConversationNameContextMenu({
                   type="button"
                   data-testid="copy-share-link-button"
                   onClick={onCopyShareLink}
-                  className="rounded p-0.5 text-[var(--oh-muted)] hover:bg-[var(--oh-interactive-selected)] hover:text-[var(--oh-foreground)] cursor-pointer [&_svg]:text-current"
+                  className="rounded p-0.5 text-muted hover:bg-interactive-selected hover:text-foreground cursor-pointer [&_svg]:text-current"
                   title={t(I18nKey.BUTTON$COPY_TO_CLIPBOARD)}
                 >
                   <CopyIcon width={14} height={14} />
@@ -302,7 +298,7 @@ export function ConversationNameContextMenu({
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(event) => event.stopPropagation()}
-                  className="rounded p-0.5 text-[var(--oh-muted)] no-underline visited:text-[var(--oh-muted)] hover:bg-[var(--oh-interactive-selected)] hover:text-[var(--oh-foreground)] cursor-pointer [&_svg]:text-current"
+                  className="rounded p-0.5 text-muted no-underline visited:text-muted hover:bg-interactive-selected hover:text-foreground cursor-pointer [&_svg]:text-current"
                   title={t(I18nKey.BUTTON$OPEN_IN_NEW_TAB)}
                 >
                   <ExternalLink size={14} aria-hidden />

@@ -2,10 +2,12 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { SuggestedTask } from "#/utils/types";
-import { AgentKind, Provider } from "#/types/settings";
+import { Provider } from "#/types/settings";
 import { useTracking } from "#/hooks/use-tracking";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useAgentProfiles } from "#/hooks/query/use-agent-profiles";
+import { useSettings } from "#/hooks/query/use-settings";
+import { useMetaProfiles } from "#/hooks/query/use-meta-profiles";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
 import AgentProfilesService, {
@@ -74,6 +76,15 @@ export const useCreateConversation = () => {
   // wrong agent.
   const { backend, orgId } = useActiveBackend();
   useAgentProfiles();
+  // Read the "Run on first message" toggle from the warmed settings
+  // query so the cloud path can stamp the router instruction without a
+  // settings round-trip at conversation creation. The local path reads the
+  // toggle from its own settings fetch inside the encrypted-settings builder.
+  const { data: settings } = useSettings();
+  // The active meta-profile gates the suffix on the cloud path: with no
+  // active router the agent-server does not attach `route_task_to_model`, so
+  // emitting the instruction would tell the agent to call a tool it lacks.
+  const { data: metaProfiles } = useMetaProfiles();
 
   return useMutation({
     mutationKey: CREATE_CONVERSATION_MUTATION_KEY,
@@ -96,23 +107,18 @@ export const useCreateConversation = () => {
       // conversations (#3727), on both local and cloud (cloud gained
       // /api/agent-profiles in OpenHands #15060, #3730). Await the list from
       // the shared query cache: a send fired before the home query resolves
-      // must still launch from the active profile, not fall through to the
-      // agent_settings path. Degrades safely: if the fetch errors (older
-      // backend without the surface), this stays undefined and creation falls
-      // back to the encrypted agent_settings launch path.
-      let agentProfiles: AgentProfileListResponse | undefined;
-      try {
-        agentProfiles = await queryClient.ensureQueryData({
+      // must still launch from the active profile. Do not fall back to the
+      // global agent_settings when profile discovery fails: activation is
+      // pointer-only, so those settings may describe a different agent.
+      const agentProfiles: AgentProfileListResponse =
+        await queryClient.ensureQueryData({
           queryKey: [...AGENT_PROFILES_QUERY_KEYS.all, backend.id, orgId],
           queryFn: AgentProfilesService.listProfiles,
           ...AGENT_PROFILES_RETRY_OPTIONS,
         });
-      } catch {
-        // Profiles unavailable → legacy agent_settings launch.
-      }
 
       const requestedAgentProfileId =
-        agentProfileId ?? agentProfiles?.active_agent_profile_id ?? undefined;
+        agentProfileId ?? agentProfiles.active_agent_profile_id ?? undefined;
 
       // Fall back to the legacy agent_settings launch when the resolved agent
       // profile can't resolve its LLM. The agent-server seeds a `default`
@@ -134,7 +140,11 @@ export const useCreateConversation = () => {
       // `launched_agent_profile` stamped and the profile's config applied
       // (#1571 review).
       const isCloud = backend.kind === "cloud";
-      let effectiveAgentProfileId = requestedAgentProfileId;
+      let prefersAgentSettingsFallback = false;
+      // The account-wide active LLM profile from the launch-path fetch below
+      // (null when that fetch didn't run or failed). Fresher than the
+      // `useLlmProfiles()` render snapshot, which a fast send can outrun.
+      let fetchedActiveLlmProfile: string | null = null;
       if (
         !isCloud &&
         resolvedAgentProfile?.name === WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME &&
@@ -158,7 +168,7 @@ export const useCreateConversation = () => {
         //
         // Scoped to local: cloud never writes agent_settings, so it always
         // resolves `default` server-side via agent_profile_id (validated below).
-        effectiveAgentProfileId = undefined;
+        prefersAgentSettingsFallback = true;
       } else if (
         resolvedAgentProfile?.agent_kind === "openhands" &&
         resolvedAgentProfile.llm_profile_ref
@@ -179,6 +189,7 @@ export const useCreateConversation = () => {
           llmProfileExists = llm.profiles.some(
             (profile) => profile.name === resolvedAgentProfile.llm_profile_ref,
           );
+          fetchedActiveLlmProfile = llm.active_profile ?? null;
         } catch {
           // List unavailable → can't validate → fall back to agent_settings.
         }
@@ -189,43 +200,104 @@ export const useCreateConversation = () => {
               `LLM profile "${resolvedAgentProfile.llm_profile_ref}"; ` +
               "launching from agent_settings instead.",
           );
-          effectiveAgentProfileId = undefined;
+          prefersAgentSettingsFallback = true;
+        } else if (
+          !isCloud &&
+          !agentProfileId &&
+          fetchedActiveLlmProfile &&
+          fetchedActiveLlmProfile !== resolvedAgentProfile.llm_profile_ref
+        ) {
+          // The home LLM pill shows — and its dropdown activates — the
+          // account-wide active LLM profile, never the pinned ref
+          // (useChatInputLlmProfileState), so when the two differ the launch
+          // must run the selection or the UI advertises a model the
+          // conversation won't use (#16539). Launch via agent_settings, which
+          // the dropdown's profile activation syncs to the selection. Scoped
+          // to the implicit active-profile launch: an explicit `agentProfileId`
+          // (the in-conversation profile picker) is a deliberate profile pick,
+          // so its pinned ref stays authoritative. Local-only like the
+          // downgrades above — cloud has no agent_settings payload to fall
+          // back to. Trade-off: the named profile's non-LLM config doesn't
+          // apply to this launch; the start request has no per-launch LLM
+          // override that could preserve it (AgentLaunchAdditions carries only
+          // a system-message suffix).
+          prefersAgentSettingsFallback = true;
         }
       }
 
-      // Only extend the call with the profile tail when launching from a
+      // A legacy agent_settings launch carries no profile identity, so Agent
+      // Server cannot enforce that profile's secret allow-list. Keep restricted
+      // profiles on the server-resolved path even when one of the compatibility
+      // fallbacks above would otherwise apply. If the detail cannot be read,
+      // fail closed by preserving the profile id and letting Agent Server return
+      // the underlying profile-resolution error.
+      let profileAllowsAgentSettingsFallback = true;
+      if (prefersAgentSettingsFallback && resolvedAgentProfile) {
+        try {
+          // Revalidate stale cached details: policy may have changed since the
+          // profile editor or another client last populated this query.
+          const detail = await queryClient.fetchQuery({
+            queryKey: AGENT_PROFILES_QUERY_KEYS.detail(
+              backend.id,
+              orgId,
+              resolvedAgentProfile.name,
+            ),
+            queryFn: () =>
+              AgentProfilesService.getProfile(resolvedAgentProfile.name),
+            ...AGENT_PROFILES_RETRY_OPTIONS,
+          });
+          const secretRefs = (detail.profile as { secret_refs?: unknown })
+            .secret_refs;
+          profileAllowsAgentSettingsFallback = !Array.isArray(secretRefs);
+        } catch {
+          profileAllowsAgentSettingsFallback = false;
+        }
+      }
+      const effectiveAgentProfileId =
+        prefersAgentSettingsFallback && profileAllowsAgentSettingsFallback
+          ? undefined
+          : requestedAgentProfileId;
+
+      // Only extend the call with the profile fields when launching from a
       // profile, so a plain create stays byte-identical to the legacy
       // agent_settings path (#3727). sandboxId is unused here.
-      // TODO(#1587): createConversation has grown to 11 positional params;
-      // refactor it to an options object so this position-skipping tail isn't
-      // needed.
-      const profileArgs: [undefined, string, AgentKind | undefined] | [] =
-        effectiveAgentProfileId
-          ? [
-              undefined,
-              effectiveAgentProfileId,
-              resolvedAgentProfile?.agent_kind,
-            ]
-          : [];
-
       const conversation =
-        await AgentServerConversationService.createConversation(
-          query,
+        await AgentServerConversationService.createConversation({
+          initialUserMsg: query,
           conversationInstructions,
           plugins,
-          repository
+          metadata: repository
             ? {
                 selected_repository: repository.name,
                 selected_branch: repository.branch ?? null,
                 git_provider: repository.gitProvider,
               }
             : null,
-          workingDir,
+          workingDirOverride: workingDir,
           workspaceMode,
           parentConversationId,
           agentType,
-          ...profileArgs,
-        );
+          ...(effectiveAgentProfileId
+            ? {
+                agentProfileId: effectiveAgentProfileId,
+                agentProfileKind: resolvedAgentProfile?.agent_kind,
+                // Let title generation use the same LLM as the agent profile
+                // so the title and the agent steps share a model (#16885).
+                agentLlmProfileRef: resolvedAgentProfile?.llm_profile_ref,
+              }
+            : {}),
+          // Only stamp the toggle when it's on so the default path stays
+          // byte-identical to the legacy launch (and the e2e snapshot tests
+          // that assert the exact createConversation payload). The active
+          // meta-profile gates the suffix: no router attached means no
+          // route-at-start instruction, even if the toggle was left on.
+          ...(settings?.run_router_at_conversation_start
+            ? {
+                runRouterAtConversationStart: true,
+                hasActiveMetaProfile: !!metaProfiles?.active_meta_profile,
+              }
+            : {}),
+        });
 
       // Stamp the active LLM profile onto the (local) conversation so the
       // chat switcher shows the exact profile even when several profiles
@@ -247,7 +319,9 @@ export const useCreateConversation = () => {
         let installed: InstalledPluginInfo[] = [];
         try {
           installed = await queryClient.ensureQueryData({
-            queryKey: PLUGINS_QUERY_KEYS.installed,
+            // Same key `usePlugins` writes. Unscoped, this served the previous
+            // backend's list and attached plugins the target server lacks.
+            queryKey: [...PLUGINS_QUERY_KEYS.installed, backend.id, orgId],
             queryFn: () => PluginsManagementService.listInstalledPlugins(),
           });
         } catch {
@@ -270,16 +344,17 @@ export const useCreateConversation = () => {
       // A launch from a named OpenHands profile runs that profile's
       // `llm_profile_ref`, which can differ from the standalone active LLM
       // profile — stamp the ref so the switcher pill names the exact profile
-      // the conversation runs (#1082). The agent_settings path (the `default`
-      // baseline or a dangling ref, where effectiveAgentProfileId is cleared)
-      // runs the active LLM, so it keeps `active_profile`. ACP profiles carry
-      // no LLM profile, so they fall through to the active-profile stamp
-      // (unused by the ACP model chip).
+      // the conversation runs (#1082). The agent_settings paths (the `default`
+      // baseline, a dangling ref, or a dropdown override (#16539) — where
+      // effectiveAgentProfileId is cleared) run the active LLM, so they stamp
+      // the active profile, preferring the launch-path fetch over the hook's
+      // render snapshot. ACP profiles carry no LLM profile, so they fall
+      // through to the active-profile stamp (unused by the ACP model chip).
       const activeProfile =
         effectiveAgentProfileId &&
         resolvedAgentProfile?.agent_kind === "openhands"
           ? resolvedAgentProfile.llm_profile_ref
-          : (llmProfiles?.active_profile ?? null);
+          : (fetchedActiveLlmProfile ?? llmProfiles?.active_profile ?? null);
       if (localConversationId && (activeProfile || attachedPlugins.length)) {
         const prev = getStoredConversationMetadata(localConversationId);
         setStoredConversationMetadata(localConversationId, {

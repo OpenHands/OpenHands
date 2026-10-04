@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "test-utils";
 import { ModelMessages } from "#/components/features/chat/model-messages";
 import { useModelStore } from "#/stores/model-store";
+import { useFreeModelsStore } from "#/stores/free-models-store";
 import type { ProfileInfo } from "#/api/profiles-service/profiles-service.api";
 
 const CONVERSATION_ID = "conv-1";
@@ -36,6 +37,10 @@ describe("ModelMessages", () => {
     i18n.addResourceBundle("en", "translation", resources, true, true);
     i18n.addResourceBundle("en", "openhands", resources, true, true);
     useModelStore.setState({ entriesByConversation: {} });
+    useFreeModelsStore.getState().setFlags({
+      freeModels: new Set(),
+      defaultModel: null,
+    });
   });
 
   it("renders only entries anchored to the requested event", async () => {
@@ -103,5 +108,37 @@ describe("ModelMessages", () => {
     expect(screen.getByTestId("model-messages")).toHaveTextContent(
       "ℹ️ Switched to profile haiku",
     );
+  });
+
+  it("labels a DB-flagged free OpenHands route in expanded profile diagnostics", async () => {
+    const user = userEvent.setup();
+    useFreeModelsStore.getState().setFlags({
+      freeModels: new Set(["openhands/glm-5.2"]),
+      defaultModel: "openhands/glm-5.2",
+    });
+    useModelStore.getState().show(CONVERSATION_ID, "event-1", [
+      {
+        name: "free",
+        model: "openhands/glm-5.2",
+        base_url: null,
+        api_key_set: true,
+      },
+    ]);
+
+    renderWithProviders(
+      <ModelMessages
+        conversationId={CONVERSATION_ID}
+        anchorEventId="event-1"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "BUTTON$EXPAND" }));
+    await user.click(
+      screen.getByRole("button", { name: "Toggle details for free" }),
+    );
+
+    expect(
+      screen.getByText(/model:\s+openhands\/glm-5\.2 \(free\)/),
+    ).toBeInTheDocument();
   });
 });

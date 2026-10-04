@@ -4,9 +4,7 @@ import type {
   BashEventPage,
   BashOutput,
 } from "@openhands/typescript-client";
-import { buildHttpBaseUrl } from "#/utils/websocket-url";
 import { getActiveBackend } from "../backend-registry/active-store";
-import { callCloudProxy } from "../cloud/proxy";
 import { getAgentServerClientOptions } from "../agent-server-client-options";
 
 interface SearchOptions {
@@ -31,10 +29,11 @@ function isBashOutput(event: BashEvent): event is BashOutput {
  * agent-server directly with the SDK's `BashClient` (a per-conversation
  * URL is honoured when known, otherwise we fall back to the backend
  * host — a single local agent-server hosts all conversations). In
- * **cloud** mode we tunnel through `callCloudProxy` with the runtime URL
- * as `hostOverride`: direct browser calls to `*.prod-runtime.all-hands.dev`
- * are blocked by CORS, and runtime endpoints authenticate with the
- * conversation's `X-Session-API-Key`.
+ * **cloud** mode we call that same per-conversation runtime host
+ * directly from the browser: the runtime's CORS allowlist
+ * (`OH_ALLOW_CORS_ORIGINS`, set to the Canvas origin in saas-deploy)
+ * permits the cross-origin request, and runtime endpoints authenticate
+ * with the conversation's `X-Session-API-Key`.
  *
  * Note on the search filter name: the agent-server API uses
  * `command_id__eq` (not `bash_command_id__eq`) — that's the parameter the
@@ -79,9 +78,7 @@ class BashService {
     sessionApiKey: string | null | undefined,
     options: SearchOptions,
   ): Promise<BashEventPage> {
-    const active = getActiveBackend().backend;
-
-    if (active.kind === "cloud") {
+    if (getActiveBackend().backend.kind === "cloud") {
       // Cloud requires the per-conversation runtime URL — there is no
       // shared cloud host that owns bash events. Callers must wait for
       // the conversation to be hydrated before invoking this method on
@@ -91,24 +88,8 @@ class BashService {
           "BashService.listOutputs requires a conversation URL on cloud backends",
         );
       }
-      const params = new URLSearchParams();
-      Object.entries(options).forEach(([k, v]) => {
-        if (v !== undefined && v !== null) params.set(k, String(v));
-      });
-      return callCloudProxy<BashEventPage>({
-        backend: active,
-        method: "GET",
-        hostOverride: buildHttpBaseUrl(conversationUrl),
-        path: `/api/bash/bash_events/search?${params.toString()}`,
-        authMode: "session-api-key",
-        sessionApiKey,
-      });
     }
 
-    // Local mode: the active backend's agent-server hosts the bash
-    // events. The optional `conversationUrl` is used when present (lets
-    // us target a per-conversation sub-host), otherwise we fall through
-    // to `backend.host` via `getAgentServerClientOptions`.
     return new BashClient(
       getAgentServerClientOptions({
         ...(conversationUrl ? { conversationUrl } : {}),

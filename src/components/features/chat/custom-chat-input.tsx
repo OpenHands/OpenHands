@@ -16,6 +16,8 @@ export interface CustomChatInputProps {
   isNewConversationPending?: boolean;
   hasStartedConversation?: boolean;
   showButton?: boolean;
+  /** Overrides the input's default placeholder text. */
+  placeholder?: string;
   onSubmit: (message: string) => void;
   onFocus?: () => void;
   onBlur?: () => void;
@@ -32,6 +34,7 @@ export function CustomChatInput({
   isNewConversationPending = false,
   hasStartedConversation,
   showButton = true,
+  placeholder,
   onSubmit,
   onFocus,
   onBlur,
@@ -107,6 +110,7 @@ export function CustomChatInput({
     gripRef,
     isGripVisible,
     isGripDragging,
+    canResize,
     handleTopEdgeClick,
     smartResize,
     handleGripMouseDown,
@@ -176,6 +180,7 @@ export function CustomChatInput({
           gripRef={gripRef}
           isGripVisible={isGripVisible}
           isGripDragging={isGripDragging}
+          canResize={canResize}
           handleTopEdgeClick={handleTopEdgeClick}
           handleGripMouseDown={handleGripMouseDown}
           handleGripTouchStart={handleGripTouchStart}
@@ -189,6 +194,7 @@ export function CustomChatInput({
           hasStartedConversation={hasStartedConversation}
           isNewConversationPending={isNewConversationPending}
           showButton={showButton}
+          placeholder={placeholder}
           buttonClassName={buttonClassName}
           chatInputRef={chatInputRef}
           handleFileIconClick={handleFileIconClick}

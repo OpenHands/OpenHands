@@ -213,20 +213,12 @@ describe("useNewConversationCommand", () => {
     });
     await result.current.mutateAsync();
 
-    // Assert — sandbox_id is the 9th positional argument; parent_conversation_id
-    // and agent_type stay undefined because /new is NOT a sub-conversation.
+    // Assert — only sandbox_id travels; parent_conversation_id and agent_type
+    // stay undefined because /new is NOT a sub-conversation.
     await waitFor(() => {
-      expect(createSpy).toHaveBeenCalledWith(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        "sandbox-abc",
-      );
+      expect(createSpy).toHaveBeenCalledWith({
+        sandboxId: "sandbox-abc",
+      });
     });
   });
 

@@ -1,6 +1,7 @@
 import { Trans } from "react-i18next";
 import React from "react";
 import { CANVAS_UI_CLIENT_TOOL_NAME } from "#/constants/canvas-ui";
+import { LAUNCH_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversation";
 import {
   OpenHandsEvent,
   ObservationEvent,
@@ -189,6 +190,8 @@ const getObservationEventTitle = (
     case "StrReplaceEditorObservation":
       if (event.observation.command === "view") {
         observationKey = "OBSERVATION_MESSAGE$READ";
+      } else if (event.observation.command === "create") {
+        observationKey = "OBSERVATION_MESSAGE$WRITE";
       } else {
         observationKey = "OBSERVATION_MESSAGE$EDIT";
       }
@@ -222,6 +225,10 @@ const getObservationEventTitle = (
         observationKey = "OBSERVATION_MESSAGE$CANVAS_UI";
         break;
       }
+      if (event.tool_name === LAUNCH_CHILD_CONVERSATION_TOOL_NAME) {
+        observationKey = "OBSERVATION_MESSAGE$LAUNCH_CHILD_CONVERSATION";
+        break;
+      }
       return observationType.replace("Observation", "").toUpperCase();
     case "SwitchLLMObservation":
       observationKey = event.observation.is_error
@@ -229,6 +236,14 @@ const getObservationEventTitle = (
         : "MODEL$SWITCHED_TO_PROFILE";
       observationValues = {
         name: event.observation.profile_name,
+      };
+      break;
+    case "ClassifyAndSwitchLLMObservation":
+      observationKey = event.observation.is_error
+        ? "MODEL$SWITCH_FAILED"
+        : "MODEL$SWITCHED_TO_PROFILE";
+      observationValues = {
+        name: event.observation.model,
       };
       break;
     case "BrowserObservation":

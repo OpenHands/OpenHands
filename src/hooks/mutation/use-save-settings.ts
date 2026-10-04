@@ -76,9 +76,14 @@ export const useSaveSettings = (
         | undefined;
 
       if (nextMcpConfig && currentMcpConfig !== nextMcpConfig) {
+        const servers = Object.values(nextMcpConfig);
         trackMcpConfigUpdated({
-          sseServersCount: nextMcpConfig.sse_servers?.length ?? 0,
-          stdioServersCount: nextMcpConfig.stdio_servers?.length ?? 0,
+          sseServersCount: servers.filter(
+            (server) => server.transport === "sse",
+          ).length,
+          stdioServersCount: servers.filter(
+            (server) => server.transport === "stdio",
+          ).length,
         });
       }
 

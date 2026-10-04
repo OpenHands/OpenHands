@@ -22,7 +22,7 @@ import {
 } from "#/types/agent-server/type-guards";
 import { useConfig } from "#/hooks/query/use-config";
 import { useConversationStore } from "#/stores/conversation-store";
-import { useAgentState } from "#/hooks/use-agent-state";
+import { useAgentState, usePlanningAgentState } from "#/hooks/use-agent-state";
 import { AgentState } from "#/types/agent-state";
 import { ChatMessage } from "#/components/features/chat/chat-message";
 import { GoalStatusContent } from "#/components/features/chat/goal-status-content";
@@ -37,14 +37,23 @@ import { HookExecutionEventMessage } from "./event-message-components/hook-execu
 import { createSkillReadyEvent } from "./event-content-helpers/create-skill-ready-event";
 import { shouldShowPlanPreview } from "./hooks/use-plan-preview-events";
 import { getReasoningContent, splitInlineThink } from "./event-thought-helpers";
+import { useStreamedText } from "#/hooks/use-streamed-text";
 
 interface EventMessageProps {
   event: OpenHandsEvent & { isFromPlanningAgent?: boolean };
-  messages: OpenHandsEvent[];
+  /** @deprecated Prefer the stable correspondingAction prop. */
+  messages?: OpenHandsEvent[];
+  /**
+   * The action paired with an observation. null means the caller performed
+   * the lookup and found no action; undefined keeps legacy messages lookup.
+   */
+  correspondingAction?: ActionEvent | null;
   isLastMessage: boolean;
   isInLast10Actions: boolean;
   /** Set of event IDs that should render PlanPreview (one per user message phase) */
   planPreviewEventIds?: Set<string>;
+  /** Stable per-event replacement for planPreviewEventIds. */
+  showPlanPreview?: boolean;
   /**
    * When true, do not render the inline `ThoughtEventMessage` for action /
    * observation events. The caller is expected to render the thought
@@ -55,14 +64,8 @@ interface EventMessageProps {
   suppressThought?: boolean;
 }
 
-/**
- * Extracts activated skills from a MessageEvent, supporting both
- * activated_skills and activated_microagents field names.
- */
 const getActivatedSkills = (event: MessageEvent): string[] =>
-  (event as unknown as { activated_skills?: string[] }).activated_skills ||
-  event.activated_microagents ||
-  [];
+  event.activated_skills || [];
 
 /**
  * Checks if extended content contains valid text content.
@@ -134,25 +137,70 @@ const renderUserMessageWithSkillReady = (
   }
 };
 
-export function EventMessage({
+/**
+ * Renders the plan preview. Its own component so `usePlanningAgentState()`
+ * only subscribes on this rare row, not every message in the conversation.
+ */
+function PlanningObservationPreview({
+  planContent,
+  isLastMessage,
+  isMainAgentRunning,
+}: {
+  planContent: string | null;
+  isLastMessage: boolean;
+  isMainAgentRunning: boolean;
+}) {
+  const {
+    localPlanningConversationId,
+    curPlanningAgentState,
+    isPlanningAgentRunning,
+  } = usePlanningAgentState();
+
+  // Guard on the id explicitly — useAgentState(undefined) falls back to the
+  // route conversation, which could be mistaken for the planner's activity.
+  const isStreaming =
+    isLastMessage &&
+    !!localPlanningConversationId &&
+    curPlanningAgentState === AgentState.RUNNING;
+
+  return (
+    <PlanPreview
+      planContent={planContent}
+      isStreaming={isStreaming}
+      isBuildDisabled={isMainAgentRunning || isPlanningAgentRunning}
+    />
+  );
+}
+
+function EventMessageComponent({
   event,
   messages,
+  correspondingAction: suppliedCorrespondingAction,
   isLastMessage,
   isInLast10Actions,
   planPreviewEventIds,
+  showPlanPreview,
   suppressThought = false,
 }: EventMessageProps) {
   const { data: config } = useConfig();
-  const { planContent } = useConversationStore();
+  const planContent = useConversationStore((state) => state.planContent);
   const { curAgentState } = useAgentState();
 
-  // Disable Build button while agent is running (streaming)
+  // Planner-running state is folded in by PlanningObservationPreview below,
+  // not read here, to avoid a second useAgentState() subscription per row.
   const isAgentRunning =
     curAgentState === AgentState.RUNNING ||
     curAgentState === AgentState.LOADING;
 
   // Read isFromPlanningAgent directly from the event object
   const isFromPlanningAgent = event.isFromPlanningAgent || false;
+
+  // Streaming slots render on a clock rather than at the granularity the
+  // network delivered (#15493). Unconditional: hooks cannot be nested in the
+  // per-kind branches below, and a non-slot event has no streamed content.
+  const streamedContent = useStreamedText(
+    isStreamingDeltaEvent(event) ? (event.content ?? "") : "",
+  );
 
   // Common props for components that need them
   const commonProps = {
@@ -194,7 +242,7 @@ export function EventMessage({
   if (isStreamingDeltaEvent(event)) {
     // Route an inline <think> block to the thinking section, not the bubble.
     const { reasoning: inlineThink, message } = splitInlineThink(
-      event.content ?? "",
+      streamedContent,
       { streaming: true },
     );
     const reasoningContent = [event.reasoning_content ?? "", inlineThink]
@@ -208,6 +256,7 @@ export function EventMessage({
             type="agent"
             message={message}
             isFromPlanningAgent={isFromPlanningAgent}
+            timestamp={event.timestamp}
           />
         )}
       </>
@@ -259,17 +308,16 @@ export function EventMessage({
       // Only show PlanPreview if this event is marked as the one to display
       // (last PlanningFileEditorObservation in its phase)
       if (
-        planPreviewEventIds &&
-        shouldShowPlanPreview(event.id, planPreviewEventIds)
+        showPlanPreview ??
+        (planPreviewEventIds
+          ? shouldShowPlanPreview(event.id, planPreviewEventIds)
+          : false)
       ) {
-        // Show shine effect only if this is the last message AND agent is running
-        const isStreaming =
-          isLastMessage && curAgentState === AgentState.RUNNING;
         return (
-          <PlanPreview
+          <PlanningObservationPreview
             planContent={planContent}
-            isStreaming={isStreaming}
-            isBuildDisabled={isAgentRunning}
+            isLastMessage={isLastMessage}
+            isMainAgentRunning={isAgentRunning}
           />
         );
       }
@@ -279,9 +327,12 @@ export function EventMessage({
     }
 
     // Find the action that this observation is responding to
-    const correspondingAction = messages.find(
-      (msg) => isActionEvent(msg) && msg.id === event.action_id,
-    );
+    const correspondingAction =
+      suppliedCorrespondingAction === undefined
+        ? messages?.find(
+            (msg) => isActionEvent(msg) && msg.id === event.action_id,
+          )
+        : (suppliedCorrespondingAction ?? undefined);
 
     // Skip ThoughtEventMessage for ThinkAction (thought IS the action)
     const shouldShowThought =
@@ -345,3 +396,9 @@ export function EventMessage({
     <GenericEventMessageWrapper event={event} isLastMessage={isLastMessage} />
   );
 }
+
+// Messages passes stable event-specific lookup results, so an appended tail
+// can update only the wrappers whose event or positional state really changed.
+// Context and store subscriptions inside this component still bypass memo.
+export const EventMessage = React.memo(EventMessageComponent);
+EventMessage.displayName = "EventMessage";

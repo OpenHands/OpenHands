@@ -10,6 +10,7 @@ import { QUERY_KEYS, CONFIG_CACHE_OPTIONS } from "#/hooks/query/query-keys";
 import { Typography } from "#/ui/typography";
 import { useBreakpoint } from "#/hooks/use-breakpoint";
 import { useSettingsNavItems } from "#/hooks/use-settings-nav-items";
+import { OSS_NAV_ITEMS } from "#/constants/settings-nav";
 import {
   getFirstAvailablePath,
   isSettingsPageHidden,
@@ -47,13 +48,15 @@ function SettingsScreen() {
   const [hideSectionHeader, setHideSectionHeader] = useState(false);
 
   const { currentSectionTitle, currentSectionSubtitle } = useMemo(() => {
-    const currentRenderedItem = navItems.find(
-      (item) => item.type === "item" && item.item.to === location.pathname,
+    // Resolve from the full list, not the listed subset: locked-to-Cloud
+    // unlists most pages but they stay reachable via deep links (OHE-3168).
+    const currentItem = OSS_NAV_ITEMS.find(
+      (item) => item.to === location.pathname,
     );
-    if (currentRenderedItem?.type === "item") {
+    if (currentItem) {
       return {
-        currentSectionTitle: currentRenderedItem.item.text,
-        currentSectionSubtitle: currentRenderedItem.item.subtitle,
+        currentSectionTitle: currentItem.text,
+        currentSectionSubtitle: currentItem.subtitle,
       };
     }
     const firstItem = navItems.find((item) => item.type === "item");
