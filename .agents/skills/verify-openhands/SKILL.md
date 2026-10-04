@@ -98,6 +98,12 @@ control-openhands stop                         # stops only this run; evidence s
 - **Essential pathways** are single commands so recipes can start from a known
   state: `onboard`, `llm preset|set`, `conversation start --prompt ... --wait`,
   `conversation events <id>`, `fixture git-repo`.
+- **State control** reaches states a happy path never shows, without mocks:
+  `browser reset` (fresh browser profile: first run again), `service stop
+  automation|agent-server` (backend-down UI), `restart` (same state after a
+  backend restart: persistence and reconnection) and `restart --rotate-key`
+  (stale session key). `browser network`, `browser toasts` and `browser media`
+  observe requests by origin, toasts and sound without changing anything.
 - **Evidence** goes under `<run>/evidence/<feature-id>/` and the ledger
   `<run>/evidence/ledger.jsonl`; `evidence report` renders the table from
   [the report contract](references/report.md). Keys, logs, browser profile and

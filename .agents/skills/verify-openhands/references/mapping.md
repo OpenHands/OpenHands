@@ -57,7 +57,8 @@ with its reason in the index's "Not mapped" section.
 
 One file per user-facing job (for example "Secrets", "LLM profiles",
 "Conversation composer"), not per component. Aim for files an agent can verify
-in one sitting: roughly 4 to 12 sub-features each. Name files
+in one sitting: usually 4 to 15 sub-features, up to about 30 for a dense page;
+split beyond that (for example dashboard list vs. per-item actions). Name files
 `Fnn-short-slug.md` and give the family the ID `Fnn`. Keep IDs stable forever:
 when a label or route moves, update the text, not the ID; when a feature is
 removed, mark it `retired` with the authorizing PR instead of deleting the row.

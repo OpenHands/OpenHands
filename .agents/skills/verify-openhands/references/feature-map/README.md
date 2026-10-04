@@ -47,6 +47,12 @@ that every row passes today; the run's evidence ledger is.
   the 30 s default adds up quickly.
 - Conversations created as fixtures may stay when no recipe in the family covers
   deleting them; they vanish with the run's private state.
+- Rows with generated ids: select by prefix plus the fixture name,
+  `'[data-testid^="automation-card-"] >> has-text=QA_Pong'`. Portal menus without
+  test ids: scope by role and a unique item, `'role=menu >> has-text=Delete'`.
+- Restore per-viewer state too (view mode, pinned home route, collapsed panels
+  live in localStorage); some controls disable themselves once their data is
+  gone, so restore before deleting fixtures.
 - `control-openhands api ... --write`, `llm` and `fixture` arrange preconditions.
   They are never the proof step for the feature under test.
 
