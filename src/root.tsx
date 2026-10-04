@@ -53,6 +53,13 @@ import {
   readPersistedColorTheme,
 } from "#/themes/color-themes";
 
+/**
+ * react-hot-toast's own container inset. Restated here because overriding
+ * `containerStyle` replaces those offsets outright, and dropping them would put
+ * toasts flush against the edge everywhere to fix a cutout that only phones have.
+ */
+const TOASTER_GUTTER = "16px";
+
 /** Applies the persisted palette before paint; useEffect lands a frame late. */
 function ColorThemeApplier() {
   React.useLayoutEffect(() => {
@@ -95,7 +102,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
     <html lang="en" suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        {/* `viewport-fit=cover` lets an installed window paint edge to edge on
+            notched devices; the shell pays for it back with safe-area padding. */}
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1, viewport-fit=cover"
+        />
         <Meta />
         <Links />
         <script
@@ -106,7 +118,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <AgentServerUIRoot contentClassName="min-h-screen">
           <ColorThemeApplier />
           {children}
-          <Toaster toastOptions={TOAST_OPTIONS} />
+          {/* Toasts are fixed to the viewport, so they sit outside the shell's
+              safe-area padding and would otherwise land under the status bar. */}
+          <Toaster
+            toastOptions={TOAST_OPTIONS}
+            containerStyle={{
+              top: `calc(${TOASTER_GUTTER} + env(safe-area-inset-top, 0px))`,
+              right: `calc(${TOASTER_GUTTER} + env(safe-area-inset-right, 0px))`,
+              bottom: `calc(${TOASTER_GUTTER} + env(safe-area-inset-bottom, 0px))`,
+              left: `calc(${TOASTER_GUTTER} + env(safe-area-inset-left, 0px))`,
+            }}
+          />
           <div id="modal-portal-exit" />
         </AgentServerUIRoot>
         <ScrollRestoration />
@@ -223,11 +245,34 @@ export const links: LinksFunction = () => [
     type: "image/svg+xml",
     href: buildAgentCanvasPath("/favicon.svg"),
   },
+  {
+    rel: "apple-touch-icon",
+    sizes: "180x180",
+    href: buildAgentCanvasPath("/apple-touch-icon.png"),
+  },
+  // Every URL *inside* the manifest is relative to the manifest itself, so this
+  // href is the only place the mount point has to be spliced in: under
+  // `--base-path /canvas` the manifest loads from `/canvas/site.webmanifest`
+  // and its `start_url`, `scope` and icons all resolve under `/canvas/` too.
+  {
+    rel: "manifest",
+    href: buildAgentCanvasPath("/site.webmanifest"),
+  },
 ];
 
 export const meta: MetaFunction = () => [
   { title: "OpenHands" },
   { name: "description", content: "Let's Start Building!" },
+  // iOS below 17.4 ignores the manifest's `display` and reads these instead.
+  // `theme-color` is deliberately absent: the color theme bootstrap owns that
+  // tag so it can track the palette the user picked.
+  { name: "apple-mobile-web-app-capable", content: "yes" },
+  {
+    name: "apple-mobile-web-app-status-bar-style",
+    content: "black-translucent",
+  },
+  { name: "apple-mobile-web-app-title", content: "Agent Canvas" },
+  { name: "mobile-web-app-capable", content: "yes" },
 ];
 
 export default function App() {

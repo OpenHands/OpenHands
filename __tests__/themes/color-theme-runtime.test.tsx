@@ -6,6 +6,7 @@ import {
   COLOR_THEME_BOOTSTRAP_SCRIPT,
   DEFAULT_COLOR_THEME,
   applyColorTheme,
+  getColorThemeBaseColor,
   getColorThemeCss,
   readPersistedColorTheme,
   setColorTheme,
@@ -123,4 +124,52 @@ describe("color themes", () => {
       ).toBe(getColorThemeCss(DEFAULT_COLOR_THEME));
     },
   );
+
+  // An installed window takes its title bar and task-switcher color from this
+  // tag, so a stale value leaves the OS chrome a different color than the app.
+  describe("theme-color meta", () => {
+    const readThemeColor = () =>
+      document
+        .querySelector<HTMLMetaElement>('meta[name="theme-color"]')
+        ?.getAttribute("content");
+
+    it.each([
+      ["openhands-neutral", "#181818"],
+      ["openhands-deepsea", "#0B0E14"],
+      ["light-plus", "#FFFFFF"],
+      ["solarized-light", "#FDF6E3"],
+    ] as const)("resolves %s to its painted base color", (key, expected) => {
+      expect(getColorThemeBaseColor(key)).toBe(expected);
+    });
+
+    it("follows the selected palette", () => {
+      act(() => setColorTheme("light-plus"));
+      expect(readThemeColor()).toBe(getColorThemeBaseColor("light-plus"));
+
+      act(() => setColorTheme("openhands-deepsea"));
+      expect(readThemeColor()).toBe(
+        getColorThemeBaseColor("openhands-deepsea"),
+      );
+    });
+
+    it("reuses the existing tag rather than stacking duplicates", () => {
+      act(() => setColorTheme("light-plus"));
+      act(() => setColorTheme("solarized-light"));
+
+      expect(
+        document.querySelectorAll('meta[name="theme-color"]'),
+      ).toHaveLength(1);
+    });
+
+    // The bootstrap runs in <head> before first paint; leaving the tag to React
+    // would flash the manifest's color while the app hydrates.
+    it("is set by the bootstrap script before paint", () => {
+      localStorage.setItem("openhands-color-theme", "solarized-light");
+      document.querySelector('meta[name="theme-color"]')?.remove();
+
+      window.eval(COLOR_THEME_BOOTSTRAP_SCRIPT);
+
+      expect(readThemeColor()).toBe(getColorThemeBaseColor("solarized-light"));
+    });
+  });
 });

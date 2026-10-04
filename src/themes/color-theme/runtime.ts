@@ -1,3 +1,4 @@
+import { AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES } from "#/styles/agent-server-ui-style-scope";
 import { type ColorThemeKey } from "./types";
 import { COLOR_THEMES, DEFAULT_COLOR_THEME } from "./definitions";
 
@@ -44,6 +45,53 @@ export function setColorTheme(key: ColorThemeKey): void {
 }
 
 const THEME_STYLE_TAG_ID = "oh-color-theme-override";
+
+const CSS_VAR_REFERENCE = /^var\((--[\w-]+)\)$/;
+
+/**
+ * The theme's page background as a literal color.
+ *
+ * `--oh-color-base` is what `index.css` paints the page with, but themes express
+ * it either as a hex (light-plus, solarized-light) or by leaving the stylesheet
+ * default — a reference into the theme's own `--cool-grey-*` scale — in place.
+ * The browser resolves that chain itself for painting; `<meta name="theme-color">`
+ * and the manifest need the literal value, so resolve one `var()` hop here.
+ */
+export function getColorThemeBaseColor(key: ColorThemeKey): string {
+  const { scale, tokens = {} } = COLOR_THEMES[key];
+  const declared =
+    tokens["--oh-color-base"] ??
+    AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES["--oh-color-base"];
+
+  const referenced = CSS_VAR_REFERENCE.exec(declared.trim())?.[1];
+  if (!referenced) return declared;
+
+  // A scale stop the theme does not define falls back to the base stylesheet,
+  // which we cannot read here; the default theme's value is the closest honest
+  // approximation and only ever applies to a malformed theme definition.
+  return scale[referenced] ?? "#181818";
+}
+
+const THEME_COLOR_META_NAME = "theme-color";
+
+/**
+ * Point the browser/OS chrome (mobile address bar, installed-window title bar,
+ * task switcher) at the palette the user actually selected. Managed
+ * imperatively rather than through the route `meta` export for the same reason
+ * as the style tag above: React re-creates the head elements it owns, and the
+ * value has to survive that.
+ */
+function applyThemeColorMeta(color: string): void {
+  let meta = document.querySelector<HTMLMetaElement>(
+    `meta[name="${THEME_COLOR_META_NAME}"]`,
+  );
+  if (!meta) {
+    meta = document.createElement("meta");
+    meta.name = THEME_COLOR_META_NAME;
+    document.head.appendChild(meta);
+  }
+  meta.content = color;
+}
 
 /**
  * Apply a theme by injecting (or replacing) a <style> tag that overrides
@@ -118,12 +166,13 @@ export function applyColorTheme(key: ColorThemeKey): void {
 
   activeColorTheme = key;
   document.documentElement.style.colorScheme = COLOR_THEMES[key].appearance;
+  applyThemeColorMeta(getColorThemeBaseColor(key));
   for (const listener of colorThemeListeners) listener();
 }
 
 /** Runs in the document head before the body paints or React hydrates. */
 export const COLOR_THEME_BOOTSTRAP_SCRIPT = `(() => {
-  const themes = ${JSON.stringify(Object.fromEntries(Object.keys(COLOR_THEMES).map((key) => [key, { css: getColorThemeCss(key as ColorThemeKey), appearance: COLOR_THEMES[key as ColorThemeKey].appearance }]))).replace(/</g, "\\u003c")};
+  const themes = ${JSON.stringify(Object.fromEntries(Object.keys(COLOR_THEMES).map((key) => [key, { css: getColorThemeCss(key as ColorThemeKey), appearance: COLOR_THEMES[key as ColorThemeKey].appearance, themeColor: getColorThemeBaseColor(key as ColorThemeKey) }]))).replace(/</g, "\\u003c")};
   let key = ${JSON.stringify(DEFAULT_COLOR_THEME)};
   try { const stored = localStorage.getItem(${JSON.stringify(STORAGE_KEY)}); if (Object.hasOwn(themes, stored)) key = stored; } catch {}
   const style = document.createElement('style');
@@ -131,4 +180,13 @@ export const COLOR_THEME_BOOTSTRAP_SCRIPT = `(() => {
   style.textContent = themes[key].css;
   document.head.appendChild(style);
   document.documentElement.style.colorScheme = themes[key].appearance;
+  // Set before first paint: an installed window picks its title bar color up
+  // front, so a late update would flash the manifest's default instead.
+  let themeColor = document.querySelector('meta[name=${JSON.stringify(THEME_COLOR_META_NAME)}]');
+  if (!themeColor) {
+    themeColor = document.createElement('meta');
+    themeColor.name = ${JSON.stringify(THEME_COLOR_META_NAME)};
+    document.head.appendChild(themeColor);
+  }
+  themeColor.content = themes[key].themeColor;
 })();`;
