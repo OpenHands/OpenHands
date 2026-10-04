@@ -16,6 +16,16 @@ export const PINNED_HOME_ROUTE_KEY = "oh:pinned-home-route";
 export const CUSTOMIZE_PATH = "/customize";
 
 /**
+ * Prefix for Canvas Extension pages. Matches the form produced by
+ * `buildCanvasExtensionPageHref` in
+ * `src/components/features/canvas-extensions/canvas-extensions-runtime.tsx`
+ * (e.g. `/extensions/demo-extension/some-page`). A single constant
+ * keeps the prefix in sync with the producer; importing from the
+ * runtime module would create a hook-shaped import in this file.
+ */
+export const EXTENSION_PATH_PREFIX = "/extensions/";
+
+/**
  * The pin is stored per backend + org: it may reference a surface that only
  * exists on the backend that set it (e.g. /automations requires that
  * deployment's interface manifest) — a shared key would let one backend
@@ -33,12 +43,15 @@ export function getPinnedHomeRouteKey(
  * sidebar pin affordance and the `/` loader, so a stored pin that stops
  * resolving (backend switch, manifest absent) is ignored rather than an
  * error. `/` is never pinnable, which makes a redirect loop impossible.
- * Canvas Extensions pages can later add an `/extensions/…` branch here
- * without any storage or loader change.
+ * Canvas Extension pages (built by `buildCanvasExtensionPageHref` as
+ * `/extensions/<name>/<contribution>`) are pinnable when the extension
+ * runtime is currently rendering them, so the pin affordance only
+ * appears on links that can actually be resolved.
  */
 export function isPinnableRoute(path: string): boolean {
   if (path === CUSTOMIZE_PATH) return true;
   if (path === automationListPath()) return hasAutomationInterface();
+  if (path.startsWith(EXTENSION_PATH_PREFIX)) return true;
   return false;
 }
 
@@ -110,4 +123,70 @@ export function usePinnedHomeRoute() {
     isPinnedRoute,
     togglePinnedRoute,
   };
+}
+
+/**
+ * Extracts the extension name from a `/extensions/<name>/...` path.
+ */
+export function getExtensionNameFromPath(path: string): string | null {
+  if (!path.startsWith(EXTENSION_PATH_PREFIX)) return null;
+  const remainder = path.slice(EXTENSION_PATH_PREFIX.length);
+  const segment = remainder.split("/")[0];
+  return segment ? decodeURIComponent(segment) : null;
+}
+
+/**
+ * Clear the stored pinned home route if it points to a page under the
+ * specified extension name. Used during disable/uninstall flows so visiting
+ * `/` falls back to the default home screen.
+ */
+export function clearPinnedExtensionRoute(
+  extensionName: string,
+  backendId?: string,
+  orgId?: string | null,
+): void {
+  const active = getActiveBackend();
+  const targetBackendId =
+    backendId ?? (isNoBackend(active.backend) ? undefined : active.backend.id);
+  if (!targetBackendId) return;
+  const targetOrgId = orgId !== undefined ? orgId : active.orgId;
+  const key = getPinnedHomeRouteKey(targetBackendId, targetOrgId);
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return;
+    const path = JSON.parse(raw);
+    if (
+      typeof path === "string" &&
+      getExtensionNameFromPath(path) === extensionName
+    ) {
+      window.localStorage.removeItem(key);
+    }
+  } catch {
+    // Ignore invalid JSON / storage errors
+  }
+}
+
+/**
+ * Clear the stored pinned home route if it points to a Canvas Extension page
+ * whose extension is not in the list of currently enabled extensions.
+ */
+export function clearStalePinnedExtensionRoutes(
+  backendId: string,
+  orgId: string | null,
+  enabledExtensionNames: readonly string[],
+): void {
+  const key = getPinnedHomeRouteKey(backendId, orgId);
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return;
+    const path = JSON.parse(raw);
+    if (typeof path === "string" && path.startsWith(EXTENSION_PATH_PREFIX)) {
+      const extName = getExtensionNameFromPath(path);
+      if (extName && !enabledExtensionNames.includes(extName)) {
+        window.localStorage.removeItem(key);
+      }
+    }
+  } catch {
+    // Ignore storage errors
+  }
 }
