@@ -41,11 +41,16 @@ function readPngSize(path: string): { width: number; height: number } {
 }
 
 describe("web app manifest", () => {
+  // The guard is that these stay filled in — the placeholder they replaced
+  // (`"name": ""`) is what kept Chromium from offering installation at all.
+  // Deliberately not asserting the exact wording: product naming is a branding
+  // call, and pinning it here would make every rename a test failure.
   it("declares the fields a browser needs to offer installation", () => {
-    expect(manifest.name).toBe("OpenHands Agent Canvas");
-    expect(manifest.short_name).toBe("Agent Canvas");
+    expect(manifest.name.trim()).not.toBe("");
+    expect(manifest.short_name.trim()).not.toBe("");
+    // Home-screen labels are truncated past roughly a dozen characters.
     expect(manifest.short_name.length).toBeLessThanOrEqual(12);
-    expect(manifest.description).not.toBe("");
+    expect(manifest.description.trim()).not.toBe("");
     expect(manifest.display).toBe("standalone");
     expect(manifest.categories.length).toBeGreaterThan(0);
   });
