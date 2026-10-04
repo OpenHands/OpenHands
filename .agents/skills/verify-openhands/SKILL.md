@@ -53,8 +53,7 @@ around a gap with an untracked one-off script the next agent cannot rerun.
 ## Launch → doctor → drive → evidence → cleanup
 
 ```sh
-control-openhands launch                       # builds if needed; prints run dir, ports
-export OH_VERIFY_RUN=<run dir from launch>     # optional; 'current' symlink is the default
+export OH_VERIFY_RUN=$(control-openhands launch --new --print-run)   # builds if needed; isolated run
 control-openhands doctor                       # read-only; must be ok before driving
 control-openhands llm preset deepseek          # deepseek-flash (active) + deepseek-pro; key from $DEEPSEEK_API_KEY or --api-key-file
 control-openhands onboard --skip               # consent + onboarding (walk it instead when F01 is under test)
@@ -67,6 +66,10 @@ control-openhands evidence add --feature F05.secret-create --result pass --entry
 control-openhands stop                         # stops only this run; evidence stays
 ```
 
+- **Which run.** Commands use `--run`, else `$OH_VERIFY_RUN`, else the only live
+  run. With several live runs they refuse to guess, so export `OH_VERIFY_RUN` in
+  every shell command when other agents share the machine: an agent that drives
+  someone else's run corrupts both evidence ledgers.
 - **Launch** refuses to start when less than about 2 GB of memory is free: each
   run holds an Agent Server, automation, a static frontend and Chromium (about
   1.5 GB together). Stop runs you are done with; several agents on one machine

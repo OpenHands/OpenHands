@@ -97,12 +97,42 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 // ---------------------------------------------------------------------------
 // Run directory handling.
 // ---------------------------------------------------------------------------
+function liveRuns() {
+  if (!existsSync(verifyHome)) return [];
+  return readdirSync(verifyHome)
+    .filter((name) => name !== "current" && !name.startsWith("."))
+    .map((name) => join(verifyHome, name))
+    .filter((dir) => {
+      try {
+        const run = JSON.parse(readFileSync(join(dir, "run.json"), "utf8"));
+        return groupAlive(run.launcherPgid);
+      } catch {
+        return false;
+      }
+    });
+}
+
 function resolveRunDir(flags, { required = true } = {}) {
   const explicit = flags.run || process.env.OH_VERIFY_RUN;
   let dir;
   if (explicit) dir = resolve(explicit);
-  else if (existsSync(join(verifyHome, "current"))) {
-    dir = realpathSync(join(verifyHome, "current"));
+  else {
+    // With several live runs (several agents on one machine), guessing would
+    // let one agent drive another's browser. Refuse instead.
+    const live = liveRuns();
+    if (live.length > 1) {
+      throw new CliError(
+        `${live.length} runs are alive; refusing to guess which one is yours.`,
+        {
+          code: 3,
+          hint: `export OH_VERIFY_RUN=<your run dir> (or pass --run). Live runs: ${live.join(", ")}`,
+        },
+      );
+    }
+    if (live.length === 1) dir = live[0];
+    else if (existsSync(join(verifyHome, "current"))) {
+      dir = realpathSync(join(verifyHome, "current"));
+    }
   }
   if (!dir || !existsSync(join(dir, "run.json"))) {
     if (!required) return undefined;
@@ -485,7 +515,7 @@ async function cmdLaunch({ flags }) {
     );
   }
 
-  const existing = loadRun(flags, { required: false });
+  const existing = flags.new ? undefined : loadRun(flags, { required: false });
   if (existing && !flags.new && groupAlive(existing.launcherPgid)) {
     out({
       ok: true,
@@ -667,6 +697,11 @@ async function cmdLaunch({ flags }) {
   let browser;
   if (!flags["no-browser"]) browser = await startBrowser(run);
 
+  if (flags["print-run"]) {
+    // For: export OH_VERIFY_RUN=$(control-openhands launch --new --print-run)
+    process.stdout.write(`${dir}\n`);
+    return;
+  }
   out({
     ok: true,
     run: dir,
@@ -2562,7 +2597,7 @@ Examples:
   control-openhands browser screenshot --feature F05.secret-create --name form
   control-openhands stop
 `,
-  launch: `control-openhands launch [--public] [--new] [--port N | --port-from N] [--build auto|always|never] [--min-free-mb 2000]
+  launch: `control-openhands launch [--public] [--new] [--print-run] [--port N | --port-from N] [--build auto|always|never] [--min-free-mb 2000]
                          [--no-browser] [--timeout SEC] [--sdk-path DIR | --sdk-ref REF]
                          [--automation-path DIR | --automation-ref REF] [--run-id ID]
 
@@ -2572,6 +2607,10 @@ encryption key, on a free port block (ingress P, agent-server P+1, automation
 P+2, static frontend P+3, editor P+1001). Waits for authenticated settings,
 automation health and the SPA, then starts the browser daemon.
 Idempotent: an alive current run is reused unless --new is given.
+--print-run prints only the run directory, for
+  export OH_VERIFY_RUN=$(control-openhands launch --new --print-run)
+Every other command uses --run, else $OH_VERIFY_RUN, else the only live run;
+with several live runs it refuses to guess (several agents on one machine).
 
 Environment: OH_VERIFY_HOME, CONTROL_OPENHANDS_BROWSER (Chromium path),
 CONTROL_OPENHANDS_BROWSER_ARGS (extra Chromium flags), CONTROL_OPENHANDS_HEADED=1,
