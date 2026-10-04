@@ -135,15 +135,20 @@ function git(args, cwd = repoRoot) {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
 }
 
+const BUILD_INPUTS = ["src", "public", "package.json", "package-lock.json", "vite.config.ts", "react-router.config.ts", "tsconfig.json", "tailwind.config.js"];
+
 function checkoutRevision() {
-  const sha = git(["rev-parse", "HEAD"]);
-  const dirty = git(["status", "--porcelain", "--untracked-files=no", "--", "src", "public", "package.json", "package-lock.json", "vite.config.ts", "react-router.config.ts"]);
-  if (!dirty) return sha;
-  const diffHash = createHash("sha256")
-    .update(git(["diff", "HEAD", "--", "src", "public"]))
-    .digest("hex")
-    .slice(0, 12);
-  return `${sha}+dirty.${diffHash}`;
+  return git(["rev-parse", "HEAD"]);
+}
+
+// Identity of the frontend build inputs: commits that only touch other paths
+// (docs, this skill) reuse the existing build instead of rebuilding under
+// stacks that are already serving it.
+function buildId() {
+  const tree = git(["ls-tree", "HEAD", "--", ...BUILD_INPUTS]);
+  const dirty = git(["diff", "HEAD", "--", ...BUILD_INPUTS]);
+  const id = createHash("sha256").update(tree).update(dirty).digest("hex").slice(0, 16);
+  return dirty ? `${id}-dirty` : id;
 }
 
 function processAlive(pid) {
@@ -394,23 +399,24 @@ async function cmdLaunch({ flags }) {
 
   // 1. Build the exact checkout (or reuse a build stamped with this revision).
   const revision = checkoutRevision();
+  const currentBuildId = buildId();
   const buildDir = join(repoRoot, "build");
   const marker = join(buildDir, "verify-revision.txt");
   const buildMode = flags.build ?? "auto";
   const stamped = existsSync(marker) ? readFileSync(marker, "utf8").trim() : "";
   let built = false;
-  if (buildMode === "always" || (buildMode === "auto" && stamped !== revision)) {
+  if (buildMode === "always" || (buildMode === "auto" && stamped !== currentBuildId)) {
     if (!existsSync(join(repoRoot, "node_modules"))) {
       throw new CliError("node_modules is missing.", { code: 3, hint: "npm ci --ignore-scripts --no-audit --no-fund" });
     }
-    process.stderr.write(`building ${revision} (npm run build:app)...\n`);
+    process.stderr.write(`building ${revision} (build inputs ${currentBuildId}; npm run build:app)...\n`);
     const result = spawnSync("npm", ["run", "build:app"], {
       cwd: repoRoot,
       stdio: ["ignore", 2, 2],
       env: { ...process.env, VITE_DO_NOT_TRACK: "1" },
     });
     if (result.status !== 0) throw new CliError("npm run build:app failed", { code: 3 });
-    writeFileSync(marker, `${revision}\n`);
+    writeFileSync(marker, `${currentBuildId}\n`);
     built = true;
   } else if (buildMode === "never" && !existsSync(join(buildDir, "index.html"))) {
     throw new CliError("No build/ found and --build never was given.", { code: 3 });
@@ -472,6 +478,7 @@ async function cmdLaunch({ flags }) {
     dir,
     repo: repoRoot,
     revision,
+    buildId: currentBuildId,
     builtThisRun: built,
     mode: flags.public ? "public" : "local",
     baseUrl: `http://127.0.0.1:${ports.ingress}`,
@@ -577,9 +584,9 @@ async function cmdDoctor({ flags }) {
     try {
       const marker = await http(run, "GET", "/verify-revision.txt", { auth: false });
       const served = marker.text.trim();
-      add("served build matches run revision", marker.status === 200 && served === run.revision, `served=${served.slice(0, 60)} run=${run.revision.slice(0, 60)}`);
-      const current = checkoutRevision();
-      add("checkout still at run revision", current === run.revision, `checkout=${current.slice(0, 60)}`, "warn");
+      add("served build matches this checkout's build inputs", marker.status === 200 && served === run.buildId, `served=${served} run=${run.buildId} revision=${run.revision.slice(0, 12)}`);
+      const current = buildId();
+      add("checkout build inputs unchanged since launch", current === run.buildId, `now=${current}`, "warn");
       const unauth = await http(run, "GET", "/api/settings", { auth: false });
       add("unauthenticated API rejected", [401, 403].includes(unauth.status), `status=${unauth.status}`);
       const settings = await http(run, "GET", "/api/settings");

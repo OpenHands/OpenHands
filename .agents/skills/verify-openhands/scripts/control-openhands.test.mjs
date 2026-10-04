@@ -1,0 +1,121 @@
+// Fast checks for control-openhands that need no browser or running stack:
+//   node --test ".agents/skills/verify-openhands/scripts/*.test.mjs"
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { test } from "node:test";
+import { fileURLToPath } from "node:url";
+import { buildLocator, parseRole } from "./lib/selectors.mjs";
+
+const here = dirname(fileURLToPath(import.meta.url));
+const cli = join(here, "control-openhands.mjs");
+
+// A fake Playwright scope that records the locator chain it was asked for.
+function recorder(path = []) {
+  const step = (name) => (...args) => recorder([...path, [name, ...args]]);
+  return {
+    path,
+    getByTestId: step("getByTestId"),
+    getByRole: step("getByRole"),
+    getByText: step("getByText"),
+    getByLabel: step("getByLabel"),
+    getByPlaceholder: step("getByPlaceholder"),
+    getByTitle: step("getByTitle"),
+    getByAltText: step("getByAltText"),
+    nth: step("nth"),
+    filter: step("filter"),
+    locator: step("locator"),
+  };
+}
+
+function run(args, env = {}) {
+  const result = spawnSync(process.execPath, [cli, ...args], {
+    encoding: "utf8",
+    env: { ...process.env, OH_VERIFY_HOME: mkdtempSync(join(tmpdir(), "cov-")), OH_VERIFY_RUN: "", ...env },
+  });
+  let json;
+  try {
+    json = JSON.parse(result.stdout);
+  } catch {
+    json = undefined;
+  }
+  return { ...result, json };
+}
+
+test("scoped testid chain builds nested locators", () => {
+  const loc = buildLocator(recorder(), "testid=add-secret-form >> testid=submit-button");
+  assert.deepEqual(loc.path, [
+    ["getByTestId", "add-secret-form"],
+    ["getByTestId", "submit-button"],
+  ]);
+});
+
+test("role selectors carry name, exactness and state options", () => {
+  assert.deepEqual(parseRole('button[name="Save"][exact]'), {
+    role: "button",
+    options: { name: "Save", exact: true },
+  });
+  assert.deepEqual(parseRole("checkbox[checked=false]").options, { checked: false });
+  const regex = parseRole('link[name="/^Docs/i"]').options.name;
+  assert.ok(regex instanceof RegExp && regex.test("docs page"));
+  assert.throws(() => parseRole("button[colour=red]"), /Unsupported role attribute/);
+});
+
+test("quoted text is exact, bare text is partial, other segments pass through", () => {
+  const loc = buildLocator(
+    recorder(),
+    'text="Secrets" >> text=Sec >> has-text=QA_ >> nth=1 >> visible >> input[type=file]',
+  );
+  assert.deepEqual(loc.path, [
+    ["getByText", "Secrets", { exact: true }],
+    ["getByText", "Sec", { exact: false }],
+    ["filter", { hasText: "QA_" }],
+    ["nth", 1],
+    ["filter", { visible: true }],
+    ["locator", "input[type=file]"],
+  ]);
+});
+
+test("--help lists every command family with examples", () => {
+  const { status, stdout } = run(["--help"]);
+  assert.equal(status, 0);
+  for (const word of ["launch", "doctor", "browser", "conversation", "evidence", "map", "Examples:"]) {
+    assert.match(stdout, new RegExp(word));
+  }
+  assert.match(run(["browser", "--help"]).stdout, /testids/);
+});
+
+test("usage errors exit 2 with a hint; a missing run exits 3", () => {
+  const unknown = run(["frobnicate"]);
+  assert.equal(unknown.status, 2);
+  assert.equal(unknown.json.ok, false);
+  assert.ok(unknown.json.hint);
+  const noRun = run(["doctor"]);
+  assert.equal(noRun.status, 3);
+  assert.match(noRun.json.hint, /control-openhands launch/);
+});
+
+test("keys are refused on argv before any request is made", () => {
+  const dir = mkdtempSync(join(tmpdir(), "cov-run-"));
+  mkdirSync(join(dir, "private"));
+  writeFileSync(join(dir, "private", "session-key"), "x".repeat(64));
+  writeFileSync(
+    join(dir, "run.json"),
+    JSON.stringify({ baseUrl: "http://127.0.0.1:9", ports: { ingress: 9 }, launcherPgid: 0 }),
+  );
+  const result = run(["llm", "set", "--profile", "x", "--model", "m", "--api-key", "secret"], { OH_VERIFY_RUN: dir });
+  assert.equal(result.status, 2);
+  assert.match(result.json.error, /Do not pass keys on the command line/);
+  assert.doesNotMatch(result.stdout, /secret"/);
+});
+
+test("map routes reads the route registry with nested settings paths", () => {
+  const { status, json } = run(["map", "routes"]);
+  assert.equal(status, 0);
+  const paths = json.routes.map((r) => r.path);
+  for (const path of ["/", "/settings", "/settings/llm", "/settings/secrets", "/automations/:automationId", "/shared/conversations/:conversationId"]) {
+    assert.ok(paths.includes(path), `missing ${path}`);
+  }
+});
