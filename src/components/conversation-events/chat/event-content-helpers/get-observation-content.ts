@@ -19,6 +19,7 @@ import {
   InvokeSkillObservation,
   CanvasUIObservation,
   SwitchLLMObservation,
+  ClassifyAndSwitchLLMObservation,
 } from "#/types/agent-server/core/base/observation";
 
 // File Editor Observations
@@ -206,6 +207,35 @@ const getSwitchLLMObservationContent = (
   }
   if (observation.reason) {
     parts.push(`**Reason:** ${observation.reason}`);
+  }
+
+  return parts.join("\n");
+};
+
+// Router-driven model switch (mirrors SwitchLLMObservation, but `model` is the
+// activated profile name and `active_model` is the underlying model string).
+const getClassifyAndSwitchLLMObservationContent = (
+  event: ObservationEvent<ClassifyAndSwitchLLMObservation>,
+): string => {
+  const { observation } = event;
+
+  const textContent = observation.content
+    .filter((c) => c.type === "text")
+    .map((c) => c.text)
+    .join("\n");
+
+  if (observation.is_error) {
+    return textContent
+      ? `**Error:**\n${textContent}`
+      : `**Error:**\nFailed to switch LLM profile.`;
+  }
+
+  const parts = [`**Profile:** \`${observation.model}\``];
+  if (observation.active_model) {
+    parts.push(`**Active model:** \`${observation.active_model}\``);
+  }
+  if (observation.chosen_class) {
+    parts.push(`**Reason:** ${observation.chosen_class}`);
   }
 
   return parts.join("\n");
@@ -428,6 +458,10 @@ export const getObservationContent = (event: ObservationEvent): string => {
     case "SwitchLLMObservation":
       return getSwitchLLMObservationContent(
         event as ObservationEvent<SwitchLLMObservation>,
+      );
+    case "ClassifyAndSwitchLLMObservation":
+      return getClassifyAndSwitchLLMObservationContent(
+        event as ObservationEvent<ClassifyAndSwitchLLMObservation>,
       );
 
     default:

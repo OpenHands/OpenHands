@@ -191,6 +191,16 @@ describe("AutomationService", () => {
         params: { limit: 50, offset: 0 },
       });
     });
+
+    it("sends the creator filter as created_by", async () => {
+      mockGet.mockResolvedValue({ data: { automations: [], total: 0 } });
+
+      await AutomationService.listAutomations({ createdBy: "others" });
+
+      expect(mockGet).toHaveBeenCalledWith("/api/automation/v1", {
+        params: { limit: 50, offset: 0, created_by: "others" },
+      });
+    });
   });
 
   describe("getAutomations", () => {
@@ -387,6 +397,18 @@ describe("AutomationService", () => {
       });
       expect(mockGet).not.toHaveBeenCalled();
       expect(result).toEqual(response);
+    });
+
+    it("listAutomations adds the creator filter to the path", async () => {
+      mockCallCloudProxy.mockResolvedValue({ automations: [], total: 0 });
+
+      await AutomationService.listAutomations({ createdBy: "me" });
+
+      expect(mockCallCloudProxy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          path: "/api/automation/v1?limit=50&offset=0&created_by=me",
+        }),
+      );
     });
 
     it("getAutomation routes to callCloudProxy with the id in the path", async () => {

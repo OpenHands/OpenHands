@@ -70,3 +70,18 @@ This directory is PR-only evidence. Fork PRs require manual `.pr/` cleanup befor
 `PATH=/opt/homebrew/opt/node@22/bin:$PATH VITE_DO_NOT_TRACK=1 npm run dev:mock -- --host 127.0.0.1 --port 3196 --strictPort`
 
 Open Workspace in the real Canvas UI using MSW data. `workspace-before.png` uses the four affected source files from `0bfdebb`; `workspace-after.png` uses `a35e74e`. The same running app applied the revisions through Vite HMR. No live LLM or credentials were used. The workspace field and its shared caret retain their appearance; compiler/merge parity covers all four removals.
+
+## Error-level enforcement after updating from main
+
+Merged upstream main at `35dc8aafaad2d883cf0c6629dea857eb2235895e` following [review 5297880470](https://github.com/OpenHands/OpenHands/pull/17644#pullrequestreview-5297880470). With the initial findings resolved, `shadcn/no-unknown-classes` is now `error`; both exact exceptions and every other rule setting are unchanged. This supersedes the issue's original warning-level rollout. CI continues to use ordinary `npm run lint`, without a warning-count gate.
+
+Verified on the merged tree with a fresh `npm ci` (Node 22.23.2):
+
+- `npm run lint`: passed, **zero unknown-class findings / zero errors / 376 existing `shadcn/no-arbitrary-values` warnings**. TypeScript and formatting checks also passed.
+- `node .pr/verify-unknown-classes.mjs`: passed; each deliberately invalid utility/variant is severity 2, representative project/plugin utilities are accepted, and exceptions remain exact.
+- Real CLI negative check: created a temporary `src/ui/lint-rule-probe-*.tsx` containing `export const Probe = () => <div className="hovr:flex" />;`, ran `node node_modules/eslint/bin/eslint.js <file> --format json`, then removed the file in `finally`. **Exit 1**, exactly one error, from `shadcn/no-unknown-classes`; no parser/fatal error. The earlier stdin attempt was unsuitable for the project-aware parser, so the final check used an actual source file.
+- `node .pr/verify-inert-classes.mjs`: passed; the merged theme still generates identical CSS for the removals.
+- The five form/dropdown/helper test files listed above: **70 tests passed** on current main.
+- `npm run build` and `npm run build:lib`: passed.
+
+Full-suite CI will rerun on the pushed merge. The historical checks above refer to earlier heads; no new full-suite local result is claimed here.
