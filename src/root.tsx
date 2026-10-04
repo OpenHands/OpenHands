@@ -271,7 +271,9 @@ export const meta: MetaFunction = () => [
     name: "apple-mobile-web-app-status-bar-style",
     content: "black-translucent",
   },
-  { name: "apple-mobile-web-app-title", content: "Agent Canvas" },
+  // iOS labels the home-screen icon with this; keep it matching the manifest's
+  // `short_name`, which is what Android and desktop label the launcher with.
+  { name: "apple-mobile-web-app-title", content: "OpenHands" },
   { name: "mobile-web-app-capable", content: "yes" },
 ];
 

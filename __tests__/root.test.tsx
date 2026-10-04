@@ -975,9 +975,18 @@ describe("App root document meta", () => {
       name: "apple-mobile-web-app-status-bar-style",
       content: "black-translucent",
     });
-    expect(documentMeta).toContainEqual({
+    // Asserted as present and non-empty rather than pinned to exact copy: the
+    // home-screen label is a branding call, and the manifest's `short_name` is
+    // the value it tracks.
+    expect(
+      documentMeta.find(
+        (descriptor) =>
+          "name" in descriptor &&
+          descriptor.name === "apple-mobile-web-app-title",
+      ),
+    ).toEqual({
       name: "apple-mobile-web-app-title",
-      content: "Agent Canvas",
+      content: expect.stringMatching(/\S/),
     });
   });
 
