@@ -68,7 +68,8 @@ test.describe("onboarding happy path", () => {
   });
 
   // TODO: Restore after the post-launch mock reply reaches the conversation.
-  // https://github.com/OpenHands/OpenHands/issues/17872 tracks the reply timeout.
+  // No dedicated root-cause issue exists for the reply timeout yet.
+  // https://github.com/OpenHands/OpenHands/issues/17872 is the aggregate tracker.
   test.fixme("completes the full onboarding flow and launches a conversation", async ({
     page,
     request,
@@ -145,9 +146,9 @@ test.describe("onboarding happy path", () => {
       await allToggle.dispatchEvent("click");
 
       // Wait for the advanced form
-      await expect(
-        page.getByTestId("llm-settings-form-advanced"),
-      ).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByTestId("llm-settings-form-advanced")).toBeVisible({
+        timeout: 10_000,
+      });
 
       // Fill in model
       const modelInput = page.getByTestId("llm-custom-model-input");
@@ -223,7 +224,10 @@ test.describe("onboarding happy path", () => {
             page.evaluate(() =>
               window.localStorage.getItem("openhands-onboarded"),
             ),
-          { message: "openhands-onboarded should be '1' after completing the flow" },
+          {
+            message:
+              "openhands-onboarded should be '1' after completing the flow",
+          },
         )
         .toBe("1");
     });

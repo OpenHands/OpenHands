@@ -19,6 +19,8 @@ describe("mock-LLM user skill paths", () => {
       await import("../../tests/e2e/mock-llm/utils/skill-test-helpers");
     const config = buildSafeDevConfig(process.cwd(), {
       OH_CANVAS_SAFE_STATE_DIR: STATE_DIR,
+      LOCAL_BACKEND_API_KEY: "test-session-key",
+      OH_SECRET_KEY: "test-secret-key",
     });
 
     const serverEnv = buildAgentServerEnv(config, { env: {} });
