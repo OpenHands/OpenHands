@@ -22,6 +22,10 @@ export const LLM_PROFILES_QUERY_KEYS = {
   all: ["llm-profiles"] as const,
 } as const;
 
+export const META_PROFILES_QUERY_KEYS = {
+  all: ["meta-profiles"] as const,
+} as const;
+
 export const AGENT_PROFILES_QUERY_KEYS = {
   all: ["agent-profiles"] as const,
   // Nested under `all` so profile mutations invalidate cached details too.
@@ -70,6 +74,20 @@ export const CANVAS_EXTENSIONS_QUERY_KEYS = {
       backendId,
       orgId,
       connectionRevision,
+    ] as const,
+  icon: (
+    backendId: string,
+    orgId: string | null,
+    connectionRevision: number,
+    name: string,
+  ) =>
+    [
+      "canvas-extensions",
+      "icon",
+      backendId,
+      orgId,
+      connectionRevision,
+      name,
     ] as const,
 } as const;
 

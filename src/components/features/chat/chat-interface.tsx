@@ -597,7 +597,7 @@ export function ChatInterface() {
             <GoalStatusBanner conversationId={conversationId} />
           </div>
 
-          <div className="flex shrink-0 flex-col gap-[6px] pb-4">
+          <div className="flex shrink-0 flex-col gap-1.5 pb-4">
             <SkillInstallRestartBanner conversationId={conversationId} />
             <BtwMessages conversationId={conversationId} />
             {errorMessage && (
@@ -628,14 +628,14 @@ export function ChatInterface() {
               // the chat input. The conversation history above is still visible.
               <div
                 data-testid="archived-conversation-banner"
-                className="mx-1 px-4 py-3 rounded-lg bg-[var(--oh-surface)] border border-[var(--oh-border-subtle)]"
+                className="mx-1 px-4 py-3 rounded-lg bg-surface border border-border-subtle"
               >
-                <p className="text-xs font-semibold text-[var(--oh-foreground)]">
+                <p className="text-xs font-semibold text-foreground">
                   {sandboxStatus === "ERROR"
                     ? t(I18nKey.CHAT_INTERFACE$ERROR_SANDBOX_TITLE)
                     : t(I18nKey.CHAT_INTERFACE$ARCHIVED_SANDBOX_TITLE)}
                 </p>
-                <p className="text-xs text-[var(--oh-muted)] mt-0.5">
+                <p className="text-xs text-muted mt-0.5">
                   {sandboxStatus === "ERROR"
                     ? t(I18nKey.CHAT_INTERFACE$ERROR_SANDBOX_DESCRIPTION)
                     : t(I18nKey.CHAT_INTERFACE$ARCHIVED_SANDBOX_DESCRIPTION)}

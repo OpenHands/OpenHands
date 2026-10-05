@@ -182,9 +182,7 @@ describe("ChatInterface - Chat Suggestions", () => {
       },
     });
 
-    useOptimisticUserMessageStore.setState({
-      pendingMessages: [],
-    });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
 
     useErrorMessageStore.setState({
       errorMessage: null,
@@ -313,7 +311,7 @@ describe("ChatInterface - Scroll-up loads older events", () => {
       defaultOptions: { queries: { retry: false } },
     });
 
-    useOptimisticUserMessageStore.setState({ pendingMessages: [] });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
     useErrorMessageStore.setState({ errorMessage: null });
 
     (useConfig as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
@@ -677,7 +675,7 @@ describe("ChatInterface - Pending message queue", () => {
     queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    useOptimisticUserMessageStore.setState({ pendingMessages: [] });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
     useErrorMessageStore.setState({ errorMessage: null });
     (useConfig as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       data: {},
@@ -698,7 +696,7 @@ describe("ChatInterface - Pending message queue", () => {
   });
 
   afterEach(() => {
-    useOptimisticUserMessageStore.setState({ pendingMessages: [] });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
   });
 
   function submitMessage(text: string) {
@@ -785,7 +783,7 @@ describe("ChatInterface - Auto-scroll on submit (issue #817)", () => {
     queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    useOptimisticUserMessageStore.setState({ pendingMessages: [] });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
     useErrorMessageStore.setState({ errorMessage: null });
     (useConfig as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       data: {},
@@ -806,7 +804,7 @@ describe("ChatInterface - Auto-scroll on submit (issue #817)", () => {
   });
 
   afterEach(() => {
-    useOptimisticUserMessageStore.setState({ pendingMessages: [] });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
   });
 
   it("scrolls to bottom when a new prompt is submitted while the user is scrolled up", async () => {
@@ -1031,7 +1029,7 @@ describe("ChatInterface - Tracking", () => {
     queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    useOptimisticUserMessageStore.setState({ pendingMessages: [] });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
     useErrorMessageStore.setState({ errorMessage: null });
     (useConfig as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       data: {},
@@ -1120,7 +1118,7 @@ describe("ChatInterface - Build plan keyboard shortcut", () => {
     queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    useOptimisticUserMessageStore.setState({ pendingMessages: [] });
+    useOptimisticUserMessageStore.getState().clearPendingMessages();
     useErrorMessageStore.setState({ errorMessage: null });
     (useConfig as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       data: {},

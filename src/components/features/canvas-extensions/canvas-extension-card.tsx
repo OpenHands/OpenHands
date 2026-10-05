@@ -3,6 +3,7 @@ import { BrandButton } from "#/components/features/settings/brand-button";
 import { ToggleSwitch } from "#/ui/toggle-switch";
 import { I18nKey } from "#/i18n/declaration";
 import type { InstalledCanvasExtensionInfo } from "#/types/canvas-extension";
+import { CanvasExtensionIcon } from "./canvas-extension-icon";
 import {
   extensionModuleCardPillClassName,
   extensionModuleCardSurfaceClassName,
@@ -12,6 +13,7 @@ interface CanvasExtensionCardProps {
   extension: InstalledCanvasExtensionInfo;
   isBusy: boolean;
   onToggle: () => void;
+  onRefresh: () => void;
   onUninstall: () => void;
 }
 
@@ -19,6 +21,7 @@ export function CanvasExtensionCard({
   extension,
   isBusy,
   onToggle,
+  onRefresh,
   onUninstall,
 }: CanvasExtensionCardProps) {
   const { t } = useTranslation("openhands");
@@ -31,8 +34,13 @@ export function CanvasExtensionCard({
       className={`flex min-w-0 flex-col gap-4 p-4 ${extensionModuleCardSurfaceClassName}`}
     >
       <header className="flex items-start justify-between gap-4">
+        <CanvasExtensionIcon
+          extension={extension}
+          size={20}
+          className="mt-0.5 shrink-0"
+        />
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-sm font-semibold text-white">
+          <h3 className="truncate text-sm font-semibold text-contrast">
             {displayName}
           </h3>
           <p className="mt-0.5 truncate text-xs text-tertiary-alt">
@@ -108,7 +116,16 @@ export function CanvasExtensionCard({
         </section>
       ) : null}
 
-      <footer className="flex justify-end gap-2 border-t border-[var(--oh-border)] pt-3">
+      <footer className="flex justify-end gap-2 border-t border-border pt-3">
+        <BrandButton
+          type="button"
+          variant="secondary"
+          testId={`canvas-extension-refresh-${extension.name}`}
+          isDisabled={isBusy}
+          onClick={onRefresh}
+        >
+          {t(I18nKey.SETTINGS$PLUGINS_REFRESH)}
+        </BrandButton>
         <BrandButton
           type="button"
           variant="ghost-danger"
