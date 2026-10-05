@@ -184,6 +184,51 @@ data, user actions, lazy initialization, store mirroring, or ordering repairs.
 Subscriptions, browser APIs, timers, and network synchronization remain valid
 when cleanup and dependencies are explicit.
 
+## Design Context for Deep PRs
+
+A diff shows each changed line, not the design. Expect durable design context
+when a reviewer cannot judge a PR from the diff in a couple of minutes, for
+example:
+
+- a new or changed Agent Server, Cloud, or automation integration, event
+  contract, or persisted-state shape;
+- a new feature module or subsystem, a cross-cutting refactor, or a migration;
+- a behavior change in backend selection, conversation flow, or settings and
+  profile transitions; or
+- a large change whose intent cannot be reconstructed from the diff, even if no
+  single hunk is complex.
+
+Do not ask for design context on trivial, generated, or self-explanatory
+changes: a typo, a one-line guard, a dependency bump, a copy or style tweak, or a
+small localized fix. Size alone does not make a PR deep.
+
+Adequate design context states:
+
+- **Intent:** the problem and why this approach;
+- **Before and after:** the important behavior, UI flow, or API shape on each
+  side;
+- **Compatibility and risk:** affected Canvas modes, stored state, and supported
+  backends, and what can break; and
+- **Code references:** links to the real code at a commit SHA.
+
+Put it in the PR description, or link a `.pr/` design doc that covers it from
+the `pr-design-doc` skill. Count a `.pr/` doc only when the link is pinned to a
+commit SHA, not the branch name. Approving a same-repository PR runs the
+`PR Artifacts` cleanup, which removes `.pr/` from the branch, so a branch link
+stops resolving before a human maintainer reads it, while a SHA link keeps
+working.
+
+Scale the response to the risk assessment:
+
+- **Deep and 🔴 HIGH risk without adequate context:** submit **COMMENT** and ask
+  for the write-up or a SHA-pinned doc.
+- **Deep and 🟡 MEDIUM risk:** ask for it when the change is hard to reconstruct
+  from the diff; a small, self-evident change does not need it.
+- **🟢 LOW risk:** never withhold approval for missing design context.
+
+Design context is a review aid, not a merge gate by itself. It does not excuse a
+correctness, security, compatibility, or architecture defect.
+
 ## Dependencies and Releases
 
 - Direct dependencies are exact-pinned. Update `package.json` and
