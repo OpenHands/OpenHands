@@ -53,11 +53,11 @@ const storedAcp = {
 
 describe("mergeAgentProfileSaveInput", () => {
   it("preserves unmodeled OpenHands fields under the edited ones", () => {
-    const edited: AgentProfileSaveInput = {
+    const edited = {
       agent_kind: "openhands",
       enable_sub_agents: true,
       llm_profile_ref: "new-llm",
-    };
+    } as AgentProfileSaveInput;
 
     const merged = mergeAgentProfileSaveInput(storedOpenHands, edited);
 
@@ -120,7 +120,7 @@ describe("mergeAgentProfileSaveInput", () => {
       agent_kind: "openhands",
       enable_sub_agents: true,
       llm_profile_ref: "new-llm",
-    });
+    } as AgentProfileSaveInput);
 
     // The path name is authoritative and the server preserves the namesake's
     // id / bumps revision itself; posting stale identity would only mislead.
@@ -144,11 +144,11 @@ describe("mergeAgentProfileSaveInput", () => {
   });
 
   it("passes the edited fields through on create (no stored profile)", () => {
-    const edited: AgentProfileSaveInput = {
+    const edited = {
       agent_kind: "openhands",
       enable_sub_agents: false,
       llm_profile_ref: "default",
-    };
+    } as AgentProfileSaveInput;
 
     expect(mergeAgentProfileSaveInput(null, edited)).toEqual(edited);
   });

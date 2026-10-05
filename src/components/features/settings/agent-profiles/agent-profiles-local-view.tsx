@@ -62,10 +62,14 @@ function toAgentSettingsOverride(
   const switchLlmToolEnabled =
     (profile as { enable_switch_llm_tool?: boolean }).enable_switch_llm_tool ??
     true;
+  // `enable_sub_agents` left the typed model in SDK 1.51 (folded into `tools`
+  // server-side until 1.56); it rides untyped until the editor moves to `tools`.
+  const subAgentsEnabled =
+    (profile as { enable_sub_agents?: boolean }).enable_sub_agents ?? false;
   return {
     agent_kind: "openhands",
     mcp_server_refs: profile.mcp_server_refs ?? null,
-    enable_sub_agents: profile.enable_sub_agents,
+    enable_sub_agents: subAgentsEnabled,
     enable_switch_llm_tool: switchLlmToolEnabled,
     tool_concurrency_limit: profile.tool_concurrency_limit,
     secret_refs: secretRefs,

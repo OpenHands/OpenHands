@@ -41,7 +41,11 @@ const DEFAULT_VERIFICATION = {
 };
 
 function makeOpenHandsProfile(
-  overrides: Partial<AgentProfile> & { id: string; name: string },
+  overrides: Partial<AgentProfile> & {
+    id: string;
+    name: string;
+    enable_sub_agents?: boolean;
+  },
 ): AgentProfile {
   return {
     schema_version: 1,
@@ -57,7 +61,7 @@ function makeOpenHandsProfile(
     enable_sub_agents: false,
     tool_concurrency_limit: 1,
     ...overrides,
-  } as AgentProfile;
+  } as unknown as AgentProfile;
 }
 
 /** Stable id of the seeded `default` profile (the active one after a seed). */
