@@ -1063,7 +1063,7 @@ async function cmdDoctor({ flags }) {
         add(
           "UI loads without page errors",
           probe.pageErrors.length === 0 && !wedged,
-          `markers=${probe.markers.join(",") || "none"} pageErrors=${probe.pageErrors.length} testids=${probe.testids}`,
+          `markers=${probe.markers.join(",") || "none"} pageErrors=${probe.pageErrors.length} testidsInDom=${probe.testids} (hidden included)`,
         );
       } catch (error) {
         add("UI probe", false, String(error.message));
@@ -1589,6 +1589,11 @@ async function waitConversation(run, id, { until, timeoutSec }) {
       terminal &&
       (sawRunning || until === "idle" || info.execution_status !== "idle")
     ) {
+      // Titles are generated shortly after the first run finishes.
+      for (let i = 0; i < 5 && !info.title && Date.now() < deadline; i += 1) {
+        await delay(2000);
+        info = await conversationInfo(run, id);
+      }
       return { ...summarize(info), waitedFor: wanted };
     }
     await delay(2000);
@@ -1615,9 +1620,7 @@ function eventText(event) {
     pick(event.observation?.content) ||
     event.observation?.text ||
     ""
-  )
-    .replace(/\s+/g, " ")
-    .slice(0, 160);
+  ).replace(/\s+/g, " ");
 }
 
 // The Open Workspace folder browser has no path field: walk it to PATH.
@@ -1760,13 +1763,18 @@ async function cmdConversation({ positional, flags }) {
       count: items.length,
       events: items
         .filter((e) => !kinds || kinds.includes(e.kind))
-        .map((e) => ({
-          kind: e.kind,
-          source: e.source,
-          tool: e.tool_name ?? e.action?.kind,
-          text: eventText(e),
-          ts: e.timestamp,
-        })),
+        .map((e) => {
+          const text = eventText(e);
+          const max = flags.full ? 4000 : 160;
+          return {
+            kind: e.kind,
+            source: e.source,
+            tool: e.tool_name ?? e.action?.kind,
+            text: text.slice(0, max),
+            truncated: text.length > max || undefined,
+            ts: e.timestamp,
+          };
+        }),
     });
     return;
   }
@@ -2497,10 +2505,6 @@ function mapCheck({ only } = {}) {
       problems.push(
         `${file}: Driving section must start with "Preconditions:"`,
       );
-    for (const m of drive.matchAll(/`(F\d{2}\.[a-z0-9-]+)`/g)) {
-      if (!declared.includes(m[1]) && !/^F\d{2}\.[a-z0-9-]+$/.test(m[1]))
-        problems.push(`${file}: bad ID reference ${m[1]}`);
-    }
     for (const m of text.matchAll(
       /control-openhands ([a-z-]+)(?: ([a-z-]+))?/g,
     )) {
@@ -2514,11 +2518,33 @@ function mapCheck({ only } = {}) {
       if (!existsSync(target)) problems.push(`${file}: dead link ${m[1]}`);
     }
   }
+  // References (`Fnn.slug` in prose, --feature Fnn.slug in recipes) must name
+  // a declared ID once that family's file exists.
+  const families = new Set(
+    files.map((f) => /^(F\d{2})-/.exec(f)?.[1]).filter(Boolean),
+  );
+  for (const file of files) {
+    if (only && file !== only) continue;
+    const text = readFileSync(join(mapDir, file), "utf8");
+    const refs = new Set();
+    for (const m of text.matchAll(/`(F\d{2}\.[a-z0-9-]+)`/g)) refs.add(m[1]);
+    for (const m of text.matchAll(/--feature (F\d{2}\.[a-z0-9-]+)/g))
+      refs.add(m[1]);
+    for (const ref of refs) {
+      if (!ids.has(ref) && families.has(ref.slice(0, 3)))
+        problems.push(`${file}: reference to unknown ID ${ref}`);
+    }
+  }
   for (const m of index.matchAll(/\]\(\.?\/?([A-Za-z0-9-]+\.md)\)/g)) {
     if (!existsSync(join(mapDir, m[1])))
       problems.push(`README.md: links missing file ${m[1]}`);
   }
-  return { files: files.length, ids: ids.size, problems };
+  return {
+    files: files.length,
+    ids: ids.size,
+    checked: only ?? "all",
+    problems,
+  };
 }
 
 function routePaths() {
@@ -2785,7 +2811,8 @@ settings → close at say-hello. Skipping is not proof that onboarding works.
 control-openhands conversation wait ID [--until finished,idle] [--timeout SEC]
 control-openhands conversation status ID
 control-openhands conversation list
-control-openhands conversation events ID [--last N] [--kinds MessageEvent,ActionEvent]
+control-openhands conversation events ID [--last N] [--kinds MessageEvent,ActionEvent] [--full]
+        (texts are cut at 160 chars with truncated:true; --full keeps up to 4000)
 
 'start' types into the home composer (testid=chat-input), presses
 testid=submit-button and returns the new /conversations/<id>. --stay uses the

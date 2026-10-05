@@ -113,16 +113,36 @@ deactivate the profile) unless the next recipe depends on it, in which case say 
 Values that differ per run (conversation and automation ids) are written as
 `<id>` placeholders next to the command that prints them.
 
+The driving bullets must run top to bottom on one stack, because the next agent
+will run them that way:
+
+- Put every arrange step in `Preconditions:`, in execution order. A
+  precondition with a short life (a conversation that is running, a toast)
+  says when to create it: "right before the Stop bullet".
+- A bullet never depends on state that a later bullet creates, and never
+  deletes a fixture that a later bullet needs.
+- Write environment-dependent results as conditionals ("if the registry is
+  reachable, `Up to date`; otherwise ...") and check them with `browser
+  network`, not from memory.
+- Secret and credential checks assert the tool's output, not the model's
+  reply: models refuse to echo secrets. Compare inside the command
+  (`test "$QA_SECRET" = expected && echo match`) and read the observation
+  with `conversation events <id> --kinds ObservationEvent`.
+
 ## 4. Prove every recipe live
 
 Execute every command you wrote, in order, on a fresh `launch` (or a run you
-have doctored since its last surprise). For each sub-feature record
+have doctored since its last surprise). Before you hand the file over, run the
+whole file once more from the top, exactly as written. For each sub-feature record
 `control-openhands evidence add --feature <ID> --result pass|fail|blocked|not-run`
 with the entry point, expected and actual result and artifacts.
 
 - A recipe that fails because the instructions are wrong: fix the instructions
   and re-drive (map drift).
-- A recipe the CLI cannot express: extend the CLI and re-drive (harness gap).
+- A recipe the CLI cannot express: check `control-openhands --help` and
+  `control-openhands help browser` first (backdrops, modifier clicks, stopped
+  services, stale keys, first run and sound all have verbs), then extend the
+  CLI and re-drive (harness gap).
 - A recipe that fails because the app is broken: keep the expected result,
   record `fail` with evidence and report the product bug separately.
 - A recipe that needs something the run cannot have (a Cloud account, a

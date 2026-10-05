@@ -69,7 +69,8 @@ control-openhands stop                         # stops only this run; evidence s
 - **Which run.** Commands use `--run`, else `$OH_VERIFY_RUN`, else the only live
   run. With several live runs they refuse to guess, so export `OH_VERIFY_RUN` in
   every shell command when other agents share the machine: an agent that drives
-  someone else's run corrupts both evidence ledgers.
+  someone else's run corrupts both evidence ledgers. For the same reason never
+  `pkill -f` or `killall` by pattern; `control-openhands stop` ends only your run.
 - **Launch** refuses to start when less than about 2 GB of memory is free: each
   run holds an Agent Server, automation, a static frontend and Chromium (about
   1.5 GB together). Stop runs you are done with; several agents on one machine
@@ -79,7 +80,8 @@ control-openhands stop                         # stops only this run; evidence s
   `HOME`, state, session key and free port block, so it never touches a user's
   `~/.openhands` or another run. `launch --new` starts a second independent run
   (for a baseline, or to drive two backends); `--public` exercises the API-key
-  login screen (`control-openhands login`). `--sdk-path/--sdk-ref` and
+  login screen (`control-openhands login`). It still binds to 127.0.0.1; it only
+  stops injecting the session key into the page. `--sdk-path/--sdk-ref` and
   `--automation-path/--automation-ref` test unreleased backends; record them.
 - **Doctor** checks the launcher's process group, ports, served build revision,
   unauthenticated rejection, authenticated settings, Agent Server pin, automation
@@ -106,8 +108,12 @@ control-openhands stop                         # stops only this run; evidence s
   `browser reset` (fresh browser profile: first run again), `service stop
   automation|agent-server` (backend-down UI), `restart` (same state after a
   backend restart: persistence and reconnection) and `restart --rotate-key`
-  (stale session key). `browser network`, `browser toasts` and `browser media`
-  observe requests by origin, toasts and sound without changing anything.
+  (stale session key). `restart` keeps the browser on its page. While a service
+  is stopped, a reload replaces the page with the backend-unavailable screen, so
+  drive backend-down states on the page that was already loaded. `browser
+  network`, `browser toasts` and `browser media` observe requests by origin,
+  toasts and sound without changing anything. Check `--help` before calling a
+  state unreachable: most "can't be driven" claims predate a verb.
 - **Evidence** goes under `<run>/evidence/<feature-id>/` and the ledger
   `<run>/evidence/ledger.jsonl`; `evidence report` renders the table from
   [the report contract](references/report.md). Keys, logs, browser profile and

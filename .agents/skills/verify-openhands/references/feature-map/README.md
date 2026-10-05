@@ -34,8 +34,16 @@ that every row passes today; the run's evidence ledger is.
 - UI navigation and direct URL entry are different entry points; record which
   one a check used. After a navigating click, wait for the destination:
   `browser click '<sel>' --expect-url '<regex>'`; the plain click returns the old URL.
-- Many settings switches are a hidden `<input>` inside a `<label>`: click the
-  label text (or the visible track) and read `.checked` with `browser eval`.
+- Many settings switches are a hidden `<input>` inside a `<label>`: click
+  `'testid=<switch> >> xpath=ancestor::label'` (language-independent; the label
+  text also works in English) and read `.checked` with `browser eval`.
+- Verbs that are easy to miss: `browser mouse-click X Y` (backdrops and
+  overlays), `click --modifiers Control,Meta` (open in new tab, multi-select),
+  `browser tooltip <sel>`, `browser wait <sel> --state hidden|visible|detached`
+  (use it after toggles: animations make an immediate `count` or `visible`
+  lie). `browser eval` takes one expression; wrap statements in an IIFE.
+- An already-open page does not refetch settings written by `llm` or `api
+  --write`: `browser reload` before asserting UI state after an arrange step.
 - Settings and panels scroll inside a container: `browser scroll '<sel>' --by 600`
   scrolls the right one, and `--full-page` screenshots capture only the
   viewport there, so take one screenshot per scroll position.
@@ -54,7 +62,14 @@ that every row passes today; the run's evidence ledger is.
   `browser testids 'role=dialog'` lists nothing, use
   `'role=dialog >> role=button[name="Confirm"]'`.
 - `browser errors --clear` and `browser network --clear` print the list, then
-  empty it: run them before the action, then read again after it.
+  empty it: run them before the action, then read again after it. `errors`
+  lists failures only; prove that a request happened (or did not) with
+  `network`. Page errors (uncaught exceptions) are failures; console warnings
+  such as missing translations are reported, not failures.
+- Downloads are saved as `<run>/private/downloads/<ms>-<suggested name>`;
+  claims about their content need `browser downloads --last 1 --inspect`.
+- `onboard --skip` after `browser reset` skips only the modal: consent is
+  stored on the backend, so it is not asked again.
 - When a label depends on the UI language or a toast may already be gone,
   assert the persisted state after `browser reload` instead of `wait-text`.
 - Pass `--timeout 5000` to waits for elements that may legitimately not appear;
