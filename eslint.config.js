@@ -256,6 +256,13 @@ export default [
       "no-restricted-imports": [
         "error",
         {
+          patterns: [
+            {
+              regex: "#/context/",
+              message:
+                "All React contexts live under `#/contexts/`. Import from `#/contexts/` instead.",
+            },
+          ],
           paths: [
             {
               name: "@openhands/typescript-client/client/http-client",
