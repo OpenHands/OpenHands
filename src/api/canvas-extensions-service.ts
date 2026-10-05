@@ -1,5 +1,7 @@
-import { AgentServerClient } from "@openhands/typescript-client/clients";
-import * as AgentServerClients from "@openhands/typescript-client/clients";
+import {
+  AgentServerClient,
+  CanvasExtensionsClient,
+} from "@openhands/typescript-client/clients";
 import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
 import { isSdkHttpStatusError } from "#/api/agent-server-compatibility";
 import type { CanvasExtensionAppViewSession } from "#/extensions/canvas-extension-app-view";
@@ -22,30 +24,6 @@ const REMOTE_EXTENSION_SOURCE_PATTERN =
 interface AppBackendServerInfo {
   capabilities?: string[];
   app_backend_ingress_url?: string | null;
-}
-
-interface AppBackendSessionResponse {
-  ingress_url: string;
-  expires_at: string;
-  iframe_sandbox: string;
-}
-
-interface AppBackendSessionClient {
-  createAppBackendSession: (
-    name: string,
-    signal?: AbortSignal,
-  ) => Promise<AppBackendSessionResponse>;
-  revokeAppBackendSession: (name: string) => Promise<void>;
-  close: () => void;
-}
-
-interface AppBackendSessionClientConstructor {
-  new (options: {
-    host: string;
-    apiKey?: string;
-    timeout?: number;
-    appBackendIngressUrl: string;
-  }): AppBackendSessionClient;
 }
 
 export interface CanvasExtensionAppBackendViewClient {
@@ -138,14 +116,6 @@ async function mapUnsupported<T>(operation: () => Promise<T>): Promise<T> {
   }
 }
 
-function getAppBackendSessionClientConstructor(): AppBackendSessionClientConstructor | null {
-  return (
-    (Reflect.get(AgentServerClients, "CanvasExtensionsClient") as
-      | AppBackendSessionClientConstructor
-      | undefined) ?? null
-  );
-}
-
 async function createAppBackendViewClient(
   name: string,
   backend: Backend,
@@ -173,9 +143,7 @@ async function createAppBackendViewClient(
     return null;
   }
 
-  const Client = getAppBackendSessionClientConstructor();
-  if (!Client) return null;
-  const sessionClient = new Client({
+  const sessionClient = new CanvasExtensionsClient({
     ...clientOptions,
     appBackendIngressUrl: ingressUrl.href,
   });
@@ -192,9 +160,7 @@ async function createAppBackendViewClient(
   return {
     createSession: async (signal) => {
       if (disposed) throw new Error("Canvas App backend view is disposed");
-      const session = signal
-        ? await sessionClient.createAppBackendSession(name, signal)
-        : await sessionClient.createAppBackendSession(name);
+      const session = await sessionClient.createAppBackendSession(name, signal);
       hasSession = true;
       const sessionUrl = parseHttpUrl(session.ingress_url);
       if (sessionUrl?.origin !== ingressUrl.origin) {

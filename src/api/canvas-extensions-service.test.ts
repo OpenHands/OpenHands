@@ -1,5 +1,7 @@
-import { AgentServerClient } from "@openhands/typescript-client/clients";
-import * as AgentServerClients from "@openhands/typescript-client/clients";
+import {
+  AgentServerClient,
+  CanvasExtensionsClient,
+} from "@openhands/typescript-client/clients";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import CanvasExtensionsService, {
   CanvasExtensionsUnsupportedError,
@@ -74,12 +76,7 @@ beforeEach(() => {
       } as unknown as AgentServerClient;
     } as unknown as typeof AgentServerClient,
   );
-  const CanvasExtensionsClientMock = (
-    AgentServerClients as typeof AgentServerClients & {
-      CanvasExtensionsClient: ReturnType<typeof vi.fn>;
-    }
-  ).CanvasExtensionsClient;
-  CanvasExtensionsClientMock.mockImplementation(
+  vi.mocked(CanvasExtensionsClient).mockImplementation(
     function MockCanvasExtensionsClient() {
       return {
         createAppBackendSession,
@@ -265,11 +262,6 @@ describe("CanvasExtensionsService", () => {
     });
     await viewClient!.revokeSession();
     viewClient!.dispose();
-    const CanvasExtensionsClient = (
-      AgentServerClients as typeof AgentServerClients & {
-        CanvasExtensionsClient: ReturnType<typeof vi.fn>;
-      }
-    ).CanvasExtensionsClient;
     expect(CanvasExtensionsClient).toHaveBeenCalledWith({
       host: localBackend.host,
       apiKey: localBackend.apiKey,
@@ -277,7 +269,10 @@ describe("CanvasExtensionsService", () => {
       workingDir: expect.any(String),
       appBackendIngressUrl: "https://apps.example.test/",
     });
-    expect(createAppBackendSession).toHaveBeenCalledWith(extension.name);
+    expect(createAppBackendSession).toHaveBeenCalledWith(
+      extension.name,
+      undefined,
+    );
     expect(revokeAppBackendSession).toHaveBeenCalledWith(extension.name);
     expect(closeAppBackendClient).toHaveBeenCalledTimes(1);
   });
