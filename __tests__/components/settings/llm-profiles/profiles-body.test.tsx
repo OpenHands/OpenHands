@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
 import { ProfilesBody } from "#/components/features/settings/llm-profiles/profiles-body";
 import { ProfileInfo } from "#/api/profiles-service/profiles-service.api";
 
@@ -16,6 +17,9 @@ vi.mock("react-i18next", () => ({
         BUTTON$RENAME: "Rename",
         SETTINGS$PROFILE_SET_ACTIVE: "Set as active",
         BUTTON$DELETE: "Delete",
+        SETTINGS$ORACLE_PROFILE_BADGE: "Oracle",
+        SETTINGS$ORACLE_PROFILE_DESCRIPTION: "Ask Oracle for a second opinion",
+        SETTINGS$ORACLE_PROFILE_CONFIGURE: "Configure Oracle",
       };
       return translations[key] || key;
     },
@@ -74,6 +78,18 @@ describe("ProfilesBody", () => {
     render(<ProfilesBody {...defaultProps} profiles={[]} />);
 
     expect(screen.getByText("No profiles saved yet")).toBeInTheDocument();
+  });
+
+  it("offers Oracle configuration while the reserved profile is absent", async () => {
+    const onConfigureOracle = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <ProfilesBody {...defaultProps} onConfigureOracle={onConfigureOracle} />,
+    );
+
+    await user.click(screen.getByTestId("configure-oracle-profile"));
+    expect(onConfigureOracle).toHaveBeenCalledTimes(1);
   });
 
   it("renders a list of profiles", () => {
