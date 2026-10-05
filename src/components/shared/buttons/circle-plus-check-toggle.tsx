@@ -102,18 +102,25 @@ export function CirclePlusCheckToggle({
         )}
       >
         {isSelected ? (
-          showRemoveIcon ? (
+          <>
+            <CheckmarkIcon
+              aria-hidden
+              width={14}
+              height={14}
+              className={cn("pointer-events-none", showRemoveIcon && "hidden")}
+            />
             <RemoveIcon
               aria-hidden
               width={14}
               height={14}
-              className="stroke-[2.5]"
+              className={cn(
+                "pointer-events-none stroke-[2.5]",
+                !showRemoveIcon && "hidden",
+              )}
             />
-          ) : (
-            <CheckmarkIcon aria-hidden width={14} height={14} />
-          )
+          </>
         ) : (
-          <PlusIcon aria-hidden className="size-3" />
+          <PlusIcon aria-hidden className="pointer-events-none size-3" />
         )}
       </button>
     </StyledTooltip>
