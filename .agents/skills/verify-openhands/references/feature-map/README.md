@@ -45,7 +45,8 @@ that every row passes today; the run's evidence ledger is.
   `click --hover-first` (hover-driven toggles), `click --expect-new-url`,
   `browser tooltip <sel>`, `browser wait <sel> --state hidden|visible|detached`
   (use it after toggles: animations make an immediate `count` or `visible`
-  lie). `browser eval` takes one expression; wrap statements in an IIFE.
+  lie), `browser media --clear` (forget earlier sounds before a negative sound
+  check). `browser eval` takes one expression; wrap statements in an IIFE.
 - Input that is not a click: `browser upload-via <trigger> <file>` answers the
   real file chooser; `browser drop-files <sel> <file>` and `browser paste <sel>
   --file F --text T` deliver drag-and-drop and paste events (target an element
@@ -68,8 +69,8 @@ that every row passes today; the run's evidence ledger is.
 - An already-open page does not refetch settings written by `llm` or `api
   --write`: `browser reload` before asserting UI state after an arrange step.
 - Settings and panels scroll inside a container: `browser scroll '<sel>' --by 600`
-  scrolls the right one, and `--full-page` screenshots capture only the
-  viewport there, so take one screenshot per scroll position.
+  scrolls the right one. `--full-page` cannot help there, because the page
+  itself is only one viewport tall: take one screenshot per scroll position.
 - `conversation start` leaves the browser on the conversation page, which also
   has a `testid=submit-button`. `browser goto` the next page explicitly, or a
   later `wait --state detached` passes vacuously on the wrong page.
@@ -197,12 +198,17 @@ that every row passes today; the run's evidence ledger is.
 - Exports and downloads: `browser downloads --last 1 --inspect [--contains TEXT]`
   shows a text file's head or a zip's entry names.
 - Record every check with `control-openhands evidence add --feature <ID> --result
-  pass|fail|blocked|not-run`. A skipped entry point is never verified through a
-  different one. Blocked rows name the missing prerequisite and the attempted path.
+  pass|fail|blocked|not-run`, one row per sub-feature ID a recipe bullet proves
+  (a bullet that covers two IDs gets two rows). A skipped entry point is never
+  verified through a different one. Blocked rows name the missing prerequisite
+  and the attempted path.
+- Resuming after `stop`: `control-openhands restart` brings the stack back with
+  its state, ports and ledger, and `browser start` opens a fresh page at
+  `about:blank`; `browser goto` the page you were on before asserting.
 
 ## Feature entry contract
 
-Each feature file starts with an H1 title, one paragraph describing the
+Each feature file starts with an H1 title, a short paragraph describing the
 user-visible behavior and a `Source:` line. It then uses exactly four H2 sections
 in this order (`control-openhands map check` enforces it):
 
