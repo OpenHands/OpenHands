@@ -478,10 +478,26 @@ async function serveInjectedIndexHtml(
       : script + content;
 
   const buf = Buffer.from(injected, "utf8");
+  // Injected documents embed deployment-specific config (lock-to-cloud
+  // URL, session key,, base path,, …). A stale cached copy would strip
+  // that config and boot the app into the no-backend state,, so no-store
+  // (not merely no-cache) is required to protect locked-to-cloud
+  // deployments behind proxies/CDNs that might heuristically cache documents.
+
   res.writeHead(200, {
     "Content-Type": "text/html; charset=utf-8",
     "Content-Length": buf.length,
-    "Cache-Control": sessionApiKey ? "no-store" : "no-cache",
+    "Cache-Control": needsRuntimeInjection({
+      sessionApiKey,
+      authRequired,
+      runtimeServicesInfo,
+      lockToCloud,
+      basePath,
+      vscodeBasePath,
+      disableTelemetry,
+    })
+      ? "no-store"
+      : "no-cache",
   });
   if (req.method === "HEAD") {
     res.end();
