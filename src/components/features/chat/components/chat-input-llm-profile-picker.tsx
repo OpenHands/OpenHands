@@ -12,6 +12,7 @@ import { Divider } from "#/ui/divider";
 import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
+import { getLockedCloudHost } from "#/api/agent-server-config";
 import { chatInputPillButtonClassName } from "#/utils/form-control-classes";
 import { useFreeModels } from "#/hooks/query/use-free-models";
 import { formatModelPillLabel } from "#/utils/format-model-name";
@@ -60,6 +61,8 @@ export function ChatInputLlmProfileMenuContent({
   // uses when the ACP picker is gated off.
   const showProfileList = canSwitchProfile && profiles.length > 0;
   const readOnlyProfileName = canSwitchProfile ? null : currentProfileName;
+  // Locked-to-Cloud blocks the Canvas LLM page this links to (OHE-3457).
+  const showSettingsLink = getLockedCloudHost() === null;
 
   const handleSelect = (profileName: string) => {
     selectProfile(profileName);
@@ -143,27 +146,29 @@ export function ChatInputLlmProfileMenuContent({
           </div>
         </li>
       )}
-      {(showProfileList || readOnlyProfileName) && (
+      {showSettingsLink && (showProfileList || readOnlyProfileName) && (
         <Divider inset={dividerInset} />
       )}
-      <li className="text-sm">
-        <NavigationLink
-          to="/settings/llm"
-          onClick={onClose}
-          className={cn(
-            "flex h-7.5 items-center gap-2 rounded p-2 leading-5 text-foreground hover:bg-interactive-hover transition-colors",
-            settingsLinkClassName,
-          )}
-        >
-          <SettingsGearIcon
-            width={16}
-            height={16}
-            className={cn("shrink-0", settingsIconClassName)}
-            aria-hidden
-          />
-          <span>{t(I18nKey.SETTINGS$LLM_PROFILES)}</span>
-        </NavigationLink>
-      </li>
+      {showSettingsLink && (
+        <li className="text-sm">
+          <NavigationLink
+            to="/settings/llm"
+            onClick={onClose}
+            className={cn(
+              "flex h-7.5 items-center gap-2 rounded p-2 leading-5 text-foreground hover:bg-interactive-hover transition-colors",
+              settingsLinkClassName,
+            )}
+          >
+            <SettingsGearIcon
+              width={16}
+              height={16}
+              className={cn("shrink-0", settingsIconClassName)}
+              aria-hidden
+            />
+            <span>{t(I18nKey.SETTINGS$LLM_PROFILES)}</span>
+          </NavigationLink>
+        </li>
+      )}
     </>
   );
 }
