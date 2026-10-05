@@ -43,9 +43,7 @@ type ViewMode = "list" | "create" | "edit";
 function toAgentSettingsOverride(
   profile: AgentProfile,
 ): Record<string, SettingsValue> {
-  const secretRefs =
-    ((profile as { secret_refs?: unknown }).secret_refs as SettingsValue) ??
-    null;
+  const secretRefs = profile.secret_refs ?? null;
   if (profile.agent_kind === "acp") {
     return {
       agent_kind: "acp",
@@ -57,12 +55,10 @@ function toAgentSettingsOverride(
       acp_model: profile.acp_model ?? "",
     };
   }
-  // Untyped in the pinned ts-client, like `secret_refs` above.
-  const tools = (profile as { tools?: unknown }).tools;
   return {
     agent_kind: "openhands",
     mcp_server_refs: profile.mcp_server_refs ?? null,
-    tools: (tools as SettingsValue) ?? null,
+    tools: (profile.tools as SettingsValue) ?? null,
     tool_concurrency_limit: profile.tool_concurrency_limit,
     secret_refs: secretRefs,
     persona: profile.persona ?? null,
