@@ -169,9 +169,7 @@ describe("UserAssistantEventMessage — branch action", () => {
     rerender(page());
 
     await waitFor(() =>
-      expect(screen.getByTestId("chat-input")).toHaveTextContent(
-        "Hello world",
-      ),
+      expect(screen.getByTestId("chat-input").textContent).toBe("Hello world"),
     );
     expect(onSubmit).not.toHaveBeenCalled();
   });
@@ -288,7 +286,9 @@ describe("UserAssistantEventMessage — branch action", () => {
   });
 
   it("hides the branch action outside of a conversation", () => {
-    useOptionalConversationIdMock.mockReturnValue({ conversationId: undefined });
+    useOptionalConversationIdMock.mockReturnValue({
+      conversationId: undefined,
+    });
 
     renderMessage(makeEvent("agent", "evt-agent"));
 
