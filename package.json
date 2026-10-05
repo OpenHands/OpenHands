@@ -61,7 +61,7 @@
     "shell-quote": "1.9.0",
     "sirv": "3.0.2",
     "sirv-cli": "3.0.1",
-    "socket.io-client": "4.8.3",
+    "socket.io-client": "4.8.4",
     "tailwind-merge": "3.7.0",
     "tailwind-scrollbar": "4.0.2",
     "unist-util-visit": "5.1.0",
