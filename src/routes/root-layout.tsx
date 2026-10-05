@@ -19,6 +19,7 @@ import { useSyncTelemetryConsent } from "#/hooks/use-sync-telemetry-consent";
 import { useSyncAutomationTelemetryConsent } from "#/hooks/use-sync-automation-telemetry-consent";
 
 import { useTelemetryIdentity } from "#/hooks/use-telemetry-identity";
+import { useSyncDocumentLanguage } from "#/hooks/use-sync-document-language";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { CloudOrganizationBoundary } from "#/components/features/backends/cloud-organization-boundary";
 import { useAppTitle } from "#/hooks/use-app-title";
@@ -102,6 +103,7 @@ function MainAppContent() {
       i18n.changeLanguage(settings.language);
     }
   }, [settings?.language]);
+  useSyncDocumentLanguage();
 
   if (config.isLoading) {
     return (

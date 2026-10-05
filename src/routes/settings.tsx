@@ -99,8 +99,9 @@ function SettingsScreen() {
     return <Navigate to={LOCKED_CLOUD_SETTINGS_NAV_PATH} replace />;
   }
 
+  // SettingsLayout renders the page's only <main> landmark (#17909).
   return (
-    <main data-testid="settings-screen" className="min-h-0">
+    <div data-testid="settings-screen" className="min-h-0">
       <SettingsSectionHeaderProvider
         setHideSectionHeader={setHideSectionHeader}
       >
@@ -123,7 +124,7 @@ function SettingsScreen() {
           </div>
         </SettingsLayout>
       </SettingsSectionHeaderProvider>
-    </main>
+    </div>
   );
 }
 
