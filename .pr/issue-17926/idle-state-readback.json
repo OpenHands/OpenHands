@@ -1,0 +1,17 @@
+{
+  "conversations": [
+    {
+      "id": "f592777b-4b49-4987-9e93-dcdef6e1dbb6",
+      "title": "Draft A",
+      "execution_status": "idle",
+      "eventCount": 0
+    },
+    {
+      "id": "5214689d-2815-4178-b40c-1427c666e8bd",
+      "title": "Draft B",
+      "execution_status": "idle",
+      "eventCount": 0
+    }
+  ],
+  "runningAcpProcesses": []
+}

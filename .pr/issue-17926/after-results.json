@@ -1,0 +1,689 @@
+{
+  "phase": "after",
+  "browserMode": "Real system Chromium desktop; Shift+Enter inserts native line breaks",
+  "setup": {
+    "backend": "real OpenHands Agent Server 1.50.1",
+    "automation": "real OpenHands automation 1.17.0",
+    "frontend": "production bin/agent-canvas.mjs static build",
+    "conversations": [
+      {
+        "id": "f592777b-4b49-4987-9e93-dcdef6e1dbb6",
+        "title": "Draft A",
+        "execution_status": "idle"
+      },
+      {
+        "id": "5214689d-2815-4178-b40c-1427c666e8bd",
+        "title": "Draft B",
+        "execution_status": "idle"
+      }
+    ],
+    "globalAgentProfile": "official @agentclientprotocol/codex-acp 2.1.1 configured, unauthenticated, unused",
+    "model": "No model executed. Idle OpenHands conversations are configured as openai/gpt-5.4-mini without API keys and without initial_message. No ACP process, initialize, session/new, account/read, login, or prompt invoked."
+  },
+  "singleline": {
+    "typed": "Keep this unsent draft when I return.",
+    "restored": "Keep this unsent draft when I return.",
+    "inputToNavigationMs": 141,
+    "targetSessionKeptOwnDraft": true
+  },
+  "settings": {
+    "previouslySaved": "Previously saved before settings.",
+    "typed": "Latest edit survives settings and back.",
+    "restored": "Latest edit survives settings and back.",
+    "inputToNavigationMs": 137.89999999990687
+  },
+  "multiline": {
+    "typed": "First draft line\nSecond draft line\nThird draft line",
+    "restored": "First draft line\nSecond draft line\nThird draft line",
+    "inputToNavigationMs": 199.10000000009313
+  },
+  "requests": [
+    {
+      "method": "POST",
+      "url": "https://z.openhands.dev/flags/"
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:8000/api/skills"
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:8000/api/automation/v1/telemetry/consent"
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:8000/api/conversations/5214689d-2815-4178-b40c-1427c666e8bd/bash/execute_bash_command"
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:8000/api/conversations/5214689d-2815-4178-b40c-1427c666e8bd/bash/execute_bash_command"
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:8000/api/auth/workspace-session"
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:8000/api/auth/workspace-session"
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:8000/api/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6/bash/execute_bash_command"
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:8000/api/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6/bash/execute_bash_command"
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:8000/api/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6/bash/execute_bash_command"
+    }
+  ],
+  "browserEvents": [
+    {
+      "kind": "navigation",
+      "at": 3237,
+      "from": "/conversations/5214689d-2815-4178-b40c-1427c666e8bd",
+      "to": "/settings",
+      "latestInput": null,
+      "inputToNavigationMs": null
+    },
+    {
+      "kind": "navigation",
+      "at": 3304.600000000093,
+      "from": "/settings",
+      "to": "/settings/agents",
+      "latestInput": null,
+      "inputToNavigationMs": null
+    },
+    {
+      "kind": "navigation",
+      "at": 4299.40000000014,
+      "from": "/settings/agents",
+      "to": "/conversations/5214689d-2815-4178-b40c-1427c666e8bd",
+      "latestInput": null,
+      "inputToNavigationMs": null
+    },
+    {
+      "kind": "input",
+      "at": 5407,
+      "text": "Draft B stays with session B.",
+      "html": "Draft B stays with session B.",
+      "path": "/conversations/5214689d-2815-4178-b40c-1427c666e8bd"
+    },
+    {
+      "kind": "navigationClick",
+      "at": 6187.100000000093,
+      "from": "/conversations/5214689d-2815-4178-b40c-1427c666e8bd",
+      "to": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6",
+      "latestInput": {
+        "at": 5407,
+        "text": "Draft B stays with session B.",
+        "html": "Draft B stays with session B.",
+        "path": "/conversations/5214689d-2815-4178-b40c-1427c666e8bd"
+      },
+      "inputToNavigationMs": 780.1000000000931
+    },
+    {
+      "kind": "navigation",
+      "at": 6251.699999999953,
+      "from": "/conversations/5214689d-2815-4178-b40c-1427c666e8bd",
+      "to": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6",
+      "latestInput": {
+        "at": 5407,
+        "text": "Draft B stays with session B.",
+        "html": "Draft B stays with session B.",
+        "path": "/conversations/5214689d-2815-4178-b40c-1427c666e8bd"
+      },
+      "inputToNavigationMs": 844.6999999999534
+    },
+    {
+      "kind": "input",
+      "at": 7653.100000000093,
+      "text": "Previously saved draft.",
+      "html": "Previously saved draft.",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 8412.699999999953,
+      "text": "Keep this unsent draft when I return.",
+      "html": "Keep this unsent draft when I return.",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "navigationClick",
+      "at": 8488.90000000014,
+      "from": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6",
+      "to": "/conversations/5214689d-2815-4178-b40c-1427c666e8bd",
+      "latestInput": {
+        "at": 8412.699999999953,
+        "text": "Keep this unsent draft when I return.",
+        "html": "Keep this unsent draft when I return.",
+        "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+      },
+      "inputToNavigationMs": 76.20000000018626
+    },
+    {
+      "kind": "navigation",
+      "at": 8553.699999999953,
+      "from": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6",
+      "to": "/conversations/5214689d-2815-4178-b40c-1427c666e8bd",
+      "latestInput": {
+        "at": 8412.699999999953,
+        "text": "Keep this unsent draft when I return.",
+        "html": "Keep this unsent draft when I return.",
+        "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+      },
+      "inputToNavigationMs": 141
+    },
+    {
+      "kind": "navigationClick",
+      "at": 10452.600000000093,
+      "from": "/conversations/5214689d-2815-4178-b40c-1427c666e8bd",
+      "to": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6",
+      "latestInput": {
+        "at": 8412.699999999953,
+        "text": "Keep this unsent draft when I return.",
+        "html": "Keep this unsent draft when I return.",
+        "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+      },
+      "inputToNavigationMs": 2040
+    },
+    {
+      "kind": "navigation",
+      "at": 10509.699999999953,
+      "from": "/conversations/5214689d-2815-4178-b40c-1427c666e8bd",
+      "to": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6",
+      "latestInput": {
+        "at": 8412.699999999953,
+        "text": "Keep this unsent draft when I return.",
+        "html": "Keep this unsent draft when I return.",
+        "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+      },
+      "inputToNavigationMs": 2097
+    },
+    {
+      "kind": "input",
+      "at": 13532.5,
+      "text": "Previously saved before settings.",
+      "html": "Previously saved before settings.",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 14293.90000000014,
+      "text": "Latest edit survives settings and back.",
+      "html": "Latest edit survives settings and back.",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "navigationClick",
+      "at": 14386.100000000093,
+      "from": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6",
+      "to": "/settings",
+      "latestInput": {
+        "at": 14293.90000000014,
+        "text": "Latest edit survives settings and back.",
+        "html": "Latest edit survives settings and back.",
+        "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+      },
+      "inputToNavigationMs": 92.19999999995343
+    },
+    {
+      "kind": "navigation",
+      "at": 14417,
+      "from": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6",
+      "to": "/settings",
+      "latestInput": {
+        "at": 14293.90000000014,
+        "text": "Latest edit survives settings and back.",
+        "html": "Latest edit survives settings and back.",
+        "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+      },
+      "inputToNavigationMs": 123.0999999998603
+    },
+    {
+      "kind": "navigation",
+      "at": 14431.800000000047,
+      "from": "/settings",
+      "to": "/settings/agents",
+      "latestInput": {
+        "at": 14293.90000000014,
+        "text": "Latest edit survives settings and back.",
+        "html": "Latest edit survives settings and back.",
+        "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+      },
+      "inputToNavigationMs": 137.89999999990687
+    },
+    {
+      "kind": "navigation",
+      "at": 15984.5,
+      "from": "/settings/agents",
+      "to": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6",
+      "latestInput": {
+        "at": 14293.90000000014,
+        "text": "Latest edit survives settings and back.",
+        "html": "Latest edit survives settings and back.",
+        "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+      },
+      "inputToNavigationMs": 1690.5999999998603
+    },
+    {
+      "kind": "input",
+      "at": 19188.300000000047,
+      "text": "\n",
+      "html": "<br>",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 19973,
+      "text": "F",
+      "html": "F",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 20015,
+      "text": "Fi",
+      "html": "Fi",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 20056.5,
+      "text": "Fir",
+      "html": "Fir",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 20095.100000000093,
+      "text": "Firs",
+      "html": "Firs",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 20135.100000000093,
+      "text": "First",
+      "html": "First",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 20175.90000000014,
+      "text": "First ",
+      "html": "First ",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 20216.40000000014,
+      "text": "First d",
+      "html": "First d",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 20255.40000000014,
+      "text": "First dr",
+      "html": "First dr",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 20297.90000000014,
+      "text": "First dra",
+      "html": "First dra",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 20338.800000000047,
+      "text": "First draf",
+      "html": "First draf",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 20384.100000000093,
+      "text": "First draft",
+      "html": "First draft",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 20424.90000000014,
+      "text": "First draft ",
+      "html": "First draft ",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 20472.5,
+      "text": "First draft l",
+      "html": "First draft l",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 20511.699999999953,
+      "text": "First draft li",
+      "html": "First draft li",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 20582.300000000047,
+      "text": "First draft lin",
+      "html": "First draft lin",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 20630.600000000093,
+      "text": "First draft line",
+      "html": "First draft line",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 20683,
+      "text": "First draft line\n\n",
+      "html": "First draft line\n\n",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 20696.800000000047,
+      "text": "First draft line\nS",
+      "html": "First draft line\nS",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 20736.600000000093,
+      "text": "First draft line\nSe",
+      "html": "First draft line\nSe",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 20776.5,
+      "text": "First draft line\nSec",
+      "html": "First draft line\nSec",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 20831.199999999953,
+      "text": "First draft line\nSeco",
+      "html": "First draft line\nSeco",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 20870.600000000093,
+      "text": "First draft line\nSecon",
+      "html": "First draft line\nSecon",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 20912.100000000093,
+      "text": "First draft line\nSecond",
+      "html": "First draft line\nSecond",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 20951.40000000014,
+      "text": "First draft line\nSecond ",
+      "html": "First draft line\nSecond ",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 20993.199999999953,
+      "text": "First draft line\nSecond d",
+      "html": "First draft line\nSecond d",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 21037.800000000047,
+      "text": "First draft line\nSecond dr",
+      "html": "First draft line\nSecond dr",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 21076.800000000047,
+      "text": "First draft line\nSecond dra",
+      "html": "First draft line\nSecond dra",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 21121.600000000093,
+      "text": "First draft line\nSecond draf",
+      "html": "First draft line\nSecond draf",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 21162.5,
+      "text": "First draft line\nSecond draft",
+      "html": "First draft line\nSecond draft",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 21204.600000000093,
+      "text": "First draft line\nSecond draft ",
+      "html": "First draft line\nSecond draft ",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 21245.300000000047,
+      "text": "First draft line\nSecond draft l",
+      "html": "First draft line\nSecond draft l",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 21283,
+      "text": "First draft line\nSecond draft li",
+      "html": "First draft line\nSecond draft li",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 21325.40000000014,
+      "text": "First draft line\nSecond draft lin",
+      "html": "First draft line\nSecond draft lin",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 21363.100000000093,
+      "text": "First draft line\nSecond draft line",
+      "html": "First draft line\nSecond draft line",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 21422.600000000093,
+      "text": "First draft line\nSecond draft line\n\n",
+      "html": "First draft line\nSecond draft line\n\n",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 21428.90000000014,
+      "text": "First draft line\nSecond draft line\nT",
+      "html": "First draft line\nSecond draft line\nT",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 21466.5,
+      "text": "First draft line\nSecond draft line\nTh",
+      "html": "First draft line\nSecond draft line\nTh",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 21505,
+      "text": "First draft line\nSecond draft line\nThi",
+      "html": "First draft line\nSecond draft line\nThi",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 21544.5,
+      "text": "First draft line\nSecond draft line\nThir",
+      "html": "First draft line\nSecond draft line\nThir",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 21584.100000000093,
+      "text": "First draft line\nSecond draft line\nThird",
+      "html": "First draft line\nSecond draft line\nThird",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 21629.800000000047,
+      "text": "First draft line\nSecond draft line\nThird ",
+      "html": "First draft line\nSecond draft line\nThird ",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 21673.100000000093,
+      "text": "First draft line\nSecond draft line\nThird d",
+      "html": "First draft line\nSecond draft line\nThird d",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 21711.40000000014,
+      "text": "First draft line\nSecond draft line\nThird dr",
+      "html": "First draft line\nSecond draft line\nThird dr",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 21751.199999999953,
+      "text": "First draft line\nSecond draft line\nThird dra",
+      "html": "First draft line\nSecond draft line\nThird dra",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 21791.90000000014,
+      "text": "First draft line\nSecond draft line\nThird draf",
+      "html": "First draft line\nSecond draft line\nThird draf",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 21831.600000000093,
+      "text": "First draft line\nSecond draft line\nThird draft",
+      "html": "First draft line\nSecond draft line\nThird draft",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 21870,
+      "text": "First draft line\nSecond draft line\nThird draft ",
+      "html": "First draft line\nSecond draft line\nThird draft ",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 21908,
+      "text": "First draft line\nSecond draft line\nThird draft l",
+      "html": "First draft line\nSecond draft line\nThird draft l",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 21946.699999999953,
+      "text": "First draft line\nSecond draft line\nThird draft li",
+      "html": "First draft line\nSecond draft line\nThird draft li",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 21985.600000000093,
+      "text": "First draft line\nSecond draft line\nThird draft lin",
+      "html": "First draft line\nSecond draft line\nThird draft lin",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "input",
+      "at": 22024.300000000047,
+      "text": "First draft line\nSecond draft line\nThird draft line",
+      "html": "First draft line\nSecond draft line\nThird draft line",
+      "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+    },
+    {
+      "kind": "navigationClick",
+      "at": 22137.40000000014,
+      "from": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6",
+      "to": "/conversations",
+      "latestInput": {
+        "at": 22024.300000000047,
+        "text": "First draft line\nSecond draft line\nThird draft line",
+        "html": "First draft line\nSecond draft line\nThird draft line",
+        "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+      },
+      "inputToNavigationMs": 113.10000000009313
+    },
+    {
+      "kind": "navigation",
+      "at": 22223.40000000014,
+      "from": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6",
+      "to": "/conversations",
+      "latestInput": {
+        "at": 22024.300000000047,
+        "text": "First draft line\nSecond draft line\nThird draft line",
+        "html": "First draft line\nSecond draft line\nThird draft line",
+        "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+      },
+      "inputToNavigationMs": 199.10000000009313
+    },
+    {
+      "kind": "navigationClick",
+      "at": 23804.40000000014,
+      "from": "/conversations",
+      "to": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6",
+      "latestInput": {
+        "at": 22024.300000000047,
+        "text": "First draft line\nSecond draft line\nThird draft line",
+        "html": "First draft line\nSecond draft line\nThird draft line",
+        "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+      },
+      "inputToNavigationMs": 1780.1000000000931
+    },
+    {
+      "kind": "navigation",
+      "at": 23899.800000000047,
+      "from": "/conversations",
+      "to": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6",
+      "latestInput": {
+        "at": 22024.300000000047,
+        "text": "First draft line\nSecond draft line\nThird draft line",
+        "html": "First draft line\nSecond draft line\nThird draft line",
+        "path": "/conversations/f592777b-4b49-4987-9e93-dcdef6e1dbb6"
+      },
+      "inputToNavigationMs": 1875.5
+    }
+  ]
+}

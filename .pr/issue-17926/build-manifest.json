@@ -1,0 +1,46 @@
+{
+  "before": {
+    "repository": "/workspace/openhands-17926-before",
+    "gitHead": "8bb2293410c3488828a532b52691b7aaac10797d",
+    "draftSourceSha256": "f987bd6ac8d1cc4cc66eaefa8a03f1d56a4e831f330d6228e1ff7e1aedf02f7f",
+    "uncommittedDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "indexSha256": "e15bb9e38232d9c5e4d13793149b21c776828f52381cfd0d7d7d00a7535cd13b",
+    "draftAssets": [
+      {
+        "path": "assets/llm-not-configured-banner-pvkWesX4.js",
+        "sha256": "2dd7115ff29a83676cd80151f6a4a05755bfbf2457d295b43bdb57422607d1f8"
+      }
+    ]
+  },
+  "after": {
+    "repository": "/workspace/openhands-17926",
+    "gitHead": "8bb2293410c3488828a532b52691b7aaac10797d",
+    "draftSourceSha256": "4acbbb17238cd5cbc1034db2faf5d202a73c16407131214534f1d1318ffe38ef",
+    "uncommittedDiffSha256": "9b098ab45dfd0e65692d9c95fe7bf3c40b39ec821005353851bcda93295e130e",
+    "indexSha256": "b5c74b6b6593a86fab559429123a513d1801a0e02fff04bd444327bd6f7c902f",
+    "draftAssets": [
+      {
+        "path": "assets/llm-not-configured-banner-BjNZuBuD.js",
+        "sha256": "7b90c892209aa8b642ea9a155e9be0084ed305cdd4bd17ec6eb701579c307d2c"
+      }
+    ]
+  },
+  "launchers": [
+    {
+      "file": "bin/agent-canvas.mjs",
+      "beforeSha256": "098ef65a75fd5b20f9797e1fead4ff49f9f2e305167aabeec69615f4c09c2352",
+      "afterSha256": "098ef65a75fd5b20f9797e1fead4ff49f9f2e305167aabeec69615f4c09c2352"
+    },
+    {
+      "file": "scripts/dev-with-automation.mjs",
+      "beforeSha256": "a1de936e14001fd9a0e3a7a4342f3aeac47af286dc983aa0aaf6dbd10d0bd09c",
+      "afterSha256": "a1de936e14001fd9a0e3a7a4342f3aeac47af286dc983aa0aaf6dbd10d0bd09c"
+    },
+    {
+      "file": "scripts/static-server.mjs",
+      "beforeSha256": "29ce2a938f770c66049860918286b8e84039ca55d0788beb0b7cbb6ce3bd6478",
+      "afterSha256": "29ce2a938f770c66049860918286b8e84039ca55d0788beb0b7cbb6ce3bd6478"
+    }
+  ],
+  "deployment": "Unchanged production bin/static-server and real backend remain running. Preserve original base build as evidence/base-build, then symlink the ignored base build path to the fixed worktree build. static-server uses sirv dev:true and reads index.html per request, so it serves the exact fixed compiled assets. No backend restart, API mock, DOM patch, authentication change, or model execution."
+}
