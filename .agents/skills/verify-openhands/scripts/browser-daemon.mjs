@@ -450,9 +450,15 @@ const handlers = {
           const log = [];
           const snap = () => {
             const els = [...document.querySelectorAll(sel)];
+            // Text plus disabled/busy markers, so pending states show up.
             const entry = els.length
-              ? els.map((e) =>
-                  (e.innerText || e.value || "").trim().slice(0, 80),
+              ? els.map(
+                  (e) =>
+                    (e.innerText || e.value || "").trim().slice(0, 80) +
+                    (e.disabled || e.getAttribute("aria-disabled") === "true"
+                      ? " [disabled]"
+                      : "") +
+                    (e.getAttribute("aria-busy") === "true" ? " [busy]" : ""),
                 )
               : ["<absent>"];
             const key = JSON.stringify(entry);

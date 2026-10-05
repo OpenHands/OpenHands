@@ -24,7 +24,7 @@ import { createConnection } from "node:net";
 import { freemem, tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { deflateSync } from "node:zlib";
+import { deflateSync, gunzipSync } from "node:zlib";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const skillDir = resolve(here, "..");
@@ -300,7 +300,7 @@ async function http(
   run,
   method,
   path,
-  { body, auth = true, timeout = 15_000, headers = {} } = {},
+  { body, raw, auth = true, timeout = 15_000, headers = {} } = {},
 ) {
   const url = new URL(path, run.baseUrl);
   if (url.origin !== new URL(run.baseUrl).origin) {
@@ -318,7 +318,7 @@ async function http(
       ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
       ...headers,
     },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: raw ?? (body === undefined ? undefined : JSON.stringify(body)),
   });
   const text = await response.text();
   let json;
@@ -1215,7 +1215,21 @@ async function cmdApi({ positional, flags }) {
       : String(flags.data);
     body = JSON.parse(raw);
   }
-  const response = await http(run, verb, path, { body });
+  // Non-JSON uploads (an automation tarball): --data-file F --content-type T.
+  let rawBody;
+  const headers = {};
+  if (flags["data-file"] && flags["data-file"] !== true) {
+    rawBody = readFileSync(resolve(String(flags["data-file"])));
+    headers["Content-Type"] =
+      flags["content-type"] && flags["content-type"] !== true
+        ? String(flags["content-type"])
+        : "application/octet-stream";
+  }
+  const response = await http(run, verb, path, {
+    body,
+    raw: rawBody,
+    headers,
+  });
   const max = intFlag(flags["max-bytes"], 6000);
   if (flags.pick && flags.pick !== true && response.json !== undefined) {
     const value = String(flags.pick)
@@ -1228,6 +1242,12 @@ async function cmdApi({ positional, flags }) {
   out({
     ok: response.ok,
     status: response.status,
+    warning:
+      !["GET", "HEAD", "DELETE"].includes(verb) &&
+      body === undefined &&
+      rawBody === undefined
+        ? `${verb} sent no body: pass --data '{...}' (JSON) or --data-file F --content-type T.`
+        : undefined,
     contentType: response.contentType,
     body:
       response.json ??
@@ -1646,6 +1666,7 @@ function eventText(event) {
     event.action?.path ||
     pick(event.observation?.content) ||
     event.observation?.text ||
+    [event.code, event.detail].filter(Boolean).join(": ") ||
     ""
   ).replace(/\s+/g, " ");
 }
@@ -1848,13 +1869,16 @@ async function cmdConversation({ positional, flags }) {
     // menu's Stop Runtime does, to reach paused-only states.
     if (!id) usage("conversation pause <id>");
     const before = await conversationInfo(run, id);
+    // Local Stop Runtime interrupts (cancels the in-flight LLM call).
     const res = await http(
       run,
       "POST",
-      `/api/conversations/${encodeURIComponent(id)}/pause`,
+      `/api/conversations/${encodeURIComponent(id)}/interrupt`,
     );
     if (!res.ok)
-      throw new CliError(`pause: HTTP ${res.status} ${res.text.slice(0, 200)}`);
+      throw new CliError(
+        `interrupt: HTTP ${res.status} ${res.text.slice(0, 200)}`,
+      );
     if (before.execution_status !== "running") {
       out({
         ok: true,
@@ -1866,14 +1890,47 @@ async function cmdConversation({ positional, flags }) {
     out({
       ok: true,
       ...(await waitConversation(run, id, {
-        until: "paused",
-        timeoutSec: 60,
+        until: "paused,idle,finished,error",
+        timeoutSec: 90,
       })),
     });
     return;
   }
+  if (sub === "send") {
+    // A follow-up message through the conversation page's composer.
+    const prompt = flags.prompt;
+    if (!id || !prompt || prompt === true)
+      usage(
+        "conversation send <id> --prompt TEXT [--wait]",
+        'control-openhands conversation send <id> --prompt "Now add a test" --wait',
+      );
+    await browserCall(run, "goto", {
+      target: `/conversations/${encodeURIComponent(id)}`,
+    });
+    await browserCall(run, "wait", {
+      selector: "testid=chat-input",
+      timeout: 30_000,
+    });
+    await browserCall(run, "fill", {
+      selector: "testid=chat-input",
+      value: String(prompt),
+    });
+    await browserCall(run, "click", { selector: "testid=submit-button" });
+    const result = { ok: true, id, sent: String(prompt).length };
+    if (flags.wait)
+      Object.assign(
+        result,
+        await waitConversation(run, id, {
+          until: flags.until,
+          timeoutSec,
+          fresh: true,
+        }),
+      );
+    out(result);
+    return;
+  }
   usage(
-    "Usage: control-openhands conversation start|wait|status|list|events|pause",
+    "Usage: control-openhands conversation start|send|wait|status|list|events|pause",
     'control-openhands conversation start --prompt "..." --wait',
   );
 }
@@ -2011,6 +2068,19 @@ async function cmdFixture({ positional, flags }) {
     out({ ok: true, path });
     return;
   }
+  if (kind === "git-remote") {
+    // A bare repository to push to (Git Sync, Push): a local "remote".
+    const dir = join(workspace, `${name ?? "qa-remote"}.git`);
+    if (!existsSync(dir))
+      execFileSync("git", ["init", "-q", "--bare", "-b", "main", dir]);
+    out({
+      ok: true,
+      path: dir,
+      url: `file://${dir}`,
+      hint: "Inspect what arrived with: git -C <path> log --oneline --all",
+    });
+    return;
+  }
   if (kind === "skill") {
     // A personal skill under the run's private HOME, or a project skill in a
     // fixture repo (--repo NAME).
@@ -2055,7 +2125,7 @@ async function cmdFixture({ positional, flags }) {
     return;
   }
   usage(
-    "Usage: control-openhands fixture git-repo|folder|image|file|skill [--name N] [--remote URL]",
+    "Usage: control-openhands fixture git-repo|git-remote|folder|image|file|skill [--name N] [--remote URL]",
     "control-openhands fixture git-repo --name qa-repo",
   );
 }
@@ -2081,17 +2151,57 @@ function zipEntries(buf, limit = 30) {
   return { count, names: names.slice(0, limit) };
 }
 
+// Member names of a .tar or .tar.gz download (ustar headers).
+function tarEntries(buf, limit = 30) {
+  let data = buf;
+  if (buf.length > 2 && buf[0] === 0x1f && buf[1] === 0x8b) {
+    try {
+      data = gunzipSync(buf);
+    } catch {
+      return undefined;
+    }
+  }
+  if (data.length < 512 || data.toString("latin1", 257, 262) !== "ustar")
+    return undefined;
+  const names = [];
+  let count = 0;
+  for (let off = 0; off + 512 <= data.length; ) {
+    const name = data.toString("utf8", off, off + 100).replace(/\0.*$/s, "");
+    if (!name) break;
+    const prefix = data
+      .toString("utf8", off + 345, off + 500)
+      .replace(/\0.*$/s, "");
+    const size = parseInt(
+      data
+        .toString("latin1", off + 124, off + 136)
+        .replace(/\0.*$/s, "")
+        .trim() || "0",
+      8,
+    );
+    count += 1;
+    if (names.length < limit) names.push(prefix ? `${prefix}/${name}` : name);
+    off += 512 + Math.ceil(size / 512) * 512;
+  }
+  return { gzip: data !== buf, count, names };
+}
+
 function inspectDownload(path, needle) {
   const buf = readFileSync(path);
   const info = { bytes: buf.length };
   const isZip = buf.length >= 4 && buf.readUInt32LE(0) === 0x04034b50;
+  const tar = isZip ? undefined : tarEntries(buf);
   if (isZip) info.zip = zipEntries(buf);
+  else if (tar) info.tar = tar;
   else if (!buf.subarray(0, 4096).includes(0))
     info.head = buf.toString("utf8", 0, 600);
   if (needle !== undefined)
     info.contains = isZip
       ? (zipEntries(buf, Infinity)?.names ?? []).some((n) => n.includes(needle))
-      : buf.toString("utf8").includes(needle);
+      : tar
+        ? (tarEntries(buf, Infinity)?.names ?? []).some((n) =>
+            n.includes(needle),
+          )
+        : buf.toString("utf8").includes(needle);
   return info;
 }
 
@@ -2933,7 +3043,7 @@ Essential pathways (driven through the real UI)
   login         Public mode: enter the session key on the API-key screen
   onboard       Telemetry consent + onboarding modal (--skip, or walk it with --agent)
   workspace     open PATH — pick a folder through Open Workspace (folder browser)
-  conversation  start --prompt "..." [--wait] [--workspace PATH] | wait | status | list | events
+  conversation  start --prompt "..." [--wait] [--workspace PATH] | send | wait | status | list | events | pause
 
 Drive and observe
   browser       goto/click/fill/press/wait/text/snapshot/testids/screenshot/viewport/errors/...
@@ -2995,7 +3105,7 @@ Stops the browser daemon and SIGTERMs the launcher's process group (SIGKILL
 after 30 s), verifies every run port closed and counts evidence files.
 --purge-private then deletes private/ (keys, state, logs) and recounts evidence.
 `,
-  api: `control-openhands api <METHOD> </path> [--data JSON|@file] [--write] [--max-bytes N]
+  api: `control-openhands api <METHOD> </path> [--data JSON|@file | --data-file F --content-type T] [--write] [--pick a.b.c] [--max-bytes N]
 
 Sends the run's session key only to the run's own origin. Non-GET needs --write:
 use it to arrange preconditions, never as proof that a UI path works.
@@ -3028,7 +3138,8 @@ settings → close at say-hello. Skipping is not proof that onboarding works.
   conversation: `control-openhands conversation start --prompt TEXT [--wait] [--until STATES] [--timeout SEC] [--stay] [--workspace PATH]
 control-openhands conversation wait ID [--until finished,idle] [--timeout SEC] [--fresh]
         (--fresh after sending a message: ignore the previous run's terminal status)
-control-openhands conversation pause ID   arrange a paused conversation (API, not UI proof)
+control-openhands conversation send ID --prompt TEXT [--wait]   follow-up message through the composer
+control-openhands conversation pause ID   arrange an interrupted conversation (API, as local Stop Runtime; not UI proof)
 control-openhands conversation status ID
 control-openhands conversation list
 control-openhands conversation events ID [--last N] [--kinds MessageEvent,ActionEvent] [--full]
@@ -3050,6 +3161,7 @@ Examples:
 `,
   fixture: `control-openhands fixture git-repo [--name qa-repo] [--remote https://github.com/qa-example/qa-repo.git]
         # git repo in <run>/workspace (README, src/calc.py, test); --remote only sets origin
+control-openhands fixture git-remote [--name qa-remote]   # bare repo <run>/workspace/qa-remote.git to push to
 control-openhands fixture folder [--name qa-folder]
 control-openhands fixture image [--name qa-image] [--width 160 --height 96]   # PNG under evidence/_fixtures
 control-openhands fixture file [--name qa-note.txt] [--content TEXT]

@@ -85,6 +85,28 @@ that every row passes today; the run's evidence ledger is.
   claims about their content need `browser downloads --last 1 --inspect`.
 - `onboard --skip` after `browser reset` skips only the modal: consent is
   stored on the backend, so it is not asked again.
+- The Agent Server runs with `HOME=<run>/private/home` (personal skills,
+  plugins, `~/.agents`) and keeps catalog caches under `<run>/private/cache`.
+  Fixtures that belong there (`fixture skill`) write into the run, never into
+  the operator's home.
+- Each port is its own origin: `browser goto` needs `--allow-external` for any
+  other localhost port, and that origin starts at first run again.
+- At phone width the desktop sidebar stays in the DOM, hidden, so sidebar test
+  ids match twice: scope them, `'testid=sidebar-mobile-drawer >> ...'`.
+- Card toggles that swap their icon on hover (plugins, skills, pickers) can
+  swallow a plain click: use `click --hover-first` and assert `aria-checked`
+  plus the API state.
+- An open autocomplete listbox closes when another command touches the page;
+  `browser choose` opens, filters and picks in one step.
+- Side effects outside the app are valid second views: `git -C <path> log`
+  on a `fixture git-remote` after a push or Git Sync, a downloaded file with
+  `downloads --inspect`. Mark such shell commands as read-only checks.
+- Negative tests (a 409, a 422, a stopped service) add expected HTTP errors:
+  run `browser errors --clear` after them so the family's sweep only shows
+  surprises, and name the expected ones in the evidence row.
+- Cleanup across families: deleting a fixture through the UI belongs to the
+  family that maps deletion; elsewhere `api DELETE ... --write` is fine
+  (arrange, not proof).
 - When a label depends on the UI language or a toast may already be gone,
   assert the persisted state after `browser reload` instead of `wait-text`.
 - Pass `--timeout 5000` to waits for elements that may legitimately not appear;

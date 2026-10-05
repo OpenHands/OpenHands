@@ -66,8 +66,13 @@ removed, mark it `retired` with the authorizing PR instead of deleting the row.
 A **sub-feature** is one observable behavior with its own pass/fail, such as
 "saving persists after reload" or "empty state explains what to do". IDs look
 like `F14.secret-create`: lowercase, hyphenated, unique across the map. Settle
-the IDs before taking evidence: screenshots and ledger rows are filed under
-them, and renaming later means re-shooting.
+the IDs before taking evidence, and write the `## Sub-features` list into the
+file first: screenshots and ledger rows are filed under them (`evidence add`
+and `map check` reject unknown IDs), and renaming later means re-shooting.
+
+An entry point shared by several families (a launcher card, a settings link)
+is mapped once, by the family that owns the destination; the others reference
+that ID instead of re-mapping it.
 
 ## 3. Write each entry
 
@@ -133,7 +138,16 @@ will run them that way:
 
 Execute every command you wrote, in order, on a fresh `launch` (or a run you
 have doctored since its last surprise). Before you hand the file over, run the
-whole file once more from the top, exactly as written. For each sub-feature record
+whole file once more from the top, exactly as written; a multi-minute,
+model-backed step whose commands did not change since it last passed may be
+skipped in that second pass if you say so in the report.
+
+Families about the launcher or the outside world (partial stacks, Docker,
+desktop, a git remote) need some plain shell commands. Keep them few, give
+every hand-started process its own process group and stop it by that group
+(never by name pattern), and prefer adding a CLI verb once a command repeats.
+Builds that rewrite tracked or generated files (`npm run build:lib`) run in a
+copy of the checkout, not in the one other runs serve. For each sub-feature record
 `control-openhands evidence add --feature <ID> --result pass|fail|blocked|not-run`
 with the entry point, expected and actual result and artifacts.
 

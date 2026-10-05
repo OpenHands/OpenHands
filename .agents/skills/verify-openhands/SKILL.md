@@ -126,6 +126,10 @@ control-openhands stop                         # stops only this run; evidence s
 
 ## LLM budget
 
+Features that start a real agent with automation or debugging skills (for
+example "Debug with OpenHands") can act on other fixtures by name: stop those
+conversations when their recipe is done.
+
 Use `deepseek-flash` for everything that needs a model; switch to `deepseek-pro`
 only for checks that need a second profile or a stronger model. Keep prompts
 small and confined to the run workspace. Without a key, run every credential-free
