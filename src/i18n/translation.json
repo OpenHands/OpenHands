@@ -36719,6 +36719,23 @@
     "zh-CN": "⌘K",
     "zh-TW": "⌘K"
   },
+  "COMMAND_MENU$SHORTCUT_CTRL": {
+    "ar": "Ctrl+K",
+    "ca": "Ctrl+K",
+    "de": "Strg+K",
+    "en": "Ctrl+K",
+    "es": "Ctrl+K",
+    "fr": "Ctrl+K",
+    "it": "Ctrl+K",
+    "ja": "Ctrl+K",
+    "ko-KR": "Ctrl+K",
+    "no": "Ctrl+K",
+    "pt": "Ctrl+K",
+    "tr": "Ctrl+K",
+    "uk": "Ctrl+K",
+    "zh-CN": "Ctrl+K",
+    "zh-TW": "Ctrl+K"
+  },
   "COMMAND_MENU$GROUP_NAVIGATION": {
     "ar": "Navigation",
     "ca": "Navigation",
@@ -37161,6 +37178,23 @@
     "zh-CN": "llm model provider api key profile inference",
     "zh-TW": "llm model provider api key profile inference"
   },
+  "COMMAND_MENU$META_LLM_SETTINGS_KEYWORDS": {
+    "ar": "model router meta llm routing profile موجه النماذج توجيه ملف",
+    "ca": "model router meta llm routing profile encaminador models encaminament perfil",
+    "de": "model router meta llm routing profile modell-router weiterleitung profil",
+    "en": "model router meta llm routing profile",
+    "es": "model router meta llm routing profile enrutador modelos enrutamiento perfil",
+    "fr": "model router meta llm routing profile routeur modèles routage profil",
+    "it": "model router meta llm routing profile router modelli instradamento profilo",
+    "ja": "model router meta llm routing profile モデル ルーター ルーティング プロファイル",
+    "ko-KR": "model router meta llm routing profile 모델 라우터 라우팅 프로필",
+    "no": "model router meta llm routing profile modellruter ruting profil",
+    "pt": "model router meta llm routing profile roteador modelos roteamento perfil",
+    "tr": "model router meta llm routing profile model yönlendirici yönlendirme profil",
+    "uk": "model router meta llm routing profile маршрутизатор моделей маршрутизація профіль",
+    "zh-CN": "model router meta llm routing profile 模型 路由器 路由 配置文件",
+    "zh-TW": "model router meta llm routing profile 模型 路由器 路由 設定檔"
+  },
   "COMMAND_MENU$CONDENSER_SETTINGS_TITLE": {
     "ar": "Condenser settings",
     "ca": "Condenser settings",
@@ -37211,6 +37245,23 @@
     "uk": "condenser context memory summary",
     "zh-CN": "condenser context memory summary",
     "zh-TW": "condenser context memory summary"
+  },
+  "COMMAND_MENU$AGENT_CONTEXT_SETTINGS_KEYWORDS": {
+    "ar": "agent context memory notes recall سياق الوكيل ذاكرة ملاحظات تذكر",
+    "ca": "agent context memory notes recall context agent memòria notes record",
+    "de": "agent context memory notes recall agentenkontext gedächtnis notizen erinnerung",
+    "en": "agent context memory notes recall",
+    "es": "agent context memory notes recall contexto agente memoria notas recordar",
+    "fr": "agent context memory notes recall contexte agent mémoire notes rappel",
+    "it": "agent context memory notes recall contesto agente memoria appunti ricordare",
+    "ja": "agent context memory notes recall エージェント コンテキスト メモリ メモ 記憶",
+    "ko-KR": "agent context memory notes recall 에이전트 컨텍스트 메모리 메모 기억",
+    "no": "agent context memory notes recall agentkontekst minne notater huske",
+    "pt": "agent context memory notes recall contexto agente memória notas lembrar",
+    "tr": "agent context memory notes recall ajan bağlam bellek notlar hatırlama",
+    "uk": "agent context memory notes recall контекст агента пам'ять нотатки згадування",
+    "zh-CN": "agent context memory notes recall 代理 上下文 记忆 笔记 回忆",
+    "zh-TW": "agent context memory notes recall 代理 上下文 記憶 筆記 回憶"
   },
   "COMMAND_MENU$VERIFICATION_SETTINGS_TITLE": {
     "ar": "Verification settings",
