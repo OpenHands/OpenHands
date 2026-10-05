@@ -152,18 +152,11 @@ export const useCreateConversation = () => {
       ) {
         // The seeded OpenHands `default` profile is the enriched baseline, not a
         // deliberate profile pick — it mirrors global agent_settings. Launch it
-        // via agent_settings so the canvas-only enrichment the profile path
-        // still drops survives the common home-launch: the ~60 bundled public
-        // skills this adapter injects (buildAgentContext). Server-side
-        // discovery is the profile path's own skill pipeline and finds none of
-        // them, so a profile launch here resolves zero skills — the
-        // two-pipeline drift tracked in software-agent-sdk#3979. Reconcile that
-        // and this branch can go, leaving one launch path for every profile.
-        //
-        // <RUNTIME_SERVICES> is no longer a reason: it now rides
-        // `agent_launch_additions` on the profile path (#16205).
+        // via agent_settings so the global settings and the canvas skill
+        // selection (buildAgentContext) apply to the common home-launch; the
+        // profile path resolves skills server-side instead.
         // Named profiles are deliberate custom configs and still use the profile
-        // path (accepting that skills boundary).
+        // path.
         // Trade-off: per-profile fields set on `default` itself don't apply on
         // home-launch — custom per-profile config belongs in a named profile.
         //

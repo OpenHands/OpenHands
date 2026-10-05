@@ -1169,9 +1169,7 @@ type AgentSettingsStartConversationPayload = StartConversationPayloadBase & {
   // exclusive agent sources; the server resolves the profile server-side.
   agent_settings?: AgentSettingsPayload;
   agent_profile_id?: string;
-  // Deployment context appended to the *resolved* agent's system-message
-  // suffix, so it survives the profile path where ``agent_settings`` cannot be
-  // sent (``AgentLaunchAdditions``, software-agent-sdk#4030).
+  // Appended to the profile-resolved agent's system-message suffix.
   agent_launch_additions?: { system_message_suffix_append?: string };
   agent?: never;
 };
@@ -1273,10 +1271,8 @@ export function buildStartConversationRequest(
     options.query,
     options.hasActiveMetaProfile,
   );
-  // Folded into ``agent_settings`` on the inline path; on the profile path it
-  // has to ride ``agent_launch_additions`` instead (see below). The
-  // router-at-start instruction stays inline-only: a profile-resolved agent
-  // has no ``route_task_to_model`` tool to act on it.
+  // The router-at-start instruction stays inline-only: a profile-resolved
+  // agent has no ``route_task_to_model`` tool to act on it.
   const profileLaunchSuffix = buildRuntimeServicesSystemSuffix(
     options.runtimeServicesInfo,
   );
@@ -1313,12 +1309,8 @@ export function buildStartConversationRequest(
     // Finish/Think). The Canvas UI tool is a top-level client tool and
     // therefore works on both inline-agent and profile launch paths.
     //
-    // ``RUNTIME_SERVICES`` (the sandbox-facing URLs of this local stack) is a
-    // suffix only the client can compute, so it rides
-    // ``agent_launch_additions``, which the server appends after resolving the
-    // profile (software-agent-sdk#4030). Without it a profile-launched
-    // conversation cannot find the local automation backend and falls through
-    // to the Cloud default (#16205).
+    // ``RUNTIME_SERVICES`` (this stack's sandbox-facing URLs) only exists
+    // client-side, so the profile path sends it as ``agent_launch_additions``.
     //
     // Persistent memory is NOT on that boundary: ``load_memory`` is a global
     // user preference, so the agent-server stamps the stored

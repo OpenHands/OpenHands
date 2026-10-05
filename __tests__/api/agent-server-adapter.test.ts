@@ -1521,9 +1521,7 @@ describe("agent_settings runtime services suffix", () => {
   });
 
   it("carries runtime services on the profile path, where agent_settings can't be sent", () => {
-    // agent_profile_id and agent_settings are mutually exclusive, so the
-    // suffix rides agent_launch_additions and the server appends it after
-    // resolving the profile (#16205).
+    // agent_profile_id and agent_settings are mutually exclusive.
     const payload = buildStartConversationRequest({
       settings: DEFAULT_SETTINGS,
       query: "hello",
@@ -1573,6 +1571,29 @@ describe("agent_settings runtime services suffix", () => {
       payload.agent_launch_additions?.system_message_suffix_append;
     expect(appended).toContain("<RUNTIME_SERVICES>");
     expect(appended).not.toContain("ROUTE_AT_CONVERSATION_START");
+  });
+
+  it("carries runtime services on an ACP profile launch too", () => {
+    const payload = buildStartConversationRequest({
+      settings: DEFAULT_SETTINGS,
+      query: "hello",
+      agentProfileId: "profile-acp",
+      agentProfileKind: "acp",
+      runtimeServicesInfo: {
+        mode: "dev:automation",
+        services: {
+          automation: { url_from_agent: "http://localhost:18001" },
+        },
+      },
+    }) as {
+      agent_profile_id?: string;
+      agent_launch_additions?: { system_message_suffix_append?: string };
+    };
+
+    expect(payload.agent_profile_id).toBe("profile-acp");
+    expect(
+      payload.agent_launch_additions?.system_message_suffix_append,
+    ).toContain("<RUNTIME_SERVICES>");
   });
 
   it("omits the additions entirely when there is no runtime services info", () => {
