@@ -59,7 +59,7 @@ export function ConfirmDeleteModal({
             type="button"
             variant="secondary"
             onClick={onCancel}
-            data-testid="cancel-button"
+            testId="cancel-button"
           >
             {t(I18nKey.BUTTON$CANCEL)}
           </BrandButton>
@@ -67,7 +67,7 @@ export function ConfirmDeleteModal({
             type="button"
             variant="primary"
             onClick={onConfirm}
-            data-testid="confirm-button"
+            testId="confirm-button"
           >
             {t(I18nKey.ACTION$CONFIRM_DELETE)}
           </BrandButton>

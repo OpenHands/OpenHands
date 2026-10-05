@@ -59,4 +59,13 @@ describe("ConfirmDeleteModal", () => {
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
+
+  it("exposes test ids on the cancel and confirm buttons", () => {
+    renderWithProviders(
+      <ConfirmDeleteModal onConfirm={vi.fn()} onCancel={vi.fn()} />,
+    );
+
+    expect(screen.getByTestId("cancel-button")).toBeInTheDocument();
+    expect(screen.getByTestId("confirm-button")).toBeInTheDocument();
+  });
 });
