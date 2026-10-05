@@ -99,6 +99,6 @@ Preconditions:
 - The agent may summarize a client-tool action with its own title (for example "Launch local child conversation to reply PONG") instead of "Launching a child conversation"; assert the toast and events, not the chat title.
 - The Overview peek appears only while the drawer is open (`canPeekOnHover` needs `isRightPanelShown`); a `browser goto` or reload starts with the drawer closed.
 - At phone width (and in a narrow drawer) the tab row shows only the tabs that fit; the rest are reachable only through the tabs menu (`conversation-tabs-menu-open-<tab>`), and which tabs fit depends on the active tab's label width.
-- Several agent servers on one machine share the tmux socket `/tmp/tmux-0/openhands`: when another run stops, the next terminal command in yours can come back as "The terminal session was reset because the underlying tmux server/session disappeared" (the agent then reruns it). Expect an extra `$ <command>` block in the terminal; it is not an F27 failure.
+- Plain `agent-canvas` instances on one machine share the tmux socket `/tmp/tmux-<uid>/openhands` (OpenHands/OpenHands#17946), so another instance stopping can reset this one's terminal. `control-openhands launch` gives each run its own `TMUX_TMPDIR`, so in verification runs a reset means this run's agent server restarted.
 - Agent Tools & Metadata remembers the last tab (it reopens on Available Tools).
 - Known open issues: terminal history after reload (#17566) still fails (reproduced 2026-10-05); info modals at phone width (#17562) pass.

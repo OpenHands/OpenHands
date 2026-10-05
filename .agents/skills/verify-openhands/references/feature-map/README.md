@@ -63,7 +63,29 @@ that every row passes today; the run's evidence ledger is.
   scrolls the right one, and `--full-page` screenshots capture only the
   viewport there, so take one screenshot per scroll position.
 - `conversation start` leaves the browser on the conversation page, which also
-  has a `testid=submit-button`. `browser goto` the next page explicitly.
+  has a `testid=submit-button`. `browser goto` the next page explicitly, or a
+  later `wait --state detached` passes vacuously on the wrong page.
+- `click --expect-url` passes at once when the URL already matches (one
+  conversation to another); use `--expect-new-url` there.
+- Select rows by a prompt word or an id prefix, never by a model-written title:
+  titles differ between runs. Only the 20 most recently updated conversations
+  load, so a recipe that creates more must not rely on older rows after a reload.
+- Click composite cards by their title or a detail element: the centre can be
+  a region that stops propagation, and the click then does nothing.
+- Dialogs can match twice (nested `role=dialog`): scope by test id or add
+  `>> nth=0`. `browser testids <scope>` misses portaled parts of a dialog or
+  menu; run it unscoped with `--filter`.
+- Panels opened by a click mount after a moment: `browser wait` before
+  counting. A disabled rich composer is `contenteditable=false`, so `fill`
+  fails there; check `browser attr ... contenteditable`.
+- Error toasts can arrive after the UI retries (about 1.5 s): read them with
+  `browser toasts --history`.
+- Pop-ups opened with `window.open` (sign-in, docs links) appear a moment after
+  the click: `browser wait-tab '<url regex>'`, then `browser tab <i>`.
+- Drag: `browser drag <sel> <target-sel>` moves the pointer in steps; if a list
+  still does not reorder, drag its handle with `--by DX,DY --steps 20`.
+- An MCP server to test with: `control-openhands fixture mcp-server` writes a
+  dependency-free stdio server with one tool, `qa_echo`.
 - A conversation in a folder or repo: `control-openhands fixture git-repo --name
   qa-repo [--remote https://github.com/qa-example/qa-repo.git]`, then
   `control-openhands conversation start --workspace qa-repo --prompt ...`. It
@@ -81,6 +103,11 @@ that every row passes today; the run's evidence ledger is.
   lists failures only; prove that a request happened (or did not) with
   `network`. Page errors (uncaught exceptions) are failures; console warnings
   such as missing translations are reported, not failures.
+- `api GET ... --pick a.b.c` paths start inside the response body (a leading
+  `body.` is accepted).
+- In a sandbox, requests to external hosts (fonts, model catalogs) can fail;
+  judge the errors sweep by its `app:` rows, and `browser errors --app-only
+  --no-warnings` hides translation warnings.
 - Downloads are saved as `<run>/private/downloads/<ms>-<suggested name>`;
   claims about their content need `browser downloads --last 1 --inspect`.
 - `onboard --skip` after `browser reset` skips only the modal: consent is

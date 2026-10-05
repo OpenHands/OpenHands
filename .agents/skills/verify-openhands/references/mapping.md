@@ -129,6 +129,13 @@ will run them that way:
 - Write environment-dependent results as conditionals ("if the registry is
   reachable, `Up to date`; otherwise ...") and check them with `browser
   network`, not from memory.
+- A bullet that leaves an unsaved edit ends with `browser reload`, and a
+  bullet that changes a setting a later editor inherits (an LLM temperature,
+  a theme) restores it or says so: later bullets inherit both.
+- After picking an option and saving, read the stored value back; a failed
+  option click otherwise goes unnoticed until a later step.
+- Assert deterministic text (what the UI sent, a file the agent wrote, a tool
+  observation), not the model's wording.
 - Secret and credential checks assert the tool's output, not the model's
   reply: models refuse to echo secrets. Compare inside the command
   (`test "$QA_SECRET" = expected && echo match`) and read the observation

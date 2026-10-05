@@ -88,7 +88,7 @@ Preconditions:
 - Conversation drafts are saved 500 ms after the last keystroke and not flushed on unmount (the home draft is): navigating sooner restores the older draft (fail row). Wait a second before navigating when testing restoration.
 - Escape does not close the `+` tools menu; click `chat-plus-button` again or choose an item. A menu left open covers attachments in screenshots.
 - Uploaded chips and thumbnails have no test ids; Send, Stop/Play and the attachment remove buttons have no accessible name (fail row). Select by text/alt as above.
-- `browser upload` feeds the hidden input directly; the `+` > Add Files and Images item only opens the native picker, which the CLI cannot drive.
+- `browser upload` feeds the hidden input directly. To drive the real path, `+` > Add Files and Images, use `control-openhands browser upload-via 'testid=add-files-and-images-button' <file>`, which answers the native file chooser.
 - The `Switched to profile` notes are client-side and gone after reload; assert the pill and `conversation status`.
 - `/plan` messages go to a separate planner conversation; the browser stays on the parent `/conversations/<id>`, so wait on the planner id from `conversation list`.
 - After a goal is resumed, the old `interrupted` banner still offers `Resume` (also after reload); clicking it again starts another loop.

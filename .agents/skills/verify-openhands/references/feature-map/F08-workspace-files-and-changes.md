@@ -113,5 +113,5 @@ Preconditions:
 - `browser click ... --observe` accepts the usual selector syntax (`testid=...`).
 - Two `.cursor-ew-resize` grips sit in the conversation page (chat/drawer, then the Files tree); scope the tree one with `testid=files-tab-tree-resize-handle`.
 - At phone width, chat path links (and other `navigateToTab`/`openWorkspaceFile` callers in `src/services/canvas-ui.ts`) only update the store and never navigate to `/panel`, so nothing visible happens.
-- In this sandbox the agent's tmux terminal sometimes resets mid-command ("terminal session was reset"), and the agent reruns the command. Check the workspace with `git status` through a second prompt rather than trusting the first observation.
+- If the agent's terminal resets mid-command ("terminal session was reset", for example after a `restart`), the agent reruns the command. Check the workspace with `git status` through a second prompt rather than trusting the first observation. Runs no longer share a tmux server (OpenHands/OpenHands#17946).
 - Known issue: [#17567](https://github.com/OpenHands/OpenHands/issues/17567) (Monaco disposed-model page error on diff unmount; it also fires on collapse and on a diff→old switch).

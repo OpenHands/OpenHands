@@ -66,6 +66,11 @@ summary, source entry points, likely drift with citations (or none), new
 surfaces missing from the map, and one live recipe. Readers never edit files or
 drive the browser.
 
+Re-check stale harness claims whenever the CLI gained verbs: grep the map for
+`blocked`, `not run`, `harness gap`, `no verb` and `cannot be driven`, and
+re-drive any that a current verb can now reach (compare with
+`control-openhands --help` and `help browser`).
+
 Map **every changed path** in BASE..TARGET to a feature ID or an explicit
 non-user-facing reason. For shared components, CSS, API clients, settings
 schemas and dependency bumps, expand to their consumers rather than sampling one
