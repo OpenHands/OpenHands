@@ -74,11 +74,10 @@ export const OSS_NAV_ITEMS: SettingsNavItem[] = [
 ];
 
 /**
- * Default page for locked-to-Cloud deployments. The full Canvas settings nav
- * remains available; "All Cloud Settings" links out to the Cloud settings shell
- * for pages Canvas does not own directly.
+ * The only OSS nav entry listed when the canvas is locked to a Cloud host —
+ * i.e. deployed into SaaS / self-hosted OHE next to the OHE web app, whose own
+ * settings shell (reached via "All Cloud Settings") owns everything else
+ * (OHE-3168). The other pages are not reachable there either: the settings
+ * layout redirects them here (OHE-3457).
  */
 export const LOCKED_CLOUD_SETTINGS_NAV_PATH = "/settings/app";
-export const LOCKED_CLOUD_SETTINGS_NAV_PATHS = new Set(
-  OSS_NAV_ITEMS.map((item) => item.to),
-);

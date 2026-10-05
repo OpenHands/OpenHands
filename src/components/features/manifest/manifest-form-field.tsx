@@ -3,6 +3,7 @@ import { SettingsInput } from "#/components/features/settings/settings-input";
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
 import { GitRepoDropdown } from "#/components/features/home/git-repo-dropdown";
 import { useActiveBackend } from "#/contexts/active-backend-context";
+import { useUserProviders } from "#/hooks/use-user-providers";
 import { I18nKey } from "#/i18n/declaration";
 import {
   formControlMultilineFieldClassName,
@@ -61,14 +62,18 @@ export function SetupFormField({
 }: SetupFormFieldProps) {
   const { t } = useTranslation("openhands");
   const { backend } = useActiveBackend();
+  const { providers: connectedProviders } = useUserProviders();
   const testId = `setup-field-${name}`;
   const help = <p className="text-xs text-muted">{field.help}</p>;
 
   // Listing a user's repositories is a cloud-backend capability: `GitService`
   // answers with an empty page on any other backend, so the picker would offer
-  // a source that can never respond. Recommended automations are themselves
-  // local-only, which makes that the common case rather than the edge one.
-  const canListRepositories = backend.kind === "cloud";
+  // a source that can never respond. On a cloud backend it lists through the
+  // instance's native integration for the field's provider, which a user who
+  // connected that provider through an MCP server instead does not have.
+  const canListRepositories =
+    backend.kind === "cloud" &&
+    connectedProviders.includes(field.provider ?? "github");
 
   // The format hint is host copy: a manifest states the format of everything it
   // declares except a repository, whose shape the host derives.

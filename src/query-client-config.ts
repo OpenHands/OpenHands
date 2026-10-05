@@ -6,6 +6,7 @@ import { retrieveAxiosErrorMessage } from "./utils/retrieve-axios-error-message"
 import { displayErrorToast } from "./utils/custom-toast-handlers";
 import { getActiveBackend } from "#/api/backend-registry/active-store";
 import { recordBackendSuccess } from "#/api/backend-registry/health-store";
+import { getQueryRetryDelay } from "./utils/rate-limit-retry";
 
 const handle401Error = (error: AxiosError, client: QueryClient) => {
   if (error?.response?.status === 401 || error?.status === 401) {
@@ -30,6 +31,16 @@ const shownErrors = new Set<string>();
 
 export const createAgentServerQueryClient = () => {
   const client = new QueryClient({
+    defaultOptions: {
+      queries: {
+        // Jittered exponential backoff, with extra backoff on a confirmed
+        // 429, so a burst of queries that all got rate-limited together
+        // (e.g. every open browser tab refetching on window focus at once)
+        // don't retry in lockstep and immediately re-trip the limiter.
+        // Queries that set their own `retryDelay` are unaffected.
+        retryDelay: getQueryRetryDelay,
+      },
+    },
     queryCache: new QueryCache({
       onSuccess: (_data, query) => {
         const backendId =

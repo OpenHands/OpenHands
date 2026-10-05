@@ -58,6 +58,8 @@ const TELEMETRY_CONSENT_PENDING_LOCAL_REVOCATION_KEY =
 const TELEMETRY_CONSENT_CHANGE_EVENT = "openhands-telemetry-consent-change";
 const TELEMETRY_FIRST_USE_KEY = "openhands-telemetry-first-use";
 const TELEMETRY_SESSION_KEY = "openhands-telemetry-session";
+const POSTHOG_BOOTSTRAP_STORAGE_PREFIX = "posthog_bootstrap";
+
 const POSTHOG_INSTANCE_NAME = "agent-canvas";
 const POSTHOG_PAGEVIEW_CAPTURE_MODE = "history_change";
 
@@ -87,6 +89,19 @@ export interface TelemetryConfig {
   uiHost?: string;
 }
 
+export type WebsiteHandoffAttribution = Partial<
+  Record<
+    | "utm_source"
+    | "utm_medium"
+    | "utm_campaign"
+    | "landing_page_category"
+    | "cta_id"
+    | "cta_surface"
+    | "referring_domain_category",
+    string
+  >
+>;
+
 export type TelemetryConfiguration = TelemetryConfig | false;
 
 export type TelemetryConsent = "granted" | "denied" | "pending";
@@ -102,6 +117,19 @@ let initializationPromise: Promise<PostHog | null> | null = null;
 let pendingBootstrap: BootstrapConfig | undefined;
 let telemetryConfig: TelemetryConfig = {};
 let telemetryDisabled = false;
+
+function removeStorageKeysWithPrefix(storage: Storage, prefix: string): void {
+  const keysToRemove: string[] = [];
+
+  for (let index = 0; index < storage.length; index += 1) {
+    const key = storage.key(index);
+    if (key?.startsWith(prefix)) keysToRemove.push(key);
+  }
+
+  for (const key of keysToRemove) {
+    storage.removeItem(key);
+  }
+}
 
 /** Deployment-level opt-out injected by static-server.mjs (see file header). */
 function isRuntimeDoNotTrackEnabled(): boolean {
@@ -152,6 +180,13 @@ function getEventDeploymentKind(
 
 let telemetryBackendContext = getBackendTelemetryProperties({});
 let telemetryCloudContext = getCloudTelemetryProperties();
+let telemetryWebsiteAttribution: WebsiteHandoffAttribution = {};
+
+export function setTelemetryWebsiteAttribution(
+  attribution: WebsiteHandoffAttribution | undefined,
+): void {
+  telemetryWebsiteAttribution = attribution ?? {};
+}
 
 export function setTelemetryBackendContext(
   context: BackendTelemetryContextInput,
@@ -173,6 +208,7 @@ function addCanvasEventProperties(
   const properties = {
     ...telemetryBackendContext,
     ...telemetryCloudContext,
+    ...telemetryWebsiteAttribution,
     ...event.properties,
   };
 
@@ -887,18 +923,24 @@ export async function clearTelemetryData(): Promise<void> {
     );
     localStorage.removeItem(TELEMETRY_CONSENT_KEY);
     localStorage.removeItem(TELEMETRY_FIRST_USE_KEY);
+    removeStorageKeysWithPrefix(localStorage, POSTHOG_BOOTSTRAP_STORAGE_PREFIX);
   } catch {
     // Continue clearing the in-memory and SDK identity if storage is blocked.
   }
   clearPendingCloudTelemetryConsent();
   try {
     sessionStorage.removeItem(TELEMETRY_SESSION_KEY);
+    removeStorageKeysWithPrefix(
+      sessionStorage,
+      POSTHOG_BOOTSTRAP_STORAGE_PREFIX,
+    );
   } catch {
     // Continue clearing the in-memory and SDK identity if storage is blocked.
   }
 
   telemetryBackendContext = getBackendTelemetryProperties({});
   telemetryCloudContext = getCloudTelemetryProperties();
+  telemetryWebsiteAttribution = {};
   desiredTelemetryIdentity = null;
   desiredIdentityRevision += 1;
   appliedIdentityRevision = -1;

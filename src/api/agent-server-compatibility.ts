@@ -33,20 +33,12 @@ export const INVALID_BACKEND_API_KEY_ERROR = "Invalid API key";
 
 export interface AgentServerInfo extends BaseServerInfo {
   sdk_version?: string;
-  usable_tools?: string[] | null;
   runtime_services?: unknown;
   execution_runtime?: "local" | "docker";
 }
 
 let cachedAgentServerInfo: AgentServerInfo | null = null;
 let cachedAgentServerInfoHost: string | null = null;
-
-const getAdvertisedTools = (serverInfo: AgentServerInfo | null) => {
-  if (Array.isArray(serverInfo?.usable_tools)) {
-    return serverInfo.usable_tools;
-  }
-  return null;
-};
 
 export class AgentServerUnavailableError extends Error {
   readonly details: string | null;
@@ -154,14 +146,6 @@ export function getCachedAgentServerInfo(options?: {
     return null;
   }
   return cachedAgentServerInfo;
-}
-
-export function isAgentServerToolAvailable(toolName: string) {
-  const availableTools = getAdvertisedTools(cachedAgentServerInfo);
-  if (!Array.isArray(availableTools)) {
-    return true;
-  }
-  return availableTools.includes(toolName);
 }
 
 export function isSdkHttpError(error: unknown) {

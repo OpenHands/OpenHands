@@ -6,6 +6,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AgentServerRuntimeService from "#/api/runtime-service/agent-server-runtime-service";
 import { useWorkspaceFiles } from "#/hooks/query/use-workspace-files";
 import { listCloudConversationFiles } from "#/api/cloud/conversation-service.api";
+import SettingsService from "#/api/settings-service/settings-service.api";
+import { DEFAULT_SETTINGS } from "#/services/settings";
+import { DEFAULT_FILE_DISCOVERY } from "#/utils/workspace-file-discovery";
+
+vi.mock("#/api/settings-service/settings-service.api", () => ({
+  default: { getSettings: vi.fn(), saveSettings: vi.fn() },
+}));
 
 // The hook reads cloud/local from the backend-registry store (the same source
 // the transport layer branches on), so drive the store snapshot in tests.
@@ -50,7 +57,11 @@ vi.mock("#/hooks/query/use-active-conversation", () => ({
 
 const useRuntimeIsReadyMock = vi.fn();
 vi.mock("#/hooks/use-runtime-is-ready", () => ({
-  useRuntimeIsReady: () => useRuntimeIsReadyMock(),
+  useRuntimeIsReady: (...args: unknown[]) => useRuntimeIsReadyMock(...args),
+}));
+
+vi.mock("#/hooks/use-agent-state", () => ({
+  useAgentState: () => ({ curAgentState: "error" }),
 }));
 
 const useOptionalConversationIdMock = vi.fn();
@@ -94,6 +105,7 @@ beforeEach(() => {
   useOptionalConversationIdMock.mockReset();
   executeCommandSpy.mockReset();
   listCloudFilesMock.mockReset();
+  vi.mocked(SettingsService.getSettings).mockResolvedValue(DEFAULT_SETTINGS);
 
   useRuntimeIsReadyMock.mockReturnValue(true);
   useActiveConversationMock.mockReturnValue({ data: conversation });
@@ -108,6 +120,60 @@ afterEach(() => {
 describe("useWorkspaceFiles — local backend", () => {
   beforeEach(() => {
     storeBackendKind = "local";
+  });
+
+  // @spec WFD-002 — Workspace-scoped server persistence
+  it("uses persisted limits for the active workspace and changes them on navigation", async () => {
+    vi.mocked(SettingsService.getSettings).mockResolvedValue({
+      ...DEFAULT_SETTINGS,
+      workspace_file_discovery: {
+        "/workspace/project": { ...DEFAULT_FILE_DISCOVERY, maxFiles: 1 },
+        "/workspace/other": { ...DEFAULT_FILE_DISCOVERY, maxFiles: 0 },
+      },
+    });
+    executeCommandSpy.mockResolvedValue({
+      exit_code: 0,
+      stdout: "./a.txt\n./b.txt\n",
+      stderr: "",
+    });
+    const { result, rerender } = renderHook(() => useWorkspaceFiles(), {
+      wrapper: makeWrapper(),
+    });
+    await waitFor(() => expect(result.current.data).toEqual(["a.txt"]));
+    expect(result.current.isTruncated).toBe(true);
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        ...conversation,
+        id: "conv-2",
+        workspace: { working_dir: "/workspace/other" },
+      },
+    });
+    rerender();
+    await waitFor(() =>
+      expect(result.current.data).toEqual(["a.txt", "b.txt"]),
+    );
+    expect(result.current.isTruncated).toBe(false);
+  });
+
+  it("lists diagnostic files while the conversation is in Error", async () => {
+    const { useRuntimeIsReady } = await vi.importActual<
+      typeof import("#/hooks/use-runtime-is-ready")
+    >("#/hooks/use-runtime-is-ready");
+    useRuntimeIsReadyMock.mockImplementation(useRuntimeIsReady);
+    useActiveConversationMock.mockReturnValue({
+      data: { ...conversation, execution_status: "error" },
+    });
+    executeCommandSpy.mockResolvedValue({
+      exit_code: 0,
+      stdout: "./evidence/checkpoint.json\n",
+      stderr: "",
+    });
+    const { result } = renderHook(() => useWorkspaceFiles(), {
+      wrapper: makeWrapper(),
+    });
+    await waitFor(() =>
+      expect(result.current.data).toEqual(["evidence/checkpoint.json"]),
+    );
   });
 
   it("lists files via bash find and does not touch git changes", async () => {
@@ -125,77 +191,6 @@ describe("useWorkspaceFiles — local backend", () => {
       expect(result.current.data).toEqual(["hello.txt", "src/index.ts"]),
     );
     expect(executeCommandSpy).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("useWorkspaceFiles — local backend on a Windows host", () => {
-  const realUserAgent = window.navigator.userAgent;
-  const windowsConversation = {
-    ...conversation,
-    workspace: { working_dir: "C:\\work\\project" },
-  };
-
-  beforeEach(() => {
-    storeBackendKind = "local";
-    Object.defineProperty(window.navigator, "userAgent", {
-      value:
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
-      configurable: true,
-    });
-    useActiveConversationMock.mockReturnValue({ data: windowsConversation });
-  });
-
-  afterEach(() => {
-    Object.defineProperty(window.navigator, "userAgent", {
-      value: realUserAgent,
-      configurable: true,
-    });
-  });
-
-  it("lists files with a cmd-compatible command and normalizes absolute Windows paths", async () => {
-    executeCommandSpy.mockResolvedValue({
-      exit_code: 0,
-      stdout:
-        "C:\\work\\project\\hello.txt\r\nC:\\work\\project\\src\\index.ts\r\n",
-      stderr: "",
-    });
-
-    const { result } = renderHook(() => useWorkspaceFiles(), {
-      wrapper: makeWrapper(),
-    });
-
-    await waitFor(() =>
-      expect(result.current.data).toEqual(["hello.txt", "src/index.ts"]),
-    );
-    const command = executeCommandSpy.mock.calls[0][2] as string;
-    expect(command).toContain("dir /b /s /a:-d");
-    expect(command).toContain("findstr /v /i");
-    expect(command).toContain('/c:"\\node_modules\\"');
-    expect(command).not.toContain("find .");
-  });
-
-  it("keeps the POSIX pipeline on non-Windows hosts", async () => {
-    executeCommandSpy.mockResolvedValue({
-      exit_code: 0,
-      stdout: "./hello.txt\n",
-      stderr: "",
-    });
-    useActiveConversationMock.mockReturnValue({ data: conversation });
-
-    // Non-Windows UA for this one only.
-    Object.defineProperty(window.navigator, "userAgent", {
-      value: realUserAgent,
-      configurable: true,
-    });
-
-    const { result } = renderHook(() => useWorkspaceFiles(), {
-      wrapper: makeWrapper(),
-    });
-
-    await waitFor(() => expect(result.current.data).toEqual(["hello.txt"]));
-    const command = executeCommandSpy.mock.calls[0][2] as string;
-    expect(command).toContain("find .");
-    expect(command).not.toContain("dir /b /s");
   });
 });
 

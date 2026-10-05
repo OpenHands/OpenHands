@@ -11,6 +11,11 @@ import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useRuntimeIsReady } from "#/hooks/use-runtime-is-ready";
 import { getGitPath } from "#/utils/get-git-path";
+import { useWorkspaceFileDiscovery } from "./use-workspace-file-discovery";
+import {
+  buildWorkspaceFileListCommand,
+  parseWorkspaceFileList,
+} from "#/utils/workspace-file-discovery";
 
 // Cap the number of files we render so a giant repo doesn't freeze the UI.
 const MAX_FILES = 2000;
@@ -18,72 +23,12 @@ const MAX_FILES = 2000;
 export interface WorkspaceFilesResult {
   data: string[] | undefined;
   isLoading: boolean;
-}
-
-// Directory names that we never want to descend into when listing files.
-const EXCLUDED_DIRS = [
-  ".git",
-  "node_modules",
-  ".venv",
-  "venv",
-  "__pycache__",
-  "dist",
-  "build",
-  ".next",
-  ".cache",
-  ".pytest_cache",
-  ".mypy_cache",
-  ".turbo",
-  ".parcel-cache",
-  "target",
-];
-
-// Build a `find` invocation that lists files relative to the workspace root.
-function buildPosixListCommand(): string {
-  const pruneExpr = EXCLUDED_DIRS.map((dir) => `-name '${dir}' -prune`).join(
-    " -o ",
-  );
-  return `find . \\( ${pruneExpr} \\) -o -type f -print 2>/dev/null | sort | head -n ${MAX_FILES}`;
-}
-
-// Windows equivalent for a Windows-hosted local backend: the agent-server runs
-// the command through cmd.exe, where `find` resolves to the text-search tool
-// and `head`/`/dev/null` don't exist, so the POSIX pipeline exits 255 and the
-// Files tab falls back to its empty state. `dir /s` prints absolute paths
-// (made relative client-side below) and findstr drops the excluded
-// directories. Windows has no `head`, so the MAX_FILES cap is applied
-// client-side in the parser (the Set + slice below already bounds results).
-function buildWindowsListCommand(): string {
-  const excludes = EXCLUDED_DIRS.map((dir) => `/c:"\\${dir}\\"`).join(" ");
-  return `dir /b /s /a:-d 2>nul | findstr /v /i ${excludes} | sort`;
-}
-
-function buildListCommand(isWindowsHost: boolean): string {
-  return isWindowsHost ? buildWindowsListCommand() : buildPosixListCommand();
-}
-
-// The local backend serves the UI from the same host the agent-server runs
-// on, so the browser's user agent reflects the host OS.
-function isWindowsHost(): boolean {
-  return (
-    typeof navigator !== "undefined" && /windows/i.test(navigator.userAgent)
-  );
+  isTruncated?: boolean;
 }
 
 function normalizePath(path: string): string {
   // Strip a leading "./" so paths render cleanly in the UI.
   return path.startsWith("./") ? path.slice(2) : path;
-}
-
-// `dir /s` returns absolute paths with backslashes; make them relative to the
-// working dir and forward-slashed so they match the POSIX output shape.
-function normalizeWindowsPath(path: string, workingDir: string): string {
-  const root = workingDir.replace(/[\\/]+$/, "");
-  let p = path;
-  if (p.toLowerCase().startsWith(`${root.toLowerCase()}\\`)) {
-    p = p.slice(root.length + 1);
-  }
-  return p.replace(/\\/g, "/");
 }
 
 /**
@@ -99,29 +44,32 @@ function normalizeWindowsPath(path: string, workingDir: string): string {
  */
 function useLocalWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
   const { data: conversation } = useActiveConversation();
-  const runtimeIsReady = useRuntimeIsReady();
+  const runtimeIsReady = useRuntimeIsReady({ allowAgentError: true });
 
   const conversationId = conversation?.id;
   const conversationUrl = conversation?.conversation_url;
   const sessionApiKey = conversation?.session_api_key;
   const workingDir = conversation?.workspace?.working_dir?.trim();
+  const discovery = useWorkspaceFileDiscovery(enabled ? workingDir : undefined);
+  const { options } = discovery;
 
-  const query = useQuery<string[]>({
+  const query = useQuery({
     queryKey: [
       "workspace-files",
       conversationId,
       conversationUrl,
       sessionApiKey,
       workingDir,
+      options,
     ],
     queryFn: async () => {
-      const onWindowsHost = isWindowsHost();
       const result = await AgentServerRuntimeService.executeCommand(
         conversationUrl,
         sessionApiKey,
-        buildListCommand(onWindowsHost),
+        buildWorkspaceFileListCommand(options),
         workingDir,
         30,
+        conversationId,
       );
 
       if (result.exit_code !== 0) {
@@ -130,27 +78,25 @@ function useLocalWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
         );
       }
 
-      const lines = result.stdout
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .map((line) =>
-          onWindowsHost
-            ? normalizeWindowsPath(line, workingDir ?? "")
-            : normalizePath(line),
-        );
-
-      // Defensive: keep results unique and bounded.
-      return Array.from(new Set(lines)).slice(0, MAX_FILES);
+      return parseWorkspaceFileList(result.stdout, options.maxFiles);
     },
-    enabled: enabled && runtimeIsReady && !!conversationId && !!workingDir,
+    enabled:
+      enabled &&
+      runtimeIsReady &&
+      !!conversationId &&
+      !!workingDir &&
+      !discovery.isLoading,
     retry: false,
     staleTime: 1000 * 30,
     gcTime: 1000 * 60 * 5,
     meta: { disableToast: true },
   });
 
-  return { data: query.data, isLoading: query.isLoading };
+  return {
+    data: query.data?.paths,
+    isLoading: discovery.isLoading || query.isLoading,
+    isTruncated: query.data?.isTruncated ?? false,
+  };
 }
 
 /**
@@ -173,7 +119,7 @@ function useCloudWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
   // disabled — and never fire — whenever that data is null or still loading.
   const { conversationId } = useOptionalConversationId();
   const { data: conversation } = useActiveConversation();
-  const runtimeIsReady = useRuntimeIsReady();
+  const runtimeIsReady = useRuntimeIsReady({ allowAgentError: true });
 
   const selectedRepository = conversation?.selected_repository;
   const workingDir = conversation?.workspace?.working_dir?.trim();

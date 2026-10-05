@@ -168,7 +168,7 @@ export const isSwitchLLMObservationEvent = (
   event.observation.kind === "SwitchLLMObservation";
 
 /**
- * Type guard for router-driven model switches (Pareto/meta-profile classifier).
+ * Type guard for router-driven model switches (Router/meta-profile classifier).
  * Mirrors isSwitchLLMObservationEvent — same UI semantics, different tool.
  */
 export const isClassifyAndSwitchLLMObservationEvent = (
