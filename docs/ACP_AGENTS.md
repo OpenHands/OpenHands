@@ -112,8 +112,10 @@ First-time users get a four-step onboarding modal. To onboard an ACP agent:
    On a **local** backend the step is optional (a host login is reused
    automatically); on a **Docker / cloud** backend it's **required**, because
    there's no host login to fall back on. When the login probe detects an
-   existing session, the step shows a "you're already signed in" banner and
-   stays skippable.
+   existing session, the step shows a "you're already signed in" banner, stays
+   skippable, and collapses the credential fields behind an **Advanced: API keys
+   and credentials** toggle — nothing is required, so nothing is shown by
+   default. The same applies to Settings → Agent.
 4. **Say hello** — creates your first conversation and closes the modal.
 
 > [!NOTE]
