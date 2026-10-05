@@ -61,7 +61,6 @@
     "shell-quote": "1.9.0",
     "sirv": "3.0.2",
     "sirv-cli": "3.0.1",
-    "socket.io-client": "4.8.3",
     "tailwind-merge": "3.7.0",
     "tailwind-scrollbar": "4.0.2",
     "unist-util-visit": "5.1.0",
@@ -129,7 +128,6 @@
   "devDependencies": {
     "@eslint/eslintrc": "3.3.6",
     "@eslint/js": "9.39.4",
-    "@mswjs/socket.io-binding": "0.2.0",
     "@playwright/test": "1.63.0",
     "@react-router/dev": "7.18.2",
     "@shadcn/lint": "0.2.0",
