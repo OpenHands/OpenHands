@@ -15,8 +15,14 @@ import { create } from "zustand";
  *      sibling assets (CSS, images) that the user can't see directly but
  *      expects to reflect the latest version of the workspace.
  *
+ * The count starts at the page-load time rather than 0, so the first
+ * `?v=` URL of a page load never matches one the browser cached during an
+ * earlier load (the fileserver sends no Cache-Control, so a reload would
+ * otherwise show the old bytes).
+ *
  * Consumers:
  *   - {@link useAutoRefreshFilesOnEdit} bumps this on each mutation event.
+ *   - The Files tab Refresh button bumps it so the rich preview re-requests.
  *   - {@link useWorkspaceFileContent} reads the count via its query key so
  *     the hook refetches after each edit.
  *   - `FileContentViewer` / files-tab "open in new tab" link append the
@@ -29,7 +35,7 @@ interface WorkspaceMutationCounterState {
 
 export const useWorkspaceMutationCounter =
   create<WorkspaceMutationCounterState>((set) => ({
-    count: 0,
+    count: Date.now(),
     bump: () => set((state) => ({ count: state.count + 1 })),
   }));
 

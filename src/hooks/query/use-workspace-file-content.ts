@@ -263,8 +263,15 @@ export function useWorkspaceFileContent(relativePath: string | null) {
       // (it travels because we opt in to credentialed requests). This
       // matches the auth path the iframe / <img> uses, and avoids a CORS
       // preflight for a custom header.
+      //
+      // `cache: "no-cache"` makes the browser revalidate (ETag /
+      // Last-Modified) on every read. The fileserver sends no
+      // Cache-Control, so with the default mode an old file's cached body
+      // stays heuristically fresh and Refresh, an agent edit or even a page
+      // reload keeps showing it (#17921).
       const response = await fetch(staticUrl, {
         credentials: "include",
+        cache: "no-cache",
       });
       if (!response.ok) {
         throw new Error(`Failed to read ${relativePath}: ${response.status}`);
