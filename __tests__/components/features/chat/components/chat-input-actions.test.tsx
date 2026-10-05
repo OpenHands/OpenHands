@@ -9,6 +9,7 @@ import {
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
+import { I18nKey } from "#/i18n/declaration";
 
 const useActiveConversationMock = vi.fn<
   () => {
@@ -252,6 +253,16 @@ describe("ChatInputActions", () => {
     expect(
       screen.queryByTestId("chat-input-llm-model"),
     ).not.toBeInTheDocument();
+  });
+
+  it("gives the icon-only send button an accessible name", () => {
+    renderWithProviders(<ChatInputActions disabled={false} />);
+
+    expect(
+      screen.getByRole("button", {
+        name: I18nKey.CHAT_INTERFACE$TOOLTIP_SEND_MESSAGE,
+      }),
+    ).toHaveAttribute("data-testid", "submit-button");
   });
 
   it("hides the Change Agent button on a local backend", () => {

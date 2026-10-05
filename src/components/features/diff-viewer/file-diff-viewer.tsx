@@ -27,10 +27,14 @@ import { AccordionPanel } from "./accordion-panel";
 
 type ViewMode = "diff" | "old" | "new";
 
-const VIEW_MODES: { mode: ViewMode; icon: IconType }[] = [
-  { mode: "old", icon: LuHistory },
-  { mode: "diff", icon: LuGitCompareArrows },
-  { mode: "new", icon: LuFileCheck },
+const VIEW_MODES: { mode: ViewMode; icon: IconType; labelKey: I18nKey }[] = [
+  { mode: "old", icon: LuHistory, labelKey: I18nKey.DIFF_VIEWER$VIEW_MODE_OLD },
+  { mode: "diff", icon: LuGitCompareArrows, labelKey: I18nKey.FILES$DIFF_VIEW },
+  {
+    mode: "new",
+    icon: LuFileCheck,
+    labelKey: I18nKey.DIFF_VIEWER$VIEW_MODE_NEW,
+  },
 ];
 
 const SHARED_EDITOR_OPTIONS: editor_t.IEditorOptions = {
@@ -366,13 +370,14 @@ export function FileDiffViewer({
               onClick={(e) => e.stopPropagation()}
               aria-hidden={!viewModeControlsVisible}
             >
-              {VIEW_MODES.map(({ mode, icon: Icon }) => (
+              {VIEW_MODES.map(({ mode, icon: Icon, labelKey }) => (
                 <button
                   key={mode}
                   data-testid={`view-mode-${mode}`}
                   type="button"
                   tabIndex={viewModeControlsVisible ? 0 : -1}
                   aria-pressed={viewMode === mode}
+                  aria-label={t(labelKey)}
                   onClick={() => setViewMode(mode)}
                   className={cn(
                     "p-1 rounded transition-colors cursor-pointer",
@@ -389,6 +394,9 @@ export function FileDiffViewer({
           <button
             data-testid="collapse"
             type="button"
+            aria-label={t(
+              isCollapsed ? I18nKey.BUTTON$EXPAND : I18nKey.BUTTON$COLLAPSE,
+            )}
             className="shrink-0 text-muted"
           >
             {isCollapsed ? (
