@@ -348,11 +348,11 @@ substitute for live evidence when the changed behavior requires it. Submit
 **COMMENT** when production-facing evidence is required but absent or ambiguous,
 and name the exact capture or verification still needed before approval.
 
-Separately, `.github/scripts/check_pr_description.py` requires media for frontend
-paths, including nonvisual frontend logic, but not for the bug label alone.
-Other nonvisual fixes can use reproduction commands and before/after results in
-Summary and How to Test. The checker tests presence; reviewers judge substance.
-Report any path/behavior mismatch; do not fabricate media or relabel the PR.
+The PR-description checker requires media for frontend paths and declared bug
+fixes or features, including nonfrontend changes. It checks presence, not whether
+Canvas actually ran or the capture proves before/after behavior. Reviewers enforce
+the functional-change evidence rule above even when a PR is labeled as a chore;
+do not fabricate media or relabel a functional change to avoid evidence.
 
 Follow the test routing in `AGENTS.md`. Mock-LLM, Docker mock-LLM, and live
 LLM-backed E2E suites run after changes reach `main`, not from PR labels. For
