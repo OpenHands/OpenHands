@@ -160,9 +160,8 @@ The pinned `@openhands/typescript-client` `1.50.1` ships the bridge API
 export requirement above is satisfied by a released client. The helper is
 feature-detected at runtime on the live Agent Server: `server_info.capabilities`
 must advertise `canvas_app_backend_bridge_v1` and `app_backend_ingress_url`
-must be a valid HTTP(S) URL. The current `minimumAgentServer` floor
-(`1.47.0`) predates the bridge; once that floor is raised to a version
-exposing the bridge, this section should state the new minimum explicitly.
+must be a valid HTTP(S) URL. Canvas requires Agent Server `1.50.1` or newer,
+the first released version exposing this bridge contract.
 
 ## Agent Server API
 
