@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "vitest";
+import { launcherEnvFor } from "./lib/launcher-env.mjs";
 import { buildLocator, parseRole, toCss } from "./lib/selectors.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -249,4 +250,25 @@ test("launch pins backend versions by flag and fixtures cover tarballs", () => {
     encoding: "utf8",
   });
   assert.match(fixture.stdout, /fixture tarball/);
+});
+
+test("restart takes machine settings from the current shell, run settings from the saved env", () => {
+  const saved = {
+    HTTPS_PROXY: "http://127.0.0.1:39647",
+    PATH: "/old/bin",
+    UV_INDEX_URL: "https://old.example/simple",
+    OH_CANVAS_SAFE_BACKEND_PORT: "18831",
+    HOME: "/run/private/home",
+  };
+  const current = { HTTPS_PROXY: "http://127.0.0.1:43131", PATH: "/new/bin" };
+  const env = launcherEnvFor(saved, current, [
+    "HTTPS_PROXY",
+    "PATH",
+    "UV_INDEX_URL",
+  ]);
+  assert.equal(env.HTTPS_PROXY, "http://127.0.0.1:43131");
+  assert.equal(env.PATH, "/new/bin");
+  assert.equal(env.UV_INDEX_URL, undefined);
+  assert.equal(env.OH_CANVAS_SAFE_BACKEND_PORT, "18831");
+  assert.equal(env.HOME, "/run/private/home");
 });

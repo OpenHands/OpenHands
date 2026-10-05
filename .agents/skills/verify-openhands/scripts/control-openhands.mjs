@@ -25,6 +25,7 @@ import { freemem, tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { deflateSync, gunzipSync } from "node:zlib";
+import { launcherEnvFor } from "./lib/launcher-env.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const skillDir = resolve(here, "..");
@@ -813,10 +814,13 @@ async function waitForStack(run, timeoutSec) {
 function spawnLauncher(run) {
   // The saved environment holds no secrets; keys are re-read from private/.
   const priv = join(run.dir, "private");
-  const env = JSON.parse(readFileSync(join(priv, "launcher-env.json"), "utf8"));
+  const saved = JSON.parse(
+    readFileSync(join(priv, "launcher-env.json"), "utf8"),
+  );
+  const env = launcherEnvFor(saved, process.env, PASS_ENV);
   env.LOCAL_BACKEND_API_KEY = readFileSync(join(priv, "session-key"), "utf8");
   env.OH_SECRET_KEY = readFileSync(join(priv, "encryption-key"), "utf8");
-  if (env.TMUX_TMPDIR) env.TMUX_TMPDIR = tmuxDirFor(run.dir);
+  if (saved.TMUX_TMPDIR) env.TMUX_TMPDIR = tmuxDirFor(run.dir);
   const logFd = openSync(join(priv, "stack.log"), "a", 0o600);
   const child = spawn(process.execPath, run.launcherArgs, {
     cwd: repoRoot,
