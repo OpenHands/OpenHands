@@ -24,7 +24,7 @@ exactly what command you ran and include logs, screenshots, or reproduction note
 
 ## Summary
 
-<!-- 1-3 bullets describing what changed. For bugs, describe the observed failure and corrected behavior. -->
+<!-- 1-3 bullets describing what changed. For bugs, state the failure and fix. -->
 -
 
 ## Issue Number
@@ -39,9 +39,8 @@ Fixes #
 <!--
 Required. Share the steps for the reviewer to be able to test your PR. e.g. You can test by running `npm install` then `npm build dev`.
 
-For bug fixes, include reproduction commands/steps and observed before/after
-results. Logs or API/terminal output are valid evidence for nonvisual fixes;
-a screenshot of text output is not required.
+For bugs, include reproduction steps and observed before/after results.
+Nonvisual fixes can use logs or API/terminal output; text screenshots are not required.
 
 If you could not test this, say why.
 -->
@@ -49,15 +48,10 @@ If you could not test this, say why.
 ## Video/Screenshots
 
 <!--
-For frontend changes, provide a video or screenshots of testing the changed
-behavior successfully.
-
-Frontend changes still require authentic media from the actual app showing the
-changed behavior. For visual bug fixes, show the bug reproduced and the corrected
-state; use video when timing or transitions matter. For nonvisual bug fixes
-outside the frontend media gate,
-provide commands, logs, or reproduction results under How to Test instead of
-mandatory media. Reviewers assess whether the evidence demonstrates the fix.
+Frontend changes require real-app screenshots/video of the changed behavior.
+For visual bugs, show before and after; use video for timing or transitions.
+For nonvisual fixes outside the frontend media gate, use commands, logs, or
+results under How to Test. Reviewers judge whether the evidence proves the fix.
 -->
 
 ## Design Doc

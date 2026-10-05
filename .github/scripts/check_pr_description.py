@@ -7,16 +7,14 @@ Additional checks:
   checked.
 - If frontend code was touched, the description must include a screenshot or
   video.
-- Nonvisual bug fixes may document reproduction commands and observed results in
-  the required Summary and How to Test sections; the bug label alone does not
-  require media. Reviewers assess the substance of that evidence.
+- The bug label alone does not require media. Nonvisual fixes can use commands
+  and results in Summary and How to Test; reviewers judge the evidence.
 - The body must reference at least one issue (e.g. `Fixes #123`) and at least
   one referenced issue must carry the `ready-for-dev` label. The API lookup is
   only performed in CI (when GITHUB_EVENT_PATH and GITHUB_TOKEN are available).
 - The PR's Type checkbox must match the linked issue's labels: a "Bug fix" PR
   should link an issue with the `bug` label; a "Feature" PR should link one
-  with the `enhancement` label. This keeps the declared change type consistent
-  with the issue.
+  with the `enhancement` label.
 
 Local usage example:
     python .github/scripts/check_pr_description.py --body-file /tmp/pr-body.md \

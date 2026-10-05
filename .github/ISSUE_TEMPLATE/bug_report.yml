@@ -76,11 +76,10 @@ body:
     attributes:
       label: Actual Behavior
       description: |
-        What actually happened? To qualify for the `ready-for-dev` label,
-        describe the observed behavior with evidence suited to the bug: a real
-        Canvas screenshot/video for visual behavior, or commands, logs, API
-        output, or a focused reproducer/test for nonvisual behavior. Evidence
-        linked in this issue's comments is also valid; no duplicate upload is needed.
+        For `ready-for-dev`, describe what happened. For visual bugs, include a
+        real Canvas screenshot/video; for nonvisual bugs, use commands, logs,
+        API output, or a focused reproducer/test. Links in comments count;
+        no duplicate upload is needed.
       placeholder: |
         The button moved to the next step unexpectedly.
 
@@ -110,10 +109,8 @@ body:
     attributes:
       label: Acceptance Criteria
       description: |
-        Required for the `ready-for-dev` label. Testable, checkable bullets a
-        reviewer can verify. Describe the *fixed* state, not the bug or required
-        PR artifacts. Tests and before/after fix evidence are implementation
-        checks, not prerequisites for triaging an unwritten fix.
+        For `ready-for-dev`, list observable fixed outcomes, not PR artifacts.
+        Tests and before/after fix evidence are not needed for triage.
       placeholder: |
         - [ ] Following the reproduction steps produces the expected result.
         - [ ] The affected mode handles the failure without losing user state.
