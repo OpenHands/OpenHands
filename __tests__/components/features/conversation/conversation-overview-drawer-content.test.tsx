@@ -123,7 +123,6 @@ function OpenSection({
   );
 }
 
-function renderDrawer(
 // Stands in for a menu that closes on Escape, such as the Overview ⋯ menu.
 function MenuOverDrawer() {
   const [isOpen, setIsOpen] = React.useState(false);
@@ -142,13 +141,14 @@ function MenuOverDrawer() {
   );
 }
 
+function renderDrawer(
   section: (typeof CONVERSATION_OVERVIEW_DRAWER_SECTION)[keyof typeof CONVERSATION_OVERVIEW_DRAWER_SECTION],
 ) {
   return render(
     <ConversationOverviewDrawerProvider>
       <OpenSection section={section} />
-      <ConversationOverviewDrawerContent />
       <MenuOverDrawer />
+      <ConversationOverviewDrawerContent />
     </ConversationOverviewDrawerProvider>,
     {
       wrapper: ({ children }) => (
@@ -205,7 +205,6 @@ describe("ConversationOverviewDrawerContent", () => {
     );
   });
 
-  it("opens the add skill modal from the header add button", async () => {
   it("lets a menu opened over the drawer take the first Escape", async () => {
     const user = userEvent.setup();
     renderDrawer(CONVERSATION_OVERVIEW_DRAWER_SECTION.pull_requests);
@@ -225,6 +224,7 @@ describe("ConversationOverviewDrawerContent", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("opens the add skill modal from the header add button", async () => {
     const user = userEvent.setup();
     renderDrawer(CONVERSATION_OVERVIEW_DRAWER_SECTION.skills);
 
