@@ -1,0 +1,98 @@
+# control-openhands browser snapshot output on origin/main aeea97e1b (issue #17935)
+
+## before-composer-running
+url: http://127.0.0.1:18810/conversations/e0a7e8a3-7ec6-4ef6-8cc6-ab80ab69b7b0
+- text: What do you want to build?
+- button "More actions"
+- button "deepseek-flash"
+- text: Running
+- button:
+  - img
+- button "Start dictation"
+- button [disabled]
+- button "qa-repo" [disabled]:
+  - img
+  - text: qa-repo
+- img
+- text: main
+
+## before-composer-paused
+url: http://127.0.0.1:18810/conversations/e0a7e8a3-7ec6-4ef6-8cc6-ab80ab69b7b0
+- text: What do you want to build?
+- button "More actions"
+- button "deepseek-flash"
+- text: Stopped
+- button:
+  - img
+- 'button "Context window usage: 1% used (99% left)"'
+- button "Start dictation"
+- button [disabled]
+- button "qa-repo" [disabled]:
+  - img
+  - text: qa-repo
+- img
+- text: main
+
+## before-composer-attachments
+url: http://127.0.0.1:18810/conversations/e0a7e8a3-7ec6-4ef6-8cc6-ab80ab69b7b0
+- button:
+  - img
+- text: qa-note.txt
+- img
+- text: TXT
+- img "qa-image.png"
+- button:
+  - img
+- button "Upload as file"
+- text: What do you want to build?
+- button "More actions"
+- button "deepseek-flash"
+- text: Stopped
+- button:
+  - img
+- 'button "Context window usage: 1% used (99% left)"'
+- button "Start dictation"
+- button
+- button "qa-repo" [disabled]:
+  - img
+  - text: qa-repo
+- img
+- text: main
+
+## before-drawer-tabs
+url: http://127.0.0.1:18810/conversations/e0a7e8a3-7ec6-4ef6-8cc6-ab80ab69b7b0
+- tablist "Conversation panels":
+  - tab "Files":
+    - img
+  - tab "Commits" [selected]:
+    - img
+    - text: Commits
+  - tab "Planner"
+  - tab "Terminal"
+  - tab "Browser"
+  - tab "Usage"
+- button "Customize tabs":
+  - img
+
+## before-diff-collapsed
+url: http://127.0.0.1:18810/conversations/e0a7e8a3-7ec6-4ef6-8cc6-ab80ab69b7b0
+- img
+- strong: src/calc.py
+- button
+
+## before-diff-expanded
+url: http://127.0.0.1:18810/conversations/e0a7e8a3-7ec6-4ef6-8cc6-ab80ab69b7b0
+- img
+- strong: src/calc.py
+- button:
+  - img
+- button [pressed]:
+  - img
+- button:
+  - img
+- button
+- code:
+  - textbox
+- code:
+  - textbox
+- img

@@ -1,0 +1,112 @@
+# control-openhands browser snapshot output on the fix commit (issue #17935)
+
+## after-composer-running
+url: http://127.0.0.1:18830/conversations/eb02a6db-214e-40ec-9ba4-bd145743efe2
+- text: What do you want to build?
+- button "More actions"
+- button "deepseek-flash"
+- text: Running
+- button "Stop":
+  - img
+- button "Start dictation"
+- button "Send message" [disabled]
+- button "qa-repo" [disabled]:
+  - img
+  - text: qa-repo
+- img
+- text: main
+
+## after-composer-paused
+url: http://127.0.0.1:18830/conversations/eb02a6db-214e-40ec-9ba4-bd145743efe2
+- text: What do you want to build?
+- button "More actions"
+- button "deepseek-flash"
+- text: Stopped
+- button "Resume the agent task":
+  - img
+- 'button "Context window usage: 1% used (99% left)"'
+- button "Start dictation"
+- button "Send message" [disabled]
+- button "qa-repo" [disabled]:
+  - img
+  - text: qa-repo
+- img
+- text: main
+
+## after-composer-attachments
+url: http://127.0.0.1:18830/conversations/eb02a6db-214e-40ec-9ba4-bd145743efe2
+- button "Remove qa-note.txt":
+  - img
+- text: qa-note.txt
+- img
+- text: TXT
+- img "qa-image.png"
+- button "Remove image":
+  - img
+- button "Upload as file"
+- text: What do you want to build?
+- button "More actions"
+- button "deepseek-flash"
+- text: Stopped
+- button "Resume the agent task":
+  - img
+- 'button "Context window usage: 1% used (99% left)"'
+- button "Start dictation"
+- button "Send message"
+- button "qa-repo" [disabled]:
+  - img
+  - text: qa-repo
+- img
+- text: main
+
+## after-drawer-tabs
+url: http://127.0.0.1:18830/conversations/eb02a6db-214e-40ec-9ba4-bd145743efe2
+- tablist "Conversation panels":
+  - tab "Files":
+    - img
+  - tab "Commits" [selected]:
+    - img
+    - text: Commits
+  - tab "Planner"
+  - tab "Terminal"
+  - tab "Browser"
+  - tab "Usage"
+- button "Customize tabs":
+  - img
+
+## after-diff-collapsed
+url: http://127.0.0.1:18830/conversations/eb02a6db-214e-40ec-9ba4-bd145743efe2
+- img
+- strong: src/calc.py
+- button "Expand"
+
+## after-diff-expanded
+url: http://127.0.0.1:18830/conversations/eb02a6db-214e-40ec-9ba4-bd145743efe2
+- img
+- strong: src/calc.py
+- button "Old version":
+  - img
+- button "Diff" [pressed]:
+  - img
+- button "New version":
+  - img
+- button "Collapse"
+- code:
+  - textbox
+- code:
+  - textbox
+- img
+
+## after-diff-old
+url: http://127.0.0.1:18830/conversations/eb02a6db-214e-40ec-9ba4-bd145743efe2
+- img
+- strong: src/calc.py
+- button "Old version" [pressed]:
+  - img
+- button "Diff":
+  - img
+- button "New version":
+  - img
+- button "Collapse"
+- code:
+  - textbox "Editor content"
