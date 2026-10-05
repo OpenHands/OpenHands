@@ -1,12 +1,13 @@
-// Fast checks for control-openhands that need no browser or running stack:
-//   node --test ".agents/skills/verify-openhands/scripts/*.test.mjs"
+// Fast checks for control-openhands that need no browser or running stack.
+// They run with the rest of the suite (`npm test`), or alone:
+//   npx vitest run .agents/skills/verify-openhands
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { test } from "vitest";
 import { buildLocator, parseRole, toCss } from "./lib/selectors.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
