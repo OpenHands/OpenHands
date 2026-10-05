@@ -2910,12 +2910,22 @@ function mapCoverage() {
   const corpus = featureFiles()
     .map((f) => readFileSync(join(mapDir, f), "utf8"))
     .join("\n");
+  // The index's "## Not mapped" section lists deliberate exclusions with a
+  // reason; they are reported as excluded, not as gaps.
+  const index = existsSync(join(mapDir, "README.md"))
+    ? readFileSync(join(mapDir, "README.md"), "utf8")
+    : "";
+  const notMapped = (index.split(/^## Not mapped/m)[1] ?? "").split(/^## /m)[0];
   const routes = routePaths().map((r) => {
     const literal = r.path.replace(/\/:\w+\??/g, "/:").replace(/\*$/, "");
     const pattern = new RegExp(
       `\`${literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\\\/:/g, "/:?[A-Za-z]*")}`,
     );
-    return { ...r, mapped: pattern.test(corpus) || corpus.includes(r.file) };
+    return {
+      ...r,
+      mapped: pattern.test(corpus) || corpus.includes(r.file),
+      excluded: pattern.test(notMapped),
+    };
   });
   const featureDirs = existsSync(
     join(repoRoot, "src", "components", "features"),
@@ -2929,12 +2939,22 @@ function mapCoverage() {
   const components = featureDirs.map((name) => ({
     dir: `src/components/features/${name}`,
     mapped: corpus.includes(`components/features/${name}`),
+    excluded: notMapped.includes(`components/features/${name}`),
   }));
   return {
-    routes: { total: routes.length, unmapped: routes.filter((r) => !r.mapped) },
+    routes: {
+      total: routes.length,
+      unmapped: routes.filter((r) => !r.mapped && !r.excluded),
+      excluded: routes.filter((r) => !r.mapped && r.excluded),
+    },
     featureComponentDirs: {
       total: components.length,
-      unmapped: components.filter((c) => !c.mapped).map((c) => c.dir),
+      unmapped: components
+        .filter((c) => !c.mapped && !c.excluded)
+        .map((c) => c.dir),
+      excluded: components
+        .filter((c) => !c.mapped && c.excluded)
+        .map((c) => c.dir),
     },
   };
 }
