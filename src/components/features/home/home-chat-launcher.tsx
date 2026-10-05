@@ -15,6 +15,7 @@ import type { WorkspaceMode } from "#/api/conversation-metadata-store";
 import { setPendingTaskAttachments } from "#/stores/pending-task-attachments-store";
 import { enqueueHomeTaskPendingMessage } from "#/utils/enqueue-home-task-pending-message";
 import { sendMessageWithAttachments } from "#/utils/send-message-with-attachments";
+import { composeTaskWithRcaContext } from "#/utils/rca-context";
 import { useNavigation } from "#/context/navigation-context";
 import { useIsCreatingConversation } from "#/hooks/use-is-creating-conversation";
 import { Branch, GitRepository } from "#/types/git";
@@ -33,6 +34,7 @@ import {
 import type { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { PluginPickerModal } from "#/components/features/plugins/plugin-picker-modal";
 import { PluginPickerTrigger } from "#/components/features/plugins/plugin-picker-trigger";
+import { RcaImportControl } from "./rca-import-control";
 import { RecommendedAutomationsLauncher } from "#/components/features/automations/recommended-automations-launcher";
 import { PinnedAutomationsDashboard } from "./featured-automations/pinned-automations-dashboard";
 import { RunningAutomationsList } from "./featured-automations/running-automations-list";
@@ -70,8 +72,14 @@ export function HomeChatLauncher() {
   // Block sending entirely when there's no usable LLM; the banner above the
   // launcher (rendered by the home route) explains it and offers setup.
   const llmBlocked = !isLlmConfigLoading && !isLlmConfigured;
-  const { images, files, imagesMarkedUploadAsFile, clearAllFiles } =
-    useConversationStore();
+  const {
+    images,
+    files,
+    imagesMarkedUploadAsFile,
+    clearAllFiles,
+    pendingRcaContext,
+    setPendingRcaContext,
+  } = useConversationStore();
   const { handleUpload } = useChatAttachmentUpload();
   const { error: workspacesError } = useLocalWorkspaces({ enabled: isLocal });
   const { isolated, unsupportedMessage: runtimeWorkspaceMessage } =
@@ -92,7 +100,8 @@ export function HomeChatLauncher() {
   const handleSubmit = (message: string) => {
     const trimmed = message.trim();
     const hasAttachments = images.length > 0 || files.length > 0;
-    if ((!trimmed && !hasAttachments) || isCreating) return;
+    if ((!trimmed && !hasAttachments && !pendingRcaContext) || isCreating)
+      return;
 
     // Safety net: the input is disabled when there's no usable LLM, but never
     // create a conversation that can't run (it would fail with a cryptic
@@ -103,6 +112,12 @@ export function HomeChatLauncher() {
       images: [...images],
       files: [...files],
     };
+    // The first message delivered through the deferred/attachment paths is
+    // built client-side, so the RCA block has to be composed here; the
+    // create request path composes it in the service instead (rcaContext).
+    const taskText =
+      composeTaskWithRcaContext(trimmed || undefined, pendingRcaContext) ?? "";
+    const rcaSnapshot = pendingRcaContext ?? undefined;
 
     // Workspace/repo are optional — match the "Start from scratch" flow which
     // creates a conversation with no working dir and no repo. Build the
@@ -112,6 +127,9 @@ export function HomeChatLauncher() {
     // query here would create a duplicate text-only initial_message.
     let variables: Parameters<typeof createConversation>[0] = {
       query: hasAttachments ? undefined : trimmed || undefined,
+      // With attachments the first message is sent post-create with taskText
+      // (already composed); passing rcaContext too would duplicate the block.
+      rcaContext: hasAttachments ? undefined : rcaSnapshot,
       entryPoint: "home_chat_launcher",
     };
     // An isolated backend owns its workspace, so a host selection left over
@@ -159,6 +177,7 @@ export function HomeChatLauncher() {
         } catch {
           // sessionStorage not available
         }
+        setPendingRcaContext(null);
         const targetConversationId = data.conversation_id;
         const isTaskConversation = targetConversationId.startsWith("task-");
 
@@ -180,7 +199,7 @@ export function HomeChatLauncher() {
             }
 
             setPendingTaskAttachments(taskId, {
-              content: trimmed,
+              content: taskText,
               images: attachmentSnapshot.images,
               files: attachmentSnapshot.files,
               imagesMarkedUploadAsFile: [...imagesMarkedUploadAsFile],
@@ -188,7 +207,7 @@ export function HomeChatLauncher() {
             clearAllFiles();
             await enqueueHomeTaskPendingMessage({
               conversationId: targetConversationId,
-              text: trimmed,
+              text: taskText,
               images: attachmentSnapshot.images,
               imagesMarkedUploadAsFile,
             });
@@ -198,7 +217,7 @@ export function HomeChatLauncher() {
             try {
               await sendMessageWithAttachments({
                 conversationId: targetConversationId,
-                content: trimmed,
+                content: taskText,
                 images: attachmentSnapshot.images,
                 files: attachmentSnapshot.files,
                 imagesMarkedUploadAsFile,
@@ -212,10 +231,10 @@ export function HomeChatLauncher() {
           }
         }
 
-        if (isTaskConversation && trimmed) {
+        if (isTaskConversation && taskText) {
           await enqueueHomeTaskPendingMessage({
             conversationId: targetConversationId,
-            text: trimmed,
+            text: taskText,
             images: [],
             imagesMarkedUploadAsFile: [],
           });
@@ -293,6 +312,11 @@ export function HomeChatLauncher() {
           <PluginPickerTrigger
             count={selectedPlugins.length}
             onClick={() => setIsPluginPickerOpen(true)}
+            disabled={isCreating}
+          />
+          <RcaImportControl
+            value={pendingRcaContext}
+            onChange={setPendingRcaContext}
             disabled={isCreating}
           />
         </div>

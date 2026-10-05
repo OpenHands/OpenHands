@@ -4,6 +4,7 @@ import {
   getConversationState,
   setConversationState,
 } from "#/utils/conversation-local-storage";
+import type { RcaContext } from "#/utils/rca-context";
 
 export type ConversationTab =
   | "files"
@@ -37,6 +38,8 @@ interface ConversationState {
   pastedImageNames: string[];
   loadingFiles: string[]; // File names currently being processed
   loadingImages: string[]; // Image names currently being processed
+  /** Structured RCA context imported for the next conversation launch. */
+  pendingRcaContext: RcaContext | null;
   messageToSend: IMessageToSend | null;
   /** One-shot restore request consumed by the chat input when empty. */
   messageRestoreIfEmpty: IMessageToSend | null;
@@ -69,6 +72,7 @@ interface ConversationActions {
   clearImages: () => void;
   clearFiles: () => void;
   clearAllFiles: () => void;
+  setPendingRcaContext: (rcaContext: RcaContext | null) => void;
   addFileLoading: (fileName: string) => void;
   removeFileLoading: (fileName: string) => void;
   addImageLoading: (imageName: string) => void;
@@ -137,6 +141,7 @@ export const useConversationStore = create<ConversationStore>()(
       pastedImageNames: [],
       loadingFiles: [],
       loadingImages: [],
+      pendingRcaContext: null,
       messageToSend: null,
       messageRestoreIfEmpty: null,
       shouldShownAgentLoading: false,
@@ -259,10 +264,14 @@ export const useConversationStore = create<ConversationStore>()(
             pastedImageNames: [],
             loadingFiles: [],
             loadingImages: [],
+            pendingRcaContext: null,
           },
           false,
           "clearAllFiles",
         ),
+
+      setPendingRcaContext: (pendingRcaContext) =>
+        set({ pendingRcaContext }, false, "setPendingRcaContext"),
 
       addFileLoading: (fileName) =>
         set(
