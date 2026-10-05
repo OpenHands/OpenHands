@@ -182,6 +182,40 @@ describe("the automation interface seam", () => {
     });
   });
 
+  it("admits a complete Events page between Dashboard and Templates", async () => {
+    const base = createInterfaceManifestWithSubPages();
+    const seam = await loadSeam({
+      ...base,
+      routes: { ...base.routes, events: "/automations/events" },
+      navigation: {
+        ...base.navigation,
+        subPages: [
+          base.navigation.subPages![0],
+          { page: "events", label: "Event sources", icon: "activity" },
+          base.navigation.subPages![1],
+        ],
+      },
+      pages: {
+        ...base.pages,
+        events: {
+          title: "Event sources",
+          description: "Manage incoming webhooks",
+        },
+      },
+      endpoints: { ...base.endpoints, webhooks: "/v1/webhooks" },
+    });
+
+    expect(seam.hasAutomationInterface()).toBe(true);
+    expect(seam.getSubPagesSpec()?.map((page) => [page.page, page.to])).toEqual(
+      [
+        ["list", "/automations"],
+        ["events", "/automations/events"],
+        ["templates", "/automations/templates"],
+      ],
+    );
+    expect(seam.getEventsPageSpec()?.title).toBe("Event sources");
+  });
+
   it("stays unavailable, loudly, when a manifest fails admission", async () => {
     // Arrange
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});

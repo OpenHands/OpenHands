@@ -312,6 +312,8 @@ export interface InterfaceRoutes {
   detail: string;
   /** The templates sub-page. Static: there is no parameter to substitute. */
   templates?: string;
+  /** The event sources sub-page. */
+  events?: string;
 }
 
 /**
@@ -336,6 +338,8 @@ export interface InterfaceEndpoints {
    */
   createBundle?: string;
   uploads?: string;
+  /** The custom webhook registrations collection (GET and POST). */
+  webhooks?: string;
 }
 
 export type InterfaceEndpointName = keyof InterfaceEndpoints;
@@ -362,7 +366,7 @@ export interface InterfaceImportExport {
  * leaves the sub-pages unrendered.
  */
 
-export const INTERFACE_SUB_PAGE_IDS = ["list", "templates"] as const;
+export const INTERFACE_SUB_PAGE_IDS = ["list", "events", "templates"] as const;
 
 export type InterfaceSubPageId = (typeof INTERFACE_SUB_PAGE_IDS)[number];
 
@@ -514,6 +518,11 @@ export interface InterfaceTemplatesPage {
   description: string;
 }
 
+export interface InterfaceEventsPage {
+  title: string;
+  description: string;
+}
+
 export interface InterfaceManifest {
   version: typeof INTERFACE_VERSION;
   routes: InterfaceRoutes;
@@ -536,6 +545,7 @@ export interface InterfaceManifest {
     detail: { backLabel: string };
     edit: { title: string };
     templates?: InterfaceTemplatesPage;
+    events?: InterfaceEventsPage;
   };
   docsUrl: string;
   /**

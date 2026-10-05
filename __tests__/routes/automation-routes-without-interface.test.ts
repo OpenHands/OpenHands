@@ -24,11 +24,12 @@ function statusOfLoader(load: () => unknown): number | null {
 describe("the automation routes without an admitted interface manifest", () => {
   it("404s every automation route", async () => {
     // Arrange
-    const [list, detail, setup, templates] = await Promise.all([
+    const [list, detail, setup, templates, events] = await Promise.all([
       import("#/routes/automations-list"),
       import("#/routes/automation-detail"),
       import("#/routes/automation-setup-route"),
       import("#/routes/automation-templates"),
+      import("#/routes/automation-events"),
     ]);
 
     // Act & Assert
@@ -41,6 +42,13 @@ describe("the automation routes without an admitted interface manifest", () => {
         } as Parameters<typeof setup.clientLoader>[0]),
       ),
       templates: statusOfLoader(() => templates.clientLoader()),
-    }).toEqual({ list: 404, detail: 404, setup: 404, templates: 404 });
+      events: statusOfLoader(() => events.clientLoader()),
+    }).toEqual({
+      list: 404,
+      detail: 404,
+      setup: 404,
+      templates: 404,
+      events: 404,
+    });
   });
 });
