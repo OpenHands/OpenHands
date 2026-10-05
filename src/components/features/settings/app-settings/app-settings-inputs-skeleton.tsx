@@ -10,6 +10,7 @@ export function AppSettingsInputsSkeleton() {
       <InputSkeleton />
       <SwitchSkeleton />
       <SwitchSkeleton />
+      <SwitchSkeleton />
     </div>
   );
 }
