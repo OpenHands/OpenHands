@@ -11,6 +11,8 @@ import {
 import * as useLlmProfilesHook from "#/hooks/query/use-llm-profiles";
 import * as useActivateLlmProfileHook from "#/hooks/mutation/use-activate-llm-profile";
 import * as useSaveLlmProfileHook from "#/hooks/mutation/use-save-llm-profile";
+import * as useSettingsHook from "#/hooks/query/use-settings";
+import { DEFAULT_SETTINGS } from "#/services/settings";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
 import * as activeBackendContext from "#/contexts/active-backend-context";
 import { useFreeModelsStore } from "#/stores/free-models-store";
@@ -82,7 +84,13 @@ vi.mock("#/routes/llm-settings", async () => {
           values,
           getDirtyPayload: () => {
             if (view === "all") {
-              return { llm: { temperature: Number(temperature) } };
+              return {
+                llm: {
+                  ...(temperature !== "0.2"
+                    ? { temperature: Number(temperature) }
+                    : {}),
+                },
+              };
             }
             return {
               llm: {
@@ -462,6 +470,104 @@ describe("LlmSettingsLocalView", () => {
       expect(
         screen.queryByTestId("app-settings-skeleton"),
       ).not.toBeInTheDocument();
+    });
+
+    it("preserves active agent LLM settings not edited by the user when creating a profile", async () => {
+      vi.spyOn(useSettingsHook, "useSettings").mockReturnValue({
+        data: {
+          ...DEFAULT_SETTINGS,
+          agent_settings: {
+            ...DEFAULT_SETTINGS.agent_settings,
+            llm: {
+              model: "openai/gpt-5.6-sol",
+              temperature: 0.4,
+            },
+          },
+        },
+        isLoading: false,
+        isError: false,
+        error: null,
+        isFetching: false,
+        isFetched: true,
+      } as unknown as ReturnType<typeof useSettingsHook.useSettings>);
+
+      const user = userEvent.setup();
+      mockSaveMutateAsync.mockResolvedValueOnce({ success: true });
+
+      renderWithProviders(<LlmSettingsLocalView />);
+
+      await user.click(screen.getByTestId("add-llm-profile"));
+      expect(screen.getByTestId("profile-name-input")).toHaveValue(
+        "gpt-5.6-sol",
+      );
+
+      // Switch to All tab where temperature is displayed
+      await user.click(await screen.findByTestId("sdk-section-all-toggle"));
+
+      // Enter a custom profile name to enable Save without editing temperature
+      const nameInput = screen.getByTestId("profile-name-input");
+      await user.clear(nameInput);
+      await user.type(nameInput, "custom-profile");
+
+      await waitFor(() => {
+        expect(screen.getByTestId("save-profile-btn")).not.toBeDisabled();
+      });
+      await user.click(screen.getByTestId("save-profile-btn"));
+
+      await waitFor(() => expect(mockSaveMutateAsync).toHaveBeenCalled());
+      const savedLlm = mockSaveMutateAsync.mock.calls[0][0].request.llm;
+      expect(savedLlm.temperature).toBe(0.4);
+      expect(savedLlm.model).toBe("openai/gpt-5.6-sol");
+      expect(savedLlm).not.toHaveProperty("api_key");
+      expect(savedLlm).not.toHaveProperty("base_url");
+    });
+
+    it("persists a newly edited field over active settings in create mode", async () => {
+      vi.spyOn(useSettingsHook, "useSettings").mockReturnValue({
+        data: {
+          ...DEFAULT_SETTINGS,
+          agent_settings: {
+            ...DEFAULT_SETTINGS.agent_settings,
+            llm: {
+              model: "openai/gpt-5.6-sol",
+              temperature: 0.4,
+            },
+          },
+        },
+        isLoading: false,
+        isError: false,
+        error: null,
+        isFetching: false,
+        isFetched: true,
+      } as unknown as ReturnType<typeof useSettingsHook.useSettings>);
+
+      const user = userEvent.setup();
+      mockSaveMutateAsync.mockResolvedValueOnce({ success: true });
+
+      renderWithProviders(<LlmSettingsLocalView />);
+
+      await user.click(screen.getByTestId("add-llm-profile"));
+      await user.click(await screen.findByTestId("sdk-section-all-toggle"));
+
+      const temperatureInput = await screen.findByTestId(
+        "sdk-settings-llm.temperature",
+      );
+      await user.clear(temperatureInput);
+      await user.type(temperatureInput, "0.8");
+
+      const nameInput = screen.getByTestId("profile-name-input");
+      await user.clear(nameInput);
+      await user.type(nameInput, "temp-edited-profile");
+
+      await waitFor(() => {
+        expect(screen.getByTestId("save-profile-btn")).not.toBeDisabled();
+      });
+      await user.click(screen.getByTestId("save-profile-btn"));
+
+      await waitFor(() => expect(mockSaveMutateAsync).toHaveBeenCalled());
+      const savedLlm = mockSaveMutateAsync.mock.calls[0][0].request.llm;
+      expect(savedLlm.temperature).toBe(0.8);
+      expect(savedLlm.model).toBe("openai/gpt-5.6-sol");
     });
   });
 
