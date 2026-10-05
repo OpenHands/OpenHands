@@ -63,10 +63,10 @@ export const chatInputIconButtonClassName = cn(
 );
 
 export const formControlFocusClassName =
-  "focus:border-contrast/40 focus:ring-1 focus:ring-contrast/20 focus:outline-none";
+  "focus:border-contrast/40 dark:focus:border-contrast/40 focus:ring-1 focus:ring-contrast/20 focus:outline-none";
 
 export const formControlFocusWithinClassName =
-  "focus-within:border-contrast/40 focus-within:ring-1 focus-within:ring-contrast/20";
+  "focus-within:border-contrast/40 dark:focus-within:border-contrast/40 focus-within:ring-1 focus-within:ring-contrast/20";
 
 export const formControlDisabledClassName =
   "disabled:cursor-not-allowed disabled:opacity-60";

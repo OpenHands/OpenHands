@@ -58,7 +58,7 @@ export const dropdownMenuRowIconWrapperClassName = cn(
 export const dropdownFilterTriggerClassName = cn(
   "inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium",
   "border-border-input bg-base-secondary text-contrast dark:border-border",
-  "focus-visible:border-contrast/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-contrast/20",
+  "focus-visible:border-contrast/40 dark:focus-visible:border-contrast/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-contrast/20",
   dropdownInstantColorClassName,
 );
 
