@@ -13,11 +13,14 @@ export interface CanvasExtensionAppViewLabels {
 
 export interface CanvasExtensionAppViewSessionContext {
   signal: AbortSignal;
+  query?: Record<string, string>;
 }
 
 export interface MountCanvasExtensionAppViewOptions {
   container: HTMLElement;
   labels: CanvasExtensionAppViewLabels;
+  /** Optional query values are applied by the trusted bridge before mounting. */
+  query?: Record<string, string>;
   createSession: (
     context: CanvasExtensionAppViewSessionContext,
   ) => Promise<CanvasExtensionAppViewSession>;
@@ -69,9 +72,11 @@ function validatedSession(
   return { ...session, url: url.href, iframeSandbox: sandboxTokens.join(" ") };
 }
 
-function createStatus(message: string): HTMLParagraphElement {
-  const status = document.createElement("p");
+function createStatus(message: string): HTMLDivElement {
+  const status = document.createElement("div");
   status.setAttribute("role", "status");
+  status.className =
+    "flex h-full min-h-64 w-full items-center justify-center text-sm text-muted";
   status.textContent = message;
   return status;
 }
@@ -79,6 +84,8 @@ function createStatus(message: string): HTMLParagraphElement {
 function createAction(label: string, onClick: () => void): HTMLButtonElement {
   const button = document.createElement("button");
   button.type = "button";
+  button.className =
+    "inline-flex min-h-10 cursor-pointer items-center justify-center rounded-lg bg-primary px-4 text-sm font-semibold text-[var(--oh-accent-foreground)] transition-opacity hover:opacity-80";
   button.textContent = label;
   button.addEventListener("click", onClick);
   return button;
@@ -87,9 +94,11 @@ function createAction(label: string, onClick: () => void): HTMLButtonElement {
 export function mountCanvasExtensionAppView({
   container,
   labels,
+  query,
   createSession,
   revokeSession,
 }: MountCanvasExtensionAppViewOptions): MountedCanvasExtensionAppView {
+  container.classList.add("h-full", "min-h-0", "w-full");
   let disposed = false;
   let generation = 0;
   let controller: AbortController | null = null;
@@ -115,14 +124,25 @@ export function mountCanvasExtensionAppView({
 
   const renderError = (message: string, url?: string) => {
     if (disposed) return;
+    const wrapper = document.createElement("div");
+    wrapper.className =
+      "flex h-full min-h-64 w-full items-center justify-center p-8";
     const panel = document.createElement("div");
     panel.setAttribute("role", "alert");
+    panel.className =
+      "flex w-full max-w-lg flex-col items-center rounded-xl border border-border bg-surface-card p-8 text-center";
     const description = document.createElement("p");
+    description.className =
+      "mb-6 mt-0 max-w-md text-base font-medium leading-6 text-content";
     description.textContent = message;
-    panel.append(description, createAction(labels.retry, retry));
+    const actions = document.createElement("div");
+    actions.className = "flex flex-wrap items-center justify-center gap-3";
+    actions.append(createAction(labels.retry, retry));
 
     if (url) {
       const link = document.createElement("a");
+      link.className =
+        "inline-flex min-h-10 cursor-pointer items-center justify-center rounded-lg border border-border px-4 text-sm font-semibold text-content hover:bg-surface-raised";
       link.href = url;
       link.target = "_blank";
       link.rel = "noopener noreferrer";
@@ -131,9 +151,11 @@ export function mountCanvasExtensionAppView({
         event.preventDefault();
         window.open(url, "_blank", "noopener,noreferrer");
       });
-      panel.append(link);
+      actions.append(link);
     }
-    container.replaceChildren(panel);
+    panel.append(description, actions);
+    wrapper.append(panel);
+    container.replaceChildren(wrapper);
   };
 
   const mount = async () => {
@@ -144,7 +166,10 @@ export function mountCanvasExtensionAppView({
     container.replaceChildren(createStatus(labels.loading));
 
     try {
-      const response = await createSession({ signal: controller.signal });
+      const response = await createSession({
+        signal: controller.signal,
+        query,
+      });
       hasSession = true;
       const created = validatedSession(response);
       if (disposed || currentGeneration !== generation) {
