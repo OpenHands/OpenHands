@@ -1,0 +1,77 @@
+$ control-openhands browser toasts --history
+{
+  "ok": true,
+  "toasts": [
+    {
+      "role": "alert",
+      "text": "Your LLM isn't set up yet, so conversations won't run. Finish setup to get started.\nSet up LLM",
+      "links": []
+    },
+    {
+      "role": "status",
+      "text": "HTTP request failed (502 Bad Gateway): \"Bad Gateway: connect ECONNREFUSED 127.0.0.1:18831\"",
+      "links": []
+    }
+  ],
+  "history": [
+    {
+      "ts": "2026-10-05T17:52:10.613Z",
+      "role": "alert",
+      "text": "Your LLM isn't set up yet, so conversations won't run. Finish setup to get started.\nSet up LLM"
+    },
+    {
+      "ts": "2026-10-05T17:52:19.456Z",
+      "role": "status",
+      "text": "ConversationId unknown, cannot download trajectory"
+    },
+    {
+      "ts": "2026-10-05T17:52:19.456Z",
+      "role": "status",
+      "text": "HTTP request failed (502 Bad Gateway): \"Bad Gateway: connect ECONNREFUSED 127.0.0.1:18831\""
+    }
+  ]
+}
+$ control-openhands browser count testid=context-menu
+{
+  "ok": true,
+  "count": 1
+}
+$ control-openhands browser errors --app-only --no-warnings
+{
+  "ok": true,
+  "since": "last clear",
+  "summary": {
+    "app:http-error": 1,
+    "app:console.error": 1,
+    "app:pageerror": 1
+  },
+  "pageErrors": 1,
+  "appErrors": 3,
+  "warnings": 0,
+  "events": [
+    {
+      "ts": "2026-10-05T17:52:19.444Z",
+      "kind": "http-error",
+      "page": "http://127.0.0.1:18830/",
+      "appOrigin": true,
+      "url": "http://127.0.0.1:18830/api/file/download-trajectory/9849cf64-d944-42f2-9fdc-d2ddd3077caa",
+      "method": "GET",
+      "status": 502
+    },
+    {
+      "ts": "2026-10-05T17:52:19.445Z",
+      "kind": "console.error",
+      "page": "http://127.0.0.1:18830/",
+      "appOrigin": true,
+      "message": "Failed to load resource: the server responded with a status of 502 (Bad Gateway)",
+      "url": "http://127.0.0.1:18830/api/file/download-trajectory/9849cf64-d944-42f2-9fdc-d2ddd3077caa"
+    },
+    {
+      "ts": "2026-10-05T17:52:19.466Z",
+      "kind": "pageerror",
+      "page": "http://127.0.0.1:18830/",
+      "appOrigin": true,
+      "message": "HTTP request failed (502 Bad Gateway): \"Bad Gateway: connect ECONNREFUSED 127.0.0.1:18831\""
+    }
+  ]
+}

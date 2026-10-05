@@ -1,0 +1,59 @@
+$ control-openhands browser toasts --history
+{
+  "ok": true,
+  "toasts": [
+    {
+      "role": "alert",
+      "text": "Your LLM isn't set up yet, so conversations won't run. Finish setup to get started.\nSet up LLM",
+      "links": []
+    },
+    {
+      "role": "status",
+      "text": "Couldn't download the conversation data: HTTP request failed (502 Bad Gateway): \"Bad Gateway: connect ECONNREFUSED 127.0.0.1:18801\"",
+      "links": []
+    }
+  ],
+  "history": [
+    {
+      "ts": "2026-10-05T18:04:11.711Z",
+      "role": "status",
+      "text": "Couldn't download the conversation data: HTTP request failed (502 Bad Gateway): \"Bad Gateway: connect ECONNREFUSED 127.0.0.1:18801\""
+    }
+  ]
+}
+$ control-openhands browser count testid=context-menu
+{
+  "ok": true,
+  "count": 0
+}
+$ control-openhands browser errors --app-only --no-warnings
+{
+  "ok": true,
+  "since": "last clear",
+  "summary": {
+    "app:http-error": 1,
+    "app:console.error": 1
+  },
+  "pageErrors": 0,
+  "appErrors": 2,
+  "warnings": 0,
+  "events": [
+    {
+      "ts": "2026-10-05T18:04:11.689Z",
+      "kind": "http-error",
+      "page": "http://127.0.0.1:18800/",
+      "appOrigin": true,
+      "url": "http://127.0.0.1:18800/api/file/download-trajectory/f65c13a9-c33b-4d26-a76e-bf1fb5b1fd84",
+      "method": "GET",
+      "status": 502
+    },
+    {
+      "ts": "2026-10-05T18:04:11.689Z",
+      "kind": "console.error",
+      "page": "http://127.0.0.1:18800/",
+      "appOrigin": true,
+      "message": "Failed to load resource: the server responded with a status of 502 (Bad Gateway)",
+      "url": "http://127.0.0.1:18800/api/file/download-trajectory/f65c13a9-c33b-4d26-a76e-bf1fb5b1fd84"
+    }
+  ]
+}
