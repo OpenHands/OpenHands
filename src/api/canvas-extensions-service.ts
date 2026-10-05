@@ -336,6 +336,15 @@ class CanvasExtensionsService {
     return createAppBackendViewClient(name, backend);
   }
 
+  static async fetchIcon(name: string): Promise<Blob> {
+    const client = getClient();
+    return mapUnsupported(() =>
+      client.get<Blob>(`${installedExtensionPath(name)}/icon`, {
+        responseType: "blob",
+      }),
+    );
+  }
+
   static async requestAgentServer<T = unknown>(
     request: CanvasExtensionAgentServerRequest,
     backend?: Backend,
