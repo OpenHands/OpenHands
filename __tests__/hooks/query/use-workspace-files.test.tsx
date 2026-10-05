@@ -122,6 +122,33 @@ describe("useWorkspaceFiles — local backend", () => {
     storeBackendKind = "local";
   });
 
+  it("lists files with a cmd.exe command when the host is Windows", async () => {
+    const userAgent = vi
+      .spyOn(window.navigator, "userAgent", "get")
+      .mockReturnValue("Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        ...conversation,
+        workspace: { working_dir: "C:\\Users\\me\\proj" },
+      },
+    });
+    executeCommandSpy.mockResolvedValue({
+      exit_code: 0,
+      stdout: "C:\\Users\\me\\proj\\src\\index.ts\r\n",
+      stderr: "",
+    });
+
+    const { result } = renderHook(() => useWorkspaceFiles(), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.data).toEqual(["src/index.ts"]));
+    const command = executeCommandSpy.mock.calls[0][2] as string;
+    expect(command).toMatch(/^dir \/b \/s/);
+    expect(command).not.toMatch(/head|\/dev\/null/);
+    userAgent.mockRestore();
+  });
+
   // @spec WFD-002 — Workspace-scoped server persistence
   it("uses persisted limits for the active workspace and changes them on navigation", async () => {
     vi.mocked(SettingsService.getSettings).mockResolvedValue({

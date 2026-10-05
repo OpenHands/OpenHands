@@ -91,3 +91,59 @@ export function parseWorkspaceFileList(stdout: string, maxFiles: number) {
     isTruncated: maxFiles > 0 && paths.length > maxFiles,
   };
 }
+
+// A Windows-hosted local backend runs commands through cmd.exe, where `find`
+// is the text-search tool and `head` and `/dev/null` do not exist, so the POSIX
+// pipeline exits non-zero and the Files tab shows its empty state. `dir /s`
+// prints absolute backslash paths; findstr drops excluded directories and the
+// caller makes the rest relative with `parseWindowsWorkspaceFileList`.
+const isCmdSafePattern = (pattern: string) => !/["%^&|<>!*?]/.test(pattern);
+
+export function buildWindowsWorkspaceFileListCommand(
+  options: WorkspaceFileDiscovery,
+  workingDir: string,
+): string {
+  const root = workingDir.replace(/[\\/]+$/, "").toLowerCase();
+  const excludes = options.excludedPatterns
+    .map((pattern) => pattern.replace(/^\.\//, "").replaceAll("/", "\\"))
+    .filter(
+      (pattern) =>
+        isCmdSafePattern(pattern) &&
+        // A pattern that already appears in the workspace root path would drop
+        // every file; the parser filters those on the relative path instead.
+        !`\\${root.replaceAll("/", "\\")}\\`.includes(
+          `\\${pattern.toLowerCase()}\\`,
+        ),
+    )
+    .map((pattern) => `/c:"\\${pattern}\\"`);
+  const filter = excludes.length
+    ? ` | findstr /v /i ${excludes.join(" ")}`
+    : "";
+  return `dir /b /s /a:-d 2>nul${filter} | sort`;
+}
+
+export function parseWindowsWorkspaceFileList(
+  stdout: string,
+  workingDir: string,
+  options: WorkspaceFileDiscovery,
+) {
+  const root = workingDir.replaceAll("/", "\\").replace(/\\+$/, "");
+  const excluded = options.excludedPatterns
+    .filter((pattern) => !pattern.includes("/"))
+    .map((pattern) => pattern.toLowerCase());
+  const relative = stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) =>
+      line.toLowerCase().startsWith(`${root.toLowerCase()}\\`)
+        ? line.slice(root.length + 1)
+        : line,
+    )
+    .map((line) => line.replace(/\\/g, "/"))
+    .filter((line) => {
+      const dirs = line.toLowerCase().split("/").slice(0, -1);
+      return !dirs.some((dir) => excluded.includes(dir));
+    });
+  return parseWorkspaceFileList(relative.join("\n"), options.maxFiles);
+}

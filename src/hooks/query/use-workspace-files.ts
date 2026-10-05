@@ -13,7 +13,9 @@ import { useRuntimeIsReady } from "#/hooks/use-runtime-is-ready";
 import { getGitPath } from "#/utils/get-git-path";
 import { useWorkspaceFileDiscovery } from "./use-workspace-file-discovery";
 import {
+  buildWindowsWorkspaceFileListCommand,
   buildWorkspaceFileListCommand,
+  parseWindowsWorkspaceFileList,
   parseWorkspaceFileList,
 } from "#/utils/workspace-file-discovery";
 
@@ -63,10 +65,18 @@ function useLocalWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
       options,
     ],
     queryFn: async () => {
+      // The local backend serves the UI from the host the agent-server runs
+      // on, so the browser's user agent reflects the host OS.
+      const onWindowsHost =
+        !!workingDir &&
+        typeof navigator !== "undefined" &&
+        /windows/i.test(navigator.userAgent);
       const result = await AgentServerRuntimeService.executeCommand(
         conversationUrl,
         sessionApiKey,
-        buildWorkspaceFileListCommand(options),
+        onWindowsHost
+          ? buildWindowsWorkspaceFileListCommand(options, workingDir)
+          : buildWorkspaceFileListCommand(options),
         workingDir,
         30,
         conversationId,
@@ -78,7 +88,9 @@ function useLocalWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
         );
       }
 
-      return parseWorkspaceFileList(result.stdout, options.maxFiles);
+      return onWindowsHost
+        ? parseWindowsWorkspaceFileList(result.stdout, workingDir, options)
+        : parseWorkspaceFileList(result.stdout, options.maxFiles);
     },
     enabled:
       enabled &&
