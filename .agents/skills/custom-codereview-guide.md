@@ -34,7 +34,10 @@ confirm before reviewing the rest.
 ## Triage: Ownership and Scope
 
 During triage, check ownership, supported behavior, and acceptance criteria.
-Do not require tests, PR artifacts, or before/after fix evidence for an unwritten fix.
+Issue readiness means the work is clear enough to start—not that the fix is
+complete. Do not require a PR, passing implementation tests, or before-and-after
+fix evidence. Reconsider readiness when new information leaves scope or expected
+behavior unresolved.
 
 Trace the failing boundary before assigning an owner:
 
@@ -61,10 +64,6 @@ For visual defects, use actual Canvas captures. For nonvisual defects, use comma
 logs, API output, or a focused reproducer/test. Accept evidence linked in comments;
 do not require duplicate uploads or screenshots of logs. State uncertainty; do not
 call inferred failures or defensive handling verified production reproductions.
-
-Readiness is not PR approval. Follow `.github/workflows/issue-readiness-check.yml`:
-actors with `write`, `maintain`, or `admin` permission may grant `ready-for-dev`.
-Do not invent bot exceptions or override failing required checks.
 
 ## Implementation and Merge Review
 
