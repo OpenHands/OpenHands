@@ -9,8 +9,9 @@
  *
  * Summaries are derived from the newest page of runs (the sample the runs
  * hook fetches); `total` alone is the response's lifetime count. Success rate
- * and durations consider only COMPLETED and FAILED runs — a cancelled or
- * skipped run says nothing about either.
+ * and durations consider only terminal lifecycle runs; the success numerator
+ * uses task-aware display status so completed-but-blocked work is not counted
+ * as successful.
  */
 
 import {
@@ -19,7 +20,9 @@ import {
   type AutomationRun,
   type AutomationRunsResponse,
 } from "#/types/automation";
+import { getAutomationRunDisplay } from "#/utils/automation-run-display";
 import type {
+  DashboardCreatedByValue,
   DashboardSortValue,
   DashboardStatusValue,
   DashboardTriggerValue,
@@ -81,15 +84,29 @@ const TERMINAL_STATUSES = new Set<AutomationRunStatus>([
   AutomationRunStatus.FAILED,
 ]);
 
+function isTaskSuccessful(run: AutomationRun): boolean {
+  const { badgeStatus } = getAutomationRunDisplay(run);
+  return (
+    badgeStatus === AutomationRunStatus.COMPLETED || badgeStatus === "success"
+  );
+}
+
+function isTaskFailing(run: AutomationRun): boolean {
+  const { badgeStatus } = getAutomationRunDisplay(run);
+  return (
+    badgeStatus === AutomationRunStatus.FAILED ||
+    badgeStatus === "failed" ||
+    badgeStatus === "blocked"
+  );
+}
+
 export function summarizeAutomationRuns(
   response: AutomationRunsResponse,
 ): AutomationRunSummary {
   const terminal = response.runs.filter((run) =>
     TERMINAL_STATUSES.has(run.status),
   );
-  const completed = terminal.filter(
-    (run) => run.status === AutomationRunStatus.COMPLETED,
-  ).length;
+  const completed = terminal.filter(isTaskSuccessful).length;
 
   let completedTotal: number | null;
   if (response.status_counts) {
@@ -135,14 +152,14 @@ export function deriveAutomationHealth(
   }
   const latest = state.summary.latestRun;
   if (!latest) return "never-run";
-  if (latest.status === AutomationRunStatus.FAILED) return "failing";
+  if (isTaskFailing(latest)) return "failing";
   if (
     latest.status === AutomationRunStatus.PENDING ||
     latest.status === AutomationRunStatus.RUNNING
   ) {
     return "running";
   }
-  return "healthy";
+  return isTaskSuccessful(latest) ? "healthy" : "unknown";
 }
 
 /** "—" unknown, seconds under a minute, minutes under an hour, else "1.5h". */
@@ -187,6 +204,17 @@ const TRIGGER_PREDICATES: Record<
   schedule: (automation) => automation.trigger.type !== "event",
 };
 
+// The caller's id is non-null whenever these run; applyDashboardView skips the
+// creator check until identity resolves, so "me" is an exact match and
+// "others" is everything else, including creator-less automations.
+const CREATED_BY_PREDICATES: Record<
+  Exclude<DashboardCreatedByValue, "all">,
+  (automation: Automation, currentUserId: string) => boolean
+> = {
+  me: (automation, currentUserId) => automation.user_id === currentUserId,
+  others: (automation, currentUserId) => automation.user_id !== currentUserId,
+};
+
 function runCount(automation: Automation, byId: Summaries): number {
   return byId.get(automation.id)?.summary?.total ?? 0;
 }
@@ -213,6 +241,8 @@ export interface DashboardViewState {
   search: string;
   status: DashboardStatusValue;
   trigger: DashboardTriggerValue;
+  createdBy: DashboardCreatedByValue;
+  currentUserId: string | null;
   sort: DashboardSortValue;
 }
 
@@ -237,6 +267,15 @@ export function applyDashboardView(
       if (
         view.trigger !== "all" &&
         !TRIGGER_PREDICATES[view.trigger](automation)
+      ) {
+        return false;
+      }
+      // With no caller id (local backend, personal workspace, or /me
+      // loading), the creator filter is inert.
+      if (
+        view.currentUserId !== null &&
+        view.createdBy !== "all" &&
+        !CREATED_BY_PREDICATES[view.createdBy](automation, view.currentUserId)
       ) {
         return false;
       }

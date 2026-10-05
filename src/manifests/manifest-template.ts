@@ -7,7 +7,7 @@
  * cannot express behavior here.
  */
 
-import type { SetupEntry, SetupFormValues } from "./types";
+import type { SetupEntry, SetupFormValues, SetupPayloadValue } from "./types";
 
 const PLACEHOLDER_PATTERN = /\{\{([A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*)\}\}/g;
 
@@ -42,11 +42,19 @@ function wholePlaceholderPath(template: string): string | null {
   return match ? match[1] : null;
 }
 
-/** A list of strings, which is the one non-string shape a form value takes. */
-function isStringList(value: unknown): value is string[] {
-  return (
-    Array.isArray(value) && value.every((item) => typeof item === "string")
-  );
+function isPlainPayloadValue(value: unknown): value is SetupPayloadValue {
+  if (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return true;
+  }
+  if (Array.isArray(value)) return value.every(isPlainPayloadValue);
+  if (typeof value !== "object") return false;
+  if (Object.getPrototypeOf(value) !== Object.prototype) return false;
+  return Object.values(value).every(isPlainPayloadValue);
 }
 
 /**
@@ -57,19 +65,19 @@ function isStringList(value: unknown): value is string[] {
  * get an array. Inside a sentence the same placeholder still reads as text,
  * because there is nowhere for a list to go in a string.
  *
- * Only the shapes a form value has are kept whole. A placeholder naming
- * anything else - `{{automation.setup}}` resolves to the setup block itself -
+ * Plain JSON form values are kept whole. A placeholder naming anything else -
+ * for example `{{automation.setup}}`, or a browser `File` selected by the user -
  * reads as text like it does inside a sentence, so a manifest cannot state one
  * value and put its own object graph into the request body.
  */
 export function interpolateValue(
   template: string,
   scope: SetupScope,
-): string | string[] {
+): SetupPayloadValue {
   const path = wholePlaceholderPath(template);
   if (path === null) return interpolateText(template, scope);
   const resolved = getByPath(scope, path);
-  return isStringList(resolved) ? resolved : toText(resolved);
+  return isPlainPayloadValue(resolved) ? resolved : toText(resolved);
 }
 
 /** Substitute placeholders inside a template string. */

@@ -1,5 +1,11 @@
 import { useMemo, useState } from "react";
-import { Outlet, redirect, useLocation, useMatches } from "react-router";
+import {
+  Navigate,
+  Outlet,
+  redirect,
+  useLocation,
+  useMatches,
+} from "react-router";
 import { useTranslation } from "react-i18next";
 import { Route } from "./+types/settings";
 import OptionService from "#/api/option-service/option-service.api";
@@ -11,10 +17,15 @@ import { Typography } from "#/ui/typography";
 import { useBreakpoint } from "#/hooks/use-breakpoint";
 import { useSettingsNavItems } from "#/hooks/use-settings-nav-items";
 import {
+  LOCKED_CLOUD_SETTINGS_NAV_PATH,
+  OSS_NAV_ITEMS,
+} from "#/constants/settings-nav";
+import {
   getFirstAvailablePath,
   isSettingsPageHidden,
 } from "#/utils/settings-utils";
 import { SettingsSectionHeaderProvider } from "#/contexts/settings-section-header-context";
+import { getLockedCloudHost } from "#/api/agent-server-config";
 
 export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
   const url = new URL(request.url);
@@ -47,13 +58,15 @@ function SettingsScreen() {
   const [hideSectionHeader, setHideSectionHeader] = useState(false);
 
   const { currentSectionTitle, currentSectionSubtitle } = useMemo(() => {
-    const currentRenderedItem = navItems.find(
-      (item) => item.type === "item" && item.item.to === location.pathname,
+    // Resolve from the full list, not the listed subset, so a page that is
+    // reachable but unlisted still gets its own title.
+    const currentItem = OSS_NAV_ITEMS.find(
+      (item) => item.to === location.pathname,
     );
-    if (currentRenderedItem?.type === "item") {
+    if (currentItem) {
       return {
-        currentSectionTitle: currentRenderedItem.item.text,
-        currentSectionSubtitle: currentRenderedItem.item.subtitle,
+        currentSectionTitle: currentItem.text,
+        currentSectionSubtitle: currentItem.subtitle,
       };
     }
     const firstItem = navItems.find((item) => item.type === "item");
@@ -74,6 +87,17 @@ function SettingsScreen() {
   const isMobileHub = isMobile && location.pathname === "/settings";
   const shouldHideTitle =
     routeHandle?.hideTitle === true || isMobileHub || hideSectionHeader;
+
+  // Locked-to-Cloud (SaaS / self-hosted OHE) only exposes the Application
+  // page; the OHE settings shell owns the rest, so direct links to the other
+  // Canvas settings pages are sent to Application instead (OHE-3457).
+  if (
+    getLockedCloudHost() !== null &&
+    location.pathname !== "/settings" &&
+    location.pathname !== LOCKED_CLOUD_SETTINGS_NAV_PATH
+  ) {
+    return <Navigate to={LOCKED_CLOUD_SETTINGS_NAV_PATH} replace />;
+  }
 
   return (
     <main data-testid="settings-screen" className="min-h-0">

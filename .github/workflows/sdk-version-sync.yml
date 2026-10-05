@@ -5,6 +5,7 @@ on:
     paths:
       # Only run on PRs that touch version-related files
       - "config/defaults.json"
+      - "package.json"
       - "scripts/dev-safe.mjs"
       - "scripts/dev-with-automation.mjs"
       - "scripts/check-sdk-version-sync.mjs"
@@ -14,6 +15,7 @@ on:
       - main
     paths:
       - "config/defaults.json"
+      - "package.json"
       - "scripts/dev-safe.mjs"
       - "scripts/dev-with-automation.mjs"
       - "scripts/check-sdk-version-sync.mjs"

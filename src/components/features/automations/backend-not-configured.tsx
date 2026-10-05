@@ -12,7 +12,7 @@ export function BackendUnavailable({ onRetry }: BackendUnavailableProps) {
 
   return (
     <div className="flex flex-col items-center justify-center py-20 px-4">
-      <ExclamationCircleIcon className="size-12 text-[var(--oh-warning)]" />
+      <ExclamationCircleIcon className="size-12 text-warning" />
       <h2 className="mt-4 text-lg font-medium text-content">
         {t(I18nKey.AUTOMATIONS$BACKEND_UNAVAILABLE_TITLE)}
       </h2>

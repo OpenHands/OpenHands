@@ -2,10 +2,13 @@ import { getLastRenderableEventId } from "#/hooks/chat/model-command-event-ancho
 import { useModelStore, SeededSwitch } from "#/stores/model-store";
 import {
   getStoredConversationMetadata,
-  setStoredConversationMetadata,
+  mergeStoredConversationMetadata,
 } from "#/api/conversation-metadata-store";
 import { OpenHandsEvent } from "#/types/agent-server/core";
-import { isSwitchLLMObservationEvent } from "#/types/agent-server/type-guards";
+import {
+  isClassifyAndSwitchLLMObservationEvent,
+  isSwitchLLMObservationEvent,
+} from "#/types/agent-server/type-guards";
 import { shouldRenderEvent } from "#/components/conversation-events/chat/event-content-helpers/should-render-event";
 
 export function recordModelSwitchMessage(
@@ -39,21 +42,14 @@ export function stampActiveLlmProfile(
 ) {
   useModelStore.getState().setActiveProfile(conversationId, profileName);
 
-  const prev = getStoredConversationMetadata(conversationId);
-  setStoredConversationMetadata(conversationId, {
-    selected_repository: prev?.selected_repository ?? null,
-    selected_branch: prev?.selected_branch ?? null,
-    git_provider: prev?.git_provider ?? null,
-    selected_workspace: prev?.selected_workspace ?? null,
-    // Carry the attached-workspace mode forward too — the full-object replace
-    // would otherwise drop it (#15520). This helper is the single write site
-    // for the profile-switch stamp, so one line covers every path.
-    workspace_mode: prev?.workspace_mode ?? null,
+  // Merge rather than replace: the stamp only owns these two fields, and the
+  // record carries others it must not drop — the attached workspace mode
+  // (#15520), the plugins snapshot behind the in-conversation plugins view,
+  // and the local planner conversation id. Enumerating them here meant every
+  // new field had to remember to opt in.
+  mergeStoredConversationMetadata(conversationId, {
     active_profile: profileName,
     stamped_at: stampedAt,
-    // Full-object replace: carry the plugins snapshot forward so the
-    // in-conversation plugins view survives a profile switch.
-    plugins: prev?.plugins ?? null,
   });
 }
 
@@ -112,6 +108,26 @@ export function seedModelSwitchesFromHistory(
       });
       latestSwitch = {
         profileName: event.observation.profile_name,
+        timestamp: event.timestamp,
+      };
+    } else if (
+      isClassifyAndSwitchLLMObservationEvent(event) &&
+      !event.observation.is_error &&
+      event.observation.model
+    ) {
+      // Router-driven switch: the matched LLM profile name is the
+      // observation's `model` (the SDK matched classifier output against
+      // saved profile names case-insensitively and stamped the profile name
+      // there; `active_model` is the underlying model string, not the
+      // profile name).
+      const profileName = event.observation.model;
+      switches.push({
+        id: `history-classify-switch:${event.id}`,
+        anchorEventId: lastRenderableId,
+        profileName,
+      });
+      latestSwitch = {
+        profileName,
         timestamp: event.timestamp,
       };
     }
