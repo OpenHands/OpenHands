@@ -86,11 +86,11 @@ Preconditions:
 
 ## Gotchas
 
-- The stop and delete confirmation buttons have no test ids at runtime (`BrandButton` takes `testId`, the modals pass `data-testid`): select them by role inside `role=dialog`.
+- The stop and delete confirmation buttons have no test ids at runtime (`BrandButton` takes `testId`, the modals pass `data-testid`) (#17915): select them by role inside `role=dialog`.
 - `stop-button`, `show-skills-button`, `show-hooks-button` and `show-agent-tools-button` also exist in the composer, and `ellipsis-button` in sidebar rows: always scope to `testid=chat-pane-header` or `testid=conversation-name-context-menu`.
 - Stop Runtime (status menu) and Stop Conversation (menu) both navigate to `/conversations`. On a finished local conversation the agent server keeps `finished`; use a running conversation to see `paused` and Start Runtime.
 - Rename has no Escape-to-cancel: Escape leaves the input open and the next blur saves whatever was typed.
-- The "..." menu and the status-dot menu ignore Escape (the Git actions menu closes on it); close them with an outside click (`browser mouse-click 900 500`).
+- The "..." menu (#17913) and the status-dot menu (#17933) ignore Escape (the Git actions menu closes on it); close them with an outside click (`browser mouse-click 900 500`).
 - The status menu reads `Running` / `Stop Runtime` for a finished local conversation too; only a paused one shows `Server Stopped` / `Start Runtime`.
 - Panel and Overview columns animate: read their state with `browser wait <sel> --state hidden|visible`, not an immediate `browser visible`.
 - The Skills dialog re-reads the workspace each time it opens, so a project skill added while the dialog is closed appears without Refresh.
@@ -104,5 +104,5 @@ Preconditions:
 - The repo, branch and Pull/Push chips come from `git remote get-url origin` in the workspace, read when the page loads: reload after changing the remote.
 - The Usage tab logs `GET /api/llm/balance` 404 on a local backend (F27); count it in `browser errors --app-only` but it is not an F07 failure.
 - The overview's Automations section has no opener in the UI (the overview menu offers Workspace and Git sections only).
-- On a local backend the Hooks dialog never lists hooks: `getHooks` in `src/api/conversation-service/agent-server-conversation-service.api.ts` always returns an empty list, although the conversation's `hook_config` holds the workspace `.openhands/hooks.json` and the dialog says hooks are loaded from the workspace.
-- Known product issues (repro candidates): the Hooks dialog shows `No hooks configured` for a conversation started with workspace hooks; branching from a user message drops the message but leaves the composer empty; an unknown id also shows `Unable to load conversations because the selected agent server returned data this UI does not understand…`; at 390 px the "..." menu overflows the right edge (labels cut to `Show Availab…`, `Delete Conve…`).
+- On a local backend the Hooks dialog never lists hooks: `getHooks` in `src/api/conversation-service/agent-server-conversation-service.api.ts` always returns an empty list, although the conversation's `hook_config` holds the workspace `.openhands/hooks.json` and the dialog says hooks are loaded from the workspace (#17924).
+- Known product issues (repro candidates): the Hooks dialog shows `No hooks configured` for a conversation started with workspace hooks (#17924); branching from a user message drops the message but leaves the composer empty (#17914); an unknown id also shows `Unable to load conversations because the selected agent server returned data this UI does not understand…` (#17905); at 390 px the "..." menu overflows the right edge (labels cut to `Show Availab…`, `Delete Conve…`) (#17913).

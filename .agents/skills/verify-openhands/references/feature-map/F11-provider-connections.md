@@ -84,9 +84,10 @@ Preconditions:
 - Edit's Save is enabled even with no changes, and a blank key on Edit is omitted from the request (the stored key is kept); there is no way to clear a key.
 - The delete spinner (`aria-busy`) lasts under 100 ms on a local stack; `--observe` sees only `Delete` then `<absent>`.
 - `role=dialog` matches two nested elements in these modals; count `> 0`, do not expect `1`.
-- The first profile added on a run with no profiles becomes the active one. Activating a linked profile copies the resolved key into the active agent settings, which keep the connection id: that is why the server still counts a reference after every linked profile is gone (see `F11.delete-stale-reference`).
+- The first profile added on a run with no profiles becomes the active one. Activating a linked profile copies the resolved key into the active agent settings, which keep the connection id: that is why the server still counts a reference after every linked profile is gone (see `F11.delete-stale-reference`) (OpenHands/software-agent-sdk#5498).
 - Delete a connection's linked profiles before the connection; then also make an unlinked profile active, or the delete is refused.
 - Rotation results are read from the conversation (`conversation events ... --kinds ConversationErrorEvent,MessageEvent` and the banner in the chat), not from the settings page, which never shows the key.
 - Model Router's **Add connection** reuses this modal (F12); its toasts and fields are the same.
 - `F11.load-error` needs a real server failure: the recipe corrupts this run's own `provider_connections.json` and restores it. Always restore it (keep the `.bak`), or every later family on the run sees the error; never touch another run's state.
 - At phone width a long name squeezes the provider column to one letter (`d…`); the full values stay in the API and the name's `title`.
+- Known issue OpenHands/software-agent-sdk#5497: after a key rotation, new conversations still run agent steps on the old key; only title generation uses the new one (`F11.rotate`).

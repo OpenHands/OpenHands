@@ -76,7 +76,7 @@ Preconditions:
 
 - Two save models on one form: theme, checklist and voice input apply instantly and ignore Save; the rest is dropped silently if you navigate away before Save (filling `git-user-name-input`, then clicking `sidebar-settings-/settings/secrets` and back, shows the stored `openhands` again; `browser dialogs` is empty). Assert the instant ones without clicking Save, and never expect Save to enable for them.
 - The success toast is rendered in the language that was active when you clicked Save: switching to French toasts `Settings saved`, switching back toasts `Paramètres enregistrés` (`browser wait-text 'Paramètres enregistrés'`), so `wait-text 'Settings saved'` times out there. Assert with `browser text 'testid=submit-button'` after a reload instead.
-- Some chrome strings are not translated in any language (`Search commands`, `Automate`); do not treat them as a language switch failure.
+- Some chrome strings are not translated in any language (`Search commands`, `Automate`) (#17909); do not treat them as a language switch failure.
 - The switches are hidden checkboxes: `browser click 'testid=enable-analytics-switch'` times out (`element is not visible`). Click the label text scoped to `testid=app-settings-screen`, and read `.checked` through `eval`.
 - `role=option[name^=...]` is not supported by the selector parser; use `role=option >> has-text=<profile>` for profile options whose names include the model.
 - `conversation start` leaves the browser on the conversation page, which also has a `testid=submit-button`; `goto /settings/app` before the next settings step or clicks hit the composer.
@@ -87,4 +87,5 @@ Preconditions:
 - The Title generation model combobox has a clear (×) button with no accessible name (`- button` in the snapshot, visible as × at phone width). At desktop width it only takes clicks after `browser hover` on the input (`F16.title-model-clear`); otherwise use the Automatic option.
 - `browser eval` wraps its argument as an expression: statements separated by `;` fail with `SyntaxError: Unexpected token ';'`; wrap them in `(() => { ...; return x; })()`.
 - With `service stop agent-server`, a `browser reload` of `/settings/app` shows the backend-unavailable screen (`agent-server-onboarding-screen`, Manage backends), not the form: stop the service only after the page is loaded, and `restart` afterwards.
-- Known product bugs (repro candidates): git identity never reaches the agent; switches are not keyboard reachable or announced; `<html lang>` stays `en` after a language change; a failed save discards the user's edits (`F16.save-states`).
+- Known product bugs (repro candidates): git identity never reaches the agent (#17899); switches are not keyboard reachable or announced (#17900); `<html lang>` stays `en` after a language change (#17909); a failed save discards the user's edits (`F16.save-states`) (#17927).
+- Known issue #17898: a build with `VITE_DO_NOT_TRACK=1` still initializes PostHog and loads scripts from the telemetry host, also with analytics off (`F16.analytics`).

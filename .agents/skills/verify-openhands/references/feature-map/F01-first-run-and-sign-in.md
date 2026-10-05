@@ -103,5 +103,5 @@ Not reachable locally:
 - Right after Next, the ACP step reads "Checking for an existing Claude Code login…" with Next disabled. Wait for `testid=onboarding-acp-auth-detected` before reading the banner. The "already signed in" banner depends on the host's CLI login. On a clean CI machine the fields become required, and Next is blocked until they are filled.
 - Choosing an ACP agent saves `agent_kind: acp` immediately. Re-choose OpenHands before leaving, or later conversations in the run use the ACP agent.
 - In preview mode, Skip and Close are inert. The LLM slide shows `gpt-5.6-sol` even when another model is saved, so do not read it as data loss.
-- Known failure: the public first run and the API-key screen raise an error toast `No backend is configured.` (`NoBackendAvailableError` is not filtered by the global query toast).
-- Known failure: a direct load of an unknown route logs React error #418, and the 404 page has no link back to the app.
+- Known failure: the public first run and the API-key screen raise an error toast `No backend is configured.` (`NoBackendAvailableError` is not filtered by the global query toast) (#17901).
+- Known failure: a direct load of an unknown route logs React error #418, and the 404 page has no link back to the app (#17904).

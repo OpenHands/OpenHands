@@ -80,23 +80,24 @@ Preconditions:
 
 ## Gotchas
 
-- Switches are hidden `<input>`s: `browser testids` lists them only with `--hidden`. Toggle by clicking the label text scoped to the page, read `.checked` with `browser eval`.
+- Switches are hidden `<input>`s (#17900): `browser testids` lists them only with `--hidden`. Toggle by clicking the label text scoped to the page, read `.checked` with `browser eval`.
 - `text=Enable Critic` is a case-insensitive substring match and hits the help paragraph `Enable critic evaluation for the agent.` first, so the click does nothing. Quote it: `text="Enable Critic"` (same for `text="Enable Iterative Refinement"`).
 - The conversation-owned fields have no `verification.` prefix: `sdk-settings-confirmation_mode`, `sdk-settings-security_analyzer`. Critic fields keep it (`sdk-settings-verification.critic_enabled`).
 - Saving is tier-scoped: Basic or Advanced saves reset every field the tier hides to its schema default (`F15.view-scoped-save`). Make all edits on All when other non-default values must survive.
 - The page opens on the least detailed tier that shows every stored override (any minor override → All). Do not assume Basic after a reload.
 - Condenser Kind `no_op` still shows the summarizer fields with defaults, although the stored condenser no longer has them.
-- A server-side validation error is retried three times (about 1.5 s of `Saving...`) before the toast, and the toast only says `Settings validation failed` without naming the field.
-- The Condenser Kind help text shows raw reStructuredText (` ``'llm_summarizing'`` `) from the schema description.
+- A server-side validation error is retried three times (about 1.5 s of `Saving...`) before the toast, and the toast only says `Settings validation failed` without naming the field (#17932).
+- The Condenser Kind help text shows raw reStructuredText (` ``'llm_summarizing'`` `) from the schema description (#17939, OpenHands/software-agent-sdk#5495).
 - Toasts close after a few seconds; read them right after the click, or assert the stored value with `api GET /api/settings`.
 - Under confirmation mode the first confirmed command sometimes returned `The terminal session was reset because the underlying tmux server/session disappeared...` while several runs shared one tmux server (OpenHands/OpenHands#17946); `launch` now isolates them, so treat a reset as a finding. The agent then asks to run it again; a confirmed command took up to two minutes to produce its observation. Confirm again and wait with `conversation wait`, not a fixed sleep.
 - The confirmation buttons have test ids (`action-confirm-button`, `action-reject-button`) but their accessible names are `Confirm action` / `Reject action`, not the visible `Continue` / `Cancel`: `role=button[name*="Continue"]` finds nothing.
 - Basic-tier saves on Verification reset Security Analyzer to `llm` (it is an Advanced field). That is a convenient restore, and a trap if you meant to keep `None`.
 - The memory instructions are only visible through the conversation's first event; `conversation events` truncates text, so read `api GET /api/conversations/<id>/events/search?limit=1` and search the JSON.
-- The seven condenser minor fields have no translations (`SCHEMA$CONDENSER$KEEP_FIRST$LABEL` etc.): their labels are the schema's English text with inconsistent casing (`Max Size` vs `Max tokens`, `Keep first`).
+- The seven condenser minor fields have no translations (`SCHEMA$CONDENSER$KEEP_FIRST$LABEL` etc.): their labels are the schema's English text with inconsistent casing (`Max Size` vs `Max tokens`, `Keep first`) (#17939).
 - The dropdowns' clear (×) button has no accessible name and, in this build, clicking it through `role=button >> nth=2` left the value unchanged.
 - After every successful save the selected tab is recomputed from the stored values (`F15.tier-after-save`), so a follow-up `fill` on an All-only field can time out because the page silently moved to Basic. Re-click `sdk-section-all-toggle` before each further edit.
 - Pressing Enter in a field does not save (no toast, API unchanged, Save stays enabled); only the Save Changes button submits.
 - Fields revealed by a parent switch do not exist while the switch is off: `fill` on `critic_threshold` with Iterative Refinement off waits for a missing element.
 - Rejecting a pending action (Cancel), the lock chip above the composer and the ⌘↩ / ⇧⌘⌫ shortcuts belong to `F06.confirmation-mode` and `F06.confirmation-shortcuts`; this family only proves that the settings turn the prompt on.
 - `browser count 'role=status'` also counts the backend status dot (`backend-status-dot`); use `browser toasts` for toast texts.
+- Known issue #17908: the command menu has no Agent Context entry (`F15.command-menu`).

@@ -94,7 +94,7 @@ Preconditions:
 - "Create a plan" leaves that conversation in plan mode: the next composer message goes to the planner helper, which has no `launch_child_conversation` or `canvas_ui_control`. Use a separate conversation for client-tool prompts.
 - The child-launch toast's Open link animates; `browser click` on it times out with "element is not stable". Read the child id from the parent's `[child-conversation]` message instead.
 - `GET …/file/download?path=…/.agents_tmp/PLAN.md` 404 and `GET /api/llm/balance` 404 are expected app-origin errors (no plan yet; no balance endpoint). Count them in `browser errors --app-only` but do not report them.
-- Escape does not close the composer context popover or the Overview "..." menu; click outside, or click the trigger again.
+- Escape does not close the composer context popover or the Overview "..." menu (#17933); click outside, or click the trigger again.
 - The Overview column is 28 px narrower than its content (`scrollWidth` 296, `clientWidth` 268). After some clicks inside it, Playwright's scroll-into-view shifts it and the card looks cut off on the left; `browser reload` restores it before taking screenshots.
 - The agent may summarize a client-tool action with its own title (for example "Launch local child conversation to reply PONG") instead of "Launching a child conversation"; assert the toast and events, not the chat title.
 - The Overview peek appears only while the drawer is open (`canPeekOnHover` needs `isRightPanelShown`); a `browser goto` or reload starts with the drawer closed.
@@ -102,3 +102,4 @@ Preconditions:
 - Plain `agent-canvas` instances on one machine share the tmux socket `/tmp/tmux-<uid>/openhands` (OpenHands/OpenHands#17946), so another instance stopping can reset this one's terminal. `control-openhands launch` gives each run its own `TMUX_TMPDIR`, so in verification runs a reset means this run's agent server restarted.
 - Agent Tools & Metadata remembers the last tab (it reopens on Available Tools).
 - Known open issues: terminal history after reload (#17566) still fails (reproduced 2026-10-05); info modals at phone width (#17562) pass.
+- Known issue #17940: at phone width an agent `open_tab` has no visible effect (`F27.canvas-ui-phone`), an agent-opened tab reverts to Files after a reload (`F27.canvas-ui-open-tab`), and selecting Planner pushes the tab row above the screen (`F27.phone`).

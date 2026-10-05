@@ -90,4 +90,5 @@ Preconditions:
 - The `/settings` → `/settings/agents` redirect only happens at ≥768 px. At phone width `/settings` is the hub; do not expect a redirect there.
 - The phone hub is indented 32 px while sub-pages start at 16 px (hub padding inside the page padding); that is current layout, not overflow.
 - The "LLM Profiles" rename in `useSettingsNavItems` targets a `/settings` nav item that does not exist, so it never applies; the LLM nav item always reads "LLM".
-- Known issues found while mapping (repro candidates, not exemptions): no command-menu entries for Model Router and Agent Context; two nested `main` landmarks; update dialog overflows a 390 px viewport with Close off-screen.
+- Known issues found while mapping (repro candidates, not exemptions): no command-menu entries for Model Router and Agent Context (#17908); two nested `main` landmarks (#17909); update dialog overflows a 390 px viewport with Close off-screen (#17903).
+- Known issue #17904: an unknown `/settings/<x>` URL shows the bare 404 page with no way back and logs React error #418 (`F09.unknown-subpath`).

@@ -102,7 +102,8 @@ Preconditions:
 - `@modelcontextprotocol/server-everything sse` printed `Server is running` here but never answered on its port; use the `streamableHttp` mode for the remote-server fixture.
 - A server without a catalog credential probe reads `Reachable — credentials not verified`, never `Connected — credentials verified (N tool(s))`, even without credentials. Health after a save is seeded from the pre-save test and is lost on reload (`Not checked yet`).
 - Adding a custom server shows no toast; only catalog installs and deletes toast. Assert the card after reload.
-- Catalog installs are add-only: a second Time install becomes `time_1` and loses its catalog identity (see `F17.install-stdio`). Twelve library entries (provider-OAuth-only, such as Sentry, HubSpot or the Cloudflare OAuth servers) open an empty modal whose Install does nothing (`F17.install-unsupported`).
-- The section filter's accessible name is `Filter conversations` (it reuses the conversation filter's default label); use the test ids.
-- A failed stdio health check reads `Check the URL and server type` even though stdio servers have no URL.
-- A malformed header line in the custom editor shows `Environment variables must follow KEY=value format` (`mcp-server-form.tsx` runs headers through `validateEnvFormat`); see `F17.custom-validation`.
+- Catalog installs are add-only: a second Time install becomes `time_1` and loses its catalog identity (see `F17.install-stdio`) (#17930). Twelve library entries (provider-OAuth-only, such as Sentry, HubSpot or the Cloudflare OAuth servers) open an empty modal whose Install does nothing (`F17.install-unsupported`) (#17922).
+- The section filter's accessible name is `Filter conversations` (it reuses the conversation filter's default label) (#17939); use the test ids.
+- A failed stdio health check reads `Check the URL and server type` even though stdio servers have no URL (#17931).
+- A malformed header line in the custom editor shows `Environment variables must follow KEY=value format` (`mcp-server-form.tsx` runs headers through `validateEnvFormat`) (#17958); see `F17.custom-validation`.
+- Known issue #17941: turning off an enabled card toggle can drop the click when the pointer moves in and presses at once (`F17.enable-disable`).

@@ -102,12 +102,14 @@ Preconditions:
 - `control-openhands service stop agent-server` cannot show this page's error states: the whole app switches to the disconnected-backend screen.
 - In Edit, `llm-api-key-input` holds the stored *encrypted* key token (about 140 masked characters), not an empty field. Never run `browser value` on it: it prints the token. Leave it untouched to keep the key.
 - Provider and model options render in a portal outside the editor and modals: select `testid=provider-item-<name>` unscoped. Only verified providers have `provider-item-*` IDs and only Other models have `model-item-*` IDs; use `role=option[name="..."][exact]` for the rest. `browser testids --filter model-item` lists only items scrolled into view; `browser count` finds the rest.
-- The auto-filled Profile Name sticks to the default model's name (`gpt-5.6-sol`) after you change model. Always fill `profile-name-input` explicitly, or you save a DeepSeek profile called `gpt-5.6-sol`.
-- A duplicate profile name disables Save silently: no message, and `aria-invalid` stays `false`. Check `browser enabled 'testid=save-profile-btn'`, not the field styling.
-- The Rename modal does not check duplicates client-side; the server's 409 arrives as a raw toast and `browser errors --app-only` counts one `http-error` and one `console.error` for it.
+- The auto-filled Profile Name sticks to the default model's name (`gpt-5.6-sol`) after you change model (#17929). Always fill `profile-name-input` explicitly, or you save a DeepSeek profile called `gpt-5.6-sol`.
+- A duplicate profile name disables Save silently: no message, and `aria-invalid` stays `false` (#17938). Check `browser enabled 'testid=save-profile-btn'`, not the field styling.
+- The Rename modal does not check duplicates client-side; the server's 409 arrives as a raw toast (#17937) and `browser errors --app-only` counts one `http-error` and one `console.error` for it.
 - Set as default (and deleting the Default) rewrites the agent's active LLM settings (`control-openhands llm show`). Deleting every profile leaves the last applied model and key in agent settings.
 - Profiles created by Add models are named from the model (`deepseek-chat`, …), not `QA_*`. The chooser hides a model when a profile with that *name* exists, not when a profile uses that model. Clean them up before the connection: the server refuses to delete a connection while profiles reference it.
 - A profile linked to a missing connection is grouped under a header showing the raw connection id (`00000000…`) instead of a name.
 - The All tab logs many `[i18n] Missing translation for key "SCHEMA$LLM$..."` console warnings; they are not page errors.
 - The list follows the server's order, which sorts by profile file name: `QA_pro-copy-1` lists before `QA_pro-copy` (`-` sorts before `.json`'s `.`). Do not assert a strict alphabetical order on names that are prefixes of each other.
 - Toasts last only a few seconds. A `browser screenshot` taken after a slow command can miss them, so assert with `browser wait-text` or `browser toasts`.
+- Known issue #17934: the row menu does not move focus into itself on open, and on the Default row arrow keys stop at the disabled Set as default (`F10.actions-menu`).
+- Known issue #17955: a new profile is saved without the inherited LLM options the editor shows, such as temperature (`F10.create-prefill`).

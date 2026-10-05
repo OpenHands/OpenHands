@@ -124,10 +124,10 @@ Preconditions:
 - Folder test ids embed the sanitized absolute workspace path (`thread-folder-ws--tmp-...-qa-f04-repo`). Select with `[data-testid^="thread-folder-ws-"][data-testid$="<folder>"]` or by the `+` button's accessible name.
 - Row links carry `?backend=default-local`; anchor URL regexes without `$`.
 - Hover and ⋮ need the row on screen: `browser scroll '<row>'` first, and `browser hover` before clicking `ellipsis-button` or the pin.
-- The ⋮ menu ignores Escape; close it with `browser mouse-click` outside it.
-- The Stop, Delete and Delete all dialogs have no test ids on their buttons (`data-testid` is dropped by `BrandButton`); use `role=dialog >> role=button[name="..."]`. The Archive and Edit tags dialogs do have `cancel-button` and `confirm-button`.
+- The ⋮ menu ignores Escape (#17933); close it with `browser mouse-click` outside it.
+- The Stop, Delete and Delete all dialogs have no test ids on their buttons (`data-testid` is dropped by `BrandButton`) (#17915); use `role=dialog >> role=button[name="..."]`. The Archive and Edit tags dialogs do have `cancel-button` and `confirm-button`.
 - With the drawer open at phone width there are two `conversation-panel` elements; scope with `testid=sidebar-mobile-drawer >> ...`.
-- The fresh default layout (By date, older shown) matches no preset, so a new user sees no preset checked and `More options · Custom`.
+- The fresh default layout (By date, older shown) matches no preset, so a new user sees no preset checked and `More options · Custom` (#17943).
 - In By workspace mode Load more often adds no visible row: later rows join existing folders behind their More button.
 - By workspace never shows `No conversations found` while any workspace is registered: empty workspace folders stay.
 - Pinned rows bypass tag and automation filters and suppress the filtered empty states; unpin before asserting them.
@@ -136,3 +136,5 @@ Preconditions:
 - `service stop agent-server` needs `control-openhands restart` and a `browser reload` before anything else works.
 - The list refreshes on an interval: a row keeps `conversation-status-working` and `Conversation <id5>` for up to about 40 s after the conversation finished. Use `browser wait ... --timeout 60000`, not an immediate `count`.
 - Model-written titles vary from run to run; match finished conversations on a word from the prompt (`has-text=pong`), never on the whole title.
+- Known issue #17919: Delete all deletes only the loaded pages, and its dialog states that smaller count (`F04.delete-all`).
+- Known issue #17943: a failed download toasts `ConversationId unknown, cannot download trajectory` and leaves the ⋮ menu open (`F04.download-error`).

@@ -85,12 +85,15 @@ Preconditions:
 - Always export your own `OH_VERIFY_RUN`. `launch --new` repoints the shared `current` symlink, and another agent relying on `current` drove and then stopped this family's stack mid-run. If the URL jumps to a page you never opened or `fetch failed` appears, run `control-openhands status` before blaming the product.
 - `conversation wait <id>` right after sending returns at once with the previous `finished` status. Use `conversation wait <id> --fresh`; `--until running` then a terminal wait only works for turns longer than the poll interval (a `Reply with only` turn on deepseek-flash can finish first, and `--until running` then times out).
 - The slash menu stays open while you type a command; press Escape before Enter or Enter selects the highlighted option instead of sending.
-- Conversation drafts are saved 500 ms after the last keystroke and not flushed on unmount (the home draft is): navigating sooner restores the older draft (fail row). Wait a second before navigating when testing restoration.
-- Escape does not close the `+` tools menu; click `chat-plus-button` again or choose an item. A menu left open covers attachments in screenshots.
-- Uploaded chips and thumbnails have no test ids; Send, Stop/Play and the attachment remove buttons have no accessible name (fail row). Select by text/alt as above.
+- Conversation drafts are saved 500 ms after the last keystroke and not flushed on unmount (the home draft is): navigating sooner restores the older draft (fail row) (#17926). Wait a second before navigating when testing restoration.
+- Escape does not close the `+` tools menu (#17933); click `chat-plus-button` again or choose an item. A menu left open covers attachments in screenshots.
+- Uploaded chips and thumbnails have no test ids; Send, Stop/Play and the attachment remove buttons have no accessible name (fail row) (#17935). Select by text/alt as above.
 - `browser upload` feeds the hidden input directly. To drive the real path, `+` > Add Files and Images, use `control-openhands browser upload-via 'testid=add-files-and-images-button' <file>`, which answers the native file chooser.
 - The `Switched to profile` notes are client-side and gone after reload; assert the pill and `conversation status`.
 - `/plan` messages go to a separate planner conversation; the browser stays on the parent `/conversations/<id>`, so wait on the planner id from `conversation list`.
-- After a goal is resumed, the old `interrupted` banner still offers `Resume` (also after reload); clicking it again starts another loop.
+- After a goal is resumed, the old `interrupted` banner still offers `Resume` (also after reload) (#17942); clicking it again starts another loop.
 - Opening the context popover logs a 404 for `/api/llm/balance` on the local backend in `browser errors --app-only`; it does not break the popover.
 - `--observe` takes CSS selectors (`'[role=status]'`), not `role=` selector syntax.
+- Known issue #17925: at narrow widths the "More input actions" menu closes as soon as it opens, so the model cannot be switched (`F05.overflow-menu`).
+- Known issue #17937: `/model <unknown name>` toasts the raw `HTTP request failed (404 Not Found): {...}` text (`F05.slash-model`).
+- Known issue #17942: bare `/btw` clears the composer with no feedback (`F05.slash-btw`).

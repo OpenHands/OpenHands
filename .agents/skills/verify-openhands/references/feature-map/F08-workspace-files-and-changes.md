@@ -102,16 +102,17 @@ Preconditions:
 ## Gotchas
 
 - When the drawer is closed, its tabs stay mounted at width 0. `browser count 'testid=files-tab'` is `1` even then, so assert with `browser visible` or `right-panel-toggle` `aria-pressed`.
-- Inactive drawer tab buttons have no accessible name (the label span is `aria-hidden`), so `role=button[name="Commits"]` matches only the active tab. Use the `conversation-tab-*` test ids.
-- The overflow menu is not a `role=menu` and `Escape` does not close it. Close it by choosing a row or with `browser mouse-click` outside.
-- The Files list and the open preview do not follow bash edits: only file-editor observations bump the workspace cache, by design in `use-auto-refresh-files-on-edit.ts`. Click `files-tab-refresh` before asserting on files the agent made with the shell. Even then the first refresh can return the old file body: the content fetch uses the browser HTTP cache, and the fileserver sends `Last-Modified`/`ETag` with no `Cache-Control`. Re-click after a few seconds.
+- Inactive drawer tab buttons have no accessible name (the label span is `aria-hidden`) (#17935), so `role=button[name="Commits"]` matches only the active tab. Use the `conversation-tab-*` test ids.
+- The overflow menu is not a `role=menu` and `Escape` does not close it (#17933). Close it by choosing a row or with `browser mouse-click` outside.
+- The Files list and the open preview do not follow bash edits: only file-editor observations bump the workspace cache, by design in `use-auto-refresh-files-on-edit.ts`. Click `files-tab-refresh` before asserting on files the agent made with the shell. Even then the first refresh can return the old file body: the content fetch uses the browser HTTP cache, and the fileserver sends `Last-Modified`/`ETag` with no `Cache-Control` (#17921). Re-click after a few seconds.
 - The chat also fetches the file list (to linkify paths). A conversation page left open while the agent works can therefore show a stale tree the moment the drawer first opens.
 - Binary detection is a NUL-byte sniff of the first 8 KB, and the Office message also needs that sniff to trip. A 4-byte `PK\003\004` "pptx" or random bytes without a NUL render as text in the plain viewer. Fixtures must contain a NUL.
 - `control-openhands fixture folder` writes a plain folder with `notes.md`, but by the time the conversation has run the folder holds an empty `.git`, so a conversation that leaves `notes.md` in place shows `Uncommitted 1 file` rather than the empty state. Delete it first (as in the recipe).
-- Diff views are Monaco. `testid=file-diff-viewer` and `file-single-viewer` are not on the DOM; read text through `testid=editor-container`. The narrow drawer falls back to an inline (not side-by-side) diff. The view-mode and `collapse` buttons have no accessible names.
+- Diff views are Monaco. `testid=file-diff-viewer` and `file-single-viewer` are not on the DOM; read text through `testid=editor-container`. The narrow drawer falls back to an inline (not side-by-side) diff. The view-mode and `collapse` buttons have no accessible names (#17935).
 - `browser eval "navigator.clipboard.readText()"` hangs for about 2 minutes (no clipboard permission). Use `control-openhands browser clipboard` to read what Copy wrote.
 - `browser click ... --observe` accepts the usual selector syntax (`testid=...`).
 - Two `.cursor-ew-resize` grips sit in the conversation page (chat/drawer, then the Files tree); scope the tree one with `testid=files-tab-tree-resize-handle`.
-- At phone width, chat path links (and other `navigateToTab`/`openWorkspaceFile` callers in `src/services/canvas-ui.ts`) only update the store and never navigate to `/panel`, so nothing visible happens.
+- At phone width, chat path links (and other `navigateToTab`/`openWorkspaceFile` callers in `src/services/canvas-ui.ts`) only update the store and never navigate to `/panel`, so nothing visible happens (#17940).
 - If the agent's terminal resets mid-command ("terminal session was reset", for example after a `restart`), the agent reruns the command. Check the workspace with `git status` through a second prompt rather than trusting the first observation. Runs no longer share a tmux server (OpenHands/OpenHands#17946).
 - Known issue: [#17567](https://github.com/OpenHands/OpenHands/issues/17567) (Monaco disposed-model page error on diff unmount; it also fires on collapse and on a diff→old switch).
+- Known issue #17940: at desktop width `/conversations/<id>/panel` keeps the full-width phone panel page and hides the chat (`F08.panel-direct-url`).

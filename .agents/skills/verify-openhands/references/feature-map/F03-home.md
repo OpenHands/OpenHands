@@ -143,3 +143,5 @@ Phone:
 - Deleting the last automation leaves its id in the pinned localStorage key (pruning skips an empty list); the grid still hides it.
 - Pinned cards reorder only by mouse drag; there is no keyboard or menu alternative. Drive it with `browser drag <handle> --by DX,DY --steps 20`; `browser drag <handle> <target>` reports ok but leaves the order unchanged.
 - `VITE_HOME_AUTOMATIONS_DEMO=true` (build-time) swaps the home automation sections for demo data; never verify against such a build.
+- Known issue #17936: a failed launch from Home shows three identical error toasts and clears the composer (`F03.create-error-toast`).
+- Known issue #17944: at phone width the folder browser hides folder names (`F03.phone`), and the workspace combobox never shows `No workspaces yet` (`F03.workspace-dropdown-search`).

@@ -99,15 +99,16 @@ Preconditions:
 ## Gotchas
 
 - A card click and a deep link are different paths: from the grid, GitHub/Slack-only responders (`qa-changes`, `github-agents-md-maintainer`, `slack-channel-monitor`, …) first show the responder choice and then the GitHub/Slack install dialog, so their setup form is reachable locally only by URL (`/automations/new/<id>`).
-- A card's `N MCPs to connect before launch` pill counts optional integrations too: Custom automation shows `1 MCPs to connect before launch` for GitHub, yet opens its setup at once because GitHub is optional there.
+- A card's `N MCPs to connect before launch` pill counts optional integrations too: Custom automation shows `1 MCPs to connect before launch` for GitHub, yet opens its setup at once because GitHub is optional there (#17959).
 - The featured-section copy says picking a card opens "a pre-filled conversation"; most featured cards open a setup form instead.
 - The setup dialog's comboboxes (Action, Agent profile, Timezone, LLM profile) are autocomplete inputs: click the field and pick the option in the same breath, scoped as `role=listbox >> role=option[name="…"]`. A `browser snapshot` between the two closes the listbox (reproduced twice), and the option click then times out after 30 s; click the field again.
 - Service preflight runs 400 ms after a blur, not on every keystroke; `browser press Tab` then `browser wait` for the `-error` element.
 - **Confirm and create** creates the automation enabled; only imports arrive disabled. Use a yearly cron (`0 0 1 1 *`) so nothing fires during the run.
 - The **Daily news digest** entry names its automation `Daily news digest` (no `QA_` prefix); remember it in cleanup.
-- Picking any agent profile in the setup dialog blocks creation today: the automation service (1.17.0) rejects `agent_profile_id` on `/v1/preset/prompt` and `/v1/preset/plugin` (`F22.setup-agent-profile`), and the error shows as a form-level alert, not under the field. Leave Agent profile on `Default` in every other recipe.
+- Picking any agent profile in the setup dialog blocks creation today: the automation service (1.17.0) rejects `agent_profile_id` on `/v1/preset/prompt` and `/v1/preset/plugin` (`F22.setup-agent-profile`) (#17960), and the error shows as a form-level alert, not under the field. Leave Agent profile on `Default` in every other recipe.
 - The automation detail page has no `main` landmark: read its title with `browser text 'role=heading[level=1]'`, not `'role=main >> …'`.
 - The import success toast is the only path to **View automation** and disappears after about 5 s.
 - **Continue with local setup** silently creates the `OPENHANDS_URL` secret (value: the app origin) the first time; F14's list then has an extra row.
 - The **Install** button in a template's install dialog verifies the MCP connection before saving, so dummy credentials cannot complete the queue; nothing is saved on failure.
 - Creating the first automation ticks **Schedule a task** in the sidebar Getting-started checklist (F02); a run that checks the checklist should do so before this file.
+- Known issue #17959: a template search with no matches leaves a blank area with no message (`F22.templates-search`).

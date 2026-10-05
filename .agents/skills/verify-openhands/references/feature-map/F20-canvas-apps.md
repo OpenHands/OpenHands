@@ -83,9 +83,9 @@ Preconditions:
 
 - The card's refresh button (`canvas-extension-refresh-<name>`) is labelled **Update**, not "Refresh".
 - The trust confirmation has no title and reuses the shared `confirmation-modal`; its body repeats the amber notice. Keyboard focus is not moved into it: after Space on the switch, Tab lands on the card's **Update** button behind the dialog.
-- `nav_label` is dropped by the Agent Server: `GET /api/canvas-extensions/installed` returns pages with only `id`, `title` and `path` (Agent Server 1.50.1), so the rail shows the page title. Keep `F20.rail-label` failing until the backend returns it.
-- Install and update errors go through the shared error toast, which rewrites any message containing "failed to fetch" into the generic `Disconnected (check URL or network)…` text. Every unreachable Git source hits this because the server's detail says `Failed to fetch extension from <url>`; the local-path error is shown verbatim.
-- `docs/CANVAS_EXTENSIONS_TESTING.md` and `specs/canvas-extensions.md` still describe a `/extensions` inventory with "Customize → Extensions" and "Add extension"; the inventory is `/apps` with **Add app**, and `/extensions` alone renders the generic `404 Not Found`.
+- `nav_label` is dropped by the Agent Server: `GET /api/canvas-extensions/installed` returns pages with only `id`, `title` and `path` (Agent Server 1.50.1), so the rail shows the page title (OpenHands/software-agent-sdk#5501). Keep `F20.rail-label` failing until the backend returns it.
+- Install and update errors go through the shared error toast, which rewrites any message containing "failed to fetch" into the generic `Disconnected (check URL or network)…` text (#17954). Every unreachable Git source hits this because the server's detail says `Failed to fetch extension from <url>`; the local-path error is shown verbatim.
+- `docs/CANVAS_EXTENSIONS_TESTING.md` and `specs/canvas-extensions.md` still describe a `/extensions` inventory with "Customize → Extensions" and "Add extension"; the inventory is `/apps` with **Add app**, and `/extensions` alone renders the generic `404 Not Found` (#17956).
 - The page states (empty, error, unsupported) and the `/extensions/...` unavailable card have no test ids; assert on text with `browser snapshot`.
 - The Agent Server fetches Git sources with a shallow clone and appends `.git` to the repo URL: a test Git server must speak smart HTTP and answer both `qa-repo` and `qa-repo.git`.
 - The Git bullets read the public upstream repo, so they depend on its `main` still holding the identical fixture; the precondition's `diff -r` guards that. Each Git install or Update clones in about 2 s here, long enough for the busy-lock checks when they run in the same shell line as the click; on a slower network raise the `wait` timeouts, not the expectations.
@@ -94,3 +94,4 @@ Preconditions:
 - `control-openhands launch` passes the launcher only a fixed list of environment variables (path, locale, proxy) plus its own flags: `OH_AGENT_SERVER_VERSION=<old>` in the environment is ignored (the run still gets the pinned server); use `--sdk-ref v<version>`. Any server older than 1.47.0 is gated by Canvas before `/apps` renders.
 - Stopping the Agent Server makes the next full page load show the **Manage backends** gate; always `restart` and `doctor` afterwards.
 - A trailing `browser errors --app-only` sweep shows a `400` per failed install by design; count only other errors.
+- Known issue #17956: the app switch still responds to Space while Update, Uninstall or Enable is pending (`F20.busy-lock`).
