@@ -22,7 +22,6 @@ import {
   validateLocalBackend,
   INVALID_BACKEND_API_KEY_ERROR,
   isAgentServerAuthError,
-  isAgentServerToolAvailable,
   isAgentServerUnavailableError,
   isAgentServerUnknownVersionError,
   isAgentServerUnsupportedVersionError,
@@ -294,54 +293,6 @@ describe("loadAgentServerInfo", () => {
     warning.mockRestore();
   });
 
-  it("uses advertised tools after a successful probe", async () => {
-    setRegisteredBackends([localBackend]);
-    setActiveSelection({ backendId: localBackend.id });
-    getServerInfoMock.mockResolvedValue({
-      version: MINIMUM_COMPATIBLE_AGENT_SERVER_VERSION,
-      usable_tools: ["terminal"],
-    });
-
-    await loadAgentServerInfo();
-
-    expect(isAgentServerToolAvailable("terminal")).toBe(true);
-    expect(isAgentServerToolAvailable("browser_tool_set")).toBe(false);
-    clearCachedAgentServerInfo();
-    expect(isAgentServerToolAvailable("browser_tool_set")).toBe(true);
-  });
-
-  it("clears advertised tools when a later server-info probe fails", async () => {
-    setRegisteredBackends([localBackend]);
-    setActiveSelection({ backendId: localBackend.id });
-    getServerInfoMock.mockResolvedValue({
-      version: MINIMUM_COMPATIBLE_AGENT_SERVER_VERSION,
-      usable_tools: ["terminal"],
-    });
-    await loadAgentServerInfo();
-    expect(isAgentServerToolAvailable("browser_tool_set")).toBe(false);
-
-    getServerInfoMock.mockRejectedValue(new Error("connection closed"));
-
-    await expect(loadAgentServerInfo()).rejects.toBeInstanceOf(
-      AgentServerUnavailableError,
-    );
-    expect(isAgentServerToolAvailable("browser_tool_set")).toBe(true);
-  });
-
-  it("allows tools when the server does not advertise a tool list", async () => {
-    setRegisteredBackends([localBackend]);
-    setActiveSelection({ backendId: localBackend.id });
-    getServerInfoMock.mockResolvedValue({
-      version: MINIMUM_COMPATIBLE_AGENT_SERVER_VERSION,
-      usable_tools: null,
-    });
-
-    await loadAgentServerInfo();
-
-    expect(isAgentServerToolAvailable("browser_tool_set")).toBe(true);
-    clearCachedAgentServerInfo();
-    expect(isAgentServerToolAvailable("browser_tool_set")).toBe(true);
-  });
   it("returns cached server info only for the probed backend host", async () => {
     expect(getCachedAgentServerInfo()).toBeNull();
     setRegisteredBackends([localBackend]);

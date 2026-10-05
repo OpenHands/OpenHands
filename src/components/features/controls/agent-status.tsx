@@ -12,7 +12,10 @@ import { AgentLoading } from "./agent-loading";
 import { useConversationStore } from "#/stores/conversation-store";
 import CircleErrorIcon from "#/icons/circle-error.svg?react";
 import { useAgentState } from "#/hooks/use-agent-state";
-import { useUnifiedWebSocketStatus } from "#/hooks/use-unified-websocket-status";
+import {
+  useHasConnectedOnceWebSocket,
+  useUnifiedWebSocketStatus,
+} from "#/hooks/use-unified-websocket-status";
 import { useTaskPolling } from "#/hooks/query/use-task-polling";
 import { useSubConversationTaskPolling } from "#/hooks/query/use-sub-conversation-task-polling";
 import { useAgentNotification } from "#/hooks/use-agent-notification";
@@ -40,6 +43,7 @@ export function AgentStatus({
   // Trigger browser tab flash and notification sound on state changes
   useAgentNotification(curAgentState);
   const webSocketStatus = useUnifiedWebSocketStatus();
+  const hasConnectedOnce = useHasConnectedOnceWebSocket();
   const { data: conversation } = useActiveConversation();
   const { taskStatus } = useTaskPolling();
 
@@ -57,6 +61,7 @@ export function AgentStatus({
     executionStatus ?? null,
     taskStatus,
     subConversationTaskStatus,
+    hasConnectedOnce,
   );
 
   const shouldShownAgentLoading =
@@ -134,14 +139,14 @@ export function AgentStatus({
       )}
     >
       <span
-        className="text-[11px] text-[var(--oh-muted)] font-normal leading-5 min-w-0 max-w-full truncate"
+        className="text-[11px] text-muted font-normal leading-5 min-w-0 max-w-full truncate"
         title={t(statusCode)}
       >
         {t(statusCode)}
       </span>
       <div
         className={cn(
-          "box-border content-stretch flex flex-row gap-[3px] items-center justify-center overflow-clip px-0.5 py-1 relative rounded-[100px] shrink-0 size-6 transition-all duration-200 active:scale-95 bg-transparent text-[var(--oh-muted)] hover:bg-white/10 hover:text-white",
+          "box-border content-stretch flex flex-row gap-0.75 items-center justify-center overflow-clip px-0.5 py-1 relative rounded-[100px] shrink-0 size-6 transition-all duration-200 active:scale-95 bg-transparent text-muted hover:bg-contrast/10 hover:text-contrast",
           isInteractive ? "cursor-pointer" : "cursor-default",
         )}
       >

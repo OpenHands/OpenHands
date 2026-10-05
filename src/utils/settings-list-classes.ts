@@ -23,12 +23,10 @@ export const settingsListScrollContainerClassName = cn(
   "overflow-auto max-h-[min(70vh,39rem)]",
 );
 
-export const settingsListDividerClassName =
-  "divide-y divide-[var(--oh-border)]";
+export const settingsListDividerClassName = "divide-y divide-border";
 
 /** Interactive row hover on dark list surfaces (base-secondary). */
-export const settingsListRowHoverClassName =
-  "hover:bg-[var(--oh-interactive-hover-low)]";
+export const settingsListRowHoverClassName = "hover:bg-interactive-hover-low";
 
 export const settingsListRowClassName = cn(
   settingsListRowHeightClassName,
@@ -40,12 +38,12 @@ export const settingsListRowClassName = cn(
 export const settingsListTableRowClassName = cn(
   settingsListRowHoverClassName,
   formControlTransitionClassName,
-  "border-t border-[var(--oh-border)] first:border-t-0",
+  "border-t border-border first:border-t-0",
 );
 
 export const settingsListTableHeadClassName = cn(
   formControlSurfaceClassName,
-  "sticky top-0 z-10 border-b border-[var(--oh-border)]",
+  "sticky top-0 z-10 border-b border-border",
 );
 
 export const settingsListTableHeaderCellClassName = cn(
@@ -61,9 +59,9 @@ export const settingsListTableCellClassName = cn(
 export const settingsListIconActionButtonClassName = cn(
   "inline-flex cursor-pointer items-center justify-center rounded-md p-1 text-muted",
   formControlTransitionClassName,
-  "hover:bg-[var(--oh-interactive-hover-low)] hover:text-white",
+  "hover:bg-interactive-hover-low hover:text-contrast",
 );
 
 /** Amber warning pill shown inline in a settings list row (profile rows). */
 export const settingsListWarningBadgeClassName =
-  "flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-[var(--oh-warning,#f59e0b)] px-2 py-0.5 text-xs font-medium text-black";
+  "flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-warning px-2 py-0.5 text-xs font-medium text-black";

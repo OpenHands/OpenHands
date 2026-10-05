@@ -16,7 +16,7 @@ import {
 import { getAgentServerClientOptions } from "./agent-server-client-options";
 import {
   getCachedAgentServerInfo,
-  isAgentServerToolAvailable,
+  type AgentServerInfo,
 } from "./agent-server-compatibility";
 import { getAgentServerWorkingDir } from "./agent-server-config";
 import { getEffectiveLocalBackend } from "./backend-registry/active-store";
@@ -37,6 +37,7 @@ import {
   type SkillEnablement,
 } from "#/utils/skill-enablement";
 import SettingsService from "./settings-service/settings-service.api";
+import MetaProfilesService from "./meta-profiles-service/meta-profiles-service.api";
 import { getStoredConversationMetadata } from "./conversation-metadata-store";
 import LLMSubscriptionService from "./llm-subscription-service";
 import {
@@ -141,19 +142,12 @@ export interface DirectConversationInfo {
   sub_conversation_ids?: string[] | null;
 }
 
-const DEFAULT_TOOL_NAMES = ["terminal", "file_editor", "task_tracker"];
-const BROWSER_TOOL_SET_NAME = "browser_tool_set";
-const TASK_TOOL_SET_NAME = "task_tool_set";
 // Falls back to the same default the code agent uses when the user has not
 // configured `conversation_settings.max_iterations` (see buildConfiguredConversationSettings).
 const DEFAULT_MAX_ITERATIONS = 500;
 
 function resolveMaxIterations(value: unknown): number {
   return typeof value === "number" ? value : DEFAULT_MAX_ITERATIONS;
-}
-
-function browserToolsEnabled() {
-  return import.meta.env.VITE_ENABLE_BROWSER_TOOLS !== "false";
 }
 
 /**
@@ -210,7 +204,7 @@ export function parseRuntimeServicesInfo(
   return parsed;
 }
 
-export async function fetchBackendRuntimeServicesInfo(): Promise<RuntimeServicesInfo | null> {
+async function fetchBackendServerInfo(): Promise<AgentServerInfo | null> {
   let clientOptions: ReturnType<typeof getAgentServerClientOptions>;
   try {
     clientOptions = getAgentServerClientOptions({ timeout: 3000 });
@@ -218,19 +212,30 @@ export async function fetchBackendRuntimeServicesInfo(): Promise<RuntimeServices
     return null;
   }
 
-  const cached = parseRuntimeServicesInfo(
-    getCachedAgentServerInfo({ host: clientOptions.host })?.runtime_services,
-  );
+  const cached = getCachedAgentServerInfo({ host: clientOptions.host });
   if (cached) return cached;
 
   try {
-    const serverInfo = await new ServerClient(clientOptions).getServerInfo();
-    return parseRuntimeServicesInfo(
-      (serverInfo as { runtime_services?: unknown }).runtime_services,
-    );
+    return (await new ServerClient(
+      clientOptions,
+    ).getServerInfo()) as AgentServerInfo;
   } catch {
     return null;
   }
+}
+
+export async function fetchBackendRuntimeServicesInfo(): Promise<RuntimeServicesInfo | null> {
+  const serverInfo = await fetchBackendServerInfo();
+  return parseRuntimeServicesInfo(
+    (serverInfo as { runtime_services?: unknown } | null)?.runtime_services,
+  );
+}
+
+export async function fetchBackendExecutionRuntime(): Promise<
+  AgentServerInfo["execution_runtime"]
+> {
+  const serverInfo = await fetchBackendServerInfo();
+  return serverInfo?.execution_runtime;
 }
 
 /**
@@ -335,6 +340,42 @@ export function buildRuntimeServicesSystemSuffix(
   lines.push("</RUNTIME_SERVICES>");
 
   return lines.join("\n");
+}
+
+/**
+ * System-message instruction appended when the user enables "Run on first
+ * message" for the Model Router. With an active meta-profile the
+ * agent-server attaches the ``route_task_to_model`` tool; this suffix tells
+ * the agent to call it with the *first* user message before doing anything
+ * else, so the opening request is always routed to the classifier-selected
+ * model. Subsequent messages are left to the agent's own judgment.
+ *
+ * Only emitted when ``runAtStart`` is on AND a meta-profile is active
+ * (``hasActiveRouter``): with no active meta-profile the agent-server does
+ * not attach ``route_task_to_model``, so emitting the instruction would tell
+ * the agent to call a tool it does not have. Gating here — inside the single
+ * suffix builder that every launch path funnels through — keeps behavior
+ * consistent regardless of how the toggle was persisted, so a stale ``true``
+ * (e.g. the active profile was just deleted) can never reach the prompt.
+ *
+ * Returns `undefined` when disabled so no prompt noise is added — the default
+ * "everything works as normal" path is byte-identical to before.
+ */
+export function buildRouterAtStartSystemSuffix(
+  runAtStart: boolean,
+  hasActiveRouter: boolean,
+): string | undefined {
+  if (!runAtStart || !hasActiveRouter) return undefined;
+  return [
+    "<ROUTE_AT_CONVERSATION_START>",
+    "Before responding to the FIRST user message of this conversation, call",
+    "the `route_task_to_model` tool with that user message so the active",
+    "Model Router selects the appropriate model. After the router switches",
+    "the model, continue handling the user's request with the switched",
+    "model. Apply this only to the very first user message; do not route",
+    "subsequent messages this way.",
+    "</ROUTE_AT_CONVERSATION_START>",
+  ].join("\n");
 }
 
 export function toConversationUrl(conversationId: string): string {
@@ -473,6 +514,15 @@ interface LocalWorkspacePayload {
   working_dir: string;
 }
 
+const DOCKER_EXECUTION_WORKING_DIR = "/workspace" as const;
+
+interface DockerExecutionWorkspacePayload {
+  kind: "DockerExecutionWorkspace";
+  working_dir: typeof DOCKER_EXECUTION_WORKING_DIR;
+}
+
+type WorkspacePayload = LocalWorkspacePayload | DockerExecutionWorkspacePayload;
+
 interface InitialMessagePayload {
   role: "user";
   content: Array<{ type: "text"; text: string }>;
@@ -480,7 +530,7 @@ interface InitialMessagePayload {
 }
 
 type ConversationSettingsPayload = SettingsRecord & {
-  workspace: LocalWorkspacePayload;
+  workspace: WorkspacePayload;
   initial_message?: InitialMessagePayload;
 };
 
@@ -715,52 +765,21 @@ function isToolRecord(
   );
 }
 
-function shouldIncludeTool(name: string, agentSettings: SettingsRecord) {
-  if (name === BROWSER_TOOL_SET_NAME) {
-    return browserToolsEnabled() && isAgentServerToolAvailable(name);
-  }
-
-  if (name === TASK_TOOL_SET_NAME) {
-    return (
-      agentSettings.enable_sub_agents === true &&
-      isAgentServerToolAvailable(name)
-    );
-  }
-
-  return true;
-}
-
-function getAgentTools(agentSettings: SettingsRecord): AgentToolSpec[] {
-  const tools = new Map<string, AgentToolSpec>();
-
-  for (const name of DEFAULT_TOOL_NAMES) {
-    if (shouldIncludeTool(name, agentSettings)) {
-      tools.set(name, { name, params: {} });
-    }
-  }
-
-  for (const name of [BROWSER_TOOL_SET_NAME, TASK_TOOL_SET_NAME]) {
-    if (shouldIncludeTool(name, agentSettings)) {
-      tools.set(name, { name, params: {} });
-    }
-  }
-
+/** Unset `tools` is left to the server; a list is sent as given. */
+function getAgentTools(
+  agentSettings: SettingsRecord,
+): AgentToolSpec[] | undefined {
   const configuredTools = agentSettings.tools;
   if (
-    Array.isArray(configuredTools) &&
-    configuredTools.every((tool) => isToolRecord(tool))
+    !Array.isArray(configuredTools) ||
+    !configuredTools.every((tool) => isToolRecord(tool))
   ) {
-    for (const tool of configuredTools) {
-      if (shouldIncludeTool(tool.name, agentSettings)) {
-        tools.set(tool.name, {
-          name: tool.name,
-          params: toRecord(tool.params),
-        });
-      }
-    }
+    return undefined;
   }
-
-  return Array.from(tools.values());
+  return configuredTools.map((tool) => ({
+    name: tool.name,
+    params: toRecord(tool.params),
+  }));
 }
 
 function buildInitialMessage(
@@ -838,9 +857,15 @@ function buildAgentContext(
   runtimeServicesInfo?: RuntimeServicesInfo | null,
   enablement: SkillEnablement = {},
   invokedCatalogSkill?: string,
+  runRouterAtStart?: boolean,
+  hasActiveRouter?: boolean,
 ): SettingsRecord {
   const runtimeServicesSuffix =
     buildRuntimeServicesSystemSuffix(runtimeServicesInfo);
+  const routerAtStartSuffix = buildRouterAtStartSystemSuffix(
+    runRouterAtStart ?? false,
+    hasActiveRouter ?? false,
+  );
   const existingContext = toRecord(agentSettings.agent_context);
 
   // Merge bundled public skills with any skills already present in the
@@ -888,8 +913,12 @@ function buildAgentContext(
     // prompt too. The allow-list has no counterpart to send: the backend
     // loads no catalog skills of its own (`load_public_skills` is false).
     disabled_skills: disabledSkills,
-    ...(runtimeServicesSuffix
-      ? { system_message_suffix: runtimeServicesSuffix }
+    ...(runtimeServicesSuffix || routerAtStartSuffix
+      ? {
+          system_message_suffix: [runtimeServicesSuffix, routerAtStartSuffix]
+            .filter((s): s is string => Boolean(s))
+            .join("\n\n"),
+        }
       : {}),
   };
 }
@@ -925,6 +954,7 @@ function buildConfiguredAcpAgentSettings(
   settings: Settings,
   runtimeServicesInfo?: RuntimeServicesInfo | null,
   query?: string,
+  hasActiveMetaProfile?: boolean,
 ): AgentSettingsPayload {
   const agentSettings = toRecord(settings.agent_settings);
   const payload: AgentSettingsPayload = {
@@ -934,6 +964,8 @@ function buildConfiguredAcpAgentSettings(
       runtimeServicesInfo,
       toSkillEnablement(settings),
       findInvokedCatalogSkill(query),
+      settings.run_router_at_conversation_start,
+      hasActiveMetaProfile,
     ),
   };
 
@@ -993,6 +1025,7 @@ function buildConfiguredOpenHandsAgentSettings(
   settings: Settings,
   runtimeServicesInfo?: RuntimeServicesInfo | null,
   query?: string,
+  hasActiveMetaProfile?: boolean,
 ): AgentSettingsPayload {
   const agentSettings = toRecord(settings.agent_settings);
   const llm = buildNormalizedLlmSettings(agentSettings.llm);
@@ -1023,6 +1056,8 @@ function buildConfiguredOpenHandsAgentSettings(
       runtimeServicesInfo,
       toSkillEnablement(settings),
       findInvokedCatalogSkill(query),
+      settings.run_router_at_conversation_start,
+      hasActiveMetaProfile,
     ),
     tools: getAgentTools(agentSettings),
   };
@@ -1032,13 +1067,20 @@ function buildConfiguredAgentSettings(
   settings: Settings,
   runtimeServicesInfo?: RuntimeServicesInfo | null,
   query?: string,
+  hasActiveMetaProfile?: boolean,
 ): AgentSettingsPayload {
   return isAcpAgent(settings)
-    ? buildConfiguredAcpAgentSettings(settings, runtimeServicesInfo, query)
+    ? buildConfiguredAcpAgentSettings(
+        settings,
+        runtimeServicesInfo,
+        query,
+        hasActiveMetaProfile,
+      )
     : buildConfiguredOpenHandsAgentSettings(
         settings,
         runtimeServicesInfo,
         query,
+        hasActiveMetaProfile,
       );
 }
 
@@ -1048,9 +1090,16 @@ function buildConfiguredConversationSettings(options: {
   conversationInstructions?: string;
   plugins?: PluginSpec[];
   workingDir?: string;
+  executionRuntime?: AgentServerInfo["execution_runtime"];
 }): ConversationSettingsPayload {
-  const { settings, query, conversationInstructions, plugins, workingDir } =
-    options;
+  const {
+    settings,
+    query,
+    conversationInstructions,
+    plugins,
+    workingDir,
+    executionRuntime,
+  } = options;
   const conversationSettings = toRecord(settings.conversation_settings);
   const initialMessage = buildInitialMessage(query, conversationInstructions);
 
@@ -1058,12 +1107,19 @@ function buildConfiguredConversationSettings(options: {
     (key) => delete conversationSettings[key],
   );
 
+  const workspace: WorkspacePayload =
+    executionRuntime === "docker"
+      ? {
+          kind: "DockerExecutionWorkspace",
+          working_dir: DOCKER_EXECUTION_WORKING_DIR,
+        }
+      : {
+          kind: "LocalWorkspace",
+          working_dir: workingDir ?? getAgentServerWorkingDir(),
+        };
   const payload: ConversationSettingsPayload = {
     ...conversationSettings,
-    workspace: {
-      kind: "LocalWorkspace",
-      working_dir: workingDir ?? getAgentServerWorkingDir(),
-    },
+    workspace,
     ...(initialMessage ? { initial_message: initialMessage } : {}),
     ...(plugins?.length
       ? {
@@ -1090,7 +1146,7 @@ interface LookupSecret {
 type CustomSecretInput = { name: string; description?: string };
 
 type StartConversationPayloadBase = Record<string, unknown> & {
-  workspace: LocalWorkspacePayload;
+  workspace: WorkspacePayload;
   confirmation_policy: SettingsRecord;
   security_analyzer?: SettingsRecord;
   initial_message?: InitialMessagePayload;
@@ -1148,7 +1204,18 @@ export interface StartConversationOptions {
   agentProfileKind?: AgentKind;
   titleLlmProfile?: string;
   runtimeServicesInfo?: RuntimeServicesInfo | null;
+  executionRuntime?: AgentServerInfo["execution_runtime"];
   workspaceHookConfig?: HookConfig | null;
+  /**
+   * Whether a Model Router meta-profile is currently active. The
+   * route-at-conversation-start system-message suffix is only emitted when
+   * this is true AND ``settings.run_router_at_conversation_start`` is on —
+   * without an active meta-profile the agent-server does not attach the
+   * ``route_task_to_model`` tool, so the instruction would be a no-op (or
+   * worse, tell the agent to call a tool it lacks). Defaults to false so a
+   * sync caller that omits it never emits the suffix.
+   */
+  hasActiveMetaProfile?: boolean;
 }
 
 /**
@@ -1200,6 +1267,7 @@ export function buildStartConversationRequest(
     sourceAgentSettings,
     options.runtimeServicesInfo,
     options.query,
+    options.hasActiveMetaProfile,
   );
   const acpServerTag = acpMode
     ? getAcpServerTag(sourceAgentSettings)
@@ -1215,9 +1283,10 @@ export function buildStartConversationRequest(
       }
     : options;
 
-  const conversationSettings = buildConfiguredConversationSettings(
-    sourceConversationOptions,
-  );
+  const conversationSettings = buildConfiguredConversationSettings({
+    ...sourceConversationOptions,
+    executionRuntime: options.executionRuntime,
+  });
 
   const payload: AgentSettingsStartConversationPayload = {
     // ``agent_profile_id`` and ``agent_settings`` are mutually exclusive agent
@@ -1262,7 +1331,10 @@ export function buildStartConversationRequest(
     ...(options.titleLlmProfile
       ? { title_llm_profile: options.titleLlmProfile }
       : {}),
-    worktree: options.worktree ?? true,
+    worktree:
+      options.executionRuntime === "docker"
+        ? false
+        : (options.worktree ?? true),
   };
 
   // Stamp the client source tag so the agent-server can attribute the
@@ -1355,6 +1427,8 @@ export function buildStartPlanningConversationRequest(options: {
   maxIterations?: number;
   /** Mirrors the code agent's skill filtering — see buildConfiguredOpenHandsAgentSettings. */
   skillEnablement?: SkillEnablement;
+  /** Mirrors the main conversation's workspace selection — see buildConfiguredConversationSettings. */
+  executionRuntime?: AgentServerInfo["execution_runtime"];
 }): RawAgentStartConversationPayload {
   const agentSettings = toRecord(options.encryptedAgentSettings);
   const llm = buildNormalizedLlmSettings(agentSettings.llm);
@@ -1419,10 +1493,16 @@ export function buildStartPlanningConversationRequest(options: {
         keep_first: 6,
       },
     },
-    workspace: {
-      kind: "LocalWorkspace",
-      working_dir: options.workingDir,
-    },
+    workspace:
+      options.executionRuntime === "docker"
+        ? {
+            kind: "DockerExecutionWorkspace",
+            working_dir: DOCKER_EXECUTION_WORKING_DIR,
+          }
+        : {
+            kind: "LocalWorkspace",
+            working_dir: options.workingDir,
+          },
     // No Canvas UI client tool: the planner's only output is PLAN.md, which the
     // Planner tab surfaces on its own via PlanningFileEditorObservation. Handing
     // it the panel-control tool would only let it navigate the right-side panel
@@ -1535,6 +1615,8 @@ export async function buildStartPlanningConversationRequestWithEncryptedSettings
    */
   parentAgentProfileId?: string | null;
   initialMessage?: string;
+  /** The server's `execution_runtime` — threads through to workspace selection. */
+  executionRuntime?: AgentServerInfo["execution_runtime"];
 }): Promise<RawAgentStartConversationPayload> {
   const { SecretsService } = await import("./secrets-service");
 
@@ -1602,7 +1684,7 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
   parentConversationId?: string;
   workingDir?: string;
   /** Workspace root for the hooks lookup, not the per-conversation `workingDir` (#16907). */
-  hooksProjectDir?: string;
+  hooksProjectDir?: string | null;
   worktree?: boolean;
   agentProfileId?: string;
   agentProfileKind?: AgentKind;
@@ -1616,17 +1698,28 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
   const [
     settingsResult,
     customSecrets,
-    runtimeServicesInfo,
+    serverInfo,
     workspaceHookConfig,
+    metaProfiles,
   ] = await Promise.all([
     SettingsService.getSettingsForConversation(),
     SecretsService.getSecrets(),
-    fetchBackendRuntimeServicesInfo(),
-    HooksService.loadWorkspaceHooks(options.hooksProjectDir),
+    fetchBackendServerInfo(),
+    options.hooksProjectDir === null
+      ? Promise.resolve(null)
+      : HooksService.loadWorkspaceHooks(options.hooksProjectDir),
+    // Best-effort: if the meta-profiles endpoint is unreachable we cannot
+    // confirm a router is active, so fail closed (no route-at-start suffix).
+    MetaProfilesService.listMetaProfiles().catch(() => null),
   ]);
 
   const { agentSettings, conversationSettings, secretsEncrypted } =
     settingsResult;
+  const runtimeServicesInfo = parseRuntimeServicesInfo(
+    (serverInfo as { runtime_services?: unknown } | null)?.runtime_services,
+  );
+  const executionRuntime = serverInfo?.execution_runtime;
+  const hasActiveMetaProfile = !!metaProfiles?.active_meta_profile;
 
   // A profile launch resolves the LLM server-side, so the current-settings
   // subscription check doesn't apply (and can't see the profile's LLM).
@@ -1641,7 +1734,9 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
     secretsEncrypted,
     customSecrets,
     runtimeServicesInfo,
+    executionRuntime,
     workspaceHookConfig,
+    hasActiveMetaProfile,
   });
 }
 

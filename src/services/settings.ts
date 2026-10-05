@@ -21,6 +21,7 @@ export const DEFAULT_SETTINGS: Settings = {
   user_consents_to_analytics: null,
   enable_proactive_conversation_starters: false,
   enable_solvability_analysis: false,
+  run_router_at_conversation_start: false,
   search_api_key: "",
   is_new_user: true,
   disabled_skills: [],
@@ -33,7 +34,7 @@ export const DEFAULT_SETTINGS: Settings = {
   title_llm_profile: null,
   agent_settings_schema: null,
   agent_settings: {
-    schema_version: 6,
+    schema_version: 8,
     agent_kind: "openhands",
     agent: "CodeActAgent",
     llm: {
@@ -47,8 +48,6 @@ export const DEFAULT_SETTINGS: Settings = {
       critic_enabled: false,
       enable_iterative_refinement: false,
     },
-    enable_sub_agents: false,
-    enable_switch_llm_tool: true,
     mcp_config: {},
   },
   conversation_settings_schema: null,
