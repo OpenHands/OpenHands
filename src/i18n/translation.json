@@ -44300,5 +44300,39 @@
     "de": "Die Mikrofontaste im Chat-Eingabefeld verwendet die Spracherkennung deines Browsers. Um stattdessen deinen eigenen Transkriptionsdienst zu nutzen, etwa einen lokalen Whisper-Server, gib einen OpenAI-kompatiblen Endpunkt ein. Diese Einstellungen werden nur in diesem Browser gespeichert.",
     "uk": "Кнопка мікрофона в полі чату використовує розпізнавання мовлення вашого браузера. Щоб натомість використовувати власний сервіс транскрибування, наприклад локальний сервер Whisper, введіть OpenAI-сумісну кінцеву точку. Ці налаштування зберігаються лише в цьому браузері.",
     "ca": "El botó del micròfon de l'entrada del xat utilitza el reconeixement de veu del navegador. Per utilitzar el teu propi servei de transcripció, com ara un servidor Whisper local, introdueix un endpoint compatible amb OpenAI. Aquesta configuració només es desa en aquest navegador."
+  },
+  "NOT_FOUND$TITLE": {
+    "en": "Page not found",
+    "ja": "ページが見つかりません",
+    "zh-CN": "未找到页面",
+    "zh-TW": "找不到頁面",
+    "ko-KR": "페이지를 찾을 수 없습니다",
+    "no": "Fant ikke siden",
+    "it": "Pagina non trovata",
+    "pt": "Página não encontrada",
+    "es": "Página no encontrada",
+    "ar": "الصفحة غير موجودة",
+    "fr": "Page introuvable",
+    "tr": "Sayfa bulunamadı",
+    "de": "Seite nicht gefunden",
+    "uk": "Сторінку не знайдено",
+    "ca": "No s'ha trobat la pàgina"
+  },
+  "NOT_FOUND$MESSAGE": {
+    "en": "This address does not match any page. Check the URL, or go back to the home page.",
+    "ja": "このアドレスに一致するページはありません。URL を確認するか、ホームページに戻ってください。",
+    "zh-CN": "此地址没有对应的页面。请检查 URL,或返回首页。",
+    "zh-TW": "此位址沒有對應的頁面。請檢查 URL,或返回首頁。",
+    "ko-KR": "이 주소와 일치하는 페이지가 없습니다. URL을 확인하거나 홈 페이지로 돌아가세요.",
+    "no": "Denne adressen samsvarer ikke med noen side. Kontroller URL-en, eller gå tilbake til startsiden.",
+    "it": "Questo indirizzo non corrisponde a nessuna pagina. Controlla l'URL o torna alla home page.",
+    "pt": "Este endereço não corresponde a nenhuma página. Verifique a URL ou volte para a página inicial.",
+    "es": "Esta dirección no coincide con ninguna página. Comprueba la URL o vuelve a la página de inicio.",
+    "ar": "لا يطابق هذا العنوان أي صفحة. تحقق من عنوان URL، أو عد إلى الصفحة الرئيسية.",
+    "fr": "Cette adresse ne correspond à aucune page. Vérifiez l'URL ou revenez à la page d'accueil.",
+    "tr": "Bu adres hiçbir sayfayla eşleşmiyor. URL'yi kontrol edin veya ana sayfaya dönün.",
+    "de": "Diese Adresse passt zu keiner Seite. Prüfe die URL oder kehre zur Startseite zurück.",
+    "uk": "Ця адреса не відповідає жодній сторінці. Перевірте URL або поверніться на головну сторінку.",
+    "ca": "Aquesta adreça no correspon a cap pàgina. Comprova l'URL o torna a la pàgina d'inici."
   }
 }
