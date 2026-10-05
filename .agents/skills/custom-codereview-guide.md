@@ -1,6 +1,6 @@
 ---
 name: custom-codereview-guide
-description: Repository-specific review rules for the OpenHands Agent Canvas frontend.
+description: Repository-specific triage and review rules for the OpenHands Agent Canvas frontend.
 triggers:
   - /codereview
 ---
@@ -31,6 +31,53 @@ integration and depends on public interfaces from the owning repository. When a
 change belongs in one of the repositories above, say so and ask a maintainer to
 confirm before reviewing the rest.
 
+## Triage: Ownership and Scope
+
+Consult this guide during issue triage for ownership, supported behavior, and
+acceptance criteria. Implementation and merge checks apply to a PR, not an
+unwritten fix: do not require new regression tests, PR artifacts, or before/after
+fix evidence to make an issue actionable.
+
+Trace the failing boundary before assigning an owner. Inspect
+`OpenHands/software-agent-sdk` for events, tools, ACP, profiles, conversation
+lifecycle, and persistence; inspect `OpenHands/automation` for form contracts,
+run state, and pagination. Check producers and consumers at actually installed
+or supported versions using package locks, runtime versions, and
+`config/defaults.json`, not just upstream main. Cite the version and source when
+ownership or compatibility depends on it.
+
+Prefer a fix in the owning provider over a downstream Canvas workaround. Separate
+Canvas integration from provider work and state release/dependency constraints.
+Distinguish introduced regressions from preexisting, independent upstream issues;
+do not silently expand scope to fix them. Recommend material follow-up work, but
+do not automatically edit other repositories or create tickets without
+authorization. Use answers already in the issue or linked discussion rather than
+asking the reporter to repeat them.
+
+## Triage: Behavioral Acceptance and Readiness
+
+Acceptance criteria describe observable outcomes, affected modes, and meaningful
+failure or recovery cases—not a required implementation or PR-artifact checklist.
+Keep the verification plan separate. Bugs need expected vs. actual behavior,
+environment/version, and a reproducible scenario; features need the desired
+outcome and scope, not evidence of an unimplemented feature.
+
+Match issue evidence to behavior: actual Canvas captures for visual defects;
+commands, logs, API output, or a focused reproducer/test for nonvisual defects.
+Consider evidence already linked in comments; do not demand screenshots of logs
+or relocation of an existing capture just to satisfy a template. State remaining
+uncertainty without calling inferred or defensive handling a verified production
+reproduction.
+
+Readiness is not PR approval. Follow the current label policy in
+`.github/workflows/issue-readiness-check.yml`: actors with `write`, `maintain`, or
+`admin` permission may grant `ready-for-dev`, with no blanket bot exception.
+Do not override a failing required check or invent a bot-only authorization rule.
+
+## Implementation and Merge Review
+
+The remaining checkpoints apply to implemented changes and their PR evidence.
+
 ## Review Sequence and Decision
 
 Review the current PR head in this order:
@@ -57,6 +104,13 @@ the automation can request a human maintainer to choose the appropriate
 lightweight evaluation. Use COMMENT when an acceptance criterion or required
 check calls for specific eval evidence and that evidence is missing or failing,
 or when available results show a regression.
+
+Keep the code verdict separate from merge readiness. If a required check fails,
+the branch is unmergeable, or required evidence is missing, use **COMMENT** and
+state the gate even when the code looks sound. The summary, final verdict/footer,
+and submitted review state must agree; never end an unresolved material finding
+or merge gate with `APPROVED`. Optional evaluation follow-up remains nonblocking
+as described above.
 
 Include a compact checklist for every linked acceptance criterion. Meeting the
 checklist is necessary but does not replace review for regressions, security, or
@@ -108,6 +162,11 @@ field, schema, or behavior. Canvas and the Agent Server are independently
 versioned.
 
 Require an increase to `minimumAgentServer` to the first compatible released version.
+
+Before demanding or removing a compatibility fallback, inspect the SDK producer
+at the supported release floor and affected deployed versions. Show which payload
+or behavior those versions can actually produce; an old fixture or hypothetical
+legacy field alone does not establish a supported compatibility requirement.
 
 Verify the compatibility boundary. Adding a TypeScript-client method does not
 make older Agent Servers support it. Submit **COMMENT** if a supported backend
@@ -171,6 +230,14 @@ Telemetry has stricter named owners:
 - Consent rendering uses the telemetry consent external store;
   `setTelemetryConsent` is the only consent controller.
 - A business milestone has one canonical capture.
+
+### Docker user and permission workarounds
+
+When a PR recommends a Docker `--user` or `HOME` workaround, validate the whole
+supported execution path under that UID/GID: home directory, configuration and
+cache directories, temporary files, and subprocess/browser startup. A writable
+mounted persistence directory alone does not prove that the recommended mode
+works. Check ownership and permissions outside the mount as well.
 
 ## Design Review
 
@@ -243,9 +310,13 @@ correctness, security, compatibility, or architecture defect.
 
 ## Testing and Production Evidence
 
-- Every PR that touches frontend code needs an authentic screenshot or video
-  captured while exercising the PR code. This includes non-visual frontend logic
-  whose effect appears in a generated or downloaded user-facing artifact.
+- Choose evidence by changed behavior, not by a frontend filename alone.
+  Nonvisual logic and test-only changes can use reproducible commands, actual
+  logs/output, and tests exercising real code paths; docs-only changes need no
+  runtime tests or media.
+- Validate rendered behavior in the actual Canvas app. Token, class-name, or
+  source-string assertions do not establish computed styling, isolation, layout,
+  or readable controls; they cannot replace a required real-app capture.
 - Require evidence proportional to the behavior changed. UI changes need a
   screenshot or video from the real app; CLI, API, and script changes need the
   exact runtime command and observed result.
@@ -286,9 +357,15 @@ correctness, security, compatibility, or architecture defect.
 - Do not duplicate library behavior or add brittle presentation-only snapshots.
 
 Tests, mock-LLM runs, and mocked-backend runs are regression proof, not a
-substitute for required live evidence. Submit **COMMENT** when production-facing
-evidence is required but absent or ambiguous, and name the exact capture or
-verification still needed before approval.
+substitute for live evidence when the changed behavior requires it. Submit
+**COMMENT** when production-facing evidence is required but absent or ambiguous,
+and name the exact capture or verification still needed before approval.
+
+Check the current PR validator as a separate merge gate:
+`.github/scripts/check_pr_description.py` still requires media for frontend-code
+and bug-fix PRs, even where nonvisual evidence suffices for behavioral review.
+Report that mismatch rather than fabricating media, relabeling a PR, or claiming
+the gate passed. Do not apply that PR requirement to triage.
 
 Follow the test routing in `AGENTS.md`. Mock-LLM, Docker mock-LLM, and live
 LLM-backed E2E suites run after changes reach `main`, not from PR labels. For

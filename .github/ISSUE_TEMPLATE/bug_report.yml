@@ -77,9 +77,10 @@ body:
       label: Actual Behavior
       description: |
         What actually happened? To qualify for the `ready-for-dev` label,
-        describe the observed behavior and attach a screenshot or video of the
-        bug in this section.
-        Drag a screenshot/video into this field, or paste a link.
+        describe the observed behavior with evidence suited to the bug: a real
+        Canvas screenshot/video for visual behavior, or commands, logs, API
+        output, or a focused reproducer/test for nonvisual behavior. Evidence
+        linked in this issue's comments is also valid; no duplicate upload is needed.
       placeholder: |
         The button moved to the next step unexpectedly.
 
@@ -110,10 +111,12 @@ body:
       label: Acceptance Criteria
       description: |
         Required for the `ready-for-dev` label. Testable, checkable bullets a
-        reviewer can verify. Describe the *fixed* state, not the bug.
+        reviewer can verify. Describe the *fixed* state, not the bug or required
+        PR artifacts. Tests and before/after fix evidence are implementation
+        checks, not prerequisites for triaging an unwritten fix.
       placeholder: |
-        - [ ] A screenshot/video demonstrating the bug can be replicated on main is attached to the PR.
-        - [ ] A screenshot/video demonstrating that the bug is fixed on the PR branch is attached to the PR.
+        - [ ] Following the reproduction steps produces the expected result.
+        - [ ] The affected mode handles the failure without losing user state.
         - [ ] …
     validations:
       required: false

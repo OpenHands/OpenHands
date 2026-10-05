@@ -36,9 +36,10 @@ body:
       label: Acceptance Criteria
       description: |
         Required for the `ready-for-dev` label. Testable, checkable bullets a
-        reviewer can verify to confirm the feature is done.
+        reviewer can verify to confirm the feature is done. Describe observable
+        outcomes, not PR artifacts or tests for an unimplemented feature.
       placeholder: |
-        - [ ] A screenshot/video demonstrating the feature behavior is attached to the PR.
+        - [ ] As a user, I can complete the requested action in the affected mode.
         - [ ] …
     validations:
       required: true
