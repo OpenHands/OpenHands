@@ -234,8 +234,25 @@ After: no remaining child process, exit status 0.
 """
 
 
-def test_nonvisual_bug_accepts_reproduction_logs_without_media():
-    assert validate_pr_body(NONVISUAL_BUG_BODY, ["scripts/launcher.cjs"]) == []
+def test_functional_launcher_bug_requires_running_canvas_media():
+    errors = validate_pr_body(NONVISUAL_BUG_BODY, ["scripts/launcher.cjs"])
+    assert len(errors) == 1
+    assert "functional change" in errors[0]
+
+
+def test_nonfrontend_feature_requires_running_canvas_media():
+    body = NONVISUAL_BUG_BODY.replace("[x] Bug fix", "[x] Feature")
+    assert len(validate_pr_body(body, ["scripts/launcher.cjs"])) == 1
+
+
+def test_functional_launcher_bug_accepts_canvas_recording():
+    body = NONVISUAL_BUG_BODY + "\n## Video/Screenshots\nhttps://github.com/user-attachments/assets/abc123"
+    assert validate_pr_body(body, ["scripts/launcher.cjs"]) == []
+
+
+def test_nonfunctional_change_accepts_text_evidence():
+    body = NONVISUAL_BUG_BODY.replace("[x] Bug fix", "[x] Docs / chore")
+    assert validate_pr_body(body, ["docs/README.md"]) == []
 
 
 def test_nonvisual_bug_still_requires_summary_and_test_details():

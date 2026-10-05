@@ -7,8 +7,8 @@ Additional checks:
   checked.
 - If frontend code was touched, the description must include a screenshot or
   video.
-- The bug label alone does not require media. Nonvisual fixes can use commands
-  and results in Summary and How to Test; reviewers judge the evidence.
+- Bug-fix and feature PRs require running-Canvas screenshots or video even
+  outside frontend paths. Reviewers verify before/after behavior and authenticity.
 - The body must reference at least one issue (e.g. `Fixes #123`) and at least
   one referenced issue must carry the `ready-for-dev` label. The API lookup is
   only performed in CI (when GITHUB_EVENT_PATH and GITHUB_TOKEN are available).
@@ -218,15 +218,17 @@ def validate_human_tested_checkbox(body: str) -> list[str]:
 
 
 def validate_frontend_screenshot(body: str, files: list[str]) -> list[str]:
-    """Require a screenshot/video in the body when frontend code was touched."""
-    if not touches_frontend(files):
+    """Require media for frontend edits and declared functional changes."""
+    frontend = touches_frontend(files)
+    if not frontend and extract_pr_type(body) not in (BUG_LABEL, ENHANCEMENT_LABEL):
         return []
     if has_screenshot_or_video(body):
         return []
+    change = "touches frontend code" if frontend else "declares a functional change"
     return [
-        "This PR touches frontend code but the description has no screenshot or "
-        "video. Add one under `## Video/Screenshots` (drag a file into the editor "
-        "or paste a video link)."
+        f"This PR {change} but the description has no screenshot or video. "
+        "Add evidence from a running Canvas under `## Video/Screenshots`; "
+        "for bug fixes, demonstrate failure before and success after the change."
     ]
 
 

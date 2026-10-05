@@ -76,10 +76,10 @@ body:
     attributes:
       label: Actual Behavior
       description: |
-        For `ready-for-dev`, describe what happened. For visual bugs, include a
-        real Canvas screenshot/video; for nonvisual bugs, use commands, logs,
-        API output, or a focused reproducer/test. Links in comments count;
-        no duplicate upload is needed.
+        Describe what happened. For functional Canvas bugs, include a screenshot
+        or video of the failure in the running app. Logs, API output, and
+        reproducers can supplement it. Say if you have not reproduced it.
+        Links in comments count; no after-fix evidence is needed for triage.
       placeholder: |
         The button moved to the next step unexpectedly.
 

@@ -40,7 +40,8 @@ Fixes #
 Required. Share the steps for the reviewer to be able to test your PR. e.g. You can test by running `npm install` then `npm build dev`.
 
 For bugs, include reproduction steps and observed before/after results.
-Nonvisual fixes can use logs or API/terminal output; text screenshots are not required.
+For functional changes, logs and tests supplement the running-Canvas demonstration below.
+Nonvisual evidence alone is sufficient only for non-functional changes.
 
 If you could not test this, say why.
 -->
@@ -48,10 +49,11 @@ If you could not test this, say why.
 ## Video/Screenshots
 
 <!--
-Frontend changes require real-app screenshots/video of the changed behavior.
-For visual bugs, show before and after; use video for timing or transitions.
-For nonvisual fixes outside the frontend media gate, use commands, logs, or
-results under How to Test. Reviewers judge whether the evidence proves the fix.
+Functional changes require screenshots/video of the running Canvas exercising
+the changed behavior, even outside frontend files. For bugs, demonstrate failure
+before and success after using the same setup. For new features, show the working
+behavior. Use video for timing or transitions. Logs/tests alone do not suffice.
+Non-functional changes may use relevant commands and results under How to Test.
 -->
 
 ## Design Doc

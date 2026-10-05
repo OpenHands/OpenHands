@@ -60,10 +60,10 @@ failure/recovery cases, not implementation requirements or PR artifacts. Keep ve
 Bugs need expected/actual behavior, environment/version, and reproduction steps;
 features need the desired outcome and scope, not evidence of an unbuilt feature.
 
-For visual defects, use actual Canvas captures. For nonvisual defects, use commands,
-logs, API output, or a focused reproducer/test. Accept evidence linked in comments;
-do not require duplicate uploads or screenshots of logs. State uncertainty; do not
-call inferred failures or defensive handling verified production reproductions.
+For Canvas functional bugs, capture the failure in the running app; logs, API
+output, and reproducers can supplement the capture. Accept evidence linked in
+comments without duplicate uploads. State uncertainty when the failure has not
+been reproduced. Triage does not require an after-fix demonstration.
 
 ## Implementation and Merge Review
 
@@ -297,13 +297,16 @@ correctness, security, compatibility, or architecture defect.
 
 ## Testing and Production Evidence
 
-- For nonvisual or test-only changes, use reproducible commands, actual output,
-  and real-code tests. Docs-only changes need no runtime tests or media.
+- Nonvisual evidence alone is acceptable only for non-functional changes, such
+  as documentation or test-only edits that do not alter product behavior. Use
+  relevant commands and output; docs-only changes need no runtime tests or media.
 - Check rendering in Canvas. Token, class-name, and source-string assertions do
   not prove computed styling, isolation, layout, or readability, or replace captures.
-- Require evidence proportional to the behavior changed. UI changes need a
-  screenshot or video from the real app; CLI, API, and script changes need the
-  exact runtime command and observed result.
+- Every functional change needs screenshots or video of the running Canvas
+  exercising the changed behavior, including backend integration, launcher,
+  API, and lifecycle changes. Logs, commands, and tests supplement—not replace—
+  that demonstration. Bug fixes must show failure before and success after;
+  new features must demonstrate the working behavior.
 - Authentic evidence comes from the real Agent Canvas app, browser, OS dialog,
   generated or downloaded artifact, or actual terminal/runtime output. It must
   include enough surrounding context and reproduction steps to establish what
