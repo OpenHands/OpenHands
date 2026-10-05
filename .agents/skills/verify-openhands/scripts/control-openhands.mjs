@@ -5,7 +5,7 @@
 // Run `control-openhands --help` or `control-openhands <command> --help`.
 
 import { spawn, spawnSync, execFileSync } from "node:child_process";
-import { randomBytes, createHash } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import {
   appendFileSync,
   existsSync,
@@ -25,7 +25,7 @@ import { freemem, tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { deflateSync, gunzipSync } from "node:zlib";
-import { BUILD_INPUTS } from "./lib/build-inputs.mjs";
+import { buildIdentity } from "./lib/build-id.mjs";
 import { launcherEnvFor } from "./lib/launcher-env.mjs";
 import { routePattern } from "./lib/route-pattern.mjs";
 
@@ -176,18 +176,11 @@ function checkoutRevision() {
   return git(["rev-parse", "HEAD"]);
 }
 
-// Identity of the frontend build inputs: commits that only touch other paths
-// (docs, this skill) reuse the existing build instead of rebuilding under
-// stacks that are already serving it.
+// Identity of the frontend build inputs, untracked new files included:
+// commits that only touch other paths (docs, this skill) reuse the existing
+// build instead of rebuilding under stacks that are already serving it.
 function buildId() {
-  const tree = git(["ls-tree", "HEAD", "--", ...BUILD_INPUTS]);
-  const dirty = git(["diff", "HEAD", "--", ...BUILD_INPUTS]);
-  const id = createHash("sha256")
-    .update(tree)
-    .update(dirty)
-    .digest("hex")
-    .slice(0, 16);
-  return dirty ? `${id}-dirty` : id;
+  return buildIdentity(repoRoot);
 }
 
 function processAlive(pid) {
@@ -1071,10 +1064,13 @@ async function cmdDoctor({ flags }) {
         `served=${served} run=${run.buildId} revision=${run.revision.slice(0, 12)}`,
       );
       const current = buildId();
+      const unchanged = current === run.buildId;
       add(
-        "checkout build inputs unchanged since launch",
-        current === run.buildId,
-        `now=${current}`,
+        unchanged
+          ? "checkout build inputs unchanged since launch"
+          : "checkout build inputs changed since launch; relaunch with --build auto to serve them",
+        unchanged,
+        `launch=${run.buildId} now=${current}`,
         "warn",
       );
       const unauth = await http(run, "GET", "/api/settings", { auth: false });

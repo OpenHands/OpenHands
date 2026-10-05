@@ -15,6 +15,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "vitest";
+import { buildIdentity } from "./lib/build-id.mjs";
 import { BUILD_INPUTS } from "./lib/build-inputs.mjs";
 import { launcherEnvFor } from "./lib/launcher-env.mjs";
 import { redactStorage } from "./lib/redact-storage.mjs";
@@ -374,4 +375,44 @@ test("build inputs cover every file the frontend imports from outside src", () =
   };
   walk(join(repo, "src"));
   assert.deepEqual([...missing], []);
+});
+
+test("build identity changes when a new untracked source file appears", () => {
+  const repo = mkdtempSync(join(tmpdir(), "buildid-"));
+  const git = (...args) =>
+    spawnSync("git", args, { cwd: repo, encoding: "utf8" });
+  git("init", "-q");
+  mkdirSync(join(repo, "src"));
+  writeFileSync(join(repo, "src", "app.ts"), "export const a = 1;\n");
+  writeFileSync(join(repo, ".gitignore"), "src/generated.ts\n");
+  git("add", "-A");
+  git(
+    "-c",
+    "user.name=t",
+    "-c",
+    "user.email=t@t",
+    "-c",
+    "commit.gpgsign=false",
+    "commit",
+    "-qm",
+    "init",
+  );
+  const clean = buildIdentity(repo, ["src"]);
+  assert.doesNotMatch(clean, /-dirty$/);
+  writeFileSync(join(repo, "src", "generated.ts"), "ignored\n");
+  assert.equal(
+    buildIdentity(repo, ["src"]),
+    clean,
+    "ignored files do not count",
+  );
+  writeFileSync(join(repo, "src", "not-found.tsx"), "export default 1;\n");
+  const added = buildIdentity(repo, ["src"]);
+  assert.notEqual(added, clean);
+  assert.match(added, /-dirty$/);
+  writeFileSync(join(repo, "src", "not-found.tsx"), "export default 2;\n");
+  assert.notEqual(
+    buildIdentity(repo, ["src"]),
+    added,
+    "edits to the new file count",
+  );
 });
