@@ -278,7 +278,12 @@ export function InstallServerModal({
         .then((result) => {
           if (!result.ok) {
             setGlobalError(
-              makeMcpTestErrorMessage(t, result.error_kind, result.error),
+              makeMcpTestErrorMessage(
+                t,
+                result.error_kind,
+                result.error,
+                payload.type,
+              ),
             );
             return;
           }
@@ -321,7 +326,12 @@ export function InstallServerModal({
       onSuccess: (result) => {
         if (!result.ok) {
           setGlobalError(
-            makeMcpTestErrorMessage(t, result.error_kind, result.error),
+            makeMcpTestErrorMessage(
+              t,
+              result.error_kind,
+              result.error,
+              payload.type,
+            ),
           );
           // Modal stays open — do NOT call onClose.
           return;
