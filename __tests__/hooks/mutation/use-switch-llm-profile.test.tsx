@@ -1,6 +1,7 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AxiosError, AxiosHeaders } from "axios";
+import { HttpError } from "@openhands/typescript-client";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { useSwitchLlmProfile } from "#/hooks/mutation/use-switch-llm-profile";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
@@ -148,7 +149,7 @@ describe("useSwitchLlmProfile", () => {
   // failed switch keeps the specific "Switched to {name} failed" message
   // (#1571 review).
   it("shows the tailored switch-failed message when the error carries no server detail", async () => {
-    // An empty-message Error extracts to "" (see retrieveAxiosErrorMessage),
+    // An empty-message Error carries no usable message (see getApiErrorMessage),
     // so the tailored fallback is what actually renders.
     vi.mocked(AgentServerConversationService.switchProfile).mockRejectedValue(
       new Error(),
@@ -187,6 +188,46 @@ describe("useSwitchLlmProfile", () => {
     expect(displayErrorToast).toHaveBeenCalledWith(
       "LLM profile 'gpt-5' not found",
     );
+  });
+
+  it("shows the server's `detail` instead of the raw HttpError text for an unknown profile (#17937)", async () => {
+    // Arrange — the agent-server answers /switch_profile with a FastAPI 404,
+    // which the shared TypeScript client throws as an HttpError.
+    vi.mocked(AgentServerConversationService.switchProfile).mockRejectedValue(
+      new HttpError(
+        404,
+        "Not Found",
+        { detail: "Profile 'qa-nope' not found" },
+        `HTTP request failed (404 Not Found): {"detail":"Profile 'qa-nope' not found"}`,
+      ),
+    );
+
+    // Act
+    const { result } = renderSwitchHook();
+    result.current.mutate({ conversationId: "conv-1", profileName: "qa-nope" });
+
+    // Assert
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(displayErrorToast).toHaveBeenCalledWith(
+      "Profile 'qa-nope' not found",
+    );
+  });
+
+  it("falls back to the tailored switch-failed message for an HttpError without a server detail", async () => {
+    vi.mocked(AgentServerConversationService.switchProfile).mockRejectedValue(
+      new HttpError(
+        502,
+        "Bad Gateway",
+        null,
+        "HTTP request failed (502 Bad Gateway): null",
+      ),
+    );
+
+    const { result } = renderSwitchHook();
+    result.current.mutate({ conversationId: "conv-1", profileName: "Smart" });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(displayErrorToast).toHaveBeenCalledWith("MODEL$SWITCH_FAILED");
   });
 
   // The following behaviors run in the mutation-level onSuccess (not

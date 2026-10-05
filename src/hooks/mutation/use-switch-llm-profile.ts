@@ -12,7 +12,7 @@ import {
   stampActiveLlmProfile,
 } from "#/hooks/chat/record-model-switch-message";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
-import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
+import { getApiErrorMessage } from "#/utils/api-error-message";
 import { I18nKey } from "#/i18n/declaration";
 import { invalidateConversationQueries } from "./conversation-mutation-utils";
 
@@ -63,7 +63,7 @@ export const useSwitchLlmProfile = () => {
     }),
     onError: (error, { profileName }) => {
       const fallback = t(I18nKey.MODEL$SWITCH_FAILED, { name: profileName });
-      displayErrorToast(retrieveAxiosErrorMessage(error) || fallback);
+      displayErrorToast(getApiErrorMessage(error, fallback));
     },
     onSuccess: (_data, { conversationId, profileName }, context) => {
       queryClient.invalidateQueries({
