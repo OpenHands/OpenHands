@@ -370,7 +370,8 @@ The convention:
 2. Commit it under the temporary **`.pr/`** directory, e.g. `.pr/design.html`. This directory
    is for PR-only artifacts and must not land in `main`. For a same-repository PR it is
    **removed automatically when the PR is approved** (`.github/workflows/pr-artifacts.yml`).
-   For a fork PR the workflow only posts a reminder, so delete `.pr/` yourself before merge.
+   For a fork PR the workflow cannot push to your branch; it posts a notice and, if `.pr/`
+   reaches `main` after merge, opens or updates a cleanup PR. Delete `.pr/` yourself before merge.
 3. Link it near the top of the PR description via htmlpreview, at the commit that contains
    the page (`git rev-parse HEAD` after you push it):
 
