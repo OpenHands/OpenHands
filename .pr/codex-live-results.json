@@ -1,0 +1,74 @@
+{
+  "date": "2026-10-02",
+  "platform": "Windows",
+  "codex_acp_version": "1.10.0",
+  "model": "gpt-5.6-sol",
+  "human_authorization": true,
+  "api_key_supplied": false,
+  "turns": [
+    {
+      "stage": "before_restart",
+      "reply": "OK",
+      "passed": true
+    },
+    {
+      "stage": "after_restart",
+      "reply": "OK",
+      "passed": true
+    },
+    {
+      "stage": "after_refresh",
+      "reply": "OK",
+      "passed": true
+    },
+    {
+      "stage": "default_windows_preset",
+      "reply": "OK",
+      "passed": true
+    },
+    {
+      "stage": "recovered_original_conversation",
+      "reply": "OK",
+      "passed": true
+    }
+  ],
+  "refresh": {
+    "expiry_predicate_forced": true,
+    "stored_version_changed": true,
+    "access_token_changed": true,
+    "refresh_token_rotated": true,
+    "last_refresh_changed": true,
+    "running_server_connected": true
+  },
+  "pending": [
+    "natural_expiry",
+    "real_account_disconnect",
+    "published_dependency_pins",
+    "Cloud_App_API",
+    "remote_human_authorization_and_model_turn"
+  ],
+  "default_windows_launcher": {
+    "sdk_commit": "5ab913acbc8d938f21a18e981dd9aa3224eaf2ca",
+    "profile_command": "npx -y --prefer-offline @agentclientprotocol/codex-acp@1.10.0",
+    "custom_profile_override": false,
+    "packaged_sdk_matches_source": true,
+    "passed": true,
+    "original_failed_conversation_recovered": true
+  },
+  "browser_reload_connected": true,
+  "linux_regressions": {
+    "backend_acp_passed": 594,
+    "windows_only_skipped": 2,
+    "typescript_passed": 348,
+    "run": "https://github.com/luxleader/software-agent-sdk/actions/runs/37023860358",
+    "scope": "Successful hosted Linux run; full test, package, canonical Docker build and container HTTP acceptance steps passed."
+  },
+  "docker_remote_acceptance": {
+    "passed": true,
+    "report": "codex-remote-results.json",
+    "real_account_credentials_used": false,
+    "real_model_turn": false
+  },
+  "candidate_release": "https://github.com/luxleader/software-agent-sdk/releases/tag/codex-oauth-17372-candidate-5ab913ac",
+  "official_registry_release": false
+}

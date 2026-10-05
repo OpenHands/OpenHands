@@ -1,4 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 // Type definitions for the module exports
 type NormalizeVersion = (version: string | null) => string | null;
@@ -8,7 +12,7 @@ type FindClientPinMismatch = (
   pinned: string | null,
   expected: string,
 ) => { package: string; expected: string; actual: string | null } | null;
-type ReadClientPin = () => string | null;
+type ReadClientPin = (root?: string) => string | null;
 
 // Import after mocking - need dynamic import since the script has side effects
 describe("check-sdk-version-sync helpers", () => {
@@ -27,6 +31,21 @@ describe("check-sdk-version-sync helpers", () => {
     // Mock console to suppress output during tests
     vi.spyOn(console, "log").mockImplementation(() => {});
     vi.spyOn(console, "error").mockImplementation(() => {});
+    // Importing this CLI also runs main; keep its PyPI transport deterministic.
+    const defaults = JSON.parse(
+      readFileSync(join(__dirname, "../../config/defaults.json"), "utf8"),
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          info: {
+            requires_dist: [`openhands-sdk==${defaults.versions.agentServer}`],
+          },
+        }),
+      }),
+    );
 
     // Dynamic import to get fresh module
     const module = await import("../../scripts/check-sdk-version-sync.mjs");
@@ -43,6 +62,7 @@ describe("check-sdk-version-sync helpers", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   describe("normalizeVersion", () => {
@@ -203,8 +223,91 @@ describe("check-sdk-version-sync helpers", () => {
   });
 
   describe("readClientPin", () => {
+    const candidate =
+      "https://github.com/openhands/sdk/releases/download/candidate/client.tgz";
+    const integrity = `sha512-${createHash("sha512").update("test client tarball").digest("base64")}`;
+    let fixtureRoot: string;
+
+    beforeEach(() => {
+      fixtureRoot = mkdtempSync(join(tmpdir(), "canvas-sdk-sync-"));
+      writeFileSync(
+        join(fixtureRoot, "package.json"),
+        JSON.stringify({ dependencies: { [CLIENT_PACKAGE_NAME]: candidate } }),
+      );
+    });
+
+    afterEach(() => {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    });
+
+    function writeLock(
+      entry: Record<string, unknown>,
+      rootSpec: string = candidate,
+    ) {
+      writeFileSync(
+        join(fixtureRoot, "package-lock.json"),
+        JSON.stringify({
+          packages: {
+            "": { dependencies: { [CLIENT_PACKAGE_NAME]: rootSpec } },
+            [`node_modules/${CLIENT_PACKAGE_NAME}`]: entry,
+          },
+        }),
+      );
+    }
+
     it("reads an exact pin this repo actually ships", () => {
       expect(readClientPin()).toMatch(/^[0-9]+\.[0-9]+\.[0-9]+$/);
+    });
+
+    it("checks the locked tarball version instead of its download address", () => {
+      writeLock({ version: "1.50.1", resolved: candidate, integrity });
+      expect(
+        findClientPinMismatch(readClientPin(fixtureRoot), "1.50.1"),
+      ).toBeNull();
+    });
+
+    it("still rejects a tarball whose locked version differs from the server", () => {
+      writeLock({ version: "1.49.0", resolved: candidate, integrity });
+      expect(
+        findClientPinMismatch(readClientPin(fixtureRoot), "1.50.1"),
+      ).toEqual({
+        package: CLIENT_PACKAGE_NAME,
+        expected: "1.50.1",
+        actual: "1.49.0",
+      });
+    });
+
+    it.each([
+      ["missing integrity", { integrity: undefined }],
+      ["weak integrity", { integrity: "sha1-abc" }],
+      ["malformed integrity", { integrity: "sha512-abc" }],
+      ["another artifact", { resolved: `${candidate}?different` }],
+      ["missing version", { version: undefined }],
+      ["version range", { version: "^1.50.1" }],
+    ])("rejects a candidate lock with %s", (_label, overrides) => {
+      writeLock({
+        version: "1.50.1",
+        resolved: candidate,
+        integrity,
+        ...overrides,
+      });
+      expect(
+        findClientPinMismatch(readClientPin(fixtureRoot), "1.50.1"),
+      ).not.toBeNull();
+    });
+
+    it("rejects stale root lock metadata and an absent lockfile", () => {
+      writeLock(
+        { version: "1.50.1", resolved: candidate, integrity },
+        "1.50.1",
+      );
+      expect(
+        findClientPinMismatch(readClientPin(fixtureRoot), "1.50.1"),
+      ).not.toBeNull();
+      rmSync(join(fixtureRoot, "package-lock.json"));
+      expect(
+        findClientPinMismatch(readClientPin(fixtureRoot), "1.50.1"),
+      ).not.toBeNull();
     });
   });
 });

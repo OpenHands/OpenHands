@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import { AcpConflictWarnings } from "#/components/features/settings/acp-conflict-warnings";
 import { AcpAuthStatusBanner } from "#/components/features/settings/acp-auth-status-banner";
 import { AcpSecretField } from "#/components/features/settings/acp-secret-field";
+import { CodexAuthCard } from "./codex-auth-card";
 import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
 import { useAcpAuthStatus } from "#/hooks/query/use-acp-auth-status";
@@ -48,27 +49,52 @@ export function AcpCredentialsSection({
         </Typography.Text>
       </div>
 
-      <AcpAuthStatusBanner
-        status={authStatus}
-        isChecking={isChecking}
-        credentialsConfigured={credentialsConfigured}
-        providerName={providerName}
-        testIdPrefix="settings-acp-auth"
-      />
+      {providerKey === "codex" && <CodexAuthCard />}
+      {(providerKey !== "codex" ||
+        (credentialsConfigured && authStatus !== "authenticated")) && (
+        <AcpAuthStatusBanner
+          status={authStatus}
+          isChecking={isChecking}
+          credentialsConfigured={credentialsConfigured}
+          providerName={providerName}
+          testIdPrefix="settings-acp-auth"
+        />
+      )}
 
       <div className="flex flex-col gap-5">
-        {fields.map((field) => (
-          <AcpSecretField
-            key={field.name}
-            field={field}
-            value={values[field.name] ?? ""}
-            onChange={(value) => setValue(field.name, value)}
-            alreadySet={secretExists(field.name)}
-            testId={`settings-acp-secret-${field.name}`}
-            showOptionalTag
-          />
-        ))}
+        {fields
+          .filter((field) => providerKey !== "codex" || !field.multiline)
+          .map((field) => (
+            <AcpSecretField
+              key={field.name}
+              field={field}
+              value={values[field.name] ?? ""}
+              onChange={(value) => setValue(field.name, value)}
+              alreadySet={secretExists(field.name)}
+              testId={`settings-acp-secret-${field.name}`}
+              showOptionalTag
+            />
+          ))}
       </div>
+
+      {providerKey === "codex" && (
+        <details>
+          <summary>{t(I18nKey.SETTINGS$CODEX_MANUAL_AUTH)}</summary>
+          {fields
+            .filter((field) => field.multiline)
+            .map((field) => (
+              <AcpSecretField
+                key={field.name}
+                field={field}
+                value={values[field.name] ?? ""}
+                onChange={(value) => setValue(field.name, value)}
+                alreadySet={secretExists(field.name)}
+                testId={`settings-acp-secret-${field.name}`}
+                showOptionalTag
+              />
+            ))}
+        </details>
+      )}
 
       <AcpConflictWarnings conflicts={conflicts} />
     </div>
