@@ -34934,6 +34934,23 @@
     "uk": "Застосунок встановлено. Перевірте його тут і ввімкніть, коли будете готові.",
     "ca": "Aplicació instal·lada. Revisa-la aquí i activa-la quan estiguis a punt."
   },
+  "SETTINGS$APPS_ALREADY_INSTALLED": {
+    "en": "This app is already installed. Use Update or Uninstall on its card.",
+    "ja": "このアプリはすでにインストールされています。カードの「更新」または「アンインストール」を使用してください。",
+    "zh-CN": "此应用已安装。请使用其卡片上的“更新”或“卸载”。",
+    "zh-TW": "此應用程式已安裝。請使用其卡片上的「更新」或「解除安裝」。",
+    "ko-KR": "이 앱은 이미 설치되어 있습니다. 카드의 업데이트 또는 제거를 사용하세요.",
+    "no": "Denne appen er allerede installert. Bruk Oppdater eller Avinstaller på kortet.",
+    "ar": "هذا التطبيق مثبت بالفعل. استخدم تحديث أو إزالة التثبيت على بطاقته.",
+    "de": "Diese App ist bereits installiert. Verwende Aktualisieren oder Deinstallieren auf ihrer Karte.",
+    "fr": "Cette application est déjà installée. Utilisez Mettre à jour ou Désinstaller sur sa carte.",
+    "it": "Questa app è già installata. Usa Aggiorna o Disinstalla sulla sua scheda.",
+    "pt": "Este aplicativo já está instalado. Use Atualizar ou Desinstalar no cartão dele.",
+    "es": "Esta aplicación ya está instalada. Usa Actualizar o Desinstalar en su tarjeta.",
+    "tr": "Bu uygulama zaten yüklü. Kartındaki Güncelle veya Kaldır seçeneğini kullanın.",
+    "uk": "Цей застосунок уже встановлено. Скористайтеся кнопкою Оновити або Видалити на його картці.",
+    "ca": "Aquesta aplicació ja està instal·lada. Fes servir Actualitza o Desinstal·la a la seva targeta."
+  },
   "SETTINGS$APPS_REFRESH_SUCCESS": {
     "en": "App updated.",
     "ja": "アプリを更新しました。",

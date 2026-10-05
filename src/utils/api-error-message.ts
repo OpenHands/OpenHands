@@ -18,18 +18,22 @@ export function getApiErrorBody(error: unknown): unknown {
 
 /**
  * Extract a human-readable message from a failed API call. Prefers the
- * server-provided `message`/`detail` fields, then the `Error` message,
- * then `fallback`.
+ * server-provided `message`/`exception`/`detail` fields, then the `Error`
+ * message, then `fallback`. The Agent Server answers an unhandled error with
+ * a fixed `detail: "Internal Server Error"` and the actual reason under
+ * `exception`, so that one wins over `detail`.
  */
 export function getApiErrorMessage(error: unknown, fallback: string): string {
   const body = getApiErrorBody(error);
 
   if (body && typeof body === "object") {
-    const { message, detail } = body as {
+    const { message, exception, detail } = body as {
       message?: unknown;
+      exception?: unknown;
       detail?: unknown;
     };
     if (typeof message === "string" && message) return message;
+    if (typeof exception === "string" && exception) return exception;
     if (typeof detail === "string" && detail) return detail;
   }
 

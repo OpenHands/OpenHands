@@ -16,6 +16,21 @@ describe("getApiErrorMessage", () => {
     );
   });
 
+  it("returns the reason from an Agent Server unhandled-error body, not its generic `detail`", () => {
+    // Arrange — the Agent Server answers unhandled errors with a fixed
+    // `detail` and the actual reason under `exception`.
+    const error = new HttpError(500, "Internal Server Error", {
+      detail: "Internal Server Error",
+      exception: "Local extension path does not exist: /plugins/magic-test",
+      error_id: "0dd795f8",
+    });
+
+    // Act + Assert
+    expect(getApiErrorMessage(error, "fallback")).toBe(
+      "Local extension path does not exist: /plugins/magic-test",
+    );
+  });
+
   it("returns the response body `message` from an axios error", () => {
     // Arrange — local agent-server calls still reject with AxiosError.
     const error = new AxiosError("Request failed with status code 500");
