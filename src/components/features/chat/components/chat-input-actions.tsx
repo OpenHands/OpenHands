@@ -255,10 +255,13 @@ export function ChatInputActions({
     }
   }, [hasOverflowItems]);
 
+  // The trigger toggles the menu itself. The app hydrates on `document`, so
+  // its stopPropagation() can't keep the click from this document listener;
+  // without the ignore ref, the opening click immediately closes the menu.
   const overflowMenuRef = useClickOutsideElement<HTMLUListElement>(() => {
     setIsOverflowOpen(false);
     setActiveSubmenu(null);
-  });
+  }, overflowTriggerRef);
 
   const isAgentSwitcherDisabled =
     curAgentState === AgentState.RUNNING ||
