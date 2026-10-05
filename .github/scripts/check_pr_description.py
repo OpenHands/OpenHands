@@ -7,16 +7,16 @@ Additional checks:
   checked.
 - If frontend code was touched, the description must include a screenshot or
   video.
-- If the PR is marked as a Bug fix, the description must include a screenshot
-  or video showing reproduction evidence — regardless of whether frontend
-  code was touched.
+- Nonvisual bug fixes may document reproduction commands and observed results in
+  the required Summary and How to Test sections; the bug label alone does not
+  require media. Reviewers assess the substance of that evidence.
 - The body must reference at least one issue (e.g. `Fixes #123`) and at least
   one referenced issue must carry the `ready-for-dev` label. The API lookup is
   only performed in CI (when GITHUB_EVENT_PATH and GITHUB_TOKEN are available).
 - The PR's Type checkbox must match the linked issue's labels: a "Bug fix" PR
   should link an issue with the `bug` label; a "Feature" PR should link one
-  with the `enhancement` label. This prevents a contributor from bypassing
-  bug-specific requirements by mislabeling the PR type.
+  with the `enhancement` label. This keeps the declared change type consistent
+  with the issue.
 
 Local usage example:
     python .github/scripts/check_pr_description.py --body-file /tmp/pr-body.md \
@@ -232,27 +232,6 @@ def validate_frontend_screenshot(body: str, files: list[str]) -> list[str]:
     ]
 
 
-def validate_bug_fix_evidence(body: str) -> list[str]:
-    """Require reproduction evidence when the PR is marked as a Bug fix.
-
-    A bug-fix PR must include a screenshot or video showing the bug reproduced
-    and then fixed. This applies regardless of whether frontend code was touched
-    — a terminal screenshot showing the error before and the fix after is just
-    as valid as a UI screenshot.
-    """
-    pr_type = extract_pr_type(body)
-    if pr_type != BUG_LABEL:
-        return []
-    if has_screenshot_or_video(body):
-        return []
-    return [
-        "This PR is marked as a Bug fix but the description has no screenshot or "
-        "video. Add reproduction evidence under `## Video/Screenshots` showing the "
-        "bug before the fix and the result after (drag a file into the editor or "
-        "paste a video link)."
-    ]
-
-
 def extract_linked_issue_numbers(body: str) -> list[int]:
     """Return issue numbers referenced in the PR body.
 
@@ -411,7 +390,6 @@ def validate_pr_body(body: str, files: list[str] | None = None) -> list[str]:
 
     errors.extend(validate_human_tested_checkbox(body))
     errors.extend(validate_frontend_screenshot(body, files or []))
-    errors.extend(validate_bug_fix_evidence(body))
 
     return errors
 

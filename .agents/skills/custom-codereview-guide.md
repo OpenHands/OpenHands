@@ -362,10 +362,13 @@ substitute for live evidence when the changed behavior requires it. Submit
 and name the exact capture or verification still needed before approval.
 
 Check the current PR validator as a separate merge gate:
-`.github/scripts/check_pr_description.py` still requires media for frontend-code
-and bug-fix PRs, even where nonvisual evidence suffices for behavioral review.
-Report that mismatch rather than fabricating media, relabeling a PR, or claiming
-the gate passed. Do not apply that PR requirement to triage.
+`.github/scripts/check_pr_description.py` requires media for frontend-code PRs,
+not for the bug label alone. Nonvisual bug fixes may provide reproduction commands
+and observed before/after results in the required Summary and How to Test
+sections. The checker verifies presence; reviewers must assess the substance.
+The frontend path-based gate can still cover nonvisual frontend logic: report
+that distinction rather than fabricating media or relabeling a PR. Do not apply
+PR requirements to triage.
 
 Follow the test routing in `AGENTS.md`. Mock-LLM, Docker mock-LLM, and live
 LLM-backed E2E suites run after changes reach `main`, not from PR labels. For

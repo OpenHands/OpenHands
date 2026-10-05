@@ -24,7 +24,7 @@ exactly what command you ran and include logs, screenshots, or reproduction note
 
 ## Summary
 
-<!-- 1-3 bullets describing what changed. -->
+<!-- 1-3 bullets describing what changed. For bugs, describe the observed failure and corrected behavior. -->
 -
 
 ## Issue Number
@@ -39,17 +39,25 @@ Fixes #
 <!--
 Required. Share the steps for the reviewer to be able to test your PR. e.g. You can test by running `npm install` then `npm build dev`.
 
+For bug fixes, include reproduction commands/steps and observed before/after
+results. Logs or API/terminal output are valid evidence for nonvisual fixes;
+a screenshot of text output is not required.
+
 If you could not test this, say why.
 -->
 
 ## Video/Screenshots
 
 <!--
-Provide a video or screenshots of testing your PR. e.g. you added a new feature to the gui, show us the video of you testing it successfully.
+For frontend changes, provide a video or screenshots of testing the changed
+behavior successfully.
 
-For bug fixes: reproduction evidence is required. Show the bug reproduced (the
-error state) and then the result after your fix. A terminal screenshot or video
-is fine for non-UI bugs.
+Frontend changes still require authentic media from the actual app showing the
+changed behavior. For visual bug fixes, show the bug reproduced and the corrected
+state; use video when timing or transitions matter. For nonvisual bug fixes
+outside the frontend media gate,
+provide commands, logs, or reproduction results under How to Test instead of
+mandatory media. Reviewers assess whether the evidence demonstrates the fix.
 -->
 
 ## Design Doc
