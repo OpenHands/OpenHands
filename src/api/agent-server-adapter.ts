@@ -1175,6 +1175,7 @@ type AgentSettingsStartConversationPayload = StartConversationPayloadBase & {
   // exclusive agent sources; the server resolves the profile server-side.
   agent_settings?: AgentSettingsPayload;
   agent_profile_id?: string;
+  // Appended to the profile-resolved agent's system-message suffix.
   agent_launch_additions?: { system_message_suffix_append?: string };
   agent?: never;
 };
@@ -1279,6 +1280,14 @@ export function buildStartConversationRequest(
   const savedSuffix = toRecord(
     toRecord(sourceAgentSettings.agent_settings).agent_context,
   ).system_message_suffix;
+  // Router-at-start stays inline-only because profile-resolved agents do not
+  // have the route_task_to_model tool.
+  const profileLaunchSuffix = [
+    typeof savedSuffix === "string" ? savedSuffix : undefined,
+    buildRuntimeServicesSystemSuffix(options.runtimeServicesInfo),
+  ]
+    .filter((suffix): suffix is string => Boolean(suffix))
+    .join("\n\n");
   const acpServerTag = acpMode
     ? getAcpServerTag(sourceAgentSettings)
     : undefined;
@@ -1309,9 +1318,12 @@ export function buildStartConversationRequest(
     // server/SDK's responsibility to restore on the profile path — tracked in
     // software-agent-sdk#3967 (profile resolution must attach the default
     // toolset + public skills, else a profile-launched OpenHands agent has only
-    // Finish/Think). The dev ``RUNTIME_SERVICES`` system-message suffix remains
-    // agent-settings-only; the Canvas UI tool is a top-level client tool and
+    // Finish/Think). The Canvas UI tool is a top-level client tool and
     // therefore works on both inline-agent and profile launch paths.
+    //
+    // The saved global suffix and ``RUNTIME_SERVICES`` are not part of the
+    // stored profile, so the profile path sends them as
+    // ``agent_launch_additions``.
     //
     // Persistent memory is NOT on that boundary: ``load_memory`` is a global
     // user preference, so the agent-server stamps the stored
@@ -1323,10 +1335,10 @@ export function buildStartConversationRequest(
     ...(options.agentProfileId
       ? {
           agent_profile_id: options.agentProfileId,
-          ...(typeof savedSuffix === "string" && savedSuffix
+          ...(profileLaunchSuffix
             ? {
                 agent_launch_additions: {
-                  system_message_suffix_append: savedSuffix,
+                  system_message_suffix_append: profileLaunchSuffix,
                 },
               }
             : {}),
