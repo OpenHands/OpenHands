@@ -915,7 +915,13 @@ function buildAgentContext(
     disabled_skills: disabledSkills,
     ...(runtimeServicesSuffix || routerAtStartSuffix
       ? {
-          system_message_suffix: [runtimeServicesSuffix, routerAtStartSuffix]
+          system_message_suffix: [
+            typeof existingContext.system_message_suffix === "string"
+              ? existingContext.system_message_suffix
+              : undefined,
+            runtimeServicesSuffix,
+            routerAtStartSuffix,
+          ]
             .filter((s): s is string => Boolean(s))
             .join("\n\n"),
         }
@@ -1271,11 +1277,17 @@ export function buildStartConversationRequest(
     options.query,
     options.hasActiveMetaProfile,
   );
-  // The router-at-start instruction stays inline-only: a profile-resolved
-  // agent has no ``route_task_to_model`` tool to act on it.
-  const profileLaunchSuffix = buildRuntimeServicesSystemSuffix(
-    options.runtimeServicesInfo,
-  );
+  const savedSuffix = toRecord(
+    toRecord(sourceAgentSettings.agent_settings).agent_context,
+  ).system_message_suffix;
+  // Router-at-start stays inline-only because profile-resolved agents do not
+  // have the route_task_to_model tool.
+  const profileLaunchSuffix = [
+    typeof savedSuffix === "string" ? savedSuffix : undefined,
+    buildRuntimeServicesSystemSuffix(options.runtimeServicesInfo),
+  ]
+    .filter((suffix): suffix is string => Boolean(suffix))
+    .join("\n\n");
   const acpServerTag = acpMode
     ? getAcpServerTag(sourceAgentSettings)
     : undefined;
@@ -1309,8 +1321,9 @@ export function buildStartConversationRequest(
     // Finish/Think). The Canvas UI tool is a top-level client tool and
     // therefore works on both inline-agent and profile launch paths.
     //
-    // ``RUNTIME_SERVICES`` (this stack's sandbox-facing URLs) only exists
-    // client-side, so the profile path sends it as ``agent_launch_additions``.
+    // The saved global suffix and ``RUNTIME_SERVICES`` are not part of the
+    // stored profile, so the profile path sends them as
+    // ``agent_launch_additions``.
     //
     // Persistent memory is NOT on that boundary: ``load_memory`` is a global
     // user preference, so the agent-server stamps the stored

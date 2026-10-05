@@ -1520,8 +1520,99 @@ describe("agent_settings runtime services suffix", () => {
     ).toContain("<RUNTIME_SERVICES>");
   });
 
-  it("carries runtime services on the profile path, where agent_settings can't be sent", () => {
-    // agent_profile_id and agent_settings are mutually exclusive.
+  it("preserves a saved system_message_suffix when runtime services are advertised", () => {
+    const payload = buildStartConversationRequest({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        agent_settings: {
+          ...DEFAULT_SETTINGS.agent_settings,
+          agent_context: {
+            system_message_suffix: "MARKER-GLOBAL-RULES",
+          },
+        },
+      },
+      query: "hello",
+      runtimeServicesInfo: {
+        mode: "dev:automation",
+        services: {
+          agent_server: { url_from_agent: "http://localhost:18000" },
+          automation: {
+            url_from_agent: "http://localhost:18001",
+          },
+        },
+      },
+    }) as {
+      agent_settings: { agent_context: Record<string, unknown> };
+    };
+    const suffix = payload.agent_settings.agent_context
+      .system_message_suffix as string;
+    expect(suffix).toMatch(/^MARKER-GLOBAL-RULES\n\n<RUNTIME_SERVICES>/);
+  });
+
+  it("keeps a saved suffix when no runtime services are advertised", () => {
+    const payload = buildStartConversationRequest({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        agent_settings: {
+          ...DEFAULT_SETTINGS.agent_settings,
+          agent_context: { system_message_suffix: "MARKER-GLOBAL-RULES" },
+        },
+      },
+      query: "hello",
+    }) as { agent_settings: { agent_context: Record<string, unknown> } };
+
+    expect(payload.agent_settings.agent_context.system_message_suffix).toBe(
+      "MARKER-GLOBAL-RULES",
+    );
+  });
+
+  it("omits the suffix when neither a saved suffix nor runtime services exist", () => {
+    const payload = buildStartConversationRequest({
+      settings: DEFAULT_SETTINGS,
+      query: "hello",
+    }) as { agent_settings: { agent_context: Record<string, unknown> } };
+
+    expect(payload.agent_settings.agent_context).not.toHaveProperty(
+      "system_message_suffix",
+    );
+  });
+
+  it("combines saved and runtime suffixes on the profile path", () => {
+    const payload = buildStartConversationRequest({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        agent_settings: {
+          ...DEFAULT_SETTINGS.agent_settings,
+          agent_context: { system_message_suffix: "MARKER-GLOBAL-RULES" },
+        },
+      },
+      query: "hello",
+      agentProfileId: "profile-openhands",
+      agentProfileKind: "openhands",
+      runtimeServicesInfo: {
+        mode: "dev:automation",
+        services: {
+          agent_server: { url_from_agent: "http://localhost:18000" },
+          automation: { url_from_agent: "http://localhost:18001" },
+        },
+      },
+    }) as {
+      agent_profile_id?: string;
+      agent_settings?: unknown;
+      agent_launch_additions?: { system_message_suffix_append?: string };
+    };
+
+    expect(payload.agent_profile_id).toBe("profile-openhands");
+    expect(payload.agent_settings).toBeUndefined();
+    expect(
+      payload.agent_launch_additions?.system_message_suffix_append,
+    ).toMatch(/^MARKER-GLOBAL-RULES\n\n<RUNTIME_SERVICES>/);
+    expect(
+      payload.agent_launch_additions?.system_message_suffix_append,
+    ).toContain("http://localhost:18001");
+  });
+
+  it("carries runtime services on the profile path", () => {
     const payload = buildStartConversationRequest({
       settings: DEFAULT_SETTINGS,
       query: "hello",
@@ -1596,15 +1687,14 @@ describe("agent_settings runtime services suffix", () => {
     ).toContain("<RUNTIME_SERVICES>");
   });
 
-  it("omits the additions entirely when there is no runtime services info", () => {
-    // A deployment without them must send no deployment context at all, not an
-    // empty string the server would append as a blank line.
+  it("omits profile additions without a saved suffix or runtime services", () => {
     const payload = buildStartConversationRequest({
       settings: DEFAULT_SETTINGS,
       query: "hello",
       agentProfileId: "profile-openhands",
       agentProfileKind: "openhands",
     }) as { agent_launch_additions?: unknown };
+
     expect(payload.agent_launch_additions).toBeUndefined();
   });
 });
