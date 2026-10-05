@@ -4,7 +4,7 @@ import {
 } from "@openhands/typescript-client/clients";
 import type { ServerInfo as BaseServerInfo } from "@openhands/typescript-client";
 import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
-import { isAuthRequired } from "#/api/agent-server-config";
+import { getLockedCloudHost, isAuthRequired } from "#/api/agent-server-config";
 import {
   getActiveBackend,
   getEffectiveLocalBackend,
@@ -43,20 +43,41 @@ let cachedAgentServerInfoHost: string | null = null;
 export class AgentServerUnavailableError extends Error {
   readonly details: string | null;
   readonly noBackendConfigured: boolean;
+  /**
+   * True when the deployment is locked to a Cloud backend (a locked Cloud host
+   * is configured) but that backend could not be resolved for the current page
+   * — e.g. the app was opened from an origin that does not match the locked
+   * Cloud host, or a stale `index.html` dropped the injected config. This is a
+   * recoverable state, distinct from `noBackendConfigured`: the user must NOT
+   * be prompted to add a backend, because adding one is disabled in
+   * locked-to-Cloud mode.
+   */
+  readonly lockedCloudUnresolved: boolean;
 
   constructor(
     details?: string | null,
-    options?: { noBackendConfigured?: boolean },
+    options?: {
+      noBackendConfigured?: boolean;
+      lockedCloudUnresolved?: boolean;
+      lockedCloudHost?: string | null;
+    },
   ) {
     const noBackendConfigured = options?.noBackendConfigured ?? false;
+    const lockedCloudUnresolved = options?.lockedCloudUnresolved ?? false;
+    const lockedCloudHost = options?.lockedCloudHost ?? null;
     super(
-      noBackendConfigured
-        ? "No agent server backend is configured yet. Add a backend to get started."
-        : "Could not connect to the configured agent server. Make sure it is running and reachable, then reload the page.",
+      lockedCloudUnresolved
+        ? `This deployment is locked to its OpenHands Cloud backend${
+            lockedCloudHost ? ` (${lockedCloudHost})` : ""
+          }, but it could not be resolved from this page. Open the app at the configured Cloud URL and reload the page.`
+        : noBackendConfigured
+          ? "No agent server backend is configured yet. Add a backend to get started."
+          : "Could not connect to the configured agent server. Make sure it is running and reachable, then reload the page.",
     );
     this.name = "AgentServerUnavailableError";
     this.details = details ?? null;
     this.noBackendConfigured = noBackendConfigured;
+    this.lockedCloudUnresolved = lockedCloudUnresolved;
   }
 }
 
@@ -70,6 +91,22 @@ export const isAgentServerUnavailableError = (
     (error.name === "AgentServerUnavailableError" ||
       error.name === "AgentServerUnsupportedVersionError" ||
       error.name === "AgentServerUnknownVersionError"));
+
+/**
+ * True when the error is a locked-to-Cloud deployment whose configured Cloud
+ * backend could not be resolved for the current page. Consumers use this to
+ * show a recoverable "open the configured Cloud URL and reload" message
+ * instead of the add-a-backend recovery modal, which is a dead end in
+ * locked-to-Cloud mode.
+ */
+export const isLockedCloudUnresolvedError = (error: unknown): boolean =>
+  (error instanceof AgentServerUnavailableError &&
+    error.lockedCloudUnresolved) ||
+  (typeof error === "object" &&
+    error !== null &&
+    "lockedCloudUnresolved" in error &&
+    (error as { lockedCloudUnresolved?: unknown }).lockedCloudUnresolved ===
+      true);
 
 export class AgentServerUnsupportedVersionError extends AgentServerUnavailableError {
   readonly code = AGENT_SERVER_UNSUPPORTED_VERSION_ERROR_CODE;
@@ -355,10 +392,25 @@ export async function loadAgentServerInfo() {
   if (!local) {
     clearCachedAgentServerInfo();
 
-    // Empty registry (NO_BACKEND sentinel) — the user has no backend
-    // configured at all.  Throw so root.tsx shows the manage-backends
-    // modal instead of silently rendering a broken home page.
     if (isNoBackend(getActiveBackend().backend)) {
+      // A locked Cloud host is configured, but the active backend still
+      // resolved to the NO_BACKEND sentinel. That means the locked Cloud
+      // backend could not be built for this page (for example the app was
+      // opened from an origin that does not match the locked Cloud host, or a
+      // stale `index.html` dropped the injected config). This is recoverable
+      // and must NOT prompt the user to add a backend — adding one is disabled
+      // in locked-to-Cloud mode, so the manage-backends modal is a dead end.
+      const lockedCloudHost = getLockedCloudHost();
+      if (lockedCloudHost) {
+        throw new AgentServerUnavailableError(
+          "Locked Cloud backend did not resolve for this page",
+          { lockedCloudUnresolved: true, lockedCloudHost },
+        );
+      }
+
+      // Empty registry (NO_BACKEND sentinel) — the user has no backend
+      // configured at all.  Throw so root.tsx shows the manage-backends
+      // modal instead of silently rendering a broken home page.
       throw new AgentServerUnavailableError("No backend configured", {
         noBackendConfigured: true,
       });
