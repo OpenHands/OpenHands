@@ -1,0 +1,25 @@
+{
+  "ok": true,
+  "url": "http://127.0.0.1:18810/conversations/00d645ff-9c17-4350-94eb-2b077efdb48b",
+  "observed": [
+    {
+      "ms": 0,
+      "state": [
+        "<absent>"
+      ]
+    },
+    {
+      "ms": 90,
+      "state": [
+        "Model"
+      ]
+    },
+    {
+      "ms": 95,
+      "state": [
+        "<absent>"
+      ]
+    }
+  ],
+  "observedBy": "mutation"
+}
