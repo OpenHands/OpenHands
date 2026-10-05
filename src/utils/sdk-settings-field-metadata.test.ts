@@ -322,7 +322,7 @@ describe("warning logging", () => {
 });
 
 describe("translations for fields the pinned Agent Server exposes", () => {
-  // Field keys, schema text and choices as served by Agent Server 1.50.1's
+  // Field keys, schema text and choices as served by the pinned Agent Server's
   // /api/settings/agent-schema; without translations these render verbatim,
   // including the SDK's reStructuredText ``literals``.
   const SCHEMA_FIELDS: {
