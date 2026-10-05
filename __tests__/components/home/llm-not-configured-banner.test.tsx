@@ -12,6 +12,8 @@ import SettingsService from "#/api/settings-service/settings-service.api";
 import OptionService from "#/api/option-service/option-service.api";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
 import AgentProfilesService from "#/api/agent-profiles-service/agent-profiles-service.api";
+import type { ProfileDetailResponse } from "#/api/profiles-service/profiles-service.api";
+import { I18nKey } from "#/i18n/declaration";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import { Settings } from "#/types/settings";
 import { WebClientConfig } from "#/api/option-service/option.types";
@@ -239,5 +241,61 @@ describe("LlmNotConfiguredBanner", () => {
 
     // Assert
     expect(navigate).toHaveBeenCalledWith("/settings/llm");
+  });
+
+  it("names the profile when the active profile has lost its API key", async () => {
+    // Arrange: the profile exists and is still selected, but api_key_set is
+    // false — e.g. a save that dropped the key, or secrets that became
+    // unreadable. Asking this user to "set up an LLM" reads like a bug, so the
+    // banner has to name what actually needs repairing.
+    vi.spyOn(ProfilesService, "getProfile").mockResolvedValue({
+      name: "orphaned-profile",
+      config: { llm: { model: "openai/gpt-4.1" } },
+      api_key_set: false,
+    } as ProfileDetailResponse);
+    vi.spyOn(ProfilesService, "listProfiles").mockResolvedValue({
+      profiles: [
+        {
+          name: "orphaned-profile",
+          model: "openai/gpt-4.1",
+          base_url: null,
+          api_key_set: false,
+        },
+      ],
+      active_profile: "orphaned-profile",
+    });
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({ llm_api_key_set: false }),
+    );
+
+    // Act
+    renderBanner();
+    const banner = await screen.findByTestId("home-llm-not-configured-banner");
+
+    // Assert
+    expect(banner).toHaveTextContent(
+      I18nKey.HOME$LLM_PROFILE_MISSING_KEY_MESSAGE,
+    );
+    expect(banner).not.toHaveTextContent(
+      I18nKey.HOME$LLM_NOT_CONFIGURED_MESSAGE,
+    );
+  });
+
+  it("keeps the generic setup copy when there is no profile to repair", async () => {
+    // Arrange: no profiles at all. There is nothing to edit, so naming a
+    // profile would be wrong — the generic setup message still applies.
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({ llm_api_key_set: false }),
+    );
+
+    // Act
+    renderBanner();
+    const banner = await screen.findByTestId("home-llm-not-configured-banner");
+
+    // Assert
+    expect(banner).toHaveTextContent(I18nKey.HOME$LLM_NOT_CONFIGURED_MESSAGE);
+    expect(banner).not.toHaveTextContent(
+      I18nKey.HOME$LLM_PROFILE_MISSING_KEY_MESSAGE,
+    );
   });
 });
