@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import {
   OpenHandsEvent,
   ActionEvent,
@@ -15,6 +16,7 @@ import {
 import {
   isACPToolCallEvent,
   isObservationEvent,
+  isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
 import {
   SkillReadyEvent,
@@ -68,6 +70,7 @@ export function GenericEventMessageWrapper({
   event,
   correspondingAction,
 }: GenericEventMessageWrapperProps) {
+  const { t } = useTranslation("openhands");
   const { title, details } = getEventContent(event, correspondingAction);
 
   // TaskTrackerObservation has its own rendering
@@ -116,6 +119,16 @@ export function GenericEventMessageWrapper({
         success={success}
         initiallyExpanded={initiallyExpanded}
         timestamp={event.timestamp}
+        titleTrailing={
+          !isSkillReadyEvent(event) && isUserRejectObservation(event) ? (
+            <span
+              data-testid="rejected-indicator"
+              className="ml-2 flex-shrink-0 text-danger"
+            >
+              {t(I18nKey.EVENT$REJECTED)}
+            </span>
+          ) : undefined
+        }
         titleIcon={
           skillKnowledge ? (
             <SkillsIcon className="h-4 w-4 stroke-muted flex-shrink-0 mr-2" />

@@ -10,6 +10,7 @@ import {
   MessageEvent,
   ObservationEvent,
   SecurityRisk,
+  UserRejectObservation,
 } from "#/types/agent-server/core";
 import { TextContent } from "#/types/agent-server/core/base/common";
 import {
@@ -165,6 +166,19 @@ const makeAgentErrorEvent = (id: string): AgentErrorEvent => ({
   tool_name: "execute_bash",
   tool_call_id: `call_${id}`,
   error: "boom",
+});
+
+const makeUserRejectObservation = (
+  id: string,
+  actionId: string,
+): UserRejectObservation => ({
+  id,
+  timestamp: new Date().toISOString(),
+  source: "environment",
+  tool_name: "execute_bash",
+  tool_call_id: `call_${actionId}`,
+  action_id: actionId,
+  rejection_reason: "User rejected the action",
 });
 
 const makeHookExecutionEvent = (id: string): HookExecutionEvent => ({
@@ -335,6 +349,41 @@ describe("groupEvents", () => {
     if (result[0].kind === "group") {
       expect(result[0].events).toHaveLength(3);
     }
+  });
+
+  it("keeps a rejected action in its group", () => {
+    const events = [
+      makeBashObservation("o1", "a1"),
+      makeUserRejectObservation("r2", "a2"),
+    ];
+
+    const result = groupEvents(events);
+
+    expect(result).toEqual([{ kind: "group", events, startIndex: 0 }]);
+  });
+
+  it("keeps a rejected markdown create outside the group", () => {
+    const action = makeMarkdownFileEditorAction("a2");
+    const events = [
+      makeBashObservation("o1", "a1"),
+      makeUserRejectObservation("r2", "a2"),
+    ];
+
+    const result = groupEvents(events, undefined, [action, ...events]);
+
+    expect(result.map((item) => item.kind)).toEqual(["single", "single"]);
+  });
+
+  it("hoists the thought of a rejected action", () => {
+    const action = makeBashAction("a1", [{ type: "text", text: "Let me try" }]);
+    const rejection = makeUserRejectObservation("r1", "a1");
+
+    const result = groupEvents([rejection], undefined, [action, rejection]);
+
+    expect(result).toEqual([
+      { kind: "thought", action, index: 0 },
+      { kind: "single", event: rejection, index: 0 },
+    ]);
   });
 
   it("breaks the group when a non-groupable event interrupts", () => {

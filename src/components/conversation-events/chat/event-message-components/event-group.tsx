@@ -6,7 +6,9 @@ import ArrowUp from "#/icons/angle-up-solid.svg?react";
 import { OpenHandsEvent, ActionEvent } from "#/types/agent-server/core";
 import {
   isActionEvent,
+  isAgentErrorEvent,
   isObservationEvent,
+  isUserRejectObservation,
 } from "#/types/agent-server/type-guards";
 import { I18nKey } from "#/i18n/declaration";
 import { getEventContent } from "../event-content-helpers/get-event-content";
@@ -19,8 +21,9 @@ interface EventGroupProps {
   /**
    * Full event history. Used to resolve the action that produced the latest
    * observation in the group so the summary title matches what the individual
-   * card would show (e.g. "Editing path/to/file"). Falls back to `events` when
-   * omitted.
+   * card would show (e.g. "Editing path/to/file"), and to find the
+   * `AgentErrorEvent` that resolved an action without an observation. Falls
+   * back to `events` when omitted.
    */
   allEvents?: OpenHandsEvent[];
   /**
@@ -71,25 +74,39 @@ export function EventGroup({
     return null;
   }
 
-  // Each ObservationEvent in the group is a completed action. An ActionEvent
-  // that's still here (i.e. not yet replaced by its observation in the UI
-  // events array) is an action currently in flight.
-  const pendingAction = events.find((e): e is ActionEvent => isActionEvent(e));
-  const completedCount = events.filter(isObservationEvent).length;
+  // Each ObservationEvent (or UserRejectObservation) in the group is a
+  // resolved action. An ActionEvent that's still here (i.e. not yet replaced
+  // in the UI events array) is an action currently in flight, unless an
+  // AgentErrorEvent resolved it: that event carries no action id and renders
+  // on its own, so it never replaces the action it answers.
+  const lookupSource = allEvents ?? events;
+  const unreplacedActions = events.filter(isActionEvent);
+  const erroredToolCallIds =
+    unreplacedActions.length > 0
+      ? new Set(
+          lookupSource.filter(isAgentErrorEvent).map((e) => e.tool_call_id),
+        )
+      : null;
+  const pendingActions = unreplacedActions.filter(
+    (action) => !erroredToolCallIds?.has(action.tool_call_id),
+  );
   const totalCount = events.length;
-  const isRunning = !!pendingAction;
+  const completedCount = totalCount - pendingActions.length;
+  const isRunning = pendingActions.length > 0;
 
   // Title of the most recent groupable event. While running this is the
-  // pending action; otherwise it's the latest observation, with its
-  // originating action looked up so the title can be the action-style summary
-  // ("Editing path/to/file") instead of the observation default.
+  // pending action; otherwise it's the latest observation (or rejection), with
+  // its originating action looked up so the title can be the action-style
+  // summary ("Editing path/to/file") instead of the observation default.
   const latestEvent = events[events.length - 1];
   let latestTitle: React.ReactNode = null;
   if (latestEvent) {
     if (isActionEvent(latestEvent)) {
       latestTitle = getEventContent(latestEvent).title;
-    } else if (isObservationEvent(latestEvent)) {
-      const lookupSource = allEvents ?? events;
+    } else if (
+      isObservationEvent(latestEvent) ||
+      isUserRejectObservation(latestEvent)
+    ) {
       const correspondingAction = lookupSource.find(
         (e): e is ActionEvent =>
           isActionEvent(e) && e.id === latestEvent.action_id,
