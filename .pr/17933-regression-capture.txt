@@ -1,0 +1,199 @@
+$ git log -1 --format=%h -> 81916f2af (round-1 fix; doctor: served build matches this checkout)
+# Round 2 for #17933: Escape with two layers open, on the round-1 build (before the layer stack)
+== L1. card menu open, then Ctrl+K, then Escape
+$ control-openhands browser viewport desktop
+{  "ok": true,  "viewport": {    "width": 1440,    "height": 1000  }}
+$ control-openhands browser goto /conversations
+{  "ok": true,  "url": "http://127.0.0.1:18800/conversations",  "status": 200}
+$ control-openhands browser hover testid=conversation-card >> nth=0
+{  "ok": true}
+$ control-openhands browser click testid=conversation-card >> nth=0 >> testid=ellipsis-button
+{  "ok": true,  "url": "http://127.0.0.1:18800/conversations"}
+$ control-openhands browser press Control+k
+{  "ok": true,  "url": "http://127.0.0.1:18800/conversations"}
+$ control-openhands browser wait testid=command-menu
+{  "ok": true,  "state": "visible"}
+$ control-openhands browser eval <activeElement testid|id|tag>
+{  "ok": true,  "value": "command-menu-search"}
+$ control-openhands browser press Escape
+{  "ok": true,  "url": "http://127.0.0.1:18800/conversations"}
+command menu after 1st Escape:
+$ control-openhands browser count testid=command-menu
+{  "ok": true,  "count": 1}
+card menu after 1st Escape:
+$ control-openhands browser count testid=context-menu
+{  "ok": true,  "count": 0}
+focus after 1st Escape:
+$ control-openhands browser eval <activeElement testid|id|tag>
+{  "ok": true,  "value": "ellipsis-button"}
+$ control-openhands browser screenshot --feature F17933 --name before-card-menu-under-command-menu-escape
+{  "ok": true,  "path": "/tmp/claude-0/-home-user/22a0973a-68bd-5e3e-a1e3-37a6e2c83102/scratchpad/runs/2026-10-05T2136-4b518f/evidence/F17933/before-card-menu-under-command-menu-escape.png",  "url": "http://127.0.0.1:18800/conversations",  "viewport": {    "width": 1440,    "height": 1000  }}
+$ control-openhands browser press Escape
+{  "ok": true,  "url": "http://127.0.0.1:18800/conversations"}
+card menu after 2nd Escape:
+$ control-openhands browser count testid=context-menu
+{  "ok": true,  "count": 0}
+focus after 2nd Escape:
+$ control-openhands browser eval <activeElement testid|id|tag>
+{  "ok": true,  "value": "ellipsis-button"}
+== L2. context-window popover open, then Ctrl+K, then Escape
+$ control-openhands browser goto /conversations/5ba91f86-0bc3-44d1-9120-2a9e3121a647
+{  "ok": true,  "url": "http://127.0.0.1:18800/conversations/5ba91f86-0bc3-44d1-9120-2a9e3121a647",  "status": 200}
+$ control-openhands browser wait testid=context-window-meter
+{  "ok": true,  "state": "visible"}
+$ control-openhands browser click testid=context-window-meter
+{  "ok": true,  "url": "http://127.0.0.1:18800/conversations/5ba91f86-0bc3-44d1-9120-2a9e3121a647"}
+$ control-openhands browser count testid=context-window-meter-popover
+{  "ok": true,  "count": 1}
+$ control-openhands browser press Control+k
+{  "ok": true,  "url": "http://127.0.0.1:18800/conversations/5ba91f86-0bc3-44d1-9120-2a9e3121a647"}
+$ control-openhands browser wait testid=command-menu
+{  "ok": true,  "state": "visible"}
+$ control-openhands browser press Escape
+{  "ok": true,  "url": "http://127.0.0.1:18800/conversations/5ba91f86-0bc3-44d1-9120-2a9e3121a647"}
+command menu after 1st Escape:
+$ control-openhands browser count testid=command-menu
+{  "ok": true,  "count": 1}
+popover after 1st Escape:
+$ control-openhands browser count testid=context-window-meter-popover
+{  "ok": true,  "count": 0}
+focus after 1st Escape:
+$ control-openhands browser eval <activeElement testid|id|tag>
+{  "ok": true,  "value": "context-window-meter"}
+tooltips open:
+$ control-openhands browser count role=tooltip
+{  "ok": true,  "count": 1}
+$ control-openhands browser screenshot --feature F17933 --name before-meter-under-command-menu-escape
+{  "ok": true,  "path": "/tmp/claude-0/-home-user/22a0973a-68bd-5e3e-a1e3-37a6e2c83102/scratchpad/runs/2026-10-05T2136-4b518f/evidence/F17933/before-meter-under-command-menu-escape.png",  "url": "http://127.0.0.1:18800/conversations/5ba91f86-0bc3-44d1-9120-2a9e3121a647",  "viewport": {    "width": 1440,    "height": 1000  }}
+$ control-openhands browser press Escape
+{  "ok": true,  "url": "http://127.0.0.1:18800/conversations/5ba91f86-0bc3-44d1-9120-2a9e3121a647"}
+popover after 2nd Escape:
+$ control-openhands browser count testid=context-window-meter-popover
+{  "ok": true,  "count": 0}
+focus after 2nd Escape:
+$ control-openhands browser eval <activeElement testid|id|tag>
+{  "ok": true,  "value": "context-window-meter"}
+== L3. Overview menu open, then Ctrl+K, then Escape
+$ control-openhands browser goto /conversations/5ba91f86-0bc3-44d1-9120-2a9e3121a647
+{  "ok": true,  "url": "http://127.0.0.1:18800/conversations/5ba91f86-0bc3-44d1-9120-2a9e3121a647",  "status": 200}
+$ control-openhands browser wait testid=conversation-overview-toggle
+{  "ok": true,  "state": "visible"}
+$ control-openhands browser click testid=conversation-overview-toggle
+{  "ok": true,  "url": "http://127.0.0.1:18800/conversations/5ba91f86-0bc3-44d1-9120-2a9e3121a647"}
+$ control-openhands browser click testid=conversation-overview-ellipsis
+{  "ok": true,  "url": "http://127.0.0.1:18800/conversations/5ba91f86-0bc3-44d1-9120-2a9e3121a647"}
+$ control-openhands browser count testid=conversation-overview-context-menu
+{  "ok": true,  "count": 1}
+$ control-openhands browser press Control+k
+{  "ok": true,  "url": "http://127.0.0.1:18800/conversations/5ba91f86-0bc3-44d1-9120-2a9e3121a647"}
+$ control-openhands browser wait testid=command-menu
+{  "ok": true,  "state": "visible"}
+$ control-openhands browser press Escape
+{  "ok": true,  "url": "http://127.0.0.1:18800/conversations/5ba91f86-0bc3-44d1-9120-2a9e3121a647"}
+command menu after 1st Escape:
+$ control-openhands browser count testid=command-menu
+{  "ok": true,  "count": 1}
+overview menu after 1st Escape:
+$ control-openhands browser count testid=conversation-overview-context-menu
+{  "ok": true,  "count": 0}
+focus after 1st Escape:
+$ control-openhands browser eval <activeElement testid|id|tag>
+{  "ok": true,  "value": "conversation-overview-ellipsis"}
+$ control-openhands browser press Escape
+{  "ok": true,  "url": "http://127.0.0.1:18800/conversations/5ba91f86-0bc3-44d1-9120-2a9e3121a647"}
+overview menu after 2nd Escape:
+$ control-openhands browser count testid=conversation-overview-context-menu
+{  "ok": true,  "count": 0}
+focus after 2nd Escape:
+$ control-openhands browser eval <activeElement testid|id|tag>
+{  "ok": true,  "value": "conversation-overview-ellipsis"}
+== L4. Overview section drawer open, then the Overview menu, then Escape
+$ control-openhands browser click testid=conversation-overview-ellipsis
+{  "ok": true,  "url": "http://127.0.0.1:18800/conversations/5ba91f86-0bc3-44d1-9120-2a9e3121a647"}
+$ control-openhands browser click testid=conversation-overview-menu-open-git-pull_requests
+{  "ok": true,  "url": "http://127.0.0.1:18800/conversations/5ba91f86-0bc3-44d1-9120-2a9e3121a647"}
+$ control-openhands browser wait testid=conversation-overview-drawer-content
+{  "ok": true,  "state": "visible"}
+$ control-openhands browser click testid=conversation-overview-ellipsis
+{  "ok": true,  "url": "http://127.0.0.1:18800/conversations/5ba91f86-0bc3-44d1-9120-2a9e3121a647"}
+$ control-openhands browser count testid=conversation-overview-context-menu
+{  "ok": true,  "count": 1}
+$ control-openhands browser press Escape
+{  "ok": true,  "url": "http://127.0.0.1:18800/conversations/5ba91f86-0bc3-44d1-9120-2a9e3121a647"}
+overview menu after 1st Escape:
+$ control-openhands browser count testid=conversation-overview-context-menu
+{  "ok": true,  "count": 0}
+drawer after 1st Escape:
+$ control-openhands browser count testid=conversation-overview-drawer-content
+{  "ok": true,  "count": 0}
+focus after 1st Escape:
+$ control-openhands browser eval <activeElement testid|id|tag>
+{  "ok": true,  "value": "conversation-overview-ellipsis"}
+$ control-openhands browser screenshot --feature F17933 --name before-overview-menu-over-drawer-escape
+{  "ok": true,  "path": "/tmp/claude-0/-home-user/22a0973a-68bd-5e3e-a1e3-37a6e2c83102/scratchpad/runs/2026-10-05T2136-4b518f/evidence/F17933/before-overview-menu-over-drawer-escape.png",  "url": "http://127.0.0.1:18800/conversations/5ba91f86-0bc3-44d1-9120-2a9e3121a647",  "viewport": {    "width": 1440,    "height": 1000  }}
+$ control-openhands browser press Escape
+{  "ok": true,  "url": "http://127.0.0.1:18800/conversations/5ba91f86-0bc3-44d1-9120-2a9e3121a647"}
+drawer after 2nd Escape:
+$ control-openhands browser count testid=conversation-overview-drawer-content
+{  "ok": true,  "count": 0}
+$ control-openhands browser click testid=conversation-overview-toggle
+{  "ok": true,  "url": "http://127.0.0.1:18800/conversations/5ba91f86-0bc3-44d1-9120-2a9e3121a647"}
+== L5. phone: nav drawer open, then Ctrl+K, then Escape
+$ control-openhands browser viewport phone
+{  "ok": true,  "viewport": {    "width": 390,    "height": 844  }}
+$ control-openhands browser goto /conversations
+{  "ok": true,  "url": "http://127.0.0.1:18800/conversations",  "status": 200}
+$ control-openhands browser wait testid=sidebar-mobile-menu-toggle
+{  "ok": true,  "state": "visible"}
+$ control-openhands browser click testid=sidebar-mobile-menu-toggle
+{  "ok": true,  "url": "http://127.0.0.1:18800/conversations"}
+$ control-openhands browser count testid=sidebar-mobile-drawer
+{  "ok": true,  "count": 1}
+$ control-openhands browser press Control+k
+{  "ok": true,  "url": "http://127.0.0.1:18800/conversations"}
+$ control-openhands browser wait testid=command-menu
+{  "ok": true,  "state": "visible"}
+$ control-openhands browser press Escape
+{  "ok": true,  "url": "http://127.0.0.1:18800/conversations"}
+command menu after 1st Escape:
+$ control-openhands browser count testid=command-menu
+{  "ok": true,  "count": 0}
+drawer toggle expanded after 1st Escape:
+$ control-openhands browser eval document.querySelector("[data-testid=sidebar-mobile-menu-toggle]")?.getAttribute("aria-expanded")
+{  "ok": true,  "value": "true"}
+$ control-openhands browser screenshot --feature F17933 --name before-phone-drawer-under-command-menu-escape
+{  "ok": true,  "path": "/tmp/claude-0/-home-user/22a0973a-68bd-5e3e-a1e3-37a6e2c83102/scratchpad/runs/2026-10-05T2136-4b518f/evidence/F17933/before-phone-drawer-under-command-menu-escape.png",  "url": "http://127.0.0.1:18800/conversations",  "viewport": {    "width": 390,    "height": 844  }}
+$ control-openhands browser press Escape
+{  "ok": true,  "url": "http://127.0.0.1:18800/conversations"}
+drawer toggle expanded after 2nd Escape:
+$ control-openhands browser eval document.querySelector("[data-testid=sidebar-mobile-menu-toggle]")?.getAttribute("aria-expanded")
+{  "ok": true,  "value": "false"}
+== L6. phone: card menu inside nav drawer, Escape twice
+$ control-openhands browser click testid=sidebar-mobile-menu-toggle
+{  "ok": true,  "url": "http://127.0.0.1:18800/conversations"}
+$ control-openhands browser hover testid=sidebar-mobile-drawer >> testid=conversation-card >> nth=0
+{  "ok": true}
+$ control-openhands browser click testid=sidebar-mobile-drawer >> testid=conversation-card >> nth=0 >> testid=ellipsis-button
+{  "ok": true,  "url": "http://127.0.0.1:18800/conversations"}
+$ control-openhands browser count testid=context-menu
+{  "ok": true,  "count": 1}
+$ control-openhands browser press Escape
+{  "ok": true,  "url": "http://127.0.0.1:18800/conversations"}
+card menu after 1st Escape:
+$ control-openhands browser count testid=context-menu
+{  "ok": true,  "count": 0}
+focus after 1st Escape:
+$ control-openhands browser eval <activeElement testid|id|tag>
+{  "ok": true,  "value": "ellipsis-button"}
+drawer toggle expanded after 1st Escape:
+$ control-openhands browser eval document.querySelector("[data-testid=sidebar-mobile-menu-toggle]")?.getAttribute("aria-expanded")
+{  "ok": true,  "value": "true"}
+$ control-openhands browser screenshot --feature F17933 --name before-phone-card-menu-escape
+{  "ok": true,  "path": "/tmp/claude-0/-home-user/22a0973a-68bd-5e3e-a1e3-37a6e2c83102/scratchpad/runs/2026-10-05T2136-4b518f/evidence/F17933/before-phone-card-menu-escape.png",  "url": "http://127.0.0.1:18800/conversations",  "viewport": {    "width": 390,    "height": 844  }}
+$ control-openhands browser press Escape
+{  "ok": true,  "url": "http://127.0.0.1:18800/conversations"}
+drawer toggle expanded after 2nd Escape:
+$ control-openhands browser eval document.querySelector("[data-testid=sidebar-mobile-menu-toggle]")?.getAttribute("aria-expanded")
+{  "ok": true,  "value": "false"}
+$ control-openhands browser viewport desktop
+{  "ok": true,  "viewport": {    "width": 1440,    "height": 1000  }}
