@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, renderHook, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -10,6 +10,10 @@ import { CreateInstructions } from "#/components/features/automations/create-ins
 import { I18nKey } from "#/i18n/declaration";
 import { useConversationStore } from "#/stores/conversation-store";
 import * as telemetry from "#/services/telemetry";
+import {
+  HOME_PROMPT_DRAFT_KEY,
+  useDraftPersistence,
+} from "#/hooks/chat/use-draft-persistence";
 
 vi.mock("#/hooks/query/use-settings", () => ({
   useSettings: () => ({ data: { user_consents_to_analytics: true } }),
@@ -89,6 +93,7 @@ describe("CreateInstructions", () => {
       .spyOn(telemetry, "trackEvent")
       .mockResolvedValue(undefined);
     useConversationStore.setState({ messageToSend: null });
+    sessionStorage.removeItem(HOME_PROMPT_DRAFT_KEY);
   });
 
   afterEach(() => {
@@ -109,15 +114,15 @@ describe("CreateInstructions", () => {
 
   it("navigates to conversations with a prefilled prompt when Create Automation is clicked", async () => {
     const user = userEvent.setup();
-    const setMessageToSend = vi.fn();
-    useConversationStore.setState({ setMessageToSend });
+    sessionStorage.setItem(HOME_PROMPT_DRAFT_KEY, "previous home draft");
     const { navigate } = renderCreateInstructions();
 
     await user.click(screen.getByTestId("automations-create-automation"));
 
     expect(navigate).toHaveBeenCalledWith("/conversations");
-    await waitFor(() => {
-      expect(setMessageToSend).toHaveBeenCalledWith("Create an automation");
-    });
+    const chatInputRef = { current: document.createElement("div") };
+    renderHook(() => useDraftPersistence(null, chatInputRef));
+    expect(chatInputRef.current.textContent).toBe("Create an automation");
+    expect(useConversationStore.getState().messageToSend).toBeNull();
   });
 });
