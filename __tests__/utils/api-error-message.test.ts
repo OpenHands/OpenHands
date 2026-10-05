@@ -16,6 +16,22 @@ describe("getApiErrorMessage", () => {
     );
   });
 
+  it("returns the nested `detail.message` when the body `detail` is structured", () => {
+    // Arrange — Agent Server refusals carry machine-readable fields next to
+    // the message, so `detail` is an object rather than a string.
+    const error = new HttpError(422, "Unprocessable Entity", {
+      detail: {
+        message: "MCP server ref(s) not present: 'qa_mcp_a'",
+        dangling_mcp_server_refs: ["qa_mcp_a"],
+      },
+    });
+
+    // Act + Assert
+    expect(getApiErrorMessage(error, "fallback")).toBe(
+      "MCP server ref(s) not present: 'qa_mcp_a'",
+    );
+  });
+
   it("returns the response body `message` from an axios error", () => {
     // Arrange — local agent-server calls still reject with AxiosError.
     const error = new AxiosError("Request failed with status code 500");

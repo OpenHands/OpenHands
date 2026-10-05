@@ -18,8 +18,8 @@ export function getApiErrorBody(error: unknown): unknown {
 
 /**
  * Extract a human-readable message from a failed API call. Prefers the
- * server-provided `message`/`detail` fields, then the `Error` message,
- * then `fallback`.
+ * server-provided `message`/`detail` fields (including a structured
+ * `detail.message`), then the `Error` message, then `fallback`.
  */
 export function getApiErrorMessage(error: unknown, fallback: string): string {
   const body = getApiErrorBody(error);
@@ -31,6 +31,12 @@ export function getApiErrorMessage(error: unknown, fallback: string): string {
     };
     if (typeof message === "string" && message) return message;
     if (typeof detail === "string" && detail) return detail;
+    if (detail && typeof detail === "object") {
+      const { message: detailMessage } = detail as { message?: unknown };
+      if (typeof detailMessage === "string" && detailMessage) {
+        return detailMessage;
+      }
+    }
   }
 
   if (error instanceof Error && error.message) return error.message;
