@@ -143,6 +143,32 @@ Local (`npx` / `npm run dev`) listeners bind **loopback only** (`127.0.0.1`) so 
 
 Docker listens on all container interfaces so port publishing works, but does not inject its session key into HTML by default. The quickstart above explicitly enables injection while publishing the host port on `127.0.0.1` only. If you publish Docker on a LAN or public interface, omit `AGENT_CANVAS_ALLOW_LAN_SESSION_KEY` and enter the API key in the UI. Set `LOCAL_BACKEND_API_KEY` to a strong value, or retrieve the generated value with `docker exec <container> sh -c 'cat "$STATE_DIR/api-key.txt"'`. For internet-facing installs, follow [self-hosting](./docs/SELF_HOSTING.md).
 
+## Non-interactive tasks
+
+For non-interactive tasks and orchestrator integrations, use the
+[Python SDK](https://docs.openhands.dev/sdk/getting-started) or
+[Agent Server API](https://docs.openhands.dev/sdk/guides/agent-server/overview).
+Your program submits a conversation, waits for completion, collects the
+results, and determines its own exit status. See the
+[Docker sandbox guide](https://docs.openhands.dev/sdk/guides/agent-server/docker-sandbox)
+for an existing example.
+
+The legacy [OpenHands CLI](https://github.com/OpenHands/OpenHands-CLI#project-status),
+including its headless mode, is no longer actively maintained.
+
+For a one-shot task, configure an agent and Docker workspace using the
+guide above. Send one message with `conversation.send_message()`, then
+wait with `conversation.run()`. Its `timeout` parameter limits how long
+your program waits; it does not cancel the remote run.
+`max_iteration_per_run` limits the number of agent iterations per run.
+
+For example, ask the agent to create `result.txt` containing
+`HEADLESS_OK`. For this small example, use `timeout=60` to wait up to
+60 seconds and `max_iteration_per_run=4` to allow up to four iterations.
+Collect events and workspace files, check
+`conversation.state.execution_status`, and verify the file contents
+before choosing your program's exit code.
+
 # Architecture
 
 Agent Canvas is powered by the [OpenHands Agent Server](https://github.com/OpenHands/software-agent-sdk/tree/main/openhands-agent-server/openhands/agent_server), a REST API for running multiple agents on a single machine. Each Agent Server runs on a single host/port; the Agent Canvas can connect to multiple Agent Servers and easily flip between them.
@@ -155,6 +181,7 @@ You can run an Agent Server anywhere:
 - Inside OpenHands Cloud (our commercial offering)
 
 The Agent Server is often paired with an [Automation Server](https://github.com/OpenHands/automation), which lets you set up agents that run on a schedule or in response to events.
+
 
 <img width="1456" height="1258" alt="image" src="https://github.com/user-attachments/assets/cb6de6f5-ac30-4d04-a76a-b5c259f0c163" />
 
