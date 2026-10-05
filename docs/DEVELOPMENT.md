@@ -355,6 +355,43 @@ threshold.
 Stryker does not cover the small Python surface in this repository; mutating it
 would need a Python test harness and Python-specific mutation tool.
 
+## Design doc for non-trivial PRs
+
+For a non-trivial PR — a new or changed public API, a new subsystem, a behavior change in
+core logic, or a migration — a reviewer often has to reconstruct the design from the diff
+alone. That is slow. You are encouraged (not required) to add a short design doc so reviewers
+grasp the proposal at a glance.
+
+The convention:
+
+1. Write a **self-contained HTML** page (inline CSS/SVG, opens by double-click) that covers
+   the code/API design and a **before/after** of your change, grounded to the actual code.
+   Keep it static, with no scripts: htmlpreview runs the page in the reviewer's browser.
+2. Commit it under the temporary **`.pr/`** directory, e.g. `.pr/design.html`. This directory
+   is for PR-only artifacts and must not land in `main`. For a same-repository PR it is
+   **removed automatically when the PR is approved** (`.github/workflows/pr-artifacts.yml`).
+   For a fork PR the workflow cannot push to your branch; it posts a notice and, if `.pr/`
+   reaches `main` after merge, opens or updates a cleanup PR. Delete `.pr/` yourself before merge.
+3. Link it near the top of the PR description via htmlpreview, at the commit that contains
+   the page (`git rev-parse HEAD` after you push it):
+
+   ```
+   https://htmlpreview.github.io/?https://github.com/<your-fork>/<repo>/blob/<commit-sha>/.pr/design.html
+   ```
+
+   Use the commit SHA, not the branch name. Approval cleanup removes `.pr/` from the branch,
+   so a branch link stops working while a SHA link keeps resolving. Refresh the link when the
+   page changes substantively.
+
+Keep the essentials in the PR description as well: the intent, the important before/after
+behavior or API shape, compatibility and risk, and code references. The page adds detail.
+
+Skip this for trivial PRs (a typo, a one-line guard, a dependency bump) — there, a design doc
+is just noise. htmlpreview only works for public repos and self-contained pages.
+
+The [`pr-design-doc`](../.agents/skills/pr-design-doc/SKILL.md) skill can generate the page
+for you.
+
 ## CSS isolation and host-app customization
 
 The standalone app and the exported provider/root wrapper now scope all bundled CSS under a dedicated shell element with the `data-agent-server-ui` attribute. That means Tailwind utilities, HeroUI component styles, xterm styles, and local CSS only apply inside the OpenHands UI subtree instead of leaking into a host app.
