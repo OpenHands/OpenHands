@@ -1,3 +1,4 @@
+import { useConversationWorkspace } from "#/hooks/query/use-conversation-workspace";
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
@@ -73,9 +74,11 @@ export function HomeChatLauncher() {
     useConversationStore();
   const { handleUpload } = useChatAttachmentUpload();
   const { error: workspacesError } = useLocalWorkspaces({ enabled: isLocal });
-  const workspacesUnsupportedMessage = isLocal
-    ? getWorkspacesUnsupportedMessage(workspacesError, t)
-    : null;
+  const { isolated, unsupportedMessage: runtimeWorkspaceMessage } =
+    useConversationWorkspace();
+  const workspacesUnsupportedMessage =
+    runtimeWorkspaceMessage ??
+    (isLocal ? getWorkspacesUnsupportedMessage(workspacesError, t) : null);
 
   const setWorkspaceMode = (mode: WorkspaceMode) => {
     setWorkspaceModeState(mode);
@@ -111,7 +114,12 @@ export function HomeChatLauncher() {
       query: hasAttachments ? undefined : trimmed || undefined,
       entryPoint: "home_chat_launcher",
     };
-    if (isLocal && pendingWorkspace) {
+    // An isolated backend owns its workspace, so a host selection left over
+    // from a non-isolated session must not be forwarded: the server rejects it
+    // (`HOME$ISOLATED_WORKSPACE_NOTICE`) and the user sees an error toast for a
+    // selection they may not have noticed. Creation proceeds isolated instead;
+    // the launcher still offers an explicit "clear" affordance for the UI.
+    if (isLocal && pendingWorkspace && !isolated) {
       variables = {
         ...variables,
         workingDir: pendingWorkspace.path,
@@ -232,7 +240,7 @@ export function HomeChatLauncher() {
       data-testid="home-chat-launcher"
       className="flex w-full flex-col items-center pt-[max(4rem,28vh)] pb-10"
     >
-      <div className="flex w-full max-w-[800px] flex-col gap-4 md:px-4">
+      <div className="flex w-full max-w-200 flex-col gap-4 md:px-4">
         <div className="flex w-full justify-center">
           <HomeHeaderTitle />
         </div>
@@ -241,10 +249,27 @@ export function HomeChatLauncher() {
           <CustomChatInput
             onSubmit={handleSubmitWithModelGuard}
             onFilesPaste={handleUpload}
+            placeholder={t(I18nKey.HOME$DESCRIBE_ENGINEERING_TASK)}
             disabled={isCreating || llmBlocked}
           />
         </div>
 
+        {isolated && (
+          <p role="status" className="text-xs text-[var(--oh-text-secondary)]">
+            {pendingWorkspace
+              ? runtimeWorkspaceMessage
+              : t(I18nKey.HOME$ISOLATED_WORKSPACE_NEW)}
+            {pendingWorkspace && (
+              <button
+                type="button"
+                className="ml-2 underline"
+                onClick={() => setPendingWorkspace(null)}
+              >
+                {t(I18nKey.HOME$CLEAR_HOST_WORKSPACE)}
+              </button>
+            )}
+          </p>
+        )}
         <div className="flex items-center justify-start gap-2">
           {hasSelection ? (
             <HomeGitControlBarPreview
