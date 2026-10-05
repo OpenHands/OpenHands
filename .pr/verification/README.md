@@ -28,8 +28,10 @@ The CLI now refuses to guess when several runs are live, and
 
 ## F16 Application settings (run `2026-10-05T0154-f1e371`)
 
-[ledger.md](f16-application/ledger.md): 22 checks, with 17 pass, 4 fail and
-1 blocked.
+[ledger.md](f16-application/ledger.md): 24 checks over all 19 F16
+sub-features, with 19 pass, 4 fail and 1 blocked. The agent's closing summary,
+including its feedback on the skill, the README and the recipes, is in
+[agent-summary.md](f16-application/agent-summary.md).
 
 - **Fail**: all four are product bugs that the map already documents as known
   failures, and each has an issue:
@@ -40,9 +42,14 @@ The CLI now refuses to guess when several runs are live, and
 - **Blocked**: `F16.analytics-cloud` needs an OpenHands Cloud account. It is
   recorded as blocked, not as a pass.
 
-The run was cut short by the model provider, which reported "Insufficient
-Balance", while the agent was finishing the last recipe and before it wrote its
-summary. I stopped its stack with `control-openhands stop`.
+The first attempt stopped at the last recipe, `F16.browser-scope`, when the
+model account ran out of credit ("Insufficient Balance"). After a top-up, both
+stacks were restarted in place with `control-openhands restart` (same state,
+ports and ledger) and the same conversation got one message asking it to
+finish. The agent ran `F16.browser-scope` (pass), the family's errors sweep (no
+app or page errors), stopped its stack and wrote its summary. The restart also
+exposed a harness bug, fixed in this PR: `restart` replayed the proxy address
+saved at launch, which had since changed.
 
 | Language: French, without a reload | Color theme: Light+ after a reload |
 |---|---|
