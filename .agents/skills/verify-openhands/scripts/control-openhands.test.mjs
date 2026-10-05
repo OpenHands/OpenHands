@@ -236,3 +236,16 @@ test("global flags may come before the command", () => {
   );
   assert.doesNotMatch(res.stdout + res.stderr, /Unknown command/);
 });
+
+test("launch pins backend versions by flag and fixtures cover tarballs", () => {
+  const launch = spawnSync(process.execPath, [cli, "help", "launch"], {
+    encoding: "utf8",
+  });
+  assert.match(launch.stdout, /--sdk-version V/);
+  assert.match(launch.stdout, /--automation-version V/);
+  assert.match(launch.stdout, /not forwarded/);
+  const fixture = spawnSync(process.execPath, [cli, "help", "fixture"], {
+    encoding: "utf8",
+  });
+  assert.match(fixture.stdout, /fixture tarball/);
+});

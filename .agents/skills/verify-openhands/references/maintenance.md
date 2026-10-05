@@ -60,7 +60,7 @@ to justify a change after the fact.
 ## 3. Index hygiene and source wave
 
 Run `control-openhands map check` and `map coverage`; fix missing, duplicate and
-dead entries. Then give one read-only reader per feature file (parallel if
+dead entries (`map check --fix-counts` refreshes the index counts). Then give one read-only reader per feature file (parallel if
 delegation is available). Each reads current source for that feature and returns:
 summary, source entry points, likely drift with citations (or none), new
 surfaces missing from the map, and one live recipe. Readers never edit files or

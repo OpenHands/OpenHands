@@ -451,6 +451,18 @@ async function stopBrowser(run) {
   return { stopped: true, pid: info.pid };
 }
 
+function versionAtLeast(version, minimum) {
+  const parts = (v) =>
+    String(v)
+      .replace(/^v/, "")
+      .split(/[.+-]/)
+      .slice(0, 3)
+      .map((n) => Number.parseInt(n, 10) || 0);
+  const [a, b] = [parts(version), parts(minimum)];
+  for (let i = 0; i < 3; i += 1) if (a[i] !== b[i]) return a[i] > b[i];
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // Commands: lifecycle.
 // ---------------------------------------------------------------------------
@@ -658,6 +670,17 @@ async function cmdLaunch({ flags }) {
     env.OH_AUTOMATION_LOCAL_PATH = resolve(flags["automation-path"]);
   if (flags["automation-ref"])
     env.OH_AUTOMATION_GIT_REF = flags["automation-ref"];
+  if (flags["sdk-version"]) env.OH_AGENT_SERVER_VERSION = flags["sdk-version"];
+  if (flags["automation-version"])
+    env.OH_AUTOMATION_VERSION = flags["automation-version"];
+  // Only PASS_ENV and the flags above reach the launcher, so a version pin
+  // exported in the caller's shell would be dropped without a word.
+  const ignoredEnv = Object.keys(process.env).filter(
+    (k) => /^OH_(AGENT_SERVER|AUTOMATION)_/.test(k) && !(k in env),
+  );
+  const envWarning = ignoredEnv.length
+    ? `Ignored ${ignoredEnv.join(", ")} from your shell: runs are isolated. Use --sdk-version/--sdk-ref/--sdk-path or --automation-version/--automation-ref/--automation-path.`
+    : undefined;
 
   const launcherArgs = [
     join(repoRoot, "bin", "agent-canvas.mjs"),
@@ -720,12 +743,14 @@ async function cmdLaunch({ flags }) {
 
   if (flags["print-run"]) {
     // For: export OH_VERIFY_RUN=$(control-openhands launch --new --print-run)
+    if (envWarning) process.stderr.write(`warning: ${envWarning}\n`);
     process.stdout.write(`${dir}\n`);
     return;
   }
   out({
     ok: true,
     run: dir,
+    ...(envWarning ? { warning: envWarning } : {}),
     baseUrl: run.baseUrl,
     mode: run.mode,
     revision,
@@ -1056,13 +1081,28 @@ async function cmdDoctor({ flags }) {
         info.status === 200,
         `version=${info.json?.version}`,
       );
+      const version = info.json?.version;
+      const overridden = Object.keys(run.overrides ?? {}).filter((k) =>
+        k.startsWith("OH_AGENT_SERVER_"),
+      );
       add(
         "agent-server matches pin",
-        info.json?.version === pin ||
-          Object.keys(run.overrides ?? {}).length > 0,
-        `server=${info.json?.version} pin=${pin}`,
+        version === pin || overridden.length > 0,
+        overridden.length
+          ? `server=${version}, chosen by ${overridden.join(", ")} (default pin ${pin})`
+          : `server=${version} pin=${pin}`,
         "warn",
       );
+      const minimum = defaults().compatibility?.minimumAgentServer;
+      if (minimum && version)
+        add(
+          "agent-server meets the UI minimum",
+          versionAtLeast(version, minimum),
+          versionAtLeast(version, minimum)
+            ? `server=${version} minimum=${minimum}`
+            : `server=${version} is below ${minimum}: every page shows the backend-compatibility gate instead of the app`,
+          "warn",
+        );
       const automation = await http(run, "GET", "/api/automation/health");
       add(
         "automation healthy",
@@ -2127,6 +2167,19 @@ async function cmdFixture({ positional, flags }) {
     out({ ok: true, path });
     return;
   }
+  if (kind === "tarball") {
+    // A one-file script bundle for the automation "Upload tarball" action:
+    // main.py prints pong, packed as <name>.tar.gz next to its source folder.
+    const dir = join(run.dir, "evidence", "_fixtures");
+    const base = name ?? "qa-tarball";
+    const src = join(dir, base);
+    mkdirSync(src, { recursive: true });
+    writeFileSync(join(src, "main.py"), 'print("pong")\n');
+    const path = join(dir, `${base}.tar.gz`);
+    execFileSync("tar", ["-czf", path, "-C", src, "main.py"]);
+    out({ ok: true, path, entrypoint: "python3 main.py", files: ["main.py"] });
+    return;
+  }
   if (kind === "mcp-server") {
     // A dependency-free stdio MCP server with one tool, qa_echo, for the
     // custom-server and agent-use recipes (no network, no npm install).
@@ -2201,7 +2254,7 @@ async function cmdFixture({ positional, flags }) {
     return;
   }
   usage(
-    "Usage: control-openhands fixture git-repo|git-remote|folder|image|file|skill|mcp-server [--name N] [--remote URL]",
+    "Usage: control-openhands fixture git-repo|git-remote|folder|image|file|tarball|skill|mcp-server [--name N] [--remote URL]",
     "control-openhands fixture git-repo --name qa-repo",
   );
 }
@@ -2956,12 +3009,59 @@ function mapCheck({ only } = {}) {
     if (!existsSync(join(mapDir, m[1])))
       problems.push(`README.md: links missing file ${m[1]}`);
   }
+  // The index's counts go stale whenever a family gains an ID; a whole-map
+  // check compares them with the files.
+  if (!only) {
+    const counts = new Map();
+    for (const file of ids.values())
+      counts.set(file, (counts.get(file) ?? 0) + 1);
+    for (const row of index.matchAll(
+      /^\|\s*F\d{2}\s*\|\s*\[[^\]]*\]\(\.?\/?([A-Za-z0-9-]+\.md)\).*\|\s*(\d+)\s*\|\s*$/gm,
+    )) {
+      const actual = counts.get(row[1]) ?? 0;
+      if (Number(row[2]) !== actual)
+        problems.push(
+          `README.md: ${row[1]} lists ${row[2]} sub-features, the file declares ${actual}`,
+        );
+    }
+    const total = /(\d+) families, (\d+) sub-features/.exec(index);
+    if (
+      total &&
+      (Number(total[1]) !== files.length || Number(total[2]) !== ids.size)
+    )
+      problems.push(
+        `README.md: says "${total[0]}", the map has ${files.length} families and ${ids.size} sub-features`,
+      );
+  }
   return {
     files: files.length,
     ids: ids.size,
     checked: only ?? "all",
     problems,
   };
+}
+
+// Rewrites the README index's per-family sub-feature counts and its total
+// from the files; everything else in the index is left as written.
+function fixIndexCounts() {
+  const path = join(mapDir, "README.md");
+  if (!existsSync(path)) return;
+  const counts = new Map();
+  for (const { file } of mapIdList())
+    counts.set(file, (counts.get(file) ?? 0) + 1);
+  let total = 0;
+  for (const n of counts.values()) total += n;
+  const text = readFileSync(path, "utf8")
+    .replace(
+      /^(\|\s*F\d{2}\s*\|\s*\[[^\]]*\]\(\.?\/?([A-Za-z0-9-]+\.md)\).*\|\s*)(\d+)(\s*\|\s*)$/gm,
+      (row, head, file, n, tail) =>
+        counts.has(file) ? `${head}${counts.get(file)}${tail}` : row,
+    )
+    .replace(
+      /(\d+) families, (\d+) sub-features/,
+      `${featureFiles().length} families, ${total} sub-features`,
+    );
+  writeFileSync(path, text);
 }
 
 function routePaths() {
@@ -3066,6 +3166,7 @@ async function cmdMap({ positional, flags }) {
       flags.file && flags.file !== true
         ? basename(String(flags.file))
         : undefined;
+    if (flags["fix-counts"] && !only) fixIndexCounts();
     const result = mapCheck({ only });
     if (only) {
       result.problems = result.problems.filter(
@@ -3177,8 +3278,8 @@ Examples:
   control-openhands stop
 `,
   launch: `control-openhands launch [--public] [--new] [--print-run] [--port N | --port-from N] [--build auto|always|never] [--min-free-mb 2000]
-                         [--no-browser] [--timeout SEC] [--sdk-path DIR | --sdk-ref REF]
-                         [--automation-path DIR | --automation-ref REF] [--run-id ID]
+                         [--no-browser] [--timeout SEC] [--sdk-path DIR | --sdk-ref REF | --sdk-version V]
+                         [--automation-path DIR | --automation-ref REF | --automation-version V] [--run-id ID]
 
 Builds the checkout when build/verify-revision.txt does not match HEAD, then
 starts bin/agent-canvas.mjs with a private HOME, state dir, session key and
@@ -3190,6 +3291,10 @@ Idempotent: an alive current run is reused unless --new is given.
   export OH_VERIFY_RUN=$(control-openhands launch --new --print-run)
 Every other command uses --run, else $OH_VERIFY_RUN, else the only live run;
 with several live runs it refuses to guess (several agents on one machine).
+Backend versions come only from the flags: OH_AGENT_SERVER_* and OH_AUTOMATION_*
+in your shell are not forwarded (launch warns). An Agent Server below
+config/defaults.json compatibility.minimumAgentServer (1.47.0 today) never gets
+past the UI's backend-compatibility gate.
 
 Environment: OH_VERIFY_HOME, CONTROL_OPENHANDS_BROWSER (Chromium path),
 CONTROL_OPENHANDS_BROWSER_ARGS (extra Chromium flags), CONTROL_OPENHANDS_HEADED=1,
@@ -3204,8 +3309,8 @@ Examples:
   doctor: `control-openhands doctor [--skip-ui]
 
 Read-only. Checks launcher group and ports, served build revision, unauthenticated
-rejection, authenticated settings, agent-server version vs config/defaults.json,
-automation health, LLM configuration (info) and a throwaway-tab UI probe.
+rejection, authenticated settings, agent-server version vs config/defaults.json
+(pin, and the UI's minimum Agent Server version), automation health, LLM configuration (info) and a throwaway-tab UI probe.
 Exit 3 when any check fails.
 `,
   stop: `control-openhands stop [--purge-private]
@@ -3275,6 +3380,7 @@ control-openhands fixture mcp-server [--name qa-mcp]      # stdio MCP server (to
 control-openhands fixture folder [--name qa-folder]
 control-openhands fixture image [--name qa-image] [--width 160 --height 96]   # PNG under evidence/_fixtures
 control-openhands fixture file [--name qa-note.txt] [--content TEXT]
+control-openhands fixture tarball [--name qa-tarball]   # evidence/_fixtures/qa-tarball.tar.gz (main.py prints pong)
 control-openhands fixture skill [--name qa-hello] [--repo qa-repo] [--trigger qa-ping] [--body TEXT]
         # SKILL.md in the run's private ~/.agents/skills, or in a fixture repo's .agents/skills
 `,
@@ -3338,7 +3444,7 @@ Verbs
   storage [--session] [--values]         localStorage (or sessionStorage) keys; values only on request
                                          (keys, tokens and secrets inside values are redacted)
   media [--clear]                        media playback recorded since load (sound features)
-  network [--external] [--filter REGEX] [--clear] [--last N]   requests with status and redacted query
+  network [--external] [--filter REGEX] [--clear] [--last N]   requests with status and redacted query (rows under "recent")
                                          (privacy/telemetry checks; --clear as for errors)
   toasts [--history [--clear]]          toasts on screen now (with links); --history adds every
                                          status/alert text seen since this page loaded
@@ -3357,7 +3463,8 @@ control-openhands evidence retract --feature ID [--entry "UI path"] [--note why]
 control-openhands evidence list [--feature F05]
 control-openhands evidence report > report.md
 `,
-  map: `control-openhands map check [--file Fnn-name.md]   lint the map (or one entry, skipping index links): four H2s, unique IDs, links, known commands
+  map: `control-openhands map check [--file Fnn-name.md]   lint the map (or one entry, skipping index links): four H2s, unique IDs, links, known commands, index counts
+control-openhands map check --fix-counts   rewrite the index's sub-feature counts and total from the files, then lint
 control-openhands map coverage   routes in src/routes.ts and src/components/features/* dirs not yet mapped
 control-openhands map ids        every sub-feature ID with its file
 control-openhands map routes     the route registry as path → route module

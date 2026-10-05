@@ -171,6 +171,21 @@ with the entry point, expected and actual result and artifacts.
   GitHub token, VS Code server, macOS): mark it `blocked`, name the prerequisite
   in `Preconditions:` and keep the recipe as far as it can be written.
 
+`blocked` is the most common wrong verdict. Before you write it, try the
+cheaper routes that earlier mappers missed:
+
+- Another family may already create the precondition through the UI (F22's
+  Daily news digest makes a script automation with no account). Search the
+  other files for it.
+- A bundled fixture often exists upstream too: a public, read-only Git source
+  such as `https://github.com/OpenHands/OpenHands/tree/main/src/fixtures/...`
+  works through the Agent Server's network access.
+- When a path is "blocked because every X needs Y", list every X by its real
+  attributes first. For example, sort the template cards by setup form and
+  integration type: cards whose integrations all need external setup skip the
+  install queue entirely.
+- Check `<verb> --help` again; a `fixture` or `browser` verb may exist now.
+
 ## 5. Check the map
 
 ```sh
@@ -182,7 +197,8 @@ control-openhands map ids        # every ID with its file, for the index tables
 
 Whoever owns the index ([feature-map/README.md](feature-map/README.md)) adds the
 new file to the families table with its entry points, prerequisites and ID
-count, and lists "Not mapped" reasons. When several agents map families in
+count, and lists "Not mapped" reasons. `control-openhands map check` fails when
+a count is stale; `map check --fix-counts` rewrites the counts and the total. When several agents map families in
 parallel, each edits only its own file and checks it with `--file`; one
 coordinator updates the index afterwards.
 Then hand the evidence ledger (`control-openhands evidence report`) to whoever
