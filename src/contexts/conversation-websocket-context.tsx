@@ -12,6 +12,7 @@ import { ConversationClient } from "@openhands/typescript-client/clients";
 
 import { useQueryClient } from "@tanstack/react-query";
 import { useWebSocket, WebSocketHookOptions } from "#/hooks/use-websocket";
+import { usePageVisibilityReconnect } from "#/hooks/use-page-visibility-reconnect";
 import { SERVER_CONNECTION_ERROR_MESSAGE } from "#/constants/server-connection-error";
 import { useEventStore } from "#/stores/use-event-store";
 import { useErrorMessageStore } from "#/stores/error-message-store";
@@ -1208,13 +1209,17 @@ export function ConversationWebSocketProvider({
   // Only attempt WebSocket connection when we have a valid URL
   // This prevents connection attempts during task polling phase
   const websocketUrl = wsUrl;
-  const { socket: mainSocket, reconnect: reconnectMain } = useWebSocket(
-    websocketUrl || "",
-    mainWebsocketOptions,
-  );
+  const {
+    socket: mainSocket,
+    reconnect: reconnectMain,
+    disconnect: disconnectMain,
+  } = useWebSocket(websocketUrl || "", mainWebsocketOptions);
 
-  const { socket: planningAgentSocket, reconnect: reconnectPlanning } =
-    useWebSocket(planningAgentWsUrl || "", planningWebsocketOptions);
+  const {
+    socket: planningAgentSocket,
+    reconnect: reconnectPlanning,
+    disconnect: disconnectPlanning,
+  } = useWebSocket(planningAgentWsUrl || "", planningWebsocketOptions);
 
   const reconnect = useCallback(() => {
     removeErrorMessage();
@@ -1230,6 +1235,39 @@ export function ConversationWebSocketProvider({
     reconnectPlanning,
     removeErrorMessage,
   ]);
+
+  // Mobile browsers freeze and discard backgrounded tabs, silently killing
+  // the socket; this pre-empts that with a clean close on the way out and an
+  // immediate, explicit reconnect on the way back — see
+  // `usePageVisibilityReconnect` for the full rationale. Both sockets are
+  // covered regardless of `conversationMode`: a mode switch while
+  // backgrounded must not leave the *other* one stale.
+  const disconnectForBackground = useCallback(() => {
+    disconnectMain();
+    disconnectPlanning();
+  }, [disconnectMain, disconnectPlanning]);
+
+  const reconnectStaleOnForeground = useCallback(() => {
+    if (websocketUrl && mainConnectionState !== "OPEN") {
+      reconnectMain();
+    }
+    if (planningAgentWsUrl && planningConnectionState !== "OPEN") {
+      reconnectPlanning();
+    }
+  }, [
+    websocketUrl,
+    mainConnectionState,
+    planningAgentWsUrl,
+    planningConnectionState,
+    reconnectMain,
+    reconnectPlanning,
+  ]);
+
+  usePageVisibilityReconnect({
+    enabled: !!(websocketUrl || planningAgentWsUrl),
+    disconnect: disconnectForBackground,
+    reconnectIfStale: reconnectStaleOnForeground,
+  });
 
   // V1 send message function via WebSocket
   // Falls back to REST API queue when WebSocket is not connected

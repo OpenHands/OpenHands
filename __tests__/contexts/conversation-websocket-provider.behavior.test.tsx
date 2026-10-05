@@ -44,6 +44,8 @@ const socketCapture = vi.hoisted(() => ({
   planningSocket: null as TestSocket | null,
   reconnectMain: vi.fn(),
   reconnectPlanning: vi.fn(),
+  disconnectMain: vi.fn(),
+  disconnectPlanning: vi.fn(),
   queueMessage: vi.fn(),
   readConversationFile: vi.fn(),
   trackError: vi.fn(),
@@ -72,6 +74,7 @@ vi.mock("#/hooks/use-websocket", () => ({
       return {
         socket: socketCapture.mainSocket,
         reconnect: socketCapture.reconnectMain,
+        disconnect: socketCapture.disconnectMain,
       };
     }
 
@@ -80,6 +83,7 @@ vi.mock("#/hooks/use-websocket", () => ({
     return {
       socket: socketCapture.planningSocket,
       reconnect: socketCapture.reconnectPlanning,
+      disconnect: socketCapture.disconnectPlanning,
     };
   }),
 }));
@@ -335,6 +339,8 @@ describe("Conversation websocket behavior", () => {
     socketCapture.planningSocket = null;
     socketCapture.reconnectMain.mockReset();
     socketCapture.reconnectPlanning.mockReset();
+    socketCapture.disconnectMain.mockReset();
+    socketCapture.disconnectPlanning.mockReset();
     socketCapture.queueMessage.mockReset().mockResolvedValue(undefined);
     socketCapture.readConversationFile.mockReset();
     socketCapture.trackError.mockReset();
@@ -2243,5 +2249,175 @@ describe("Conversation websocket behavior", () => {
       expect.any(SyntaxError),
     );
     expect(warn).toHaveBeenCalledTimes(1);
+  });
+});
+
+const MOBILE_USER_AGENT =
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15";
+const DESKTOP_USER_AGENT =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36";
+
+function setUserAgent(userAgent: string) {
+  vi.spyOn(window.navigator, "userAgent", "get").mockReturnValue(userAgent);
+}
+
+function setVisibility(state: "visible" | "hidden") {
+  Object.defineProperty(document, "visibilityState", {
+    value: state,
+    configurable: true,
+  });
+  document.dispatchEvent(new Event("visibilitychange"));
+}
+
+describe("Conversation websocket — page visibility reconnect (#17894)", () => {
+  const originalVisibilityDescriptor = Object.getOwnPropertyDescriptor(
+    Document.prototype,
+    "visibilityState",
+  );
+
+  beforeEach(() => {
+    socketCapture.callIndex = 0;
+    socketCapture.mainUrl = "";
+    socketCapture.planningUrl = "";
+    socketCapture.mainOptions = null;
+    socketCapture.planningOptions = null;
+    socketCapture.mainSocket = null;
+    socketCapture.planningSocket = null;
+    socketCapture.reconnectMain.mockReset();
+    socketCapture.reconnectPlanning.mockReset();
+    socketCapture.disconnectMain.mockReset();
+    socketCapture.disconnectPlanning.mockReset();
+    contextCapture.current = null;
+    historyCapture.result = {
+      data: { events: [] },
+      isPending: false,
+      isFetching: false,
+      isError: false,
+    };
+    useConversationStore.setState({
+      conversationMode: "code",
+      planContent: null,
+    });
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    if (originalVisibilityDescriptor) {
+      Object.defineProperty(
+        document,
+        "visibilityState",
+        originalVisibilityDescriptor,
+      );
+    }
+  });
+
+  it("disconnects both sockets once the hide debounce elapses on a mobile user agent", () => {
+    setUserAgent(MOBILE_USER_AGENT);
+    renderProvider({ subConversations: [makeSubConversation()] });
+
+    act(() => setVisibility("hidden"));
+    // Still within the grace period: nothing torn down yet.
+    expect(socketCapture.disconnectMain).not.toHaveBeenCalled();
+    expect(socketCapture.disconnectPlanning).not.toHaveBeenCalled();
+
+    act(() => {
+      vi.advanceTimersByTime(3_000);
+    });
+
+    expect(socketCapture.disconnectMain).toHaveBeenCalledOnce();
+    expect(socketCapture.disconnectPlanning).toHaveBeenCalledOnce();
+  });
+
+  it("never tears a socket down for a quick glance away (flap guard)", () => {
+    setUserAgent(MOBILE_USER_AGENT);
+    renderProvider();
+
+    act(() => {
+      setVisibility("hidden");
+      vi.advanceTimersByTime(1_000);
+      setVisibility("visible");
+      vi.advanceTimersByTime(10_000);
+    });
+
+    expect(socketCapture.disconnectMain).not.toHaveBeenCalled();
+  });
+
+  it("does not disconnect on hide for a desktop user agent", () => {
+    setUserAgent(DESKTOP_USER_AGENT);
+    renderProvider();
+
+    act(() => {
+      setVisibility("hidden");
+      vi.advanceTimersByTime(10_000);
+    });
+
+    expect(socketCapture.disconnectMain).not.toHaveBeenCalled();
+    expect(socketCapture.disconnectPlanning).not.toHaveBeenCalled();
+  });
+
+  it("immediately reconnects a stale socket on return to the foreground, regardless of platform", () => {
+    setUserAgent(DESKTOP_USER_AGENT);
+    renderProvider();
+    act(() => mainOptions().onClose?.(new CloseEvent("close")));
+    expect(screen.getByTestId("connection-state")).toHaveTextContent("CLOSED");
+
+    act(() => {
+      setVisibility("hidden");
+      setVisibility("visible");
+    });
+
+    // Nothing waits on a backoff timer: the foreground check fires the
+    // reconnect synchronously off the visibility event itself.
+    expect(socketCapture.reconnectMain).toHaveBeenCalledOnce();
+  });
+
+  it("does not reconnect an already-open socket on a foreground health check", () => {
+    setUserAgent(DESKTOP_USER_AGENT);
+    const mainSocket = makeSocket(WebSocket.OPEN);
+    socketCapture.mainSocket = mainSocket;
+    renderProvider();
+    act(() => mainOptions().onOpen?.(new Event("open")));
+    expect(screen.getByTestId("connection-state")).toHaveTextContent("OPEN");
+
+    act(() => {
+      setVisibility("hidden");
+      setVisibility("visible");
+    });
+
+    expect(socketCapture.reconnectMain).not.toHaveBeenCalled();
+  });
+
+  it("reconnects whichever sockets are stale independent of the active conversation mode", () => {
+    setUserAgent(DESKTOP_USER_AGENT);
+    renderProvider({ subConversations: [makeSubConversation()] });
+    useConversationStore.setState({ conversationMode: "plan" });
+    act(() => mainOptions().onClose?.(new CloseEvent("close")));
+    act(() => planningOptions().onClose?.(new CloseEvent("close")));
+
+    act(() => {
+      setVisibility("hidden");
+      setVisibility("visible");
+    });
+
+    // Unlike the manual `reconnect()` action (mode-gated), the foreground
+    // health check always covers both — a mode switch while backgrounded
+    // must not leave the other socket stale.
+    expect(socketCapture.reconnectMain).toHaveBeenCalledOnce();
+    expect(socketCapture.reconnectPlanning).toHaveBeenCalledOnce();
+  });
+
+  it("stops reacting to visibility changes after the provider unmounts", () => {
+    setUserAgent(MOBILE_USER_AGENT);
+    const { unmount } = renderProvider();
+    unmount();
+
+    act(() => {
+      setVisibility("hidden");
+      vi.advanceTimersByTime(10_000);
+    });
+
+    expect(socketCapture.disconnectMain).not.toHaveBeenCalled();
   });
 });
