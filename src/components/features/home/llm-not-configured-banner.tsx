@@ -19,11 +19,14 @@ import { Typography } from "#/ui/typography";
 export function LlmNotConfiguredBanner() {
   const { t } = useTranslation("openhands");
   const { navigate } = useNavigation();
-  const { isConfigured, isLoading } = useLlmConfigured();
+  const { isConfigured, isLoading, configurationIssue } = useLlmConfigured();
 
-  if (isLoading || isConfigured) {
+  if (isLoading || isConfigured || !configurationIssue) {
     return null;
   }
+
+  const isMissingActiveProfileKey =
+    configurationIssue === "missing_active_profile_key";
 
   return (
     <div
@@ -36,7 +39,11 @@ export function LlmNotConfiguredBanner() {
           <FaTriangleExclamation className="align-middle text-yellow-400" />
         </div>
         <Typography.Text className="ml-3 text-sm font-medium">
-          {t(I18nKey.HOME$LLM_NOT_CONFIGURED_MESSAGE)}
+          {t(
+            isMissingActiveProfileKey
+              ? I18nKey.HOME$LLM_MISSING_ACTIVE_PROFILE_KEY_MESSAGE
+              : I18nKey.HOME$LLM_NOT_CONFIGURED_MESSAGE,
+          )}
         </Typography.Text>
       </div>
 
@@ -47,7 +54,11 @@ export function LlmNotConfiguredBanner() {
         className="w-fit shrink-0 self-start whitespace-nowrap sm:self-auto"
         onClick={() => navigate("/settings/llm")}
       >
-        {t(I18nKey.HOME$LLM_NOT_CONFIGURED_ACTION)}
+        {t(
+          isMissingActiveProfileKey
+            ? I18nKey.HOME$LLM_MISSING_ACTIVE_PROFILE_KEY_ACTION
+            : I18nKey.HOME$LLM_NOT_CONFIGURED_ACTION,
+        )}
       </BrandButton>
     </div>
   );
