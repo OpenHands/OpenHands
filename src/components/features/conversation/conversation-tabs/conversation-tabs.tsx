@@ -14,6 +14,7 @@ import DoubleCheckIcon from "#/icons/double-check.svg?react";
 import { EllipsisButton } from "#/components/features/conversation-panel/ellipsis-button";
 import { cn } from "#/utils/utils";
 import { useConversationLocalStorageState } from "#/utils/conversation-local-storage";
+import { CONVERSATION_TAB_LABEL_KEYS } from "./conversation-tab-ids";
 import { ConversationTabNav } from "./conversation-tab-nav";
 import { DrawerVSCodeLink } from "./drawer-vscode-link";
 import { ChatActionTooltip } from "../../chat/chat-action-tooltip";
@@ -95,36 +96,36 @@ export function ConversationTabs({
       isActive: isTabActive("files"),
       icon: DocumentIcon,
       onClick: () => selectTab("files"),
-      tooltipContent: t(I18nKey.COMMON$FILES),
-      tooltipAriaLabel: t(I18nKey.COMMON$FILES),
-      label: t(I18nKey.COMMON$FILES),
+      tooltipContent: t(CONVERSATION_TAB_LABEL_KEYS.files),
+      tooltipAriaLabel: t(CONVERSATION_TAB_LABEL_KEYS.files),
+      label: t(CONVERSATION_TAB_LABEL_KEYS.files),
     },
     {
       tabValue: "commits",
       isActive: isTabActive("commits"),
       icon: LuFileDiff,
       onClick: () => selectTab("commits"),
-      tooltipContent: t(I18nKey.DIFF_VIEWER$COMMITS),
-      tooltipAriaLabel: t(I18nKey.DIFF_VIEWER$COMMITS),
-      label: t(I18nKey.DIFF_VIEWER$COMMITS),
+      tooltipContent: t(CONVERSATION_TAB_LABEL_KEYS.commits),
+      tooltipAriaLabel: t(CONVERSATION_TAB_LABEL_KEYS.commits),
+      label: t(CONVERSATION_TAB_LABEL_KEYS.commits),
     },
     {
       tabValue: "planner",
       isActive: isTabActive("planner"),
       icon: ListTodo,
       onClick: () => selectTab("planner"),
-      tooltipContent: t(I18nKey.COMMON$PLANNER),
-      tooltipAriaLabel: t(I18nKey.COMMON$PLANNER),
-      label: t(I18nKey.COMMON$PLANNER),
+      tooltipContent: t(CONVERSATION_TAB_LABEL_KEYS.planner),
+      tooltipAriaLabel: t(CONVERSATION_TAB_LABEL_KEYS.planner),
+      label: t(CONVERSATION_TAB_LABEL_KEYS.planner),
     },
     {
       tabValue: "terminal",
       isActive: isTabActive("terminal"),
       icon: SquareChevronRight,
       onClick: () => selectTab("terminal"),
-      tooltipContent: t(I18nKey.COMMON$TERMINAL),
-      tooltipAriaLabel: t(I18nKey.COMMON$TERMINAL),
-      label: t(I18nKey.COMMON$TERMINAL),
+      tooltipContent: t(CONVERSATION_TAB_LABEL_KEYS.terminal),
+      tooltipAriaLabel: t(CONVERSATION_TAB_LABEL_KEYS.terminal),
+      label: t(CONVERSATION_TAB_LABEL_KEYS.terminal),
       className: "pl-2",
     },
     {
@@ -132,18 +133,18 @@ export function ConversationTabs({
       isActive: isTabActive("browser"),
       icon: Globe,
       onClick: () => selectTab("browser"),
-      tooltipContent: t(I18nKey.COMMON$BROWSER),
-      tooltipAriaLabel: t(I18nKey.COMMON$BROWSER),
-      label: t(I18nKey.COMMON$BROWSER),
+      tooltipContent: t(CONVERSATION_TAB_LABEL_KEYS.browser),
+      tooltipAriaLabel: t(CONVERSATION_TAB_LABEL_KEYS.browser),
+      label: t(CONVERSATION_TAB_LABEL_KEYS.browser),
     },
     {
       tabValue: "usage",
       isActive: isTabActive("usage"),
       icon: Gauge,
       onClick: () => selectTab("usage"),
-      tooltipContent: t(I18nKey.COMMON$USAGE),
-      tooltipAriaLabel: t(I18nKey.COMMON$USAGE),
-      label: t(I18nKey.COMMON$USAGE),
+      tooltipContent: t(CONVERSATION_TAB_LABEL_KEYS.usage),
+      tooltipAriaLabel: t(CONVERSATION_TAB_LABEL_KEYS.usage),
+      label: t(CONVERSATION_TAB_LABEL_KEYS.usage),
     },
   ];
 
@@ -154,9 +155,9 @@ export function ConversationTabs({
       isActive: isTabActive("tasklist"),
       icon: DoubleCheckIcon,
       onClick: () => selectTab("tasklist"),
-      tooltipContent: t(I18nKey.COMMON$TASK_LIST),
-      tooltipAriaLabel: t(I18nKey.COMMON$TASK_LIST),
-      label: t(I18nKey.COMMON$TASK_LIST),
+      tooltipContent: t(CONVERSATION_TAB_LABEL_KEYS.tasklist),
+      tooltipAriaLabel: t(CONVERSATION_TAB_LABEL_KEYS.tasklist),
+      label: t(CONVERSATION_TAB_LABEL_KEYS.tasklist),
     });
   }
 

@@ -4,9 +4,9 @@ import { TabWrapper } from "./tab-wrapper";
 import { TabContainer } from "./tab-container";
 import { TabContentArea } from "./tab-content-area";
 import { ConversationTabContentCrossfade } from "./conversation-tab-content-crossfade";
-import { I18nKey } from "#/i18n/declaration";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useConversationId } from "#/hooks/use-conversation-id";
+import { CONVERSATION_TAB_LABEL_KEYS } from "../conversation-tab-ids";
 
 // Lazy load all tab components, including the terminal — xterm + addon-fit +
 // xterm.css are large enough that we don't want them in the conversation
@@ -19,15 +19,14 @@ const TaskListTab = lazy(() => import("#/routes/task-list-tab"));
 const UsageTab = lazy(() => import("#/routes/usage-tab"));
 const Terminal = lazy(() => import("#/components/features/terminal/terminal"));
 
-// `labelKey` matches the tab's name in the strip; it names the panel.
 const TAB_CONFIG = {
-  tasklist: { component: TaskListTab, labelKey: I18nKey.COMMON$TASK_LIST },
-  files: { component: FilesTab, labelKey: I18nKey.COMMON$FILES },
-  commits: { component: CommitsTab, labelKey: I18nKey.DIFF_VIEWER$COMMITS },
-  browser: { component: BrowserTab, labelKey: I18nKey.COMMON$BROWSER },
-  terminal: { component: Terminal, labelKey: I18nKey.COMMON$TERMINAL },
-  planner: { component: PlannerTab, labelKey: I18nKey.COMMON$PLANNER },
-  usage: { component: UsageTab, labelKey: I18nKey.COMMON$USAGE },
+  tasklist: { component: TaskListTab },
+  files: { component: FilesTab },
+  commits: { component: CommitsTab },
+  browser: { component: BrowserTab },
+  terminal: { component: Terminal },
+  planner: { component: PlannerTab },
+  usage: { component: UsageTab },
 };
 
 export function ConversationTabContent() {
@@ -49,7 +48,9 @@ export function ConversationTabContent() {
       : (selectedTab ?? "files");
 
   return (
-    <TabContainer label={t(activeTab.labelKey)}>
+    <TabContainer
+      label={t(CONVERSATION_TAB_LABEL_KEYS[selectedTab ?? "files"])}
+    >
       <TabContentArea>
         <ConversationTabContentCrossfade
           showAgentLoading={shouldShownAgentLoading}

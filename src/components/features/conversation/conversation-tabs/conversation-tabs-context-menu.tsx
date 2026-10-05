@@ -3,6 +3,7 @@ import ReactDOM from "react-dom";
 import { useTranslation } from "react-i18next";
 import { ContextMenu } from "#/ui/context-menu";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import { clampLeftToViewport } from "#/hooks/use-popover-fixed-placement";
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { useConversationLocalStorageState } from "#/utils/conversation-local-storage";
 import {
@@ -28,8 +29,6 @@ import {
 
 /** Space between the trigger and the portaled menu. */
 const MENU_GAP_PX = 8;
-/** Smallest distance the menu may sit from a viewport edge. */
-const MENU_VIEWPORT_MARGIN_PX = 8;
 
 interface ConversationTabsContextMenuProps {
   isOpen: boolean;
@@ -70,11 +69,6 @@ export function ConversationTabsContextMenu({
         rect.bottom + MENU_GAP_PX + (menuRect?.height ?? 0) >
         window.innerHeight;
 
-      // An embedded canvas can sit hard against the viewport's right edge,
-      // where left-aligning on the trigger clips the labels and pin controls.
-      const rightmostLeft =
-        window.innerWidth - (menuRect?.width ?? 0) - MENU_VIEWPORT_MARGIN_PX;
-
       setPortalStyle({
         position: "fixed",
         zIndex: 9999,
@@ -82,10 +76,9 @@ export function ConversationTabsContextMenu({
         ...(overflowsBelow
           ? { bottom: window.innerHeight - rect.top + MENU_GAP_PX }
           : { top: rect.bottom + MENU_GAP_PX }),
-        left: Math.max(
-          MENU_VIEWPORT_MARGIN_PX,
-          Math.min(rect.left, rightmostLeft),
-        ),
+        // An embedded canvas can sit hard against the viewport's right edge,
+        // where left-aligning on the trigger clips the labels and pin controls.
+        left: clampLeftToViewport(rect.left, menuRect?.width ?? 0),
       });
     };
 
