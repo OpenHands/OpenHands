@@ -1,0 +1,30 @@
+Issue #17951 - URL after choosing another backend from a Manage backends row
+(control-openhands output, Local = this run's Agent Server, QA_Second = a second launched stack)
+
+BEFORE (origin/main aeea97e1b)
+$ browser click 'testid=conversation-card' --expect-url '/conversations/[0-9a-f-]+'
+  "url": "http://127.0.0.1:18820/conversations/e5f03972-48a6-4e17-a105-546a06b756c6?backend=default-local"
+$ browser click 'testid=backend-selector'; browser click 'testid=manage-backends-menu-item'
+$ browser click 'testid=manage-backends-row-QA_Second >> role=button >> nth=0'
+$ browser wait 'testid=chat-interface' --timeout 8000      -> Timeout 8000ms exceeded
+$ browser url
+  "url": "http://127.0.0.1:18820/conversations/e5f03972-48a6-4e17-a105-546a06b756c6?backend=default-local"
+$ browser count 'testid=chat-interface'                    -> "count": 0
+$ browser snapshot 'testid=backend-selector'               -> combobox "QA_Second"
+=> stale conversation URL, empty main pane
+
+AFTER (this branch)
+$ browser click 'testid=conversation-card' --expect-url '/conversations/[0-9a-f-]+'
+  "url": "http://127.0.0.1:18830/conversations/d3772376-4604-4f6d-827c-126ae853e28b?backend=default-local"
+$ browser click 'testid=manage-backends-row-QA_Second >> role=button >> nth=0' --expect-url '/conversations(\?|$)'
+  "url": "http://127.0.0.1:18830/conversations"
+$ browser snapshot 'testid=backend-selector'               -> combobox "QA_Second"
+
+$ browser click '[data-testid^="automation-card-"] >> has-text=QA_17951 Pong >> role=heading' --expect-url '/automations/[0-9a-f-]+'
+  "url": "http://127.0.0.1:18830/automations/447b2162-191d-4a1d-9f47-816b1d64e47a"
+$ browser click 'testid=manage-backends-row-QA_Second >> role=button >> nth=0' --expect-url '/automations(\?|$)'
+  "url": "http://127.0.0.1:18830/automations"
+
+$ browser goto /settings/app; (Manage backends) click 'testid=manage-backends-row-Local >> role=button >> nth=0'
+  "url": "http://127.0.0.1:18830/settings/app"   (non-detail page: no redirect)
+$ browser snapshot 'testid=backend-selector'               -> combobox "Local"
