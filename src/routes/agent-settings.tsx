@@ -299,7 +299,7 @@ interface AgentSettingsScreenProps {
   /** `agent_settings`-shaped profile fields the form opens on. */
   agentSettingsOverride?: Record<string, SettingsValue> | null;
   onSaveControlChange: (control: AgentSettingsSaveControl) => void;
-  /** Local launches route the `default` profile around its stored prompt. */
+  /** Local launches route the `default` profile around its stored prompt and tools. */
   isDefaultProfile?: boolean;
 }
 
@@ -346,11 +346,12 @@ export function AgentSettingsScreen({
     initialTools.mode === "custom" ? initialTools.selected : null,
   );
   const toolsSupported = agentProfileSupportsTools();
+  const toolsEditable = toolsSupported && !isDefaultProfile;
   const {
     data: toolCatalog,
     isError: toolCatalogFailed,
     refetch: refetchToolCatalog,
-  } = useToolCatalog({ enabled: toolsSupported });
+  } = useToolCatalog({ enabled: toolsEditable });
   // Only a loaded catalog may write `tools`.
   const toolCatalogLoaded = toolCatalog !== undefined;
   const standardToolNames = React.useMemo(
@@ -908,7 +909,20 @@ export function AgentSettingsScreen({
           onChange={setToolConcurrency}
         />
       ) : null}
-      {!isAcp && toolsSupported ? (
+      {!isAcp && toolsSupported && isDefaultProfile ? (
+        <div className="flex flex-col gap-2.5">
+          <Typography.Text className="text-sm">
+            {t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS)}
+          </Typography.Text>
+          <Typography.Text
+            testId="agent-settings-tools-default-profile"
+            className="text-xs text-tertiary-alt"
+          >
+            {t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS_DEFAULT_PROFILE)}
+          </Typography.Text>
+        </div>
+      ) : null}
+      {!isAcp && toolsEditable ? (
         <div className="flex flex-col gap-2.5">
           <Typography.Text className="text-sm">
             {t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS)}

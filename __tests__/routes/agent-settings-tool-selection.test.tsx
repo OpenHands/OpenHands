@@ -30,6 +30,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  setActiveSelection(null);
+  setRegisteredBackends([]);
   __resetActiveStoreForTests();
 });
 
@@ -271,6 +273,39 @@ it("hides tools on a cloud backend and leaves the stored selection alone", async
   );
 
   await waitFor(() => expect(control).not.toBeNull());
+  expect(
+    screen.queryByTestId("agent-settings-tools-mode"),
+  ).not.toBeInTheDocument();
+  expect(ToolCatalogService.getCatalog).not.toHaveBeenCalled();
+  expect(control!.buildAgentProfileFields()).not.toHaveProperty("tools");
+});
+
+it("points the default profile to a named profile instead of offering tools", async () => {
+  let control: AgentSettingsSaveControl | null = null;
+  render(
+    <MemoryRouter>
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <AgentSettingsScreen
+          agentSettingsOverride={{
+            agent_kind: "openhands",
+            tools: [{ name: "terminal", params: {} }],
+          }}
+          onSaveControlChange={(next) => {
+            control = next;
+          }}
+          isDefaultProfile
+        />
+      </QueryClientProvider>
+    </MemoryRouter>,
+  );
+
+  expect(
+    await screen.findByTestId("agent-settings-tools-default-profile"),
+  ).toHaveTextContent("SETTINGS$AGENT_PROFILE_TOOLS_DEFAULT_PROFILE");
   expect(
     screen.queryByTestId("agent-settings-tools-mode"),
   ).not.toBeInTheDocument();
