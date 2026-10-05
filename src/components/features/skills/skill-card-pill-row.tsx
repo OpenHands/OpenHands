@@ -156,6 +156,9 @@ export function SkillCardPillRow({ pills, testId }: SkillCardPillRowProps) {
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        // The modal also listens for Escape on window. Keep this key press
+        // scoped to the open popover so it does not close both at once.
+        event.stopPropagation();
         setIsOverflowOpen(false);
       }
     };
@@ -176,6 +179,14 @@ export function SkillCardPillRow({ pills, testId }: SkillCardPillRowProps) {
 
   const stopCardActivation = (event: React.SyntheticEvent) => {
     event.stopPropagation();
+  };
+
+  const stopCardActivationForKeyboard = (
+    event: React.KeyboardEvent<HTMLButtonElement>,
+  ) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.stopPropagation();
+    }
   };
 
   const activateOverflow = (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -219,7 +230,7 @@ export function SkillCardPillRow({ pills, testId }: SkillCardPillRowProps) {
             })}
             onMouseDown={stopCardActivation}
             onClick={activateOverflow}
-            onKeyDown={stopCardActivation}
+            onKeyDown={stopCardActivationForKeyboard}
             className={cn(
               extensionModuleCardPillClassName,
               "cursor-pointer font-medium text-tertiary-alt hover:text-contrast",
