@@ -15,7 +15,10 @@ import type { ActionEvent, MessageEvent } from "#/types/agent-server/core";
 import { SecurityRisk } from "#/types/agent-server/core";
 import type { FinishAction } from "#/types/agent-server/core/base/action";
 import type { CriticResult } from "#/types/agent-server/core/base/critic";
-import { seedLocalStorage, routeSessionApiKey } from "../utils/mock-llm-helpers";
+import {
+  seedLocalStorage,
+  routeSessionApiKey,
+} from "../utils/mock-llm-helpers";
 
 test.describe.configure({ mode: "serial" });
 
@@ -389,24 +392,28 @@ test.describe("UI regressions", () => {
       )
       .not.toBe("rgba(0, 0, 0, 0)");
 
-    const insideBackground = await shell.evaluate(
-      (el) => getComputedStyle(el).backgroundColor,
-    );
-
-    const outsideStyles = await page.evaluate(() => {
+    const probeStyles = await shell.evaluate((el) => {
+      const shellBackground = getComputedStyle(el).backgroundColor;
       const probe = document.createElement("div");
-      probe.className = "bg-base text-content-2";
-      probe.textContent = "host";
+      probe.className = "bg-canvas-base";
+      // Keep the token available outside the shell: an undefined variable
+      // would make even a leaked utility transparent and hide a scoping bug.
+      probe.style.setProperty("--oh-color-base", shellBackground);
+      el.appendChild(probe);
+      const insideBackground = getComputedStyle(probe).backgroundColor;
       document.documentElement.appendChild(probe);
-      const styles = getComputedStyle(probe);
+      const outsideBackground = getComputedStyle(probe).backgroundColor;
+      probe.remove();
       return {
-        backgroundColor: styles.backgroundColor,
-        color: styles.color,
+        shellBackground,
+        insideBackground,
+        outsideBackground,
       };
     });
 
-    expect(insideBackground).not.toBe("rgba(0, 0, 0, 0)");
-    expect(outsideStyles.backgroundColor).not.toBe(insideBackground);
+    // First prove the utility exists, then prove it cannot style the host.
+    expect(probeStyles.insideBackground).toBe(probeStyles.shellBackground);
+    expect(probeStyles.outsideBackground).toBe("rgba(0, 0, 0, 0)");
   });
 
   // ── critic result rendering ──────────────────────────────────────
