@@ -81,6 +81,9 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
   TOAST_OPTIONS: {},
 }));
 
+// Mock react-router navigation hooks. Kept at module scope (not nested inside
+// beforeAll) because Vitest 4 emits warnings for nested vi.mock() calls and
+// will make them errors in a future release.
 vi.mock("react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("react-router")>()),
   Link: ({ children }: React.PropsWithChildren) => children,
