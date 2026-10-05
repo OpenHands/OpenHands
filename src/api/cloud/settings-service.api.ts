@@ -228,3 +228,17 @@ export async function fetchCloudConversationSettingsSchema(): Promise<unknown> {
     path: "/api/v1/settings/conversation-schema",
   });
 }
+
+/**
+ * The git providers whose native (OAuth) integration this cloud instance has
+ * enabled — what its Settings > Integrations page offers to connect.
+ */
+export async function fetchCloudProvidersConfigured(): Promise<Provider[]> {
+  const backend = getActiveCloudBackend();
+  const config = await callCloudProxy<{ providers_configured?: Provider[] }>({
+    backend,
+    method: "GET",
+    path: "/api/v1/web-client/config",
+  });
+  return config.providers_configured ?? [];
+}

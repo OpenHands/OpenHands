@@ -14,6 +14,7 @@ import { isNoBackend } from "#/api/backend-registry/active-store";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useCanvasExtensions } from "#/hooks/query/use-canvas-extensions";
 import {
+  useRefreshCanvasExtension,
   useSetCanvasExtensionEnabled,
   useUninstallCanvasExtension,
 } from "#/hooks/mutation/use-manage-canvas-extensions";
@@ -43,13 +44,15 @@ export default function CanvasExtensionsScreen() {
   const query = useCanvasExtensions();
   const setEnabled = useSetCanvasExtensionEnabled();
   const uninstall = useUninstallCanvasExtension();
+  const refresh = useRefreshCanvasExtension();
 
   const backendCanSupportExtensions =
     !isNoBackend(backend) && backend.kind === "local";
   const unsupported =
     !backendCanSupportExtensions ||
     isCanvasExtensionsUnsupportedError(query.error);
-  const isBusy = setEnabled.isPending || uninstall.isPending;
+  const isBusy =
+    setEnabled.isPending || uninstall.isPending || refresh.isPending;
 
   const confirmAction = () => {
     if (!pendingAction) return;
@@ -184,6 +187,7 @@ export default function CanvasExtensionsScreen() {
                         setPendingAction({ type: "enable", extension });
                       }
                     }}
+                    onRefresh={() => refresh.mutate(extension)}
                     onUninstall={() =>
                       setPendingAction({ type: "uninstall", extension })
                     }

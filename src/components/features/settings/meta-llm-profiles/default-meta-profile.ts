@@ -1,11 +1,9 @@
 import type { MetaProfile } from "#/api/meta-profiles-service/meta-profiles-service.api";
 
-export const DEFAULT_MAX_SCORE_PARETO_META_PROFILE_NAME =
-  "default-max-score-pareto";
-export const DEFAULT_MIN_COST_PARETO_META_PROFILE_NAME =
-  "default-min-cost-pareto";
+export const DEFAULT_ROUTER_PRO_META_PROFILE_NAME = "openhands-router-pro";
+export const DEFAULT_ROUTER_FLASH_META_PROFILE_NAME = "openhands-router-flash";
 
-export const DEFAULT_MAX_SCORE_PARETO_META_PROFILE_MODEL_TABLE = `- gpt-5.4: swe-bench: 75.60%/$0.63; swt-bench: 70.40%/$0.47; swe-bench-multimodal: 36.80%/$1.45; commit0: 56.20%/$4.04; gaia: 82.40%/$0.61
+export const DEFAULT_ROUTER_PRO_META_PROFILE_MODEL_TABLE = `- gpt-5.4: swe-bench: 75.60%/$0.63; swt-bench: 70.40%/$0.47; swe-bench-multimodal: 36.80%/$1.45; commit0: 56.20%/$4.04; gaia: 82.40%/$0.61
 - gpt-5.5: swe-bench: 78.20%/$1.52; swt-bench: 83.40%/$0.92; swe-bench-multimodal: 38.20%/$2.81; commit0: 43.80%/$5.56; gaia: 86.10%/$0.74
 - minimax-m3: swe-bench: 76.40%/$0.17; swt-bench: 81.10%/$0.11; swe-bench-multimodal: 36.80%/$0.35; commit0: 25.00%/$0.62; gaia: 66.70%/$0.35
 - claude-opus-4-6: swe-bench: 76.80%/$0.77; swt-bench: 78.80%/$0.43; swe-bench-multimodal: 41.80%/$2.37; commit0: 56.20%/$7.69; gaia: 80.00%/$0.44
@@ -15,10 +13,9 @@ export const DEFAULT_MAX_SCORE_PARETO_META_PROFILE_MODEL_TABLE = `- gpt-5.4: swe
 - kimi-k2.5: swe-bench: 68.80%/$0.41; swt-bench: 61.90%/$0.42; swe-bench-multimodal: 32.80%/$1.62; commit0: 18.80%/$1.26; gaia: 63.60%/$0.38
 - kimi-k2.6: swe-bench: 74.60%/$0.67; swt-bench: 70.40%/$0.33; swe-bench-multimodal: 41.20%/$0.64; commit0: 25.00%/$1.52; gaia: 74.50%/$0.42
 - deepseek-v3.2-reasoner: swe-bench: 71.60%/$0.16; swt-bench: 53.60%/$0.12; swe-bench-multimodal: 27.90%/$0.19; commit0: 25.00%/$0.57; gaia: 50.30%/$0.06
-- claude-sonnet-4-5: swe-bench: 74.20%/$1.19; swt-bench: 68.80%/$0.98; swe-bench-multimodal: 36.80%/$1.89; commit0: 12.50%/$3.23; gaia: 72.70%/$0.87
-- gpt-5.2-codex: swe-bench: 73.80%/$0.94; swt-bench: 67.00%/$0.66; swe-bench-multimodal: 35.90%/$2.97; commit0: 43.80%/$5.50; gaia: 70.90%/$0.55`;
+- claude-sonnet-4-5: swe-bench: 74.20%/$1.19; swt-bench: 68.80%/$0.98; swe-bench-multimodal: 36.80%/$1.89; commit0: 12.50%/$3.23; gaia: 72.70%/$0.87`;
 
-export const DEFAULT_MAX_SCORE_PARETO_META_PROFILE_PROMPT = `You are a model router for an autonomous software agent. Your job is to pick exactly one model for the task below. Do not solve the task; never answer it.
+export const DEFAULT_ROUTER_PRO_META_PROFILE_PROMPT = `You are a model router for an autonomous software agent. Your job is to pick exactly one model for the task below. Do not solve the task; never answer it.
 
 Step 1 — Classify the task into exactly one category:
 - BUG-FIX / CODE REPAIR: fix a defect or implement a change in an existing, mature repository (SWE-bench-like).
@@ -75,14 +72,14 @@ Return ONLY valid JSON in this exact shape, with the model field containing an e
 Task:
 {{ instance_text }}`;
 
-export const DEFAULT_MAX_SCORE_PARETO_META_PROFILE_DEFAULT: MetaProfile = {
+export const DEFAULT_ROUTER_PRO_META_PROFILE_DEFAULT: MetaProfile = {
   classifier_model: "minimax-m3",
   classes: [],
-  prompt_template: DEFAULT_MAX_SCORE_PARETO_META_PROFILE_PROMPT,
-  model_table: DEFAULT_MAX_SCORE_PARETO_META_PROFILE_MODEL_TABLE,
+  prompt_template: DEFAULT_ROUTER_PRO_META_PROFILE_PROMPT,
+  model_table: DEFAULT_ROUTER_PRO_META_PROFILE_MODEL_TABLE,
 };
 
-export const DEFAULT_MIN_COST_PARETO_META_PROFILE_PROMPT = `You are a model router for an autonomous software-agent task. Select exactly one model to run the task. Do not attempt to solve the task yourself.
+export const DEFAULT_ROUTER_FLASH_META_PROFILE_PROMPT = `You are a model router for an autonomous software-agent task. Select exactly one model to run the task. Do not attempt to solve the task yourself.
 
 ROUTING GOAL:
 Expand the score/cost value frontier by routing each task to the cheapest model that is likely to solve it, and escalating only when the task pattern predicts that cheaper models will fail. A cheap route that fails is a regression, not a savings. An expensive route is justified only when cheaper models would likely miss.
@@ -125,16 +122,20 @@ ANTI-PATTERNS TO AVOID:
 - Escalating routine repo fixes to a premium model on a single vague difficulty signal — most such tasks are solved far cheaper.
 - Routing research/QA tasks to premium coding flagships instead of GPT-5.4/GPT-5.5.
 - Using claude-opus-4-8 as the buildout workhorse when GPT-5.4 covers standard scope at half the cost.
-- Downgrading protected-
+
+You may choose any model listed in the model table below; the recommendations above should be followed unless the task text gives a strong, specific reason to deviate.
+
+{{ model_table }}
+
+Return ONLY valid JSON in this exact shape, with the model field containing an exact model name from the table:
+{"model": "<exact model name>", "reason": "<short reason: category + difficulty tier + why this model>"}
 
 Task:
-{{ instance_text }}
+{{ instance_text }}`;
 
-Return ONLY JSON: {"model": "<exact model name>", "reason": "<short reason>"}`;
-
-export const DEFAULT_MIN_COST_PARETO_META_PROFILE_DEFAULT: MetaProfile = {
+export const DEFAULT_ROUTER_FLASH_META_PROFILE_DEFAULT: MetaProfile = {
   classifier_model: "minimax-m3",
   classes: [],
-  prompt_template: DEFAULT_MIN_COST_PARETO_META_PROFILE_PROMPT,
-  model_table: DEFAULT_MAX_SCORE_PARETO_META_PROFILE_MODEL_TABLE,
+  prompt_template: DEFAULT_ROUTER_FLASH_META_PROFILE_PROMPT,
+  model_table: DEFAULT_ROUTER_PRO_META_PROFILE_MODEL_TABLE,
 };

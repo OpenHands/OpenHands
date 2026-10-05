@@ -440,6 +440,7 @@ describe("deriveErrorMap", () => {
       "template.config.github_token_secret": ["githubTokenSecret"],
       "template.config.trigger_label": ["triggerLabel"],
       "template.config.trigger_reviewer": ["triggerReviewer"],
+      "template.config.max_new_per_run": ["maxNewPerRun"],
       "template.config.review_tone": ["reviewTone"],
       "template.config.maintainers": ["maintainers"],
     });

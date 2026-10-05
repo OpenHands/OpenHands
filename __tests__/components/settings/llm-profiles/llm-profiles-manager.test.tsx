@@ -281,8 +281,55 @@ describe("LlmProfilesManager", () => {
     expect(await screen.findByText("Provider connections")).toBeInTheDocument();
     expect(screen.getByTestId("add-provider-connection")).toBeInTheDocument();
     const row = await screen.findByTestId("provider-connection-row");
-    expect(within(row).getByTestId("provider-connection-edit")).toBeVisible();
-    expect(within(row).getByTestId("provider-connection-delete")).toBeVisible();
+    // Edit/delete/bulk-add live behind the three-dots menu, so a manager sees
+    // the trigger; the actions themselves appear once it is opened.
+    expect(
+      within(row).getByTestId("provider-connection-menu-trigger"),
+    ).toBeVisible();
+  });
+
+  it("shows the top Add-from-provider-connections button and opens the chooser modal", async () => {
+    const user = userEvent.setup();
+    vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
+      profiles: mockProfiles,
+      active_profile: "gpt-4-profile",
+    });
+
+    renderManager(
+      { onAddProfile: vi.fn() },
+      { connections: [makeConnection()] },
+    );
+
+    const topButton = await screen.findByTestId("add-models-from-provider");
+    expect(topButton).toBeInTheDocument();
+    // The regular single-profile button remains alongside it.
+    expect(screen.getByTestId("add-llm-profile")).toBeInTheDocument();
+
+    // Chooser entry point: the modal opens with the combobox unset (no
+    // preselected connection), so the model list has not loaded yet.
+    await user.click(topButton);
+    expect(await screen.findByTestId("add-models-modal")).toBeInTheDocument();
+    const combobox = screen.getByTestId(
+      "add-models-provider",
+    ) as HTMLSelectElement;
+    expect(combobox.value).toBe("");
+  });
+
+  it("still shows the top Add-from-provider-connections button when there are no connections", async () => {
+    // The entry point stays reachable with zero connections: the user can
+    // pick a provider from the catalog and bulk-add keyless profiles, the
+    // pre-connection behavior the linked issue requires.
+    vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
+      profiles: mockProfiles,
+      active_profile: "gpt-4-profile",
+    });
+
+    renderManager({ onAddProfile: vi.fn() }, { connections: [] });
+
+    expect(
+      await screen.findByTestId("add-models-from-provider"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("add-llm-profile")).toBeInTheDocument();
   });
 
   it("hides provider connections on a cloud backend without an org", async () => {
