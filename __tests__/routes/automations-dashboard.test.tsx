@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import React from "react";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
@@ -19,6 +19,11 @@ import AutomationTemplates, {
 } from "#/routes/automation-templates";
 import type { Backend } from "#/api/backend-registry/types";
 import {
+  getCloudOrganizationMe,
+  getCloudOrganizations,
+  getCurrentCloudApiKey,
+} from "#/api/cloud/organization-service.api";
+import {
   AutomationRunStatus,
   type Automation,
   type AutomationRun,
@@ -36,6 +41,15 @@ vi.mock("#/manifests/manifest-sources", async (importOriginal) => {
     AUTOMATION_INTERFACE_CANDIDATE: createInterfaceManifestWithSubPages(),
   };
 });
+
+vi.mock("#/api/cloud/organization-service.api", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("#/api/cloud/organization-service.api")
+  >()),
+  getCloudOrganizations: vi.fn(),
+  getCloudOrganizationMe: vi.fn(),
+  getCurrentCloudApiKey: vi.fn(),
+}));
 
 vi.mock("#/api/automation-service/automation-service.api", () => ({
   default: {
@@ -268,6 +282,10 @@ describe("AutomationsList — manifest-declared dashboard", () => {
         "automations-sort",
       ),
     ).toBeInTheDocument();
+    // Local backends have no per-user creators to split by.
+    expect(
+      screen.queryByTestId("automations-filter-created-by"),
+    ).not.toBeInTheDocument();
     expect(
       within(screen.getByTestId("automations-filters-menu")).getByText(
         "Filter widgets by state",
@@ -359,6 +377,405 @@ describe("AutomationsList — manifest-declared dashboard", () => {
     // Assert
     await screen.findByTestId("automation-card-a-ok");
     expect((search as HTMLInputElement).value).toBe("");
+  });
+});
+
+describe("AutomationsList — created-by filter on cloud workspaces", () => {
+  const TEAM_ORG_ID = "org-team";
+  const CURRENT_USER_ID = "user-me";
+  const cloudBackend: Backend = {
+    id: "cloud-1",
+    name: "Production",
+    host: "https://app.all-hands.dev",
+    apiKey: "bearer-key",
+    kind: "cloud",
+  };
+  const mine = createAutomation({
+    id: "a-mine",
+    name: "Alpha widget",
+    user_id: CURRENT_USER_ID,
+  });
+  const theirs = createAutomation({
+    id: "a-theirs",
+    name: "Beta widget",
+    user_id: "user-teammate",
+  });
+  const unowned = createAutomation({ id: "a-unowned", name: "Gamma widget" });
+
+  function selectWorkspace(orgId: string) {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId });
+  }
+
+  async function openFiltersMenu(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(
+      within(screen.getByTestId("automations-filters")).getByTestId(
+        "dropdown-trigger",
+      ),
+    );
+  }
+
+  async function pickCreatedBy(
+    user: ReturnType<typeof userEvent.setup>,
+    value: "all" | "me" | "others",
+  ) {
+    await user.click(
+      within(
+        await screen.findByTestId("automations-filter-created-by"),
+      ).getByTestId("dropdown-trigger"),
+    );
+    await user.click(
+      screen.getByTestId(`automations-filter-created-by-${value}`),
+    );
+  }
+
+  function visibleCardIds() {
+    return screen
+      .queryAllByTestId(/^automation-card-/)
+      .map((card) => card.getAttribute("data-testid"));
+  }
+
+  beforeEach(() => {
+    vi.mocked(AutomationService.getAutomations).mockResolvedValue({
+      automations: [mine, theirs, unowned],
+      total: 3,
+    });
+    vi.mocked(AutomationService.getAutomationRuns).mockResolvedValue({
+      runs: [createRun({})],
+      total: 1,
+    });
+    vi.mocked(getCloudOrganizations).mockResolvedValue({
+      items: [
+        { id: TEAM_ORG_ID, name: "Widget team", is_personal: false },
+        { id: CURRENT_USER_ID, name: "Personal", is_personal: true },
+      ],
+      currentOrgId: TEAM_ORG_ID,
+    });
+    vi.mocked(getCurrentCloudApiKey).mockResolvedValue({
+      orgId: null,
+      isLegacyKey: true,
+    });
+    vi.mocked(getCloudOrganizationMe).mockImplementation(async (orgId) => ({
+      orgId,
+      userId: CURRENT_USER_ID,
+      role: "member",
+      permissions: ["view_automations"],
+    }));
+  });
+
+  it("narrows a team workspace to my automations", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    selectWorkspace(TEAM_ORG_ID);
+    renderAt("/automations", <AutomationsList />);
+    await screen.findByTestId("automation-card-a-unowned");
+    await openFiltersMenu(user);
+
+    // Act
+    await pickCreatedBy(user, "me");
+
+    // Assert
+    await waitFor(() => {
+      expect(visibleCardIds()).toEqual(["automation-card-a-mine"]);
+    });
+    expect(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$FILTERS }),
+    ).toHaveTextContent("1");
+  });
+
+  it("asks the server for my automations when they are past the first page", async () => {
+    // Arrange — the newest page is all teammates'; mine is older. The server
+    // honours created_by, so only a server-side filter can find it.
+    const teammates = Array.from({ length: 50 }, (_, index) =>
+      createAutomation({
+        id: `a-teammate-${index}`,
+        name: `Teammate widget ${index}`,
+        user_id: "user-teammate",
+      }),
+    );
+    vi.mocked(AutomationService.getAutomations).mockImplementation(
+      async (_limit, _offset, createdBy) =>
+        createdBy === "me"
+          ? { automations: [mine], total: 1 }
+          : { automations: teammates, total: 51 },
+    );
+    const user = userEvent.setup();
+    selectWorkspace(TEAM_ORG_ID);
+    renderAt("/automations", <AutomationsList />);
+    await screen.findByTestId("automation-card-a-teammate-0");
+    await openFiltersMenu(user);
+
+    // Act
+    await pickCreatedBy(user, "me");
+
+    // Assert
+    await waitFor(() => {
+      expect(visibleCardIds()).toEqual(["automation-card-a-mine"]);
+    });
+    expect(AutomationService.getAutomations).toHaveBeenLastCalledWith(
+      50,
+      0,
+      "me",
+    );
+  });
+
+  it("keeps Load more under the filtered empty state when a service ignores the creator filter", async () => {
+    // Arrange — an automation service without created_by returns every
+    // creator, newest first; mine is only on the second page.
+    const teammates = Array.from({ length: 50 }, (_, index) =>
+      createAutomation({
+        id: `a-teammate-${index}`,
+        name: `Teammate widget ${index}`,
+        user_id: "user-teammate",
+      }),
+    );
+    vi.mocked(AutomationService.getAutomations).mockImplementation(
+      async (_limit, offset) =>
+        offset === 0
+          ? { automations: teammates, total: 51 }
+          : { automations: [mine], total: 51 },
+    );
+    const user = userEvent.setup();
+    selectWorkspace(TEAM_ORG_ID);
+    renderAt("/automations", <AutomationsList />);
+    await screen.findByTestId("automation-card-a-teammate-0");
+    await openFiltersMenu(user);
+    await pickCreatedBy(user, "me");
+    await screen.findByTestId("automations-filtered-empty");
+
+    // Act
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$LOAD_MORE }),
+    );
+
+    // Assert
+    await waitFor(() => {
+      expect(visibleCardIds()).toEqual(["automation-card-a-mine"]);
+    });
+  });
+
+  it("keeps the overview tiles on the whole list when filtering by creator", async () => {
+    // Arrange — the server honours created_by.
+    vi.mocked(AutomationService.getAutomations).mockImplementation(
+      async (_limit, _offset, createdBy) =>
+        createdBy === "me"
+          ? { automations: [mine], total: 1 }
+          : { automations: [mine, theirs, unowned], total: 3 },
+    );
+    const user = userEvent.setup();
+    selectWorkspace(TEAM_ORG_ID);
+    renderAt("/automations", <AutomationsList />);
+    await screen.findByTestId("automation-card-a-unowned");
+    await openFiltersMenu(user);
+
+    // Act
+    await pickCreatedBy(user, "me");
+
+    // Assert
+    await waitFor(() => {
+      expect(visibleCardIds()).toEqual(["automation-card-a-mine"]);
+    });
+    const tile = screen.getByTestId("overview-tile-automations");
+    expect(within(tile).getByText("3", { exact: true })).toBeInTheDocument();
+  });
+
+  it("keeps the loaded list on screen while the creator-filtered page loads", async () => {
+    // Arrange — the created_by=me request never settles.
+    vi.mocked(AutomationService.getAutomations).mockImplementation(
+      (_limit, _offset, createdBy) =>
+        createdBy === "me"
+          ? new Promise(() => {})
+          : Promise.resolve({ automations: [mine, theirs, unowned], total: 3 }),
+    );
+    const user = userEvent.setup();
+    selectWorkspace(TEAM_ORG_ID);
+    renderAt("/automations", <AutomationsList />);
+    await screen.findByTestId("automation-card-a-unowned");
+    await openFiltersMenu(user);
+
+    // Act
+    await pickCreatedBy(user, "me");
+
+    // Assert — the loaded rows, narrowed on the client, instead of skeletons.
+    await waitFor(() => {
+      expect(visibleCardIds()).toEqual(["automation-card-a-mine"]);
+    });
+    expect(
+      screen.queryByTestId("automation-card-skeleton"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows loading, not a false no-match, while my page loads past the first page", async () => {
+    // Arrange — the loaded page has none of mine; created_by=me never settles.
+    vi.mocked(AutomationService.getAutomations).mockImplementation(
+      (_limit, _offset, createdBy) =>
+        createdBy === "me"
+          ? new Promise(() => {})
+          : Promise.resolve({ automations: [theirs, unowned], total: 3 }),
+    );
+    const user = userEvent.setup();
+    selectWorkspace(TEAM_ORG_ID);
+    renderAt("/automations", <AutomationsList />);
+    await screen.findByTestId("automation-card-a-theirs");
+    await openFiltersMenu(user);
+
+    // Act
+    await pickCreatedBy(user, "me");
+
+    // Assert
+    expect(
+      (await screen.findAllByTestId("automation-card-skeleton")).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.queryByTestId("automations-filtered-empty"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the first-run empty state when an empty org filters by creator", async () => {
+    // Arrange — the org has no automations at all; the "me" page is held
+    // until the test sends it.
+    const empty = { automations: [], total: 0 };
+    let sendMine: (page: typeof empty) => void = () => {};
+    vi.mocked(AutomationService.getAutomations).mockImplementation(
+      async (_limit, _offset, createdBy) =>
+        createdBy === "me"
+          ? new Promise((resolve) => {
+              sendMine = resolve;
+            })
+          : empty,
+    );
+    const user = userEvent.setup();
+    selectWorkspace(TEAM_ORG_ID);
+    renderAt("/automations", <AutomationsList />);
+    await screen.findByTestId("automations-empty");
+    await openFiltersMenu(user);
+
+    // Act
+    await pickCreatedBy(user, "me");
+
+    // Assert — while "me" loads, the empty state shows without skeletons.
+    await waitFor(() =>
+      expect(AutomationService.getAutomations).toHaveBeenLastCalledWith(
+        50,
+        0,
+        "me",
+      ),
+    );
+    expect(screen.getByTestId("automations-empty")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automation-card-skeleton"),
+    ).not.toBeInTheDocument();
+
+    // Act
+    act(() => sendMine(empty));
+
+    // Assert
+    await waitFor(() =>
+      expect(screen.getByTestId("automations-empty")).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByTestId("automation-card-skeleton"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automations-filtered-empty"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("offers Clear filters when the server finds none of my automations", async () => {
+    // Arrange — the org has automations, but none are the caller's.
+    vi.mocked(AutomationService.getAutomations).mockImplementation(
+      async (_limit, _offset, createdBy) =>
+        createdBy === "me"
+          ? { automations: [], total: 0 }
+          : { automations: [theirs, unowned], total: 2 },
+    );
+    const user = userEvent.setup();
+    selectWorkspace(TEAM_ORG_ID);
+    renderAt("/automations", <AutomationsList />);
+    await screen.findByTestId("automation-card-a-theirs");
+    await openFiltersMenu(user);
+    await pickCreatedBy(user, "me");
+
+    // Act
+    await user.click(await screen.findByTestId("automations-clear-filters"));
+
+    // Assert
+    await waitFor(() => {
+      expect(visibleCardIds()).toEqual([
+        "automation-card-a-theirs",
+        "automation-card-a-unowned",
+      ]);
+    });
+  });
+
+  it("returns to every creator from Reset all and from Clear filters", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    selectWorkspace(TEAM_ORG_ID);
+    renderAt("/automations", <AutomationsList />);
+    await screen.findByTestId("automation-card-a-unowned");
+    await openFiltersMenu(user);
+    await pickCreatedBy(user, "me");
+    await waitFor(() => {
+      expect(visibleCardIds()).toEqual(["automation-card-a-mine"]);
+    });
+
+    // Act — Reset all from the Filters menu.
+    await user.click(screen.getByTestId("automations-filters-reset"));
+
+    // Assert
+    await waitFor(() => {
+      expect(visibleCardIds()).toHaveLength(3);
+    });
+
+    // Arrange — "me" plus a search only a teammate's automation matches.
+    await pickCreatedBy(user, "me");
+    await user.type(
+      screen.getByLabelText(I18nKey.AUTOMATIONS$SEARCH_PLACEHOLDER),
+      "beta",
+    );
+    await screen.findByTestId("automations-filtered-empty");
+
+    // Act — Clear filters from the filtered empty state.
+    await user.click(screen.getByTestId("automations-clear-filters"));
+
+    // Assert
+    await waitFor(() => {
+      expect(visibleCardIds()).toHaveLength(3);
+    });
+  });
+
+  it("ignores a creator selection while the workspace hides the filter", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    selectWorkspace(TEAM_ORG_ID);
+    renderAt("/automations", <AutomationsList />);
+    await screen.findByTestId("automation-card-a-unowned");
+    await openFiltersMenu(user);
+    await pickCreatedBy(user, "me");
+    await waitFor(() => {
+      expect(visibleCardIds()).toEqual(["automation-card-a-mine"]);
+    });
+
+    // Act — the personal workspace, where every automation is the caller's.
+    act(() => selectWorkspace(CURRENT_USER_ID));
+
+    // Assert
+    await waitFor(() => {
+      expect(visibleCardIds()).toEqual([
+        "automation-card-a-mine",
+        "automation-card-a-theirs",
+        "automation-card-a-unowned",
+      ]);
+    });
+    expect(
+      screen.queryByTestId("automations-filter-created-by"),
+    ).not.toBeInTheDocument();
+    expect(AutomationService.getAutomations).toHaveBeenLastCalledWith(
+      50,
+      0,
+      undefined,
+    );
   });
 });
 

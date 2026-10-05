@@ -114,6 +114,12 @@ export interface AutomationsResponse {
   total: number;
 }
 
+/**
+ * Mirrors the list endpoint's `created_by` query param: the caller's
+ * automations (`me`) or the rest of the org's (`others`).
+ */
+export type AutomationCreatedByFilter = "me" | "others";
+
 /** Mirrors `RunStatus` in the automation service's OpenAPI schema. */
 export enum AutomationRunStatus {
   PENDING = "PENDING",
