@@ -21,14 +21,11 @@ import { ChatActionTooltip } from "../../chat/chat-action-tooltip";
 import { I18nKey } from "#/i18n/declaration";
 import { useConversationStore } from "#/stores/conversation-store";
 import { ConversationTabsContextMenu } from "./conversation-tabs-context-menu";
+import { ConversationPlannerBuildBar } from "./conversation-planner-build-bar";
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { useSelectConversationTab } from "#/hooks/use-select-conversation-tab";
 import { useTaskList } from "#/hooks/use-task-list";
 import { useActiveBackend } from "#/contexts/active-backend-context";
-import { useHandleBuildPlanClick } from "#/hooks/use-handle-build-plan-click";
-import { useAgentState, usePlanningAgentState } from "#/hooks/use-agent-state";
-import { AgentState } from "#/types/agent-state";
-import { Typography } from "#/ui/typography";
 import { mobileTopBarIconClassName } from "#/utils/mobile-top-bar-icon-button-classes";
 
 export function ConversationTabs({
@@ -40,7 +37,7 @@ export function ConversationTabs({
   isPanelResizing?: boolean;
 }) {
   const { conversationId } = useConversationId();
-  const { setSelectedTab, planContent } = useConversationStore();
+  const { setSelectedTab } = useConversationStore();
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
@@ -49,10 +46,6 @@ export function ConversationTabs({
 
   const { hasTaskList } = useTaskList();
   const { backend } = useActiveBackend();
-
-  const { handleBuildPlanClick } = useHandleBuildPlanClick();
-  const { curAgentState } = useAgentState();
-  const { isPlanningAgentRunning } = usePlanningAgentState();
 
   const {
     selectTab,
@@ -170,12 +163,6 @@ export function ConversationTabs({
   });
 
   const unpinnedSignature = persistedState.unpinnedTabs.join(",");
-
-  const isAgentRunning =
-    curAgentState === AgentState.RUNNING ||
-    curAgentState === AgentState.LOADING ||
-    isPlanningAgentRunning;
-  const isBuildDisabled = isAgentRunning || !planContent;
 
   const tabsRowInnerRef = useRef<HTMLDivElement>(null);
   const measureRowRef = useRef<HTMLDivElement>(null);
@@ -431,31 +418,9 @@ export function ConversationTabs({
           </div>
         </div>
       </div>
-      {isTabActive("planner") && (
-        <div
-          className={cn(
-            "flex h-10 min-h-10 shrink-0 items-center border-t border-border pl-2.5 pr-1",
-          )}
-        >
-          <button
-            type="button"
-            onClick={handleBuildPlanClick}
-            disabled={isBuildDisabled}
-            className={cn(
-              "flex h-5 min-w-17 items-center justify-center rounded bg-contrast px-2 transition-opacity",
-              isBuildDisabled
-                ? "cursor-not-allowed opacity-50"
-                : "cursor-pointer hover:opacity-90",
-            )}
-            data-testid="planner-tab-build-button"
-          >
-            <Typography.Text className="text-[11px] font-normal leading-5 text-contrast-foreground">
-              {/* eslint-disable-next-line i18next/no-literal-string */}
-              {t(I18nKey.COMMON$BUILD)} ⌘↩
-            </Typography.Text>
-          </button>
-        </div>
-      )}
+      {/* At phone width the panel page renders this below its fixed-height
+          top bar, where the compact tab row lives. */}
+      {variant === "default" && <ConversationPlannerBuildBar />}
     </>
   );
 }

@@ -236,6 +236,18 @@ describe("AgentStatus", () => {
     expect(setShouldShownAgentLoading).toHaveBeenCalledWith(true);
   });
 
+  it("clears its loading report when it unmounts so the phone panel page does not keep a stale loading overlay", () => {
+    const { setShouldShownAgentLoading, unmount } = renderAgentStatus({
+      agentState: AgentState.LOADING,
+      executionStatus: null,
+    });
+    expect(setShouldShownAgentLoading).toHaveBeenLastCalledWith(true);
+
+    unmount();
+
+    expect(setShouldShownAgentLoading).toHaveBeenLastCalledWith(false);
+  });
+
   it("forwards the active conversation to sub-conversation polling", () => {
     const { handleResumeAgent, handleStop, rerender } = renderAgentStatus({
       conversationId: "conversation-42",
