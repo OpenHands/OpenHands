@@ -91,7 +91,7 @@ vi.mock("#/hooks/use-websocket", () => ({
         wsCapture.planningOptions = options;
       }
     }
-    return { socket: null, reconnect: vi.fn() };
+    return { socket: null, reconnect: vi.fn(), disconnect: vi.fn() };
   }),
 }));
 vi.mock("#/hooks/query/use-user-conversation", () => ({
