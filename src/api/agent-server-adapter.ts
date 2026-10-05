@@ -1175,6 +1175,7 @@ type AgentSettingsStartConversationPayload = StartConversationPayloadBase & {
   // exclusive agent sources; the server resolves the profile server-side.
   agent_settings?: AgentSettingsPayload;
   agent_profile_id?: string;
+  agent_launch_additions?: { system_message_suffix_append?: string };
   agent?: never;
 };
 
@@ -1275,6 +1276,9 @@ export function buildStartConversationRequest(
     options.query,
     options.hasActiveMetaProfile,
   );
+  const savedSuffix = toRecord(
+    toRecord(sourceAgentSettings.agent_settings).agent_context,
+  ).system_message_suffix;
   const acpServerTag = acpMode
     ? getAcpServerTag(sourceAgentSettings)
     : undefined;
@@ -1317,7 +1321,16 @@ export function buildStartConversationRequest(
     // re-send it here (``agent_profile_id`` and ``agent_settings`` are
     // mutually exclusive).
     ...(options.agentProfileId
-      ? { agent_profile_id: options.agentProfileId }
+      ? {
+          agent_profile_id: options.agentProfileId,
+          ...(typeof savedSuffix === "string" && savedSuffix
+            ? {
+                agent_launch_additions: {
+                  system_message_suffix_append: savedSuffix,
+                },
+              }
+            : {}),
+        }
       : { agent_settings: agentSettings }),
     workspace: conversationSettings.workspace,
     // The agent-server caches each client tool's schema per tool *name* for the
