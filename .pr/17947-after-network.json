@@ -1,0 +1,39 @@
+{
+  "ok": true,
+  "total": 3,
+  "byOrigin": {
+    "http://127.0.0.1:18830": 3
+  },
+  "recent": [
+    {
+      "ts": "2026-10-05T18:32:52.898Z",
+      "origin": "http://127.0.0.1:18830",
+      "path": "/api/conversations",
+      "query": "?ids=d527f4e1-1fbd-48a8-ab58-3b6362df2208",
+      "method": "GET",
+      "type": "fetch",
+      "app": true,
+      "status": 200
+    },
+    {
+      "ts": "2026-10-05T18:32:52.898Z",
+      "origin": "http://127.0.0.1:18830",
+      "path": "/api/bash/bash_events/search",
+      "query": "?kind__eq=BashOutput&command_id__eq=46d74a011db1428594e74240e82e15ea&sort_order=TIMESTAMP",
+      "method": "GET",
+      "type": "fetch",
+      "app": true,
+      "status": 200
+    },
+    {
+      "ts": "2026-10-05T18:32:52.926Z",
+      "origin": "http://127.0.0.1:18830",
+      "path": "/api/bash/bash_events/search",
+      "query": "?kind__eq=BashOutput&command_id__eq=46d74a011db1428594e74240e82e15ea&sort_order=TIMESTAMP",
+      "method": "GET",
+      "type": "fetch",
+      "app": true,
+      "status": 200
+    }
+  ]
+}
