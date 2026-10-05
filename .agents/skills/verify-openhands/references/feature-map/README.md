@@ -39,9 +39,24 @@ that every row passes today; the run's evidence ledger is.
   text also works in English) and read `.checked` with `browser eval`.
 - Verbs that are easy to miss: `browser mouse-click X Y` (backdrops and
   overlays), `click --modifiers Control,Meta` (open in new tab, multi-select),
+  `click --hover-first` (hover-driven toggles), `click --expect-new-url`,
   `browser tooltip <sel>`, `browser wait <sel> --state hidden|visible|detached`
   (use it after toggles: animations make an immediate `count` or `visible`
   lie). `browser eval` takes one expression; wrap statements in an IIFE.
+- Input that is not a click: `browser upload-via <trigger> <file>` answers the
+  real file chooser; `browser drop-files <sel> <file>` and `browser paste <sel>
+  --file F --text T` deliver drag-and-drop and paste events (target an element
+  inside the drop zone: events bubble up); `browser drag` reorders draggable
+  rows or moves a grip `--by DX,DY`; `browser choose <combobox> <label>` picks
+  an autocomplete option; `browser clipboard` reads what a Copy button wrote.
+- Short-lived feedback: `browser toasts --history` lists every toast since the
+  page loaded; `click --observe SEL` records transient labels.
+- Agent-side proof: `conversation events <id> --grep TEXT [--from-start]`
+  searches whole events (the system prompt's skills and tools, tool
+  arguments); rows show activated skills. After sending a follow-up message,
+  `conversation wait <id> --fresh` ignores the previous terminal status.
+  `fixture skill` writes a personal or project `SKILL.md`; `api GET ...
+  --pick a.b.c` reads one field.
 - An already-open page does not refetch settings written by `llm` or `api
   --write`: `browser reload` before asserting UI state after an arrange step.
 - Settings and panels scroll inside a container: `browser scroll '<sel>' --by 600`

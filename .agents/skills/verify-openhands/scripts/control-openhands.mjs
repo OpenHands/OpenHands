@@ -74,7 +74,11 @@ function parseArgs(argv) {
         const next = argv[i + 1];
         if (next === undefined || next.startsWith("--")) flags[key] = true;
         else {
-          flags[key] = next;
+          // --artifact may repeat; every other flag keeps its last value.
+          flags[key] =
+            key === "artifact" && flags[key] !== undefined
+              ? [].concat(flags[key], next)
+              : next;
           i += 1;
         }
       }
@@ -580,6 +584,18 @@ async function cmdLaunch({ flags }) {
     join(dir, "workspace"),
   ]) {
     mkdirSync(d, { recursive: true, mode: d.startsWith(priv) ? 0o700 : 0o755 });
+  }
+  // MCP stdio servers start with a minimal environment (HOME, PATH), so a
+  // CA bundle given to this process does not reach their uvx/npx. Seed the
+  // private HOME's tool config with it.
+  const caBundle = process.env.SSL_CERT_FILE || process.env.NODE_EXTRA_CA_CERTS;
+  if (caBundle && existsSync(caBundle)) {
+    mkdirSync(join(priv, "home", ".config", "uv"), { recursive: true });
+    writeFileSync(
+      join(priv, "home", ".config", "uv", "uv.toml"),
+      "native-tls = true\n",
+    );
+    writeFileSync(join(priv, "home", ".npmrc"), `cafile=${caBundle}\n`);
   }
   writeFileSync(join(priv, "session-key"), randomBytes(32).toString("hex"), {
     mode: 0o600,
@@ -1201,6 +1217,14 @@ async function cmdApi({ positional, flags }) {
   }
   const response = await http(run, verb, path, { body });
   const max = intFlag(flags["max-bytes"], 6000);
+  if (flags.pick && flags.pick !== true && response.json !== undefined) {
+    const value = String(flags.pick)
+      .split(".")
+      .reduce((o, k) => (o == null ? undefined : o[k]), response.json);
+    out({ ok: response.ok, status: response.status, pick: flags.pick, value });
+    if (!response.ok) process.exitCode = 1;
+    return;
+  }
   out({
     ok: response.ok,
     status: response.status,
@@ -1574,21 +1598,24 @@ function summarize(info) {
   };
 }
 
-async function waitConversation(run, id, { until, timeoutSec }) {
+async function waitConversation(run, id, { until, timeoutSec, fresh }) {
   const wanted = until === "any" || !until ? TERMINAL : until.split(",");
   const deadline = Date.now() + timeoutSec * 1000;
   let info = await conversationInfo(run, id);
-  let sawRunning = info.execution_status === "running";
+  // --fresh: a message was just sent; ignore the previous run's terminal
+  // status until the conversation has run again.
+  let sawRunning = !fresh && info.execution_status === "running";
+  const startedAt = Date.now();
   while (Date.now() < deadline) {
     info = await conversationInfo(run, id);
     if (info.execution_status === "running") sawRunning = true;
     const terminal = wanted.includes(info.execution_status);
     // A fresh conversation reports idle before its first step: wait for it
     // to actually run unless the caller only asked for "idle".
-    if (
-      terminal &&
-      (sawRunning || until === "idle" || info.execution_status !== "idle")
-    ) {
+    const settled = fresh
+      ? sawRunning || Date.now() - startedAt > 20_000
+      : sawRunning || until === "idle" || info.execution_status !== "idle";
+    if (terminal && settled) {
       // Titles are generated shortly after the first run finishes.
       for (let i = 0; i < 5 && !info.title && Date.now() < deadline; i += 1) {
         await delay(2000);
@@ -1722,7 +1749,11 @@ async function cmdConversation({ positional, flags }) {
       );
     out({
       ok: true,
-      ...(await waitConversation(run, id, { until: flags.until, timeoutSec })),
+      ...(await waitConversation(run, id, {
+        until: flags.until,
+        timeoutSec,
+        fresh: Boolean(flags.fresh),
+      })),
     });
     return;
   }
@@ -1747,39 +1778,102 @@ async function cmdConversation({ positional, flags }) {
     const res = await http(
       run,
       "GET",
-      `/api/conversations/${encodeURIComponent(id)}/events/search?limit=100&sort_order=TIMESTAMP_DESC`,
+      `/api/conversations/${encodeURIComponent(id)}/events/search?limit=100&sort_order=${flags["from-start"] ? "TIMESTAMP" : "TIMESTAMP_DESC"}`,
     );
     if (!res.ok)
       throw new CliError(
         `events: HTTP ${res.status} ${res.text.slice(0, 200)}`,
       );
-    const items = (res.json?.items ?? []).slice(0, last).reverse();
+    const fetched = res.json?.items ?? [];
+    const items = flags["from-start"]
+      ? fetched.slice(0, last)
+      : fetched.slice(0, last).reverse();
+    const grep =
+      flags.grep && flags.grep !== true
+        ? String(flags.grep).toLowerCase()
+        : null;
     const kinds =
       flags.kinds && flags.kinds !== true
         ? String(flags.kinds).split(",")
         : null;
+    const shown = items
+      .filter((e) => !kinds || kinds.includes(e.kind))
+      .map((e) => {
+        const text = eventText(e);
+        const max = flags.full ? 4000 : 160;
+        const row = {
+          kind: e.kind,
+          source: e.source,
+          tool: e.tool_name ?? e.action?.kind,
+          text: text.slice(0, max),
+          truncated: text.length > max || undefined,
+          skills: e.activated_skills?.length ? e.activated_skills : undefined,
+          tools: Array.isArray(e.tools)
+            ? e.tools.map((tool) => tool.title || tool.name || tool.kind)
+            : undefined,
+          ts: e.timestamp,
+        };
+        if (grep) {
+          // Search the whole event (system prompt, tool args, extended
+          // content), not only the summarized text.
+          const raw = JSON.stringify(e);
+          const lower = raw.toLowerCase();
+          const excerpts = [];
+          let at = lower.indexOf(grep);
+          let matches = 0;
+          while (at >= 0) {
+            matches += 1;
+            if (excerpts.length < 3)
+              excerpts.push(
+                raw.slice(Math.max(0, at - 60), at + grep.length + 60),
+              );
+            at = lower.indexOf(grep, at + grep.length);
+          }
+          row.matches = matches;
+          row.excerpts = excerpts.length ? excerpts : undefined;
+        }
+        return row;
+      })
+      .filter((row) => !grep || row.matches > 0);
     out({
       ok: true,
-      count: items.length,
-      events: items
-        .filter((e) => !kinds || kinds.includes(e.kind))
-        .map((e) => {
-          const text = eventText(e);
-          const max = flags.full ? 4000 : 160;
-          return {
-            kind: e.kind,
-            source: e.source,
-            tool: e.tool_name ?? e.action?.kind,
-            text: text.slice(0, max),
-            truncated: text.length > max || undefined,
-            ts: e.timestamp,
-          };
-        }),
+      total: fetched.length,
+      count: shown.length,
+      events: shown,
+    });
+    return;
+  }
+  if (sub === "pause") {
+    // Arrange step (not UI proof): pause through the API, as the status
+    // menu's Stop Runtime does, to reach paused-only states.
+    if (!id) usage("conversation pause <id>");
+    const before = await conversationInfo(run, id);
+    const res = await http(
+      run,
+      "POST",
+      `/api/conversations/${encodeURIComponent(id)}/pause`,
+    );
+    if (!res.ok)
+      throw new CliError(`pause: HTTP ${res.status} ${res.text.slice(0, 200)}`);
+    if (before.execution_status !== "running") {
+      out({
+        ok: true,
+        ...summarize(await conversationInfo(run, id)),
+        note: `It was ${before.execution_status}: pause only changes a running conversation.`,
+      });
+      return;
+    }
+    out({
+      ok: true,
+      ...(await waitConversation(run, id, {
+        until: "paused",
+        timeoutSec: 60,
+      })),
     });
     return;
   }
   usage(
-    "Usage: control-openhands conversation start|wait|status|list|events",
+    "Usage: control-openhands conversation start|wait|status|list|events|pause",
     'control-openhands conversation start --prompt "..." --wait',
   );
 }
@@ -1917,6 +2011,42 @@ async function cmdFixture({ positional, flags }) {
     out({ ok: true, path });
     return;
   }
+  if (kind === "skill") {
+    // A personal skill under the run's private HOME, or a project skill in a
+    // fixture repo (--repo NAME).
+    const skillName = name ?? "qa-hello";
+    const root =
+      flags.repo && flags.repo !== true
+        ? join(workspace, String(flags.repo))
+        : join(run.dir, "private", "home");
+    if (flags.repo && !existsSync(root))
+      usage(
+        `No fixture repo ${root}`,
+        "control-openhands fixture git-repo --name qa-repo",
+      );
+    const dir = join(root, ".agents", "skills", skillName);
+    mkdirSync(dir, { recursive: true });
+    const trigger =
+      flags.trigger && flags.trigger !== true
+        ? String(flags.trigger)
+        : undefined;
+    const body =
+      flags.body && flags.body !== true
+        ? String(flags.body)
+        : "When this skill is active, end your reply with the word QA_SKILL_OK.";
+    const path = join(dir, "SKILL.md");
+    writeFileSync(
+      path,
+      `---\nname: ${skillName}\ndescription: QA fixture skill created by control-openhands.\n${trigger ? `triggers:\n- ${trigger}\n` : ""}---\n\n${body}\n`,
+    );
+    out({
+      ok: true,
+      path,
+      scope: flags.repo ? "project" : "user",
+      hint: "Reload the page: the skills list is cached.",
+    });
+    return;
+  }
   if (kind === "folder") {
     const dir = join(workspace, name ?? "qa-folder");
     mkdirSync(dir, { recursive: true });
@@ -1925,7 +2055,7 @@ async function cmdFixture({ positional, flags }) {
     return;
   }
   usage(
-    "Usage: control-openhands fixture git-repo|folder|image|file [--name N] [--remote URL]",
+    "Usage: control-openhands fixture git-repo|folder|image|file|skill [--name N] [--remote URL]",
     "control-openhands fixture git-repo --name qa-repo",
   );
 }
@@ -2032,6 +2162,8 @@ async function cmdBrowser({ positional, flags }) {
             : undefined,
         position,
         expectUrl: flags["expect-url"],
+        expectNewUrl: flags["expect-new-url"],
+        hoverFirst: flags["hover-first"],
         observe: flags.observe,
         observeMs: flags["observe-ms"],
       });
@@ -2056,7 +2188,82 @@ async function cmdBrowser({ positional, flags }) {
       result = await browserCall(run, "media", { clear: Boolean(flags.clear) });
       break;
     case "toasts":
-      result = await browserCall(run, "toasts", {});
+      result = await browserCall(run, "toasts", {
+        history: Boolean(flags.history),
+        clear: Boolean(flags.clear),
+      });
+      break;
+    case "clipboard":
+      result = await browserCall(run, "clipboard", {
+        write:
+          flags.write !== undefined && flags.write !== true
+            ? String(flags.write)
+            : undefined,
+      });
+      break;
+    case "drag":
+      need(
+        1,
+        "control-openhands browser drag 'testid=card-a' 'testid=card-b' [--position before|after] | drag 'testid=divider' --by -200,0",
+      );
+      if (!rest[1] && !flags.by)
+        usage("browser drag needs a target selector or --by DX,DY");
+      result = await browserCall(run, "drag", {
+        source: sel,
+        target: rest[1],
+        by: flags.by,
+        steps: flags.steps,
+        position: flags.position,
+      });
+      break;
+    case "upload-via":
+      need(
+        2,
+        "control-openhands browser upload-via 'role=menuitem[name=\"Add Files and Images\"]' ./qa.png",
+      );
+      result = await browserCall(run, "upload-via", {
+        trigger: sel,
+        files: rest.slice(1).map((f) => resolve(f)),
+        timeout,
+      });
+      break;
+    case "drop-files":
+      need(
+        2,
+        "control-openhands browser drop-files 'testid=chat-input' ./qa.png",
+      );
+      result = await browserCall(run, "drop-files", {
+        selector: sel,
+        files: rest.slice(1).map((f) => resolve(f)),
+        stage: flags.stage,
+      });
+      break;
+    case "paste": {
+      need(
+        1,
+        "control-openhands browser paste 'testid=chat-input' --file ./qa.png",
+      );
+      const files = [].concat(flags.file ?? []).filter((f) => f !== true);
+      result = await browserCall(run, "paste", {
+        selector: sel,
+        text:
+          flags.text !== undefined && flags.text !== true
+            ? String(flags.text)
+            : undefined,
+        files: files.map((f) => resolve(String(f))),
+      });
+      break;
+    }
+    case "choose":
+      need(
+        2,
+        "control-openhands browser choose 'label=Model' 'deepseek/deepseek-flash'",
+      );
+      result = await browserCall(run, "choose", {
+        selector: sel,
+        option: rest[1],
+        timeout,
+      });
       break;
     case "reset": {
       // A fresh browser profile: first-run state, empty localStorage, no
@@ -2074,6 +2281,8 @@ async function cmdBrowser({ positional, flags }) {
         clear: Boolean(flags.clear),
         external: Boolean(flags.external),
         last: flags.last,
+        filter:
+          flags.filter && flags.filter !== true ? flags.filter : undefined,
       });
       break;
     case "hover":
@@ -2137,6 +2346,7 @@ async function cmdBrowser({ positional, flags }) {
       result = await browserCall(run, "scroll", {
         selector: sel,
         by: flags.by,
+        x: flags.x,
         timeout,
       });
       break;
@@ -2268,9 +2478,11 @@ async function cmdEvidence({ positional, flags }) {
         "control-openhands evidence add --feature F05.secret-create --result pass --entry 'Settings > Secrets > Add' --expected 'row after reload' --actual 'row present' --artifact evidence/F05.secret-create/after-reload.png",
       );
     }
-    const artifacts = [];
-    const raw = flags.artifact;
-    if (raw && raw !== true) artifacts.push(...String(raw).split(","));
+    const artifacts = []
+      .concat(flags.artifact ?? [])
+      .filter((a) => a !== true)
+      .flatMap((a) => String(a).split(","))
+      .filter(Boolean);
     const missing = artifacts.filter((a) => !existsSync(resolve(run.dir, a)));
     if (missing.length) {
       throw new CliError(`Artifact not found: ${missing.join(", ")}`, {
@@ -2458,6 +2670,12 @@ const BROWSER_VERBS = new Set([
   "network",
   "toasts",
   "reset",
+  "clipboard",
+  "drag",
+  "upload-via",
+  "drop-files",
+  "paste",
+  "choose",
 ]);
 
 function featureFiles() {
@@ -2808,11 +3026,16 @@ skips the onboarding modal (--skip) or walks it: choose agent → keep current L
 settings → close at say-hello. Skipping is not proof that onboarding works.
 `,
   conversation: `control-openhands conversation start --prompt TEXT [--wait] [--until STATES] [--timeout SEC] [--stay] [--workspace PATH]
-control-openhands conversation wait ID [--until finished,idle] [--timeout SEC]
+control-openhands conversation wait ID [--until finished,idle] [--timeout SEC] [--fresh]
+        (--fresh after sending a message: ignore the previous run's terminal status)
+control-openhands conversation pause ID   arrange a paused conversation (API, not UI proof)
 control-openhands conversation status ID
 control-openhands conversation list
 control-openhands conversation events ID [--last N] [--kinds MessageEvent,ActionEvent] [--full]
-        (texts are cut at 160 chars with truncated:true; --full keeps up to 4000)
+        [--grep TEXT] [--from-start]
+        (texts are cut at 160 chars with truncated:true; --full keeps up to 4000;
+         --grep searches whole events, e.g. the SystemPromptEvent with --from-start;
+         rows show activated skills and, for the system prompt, the tool names)
 
 'start' types into the home composer (testid=chat-input), presses
 testid=submit-button and returns the new /conversations/<id>. --stay uses the
@@ -2830,6 +3053,8 @@ Examples:
 control-openhands fixture folder [--name qa-folder]
 control-openhands fixture image [--name qa-image] [--width 160 --height 96]   # PNG under evidence/_fixtures
 control-openhands fixture file [--name qa-note.txt] [--content TEXT]
+control-openhands fixture skill [--name qa-hello] [--repo qa-repo] [--trigger qa-ping] [--body TEXT]
+        # SKILL.md in the run's private ~/.agents/skills, or in a fixture repo's .agents/skills
 `,
   workspace: `control-openhands workspace open PATH|NAME [--stay]
 
@@ -2859,13 +3084,21 @@ Verbs
   click|dblclick <sel> [--force] [--timeout MS] [--button left|middle|right]
         [--modifiers Control,Meta,Shift,Alt] [--position X,Y] (offset inside the element)
         [--expect-url REGEX] (wait for client-side navigation; click returns the old URL otherwise)
+        [--expect-new-url REGEX] (wait for a URL that differs from the pre-click one)
+        [--hover-first [MS]] (hover, settle, then click: hover-driven toggles)
         [--observe SEL [--observe-ms 3000]] (record transient states such as "Saving..."; SEL uses the same syntax)
   hover|focus|check|uncheck <sel>        (hidden <input> switches: click their label instead)
   mouse-click X Y [--button B]          click at viewport coordinates (backdrops, overlays)
-  tooltip <sel>                          hover and return the role=tooltip text
+  tooltip <sel>                          hover and return the role=tooltip text (or the title attribute)
   fill|type <sel> <value> [--value-file F | --value-env VAR]
   press <Key> [--selector S]            e.g. Escape, Enter, Control+k, Meta+k
-  select <sel> <value> | upload <sel> <file...> | scroll [<sel>] [--by PX]
+  select <sel> <value> | upload <sel> <file...> | scroll [<sel>] [--by PX] [--x PX]
+  upload-via <trigger-sel> <file...>     click a button/menu item and answer the real file chooser
+  drop-files <sel> <file...> [--stage enter|over]   files dragged in from the desktop
+  paste <sel> [--text T] [--file F]...   a paste event carrying text and/or files
+  drag <sel> <target-sel> [--position before|after] | drag <sel> --by DX,DY [--steps N]
+  choose <combobox-sel> <option label>   open an autocomplete, filter, click the option
+  clipboard [--write TEXT]               read (or arrange) the clipboard; Copy buttons write it
   wait <sel> [--state visible|hidden|attached|detached] | wait-url <regex> | wait-text <text>
   text|value|count|visible|enabled|bbox <sel> | attr <sel> <name>
   snapshot [<sel>] [--max-lines N] [--feature ID --name N]   ARIA tree (saved as evidence)
@@ -2880,8 +3113,10 @@ Verbs
   downloads [--last N] [--inspect] [--contains TEXT]   saved files; --inspect adds a text head or zip entry names
   storage [--session] [--values]         localStorage (or sessionStorage) keys; values only on request
   media [--clear]                        media playback recorded since load (sound features)
-  network [--external] [--clear] [--last N]   requests by origin (privacy/telemetry checks; --clear as for errors)
-  toasts                                 texts of the toasts on screen now
+  network [--external] [--filter REGEX] [--clear] [--last N]   requests with status and redacted query
+                                         (privacy/telemetry checks; --clear as for errors)
+  toasts [--history [--clear]]          toasts on screen now (with links); --history adds every
+                                         status/alert text seen since this page loaded
   reset                                  fresh browser profile (first-run state); the stack keeps running
   scroll <sel> --by PX                   scroll the element's scrollable container (settings, panels)
   scroll <sel> | scroll --by PX          bring into view | wheel at the mouse position

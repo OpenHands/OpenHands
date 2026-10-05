@@ -12,12 +12,13 @@ import { createServer } from "node:http";
 import { X509Certificate, createHash, randomBytes } from "node:crypto";
 import {
   appendFileSync,
+  existsSync,
   mkdirSync,
   readFileSync,
   writeFileSync,
 } from "node:fs";
 import { createRequire } from "node:module";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildLocator, toCss } from "./lib/selectors.mjs";
 
@@ -93,6 +94,41 @@ const context = await chromium.launchPersistentContext(
   },
 );
 
+// Copy buttons await navigator.clipboard; grant it so `browser clipboard`
+// can read what they wrote.
+await context
+  .grantPermissions(["clipboard-read", "clipboard-write"], {
+    origin: baseUrl.origin,
+  })
+  .catch(() => {});
+
+// Toasts vanish within seconds: keep a per-document history of the texts that
+// appeared in status/alert regions (`browser toasts --history`).
+await context.addInitScript(() => {
+  window.__ohToasts = [];
+  const last = new WeakMap();
+  const scan = () => {
+    for (const el of document.querySelectorAll(
+      '[role="status"], [role="alert"]',
+    )) {
+      const text = (el.innerText || "").trim();
+      if (!text || last.get(el) === text) continue;
+      last.set(el, text);
+      window.__ohToasts.push({
+        ts: new Date().toISOString(),
+        role: el.getAttribute("role"),
+        text: text.slice(0, 300),
+      });
+    }
+  };
+  // Observe the document node itself: hydration can replace <html>.
+  new MutationObserver(scan).observe(document, {
+    subtree: true,
+    childList: true,
+    characterData: true,
+  });
+});
+
 // Instrumentation, not mocking: record media playback so sound features can
 // be observed (`browser media`); playback itself still happens.
 await context.addInitScript(() => {
@@ -108,10 +144,39 @@ await context.addInitScript(() => {
 });
 
 let dialogPolicy = "dismiss";
+// Events survive a daemon restart (`restart`, `browser reset`): reload the
+// ones recorded since the last `errors --clear` mark.
 const events = [];
-// Request log by origin (no query strings or bodies), for privacy and
-// telemetry checks: which hosts did the page talk to?
+if (existsSync(eventsPath)) {
+  const lines = readFileSync(eventsPath, "utf8").trim().split("\n");
+  let start = 0;
+  lines.forEach((line, i) => {
+    if (line.includes('"kind":"mark"')) start = i + 1;
+  });
+  for (const line of lines.slice(start).slice(-3000)) {
+    try {
+      events.push(JSON.parse(line));
+    } catch {
+      // A torn line from a killed daemon; skip it.
+    }
+  }
+}
+// Request log by origin, for privacy and telemetry checks: which hosts did
+// the page talk to? Query values that look like credentials are redacted;
+// bodies are never kept.
 const requests = [];
+const requestEntries = new WeakMap();
+
+function redactQuery(search) {
+  if (!search) return "";
+  const params = new URLSearchParams(search);
+  for (const key of [...params.keys()]) {
+    if (/key|token|secret|auth|pass|session|sig/i.test(key))
+      params.set(key, "<redacted>");
+  }
+  const text = params.toString();
+  return text ? `?${text.slice(0, 200)}` : "";
+}
 let markIndex = 0;
 let activePage = context.pages()[0] ?? (await context.newPage());
 
@@ -158,22 +223,27 @@ function watch(page) {
   page.on("request", (request) => {
     let origin = "";
     let path = "";
+    let query = "";
     try {
       const url = new URL(request.url());
       origin = url.origin;
       path = url.pathname.slice(0, 120);
+      query = redactQuery(url.search);
     } catch {
       return;
     }
-    if (!origin.startsWith("http")) return;
-    requests.push({
+    if (!origin.startsWith("http") && !origin.startsWith("ws")) return;
+    const entry = {
       ts: new Date().toISOString(),
       origin,
       path,
+      query: query || undefined,
       method: request.method(),
       type: request.resourceType(),
       app: origin === baseUrl.origin,
-    });
+    };
+    requestEntries.set(request, entry);
+    requests.push(entry);
     if (requests.length > 5000) requests.splice(0, 1000);
   });
   page.on("requestfailed", (request) => {
@@ -186,6 +256,8 @@ function watch(page) {
     });
   });
   page.on("response", (response) => {
+    const entry = requestEntries.get(response.request());
+    if (entry) entry.status = response.status();
     if (response.status() >= 400) {
       record("http-error", page, {
         url: response.url().slice(0, 500),
@@ -302,8 +374,10 @@ async function collectTestids(scopeSelector, includeHidden) {
         testid: id,
         tag: el.tagName.toLowerCase(),
         role: el.getAttribute("role") || undefined,
-        label: (label || "").slice(0, 60) || undefined,
+        label: (label || "").slice(0, 60),
         count: 0,
+        domCount: document.querySelectorAll(`[data-testid="${CSS.escape(id)}"]`)
+          .length,
         visible,
       };
       entry.count += 1;
@@ -357,9 +431,12 @@ const handlers = {
     modifiers,
     position,
     expectUrl,
+    expectNewUrl,
+    hoverFirst,
     observe,
     observeMs,
   }) {
+    const before = activePage.url();
     // Record transient states (labels such as "Saving...", skeletons) of the
     // observed elements while the click's effects play out: an in-page
     // MutationObserver when the selector is plain CSS/testid, else polling.
@@ -417,6 +494,12 @@ const handlers = {
         }
       })();
     }
+    if (hoverFirst) {
+      // Hover-driven controls re-render on pointerenter and swallow a click
+      // that moves and presses at once.
+      await locate(selector).hover({ timeout });
+      await activePage.waitForTimeout(Number(hoverFirst) || 150);
+    }
     await locate(selector).click({
       timeout,
       force,
@@ -426,6 +509,13 @@ const handlers = {
     });
     if (expectUrl) {
       await activePage.waitForURL(new RegExp(expectUrl), { timeout });
+    }
+    if (expectNewUrl) {
+      const re = new RegExp(expectNewUrl);
+      await activePage.waitForURL(
+        (u) => u.toString() !== before && re.test(u.toString()),
+        { timeout },
+      );
     }
     let observed;
     if (observer || poller) {
@@ -467,10 +557,24 @@ const handlers = {
     // Tooltips often ignore the first hover after a navigation: move away,
     // hover, then wait for role=tooltip.
     await activePage.mouse.move(0, 0);
-    await locate(selector).hover({ timeout });
+    const target = locate(selector).first();
+    await target.hover({ timeout });
     const tip = activePage.getByRole("tooltip").first();
-    await tip.waitFor({ state: "visible", timeout: timeout ?? 5000 });
-    return { text: (await tip.innerText()).trim() };
+    try {
+      await tip.waitFor({ state: "visible", timeout: timeout ?? 5000 });
+      return { source: "role=tooltip", text: (await tip.innerText()).trim() };
+    } catch (error) {
+      // Native title tooltips are not in the DOM; report the attribute.
+      const title = await target.evaluate(
+        (el) =>
+          el.getAttribute("title") ||
+          el.querySelector("[title]")?.getAttribute("title") ||
+          el.closest("[title]")?.getAttribute("title") ||
+          null,
+      );
+      if (title) return { source: "title attribute", text: title };
+      throw error;
+    }
   },
   async focus({ selector, timeout }) {
     await locate(selector).focus({ timeout });
@@ -507,7 +611,32 @@ const handlers = {
     await locate(selector).setInputFiles(files, { timeout });
     return { files };
   },
-  async scroll({ selector, by, timeout }) {
+  async scroll({ selector, by, x, timeout }) {
+    if (selector && x !== undefined) {
+      // Horizontal rails: scroll the nearest horizontally scrollable box.
+      return locate(selector)
+        .first()
+        .evaluate((el, dx) => {
+          let node = el;
+          while (
+            node &&
+            !(
+              node.scrollWidth > node.clientWidth &&
+              /auto|scroll/.test(getComputedStyle(node).overflowX)
+            )
+          ) {
+            node = node.parentElement;
+          }
+          const target = node || document.scrollingElement;
+          target.scrollBy(dx, 0);
+          return {
+            scrolled:
+              target === document.scrollingElement ? "page" : "container",
+            scrollLeft: Math.round(target.scrollLeft),
+            scrollWidth: target.scrollWidth,
+          };
+        }, Number(x));
+    }
     if (selector && by !== undefined) {
       // Scroll the element's nearest scrollable container (settings and
       // panels scroll inside a container, not the window).
@@ -635,7 +764,15 @@ const handlers = {
   },
   async testids({ selector, includeHidden }) {
     const items = await collectTestids(selector, Boolean(includeHidden));
-    return { url: activePage.url(), count: items.length, testids: items };
+    const ambiguous = items.filter((i) => i.domCount > 1).map((i) => i.testid);
+    return {
+      url: activePage.url(),
+      count: items.length,
+      testids: items,
+      hint: ambiguous.length
+        ? `Several DOM nodes share ${ambiguous.slice(0, 5).join(", ")} (domCount > 1): scope with ' >> ' or add '>> visible'.`
+        : undefined,
+    };
   },
   async screenshot({ feature, name, selector, fullPage }) {
     const path = evidencePath(feature, name, ".png");
@@ -670,10 +807,23 @@ const handlers = {
       since: all ? "daemon start" : "last clear",
       summary,
       pageErrors: filtered.filter((e) => e.kind === "pageerror").length,
-      appErrors: filtered.filter((e) => e.appOrigin).length,
+      appErrors: filtered.filter(
+        (e) => e.appOrigin && e.kind !== "console.warning",
+      ).length,
+      warnings: filtered.filter((e) => e.kind === "console.warning").length,
       events: filtered.slice(-40),
     };
-    if (clear) markIndex = events.length;
+    if (clear) {
+      markIndex = events.length;
+      try {
+        appendFileSync(
+          eventsPath,
+          `${JSON.stringify({ ts: new Date().toISOString(), kind: "mark" })}\n`,
+        );
+      } catch {
+        // Best effort, as for record().
+      }
+    }
     return result;
   },
   async events({ kinds, last }) {
@@ -791,8 +941,13 @@ const handlers = {
     if (keysOnly !== false) return { area, keys: Object.keys(data).sort() };
     return { area, storage: data };
   },
-  async network({ clear, external, last }) {
-    const list = external ? requests.filter((r) => !r.app) : requests;
+  async network({ clear, external, last, filter }) {
+    const re = filter ? new RegExp(filter) : null;
+    const list = requests.filter(
+      (r) =>
+        (!external || !r.app) &&
+        (!re || re.test(`${r.origin}${r.path}${r.query ?? ""}`)),
+    );
     const byOrigin = {};
     for (const r of list) byOrigin[r.origin] = (byOrigin[r.origin] ?? 0) + 1;
     const result = {
@@ -803,7 +958,7 @@ const handlers = {
     if (clear) requests.length = 0;
     return result;
   },
-  async toasts() {
+  async toasts({ history, clear }) {
     const toasts = await activePage.evaluate(() =>
       [...document.querySelectorAll('[role="status"], [role="alert"]')]
         .filter((el) => {
@@ -813,9 +968,169 @@ const handlers = {
         .map((el) => ({
           role: el.getAttribute("role"),
           text: el.innerText.trim().slice(0, 300),
+          links: [...el.querySelectorAll("a[href]")].map((a) => ({
+            text: a.innerText.trim(),
+            href: a.getAttribute("href"),
+          })),
         })),
     );
-    return { toasts };
+    if (!history && !clear) return { toasts };
+    const seen = await activePage.evaluate((reset) => {
+      const list = window.__ohToasts ?? [];
+      if (reset) window.__ohToasts = [];
+      return list;
+    }, Boolean(clear));
+    return { toasts, history: seen };
+  },
+  async clipboard({ write }) {
+    if (write !== undefined) {
+      await activePage.evaluate((t) => navigator.clipboard.writeText(t), write);
+      return { written: write.length };
+    }
+    const text = await activePage.evaluate(() =>
+      Promise.race([
+        navigator.clipboard.readText(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("clipboard read timed out")), 5000),
+        ),
+      ]),
+    );
+    return { text };
+  },
+  async drag({ source, target, by, steps, position }) {
+    const from = locate(source).first();
+    if (target) {
+      // HTML5 drag and drop (draggable rows, folders, pinned cards).
+      const to = locate(target).first();
+      const box = await to.boundingBox();
+      const targetPosition =
+        box && position === "before"
+          ? { x: box.width / 2, y: 2 }
+          : box && position === "after"
+            ? { x: box.width / 2, y: box.height - 2 }
+            : undefined;
+      await from.dragTo(to, { targetPosition });
+      return { dragged: source, to: target, position: position ?? "center" };
+    }
+    // Pointer drag by an offset (resize grips, dividers).
+    const box = await from.boundingBox();
+    if (!box) throw new Error(`${source} has no box to drag`);
+    const [dx, dy] = String(by ?? "0,0")
+      .split(",")
+      .map(Number);
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+    await activePage.mouse.move(x, y);
+    await activePage.mouse.down();
+    await activePage.mouse.move(x + dx, y + (dy || 0), {
+      steps: Number(steps ?? 12),
+    });
+    await activePage.mouse.up();
+    return { dragged: source, by: { dx, dy: dy || 0 } };
+  },
+  async "upload-via"({ trigger, files, timeout }) {
+    // The real file chooser opened by a menu item or button.
+    const [chooser] = await Promise.all([
+      activePage.waitForEvent("filechooser", { timeout: timeout ?? 15_000 }),
+      locate(trigger).first().click({ timeout }),
+    ]);
+    await chooser.setFiles(files);
+    return { files, multiple: chooser.isMultiple() };
+  },
+  async "drop-files"({ selector, files, stage }) {
+    // Files dragged in from the desktop: dragenter, dragover, drop with a
+    // DataTransfer holding the files (--stage enter|over stops early).
+    const MIME = {
+      ".png": "image/png",
+      ".jpg": "image/jpeg",
+      ".jpeg": "image/jpeg",
+      ".gif": "image/gif",
+      ".txt": "text/plain",
+      ".md": "text/markdown",
+      ".json": "application/json",
+      ".pdf": "application/pdf",
+    };
+    const payload = files.map((f) => ({
+      name: basename(f),
+      type: MIME[extname(f).toLowerCase()] ?? "application/octet-stream",
+      b64: readFileSync(f).toString("base64"),
+    }));
+    const dataTransfer = await activePage.evaluateHandle((items) => {
+      const dt = new DataTransfer();
+      for (const it of items) {
+        const bin = atob(it.b64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+        dt.items.add(new File([bytes], it.name, { type: it.type }));
+      }
+      return dt;
+    }, payload);
+    const loc = locate(selector).first();
+    const order = ["dragenter", "dragover", "drop"];
+    const last = { enter: 0, over: 1 }[stage] ?? 2;
+    for (const type of order.slice(0, last + 1)) {
+      await loc.dispatchEvent(type, { dataTransfer });
+    }
+    return { files: payload.map((p) => p.name), stage: order[last] };
+  },
+  async paste({ selector, text, files }) {
+    // A paste event carrying text or files, as the browser delivers it.
+    const payload = (files ?? []).map((f) => ({
+      name: basename(f),
+      type: /\.png$/i.test(f)
+        ? "image/png"
+        : /\.jpe?g$/i.test(f)
+          ? "image/jpeg"
+          : "application/octet-stream",
+      b64: readFileSync(f).toString("base64"),
+    }));
+    const loc = locate(selector).first();
+    await loc.focus();
+    const delivered = await loc.evaluate(
+      (el, { text: t, items }) => {
+        const dt = new DataTransfer();
+        if (t !== undefined && t !== null) dt.setData("text/plain", t);
+        for (const it of items) {
+          const bin = atob(it.b64);
+          const bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+          dt.items.add(new File([bytes], it.name, { type: it.type }));
+        }
+        const event = new ClipboardEvent("paste", {
+          clipboardData: dt,
+          bubbles: true,
+          cancelable: true,
+        });
+        el.dispatchEvent(event);
+        return { defaultPrevented: event.defaultPrevented };
+      },
+      { text, items: payload },
+    );
+    return {
+      pasted: { text: text?.length, files: payload.map((p) => p.name) },
+      ...delivered,
+    };
+  },
+  async choose({ selector, option, timeout }) {
+    // Autocomplete/combobox: open, filter by the label, click the option.
+    const input = locate(selector).first();
+    await input.click({ timeout });
+    const opt = activePage.getByRole("option", { name: option, exact: true });
+    await input.fill(option).catch(() => {});
+    try {
+      await opt.first().waitFor({ state: "visible", timeout: 3000 });
+    } catch {
+      await input.fill("").catch(() => {});
+      await input.press("ArrowDown").catch(() => {});
+      await opt
+        .first()
+        .waitFor({ state: "visible", timeout: timeout ?? 10_000 });
+    }
+    await opt.first().click({ timeout });
+    return {
+      chosen: option,
+      value: await input.inputValue().catch(() => undefined),
+    };
   },
   async media({ clear }) {
     const plays = await activePage.evaluate((reset) => {

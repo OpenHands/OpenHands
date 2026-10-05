@@ -203,3 +203,20 @@ test("evidence retract is an evidence verb, not a conversation verb", () => {
   assert.doesNotMatch(conv.stdout, /retract/);
   assert.match(conv.stdout, /--workspace PATH/);
 });
+
+test("browser help documents the input verbs agents asked for", () => {
+  const res = spawnSync(process.execPath, [cli, "help", "browser"], {
+    encoding: "utf8",
+  });
+  for (const verb of [
+    "upload-via",
+    "drop-files",
+    "paste",
+    "drag",
+    "choose",
+    "clipboard",
+    "--expect-new-url",
+    "--history",
+  ])
+    assert.match(res.stdout, new RegExp(verb.replace(/[-]/g, "\\-")));
+});
