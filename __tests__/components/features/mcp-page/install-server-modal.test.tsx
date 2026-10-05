@@ -1,6 +1,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { http, HttpResponse } from "msw";
+import { server } from "#/mocks/node";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import McpService from "#/api/mcp-service/mcp-service.api";
 import {
@@ -1149,6 +1151,232 @@ describe("InstallServerModal", () => {
       expect(
         screen.queryByTestId("mcp-install-modal-error"),
       ).not.toBeInTheDocument();
+    });
+  });
+
+  describe("InstallServerModal — native integration on cloud", () => {
+    const github = MCP_MARKETPLACE.find((e) => e.id === "github")!;
+
+    /**
+     * Activates a cloud backend whose instance enables `providersConfigured`
+     * natively, with `connected` as the user's connected providers.
+     */
+    function activateCloudBackend({
+      providersConfigured,
+      connected = {},
+    }: {
+      providersConfigured: string[];
+      connected?: Record<string, string | null>;
+    }) {
+      const instance = { configServed: false };
+      setRegisteredBackends([
+        {
+          id: "cloud-1",
+          name: "Cloud",
+          host: "https://app.all-hands.dev",
+          apiKey: "k",
+          kind: "cloud",
+        },
+      ]);
+      setActiveSelection({ backendId: "cloud-1" });
+      server.use(
+        http.get("*/api/v1/web-client/config", () => {
+          instance.configServed = true;
+          return HttpResponse.json({
+            providers_configured: providersConfigured,
+          });
+        }),
+      );
+      const getSettings = vi
+        .spyOn(SettingsService, "getSettings")
+        .mockResolvedValue({
+          ...MOCK_DEFAULT_USER_SETTINGS,
+          provider_tokens_set: connected,
+        });
+      return { instance, getSettings };
+    }
+
+    it("recommends the native integration by default next to the MCP server", async () => {
+      // Arrange
+      activateCloudBackend({ providersConfigured: ["github"] });
+
+      // Act
+      renderWith(
+        <InstallServerModal
+          existingServers={[]}
+          entry={github}
+          onClose={vi.fn()}
+        />,
+      );
+
+      // Assert
+      expect(await screen.findByTestId("mcp-native-panel")).toBeInTheDocument();
+      expect(screen.getByTestId("mcp-install-tab-mcp")).toBeInTheDocument();
+      expect(screen.queryByTestId("mcp-install-field-api_key")).toBeNull();
+    });
+
+    it("waits for the instance's providers instead of showing the MCP form first", async () => {
+      // Arrange
+      activateCloudBackend({ providersConfigured: ["github"] });
+
+      // Act
+      renderWith(
+        <InstallServerModal
+          existingServers={[]}
+          entry={github}
+          onClose={vi.fn()}
+        />,
+      );
+
+      // Assert — nothing to type into until it is known which option leads,
+      // so the form is not swapped out from under the user.
+      expect(screen.getByTestId("mcp-install-resolving")).toBeInTheDocument();
+      expect(screen.queryByTestId("mcp-install-field-api_key")).toBeNull();
+      expect(await screen.findByTestId("mcp-native-panel")).toBeInTheDocument();
+      expect(screen.queryByTestId("mcp-install-resolving")).toBeNull();
+    });
+
+    it("opens the instance's integrations page to connect natively", async () => {
+      // Arrange
+      activateCloudBackend({ providersConfigured: ["github"] });
+      const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
+      renderWith(
+        <InstallServerModal
+          existingServers={[]}
+          entry={github}
+          onClose={vi.fn()}
+        />,
+      );
+
+      // Act
+      fireEvent.click(await screen.findByTestId("mcp-native-install"));
+
+      // Assert
+      expect(openSpy).toHaveBeenCalledWith(
+        "https://app.all-hands.dev/settings/integrations",
+        "_blank",
+        "noopener,noreferrer",
+      );
+    });
+
+    it("shows the MCP form under the MCP tab", async () => {
+      // Arrange
+      activateCloudBackend({ providersConfigured: ["github"] });
+      renderWith(
+        <InstallServerModal
+          existingServers={[]}
+          entry={github}
+          onClose={vi.fn()}
+        />,
+      );
+
+      // Act
+      fireEvent.click(await screen.findByTestId("mcp-install-tab-mcp"));
+
+      // Assert
+      expect(
+        screen.getByTestId("mcp-install-field-api_key"),
+      ).toBeInTheDocument();
+      expect(screen.queryByTestId("mcp-native-panel")).toBeNull();
+    });
+
+    it("keeps the MCP server's documentation with the MCP option", async () => {
+      // Arrange
+      activateCloudBackend({ providersConfigured: ["github"] });
+      renderWith(
+        <InstallServerModal
+          existingServers={[]}
+          entry={github}
+          onClose={vi.fn()}
+        />,
+      );
+      await screen.findByTestId("mcp-native-panel");
+
+      // Assert — it describes the MCP server, so the native option omits it.
+      expect(screen.queryByText("MCP$VIEW_DOCS")).toBeNull();
+
+      // Act
+      fireEvent.click(screen.getByTestId("mcp-install-tab-mcp"));
+
+      // Assert
+      expect(screen.getByText("MCP$VIEW_DOCS")).toBeInTheDocument();
+    });
+
+    it("says the native integration is not connected yet when continuing too early", async () => {
+      // Arrange
+      activateCloudBackend({ providersConfigured: ["github"] });
+      vi.spyOn(window, "open").mockReturnValue(null);
+      const onSuccess = vi.fn();
+      renderWith(
+        <InstallServerModal
+          existingServers={[]}
+          entry={github}
+          onClose={vi.fn()}
+          onSuccess={onSuccess}
+        />,
+      );
+      fireEvent.click(await screen.findByTestId("mcp-native-install"));
+
+      // Act
+      fireEvent.click(screen.getByTestId("mcp-native-continue"));
+
+      // Assert
+      expect(await screen.findByTestId("mcp-native-error")).toHaveTextContent(
+        "MCP$NATIVE_NOT_CONNECTED_YET",
+      );
+      expect(onSuccess).not.toHaveBeenCalled();
+    });
+
+    it("continues once the native integration is connected", async () => {
+      // Arrange
+      const { getSettings } = activateCloudBackend({
+        providersConfigured: ["github"],
+      });
+      vi.spyOn(window, "open").mockReturnValue(null);
+      const onSuccess = vi.fn();
+      const onClose = vi.fn();
+      renderWith(
+        <InstallServerModal
+          existingServers={[]}
+          entry={github}
+          onClose={onClose}
+          onSuccess={onSuccess}
+        />,
+      );
+      fireEvent.click(await screen.findByTestId("mcp-native-install"));
+      getSettings.mockResolvedValue({
+        ...MOCK_DEFAULT_USER_SETTINGS,
+        provider_tokens_set: { github: null },
+      });
+
+      // Act
+      fireEvent.click(screen.getByTestId("mcp-native-continue"));
+
+      // Assert
+      await waitFor(() => expect(onSuccess).toHaveBeenCalledWith(github));
+      expect(onClose).toHaveBeenCalled();
+    });
+
+    it("offers only the MCP server when the instance has not enabled the native integration", async () => {
+      // Arrange
+      const { instance } = activateCloudBackend({ providersConfigured: [] });
+
+      // Act
+      renderWith(
+        <InstallServerModal
+          existingServers={[]}
+          entry={github}
+          onClose={vi.fn()}
+        />,
+      );
+
+      // Assert
+      await waitFor(() => expect(instance.configServed).toBe(true));
+      expect(
+        screen.getByTestId("mcp-install-field-api_key"),
+      ).toBeInTheDocument();
+      expect(screen.queryByTestId("mcp-install-tab-native")).toBeNull();
+      expect(screen.queryByTestId("mcp-native-panel")).toBeNull();
     });
   });
 });

@@ -7,6 +7,7 @@ import {
   focusContentEditableAtEnd,
   getClipboardFiles,
   getTextContent,
+  insertTextAtCaret,
   isContentEmpty,
   isPastedClipboardImage,
   normalizePastedFile,
@@ -343,5 +344,46 @@ describe("content-editable helpers", () => {
     vi.spyOn(window, "getSelection").mockReturnValue(null);
     focusContentEditableAtEnd(element);
     expect(focus).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("insertTextAtCaret", () => {
+  function setup(text: string, caretOffset?: number) {
+    const element = document.createElement("div");
+    element.textContent = text;
+    document.body.appendChild(element);
+    window.getSelection()!.removeAllRanges();
+    if (caretOffset !== undefined) {
+      const range = document.createRange();
+      range.setStart(element.firstChild!, caretOffset);
+      window.getSelection()!.addRange(range);
+    }
+    const execCommand = vi.fn();
+    Object.defineProperty(document, "execCommand", {
+      configurable: true,
+      value: execCommand,
+    });
+    return { element, execCommand };
+  }
+
+  afterEach(() => {
+    Reflect.deleteProperty(document, "execCommand");
+    document.body.replaceChildren();
+  });
+
+  it("inserts through the paste path, padding against adjacent words", () => {
+    const { element, execCommand } = setup("fix the bug", "fix the ".length);
+
+    insertTextAtCaret(element, "login");
+
+    expect(execCommand).toHaveBeenCalledWith("insertText", false, "login ");
+  });
+
+  it("adds a leading space after a word and appends when the caret is outside", () => {
+    const { element, execCommand } = setup("hello");
+
+    insertTextAtCaret(element, "world");
+
+    expect(execCommand).toHaveBeenCalledWith("insertText", false, " world");
   });
 });

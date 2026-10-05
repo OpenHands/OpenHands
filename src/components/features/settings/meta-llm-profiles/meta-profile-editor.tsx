@@ -135,10 +135,26 @@ export function MetaProfileEditor({
     showRouterConnectionPicker,
   ]);
 
-  const profileItems = useMemo(
-    () => availableProfiles.map((p) => ({ key: p, label: p })),
-    [availableProfiles],
-  );
+  // The classifier dropdown is driven by saved LLM profile names, but a router
+  // template can name a classifier (e.g. ``minimax-m3``) before any profiles
+  // exist. Without the value in the list, the Autocomplete's
+  // ``defaultSelectedKey`` finds no match and renders an empty input — which
+  // ``allowsCustomValue`` then syncs back as ``""``, dropping the classifier
+  // from the saved config (so it never gets created). Surface the chosen
+  // classifier as an item so it is genuinely preselected.
+  const profileItems = useMemo(() => {
+    const items = availableProfiles.map((p) => ({ key: p, label: p }));
+    const classifier = config.classifier_model.trim();
+    if (
+      classifier &&
+      !availableProfiles.some(
+        (p) => p.toLowerCase() === classifier.toLowerCase(),
+      )
+    ) {
+      items.push({ key: classifier, label: classifier });
+    }
+    return items;
+  }, [availableProfiles, config.classifier_model]);
   const routerConnectionItems = useMemo(
     () => [
       {
@@ -222,7 +238,7 @@ export function MetaProfileEditor({
           name="classifier_model"
           label={t(I18nKey.SETTINGS$META_PROFILE_CLASSIFIER)}
           items={profileItems}
-          defaultSelectedKey={startingConfig.classifier_model || undefined}
+          selectedKey={config.classifier_model || undefined}
           allowsCustomValue
           isDisabled={isSaving}
           onInputChange={(value) =>
