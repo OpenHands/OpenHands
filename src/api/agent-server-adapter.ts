@@ -1169,6 +1169,8 @@ type AgentSettingsStartConversationPayload = StartConversationPayloadBase & {
   // exclusive agent sources; the server resolves the profile server-side.
   agent_settings?: AgentSettingsPayload;
   agent_profile_id?: string;
+  // Appended to the profile-resolved agent's system-message suffix.
+  agent_launch_additions?: { system_message_suffix_append?: string };
   agent?: never;
 };
 
@@ -1269,6 +1271,11 @@ export function buildStartConversationRequest(
     options.query,
     options.hasActiveMetaProfile,
   );
+  // The router-at-start instruction stays inline-only: a profile-resolved
+  // agent has no ``route_task_to_model`` tool to act on it.
+  const profileLaunchSuffix = buildRuntimeServicesSystemSuffix(
+    options.runtimeServicesInfo,
+  );
   const acpServerTag = acpMode
     ? getAcpServerTag(sourceAgentSettings)
     : undefined;
@@ -1299,9 +1306,11 @@ export function buildStartConversationRequest(
     // server/SDK's responsibility to restore on the profile path — tracked in
     // software-agent-sdk#3967 (profile resolution must attach the default
     // toolset + public skills, else a profile-launched OpenHands agent has only
-    // Finish/Think). The dev ``RUNTIME_SERVICES`` system-message suffix remains
-    // agent-settings-only; the Canvas UI tool is a top-level client tool and
+    // Finish/Think). The Canvas UI tool is a top-level client tool and
     // therefore works on both inline-agent and profile launch paths.
+    //
+    // ``RUNTIME_SERVICES`` (this stack's sandbox-facing URLs) only exists
+    // client-side, so the profile path sends it as ``agent_launch_additions``.
     //
     // Persistent memory is NOT on that boundary: ``load_memory`` is a global
     // user preference, so the agent-server stamps the stored
@@ -1311,7 +1320,16 @@ export function buildStartConversationRequest(
     // re-send it here (``agent_profile_id`` and ``agent_settings`` are
     // mutually exclusive).
     ...(options.agentProfileId
-      ? { agent_profile_id: options.agentProfileId }
+      ? {
+          agent_profile_id: options.agentProfileId,
+          ...(profileLaunchSuffix
+            ? {
+                agent_launch_additions: {
+                  system_message_suffix_append: profileLaunchSuffix,
+                },
+              }
+            : {}),
+        }
       : { agent_settings: agentSettings }),
     workspace: conversationSettings.workspace,
     // The agent-server caches each client tool's schema per tool *name* for the
