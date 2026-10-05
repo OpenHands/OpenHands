@@ -4,6 +4,91 @@ import { describe, expect, it, vi } from "vitest";
 import { SettingsSwitch } from "#/components/features/settings/settings-switch";
 
 describe("SettingsSwitch", () => {
+  it.each(["left", "right"] as const)(
+    "exposes the %s switch to keyboard users and label activation",
+    async (togglePosition) => {
+      const user = userEvent.setup();
+      const onToggle = vi.fn();
+      render(
+        <SettingsSwitch onToggle={onToggle} togglePosition={togglePosition}>
+          Keyboard setting
+        </SettingsSwitch>,
+      );
+
+      const checkbox = screen.getByRole("checkbox", {
+        name: "Keyboard setting",
+      });
+      await user.tab();
+      expect(checkbox).toHaveFocus();
+
+      await user.keyboard(" ");
+      expect(checkbox).toBeChecked();
+      expect(onToggle).toHaveBeenNthCalledWith(1, true);
+
+      await user.keyboard(" ");
+      expect(checkbox).not.toBeChecked();
+      expect(onToggle).toHaveBeenNthCalledWith(2, false);
+
+      await user.click(screen.getByText("Keyboard setting"));
+      expect(checkbox).toBeChecked();
+      expect(onToggle).toHaveBeenNthCalledWith(3, true);
+      expect(onToggle).toHaveBeenCalledTimes(3);
+    },
+  );
+
+  it("preserves a controlled value until its owner updates it", async () => {
+    const user = userEvent.setup();
+    const onToggle = vi.fn();
+    const { rerender } = render(
+      <SettingsSwitch isToggled={false} onToggle={onToggle}>
+        Controlled setting
+      </SettingsSwitch>,
+    );
+    const checkbox = screen.getByRole("checkbox", {
+      name: "Controlled setting",
+    });
+
+    await user.tab();
+    await user.keyboard(" ");
+    expect(onToggle).toHaveBeenCalledWith(true);
+    expect(checkbox).not.toBeChecked();
+
+    rerender(
+      <SettingsSwitch isToggled onToggle={onToggle}>
+        Controlled setting
+      </SettingsSwitch>,
+    );
+    expect(checkbox).toBeChecked();
+    await user.keyboard(" ");
+    expect(onToggle).toHaveBeenLastCalledWith(false);
+    expect(checkbox).toBeChecked();
+  });
+
+  it("keeps disabled switches exposed but skips them during keyboard navigation", async () => {
+    const user = userEvent.setup();
+    const onToggle = vi.fn();
+    render(
+      <>
+        <SettingsSwitch isDisabled defaultIsToggled onToggle={onToggle}>
+          Disabled setting
+        </SettingsSwitch>
+        <SettingsSwitch>Available setting</SettingsSwitch>
+      </>,
+    );
+    const disabled = screen.getByRole("checkbox", {
+      name: "Disabled setting",
+    });
+    expect(disabled).toBeDisabled();
+    await user.tab();
+    expect(
+      screen.getByRole("checkbox", { name: "Available setting" }),
+    ).toHaveFocus();
+    await user.keyboard(" ");
+    await user.click(screen.getByText("Disabled setting"));
+    expect(disabled).toBeChecked();
+    expect(onToggle).not.toHaveBeenCalled();
+  });
+
   it("should call the onChange handler when the input is clicked", async () => {
     const user = userEvent.setup();
     const onToggleMock = vi.fn();
