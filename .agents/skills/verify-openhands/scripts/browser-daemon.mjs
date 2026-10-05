@@ -820,10 +820,12 @@ const handlers = {
     await activePage.setViewportSize(next);
     return { viewport: next };
   },
-  async errors({ clear, all, appOnly }) {
+  async errors({ clear, all, appOnly, noWarnings }) {
     const slice = all ? events : events.slice(markIndex);
     const relevant = slice.filter(
-      (e) => !["page-opened", "download", "dialog"].includes(e.kind),
+      (e) =>
+        !["page-opened", "download", "dialog", "mark"].includes(e.kind) &&
+        !(noWarnings && e.kind === "console.warning"),
     );
     const filtered = appOnly ? relevant.filter((e) => e.appOrigin) : relevant;
     const summary = {};
@@ -867,6 +869,21 @@ const handlers = {
       return result instanceof Promise ? result : Promise.resolve(result);
     }, expression);
     return { value };
+  },
+  async "wait-tab"({ pattern, timeout }) {
+    // window.open pages appear a moment after the click.
+    const re = new RegExp(pattern);
+    const deadline = Date.now() + (timeout ?? 10_000);
+    while (Date.now() < deadline) {
+      const pages = context.pages();
+      const index = pages.findIndex((p) => re.test(p.url()));
+      if (index >= 0) return { index, url: pages[index].url() };
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    const open = context.pages().map((p, i) => `${i}: ${p.url()}`);
+    throw new Error(
+      `No tab matching ${pattern} within the timeout. Open tabs: ${open.join(" | ")} (a pop-up that stays about:blank could not load its URL)`,
+    );
   },
   async tabs() {
     return {
@@ -967,7 +984,27 @@ const handlers = {
     }, Boolean(session));
     const area = session ? "sessionStorage" : "localStorage";
     if (keysOnly !== false) return { area, keys: Object.keys(data).sort() };
-    return { area, storage: data };
+    // Values can embed session keys (backend entries); redact secret-looking
+    // fields so the output is safe to paste into reports.
+    const redact = (value) => {
+      try {
+        return JSON.stringify(JSON.parse(value), (k, v) =>
+          /key|token|secret|password|auth/i.test(k) &&
+          typeof v === "string" &&
+          v
+            ? "<redacted>"
+            : v,
+        );
+      } catch {
+        return value;
+      }
+    };
+    return {
+      area,
+      storage: Object.fromEntries(
+        Object.entries(data).map(([k, v]) => [k, redact(v)]),
+      ),
+    };
   },
   async network({ clear, external, last, filter }) {
     const re = filter ? new RegExp(filter) : null;
@@ -1028,16 +1065,27 @@ const handlers = {
   async drag({ source, target, by, steps, position }) {
     const from = locate(source).first();
     if (target) {
-      // HTML5 drag and drop (draggable rows, folders, pinned cards).
-      const to = locate(target).first();
-      const box = await to.boundingBox();
-      const targetPosition =
-        box && position === "before"
-          ? { x: box.width / 2, y: 2 }
-          : box && position === "after"
-            ? { x: box.width / 2, y: box.height - 2 }
-            : undefined;
-      await from.dragTo(to, { targetPosition });
+      // HTML5 drag and drop with stepped pointer moves: React handlers that
+      // set state in dragover need intermediate events before the drop.
+      const from0 = await from.boundingBox();
+      const box = await locate(target).first().boundingBox();
+      if (!from0 || !box) throw new Error("source or target has no box");
+      const tx = box.x + box.width / 2;
+      const ty =
+        position === "before"
+          ? box.y + 3
+          : position === "after"
+            ? box.y + box.height - 3
+            : box.y + box.height / 2;
+      await activePage.mouse.move(
+        from0.x + from0.width / 2,
+        from0.y + from0.height / 2,
+      );
+      await activePage.mouse.down();
+      await activePage.mouse.move(tx, ty, { steps: Number(steps ?? 20) });
+      await activePage.waitForTimeout(150);
+      await activePage.mouse.move(tx, ty + 1);
+      await activePage.mouse.up();
       return { dragged: source, to: target, position: position ?? "center" };
     }
     // Pointer drag by an offset (resize grips, dividers).

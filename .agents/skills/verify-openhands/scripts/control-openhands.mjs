@@ -630,6 +630,11 @@ async function cmdLaunch({ flags }) {
     if (process.env[name] !== undefined) env[name] = process.env[name];
   const realHome = process.env.HOME || "";
   Object.assign(env, {
+    // A private tmux server per run (OpenHands/OpenHands#17946: the launcher's
+    // <stateDir>/tmux is never created, so runs would share one server). It
+    // lives under /tmp because a socket below the long run path would exceed
+    // the 108-byte Unix socket limit.
+    TMUX_TMPDIR: tmuxDirFor(dir),
     HOME: join(priv, "home"),
     // Reuse the operator's uv caches so each run does not re-download Python.
     UV_CACHE_DIR: process.env.UV_CACHE_DIR || join(realHome, ".cache", "uv"),
@@ -786,6 +791,7 @@ function spawnLauncher(run) {
   const env = JSON.parse(readFileSync(join(priv, "launcher-env.json"), "utf8"));
   env.LOCAL_BACKEND_API_KEY = readFileSync(join(priv, "session-key"), "utf8");
   env.OH_SECRET_KEY = readFileSync(join(priv, "encryption-key"), "utf8");
+  if (env.TMUX_TMPDIR) env.TMUX_TMPDIR = tmuxDirFor(run.dir);
   const logFd = openSync(join(priv, "stack.log"), "a", 0o600);
   const child = spawn(process.execPath, run.launcherArgs, {
     cwd: repoRoot,
@@ -1107,6 +1113,12 @@ async function cmdDoctor({ flags }) {
   if (failed.length) process.exitCode = 3;
 }
 
+function tmuxDirFor(runDir) {
+  const dir = join("/tmp", `ohv-tmux-${basename(runDir).slice(-6)}`);
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  return dir;
+}
+
 async function cmdStop({ flags }) {
   const run = loadRun(flags);
   const result = { run: run.dir };
@@ -1118,7 +1130,13 @@ async function cmdStop({ flags }) {
   for (const [name, port] of Object.entries(run.ports))
     ports[name] = (await portOpen(port)) ? "still open" : "closed";
   result.launcherStopped = !groupAlive(pgid);
-  if (result.launcherStopped) releaseClaim(run);
+  if (result.launcherStopped) {
+    releaseClaim(run);
+    rmSync(join("/tmp", `ohv-tmux-${basename(run.dir).slice(-6)}`), {
+      recursive: true,
+      force: true,
+    });
+  }
   result.ports = ports;
   run.stoppedAt = new Date().toISOString();
   saveRun(run);
@@ -1232,7 +1250,9 @@ async function cmdApi({ positional, flags }) {
   });
   const max = intFlag(flags["max-bytes"], 6000);
   if (flags.pick && flags.pick !== true && response.json !== undefined) {
+    // Paths start inside the response body; a leading "body." is accepted.
     const value = String(flags.pick)
+      .replace(/^body\./, "")
       .split(".")
       .reduce((o, k) => (o == null ? undefined : o[k]), response.json);
     out({ ok: response.ok, status: response.status, pick: flags.pick, value });
@@ -1636,12 +1656,18 @@ async function waitConversation(run, id, { until, timeoutSec, fresh }) {
       ? sawRunning || Date.now() - startedAt > 20_000
       : sawRunning || until === "idle" || info.execution_status !== "idle";
     if (terminal && settled) {
-      // Titles are generated shortly after the first run finishes.
-      for (let i = 0; i < 5 && !info.title && Date.now() < deadline; i += 1) {
+      // Titles are generated shortly after the first run finishes; report
+      // the status that matched, not a later one.
+      const matched = summarize(info);
+      for (
+        let i = 0;
+        i < 5 && !matched.title && Date.now() < deadline;
+        i += 1
+      ) {
         await delay(2000);
-        info = await conversationInfo(run, id);
+        matched.title = (await conversationInfo(run, id)).title ?? null;
       }
-      return { ...summarize(info), waitedFor: wanted };
+      return { ...matched, waitedFor: wanted };
     }
     await delay(2000);
   }
@@ -1984,6 +2010,39 @@ function pngBytes(width, height, [r, g, b]) {
   ]);
 }
 
+const MCP_FIXTURE_SOURCE = `#!/usr/bin/env node
+// QA fixture: minimal MCP server over stdio (JSON-RPC 2.0, one tool).
+import { appendFileSync } from "node:fs";
+import { createInterface } from "node:readline";
+const log = new URL("./requests.log", import.meta.url);
+const send = (msg) => process.stdout.write(JSON.stringify(msg) + "\\n");
+createInterface({ input: process.stdin }).on("line", (line) => {
+  let req;
+  try { req = JSON.parse(line); } catch { return; }
+  const { id, method, params } = req;
+  try { appendFileSync(log, new Date().toISOString() + " " + method + "\\n"); } catch {}
+  if (id === undefined) return; // notifications
+  if (method === "resources/list") return send({ jsonrpc: "2.0", id, result: { resources: [] } });
+  if (method === "resources/templates/list") return send({ jsonrpc: "2.0", id, result: { resourceTemplates: [] } });
+  if (method === "prompts/list") return send({ jsonrpc: "2.0", id, result: { prompts: [] } });
+  if (method === "initialize")
+    return send({ jsonrpc: "2.0", id, result: {
+      protocolVersion: params?.protocolVersion ?? "2025-06-18",
+      capabilities: { tools: {} },
+      serverInfo: { name: "qa-mcp", version: "1.0.0" } } });
+  if (method === "tools/list")
+    return send({ jsonrpc: "2.0", id, result: { tools: [{
+      name: "qa_echo",
+      description: "Echo the given text back, prefixed with QA_ECHO:",
+      inputSchema: { type: "object", properties: { text: { type: "string" } }, required: ["text"] } }] } });
+  if (method === "tools/call")
+    return send({ jsonrpc: "2.0", id, result: { content: [{ type: "text",
+      text: "QA_ECHO: " + String(params?.arguments?.text ?? "") }] } });
+  if (method === "ping") return send({ jsonrpc: "2.0", id, result: {} });
+  send({ jsonrpc: "2.0", id, error: { code: -32601, message: "Method not found: " + method } });
+});
+`;
+
 async function cmdFixture({ positional, flags }) {
   const run = loadRun(flags);
   const [kind] = positional;
@@ -2068,6 +2127,23 @@ async function cmdFixture({ positional, flags }) {
     out({ ok: true, path });
     return;
   }
+  if (kind === "mcp-server") {
+    // A dependency-free stdio MCP server with one tool, qa_echo, for the
+    // custom-server and agent-use recipes (no network, no npm install).
+    const dir = join(workspace, name ?? "qa-mcp");
+    mkdirSync(dir, { recursive: true });
+    const path = join(dir, "server.mjs");
+    writeFileSync(path, MCP_FIXTURE_SOURCE);
+    out({
+      ok: true,
+      path,
+      command: process.execPath,
+      args: [path],
+      tool: "qa_echo",
+      hint: `Add a custom STDIO server with command ${process.execPath} and argument ${path}; ask the agent to call qa_echo.`,
+    });
+    return;
+  }
   if (kind === "git-remote") {
     // A bare repository to push to (Git Sync, Push): a local "remote".
     const dir = join(workspace, `${name ?? "qa-remote"}.git`);
@@ -2125,7 +2201,7 @@ async function cmdFixture({ positional, flags }) {
     return;
   }
   usage(
-    "Usage: control-openhands fixture git-repo|git-remote|folder|image|file|skill [--name N] [--remote URL]",
+    "Usage: control-openhands fixture git-repo|git-remote|folder|image|file|skill|mcp-server [--name N] [--remote URL]",
     "control-openhands fixture git-repo --name qa-repo",
   );
 }
@@ -2535,6 +2611,17 @@ async function cmdBrowser({ positional, flags }) {
         clear: Boolean(flags.clear),
         all: Boolean(flags.all),
         appOnly: Boolean(flags["app-only"]),
+        noWarnings: Boolean(flags["no-warnings"]),
+      });
+      break;
+    case "wait-tab":
+      need(
+        1,
+        "control-openhands browser wait-tab 'auth\\.openai\\.com' [--timeout 10000]",
+      );
+      result = await browserCall(run, "wait-tab", {
+        pattern: rest[0],
+        timeout,
       });
       break;
     case "events":
@@ -2787,6 +2874,7 @@ const BROWSER_VERBS = new Set([
   "drop-files",
   "paste",
   "choose",
+  "wait-tab",
 ]);
 
 function featureFiles() {
@@ -3183,6 +3271,7 @@ Examples:
   fixture: `control-openhands fixture git-repo [--name qa-repo] [--remote https://github.com/qa-example/qa-repo.git]
         # git repo in <run>/workspace (README, src/calc.py, test); --remote only sets origin
 control-openhands fixture git-remote [--name qa-remote]   # bare repo <run>/workspace/qa-remote.git to push to
+control-openhands fixture mcp-server [--name qa-mcp]      # stdio MCP server (tool qa_echo); prints command and args
 control-openhands fixture folder [--name qa-folder]
 control-openhands fixture image [--name qa-image] [--width 160 --height 96]   # PNG under evidence/_fixtures
 control-openhands fixture file [--name qa-note.txt] [--content TEXT]
@@ -3239,13 +3328,15 @@ Verbs
   testids [<sel>] [--hidden] [--filter part]                 discover on-screen data-testid handles (--hidden adds hidden/off-screen)
   screenshot [<sel>] --feature ID --name N [--full-page]     PNG under evidence/<ID>/
   viewport desktop|phone|narrow|tablet|WxH                    1440x1000, 390x844, 320x700, 820x1180
-  errors [--clear] [--all] [--app-only]                        page/console/HTTP errors since last clear
+  errors [--clear] [--all] [--app-only] [--no-warnings]        page/console/HTTP errors since last clear
                                          (--clear prints the list, then empties it: run it before the action)
   events [--kinds pageerror,dialog,download] [--last N]
   eval <js expression>                   read-only inspection; never mutate app state with it
   tabs | tab <i> | close-tab <i> | dialogs [--policy accept|dismiss]
+  wait-tab <url-regex> [--timeout MS]   wait for a pop-up (window.open) whose URL matches; prints its index
   downloads [--last N] [--inspect] [--contains TEXT]   saved files; --inspect adds a text head or zip entry names
   storage [--session] [--values]         localStorage (or sessionStorage) keys; values only on request
+                                         (keys, tokens and secrets inside values are redacted)
   media [--clear]                        media playback recorded since load (sound features)
   network [--external] [--filter REGEX] [--clear] [--last N]   requests with status and redacted query
                                          (privacy/telemetry checks; --clear as for errors)
