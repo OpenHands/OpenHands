@@ -13,6 +13,7 @@ import * as useActivateLlmProfileHook from "#/hooks/mutation/use-activate-llm-pr
 import * as useSaveLlmProfileHook from "#/hooks/mutation/use-save-llm-profile";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
 import * as activeBackendContext from "#/contexts/active-backend-context";
+import { useFreeModelsStore } from "#/stores/free-models-store";
 import type { Backend } from "#/api/backend-registry/types";
 
 const mockCloudBackend: Backend = {
@@ -212,6 +213,10 @@ describe("LlmSettingsLocalView", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    useFreeModelsStore.getState().setFlags({
+      freeModels: new Set(),
+      defaultModel: null,
+    });
 
     vi.mocked(useLlmProfilesHook.useLlmProfiles).mockReturnValue(
       createMockLlmProfilesReturn(),
@@ -364,6 +369,23 @@ describe("LlmSettingsLocalView", () => {
       );
     });
 
+    it("prefills the DB-selected OpenHands default when creating a new profile", async () => {
+      useFreeModelsStore.getState().setFlags({
+        freeModels: new Set(["openhands/gpt-5.2"]),
+        defaultModel: "openhands/gpt-5.2",
+      });
+
+      const user = userEvent.setup();
+      renderWithProviders(<LlmSettingsLocalView />);
+
+      await user.click(screen.getByTestId("add-llm-profile"));
+
+      expect(screen.getByTestId("profile-name-input")).toHaveValue("gpt-5.2");
+      expect(screen.getByTestId("mock-basic-model-input")).toHaveValue(
+        "openhands/gpt-5.2",
+      );
+    });
+
     it("uses unique key for create mode to ensure form remounts", async () => {
       const user = userEvent.setup();
       renderWithProviders(<LlmSettingsLocalView />);
@@ -405,6 +427,41 @@ describe("LlmSettingsLocalView", () => {
 
       // The key "new-profile" should be used, ensuring a fresh form mount
       // that doesn't inherit any existing profile data
+    });
+
+    it("shows a skeleton until the DB default query settles, then mounts the form with the resolved default", async () => {
+      // Start with the flags unset (hydrator has not resolved yet), so the
+      // create form must wait instead of mounting with the static fallback.
+      useFreeModelsStore.getState().resetFlags();
+
+      const user = userEvent.setup();
+      renderWithProviders(<LlmSettingsLocalView />);
+
+      await user.click(screen.getByTestId("add-llm-profile"));
+
+      // While the DB default is unresolved, the form is replaced by a skeleton
+      // (no model input / save control to accept yet).
+      expect(screen.getByTestId("app-settings-skeleton")).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("mock-basic-model-input"),
+      ).not.toBeInTheDocument();
+
+      // The DB default resolves to a concrete model.
+      useFreeModelsStore.getState().setFlags({
+        freeModels: new Set(["openhands/gpt-5.2"]),
+        defaultModel: "openhands/gpt-5.2",
+      });
+
+      // The keyed form now mounts with the resolved default, not the static
+      // fallback.
+      await waitFor(() => {
+        expect(screen.getByTestId("mock-basic-model-input")).toHaveValue(
+          "openhands/gpt-5.2",
+        );
+      });
+      expect(
+        screen.queryByTestId("app-settings-skeleton"),
+      ).not.toBeInTheDocument();
     });
   });
 
@@ -979,6 +1036,13 @@ describe("LlmSettingsLocalView - OpenHands provider on cloud", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+
+    // Mark the DB default query as settled so the create-mode form mounts
+    // (the gate renders a skeleton until `defaultModelReady` is true).
+    useFreeModelsStore.getState().setFlags({
+      freeModels: new Set(),
+      defaultModel: null,
+    });
 
     vi.mocked(useLlmProfilesHook.useLlmProfiles).mockReturnValue(
       createMockLlmProfilesReturn({

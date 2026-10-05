@@ -8,6 +8,7 @@ import {
   getStoredConversationMetadata,
   removeStoredConversationMetadata,
 } from "#/api/conversation-metadata-store";
+import { AGENT_PROFILES_QUERY_KEYS } from "#/hooks/query/query-keys";
 
 vi.mock("#/hooks/use-tracking", () => ({
   useTracking: () => ({
@@ -53,17 +54,25 @@ vi.mock("#/hooks/query/use-agent-profiles", () => ({
 // The launch path resolves the active AgentProfile by awaiting
 // `AgentProfilesService.listProfiles` through the query cache (#3727).
 // Default: no active profile, so a plain create stays on the legacy path.
-const { listAgentProfilesMock } = vi.hoisted(() => ({
+const { listAgentProfilesMock, getAgentProfileMock } = vi.hoisted(() => ({
   listAgentProfilesMock: vi.fn(),
+  getAgentProfileMock: vi.fn(),
 }));
 vi.mock("#/api/agent-profiles-service/agent-profiles-service.api", () => ({
   __esModule: true,
-  default: { listProfiles: listAgentProfilesMock },
+  default: {
+    listProfiles: listAgentProfilesMock,
+    getProfile: getAgentProfileMock,
+  },
   WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME: "default",
 }));
 listAgentProfilesMock.mockResolvedValue({
   profiles: [],
   active_agent_profile_id: null,
+});
+getAgentProfileMock.mockResolvedValue({
+  name: "default",
+  profile: { secret_refs: null },
 });
 
 // LLM-profile service: real listProfiles calls (the llmProfileExists
@@ -89,6 +98,11 @@ describe("useCreateConversation", () => {
     listAgentProfilesMock.mockResolvedValue({
       profiles: [],
       active_agent_profile_id: null,
+    });
+    getAgentProfileMock.mockReset();
+    getAgentProfileMock.mockResolvedValue({
+      name: "default",
+      profile: { secret_refs: null },
     });
     listLlmProfilesMock.mockReset();
     listLlmProfilesMock.mockResolvedValue({
@@ -419,6 +433,75 @@ describe("useCreateConversation", () => {
     const call = createConversationSpy.mock.lastCall;
     expect(call?.[0]?.agentProfileId).toBeUndefined();
   });
+
+  it.each([
+    ["the local default profile", "default", "gpt", ["gpt"], "gpt"],
+    ["a missing LLM profile", "missing-llm", "missing", [], null],
+    [
+      "an implicit active-LLM override",
+      "pinned",
+      "pinned",
+      ["pinned", "selected"],
+      "selected",
+    ],
+  ] as const)(
+    "keeps a secret-scoped profile for %s",
+    async (
+      _fallback,
+      profileName,
+      llmProfileRef,
+      llmProfileNames,
+      activeLlmProfile,
+    ) => {
+      const profile = {
+        id: `profile-${profileName}`,
+        name: profileName,
+        agent_kind: "openhands",
+        revision: 1,
+        llm_profile_ref: llmProfileRef,
+        mcp_server_refs: null,
+      };
+      listAgentProfilesMock.mockResolvedValue({
+        profiles: [profile],
+        active_agent_profile_id: profile.id,
+      });
+      getAgentProfileMock.mockResolvedValue({
+        name: profile.name,
+        profile: { ...profile, secret_refs: [] },
+      });
+      listLlmProfilesMock.mockResolvedValue({
+        profiles: llmProfileNames.map((name) => ({ name })),
+        active_profile: activeLlmProfile,
+      });
+      const createConversationSpy = vi
+        .spyOn(AgentServerConversationService, "createConversation")
+        .mockResolvedValue({
+          id: "task-id",
+          app_conversation_id: "conv-1",
+          agent_server_url: "http://agent-server.local",
+        } as never);
+      const queryClient = new QueryClient();
+      queryClient.setQueryData(
+        AGENT_PROFILES_QUERY_KEYS.detail("local-1", null, profile.name),
+        { profile: { ...profile, secret_refs: null } },
+        { updatedAt: 1 },
+      );
+
+      const { result } = renderHook(() => useCreateConversation(), {
+        wrapper: ({ children }) => (
+          <QueryClientProvider client={queryClient}>
+            {children}
+          </QueryClientProvider>
+        ),
+      });
+
+      await result.current.mutateAsync({ query: "hello" });
+
+      expect(createConversationSpy.mock.lastCall?.[0]?.agentProfileId).toBe(
+        profile.id,
+      );
+    },
+  );
 
   it("keeps the profile path for an ACP `default` profile (agent_settings can't carry ACP config)", async () => {
     // The default→agent_settings shortcut is OpenHands-only: activation is

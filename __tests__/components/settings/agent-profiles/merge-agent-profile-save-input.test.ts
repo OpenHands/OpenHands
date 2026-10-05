@@ -29,8 +29,7 @@ const storedOpenHands = {
     critic_server_url: null,
     critic_model_name: null,
   },
-  enable_sub_agents: false,
-  enable_switch_llm_tool: false,
+  tools: [{ name: "terminal", params: {} }],
   tool_concurrency_limit: 4,
   mcp_server_refs: ["github"],
   disabled_skills: ["deploy-checklist"],
@@ -53,18 +52,18 @@ const storedAcp = {
 
 describe("mergeAgentProfileSaveInput", () => {
   it("preserves unmodeled OpenHands fields under the edited ones", () => {
-    const edited: AgentProfileSaveInput = {
+    const edited = {
       agent_kind: "openhands",
-      enable_sub_agents: true,
+      tools: [{ name: "grep", params: {} }],
       llm_profile_ref: "new-llm",
-    };
+    } as unknown as AgentProfileSaveInput;
 
     const merged = mergeAgentProfileSaveInput(storedOpenHands, edited);
 
     // Edited fields win.
     expect(merged).toMatchObject({
       agent_kind: "openhands",
-      enable_sub_agents: true,
+      tools: [{ name: "grep", params: {} }],
       llm_profile_ref: "new-llm",
     });
     // Fields the editor doesn't model survive the whole-profile overwrite.
@@ -74,25 +73,8 @@ describe("mergeAgentProfileSaveInput", () => {
       system_message_suffix: "Be terse.",
       mcp_server_refs: ["github"],
       disabled_skills: ["deploy-checklist"],
-      enable_switch_llm_tool: false,
       tool_concurrency_limit: 4,
     });
-  });
-
-  it("lets an edited enable_switch_llm_tool win over the stored value", () => {
-    // The editor now models the field, so an edited value must override the
-    // stored one rather than being carried under it. The field rides untyped
-    // (the pinned ts-client predates it), hence the cast.
-    const edited = {
-      agent_kind: "openhands",
-      enable_sub_agents: false,
-      enable_switch_llm_tool: true,
-      llm_profile_ref: "new-llm",
-    } as unknown as AgentProfileSaveInput;
-
-    const merged = mergeAgentProfileSaveInput(storedOpenHands, edited);
-
-    expect(merged).toMatchObject({ enable_switch_llm_tool: true });
   });
 
   it("preserves unmodeled ACP fields under the edited ones", () => {
@@ -118,7 +100,6 @@ describe("mergeAgentProfileSaveInput", () => {
   it("strips server-managed identity from the merge", () => {
     const merged = mergeAgentProfileSaveInput(storedOpenHands, {
       agent_kind: "openhands",
-      enable_sub_agents: true,
       llm_profile_ref: "new-llm",
     });
 
@@ -146,10 +127,51 @@ describe("mergeAgentProfileSaveInput", () => {
   it("passes the edited fields through on create (no stored profile)", () => {
     const edited: AgentProfileSaveInput = {
       agent_kind: "openhands",
-      enable_sub_agents: false,
       llm_profile_ref: "default",
     };
 
     expect(mergeAgentProfileSaveInput(null, edited)).toEqual(edited);
   });
+});
+
+describe("mergeAgentProfileSaveInput tools", () => {
+  it("round-trips stored tools the draft leaves out", () => {
+    const stored = {
+      ...storedOpenHands,
+      tools: [{ name: "switch_llm", params: { x: 1 } }],
+    } as unknown as AgentProfile;
+    const edited = {
+      agent_kind: "openhands",
+      mcp_server_refs: null,
+      tool_concurrency_limit: 2,
+    } as AgentProfileSaveInput;
+
+    expect(mergeAgentProfileSaveInput(stored, edited)).toMatchObject({
+      tools: [{ name: "switch_llm", params: { x: 1 } }],
+      tool_concurrency_limit: 2,
+    });
+  });
+
+  it.each([[[{ name: "terminal", params: {} }]], [null]])(
+    "replaces the stored tools with the draft's %j",
+    (tools) => {
+      const stored = {
+        ...storedOpenHands,
+        tools: [
+          { name: "terminal", params: {} },
+          { name: "switch_llm", params: {} },
+        ],
+      } as unknown as AgentProfile;
+      const edited = {
+        agent_kind: "openhands",
+        mcp_server_refs: null,
+        tools,
+      } as unknown as AgentProfileSaveInput;
+
+      expect(mergeAgentProfileSaveInput(stored, edited)).toMatchObject({
+        tools,
+        system_message_suffix: "Be terse.",
+      });
+    },
+  );
 });

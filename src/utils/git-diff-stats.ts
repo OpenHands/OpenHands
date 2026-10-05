@@ -5,40 +5,37 @@ export interface GitDiffLineStats {
   deletions: number;
 }
 
-function countUnifiedDiffStats(diff: string): GitDiffLineStats {
+export function countUnifiedDiffStats(diff: string): {
+  additions: number;
+  deletions: number;
+} {
   let additions = 0;
   let deletions = 0;
-
-  // `git diff` emits each file as a `diff --git` line, a small header block
-  // (`index …`, `--- a/x`, `+++ b/x`), then one or more `@@` hunks. The
-  // `---`/`+++` prefixes are only file-header lines *inside that header
-  // block*; once we are inside a hunk, a line that starts with `---`/`+++`
-  // is a deleted/added line whose content itself begins with `--`/`++`, and
-  // it must be counted. So we only treat `---`/`+++` as headers before the
-  // first `@@` of each file, resetting on each `diff --git`.
-  let inFileHeader = true;
+  let inHunk = false;
 
   for (const line of diff.split("\n")) {
-    if (line.startsWith("diff --git ")) {
-      inFileHeader = true;
+    if (line.startsWith("diff --git") || line.startsWith("index ")) {
+      inHunk = false;
       continue;
     }
-    if (inFileHeader) {
-      // File-header block: the first `@@` opens the first hunk; everything
-      // before it (`--- a/x`, `+++ b/x`, `index …`) is not a change.
-      if (line.startsWith("@@")) {
-        inFileHeader = false;
-      }
-      continue;
-    }
+
     if (line.startsWith("@@")) {
-      // A later hunk header is still not a change.
+      inHunk = true;
       continue;
     }
-    if (line.startsWith("+")) {
-      additions += 1;
-    } else if (line.startsWith("-")) {
-      deletions += 1;
+
+    if (!inHunk) {
+      if (line.startsWith("---") || line.startsWith("+++")) {
+        continue;
+      }
+    }
+
+    if (inHunk) {
+      if (line.startsWith("+")) {
+        additions += 1;
+      } else if (line.startsWith("-")) {
+        deletions += 1;
+      }
     }
   }
 

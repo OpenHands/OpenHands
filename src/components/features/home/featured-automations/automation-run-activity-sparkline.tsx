@@ -5,7 +5,8 @@ import { NavigationLink } from "#/components/shared/navigation-link";
 import { AUTOMATION_RUN_ACTIVITY_LIMIT } from "#/hooks/query/use-latest-automation-runs";
 import { isInFlightAutomationRun } from "#/hooks/use-home-automation-actions";
 import { I18nKey } from "#/i18n/declaration";
-import { AutomationRunStatus, type AutomationRun } from "#/types/automation";
+import type { AutomationRun } from "#/types/automation";
+import { getAutomationRunDisplay } from "#/utils/automation-run-display";
 import { formatRelativeTime } from "#/utils/format-relative-time";
 import { cn } from "#/utils/utils";
 import { getLastRunTimestamp } from "./automation-run-health";
@@ -34,8 +35,10 @@ function TooltipRow({
 }) {
   return (
     <div className="flex items-start gap-2 text-xs">
-      <span className="w-16 shrink-0 text-[var(--oh-muted)]">{label}</span>
-      <span className="min-w-0 flex-1 break-words text-white">{children}</span>
+      <span className="w-16 shrink-0 text-muted">{label}</span>
+      <span className="min-w-0 flex-1 break-words text-contrast">
+        {children}
+      </span>
     </div>
   );
 }
@@ -54,23 +57,20 @@ function RunActivityBarTooltip({
     : null;
   const durationMs = getAutomationRunDurationMs(run, nowMs);
   const durationLabel = formatDurationForTitle(durationMs);
-  const statusLabel = t(getAutomationRunStatusLabelKey(run.status));
-  const errorDetail =
-    run.status === AutomationRunStatus.FAILED
-      ? run.error_detail?.trim() || null
-      : null;
+  const display = getAutomationRunDisplay(run);
+  const statusLabel = t(getAutomationRunStatusLabelKey(display.badgeStatus));
 
   return (
-    <div className="flex w-[220px] flex-col gap-2 p-3">
+    <div className="flex w-55 flex-col gap-2 p-3">
       <div className="flex items-center gap-2">
         <span
           aria-hidden="true"
           className={cn(
             "h-3 w-1.5 shrink-0 rounded-[1px]",
-            barColorClassForStatus(run.status),
+            barColorClassForStatus(display.badgeStatus),
           )}
         />
-        <span className="text-sm font-medium text-white">{statusLabel}</span>
+        <span className="text-sm font-medium text-contrast">{statusLabel}</span>
       </div>
 
       <div className="flex flex-col gap-1">
@@ -86,9 +86,9 @@ function RunActivityBarTooltip({
         ) : null}
       </div>
 
-      {errorDetail ? (
-        <p className="line-clamp-3 text-xs text-[var(--oh-status-error)]">
-          {errorDetail}
+      {display.summary ? (
+        <p className="line-clamp-3 text-xs text-text-secondary">
+          {display.summary}
         </p>
       ) : null}
     </div>
@@ -106,7 +106,8 @@ function RunActivityBar({
 }) {
   const { t } = useTranslation("openhands");
   const durationMs = getAutomationRunDurationMs(run, nowMs);
-  const statusLabel = t(getAutomationRunStatusLabelKey(run.status));
+  const display = getAutomationRunDisplay(run);
+  const statusLabel = t(getAutomationRunStatusLabelKey(display.badgeStatus));
   const disableAnimation = import.meta.env.MODE === "test";
   const href = `/automations/${encodeURIComponent(automationId)}?run=${encodeURIComponent(run.id)}`;
 
@@ -117,13 +118,13 @@ function RunActivityBar({
       closeDelay={80}
       delay={200}
       disableAnimation={disableAnimation}
-      className="rounded-xl border border-[var(--oh-border)] bg-base-secondary p-0 text-white shadow-xl"
+      className="rounded-xl border border-border bg-base-secondary p-0 text-contrast shadow-xl"
     >
       {/* Wider hit target than the 4px bar so cancelled/skipped greys are easy to inspect. */}
       <NavigationLink
         to={href}
         aria-label={statusLabel}
-        className="group/spark-bar inline-flex h-full cursor-pointer items-end px-[2px] focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--oh-focus)]"
+        className="group/spark-bar inline-flex h-full cursor-pointer items-end px-0.5 focus:outline-none focus-visible:ring-1 focus-visible:ring-focus"
         onMouseDown={(event) => event.stopPropagation()}
         onClick={(event) => event.stopPropagation()}
       >
@@ -134,7 +135,7 @@ function RunActivityBar({
             // Grow the hovered/focused bar so it reads clearly among neighbors.
             "group-hover/spark-bar:scale-x-[1.4] group-hover/spark-bar:scale-y-[1.15]",
             "group-focus-visible/spark-bar:scale-x-[1.4] group-focus-visible/spark-bar:scale-y-[1.15]",
-            barColorClassForStatus(run.status),
+            barColorClassForStatus(display.badgeStatus),
           )}
           style={{ height: durationMsToSparklineBarHeightPx(durationMs) }}
         />
