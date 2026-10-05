@@ -103,9 +103,14 @@ export function applySegment(scope, segment) {
     case "nth":
       return scope.nth(Number(value));
     case "has-text":
-      return scope.filter({ hasText: unquote(value).text });
     case "visible":
-      return scope.filter({ visible: true });
+      if (typeof scope.filter !== "function")
+        throw new Error(
+          `${engine}= narrows the previous segment; start with a selector, e.g. 'role=row >> ${seg}' (or use text= on its own)`,
+        );
+      return engine === "has-text"
+        ? scope.filter({ hasText: unquote(value).text })
+        : scope.filter({ visible: true });
     default:
       return scope.locator(seg);
   }

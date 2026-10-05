@@ -220,3 +220,19 @@ test("browser help documents the input verbs agents asked for", () => {
   ])
     assert.match(res.stdout, new RegExp(verb.replace(/[-]/g, "\\-")));
 });
+
+test("has-text and visible need a previous segment", () => {
+  assert.throws(
+    () => buildLocator({ locator: () => ({}) }, "has-text=QA_x"),
+    /narrows the previous segment/,
+  );
+});
+
+test("global flags may come before the command", () => {
+  const res = spawnSync(
+    process.execPath,
+    [cli, "--run", "/nonexistent-run", "status"],
+    { encoding: "utf8" },
+  );
+  assert.doesNotMatch(res.stdout + res.stderr, /Unknown command/);
+});

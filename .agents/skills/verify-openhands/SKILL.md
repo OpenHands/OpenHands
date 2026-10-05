@@ -66,7 +66,7 @@ control-openhands evidence add --feature F05.secret-create --result pass --entry
 control-openhands stop                         # stops only this run; evidence stays
 ```
 
-- **Which run.** Commands use `--run`, else `$OH_VERIFY_RUN`, else the only live
+- **Which run.** Commands use `--run DIR` (anywhere on the line), else `$OH_VERIFY_RUN`, else the only live
   run. With several live runs they refuse to guess, so export `OH_VERIFY_RUN` in
   every shell command when other agents share the machine: an agent that drives
   someone else's run corrupts both evidence ledgers. For the same reason never
@@ -118,7 +118,9 @@ control-openhands stop                         # stops only this run; evidence s
   `<run>/evidence/ledger.jsonl`; `evidence report` renders the table from
   [the report contract](references/report.md). Keys, logs, browser profile and
   downloads stay in `<run>/private/`. Evidence is not automatically public:
-  review every image before publishing it.
+  review every image before publishing it. The CLI masks password fields in
+  `snapshot`, `value` and `testids`; a screenshot of a visible key field is
+  still a leak.
 - **Cleanup** with `control-openhands stop` (add `--purge-private` to delete keys
   and state once you have checked the evidence). It only signals the process
   group it launched and verifies the ports closed. Delete run-owned fixtures

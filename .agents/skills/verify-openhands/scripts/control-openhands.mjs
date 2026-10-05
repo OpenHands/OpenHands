@@ -2411,6 +2411,7 @@ async function cmdBrowser({ positional, flags }) {
         timeout,
         force: Boolean(flags.force),
         button: flags.button,
+        reveal: Boolean(flags.reveal),
       });
       break;
     case "fill":
@@ -3202,7 +3203,7 @@ Verbs
   hover|focus|check|uncheck <sel>        (hidden <input> switches: click their label instead)
   mouse-click X Y [--button B]          click at viewport coordinates (backdrops, overlays)
   tooltip <sel>                          hover and return the role=tooltip text (or the title attribute)
-  fill|type <sel> <value> [--value-file F | --value-env VAR]
+  fill|type <sel> [<value> | --value-file F | --value-env VAR]   (prefer the file/env forms for keys)
   press <Key> [--selector S]            e.g. Escape, Enter, Control+k, Meta+k
   select <sel> <value> | upload <sel> <file...> | scroll [<sel>] [--by PX] [--x PX]
   upload-via <trigger-sel> <file...>     click a button/menu item and answer the real file chooser
@@ -3213,6 +3214,7 @@ Verbs
   clipboard [--write TEXT]               read (or arrange) the clipboard; Copy buttons write it
   wait <sel> [--state visible|hidden|attached|detached] | wait-url <regex> | wait-text <text>
   text|value|count|visible|enabled|bbox <sel> | attr <sel> <name>
+        (password values are masked in value, snapshot and testids; value --reveal shows one)
   snapshot [<sel>] [--max-lines N] [--feature ID --name N]   ARIA tree (saved as evidence)
   testids [<sel>] [--hidden] [--filter part]                 discover on-screen data-testid handles (--hidden adds hidden/off-screen)
   screenshot [<sel>] --feature ID --name N [--full-page]     PNG under evidence/<ID>/
@@ -3273,7 +3275,19 @@ const COMMANDS = {
 };
 
 async function main() {
-  const [command, ...rest] = process.argv.slice(2);
+  // Global flags such as --run DIR may come before the command.
+  let argv = process.argv.slice(2);
+  const leading = [];
+  while (argv[0]?.startsWith("--") && !["--help", "-h"].includes(argv[0])) {
+    const takesValue =
+      !argv[0].includes("=") &&
+      argv[1] !== undefined &&
+      !argv[1].startsWith("--");
+    leading.push(...argv.slice(0, takesValue ? 2 : 1));
+    argv = argv.slice(takesValue ? 2 : 1);
+  }
+  const [command, ...afterCommand] = argv;
+  const rest = [...afterCommand, ...leading];
   if (
     !command ||
     command === "--help" ||

@@ -91,6 +91,13 @@ that every row passes today; the run's evidence ledger is.
   the operator's home.
 - Each port is its own origin: `browser goto` needs `--allow-external` for any
   other localhost port, and that origin starts at first run again.
+- Two stacks (a second backend, backend switching): launch the second one with
+  `export OH_VERIFY_RUN_2=$(OH_VERIFY_RUN= control-openhands launch --new
+  --no-browser --print-run)` and address it with `--run "$OH_VERIFY_RUN_2"`
+  (before or after the command). Add it in the UI as a backend; activating a
+  backend asks for its own telemetry consent, which `onboard --skip` answers.
+  While its services are stopped the browser logs CORS errors for that origin;
+  they come from the dead upstream, not from the app.
 - At phone width the desktop sidebar stays in the DOM, hidden, so sidebar test
   ids match twice: scope them, `'testid=sidebar-mobile-drawer >> ...'`.
 - Card toggles that swap their icon on hover (plugins, skills, pickers) can

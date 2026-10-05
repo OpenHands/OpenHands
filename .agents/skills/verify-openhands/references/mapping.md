@@ -140,7 +140,8 @@ Execute every command you wrote, in order, on a fresh `launch` (or a run you
 have doctored since its last surprise). Before you hand the file over, run the
 whole file once more from the top, exactly as written; a multi-minute,
 model-backed step whose commands did not change since it last passed may be
-skipped in that second pass if you say so in the report.
+skipped in that second pass if you say so in the report, and a family that
+stops or restarts services may use a fresh stack for it.
 
 Families about the launcher or the outside world (partial stacks, Docker,
 desktop, a git remote) need some plain shell commands. Keep them few, give

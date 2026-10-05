@@ -369,7 +369,9 @@ async function collectTestids(scopeSelector, includeHidden) {
         el.getAttribute("aria-label") ||
         el.getAttribute("title") ||
         el.getAttribute("placeholder") ||
-        (el.innerText || el.value || "").trim().split("\n")[0];
+        (el.innerText || (el.type === "password" ? "" : el.value) || "")
+          .trim()
+          .split("\n")[0];
       const entry = seen.get(id) || {
         testid: id,
         tag: el.tagName.toLowerCase(),
@@ -701,8 +703,20 @@ const handlers = {
     }
     return { text: (await loc.innerText({ timeout })).trim() };
   },
-  async value({ selector, timeout }) {
-    return { value: await locate(selector).inputValue({ timeout }) };
+  async value({ selector, timeout, reveal }) {
+    const loc = locate(selector);
+    const value = await loc.inputValue({ timeout });
+    const type = await loc
+      .first()
+      .getAttribute("type")
+      .catch(() => null);
+    if (type === "password" && !reveal)
+      return {
+        value: value ? "********" : "",
+        length: value.length,
+        masked: true,
+      };
+    return { value };
   },
   async attr({ selector, name, timeout }) {
     return { [name]: await locate(selector).getAttribute(name, { timeout }) };
@@ -748,7 +762,15 @@ const handlers = {
     const loc = selector
       ? locate(selector).first()
       : activePage.locator("body");
-    const tree = await loc.ariaSnapshot();
+    // ARIA snapshots include textbox values: mask what password fields hold
+    // so keys never land in output or saved evidence.
+    const secrets = await activePage.evaluate(() =>
+      [...document.querySelectorAll('input[type="password"]')]
+        .map((i) => i.value)
+        .filter((v) => v && v.length >= 4),
+    );
+    let tree = await loc.ariaSnapshot();
+    for (const s of secrets) tree = tree.split(s).join("********");
     let saved;
     if (feature || name) {
       saved = evidencePath(
