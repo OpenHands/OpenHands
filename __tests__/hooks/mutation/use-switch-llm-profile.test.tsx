@@ -16,6 +16,10 @@ import {
   setStoredConversationMetadata,
 } from "#/api/conversation-metadata-store";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import {
+  BACKEND_REQUEST_TIMEOUT_MESSAGE,
+  CORS_OR_NETWORK_ERROR_MESSAGE,
+} from "#/utils/user-facing-error";
 
 vi.mock("#/utils/custom-toast-handlers");
 
@@ -228,6 +232,40 @@ describe("useSwitchLlmProfile", () => {
 
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(displayErrorToast).toHaveBeenCalledWith("MODEL$SWITCH_FAILED");
+  });
+
+  it("keeps the shared disconnect wording when the switch request never reaches the server", async () => {
+    // Arrange — the shared client wraps a fetch failure in a plain Error that
+    // carries no response body.
+    vi.mocked(AgentServerConversationService.switchProfile).mockRejectedValue(
+      new Error("Request failed: Failed to fetch", {
+        cause: new TypeError("Failed to fetch"),
+      }),
+    );
+
+    // Act
+    const { result } = renderSwitchHook();
+    result.current.mutate({ conversationId: "conv-1", profileName: "Smart" });
+
+    // Assert
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(displayErrorToast).toHaveBeenCalledWith(
+      CORS_OR_NETWORK_ERROR_MESSAGE,
+    );
+  });
+
+  it("keeps the shared timeout wording when the switch request times out", async () => {
+    vi.mocked(AgentServerConversationService.switchProfile).mockRejectedValue(
+      new Error("Request timeout after 60000ms"),
+    );
+
+    const { result } = renderSwitchHook();
+    result.current.mutate({ conversationId: "conv-1", profileName: "Smart" });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(displayErrorToast).toHaveBeenCalledWith(
+      BACKEND_REQUEST_TIMEOUT_MESSAGE,
+    );
   });
 
   // The following behaviors run in the mutation-level onSuccess (not

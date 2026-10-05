@@ -12,7 +12,7 @@ import {
   stampActiveLlmProfile,
 } from "#/hooks/chat/record-model-switch-message";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
-import { getApiErrorMessage } from "#/utils/api-error-message";
+import { getApiOrConnectionErrorMessage } from "#/utils/api-error-message";
 import { I18nKey } from "#/i18n/declaration";
 import { invalidateConversationQueries } from "./conversation-mutation-utils";
 
@@ -63,7 +63,9 @@ export const useSwitchLlmProfile = () => {
     }),
     onError: (error, { profileName }) => {
       const fallback = t(I18nKey.MODEL$SWITCH_FAILED, { name: profileName });
-      displayErrorToast(getApiErrorMessage(error, fallback));
+      // Server errors show their `detail`; a network failure or timeout keeps
+      // the shared "Disconnected (...)" wording.
+      displayErrorToast(getApiOrConnectionErrorMessage(error, fallback));
     },
     onSuccess: (_data, { conversationId, profileName }, context) => {
       queryClient.invalidateQueries({
