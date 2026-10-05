@@ -28,7 +28,7 @@ function isStepDone(
   if (!guideSteps || step.completion === "optional") {
     return false;
   }
-  return step.completion === "guide-org" || guideSteps[step.completion];
+  return guideSteps[step.completion];
 }
 
 /**

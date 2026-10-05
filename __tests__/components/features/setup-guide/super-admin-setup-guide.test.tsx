@@ -138,10 +138,10 @@ describe("SuperAdminSetupGuide", () => {
     expect(
       await screen.findByTestId("super-admin-setup-guide-panel"),
     ).toBeInTheDocument();
-    expect(screen.getByText("2/5")).toBeInTheDocument();
+    expect(screen.getByText("1/4")).toBeInTheDocument();
     expect(screen.getByRole("progressbar")).toHaveAttribute(
       "aria-valuenow",
-      "40",
+      "25",
     );
   });
 
@@ -168,14 +168,11 @@ describe("SuperAdminSetupGuide", () => {
       `${CLOUD_HOST}/settings/org-members?org=${GUIDE_ORG_ID}`,
     );
     expect(
-      screen.getByTestId("super-admin-setup-guide-step-create-org"),
-    ).toHaveAttribute("href", `${CLOUD_HOST}/super-admin/organizations`);
-    expect(
       screen.getByTestId("super-admin-setup-guide-step-optional-saml"),
     ).toHaveAttribute("href", `${CLOUD_HOST}/super-admin/instance`);
     expect(
       screen.getByTestId("super-admin-setup-guide-step-first-automation"),
-    ).toHaveAttribute("href", "/automations");
+    ).toHaveAttribute("href", "/automations/templates");
     expect(screen.getByTestId("super-admin-setup-guide-page")).toHaveAttribute(
       "href",
       `${CLOUD_HOST}/super-admin/setup`,
@@ -187,12 +184,12 @@ describe("SuperAdminSetupGuide", () => {
     let state = guideState({ org_llm: true });
     serveSetupGuide({ setupState: () => HttpResponse.json(state) });
     const { navigateTo } = renderGuide("/automations/templates");
-    expect(await screen.findByText("2/5")).toBeInTheDocument();
+    expect(await screen.findByText("1/4")).toBeInTheDocument();
 
     state = guideState({ org_llm: true, automation: true });
     navigateTo("/automations/automation-1");
 
-    expect(await screen.findByText("3/5")).toBeInTheDocument();
+    expect(await screen.findByText("2/4")).toBeInTheDocument();
   });
 
   it("closes to the pill and opens again from it", async () => {
