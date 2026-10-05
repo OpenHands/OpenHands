@@ -1,0 +1,13 @@
+# Before (main @ aeea97e1b), control-openhands live run, /automations dashboard
+$ control-openhands browser click [data-testid^="automation-card-"] >> has-text=QA_17907 Digest >> role=button[name="Automation actions"]
+{ "ok": true, "url": "http://127.0.0.1:18810/automations"}
+$ control-openhands browser click role=list >> has-text=Export >> role=button[name="Delete"]
+{ "ok": true, "url": "http://127.0.0.1:18810/automations"}
+$ control-openhands browser eval document.activeElement.tagName
+{ "ok": true, "value": "BODY"}
+$ control-openhands browser press Escape
+{ "ok": true, "url": "http://127.0.0.1:18810/automations"}
+$ control-openhands browser count role=heading[name="Delete automation"]
+{ "ok": true, "count": 1}
+$ control-openhands browser count role=dialog
+{ "ok": true, "count": 0}

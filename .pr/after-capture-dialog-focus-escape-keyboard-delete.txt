@@ -1,0 +1,67 @@
+# After (aeea97e1b + this fix; doctor: served build matches this checkout), /automations dashboard
+$ control-openhands browser click [data-testid^="automation-card-"] >> has-text=QA_17907 Digest >> role=button[name="Automation actions"]
+{ "ok": true, "url": "http://127.0.0.1:18820/automations"}
+$ control-openhands browser click role=list >> has-text=Export >> role=button[name="Delete"]
+{ "ok": true, "url": "http://127.0.0.1:18820/automations"}
+$ control-openhands browser count role=dialog[name="Delete automation"]
+{ "ok": true, "count": 1}
+$ control-openhands browser attr role=dialog[name="Delete automation"] aria-modal
+{ "ok": true, "aria-modal": "true"}
+$ control-openhands browser eval document.activeElement.tagName + ' ' + document.activeElement.textContent + ' insideDialog=' + !!document.activeElement.closest('[role=dialog]')
+{ "ok": true, "value": "BUTTON Cancel insideDialog=true"}
+$ control-openhands browser press Escape
+{ "ok": true, "url": "http://127.0.0.1:18820/automations"}
+$ control-openhands browser count role=dialog
+{ "ok": true, "count": 0}
+$ control-openhands browser count role=heading[name="Delete automation"]
+{ "ok": true, "count": 0}
+$ control-openhands browser count [data-testid^="automation-card-"] >> has-text=QA_17907 Digest
+{ "ok": true, "count": 1}
+$ control-openhands api GET /api/automation/v1
+{ "ok": true, "status": 200, "contentType": "application/json", "body": { "automations": [ {  "name": "QA_17907 Digest", ... } ], "total": 1 }}
+# Cancel, Close (X) and backdrop click still dismiss without deleting
+$ control-openhands browser click role=dialog[name="Delete automation"] >> role=button[name="Cancel"]
+{ "ok": true, "url": "http://127.0.0.1:18820/automations"}
+$ control-openhands browser count role=dialog
+{ "ok": true, "count": 0}
+$ control-openhands browser click role=dialog[name="Delete automation"] >> role=button[name="Close"]
+{ "ok": true, "url": "http://127.0.0.1:18820/automations"}
+$ control-openhands browser count role=dialog
+{ "ok": true, "count": 0}
+$ control-openhands browser mouse-click 60 900
+{ "ok": true, "url": "http://127.0.0.1:18820/automations"}
+$ control-openhands browser count role=dialog
+{ "ok": true, "count": 0}
+$ control-openhands browser count [data-testid^="automation-card-"] >> has-text=QA_17907 Digest
+{ "ok": true, "count": 1}
+# Automation detail page: same dialog; Escape cancels, then keyboard Tab + Enter on Delete deletes
+$ control-openhands browser click [data-testid^="automation-card-"] >> has-text=QA_17907 Digest >> role=heading --expect-url /automations/[0-9a-f-]{8,}
+{ "ok": true, "url": "http://127.0.0.1:18820/automations/ff301a01-04d3-4d40-9b9b-e6eeb46f7207"}
+$ control-openhands browser click role=button[name="Automation actions"]
+{ "ok": true, "url": "http://127.0.0.1:18820/automations/ff301a01-04d3-4d40-9b9b-e6eeb46f7207"}
+$ control-openhands browser click role=list >> has-text=Tarball >> role=button[name="Delete"]
+{ "ok": true, "url": "http://127.0.0.1:18820/automations/ff301a01-04d3-4d40-9b9b-e6eeb46f7207"}
+$ control-openhands browser count role=dialog[name="Delete automation"]
+{ "ok": true, "count": 1}
+$ control-openhands browser eval document.activeElement.textContent + ' insideDialog=' + !!document.activeElement.closest('[role=dialog]')
+{ "ok": true, "value": "Cancel insideDialog=true"}
+$ control-openhands browser press Escape
+{ "ok": true, "url": "http://127.0.0.1:18820/automations/ff301a01-04d3-4d40-9b9b-e6eeb46f7207"}
+$ control-openhands browser count role=dialog
+{ "ok": true, "count": 0}
+$ control-openhands browser url
+{ "ok": true, "url": "http://127.0.0.1:18820/automations/ff301a01-04d3-4d40-9b9b-e6eeb46f7207", "title": "OpenHands", "viewport": { "width": 1440, "height": 1000 }}
+$ control-openhands browser click role=button[name="Automation actions"]
+{ "ok": true, "url": "http://127.0.0.1:18820/automations/ff301a01-04d3-4d40-9b9b-e6eeb46f7207"}
+$ control-openhands browser click role=list >> has-text=Tarball >> role=button[name="Delete"]
+{ "ok": true, "url": "http://127.0.0.1:18820/automations/ff301a01-04d3-4d40-9b9b-e6eeb46f7207"}
+$ control-openhands browser press Tab
+{ "ok": true, "url": "http://127.0.0.1:18820/automations/ff301a01-04d3-4d40-9b9b-e6eeb46f7207"}
+$ control-openhands browser eval document.activeElement.textContent
+{ "ok": true, "value": "Delete"}
+$ control-openhands browser press Enter
+{ "ok": true, "url": "http://127.0.0.1:18820/automations/ff301a01-04d3-4d40-9b9b-e6eeb46f7207"}
+$ control-openhands browser wait-url /automations(\?|$)
+{ "ok": true, "url": "http://127.0.0.1:18820/automations"}
+$ control-openhands api GET /api/automation/v1
+{ "ok": true, "status": 200, "contentType": "application/json", "body": { "automations": [], "total": 0 }}
