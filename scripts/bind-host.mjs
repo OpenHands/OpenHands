@@ -16,7 +16,9 @@ export function isLoopbackBind(host) {
     .trim()
     .replace(/^\[|\]$/g, "")
     .toLowerCase();
-  return STATIC_LOOPBACK_HOSTS.has(normalized) || IPV4_LOOPBACK_RE.test(normalized);
+  return (
+    STATIC_LOOPBACK_HOSTS.has(normalized) || IPV4_LOOPBACK_RE.test(normalized)
+  );
 }
 
 /**
@@ -75,4 +77,25 @@ export function applySessionKeyPolicy(opts = {}) {
     authRequired: true,
     strippedSessionKey: true,
   };
+}
+
+/**
+ * Translate the shared bind/key policy into static-server CLI flags.
+ *
+ * @param {Parameters<typeof applySessionKeyPolicy>[0]} opts
+ * @returns {string[]}
+ */
+export function buildSessionKeyPolicyArgs(opts = {}) {
+  const policy = applySessionKeyPolicy(opts);
+  const args = [];
+  if (policy.sessionApiKey) {
+    args.push("--session-api-key", policy.sessionApiKey);
+    if (opts.allowLanSessionKey) {
+      args.push("--allow-lan-session-key");
+    }
+  }
+  if (policy.authRequired) {
+    args.push("--auth-required");
+  }
+  return args;
 }

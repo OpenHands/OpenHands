@@ -14,6 +14,12 @@ describe("dev-static CLI", () => {
   ])("parses an explicit bind host", (argv, expected) => {
     expect(parseArgs(argv).host).toBe(expected);
   });
+
+  it("parses explicit LAN session-key consent", () => {
+    expect(parseArgs(["--allow-lan-session-key"]).allowLanSessionKey).toBe(
+      true,
+    );
+  });
 });
 
 describe("dev-static", () => {

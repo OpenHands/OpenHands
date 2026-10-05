@@ -54,6 +54,7 @@ Override versions via environment variables:
 const isPublic = args.includes("--public");
 const isFrontendOnly = args.includes("--frontend-only");
 const isBackendOnly = args.includes("--backend-only");
+const allowLanSessionKey = args.includes("--allow-lan-session-key");
 
 if (args.includes("-h") || args.includes("--help")) {
   console.log(`
@@ -79,6 +80,9 @@ OPTIONS:
                         or :: to listen on all interfaces; the session
                         key is then not injected into HTML.
   --public              Enable public mode (see above)
+  --allow-lan-session-key
+                        Inject the session key when binding off-loopback.
+                        Only use on a trusted LAN; incompatible with --public.
   --frontend-only       Start only the static frontend behind ingress
   --backend-only        Start only agent-server + automation behind ingress
   -v, --version         Show version number
@@ -138,6 +142,11 @@ if (isFrontendOnly && isPublic) {
   process.exit(1);
 }
 
+if (isPublic && allowLanSessionKey) {
+  console.error("Error: --public cannot be used with --allow-lan-session-key");
+  process.exit(1);
+}
+
 // Check build exists before doing anything else unless no frontend will run.
 if (!isBackendOnly && !existsSync(BUILD_DIR)) {
   console.error(`
@@ -153,8 +162,11 @@ this is a packaging error. If running from source:
 }
 
 let main;
+let formatLauncherError;
+let isPortInUseError;
 try {
-  ({ main } = await import("../scripts/dev-with-automation.mjs"));
+  ({ main, formatLauncherError, isPortInUseError } =
+    await import("../scripts/dev-with-automation.mjs"));
 } catch (err) {
   console.error("Failed to load required scripts. Try reinstalling:");
   console.error("  npm install -g @openhands/agent-canvas@latest");
@@ -168,9 +180,10 @@ main({
   staticDir: BUILD_DIR,
   mode: "agent-canvas",
   isPublic,
+  allowLanSessionKey,
 }).catch((err) => {
-  console.error(`Fatal error: ${err.message}`);
-  if (err.stack) {
+  console.error(`Fatal error: ${formatLauncherError(err)}`);
+  if (!isPortInUseError(err) && err instanceof Error && err.stack) {
     console.error(err.stack);
   }
   process.exit(1);

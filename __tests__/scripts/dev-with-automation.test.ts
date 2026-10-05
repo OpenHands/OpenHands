@@ -24,9 +24,12 @@ import {
   buildViteBackendEnv,
   buildViteFrontendEnv,
   getAgentServerBaseUrl,
+  formatLauncherError,
   getFrontendBackend,
+  isPortInUseError,
   getLocalServiceRoutes,
   getRejectPrefixes,
+  parseArgs,
   setServiceLogListener,
   spawnService,
   validateLocalAutomationPath,
@@ -86,6 +89,38 @@ describe("buildAutomationRuntimeServicesInfo", () => {
     expect(info.services.ingress.url_from_agent).toBe("http://localhost:8000");
     expect(info.services.automation.url_from_agent).toBe(
       "http://localhost:18001",
+    );
+  });
+});
+
+describe("dev-with-automation CLI", () => {
+  it("adds CLI and environment alternatives to busy-port errors", () => {
+    expect(
+      formatLauncherError(
+        new Error(
+          "Cannot start: the following ports are already in use:\n\n" +
+            "   • ingress: port 8000\n\n" +
+            "Another agent-canvas instance may already be running.\n" +
+            "Stop it first, or override the port via environment variables (e.g. PORT=<other>).",
+        ),
+      ),
+    ).toMatch(/--port <other>.*PORT=<other>|PORT=<other>.*--port <other>/s);
+  });
+
+  it("classifies only busy-port errors as user-facing launcher errors", () => {
+    expect(
+      isPortInUseError(
+        new Error("Cannot start: the following ports are already in use"),
+      ),
+    ).toBe(true);
+    const unexpected = new Error("unexpected launcher failure");
+    expect(isPortInUseError(unexpected)).toBe(false);
+    expect(unexpected.stack).toContain("unexpected launcher failure");
+  });
+
+  it("parses explicit LAN session-key consent", () => {
+    expect(parseArgs(["--allow-lan-session-key"]).allowLanSessionKey).toBe(
+      true,
     );
   });
 });
@@ -614,6 +649,22 @@ describe("stack mode routing", () => {
     );
   });
 
+  it("injects the key off-loopback only with explicit LAN consent", async () => {
+    const config = await buildConfig(
+      { host: "0.0.0.0", allowLanSessionKey: true },
+      envWithIsolatedKeyPath(),
+    );
+
+    expect(config.allowLanSessionKey).toBe(true);
+    expect(buildViteFrontendEnv(config)).toMatchObject({
+      VITE_BIND_HOST: "0.0.0.0",
+      VITE_SESSION_API_KEY: config.sessionApiKey,
+    });
+    expect(buildViteFrontendEnv(config)).not.toHaveProperty(
+      "VITE_AUTH_REQUIRED",
+    );
+  });
+
   it("keeps the session key out of an off-loopback Vite origin", async () => {
     const config = await buildConfig(
       { host: "0.0.0.0" },
@@ -648,6 +699,15 @@ describe("stack mode routing", () => {
     );
 
     expect(config.bindHost).toBe("127.0.0.1");
+  });
+
+  it("rejects LAN key injection in public mode", async () => {
+    await expect(
+      buildConfig(
+        { public: true, allowLanSessionKey: true },
+        envWithIsolatedKeyPath({ LOCAL_BACKEND_API_KEY: "public-key" }),
+      ),
+    ).rejects.toThrow(/--public cannot be used with --allow-lan-session-key/);
   });
 
   it("keeps the session key out of public-mode Vite on loopback", async () => {

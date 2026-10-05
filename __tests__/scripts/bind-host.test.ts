@@ -4,6 +4,7 @@ import {
   DEFAULT_BIND_HOST,
   applySessionKeyPolicy,
   bindHostArgs,
+  buildSessionKeyPolicyArgs,
   isLoopbackBind,
   resolveBindHost,
 } from "../../scripts/bind-host.mjs";
@@ -15,9 +16,7 @@ describe("bind-host", () => {
   });
 
   it("prefers --host over OH_BIND_HOST", () => {
-    expect(
-      resolveBindHost({ flag: "0.0.0.0", env: "::" }),
-    ).toBe("0.0.0.0");
+    expect(resolveBindHost({ flag: "0.0.0.0", env: "::" })).toBe("0.0.0.0");
   });
 
   it("treats :: and 0.0.0.0 as non-loopback", () => {
@@ -69,6 +68,26 @@ describe("bind-host", () => {
     });
     expect(policy.sessionApiKey).toBe("secret-key");
     expect(policy.strippedSessionKey).toBe(false);
+  });
+
+  it("builds static-server flags for explicit LAN consent", () => {
+    expect(
+      buildSessionKeyPolicyArgs({
+        host: "0.0.0.0",
+        sessionApiKey: "secret-key",
+        allowLanSessionKey: true,
+      }),
+    ).toEqual(["--session-api-key", "secret-key", "--allow-lan-session-key"]);
+  });
+
+  it("builds key-free static-server flags by default off-loopback", () => {
+    expect(
+      buildSessionKeyPolicyArgs({
+        host: "0.0.0.0",
+        sessionApiKey: "secret-key",
+        warn: () => {},
+      }),
+    ).toEqual(["--auth-required"]);
   });
 
   it("emits --host for child processes", () => {

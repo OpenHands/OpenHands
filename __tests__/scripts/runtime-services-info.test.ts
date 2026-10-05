@@ -19,6 +19,8 @@ interface RuntimeServicesInfoShape {
   agent_host_alias: string;
   services: {
     agent_server?: { url_from_agent: string };
+    ingress?: { description: string; url_from_agent: string };
+    frontend?: { url_from_agent: string };
     automation?: {
       url_from_agent: string;
       api_prefix: string;
@@ -69,6 +71,33 @@ describe("runtime-services-info.mjs", () => {
         automation: {},
       }) as RuntimeServicesInfoShape;
       expect(info.services.automation).toBeUndefined();
+    });
+
+    it("describes a backend-only ingress without a frontend route", () => {
+      const info = buildRuntimeServicesInfo({
+        agentServerPort: 18000,
+        ingressPort: 8000,
+        automation: { port: 18001 },
+      }) as RuntimeServicesInfoShape;
+
+      expect(info.services.frontend).toBeUndefined();
+      expect(info.services.ingress?.description).not.toContain("frontend");
+      expect(info.services.ingress?.description).not.toContain(
+        "and /* to the frontend",
+      );
+    });
+
+    it("describes the frontend route when the full stack exposes one", () => {
+      const info = buildRuntimeServicesInfo({
+        agentServerPort: 18000,
+        ingressPort: 8000,
+        frontendPort: 3001,
+        automation: { port: 18001 },
+      }) as RuntimeServicesInfoShape;
+
+      expect(info.services.ingress?.description).toContain(
+        "/* to the frontend",
+      );
     });
 
     it("throws when neither port nor url is provided", () => {

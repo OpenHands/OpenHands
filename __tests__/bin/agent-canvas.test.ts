@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { spawn } from "node:child_process";
 import { once } from "node:events";
+import net from "node:net";
 import {
   chmodSync,
   copyFileSync,
@@ -43,7 +44,82 @@ describe("agent-canvas CLI", () => {
     expect(stdout).toContain("USAGE:");
     expect(stdout).toContain("--frontend-only");
     expect(stdout).toContain("--backend-only");
+    expect(stdout).toContain("--allow-lan-session-key");
     expect(stdout).toContain("--help");
+  });
+
+  it("prints a busy-port error once without an internal stack", async () => {
+    const server = net.createServer();
+    const stubBinDir = mkdtempSync(resolve(tmpdir(), "agent-canvas-stub-bin-"));
+    const isWindows = process.platform === "win32";
+
+    if (isWindows) {
+      writeFileSync(resolve(stubBinDir, "uvx.cmd"), "@exit /b 0\r\n");
+    } else {
+      const uvxPath = resolve(stubBinDir, "uvx");
+      writeFileSync(uvxPath, "#!/bin/sh\nexit 0\n");
+      chmodSync(uvxPath, 0o755);
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      server.listen(0, "127.0.0.1", resolve);
+      server.on("error", reject);
+    });
+
+    const address = server.address();
+    if (!address || typeof address === "string") {
+      server.close();
+      rmSync(stubBinDir, { recursive: true, force: true });
+      throw new Error("Failed to reserve a port");
+    }
+
+    try {
+      const child = spawn(
+        process.execPath,
+        [
+          "bin/agent-canvas.mjs",
+          "--backend-only",
+          "--port",
+          String(address.port),
+        ],
+        {
+          cwd: repoRoot,
+          env: {
+            ...process.env,
+            PATH: `${stubBinDir}${delimiter}${process.env.PATH ?? ""}`,
+            OH_CANVAS_SAFE_BACKEND_PORT: "19920",
+            OH_CANVAS_SAFE_AUTOMATION_PORT: "19921",
+            ...(isWindows
+              ? {
+                  PATHEXT: process.env.PATHEXT ?? ".CMD;.EXE;.BAT;.COM",
+                  SystemRoot: process.env.SystemRoot ?? "",
+                }
+              : {}),
+          },
+          stdio: ["ignore", "pipe", "pipe"],
+        },
+      );
+
+      let output = "";
+      child.stdout.on("data", (chunk) => {
+        output += chunk.toString();
+      });
+      child.stderr.on("data", (chunk) => {
+        output += chunk.toString();
+      });
+
+      const [code] = await once(child, "exit");
+      expect(code).toBe(1);
+      expect(
+        output.match(/Cannot start: the following ports are already in use/g),
+      ).toHaveLength(1);
+      expect(output).toContain("--port <other>");
+      expect(output).toContain("PORT=<other>");
+      expect(output).not.toContain("at assertPortsFree");
+    } finally {
+      server.close();
+      rmSync(stubBinDir, { recursive: true, force: true });
+    }
   });
 
   it("does not require build/ in --backend-only mode", async () => {

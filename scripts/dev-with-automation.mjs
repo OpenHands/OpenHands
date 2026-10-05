@@ -73,6 +73,7 @@ import {
 import { fileLog, stripAnsi } from "./logger.mjs";
 import {
   applySessionKeyPolicy,
+  buildSessionKeyPolicyArgs,
   bindHostArgs,
   isLoopbackBind,
   resolveBindHost,
@@ -132,6 +133,22 @@ function logError(message) {
   fileLog("error", `✗ ${stripAnsi(message)}`);
 }
 
+export function isPortInUseError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("following ports are already in use");
+}
+
+export function formatLauncherError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  if (!isPortInUseError(error)) {
+    return message;
+  }
+  return (
+    `${message}\n` +
+    "You can also choose a different ingress port with --port <other>."
+  );
+}
+
 /**
  * Parse one JSON log line produced by the SDK's JsonFormatter and return a
  * single-line human-readable string + an appropriate ANSI color.
@@ -168,8 +185,8 @@ function parseAgentServerLogLine(rawLine) {
 // Configuration
 // ═══════════════════════════════════════════════════════════════════════════
 
-function parseArgs() {
-  const args = process.argv.slice(2);
+function parseArgs(argv = process.argv.slice(2)) {
+  const args = argv;
   const config = {
     port: null,
     automationGitRef: null,
@@ -183,6 +200,7 @@ function parseArgs() {
     frontendOnly: false,
     backendOnly: false,
     host: null,
+    allowLanSessionKey: false,
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -226,6 +244,9 @@ function parseArgs() {
       case "--host":
         config.host = args[++i];
         break;
+      case "--allow-lan-session-key":
+        config.allowLanSessionKey = true;
+        break;
       case "-h":
       case "--help":
         showHelp();
@@ -259,6 +280,8 @@ OPTIONS:
   --dynamic                   Force Vite dev server when a wrapper defaults static
   --frontend-only             Start only the frontend behind ingress
   --backend-only              Start only agent-server + automation behind ingress
+  --allow-lan-session-key     Inject the session key when binding off-loopback
+                              (trusted LAN only; incompatible with --public)
   -v, --verbose               Show detailed output
   -h, --help                  Show this help
 
@@ -423,6 +446,9 @@ async function buildConfig(args, env = process.env) {
   if (isPublic && frontendOnly) {
     throw new Error("--public cannot be used with --frontend-only");
   }
+  if (isPublic && args.allowLanSessionKey) {
+    throw new Error("--public cannot be used with --allow-lan-session-key");
+  }
 
   // In public mode, LOCAL_BACKEND_API_KEY is required — without it the
   // auth screen has nothing to validate against.
@@ -497,7 +523,7 @@ async function buildConfig(args, env = process.env) {
       env.OH_BIND_HOST ||
       (env.OH_CONVERSATION_RUNTIME === "docker" ? "0.0.0.0" : undefined),
   });
-  if (!isLoopbackBind(bindHost) && !isPublic) {
+  if (!isLoopbackBind(bindHost) && !isPublic && !args.allowLanSessionKey) {
     logService(
       "auth",
       `Bind host ${bindHost} is not loopback — session key will not be injected into HTML`,
@@ -537,6 +563,8 @@ async function buildConfig(args, env = process.env) {
 
     // Public mode — the session key should NOT be baked into the frontend
     isPublic,
+    // Explicit consent to inject the key into HTML on non-loopback binds.
+    allowLanSessionKey: Boolean(args.allowLanSessionKey),
 
     frontendOnly,
     backendOnly,
@@ -1231,6 +1259,7 @@ function buildViteFrontendEnv(config) {
         ? config.sessionApiKey
         : null,
     authRequired: Boolean(config.launchAgentServer && config.isPublic),
+    allowLanSessionKey: config.allowLanSessionKey,
     warn: (msg) => logService("vite", msg, c.yellow),
   });
   if (policy.authRequired) {
@@ -1467,6 +1496,9 @@ async function main(options = {}) {
     // When true, enable public mode (require LOCAL_BACKEND_API_KEY,
     // don't bake session key into frontend).
     isPublic: isPublicOverride,
+    // Explicit consent to inject the generated session key into HTML while
+    // listening off-loopback. Wrappers pass this when their own CLI parsed it.
+    allowLanSessionKey: allowLanSessionKeyOverride,
     // When true, skip the npm prerequisite check. Used by the Electron desktop
     // launcher where npm is not needed at runtime in static mode.
     skipNpmCheck = false,
@@ -1494,6 +1526,9 @@ async function main(options = {}) {
   // Allow options to override CLI args for public mode
   if (isPublicOverride != null) {
     args.public = isPublicOverride;
+  }
+  if (allowLanSessionKeyOverride != null) {
+    args.allowLanSessionKey = allowLanSessionKeyOverride;
   }
 
   // Allow options to override CLI args (for bin/agent-canvas.mjs)
@@ -1691,25 +1726,16 @@ function startStaticFrontend(config, staticDir) {
       // In local mode on loopback, inject the API key so the pre-built
       // frontend can authenticate transparently. Off-loopback binds (and
       // public mode) use the API key entry screen instead.
-      ...(() => {
-        const policy = applySessionKeyPolicy({
-          host: config.bindHost,
-          sessionApiKey:
-            config.launchAgentServer && !config.isPublic
-              ? config.sessionApiKey
-              : null,
-          authRequired: Boolean(config.launchAgentServer && config.isPublic),
-          warn: (msg) => logService("static", msg, c.yellow),
-        });
-        const flags = [];
-        if (policy.sessionApiKey) {
-          flags.push("--session-api-key", policy.sessionApiKey);
-        }
-        if (policy.authRequired) {
-          flags.push("--auth-required");
-        }
-        return flags;
-      })(),
+      ...buildSessionKeyPolicyArgs({
+        host: config.bindHost,
+        sessionApiKey:
+          config.launchAgentServer && !config.isPublic
+            ? config.sessionApiKey
+            : null,
+        authRequired: Boolean(config.launchAgentServer && config.isPublic),
+        allowLanSessionKey: config.allowLanSessionKey,
+        warn: (msg) => logService("static", msg, c.yellow),
+      }),
       // Inject runtime-services info so the agent knows what's reachable.
       ...(runtimeServicesInfo
         ? ["--runtime-services-info", runtimeServicesInfo]
@@ -1751,6 +1777,7 @@ export {
   getRejectPrefixes,
   getVSCodeAdvertiseArgs,
   main,
+  parseArgs,
   registerShutdownHook,
   spawnService,
   commandExists,
@@ -1778,8 +1805,8 @@ const isMainModule =
 
 if (isMainModule) {
   main().catch((err) => {
-    logError(`Fatal error: ${err.message}`);
-    if (err.stack) {
+    logError(`Fatal error: ${formatLauncherError(err)}`);
+    if (!isPortInUseError(err) && err instanceof Error && err.stack) {
       console.error(c.dim + err.stack + c.reset);
       fileLog("error", err.stack);
     }

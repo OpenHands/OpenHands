@@ -64,12 +64,14 @@ import {
   buildAutomationRuntimeServicesInfo,
   buildConfig,
   buildRouteArgs,
+  formatLauncherError,
   getAgentServerBaseUrl,
+  isPortInUseError,
   getLocalServiceRoutes,
   getNoReferrerPrefixArgs,
   getVSCodeAdvertiseArgs,
 } from "./dev-with-automation.mjs";
-import { applySessionKeyPolicy, bindHostArgs } from "./bind-host.mjs";
+import { bindHostArgs, buildSessionKeyPolicyArgs } from "./bind-host.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, "..");
@@ -119,6 +121,7 @@ export function parseArgs(argv = process.argv.slice(2)) {
     skipBuild: false,
     verbose: false,
     host: null,
+    allowLanSessionKey: false,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -130,6 +133,9 @@ export function parseArgs(argv = process.argv.slice(2)) {
       case "-H":
       case "--host":
         config.host = argv[++i];
+        break;
+      case "--allow-lan-session-key":
+        config.allowLanSessionKey = true;
         break;
       case "--automation-ref":
         config.automationGitRef = argv[++i];
@@ -171,6 +177,8 @@ OPTIONS:
   --automation-ref <ref>      Git ref for automation backend (default: main)
   --automation-repo <url>     Git repo URL for automation
   --skip-build                Reuse existing build/ directory (faster restart)
+  --allow-lan-session-key     Inject the session key when binding off-loopback
+                              (trusted LAN only)
   -v, --verbose               Show detailed output
   -h, --help                  Show this help
 
@@ -437,21 +445,12 @@ function startStaticServer(config) {
       ...(process.env.VITE_BASE_PATH
         ? ["--base-path", process.env.VITE_BASE_PATH]
         : []),
-      ...(() => {
-        const policy = applySessionKeyPolicy({
-          host: config.bindHost,
-          sessionApiKey: config.sessionApiKey,
-          warn: (msg) => logService("static", msg, c.yellow),
-        });
-        const flags = [];
-        if (policy.sessionApiKey) {
-          flags.push("--session-api-key", policy.sessionApiKey);
-        }
-        if (policy.authRequired) {
-          flags.push("--auth-required");
-        }
-        return flags;
-      })(),
+      ...buildSessionKeyPolicyArgs({
+        host: config.bindHost,
+        sessionApiKey: config.sessionApiKey,
+        allowLanSessionKey: config.allowLanSessionKey,
+        warn: (msg) => logService("static", msg, c.yellow),
+      }),
       "--runtime-services-info",
       runtimeServicesInfo,
       ...buildLocalServiceRouteArgs(config),
@@ -675,8 +674,8 @@ const isMainModule =
 
 if (isMainModule) {
   main().catch((err) => {
-    logError(`Fatal error: ${err.message}`);
-    if (err.stack) {
+    logError(`Fatal error: ${formatLauncherError(err)}`);
+    if (!isPortInUseError(err) && err instanceof Error && err.stack) {
       console.error(c.dim + err.stack + c.reset);
     }
     process.exit(1);
