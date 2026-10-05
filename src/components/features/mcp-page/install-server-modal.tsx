@@ -77,6 +77,11 @@ interface InstallServerModalProps {
   existingServers: MCPServerConfig[];
   onClose: () => void;
   onSuccess?: (entry: MarketplaceEntry) => void;
+  /**
+   * When true, an entry that has an MCP option opens on its MCP form without
+   * offering the instance's native integration. Defaults to false.
+   */
+  mcpOnly?: boolean;
 }
 
 interface FieldState {
@@ -158,6 +163,7 @@ export function InstallServerModal({
   existingServers,
   onClose,
   onSuccess,
+  mcpOnly = false,
 }: InstallServerModalProps) {
   const { t } = useTranslation("openhands");
   const { mutate: addMcpServer, isPending: isAdding } = useAddMcpServer();
@@ -185,15 +191,19 @@ export function InstallServerModal({
 
   // A git entry the cloud instance can also connect natively offers that as
   // the recommended option next to the MCP server; an entry with no MCP
-  // option (Bitbucket) offers only the native one.
+  // option (Bitbucket) offers only the native one. A caller that asked for the
+  // MCP server alone skips the native option whenever the entry has an MCP one.
   const { getNativeIntegration, isLoading: isNativeIntegrationsLoading } =
     useNativeGitIntegrations();
-  const native = getNativeIntegration(entry.id);
+  const skipNative = mcpOnly && !!option;
+  const native = skipNative ? null : getNativeIntegration(entry.id);
   // Until the instance's providers are known, a git entry cannot say whether
   // it leads with the native option; showing the MCP form meanwhile would swap
   // it out from under the user once the answer arrives.
   const isResolvingNative =
-    isNativeIntegrationsLoading && isNativeGitCandidate(entry.id);
+    !skipNative &&
+    isNativeIntegrationsLoading &&
+    isNativeGitCandidate(entry.id);
   const [selectedConnection, setSelectedConnection] = React.useState<
     "native" | "mcp"
   >("native");
