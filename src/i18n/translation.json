@@ -10709,6 +10709,23 @@
     "uk": "З'єднання",
     "ca": "Connectant"
   },
+  "CHAT_INTERFACE$RECONNECTING": {
+    "en": "Reconnecting...",
+    "ja": "再接続中...",
+    "zh-CN": "正在重新连接...",
+    "zh-TW": "正在重新連線...",
+    "ko-KR": "다시 연결 중...",
+    "no": "Kobler til på nytt...",
+    "it": "Riconnessione in corso...",
+    "pt": "Reconectando...",
+    "es": "Reconectando...",
+    "ar": "جارٍ إعادة الاتصال...",
+    "fr": "Reconnexion en cours...",
+    "tr": "Yeniden bağlanıyor...",
+    "de": "Verbindung wird wiederhergestellt...",
+    "uk": "Повторне з'єднання...",
+    "ca": "Reconnectant..."
+  },
   "CHAT_INTERFACE$STOPPED": {
     "en": "Stopped",
     "ja": "停止しました",

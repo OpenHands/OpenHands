@@ -2420,4 +2420,104 @@ describe("Conversation websocket — page visibility reconnect (#17894)", () => 
 
     expect(socketCapture.disconnectMain).not.toHaveBeenCalled();
   });
+
+  it("does not surface the connection-error banner for a drop that happens while the tab is hidden", () => {
+    setUserAgent(MOBILE_USER_AGENT);
+    renderProvider();
+    act(() => mainOptions().onOpen?.(new Event("open")));
+
+    act(() => {
+      setVisibility("hidden");
+      // The OS kills the socket mid-background, ahead of our own debounced
+      // disconnect — exactly the race this guards against.
+      mainOptions().onError?.(new Event("error"));
+    });
+
+    expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+    expect(screen.getByTestId("connection-state")).toHaveTextContent("CLOSED");
+
+    act(() => setVisibility("visible"));
+  });
+
+  it("still surfaces the connection-error banner for a drop that happens while visible", () => {
+    setUserAgent(MOBILE_USER_AGENT);
+    renderProvider();
+    act(() => mainOptions().onOpen?.(new Event("open")));
+
+    act(() => mainOptions().onError?.(new Event("error")));
+
+    expect(useErrorMessageStore.getState()).toMatchObject({
+      errorMessage: SERVER_CONNECTION_ERROR_MESSAGE,
+      errorType: "connection",
+    });
+  });
+
+  it("does not surface the planning socket's connection-error banner while hidden", async () => {
+    vi.spyOn(EventService, "getEventCount").mockResolvedValue(0);
+    setUserAgent(MOBILE_USER_AGENT);
+    renderProvider({ subConversations: [makeSubConversation()] });
+    await act(async () => planningOptions().onOpen?.(new Event("open")));
+
+    act(() => {
+      setVisibility("hidden");
+      planningOptions().onError?.(new Event("error"));
+    });
+
+    expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+
+    // Settle the pending (fake-timer) hide-debounce before the test ends: an
+    // un-settled `setTimeout` surviving into `vi.useRealTimers()` in this
+    // suite's `afterEach` otherwise leaks past this test.
+    act(() => setVisibility("visible"));
+  });
+
+  it("clears a stale connection-error banner the instant the tab is foregrounded, ahead of the reconnect actually completing", () => {
+    setUserAgent(DESKTOP_USER_AGENT);
+    renderProvider();
+    act(() => mainOptions().onOpen?.(new Event("open")));
+    act(() => mainOptions().onClose?.(new CloseEvent("close")));
+    useErrorMessageStore
+      .getState()
+      .setErrorMessage(SERVER_CONNECTION_ERROR_MESSAGE, "connection");
+
+    act(() => {
+      setVisibility("hidden");
+      setVisibility("visible");
+    });
+
+    expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+    expect(socketCapture.reconnectMain).toHaveBeenCalledOnce();
+  });
+
+  it("leaves an unrelated sticky error alone on a foreground reconnect", () => {
+    setUserAgent(DESKTOP_USER_AGENT);
+    renderProvider();
+    act(() => mainOptions().onOpen?.(new Event("open")));
+    act(() => mainOptions().onClose?.(new CloseEvent("close")));
+    useErrorMessageStore
+      .getState()
+      .setErrorMessage("Bad API key", "conversation");
+
+    act(() => {
+      setVisibility("hidden");
+      setVisibility("visible");
+    });
+
+    expect(useErrorMessageStore.getState().errorMessage).toBe("Bad API key");
+  });
+
+  it("exposes hasConnectedOnce so the UI can tell a reconnect from the first-ever connect", () => {
+    setUserAgent(DESKTOP_USER_AGENT);
+    renderProvider();
+    expect(contextCapture.current?.hasConnectedOnce).toBe(false);
+
+    act(() => mainOptions().onOpen?.(new Event("open")));
+    expect(contextCapture.current?.hasConnectedOnce).toBe(true);
+
+    // Staying true through a subsequent drop is the whole point: it's what
+    // lets the status badge read "Reconnecting" instead of "Connecting"
+    // while the foreground health check is retrying.
+    act(() => mainOptions().onClose?.(new CloseEvent("close")));
+    expect(contextCapture.current?.hasConnectedOnce).toBe(true);
+  });
 });

@@ -103,6 +103,12 @@ interface ConversationWebSocketContextType {
   sendMessage: (message: SendMessageRequest) => Promise<SendMessageResult>;
   isLoadingHistory: boolean;
   reconnect: () => void;
+  /**
+   * True once the main or planning socket has opened at least once for the
+   * current conversation. Lets the UI say "Reconnecting" instead of the
+   * first-connect "Connecting" — see `getStatusCode`.
+   */
+  hasConnectedOnce: boolean;
 }
 
 const ConversationWebSocketContext = createContext<
@@ -1126,8 +1132,17 @@ export function ConversationWebSocketProvider({
       },
       onError: () => {
         setMainConnectionState("CLOSED");
-        // Only show error message if we've previously connected successfully
-        if (hasConnectedRefMain.current) {
+        // Only show an error if we've previously connected successfully, and
+        // the page is actually visible: a hidden tab is never watching this
+        // banner, and a background-caused drop (mobile freezing the tab) is
+        // about to be cleaned up and silently retried by
+        // `usePageVisibilityReconnect` the moment the tab is foregrounded —
+        // surfacing "Unable to connect" for it would just be a stale flash
+        // the user sees on return instead of "Reconnecting".
+        if (
+          hasConnectedRefMain.current &&
+          document.visibilityState !== "hidden"
+        ) {
           setErrorMessage(SERVER_CONNECTION_ERROR_MESSAGE, "connection");
         }
       },
@@ -1191,8 +1206,12 @@ export function ConversationWebSocketProvider({
       },
       onError: () => {
         setPlanningConnectionState("CLOSED");
-        // Only show error message if we've previously connected successfully
-        if (hasConnectedRefPlanning.current) {
+        // See the main socket's onError: skip the banner for a hidden-tab
+        // drop, which is about to be silently retried on foreground.
+        if (
+          hasConnectedRefPlanning.current &&
+          document.visibilityState !== "hidden"
+        ) {
           setErrorMessage(SERVER_CONNECTION_ERROR_MESSAGE, "connection");
         }
       },
@@ -1248,6 +1267,13 @@ export function ConversationWebSocketProvider({
   }, [disconnectMain, disconnectPlanning]);
 
   const reconnectStaleOnForeground = useCallback(() => {
+    // Drop any "Unable to connect" banner left over from a background-caused
+    // close the instant the tab is foregrounded, so the UI reads
+    // "Reconnecting" (via `hasConnectedOnce`) rather than a stale error while
+    // the reconnect below is in flight. `clearConnectionError` only clears
+    // the connection-classified message, leaving any unrelated sticky error
+    // (e.g. a misconfigured API key) untouched.
+    clearConnectionError();
     if (websocketUrl && mainConnectionState !== "OPEN") {
       reconnectMain();
     }
@@ -1261,6 +1287,7 @@ export function ConversationWebSocketProvider({
     planningConnectionState,
     reconnectMain,
     reconnectPlanning,
+    clearConnectionError,
   ]);
 
   usePageVisibilityReconnect({
@@ -1403,10 +1430,13 @@ export function ConversationWebSocketProvider({
       sendMessage,
       isLoadingHistory,
       reconnect,
+      hasConnectedOnce:
+        hasConnectedRefMain.current || hasConnectedRefPlanning.current,
     }),
     [
       connectionState,
       mainConnectionState,
+      planningConnectionState,
       sendMessage,
       isLoadingHistory,
       reconnect,

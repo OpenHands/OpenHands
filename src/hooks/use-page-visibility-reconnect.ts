@@ -14,11 +14,14 @@ export interface UsePageVisibilityReconnectOptions {
   /** Skip wiring listeners entirely when there is nothing to manage yet. */
   enabled: boolean;
   /**
-   * Close the socket(s) cleanly. Only invoked on mobile user agents: desktop
-   * browsers keep sockets alive across tab switches, so tearing them down on
-   * `visibilitychange` there would stop live updates for no reason. A clean
-   * (code 1000) close here beats letting the OS discard the tab, which often
-   * surfaces as a non-1000 close and an error toast once the hook catches up.
+   * Close the socket(s) cleanly. The debounced `visibilitychange`-hidden path
+   * only calls this on mobile user agents: desktop browsers keep sockets
+   * alive across ordinary tab switches, so tearing them down there would stop
+   * live updates for no reason. The immediate `freeze` path calls this on any
+   * platform, since by the time `freeze` fires the browser has already
+   * decided to suspend the page. Either way, a clean (code 1000) close here
+   * beats letting the OS discard the tab, which often surfaces as a non-1000
+   * close and an error toast once the hook catches up.
    */
   disconnect: () => void;
   /**
@@ -91,18 +94,34 @@ export function usePageVisibilityReconnect({
       }
     };
 
+    // `freeze` (Page Lifecycle API; Chromium only) fires synchronously right
+    // before the browser suspends JS execution entirely, so there is no time
+    // left to debounce — any pending timer from `handleHidden` would lose
+    // this race, since a frozen page can't run its own `setTimeout`
+    // callback. No user-agent check either: once the browser has decided to
+    // freeze the page (immediately on mobile, or after a long-hidden desktop
+    // tab), the socket is already on borrowed time regardless of platform.
+    const handleFreeze = () => {
+      clearHideTimeout();
+      disconnectRef.current();
+    };
+
     // `pagehide` fires when iOS Safari discards a backgrounded tab outright,
     // which is not guaranteed to be preceded by `visibilitychange`; `pageshow`
-    // is its restore counterpart, including a bfcache restore.
+    // and `resume` are its restore counterparts, including a bfcache restore.
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("pagehide", handleHidden);
     window.addEventListener("pageshow", handleVisible);
+    document.addEventListener("freeze", handleFreeze);
+    document.addEventListener("resume", handleVisible);
 
     return () => {
       clearHideTimeout();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("pagehide", handleHidden);
       window.removeEventListener("pageshow", handleVisible);
+      document.removeEventListener("freeze", handleFreeze);
+      document.removeEventListener("resume", handleVisible);
     };
   }, [enabled]);
 }

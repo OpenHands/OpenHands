@@ -176,6 +176,61 @@ describe("usePageVisibilityReconnect", () => {
     expect(reconnectIfStale).toHaveBeenCalledOnce();
   });
 
+  it("disconnects immediately on `freeze`, bypassing the hide debounce, even on desktop", () => {
+    setUserAgent(DESKTOP_USER_AGENT);
+    const disconnect = vi.fn();
+    const reconnectIfStale = vi.fn();
+    renderHook(() =>
+      usePageVisibilityReconnect({
+        enabled: true,
+        disconnect,
+        reconnectIfStale,
+      }),
+    );
+
+    act(() => document.dispatchEvent(new Event("freeze")));
+
+    expect(disconnect).toHaveBeenCalledOnce();
+  });
+
+  it("cancels a pending debounced disconnect once `freeze` has already handled it", () => {
+    setUserAgent(MOBILE_USER_AGENT);
+    const disconnect = vi.fn();
+    const reconnectIfStale = vi.fn();
+    renderHook(() =>
+      usePageVisibilityReconnect({
+        enabled: true,
+        disconnect,
+        reconnectIfStale,
+      }),
+    );
+
+    act(() => {
+      setVisibility("hidden");
+      document.dispatchEvent(new Event("freeze"));
+      vi.advanceTimersByTime(10_000);
+    });
+
+    expect(disconnect).toHaveBeenCalledOnce();
+  });
+
+  it("reconnects immediately on `resume`", () => {
+    setUserAgent(MOBILE_USER_AGENT);
+    const disconnect = vi.fn();
+    const reconnectIfStale = vi.fn();
+    renderHook(() =>
+      usePageVisibilityReconnect({
+        enabled: true,
+        disconnect,
+        reconnectIfStale,
+      }),
+    );
+
+    act(() => document.dispatchEvent(new Event("resume")));
+
+    expect(reconnectIfStale).toHaveBeenCalledOnce();
+  });
+
   it("does nothing when disabled", () => {
     setUserAgent(MOBILE_USER_AGENT);
     const disconnect = vi.fn();
