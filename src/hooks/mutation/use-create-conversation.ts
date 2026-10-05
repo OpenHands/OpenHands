@@ -152,19 +152,18 @@ export const useCreateConversation = () => {
       ) {
         // The seeded OpenHands `default` profile is the enriched baseline, not a
         // deliberate profile pick — it mirrors global agent_settings. Launch it
-        // via agent_settings so the canvas-only enrichments the profile-resolution
-        // path drops survive for the common home-launch: the <RUNTIME_SERVICES>
-        // system-message suffix and project-skill loading (buildAgentContext).
+        // via agent_settings so the global settings and the canvas skill
+        // selection (buildAgentContext) apply to the common home-launch; the
+        // profile path resolves skills server-side instead.
         // Named profiles are deliberate custom configs and still use the profile
-        // path (accepting that enrichment boundary).
+        // path.
         // Trade-off: per-profile fields set on `default` itself don't apply on
         // home-launch — custom per-profile config belongs in a named profile.
         //
         // Scoped to OpenHands: an ACP `default` must keep the profile path.
         // Activation is pointer-only, so global agent_settings is stale (often
         // still OpenHands) when an ACP profile is active — launching it via
-        // agent_settings would start the wrong agent. ACP carries no
-        // <RUNTIME_SERVICES> enrichment, so there's nothing to preserve.
+        // agent_settings would start the wrong agent.
         //
         // Scoped to local: cloud never writes agent_settings, so it always
         // resolves `default` server-side via agent_profile_id (validated below).

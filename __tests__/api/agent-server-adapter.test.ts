@@ -1519,6 +1519,94 @@ describe("agent_settings runtime services suffix", () => {
       payload.agent_settings.agent_context.system_message_suffix as string,
     ).toContain("<RUNTIME_SERVICES>");
   });
+
+  it("carries runtime services on the profile path, where agent_settings can't be sent", () => {
+    // agent_profile_id and agent_settings are mutually exclusive.
+    const payload = buildStartConversationRequest({
+      settings: DEFAULT_SETTINGS,
+      query: "hello",
+      agentProfileId: "profile-openhands",
+      agentProfileKind: "openhands",
+      runtimeServicesInfo: {
+        mode: "dev:automation",
+        services: {
+          agent_server: { url_from_agent: "http://localhost:18000" },
+          automation: { url_from_agent: "http://localhost:18001" },
+        },
+      },
+    }) as {
+      agent_profile_id?: string;
+      agent_settings?: unknown;
+      agent_launch_additions?: { system_message_suffix_append?: string };
+    };
+
+    expect(payload.agent_profile_id).toBe("profile-openhands");
+    expect(payload.agent_settings).toBeUndefined();
+    expect(
+      payload.agent_launch_additions?.system_message_suffix_append,
+    ).toContain("<RUNTIME_SERVICES>");
+    expect(
+      payload.agent_launch_additions?.system_message_suffix_append,
+    ).toContain("http://localhost:18001");
+  });
+
+  it("keeps the route-at-conversation-start suffix off the profile path", () => {
+    const payload = buildStartConversationRequest({
+      settings: { ...DEFAULT_SETTINGS, run_router_at_conversation_start: true },
+      hasActiveMetaProfile: true,
+      query: "hello",
+      agentProfileId: "profile-openhands",
+      agentProfileKind: "openhands",
+      runtimeServicesInfo: {
+        mode: "dev:automation",
+        services: {
+          automation: { url_from_agent: "http://localhost:18001" },
+        },
+      },
+    }) as {
+      agent_launch_additions?: { system_message_suffix_append?: string };
+    };
+
+    const appended =
+      payload.agent_launch_additions?.system_message_suffix_append;
+    expect(appended).toContain("<RUNTIME_SERVICES>");
+    expect(appended).not.toContain("ROUTE_AT_CONVERSATION_START");
+  });
+
+  it("carries runtime services on an ACP profile launch too", () => {
+    const payload = buildStartConversationRequest({
+      settings: DEFAULT_SETTINGS,
+      query: "hello",
+      agentProfileId: "profile-acp",
+      agentProfileKind: "acp",
+      runtimeServicesInfo: {
+        mode: "dev:automation",
+        services: {
+          automation: { url_from_agent: "http://localhost:18001" },
+        },
+      },
+    }) as {
+      agent_profile_id?: string;
+      agent_launch_additions?: { system_message_suffix_append?: string };
+    };
+
+    expect(payload.agent_profile_id).toBe("profile-acp");
+    expect(
+      payload.agent_launch_additions?.system_message_suffix_append,
+    ).toContain("<RUNTIME_SERVICES>");
+  });
+
+  it("omits the additions entirely when there is no runtime services info", () => {
+    // A deployment without them must send no deployment context at all, not an
+    // empty string the server would append as a blank line.
+    const payload = buildStartConversationRequest({
+      settings: DEFAULT_SETTINGS,
+      query: "hello",
+      agentProfileId: "profile-openhands",
+      agentProfileKind: "openhands",
+    }) as { agent_launch_additions?: unknown };
+    expect(payload.agent_launch_additions).toBeUndefined();
+  });
 });
 
 describe("buildStartConversationRequest — ACP discriminator", () => {
@@ -2016,7 +2104,9 @@ describe("buildStartConversationRequestWithEncryptedSettings", () => {
   });
 
   it("omits the route-at-start suffix when the meta-profiles endpoint fails (fails closed)", async () => {
-    mockListMetaProfiles.mockRejectedValue(new Error("503 Service Unavailable"));
+    mockListMetaProfiles.mockRejectedValue(
+      new Error("503 Service Unavailable"),
+    );
 
     const payload = (await buildStartConversationRequestWithEncryptedSettings({
       settings: {
