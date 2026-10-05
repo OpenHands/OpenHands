@@ -280,16 +280,17 @@ describe("Sidebar", () => {
 
     const handledEscape = new KeyboardEvent("keydown", {
       key: "Escape",
+      bubbles: true,
       cancelable: true,
     });
     handledEscape.preventDefault();
     act(() => {
-      window.dispatchEvent(handledEscape);
+      document.body.dispatchEvent(handledEscape);
     });
 
     expect(toggle).toHaveAttribute("aria-expanded", "true");
 
-    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.keyDown(document.body, { key: "Escape" });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
   });
 

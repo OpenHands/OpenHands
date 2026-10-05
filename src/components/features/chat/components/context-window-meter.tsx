@@ -74,6 +74,9 @@ export function ContextWindowMeter() {
       <StyledTooltip
         content={t(I18nKey.CHAT_INTERFACE$SHOW_CONTEXT)}
         placement="top"
+        // While the popover is open the hint is redundant, and an open
+        // tooltip would swallow the Escape meant for the popover.
+        isDisabled={isPopoverOpen}
       >
         <button
           ref={triggerRef}

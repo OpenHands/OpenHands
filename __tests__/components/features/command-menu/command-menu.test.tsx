@@ -12,6 +12,7 @@ import {
   NavigationProvider,
   type NavigationContextValue,
 } from "#/context/navigation-context";
+import { ConversationCardActions } from "#/components/features/conversation-panel/conversation-card/conversation-card-actions";
 import { useCommandMenuStore } from "#/stores/command-menu-store";
 import { useSidebarStore } from "#/stores/sidebar-store";
 import { renderWithProviders } from "../../../../test-utils";
@@ -133,6 +134,42 @@ describe("CommandMenu", () => {
 
     expect(screen.queryByTestId("command-menu")).not.toBeInTheDocument();
     expect(composer).toHaveFocus();
+  });
+
+  it("closes itself, not a card menu left open underneath, on Escape", async () => {
+    const user = userEvent.setup();
+    const onContextMenuToggle = vi.fn();
+    renderWithProviders(
+      <>
+        <textarea data-testid="composer" />
+        <ConversationCardActions
+          contextMenuOpen
+          onContextMenuToggle={onContextMenuToggle}
+          onDelete={vi.fn()}
+        />
+        <CommandMenu />
+      </>,
+      { navigation: { navigate: navigateMock } },
+    );
+    const composer = screen.getByTestId("composer");
+    composer.focus();
+
+    await user.keyboard("{Control>}k{/Control}");
+    const searchInput = await screen.findByRole("combobox", {
+      name: SEARCH_LABEL_KEY,
+    });
+    await waitFor(() => expect(searchInput).toHaveFocus());
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByTestId("command-menu")).not.toBeInTheDocument();
+    expect(onContextMenuToggle).not.toHaveBeenCalled();
+    expect(screen.getByTestId("context-menu")).toBeInTheDocument();
+    expect(screen.getByTestId("ellipsis-button")).not.toHaveFocus();
+    expect(composer).toHaveFocus();
+
+    // The next Escape reaches the card menu.
+    await user.keyboard("{Escape}");
+    expect(onContextMenuToggle).toHaveBeenCalledWith(false);
   });
 
   it("opens from the global ctrl-k shortcut", async () => {
