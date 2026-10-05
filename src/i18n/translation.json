@@ -10454,6 +10454,23 @@
     "uk": "Очікування відповіді агента…",
     "ca": "Esperant la resposta de l'agent…"
   },
+  "CHAT_INTERFACE$BTW_QUESTION_REQUIRED": {
+    "en": "Please provide a question — e.g. /btw <question>",
+    "ja": "質問を入力してください（例: /btw <question>）",
+    "zh-CN": "请提供一个问题，例如 /btw <question>",
+    "zh-TW": "請提供一個問題，例如 /btw <question>",
+    "ko-KR": "질문을 입력하세요. 예: /btw <question>",
+    "no": "Oppgi et spørsmål, f.eks. /btw <question>",
+    "it": "Inserisci una domanda, ad es. /btw <question>",
+    "pt": "Forneça uma pergunta, por exemplo /btw <question>",
+    "es": "Proporciona una pregunta, por ejemplo /btw <question>",
+    "ar": "يرجى تقديم سؤال، مثل /btw <question>",
+    "fr": "Veuillez poser une question, par ex. /btw <question>",
+    "tr": "Lütfen bir soru girin, örn. /btw <question>",
+    "de": "Bitte gib eine Frage an, z. B. /btw <question>",
+    "uk": "Вкажіть запитання, наприклад /btw <question>",
+    "ca": "Proporciona una pregunta, p. ex. /btw <question>"
+  },
   "GOAL$PREFIX": {
     "en": "Goal:",
     "ja": "ゴール:",
