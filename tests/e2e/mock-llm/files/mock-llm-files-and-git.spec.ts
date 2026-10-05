@@ -6,7 +6,7 @@
  *
  * Coverage (issue #511):
  *   - Files tab diff view can be enabled when a workspace is attached
- *   - Conversation overview shows workspace / git identity (composer rail removed)
+ *   - Composer git control bar and conversation overview show workspace / git identity
  *   - Browser tab renders empty state when no page has been browsed
  *   - Files tab defaults to file-tree view when NO workspace is attached
  */
@@ -206,13 +206,16 @@ test.describe("files tab, conversation overview git, and browser tab", () => {
 
     const workspaceName = WORKSPACE_PATH.replace(/\/+$/, "").split("/").pop()!;
 
-    // Composer no longer hosts the git rail; identity lives in overview.
-    await test.step("composer has no git control rail", async () => {
+    // The composer's git control bar renders once useLocalGitInfo detects the
+    // repository the step-2 trajectory bootstrapped.
+    await test.step("composer git control bar shows Pull and Push", async () => {
+      const composer = page.getByTestId("interactive-chat-box");
       await expect(
-        page.getByTestId("interactive-chat-box").getByRole("button", {
-          name: /^(Pull|Push|Create PR|Connect Repo)$/i,
-        }),
-      ).toHaveCount(0);
+        composer.getByRole("button", { name: /^Pull$/i }),
+      ).toBeVisible({ timeout: 20_000 });
+      await expect(
+        composer.getByRole("button", { name: /^Push$/i }),
+      ).toBeVisible();
     });
 
     await test.step("open conversation overview", async () => {
