@@ -1546,11 +1546,34 @@ describe("agent_settings runtime services suffix", () => {
     };
     const suffix = payload.agent_settings.agent_context
       .system_message_suffix as string;
-    expect(suffix).toContain("<RUNTIME_SERVICES>");
-    expect(suffix).toContain("MARKER-GLOBAL-RULES");
-    // Runtime-services block comes first; the user's saved suffix is kept after it.
-    expect(suffix.indexOf("<RUNTIME_SERVICES>")).toBeLessThan(
-      suffix.indexOf("MARKER-GLOBAL-RULES"),
+    expect(suffix).toMatch(/^MARKER-GLOBAL-RULES\n\n<RUNTIME_SERVICES>/);
+  });
+
+  it("keeps a saved suffix when no runtime services are advertised", () => {
+    const payload = buildStartConversationRequest({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        agent_settings: {
+          ...DEFAULT_SETTINGS.agent_settings,
+          agent_context: { system_message_suffix: "MARKER-GLOBAL-RULES" },
+        },
+      },
+      query: "hello",
+    }) as { agent_settings: { agent_context: Record<string, unknown> } };
+
+    expect(payload.agent_settings.agent_context.system_message_suffix).toBe(
+      "MARKER-GLOBAL-RULES",
+    );
+  });
+
+  it("omits the suffix when neither a saved suffix nor runtime services exist", () => {
+    const payload = buildStartConversationRequest({
+      settings: DEFAULT_SETTINGS,
+      query: "hello",
+    }) as { agent_settings: { agent_context: Record<string, unknown> } };
+
+    expect(payload.agent_settings.agent_context).not.toHaveProperty(
+      "system_message_suffix",
     );
   });
 });
@@ -2050,7 +2073,9 @@ describe("buildStartConversationRequestWithEncryptedSettings", () => {
   });
 
   it("omits the route-at-start suffix when the meta-profiles endpoint fails (fails closed)", async () => {
-    mockListMetaProfiles.mockRejectedValue(new Error("503 Service Unavailable"));
+    mockListMetaProfiles.mockRejectedValue(
+      new Error("503 Service Unavailable"),
+    );
 
     const payload = (await buildStartConversationRequestWithEncryptedSettings({
       settings: {
