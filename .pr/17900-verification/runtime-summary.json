@@ -1,0 +1,260 @@
+{
+  "base": {
+    "label": "base",
+    "origin": "http://127.0.0.1:19799",
+    "errors": [],
+    "before": [
+      {
+        "testid": "enable-analytics-switch",
+        "name": "Send anonymous usage data",
+        "checked": false,
+        "hidden": true,
+        "disabled": false
+      },
+      {
+        "testid": "enable-sound-notifications-switch",
+        "name": "Sound Notifications",
+        "checked": false,
+        "hidden": true,
+        "disabled": false
+      },
+      {
+        "testid": "show-getting-started-checklist-switch",
+        "name": "Show Getting Started checklist",
+        "checked": true,
+        "hidden": true,
+        "disabled": false
+      }
+    ],
+    "tabs": [
+      {
+        "tag": "INPUT",
+        "testid": "color-theme-input",
+        "text": ""
+      },
+      {
+        "tag": "INPUT",
+        "testid": "title-llm-profile-input",
+        "text": ""
+      },
+      {
+        "tag": "A",
+        "text": "Manage LLM profiles"
+      },
+      {
+        "tag": "INPUT",
+        "testid": "transcription-base-url-input",
+        "text": ""
+      },
+      {
+        "tag": "INPUT",
+        "testid": "transcription-api-key-input",
+        "text": ""
+      },
+      {
+        "tag": "INPUT",
+        "testid": "transcription-model-input",
+        "text": ""
+      },
+      {
+        "tag": "INPUT",
+        "testid": "git-user-name-input",
+        "text": ""
+      },
+      {
+        "tag": "INPUT",
+        "testid": "git-user-email-input",
+        "text": ""
+      },
+      {
+        "tag": "BODY",
+        "text": "15 options available.5 options available.1 option available.Search commands\u2318KNew"
+      },
+      {
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "tag": "BUTTON",
+        "testid": "sidebar-collapse-toggle",
+        "text": ""
+      },
+      {
+        "tag": "BUTTON",
+        "testid": "command-menu-trigger",
+        "text": "Search commands\u2318K"
+      },
+      {
+        "tag": "A",
+        "testid": "sidebar-conversations-link",
+        "text": "New Chat"
+      },
+      {
+        "tag": "A",
+        "testid": "sidebar-skills-link",
+        "text": "Customize"
+      },
+      {
+        "tag": "BUTTON",
+        "testid": "sidebar-pin-home-toggle-customize",
+        "text": ""
+      }
+    ],
+    "after": [
+      {
+        "testid": "enable-analytics-switch",
+        "checked": false,
+        "hidden": true
+      },
+      {
+        "testid": "enable-sound-notifications-switch",
+        "checked": false,
+        "hidden": true
+      },
+      {
+        "testid": "show-getting-started-checklist-switch",
+        "checked": true,
+        "hidden": true
+      }
+    ]
+  },
+  "head": {
+    "label": "head",
+    "origin": "http://127.0.0.1:19800",
+    "errors": [],
+    "before": [
+      {
+        "testid": "enable-analytics-switch",
+        "name": "Send anonymous usage data",
+        "checked": false,
+        "hidden": false,
+        "disabled": false
+      },
+      {
+        "testid": "enable-sound-notifications-switch",
+        "name": "Sound Notifications",
+        "checked": false,
+        "hidden": false,
+        "disabled": false
+      },
+      {
+        "testid": "show-getting-started-checklist-switch",
+        "name": "Show Getting Started checklist",
+        "checked": true,
+        "hidden": false,
+        "disabled": false
+      }
+    ],
+    "tabs": [
+      {
+        "tag": "INPUT",
+        "testid": "color-theme-input",
+        "text": ""
+      },
+      {
+        "tag": "INPUT",
+        "testid": "enable-analytics-switch",
+        "text": ""
+      },
+      {
+        "tag": "INPUT",
+        "testid": "enable-sound-notifications-switch",
+        "text": ""
+      },
+      {
+        "tag": "INPUT",
+        "testid": "show-getting-started-checklist-switch",
+        "text": ""
+      },
+      {
+        "tag": "INPUT",
+        "testid": "title-llm-profile-input",
+        "text": ""
+      },
+      {
+        "tag": "A",
+        "text": "Manage LLM profiles"
+      },
+      {
+        "tag": "INPUT",
+        "testid": "transcription-base-url-input",
+        "text": ""
+      },
+      {
+        "tag": "INPUT",
+        "testid": "transcription-api-key-input",
+        "text": ""
+      },
+      {
+        "tag": "INPUT",
+        "testid": "transcription-model-input",
+        "text": ""
+      },
+      {
+        "tag": "INPUT",
+        "testid": "git-user-name-input",
+        "text": ""
+      },
+      {
+        "tag": "INPUT",
+        "testid": "git-user-email-input",
+        "text": ""
+      },
+      {
+        "tag": "BODY",
+        "text": "5 options available.15 options available.1 option available.Search commands\u2318KNew"
+      },
+      {
+        "tag": "A",
+        "text": ""
+      },
+      {
+        "tag": "BUTTON",
+        "testid": "sidebar-collapse-toggle",
+        "text": ""
+      },
+      {
+        "tag": "BUTTON",
+        "testid": "command-menu-trigger",
+        "text": "Search commands\u2318K"
+      }
+    ],
+    "enable-sound-notifications-switch": {
+      "initial": false,
+      "toggled": true,
+      "restored": false,
+      "styles": {
+        "focusVisible": true,
+        "outline": "rgb(245, 245, 245) solid 2px",
+        "offset": "2px"
+      }
+    },
+    "show-getting-started-checklist-switch": {
+      "initial": true,
+      "toggled": false,
+      "restored": true,
+      "styles": {
+        "focusVisible": true,
+        "outline": "rgb(238, 238, 238) solid 2px",
+        "offset": "2px"
+      }
+    },
+    "after": [
+      {
+        "testid": "enable-analytics-switch",
+        "checked": false,
+        "hidden": false
+      },
+      {
+        "testid": "enable-sound-notifications-switch",
+        "checked": false,
+        "hidden": false
+      },
+      {
+        "testid": "show-getting-started-checklist-switch",
+        "checked": true,
+        "hidden": false
+      }
+    ]
+  }
+}
