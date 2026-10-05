@@ -3,6 +3,7 @@ import { BrandButton } from "#/components/features/settings/brand-button";
 import { ToggleSwitch } from "#/ui/toggle-switch";
 import { I18nKey } from "#/i18n/declaration";
 import type { InstalledCanvasExtensionInfo } from "#/types/canvas-extension";
+import { CanvasExtensionIcon } from "./canvas-extension-icon";
 import {
   extensionModuleCardPillClassName,
   extensionModuleCardSurfaceClassName,
@@ -33,6 +34,11 @@ export function CanvasExtensionCard({
       className={`flex min-w-0 flex-col gap-4 p-4 ${extensionModuleCardSurfaceClassName}`}
     >
       <header className="flex items-start justify-between gap-4">
+        <CanvasExtensionIcon
+          extension={extension}
+          size={20}
+          className="mt-0.5 shrink-0"
+        />
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-sm font-semibold text-contrast">
             {displayName}
