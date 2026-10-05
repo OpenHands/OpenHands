@@ -1,0 +1,14 @@
+$ control-openhands browser attr testid=plugin-toggle-magic-test aria-checked
+{"aria-checked": "false"}
+$ control-openhands browser attr testid=plugin-toggle-magic-test aria-label
+{"aria-label": "Enable plugin"}
+$ control-openhands browser click testid=plugin-toggle-magic-test --hover-first
+{}
+$ control-openhands browser wait testid=plugin-toggle-magic-test[aria-checked="true"] --timeout 15000
+{"state": "visible"}
+$ control-openhands browser attr testid=plugin-toggle-magic-test aria-label
+{"aria-label": "Disable plugin"}
+
+# Skills page toggles keep skill wording
+$ control-openhands browser eval [...document.querySelectorAll('[data-testid^=skill-toggle-]')].slice(0,2).map(e=>e.getAttribute('aria-label')).join(', ')
+{"value": "Enable skill, Disable skill"}

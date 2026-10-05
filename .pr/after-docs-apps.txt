@@ -1,0 +1,18 @@
+$ control-openhands browser goto /apps; browser text 'role=heading[level=2]'
+Apps for Agent Canvas
+
+$ grep -n "localhost:.*/apps\|Customize > Apps\|Add app" docs/CANVAS_EXTENSIONS_TESTING.md
+30:Open <http://localhost:3102/apps>. Do not use the normal ingress URL at
+40:1. In **Customize > Apps**, select **Add app**.
+83:Repeat this flow against `http://localhost:8000/apps` after the backend
+
+$ grep -n "Customize > Apps\|/apps\|Update\*\* action\|bare `/extensions`" specs/canvas-extensions.md
+17:**Customize > Apps** at `/apps`, installed with **Add app**; "addon" is an
+33:   to Customize > Apps and explicitly enables it. In v1 this is a product
+51:   app card's **Update** action re-installs from the recorded source, ref, and
+214:`/apps`; there is no bare `/extensions` page. All routing goes through React
+224:- Add Customize > Apps with an unsupported-backend state, source install
+
+$ grep -c "Customize -> Extensions\|localhost:3102/extensions>\|itself is the" docs/CANVAS_EXTENSIONS_TESTING.md specs/canvas-extensions.md
+docs/CANVAS_EXTENSIONS_TESTING.md:0
+specs/canvas-extensions.md:0

@@ -1,0 +1,13 @@
+$ control-openhands browser attr "testid=plugin-toggle-magic-test" aria-label
+{
+  "ok": true,
+  "aria-label": "Disable skill"
+}
+
+$ control-openhands browser snapshot "testid=plugin-card-magic-test"
+- button "magic-test <run>/private/cache/skills/public-skills/plugins/magic-test Disable skill A simple test plugin for verifying plugin loading. Triggers on magic words (alakazam, abracadabra) and returns a specific phrase to confirm plugins are working. v1.0.0":
+  - heading "magic-test" [level=3]
+  - paragraph: <run>/private/cache/skills/public-skills/plugins/magic-test
+  - switch "Disable skill" [checked]
+  - paragraph: A simple test plugin for verifying plugin loading. Triggers on magic words (alakazam, abracadabra) and returns a specific phrase to confirm plugins are working.
+  - text: v1.0.0
