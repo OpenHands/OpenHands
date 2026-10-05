@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import { ConversationConfirmationButtons } from "#/components/shared/buttons/conversation-confirmation-buttons";
 import { AgentState } from "#/types/agent-state";
@@ -114,6 +114,10 @@ const setupState = () => {
 };
 
 describe("conversation confirmation controls", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("stays hidden when the agent is not awaiting confirmation", () => {
     setupState();
     eventState.events = [actionEvent("action-1")];
@@ -260,56 +264,87 @@ describe("conversation confirmation controls", () => {
     });
   });
 
-  it("supports cancel and continue keyboard shortcuts and ignores near misses", () => {
-    setupState();
-    eventState.events = [actionEvent("action-1")];
-    const { unmount } = render(<ConversationConfirmationButtons />);
+  it.each(["metaKey", "ctrlKey"] as const)(
+    "supports cancel and continue keyboard shortcuts with %s and ignores near misses",
+    (modifier) => {
+      setupState();
+      eventState.events = [actionEvent("action-1")];
+      const { unmount } = render(<ConversationConfirmationButtons />);
 
-    const wrongCancel = new KeyboardEvent("keydown", {
-      key: "Backspace",
-      shiftKey: true,
-      metaKey: false,
-      cancelable: true,
-    });
-    document.dispatchEvent(wrongCancel);
-    const otherKey = new KeyboardEvent("keydown", {
-      key: "Escape",
-      shiftKey: true,
-      metaKey: true,
-      cancelable: true,
-    });
-    document.dispatchEvent(otherKey);
-    const cancel = new KeyboardEvent("keydown", {
-      key: "Backspace",
-      shiftKey: true,
-      metaKey: true,
-      cancelable: true,
-    });
-    document.dispatchEvent(cancel);
-    const continueEvent = new KeyboardEvent("keydown", {
-      key: "Enter",
-      metaKey: true,
-      cancelable: true,
-    });
-    document.dispatchEvent(continueEvent);
+      const wrongCancel = new KeyboardEvent("keydown", {
+        key: "Backspace",
+        shiftKey: true,
+        [modifier]: false,
+        cancelable: true,
+      });
+      document.dispatchEvent(wrongCancel);
+      const otherKey = new KeyboardEvent("keydown", {
+        key: "Escape",
+        shiftKey: true,
+        [modifier]: true,
+        cancelable: true,
+      });
+      document.dispatchEvent(otherKey);
+      const cancel = new KeyboardEvent("keydown", {
+        key: "Backspace",
+        shiftKey: true,
+        [modifier]: true,
+        cancelable: true,
+      });
+      document.dispatchEvent(cancel);
+      const continueEvent = new KeyboardEvent("keydown", {
+        key: "Enter",
+        [modifier]: true,
+        cancelable: true,
+      });
+      document.dispatchEvent(continueEvent);
 
-    expect(wrongCancel.defaultPrevented).toBe(false);
-    expect(otherKey.defaultPrevented).toBe(false);
-    expect(cancel.defaultPrevented).toBe(true);
-    expect(continueEvent.defaultPrevented).toBe(true);
-    expect(respondToConfirmationMock).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({ accept: false }),
-    );
-    expect(respondToConfirmationMock).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ accept: true }),
-    );
+      expect(wrongCancel.defaultPrevented).toBe(false);
+      expect(otherKey.defaultPrevented).toBe(false);
+      expect(cancel.defaultPrevented).toBe(true);
+      expect(continueEvent.defaultPrevented).toBe(true);
+      expect(respondToConfirmationMock).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ accept: false }),
+      );
+      expect(respondToConfirmationMock).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ accept: true }),
+      );
 
-    unmount();
-    document.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "Enter", metaKey: true }),
-    );
-    expect(respondToConfirmationMock).toHaveBeenCalledTimes(2);
-  });
+      unmount();
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", [modifier]: true }),
+      );
+      expect(respondToConfirmationMock).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it.each([
+    ["MacIntel", "⌘↩", "⇧⌘⌫"],
+    ["Linux x86_64", "Ctrl+↩", "Ctrl+⇧+⌫"],
+    ["Win32", "Ctrl+↩", "Ctrl+⇧+⌫"],
+  ])(
+    "labels the shortcuts with the %s modifier",
+    async (platform, continueHint, cancelHint) => {
+      vi.spyOn(navigator, "platform", "get").mockReturnValue(platform);
+      const { ActionTooltip } = await vi.importActual<
+        typeof import("#/components/shared/action-tooltip")
+      >("#/components/shared/action-tooltip");
+
+      render(
+        <>
+          <ActionTooltip type="confirm" onClick={vi.fn()} />
+          <ActionTooltip type="reject" onClick={vi.fn()} />
+        </>,
+      );
+
+      expect(screen.getByTestId("action-confirm-button")).toHaveTextContent(
+        `CHAT_INTERFACE$INPUT_CONTINUE_MESSAGE ${continueHint}`,
+      );
+      expect(screen.getByTestId("action-reject-button")).toHaveTextContent(
+        `BUTTON$CANCEL ${cancelHint}`,
+      );
+    },
+  );
 });

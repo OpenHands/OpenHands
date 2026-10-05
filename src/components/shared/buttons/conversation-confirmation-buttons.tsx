@@ -64,23 +64,27 @@ export function ConversationConfirmationButtons() {
     }
 
     const handleCancelShortcut = (event: KeyboardEvent) => {
-      if (event.shiftKey && event.metaKey && event.key === "Backspace") {
+      if (
+        event.shiftKey &&
+        (event.metaKey || event.ctrlKey) &&
+        event.key === "Backspace"
+      ) {
         event.preventDefault();
         handleConfirmation(false);
       }
     };
 
     const handleContinueShortcut = (event: KeyboardEvent) => {
-      if (event.metaKey && event.key === "Enter") {
+      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
         event.preventDefault();
         handleConfirmation(true);
       }
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      // Cancel: Shift+Cmd+Backspace (⇧⌘⌫)
+      // Cancel: Shift+Cmd+Backspace (Mac) or Shift+Ctrl+Backspace (Windows/Linux)
       handleCancelShortcut(event);
-      // Continue: Cmd+Enter (⌘↩)
+      // Continue: Cmd+Enter (Mac) or Ctrl+Enter (Windows/Linux)
       handleContinueShortcut(event);
     };
 
