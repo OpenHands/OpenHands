@@ -35,6 +35,9 @@ interface ConversationGroupFolderRowProps {
   onDragLeave: () => void;
   onDrop: (event: DragEvent<HTMLElement>) => void;
   onTogglePreviewExpanded: () => void;
+  onLoadMore?: () => void;
+  canLoadMore?: boolean;
+  isLoadingMore?: boolean;
   onLaunchFromGroup: () => void;
   renderConversationCard: (conversation: AppConversation) => ReactNode;
 }
@@ -56,6 +59,9 @@ export function ConversationGroupFolderRow({
   onDragLeave,
   onDrop,
   onTogglePreviewExpanded,
+  onLoadMore,
+  canLoadMore,
+  isLoadingMore,
   onLaunchFromGroup,
   renderConversationCard,
 }: ConversationGroupFolderRowProps) {
@@ -231,6 +237,20 @@ export function ConversationGroupFolderRow({
                   {isShowingAll
                     ? t(I18nKey.CONVERSATION_PANEL$LESS)
                     : t(I18nKey.CONVERSATION_PANEL$MORE)}
+                </button>
+              </div>
+            ) : null}
+
+            {canLoadMore && onLoadMore ? (
+              <div className="pl-2 pt-1">
+                <button
+                  type="button"
+                  data-testid={`thread-folder-load-more-${groupTestIdSuffix}`}
+                  onClick={onLoadMore}
+                  disabled={isLoadingMore}
+                  className="cursor-pointer text-xs text-muted hover:text-contrast disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {t(I18nKey.CONVERSATION$LOAD_MORE)}
                 </button>
               </div>
             ) : null}
