@@ -397,6 +397,7 @@ export default [
   // (raw hex, vh/vw, calc(), grid templates) with no theme-scale equivalent.
   // Class existence does not need component contracts. With no remaining
   // unknown utilities, new findings fail lint; styling policy remains opt-in.
+  // Canvas primitives use #/ui, not the plugin's default components/ui path.
   {
     files: ["src/**/*.{ts,tsx}"],
     plugins: { shadcn: shadcnPlugin },
@@ -405,7 +406,10 @@ export default [
       "shadcn/no-restyle": "off",
       "shadcn/no-raw-colors": "off",
       "shadcn/no-inline-styles": "off",
-      "shadcn/require-static-classes": "off",
+      "shadcn/require-static-classes": [
+        "error",
+        { componentImports: ["^#/ui(/|$)"] },
+      ],
       "shadcn/no-unknown-classes": [
         "error",
         {
@@ -418,5 +422,11 @@ export default [
         },
       ],
     },
+  },
+  {
+    // Primitive implementations own variant helpers that this rule cannot
+    // resolve. Token and unknown-class checks still apply to their definitions.
+    files: ["src/ui/**/*.{ts,tsx}"],
+    rules: { "shadcn/require-static-classes": "off" },
   },
 ];

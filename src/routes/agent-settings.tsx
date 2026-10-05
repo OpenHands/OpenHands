@@ -770,6 +770,7 @@ export function AgentSettingsScreen({
           {subAgentsDescription ? (
             <Typography.Paragraph
               className={cn(
+                // eslint-disable-next-line shadcn/require-static-classes -- Shared static token is linted at its definition; cross-file constants are opaque to this rule.
                 formControlSwitchDescriptionClassName,
                 "text-tertiary-alt text-xs leading-5",
               )}
@@ -794,6 +795,7 @@ export function AgentSettingsScreen({
           {switchLlmToolDescription ? (
             <Typography.Paragraph
               className={cn(
+                // eslint-disable-next-line shadcn/require-static-classes -- Shared static token is linted at its definition; cross-file constants are opaque to this rule.
                 formControlSwitchDescriptionClassName,
                 "text-tertiary-alt text-xs leading-5",
               )}
