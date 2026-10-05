@@ -121,9 +121,9 @@ function OverviewPinButton({
       type="button"
       data-testid={testId}
       className={cn(
-        "flex shrink-0 cursor-pointer items-center justify-center rounded-r px-2 text-white",
+        "flex shrink-0 cursor-pointer items-center justify-center rounded-r px-2 text-contrast",
         dropdownInstantColorClassName,
-        "hover:bg-white/10",
+        "hover:bg-contrast/10",
       )}
       aria-pressed={pinned}
       aria-label={pinned ? pinnedLabel : unpinnedLabel}
@@ -303,7 +303,7 @@ export function ConversationOverviewContextMenu({
               type="button"
               data-testid={testIdOpen}
               className={cn(
-                "flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-l p-2 text-start text-white",
+                "flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-l p-2 text-start text-contrast",
                 dropdownInstantColorClassName,
               )}
               onClick={onOpen}
@@ -314,7 +314,7 @@ export function ConversationOverviewContextMenu({
             <div
               data-testid={testIdOpen}
               className={cn(
-                "flex min-w-0 flex-1 items-center gap-2 rounded-l p-2 text-start text-white",
+                "flex min-w-0 flex-1 items-center gap-2 rounded-l p-2 text-start text-contrast",
                 dropdownInstantColorClassName,
               )}
             >

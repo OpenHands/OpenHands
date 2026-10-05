@@ -6,8 +6,8 @@ interface AutomationsFilteredEmptyStateProps {
 }
 
 /**
- * Automations exist but the active search/filters match none. Chrome copy, so
- * it stays the host's translations rather than manifest copy.
+ * The active search or filters match no automations. Chrome copy, so it stays
+ * the host's translations rather than manifest copy.
  */
 export function AutomationsFilteredEmptyState({
   onClear,
@@ -25,7 +25,7 @@ export function AutomationsFilteredEmptyState({
         type="button"
         data-testid="automations-clear-filters"
         onClick={onClear}
-        className="mt-2 text-sm text-white underline-offset-2 hover:underline"
+        className="mt-2 text-sm text-contrast underline-offset-2 hover:underline"
       >
         {t(I18nKey.AUTOMATIONS$CLEAR_FILTERS)}
       </button>

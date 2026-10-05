@@ -17,7 +17,7 @@ export function SearchInput({ value, onChange, className }: SearchInputProps) {
       className={cn(
         "relative flex min-w-0 flex-1 items-center",
         "h-9 rounded-lg border border-border bg-base-secondary",
-        "focus-within:border-white/40 focus-within:ring-1 focus-within:ring-white/20",
+        "focus-within:border-contrast/40 focus-within:ring-1 focus-within:ring-contrast/20",
         "transition-colors",
         className,
       )}
@@ -32,7 +32,7 @@ export function SearchInput({ value, onChange, className }: SearchInputProps) {
         onChange={(e) => onChange(e.target.value)}
         placeholder={t(I18nKey.AUTOMATIONS$SEARCH_PLACEHOLDER)}
         aria-label={t(I18nKey.AUTOMATIONS$SEARCH_PLACEHOLDER)}
-        className="min-w-0 flex-1 border-0 bg-transparent px-3 text-sm text-white outline-none placeholder:text-tertiary-alt"
+        className="min-w-0 flex-1 border-0 bg-transparent px-3 text-sm text-contrast outline-none placeholder:text-tertiary-alt"
       />
     </div>
   );

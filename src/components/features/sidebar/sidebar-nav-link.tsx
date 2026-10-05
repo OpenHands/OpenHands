@@ -134,7 +134,7 @@ export function SidebarNavLink({
           className={cn(
             "absolute right-1.5 top-1/2 -translate-y-1/2",
             "flex shrink-0 cursor-pointer items-center justify-center rounded-md p-1",
-            "text-muted hover:bg-white/10 hover:text-white",
+            "text-muted hover:bg-contrast/10 hover:text-contrast",
             hoverRevealActionClassName(pinAction.pinned),
           )}
         >
@@ -151,7 +151,9 @@ export function SidebarNavLink({
     <StyledTooltip
       content={hoverContent ?? label}
       placement="right"
-      tooltipClassName={hoverContent ? "p-0 bg-tertiary text-white" : undefined}
+      tooltipClassName={
+        hoverContent ? "p-0 bg-tertiary text-contrast" : undefined
+      }
     >
       {link}
     </StyledTooltip>

@@ -123,7 +123,7 @@ export function ConversationOverviewGitItemsPanel({
                 data-testid={`conversation-overview-${kind}-item-${item.number}`}
                 className={cn(
                   "group flex min-w-0 items-center gap-2 rounded-md px-2 py-2",
-                  "transition-colors hover:bg-white/5",
+                  "transition-colors hover:bg-contrast/5",
                 )}
               >
                 <span className="shrink-0 text-sm tabular-nums text-muted">

@@ -4,12 +4,19 @@ import { describe, expect, it, vi } from "vitest";
 import { renderWithProviders } from "test-utils";
 import { ChatInputField } from "#/components/features/chat/components/chat-input-field";
 
-function Harness({ disabled }: { disabled: boolean }) {
+function Harness({
+  disabled,
+  placeholder,
+}: {
+  disabled: boolean;
+  placeholder?: string;
+}) {
   const ref = React.useRef<HTMLDivElement | null>(null);
   return (
     <ChatInputField
       chatInputRef={ref}
       disabled={disabled}
+      placeholder={placeholder}
       onInput={vi.fn()}
       onPaste={vi.fn()}
       onKeyDown={vi.fn()}
@@ -37,5 +44,31 @@ describe("ChatInputField auto-focus", () => {
     rerender(<Harness disabled={false} />);
 
     expect(screen.getByTestId("chat-input")).not.toBe(document.activeElement);
+  });
+});
+
+function describeEngineeringTask() {
+  return "Describe an engineering task…";
+}
+
+describe("ChatInputField placeholder", () => {
+  it("falls back to the default build prompt when no placeholder is given", () => {
+    renderWithProviders(<Harness disabled={false} />);
+
+    expect(screen.getByTestId("chat-input")).toHaveAttribute(
+      "data-placeholder",
+      "SUGGESTIONS$WHAT_TO_BUILD",
+    );
+  });
+
+  it("uses the caller-supplied placeholder when provided", () => {
+    renderWithProviders(
+      <Harness disabled={false} placeholder={describeEngineeringTask()} />,
+    );
+
+    expect(screen.getByTestId("chat-input")).toHaveAttribute(
+      "data-placeholder",
+      describeEngineeringTask(),
+    );
   });
 });

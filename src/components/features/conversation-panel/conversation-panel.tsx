@@ -60,6 +60,7 @@ import {
 } from "./conversation-panel-list-helpers";
 import { useArchivedConversationsStore } from "#/stores/archived-conversations-store";
 import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store";
+import { uniqueById } from "#/utils/unique-by-id";
 
 interface ConversationPanelProps {
   onClose?: () => void;
@@ -263,14 +264,7 @@ export function ConversationPanel({
     // page fetches, a later page can overlap an earlier one and surface the
     // same conversation twice. Dedupe by id (keeping the first/freshest copy)
     // so the rendered count reflects real growth and React keys stay unique.
-    const seen = new Set<string>();
-    return all.filter((conversation) => {
-      if (seen.has(conversation.id)) {
-        return false;
-      }
-      seen.add(conversation.id);
-      return true;
-    });
+    return uniqueById(all);
   }, [data]);
 
   // Grouped pagination is folder-oriented. Record the first backend page for
@@ -903,7 +897,7 @@ export function ConversationPanel({
             !showHoverMetadata || openContextMenuId === conversation.id
           }
           disableAnimation={import.meta.env.MODE === "test"}
-          className="max-w-none overflow-visible rounded-xl border border-border bg-base-secondary p-0 text-white shadow-xl"
+          className="max-w-none overflow-visible rounded-xl border border-border bg-base-secondary p-0 text-contrast shadow-xl"
           content={
             <ConversationCardPreview
               title={conversation.title ?? ""}
@@ -1049,6 +1043,32 @@ export function ConversationPanel({
     !startTasks?.length &&
     !hasVisibleGroups;
 
+  // The Conversations header doubles as a bulk control for the grouped view:
+  // collapse every visible folder while any is expanded, expand them all once
+  // none is. Folders outside the current view keep their own state.
+  const allGroupsCollapsed =
+    hasVisibleGroups &&
+    (orderedConversationGroups ?? []).every((group) =>
+      collapsedGroupIds.has(group.id),
+    );
+
+  const toggleAllGroupsCollapsed = React.useCallback(() => {
+    setCollapsedGroupIds((prev) => {
+      const groupIds =
+        orderedConversationGroups?.map((group) => group.id) ?? [];
+      if (groupIds.length === 0) {
+        return prev;
+      }
+      const next = new Set(prev);
+      if (groupIds.every((groupId) => prev.has(groupId))) {
+        groupIds.forEach((groupId) => next.delete(groupId));
+      } else {
+        groupIds.forEach((groupId) => next.add(groupId));
+      }
+      return next;
+    });
+  }, [orderedConversationGroups]);
+
   const showConversationHeader = !compact;
 
   return (
@@ -1070,9 +1090,25 @@ export function ConversationPanel({
             data-testid="older-conversations-summary"
             className="flex min-w-0 flex-nowrap items-center gap-x-2 py-2 pl-4 pr-2.5 text-muted"
           >
-            <span className="min-w-0 truncate text-sm font-medium text-muted">
-              {t(I18nKey.SIDEBAR$CONVERSATIONS)}
-            </span>
+            {hasVisibleGroups ? (
+              <button
+                type="button"
+                data-testid="conversations-header-toggle"
+                aria-expanded={!allGroupsCollapsed}
+                onClick={toggleAllGroupsCollapsed}
+                className={cn(
+                  "min-w-0 cursor-pointer truncate text-left text-sm font-medium",
+                  "text-muted transition-colors hover:text-white",
+                  "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border",
+                )}
+              >
+                {t(I18nKey.SIDEBAR$CONVERSATIONS)}
+              </button>
+            ) : (
+              <span className="min-w-0 truncate text-sm font-medium text-muted">
+                {t(I18nKey.SIDEBAR$CONVERSATIONS)}
+              </span>
+            )}
             <div className="ml-auto flex shrink-0 items-center gap-0.5">
               <ConversationPanelNewThreadPicker
                 backendKind={activeBackend.kind}
@@ -1218,7 +1254,7 @@ export function ConversationPanel({
                 type="button"
                 data-testid="load-more-conversations"
                 onClick={requestLoadMore}
-                className="text-xs text-muted hover:text-white"
+                className="text-xs text-muted hover:text-contrast"
               >
                 {t(I18nKey.CONVERSATION$LOAD_MORE)}
               </button>

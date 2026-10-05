@@ -9,6 +9,7 @@ import { cn } from "#/utils/utils";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { getApiErrorMessage } from "#/utils/api-error-message";
 import { downloadActivityLogExport } from "#/utils/automation-activity-log-export";
+import { getAgentCanvasBaseUrl } from "#/utils/base-path";
 import type { ActivityLogExportFormat, Automation } from "#/types/automation";
 import { ActivityLogItem } from "./activity-log-item";
 
@@ -52,7 +53,7 @@ export function ActivityLogSection({
       await downloadActivityLogExport({
         automation,
         format,
-        conversationBaseUrl: window.location.origin,
+        conversationBaseUrl: getAgentCanvasBaseUrl(),
       });
       trackAutomationActivityLogExported({
         backendKind: active.backend.kind,

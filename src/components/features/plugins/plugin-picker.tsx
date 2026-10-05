@@ -99,7 +99,7 @@ export function PluginPicker({
         className={cn(
           "relative flex min-w-0 items-center",
           "rounded-lg border border-border bg-base-secondary",
-          "transition-colors focus-within:border-white/40 focus-within:ring-1 focus-within:ring-white/20",
+          "transition-colors focus-within:border-contrast/40 focus-within:ring-1 focus-within:ring-contrast/20",
         )}
       >
         <Search
@@ -124,7 +124,7 @@ export function PluginPicker({
             type="button"
             onClick={() => setSearch("")}
             aria-label={t(I18nKey.MCP$SEARCH_CLEAR)}
-            className="mr-2 cursor-pointer rounded p-1 text-tertiary-alt hover:text-white"
+            className="mr-2 cursor-pointer rounded p-1 text-tertiary-alt hover:text-contrast"
           >
             <X className="h-4 w-4" aria-hidden />
           </button>

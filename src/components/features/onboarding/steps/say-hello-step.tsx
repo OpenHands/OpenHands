@@ -4,7 +4,6 @@ import { ChatSendButton } from "#/components/features/chat/chat-send-button";
 import { RecommendedAutomationsLauncher } from "#/components/features/automations/recommended-automations-launcher";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { useNavigation } from "#/context/navigation-context";
-import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { useIsCreatingConversation } from "#/hooks/use-is-creating-conversation";
 import { I18nKey } from "#/i18n/declaration";
@@ -30,8 +29,6 @@ export function SayHelloStep({
 }: SayHelloStepProps) {
   const { t } = useTranslation("openhands");
   const { navigate } = useNavigation();
-  const { backend } = useActiveBackend();
-  const showRecommendedAutomations = backend.kind !== "cloud";
   const defaultMessage = t(I18nKey.ONBOARDING$HELLO_DEFAULT_MESSAGE);
   const [message, setMessage] = React.useState(defaultMessage);
 
@@ -41,7 +38,12 @@ export function SayHelloStep({
     isSuccess,
   } = useCreateConversation();
   const isCreatingElsewhere = useIsCreatingConversation();
-  const isLaunching = isPending || isSuccess || isCreatingElsewhere;
+  const [launchStatus, setLaunchStatus] = React.useState<
+    "idle" | "pending" | "error"
+  >("idle");
+  const isPendingLaunch =
+    launchStatus === "pending" || isPending || isCreatingElsewhere;
+  const isLaunching = isPendingLaunch || isSuccess;
   const launchInFlightRef = React.useRef(false);
 
   const canSubmit =
@@ -50,6 +52,7 @@ export function SayHelloStep({
   const launchConversation = () => {
     if (!canSubmit || launchInFlightRef.current) return;
     launchInFlightRef.current = true;
+    setLaunchStatus("pending");
 
     // Explicitly omit `repository` and `workingDir` so the
     // conversation starts with no workspace, per the spec.
@@ -62,6 +65,7 @@ export function SayHelloStep({
         },
         onError: () => {
           launchInFlightRef.current = false;
+          setLaunchStatus("error");
         },
       },
     );
@@ -78,7 +82,7 @@ export function SayHelloStep({
       className="flex max-h-[calc(90vh-7rem)] flex-col"
     >
       <header className="flex shrink-0 flex-col gap-2">
-        <h2 className="text-2xl font-medium text-white">
+        <h2 className="text-2xl font-medium text-contrast">
           {t(I18nKey.ONBOARDING$HELLO_TITLE)}
         </h2>
         <p className="text-sm text-muted">
@@ -109,7 +113,7 @@ export function SayHelloStep({
               disabled={isLaunching}
               // `text-base` is a color utility in this theme (--color-base), not 16px.
               // eslint-disable-next-line shadcn/no-arbitrary-values
-              className="min-h-5 w-full flex-1 bg-transparent text-[16px] font-normal leading-5 text-white outline-none placeholder:text-text-tertiary disabled:cursor-not-allowed disabled:opacity-50"
+              className="min-h-5 w-full flex-1 bg-transparent text-[16px] font-normal leading-5 text-contrast outline-none placeholder:text-text-tertiary disabled:cursor-not-allowed disabled:opacity-50"
             />
           </div>
         </div>
@@ -118,34 +122,56 @@ export function SayHelloStep({
             buttonClassName=""
             handleSubmit={launchConversation}
             disabled={!canSubmit}
+            isPending={isPendingLaunch}
           />
         </div>
       </form>
 
-      {showRecommendedAutomations ? (
-        <>
-          <div
-            data-testid="onboarding-hello-or-separator"
-            className="mt-6 flex w-full items-center gap-3"
-          >
-            <div className="h-px flex-1 bg-border" />
-            <span className="text-xs uppercase text-muted">
-              {t(I18nKey.LANDING$OR)}
-            </span>
-            <div className="h-px flex-1 bg-border" />
-          </div>
-
-          <div
-            data-testid="onboarding-recommended-automations"
-            className="flex min-h-0 flex-1 flex-col"
-          >
-            <RecommendedAutomationsLauncher
-              onLaunched={onLaunched}
-              scrollableGrid
-            />
-          </div>
-        </>
+      {isPendingLaunch ? (
+        <p
+          role="status"
+          aria-live="polite"
+          className="mt-3 text-sm text-[var(--oh-muted)]"
+        >
+          {t(I18nKey.ONBOARDING$HELLO_LAUNCHING)}
+        </p>
       ) : null}
+      {launchStatus === "error" ? (
+        <div
+          role="alert"
+          className="mt-3 flex items-center gap-2 text-sm text-danger"
+        >
+          <span>{t(I18nKey.ERROR$GENERIC)}</span>
+          <button
+            type="button"
+            className="underline underline-offset-2"
+            onClick={launchConversation}
+          >
+            {t(I18nKey.LAUNCH$TRY_AGAIN)}
+          </button>
+        </div>
+      ) : null}
+
+      <div
+        data-testid="onboarding-hello-or-separator"
+        className="mt-6 flex w-full items-center gap-3"
+      >
+        <div className="h-px flex-1 bg-border" />
+        <span className="text-xs uppercase text-muted">
+          {t(I18nKey.LANDING$OR)}
+        </span>
+        <div className="h-px flex-1 bg-border" />
+      </div>
+
+      <div
+        data-testid="onboarding-recommended-automations"
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        <RecommendedAutomationsLauncher
+          onLaunched={onLaunched}
+          scrollableGrid
+        />
+      </div>
 
       <div className="flex shrink-0 items-center justify-between gap-2 bg-base-secondary pt-7 pb-7">
         <BrandButton

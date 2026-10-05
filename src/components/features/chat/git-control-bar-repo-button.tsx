@@ -65,7 +65,7 @@ export function GitControlBarRepoButton({
           />
         </div>
         <div
-          className="font-normal text-white text-sm leading-5 truncate flex-1 min-w-0"
+          className="font-normal text-contrast text-sm leading-5 truncate flex-1 min-w-0"
           title={buttonText}
         >
           {buttonText}
@@ -88,7 +88,7 @@ export function GitControlBarRepoButton({
           : "cursor-pointer hover:border-border-subtle",
       )}
     >
-      <div className="w-3 h-3 flex items-center justify-center flex-shrink-0 text-white">
+      <div className="w-3 h-3 flex items-center justify-center flex-shrink-0 text-contrast">
         {showConnectRepoCta ? (
           <FolderOpen
             className="w-3 h-3"
@@ -101,7 +101,7 @@ export function GitControlBarRepoButton({
         )}
       </div>
       <div
-        className="font-normal text-white text-sm leading-5 truncate flex-1 min-w-0"
+        className="font-normal text-contrast text-sm leading-5 truncate flex-1 min-w-0"
         title={buttonText}
       >
         {buttonText}

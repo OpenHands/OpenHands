@@ -201,7 +201,7 @@ export function OpenAISubscriptionAuthCard({
           className="flex flex-col gap-2 rounded-lg border border-border-subtle p-3 text-sm"
         >
           <span>{t(I18nKey.SETTINGS$SUBSCRIPTION_DEVICE_INSTRUCTIONS)}</span>
-          <div className="flex items-center gap-2 rounded-lg bg-surface-deep px-3 py-2 font-mono text-base font-semibold text-white">
+          <div className="flex items-center gap-2 rounded-lg bg-surface-deep px-3 py-2 font-mono text-base font-semibold text-contrast">
             <span
               data-testid="subscription-user-code"
               className="flex-1 select-all tracking-[0.08em]"

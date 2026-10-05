@@ -412,7 +412,7 @@ describe("CommandMenu", () => {
       "border-border",
       "shadow-[0_24px_90px_rgba(0,0,0,0.52),0_0_0_1px_rgba(255,255,255,0.03)_inset]",
     );
-    expect(activeOption).toHaveClass("rounded-xl", "bg-white/[0.09]");
+    expect(activeOption).toHaveClass("rounded-xl", "bg-contrast/[0.09]");
     expect(inactiveOption).toHaveClass("rounded-xl", "text-muted");
     expect(activeIcon).toHaveClass("size-9", "border-accent");
     expect(inactiveIcon).toHaveClass("size-9", "border-border");

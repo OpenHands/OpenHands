@@ -276,7 +276,7 @@ describe("home automations composer layout", () => {
     );
   });
 
-  it("lists enabled automations with live run status and conversation links", async () => {
+  it("lists enabled automations with live run status and automation links", async () => {
     vi.mocked(AutomationService.getAutomations).mockResolvedValue({
       automations: [
         makeAutomation({ id: "auto-1", name: "Daily digest" }),
@@ -320,7 +320,7 @@ describe("home automations composer layout", () => {
 
     expect(screen.getByRole("link", { name: /Daily digest/ })).toHaveAttribute(
       "href",
-      "/conversations/conv-1",
+      "/automations/auto-1",
     );
     expect(screen.getByRole("link", { name: /PR review/ })).toHaveAttribute(
       "href",

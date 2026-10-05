@@ -245,7 +245,7 @@ export function AutomationCard({
                       placement="top"
                       closeDelay={100}
                       disableAnimation={disableAnimation}
-                      className="rounded-xl border border-border bg-base-secondary p-0 text-white shadow-xl"
+                      className="rounded-xl border border-border bg-base-secondary p-0 text-contrast shadow-xl"
                     >
                       <span className="min-w-0 flex-1 cursor-default truncate text-text-secondary">
                         {shortSummary}

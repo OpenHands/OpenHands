@@ -79,7 +79,7 @@ export function ConversationOverviewSecretsPanel({
               <li
                 key={secret.name}
                 data-testid="conversation-overview-secret-item"
-                className="group flex items-center gap-2 rounded-md px-2 py-2 hover:bg-white/5"
+                className="group flex items-center gap-2 rounded-md px-2 py-2 hover:bg-contrast/5"
               >
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm text-foreground">
@@ -99,7 +99,7 @@ export function ConversationOverviewSecretsPanel({
                   className={cn(
                     "shrink-0 rounded-md p-1 text-muted",
                     "opacity-0 transition-opacity group-hover:opacity-100",
-                    "hover:bg-white/10 hover:text-foreground",
+                    "hover:bg-contrast/10 hover:text-foreground",
                   )}
                 >
                   <Trash2 className="size-3.5" aria-hidden />
