@@ -20,6 +20,7 @@ import {
 import { createRequire } from "node:module";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { redactStorage } from "./lib/redact-storage.mjs";
 import { buildLocator, toCss } from "./lib/selectors.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -989,27 +990,7 @@ const handlers = {
     }, Boolean(session));
     const area = session ? "sessionStorage" : "localStorage";
     if (keysOnly !== false) return { area, keys: Object.keys(data).sort() };
-    // Values can embed session keys (backend entries); redact secret-looking
-    // fields so the output is safe to paste into reports.
-    const redact = (value) => {
-      try {
-        return JSON.stringify(JSON.parse(value), (k, v) =>
-          /key|token|secret|password|auth/i.test(k) &&
-          typeof v === "string" &&
-          v
-            ? "<redacted>"
-            : v,
-        );
-      } catch {
-        return value;
-      }
-    };
-    return {
-      area,
-      storage: Object.fromEntries(
-        Object.entries(data).map(([k, v]) => [k, redact(v)]),
-      ),
-    };
+    return { area, storage: redactStorage(data) };
   },
   async network({ clear, external, last, filter }) {
     const re = filter ? new RegExp(filter) : null;

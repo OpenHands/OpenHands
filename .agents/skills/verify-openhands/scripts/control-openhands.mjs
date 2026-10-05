@@ -25,6 +25,7 @@ import { freemem, tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { deflateSync, gunzipSync } from "node:zlib";
+import { BUILD_INPUTS } from "./lib/build-inputs.mjs";
 import { launcherEnvFor } from "./lib/launcher-env.mjs";
 import { routePattern } from "./lib/route-pattern.mjs";
 
@@ -170,17 +171,6 @@ function sessionKey(run) {
 function git(args, cwd = repoRoot) {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
 }
-
-const BUILD_INPUTS = [
-  "src",
-  "public",
-  "package.json",
-  "package-lock.json",
-  "vite.config.ts",
-  "react-router.config.ts",
-  "tsconfig.json",
-  "tailwind.config.js",
-];
 
 function checkoutRevision() {
   return git(["rev-parse", "HEAD"]);
@@ -498,7 +488,30 @@ const PASS_ENV = [
   "TMUX_TMPDIR",
 ];
 
+function checkNewRunId(runId) {
+  if (
+    typeof runId !== "string" ||
+    !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(runId)
+  ) {
+    throw new CliError(
+      "--run-id must be letters, digits, '.', '_' or '-', starting with a letter or digit.",
+      { code: 2 },
+    );
+  }
+  const dir = join(verifyHome, runId);
+  if (existsSync(dir)) {
+    throw new CliError(`Run ${runId} already exists (${dir}).`, {
+      code: 2,
+      hint: "Pick a new --run-id, or reuse that run in place with `OH_VERIFY_RUN=<dir> control-openhands restart`.",
+    });
+  }
+}
+
 async function cmdLaunch({ flags }) {
+  // A named run must be new: reusing its directory would overwrite the keys
+  // and run.json of a run that may still be live. `restart` reuses a run.
+  const requestedRunId = flags["run-id"];
+  if (requestedRunId !== undefined) checkNewRunId(requestedRunId);
   if (nodeMajor() < 24) {
     throw new CliError(
       `Node >=24 is required by the launcher; this is ${process.version}.`,
@@ -590,6 +603,13 @@ async function cmdLaunch({ flags }) {
     `${new Date().toISOString().replace(/[:.]/g, "").slice(0, 15)}-${randomBytes(3).toString("hex")}`;
   const dir = join(verifyHome, runId);
   const priv = join(dir, "private");
+  mkdirSync(verifyHome, { recursive: true });
+  try {
+    mkdirSync(dir); // exclusive: fails if another launch took the id meanwhile
+  } catch (error) {
+    if (error.code === "EEXIST") checkNewRunId(runId);
+    throw error;
+  }
   for (const d of [
     priv,
     join(priv, "home"),

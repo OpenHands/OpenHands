@@ -3,12 +3,21 @@
 //   npx vitest run .agents/skills/verify-openhands
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "vitest";
+import { BUILD_INPUTS } from "./lib/build-inputs.mjs";
 import { launcherEnvFor } from "./lib/launcher-env.mjs";
+import { redactStorage } from "./lib/redact-storage.mjs";
 import { routePattern } from "./lib/route-pattern.mjs";
 import { buildLocator, parseRole, toCss } from "./lib/selectors.mjs";
 
@@ -300,4 +309,69 @@ test("map coverage maps parameterized routes by path, not only by file", () => {
   ])
     assert.ok(!out.routes.fileOnly.includes(path), path);
   assert.deepEqual(out.routes.unmapped, []);
+});
+
+test("storage values hide secrets stored as plain strings and inside JSON", () => {
+  const out = redactStorage({
+    "openhands-transcription-api-key": "sk-dummy-123",
+    "openhands-session-key": JSON.stringify("abc"),
+    "openhands-backends": JSON.stringify([
+      { name: "Local", apiKey: "k-1", host: "http://127.0.0.1:1" },
+    ]),
+    "openhands-onboarded": "1",
+    "openhands-theme": "light-plus",
+  });
+  assert.equal(out["openhands-transcription-api-key"], "<redacted>");
+  assert.equal(out["openhands-session-key"], "<redacted>");
+  assert.deepEqual(JSON.parse(out["openhands-backends"]), [
+    { name: "Local", apiKey: "<redacted>", host: "http://127.0.0.1:1" },
+  ]);
+  assert.equal(out["openhands-onboarded"], "1");
+  assert.equal(out["openhands-theme"], "light-plus");
+});
+
+test("launch refuses a run id that already exists or escapes the run home", () => {
+  const home = mkdtempSync(join(tmpdir(), "runid-"));
+  mkdirSync(join(home, "taken"));
+  writeFileSync(join(home, "taken", "run.json"), "{}\n");
+  const taken = run(["launch", "--new", "--run-id", "taken"], {
+    OH_VERIFY_HOME: home,
+  });
+  assert.equal(taken.status, 2, taken.stderr);
+  assert.match(taken.json.error, /already exists/);
+  assert.equal(readFileSync(join(home, "taken", "run.json"), "utf8"), "{}\n");
+  const escaping = run(["launch", "--new", "--run-id", "../outside"], {
+    OH_VERIFY_HOME: home,
+  });
+  assert.equal(escaping.status, 2);
+  assert.ok(!existsSync(join(home, "..", "outside")));
+});
+
+test("build inputs cover every file the frontend imports from outside src", () => {
+  const repo = resolve(here, "../../../..");
+  const covered = (path) =>
+    BUILD_INPUTS.some(
+      (input) => path === input || path.startsWith(`${input}/`),
+    );
+  const missing = new Set();
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) walk(path);
+      else if (
+        /\.(ts|tsx)$/.test(entry.name) &&
+        !/\.test\.tsx?$/.test(entry.name)
+      ) {
+        const source = readFileSync(path, "utf8");
+        for (const [, spec] of source.matchAll(
+          /from\s+["'](\.{1,2}\/[^"']+)["']/g,
+        )) {
+          const target = relative(repo, resolve(dirname(path), spec));
+          if (!covered(target)) missing.add(target);
+        }
+      }
+    }
+  };
+  walk(join(repo, "src"));
+  assert.deepEqual([...missing], []);
 });
