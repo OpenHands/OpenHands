@@ -11,30 +11,22 @@ export interface SkillReadyItem {
 /**
  * Extracts all text content from an array of TextContent items.
  */
-const extractAllText = (extendedContent: TextContent[]): string =>
-  extendedContent
+function extractAllText(extendedContent: TextContent[]): string {
+  return extendedContent
     .filter((c) => c.type === "text")
     .map((c) => c.text)
     .join("");
+}
 
 /**
  * Extracts all <EXTRA_INFO> blocks from the given text.
  * Returns an array of content strings (without the wrapper tags).
  */
 const extractExtraInfoBlocks = (text: string): string[] => {
-  const blocks: string[] = [];
   const blockRegex = /<EXTRA_INFO>([\s\S]*?)<\/EXTRA_INFO>/gi;
-  let match = blockRegex.exec(text);
-
-  while (match !== null) {
-    const blockContent = match[1].trim();
-    if (blockContent.length > 0) {
-      blocks.push(blockContent);
-    }
-    match = blockRegex.exec(text);
-  }
-
-  return blocks;
+  return Array.from(text.matchAll(blockRegex), (match) =>
+    match[1].trim(),
+  ).filter(Boolean);
 };
 
 /**
@@ -46,7 +38,7 @@ const formatSkillWithContent = (
 ): string => {
   let formatted = `\n\n- **${skill}**`;
 
-  if (contentBlock && contentBlock.trim().length > 0) {
+  if (contentBlock) {
     formatted += `\n\n${contentBlock}`;
   }
 
@@ -63,8 +55,7 @@ const formatSkillKnowledge = (
   let content = `\n\n**Triggered Skill Knowledge:**`;
 
   activatedSkills.forEach((skill, index) => {
-    const contentBlock =
-      index < extraInfoBlocks.length ? extraInfoBlocks[index] : undefined;
+    const contentBlock = extraInfoBlocks[index];
     content += formatSkillWithContent(skill, contentBlock);
   });
 
@@ -78,9 +69,7 @@ const formatExtendedContentOnly = (extraInfoBlocks: string[]): string => {
   let content = `\n\n**Extended Content:**`;
 
   extraInfoBlocks.forEach((block) => {
-    if (block.trim().length > 0) {
-      content += `\n\n${block}`;
-    }
+    content += `\n\n${block}`;
   });
 
   return content;
@@ -89,8 +78,8 @@ const formatExtendedContentOnly = (extraInfoBlocks: string[]): string => {
 /**
  * Extracts EXTRA_INFO blocks from extended content.
  */
-const getExtraInfoBlocks = (extendedContent: TextContent[]): string[] => {
-  if (!extendedContent || extendedContent.length === 0) return [];
+const getExtraInfoBlocks = (extendedContent?: TextContent[]): string[] => {
+  if (!extendedContent) return [];
   return extractExtraInfoBlocks(extractAllText(extendedContent));
 };
 
@@ -128,19 +117,12 @@ export const getSkillReadyItems = (
   if (activatedSkills && activatedSkills.length > 0) {
     return activatedSkills.map((skill, index) => ({
       name: skill,
-      content:
-        index < extraInfoBlocks.length ? extraInfoBlocks[index].trim() : "",
+      content: extraInfoBlocks[index] ?? "",
     }));
   }
 
-  if (extraInfoBlocks.length > 0) {
-    return extraInfoBlocks
-      .filter((block) => block.trim().length > 0)
-      .map((block, index) => ({
-        name: `Extended Content ${index + 1}`,
-        content: block.trim(),
-      }));
-  }
-
-  return [];
+  return extraInfoBlocks.map((block, index) => ({
+    name: `Extended Content ${index + 1}`,
+    content: block,
+  }));
 };

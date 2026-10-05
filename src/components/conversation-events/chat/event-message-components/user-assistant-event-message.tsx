@@ -4,11 +4,13 @@ import { useNavigation } from "#/context/navigation-context";
 import { MessageEvent } from "#/types/agent-server/core";
 import { ChatMessage } from "../../../features/chat/chat-message";
 import { ImageCarousel } from "../../../features/images/image-carousel";
-import { ConversationConfirmationButtons } from "#/components/shared/buttons/conversation-confirmation-buttons";
 import { parseMessageFromEvent } from "../event-content-helpers/parse-message-from-event";
 import { CriticResultDisplay } from "./critic-result-display";
 import { CollapsibleThinking } from "./collapsible-thinking";
-import { splitInlineThink } from "../event-thought-helpers";
+import {
+  getReasoningContent,
+  splitInlineThink,
+} from "../event-thought-helpers";
 import RepoForkedIcon from "#/icons/repo-forked.svg?react";
 import { I18nKey } from "#/i18n/declaration";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
@@ -24,9 +26,8 @@ interface UserAssistantEventMessageProps {
   isFromPlanningAgent: boolean;
 }
 
-export function UserAssistantEventMessage({
+function UserAssistantEventMessageComponent({
   event,
-  isLastMessage,
   isFromPlanningAgent,
 }: UserAssistantEventMessageProps) {
   const { t } = useTranslation("openhands");
@@ -44,10 +45,19 @@ export function UserAssistantEventMessage({
   const parsed = parseMessageFromEvent(event);
   // Route an inline <think> block (e.g. from a streamed reply) to the thinking
   // section so reloaded conversations match the live rendering.
-  const { reasoning, message } =
+  const { reasoning: inlineThink, message } =
     event.source === "agent"
       ? splitInlineThink(parsed)
       : { reasoning: "", message: parsed };
+  // The finished message replaces its streaming slot outright, so reasoning the
+  // model streamed must render from the message itself or it vanishes on
+  // finalize (and never shows after a reload).
+  const reasoning = [
+    event.source === "agent" ? getReasoningContent(event.llm_message) : "",
+    inlineThink,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 
   const imageUrls: string[] = [];
   if (Array.isArray(event.llm_message.content)) {
@@ -120,11 +130,11 @@ export function UserAssistantEventMessage({
         message={message}
         isFromPlanningAgent={isFromPlanningAgent}
         actions={actions}
+        timestamp={event.timestamp}
       >
         {imageUrls.length > 0 && (
           <ImageCarousel size="small" images={imageUrls} />
         )}
-        {isLastMessage && <ConversationConfirmationButtons />}
       </ChatMessage>
       {event.source === "agent" && event.critic_result != null && (
         <CriticResultDisplay criticResult={event.critic_result} />
@@ -132,3 +142,10 @@ export function UserAssistantEventMessage({
     </>
   );
 }
+
+// Appending at the live tail keeps historical event objects and these scalar
+// rendering inputs stable. Context and store subscriptions still propagate,
+// while unchanged message wrappers avoid reconciling their large DOM subtrees.
+export const UserAssistantEventMessage = React.memo(
+  UserAssistantEventMessageComponent,
+);

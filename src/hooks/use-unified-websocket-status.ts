@@ -10,3 +10,26 @@ export function useUnifiedWebSocketStatus(): WebSocketConnectionState {
   const conversationContext = useConversationWebSocket();
   return conversationContext ? conversationContext.connectionState : "CLOSED";
 }
+
+/**
+ * The main connection's own status, unmerged with the planning connection.
+ * Use for actions that only address the main conversation (e.g. `/code`) —
+ * `useUnifiedWebSocketStatus` can report non-OPEN purely from a momentary
+ * planning reconnect.
+ */
+export function useMainWebSocketStatus(): WebSocketConnectionState {
+  const conversationContext = useConversationWebSocket();
+  return conversationContext
+    ? conversationContext.mainConnectionState
+    : "CLOSED";
+}
+
+/**
+ * True once the conversation has connected at least once. Pair with a
+ * `CONNECTING` status to tell a first-ever connect from a reconnect — see
+ * `getStatusCode`.
+ */
+export function useHasConnectedOnceWebSocket(): boolean {
+  const conversationContext = useConversationWebSocket();
+  return conversationContext ? conversationContext.hasConnectedOnce : false;
+}

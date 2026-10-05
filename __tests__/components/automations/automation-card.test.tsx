@@ -32,8 +32,13 @@ vi.mock("#/context/navigation-context", () => ({
   useNavigation: () => ({ navigate: vi.fn(), currentPath: "/" }),
 }));
 
-vi.mock("#/hooks/use-has-permission", () => ({
-  useHasPermission: () => true,
+vi.mock("#/hooks/use-automation-permissions", () => ({
+  useAutomationPermissions: () => ({
+    canView: true,
+    canManage: true,
+    isLoading: false,
+  }),
+  useIsAutomationOwner: () => true,
 }));
 
 // The pinned package predates the `impact` field, so an entry carrying one is
@@ -108,7 +113,7 @@ describe("AutomationCard", () => {
     const card = screen.getByTestId("automation-card-automation-1");
     expect(card.className).toContain("extension-module-card-interactive");
     expect(card.className).toContain("bg-base-secondary");
-    expect(card.className).not.toContain("border-[var(--oh-border)]");
+    expect(card.className).not.toContain("border-border");
   });
 
   it("renders title, description, and overflow pills", () => {

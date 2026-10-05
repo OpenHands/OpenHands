@@ -1,5 +1,5 @@
 /**
- * Mock-LLM E2E test: Canvas Extensions lifecycle through the production build.
+ * Mock-LLM E2E test: Apps lifecycle through the production build.
  *
  * Drives the real agent-canvas stack (pre-built static frontend, ingress,
  * backend registry, session auth) through the full extension lifecycle:
@@ -43,8 +43,7 @@ const bundle = readFileSync(join(FIXTURE_DIR, "extension.js"), "utf8");
 const CARD = `canvas-extension-card-${manifest.name}`;
 const SIDEBAR_ITEM = `sidebar-canvas-extension-${manifest.name}-hello`;
 const PAGE_PATH = `/extensions/${manifest.name}/hello`;
-const EMPTY_INVENTORY_TEXT =
-  "No Canvas Extensions are installed on this backend.";
+const EMPTY_INVENTORY_TEXT = "No apps are installed on this backend.";
 
 /** In-memory installation state shared by the serial steps below. */
 let installed: Record<string, unknown> | null = null;
@@ -121,8 +120,8 @@ async function serveCanvasExtensionApi(page: Page) {
   });
 }
 
-async function openExtensionsPage(page: Page) {
-  await page.goto("/extensions", { waitUntil: "domcontentloaded" });
+async function openAppsPage(page: Page) {
+  await page.goto("/apps", { waitUntil: "domcontentloaded" });
   await dismissAnalyticsModal(page);
   await waitForTestId(page, "canvas-extensions-screen");
 }
@@ -137,7 +136,7 @@ function extensionPage(page: Page) {
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("Canvas Extensions lifecycle", () => {
+test.describe("Apps lifecycle", () => {
   test.beforeEach(async ({ page }) => {
     await seedLocalStorage(page);
     await routeSessionApiKey(page);
@@ -151,7 +150,7 @@ test.describe("Canvas Extensions lifecycle", () => {
   test("step 1: install from a source path lands disabled with no sidebar item", async ({
     page,
   }) => {
-    await openExtensionsPage(page);
+    await openAppsPage(page);
     await expect(page.getByText(EMPTY_INVENTORY_TEXT)).toBeVisible();
 
     await page.getByTestId("canvas-extensions-add-button").click();
@@ -173,12 +172,14 @@ test.describe("Canvas Extensions lifecycle", () => {
   test("step 2: enabling behind the trust confirmation registers the sidebar item and renders the page", async ({
     page,
   }) => {
-    await openExtensionsPage(page);
+    await openAppsPage(page);
     await cardToggle(page).click();
 
     const confirmation = page.getByTestId("confirmation-modal");
     await expect(confirmation).toBeVisible();
-    await expect(confirmation).toContainText("Enable Demo page?");
+    await expect(confirmation).toContainText(
+      "This app runs trusted JavaScript inside Agent Canvas",
+    );
     await confirmation.getByTestId("confirm-button").click();
 
     await expect(cardToggle(page)).toHaveAttribute("aria-checked", "true");
@@ -203,7 +204,7 @@ test.describe("Canvas Extensions lifecycle", () => {
   test("step 3: disabling tears down the sidebar item and the page", async ({
     page,
   }) => {
-    await openExtensionsPage(page);
+    await openAppsPage(page);
     await expect(page.getByTestId(SIDEBAR_ITEM)).toBeVisible();
 
     // Disabling needs no trust confirmation.
@@ -214,13 +215,13 @@ test.describe("Canvas Extensions lifecycle", () => {
     await page.goto(PAGE_PATH, { waitUntil: "domcontentloaded" });
     await expect(
       page.getByText(
-        "This extension is disabled, missing, or does not provide this page.",
+        "This app is disabled, missing, or does not provide this page.",
       ),
     ).toBeVisible();
   });
 
   test("step 4: uninstalling empties the inventory", async ({ page }) => {
-    await openExtensionsPage(page);
+    await openAppsPage(page);
     await page
       .getByTestId(`canvas-extension-uninstall-${manifest.name}`)
       .click();

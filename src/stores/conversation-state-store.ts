@@ -2,12 +2,21 @@ import { create } from "zustand";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 
 interface ConversationStateStore {
-  execution_status: ExecutionStatus | null;
+  /**
+   * Latest execution status per conversation, fed by the main and planning
+   * WebSocket handlers. Scoped by conversation id so the planning helper
+   * conversation's own run/idle transitions can never overwrite the main
+   * conversation's status (or vice versa) — see conversation-websocket-context.tsx.
+   */
+  executionStatusByConversation: Record<string, ExecutionStatus>;
 
   /**
-   * Set the agent status
+   * Set the agent status for a specific conversation.
    */
-  setExecutionStatus: (execution_status: ExecutionStatus) => void;
+  setExecutionStatus: (
+    conversationId: string,
+    execution_status: ExecutionStatus,
+  ) => void;
 
   /**
    * Reset the store to initial state
@@ -17,11 +26,16 @@ interface ConversationStateStore {
 
 export const useConversationStateStore = create<ConversationStateStore>(
   (set) => ({
-    execution_status: null,
+    executionStatusByConversation: {},
 
-    setExecutionStatus: (execution_status: ExecutionStatus) =>
-      set({ execution_status }),
+    setExecutionStatus: (conversationId, execution_status) =>
+      set((state) => ({
+        executionStatusByConversation: {
+          ...state.executionStatusByConversation,
+          [conversationId]: execution_status,
+        },
+      })),
 
-    reset: () => set({ execution_status: null }),
+    reset: () => set({ executionStatusByConversation: {} }),
   }),
 );

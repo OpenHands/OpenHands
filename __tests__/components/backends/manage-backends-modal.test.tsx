@@ -32,7 +32,7 @@ const deviceFlowMocks = vi.hoisted(() => ({
   pollForToken: vi.fn(),
 }));
 
-const getServerInfoMock = vi.fn().mockResolvedValue({ version: "1.28.0" });
+const getServerInfoMock = vi.fn().mockResolvedValue({ version: "1.52.0" });
 const getSettingsMock = vi.fn().mockResolvedValue({});
 
 vi.mock("@openhands/typescript-client/clients", () => ({
@@ -102,7 +102,7 @@ beforeEach(() => {
   vi.spyOn(telemetry, "isTelemetryEnabled").mockReturnValue(true);
   window.localStorage.clear();
   getServerInfoMock.mockReset();
-  getServerInfoMock.mockResolvedValue({ version: "1.28.0" });
+  getServerInfoMock.mockResolvedValue({ version: "1.52.0" });
   getSettingsMock.mockReset();
   getSettingsMock.mockResolvedValue({});
   vi.mocked(getCloudOrganizations).mockReset();
@@ -198,7 +198,7 @@ describe("ManageBackendsModal", () => {
     );
     expect(
       screen.getByTestId("manage-backends-status-detail-Local"),
-    ).toHaveTextContent("Agent Canvas requires agent-server 1.28.0 or newer");
+    ).toHaveTextContent("Agent Canvas requires agent-server 1.51.0 or newer");
   });
 
   it("closes when the header close button is clicked", async () => {
@@ -687,6 +687,77 @@ describe("ManageBackendsModal", () => {
       await screen.findByTestId("manage-backends-reconnect-cloud-auth-error"),
     ).toHaveTextContent("Authorization request was denied.");
     expect(screen.getByTestId("manage-backends-modal")).toBeInTheDocument();
+  });
+
+  it("hides the Cloud reconnect controls when the locked backend uses cookie auth", async () => {
+    // Arrange: an OHE-hosted Canvas — locked to Cloud, but the backend is
+    // authenticated by the main-app session cookie, not a device-flow key.
+    vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://app.all-hands.dev");
+
+    // Act
+    renderWithProviders(
+      <TestSeed
+        onMount={(ctx) => {
+          ctx.addBackend({
+            name: "OpenHands Cloud",
+            host: "https://app.all-hands.dev",
+            apiKey: "",
+            kind: "cloud",
+            authMode: "cookie",
+          });
+        }}
+      >
+        <ManageBackendsModal onClose={vi.fn()} recoveryMode />
+      </TestSeed>,
+    );
+
+    // Assert
+    expect(
+      await screen.findByRole("heading", { name: "BACKEND$MANAGE_TITLE" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("manage-backends-reconnect-cloud-login-button"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("manage-backends-add")).not.toBeInTheDocument();
+  });
+
+  it("does not offer the device-flow login for a logged-out cookie-auth backend", async () => {
+    // Arrange: the main-app session cookie has expired, so the Cloud probe
+    // reports the backend as logged out.
+    vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://app.all-hands.dev");
+    vi.mocked(getCloudOrganizations).mockRejectedValue(
+      Object.assign(new Error("Unauthorized"), {
+        isAxiosError: true,
+        response: { status: 401 },
+      }),
+    );
+
+    // Act
+    renderWithProviders(
+      <TestSeed
+        onMount={(ctx) => {
+          ctx.addBackend({
+            name: "OpenHands Cloud",
+            host: "https://app.all-hands.dev",
+            apiKey: "",
+            kind: "cloud",
+            authMode: "cookie",
+          });
+        }}
+      >
+        <ManageBackendsModal onClose={vi.fn()} recoveryMode />
+      </TestSeed>,
+    );
+
+    // Assert
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("manage-backends-status-OpenHands Cloud"),
+      ).toHaveTextContent("BACKEND$LOGGED_OUT"),
+    );
+    expect(
+      screen.queryByTestId(/^manage-backends-login-.*-login-button$/),
+    ).not.toBeInTheDocument();
   });
 });
 

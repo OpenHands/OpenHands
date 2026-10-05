@@ -15,7 +15,7 @@ function ChatStatusIndicator({
     <div
       data-testid="chat-status-indicator"
       className={cn(
-        "w-full max-w-full rounded-[100px] p-1 bg-[var(--oh-surface)] flex items-center gap-1",
+        "w-full max-w-full rounded-[100px] p-1 bg-surface flex items-center gap-1",
       )}
     >
       <AnimatePresence mode="wait">
@@ -38,7 +38,7 @@ function ChatStatusIndicator({
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 2 }}
           transition={{ duration: 0.3 }}
-          className="pr-1.5 font-normal text-[11px] leading-[16px] normal-case break-words whitespace-normal"
+          className="pr-1.5 font-normal text-[11px] leading-4 normal-case break-words whitespace-normal"
         >
           {status}
         </motion.span>

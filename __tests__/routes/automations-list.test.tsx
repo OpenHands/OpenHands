@@ -9,6 +9,8 @@ import { HttpError } from "@openhands/typescript-client";
 import { I18nKey } from "#/i18n/declaration";
 
 import AutomationService from "#/api/automation-service/automation-service.api";
+import { getCloudOrganizationMe } from "#/api/cloud/organization-service.api";
+import ProfilesService from "#/api/profiles-service/profiles-service.api";
 import {
   __resetActiveStoreForTests,
   setActiveSelection,
@@ -35,10 +37,37 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
   },
 }));
 
+vi.mock("#/api/profiles-service/profiles-service.api", () => ({
+  default: {
+    listProfiles: vi.fn(),
+  },
+}));
+
 vi.mock("#/utils/custom-toast-handlers", () => ({
   displaySuccessToast: vi.fn(),
   displayErrorToast: vi.fn(),
 }));
+
+// Permissions come from the org's /me endpoint on cloud backends, so mock that
+// service rather than the hooks that read it; local backends never call it.
+vi.mock("#/api/cloud/organization-service.api", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("#/api/cloud/organization-service.api")
+  >()),
+  getCloudOrganizationMe: vi.fn(),
+}));
+
+const orgAdmin = {
+  orgId: "org-1",
+  userId: "user-1",
+  role: "admin",
+  permissions: ["view_automations", "manage_automations"],
+};
+const orgMember = {
+  ...orgAdmin,
+  role: "member",
+  permissions: ["view_automations"],
+};
 
 const localBackend: Backend = {
   id: "local-1",
@@ -77,7 +106,10 @@ function renderList(queryClient?: QueryClient) {
   const client =
     queryClient ??
     new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
     });
   return render(
     <QueryClientProvider client={client}>
@@ -99,6 +131,13 @@ beforeEach(() => {
   vi.mocked(AutomationService.getAutomations).mockResolvedValue(listResponse);
   vi.mocked(AutomationService.updateAutomation).mockReset();
   vi.mocked(AutomationService.dispatchAutomation).mockReset();
+  vi.mocked(ProfilesService.listProfiles).mockReset();
+  vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
+    profiles: [],
+    active_profile: null,
+  });
+  vi.mocked(getCloudOrganizationMe).mockReset();
+  vi.mocked(getCloudOrganizationMe).mockResolvedValue(orgAdmin);
   setRegisteredBackends([localBackend, cloudBackend]);
   setActiveSelection({ backendId: localBackend.id });
 });
@@ -108,7 +147,7 @@ afterEach(() => {
   __resetActiveStoreForTests();
 });
 
-describe("AutomationsList — Edit from the row kebab is local-only", () => {
+describe("AutomationsList — Edit from the row kebab", () => {
   it("opens the Edit modal pre-filled with the row's values when the active backend is local", async () => {
     // Arrange — local backend is active (default beforeEach); render the list
     // and wait for the row to appear.
@@ -135,10 +174,11 @@ describe("AutomationsList — Edit from the row kebab is local-only", () => {
     expect(nameInput.value).toBe(automation.name);
   });
 
-  it("hides Edit in the row kebab when the active backend is cloud", async () => {
-    // Arrange — switch to the cloud backend before mounting so the page sees
-    // it as the active backend on first render.
-    setActiveSelection({ backendId: cloudBackend.id });
+  it("opens the Edit modal pre-filled from the row kebab when the active backend is cloud", async () => {
+    // Arrange — switch to the cloud backend (with its org, which is what the
+    // permissions come from) before mounting so the page sees it as the
+    // active backend on first render.
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
     const user = userEvent.setup();
     renderList();
     await waitFor(() => {
@@ -146,18 +186,42 @@ describe("AutomationsList — Edit from the row kebab is local-only", () => {
     });
     await screen.findByText(automation.name);
 
-    // Act — open the row kebab. The aria-label resolves to the I18n key
-    // in tests because `t` is mocked to return the key itself.
+    // Act — open the row kebab and pick Edit. The aria-label resolves to
+    // the I18n key in tests because `t` is mocked to return the key itself.
     await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
+    );
 
-    // Assert — Edit must not appear on cloud; Delete still does, proving the
-    // menu actually opened and we didn't merely fail to render it.
+    // Assert — the same Edit modal mounts on cloud, wired to this row; the
+    // permission model decides, not the backend kind.
+    const nameInput = (await screen.findByTestId(
+      "edit-automation-name",
+    )) as HTMLInputElement;
+    expect(nameInput.value).toBe(automation.name);
+  });
+});
+
+describe("AutomationsList — Git Sync entry point follows manage_automations", () => {
+  it("shows the Git Sync button to an org admin on a cloud backend", async () => {
+    // Git sync is org-level config, not a local-only feature: an admin of the
+    // active org reaches it on any backend kind.
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
+    renderList();
+    await screen.findByText(automation.name);
+
+    expect(screen.getByTestId("automations-git-sync")).toBeInTheDocument();
+  });
+
+  it("hides the Git Sync button from a member", async () => {
+    vi.mocked(getCloudOrganizationMe).mockResolvedValue(orgMember);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
+    renderList();
+    await screen.findByText(automation.name);
+
     expect(
-      screen.queryByRole("button", { name: I18nKey.AUTOMATIONS$EDIT }),
+      screen.queryByTestId("automations-git-sync"),
     ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$DELETE }),
-    ).toBeInTheDocument();
   });
 });
 
@@ -300,9 +364,7 @@ describe("AutomationsList — Run now toasts", () => {
     });
     const user = userEvent.setup();
     renderList();
-    await screen.findByTestId(
-      `automation-list-row-${disabledAutomation.id}`,
-    );
+    await screen.findByTestId(`automation-list-row-${disabledAutomation.id}`);
     const button = screen.getByTestId(
       `automation-run-now-${disabledAutomation.id}`,
     );
@@ -372,9 +434,9 @@ describe("AutomationsList — add automation menu", () => {
     ).not.toBeInTheDocument();
 
     await user.click(addTrigger);
-    expect(screen.getByTestId("automations-add-automation-menu")).not.toHaveClass(
-      "mt-2",
-    );
+    expect(
+      screen.getByTestId("automations-add-automation-menu"),
+    ).not.toHaveClass("mt-2");
     expect(
       screen.getByTestId("automations-import-automation"),
     ).toBeInTheDocument();
@@ -423,7 +485,10 @@ describe("AutomationsList — list freshness on remount", () => {
         total: 2,
       });
     const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
     });
 
     // Act — first mount lands on the original list, then unmount and remount
@@ -436,5 +501,138 @@ describe("AutomationsList — list freshness on remount", () => {
     // Assert — the remount refetched and surfaced the newly created
     // automation, which is the user-observable behavior the bug blocked.
     await screen.findByText(newAutomation.name);
+  });
+});
+
+describe("AutomationsList — Load more", () => {
+  // Mirrors GET /api/automation/v1: newest first, `limit` capped at 100.
+  function serveAutomations(automations: Automation[]) {
+    vi.mocked(AutomationService.getAutomations)
+      .mockReset()
+      .mockImplementation(async (limit = 50, offset = 0) => {
+        if (limit > 100) throw new Error("422: limit must be <= 100");
+        return {
+          automations: automations.slice(offset, offset + limit),
+          total: automations.length,
+        };
+      });
+  }
+
+  function makeAutomations(count: number): Automation[] {
+    return Array.from({ length: count }, (_, index) => ({
+      ...automation,
+      id: `auto-${index + 1}`,
+      name: `Automation ${index + 1}`,
+    }));
+  }
+
+  it("pages through more automations than one request may return", async () => {
+    // Arrange
+    serveAutomations(makeAutomations(120));
+    const user = userEvent.setup();
+    renderList();
+    await screen.findByText("Automation 50");
+
+    // Act
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$LOAD_MORE }),
+    );
+    await screen.findByText("Automation 100");
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$LOAD_MORE }),
+    );
+
+    // Assert
+    await screen.findByText("Automation 120");
+    expect(vi.mocked(AutomationService.getAutomations).mock.calls).toEqual([
+      [50, 0, undefined],
+      [50, 50, undefined],
+      [50, 100, undefined],
+    ]);
+    expect(
+      screen.queryByRole("button", { name: I18nKey.AUTOMATIONS$LOAD_MORE }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("holds Load more while the list refreshes after a change", async () => {
+    // Arrange — turning an automation off refetches the loaded pages; keep
+    // that refetch in flight so a Load more click would cancel it.
+    serveAutomations(makeAutomations(60));
+    const user = userEvent.setup();
+    renderList();
+    await screen.findByText("Automation 50");
+    vi.mocked(AutomationService.getAutomations).mockReturnValue(
+      new Promise(() => {}),
+    );
+
+    // Act
+    await user.click(
+      screen.getAllByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU)[0],
+    );
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$TURN_OFF }),
+    );
+
+    // Assert
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: I18nKey.AUTOMATIONS$LOAD_MORE }),
+      ).toBeDisabled(),
+    );
+  });
+
+  it("lists an automation once when it shifts onto the next page", async () => {
+    // Arrange — a new automation lands between the two requests, pushing
+    // the last row of page one onto page two.
+    const [first, ...rest] = makeAutomations(61);
+    serveAutomations(rest);
+    const user = userEvent.setup();
+    renderList();
+    await screen.findByText("Automation 51");
+    serveAutomations([first, ...rest]);
+
+    // Act
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$LOAD_MORE }),
+    );
+
+    // Assert
+    await screen.findByText("Automation 61");
+    expect(screen.getAllByText("Automation 51")).toHaveLength(1);
+  });
+
+  it("keeps the loaded rows when Load more fails, and Load more retries", async () => {
+    // Arrange — the next page fails once.
+    serveAutomations(makeAutomations(60));
+    const user = userEvent.setup();
+    renderList();
+    await screen.findByText("Automation 50");
+    vi.mocked(AutomationService.getAutomations).mockRejectedValueOnce(
+      new Error("503"),
+    );
+    const loadMore = () =>
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$LOAD_MORE });
+
+    // Act
+    await user.click(loadMore());
+    await waitFor(() => expect(loadMore()).toBeEnabled());
+
+    // Assert — the first page stays, with no full-page error.
+    expect(screen.getByText("Automation 50")).toBeInTheDocument();
+    expect(
+      screen.queryByText(I18nKey.AUTOMATIONS$ERROR_TITLE),
+    ).not.toBeInTheDocument();
+
+    // Act — Load more asks for the failed page again.
+    await user.click(loadMore());
+
+    // Assert
+    await screen.findByText("Automation 60");
+    expect(
+      vi.mocked(AutomationService.getAutomations).mock.calls.slice(1),
+    ).toEqual([
+      [50, 50, undefined],
+      [50, 50, undefined],
+    ]);
   });
 });

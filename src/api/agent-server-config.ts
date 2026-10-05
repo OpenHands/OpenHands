@@ -257,6 +257,19 @@ export function buildConversationWorkingDirForBackend(
     : buildRelativeConversationWorkingDir(conversationId);
 }
 
+/**
+ * Workspace root for `backendHost` — the dir each conversation's `<root>/<hex>`
+ * working dir is created under. Same per-backend rule as
+ * `buildConversationWorkingDirForBackend()`.
+ */
+export function getWorkspaceRootForBackend(
+  backendHost: string | null | undefined,
+): string {
+  return isServedOriginHost(backendHost)
+    ? getAgentServerWorkingDir()
+    : DEFAULT_WORKING_DIR;
+}
+
 export function getAgentServerHeaders(): Record<string, string> {
   const sessionApiKey = getAgentServerSessionApiKey();
   return sessionApiKey ? { "X-Session-API-Key": sessionApiKey } : {};
