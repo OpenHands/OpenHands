@@ -1,0 +1,17 @@
+# Capture: bare /btw on main @ aeea97e (before the fix)
+# Conversation idle, composer cleared.
+
+$ control-openhands browser type 'testid=chat-input' '/btw'
+$ control-openhands browser press Enter --selector 'testid=chat-input'   # slash menu completes it
+$ control-openhands browser eval "document.querySelector('[data-testid=chat-input]').innerText"
+{ "ok": true, "value": "/btw " }
+$ control-openhands browser press Enter --selector 'testid=chat-input'   # submit bare "/btw "
+$ control-openhands browser eval "document.querySelector('[data-testid=chat-input]').innerText"
+{ "ok": true, "value": "" }
+$ control-openhands browser toasts
+{ "ok": true, "toasts": [] }
+$ control-openhands browser count 'testid=btw-messages'
+{ "ok": true, "count": 0 }
+
+Result: the composer is emptied, no toast, no /btw card -- the command is silently discarded.
+(Same result via the Escape path: type '/btw', Escape, Enter.)
