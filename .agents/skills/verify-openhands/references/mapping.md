@@ -17,7 +17,7 @@ a map written against a broken harness teaches wrong steps.
 While mapping, every time you reach for an ad-hoc script, a raw Playwright
 snippet or a manual curl to drive a user path, stop and add a verb or flag if missing to
 `scripts/control-openhands.mjs` instead (documented in its `--help`). The CLI is
-what makes the map rerunnable.
+what makes the map rerunnable. But if it exists already, use it instead.
 
 ## 1. Inventory user-facing surfaces
 
