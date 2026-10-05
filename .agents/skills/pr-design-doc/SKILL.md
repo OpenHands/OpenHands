@@ -48,8 +48,10 @@ cleanup, verify that the target repository has an enabled
 - Fork PR, or repository without a verified cleanup workflow: remove `.pr/` manually before
   merge.
 
-The design doc is a review aid that lives with the branch while the PR is open. It must not
-ship in the merged tree.
+The design doc is a temporary review aid and must not ship in the merged tree. Automated
+approval can trigger cleanup before human review. Keep the essential design summary in the
+PR description: intent, important before/after behavior or API shape, compatibility, risk,
+and code references. Use commit-pinned document links so cleanup does not break access.
 
 ## Workflow
 
@@ -102,17 +104,21 @@ ship in the merged tree.
    git add .pr/design.html
    git commit -m "docs(.pr): design doc for <PR topic>"
    git push <head-repo-remote> HEAD:<headRefName>
+   git rev-parse HEAD
    ```
-   Query the base repository's visibility before choosing the link:
+   Use the resulting full SHA as `<doc-commit-sha>` in document links. Refresh the document
+   and its link when substantive changes affect the design; a cleanup-only commit does not
+   need a new link. Query the base repository's visibility before choosing the link:
    ```bash
    gh repo view <base-owner>/<base-repo> --json visibility,url
    ```
    - **Public repository:** add an htmlpreview link near the top of the PR description,
-     pointing at the **fork and branch the PR is opened from** (it renders before merge):
+     pointing at the **PR head repository and commit containing the document**:
      ```
-     📄 Design doc: https://htmlpreview.github.io/?https://github.com/<fork-owner>/<repo>/blob/<pr-branch>/.pr/design.html
+     📄 Design doc: https://htmlpreview.github.io/?https://github.com/<fork-owner>/<repo>/blob/<doc-commit-sha>/.pr/design.html
      ```
-   - **Private or internal repository:** link the access-controlled GitHub blob and include
+   - **Private or internal repository:** link the access-controlled GitHub blob at the same
+     document commit and include
      local download/open instructions, or use an existing access-controlled artifact
      service. Never send the document through htmlpreview or another public host.
 
