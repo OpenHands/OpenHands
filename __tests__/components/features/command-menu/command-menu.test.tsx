@@ -96,6 +96,45 @@ describe("CommandMenu", () => {
     });
   });
 
+  it("closes with escape while a command option has focus", async () => {
+    const user = userEvent.setup();
+    renderCommandMenu();
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    const searchInput = await screen.findByRole("combobox", {
+      name: SEARCH_LABEL_KEY,
+    });
+    await waitFor(() => expect(searchInput).toHaveFocus());
+
+    await user.tab();
+    expect(document.activeElement?.id).toBe(NEW_CHAT_OPTION_ID);
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByTestId("command-menu")).not.toBeInTheDocument();
+  });
+
+  it("returns focus to the element that had it before opening", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <>
+        <textarea data-testid="composer" />
+        <CommandMenu />
+      </>,
+      { navigation: { navigate: navigateMock } },
+    );
+    const composer = screen.getByTestId("composer");
+    composer.focus();
+
+    await user.keyboard("{Control>}k{/Control}");
+    const searchInput = await screen.findByRole("combobox", {
+      name: SEARCH_LABEL_KEY,
+    });
+    await waitFor(() => expect(searchInput).toHaveFocus());
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByTestId("command-menu")).not.toBeInTheDocument();
+    expect(composer).toHaveFocus();
+  });
+
   it("opens from the global ctrl-k shortcut", async () => {
     renderCommandMenu();
 

@@ -101,7 +101,8 @@ export function Sidebar() {
     }
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      // A menu inside the drawer that handled this Escape closes first.
+      if (event.key === "Escape" && !event.defaultPrevented) {
         closeMobileNav();
       }
     };
