@@ -36771,21 +36771,21 @@
     "zh-TW": "Command menu"
   },
   "COMMAND_MENU$OPEN_LABEL": {
-    "ar": "Search commands",
-    "ca": "Search commands",
-    "de": "Search commands",
+    "ar": "البحث في الأوامر",
+    "ca": "Cerca ordres",
+    "de": "Befehle durchsuchen",
     "en": "Search commands",
-    "es": "Search commands",
-    "fr": "Search commands",
-    "it": "Search commands",
+    "es": "Buscar comandos",
+    "fr": "Rechercher des commandes",
+    "it": "Cerca comandi",
     "ja": "コマンドを検索",
-    "ko-KR": "Search commands",
-    "no": "Search commands",
-    "pt": "Search commands",
+    "ko-KR": "명령 검색",
+    "no": "Søk etter kommandoer",
+    "pt": "Pesquisar comandos",
     "tr": "Komutlarda ara",
-    "uk": "Search commands",
-    "zh-CN": "Search commands",
-    "zh-TW": "Search commands"
+    "uk": "Пошук команд",
+    "zh-CN": "搜索命令",
+    "zh-TW": "搜尋指令"
   },
   "COMMAND_MENU$CLOSE_LABEL": {
     "ar": "Close command menu",
