@@ -104,6 +104,37 @@ describe("LlmNotConfiguredBanner", () => {
     ).toBeInTheDocument();
   });
 
+  it("explains when the active LLM profile is missing its API key", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({ llm_api_key_set: false }),
+    );
+    vi.spyOn(ProfilesService, "listProfiles").mockResolvedValue({
+      profiles: [
+        {
+          name: "broken-profile",
+          model: "openai/gpt-4.1",
+          base_url: null,
+          api_key_set: false,
+        },
+      ],
+      active_profile: "broken-profile",
+    });
+    vi.spyOn(ProfilesService, "getProfile").mockResolvedValue({
+      name: "broken-profile",
+      api_key_set: false,
+      config: { model: "openai/gpt-4.1" },
+    });
+
+    renderBanner();
+
+    expect(
+      await screen.findByText("HOME$LLM_PROFILE_MISSING_API_KEY_MESSAGE"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("home-llm-not-configured-action")).toHaveTextContent(
+      "HOME$LLM_PROFILE_MISSING_API_KEY_ACTION",
+    );
+  });
+
   it("warns when only a stale settings key is set but no active profile (local)", async () => {
     // Arrange: the delete-all state — agent_settings still holds a key, but no
     // profile backs it. In local mode profiles are the source of truth, so a
