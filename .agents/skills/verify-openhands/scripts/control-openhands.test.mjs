@@ -9,6 +9,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 import { launcherEnvFor } from "./lib/launcher-env.mjs";
+import { routePattern } from "./lib/route-pattern.mjs";
 import { buildLocator, parseRole, toCss } from "./lib/selectors.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -271,4 +272,32 @@ test("restart takes machine settings from the current shell, run settings from t
   assert.equal(env.UV_INDEX_URL, undefined);
   assert.equal(env.OH_CANVAS_SAFE_BACKEND_PORT, "18831");
   assert.equal(env.HOME, "/run/private/home");
+});
+
+test("route patterns find parameterized paths the way the map writes them", () => {
+  const conversation = routePattern("/conversations/:conversationId");
+  assert.ok(conversation.test("open `/conversations/<id>` first"));
+  assert.ok(conversation.test("`/conversations/abc-123`"));
+  assert.ok(conversation.test("`/conversations/:conversationId`"));
+  assert.ok(!conversation.test("`/conversations`"));
+  const optional = routePattern("/settings/:tab?");
+  assert.ok(optional.test("`/settings`") && optional.test("`/settings/app`"));
+  assert.ok(
+    routePattern("/extensions/:extensionName/*").test(
+      "`/extensions/demo-page/hello`",
+    ),
+  );
+});
+
+test("map coverage maps parameterized routes by path, not only by file", () => {
+  const res = spawnSync(process.execPath, [cli, "map", "coverage"], {
+    encoding: "utf8",
+  });
+  const out = JSON.parse(res.stdout);
+  for (const path of [
+    "/conversations/:conversationId",
+    "/automations/:automationId",
+  ])
+    assert.ok(!out.routes.fileOnly.includes(path), path);
+  assert.deepEqual(out.routes.unmapped, []);
 });

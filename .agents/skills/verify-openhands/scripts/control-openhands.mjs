@@ -26,6 +26,7 @@ import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { deflateSync, gunzipSync } from "node:zlib";
 import { launcherEnvFor } from "./lib/launcher-env.mjs";
+import { routePattern } from "./lib/route-pattern.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const skillDir = resolve(here, "..");
@@ -3109,13 +3110,12 @@ function mapCoverage() {
     : "";
   const notMapped = (index.split(/^## Not mapped/m)[1] ?? "").split(/^## /m)[0];
   const routes = routePaths().map((r) => {
-    const literal = r.path.replace(/\/:\w+\??/g, "/:").replace(/\*$/, "");
-    const pattern = new RegExp(
-      `\`${literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\\\/:/g, "/:?[A-Za-z]*")}`,
-    );
+    const pattern = routePattern(r.path);
+    const byPath = pattern.test(corpus);
     return {
       ...r,
-      mapped: pattern.test(corpus) || corpus.includes(r.file),
+      byPath,
+      mapped: byPath || corpus.includes(r.file),
       excluded: pattern.test(notMapped),
     };
   });
@@ -3138,6 +3138,9 @@ function mapCoverage() {
       total: routes.length,
       unmapped: routes.filter((r) => !r.mapped && !r.excluded),
       excluded: routes.filter((r) => !r.mapped && r.excluded),
+      // Counted as mapped only because their route module is cited: worth
+      // documenting the user-facing path too.
+      fileOnly: routes.filter((r) => r.mapped && !r.byPath).map((r) => r.path),
     },
     featureComponentDirs: {
       total: components.length,
