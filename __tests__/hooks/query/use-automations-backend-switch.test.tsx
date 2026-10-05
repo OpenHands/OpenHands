@@ -557,7 +557,7 @@ describe("automation mutation hooks — error toasts", () => {
       },
     },
     {
-      action: "home Turn off",
+      action: "Toggle opted out with { disableToast: true }",
       run: () => {
         const { result } = renderHook(
           () => useToggleAutomation({ disableToast: true }),
