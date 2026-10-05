@@ -1,0 +1,178 @@
+$ git rev-parse --short HEAD -> aeea97e1b + fix (doctor: served build matches this checkout)
+== 1. sidebar card menu
+$ control-openhands browser goto /conversations
+$ control-openhands browser hover testid=conversation-card >> nth=0
+{  "ok": true}
+$ control-openhands browser click testid=conversation-card >> nth=0 >> testid=ellipsis-button
+$ control-openhands browser count testid=context-menu
+{  "ok": true,  "count": 1}
+$ control-openhands browser eval <activeElement testid|id|tag>
+{  "ok": true,  "value": "ellipsis-button"}
+$ control-openhands browser press Escape
+count after Escape (focus on trigger):
+$ control-openhands browser count testid=context-menu
+{  "ok": true,  "count": 0}
+$ control-openhands browser eval <activeElement testid|id|tag>
+{  "ok": true,  "value": "ellipsis-button"}
+$ control-openhands browser screenshot --feature F17933 --name after-card-menu-escape
+$ control-openhands browser mouse-click 1300 150
+$ control-openhands browser hover testid=conversation-card >> nth=0
+{  "ok": true}
+$ control-openhands browser click testid=conversation-card >> nth=0 >> testid=ellipsis-button
+$ control-openhands browser count testid=context-menu
+{  "ok": true,  "count": 1}
+$ control-openhands browser press Tab
+$ control-openhands browser eval <activeElement testid|id|tag>
+{  "ok": true,  "value": "sidebar-onboarding-checklist-toggle"}
+$ control-openhands browser press Escape
+count after Tab+Escape:
+$ control-openhands browser count testid=context-menu
+{  "ok": true,  "count": 0}
+$ control-openhands browser eval <activeElement testid|id|tag>
+{  "ok": true,  "value": "ellipsis-button"}
+$ control-openhands browser screenshot --feature F17933 --name after-card-menu-tab-escape
+$ control-openhands browser mouse-click 1300 150
+$ control-openhands browser hover testid=conversation-card >> nth=0
+{  "ok": true}
+$ control-openhands browser click testid=conversation-card >> nth=0 >> testid=ellipsis-button
+$ control-openhands browser mouse-click 1300 150
+count after outside click:
+$ control-openhands browser count testid=context-menu
+{  "ok": true,  "count": 0}
+== 2a. context window meter popover
+$ control-openhands browser goto /conversations/9263be0b-0be0-4b87-9899-1ce9c77be5d0
+$ control-openhands browser wait testid=context-window-meter
+{  "ok": true,  "state": "visible"}
+$ control-openhands browser click testid=context-window-meter
+$ control-openhands browser count testid=context-window-meter-popover
+{  "ok": true,  "count": 1}
+$ control-openhands browser press Escape
+count after Escape:
+$ control-openhands browser count testid=context-window-meter-popover
+{  "ok": true,  "count": 0}
+$ control-openhands browser eval <activeElement testid|id|tag>
+{  "ok": true,  "value": "context-window-meter"}
+$ control-openhands browser screenshot --feature F17933 --name after-meter-escape
+$ control-openhands browser mouse-click 500 300
+$ control-openhands browser click testid=context-window-meter
+open:
+$ control-openhands browser count testid=context-window-meter-popover
+{  "ok": true,  "count": 1}
+$ control-openhands browser click testid=context-window-meter
+count after trigger re-click:
+$ control-openhands browser count testid=context-window-meter-popover
+{  "ok": true,  "count": 0}
+== 2b. overview ellipsis menu
+$ control-openhands browser click testid=conversation-overview-toggle
+$ control-openhands browser click testid=conversation-overview-ellipsis
+$ control-openhands browser count testid=conversation-overview-context-menu
+{  "ok": true,  "count": 1}
+$ control-openhands browser press Escape
+count after Escape:
+$ control-openhands browser count testid=conversation-overview-context-menu
+{  "ok": true,  "count": 0}
+$ control-openhands browser eval <activeElement testid|id|tag>
+{  "ok": true,  "value": "conversation-overview-ellipsis"}
+$ control-openhands browser screenshot --feature F17933 --name after-overview-menu-escape
+$ control-openhands browser mouse-click 500 300
+$ control-openhands browser click testid=conversation-overview-ellipsis
+open:
+$ control-openhands browser count testid=conversation-overview-context-menu
+{  "ok": true,  "count": 1}
+$ control-openhands browser click testid=conversation-overview-ellipsis
+count after trigger re-click:
+$ control-openhands browser count testid=conversation-overview-context-menu
+{  "ok": true,  "count": 0}
+$ control-openhands browser click testid=conversation-overview-toggle
+== 3. command menu
+$ control-openhands browser goto /conversations
+$ control-openhands browser press Control+k
+$ control-openhands browser count testid=command-menu
+{  "ok": true,  "count": 1}
+$ control-openhands browser press Tab
+$ control-openhands browser eval document.activeElement.id
+{  "ok": true,  "value": "command-menu-option-new-chat"}
+$ control-openhands browser press Escape
+count after Tab+Escape:
+$ control-openhands browser count testid=command-menu
+{  "ok": true,  "count": 0}
+$ control-openhands browser screenshot --feature F17933 --name after-command-menu-option-escape
+$ control-openhands browser goto /conversations/9263be0b-0be0-4b87-9899-1ce9c77be5d0
+$ control-openhands browser click testid=chat-input
+$ control-openhands browser eval <activeElement testid|id|tag>
+{  "ok": true,  "value": "chat-input"}
+$ control-openhands browser press Control+k
+$ control-openhands browser count testid=command-menu
+{  "ok": true,  "count": 1}
+$ control-openhands browser press Escape
+count after Escape from input:
+$ control-openhands browser count testid=command-menu
+{  "ok": true,  "count": 0}
+focus after close:
+$ control-openhands browser eval <activeElement testid|id|tag>
+{  "ok": true,  "value": "chat-input"}
+$ control-openhands browser screenshot --feature F17933 --name after-command-menu-focus-restore
+== V1. command menu opened from the sidebar Search commands button with the keyboard
+$ control-openhands browser goto /conversations
+$ control-openhands browser focus testid=command-menu-trigger
+{  "ok": true}
+$ control-openhands browser press Enter
+$ control-openhands browser count testid=command-menu
+{  "ok": true,  "count": 1}
+$ control-openhands browser press Tab
+$ control-openhands browser press Tab
+$ control-openhands browser eval document.activeElement.id
+{  "ok": true,  "value": "command-menu-option-customize"}
+$ control-openhands browser press Escape
+count after Escape:
+$ control-openhands browser count testid=command-menu
+{  "ok": true,  "count": 0}
+focus after close:
+$ control-openhands browser eval <activeElement testid|id|tag>
+{  "ok": true,  "value": "command-menu-trigger"}
+== V2. card menu at phone width (mobile nav drawer)
+$ control-openhands browser viewport phone
+{  "ok": true,  "viewport": {    "width": 390,    "height": 844  }}
+$ control-openhands browser goto /conversations
+$ control-openhands browser click testid=sidebar-mobile-menu-toggle
+$ control-openhands browser hover testid=sidebar-mobile-drawer >> testid=conversation-card >> nth=0
+{  "ok": true}
+$ control-openhands browser click testid=sidebar-mobile-drawer >> testid=conversation-card >> nth=0 >> testid=ellipsis-button
+$ control-openhands browser count testid=context-menu
+{  "ok": true,  "count": 1}
+$ control-openhands browser eval <activeElement testid|id|tag>
+{  "ok": true,  "value": "ellipsis-button"}
+$ control-openhands browser screenshot --feature F17933 --name after-phone-card-menu-open
+$ control-openhands browser press Escape
+count after Escape:
+$ control-openhands browser count testid=context-menu
+{  "ok": true,  "count": 0}
+focus after Escape:
+$ control-openhands browser eval <activeElement testid|id|tag>
+{  "ok": true,  "value": "ellipsis-button"}
+count drawer still open:
+$ control-openhands browser count testid=sidebar-mobile-drawer
+{  "ok": true,  "count": 1}
+$ control-openhands browser screenshot --feature F17933 --name after-phone-card-menu-escape
+$ control-openhands browser viewport desktop
+{  "ok": true,  "viewport": {    "width": 1440,    "height": 1000  }}
+== V3. phone: a second Escape then closes the drawer
+$ control-openhands browser viewport phone
+{  "ok": true,  "viewport": {    "width": 390,    "height": 844  }}
+$ control-openhands browser goto /conversations
+$ control-openhands browser click testid=sidebar-mobile-menu-toggle
+$ control-openhands browser hover testid=sidebar-mobile-drawer >> testid=conversation-card >> nth=0
+{  "ok": true}
+$ control-openhands browser click testid=sidebar-mobile-drawer >> testid=conversation-card >> nth=0 >> testid=ellipsis-button
+$ control-openhands browser press Escape
+count after first Escape (menu, drawer):
+$ control-openhands browser count testid=context-menu
+{  "ok": true,  "count": 0}
+$ control-openhands browser count testid=sidebar-mobile-drawer
+{  "ok": true,  "count": 1}
+$ control-openhands browser press Escape
+count after second Escape:
+$ control-openhands browser wait testid=sidebar-mobile-drawer --state hidden --timeout 5000
+{  "ok": true,  "state": "hidden"}
+$ control-openhands browser viewport desktop
+{  "ok": true,  "viewport": {    "width": 1440,    "height": 1000  }}
