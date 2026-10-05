@@ -1,0 +1,16 @@
+{
+  "ok": true,
+  "value": {
+    "theme": "Light+",
+    "heading": "rgb(31, 31, 31)",
+    "rowNames": [
+      "qa-router: rgb(31, 31, 31)",
+      "qa-router-pro: rgb(31, 31, 31)"
+    ],
+    "titles": [
+      "Model Router: rgb(31, 31, 31)",
+      "Available meta-profiles: rgb(31, 31, 31)"
+    ],
+    "bg": "rgb(255, 255, 255)"
+  }
+}

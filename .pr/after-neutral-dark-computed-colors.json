@@ -1,0 +1,11 @@
+{
+  "ok": true,
+  "value": {
+    "heading": "rgb(255, 255, 255)",
+    "rowNames": [
+      "qa-router: rgb(255, 255, 255)",
+      "qa-router-pro: rgb(255, 255, 255)"
+    ],
+    "bg": "rgb(24, 24, 24)"
+  }
+}
