@@ -32,7 +32,7 @@ const deviceFlowMocks = vi.hoisted(() => ({
   pollForToken: vi.fn(),
 }));
 
-const getServerInfoMock = vi.fn().mockResolvedValue({ version: "1.48.0" });
+const getServerInfoMock = vi.fn().mockResolvedValue({ version: "1.52.0" });
 const getSettingsMock = vi.fn().mockResolvedValue({});
 
 vi.mock("@openhands/typescript-client/clients", () => ({
@@ -102,7 +102,7 @@ beforeEach(() => {
   vi.spyOn(telemetry, "isTelemetryEnabled").mockReturnValue(true);
   window.localStorage.clear();
   getServerInfoMock.mockReset();
-  getServerInfoMock.mockResolvedValue({ version: "1.48.0" });
+  getServerInfoMock.mockResolvedValue({ version: "1.52.0" });
   getSettingsMock.mockReset();
   getSettingsMock.mockResolvedValue({});
   vi.mocked(getCloudOrganizations).mockReset();
@@ -198,7 +198,7 @@ describe("ManageBackendsModal", () => {
     );
     expect(
       screen.getByTestId("manage-backends-status-detail-Local"),
-    ).toHaveTextContent("Agent Canvas requires agent-server 1.47.0 or newer");
+    ).toHaveTextContent("Agent Canvas requires agent-server 1.51.0 or newer");
   });
 
   it("closes when the header close button is clicked", async () => {
