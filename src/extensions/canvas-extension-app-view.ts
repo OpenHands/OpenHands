@@ -19,7 +19,7 @@ export interface CanvasExtensionAppViewSessionContext {
 export interface MountCanvasExtensionAppViewOptions {
   container: HTMLElement;
   labels: CanvasExtensionAppViewLabels;
-  /** Optional query values are validated and applied by the trusted bridge. */
+  /** Optional non-sensitive query values, validated and applied by the trusted bridge. */
   query?: Record<string, string>;
   createSession: (
     context: CanvasExtensionAppViewSessionContext,
