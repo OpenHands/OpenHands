@@ -1,0 +1,6 @@
+http://127.0.0.1:18820/mcp
+- button "Filter conversations" [expanded]: All
+- menu "Filter conversations":
+  - menuitemradio "All" [checked]
+  - menuitemradio "Installed"
+  - menuitemradio "Library"

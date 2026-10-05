@@ -1,0 +1,60 @@
+{
+  "ok": true,
+  "since": "last clear",
+  "summary": {
+    "app:console.warning": 6
+  },
+  "pageErrors": 0,
+  "appErrors": 0,
+  "warnings": 6,
+  "events": [
+    {
+      "ts": "2026-10-05T18:11:54.563Z",
+      "kind": "console.warning",
+      "page": "http://127.0.0.1:18820/settings/agents",
+      "appOrigin": true,
+      "message": "[i18n] Missing translation for key \"SCHEMA$TOOL_CONCURRENCY_LIMIT$LABEL\", falling back to: \"Parallel tool calls\"",
+      "url": "http://127.0.0.1:18820/assets/schema-field-D5yVs1t8.js"
+    },
+    {
+      "ts": "2026-10-05T18:11:54.564Z",
+      "kind": "console.warning",
+      "page": "http://127.0.0.1:18820/settings/agents",
+      "appOrigin": true,
+      "message": "[i18n] Missing translation for key \"SCHEMA$TOOL_CONCURRENCY_LIMIT$DESCRIPTION\", falling back to: \"Maximum number of tool calls to execute concurrently per agent step. 1 = sequential (default). Values > 1 enable parallel tool calls; concurrent tools share the conversation object, filesystem, and working directory, so mutations to shared state may race.\"",
+      "url": "http://127.0.0.1:18820/assets/schema-field-D5yVs1t8.js"
+    },
+    {
+      "ts": "2026-10-05T18:11:54.593Z",
+      "kind": "console.warning",
+      "page": "http://127.0.0.1:18820/settings/agents",
+      "appOrigin": true,
+      "message": "[i18n] Missing translation for key \"SCHEMA$TOOL_CONCURRENCY_LIMIT$LABEL\", falling back to: \"Parallel tool calls\"",
+      "url": "http://127.0.0.1:18820/assets/schema-field-D5yVs1t8.js"
+    },
+    {
+      "ts": "2026-10-05T18:11:54.593Z",
+      "kind": "console.warning",
+      "page": "http://127.0.0.1:18820/settings/agents",
+      "appOrigin": true,
+      "message": "[i18n] Missing translation for key \"SCHEMA$TOOL_CONCURRENCY_LIMIT$DESCRIPTION\", falling back to: \"Maximum number of tool calls to execute concurrently per agent step. 1 = sequential (default). Values > 1 enable parallel tool calls; concurrent tools share the conversation object, filesystem, and working directory, so mutations to shared state may race.\"",
+      "url": "http://127.0.0.1:18820/assets/schema-field-D5yVs1t8.js"
+    },
+    {
+      "ts": "2026-10-05T18:11:54.624Z",
+      "kind": "console.warning",
+      "page": "http://127.0.0.1:18820/settings/agents",
+      "appOrigin": true,
+      "message": "[i18n] Missing translation for key \"SCHEMA$TOOL_CONCURRENCY_LIMIT$LABEL\", falling back to: \"Parallel tool calls\"",
+      "url": "http://127.0.0.1:18820/assets/schema-field-D5yVs1t8.js"
+    },
+    {
+      "ts": "2026-10-05T18:11:54.633Z",
+      "kind": "console.warning",
+      "page": "http://127.0.0.1:18820/settings/agents",
+      "appOrigin": true,
+      "message": "[i18n] Missing translation for key \"SCHEMA$TOOL_CONCURRENCY_LIMIT$DESCRIPTION\", falling back to: \"Maximum number of tool calls to execute concurrently per agent step. 1 = sequential (default). Values > 1 enable parallel tool calls; concurrent tools share the conversation object, filesystem, and working directory, so mutations to shared state may race.\"",
+      "url": "http://127.0.0.1:18820/assets/schema-field-D5yVs1t8.js"
+    }
+  ]
+}
