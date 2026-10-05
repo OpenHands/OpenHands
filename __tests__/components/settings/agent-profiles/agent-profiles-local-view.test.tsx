@@ -114,8 +114,8 @@ vi.mock("#/utils/custom-toast-handlers");
 
 vi.mock("#/api/agent-profiles-service/agent-profiles-service.api", () => ({
   __esModule: true,
-  WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME: "default",
   default: { getProfile: vi.fn(), renameProfile: vi.fn() },
+  WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME: "default",
 }));
 
 async function openCreateAndName(name: string) {
