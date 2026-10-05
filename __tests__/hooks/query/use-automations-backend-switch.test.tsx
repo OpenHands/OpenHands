@@ -148,10 +148,9 @@ afterEach(() => {
 describe("automation hooks — backend switch", () => {
   it("useAutomations refetches when the active backend changes", async () => {
     // Arrange — mount under the local backend; capture the initial fetch.
-    const { result } = renderHook(
-      () => useAutomations({ limit: 50, offset: 0 }),
-      { wrapper: makeWrapper() },
-    );
+    const { result } = renderHook(() => useAutomations(), {
+      wrapper: makeWrapper(),
+    });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(AutomationService.getAutomations).toHaveBeenCalledTimes(1);
 
@@ -164,6 +163,26 @@ describe("automation hooks — backend switch", () => {
     await waitFor(() => {
       expect(AutomationService.getAutomations).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it("useAutomations shows no automations of the previous backend while the next one loads", async () => {
+    // Arrange — the local backend's list is loaded; the cloud one never settles.
+    const { result } = renderHook(() => useAutomations(), {
+      wrapper: makeWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    vi.mocked(AutomationService.getAutomations).mockReturnValue(
+      new Promise(() => {}),
+    );
+
+    // Act
+    act(() => setActiveSelection({ backendId: cloudBackend.id }));
+
+    // Assert
+    await waitFor(() =>
+      expect(AutomationService.getAutomations).toHaveBeenCalledTimes(2),
+    );
+    expect(result.current.data).toBeUndefined();
   });
 
   it("useAutomationDetail refetches when the active backend changes", async () => {
