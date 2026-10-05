@@ -53,6 +53,18 @@ preexisting upstream issues. Recommend material follow-ups without expanding sco
 editing other repositories, or creating tickets without authorization.
 Reuse answers in the issue and linked discussions.
 
+### Cross-repository release dependencies
+
+If an issue or PR here cannot be finished until a change in another repository
+is released, add the matching label and link the upstream issue or PR. Remove
+the label once that release ships. These labels do not affect readiness.
+
+| Label | Waiting on a release of |
+|---|---|
+| `needs-sdk-release` | `OpenHands/software-agent-sdk` (SDK, Agent Server, TypeScript client) |
+| `needs-automation-release` | `OpenHands/automation` |
+| `needs-extensions-release` | `OpenHands/extensions` |
+
 ## Triage: Behavioral Acceptance and Readiness
 
 Write acceptance criteria as observable outcomes, affected modes, and relevant
