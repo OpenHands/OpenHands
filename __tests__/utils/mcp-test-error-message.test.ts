@@ -17,7 +17,8 @@ const t = instance.t as unknown as TFunction<"openhands">;
 
 const STDIO_DETAIL =
   "Client failed to connect: [Errno 2] No such file or directory: 'qa-no-such-command'";
-const REMOTE_DETAIL = "Client failed to connect: All connection attempts failed";
+const REMOTE_DETAIL =
+  "Client failed to connect: All connection attempts failed";
 
 describe("makeMcpTestErrorMessage", () => {
   it("explains a stdio connection failure as a command that could not start, with the backend detail", () => {
