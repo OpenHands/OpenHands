@@ -49,6 +49,8 @@ If a user path cannot be driven with the CLI, that is a **harness gap**: extend
 `scripts/control-openhands.mjs` (keep it executable, document the verb in
 `--help` and below), prove the new verb live, then write the recipe. Never work
 around a gap with an untracked one-off script the next agent cannot rerun.
+Other agents on the machine may be running the same script: edit a copy, run
+`node --check` and the tests on it, then move it into place in one step.
 
 ## Launch → doctor → drive → evidence → cleanup
 
@@ -60,9 +62,9 @@ control-openhands onboard --skip               # consent + onboarding (walk it i
 control-openhands browser goto /settings/secrets
 control-openhands browser testids              # discover handles on the current page
 control-openhands browser click 'testid=add-secret-button'
-control-openhands browser screenshot --feature F05.secret-create --name form
-control-openhands evidence add --feature F05.secret-create --result pass --entry "Settings > Secrets > Add" \
-  --expected "row after reload" --actual "row present" --artifact evidence/F05.secret-create/form.png
+control-openhands browser screenshot --feature F14.create --name form
+control-openhands evidence add --feature F14.create --result pass --entry "Settings > Secrets > Add" \
+  --expected "add form" --actual "add form" --artifact evidence/F14.create/form.png
 control-openhands stop                         # stops only this run; evidence stays
 ```
 
@@ -81,11 +83,13 @@ control-openhands stop                         # stops only this run; evidence s
   `~/.openhands` or another run. `launch --new` starts a second independent run
   (for a baseline, or to drive two backends); `--public` exercises the API-key
   login screen (`control-openhands login`). It still binds to 127.0.0.1; it only
-  stops injecting the session key into the page. `--sdk-path/--sdk-ref` and
-  `--automation-path/--automation-ref` test unreleased backends; record them.
+  stops injecting the session key into the page. `--sdk-version`, `--sdk-ref` or
+  `--sdk-path` (and the `--automation-*` equivalents) choose other backends;
+  record them. Version variables exported in your shell are not forwarded.
 - **Doctor** checks the launcher's process group, ports, served build revision,
-  unauthenticated rejection, authenticated settings, Agent Server pin, automation
-  health and a throwaway-tab UI probe. Run it first, after every surprising
+  unauthenticated rejection, authenticated settings, Agent Server pin and the
+  UI's minimum Agent Server version, automation health and a throwaway-tab UI
+  probe. Run it first, after every surprising
   failure, and before blaming the product. A wedged UI on a healthy stack:
   capture evidence, `browser reload` or `goto /`, retry once.
 - **Drive** through the real UI with `control-openhands browser ...`. Selectors are
@@ -114,8 +118,10 @@ control-openhands stop                         # stops only this run; evidence s
   network`, `browser toasts` and `browser media` observe requests by origin,
   toasts and sound without changing anything. Check `--help` before calling a
   state unreachable: most "can't be driven" claims predate a verb.
-- **Evidence** goes under `<run>/evidence/<feature-id>/` and the ledger
-  `<run>/evidence/ledger.jsonl`; `evidence report` renders the table from
+- **Evidence** goes under `<run>/evidence/<feature-id>/` and the append-only
+  ledger `<run>/evidence/ledger.jsonl`. Nothing is overwritten: a repeated
+  screenshot name is saved as `<name>-2.png`, so cite the path the command
+  prints; `evidence report` renders the table from
   [the report contract](references/report.md). Keys, logs, browser profile and
   downloads stay in `<run>/private/`. Evidence is not automatically public:
   review every image before publishing it. The CLI masks password fields in

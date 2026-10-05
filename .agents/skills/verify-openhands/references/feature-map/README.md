@@ -16,7 +16,10 @@ that every row passes today; the run's evidence ledger is.
   `deepseek-flash` (active) and `deepseek-pro` from `DEEPSEEK_API_KEY` (or
   `--api-key-file PATH`). States that exist only while no LLM is configured
   (the home banner, onboarding's LLM step) need a fresh `launch --new` and must
-  run before the preset.
+  run before the preset. When the key fails validation (an empty balance, a
+  rate limit), `llm preset deepseek --no-validate` still saves the profiles:
+  recipes that only need a conversation to exist can run on, and every
+  recipe that reads a model reply is `blocked`, never a pass.
 - The browser is at the desktop viewport (1440×1000) unless a recipe says
   otherwise; `control-openhands browser viewport phone` is 390×844.
 - Never drive an instance that this verification run did not start.
@@ -50,7 +53,12 @@ that every row passes today; the run's evidence ledger is.
   rows or moves a grip `--by DX,DY`; `browser choose <combobox> <label>` picks
   an autocomplete option; `browser clipboard` reads what a Copy button wrote.
 - Short-lived feedback: `browser toasts --history` lists every toast since the
-  page loaded; `click --observe SEL` records transient labels.
+  page loaded; `click --observe SEL` records transient labels. An error toast
+  is neither a page nor an HTTP error, so `browser errors` misses it: read the
+  toast history after every mutation, backend add or switch.
+- Hover-driven controls open on pointer enter only: `browser hover` on the
+  element the pointer is already over does nothing. Hover something else first
+  (`browser hover 'testid=command-menu-trigger'`), or use `click --hover-first`.
 - Agent-side proof: `conversation events <id> --grep TEXT [--from-start]`
   searches whole events (the system prompt's skills and tools, tool
   arguments); rows show activated skills. After sending a follow-up message,

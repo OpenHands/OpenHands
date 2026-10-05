@@ -308,7 +308,12 @@ function evidencePath(feature, name, ext) {
   );
   const dir = join(evidenceDir, safeFeature);
   mkdirSync(dir, { recursive: true });
-  return join(dir, `${safeName}${ext}`);
+  // Evidence is never replaced: a repeated name gets -2, -3, ... and the
+  // caller reports the path it actually wrote.
+  let path = join(dir, `${safeName}${ext}`);
+  for (let n = 2; existsSync(path); n += 1)
+    path = join(dir, `${safeName}-${n}${ext}`);
+  return path;
 }
 
 function assertAppUrl(target, allowExternal) {

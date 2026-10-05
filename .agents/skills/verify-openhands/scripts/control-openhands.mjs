@@ -2643,7 +2643,7 @@ async function cmdBrowser({ positional, flags }) {
       if (!flags.feature || !flags.name)
         usage(
           "browser screenshot needs --feature <ID> and --name <label>",
-          "control-openhands browser screenshot --feature F05.secret-create --name after-reload",
+          "control-openhands browser screenshot --feature F14.create --name after-reload",
         );
       result = await browserCall(run, "screenshot", {
         feature: flags.feature,
@@ -2726,7 +2726,7 @@ async function cmdEvidence({ positional, flags }) {
     if (!flags.feature || !RESULTS.includes(flags.result)) {
       usage(
         "evidence add needs --feature ID and --result pass|fail|blocked|not-run",
-        "control-openhands evidence add --feature F05.secret-create --result pass --entry 'Settings > Secrets > Add' --expected 'row after reload' --actual 'row present' --artifact evidence/F05.secret-create/after-reload.png",
+        "control-openhands evidence add --feature F14.create --result pass --entry 'Settings > Secrets > Add' --expected 'row after reload' --actual 'row present' --artifact evidence/F14.create/after-reload.png",
       );
     }
     const artifacts = []
@@ -3274,7 +3274,7 @@ Examples:
   control-openhands conversation start --prompt "Create hello.py printing hi and run it" --wait
   control-openhands browser goto /settings/secrets
   control-openhands browser click 'testid=add-secret-button'
-  control-openhands browser screenshot --feature F05.secret-create --name form
+  control-openhands browser screenshot --feature F14.create --name form
   control-openhands stop
 `,
   launch: `control-openhands launch [--public] [--new] [--print-run] [--port N | --port-from N] [--build auto|always|never] [--min-free-mb 2000]

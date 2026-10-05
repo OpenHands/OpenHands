@@ -83,7 +83,7 @@ files, list the route modules and top-level component directories, not every
 file. Then exactly four H2 sections, in
 this order:
 
-1. `## Sub-features`: one bullet per ID: `` - `F05.secret-create`: add a dummy secret; it persists after reload. ``
+1. `## Sub-features`: one bullet per ID: `` - `F14.create`: add a dummy secret; it persists after reload. ``
 2. `## How to get to it (user POV)`: every entry point, in user language: the
    sidebar link, the direct URL, the command-menu entry, the keyboard shortcut,
    the row menu. Note which entry point each recipe exercises.
@@ -92,7 +92,7 @@ this order:
    one user action with exact commands and the observable result:
 
    ```markdown
-   - **Create (`F05.secret-create`).** Add a secret from the list page.
+   - **Create (`F14.create`).** Add a secret from the list page.
      Run `control-openhands browser click 'testid=add-secret-button'`,
      `control-openhands browser fill 'testid=add-secret-form >> testid=name-input' QA_TMP`,
      `control-openhands browser fill 'testid=add-secret-form >> testid=value-input' dummy-value`,
