@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import { useTracking } from "#/hooks/use-tracking";
 import { useTranslation } from "react-i18next";
 import { isAcpAuthErrorCode } from "#/utils/acp-error-codes";
+import { getLockedCloudHost } from "#/api/agent-server-config";
 import { convertImageToBase64 } from "#/utils/convert-image-to-base-64";
 import { createChatMessage } from "#/services/chat-service";
 import { BtwMessages } from "./btw-messages";
@@ -611,8 +612,10 @@ export function ChatInterface() {
                     ? () => conversationWebSocket?.reconnect()
                     : undefined
                 }
+                // Locked-to-Cloud blocks the Canvas agent settings page
+                // (OHE-3457).
                 onReauth={
-                  isAcpAuthErrorCode(errorCode)
+                  isAcpAuthErrorCode(errorCode) && getLockedCloudHost() === null
                     ? () => navigate("/settings/agents")
                     : undefined
                 }
