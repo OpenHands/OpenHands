@@ -11,6 +11,7 @@ import {
   type AgentSettingsSaveControl,
 } from "#/routes/agent-settings";
 import AgentProfilesService, {
+  WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME,
   type AgentProfile,
   type AgentProfileSummary,
   type AgentProfileSaveInput,
@@ -326,6 +327,9 @@ export function AgentProfilesLocalView() {
         key={viewMode === "edit" ? `edit-${editingProfile?.id}` : "new-profile"}
         agentSettingsOverride={override}
         onSaveControlChange={setSaveControl}
+        isDefaultProfile={
+          profileName.trim() === WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME
+        }
       />
 
       {/* OpenHands profiles reference an LLM profile (required). */}

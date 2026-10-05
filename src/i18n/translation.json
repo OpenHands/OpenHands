@@ -322,6 +322,23 @@
     "uk": "Цей агент отримує інструменти, які сервер вважає стандартними, показані вище. Список залежить від сервера, тож може змінитися після оновлення.",
     "ca": "Aquest agent rep les eines que el servidor considera estàndard, mostrades a dalt. La llista depèn del servidor, així que pot canviar quan s'actualitzi."
   },
+  "SETTINGS$AGENT_PROFILE_TOOLS_DEFAULT_PROFILE": {
+    "en": "The default profile always launches with the global tool set. Create a named profile to choose its tools.",
+    "ja": "デフォルトのプロファイルは常にグローバルなツールセットで起動します。ツールを選ぶには、名前付きのプロファイルを作成してください。",
+    "zh-CN": "默认配置文件始终使用全局工具集启动。如需选择工具，请创建一个命名配置文件。",
+    "zh-TW": "預設設定檔一律以全域工具集啟動。若要選擇工具，請建立具名設定檔。",
+    "ko-KR": "기본 프로필은 항상 전역 도구 세트로 시작됩니다. 도구를 선택하려면 이름이 있는 프로필을 만드세요.",
+    "no": "Standardprofilen starter alltid med det globale verktøysettet. Opprett en navngitt profil for å velge verktøyene.",
+    "it": "Il profilo predefinito si avvia sempre con il set di strumenti globale. Crea un profilo con nome per sceglierne gli strumenti.",
+    "pt": "O perfil padrão sempre inicia com o conjunto global de ferramentas. Crie um perfil com nome para escolher as ferramentas.",
+    "es": "El perfil predeterminado siempre se inicia con el conjunto de herramientas global. Crea un perfil con nombre para elegir sus herramientas.",
+    "ar": "يبدأ الملف الشخصي الافتراضي دائمًا بمجموعة الأدوات العامة. أنشئ ملفًا شخصيًا باسم لاختيار أدواته.",
+    "fr": "Le profil par défaut démarre toujours avec les outils globaux. Créez un profil nommé pour choisir ses outils.",
+    "tr": "Varsayılan profil her zaman genel araç setiyle başlar. Araçlarını seçmek için adlandırılmış bir profil oluşturun.",
+    "de": "Das Standardprofil startet immer mit den globalen Werkzeugen. Erstellen Sie ein benanntes Profil, um seine Werkzeuge auszuwählen.",
+    "uk": "Типовий профіль завжди запускається з глобальним набором інструментів. Щоб вибрати інструменти, створіть іменований профіль.",
+    "ca": "El perfil predeterminat sempre s’inicia amb el conjunt d’eines global. Crea un perfil amb nom per triar-ne les eines."
+  },
   "SETTINGS$GLOBAL_TOOLS_CUSTOM": {
     "en": "Conversations started without an agent profile use a custom tool list: {{names}}.",
     "ja": "エージェントプロファイルなしで開始した会話は、カスタムのツール一覧を使用します: {{names}}。",
