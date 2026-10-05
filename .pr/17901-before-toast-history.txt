@@ -1,0 +1,34 @@
+## Fresh public-mode browser: control-openhands browser reset && browser goto /  (waited 15s on onboarding step 0)
+{
+  "ok": true,
+  "toasts": [],
+  "history": [
+    {
+      "ts": "2026-10-05T16:14:40.290Z",
+      "role": "status",
+      "text": "No backend is configured."
+    },
+    {
+      "ts": "2026-10-05T16:14:44.831Z",
+      "role": "status",
+      "text": "No backend is configured."
+    }
+  ]
+}
+## browser click testid=onboarding-skip, then browser reload on the API-key screen (waited 15s)
+{
+  "ok": true,
+  "toasts": [],
+  "history": [
+    {
+      "ts": "2026-10-05T16:14:58.365Z",
+      "role": "status",
+      "text": "No backend is configured."
+    },
+    {
+      "ts": "2026-10-05T16:15:03.265Z",
+      "role": "status",
+      "text": "No backend is configured."
+    }
+  ]
+}
