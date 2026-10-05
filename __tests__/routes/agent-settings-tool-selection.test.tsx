@@ -2,8 +2,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import ToolCatalogService from "#/api/tool-catalog-service/tool-catalog-service.api";
+import {
+  __resetActiveStoreForTests,
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
 import {
   AgentSettingsScreen,
   type AgentSettingsSaveControl,
@@ -15,12 +20,17 @@ const CATALOG = [
     user_selectable: true,
     usable: true,
     in_default_set: true,
+    description: "Run shell commands",
   },
 ];
 
 beforeEach(() => {
   vi.restoreAllMocks();
   vi.spyOn(ToolCatalogService, "getCatalog").mockResolvedValue(CATALOG);
+});
+
+afterEach(() => {
+  __resetActiveStoreForTests();
 });
 
 it.each([false, true])(
@@ -226,4 +236,44 @@ it("describes a stored tool the picker would otherwise filter out", async () => 
   expect(
     await screen.findByTestId("agent-settings-tool-list"),
   ).toHaveTextContent("Browse the web");
+});
+
+it("hides tools on a cloud backend and leaves the stored selection alone", async () => {
+  setRegisteredBackends([
+    {
+      id: "cloud",
+      name: "cloud",
+      host: "https://app.example.test",
+      apiKey: "cloud-key",
+      kind: "cloud",
+    },
+  ]);
+  setActiveSelection({ backendId: "cloud" });
+  let control: AgentSettingsSaveControl | null = null;
+  render(
+    <MemoryRouter>
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <AgentSettingsScreen
+          agentSettingsOverride={{
+            agent_kind: "openhands",
+            tools: [{ name: "terminal", params: {} }],
+          }}
+          onSaveControlChange={(next) => {
+            control = next;
+          }}
+        />
+      </QueryClientProvider>
+    </MemoryRouter>,
+  );
+
+  await waitFor(() => expect(control).not.toBeNull());
+  expect(
+    screen.queryByTestId("agent-settings-tools-mode"),
+  ).not.toBeInTheDocument();
+  expect(ToolCatalogService.getCatalog).not.toHaveBeenCalled();
+  expect(control!.buildAgentProfileFields()).not.toHaveProperty("tools");
 });

@@ -4,6 +4,7 @@ import { BrandButton } from "#/components/features/settings/brand-button";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useSaveSettings } from "#/hooks/mutation/use-save-settings";
 import { readProfileTools } from "#/constants/profile-tools";
+import { agentProfileSupportsTools } from "#/api/agent-profiles-service/profile-field-support";
 import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
@@ -21,6 +22,7 @@ export function GlobalToolsNotice() {
   const { mutate: saveSettings, isPending } = useSaveSettings();
 
   const agentSettings = settings?.agent_settings;
+  if (!agentProfileSupportsTools()) return null;
   if (!agentSettings || agentSettings.agent_kind === "acp") return null;
   const tools = readProfileTools(agentSettings.tools);
   if (tools.mode !== "custom") return null;

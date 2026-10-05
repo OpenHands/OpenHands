@@ -10,3 +10,8 @@ export function agentProfileSupportsSecretRefs(): boolean {
     capabilities.includes("profile_secret_scope_v1")
   );
 }
+
+/** Local only: cloud launches ignore a profile's tools for now. */
+export function agentProfileSupportsTools(): boolean {
+  return getActiveBackend().backend.kind !== "cloud";
+}

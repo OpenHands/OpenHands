@@ -39,7 +39,10 @@ import {
 import { useToolCatalog } from "#/hooks/query/use-tool-catalog";
 import { flattenMcpConfig } from "#/utils/mcp-installed-servers";
 import { parseMcpConfig } from "#/utils/mcp-config";
-import { agentProfileSupportsSecretRefs } from "#/api/agent-profiles-service/profile-field-support";
+import {
+  agentProfileSupportsSecretRefs,
+  agentProfileSupportsTools,
+} from "#/api/agent-profiles-service/profile-field-support";
 import { useSearchSecrets } from "#/hooks/query/use-get-secrets";
 
 export const handle = { hideTitle: true };
@@ -281,7 +284,6 @@ export function AgentSettingsScreen({
   // --- Parallel tool calls (OpenHands path) ---
   // Surfaced only when the backend schema exposes the field, so older
   // agent-servers that predate ``tool_concurrency_limit`` hide it cleanly.
-
   const toolConcurrencyField = fields?.find(
     (field) => field.key === TOOL_CONCURRENCY_FIELD_KEY,
   );
@@ -305,11 +307,12 @@ export function AgentSettingsScreen({
   const [selectedTools, setSelectedTools] = useState<string[] | null>(
     initialTools.mode === "custom" ? initialTools.selected : null,
   );
+  const toolsSupported = agentProfileSupportsTools();
   const {
     data: toolCatalog,
     isError: toolCatalogFailed,
     refetch: refetchToolCatalog,
-  } = useToolCatalog();
+  } = useToolCatalog({ enabled: toolsSupported });
   // Only a loaded catalog may write `tools`.
   const toolCatalogLoaded = toolCatalog !== undefined;
   const standardToolNames = React.useMemo(
@@ -329,7 +332,7 @@ export function AgentSettingsScreen({
   );
   /** Pickable tools this runtime can run, plus anything the profile stores. */
   const toolPickerCatalog = React.useMemo(() => {
-    const items = (toolCatalog ?? [])
+    const items: { name: string; description?: string }[] = (toolCatalog ?? [])
       .filter(({ user_selectable: selectable, usable }) => selectable && usable)
       .map(({ name, description }) => ({ name, description }));
     // Stored names outside the catalog stay selectable so they are kept.
@@ -742,7 +745,7 @@ export function AgentSettingsScreen({
           onChange={setToolConcurrency}
         />
       ) : null}
-      {!isAcp ? (
+      {!isAcp && toolsSupported ? (
         <div className="flex flex-col gap-2.5">
           <Typography.Text className="text-sm">
             {t(I18nKey.SETTINGS$AGENT_PROFILE_TOOLS)}

@@ -1,46 +1,9 @@
-import { AgentServerClient } from "@openhands/typescript-client/clients";
+import { ToolClient } from "@openhands/typescript-client/clients";
+import type { ToolCatalogEntry } from "@openhands/typescript-client";
 
 import { getAgentServerClientOptions } from "../agent-server-client-options";
-import { getActiveBackend } from "../backend-registry/active-store";
-import { callCloudProxy } from "../cloud/proxy";
 
-/** Well-known path of the agent-server tool catalog endpoint. */
-export const TOOL_CATALOG_PATH = "/api/tools/catalog";
-
-/**
- * A tool as offered for configuring an agent.
- *
- * @remarks Mirrors the agent-server's `ToolCatalogEntry` until
- * `@openhands/typescript-client` ships it.
- */
-export interface ToolCatalogEntry {
-  name: string;
-  /** Whether a user may pick this tool; false for built-ins and internals. */
-  user_selectable: boolean;
-  /** Whether this server's runtime can actually run it. */
-  usable: boolean;
-  /** Whether the tool belongs to the standard set a profile gets by default. */
-  in_default_set: boolean;
-  description?: string;
-}
-
-interface ToolCatalogResponse {
-  tools: ToolCatalogEntry[];
-}
-
-function fetchCatalog(): Promise<ToolCatalogResponse> {
-  const { backend } = getActiveBackend();
-  if (backend.kind === "cloud") {
-    return callCloudProxy<ToolCatalogResponse>({
-      backend,
-      method: "GET",
-      path: TOOL_CATALOG_PATH,
-    });
-  }
-  return new AgentServerClient(getAgentServerClientOptions()).get(
-    TOOL_CATALOG_PATH,
-  );
-}
+export type { ToolCatalogEntry };
 
 function isToolCatalogEntry(value: unknown): value is ToolCatalogEntry {
   if (typeof value !== "object" || value === null) return false;
@@ -50,7 +13,7 @@ function isToolCatalogEntry(value: unknown): value is ToolCatalogEntry {
     typeof entry.user_selectable === "boolean" &&
     typeof entry.usable === "boolean" &&
     typeof entry.in_default_set === "boolean" &&
-    (entry.description === undefined || typeof entry.description === "string")
+    typeof entry.description === "string"
   );
 }
 
@@ -74,8 +37,10 @@ function assertValidCatalog(
 class ToolCatalogService {
   /** Tools this server offers, in its order. */
   static async getCatalog(): Promise<ToolCatalogEntry[]> {
-    const response = await fetchCatalog();
-    const tools = response?.tools;
+    const response = await new ToolClient(
+      getAgentServerClientOptions(),
+    ).getToolCatalog();
+    const tools: unknown = response?.tools;
     if (!Array.isArray(tools)) {
       throw new Error(
         "The agent server returned a malformed tool catalog (missing the tools array).",

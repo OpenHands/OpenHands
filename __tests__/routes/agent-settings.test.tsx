@@ -27,6 +27,7 @@ vi.mock("#/hooks/query/use-acp-auth-status", () => ({
 const profileSupportsSecretRefsMock = vi.hoisted(() => vi.fn(() => true));
 vi.mock("#/api/agent-profiles-service/profile-field-support", () => ({
   agentProfileSupportsSecretRefs: () => profileSupportsSecretRefsMock(),
+  agentProfileSupportsTools: () => true,
 }));
 
 // The secret picker lists the user's saved secrets; stub the query so these
