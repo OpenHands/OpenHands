@@ -1,6 +1,0 @@
-http://127.0.0.1:18830/mcp
-- button "Filter MCP servers" [expanded]: All
-- menu "Filter MCP servers":
-  - menuitemradio "All" [checked]
-  - menuitemradio "Installed"
-  - menuitemradio "Library"
