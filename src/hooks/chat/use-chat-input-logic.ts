@@ -4,7 +4,10 @@ import {
   clearEmptyContent,
   getTextContent,
 } from "#/components/features/chat/utils/chat-input.utils";
-import { useConversationStore } from "#/stores/conversation-store";
+import {
+  type MessageToSendTarget,
+  useConversationStore,
+} from "#/stores/conversation-store";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useDraftPersistence } from "./use-draft-persistence";
 
@@ -33,13 +36,17 @@ export const useChatInputLogic = () => {
     chatInputRef,
   );
 
-  // On the home page (no conversationId) the right-panel / messageToSend
-  // mechanism is not relevant.  More importantly, a stale messageToSend value
-  // in the Zustand store causes useAutoResize to overwrite the just-restored
-  // sessionStorage draft with an empty string (see useAutoResize value effect).
-  // Returning null here keeps value=undefined in useAutoResize so it never
-  // touches the element content on the home page.
-  const messageToSend = conversationId ? rawMessageToSend : null;
+  // Apply only messages queued for this composer. On the home page (no
+  // conversationId) a stale conversation value left in the store would make
+  // useAutoResize overwrite the just-restored sessionStorage draft, so Home
+  // takes only messages a launch queued for it explicitly (target "home").
+  const composerTarget: MessageToSendTarget = conversationId
+    ? "conversation"
+    : "home";
+  const messageToSend =
+    (rawMessageToSend?.target ?? "conversation") === composerTarget
+      ? rawMessageToSend
+      : null;
 
   // Restore a cancelled pending send (or, on the home page, a prompt whose
   // launch failed) back into the input only when empty.
@@ -54,9 +61,9 @@ export const useChatInputLogic = () => {
       if (conversationId) {
         setMessageToSend(messageRestoreIfEmpty.text);
       } else if (element) {
-        // messageToSend is ignored on the home page (see above), so write the
-        // text directly. The input event runs the same path as typing: resize,
-        // draft save and submit-button state.
+        // Write the text directly rather than queueing it as messageToSend:
+        // the input event runs the same path as typing (resize, draft save
+        // and submit-button state).
         element.textContent = messageRestoreIfEmpty.text;
         element.dispatchEvent(new InputEvent("input", { bubbles: true }));
       }

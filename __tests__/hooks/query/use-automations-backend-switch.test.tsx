@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import React from "react";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { AxiosError, type AxiosResponse } from "axios";
 
 import AutomationService from "#/api/automation-service/automation-service.api";
 import {
@@ -15,6 +16,7 @@ import {
   useCancelAutomationRun,
   useDispatchAutomation,
   useDeleteAutomation,
+  useImportAutomation,
   useToggleAutomation,
   useUpdateAutomation,
 } from "#/hooks/query/use-automations";
@@ -31,6 +33,9 @@ import type {
   AutomationRunsResponse,
 } from "#/types/automation";
 import * as telemetry from "#/services/telemetry";
+import { createAgentServerQueryClient } from "#/query-client-config";
+import { getApiErrorMessage } from "#/utils/api-error-message";
+import * as ToastHandlers from "#/utils/custom-toast-handlers";
 
 vi.mock("#/api/automation-service/automation-service.api", () => ({
   default: {
@@ -39,6 +44,7 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
     getAutomationRuns: vi.fn(),
     dispatchAutomation: vi.fn(),
     cancelAutomationRun: vi.fn(),
+    createAutomation: vi.fn(),
     deleteAutomation: vi.fn(),
     updateAutomation: vi.fn(),
     toggleAutomation: vi.fn(),
@@ -439,5 +445,171 @@ describe("automation mutation hooks — analytics tracking", () => {
       "automation_disable_button",
       expect.anything(),
     );
+  });
+});
+
+describe("automation mutation hooks — error toasts", () => {
+  // The automation service answers a stale id with 404 and a `detail` body.
+  const notFound = new AxiosError(
+    "Request failed with status code 404",
+    "ERR_BAD_REQUEST",
+    undefined,
+    undefined,
+    {
+      status: 404,
+      data: { detail: "Automation not found" },
+    } as AxiosResponse,
+  );
+
+  // The app's real client, whose MutationCache toasts unless a mutation opts out.
+  function makeAppClientWrapper() {
+    const queryClient = createAgentServerQueryClient();
+    return function Wrapper({ children }: { children: React.ReactNode }) {
+      return (
+        <QueryClientProvider client={queryClient}>
+          <ActiveBackendProvider>{children}</ActiveBackendProvider>
+        </QueryClientProvider>
+      );
+    };
+  }
+
+  // Like the routes and home cards, which render the API message themselves.
+  const toastApiMessage = (error: unknown) =>
+    ToastHandlers.displayErrorToast(getApiErrorMessage(error, "fallback"));
+
+  let errorToast: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    errorToast = vi
+      .spyOn(ToastHandlers, "displayErrorToast")
+      .mockImplementation(() => "toast-id");
+    vi.mocked(AutomationService.dispatchAutomation).mockRejectedValue(notFound);
+    vi.mocked(AutomationService.createAutomation).mockRejectedValue(notFound);
+    vi.mocked(AutomationService.updateAutomation).mockRejectedValue(notFound);
+    vi.mocked(AutomationService.cancelAutomationRun).mockRejectedValue(
+      notFound,
+    );
+    vi.mocked(AutomationService.toggleAutomation).mockRejectedValue(notFound);
+    vi.mocked(AutomationService.deleteAutomation).mockRejectedValue(notFound);
+  });
+
+  afterEach(() => {
+    errorToast.mockRestore();
+  });
+
+  it.each([
+    {
+      action: "Run now",
+      run: () => {
+        const { result } = renderHook(() => useDispatchAutomation(), {
+          wrapper: makeAppClientWrapper(),
+        });
+        act(() =>
+          result.current.mutate("auto-1", { onError: toastApiMessage }),
+        );
+      },
+    },
+    {
+      action: "Import",
+      run: () => {
+        const { result } = renderHook(() => useImportAutomation(), {
+          wrapper: makeAppClientWrapper(),
+        });
+        act(() =>
+          result.current.mutate(
+            {
+              name: "Test",
+              prompt: "p",
+              trigger: automation.trigger,
+              enabled: false,
+            },
+            { onError: toastApiMessage },
+          ),
+        );
+      },
+    },
+    {
+      action: "Edit save",
+      run: () => {
+        const { result } = renderHook(() => useUpdateAutomation(), {
+          wrapper: makeAppClientWrapper(),
+        });
+        act(() =>
+          result.current.mutate(
+            { id: "auto-1", body: { name: "Renamed" } },
+            { onError: toastApiMessage },
+          ),
+        );
+      },
+    },
+    {
+      action: "Cancel run",
+      run: () => {
+        const { result } = renderHook(() => useCancelAutomationRun(), {
+          wrapper: makeAppClientWrapper(),
+        });
+        act(() =>
+          result.current.mutate(
+            { automationId: "auto-1", runId: "run-1" },
+            { onError: toastApiMessage },
+          ),
+        );
+      },
+    },
+    {
+      action: "Toggle opted out with { disableToast: true }",
+      run: () => {
+        const { result } = renderHook(
+          () => useToggleAutomation({ disableToast: true }),
+          { wrapper: makeAppClientWrapper() },
+        );
+        act(() =>
+          result.current.mutate(
+            { id: "auto-1", enabled: false },
+            { onError: toastApiMessage },
+          ),
+        );
+      },
+    },
+  ])(
+    "a failed $action shows only the caller's API-message toast",
+    async ({ run }) => {
+      // Act
+      run();
+
+      // Assert
+      // The global MutationCache handler runs before the caller's onError.
+      await waitFor(() =>
+        expect(errorToast).toHaveBeenCalledWith("Automation not found"),
+      );
+      expect(errorToast).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each([
+    {
+      action: "Toggle",
+      run: () => {
+        const { result } = renderHook(() => useToggleAutomation(), {
+          wrapper: makeAppClientWrapper(),
+        });
+        act(() => result.current.mutate({ id: "auto-1", enabled: true }));
+      },
+    },
+    {
+      action: "Delete",
+      run: () => {
+        const { result } = renderHook(() => useDeleteAutomation(), {
+          wrapper: makeAppClientWrapper(),
+        });
+        act(() => result.current.mutate("auto-1"));
+      },
+    },
+  ])("a failed $action keeps its one global error toast", async ({ run }) => {
+    // Act
+    run();
+
+    // Assert
+    await waitFor(() => expect(errorToast).toHaveBeenCalledTimes(1));
   });
 });

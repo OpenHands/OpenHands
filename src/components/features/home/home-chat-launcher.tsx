@@ -243,7 +243,10 @@ export function HomeChatLauncher() {
         navigate(`/conversations/${targetConversationId}`);
       } catch (error) {
         toast.dismiss(toastId);
-        displayErrorToast(getApiErrorMessage(error, "") || null);
+        // Prefer the server's own message; without one, keep the launcher's
+        // existing wording (the error's message).
+        const fallback = error instanceof Error ? error.message : "";
+        displayErrorToast(getApiErrorMessage(error, fallback) || null);
         // The composer cleared itself on submit; hand the prompt back so the
         // user can retry without retyping it. Only when the create itself
         // failed and this composer is still on screen: the request is consumed
