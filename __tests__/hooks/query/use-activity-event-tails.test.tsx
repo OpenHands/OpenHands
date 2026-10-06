@@ -4,10 +4,7 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import type { OpenHandsEvent } from "#/types/agent-server/core";
-import {
-  useActivityEventTails,
-  __activitySessionGenerationCountForTests,
-} from "#/hooks/query/use-activity-event-tails";
+import { useActivityEventTails } from "#/hooks/query/use-activity-event-tails";
 import { CONVERSATION_QUERY_KEYS } from "#/hooks/query/query-keys";
 import { deriveSubagents } from "#/components/features/activity/activity-view-model";
 
@@ -400,39 +397,124 @@ describe("useActivityEventTails", () => {
     expect(nextCall.pageId).toBeUndefined();
   });
 
-  it("forgets a session generation once its tail leaves the cache", async () => {
+  it("keeps a tail after its cache entry is evicted and re-fetched", async () => {
     const client = newClient();
-    searchEvents.mockResolvedValue({ items: [] });
+    searchEvents.mockResolvedValueOnce({ items: [bashAction("first")] });
 
-    const { unmount } = renderHook(
+    const { result, unmount } = renderHook(
       () => useActivityEventTails([conversation()]),
       { wrapper: makeWrapper(client) },
     );
     await waitFor(() =>
-      expect(__activitySessionGenerationCountForTests(client)).toBe(1),
+      expect(result.current[0]).toEqual([bashAction("first")]),
     );
     unmount();
 
-    // Evicting the tail must drop the remembered generation, otherwise the map
-    // grows for every conversation ever browsed for the page's lifetime.
+    // Evicting the tail and re-mounting must fetch a fresh tail rather than
+    // reusing the removed one.
     client.removeQueries({
       queryKey: [...CONVERSATION_QUERY_KEYS.activityTail],
     });
-    await waitFor(() =>
-      expect(__activitySessionGenerationCountForTests(client)).toBe(0),
-    );
 
-    // Re-mount with the same key: with no stale entry left, no stale tail is
-    // cleared and the tail is fetched normally.
     searchEvents.mockResolvedValueOnce({ items: [bashAction("fresh")] });
-    const { result } = renderHook(
+    const { result: remounted } = renderHook(
       () => useActivityEventTails([conversation()]),
       { wrapper: makeWrapper(client) },
     );
 
     await waitFor(() =>
-      expect(result.current[0]).toEqual([bashAction("fresh")]),
+      expect(remounted.current[0]).toEqual([bashAction("fresh")]),
     );
+  });
+
+  it("starts a fresh tail when the key rotates while the fingerprint is pending", async () => {
+    const client = newClient();
+    const signatures: Array<(value: ArrayBuffer) => void> = [];
+    const realSign = crypto.subtle.sign.bind(crypto.subtle);
+    const signSpy = vi
+      .spyOn(crypto.subtle, "sign")
+      .mockImplementation((...args: Parameters<typeof crypto.subtle.sign>) => {
+        // Hold the first fingerprint (key A) pending so the key change lands
+        // before it resolves, reproducing the cancelled-effect race.
+        if (signatures.length === 0) {
+          return new Promise<ArrayBuffer>((resolve) => {
+            signatures.push(resolve);
+          });
+        }
+        return realSign(...args);
+      });
+
+    try {
+      searchEvents.mockResolvedValueOnce({ items: [taskAction("old-action")] });
+
+      const { result, rerender } = renderHook(
+        ({ key }: { key: string }) =>
+          useActivityEventTails([conversation({ session_api_key: key })]),
+        { initialProps: { key: "key-A" }, wrapper: makeWrapper(client) },
+      );
+
+      await waitFor(() => expect(signatures).toHaveLength(1));
+
+      // The session key rotates while key A's fingerprint is still pending.
+      searchEvents.mockResolvedValueOnce({ items: [bashAction("bash-1")] });
+      rerender({ key: "key-B" });
+
+      // Let the first fingerprint resolve late; it must not be recorded.
+      signatures[0](new ArrayBuffer(16));
+
+      await waitFor(() =>
+        expect(result.current[0]).toEqual([bashAction("bash-1")]),
+      );
+      expect(result.current[0]).not.toContainEqual(
+        expect.objectContaining({ id: "old-action" }),
+      );
+    } finally {
+      signSpy.mockRestore();
+    }
+  });
+
+  it("does not reuse a cached tail when Web Crypto is unavailable", async () => {
+    const client = newClient();
+    const subtleDescriptor = Object.getOwnPropertyDescriptor(
+      Object.getPrototypeOf(crypto),
+      "subtle",
+    );
+
+    try {
+      Object.defineProperty(crypto, "subtle", {
+        value: undefined,
+        configurable: true,
+      });
+      searchEvents.mockResolvedValueOnce({ items: [taskAction("old-action")] });
+
+      const { result, rerender } = renderHook(
+        ({ key }: { key: string }) =>
+          useActivityEventTails([conversation({ session_api_key: key })]),
+        { initialProps: { key: "key-A" }, wrapper: makeWrapper(client) },
+      );
+      await waitFor(() =>
+        expect(result.current[0]).toEqual([taskAction("old-action")]),
+      );
+
+      // Without Web Crypto every credential fingerprints to `null`, so a
+      // rotation cannot be detected from a fingerprint and the immediate
+      // reset above cannot fire. The next poll must still not reuse the cached
+      // tail incrementally, or the old session's action would survive.
+      searchEvents.mockResolvedValueOnce({ items: [bashAction("bash-1")] });
+      rerender({ key: "key-B" });
+      await refetchTails(client);
+
+      await waitFor(() =>
+        expect(result.current[0]).toEqual([bashAction("bash-1")]),
+      );
+      expect(result.current[0]).not.toContainEqual(
+        expect.objectContaining({ id: "old-action" }),
+      );
+    } finally {
+      if (subtleDescriptor) {
+        Object.defineProperty(crypto, "subtle", subtleDescriptor);
+      }
+    }
   });
 
   it("does not advance past events when a later cloud page fails", async () => {

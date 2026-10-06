@@ -1,6 +1,5 @@
 import { useEffect } from "react";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
-import type { QueryClient } from "@tanstack/react-query";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import EventService from "#/api/event-service/event-service.api";
 import type {
@@ -36,49 +35,6 @@ const ACTIVITY_TAIL_REFETCH_MS = 10_000;
 const ACTIVITY_TAIL_STALE_MS = 5_000;
 const ACTIVITY_TAIL_GC_MS = 1000 * 60 * 5;
 
-/**
- * The session generation last seen per activity-tail query identity, scoped to
- * the owning QueryClient so it cannot leak across clients or tests. It holds
- * only a keyed fingerprint rather than the credential itself, and survives the
- * hook unmounting and remounting (the query cache outlives the view). A
- * rotation that reuses the conversation id and runtime URL leaves the query key
- * unchanged, so a changed generation is what tells us the cached tail belongs
- * to a different session.
- */
-const lastSessionGenerationByClient = new WeakMap<
-  QueryClient,
-  Map<string, string | null>
->();
-
-const activityTailKeyPrefix = CONVERSATION_QUERY_KEYS.activityTail[0];
-
-function sessionGenerationsFor(
-  client: QueryClient,
-): Map<string, string | null> {
-  let generations = lastSessionGenerationByClient.get(client);
-  if (!generations) {
-    generations = new Map();
-    lastSessionGenerationByClient.set(client, generations);
-    // Subscribe for the lifetime of the client rather than the hook instance: a
-    // tail is usually evicted by `gcTime` after the view has unmounted, and the
-    // entry must be dropped then too. The callback only reads the query key, so
-    // it holds no credential.
-    client.getQueryCache().subscribe((event) => {
-      if (event.type !== "removed") return;
-      if (event.query.queryKey[0] !== activityTailKeyPrefix) return;
-      generations!.delete(JSON.stringify(event.query.queryKey));
-    });
-  }
-  return generations;
-}
-
-/** Test-only: number of remembered session generations for a client. */
-export function __activitySessionGenerationCountForTests(
-  client: QueryClient,
-): number {
-  return lastSessionGenerationByClient.get(client)?.size ?? 0;
-}
-
 /** Cache identity of one conversation's activity tail. */
 export function activityTailQueryKey(
   conversation: AppConversation,
@@ -99,6 +55,22 @@ export function activityTailQueryKey(
 }
 
 /**
+ * A stable, non-secret identity for a runtime session. The runtime URL is part
+ * of the query key; the session key is not, so it is folded in through
+ * `sessionGeneration`. `null` means the runtime cannot key the fingerprint
+ * (no Web Crypto, or no key), in which case a tail cached under this identity
+ * may belong to a different credential and must not be reused incrementally.
+ */
+async function sessionIdentity(
+  conversation: AppConversation,
+): Promise<string | null> {
+  const generation = await sessionGeneration(conversation.session_api_key);
+  return generation === null
+    ? null
+    : `${conversation.conversation_url ?? ""}#${generation}`;
+}
+
+/**
  * Per-conversation event tails for the live activity view.
  *
  * The conversation list only carries coarse metadata (status, cost), so the
@@ -112,7 +84,10 @@ export function activityTailQueryKey(
  *
  * The session API key is a credential the caller already holds. It is used to
  * authorize each request but is never written into the cached value or the
- * query key, so cache inspection or serialization cannot leak it.
+ * query key, so cache inspection or serialization cannot leak it. Rotation is
+ * detected inside the query function from a keyed fingerprint, which is why a
+ * pending refetch is never merged against a tail that belongs to a different
+ * session.
  */
 // @spec LAV-004 — Data is bounded and read-only
 export function useActivityEventTails(
@@ -123,35 +98,34 @@ export function useActivityEventTails(
   const enabled = conversations.length > 0;
 
   useEffect(() => {
-    const generations = sessionGenerationsFor(queryClient);
-
     let cancelled = false;
     void (async () => {
-      for (const conversation of conversations) {
-        const queryKey = activityTailQueryKey(
-          conversation,
-          active.backend.id,
-          active.orgId,
-        );
-        const cacheKey = JSON.stringify(queryKey);
-        const generation = await sessionGeneration(
-          conversation.session_api_key,
-        );
-        if (cancelled) return;
+      // Resolve every identity before touching the cache. The fingerprint is
+      // asynchronous, and a key change can land while an earlier one is still
+      // pending; comparing only after all of them resolve means a cancelled run
+      // never records a stale identity.
+      const identities = await Promise.all(
+        conversations.map(async (conversation) => ({
+          queryKey: activityTailQueryKey(
+            conversation,
+            active.backend.id,
+            active.orgId,
+          ),
+          conversationUrl: conversation.conversation_url,
+          identity: await sessionIdentity(conversation),
+        })),
+      );
+      if (cancelled) return;
 
-        const previousGeneration = generations.get(cacheKey);
-        if (
-          previousGeneration !== undefined &&
-          previousGeneration !== generation &&
-          conversation.conversation_url
-        ) {
-          // The cached tail belongs to a different runtime session. Clear it
-          // immediately, before the next periodic refetch, so the row cannot
-          // show (or carry) the previous session's activity.
+      for (const { queryKey, conversationUrl, identity } of identities) {
+        if (identity === null || !conversationUrl) continue;
+        const cached = queryClient.getQueryData<ActivityTailBuffer>(queryKey);
+        // A cached tail stamped with a different session belongs to another
+        // credential. Clear it now, before the periodic refetch, so the row
+        // cannot keep showing the previous session's activity.
+        if (cached?.sessionId !== undefined && cached.sessionId !== identity) {
           void queryClient.resetQueries({ queryKey });
         }
-
-        generations.set(cacheKey, generation);
       }
     })();
 
@@ -180,12 +154,28 @@ export function useActivityEventTails(
             return { events: [] };
           }
 
+          const identity = await sessionIdentity(conversation);
           const cached = client.getQueryData<ActivityTailBuffer>(resolvedKey);
-          const watermark = cached?.watermark;
-          const resumePageId = cached?.resumePageId;
-          const filterSupported = cached?.supportsTimestampFilter !== false;
+          // A cached tail fetched under a different (or unknown) session
+          // identity belongs to another credential: start fresh rather than
+          // merging its events into this session's tail. Unknown identity
+          // (no Web Crypto) never reuses, so a rotation on an HTTP origin
+          // cannot leak the previous session's activity.
+          const sameSession =
+            identity !== null && cached?.sessionId === identity;
+          const watermark = sameSession ? cached?.watermark : undefined;
+          const resumePageId = sameSession ? cached?.resumePageId : undefined;
+          const filterSupported =
+            !sameSession || cached?.supportsTimestampFilter !== false;
           const canIncrementallyFetch =
             watermark !== undefined && filterSupported;
+
+          const withSession = (
+            buffer: ActivityTailBuffer,
+          ): ActivityTailBuffer => ({
+            ...buffer,
+            ...(identity !== null ? { sessionId: identity } : {}),
+          });
 
           const fetchPage = (options: EventSearchOptions) =>
             EventService.searchEvents(
@@ -264,11 +254,13 @@ export function useActivityEventTails(
             // is the whole window we need, and its newest event is a valid
             // watermark because older events are never re-requested.
             const page = await fetchPlainPage();
-            return mergeActivityTail(cached, [...page.items].reverse(), {
-              canIncrementallyFetch: false,
-              supportsTimestampFilter: true,
-              rangeComplete: true,
-            });
+            return withSession(
+              mergeActivityTail(cached, [...page.items].reverse(), {
+                canIncrementallyFetch: false,
+                supportsTimestampFilter: true,
+                rangeComplete: true,
+              }),
+            );
           }
 
           const range = await fetchRange();
@@ -280,24 +272,28 @@ export function useActivityEventTails(
             // merged incrementally, so carried delegations are dropped rather
             // than being reported as running indefinitely.
             const page = await fetchPlainPage();
-            return mergeActivityTail(cached, [...page.items].reverse(), {
-              canIncrementallyFetch: false,
-              supportsTimestampFilter: false,
-              rangeComplete: true,
-            });
+            return withSession(
+              mergeActivityTail(cached, [...page.items].reverse(), {
+                canIncrementallyFetch: false,
+                supportsTimestampFilter: false,
+                rangeComplete: true,
+              }),
+            );
           }
 
           // An incomplete range (page bound hit, or a later page failed
           // transiently) keeps the watermark and stores a cursor so the next
           // poll finishes it instead of restarting from the newest page.
-          return mergeActivityTail(cached, [...range.events].reverse(), {
-            canIncrementallyFetch: true,
-            supportsTimestampFilter: true,
-            rangeComplete: range.status === "complete",
-            ...(range.status !== "complete" && range.resumePageId
-              ? { resumePageId: range.resumePageId }
-              : {}),
-          });
+          return withSession(
+            mergeActivityTail(cached, [...range.events].reverse(), {
+              canIncrementallyFetch: true,
+              supportsTimestampFilter: true,
+              rangeComplete: range.status === "complete",
+              ...(range.status !== "complete" && range.resumePageId
+                ? { resumePageId: range.resumePageId }
+                : {}),
+            }),
+          );
         },
         enabled,
         refetchInterval: ACTIVITY_TAIL_REFETCH_MS,

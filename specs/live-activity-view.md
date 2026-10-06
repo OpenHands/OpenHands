@@ -60,12 +60,15 @@
       URL, and a rotated session key shall reset the cached tail immediately —
       including when the conversation left the active list or the view
       remounted in between. The session key itself shall never enter the query
-      key, the cached value, or any long-lived map; rotation is detected from a
-      keyed (HMAC) fingerprint scoped to the owning QueryClient, so a leaked
-      value cannot be tested against candidate credentials offline.
-- [x] Remembered session generations shall be dropped when their tail leaves the
-      query cache, so browsing many conversations does not grow the map for the
-      page's lifetime.
+      key, the cached value, or any long-lived map; each cached tail is stamped
+      with a keyed (HMAC) fingerprint of the credential, so a leaked value
+      cannot be tested against candidate credentials offline.
+- [x] When the runtime cannot key that fingerprint (no Web Crypto on a
+      non-secure origin), a credential-dependent cached tail shall never be
+      reused, so a rotation there cannot leave the previous session's activity
+      on screen.
+- [x] A tail shall not be reused across a session change even when a
+      fingerprint was still pending while the key rotated.
 - [x] The view shall never start, stop, pause, or otherwise mutate a
       conversation.
 

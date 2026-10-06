@@ -309,6 +309,15 @@ export interface ActivityTailBuffer {
   resolvedObservations?: OpenHandsEvent[];
   watermark?: string;
   /**
+   * Identity of the runtime session that produced this tail: the runtime URL
+   * plus a keyed fingerprint of the session credential. It never contains the
+   * credential itself. A poll that finds a different (or absent) identity on
+   * the cached buffer starts a fresh tail instead of merging another session's
+   * events, which is what makes a rotation safe without the credential entering
+   * the query key.
+   */
+  sessionId?: string;
+  /**
    * The newest timestamp seen in a partial poll whose range has not finished
    * yet. The requests keep using `watermark` (the durable lower bound) while a
    * range is in flight, but on completion the watermark commits this value so a
