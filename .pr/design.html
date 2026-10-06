@@ -53,7 +53,7 @@
 <header>
   <p class="meta">
     <a href="https://github.com/OpenHands/OpenHands/issues/18000">Issue #18000</a>
-    · Documentation change · 2 files · +33 lines
+    · Documentation change · 2 files · +41 lines
   </p>
   <h1>Clarify the non-interactive task interface</h1>
   <p>
@@ -66,8 +66,8 @@
   </p>
   <p class="sources">
     Documentation revision:
-    <a href="https://github.com/ragtag2/OpenHands/commit/2c225c754c08119fd82136af2e30d175869db313">
-      2c225c754
+    <a href="https://github.com/ragtag2/OpenHands/commit/114aa727050b33bb3ddf1d3589f022cf6307af17">
+      114aa7270
     </a>
   </p>
 </header>
@@ -75,11 +75,11 @@
 <section id="readme">
   <h2>README gives task users a programmatic route</h2>
   <p class="sources">
-    Edited documentation · +27 lines ·
+    Edited documentation · +35 lines ·
     <a href="https://github.com/OpenHands/OpenHands/blob/53ad0012f366d738af3d09b3137cd57288395c9f/README.md#L146">
       Before: README.md:146
     </a> ·
-    <a href="https://github.com/ragtag2/OpenHands/blob/2c225c754c08119fd82136af2e30d175869db313/README.md#L146">
+    <a href="https://github.com/ragtag2/OpenHands/blob/114aa727050b33bb3ddf1d3589f022cf6307af17/README.md#L146">
       After: README.md:146
     </a>
   </p>
@@ -92,9 +92,9 @@
         a dedicated explanation of non-interactive task usage.
       </td>
       <td>
-        A short section recommends the SDK or Agent Server API, links
-        the Docker guide, records the legacy CLI's maintenance status,
-        and explains the one-shot workflow.
+        A section recommends the SDK or Agent Server API, links the Docker
+        guide, explicitly identifies the legacy CLI flags as unmaintained,
+        and documents exit-code selection, events, artifacts, and workspace diffs.
       </td>
     </tr></tbody>
   </table>
@@ -122,7 +122,7 @@
     <a href="https://github.com/OpenHands/OpenHands/blob/53ad0012f366d738af3d09b3137cd57288395c9f/docs/architecture.md#L5">
       Before: docs/architecture.md:5
     </a> ·
-    <a href="https://github.com/ragtag2/OpenHands/blob/2c225c754c08119fd82136af2e30d175869db313/docs/architecture.md#L21">
+    <a href="https://github.com/ragtag2/OpenHands/blob/114aa727050b33bb3ddf1d3589f022cf6307af17/docs/architecture.md#L21">
       After: docs/architecture.md:21
     </a>
   </p>
@@ -153,30 +153,42 @@
 </section>
 
 <section id="validation">
-  <h2>The local mock run completed successfully</h2>
+  <h2>Both validation cases returned the expected exit codes</h2>
   <p>
-    Validation used Python SDK and Agent Server 1.53.0 with Docker Desktop
-    on Windows. Scripted mock replies exercised the task workflow without
-    a provider API key.
+    Validation used Python SDK and Agent Server 1.53.0 with Docker
+    Desktop on Windows. Scripted mock replies exercised the workflow
+    without a provider API key.
   </p>
-  <p>
-    The run changed README.md from <code>before</code> to <code>after</code>,
-    created <code>result.txt</code> containing <code>HEADLESS_OK</code>,
-    collected events, logs, and a Git diff, and stopped the container.
-  </p>
-  <details open>
-    <summary>Observed command and result</summary>
+
+  <table>
+    <thead>
+      <tr><th>Case</th><th>Conversation status</th><th>Artifact</th><th>Caller exit code</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Success</td><td>finished</td><td>HEADLESS_OK</td><td>0</td></tr>
+      <tr><td>Incorrect output</td><td>finished</td><td>HEADLESS_BAD</td><td>1</td></tr>
+    </tbody>
+  </table>
+
+  <details>
+    <summary>Validation commands — PowerShell from the repository root</summary>
     <pre>&amp; .\.tmp\headless-demo\.venv\Scripts\python.exe .\.tmp\headless-demo\run.py
 $LASTEXITCODE
 
-Status: finished; exit code: 0; results: .tmp\headless-demo\results
-0</pre>
+&amp; .\.tmp\headless-demo\.venv\Scripts\python.exe .\.tmp\headless-demo\run.py --bad-output
+$LASTEXITCODE</pre>
   </details>
+
+  <p>
+    The incorrect-output case confirms that the caller verifies
+    artifacts before choosing its exit code, even when the conversation
+    status is <code>finished</code>.
+  </p>
   <p class="meta">
-    Evidence: local results/status.json, README.md, result.txt,
-    events.jsonl, mock-llm.log, and diff.patch.
+    Evidence is saved under .tmp/headless-demo/results/ and
+    .tmp/headless-demo/results-failure/: status.json, README.md,
+    result.txt, events.jsonl, mock-llm.log, and diff.patch.
     The temporary harness and outputs are outside the committed PR.
-    git diff --check passed before the documentation commit.
   </p>
 </section>
 
@@ -187,10 +199,19 @@ Status: finished; exit code: 0; results: .tmp\headless-demo\results
     canonical SDK/API setup guidance. Updating the legacy headless guide
     in OpenHands/docs is a separate follow-up.
   </p>
+  <p>
+    The issue also asks for the one-shot Canvas entrypoint plan. The
+    architecture note documents current availability; the plan still
+    needs maintainer confirmation.
+  </p>
   <p class="meta">
     This HTML page is a temporary review artifact under .pr/.
     For this fork PR, remove it before merge and retain a commit-pinned
     preview link in the PR description.
+  </p>
+  <p>
+  No new CLI command, Agent Canvas subcommand, or Agent Server endpoint
+  is added.
   </p>
 </section>
 </main>
