@@ -18,6 +18,7 @@ import {
   setStoredConversationMetadata,
 } from "#/api/conversation-metadata-store";
 import type { Backend } from "#/api/backend-registry/types";
+import { clearCachedAgentServerInfo } from "#/api/agent-server-compatibility";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import LLMSubscriptionService from "#/api/llm-subscription-service";
 import {
@@ -2005,13 +2006,124 @@ describe("AgentServerConversationService", () => {
       expect(proxyRequests).toHaveLength(0);
     });
 
-    it("returns an empty hooks result with and without a conversation id", async () => {
-      await expect(
-        AgentServerConversationService.getHooks(""),
-      ).resolves.toEqual({ hooks: [] });
-      await expect(
-        AgentServerConversationService.getHooks("conv-1"),
-      ).resolves.toEqual({ hooks: [] });
+    // @spec #17924 — The hooks dialog reads the conversation's workspace hooks.
+    describe("getHooks", () => {
+      // POST /api/hooks as the agent-server serializes it: every event key,
+      // and every HookDefinition field with its default.
+      const workspaceHookConfig = {
+        pre_tool_use: [
+          {
+            matcher: "terminal",
+            hooks: [
+              {
+                type: "command",
+                name: null,
+                command: "true",
+                prompt: null,
+                system_prompt: null,
+                tools: [],
+                timeout: 10,
+                max_iterations: 3,
+                async: false,
+              },
+            ],
+          },
+        ],
+        post_tool_use: [],
+        user_prompt_submit: [],
+        session_start: [],
+        session_end: [],
+        stop: [],
+      };
+
+      function serveWorkspaceHooks(body: object, status = 200) {
+        const projectDirs: unknown[] = [];
+        server.use(
+          http.post("*/api/hooks", async ({ request }) => {
+            const { project_dir: projectDir } = (await request.json()) as {
+              project_dir?: unknown;
+            };
+            projectDirs.push(projectDir);
+            return HttpResponse.json(body, { status });
+          }),
+        );
+        return projectDirs;
+      }
+
+      beforeEach(() => {
+        clearCachedAgentServerInfo();
+      });
+
+      it("lists the hooks of the workspace the conversation was started in", async () => {
+        setStoredConversationMetadata("conv-1", {
+          selected_repository: null,
+          selected_branch: null,
+          git_provider: null,
+          selected_workspace: "/home/user/qa-hooks-repo",
+          workspace_mode: "new_worktree",
+        });
+        const projectDirs = serveWorkspaceHooks({
+          hook_config: workspaceHookConfig,
+        });
+
+        await expect(
+          AgentServerConversationService.getHooks("conv-1"),
+        ).resolves.toEqual({
+          hooks: [
+            {
+              event_type: "pre_tool_use",
+              matchers: [
+                {
+                  matcher: "terminal",
+                  hooks: [
+                    {
+                      type: "command",
+                      command: "true",
+                      timeout: 10,
+                      async: false,
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        });
+        // The workspace root, not the per-conversation worktree.
+        expect(projectDirs).toEqual(["/home/user/qa-hooks-repo"]);
+      });
+
+      it("reads the backend workspace root for a conversation without an attached workspace", async () => {
+        const projectDirs = serveWorkspaceHooks({ hook_config: null });
+
+        await expect(
+          AgentServerConversationService.getHooks("conv-1"),
+        ).resolves.toEqual({ hooks: [] });
+        expect(projectDirs).toEqual(["/workspace/project/agent-canvas"]);
+      });
+
+      it("rejects when the agent-server cannot load the workspace hooks", async () => {
+        serveWorkspaceHooks({ detail: "Internal Server Error" }, 500);
+
+        await expect(
+          AgentServerConversationService.getHooks("conv-1"),
+        ).rejects.toThrow();
+      });
+
+      it("resolves to no hooks without a request when there is no conversation id or local backend", async () => {
+        const projectDirs = serveWorkspaceHooks({
+          hook_config: workspaceHookConfig,
+        });
+
+        await expect(
+          AgentServerConversationService.getHooks(""),
+        ).resolves.toEqual({ hooks: [] });
+        setRegisteredBackends([cloudBackend]);
+        setActiveSelection({ backendId: cloudBackend.id });
+        await expect(
+          AgentServerConversationService.getHooks("conv-cloud"),
+        ).resolves.toEqual({ hooks: [] });
+        expect(projectDirs).toEqual([]);
+      });
     });
 
     it("normalizes dot segments while keeping a requested file inside the workspace", async () => {

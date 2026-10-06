@@ -1,4 +1,8 @@
-import { ACP_SETTINGS_KEYS } from "@openhands/typescript-client";
+import {
+  ACP_SETTINGS_KEYS,
+  HOOK_EVENT_FIELDS,
+  HookType,
+} from "@openhands/typescript-client";
 import type {
   ConversationRuntimeInfo,
   HookConfig,
@@ -1773,4 +1777,28 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
 
 export function emptyHooksResponse(): GetHooksResponse {
   return { hooks: [] };
+}
+
+/** The hooks dialog's events: a workspace's configured events in SDK order. */
+export function toHooksResponse(
+  hookConfig: HookConfig | null,
+): GetHooksResponse {
+  if (!hookConfig) return emptyHooksResponse();
+  return {
+    hooks: [...HOOK_EVENT_FIELDS]
+      .filter((eventType) => hookConfig[eventType]?.length)
+      .map((eventType) => ({
+        event_type: eventType,
+        matchers: hookConfig[eventType].map(({ matcher, hooks }) => ({
+          // The SDK's own defaults for fields a hooks.json may omit.
+          matcher: matcher ?? "*",
+          hooks: hooks.map((hook) => ({
+            type: hook.type ?? HookType.COMMAND,
+            command: hook.command,
+            timeout: hook.timeout,
+            async: hook.async,
+          })),
+        })),
+      })),
+  };
 }
