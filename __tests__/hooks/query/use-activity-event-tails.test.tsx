@@ -6,6 +6,7 @@ import type { AppConversation } from "#/api/conversation-service/agent-server-co
 import type { OpenHandsEvent } from "#/types/agent-server/core";
 import { useActivityEventTails } from "#/hooks/query/use-activity-event-tails";
 import { CONVERSATION_QUERY_KEYS } from "#/hooks/query/query-keys";
+import { deriveSubagents } from "#/components/features/activity/activity-view-model";
 
 const backendMock = vi.hoisted(() => ({
   current: {
@@ -182,12 +183,11 @@ describe("useActivityEventTails", () => {
 
     await waitFor(() => expect(result.current[0]).toHaveLength(1));
 
-    // Same conversation id and runtime URL, new session. When the next poll
-    // runs it must ignore the previous session's buffer, so the unresolved
-    // delegation is not carried into the new tail.
+    // Same conversation id and runtime URL, new session. The rotation must
+    // clear the cached tail immediately, before the next periodic refetch, so
+    // the row does not keep showing the previous session's activity.
     searchEvents.mockResolvedValueOnce({ items: [bashAction("bash-1")] });
     rerender({ key: "new" });
-    await refetchTails(client);
 
     await waitFor(() =>
       expect(result.current[0]).toEqual([bashAction("bash-1")]),
@@ -196,13 +196,64 @@ describe("useActivityEventTails", () => {
       expect.objectContaining({ id: "old-action" }),
     );
 
-    // The session key is used for the request but never enters the key.
+    // The session key is used for the request but never enters the key or the
+    // cached value.
     const queryKeys = client
       .getQueryCache()
       .getAll()
       .map((query) => query.queryKey);
     expect(queryKeys.some((key) => key.includes("old"))).toBe(false);
     expect(queryKeys.some((key) => key.includes("new"))).toBe(false);
+
+    const cachedValues = JSON.stringify(
+      client
+        .getQueryCache()
+        .getAll()
+        .map((query) => query.state.data),
+    );
+    expect(cachedValues).not.toContain("key-1");
+    expect(cachedValues).not.toContain("old");
+    expect(cachedValues).not.toContain("new");
+  });
+
+  it("paginates the range so a burst larger than one page still closes a delegation", async () => {
+    const client = newClient();
+    const task = taskAction("task-action-1");
+    searchEvents.mockResolvedValueOnce({ items: [task] });
+
+    const { result } = renderHook(
+      () => useActivityEventTails([conversation()]),
+      { wrapper: makeWrapper(client) },
+    );
+
+    await waitFor(() => expect(result.current[0]).toEqual([task]));
+
+    // The observation and a full page of newer events arrive before the next
+    // poll. The observation is on the second page, so the poll must follow
+    // `next_page_id` rather than only reading the newest 30 events.
+    const newer = Array.from({ length: 30 }, (_, index) => ({
+      ...bashAction(`c${index}`),
+      timestamp: new Date(Date.UTC(2026, 9, 6, 0, 0, index + 1)).toISOString(),
+    }));
+    const observation = taskObservation("task-action-1");
+    searchEvents
+      .mockResolvedValueOnce({ items: newer, next_page_id: "page-2" })
+      .mockResolvedValueOnce({ items: [observation], next_page_id: null });
+
+    await refetchTails(client);
+
+    await waitFor(() => expect(result.current[0]).toContainEqual(observation));
+    expect(searchEvents).toHaveBeenCalledTimes(3);
+    expect(searchEvents.mock.calls[1][3]).toMatchObject({
+      timestampGte: "2026-10-06T00:00:00Z",
+    });
+    expect(searchEvents.mock.calls[2][3]).toMatchObject({
+      pageId: "page-2",
+      timestampGte: "2026-10-06T00:00:00Z",
+    });
+    expect(deriveSubagents(result.current[0] ?? [])).toEqual([
+      { id: "call-task-action-1", name: "explorer", status: "completed" },
+    ]);
   });
 
   it("falls back to an unfiltered tail when the backend rejects the filter", async () => {

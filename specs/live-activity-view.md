@@ -40,11 +40,16 @@
       scroll out of the window shall be carried forward across polls so a
       long-running delegation does not disappear, and a later observation shall
       still close it.
+- [x] Each poll shall page through the entire timestamp-filtered range via
+      `next_page_id`, so a burst larger than one page cannot hide an
+      observation; an incomplete range shall not advance the watermark or carry
+      an unresolved delegation forward.
 - [x] A conversation without a resolved `conversation_url` shall render with an
       empty tail rather than a failing request.
 - [x] The event tail's cache identity shall include the conversation's runtime
-      URL and session key, so a re-provisioned sandbox does not reuse the
-      previous runtime's tail.
+      URL, and a rotated session key shall reset the cached tail immediately;
+      the session key itself shall never enter the query key or the cached
+      value.
 - [x] The view shall never start, stop, pause, or otherwise mutate a
       conversation.
 

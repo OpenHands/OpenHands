@@ -270,6 +270,14 @@ export interface MergeActivityTailOptions {
    * dropped instead of being reported as running indefinitely.
    */
   canIncrementallyFetch?: boolean;
+  /**
+   * True when `next` holds every event in the requested range, so the newest
+   * timestamp in it is a valid watermark for the next poll. A partial page
+   * (the range was longer than one page and pagination stopped early) must not
+   * advance the watermark: doing so would permanently exclude the events the
+   * next poll never asked for.
+   */
+  rangeComplete?: boolean;
   /** Records that the backend rejected a timestamp-filtered request. */
   supportsTimestampFilter?: boolean;
 }
@@ -291,6 +299,7 @@ export function mergeActivityTail(
   options: MergeActivityTailOptions = {},
 ): ActivityTailBuffer {
   const canIncrementallyFetch = options.canIncrementallyFetch === true;
+  const rangeComplete = options.rangeComplete !== false;
   const base = canIncrementallyFetch ? (previous?.events ?? []) : [];
 
   // Streaming/state events carry no `id` and are irrelevant to the current
@@ -309,14 +318,21 @@ export function mergeActivityTail(
       ? ordered.slice(-ACTIVITY_TAIL_HISTORY_LIMIT)
       : ordered;
   const historyIds = new Set(history.map((event) => event.id));
-  const carried = unresolvedTaskActions(base).filter(
-    (event) => !historyIds.has(event.id),
-  );
+  // A carried action whose observation was displaced from the bounded history
+  // would stay "running" forever, so only carry an action while the whole
+  // range since the watermark was actually read (the observation cannot have
+  // slipped by unseen).
+  const carried = rangeComplete
+    ? unresolvedTaskActions(base).filter((event) => !historyIds.has(event.id))
+    : [];
 
-  const watermark = maxTimestamp(
-    latestEventTimestamp(next),
-    previous?.watermark,
-  );
+  // Only advance the watermark over a complete range. On a partial page the
+  // newest event is not a safe lower bound for the next poll: events between
+  // the watermark and it were never requested, and advancing past them would
+  // drop them permanently.
+  const watermark = rangeComplete
+    ? maxTimestamp(latestEventTimestamp(next), previous?.watermark)
+    : previous?.watermark;
   const supportsTimestampFilter =
     options.supportsTimestampFilter === false ||
     previous?.supportsTimestampFilter === false;

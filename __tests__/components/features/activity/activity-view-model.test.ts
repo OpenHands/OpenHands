@@ -175,6 +175,83 @@ describe("mergeActivityTail", () => {
     ]);
   });
 
+  it("carries an unresolved action whose history scrolled out when the range is complete", () => {
+    const task = taskAction("task-call-1", "explorer", "task-action-1");
+    const previous = { events: [task], watermark: "2026-10-06T00:00:00Z" };
+    const next = Array.from({ length: 60 }, (_, index) => ({
+      ...bashAction(`c${index}`),
+      timestamp: new Date(Date.UTC(2026, 9, 6, 0, 0, index + 1)).toISOString(),
+    }));
+
+    const merged = mergeActivityTail(previous, next, {
+      canIncrementallyFetch: true,
+    });
+
+    expect(merged.events).toContain(task);
+    expect(deriveSubagents(merged.events)).toEqual([
+      { id: "task-call-1", name: "explorer", status: "running" },
+    ]);
+  });
+
+  it("does not advance the watermark when the range is incomplete", () => {
+    const previous = { events: [], watermark: "2026-10-06T00:00:00Z" };
+    const newest = { ...bashAction("c9"), timestamp: "2026-10-06T00:00:30Z" };
+
+    const merged = mergeActivityTail(previous, [newest], {
+      canIncrementallyFetch: true,
+      rangeComplete: false,
+    });
+
+    // The next poll must re-request the events between the old watermark and
+    // `newest` that this partial page never read.
+    expect(merged.watermark).toBe("2026-10-06T00:00:00Z");
+  });
+
+  it("drops a carried delegation when the range is incomplete", () => {
+    const task = taskAction("task-call-1", "explorer", "task-action-1");
+    const previous = { events: [task], watermark: "2026-10-06T00:00:00Z" };
+    const next = Array.from({ length: 60 }, (_, index) => ({
+      ...bashAction(`c${index}`),
+      timestamp: new Date(Date.UTC(2026, 9, 6, 0, 0, index + 1)).toISOString(),
+    }));
+
+    const merged = mergeActivityTail(previous, next, {
+      canIncrementallyFetch: true,
+      rangeComplete: false,
+    });
+
+    // The action scrolled out of the bounded history and the incomplete range
+    // cannot prove it is still running, so it must not be carried.
+    expect(merged.events).toHaveLength(60);
+    expect(deriveSubagents(merged.events)).toEqual([]);
+    expect(merged.watermark).toBe("2026-10-06T00:00:00Z");
+  });
+
+  it("does not reopen a completed delegation whose observation is trimmed away", () => {
+    // A task action and its observation are both near the start of the buffer.
+    // Enough newer events arrive to displace the observation from the bounded
+    // history; the action must not be carried as still-running just because
+    // its resolution fell out of the window.
+    const task = taskAction("task-call-1", "explorer", "task-action-1");
+    const observation = taskObservation("task-action-1", false, "task-call-1");
+    const previous = {
+      events: [task, observation],
+      watermark: "2026-10-06T00:00:01Z",
+    };
+    const next = Array.from({ length: 60 }, (_, index) => ({
+      ...bashAction(`c${index}`),
+      timestamp: new Date(Date.UTC(2026, 9, 6, 0, 0, index + 2)).toISOString(),
+    }));
+
+    const merged = mergeActivityTail(previous, next, {
+      canIncrementallyFetch: true,
+      rangeComplete: true,
+    });
+
+    expect(merged.events).toHaveLength(60);
+    expect(deriveSubagents(merged.events)).toEqual([]);
+  });
+
   it("closes a carried delegation when its observation arrives later", () => {
     const task = taskAction("task-call-1", "explorer", "task-action-1");
     const previous = { events: [task] };
