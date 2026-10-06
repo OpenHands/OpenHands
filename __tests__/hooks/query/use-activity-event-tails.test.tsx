@@ -34,20 +34,26 @@ const conversation = (
     ...overrides,
   }) as AppConversation;
 
-const taskAction = (eventId: string): OpenHandsEvent =>
+const taskAction = (
+  eventId: string,
+  timestamp = "2026-10-06T00:00:00Z",
+): OpenHandsEvent =>
   ({
     id: eventId,
-    timestamp: "2026-10-06T00:00:00Z",
+    timestamp,
     source: "agent",
     action: { kind: "TaskAction", subagent_type: "explorer" },
     tool_name: "task",
     tool_call_id: `call-${eventId}`,
   }) as unknown as OpenHandsEvent;
 
-const bashAction = (eventId: string): OpenHandsEvent =>
+const bashAction = (
+  eventId: string,
+  timestamp = "2026-10-06T00:00:01Z",
+): OpenHandsEvent =>
   ({
     id: eventId,
-    timestamp: "2026-10-06T00:00:01Z",
+    timestamp,
     source: "agent",
     action: { kind: "ExecuteBashAction", command: "ls" },
     tool_name: "execute_bash",
@@ -73,8 +79,18 @@ function makeWrapper(client: QueryClient) {
   };
 }
 
+function newClient() {
+  return new QueryClient({ defaultOptions: { queries: { retry: false } } });
+}
+
+function refetchTails(client: QueryClient) {
+  return client.refetchQueries({
+    queryKey: [...CONVERSATION_QUERY_KEYS.activityTail],
+  });
+}
+
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
   backendMock.current = {
     backend: { id: "local-1", kind: "local" },
     orgId: null,
@@ -82,10 +98,32 @@ beforeEach(() => {
 });
 
 describe("useActivityEventTails", () => {
-  it("carries an unresolved task action forward across refetches", async () => {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
+  it("requests everything since the last poll so no observation is missed", async () => {
+    const client = newClient();
+    const task = taskAction("task-action-1");
+    searchEvents.mockResolvedValueOnce({ items: [task] });
+
+    const { result } = renderHook(
+      () => useActivityEventTails([conversation()]),
+      { wrapper: makeWrapper(client) },
+    );
+
+    await waitFor(() => expect(result.current[0]).toEqual([task]));
+    // The first poll has no watermark yet, so it must not send a filter.
+    expect(searchEvents.mock.calls[0][3]).not.toHaveProperty("timestampGte");
+
+    // The next poll asks for events at or after the newest one seen.
+    searchEvents.mockResolvedValueOnce({ items: [] });
+    await refetchTails(client);
+
+    await waitFor(() => expect(searchEvents).toHaveBeenCalledTimes(2));
+    expect(searchEvents.mock.calls[1][3]).toMatchObject({
+      timestampGte: "2026-10-06T00:00:00Z",
     });
+  });
+
+  it("closes a delegation whose observation arrives in a later poll", async () => {
+    const client = newClient();
     const task = taskAction("task-action-1");
     searchEvents.mockResolvedValueOnce({ items: [task] });
 
@@ -96,21 +134,16 @@ describe("useActivityEventTails", () => {
 
     await waitFor(() => expect(result.current[0]).toEqual([task]));
 
-    // The next poll no longer contains the still-running task action.
-    searchEvents.mockResolvedValueOnce({ items: [bashAction("bash-1")] });
-    await client.refetchQueries({
-      queryKey: [...CONVERSATION_QUERY_KEYS.activityTail],
-    });
+    const observation = taskObservation("task-action-1");
+    searchEvents.mockResolvedValueOnce({ items: [observation] });
+    await refetchTails(client);
 
-    await waitFor(() =>
-      expect(result.current[0]).toEqual([task, bashAction("bash-1")]),
-    );
+    await waitFor(() => expect(result.current[0]).toContainEqual(observation));
+    expect(result.current[0]).toContainEqual(task);
   });
 
   it("starts a fresh tail when the runtime URL changes", async () => {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
+    const client = newClient();
     searchEvents.mockResolvedValueOnce({ items: [taskAction("old-action")] });
 
     const { result, rerender } = renderHook(
@@ -124,7 +157,6 @@ describe("useActivityEventTails", () => {
 
     await waitFor(() => expect(result.current[0]).toHaveLength(1));
 
-    // Re-provisioned on a new sandbox: same id, new URL.
     const fresh = taskObservation("new-action");
     searchEvents.mockResolvedValueOnce({ items: [fresh] });
     rerender({ url: "http://runtime/new" });
@@ -133,5 +165,68 @@ describe("useActivityEventTails", () => {
     expect(result.current[0]).not.toContainEqual(
       expect.objectContaining({ id: "old-action" }),
     );
+  });
+
+  it("does not carry a delegation across a rotated session key", async () => {
+    const client = newClient();
+    searchEvents.mockResolvedValueOnce({ items: [taskAction("old-action")] });
+
+    const { result, rerender } = renderHook(
+      ({ key }: { key: string }) =>
+        useActivityEventTails([conversation({ session_api_key: key })]),
+      {
+        initialProps: { key: "old" },
+        wrapper: makeWrapper(client),
+      },
+    );
+
+    await waitFor(() => expect(result.current[0]).toHaveLength(1));
+
+    // Same conversation id and runtime URL, new session. When the next poll
+    // runs it must ignore the previous session's buffer, so the unresolved
+    // delegation is not carried into the new tail.
+    searchEvents.mockResolvedValueOnce({ items: [bashAction("bash-1")] });
+    rerender({ key: "new" });
+    await refetchTails(client);
+
+    await waitFor(() =>
+      expect(result.current[0]).toEqual([bashAction("bash-1")]),
+    );
+    expect(result.current[0]).not.toContainEqual(
+      expect.objectContaining({ id: "old-action" }),
+    );
+
+    // The session key is used for the request but never enters the key.
+    const queryKeys = client
+      .getQueryCache()
+      .getAll()
+      .map((query) => query.queryKey);
+    expect(queryKeys.some((key) => key.includes("old"))).toBe(false);
+    expect(queryKeys.some((key) => key.includes("new"))).toBe(false);
+  });
+
+  it("falls back to an unfiltered tail when the backend rejects the filter", async () => {
+    const client = newClient();
+    const task = taskAction("task-action-1");
+    searchEvents.mockResolvedValueOnce({ items: [task] });
+
+    const { result } = renderHook(
+      () => useActivityEventTails([conversation()]),
+      { wrapper: makeWrapper(client) },
+    );
+
+    await waitFor(() => expect(result.current[0]).toEqual([task]));
+
+    // A filter that is not supported fails once, then the plain tail is read.
+    searchEvents.mockRejectedValueOnce(new Error("unsupported filter"));
+    searchEvents.mockResolvedValueOnce({ items: [bashAction("bash-1")] });
+    await refetchTails(client);
+
+    await waitFor(() =>
+      expect(result.current[0]).toEqual([bashAction("bash-1")]),
+    );
+
+    // The delegation is dropped rather than reported as running forever.
+    expect(result.current[0]).not.toContainEqual(task);
   });
 });

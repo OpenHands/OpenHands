@@ -160,37 +160,83 @@ describe("deriveSubagents", () => {
 
 // @spec LAV-004 — Data is bounded and read-only
 describe("mergeActivityTail", () => {
-  it("carries an unresolved task action forward when it leaves the window", () => {
+  it("carries an unresolved task action forward when the poll is gapless", () => {
     const task = taskAction("task-call-1", "explorer", "task-action-1");
-    const previous = [task, bashAction("c1")];
+    const previous = { events: [task, bashAction("c1")] };
     const next = [bashAction("c2"), bashAction("c3")];
 
-    const merged = mergeActivityTail(previous, next);
+    const merged = mergeActivityTail(previous, next, {
+      canIncrementallyFetch: true,
+    });
 
-    expect(merged).toEqual([task, ...next]);
-    expect(deriveSubagents(merged)).toEqual([
+    expect(merged.events).toContain(task);
+    expect(deriveSubagents(merged.events)).toEqual([
       { id: "task-call-1", name: "explorer", status: "running" },
     ]);
   });
 
   it("closes a carried delegation when its observation arrives later", () => {
     const task = taskAction("task-call-1", "explorer", "task-action-1");
-    const previous = [task];
+    const previous = { events: [task] };
     const observation = taskObservation("task-action-1", false, "task-call-1");
 
-    const merged = mergeActivityTail(previous, [observation]);
+    const merged = mergeActivityTail(previous, [observation], {
+      canIncrementallyFetch: true,
+    });
 
     // The action is retained so the observation can pair with it and close
     // the delegation as completed rather than dropping the row's subagent.
-    expect(merged).toEqual([task, observation]);
-    expect(deriveSubagents(merged)).toEqual([
+    expect(merged.events).toContain(task);
+    expect(deriveSubagents(merged.events)).toEqual([
       { id: "task-call-1", name: "explorer", status: "completed" },
     ]);
   });
 
-  it("returns the fetched tail unchanged when there is no prior tail", () => {
-    const next = [bashAction("c1")];
-    expect(mergeActivityTail(undefined, next)).toBe(next);
+  it("drops a carried delegation when the window may contain gaps", () => {
+    // The observation was produced and scrolled out between two polls. A
+    // merge that cannot prove it saw every event must not keep claiming the
+    // delegation is still running.
+    const task = taskAction("task-call-1", "explorer", "task-action-1");
+    const previous = { events: [task] };
+
+    const merged = mergeActivityTail(previous, [bashAction("c9")], {
+      canIncrementallyFetch: false,
+    });
+
+    expect(merged.events).toEqual([bashAction("c9")]);
+    expect(deriveSubagents(merged.events)).toEqual([]);
+  });
+
+  it("records the newest timestamp as the next poll watermark", () => {
+    const older = { ...bashAction("c1"), timestamp: "2026-10-06T00:00:00Z" };
+    const newer = { ...bashAction("c2"), timestamp: "2026-10-06T00:00:09Z" };
+
+    expect(mergeActivityTail(undefined, [older]).watermark).toBe(
+      "2026-10-06T00:00:00Z",
+    );
+    expect(mergeActivityTail({ events: [older] }, [newer]).watermark).toBe(
+      "2026-10-06T00:00:09Z",
+    );
+  });
+
+  it("keeps the history bounded when a poll returns many events", () => {
+    const events = Array.from({ length: 120 }, (_, index) => ({
+      ...bashAction(`c${index}`),
+      timestamp: new Date(Date.UTC(2026, 9, 6, 0, 0, index)).toISOString(),
+    }));
+
+    const merged = mergeActivityTail(undefined, events);
+
+    expect(merged.events).toHaveLength(60);
+    expect(merged.events.at(-1)).toEqual(events.at(-1));
+  });
+
+  it("remembers a backend without timestamp filters", () => {
+    const merged = mergeActivityTail(undefined, [bashAction("c1")], {
+      supportsTimestampFilter: false,
+    });
+
+    expect(merged.supportsTimestampFilter).toBe(false);
   });
 });
 

@@ -193,29 +193,139 @@ function unresolvedTaskActions(events: OpenHandsEvent[]): OpenHandsEvent[] {
 }
 
 /**
- * Carry unresolved `task` delegations forward across polls. The fetched tail
- * only holds the newest events, so a task action that started more than a
- * window ago is no longer in `next` even though its delegation is still
- * running. The previous tail's still-unresolved task actions are prepended so
- * `deriveSubagents` can reconstruct them. Keeping the action also lets a later
- * `TaskObservation` pair with it (closing the delegation) even though the
- * action itself scrolled out. An action already present in `next` is left to
- * `next` alone. The carried set is bounded by the number of concurrently
- * running delegations, not the tail size.
+ * A bounded window of one conversation's events plus the polling watermark.
+ *
+ * `watermark` is the timestamp of the newest event seen so far. The next poll
+ * asks the backend for events at or after it, which is what makes the poll
+ * gapless: an observation can no longer slip between two polls and be missed,
+ * so an unresolved delegation is provably still running.
+ */
+export interface ActivityTailBuffer {
+  events: OpenHandsEvent[];
+  watermark?: string;
+  /**
+   * Set once the backend has rejected a timestamp-filtered request, so later
+   * polls skip the attempt and read a plain tail instead.
+   */
+  supportsTimestampFilter?: boolean;
+}
+
+/**
+ * How many events a conversation keeps across polls. Completed delegations
+ * linger in this window so the row does not flicker back to zero subagents the
+ * moment a task finishes.
+ */
+export const ACTIVITY_TAIL_HISTORY_LIMIT = 60;
+
+function eventTimestampMs(event: OpenHandsEvent): number | null {
+  const timestamp = event.timestamp;
+  if (typeof timestamp !== "string") return null;
+
+  const parsed = Date.parse(timestamp);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+/** The later of two ISO timestamps, tolerating missing or unparseable values. */
+function maxTimestamp(a?: string, b?: string): string | undefined {
+  if (a === undefined) return b;
+  if (b === undefined) return a;
+
+  const aMs = Date.parse(a);
+  const bMs = Date.parse(b);
+  if (Number.isNaN(aMs)) return b;
+  if (Number.isNaN(bMs)) return a;
+
+  return aMs >= bMs ? a : b;
+}
+
+/** Timestamp of the newest event in `events`, or undefined when none parse. */
+export function latestEventTimestamp(
+  events: OpenHandsEvent[],
+): string | undefined {
+  let newest: string | undefined;
+  for (const event of events) {
+    if (typeof event.timestamp === "string") {
+      newest = maxTimestamp(newest, event.timestamp);
+    }
+  }
+  return newest;
+}
+
+function compareByTimestamp(a: OpenHandsEvent, b: OpenHandsEvent): number {
+  const aMs = eventTimestampMs(a);
+  const bMs = eventTimestampMs(b);
+
+  if (aMs === null && bMs === null) return 0;
+  if (aMs === null) return 1;
+  if (bMs === null) return -1;
+  return aMs - bMs;
+}
+
+export interface MergeActivityTailOptions {
+  /**
+   * True only when the caller fetched every event since the previous
+   * watermark. An unresolved delegation is then known to be still running and
+   * may be carried forward. When the window may contain gaps (no watermark
+   * yet, or a backend without timestamp filters) carried delegations are
+   * dropped instead of being reported as running indefinitely.
+   */
+  canIncrementallyFetch?: boolean;
+  /** Records that the backend rejected a timestamp-filtered request. */
+  supportsTimestampFilter?: boolean;
+}
+
+/**
+ * Merge a freshly fetched window into the previous buffer.
+ *
+ * The fetched window is deduplicated into a bounded, timestamp-ordered history
+ * so `pickLatestActivity` and `deriveSubagents` still see the delegations that
+ * finished recently. A `task` action with no observation is carried forward
+ * only when the caller proved the window is gapless; keeping it also lets a
+ * later `TaskObservation` pair with it even though the action itself has
+ * scrolled out.
  */
 // @spec LAV-004 — Data is bounded and read-only
 export function mergeActivityTail(
-  previous: OpenHandsEvent[] | undefined,
+  previous: ActivityTailBuffer | undefined,
   next: OpenHandsEvent[],
-): OpenHandsEvent[] {
-  if (!previous?.length) return next;
+  options: MergeActivityTailOptions = {},
+): ActivityTailBuffer {
+  const canIncrementallyFetch = options.canIncrementallyFetch === true;
+  const base = canIncrementallyFetch ? (previous?.events ?? []) : [];
 
-  const nextEventIds = new Set(next.map((event) => event.id));
-  const carried = unresolvedTaskActions(previous).filter(
-    (event) => !nextEventIds.has(event.id),
+  // Streaming/state events carry no `id` and are irrelevant to the current
+  // step and the delegation fan-out, so only identified events are buffered.
+  const byId = new Map<string, OpenHandsEvent>();
+  for (const event of base) {
+    if (typeof event.id === "string") byId.set(event.id, event);
+  }
+  for (const event of next) {
+    if (typeof event.id === "string") byId.set(event.id, event);
+  }
+
+  const ordered = [...byId.values()].sort(compareByTimestamp);
+  const history =
+    ordered.length > ACTIVITY_TAIL_HISTORY_LIMIT
+      ? ordered.slice(-ACTIVITY_TAIL_HISTORY_LIMIT)
+      : ordered;
+  const historyIds = new Set(history.map((event) => event.id));
+  const carried = unresolvedTaskActions(base).filter(
+    (event) => !historyIds.has(event.id),
   );
 
-  return carried.length > 0 ? [...carried, ...next] : next;
+  const watermark = maxTimestamp(
+    latestEventTimestamp(next),
+    previous?.watermark,
+  );
+  const supportsTimestampFilter =
+    options.supportsTimestampFilter === false ||
+    previous?.supportsTimestampFilter === false;
+
+  return {
+    events: carried.length > 0 ? [...carried, ...history] : history,
+    ...(watermark !== undefined ? { watermark } : {}),
+    ...(supportsTimestampFilter ? { supportsTimestampFilter: false } : {}),
+  };
 }
 
 function messageText(event: MessageEvent): string | null {
