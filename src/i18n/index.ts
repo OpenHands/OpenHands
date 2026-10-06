@@ -28,6 +28,7 @@ export const AvailableLanguages = [
   { label: "Català", value: "ca" },
   { label: "Türkçe", value: "tr" },
   { label: "Українська", value: "uk" },
+  { label: "Bahasa Indonesia", value: "id" },
 ] as const;
 
 const initializationPromises = new WeakMap<I18nInstance, Promise<unknown>>();
