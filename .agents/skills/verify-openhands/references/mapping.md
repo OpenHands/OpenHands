@@ -168,7 +168,7 @@ with the entry point, expected and actual result and artifacts.
 - A recipe that fails because the app is broken: keep the expected result,
   record `fail` with evidence and report the product bug separately.
 - A recipe that needs something the run cannot have (a Cloud account, a
-  GitHub token, VS Code server, macOS): mark it `blocked`, name the prerequisite
+  GitHub token, a Docker daemon, macOS): mark it `blocked`, name the prerequisite
   in `Preconditions:` and keep the recipe as far as it can be written.
 
 `blocked` is the most common wrong verdict. Before you write it, try the
