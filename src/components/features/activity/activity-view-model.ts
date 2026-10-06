@@ -193,6 +193,105 @@ function unresolvedTaskActions(events: OpenHandsEvent[]): OpenHandsEvent[] {
 }
 
 /**
+ * The `TaskObservation` events that resolved a delegation, retained
+ * independently of the bounded event history. Without them, a completed
+ * delegation whose observation scrolls out of the window would be re-derived
+ * as still running once its action is carried back in.
+ */
+function mergeResolvedObservations(
+  previous: OpenHandsEvent[] | undefined,
+  next: OpenHandsEvent[],
+): OpenHandsEvent[] {
+  const byActionId = new Map<string, OpenHandsEvent>();
+  for (const event of previous ?? []) {
+    if (
+      isObservationEvent(event) &&
+      event.observation.kind === "TaskObservation"
+    ) {
+      byActionId.set(event.action_id, event);
+    }
+  }
+  for (const event of next) {
+    if (
+      isObservationEvent(event) &&
+      event.observation.kind === "TaskObservation"
+    ) {
+      byActionId.set(event.action_id, event);
+    }
+  }
+  return [...byActionId.values()];
+}
+
+/** Action event ids of the task actions in `events`. */
+function taskActionEventIds(events: OpenHandsEvent[]): Set<string> {
+  const ids = new Set<string>();
+  for (const event of events) {
+    if (isActionEvent(event) && event.action.kind === "TaskAction") {
+      ids.add(event.id);
+    }
+  }
+  return ids;
+}
+
+/** Action event ids that a `TaskObservation` in `events` has resolved. */
+function observedActionIds(events: OpenHandsEvent[]): Set<string> {
+  const ids = new Set<string>();
+  for (const event of events) {
+    if (
+      isObservationEvent(event) &&
+      event.observation.kind === "TaskObservation"
+    ) {
+      ids.add(event.action_id);
+    }
+  }
+  return ids;
+}
+
+/**
+ * Re-add the retained observations for task actions whose own observation fell
+ * out of the bounded history, so `deriveSubagents` sees each retained action's
+ * true terminal state instead of reopening it as running.
+ */
+function withResolvedObservations(
+  events: OpenHandsEvent[],
+  resolvedObservations: OpenHandsEvent[],
+): OpenHandsEvent[] {
+  if (resolvedObservations.length === 0) return events;
+
+  const actionIds = taskActionEventIds(events);
+  const observed = observedActionIds(events);
+  const extras: OpenHandsEvent[] = [];
+  for (const observation of resolvedObservations) {
+    if (!isObservationEvent(observation)) continue;
+    if (
+      !actionIds.has(observation.action_id) ||
+      observed.has(observation.action_id)
+    ) {
+      continue;
+    }
+    observed.add(observation.action_id);
+    extras.push(observation);
+  }
+
+  return extras.length > 0 ? [...events, ...extras] : events;
+}
+
+/**
+ * Drop retained resolutions whose task action is no longer present. A resolved
+ * action is never carried, so once it leaves the bounded history its resolution
+ * can never be observed again; pruning keeps the retention bounded rather than
+ * growing for the lifetime of the conversation.
+ */
+function pruneResolvedObservations(
+  resolvedObservations: OpenHandsEvent[],
+  actionIds: Set<string>,
+): OpenHandsEvent[] {
+  return resolvedObservations.filter(
+    (event) => isObservationEvent(event) && actionIds.has(event.action_id),
+  );
+}
+
+/**
  * A bounded window of one conversation's events plus the polling watermark.
  *
  * `watermark` is the timestamp of the newest event seen so far. The next poll
@@ -202,7 +301,19 @@ function unresolvedTaskActions(events: OpenHandsEvent[]): OpenHandsEvent[] {
  */
 export interface ActivityTailBuffer {
   events: OpenHandsEvent[];
+  /**
+   * The `TaskObservation` that resolved each delegation, retained outside the
+   * bounded `events` window so a completed action carried back in still reads
+   * as completed rather than running.
+   */
+  resolvedObservations?: OpenHandsEvent[];
   watermark?: string;
+  /**
+   * Page cursor to resume an unfinished timestamp-filtered range. Set when a
+   * poll hit the page bound before exhausting the range, so the next poll
+   * continues from where it stopped instead of re-reading the newest pages.
+   */
+  resumePageId?: string;
   /**
    * Set once the backend has rejected a timestamp-filtered request, so later
    * polls skip the attempt and read a plain tail instead.
@@ -278,6 +389,12 @@ export interface MergeActivityTailOptions {
    * next poll never asked for.
    */
   rangeComplete?: boolean;
+  /**
+   * Page cursor for the unfinished remainder of the range when it was not
+   * complete. Stored so the next poll resumes from there instead of re-reading
+   * the newest pages of a large backlog.
+   */
+  resumePageId?: string;
   /** Records that the backend rejected a timestamp-filtered request. */
   supportsTimestampFilter?: boolean;
 }
@@ -337,9 +454,28 @@ export function mergeActivityTail(
     options.supportsTimestampFilter === false ||
     previous?.supportsTimestampFilter === false;
 
+  // Keep the resolutions separate from the bounded history so a carried action
+  // still reads as completed (or errored) after its observation scrolls out.
+  // Prune resolutions whose action is gone so the retention stays bounded.
+  const baseEvents = carried.length > 0 ? [...carried, ...history] : history;
+  const resolvedObservations = pruneResolvedObservations(
+    mergeResolvedObservations(
+      canIncrementallyFetch ? previous?.resolvedObservations : undefined,
+      next,
+    ),
+    taskActionEventIds(baseEvents),
+  );
+  const events = withResolvedObservations(baseEvents, resolvedObservations);
+
   return {
-    events: carried.length > 0 ? [...carried, ...history] : history,
+    events,
+    ...(resolvedObservations.length > 0 ? { resolvedObservations } : {}),
     ...(watermark !== undefined ? { watermark } : {}),
+    ...(rangeComplete
+      ? {}
+      : options.resumePageId !== undefined
+        ? { resumePageId: options.resumePageId }
+        : {}),
     ...(supportsTimestampFilter ? { supportsTimestampFilter: false } : {}),
   };
 }

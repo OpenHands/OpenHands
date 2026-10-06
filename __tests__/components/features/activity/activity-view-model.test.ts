@@ -252,6 +252,55 @@ describe("mergeActivityTail", () => {
     expect(deriveSubagents(merged.events)).toEqual([]);
   });
 
+  it("keeps a carried completed delegation closed once its observation scrolls out", () => {
+    // The resolution is retained separately from the bounded history, so the
+    // carried action still reads as completed rather than reopening.
+    const task = taskAction("task-call-1", "explorer", "task-action-1");
+    const observation = taskObservation("task-action-1", false, "task-call-1");
+    const previous = {
+      events: [task],
+      resolvedObservations: [observation],
+      watermark: "2026-10-06T00:00:01Z",
+    };
+    const next = Array.from({ length: 60 }, (_, index) => ({
+      ...bashAction(`c${index}`),
+      timestamp: new Date(Date.UTC(2026, 9, 6, 0, 0, index + 2)).toISOString(),
+    }));
+
+    const merged = mergeActivityTail(previous, next, {
+      canIncrementallyFetch: true,
+      rangeComplete: true,
+    });
+
+    expect(merged.events).toContain(task);
+    expect(deriveSubagents(merged.events)).toEqual([
+      { id: "task-call-1", name: "explorer", status: "completed" },
+    ]);
+  });
+
+  it("keeps a carried errored delegation errored once its observation scrolls out", () => {
+    const task = taskAction("task-call-1", "explorer", "task-action-1");
+    const observation = taskObservation("task-action-1", true, "task-call-1");
+    const previous = {
+      events: [task],
+      resolvedObservations: [observation],
+      watermark: "2026-10-06T00:00:01Z",
+    };
+    const next = Array.from({ length: 60 }, (_, index) => ({
+      ...bashAction(`c${index}`),
+      timestamp: new Date(Date.UTC(2026, 9, 6, 0, 0, index + 2)).toISOString(),
+    }));
+
+    const merged = mergeActivityTail(previous, next, {
+      canIncrementallyFetch: true,
+      rangeComplete: true,
+    });
+
+    expect(deriveSubagents(merged.events)).toEqual([
+      { id: "task-call-1", name: "explorer", status: "error" },
+    ]);
+  });
+
   it("closes a carried delegation when its observation arrives later", () => {
     const task = taskAction("task-call-1", "explorer", "task-action-1");
     const previous = { events: [task] };

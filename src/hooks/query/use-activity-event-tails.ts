@@ -1,10 +1,14 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import EventService from "#/api/event-service/event-service.api";
-import type { EventSearchOptions } from "#/api/event-service/event-service.types";
+import type {
+  EventSearchOptions,
+  EventSearchPage,
+} from "#/api/event-service/event-service.types";
 import type { OpenHandsEvent } from "#/types/agent-server/core";
 import { useActiveBackend } from "#/contexts/active-backend-context";
+import { sessionGeneration } from "#/utils/session-generation";
 import {
   mergeActivityTail,
   type ActivityTailBuffer,
@@ -22,6 +26,7 @@ export const ACTIVITY_TAIL_LIMIT = 30;
  * incremental poll pages through the whole range since the previous watermark
  * so no observation is skipped; the bound only stops a pathological stream
  * from monopolizing a poll. When it is hit the range is treated as incomplete
+ * and its page cursor is stored so the next poll resumes where it stopped
  * (see `mergeActivityTail`).
  */
 export const ACTIVITY_TAIL_MAX_PAGES = 20;
@@ -29,6 +34,16 @@ export const ACTIVITY_TAIL_MAX_PAGES = 20;
 const ACTIVITY_TAIL_REFETCH_MS = 10_000;
 const ACTIVITY_TAIL_STALE_MS = 5_000;
 const ACTIVITY_TAIL_GC_MS = 1000 * 60 * 5;
+
+/**
+ * The session generation last seen per activity-tail query identity. Module
+ * scoped so it survives the hook unmounting and remounting (the query cache
+ * outlives the view), and holds only a non-reversible fingerprint rather than
+ * the credential itself. A rotation that reuses the conversation id and
+ * runtime URL leaves the query key unchanged, so a changed generation is what
+ * tells us the cached tail belongs to a different session.
+ */
+const lastSessionGenerationByQuery = new Map<string, string | null>();
 
 /** Cache identity of one conversation's activity tail. */
 export function activityTailQueryKey(
@@ -47,6 +62,11 @@ export function activityTailQueryKey(
     // sandbox's last action.
     conversation.conversation_url ?? null,
   ];
+}
+
+/** Test-only: forget the remembered session generations. */
+export function __resetActivitySessionGenerationsForTests(): void {
+  lastSessionGenerationByQuery.clear();
 }
 
 /**
@@ -73,37 +93,30 @@ export function useActivityEventTails(
   const queryClient = useQueryClient();
   const enabled = conversations.length > 0;
 
-  // Last session key seen per conversation id, kept outside the query cache so
-  // a rotation can be detected without persisting the secret. A rotation that
-  // reuses the conversation id and runtime URL leaves the query key unchanged,
-  // so the stale tail has to be cleared explicitly.
-  const sessionKeysRef = useRef(new Map<string, string | null>());
-
   useEffect(() => {
-    const previousKeys = sessionKeysRef.current;
-    const currentKeys = new Map<string, string | null>();
-
     for (const conversation of conversations) {
-      const sessionApiKey = conversation.session_api_key ?? null;
-      currentKeys.set(conversation.id, sessionApiKey);
+      const queryKey = activityTailQueryKey(
+        conversation,
+        active.backend.id,
+        active.orgId,
+      );
+      const cacheKey = JSON.stringify(queryKey);
+      const generation = sessionGeneration(conversation.session_api_key);
+      const previousGeneration = lastSessionGenerationByQuery.get(cacheKey);
 
-      const previousKey = previousKeys.get(conversation.id);
       if (
-        previousKey !== undefined &&
-        previousKey !== sessionApiKey &&
+        previousGeneration !== undefined &&
+        previousGeneration !== generation &&
         conversation.conversation_url
       ) {
-        void queryClient.resetQueries({
-          queryKey: activityTailQueryKey(
-            conversation,
-            active.backend.id,
-            active.orgId,
-          ),
-        });
+        // The cached tail belongs to a different runtime session. Clear it
+        // immediately, before the next periodic refetch, so the row cannot
+        // show (or carry) the previous session's activity.
+        void queryClient.resetQueries({ queryKey });
       }
-    }
 
-    sessionKeysRef.current = currentKeys;
+      lastSessionGenerationByQuery.set(cacheKey, generation);
+    }
   }, [conversations, active.backend.id, active.orgId, queryClient]);
 
   const results = useQueries({
@@ -128,6 +141,7 @@ export function useActivityEventTails(
 
           const cached = client.getQueryData<ActivityTailBuffer>(resolvedKey);
           const watermark = cached?.watermark;
+          const resumePageId = cached?.resumePageId;
           const filterSupported = cached?.supportsTimestampFilter !== false;
           const canIncrementallyFetch =
             watermark !== undefined && filterSupported;
@@ -140,72 +154,109 @@ export function useActivityEventTails(
               options,
             );
 
+          const fetchPlainPage = () =>
+            fetchPage({
+              limit: ACTIVITY_TAIL_LIMIT,
+              sortOrder: "TIMESTAMP_DESC",
+            });
+
+          type RangeResult =
+            | { status: "complete"; events: OpenHandsEvent[] }
+            | {
+                status: "incomplete" | "failed";
+                events: OpenHandsEvent[];
+                resumePageId?: string;
+                firstPage: boolean;
+              };
+
           // Page through the whole range since the watermark. A single page
           // can hold only the newest events, so a burst larger than the page
           // size would otherwise hide an observation and leave its delegation
-          // stuck "running".
-          const fetchRange = async (): Promise<{
-            events: OpenHandsEvent[];
-            complete: boolean;
-          }> => {
+          // stuck "running". A cursor from a previous incomplete poll resumes
+          // the range instead of re-reading its newest pages.
+          const fetchRange = async (): Promise<RangeResult> => {
             const events: OpenHandsEvent[] = [];
-            let pageId: string | undefined;
+            let pageId = resumePageId;
 
             for (let page = 0; page < ACTIVITY_TAIL_MAX_PAGES; page += 1) {
-              const result = await fetchPage({
-                limit: ACTIVITY_TAIL_LIMIT,
-                sortOrder: "TIMESTAMP_DESC",
-                ...(pageId ? { pageId } : {}),
-                ...(watermark !== undefined ? { timestampGte: watermark } : {}),
-              });
+              let result: EventSearchPage<OpenHandsEvent>;
+              try {
+                result = await fetchPage({
+                  limit: ACTIVITY_TAIL_LIMIT,
+                  sortOrder: "TIMESTAMP_DESC",
+                  ...(pageId ? { pageId } : {}),
+                  ...(watermark !== undefined
+                    ? { timestampGte: watermark }
+                    : {}),
+                  // Surface a failed cloud page as an error instead of the
+                  // service silently degrading it to an empty "exhausted"
+                  // page, which would advance the watermark past unread
+                  // events.
+                  strictPagination: true,
+                });
+              } catch {
+                return {
+                  status: "failed",
+                  events,
+                  ...(pageId ? { resumePageId: pageId } : {}),
+                  firstPage: page === 0 && resumePageId === undefined,
+                };
+              }
+
               events.push(...result.items);
               if (!result.next_page_id) {
-                return { events, complete: true };
+                return { status: "complete", events };
               }
               pageId = result.next_page_id;
             }
 
-            return { events, complete: false };
+            return {
+              status: "incomplete",
+              events,
+              ...(pageId ? { resumePageId: pageId } : {}),
+              firstPage: false,
+            };
           };
 
-          try {
-            if (!canIncrementallyFetch) {
-              // No watermark yet (or the filter is unsupported): the newest
-              // page is the whole window we need, and its newest event is a
-              // valid watermark because older events are never re-requested.
-              const page = await fetchPage({
-                limit: ACTIVITY_TAIL_LIMIT,
-                sortOrder: "TIMESTAMP_DESC",
-              });
-              return mergeActivityTail(cached, [...page.items].reverse(), {
-                canIncrementallyFetch: false,
-                supportsTimestampFilter: true,
-                rangeComplete: true,
-              });
-            }
-
-            const { events, complete } = await fetchRange();
-            return mergeActivityTail(cached, [...events].reverse(), {
-              canIncrementallyFetch: true,
+          if (!canIncrementallyFetch) {
+            // No watermark yet (or the filter is unsupported): the newest page
+            // is the whole window we need, and its newest event is a valid
+            // watermark because older events are never re-requested.
+            const page = await fetchPlainPage();
+            return mergeActivityTail(cached, [...page.items].reverse(), {
+              canIncrementallyFetch: false,
               supportsTimestampFilter: true,
-              rangeComplete: complete,
+              rangeComplete: true,
             });
-          } catch (error) {
-            if (!canIncrementallyFetch) throw error;
-            // The backend rejected the timestamp filter. Record that so later
+          }
+
+          const range = await fetchRange();
+
+          if (range.status === "failed" && range.firstPage) {
+            // The very first filtered request failed, which is what an
+            // unsupported timestamp filter looks like. Record that so later
             // polls skip it, and fall back to a plain tail: it cannot be
             // merged incrementally, so carried delegations are dropped rather
             // than being reported as running indefinitely.
-            const page = await fetchPage({
-              limit: ACTIVITY_TAIL_LIMIT,
-              sortOrder: "TIMESTAMP_DESC",
-            });
+            const page = await fetchPlainPage();
             return mergeActivityTail(cached, [...page.items].reverse(), {
               canIncrementallyFetch: false,
               supportsTimestampFilter: false,
               rangeComplete: true,
             });
           }
+
+          // An incomplete range (page bound hit, or a later page failed
+          // transiently) keeps the watermark and stores a cursor so the next
+          // poll finishes it instead of restarting from the newest page.
+          return mergeActivityTail(cached, [...range.events].reverse(), {
+            canIncrementallyFetch: true,
+            supportsTimestampFilter: true,
+            rangeComplete: range.status === "complete",
+            ...(range.status !== "complete" && range.resumePageId
+              ? { resumePageId: range.resumePageId }
+              : {}),
+          });
         },
         enabled,
         refetchInterval: ACTIVITY_TAIL_REFETCH_MS,

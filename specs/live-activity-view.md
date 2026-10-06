@@ -43,13 +43,22 @@
 - [x] Each poll shall page through the entire timestamp-filtered range via
       `next_page_id`, so a burst larger than one page cannot hide an
       observation; an incomplete range shall not advance the watermark or carry
-      an unresolved delegation forward.
+      an unresolved delegation forward, and shall store its page cursor so the
+      next poll resumes the range instead of re-reading the newest pages.
+- [x] A failed page shall be distinguished from an exhausted range (the request
+      is made strict): it shall not be treated as complete and shall not advance
+      the watermark past unread events.
+- [x] A delegation's terminal state shall be retained outside the bounded event
+      history, so a task action carried across the window still reads as
+      completed (or errored) rather than reopening as running.
 - [x] A conversation without a resolved `conversation_url` shall render with an
       empty tail rather than a failing request.
 - [x] The event tail's cache identity shall include the conversation's runtime
-      URL, and a rotated session key shall reset the cached tail immediately;
-      the session key itself shall never enter the query key or the cached
-      value.
+      URL, and a rotated session key shall reset the cached tail immediately —
+      including when the conversation left the active list or the view
+      remounted in between. The session key itself shall never enter the query
+      key, the cached value, or any long-lived map; rotation is detected from a
+      non-reversible fingerprint.
 - [x] The view shall never start, stop, pause, or otherwise mutate a
       conversation.
 
