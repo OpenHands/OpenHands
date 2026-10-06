@@ -190,6 +190,10 @@
     "dompurify": "3.4.14",
     "typed-rest-client": {
       "qs": "6.15.3"
+    },
+    "@vercel/react-router": {
+      "@react-router/dev": "$@react-router/dev",
+      "@react-router/node": "$@react-router/node"
     }
   },
   "main": "./dist/index.cjs",

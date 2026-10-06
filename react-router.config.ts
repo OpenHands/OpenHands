@@ -1,4 +1,5 @@
 import type { Config } from "@react-router/dev/config";
+import { fileURLToPath } from "node:url";
 import { vercelPreset } from "@vercel/react-router/vite";
 
 const normalizeBasePath = (value?: string) => {
@@ -53,7 +54,11 @@ const unpackClientDirectoryOnce = async () => {
   const fs = await import("fs");
   const path = await import("path");
 
-  const buildDir = path.resolve(__dirname, "build");
+  // React Router v8 loads this config as ESM, where `__dirname` is not defined.
+  const buildDir = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "build",
+  );
   const clientDir = path.resolve(buildDir, "client");
 
   let files: string[];
