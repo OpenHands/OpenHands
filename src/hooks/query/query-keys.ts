@@ -75,6 +75,20 @@ export const CANVAS_EXTENSIONS_QUERY_KEYS = {
       orgId,
       connectionRevision,
     ] as const,
+  icon: (
+    backendId: string,
+    orgId: string | null,
+    connectionRevision: number,
+    name: string,
+  ) =>
+    [
+      "canvas-extensions",
+      "icon",
+      backendId,
+      orgId,
+      connectionRevision,
+      name,
+    ] as const,
 } as const;
 
 export const SUPER_ADMIN_SETUP_QUERY_KEYS = {
