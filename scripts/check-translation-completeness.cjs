@@ -6,73 +6,75 @@
  * and that values are actually translated rather than English copied to every language.
  */
 
-const fs = require("fs");
-const path = require("path");
+const fs = require('fs');
+const path = require('path');
 
 // Keys whose value is intentionally identical in every language (brand names,
 // protocol/technical terms, placeholder-only format strings). Add a key here
 // only when the English value is genuinely correct for all languages.
 const IDENTICAL_VALUE_ALLOWLIST = new Set([
-  "ACTION_MESSAGE$ACP_TOOL",
-  "API$TAVILY_KEY_EXAMPLE",
-  "API$TVLY_KEY_EXAMPLE",
-  "AUTOMATIONS$DOWNLOAD_TARBALL",
-  "AUTOMATIONS$GIT_SYNC$BRANCH_PLACEHOLDER",
-  "AUTOMATIONS$GIT_SYNC$PATH_PLACEHOLDER",
-  "AUTOMATIONS$GIT_SYNC$REPO_URL_PLACEHOLDER",
-  "BACKEND$CLOUD_TITLE",
-  "BACKEND$VERSION_LABEL",
-  "BRANDING$OPENHANDS",
-  "COMMAND_MENU$SHORTCUT",
-  "CONVERSATION$ACP_AGENT_GENERIC",
-  "CONVERSATION$BUDGET_USAGE_FORMAT",
-  "CONVERSATION$OVERVIEW_DIFF_ADDITIONS",
-  "CONVERSATION$OVERVIEW_DIFF_DELETIONS",
-  "CONVERSATION$OVERVIEW_GIT",
-  "CONVERSATION$OVERVIEW_UNAVAILABLE",
-  "CONVERSATION_PANEL$PREVIEW_GIT",
-  "GITHUB$AUTH_SCOPE",
-  "LAUNCH$PLUGIN_PATH",
-  "LAUNCH$PLUGIN_REF",
-  "MCP$MCP_TAB",
-  "SCHEMA$LLM$SECTION_LABEL",
-  "SCHEMA$LLM$TOP_K$LABEL",
-  "SCHEMA$LLM$TOP_P$LABEL",
-  "SCHEMA$SECURITY_ANALYZER$CHOICE$LLM",
-  "SCHEMA$VERIFICATION$SECURITY_ANALYZER$CHOICE$LLM",
-  "SETTINGS$AGENT_SERVER_URL_PLACEHOLDER",
-  "SETTINGS$AGENT_TYPE_OPENHANDS",
-  "SETTINGS$APP_UPDATE_CARD_TITLE",
-  "SETTINGS$AZURE_DEVOPS",
-  "SETTINGS$CLOUD_SETTINGS_LINK",
-  "SETTINGS$VERSION_DOCKER",
-  "SETTINGS$VERSION_NPM_RECOMMENDED",
-  "SETTINGS$VERSION_PRODUCT_NAME",
-  "SETTINGS$GITHUB",
-  "SETTINGS$GITLAB",
-  "SETTINGS$MCP_AUTH_MODE_OAUTH",
-  "SETTINGS$MCP_DEFAULT_CONFIG",
-  "SETTINGS$MCP_HEADERS_PLACEHOLDER",
-  "SETTINGS$MCP_OAUTH_CLIENT_ID_PLACEHOLDER",
-  "SETTINGS$MCP_OAUTH_CLIENT_SECRET_PLACEHOLDER",
-  "SETTINGS$MCP_OAUTH_SCOPES_PLACEHOLDER",
-  "SETTINGS$MCP_SERVER_TYPE_SHTTP",
-  "SETTINGS$MCP_SERVER_TYPE_SSE",
-  "SETTINGS$MCP_SERVER_TYPE_STDIO",
-  "SETTINGS$NAV_LLM",
-  "SETTINGS$OPENHANDS_API_KEY_HELP_LINK",
-  "SETTINGS$SKILLS_PILLS_MORE",
-  "SETTINGS$SKILLS_VERSION",
-  "SETTINGS$SLACK",
-  "SETTINGS$TITLE_GENERATION_PROFILE_OPTION",
-  "SETUP$REPOSITORY_PLACEHOLDER",
-  "WORKSPACE$JUPYTER_TAB_LABEL",
+  'ACTION_MESSAGE$ACP_TOOL',
+  'API$TAVILY_KEY_EXAMPLE',
+  'API$TVLY_KEY_EXAMPLE',
+  'AUTOMATIONS$DOWNLOAD_TARBALL',
+  'AUTOMATIONS$GIT_SYNC$BRANCH_PLACEHOLDER',
+  'AUTOMATIONS$GIT_SYNC$PATH_PLACEHOLDER',
+  'AUTOMATIONS$GIT_SYNC$REPO_URL_PLACEHOLDER',
+  'BACKEND$CLOUD_TITLE',
+  'BACKEND$VERSION_LABEL',
+  'BRANDING$OPENHANDS',
+  'COMMAND_MENU$SHORTCUT',
+  'CONVERSATION$ACP_AGENT_GENERIC',
+  'CONVERSATION$BUDGET_USAGE_FORMAT',
+  'CONVERSATION$OVERVIEW_DIFF_ADDITIONS',
+  'CONVERSATION$OVERVIEW_DIFF_DELETIONS',
+  'CONVERSATION$OVERVIEW_GIT',
+  'CONVERSATION$OVERVIEW_UNAVAILABLE',
+  'CONVERSATION_PANEL$PREVIEW_GIT',
+  'FILES$VSCODE',
+  'GITHUB$AUTH_SCOPE',
+  'LAUNCH$PLUGIN_PATH',
+  'LAUNCH$PLUGIN_REF',
+  'MCP$MCP_TAB',
+  'SCHEMA$LLM$SECTION_LABEL',
+  'SCHEMA$LLM$TOP_K$LABEL',
+  'SCHEMA$LLM$TOP_P$LABEL',
+  'SCHEMA$SECURITY_ANALYZER$CHOICE$LLM',
+  'SCHEMA$VERIFICATION$SECURITY_ANALYZER$CHOICE$LLM',
+  'SETTINGS$AGENT_SERVER_URL_PLACEHOLDER',
+  'SETTINGS$AGENT_TYPE_OPENHANDS',
+  'SETTINGS$APP_UPDATE_CARD_TITLE',
+  'SETTINGS$AZURE_DEVOPS',
+  'SETTINGS$CLOUD_SETTINGS_LINK',
+  'SETTINGS$VERSION_DOCKER',
+  'SETTINGS$VERSION_NPM_RECOMMENDED',
+  'SETTINGS$VERSION_PRODUCT_NAME',
+  'SETTINGS$GITHUB',
+  'SETTINGS$GITLAB',
+  'SETTINGS$MCP_AUTH_MODE_OAUTH',
+  'SETTINGS$MCP_DEFAULT_CONFIG',
+  'SETTINGS$MCP_HEADERS_PLACEHOLDER',
+  'SETTINGS$MCP_OAUTH_CLIENT_ID_PLACEHOLDER',
+  'SETTINGS$MCP_OAUTH_CLIENT_SECRET_PLACEHOLDER',
+  'SETTINGS$MCP_OAUTH_SCOPES_PLACEHOLDER',
+  'SETTINGS$MCP_SERVER_TYPE_SHTTP',
+  'SETTINGS$MCP_SERVER_TYPE_SSE',
+  'SETTINGS$MCP_SERVER_TYPE_STDIO',
+  'SETTINGS$NAV_LLM',
+  'SETTINGS$OPENHANDS_API_KEY_HELP_LINK',
+  'SETTINGS$SKILLS_PILLS_MORE',
+  'SETTINGS$SKILLS_VERSION',
+  'SETTINGS$SLACK',
+  'SETTINGS$TITLE_GENERATION_PROFILE_OPTION',
+  'SETUP$REPOSITORY_PLACEHOLDER',
+  'VSCODE$TITLE',
+  'WORKSPACE$JUPYTER_TAB_LABEL',
 ]);
 
 // Extract the language codes from the AvailableLanguages array in the i18n index file
 function getSupportedLanguageCodes() {
-  const i18nIndexPath = path.join(__dirname, "../src/i18n/index.ts");
-  const i18nIndexContent = fs.readFileSync(i18nIndexPath, "utf8");
+  const i18nIndexPath = path.join(__dirname, '../src/i18n/index.ts');
+  const i18nIndexContent = fs.readFileSync(i18nIndexPath, 'utf8');
 
   const languageCodesRegex = /\{ label: "[^"]+", value: "([^"]+)" \}/g;
   const supportedLanguageCodes = [];
@@ -93,7 +95,7 @@ function checkTranslations(translationJson, supportedLanguageCodes) {
   const untranslatedKeys = {};
 
   const nonEnglishLanguageCodes = supportedLanguageCodes.filter(
-    (langCode) => langCode !== "en",
+    (langCode) => langCode !== 'en'
   );
 
   Object.entries(translationJson).forEach(([key, translations]) => {
@@ -102,7 +104,7 @@ function checkTranslations(translationJson, supportedLanguageCodes) {
 
     // Find missing languages for this key
     const missing = supportedLanguageCodes.filter(
-      (langCode) => !availableLanguages.includes(langCode),
+      (langCode) => !availableLanguages.includes(langCode)
     );
 
     if (missing.length > 0) {
@@ -111,7 +113,7 @@ function checkTranslations(translationJson, supportedLanguageCodes) {
 
     // Find extra languages for this key
     const extra = availableLanguages.filter(
-      (langCode) => !supportedLanguageCodes.includes(langCode),
+      (langCode) => !supportedLanguageCodes.includes(langCode)
     );
 
     if (extra.length > 0) {
@@ -125,7 +127,7 @@ function checkTranslations(translationJson, supportedLanguageCodes) {
       !IDENTICAL_VALUE_ALLOWLIST.has(key) &&
       translations.en !== undefined &&
       nonEnglishLanguageCodes.every(
-        (langCode) => translations[langCode] === translations.en,
+        (langCode) => translations[langCode] === translations.en
       )
     ) {
       untranslatedKeys[key] = translations.en;
@@ -143,10 +145,7 @@ module.exports = {
 
 if (require.main === module) {
   // Load the translation file
-  const translationJsonPath = path.join(
-    __dirname,
-    "../src/i18n/translation.json",
-  );
+  const translationJsonPath = path.join(__dirname, '../src/i18n/translation.json');
   const translationJson = require(translationJsonPath);
 
   const { missingTranslations, extraLanguages, untranslatedKeys } =
@@ -159,61 +158,44 @@ if (require.main === module) {
 
   // Generate detailed error message if there are missing translations
   if (Object.keys(missingTranslations).length > 0) {
-    console.error("\x1b[31m%s\x1b[0m", "ERROR: Missing translations detected");
-    console.error(
-      `Found ${Object.keys(missingTranslations).length} translation keys with missing languages:`,
-    );
+    console.error('\x1b[31m%s\x1b[0m', 'ERROR: Missing translations detected');
+    console.error(`Found ${Object.keys(missingTranslations).length} translation keys with missing languages:`);
 
     Object.entries(missingTranslations).forEach(([key, langs]) => {
-      console.error(
-        `- Key "${key}" is missing translations for: ${langs.join(", ")}`,
-      );
+      console.error(`- Key "${key}" is missing translations for: ${langs.join(', ')}`);
     });
 
-    console.error("\nPlease add the missing translations before committing.");
+    console.error('\nPlease add the missing translations before committing.');
   }
 
   // Generate detailed error message if there are extra languages
   if (Object.keys(extraLanguages).length > 0) {
-    console.error("\x1b[31m%s\x1b[0m", "ERROR: Extra languages detected");
-    console.error(
-      `Found ${Object.keys(extraLanguages).length} translation keys with extra languages not in AvailableLanguages:`,
-    );
+    console.error('\x1b[31m%s\x1b[0m', 'ERROR: Extra languages detected');
+    console.error(`Found ${Object.keys(extraLanguages).length} translation keys with extra languages not in AvailableLanguages:`);
 
     Object.entries(extraLanguages).forEach(([key, langs]) => {
-      console.error(
-        `- Key "${key}" has translations for unsupported languages: ${langs.join(", ")}`,
-      );
+      console.error(`- Key "${key}" has translations for unsupported languages: ${langs.join(', ')}`);
     });
 
-    console.error("\nPlease remove the extra languages before committing.");
+    console.error('\nPlease remove the extra languages before committing.');
   }
 
   // Generate detailed error message if there are untranslated keys
   if (Object.keys(untranslatedKeys).length > 0) {
-    console.error("\x1b[31m%s\x1b[0m", "ERROR: Untranslated keys detected");
-    console.error(
-      `Found ${Object.keys(untranslatedKeys).length} translation keys where the English value is copied to every language:`,
-    );
+    console.error('\x1b[31m%s\x1b[0m', 'ERROR: Untranslated keys detected');
+    console.error(`Found ${Object.keys(untranslatedKeys).length} translation keys where the English value is copied to every language:`);
 
     Object.entries(untranslatedKeys).forEach(([key, value]) => {
-      console.error(
-        `- Key "${key}" has the same value ("${value}") for all languages`,
-      );
+      console.error(`- Key "${key}" has the same value ("${value}") for all languages`);
     });
 
-    console.error(
-      "\nPlease translate the values before committing. If a value is intentionally identical in every language (brand name, technical term, format string), add the key to IDENTICAL_VALUE_ALLOWLIST in scripts/check-translation-completeness.cjs.",
-    );
+    console.error('\nPlease translate the values before committing. If a value is intentionally identical in every language (brand name, technical term, format string), add the key to IDENTICAL_VALUE_ALLOWLIST in scripts/check-translation-completeness.cjs.');
   }
 
   // Exit with error code if there are issues
   if (hasErrors) {
     process.exit(1);
   } else {
-    console.log(
-      "\x1b[32m%s\x1b[0m",
-      "All translation keys have complete language coverage!",
-    );
+    console.log('\x1b[32m%s\x1b[0m', 'All translation keys have complete language coverage!');
   }
 }
