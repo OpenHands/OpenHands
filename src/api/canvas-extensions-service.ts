@@ -4,10 +4,7 @@ import {
 } from "@openhands/typescript-client/clients";
 import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
 import { isSdkHttpStatusError } from "#/api/agent-server-compatibility";
-import type {
-  CanvasExtensionAppViewSession,
-  CanvasExtensionAppViewSessionContext,
-} from "#/extensions/canvas-extension-app-view";
+import type { CanvasExtensionAppViewSession } from "#/extensions/canvas-extension-app-view";
 import {
   getActiveBackend,
   isNoBackend,
@@ -31,24 +28,10 @@ interface AppBackendServerInfo {
 
 export interface CanvasExtensionAppBackendViewClient {
   createSession: (
-    context?: Partial<CanvasExtensionAppViewSessionContext>,
+    signal?: AbortSignal,
   ) => Promise<CanvasExtensionAppViewSession>;
   revokeSession: () => Promise<void>;
   dispose: () => void;
-}
-
-const APP_VIEW_QUERY_KEYS = new Set(["folder"]);
-
-function appendAppViewQuery(url: URL, query?: Record<string, string>): URL {
-  if (!query) return url;
-  for (const [key, value] of Object.entries(query)) {
-    if (!APP_VIEW_QUERY_KEYS.has(key) || key.toLowerCase().includes("token")) {
-      throw new Error(`Unsupported or sensitive App view query key: ${key}`);
-    }
-    if (!value) throw new Error(`App view query value is empty: ${key}`);
-    url.searchParams.set(key, value);
-  }
-  return url;
 }
 
 function parseHttpUrl(value: string): URL | null {
@@ -175,9 +158,8 @@ async function createAppBackendViewClient(
     }
   };
   return {
-    createSession: async (context) => {
+    createSession: async (signal) => {
       if (disposed) throw new Error("Canvas App backend view is disposed");
-      const { query, signal } = context ?? {};
       const session = await sessionClient.createAppBackendSession(name, signal);
       hasSession = true;
       const sessionUrl = parseHttpUrl(session.ingress_url);
@@ -185,15 +167,8 @@ async function createAppBackendViewClient(
         await revokeSession();
         throw new Error("Canvas App backend session URL is invalid");
       }
-      let viewUrl: URL;
-      try {
-        viewUrl = appendAppViewQuery(sessionUrl, query);
-      } catch (error) {
-        await revokeSession();
-        throw error;
-      }
       return {
-        url: viewUrl.href,
+        url: sessionUrl.href,
         expiresAt: session.expires_at,
         iframeSandbox: session.iframe_sandbox,
       };

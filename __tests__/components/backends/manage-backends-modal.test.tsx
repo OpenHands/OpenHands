@@ -15,6 +15,10 @@ import {
   ActiveBackendProvider,
   useActiveBackendContext,
 } from "#/contexts/active-backend-context";
+import {
+  NavigationProvider,
+  type NavigationContextValue,
+} from "#/context/navigation-context";
 import { ManageBackendsModal } from "#/components/features/backends/manage-backends-modal";
 import { BackendVersion } from "#/components/features/backends/backend-version";
 import { BackendRow } from "#/components/features/backends/backend-row";
@@ -72,15 +76,73 @@ vi.mock("#/hooks/query/use-settings", () => ({
   }),
 }));
 
-function renderWithProviders(ui: React.ReactElement) {
+function renderWithProviders(
+  ui: React.ReactElement,
+  navigation?: NavigationContextValue,
+) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <ActiveBackendProvider>{ui}</ActiveBackendProvider>
+      <ActiveBackendProvider>
+        {navigation ? (
+          <NavigationProvider value={navigation}>{ui}</NavigationProvider>
+        ) : (
+          ui
+        )}
+      </ActiveBackendProvider>
     </QueryClientProvider>,
   );
+}
+
+function navigationAt(currentPath: string): NavigationContextValue {
+  return {
+    currentPath,
+    conversationId: null,
+    isNavigating: false,
+    navigate: vi.fn(),
+  };
+}
+
+function ActiveBackendName() {
+  const { active } = useActiveBackendContext();
+  return <span data-testid="active-backend-name">{active.backend.name}</span>;
+}
+
+/**
+ * Seed a second backend (which becomes active, BM-001) next to the default
+ * Local backend, then select the Local row once its health probe connects.
+ */
+async function selectLocalRowFromSecondBackend(
+  navigation: NavigationContextValue,
+) {
+  const user = userEvent.setup();
+  renderWithProviders(
+    <TestSeed
+      onMount={(ctx) => {
+        ctx.addBackend({
+          name: "Second",
+          host: "http://localhost:9000",
+          apiKey: "second-key",
+          kind: "local",
+        });
+      }}
+    >
+      <ActiveBackendName />
+      <ManageBackendsModal onClose={vi.fn()} />
+    </TestSeed>,
+    navigation,
+  );
+  expect(await screen.findByTestId("active-backend-name")).toHaveTextContent(
+    "Second",
+  );
+  const localRowButton = within(
+    screen.getByTestId("manage-backends-row-Local"),
+  ).getAllByRole("button")[0];
+  await waitFor(() => expect(localRowButton).toBeEnabled());
+
+  await user.click(localRowButton);
 }
 
 function TestSeed({
@@ -199,6 +261,52 @@ describe("ManageBackendsModal", () => {
     expect(
       screen.getByTestId("manage-backends-status-detail-Local"),
     ).toHaveTextContent("Agent Canvas requires agent-server 1.51.0 or newer");
+  });
+
+  // @spec BM-002 — Switching backends from Manage backends redirects a
+  // backend-scoped detail page to its section list, like the selector.
+  it.each([
+    ["/conversations/conv-on-second", "/conversations"],
+    ["/automations/automation-on-second", "/automations"],
+  ])(
+    "redirects %s to %s when another backend is selected from its row",
+    async (detailPath, listPath) => {
+      const navigation = navigationAt(detailPath);
+
+      await selectLocalRowFromSecondBackend(navigation);
+
+      expect(screen.getByTestId("active-backend-name")).toHaveTextContent(
+        "Local",
+      );
+      expect(navigation.navigate).toHaveBeenCalledExactlyOnceWith(listPath);
+    },
+  );
+
+  it("switches backends without redirecting when not on a detail page", async () => {
+    const navigation = navigationAt("/conversations");
+
+    await selectLocalRowFromSecondBackend(navigation);
+
+    expect(screen.getByTestId("active-backend-name")).toHaveTextContent(
+      "Local",
+    );
+    expect(navigation.navigate).not.toHaveBeenCalled();
+  });
+
+  it("does not redirect when the already-active backend is selected", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    const navigation = navigationAt("/conversations/conv-on-local");
+    renderWithProviders(<ManageBackendsModal onClose={onClose} />, navigation);
+    const localRowButton = within(
+      await screen.findByTestId("manage-backends-row-Local"),
+    ).getAllByRole("button")[0];
+    await waitFor(() => expect(localRowButton).toBeEnabled());
+
+    await user.click(localRowButton);
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(navigation.navigate).not.toHaveBeenCalled();
   });
 
   it("closes when the header close button is clicked", async () => {

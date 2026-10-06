@@ -254,12 +254,8 @@ describe("CanvasExtensionsService", () => {
     );
 
     expect(viewClient).not.toBeNull();
-    await expect(
-      viewClient!.createSession({
-        query: { folder: "/workspace/my project" },
-      }),
-    ).resolves.toEqual({
-      url: "https://apps.example.test/app-backends/demo-extension/?folder=%2Fworkspace%2Fmy+project",
+    await expect(viewClient!.createSession()).resolves.toEqual({
+      url: "https://apps.example.test/app-backends/demo-extension/",
       expiresAt: "2026-09-23T16:00:00Z",
       iframeSandbox:
         "allow-forms allow-modals allow-popups allow-same-origin allow-scripts",
@@ -281,27 +277,6 @@ describe("CanvasExtensionsService", () => {
     expect(closeAppBackendClient).toHaveBeenCalledTimes(1);
   });
 
-  it("rejects credential-like App view query keys", async () => {
-    getServerInfo.mockResolvedValue({
-      capabilities: ["canvas_app_backend_bridge_v1"],
-      app_backend_ingress_url: "https://apps.example.test",
-    });
-    createAppBackendSession.mockResolvedValue({
-      ingress_url: "https://apps.example.test/app-backends/demo-extension/",
-      expires_at: "2026-09-23T16:00:00Z",
-      iframe_sandbox: "allow-scripts",
-    });
-    const viewClient = await CanvasExtensionsService.createAppBackendViewClient(
-      extension.name,
-      localBackend,
-    );
-
-    await expect(
-      viewClient!.createSession({ query: { token: "secret" } }),
-    ).rejects.toThrow("Unsupported or sensitive");
-    expect(revokeAppBackendSession).toHaveBeenCalledWith(extension.name);
-  });
-
   it("forwards cancellation to the app session request", async () => {
     getServerInfo.mockResolvedValue({
       capabilities: ["canvas_app_backend_bridge_v1"],
@@ -318,7 +293,7 @@ describe("CanvasExtensionsService", () => {
     );
     const controller = new AbortController();
 
-    await viewClient!.createSession({ signal: controller.signal });
+    await viewClient!.createSession(controller.signal);
 
     expect(createAppBackendSession).toHaveBeenCalledWith(
       extension.name,

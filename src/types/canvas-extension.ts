@@ -70,8 +70,6 @@ export interface CanvasExtensionAgentServerRequest {
 
 export interface CanvasExtensionAppBackendViewMountOptions {
   container: HTMLElement;
-  /** Optional non-sensitive query values forwarded to the App backend view. */
-  query?: Record<string, string>;
 }
 
 export interface CanvasExtensionAppBackendViewHost {
