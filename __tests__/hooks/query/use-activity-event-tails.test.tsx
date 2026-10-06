@@ -220,6 +220,7 @@ describe("useActivityEventTails", () => {
     expect(cachedValues).not.toContain("new");
   });
 
+  // @spec LAV-004 — Data is bounded and read-only
   it("does not carry the previous session's watermark into a fresh tail", async () => {
     const client = newClient();
     const url = "http://runtime/conv-1";
@@ -306,6 +307,7 @@ describe("useActivityEventTails", () => {
     }
   });
 
+  // @spec LAV-004 — Data is bounded and read-only
   it("clears a tail when the session credential disappears", async () => {
     const client = newClient();
     const task = taskAction("old-action");
