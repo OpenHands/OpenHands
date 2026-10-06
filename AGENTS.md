@@ -74,6 +74,7 @@ Create TDD tests for behavioral changes. Keep tests focused on user behavior and
 - Mock an underlying service rather than the hook that consumes it.
 - Extend an existing test file when it is a natural home; create a new file only when necessary.
 - Avoid brittle presentation-only assertions. Test functional CSS contracts directly when they are behavior.
+- Do not mirror literal source, fixture, translation, or class-string definitions in tests. Assert consumer behavior or an actual build/runtime contract instead, and do not export internals solely to make them testable. Preserve coverage for routing, accessibility, async behavior, behavioral contracts, and functional CSS/build contracts.
 - Use the minimum number of cases that fully cover the intended behavior and edge cases.
 
 Use the `e2e-testing` skill for suite selection and E2E-specific requirements.

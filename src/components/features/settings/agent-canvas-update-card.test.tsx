@@ -6,6 +6,10 @@ import {
   AGENT_CANVAS_UPDATE_COMMANDS,
 } from "#/api/agent-canvas-updates";
 import { AGENT_CANVAS_CLIENT_VERSION } from "#/api/client-source";
+import {
+  MODAL_MAX_WIDTH_VIEWPORT,
+  MODAL_WIDTH_CLASS,
+} from "#/components/shared/modals/modal-body";
 import { AgentCanvasUpdateCard } from "./agent-canvas-update-card";
 
 const { fetchLatestVersionMock, getLockedCloudHostMock } = vi.hoisted(() => ({
@@ -117,6 +121,17 @@ describe("AgentCanvasUpdateCard", () => {
     expect(
       screen.getByTestId("agent-canvas-update-release-notes"),
     ).toHaveAttribute("href", AGENT_CANVAS_RELEASE_NOTES_URL);
+  });
+
+  it("caps the 520px update dialog at 90vw so phone viewports cannot clip it", () => {
+    fetchLatestVersionMock.mockResolvedValue(AGENT_CANVAS_CLIENT_VERSION);
+
+    renderCard();
+    fireEvent.click(screen.getByTestId("agent-canvas-update-toggle"));
+
+    const modal = screen.getByTestId("agent-canvas-update-modal");
+    expect(modal).toHaveClass(MODAL_WIDTH_CLASS.md);
+    expect(modal).toHaveClass(MODAL_MAX_WIDTH_VIEWPORT);
   });
 
   it("hides install commands when the app is already up to date", async () => {

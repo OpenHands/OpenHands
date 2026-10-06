@@ -12,6 +12,7 @@ import { server } from "#/mocks/node";
 import { resetTestHandlersMockSettings } from "#/mocks/settings-handlers";
 import type { Settings } from "#/types/settings";
 import { buildMcpServerPatch } from "#/utils/mcp-config";
+import { DEFAULT_FILE_DISCOVERY } from "#/utils/workspace-file-discovery";
 
 const mockSaveCloudSettings = vi.fn();
 const mockFetchCloudSettings = vi.fn();
@@ -171,6 +172,37 @@ describe("SettingsService", () => {
         },
       },
     ]);
+  });
+
+  // @spec WFD-002 — Workspace-scoped server persistence
+  it("sends a sparse workspace preference patch and hydrates the saved options", async () => {
+    const options = {
+      ...DEFAULT_FILE_DISCOVERY,
+      maxFiles: 0,
+      includeSymlinks: true,
+    };
+    const preferences = { workspace_file_discovery: { "/project": options } };
+    let patchBody: unknown;
+    server.use(
+      http.patch("*/api/settings", async ({ request }) => {
+        patchBody = await request.json();
+        return HttpResponse.json({});
+      }),
+      http.get("*/api/settings", () =>
+        HttpResponse.json({
+          agent_settings: {},
+          conversation_settings: {},
+          llm_api_key_is_set: false,
+          misc_settings: { app_preferences: preferences },
+        }),
+      ),
+    );
+    await SettingsService.saveSettings(preferences);
+    expect(patchBody).toEqual({
+      misc_settings_diff: { app_preferences: preferences },
+    });
+    const reloaded = await SettingsService.getSettings();
+    expect(reloaded.workspace_file_discovery?.["/project"]).toEqual(options);
   });
 
   it("stores the title profile as a local app preference", async () => {

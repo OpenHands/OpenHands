@@ -38,11 +38,8 @@ const SHARED_DEFAULTS = JSON.parse(
 );
 
 const DEFAULT_BACKEND_PORT = SHARED_DEFAULTS.ports.agentServer;
-// Path prefix the bundled editor is served under. The same value has to reach
-// agent-server (as OH_VSCODE_BASE_PATH, so openvscode-server is launched with
-// --server-base-path and advertises the prefix) and the ingress route table,
-// or the advertised URL and the route that serves it disagree.
-export const VSCODE_BASE_PATH = SHARED_DEFAULTS.paths.vscodeBasePath;
+export const VSCODE_BASE_PATH = "/vscode";
+const VSCODE_ENABLED_ENV = "OH_CANVAS_ENABLE_VSCODE";
 const DEFAULT_VITE_PORT = 3001;
 const DEFAULT_WAIT_TIMEOUT_MS = 30_000;
 const DEFAULT_AGENT_SERVER_PACKAGE = SHARED_DEFAULTS.packages.agentServer;
@@ -417,7 +414,7 @@ export const AGENT_SERVER_IMPORT_MODULES = "canvas_ui_tool";
  *   edits are picked up without a manual reinstall. The agent-server itself
  *   is rebuilt from local source on each invocation (--reinstall).
  * - OH_AGENT_SERVER_GIT_REF: Git commit SHA or branch name
- * - OH_AGENT_SERVER_VERSION: Specific PyPI version (e.g., "1.50.1")
+ * - OH_AGENT_SERVER_VERSION: Specific PyPI version (e.g., "1.53.0")
  *
  * If none are set, defaults to the released version specified by
  * DEFAULT_AGENT_SERVER_VERSION. Set OH_AGENT_SERVER_GIT_REF to use a
@@ -561,7 +558,10 @@ export function buildSafeDevConfig(cwd = process.cwd(), env = process.env) {
     env.OH_CANVAS_SAFE_BACKEND_PORT,
     DEFAULT_BACKEND_PORT,
   );
-  const vscodePort = parsePort(env.OH_CANVAS_SAFE_VSCODE_PORT, backendPort + 1);
+  const vscodePort =
+    env[VSCODE_ENABLED_ENV] === "true"
+      ? parsePort(env.OH_CANVAS_SAFE_VSCODE_PORT, backendPort + 1)
+      : null;
 
   return buildConfigFromPorts({ backendPort, vscodePort }, cwd, env);
 }
@@ -594,16 +594,16 @@ export async function buildSafeDevConfigAsync(
     env.OH_CANVAS_SAFE_BACKEND_PORT,
     DEFAULT_BACKEND_PORT,
   );
-  const preferredVscodePort = parsePort(
-    env.OH_CANVAS_SAFE_VSCODE_PORT,
-    preferredBackendPort + 1,
-  );
+  const preferredVscodePort =
+    env[VSCODE_ENABLED_ENV] === "true"
+      ? parsePort(env.OH_CANVAS_SAFE_VSCODE_PORT, preferredBackendPort + 1)
+      : null;
 
-  // Fail fast if any required port is already in use.
-  await assertPortsFree([
-    { name: "agent-server", port: preferredBackendPort },
-    { name: "vscode", port: preferredVscodePort },
-  ]);
+  const requiredPorts = [{ name: "agent-server", port: preferredBackendPort }];
+  if (preferredVscodePort) {
+    requiredPorts.push({ name: "vscode", port: preferredVscodePort });
+  }
+  await assertPortsFree(requiredPorts);
 
   return buildConfigFromPorts(
     { backendPort: preferredBackendPort, vscodePort: preferredVscodePort },
@@ -616,8 +616,8 @@ export async function buildSafeDevConfigAsync(
  * @typedef {object} SafeDevConfig
  * @property {string} cwd
  * @property {number} backendPort
- * @property {number} vscodePort
- * @property {string} vscodeBasePath
+ * @property {number | null} vscodePort
+ * @property {string | null} vscodeBasePath
  * @property {string} stateDir
  * @property {string} tmuxTmpDir
  * @property {string} conversationsPath
@@ -676,7 +676,7 @@ function buildConfigFromPorts(ports, cwd, env) {
     cwd,
     backendPort,
     vscodePort,
-    vscodeBasePath: VSCODE_BASE_PATH,
+    vscodeBasePath: vscodePort ? VSCODE_BASE_PATH : null,
     stateDir,
     // tmux socket directory. Defaults to <stateDir>/tmux (under
     // ~/.openhands/agent-canvas), matching where the rest of dev state lives
@@ -792,6 +792,7 @@ export function buildAgentServerEnv(config, options = {}) {
     [
       "OH_CONVERSATION_RUNTIME",
       "OH_CONVERSATION_IMAGE",
+      "OH_CONVERSATION_IMAGE_HAS_BROWSER",
       "OH_CONVERSATION_CONTAINER_MEMORY",
       "OH_CONVERSATION_CONTAINER_CPUS",
       "OH_CONVERSATION_CONTAINER_PIDS_LIMIT",
@@ -803,6 +804,9 @@ export function buildAgentServerEnv(config, options = {}) {
   return {
     ...buildAgentServerTelemetryEnv(env),
     ...conversationRuntimeEnv,
+    ...(env.VITE_ENABLE_BROWSER_TOOLS === "false"
+      ? { OH_ENABLE_BROWSER: env.OH_ENABLE_BROWSER || "false" }
+      : {}),
     // Force Python to use UTF-8 for all file I/O and streams.
     //
     // On Windows, Python defaults to the system ANSI codepage (e.g. cp1252).
@@ -819,7 +823,7 @@ export function buildAgentServerEnv(config, options = {}) {
     OH_PERSISTENCE_DIR: path.dirname(config.stateDir),
     OH_CONVERSATIONS_PATH: config.conversationsPath,
     OH_BASH_EVENTS_DIR: config.bashEventsDir,
-    OH_VSCODE_PORT: String(config.vscodePort),
+    ...(config.vscodePort ? { OH_VSCODE_PORT: String(config.vscodePort) } : {}),
     // Serve the editor under a path prefix on the canvas origin rather than on
     // its own published port. agent-server passes this to openvscode-server as
     // --server-base-path and includes it in the URL from /api/vscode/url, which

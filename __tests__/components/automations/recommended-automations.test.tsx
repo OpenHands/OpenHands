@@ -156,22 +156,33 @@ function settingsWithGithubMcp() {
 }
 
 /**
- * Activates the cloud backend with the given native git providers enabled and
- * serves `settings` through the real settings hook (the local cases mock the
- * hook), so these cases exercise the services the hooks rely on instead.
+ * Activates the cloud backend with the given native git providers (and,
+ * optionally, the built-in Jira and Linear integrations) enabled and serves
+ * `settings` through the real settings hook (the local cases mock the hook),
+ * so these cases exercise the services the hooks rely on instead.
  */
 async function activateCloudBackend({
   providersConfigured = [],
+  jiraEnabled = false,
+  linearEnabled = false,
   settings = {},
 }: {
   providersConfigured?: string[];
+  jiraEnabled?: boolean;
+  linearEnabled?: boolean;
   settings?: object;
 } = {}) {
   setRegisteredBackends([cloudBackend]);
   setActiveSelection({ backendId: cloudBackend.id });
   server.use(
     http.get("*/api/v1/web-client/config", () =>
-      HttpResponse.json({ providers_configured: providersConfigured }),
+      HttpResponse.json({
+        providers_configured: providersConfigured,
+        feature_flags: {
+          enable_jira: jiraEnabled,
+          enable_linear: linearEnabled,
+        },
+      }),
     ),
   );
   vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
@@ -1012,6 +1023,167 @@ describe("recommended automations", () => {
     expect(modal).toHaveAttribute("data-marketplace-id", "bitbucket");
     expect(within(modal).getByTestId("mcp-native-panel")).toBeInTheDocument();
     expect(mockCreateConversationMutate).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["github-issue-to-pr", "GitHub", { providersConfigured: ["github"] }],
+    ["gitlab-issue-to-mr", "GitLab", { providersConfigured: ["gitlab"] }],
+    ["jira-issue-to-pr", "Jira", { jiraEnabled: true }],
+    ["jira-issue-to-gitlab-mr", "Jira", { jiraEnabled: true }],
+    ["jira-issue-to-bitbucket-pr", "Jira", { jiraEnabled: true }],
+    ["linear-issue-to-github-pr", "Linear", { linearEnabled: true }],
+    ["linear-issue-to-gitlab-mr", "Linear", { linearEnabled: true }],
+    ["linear-issue-to-bitbucket-pr", "Linear", { linearEnabled: true }],
+  ])(
+    "offers the built-in integration before setting up %s when the instance enables %s",
+    async (automationId, integrationName, instance) => {
+      // Arrange
+      await activateCloudBackend(instance);
+      renderLauncher({ withBackendProvider: true });
+
+      // Act
+      fireEvent.click(
+        await screen.findByTestId(
+          `recommended-automation-card-${automationId}`,
+        ),
+      );
+
+      // Assert
+      expect(
+        await screen.findByTestId("built-in-integration-choice-modal"),
+      ).toHaveTextContent(
+        `AUTOMATION_SETUP_CHOICE$BUILT_IN_TITLE:${integrationName}`,
+      );
+      expect(mockNavigate).not.toHaveBeenCalled();
+      expect(screen.queryByTestId("mcp-install-modal")).not.toBeInTheDocument();
+    },
+  );
+
+  it("opens the instance's integrations settings when the built-in integration is chosen", async () => {
+    // Arrange
+    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+    await activateCloudBackend({ jiraEnabled: true });
+    renderLauncher({ withBackendProvider: true });
+    fireEvent.click(
+      await screen.findByTestId("recommended-automation-card-jira-issue-to-pr"),
+    );
+
+    // Act
+    fireEvent.click(
+      await screen.findByTestId("built-in-integration-choice-use-built-in"),
+    );
+
+    // Assert
+    expect(openSpy).toHaveBeenCalledWith(
+      "https://staging.all-hands.dev/settings/integrations",
+      "_blank",
+      "noopener,noreferrer",
+    );
+    expect(
+      screen.queryByTestId("built-in-integration-choice-modal"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("mcp-install-modal")).not.toBeInTheDocument();
+    expect(mockCreateConversationMutate).not.toHaveBeenCalled();
+  });
+
+  it("connects the integration through its MCP server when the polling automation is chosen", async () => {
+    // Arrange
+    await activateCloudBackend({ providersConfigured: ["gitlab"] });
+    renderLauncher({ withBackendProvider: true });
+    fireEvent.click(
+      await screen.findByTestId(
+        "recommended-automation-card-gitlab-issue-to-mr",
+      ),
+    );
+
+    // Act
+    fireEvent.click(
+      await screen.findByTestId("built-in-integration-choice-continue-polling"),
+    );
+
+    // Assert
+    const modal = await screen.findByTestId("mcp-install-modal");
+    expect(modal).toHaveAttribute("data-marketplace-id", "gitlab");
+    expect(
+      within(modal).queryByTestId("mcp-install-tab-native"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(modal).queryByTestId("mcp-native-panel"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("built-in-integration-choice-modal"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("connects a git provider through its MCP server for a template without a setup choice", async () => {
+    // Arrange
+    await activateCloudBackend({ providersConfigured: ["github"] });
+    renderLauncher({ withBackendProvider: true });
+
+    // Act
+    fireEvent.click(
+      await screen.findByTestId(
+        "recommended-automation-card-github-repo-monitor",
+      ),
+    );
+
+    // Assert
+    const modal = await screen.findByTestId("mcp-install-modal");
+    expect(modal).toHaveAttribute("data-marketplace-id", "github");
+    expect(
+      within(modal).queryByTestId("mcp-install-tab-native"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(modal).queryByTestId("mcp-native-panel"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("built-in-integration-choice-modal"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("launches nothing when the setup choice is dismissed", async () => {
+    // Arrange
+    await activateCloudBackend({ providersConfigured: ["github"] });
+    renderLauncher({ withBackendProvider: true });
+    fireEvent.click(
+      await screen.findByTestId(
+        "recommended-automation-card-github-issue-to-pr",
+      ),
+    );
+
+    // Act
+    fireEvent.click(
+      await screen.findByTestId("built-in-integration-choice-modal-close"),
+    );
+
+    // Assert
+    expect(
+      screen.queryByTestId("built-in-integration-choice-modal"),
+    ).not.toBeInTheDocument();
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it("sets up an issue-to-PR template directly when the instance has no built-in integration for it", async () => {
+    // Arrange
+    await activateCloudBackend();
+    renderLauncher({ withBackendProvider: true });
+
+    // Act
+    fireEvent.click(
+      await screen.findByTestId(
+        "recommended-automation-card-github-issue-to-pr",
+      ),
+    );
+
+    // Assert
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith(
+        "/automations/new/github-issue-to-pr",
+      ),
+    );
+    expect(
+      screen.queryByTestId("built-in-integration-choice-modal"),
+    ).not.toBeInTheDocument();
   });
 
   it("shows a natively connected integration as connected on its card", () => {

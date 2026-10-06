@@ -27,7 +27,7 @@ flowchart LR
 ```
 
 The Agent Server owns the subprocess and the credentials; Agent Canvas only
-records *which* agent to run and surfaces a form for the secrets it needs. The
+records _which_ agent to run and surfaces a form for the secrets it needs. The
 agent choice is stored per backend, so switching backends can switch agents.
 
 ## Supported providers
@@ -38,11 +38,11 @@ The provider list is sourced from the SDK registry
 [`src/constants/acp-providers.ts`](../src/constants/acp-providers.ts). Adding or
 changing a provider happens upstream in the SDK, not here.
 
-| Provider | Default command |
-|---|---|
+| Provider        | Default command                                |
+| --------------- | ---------------------------------------------- |
 | **Claude Code** | `npx -y @agentclientprotocol/claude-agent-acp` |
-| **Codex** | `npx -y @agentclientprotocol/codex-acp` |
-| **Gemini CLI** | `npx -y @google/gemini-cli --acp` |
+| **Codex**       | `npx -y @agentclientprotocol/codex-acp`        |
+| **Gemini CLI**  | `npx -y @google/gemini-cli --acp`              |
 
 See [Authentication](#authentication) for how each one authenticates.
 
@@ -64,13 +64,13 @@ or self-hosted backend), the provider CLI finds that login automatically — no 
 key required. On a clean cloud sandbox there's no stored login, so an API key is
 needed instead.
 
-| Provider | Subscription login (auto-detected) | API key |
-|---|---|---|
-| **Claude Code** | A Claude Code login (Pro/Max), from Claude Code's own credential store: the **macOS Keychain**, or `~/.claude/.credentials.json` on Linux | `ANTHROPIC_API_KEY` *(onboarding)* |
-| **Codex** | A ChatGPT login (`codex login`) cached at `~/.codex/auth.json` | `OPENAI_API_KEY` *(onboarding)* |
-| **Gemini CLI** | Your Google login (`gemini`/`gemini --acp`) cached at `~/.gemini/oauth_creds.json` | `GEMINI_API_KEY` *(onboarding)* |
+| Provider        | Subscription login (auto-detected)                                                                                                        | API key                            |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| **Claude Code** | A Claude Code login (Pro/Max), from Claude Code's own credential store: the **macOS Keychain**, or `~/.claude/.credentials.json` on Linux | `ANTHROPIC_API_KEY` _(onboarding)_ |
+| **Codex**       | A ChatGPT login (`codex login`) cached at `~/.codex/auth.json`                                                                            | `OPENAI_API_KEY` _(onboarding)_    |
+| **Gemini CLI**  | Your Google login (`gemini`/`gemini --acp`) cached at `~/.gemini/oauth_creds.json`                                                        | `GEMINI_API_KEY` _(onboarding)_    |
 
-All three collect an *optional* API key (+ base URL) in onboarding. As noted
+All three collect an _optional_ API key (+ base URL) in onboarding. As noted
 above, **a subscription / OAuth login takes priority over an API key** — when the
 provider's CLI is signed in, a key set in the environment is not used. Verified
 per provider:
@@ -89,7 +89,7 @@ per provider:
   `ANTHROPIC_API_KEY` / `ANTHROPIC_BASE_URL`.
 
 The one exception is the **base URL** (`*_BASE_URL`): a custom value points the
-CLI at a different endpoint (a proxy or gateway) and *does* take effect even
+CLI at a different endpoint (a proxy or gateway) and _does_ take effect even
 under a login — for Gemini it rides the ACP `gateway` param. It's an advanced
 override, not needed for normal use.
 
@@ -102,7 +102,7 @@ First-time users get a four-step onboarding modal. To onboard an ACP agent:
 2. **Check backend** — confirms Agent Canvas can reach the Agent Server.
 3. **Set up credentials** — enter the provider's credentials. Beyond the API
    key (+ optional base URL), this step also collects the credentials a
-   *containerized* backend needs, since a fresh container has no host login:
+   _containerized_ backend needs, since a fresh container has no host login:
    - **Codex** — `CODEX_AUTH_JSON` (the contents of `~/.codex/auth.json`).
    - **Claude Code** — `CLAUDE_CODE_OAUTH_TOKEN` (a Pro/Max OAuth token).
    - **Gemini CLI** — `GOOGLE_APPLICATION_CREDENTIALS_JSON` (Vertex SA / ADC JSON)
@@ -114,6 +114,7 @@ First-time users get a four-step onboarding modal. To onboard an ACP agent:
    there's no host login to fall back on. When the login probe detects an
    existing session, the step shows a "you're already signed in" banner and
    stays skippable.
+
 4. **Say hello** — creates your first conversation and closes the modal.
 
 > [!NOTE]
@@ -148,11 +149,11 @@ point Canvas at it). In short:
 #    canvas_ui_control calls use client_tools; the Python mount keeps
 #    pre-migration conversations loadable when persisted metadata imports
 #    canvas_ui_tool.
-# Minimum image: 1.47.0-python (Canvas's minimumAgentServer: the session
-# socket). Override SHA with a newer build.
+# Minimum image: 1.51.0-python (Canvas's minimumAgentServer, including the
+# managed Canvas App backend bridge). Override SHA with a newer build.
 docker run -d --name oh-acp -p 8010:8000 -v acp-data:/workspace \
   -v "$(pwd)/tools:/canvas-tools:ro" -e OH_EXTRA_PYTHON_PATH=/canvas-tools \
-  ghcr.io/openhands/agent-server:1.47.0-python
+  ghcr.io/openhands/agent-server:1.51.0-python
 
 # 2. Canvas pointed at the container.
 VITE_BACKEND_BASE_URL=http://localhost:8010 npm run dev:frontend
@@ -196,7 +197,7 @@ needed.
 
 > [!NOTE]
 > **Pick a non-flash Gemini model.** gemini-cli 0.45.x re-resolves any `*-flash`
-> model id at generation time to its *current default* flash (e.g.
+> model id at generation time to its _current default_ flash (e.g.
 > `gemini-2.5-flash` silently ran `gemini-3-flash`, which 404s on projects that
 > don't serve it — software-agent-sdk#3532). Only a non-flash id sticks, so
 > Canvas preselects `gemini-2.5-pro`. If a Gemini turn fails with
@@ -221,7 +222,7 @@ Open **Settings → Agent** at any time:
   **Custom** to point at any other ACP server.
 - **Command** — the command line used to spawn the subprocess. Selecting a preset
   fills this in; editing it to match another preset re-detects that provider.
-  API keys are *not* entered here — they live in the Secrets panel.
+  API keys are _not_ entered here — they live in the Secrets panel.
 - **Model** — choose a suggested model for the provider or enter a custom model
   override. Built-in providers save a concrete model rather than leaving it
   blank.

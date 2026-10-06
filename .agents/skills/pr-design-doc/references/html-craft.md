@@ -290,16 +290,18 @@ directory, then build the link and paste it in the PR description:
 ```bash
 # commit the html under .pr/ on your PR branch (this dir is temporary, see the skill)
 git add .pr/design.html && git commit -m "docs(.pr): design doc" && git push <your-fork> <branch>
-# link template - use YOUR fork + PR branch, so it renders before the PR is merged:
-#   https://htmlpreview.github.io/?https://github.com/<fork-owner>/<repo>/blob/<pr-branch>/.pr/design.html
+# use the full SHA of the pushed document commit in the link:
+git rev-parse HEAD
+#   https://htmlpreview.github.io/?https://github.com/<fork-owner>/<repo>/blob/<doc-commit-sha>/.pr/design.html
 ```
 
 Example shape:
-`https://htmlpreview.github.io/?https://github.com/FORK_OWNER/REPO/blob/PR_BRANCH/.pr/design.html`
+`https://htmlpreview.github.io/?https://github.com/FORK_OWNER/REPO/blob/DOC_COMMIT_SHA/.pr/design.html`
 
-`<pr-branch>` can be any branch or commit - `raw.githubusercontent.com` serves it regardless
-of merge state, so the doc renders while the PR is still open. Point the URL at the **fork
-and branch the PR is opened from**, not `main`.
+Point the URL at the **PR head repository and full commit SHA containing the document**.
+A branch-based link breaks when `.pr/` is removed after approval; a commit-pinned link
+continues to reference the document before cleanup. Refresh the document and its link when
+substantive changes affect the design.
 
 For public repositories, anyone can open the rendered page without a download or local server.
 This works with self-contained pages containing only inline CSS and SVG.
@@ -310,8 +312,9 @@ This works with self-contained pages containing only inline CSS and SVG.
 the design doc to GitHub Pages or another public host. Keep the document free of external
 scripts and assets: opening a local file does not make third-party active content private.
 
-- Link authorized reviewers to the committed GitHub blob and ask them to download and open the
-  self-contained HTML file locally; or use an existing access-controlled artifact service.
+- Link authorized reviewers to the GitHub blob at the full document commit SHA and ask them to
+  download and open the self-contained HTML file locally; or use an existing access-controlled
+  artifact service.
 - For a local browser preview, open `.pr/design.html` directly. If the browser needs HTTP,
   serve only on loopback:
   ```bash
