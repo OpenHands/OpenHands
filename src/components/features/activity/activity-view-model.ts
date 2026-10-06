@@ -309,6 +309,13 @@ export interface ActivityTailBuffer {
   resolvedObservations?: OpenHandsEvent[];
   watermark?: string;
   /**
+   * The newest timestamp seen in a partial poll whose range has not finished
+   * yet. The requests keep using `watermark` (the durable lower bound) while a
+   * range is in flight, but on completion the watermark commits this value so a
+   * resumed backlog is not re-fetched once it has been fully read.
+   */
+  pendingHighWatermark?: string;
+  /**
    * Page cursor to resume an unfinished timestamp-filtered range. Set when a
    * poll hit the page bound before exhausting the range, so the next poll
    * continues from where it stopped instead of re-reading the newest pages.
@@ -443,12 +450,19 @@ export function mergeActivityTail(
     ? unresolvedTaskActions(base).filter((event) => !historyIds.has(event.id))
     : [];
 
-  // Only advance the watermark over a complete range. On a partial page the
-  // newest event is not a safe lower bound for the next poll: events between
-  // the watermark and it were never requested, and advancing past them would
-  // drop them permanently.
+  // While a range is unfinished the watermark must not advance past unread
+  // events, but the newest timestamp seen so far is remembered as a pending
+  // high watermark. Committing it when the range ends stops a resumed backlog
+  // from being re-fetched once it has been fully read.
+  const latest = latestEventTimestamp(next);
+  const pendingHighWatermark = rangeComplete
+    ? undefined
+    : maxTimestamp(latest, previous?.pendingHighWatermark);
   const watermark = rangeComplete
-    ? maxTimestamp(latestEventTimestamp(next), previous?.watermark)
+    ? maxTimestamp(
+        latest,
+        maxTimestamp(previous?.watermark, previous?.pendingHighWatermark),
+      )
     : previous?.watermark;
   const supportsTimestampFilter =
     options.supportsTimestampFilter === false ||
@@ -471,6 +485,7 @@ export function mergeActivityTail(
     events,
     ...(resolvedObservations.length > 0 ? { resolvedObservations } : {}),
     ...(watermark !== undefined ? { watermark } : {}),
+    ...(pendingHighWatermark !== undefined ? { pendingHighWatermark } : {}),
     ...(rangeComplete
       ? {}
       : options.resumePageId !== undefined

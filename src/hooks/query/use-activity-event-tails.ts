@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
+import type { QueryClient } from "@tanstack/react-query";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import EventService from "#/api/event-service/event-service.api";
 import type {
@@ -36,14 +37,47 @@ const ACTIVITY_TAIL_STALE_MS = 5_000;
 const ACTIVITY_TAIL_GC_MS = 1000 * 60 * 5;
 
 /**
- * The session generation last seen per activity-tail query identity. Module
- * scoped so it survives the hook unmounting and remounting (the query cache
- * outlives the view), and holds only a non-reversible fingerprint rather than
- * the credential itself. A rotation that reuses the conversation id and
- * runtime URL leaves the query key unchanged, so a changed generation is what
- * tells us the cached tail belongs to a different session.
+ * The session generation last seen per activity-tail query identity, scoped to
+ * the owning QueryClient so it cannot leak across clients or tests. It holds
+ * only a keyed fingerprint rather than the credential itself, and survives the
+ * hook unmounting and remounting (the query cache outlives the view). A
+ * rotation that reuses the conversation id and runtime URL leaves the query key
+ * unchanged, so a changed generation is what tells us the cached tail belongs
+ * to a different session.
  */
-const lastSessionGenerationByQuery = new Map<string, string | null>();
+const lastSessionGenerationByClient = new WeakMap<
+  QueryClient,
+  Map<string, string | null>
+>();
+
+const activityTailKeyPrefix = CONVERSATION_QUERY_KEYS.activityTail[0];
+
+function sessionGenerationsFor(
+  client: QueryClient,
+): Map<string, string | null> {
+  let generations = lastSessionGenerationByClient.get(client);
+  if (!generations) {
+    generations = new Map();
+    lastSessionGenerationByClient.set(client, generations);
+    // Subscribe for the lifetime of the client rather than the hook instance: a
+    // tail is usually evicted by `gcTime` after the view has unmounted, and the
+    // entry must be dropped then too. The callback only reads the query key, so
+    // it holds no credential.
+    client.getQueryCache().subscribe((event) => {
+      if (event.type !== "removed") return;
+      if (event.query.queryKey[0] !== activityTailKeyPrefix) return;
+      generations!.delete(JSON.stringify(event.query.queryKey));
+    });
+  }
+  return generations;
+}
+
+/** Test-only: number of remembered session generations for a client. */
+export function __activitySessionGenerationCountForTests(
+  client: QueryClient,
+): number {
+  return lastSessionGenerationByClient.get(client)?.size ?? 0;
+}
 
 /** Cache identity of one conversation's activity tail. */
 export function activityTailQueryKey(
@@ -62,11 +96,6 @@ export function activityTailQueryKey(
     // sandbox's last action.
     conversation.conversation_url ?? null,
   ];
-}
-
-/** Test-only: forget the remembered session generations. */
-export function __resetActivitySessionGenerationsForTests(): void {
-  lastSessionGenerationByQuery.clear();
 }
 
 /**
@@ -94,29 +123,41 @@ export function useActivityEventTails(
   const enabled = conversations.length > 0;
 
   useEffect(() => {
-    for (const conversation of conversations) {
-      const queryKey = activityTailQueryKey(
-        conversation,
-        active.backend.id,
-        active.orgId,
-      );
-      const cacheKey = JSON.stringify(queryKey);
-      const generation = sessionGeneration(conversation.session_api_key);
-      const previousGeneration = lastSessionGenerationByQuery.get(cacheKey);
+    const generations = sessionGenerationsFor(queryClient);
 
-      if (
-        previousGeneration !== undefined &&
-        previousGeneration !== generation &&
-        conversation.conversation_url
-      ) {
-        // The cached tail belongs to a different runtime session. Clear it
-        // immediately, before the next periodic refetch, so the row cannot
-        // show (or carry) the previous session's activity.
-        void queryClient.resetQueries({ queryKey });
+    let cancelled = false;
+    void (async () => {
+      for (const conversation of conversations) {
+        const queryKey = activityTailQueryKey(
+          conversation,
+          active.backend.id,
+          active.orgId,
+        );
+        const cacheKey = JSON.stringify(queryKey);
+        const generation = await sessionGeneration(
+          conversation.session_api_key,
+        );
+        if (cancelled) return;
+
+        const previousGeneration = generations.get(cacheKey);
+        if (
+          previousGeneration !== undefined &&
+          previousGeneration !== generation &&
+          conversation.conversation_url
+        ) {
+          // The cached tail belongs to a different runtime session. Clear it
+          // immediately, before the next periodic refetch, so the row cannot
+          // show (or carry) the previous session's activity.
+          void queryClient.resetQueries({ queryKey });
+        }
+
+        generations.set(cacheKey, generation);
       }
+    })();
 
-      lastSessionGenerationByQuery.set(cacheKey, generation);
-    }
+    return () => {
+      cancelled = true;
+    };
   }, [conversations, active.backend.id, active.orgId, queryClient]);
 
   const results = useQueries({

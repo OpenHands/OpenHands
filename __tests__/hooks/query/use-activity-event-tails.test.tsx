@@ -6,7 +6,7 @@ import type { AppConversation } from "#/api/conversation-service/agent-server-co
 import type { OpenHandsEvent } from "#/types/agent-server/core";
 import {
   useActivityEventTails,
-  __resetActivitySessionGenerationsForTests,
+  __activitySessionGenerationCountForTests,
 } from "#/hooks/query/use-activity-event-tails";
 import { CONVERSATION_QUERY_KEYS } from "#/hooks/query/query-keys";
 import { deriveSubagents } from "#/components/features/activity/activity-view-model";
@@ -95,7 +95,6 @@ function refetchTails(client: QueryClient) {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  __resetActivitySessionGenerationsForTests();
   backendMock.current = {
     backend: { id: "local-1", kind: "local" },
     orgId: null,
@@ -330,6 +329,110 @@ describe("useActivityEventTails", () => {
     // the same newest pages.
     const resumeCall = searchEvents.mock.calls[21][3] as { pageId?: string };
     expect(resumeCall.pageId).toBe("page-600");
+  });
+
+  it("commits the high watermark once a resumed backlog is exhausted", async () => {
+    const client = newClient();
+    searchEvents.mockResolvedValueOnce({
+      items: [taskAction("task-action-1")],
+    });
+
+    renderHook(() => useActivityEventTails([conversation()]), {
+      wrapper: makeWrapper(client),
+    });
+    await waitFor(() => expect(searchEvents).toHaveBeenCalledTimes(1));
+
+    // Poll 1: a full page of newer events points at a second page that fails,
+    // so the range is incomplete and the watermark must not advance yet.
+    const newest = Array.from({ length: 30 }, (_, index) => ({
+      ...bashAction(`c${index}`),
+      timestamp: new Date(Date.UTC(2026, 9, 6, 0, 1, index + 1)).toISOString(),
+    }));
+    searchEvents
+      .mockResolvedValueOnce({ items: newest, next_page_id: "page-2" })
+      .mockRejectedValueOnce(new Error("page 2 failed"));
+    await refetchTails(client);
+    await waitFor(() => expect(searchEvents).toHaveBeenCalledTimes(3));
+
+    const queryKey = [
+      ...CONVERSATION_QUERY_KEYS.activityTail,
+      "conv-1",
+      "local-1",
+      null,
+      "http://runtime/conv-1",
+    ];
+    const partial = client.getQueryData<{
+      watermark?: string;
+      pendingHighWatermark?: string;
+      resumePageId?: string;
+    }>(queryKey);
+    expect(partial?.resumePageId).toBe("page-2");
+    expect(partial?.pendingHighWatermark).toBe("2026-10-06T00:01:30.000Z");
+    // The lower bound still points at the previous watermark so the in-flight
+    // range is not re-read from a later point.
+    expect(partial?.watermark).toBe("2026-10-06T00:00:00Z");
+
+    // Poll 2: the resumed page is the terminal, empty page.
+    searchEvents.mockResolvedValueOnce({ items: [], next_page_id: null });
+    await refetchTails(client);
+    await waitFor(() => expect(searchEvents).toHaveBeenCalledTimes(4));
+
+    // The empty terminal page carries no events of its own, so without the
+    // pending value the watermark would stay put and the backlog would replay.
+    const completed = client.getQueryData<{
+      watermark?: string;
+      pendingHighWatermark?: string;
+      resumePageId?: string;
+    }>(queryKey);
+    expect(completed?.watermark).toBe("2026-10-06T00:01:30.000Z");
+    expect(completed?.pendingHighWatermark).toBeUndefined();
+    expect(completed?.resumePageId).toBeUndefined();
+
+    // Poll 3 starts past the committed high watermark instead of re-reading.
+    searchEvents.mockResolvedValueOnce({ items: [], next_page_id: null });
+    await refetchTails(client);
+    await waitFor(() => expect(searchEvents).toHaveBeenCalledTimes(5));
+    const nextCall = searchEvents.mock.calls[4][3] as {
+      pageId?: string;
+      timestampGte?: string;
+    };
+    expect(nextCall.timestampGte).toBe("2026-10-06T00:01:30.000Z");
+    expect(nextCall.pageId).toBeUndefined();
+  });
+
+  it("forgets a session generation once its tail leaves the cache", async () => {
+    const client = newClient();
+    searchEvents.mockResolvedValue({ items: [] });
+
+    const { unmount } = renderHook(
+      () => useActivityEventTails([conversation()]),
+      { wrapper: makeWrapper(client) },
+    );
+    await waitFor(() =>
+      expect(__activitySessionGenerationCountForTests(client)).toBe(1),
+    );
+    unmount();
+
+    // Evicting the tail must drop the remembered generation, otherwise the map
+    // grows for every conversation ever browsed for the page's lifetime.
+    client.removeQueries({
+      queryKey: [...CONVERSATION_QUERY_KEYS.activityTail],
+    });
+    await waitFor(() =>
+      expect(__activitySessionGenerationCountForTests(client)).toBe(0),
+    );
+
+    // Re-mount with the same key: with no stale entry left, no stale tail is
+    // cleared and the tail is fetched normally.
+    searchEvents.mockResolvedValueOnce({ items: [bashAction("fresh")] });
+    const { result } = renderHook(
+      () => useActivityEventTails([conversation()]),
+      { wrapper: makeWrapper(client) },
+    );
+
+    await waitFor(() =>
+      expect(result.current[0]).toEqual([bashAction("fresh")]),
+    );
   });
 
   it("does not advance past events when a later cloud page fails", async () => {

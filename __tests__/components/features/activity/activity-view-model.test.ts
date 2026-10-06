@@ -207,6 +207,45 @@ describe("mergeActivityTail", () => {
     expect(merged.watermark).toBe("2026-10-06T00:00:00Z");
   });
 
+  it("commits the pending high watermark once a resumed range completes", () => {
+    const previous = { events: [], watermark: "2026-10-06T00:00:00Z" };
+    const newestPage = [
+      { ...bashAction("c1"), timestamp: "2026-10-06T00:00:10Z" },
+    ];
+
+    const partial = mergeActivityTail(previous, newestPage, {
+      canIncrementallyFetch: true,
+      rangeComplete: false,
+      resumePageId: "page-2",
+    });
+    // Unfinished range: keep the durable lower bound and remember the newest
+    // timestamp for later.
+    expect(partial.watermark).toBe("2026-10-06T00:00:00Z");
+    expect(partial.pendingHighWatermark).toBe("2026-10-06T00:00:10Z");
+    expect(partial.resumePageId).toBe("page-2");
+
+    // A resumed page holds older events (or none at all). Committing only its
+    // own maximum would leave the watermark at the start, so the backlog would
+    // be re-fetched on every poll.
+    const olderPage = [
+      { ...bashAction("c2"), timestamp: "2026-10-06T00:00:05Z" },
+    ];
+    const completed = mergeActivityTail(partial, olderPage, {
+      canIncrementallyFetch: true,
+      rangeComplete: true,
+    });
+    expect(completed.watermark).toBe("2026-10-06T00:00:10Z");
+    expect(completed.pendingHighWatermark).toBeUndefined();
+    expect(completed.resumePageId).toBeUndefined();
+
+    // An empty terminal page must still commit the remembered high watermark.
+    const emptyTerminal = mergeActivityTail(partial, [], {
+      canIncrementallyFetch: true,
+      rangeComplete: true,
+    });
+    expect(emptyTerminal.watermark).toBe("2026-10-06T00:00:10Z");
+  });
+
   it("drops a carried delegation when the range is incomplete", () => {
     const task = taskAction("task-call-1", "explorer", "task-action-1");
     const previous = { events: [task], watermark: "2026-10-06T00:00:00Z" };
@@ -250,6 +289,43 @@ describe("mergeActivityTail", () => {
 
     expect(merged.events).toHaveLength(60);
     expect(deriveSubagents(merged.events)).toEqual([]);
+  });
+
+  it("stores a resolution during a poll before its observation leaves the window", () => {
+    const task = taskAction("task-call-1", "explorer", "task-action-1");
+    const observation = taskObservation("task-action-1", false, "task-call-1");
+
+    // Poll 1: only the action has arrived.
+    const first = mergeActivityTail(undefined, [task], {
+      canIncrementallyFetch: true,
+    });
+    expect(deriveSubagents(first.events)).toEqual([
+      { id: "task-call-1", name: "explorer", status: "running" },
+    ]);
+
+    // Poll 2: the observation arrives and its resolution is retained, not just
+    // relied on being present in the bounded history.
+    const second = mergeActivityTail(first, [observation], {
+      canIncrementallyFetch: true,
+    });
+    expect(deriveSubagents(second.events)).toEqual([
+      { id: "task-call-1", name: "explorer", status: "completed" },
+    ]);
+    expect(second.resolvedObservations).toContainEqual(observation);
+
+    // Poll 3: enough newer events push the action and its observation out of
+    // the bounded history. The delegation must never be reported as running.
+    const third = mergeActivityTail(
+      second,
+      Array.from({ length: 60 }, (_, index) => ({
+        ...bashAction(`c${index}`),
+        timestamp: new Date(
+          Date.UTC(2026, 9, 6, 0, 0, index + 5),
+        ).toISOString(),
+      })),
+      { canIncrementallyFetch: true, rangeComplete: true },
+    );
+    expect(deriveSubagents(third.events)).toEqual([]);
   });
 
   it("keeps a carried completed delegation closed once its observation scrolls out", () => {

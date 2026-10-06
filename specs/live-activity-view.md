@@ -45,6 +45,9 @@
       observation; an incomplete range shall not advance the watermark or carry
       an unresolved delegation forward, and shall store its page cursor so the
       next poll resumes the range instead of re-reading the newest pages.
+- [x] A partial poll shall remember the newest timestamp it saw as a pending
+      high watermark, and the poll that completes the range shall commit it, so
+      a resumed backlog is not re-fetched on every subsequent poll.
 - [x] A failed page shall be distinguished from an exhausted range (the request
       is made strict): it shall not be treated as complete and shall not advance
       the watermark past unread events.
@@ -58,7 +61,11 @@
       including when the conversation left the active list or the view
       remounted in between. The session key itself shall never enter the query
       key, the cached value, or any long-lived map; rotation is detected from a
-      non-reversible fingerprint.
+      keyed (HMAC) fingerprint scoped to the owning QueryClient, so a leaked
+      value cannot be tested against candidate credentials offline.
+- [x] Remembered session generations shall be dropped when their tail leaves the
+      query cache, so browsing many conversations does not grow the map for the
+      page's lifetime.
 - [x] The view shall never start, stop, pause, or otherwise mutate a
       conversation.
 
