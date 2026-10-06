@@ -58,7 +58,7 @@ export function McpToolbar({
             onClick={() => onSearchChange("")}
             aria-label={t(I18nKey.MCP$SEARCH_CLEAR)}
             data-testid="mcp-search-clear"
-            className="mr-2 p-1 rounded text-tertiary-alt hover:text-content-1 cursor-pointer"
+            className="mr-2 p-1 rounded text-tertiary-alt hover:text-content cursor-pointer"
           >
             <X className="h-4 w-4" aria-hidden />
           </button>

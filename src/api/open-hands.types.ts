@@ -40,11 +40,6 @@ export interface Feedback {
   trajectory: unknown[];
 }
 
-export interface GetVSCodeUrlResponse {
-  vscode_url: string | null;
-  error?: string;
-}
-
 export interface GetTrajectoryResponse {
   trajectory: unknown[] | null;
   error?: string;

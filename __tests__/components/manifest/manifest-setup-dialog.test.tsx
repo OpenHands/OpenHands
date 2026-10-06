@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { AUTOMATION_CATALOG } from "@openhands/extensions/automations";
 import {
   act,
   fireEvent,
@@ -101,6 +102,9 @@ const NOTHING_TO_CONNECT: SetupPrerequisitesResult = {
 };
 
 const ENTRY: SetupEntry = createSetupEntry();
+const CUSTOM_AUTOMATION_ENTRY = AUTOMATION_CATALOG.find(
+  (entry) => entry.id === "custom-automation",
+) as SetupEntry;
 
 function requirementsSchemaFailure() {
   return Object.assign(new Error("Request failed with status 422"), {
@@ -215,6 +219,12 @@ const CRON_ONLY_CAPABILITIES: DeploymentCapabilities = {
     event: { filterLanguage: "jmespath", filterFunctions: ["icontains"] },
   },
   features: [],
+};
+
+const ACTION_CAPABILITIES: DeploymentCapabilities = {
+  ...CRON_ONLY_CAPABILITIES,
+  triggerKinds: ["cron", "event"],
+  features: ["agentProfiles", "presetPrompt", "presetPlugin", "customTarball"],
 };
 
 const EVENT_FIRST_MIXED_TRIGGER_ENTRY: SetupEntry = (() => {
@@ -377,6 +387,43 @@ describe("SetupDialog", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("offers agent profiles only for actions that accept them", async () => {
+    mocks.capabilities.mockReturnValue({
+      capabilities: ACTION_CAPABILITIES,
+      supported: true,
+      unmet: [],
+      isLoading: false,
+    });
+    const { user } = renderDialog(CUSTOM_AUTOMATION_ENTRY);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("setup-action-kind")).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByTestId("automation-agent-profile"),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("setup-action-kind"));
+    await user.click(await screen.findByText("Upload tarball"));
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("automation-agent-profile"),
+      ).toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByTestId("automation-agent-profile"));
+    await user.click(await screen.findByText("Reviewer"));
+    await user.click(screen.getByTestId("setup-action-kind"));
+    await user.click(await screen.findByText("Prompt"));
+
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId("automation-agent-profile"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("setup-field-model")).toBeInTheDocument();
+    });
   });
 
   it("asks about an unconnected integration before it asks anything else", async () => {

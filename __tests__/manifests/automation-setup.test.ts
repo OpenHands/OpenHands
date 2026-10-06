@@ -82,6 +82,8 @@ interface FixtureScenario {
   expectedFieldErrors?: Record<string, string>;
   /** False when the recorded request is deliberately not what setup sends. */
   matchesSetupPayload?: boolean;
+  /** Which of the entry's trigger kinds the scenario picked, when it has several. */
+  selectedTrigger?: string;
 }
 
 interface FixtureBundle {
@@ -144,6 +146,7 @@ const CREATE_CASES = BUNDLES.flatMap((bundle) =>
             body: scenario.create.request.body,
             // A prompt entry records none; buildCreatePayload ignores it.
             tarballPath: scenario.upload?.response.body.tarball_path,
+            selectedTrigger: scenario.selectedTrigger,
           },
         ]
       : [],
@@ -159,6 +162,7 @@ const PREFLIGHT_CASES = BUNDLES.flatMap((bundle) =>
             automationId: bundle.automationId,
             formValues: scenario.formValues ?? {},
             body: scenario.preflight.request.body,
+            selectedTrigger: scenario.selectedTrigger,
           },
         ]
       : [],
@@ -191,6 +195,7 @@ const SERVICE_ERROR_CASES = BUNDLES.flatMap((bundle) =>
         formValues: scenario.formValues ?? {},
         responseBody: exchange.response.body,
         expectedFieldErrors: scenario.expectedFieldErrors,
+        selectedTrigger: scenario.selectedTrigger,
       },
     ];
   }),
@@ -246,14 +251,14 @@ describe("the contract fixtures", () => {
 describe("buildCreatePayload", () => {
   it.each(CREATE_CASES)(
     "derives the $name create body its fixture pins",
-    ({ automationId, formValues, body, tarballPath }) => {
+    ({ automationId, formValues, body, tarballPath, selectedTrigger }) => {
       // Arrange
       const entry = requireEntry(automationId);
 
       // Act
       const payload = tarballPath
-        ? buildCreatePayload(entry, formValues, tarballPath)
-        : buildCreatePayload(entry, formValues);
+        ? buildCreatePayload(entry, formValues, tarballPath, selectedTrigger)
+        : buildCreatePayload(entry, formValues, undefined, selectedTrigger);
 
       // Assert
       expect(payload).toEqual(body);
@@ -354,12 +359,12 @@ describe("buildCreatePayload", () => {
 describe("buildPreflightBody", () => {
   it.each(PREFLIGHT_CASES)(
     "derives the $name preflight envelope its fixture pins",
-    ({ automationId, formValues, body }) => {
+    ({ automationId, formValues, body, selectedTrigger }) => {
       // Arrange
       const entry = requireEntry(automationId);
 
       // Act
-      const envelope = buildPreflightBody(entry, formValues);
+      const envelope = buildPreflightBody(entry, formValues, selectedTrigger);
 
       // Assert
       expect(envelope).toEqual({
@@ -436,15 +441,26 @@ describe("buildAssistedMessage", () => {
 describe("service rejections mapped back to fields", () => {
   it.each(SERVICE_ERROR_CASES)(
     "maps the $name rejection to the fields the fixture names",
-    ({ automationId, formValues, responseBody, expectedFieldErrors }) => {
+    ({
+      automationId,
+      formValues,
+      responseBody,
+      expectedFieldErrors,
+      selectedTrigger,
+    }) => {
       // Arrange
       const entry = requireEntry(automationId);
-      const payload = buildCreatePayload(entry, formValues);
+      const payload = buildCreatePayload(
+        entry,
+        formValues,
+        undefined,
+        selectedTrigger,
+      );
 
       // Act
       const mapped = mapServiceErrors(
         normalizeServiceErrors(responseBody, payload),
-        deriveErrorMap(entry),
+        deriveErrorMap(entry, selectedTrigger),
       );
 
       // Assert
@@ -485,14 +501,20 @@ describe("deriveErrorMap", () => {
 
     // Assert — a bundle's answers reach the service through its rendered
     // config rather than through a prompt, so the paths are the config's.
+    // With no trigger selected the map covers both of the entry's kinds.
     expect(errorMap).toEqual({
       name: ["repositories"],
       "trigger.schedule": ["schedule"],
       "trigger.timezone": ["timezone"],
+      "trigger.on": ["on"],
+      "trigger.filter": ["repositories", "triggerReviewer"],
       "template.config.repos": ["repositories"],
       "template.config.github_token_secret": ["githubTokenSecret"],
       "template.config.trigger_label": ["triggerLabel"],
+      "template.config.trigger_reviewer": ["triggerReviewer"],
+      "template.config.max_new_per_run": ["maxNewPerRun"],
       "template.config.review_tone": ["reviewTone"],
+      "template.config.maintainers": ["maintainers"],
     });
   });
 });

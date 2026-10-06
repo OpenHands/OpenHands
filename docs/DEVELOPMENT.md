@@ -13,11 +13,10 @@ Docker.
 This repository contains the Agent Canvas frontend and local-stack orchestration. Use the sibling repositories for their owned layers:
 
 - [`OpenHands/software-agent-sdk`](https://github.com/OpenHands/software-agent-sdk) owns the Python SDK, Agent Server, agent/tool behavior, conversations, workspaces, events, and server API.
-- [`OpenHands/typescript-client`](https://github.com/OpenHands/typescript-client) owns browser-compatible typed access to that Agent Server API. Add client methods there rather than reimplementing API calls in Canvas.
+- [`software-agent-sdk/clients/typescript`](https://github.com/OpenHands/software-agent-sdk/tree/main/clients/typescript) owns browser-compatible typed access to that Agent Server API. Add client methods there rather than reimplementing API calls in Canvas.
 - [`OpenHands/extensions`](https://github.com/OpenHands/extensions) owns reusable skills, plugins, automations, and integrations; [`OpenHands/automation`](https://github.com/OpenHands/automation) owns automation definitions, scheduling, webhooks, run history, and dispatching; Agent Server/SDK code executes the dispatched conversations.
 
-When a feature crosses repositories, implement the backend contract in the SDK first, expose it through `typescript-client`, and consume it in Canvas. Coordinate automation lifecycle changes in `automation`. See the repository [contributor notes](../AGENTS.md) and follow the [custom code-review guide](../.agents/skills/custom-codereview-guide.md) for every pull request.
-
+When a feature crosses repositories, implement the backend contract in the SDK first, expose it through `typescript-client`, and consume it in Canvas. Coordinate automation lifecycle changes in `automation`. Version pins, local-stack overrides, and PR ordering are in [Cross-repository version compatibility](#cross-repository-version-compatibility). See the repository [contributor notes](../AGENTS.md) and follow the [custom code-review guide](../.agents/skills/custom-codereview-guide.md) for every pull request.
 
 For a static frontend build (better for slow networks, remote access, tunnels):
 
@@ -36,8 +35,10 @@ Both modes still start the ingress proxy; the proxy only routes to the services 
 
 The dev stack uses `uvx` to run a temporary `agent-server`
 installation on `127.0.0.1:18000` and points the frontend at it. It isolates
-conversation persistence by setting separate `OH_CONVERSATIONS_PATH`,
-`OH_BASH_EVENTS_DIR`, and `OH_VSCODE_PORT` values under `.openhands-dev/`, and
+conversation persistence by setting separate `OH_CONVERSATIONS_PATH` and
+`OH_BASH_EVENTS_DIR` values under `.openhands-dev/`. The legacy bundled editor
+is disabled by default; prefer installing the VS Code Canvas App. Set
+`OH_CANVAS_ENABLE_VSCODE=true` only when testing legacy compatibility. The stack
 keeps its tmux sockets under `~/.openhands/agent-canvas/tmux` (via
 `TMUX_TMPDIR`), so it does not collide with other local or cloud-backed
 OpenHands sessions. If `$HOME` is on a filesystem that does not support Unix
@@ -47,11 +48,15 @@ it instead.
 
 ### Environment Variables
 
-| Variable                  | Description                    | Default |
-| ------------------------- | ------------------------------ | ------- |
-| `PORT`                    | Ingress port                   | `8000`  |
-| `OH_AUTOMATION_GIT_REF`   | Git ref for automation backend (overrides the pinned default version) | *(unset)* |
-| `OH_AGENT_SERVER_GIT_REF` | Git ref for agent-server (overrides the pinned default version) | *(unset)* |
+| Variable                     | Description                            | Default                        |
+| ---------------------------- | -------------------------------------- | ------------------------------ |
+| `PORT`                       | Ingress port                           | `8000`                         |
+| `OH_AGENT_SERVER_LOCAL_PATH` | Absolute `software-agent-sdk` checkout | unset                          |
+| `OH_AGENT_SERVER_GIT_REF`    | Git ref for agent-server               | unset (`config/defaults.json`) |
+| `OH_AGENT_SERVER_VERSION`    | PyPI version for agent-server          | unset (`config/defaults.json`) |
+| `OH_AUTOMATION_LOCAL_PATH`   | Absolute `automation` checkout         | unset                          |
+| `OH_AUTOMATION_GIT_REF`      | Git ref for automation backend         | unset (`config/defaults.json`) |
+| `OH_AUTOMATION_VERSION`      | PyPI version for automation            | unset (`config/defaults.json`) |
 
 ### Alternative: Minimal Mode (without Automation)
 
@@ -64,28 +69,153 @@ npm run dev:minimal
 This runs only agent-server + Vite (no automation backend or ingress).
 Access at `http://localhost:3001/`
 
-### Agent server version selection
+### Cross-repository version compatibility
 
-By default, the latest released version from PyPI is used. You can override this (highest precedence first):
+The default local stack for this checkout is the **pins recorded below**, not
+an open-ended matrix of sibling `main` branches. Connecting to another Agent
+Server is allowed down to `compatibility.minimumAgentServer`. Mixing an
+unpinned Git backend with the committed TypeScript client (or the reverse) is
+unsupported and often looks like a product bug.
+
+Owning repositories:
+
+- [`OpenHands/OpenHands`](https://github.com/OpenHands/OpenHands) (this repo) — Agent Canvas
+- [`OpenHands/software-agent-sdk`](https://github.com/OpenHands/software-agent-sdk) — Python SDK and Agent Server
+- [`software-agent-sdk/clients/typescript`](https://github.com/OpenHands/software-agent-sdk/tree/main/clients/typescript) — `@openhands/typescript-client`
+- [`OpenHands/automation`](https://github.com/OpenHands/automation) — scheduling, webhooks, run history
+- [`OpenHands/extensions`](https://github.com/OpenHands/extensions) — `@openhands/extensions` skills and integrations
+
+#### Source of truth
+
+| Surface                                    | Supported version lives in                                                    |
+| ------------------------------------------ | ----------------------------------------------------------------------------- |
+| Bundled Agent Server / SDK PyPI pin        | [`config/defaults.json`](../config/defaults.json) `versions.agentServer`      |
+| Bundled automation PyPI pin                | `config/defaults.json` `versions.automation`                                  |
+| Oldest Agent Server this frontend accepts  | `config/defaults.json` `compatibility.minimumAgentServer`                     |
+| `@openhands/typescript-client`             | [`package.json`](../package.json) (exact npm pin)                             |
+| `@openhands/extensions`                    | `package.json` (exact npm pin)                                                |
+| Released automation ↔ SDK dependency match | [`scripts/check-sdk-version-sync.mjs`](../scripts/check-sdk-version-sync.mjs) |
+
+`config/defaults.json` is the source of truth for the Python backend pins used
+by the npm and Docker install paths. `agent-canvas --info` prints the same
+Agent Server and automation pins plus the minimum compatible Agent Server.
+
+Those files describe **this revision**. They are not a historical compatibility
+matrix. They do not promise that Git `main` of every sibling repository works
+together, or that independently chosen PyPI/npm numbers with the same major
+version are interchangeable.
+
+Runtime enforcement for a connected Agent Server is
+`assertAgentServerVersionIsSupported()` in
+[`src/api/agent-server-compatibility.ts`](../src/api/agent-server-compatibility.ts).
+Some UI features have additional floors inside `@openhands/typescript-client`.
+Meeting `compatibility.minimumAgentServer` does not mean every Canvas feature
+is available on that backend.
+
+The TypeScript client records the Agent Server contract it was generated from
+in `software-agent-sdk/clients/typescript`. That client
+contract pin is independent of Canvas `versions.agentServer`.
+
+#### Released package, Git ref, and local path
+
+`npm run dev`, `npm run dev:static`, and the `agent-canvas` binary select
+**Python** backends with the following precedence (highest first).
+`npm run dev:minimal` uses the same Agent Server selection and does not start
+automation. Leaving an override unset means "use the pin above", not Git
+`main`.
+
+**Agent Server** ([`software-agent-sdk`](https://github.com/OpenHands/software-agent-sdk)):
+
+1. `OH_AGENT_SERVER_LOCAL_PATH` — absolute path to a checkout that contains
+   `openhands-agent-server`, `openhands-sdk`, `openhands-tools`, and
+   `openhands-workspace`. The agent-server package is rebuilt from local
+   source on each start (`uvx --reinstall`); the other workspace packages are
+   installed editable.
+2. `OH_AGENT_SERVER_GIT_REF` — branch, tag, or commit. All four workspace
+   packages are installed from that same ref so inter-package APIs stay in
+   sync. The launcher passes `uvx --reinstall` so a cached PyPI wheel with
+   the same version string is not reused.
+3. `OH_AGENT_SERVER_VERSION` — a specific PyPI version of those four packages.
+4. Default: `versions.agentServer` from `config/defaults.json`.
 
 ```sh
-# Run against a local software-agent-sdk checkout.
 OH_AGENT_SERVER_LOCAL_PATH=/abs/path/to/software-agent-sdk npm run dev
-
-# Use a git branch or commit (takes precedence over version)
-OH_AGENT_SERVER_GIT_REF=main npm run dev
-OH_AGENT_SERVER_GIT_REF=abc1234 npm run dev
-
-# Use a specific PyPI version
-OH_AGENT_SERVER_VERSION=1.18.0 npm run dev
+OH_AGENT_SERVER_GIT_REF=<branch-or-sha> npm run dev
+OH_AGENT_SERVER_VERSION=<versions.agentServer> npm run dev
 ```
 
-`OH_AGENT_SERVER_LOCAL_PATH` must be an absolute path to a `software-agent-sdk` checkout containing the `openhands-agent-server`, `openhands-sdk`, `openhands-tools`, and `openhands-workspace` workspace packages. The agent-server itself is rebuilt from local source on each start (`uvx --reinstall`); the other workspace packages are installed editable, so their source changes take effect without a rebuild.
+**Automation** ([`automation`](https://github.com/OpenHands/automation)):
+
+1. `OH_AUTOMATION_LOCAL_PATH` — absolute path to a checkout with
+   `pyproject.toml`. `--automation-ref` on the launcher outranks this local
+   path.
+2. `OH_AUTOMATION_GIT_REF` (or `--automation-ref`) — branch, tag, or commit.
+   `OH_AUTOMATION_REPO` only applies when a git ref is selected.
+3. `OH_AUTOMATION_VERSION` — a specific PyPI version of `openhands-automation`.
+4. Default: `versions.automation` from `config/defaults.json`.
+
+Released `openhands-automation` is checked against `versions.agentServer`.
+CI runs `scripts/check-sdk-version-sync.mjs` on the **published** automation
+package, not on a local checkout or Git `main`.
+
+**TypeScript client and extensions:** Canvas does not provide Git-ref or
+local-path launcher variables for `@openhands/typescript-client` or
+`@openhands/extensions`. Both are exact npm pins in `package.json`. Public
+skills are loaded from `@openhands/extensions` at **build time**; the Agent
+Server no longer clones the extensions repo or honors `EXTENSIONS_REF`.
+
+Contributor notes require a **published** TypeScript client before Canvas
+bumps that pin. Do not point this repository at an unpublished commit SHA.
+
+Iterate on unreleased client work in `software-agent-sdk/clients/typescript`
+and extensions work in `OpenHands/extensions`, then
+bump the Canvas pin after the package exists on the registry.
+
+#### Cross-repository change checklist
+
+1. Confirm ownership using [Repository boundaries](#repository-boundaries).
+2. Read `config/defaults.json` and `package.json` for the pins this Canvas
+   revision expects.
+3. If the Agent Server API changes, land it in `software-agent-sdk` first.
+   For local Canvas testing, use `OH_AGENT_SERVER_LOCAL_PATH` or
+   `OH_AGENT_SERVER_GIT_REF`; keep the TypeScript client pin until the client
+   is published.
+4. Mirror the contract in `software-agent-sdk/clients/typescript` (OpenAPI and handwritten
+   clients). Publish that package, then bump `@openhands/typescript-client`
+   here.
+5. If automation must run against the new SDK, release `openhands-automation`
+   with matching SDK dependencies, then update `versions.automation` so
+   `scripts/check-sdk-version-sync.mjs` still passes.
+6. If public skills or integrations change, publish `@openhands/extensions`
+   and then bump that dependency.
+7. If a Canvas PR needs an unreleased Agent Server, link the
+   `OpenHands/software-agent-sdk` pull request and record the local-path or
+   Git-ref verification in the Canvas PR body. E2E workflows run after
+   changes reach `main`; for risky pre-merge changes, ask a maintainer to
+   manually dispatch the relevant workflow against the PR branch. Do not
+   assume a PR link automatically installs an SDK ref in mock-LLM Docker E2E.
+8. Do not merge Canvas UI that requires a contract the pinned client does not
+   yet expose.
+
+#### Breaking contract sequencing
+
+Usual direction: Agent Server / SDK → OpenAPI contract → `typescript-client` →
+Agent Canvas. Automation scheduling flows Canvas → `automation` → Agent
+Server / SDK.
+
+REST deprecation and the removal runway are owned by
+`software-agent-sdk` (`openhands-agent-server/AGENTS.md`). Canvas must not
+skip the client release step or consume an unpublished client SHA.
+
+Event wire types follow the same order: SDK Pydantic model, then TypeScript
+client, then Canvas consumption of the client type. See the
+[custom code-review guide](../.agents/skills/custom-codereview-guide.md).
 
 ### Other useful overrides
 
 - `OH_CANVAS_SAFE_BACKEND_PORT` — backend port for the isolated server (default `18000`)
-- `OH_CANVAS_SAFE_VSCODE_PORT` — VS Code sidecar port (default `backend port + 1`)
+- `OH_CANVAS_ENABLE_VSCODE` — enable the legacy bundled editor (`false` by default; prefer the VS Code Canvas App)
+- `OH_CANVAS_SAFE_VSCODE_PORT` — legacy editor port used only when `OH_CANVAS_ENABLE_VSCODE=true` (default `backend port + 1`)
 - `OH_CANVAS_SAFE_STATE_DIR` — base directory for isolated server state
 - `VITE_WORKING_DIR` — repo root used for new conversations (defaults to the current checkout)
 
@@ -132,6 +262,75 @@ Useful targeted verification for the isolated dev launcher:
 npm run test -- __tests__/api/agent-server-config.test.ts __tests__/scripts/dev-safe.test.ts
 ```
 
+### Unit test environments
+
+`npm test` runs Vitest as two projects, so each suite pays only for the
+environment it actually needs:
+
+| Project | Environment | Setup             | Suites                                                                   |
+| ------- | ----------- | ----------------- | ------------------------------------------------------------------------ |
+| `jsdom` | `jsdom`     | `vitest.setup.ts` | everything else (the default)                                            |
+| `node`  | `node`      | none              | the DOM-free suites listed in `NODE_ENV_PILOT_TESTS` in `vite.config.ts` |
+
+Both projects run in a single `npm test`, and the Node list is excluded from
+the jsdom project, so every suite runs exactly once. Vitest prefixes each
+result with its project name (`|node|` / `|jsdom|`) when a test fails or when
+you pass `--reporter=verbose`.
+
+The Node project exists because jsdom is not free: it costs roughly a second of
+environment setup per run, plus the whole of `vitest.setup.ts` (Testing Library
+cleanup, MSW, jest-dom, DOM global stubs). Suites that only call pure functions
+need none of it.
+
+#### Adding a suite to the Node project
+
+A suite qualifies only if **all** of the following hold. Check the suite and
+everything it imports, transitively — an import that touches the DOM at module
+scope is enough to disqualify it.
+
+- No DOM: no `document`, `window`, `HTMLElement`, `navigator`, or
+  `@testing-library/*` rendering.
+- No Web Storage or browser-owned globals: no `localStorage`,
+  `sessionStorage`, `location`, `matchMedia`, `requestAnimationFrame`.
+- No React component rendering or hook execution.
+- No MSW / network interception: nothing that relies on the `server` started
+  in `vitest.setup.ts`.
+- Nothing from `vitest.setup.ts` at all — the Node project loads no setup
+  file, so a suite that depends on one of its stubs (for example the
+  `VITE_SESSION_API_KEY` env stub) belongs in jsdom.
+
+Then add the suite's path to `NODE_ENV_PILOT_TESTS` in `vite.config.ts` and run
+it. Passing under the Node project is the confirmation; a `ReferenceError`
+naming a browser global means the suite belongs in jsdom.
+
+Keep the list explicit rather than glob-based: a glob would silently adopt new
+suites that have never been checked against the rules above.
+
+An individual suite can also opt into Node with a `// @vitest-environment node`
+docblock, which several `__tests__/scripts/` suites already do. That still
+loads `vitest.setup.ts`; the Node project is for suites that need no setup at
+all.
+
+#### Rolling back
+
+The pilot is contained in one config block and unwinds in stages:
+
+- **One suite misbehaves** — remove its path from `NODE_ENV_PILOT_TESTS`. It
+  returns to the jsdom project automatically, because that project excludes
+  exactly this list.
+- **Revert the split entirely** — empty `NODE_ENV_PILOT_TESTS`, then replace
+  `test.projects` with the previous flat options:
+
+  ```ts
+  environment: "jsdom",
+  setupFiles: ["vitest.setup.ts"],
+  exclude: [...configDefaults.exclude, "tests"],
+  ```
+
+No test file changes are needed either way: the pilot suites are unmodified and
+pass in both environments. The expectations in `__tests__/vite-config.test.ts`
+describe the split, so remove them in the same commit as a full revert.
+
 ### Mutation testing
 
 Stryker checks whether the Vitest suite detects deliberate changes to the
@@ -158,6 +357,43 @@ threshold.
 
 Stryker does not cover the small Python surface in this repository; mutating it
 would need a Python test harness and Python-specific mutation tool.
+
+## Design doc for non-trivial PRs
+
+For a non-trivial PR — a new or changed public API, a new subsystem, a behavior change in
+core logic, or a migration — a reviewer often has to reconstruct the design from the diff
+alone. That is slow. You are encouraged (not required) to add a short design doc so reviewers
+grasp the proposal at a glance.
+
+The convention:
+
+1. Write a **self-contained HTML** page (inline CSS/SVG, opens by double-click) that covers
+   the code/API design and a **before/after** of your change, grounded to the actual code.
+   Keep it static, with no scripts: htmlpreview runs the page in the reviewer's browser.
+2. Commit it under the temporary **`.pr/`** directory, e.g. `.pr/design.html`. This directory
+   is for PR-only artifacts and must not land in `main`. For a same-repository PR it is
+   **removed automatically when the PR is approved** (`.github/workflows/pr-artifacts.yml`).
+   For a fork PR the workflow cannot push to your branch; it posts a notice and, if `.pr/`
+   reaches `main` after merge, opens or updates a cleanup PR. Delete `.pr/` yourself before merge.
+3. Link it near the top of the PR description via htmlpreview, at the commit that contains
+   the page (`git rev-parse HEAD` after you push it):
+
+   ```
+   https://htmlpreview.github.io/?https://github.com/<your-fork>/<repo>/blob/<commit-sha>/.pr/design.html
+   ```
+
+   Use the commit SHA, not the branch name. Approval cleanup removes `.pr/` from the branch,
+   so a branch link stops working while a SHA link keeps resolving. Refresh the link when the
+   page changes substantively.
+
+Keep the essentials in the PR description as well: the intent, the important before/after
+behavior or API shape, compatibility and risk, and code references. The page adds detail.
+
+Skip this for trivial PRs (a typo, a one-line guard, a dependency bump) — there, a design doc
+is just noise. htmlpreview only works for public repos and self-contained pages.
+
+The [`pr-design-doc`](../.agents/skills/pr-design-doc/SKILL.md) skill can generate the page
+for you.
 
 ## CSS isolation and host-app customization
 
@@ -197,9 +433,24 @@ You can create a `.env` file in the project directory with these variables based
 | `VITE_BACKEND_HOST`         | Backend host used by the Vite dev proxy                                                   | `127.0.0.1:8000`       |
 | `VITE_SESSION_API_KEY`      | (Internal) Session API key injected by the launcher — set `LOCAL_BACKEND_API_KEY` instead | -                      |
 | `VITE_WORKING_DIR`          | Workspace path sent when starting new conversations                                       | `workspace/project`    |
-| `VITE_ENABLE_BROWSER_TOOLS` | Set to `false` to omit `BrowserToolSet` from new conversation payloads                    | `true`                 |
+| `VITE_ENABLE_BROWSER_TOOLS` | Set to `false` to start the agent-server with the browser tool set off                    | `true`                 |
 | `VITE_BASE_PATH`            | Build/serve the SPA under a subpath such as `/canvas`                                     | `/`                    |
 | `VITE_MOCK_API`             | Enable/disable API mocking with MSW                                                       | `false`                |
 | `VITE_USE_TLS`              | Use HTTPS/WSS for the Vite proxy target                                                   | `false`                |
 | `VITE_FRONTEND_PORT`        | Port to run the frontend application                                                      | `3001`                 |
 | `VITE_INSECURE_SKIP_VERIFY` | Skip TLS certificate verification for proxied backend requests                            | `false`                |
+
+### Cloud organization recovery in embedded hosts
+
+`AgentServerUIProviders` leaves organization recovery off by default so the host's
+login and onboarding can render before authentication. Import the public
+`CloudOrganizationBoundary` and mount it inside the providers, after your auth
+gate, around consumers that send organization-scoped requests. If the entire
+provider subtree is already authenticated, use `resolveCloudOrganization` to
+apply the same boundary automatically. Recovery fills its containing panel.
+Standalone Canvas mounts the boundary after its own authentication gate.
+
+A successful membership response repairs an inaccessible saved selection. A
+transient lookup failure retains a saved selection; 401/403 responses and an
+empty membership list show recovery instead. Background refreshes retain cached
+membership and user identity while the saved selection remains accessible.

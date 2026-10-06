@@ -85,11 +85,19 @@ export function CustomServerEditor({
         text: t(I18nKey.MCP$TEST_SUCCESS, { count: result.tools.length }),
       };
     }
+    // OAuth results come only from remote servers; `testedServer` may be
+    // left over from an earlier non-OAuth test.
+    const resultServerType = oauthTestResult ? undefined : testedServer?.type;
     return {
       ok: false,
-      text: makeMcpTestErrorMessage(t, result.error_kind, result.error),
+      text: makeMcpTestErrorMessage(
+        t,
+        result.error_kind,
+        result.error,
+        resultServerType,
+      ),
     };
-  }, [oauthTestResult, testResult, t]);
+  }, [oauthTestResult, testResult, testedServer, t]);
 
   // A save always follows a fresh successful probe of the exact config being
   // saved, so publish that result to the card's health entry. For stdio

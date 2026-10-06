@@ -463,6 +463,7 @@ export interface InterfaceOverview {
 export const DASHBOARD_FILTER_VALUES = {
   status: ["all", "active", "failing", "disabled"],
   trigger: ["all", "schedule", "event"],
+  created_by: ["all", "me", "others"],
 } as const;
 
 export type DashboardFilterId = keyof typeof DASHBOARD_FILTER_VALUES;
@@ -476,6 +477,9 @@ export type DashboardStatusValue =
 
 export type DashboardTriggerValue =
   (typeof DASHBOARD_FILTER_VALUES.trigger)[number];
+
+export type DashboardCreatedByValue =
+  (typeof DASHBOARD_FILTER_VALUES.created_by)[number];
 
 export interface InterfaceStatusFilter {
   id: "status";
@@ -491,9 +495,17 @@ export interface InterfaceTriggerFilter {
   options: { value: DashboardTriggerValue; label: string }[];
 }
 
+export interface InterfaceCreatedByFilter {
+  id: "created_by";
+  /** The control's accessible name. */
+  label: string;
+  options: { value: DashboardCreatedByValue; label: string }[];
+}
+
 export type InterfaceDashboardFilter =
   | InterfaceStatusFilter
-  | InterfaceTriggerFilter;
+  | InterfaceTriggerFilter
+  | InterfaceCreatedByFilter;
 
 /** Sort values name comparators this host implements. */
 export const DASHBOARD_SORT_VALUES = ["last-run", "runs", "name"] as const;

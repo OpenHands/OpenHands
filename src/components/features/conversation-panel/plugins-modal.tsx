@@ -1,6 +1,9 @@
 import { useTranslation } from "react-i18next";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
-import { ModalBody } from "#/components/shared/modals/modal-body";
+import {
+  MODAL_MAX_WIDTH_VIEWPORT,
+  ModalBody,
+} from "#/components/shared/modals/modal-body";
 import { ModalCloseButton } from "#/components/shared/modals/modal-close-button";
 import { BaseModalTitle } from "#/components/shared/modals/confirmation-modals/base-modal";
 import { I18nKey } from "#/i18n/declaration";
@@ -12,6 +15,7 @@ import {
   isLocalPluginSource,
   pluginReferenceKey,
 } from "#/utils/plugin-display";
+import { cn } from "#/utils/utils";
 
 interface PluginsModalProps {
   onClose: () => void;
@@ -32,7 +36,10 @@ export function PluginsModal({ onClose }: PluginsModalProps) {
     <ModalBackdrop onClose={onClose}>
       <ModalBody
         width="lg"
-        className="relative flex max-h-[80vh] flex-col items-start border border-border"
+        className={cn(
+          "relative flex max-h-[80vh] flex-col items-start border border-border",
+          MODAL_MAX_WIDTH_VIEWPORT,
+        )}
         testID="plugins-modal"
       >
         <ModalCloseButton onClose={onClose} testId="close-plugins-modal" />

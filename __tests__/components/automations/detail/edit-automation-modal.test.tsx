@@ -459,6 +459,49 @@ describe("EditAutomationModal", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it("cannot be dismissed while a save is pending, so a failed save still shows its toast", async () => {
+    // Arrange — the PATCH stays in flight until the test rejects it.
+    let rejectSave: (error: Error) => void = () => {};
+    vi.mocked(AutomationService.updateAutomation).mockReturnValue(
+      new Promise((_, reject) => {
+        rejectSave = reject;
+      }),
+    );
+    const user = userEvent.setup();
+    const { container, onClose } = renderModal(dailyAutomation);
+    const timeInput = screen.getByTestId("edit-automation-time");
+    await user.clear(timeInput);
+    await user.type(timeInput, "10:30");
+    await user.click(screen.getByTestId("edit-automation-save"));
+    await waitFor(() =>
+      expect(AutomationService.updateAutomation).toHaveBeenCalledTimes(1),
+    );
+
+    // Act — try every dismiss path while the save is pending.
+    const backdrop = container.querySelector<HTMLElement>(
+      '[role="presentation"]',
+    )!;
+    // The X in the corner; the footer Cancel button shares its name.
+    const [closeButton] = screen.getAllByRole("button", {
+      name: "AUTOMATIONS$CANCEL",
+    });
+    await user.click(backdrop);
+    backdrop.focus();
+    await user.keyboard("{Escape}");
+    await user.click(closeButton);
+
+    // Assert — the dialog stays, and the failure reaches its toast.
+    expect(closeButton).toBeDisabled();
+    expect(onClose).not.toHaveBeenCalled();
+    rejectSave(new Error("backend down"));
+    await waitFor(() => {
+      expect(displayErrorToast).toHaveBeenCalledTimes(1);
+    });
+    await waitFor(() => expect(closeButton).toBeEnabled());
+    await user.click(closeButton);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it("persists the newly selected LLM profile in the update payload", async () => {
     // Arrange — automation currently runs on the "fast" profile, with a
     // second "careful" profile available to switch to.

@@ -4,8 +4,10 @@ import { RemoteWorkspace } from "@openhands/typescript-client/workspace/remote-w
 import ConversationService from "#/api/conversation-service/conversation-service.api";
 import { clearAgentServerHomeDirCache } from "#/api/agent-server-home";
 
-const fileUploadMock = vi.fn();
-const getHomeMock = vi.fn();
+const { fileUploadMock, getHomeMock } = vi.hoisted(() => ({
+  fileUploadMock: vi.fn(),
+  getHomeMock: vi.fn(),
+}));
 
 vi.mock("@openhands/typescript-client/workspace/remote-workspace", () => ({
   RemoteWorkspace: vi.fn(function RemoteWorkspaceMock() {

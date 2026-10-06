@@ -1,4 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { LayoutGroup } from "framer-motion";
 import { Gauge, Globe, ListTodo, SquareChevronRight } from "lucide-react";
@@ -8,20 +14,16 @@ import DoubleCheckIcon from "#/icons/double-check.svg?react";
 import { EllipsisButton } from "#/components/features/conversation-panel/ellipsis-button";
 import { cn } from "#/utils/utils";
 import { useConversationLocalStorageState } from "#/utils/conversation-local-storage";
+import { CONVERSATION_TAB_LABEL_KEYS } from "./conversation-tab-ids";
 import { ConversationTabNav } from "./conversation-tab-nav";
-import { DrawerVSCodeLink } from "./drawer-vscode-link";
 import { ChatActionTooltip } from "../../chat/chat-action-tooltip";
 import { I18nKey } from "#/i18n/declaration";
 import { useConversationStore } from "#/stores/conversation-store";
 import { ConversationTabsContextMenu } from "./conversation-tabs-context-menu";
+import { ConversationPlannerBuildBar } from "./conversation-planner-build-bar";
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { useSelectConversationTab } from "#/hooks/use-select-conversation-tab";
 import { useTaskList } from "#/hooks/use-task-list";
-import { useActiveBackend } from "#/contexts/active-backend-context";
-import { useHandleBuildPlanClick } from "#/hooks/use-handle-build-plan-click";
-import { useAgentState, usePlanningAgentState } from "#/hooks/use-agent-state";
-import { AgentState } from "#/types/agent-state";
-import { Typography } from "#/ui/typography";
 import { mobileTopBarIconClassName } from "#/utils/mobile-top-bar-icon-button-classes";
 
 export function ConversationTabs({
@@ -33,7 +35,7 @@ export function ConversationTabs({
   isPanelResizing?: boolean;
 }) {
   const { conversationId } = useConversationId();
-  const { setSelectedTab, planContent } = useConversationStore();
+  const { setSelectedTab } = useConversationStore();
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
@@ -41,11 +43,6 @@ export function ConversationTabs({
     useConversationLocalStorageState(conversationId);
 
   const { hasTaskList } = useTaskList();
-  const { backend } = useActiveBackend();
-
-  const { handleBuildPlanClick } = useHandleBuildPlanClick();
-  const { curAgentState } = useAgentState();
-  const { isPlanningAgentRunning } = usePlanningAgentState();
 
   const {
     selectTab,
@@ -89,36 +86,36 @@ export function ConversationTabs({
       isActive: isTabActive("files"),
       icon: DocumentIcon,
       onClick: () => selectTab("files"),
-      tooltipContent: t(I18nKey.COMMON$FILES),
-      tooltipAriaLabel: t(I18nKey.COMMON$FILES),
-      label: t(I18nKey.COMMON$FILES),
+      tooltipContent: t(CONVERSATION_TAB_LABEL_KEYS.files),
+      tooltipAriaLabel: t(CONVERSATION_TAB_LABEL_KEYS.files),
+      label: t(CONVERSATION_TAB_LABEL_KEYS.files),
     },
     {
       tabValue: "commits",
       isActive: isTabActive("commits"),
       icon: LuFileDiff,
       onClick: () => selectTab("commits"),
-      tooltipContent: t(I18nKey.DIFF_VIEWER$COMMITS),
-      tooltipAriaLabel: t(I18nKey.DIFF_VIEWER$COMMITS),
-      label: t(I18nKey.DIFF_VIEWER$COMMITS),
+      tooltipContent: t(CONVERSATION_TAB_LABEL_KEYS.commits),
+      tooltipAriaLabel: t(CONVERSATION_TAB_LABEL_KEYS.commits),
+      label: t(CONVERSATION_TAB_LABEL_KEYS.commits),
     },
     {
       tabValue: "planner",
       isActive: isTabActive("planner"),
       icon: ListTodo,
       onClick: () => selectTab("planner"),
-      tooltipContent: t(I18nKey.COMMON$PLANNER),
-      tooltipAriaLabel: t(I18nKey.COMMON$PLANNER),
-      label: t(I18nKey.COMMON$PLANNER),
+      tooltipContent: t(CONVERSATION_TAB_LABEL_KEYS.planner),
+      tooltipAriaLabel: t(CONVERSATION_TAB_LABEL_KEYS.planner),
+      label: t(CONVERSATION_TAB_LABEL_KEYS.planner),
     },
     {
       tabValue: "terminal",
       isActive: isTabActive("terminal"),
       icon: SquareChevronRight,
       onClick: () => selectTab("terminal"),
-      tooltipContent: t(I18nKey.COMMON$TERMINAL),
-      tooltipAriaLabel: t(I18nKey.COMMON$TERMINAL),
-      label: t(I18nKey.COMMON$TERMINAL),
+      tooltipContent: t(CONVERSATION_TAB_LABEL_KEYS.terminal),
+      tooltipAriaLabel: t(CONVERSATION_TAB_LABEL_KEYS.terminal),
+      label: t(CONVERSATION_TAB_LABEL_KEYS.terminal),
       className: "pl-2",
     },
     {
@@ -126,18 +123,18 @@ export function ConversationTabs({
       isActive: isTabActive("browser"),
       icon: Globe,
       onClick: () => selectTab("browser"),
-      tooltipContent: t(I18nKey.COMMON$BROWSER),
-      tooltipAriaLabel: t(I18nKey.COMMON$BROWSER),
-      label: t(I18nKey.COMMON$BROWSER),
+      tooltipContent: t(CONVERSATION_TAB_LABEL_KEYS.browser),
+      tooltipAriaLabel: t(CONVERSATION_TAB_LABEL_KEYS.browser),
+      label: t(CONVERSATION_TAB_LABEL_KEYS.browser),
     },
     {
       tabValue: "usage",
       isActive: isTabActive("usage"),
       icon: Gauge,
       onClick: () => selectTab("usage"),
-      tooltipContent: t(I18nKey.COMMON$USAGE),
-      tooltipAriaLabel: t(I18nKey.COMMON$USAGE),
-      label: t(I18nKey.COMMON$USAGE),
+      tooltipContent: t(CONVERSATION_TAB_LABEL_KEYS.usage),
+      tooltipAriaLabel: t(CONVERSATION_TAB_LABEL_KEYS.usage),
+      label: t(CONVERSATION_TAB_LABEL_KEYS.usage),
     },
   ];
 
@@ -148,9 +145,9 @@ export function ConversationTabs({
       isActive: isTabActive("tasklist"),
       icon: DoubleCheckIcon,
       onClick: () => selectTab("tasklist"),
-      tooltipContent: t(I18nKey.COMMON$TASK_LIST),
-      tooltipAriaLabel: t(I18nKey.COMMON$TASK_LIST),
-      label: t(I18nKey.COMMON$TASK_LIST),
+      tooltipContent: t(CONVERSATION_TAB_LABEL_KEYS.tasklist),
+      tooltipAriaLabel: t(CONVERSATION_TAB_LABEL_KEYS.tasklist),
+      label: t(CONVERSATION_TAB_LABEL_KEYS.tasklist),
     });
   }
 
@@ -164,16 +161,9 @@ export function ConversationTabs({
 
   const unpinnedSignature = persistedState.unpinnedTabs.join(",");
 
-  const isAgentRunning =
-    curAgentState === AgentState.RUNNING ||
-    curAgentState === AgentState.LOADING ||
-    isPlanningAgentRunning;
-  const isBuildDisabled = isAgentRunning || !planContent;
-
   const tabsRowInnerRef = useRef<HTMLDivElement>(null);
   const measureRowRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const vscodeButtonRef = useRef<HTMLDivElement>(null);
   const anchorRef = useRef<HTMLButtonElement>(null);
   const [inlineTabCount, setInlineTabCount] = useState(visibleTabs.length);
 
@@ -181,8 +171,7 @@ export function ConversationTabs({
     const rowInner = tabsRowInnerRef.current;
     const measureRow = measureRowRef.current;
     const menuEl = menuRef.current;
-    const vscodeEl = vscodeButtonRef.current;
-    if (!rowInner || !measureRow || !menuEl || !vscodeEl) return undefined;
+    if (!rowInner || !measureRow || !menuEl) return undefined;
 
     const measure = () => {
       const measureButtons = measureRow.querySelectorAll<HTMLButtonElement>(
@@ -206,14 +195,13 @@ export function ConversationTabs({
       }
 
       const menuWidth = menuEl.getBoundingClientRect().width;
-      const vscodeWidth = vscodeEl.getBoundingClientRect().width;
       const gapCss =
         getComputedStyle(rowInner).columnGap || getComputedStyle(rowInner).gap;
       const gapPx = parseFloat(gapCss) || 6;
 
       let nextCount = 0;
       for (let k = tabCount; k >= 0; k -= 1) {
-        let total = menuWidth + vscodeWidth;
+        let total = menuWidth;
         for (let i = 0; i < k; i += 1) {
           total += widths[i] ?? 0;
         }
@@ -233,24 +221,63 @@ export function ConversationTabs({
     if (typeof ResizeObserver === "undefined") return undefined;
     const ro = new ResizeObserver(measure);
     ro.observe(rowInner);
-    // The editor button's presence is resolved asynchronously (the hook probes
-    // /api/vscode/status), and it sits inside an `ml-auto shrink-0` wrapper, so
-    // it appearing or disappearing does not change `rowInner`'s own box and
-    // would not otherwise re-measure. Its width is folded into the fit
-    // calculation above, so a stale value permanently costs an inline tab.
-    ro.observe(vscodeEl);
     return () => ro.disconnect();
   }, [
     unpinnedSignature,
     visibleTabs.length,
     hasTaskList,
-    backend.kind,
     selectedTab,
     isRightPanelShown,
     i18n.language,
   ]);
 
   const safeInlineTabCount = Math.min(inlineTabCount, visibleTabs.length);
+  const inlineTabs = visibleTabs.slice(0, safeInlineTabCount);
+
+  // Roving tabindex: the strip is a single tab stop. It sits on the selected
+  // tab — drawer open or not, since the strip stays in the accessibility tree
+  // while the drawer is collapsed — until the user arrows elsewhere.
+  const selectedTabIndex = inlineTabs.findIndex(
+    (tab) => tab.tabValue === selectedTab,
+  );
+  const [rovingTabIndex, setRovingTabIndex] = useState(0);
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  useEffect(() => {
+    if (selectedTabIndex >= 0) setRovingTabIndex(selectedTabIndex);
+  }, [selectedTabIndex]);
+
+  const tabStopIndex = Math.min(
+    rovingTabIndex,
+    Math.max(inlineTabs.length - 1, 0),
+  );
+
+  // Arrow keys move focus only; Enter/Space still activate, which keeps the
+  // drawer from thrashing through tabs as the user scans the strip.
+  const handleTabKeyDown = (
+    event: KeyboardEvent<HTMLButtonElement>,
+    index: number,
+  ) => {
+    const lastIndex = inlineTabs.length - 1;
+    if (lastIndex < 0) return;
+
+    let nextIndex: number;
+    if (event.key === "ArrowRight") {
+      nextIndex = index === lastIndex ? 0 : index + 1;
+    } else if (event.key === "ArrowLeft") {
+      nextIndex = index === 0 ? lastIndex : index - 1;
+    } else if (event.key === "Home") {
+      nextIndex = 0;
+    } else if (event.key === "End") {
+      nextIndex = lastIndex;
+    } else {
+      return;
+    }
+
+    event.preventDefault();
+    setRovingTabIndex(nextIndex);
+    tabRefs.current[nextIndex]?.focus();
+  };
 
   return (
     <>
@@ -305,47 +332,57 @@ export function ConversationTabs({
           <div className="flex min-w-0 flex-1 items-center justify-start overflow-hidden">
             <div className="flex w-fit max-w-full min-w-0 items-center gap-1.5">
               <LayoutGroup id="conversation-drawer-tabs">
-                <div className="flex w-fit max-w-full min-w-0 flex-nowrap items-center gap-1.5 overflow-x-hidden">
-                  {visibleTabs
-                    .slice(0, safeInlineTabCount)
-                    .map(
-                      (
-                        {
-                          tabValue,
-                          icon,
-                          onClick,
-                          isActive,
-                          tooltipContent,
-                          tooltipAriaLabel,
-                          label,
-                          className: tabClassName,
-                        },
-                        index,
-                      ) => (
-                        <ChatActionTooltip
-                          key={`${tabValue}-${index}`}
-                          tooltip={tooltipContent}
-                          ariaLabel={tooltipAriaLabel}
-                        >
-                          <ConversationTabNav
-                            tabValue={tabValue}
-                            icon={icon}
-                            onClick={onClick}
-                            isActive={isActive}
-                            label={label}
-                            className={cn(tabClassName, "shrink-0")}
-                            suppressLayoutAnimation={isPanelResizing}
-                          />
-                        </ChatActionTooltip>
-                      ),
-                    )}
+                <div
+                  // A narrow drawer can push every tab into the overflow menu,
+                  // and a tablist owning no tabs is not a tablist.
+                  role={inlineTabs.length > 0 ? "tablist" : undefined}
+                  aria-label={t(I18nKey.CONVERSATION$TABS_LABEL)}
+                  className="flex w-fit max-w-full min-w-0 flex-nowrap items-center gap-1.5 overflow-x-hidden"
+                >
+                  {inlineTabs.map(
+                    (
+                      {
+                        tabValue,
+                        icon,
+                        onClick,
+                        isActive,
+                        tooltipContent,
+                        tooltipAriaLabel,
+                        label,
+                        className: tabClassName,
+                      },
+                      index,
+                    ) => (
+                      <ChatActionTooltip
+                        key={`${tabValue}-${index}`}
+                        tooltip={tooltipContent}
+                        ariaLabel={tooltipAriaLabel}
+                      >
+                        <ConversationTabNav
+                          tabValue={tabValue}
+                          icon={icon}
+                          onClick={onClick}
+                          isActive={isActive}
+                          isSelected={selectedTab === tabValue}
+                          label={label}
+                          className={cn(tabClassName, "shrink-0")}
+                          suppressLayoutAnimation={isPanelResizing}
+                          tabIndex={index === tabStopIndex ? 0 : -1}
+                          onKeyDown={(event) => handleTabKeyDown(event, index)}
+                          buttonRef={(node) => {
+                            tabRefs.current[index] = node;
+                          }}
+                        />
+                      </ChatActionTooltip>
+                    ),
+                  )}
                 </div>
               </LayoutGroup>
               <div ref={menuRef} className="relative shrink-0">
                 <EllipsisButton
                   ref={anchorRef}
                   onClick={() => setIsMenuOpen(!isMenuOpen)}
-                  ariaLabel={t(I18nKey.COMMON$MORE_OPTIONS)}
+                  ariaLabel={t(I18nKey.CONVERSATION$CUSTOMIZE_TABS)}
                   iconClassName={
                     variant === "compact"
                       ? mobileTopBarIconClassName
@@ -361,38 +398,11 @@ export function ConversationTabs({
               </div>
             </div>
           </div>
-          {/* The ref'd wrapper must stay mounted — the overflow measurement
-              effect above bails if it's missing. */}
-          <div ref={vscodeButtonRef} className="ml-auto shrink-0 pr-1">
-            <DrawerVSCodeLink />
-          </div>
         </div>
       </div>
-      {isTabActive("planner") && (
-        <div
-          className={cn(
-            "flex h-10 min-h-10 shrink-0 items-center border-t border-border pl-2.5 pr-1",
-          )}
-        >
-          <button
-            type="button"
-            onClick={handleBuildPlanClick}
-            disabled={isBuildDisabled}
-            className={cn(
-              "flex h-5 min-w-17 items-center justify-center rounded bg-contrast px-2 transition-opacity",
-              isBuildDisabled
-                ? "cursor-not-allowed opacity-50"
-                : "cursor-pointer hover:opacity-90",
-            )}
-            data-testid="planner-tab-build-button"
-          >
-            <Typography.Text className="text-[11px] font-normal leading-5 text-contrast-foreground">
-              {/* eslint-disable-next-line i18next/no-literal-string */}
-              {t(I18nKey.COMMON$BUILD)} ⌘↩
-            </Typography.Text>
-          </button>
-        </div>
-      )}
+      {/* At phone width the panel page renders this below its fixed-height
+          top bar, where the compact tab row lives. */}
+      {variant === "default" && <ConversationPlannerBuildBar />}
     </>
   );
 }

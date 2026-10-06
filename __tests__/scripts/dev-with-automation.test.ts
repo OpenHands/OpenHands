@@ -22,6 +22,7 @@ import {
   buildConfig,
   buildRouteArgs,
   buildViteBackendEnv,
+  buildViteFrontendEnv,
   getAgentServerBaseUrl,
   getFrontendBackend,
   getLocalServiceRoutes,
@@ -32,8 +33,6 @@ import {
   DEFAULT_AUTOMATION_REPO,
   DEFAULT_AUTOMATION_PACKAGE,
   DEFAULT_AUTOMATION_VERSION,
-  DEFAULT_BACKEND_PORT,
-  DEFAULT_AUTOMATION_PORT,
 } from "../../scripts/dev-with-automation.mjs";
 import {
   buildAgentServerEnv,
@@ -318,6 +317,7 @@ describe("buildConfig", () => {
     keyDirs.push(dir);
     return {
       OH_SESSION_API_KEY_PATH: path.join(dir, "session-api-key.txt"),
+      OH_CANVAS_ENABLE_VSCODE: "true",
       // High ports that are almost certainly free, so assertPortsFree passes.
       PORT: "19902",
       OH_CANVAS_SAFE_BACKEND_PORT: "19900",
@@ -388,22 +388,23 @@ describe("buildConfig", () => {
   });
 
   it("throws when ingress port is busy", async () => {
-    const busyPort = 8100;
-
-    // Block port 8100
     const server = net.createServer();
-    await new Promise<void>((resolve, reject) => {
-      server.listen(busyPort, "127.0.0.1", () => {
+    const busyPort = await new Promise<number>((resolve, reject) => {
+      server.listen(0, "127.0.0.1", () => {
+        const address = server.address();
+        if (!address || typeof address === "string") {
+          reject(new Error("Expected a TCP server address"));
+          return;
+        }
         servers.push(server);
-        resolve();
+        resolve(address.port);
       });
       server.on("error", reject);
     });
 
-    // Should throw instead of falling back to a different port
     await expect(
       buildConfig({ port: busyPort }, envWithIsolatedKeyPath()),
-    ).rejects.toThrow(/ingress.*port 8100/i);
+    ).rejects.toThrow(new RegExp(`ingress.*port ${busyPort}`, "i"));
   });
 
   it("allocates valid ports for all services", async () => {
@@ -532,6 +533,7 @@ describe("stack mode routing", () => {
     keyDirs.push(dir);
     return {
       OH_SESSION_API_KEY_PATH: path.join(dir, "session-api-key.txt"),
+      OH_CANVAS_ENABLE_VSCODE: "true",
       PORT: "19802",
       OH_CANVAS_SAFE_BACKEND_PORT: "19800",
       OH_CANVAS_SAFE_AUTOMATION_PORT: "19801",
@@ -599,6 +601,66 @@ describe("stack mode routing", () => {
     expect(buildViteBackendEnv(config, {})).toEqual({
       VITE_BACKEND_HOST: `127.0.0.1:${config.ingressPort}`,
     });
+  });
+
+  it("binds Vite to loopback and injects the key by default", async () => {
+    const config = await buildConfig({}, envWithIsolatedKeyPath());
+
+    expect(buildViteFrontendEnv(config)).toMatchObject({
+      VITE_BIND_HOST: "127.0.0.1",
+      VITE_SESSION_API_KEY: config.sessionApiKey,
+    });
+    expect(buildViteFrontendEnv(config)).not.toHaveProperty(
+      "VITE_AUTH_REQUIRED",
+    );
+  });
+
+  it("keeps the session key out of an off-loopback Vite origin", async () => {
+    const config = await buildConfig(
+      { host: "0.0.0.0" },
+      envWithIsolatedKeyPath(),
+    );
+
+    const viteEnv = buildViteFrontendEnv(config);
+    expect(viteEnv.VITE_BIND_HOST).toBe("0.0.0.0");
+    expect(viteEnv).not.toHaveProperty("VITE_SESSION_API_KEY");
+    expect(viteEnv.VITE_AUTH_REQUIRED).toBe("true");
+  });
+
+  it("makes the key-free ingress reachable to Docker conversations", async () => {
+    const config = await buildConfig(
+      {},
+      envWithIsolatedKeyPath({ OH_CONVERSATION_RUNTIME: "docker" }),
+    );
+
+    expect(config.bindHost).toBe("0.0.0.0");
+    expect(buildViteFrontendEnv(config)).not.toHaveProperty(
+      "VITE_SESSION_API_KEY",
+    );
+  });
+
+  it("honors an explicit loopback override in Docker conversation mode", async () => {
+    const config = await buildConfig(
+      {},
+      envWithIsolatedKeyPath({
+        OH_CONVERSATION_RUNTIME: "docker",
+        OH_BIND_HOST: "127.0.0.1",
+      }),
+    );
+
+    expect(config.bindHost).toBe("127.0.0.1");
+  });
+
+  it("keeps the session key out of public-mode Vite on loopback", async () => {
+    const config = await buildConfig(
+      { public: true },
+      envWithIsolatedKeyPath({ LOCAL_BACKEND_API_KEY: "public-key" }),
+    );
+
+    const viteEnv = buildViteFrontendEnv(config);
+    expect(viteEnv.VITE_BIND_HOST).toBe("127.0.0.1");
+    expect(viteEnv).not.toHaveProperty("VITE_SESSION_API_KEY");
+    expect(viteEnv.VITE_AUTH_REQUIRED).toBe("true");
   });
 
   it("allows frontend-only Vite to target an explicit backend URL", async () => {
@@ -783,26 +845,6 @@ describe("stack mode routing", () => {
         envWithIsolatedKeyPath(),
       ),
     ).rejects.toThrow(/cannot be used together/);
-  });
-});
-
-describe("default constants", () => {
-  it("has expected default automation repo", () => {
-    expect(DEFAULT_AUTOMATION_REPO).toBe(
-      "https://github.com/OpenHands/automation",
-    );
-  });
-
-  it("has expected default automation package", () => {
-    expect(DEFAULT_AUTOMATION_PACKAGE).toBe("openhands-automation");
-  });
-
-  it("has expected default backend port", () => {
-    expect(DEFAULT_BACKEND_PORT).toBe(18000);
-  });
-
-  it("has expected default automation port", () => {
-    expect(DEFAULT_AUTOMATION_PORT).toBe(18001);
   });
 });
 

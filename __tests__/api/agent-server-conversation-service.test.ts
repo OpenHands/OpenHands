@@ -3,7 +3,6 @@ import {
   FileClient,
   ProfilesClient,
   SettingsClient,
-  VSCodeClient,
 } from "@openhands/typescript-client/clients";
 import { http, HttpResponse } from "msw";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
@@ -41,12 +40,11 @@ const {
   mockForkConversation,
   mockGetEvent,
   mockSwitchAcpModel,
-  mockVSCodeGetUrl,
-  mockVSCodeGetStatus,
   mockGetSettings,
   mockGetSettingsForConversation,
   mockGetProfile,
   mockActivateProfile,
+  mockListProfiles,
 } = vi.hoisted(() => ({
   mockHttpGet: vi.fn(),
   mockHttpPost: vi.fn(),
@@ -63,12 +61,11 @@ const {
   mockForkConversation: vi.fn(),
   mockGetEvent: vi.fn(),
   mockSwitchAcpModel: vi.fn(),
-  mockVSCodeGetUrl: vi.fn(),
-  mockVSCodeGetStatus: vi.fn(),
   mockGetSettings: vi.fn(),
   mockGetSettingsForConversation: vi.fn(),
   mockGetProfile: vi.fn(),
   mockActivateProfile: vi.fn(),
+  mockListProfiles: vi.fn(),
 }));
 
 vi.mock("@openhands/typescript-client/clients", async () => {
@@ -87,13 +84,11 @@ vi.mock("@openhands/typescript-client/clients", async () => {
       return {
         getProfile: mockGetProfile,
         activateProfile: mockActivateProfile,
+        listProfiles: mockListProfiles,
       };
     }),
     SettingsClient: vi.fn(function SettingsClientMock() {
       return mockSettingsClient();
-    }),
-    VSCodeClient: vi.fn(function VSCodeClientMock() {
-      return { getUrl: mockVSCodeGetUrl, getStatus: mockVSCodeGetStatus };
     }),
   };
 });
@@ -216,6 +211,7 @@ describe("AgentServerConversationService", () => {
     mockHttpDelete.mockReset();
     mockGetProfile.mockReset();
     mockActivateProfile.mockReset();
+    mockListProfiles.mockReset();
     mockSwitchProfile.mockReset();
     mockSwitchLLM.mockReset();
     mockSendEvent.mockReset();
@@ -225,13 +221,10 @@ describe("AgentServerConversationService", () => {
     mockForkConversation.mockReset();
     mockGetEvent.mockReset();
     mockSwitchAcpModel.mockReset();
-    mockVSCodeGetUrl.mockReset();
-    mockVSCodeGetStatus.mockReset();
     vi.mocked(ConversationClient).mockClear();
     vi.mocked(FileClient).mockClear();
     vi.mocked(ProfilesClient).mockClear();
     vi.mocked(SettingsClient).mockClear();
-    vi.mocked(VSCodeClient).mockClear();
 
     mockConversationClient.mockReturnValue({
       createConversation: async (payload: unknown) => {
@@ -312,23 +305,6 @@ describe("AgentServerConversationService", () => {
       await expect(
         AgentServerConversationService.updateConversationTags("gone", {}),
       ).rejects.toThrow("gone");
-    });
-
-    it("preserves disabled editor capability and explicit runtime credentials", async () => {
-      const status = { enabled: false, running: false };
-      mockVSCodeGetStatus.mockResolvedValue(status);
-      await expect(
-        AgentServerConversationService.getVSCodeStatus(
-          "https://runtime.example.test/api/conversations/conv-1",
-          "session-key",
-        ),
-      ).resolves.toEqual(status);
-      expect(VSCodeClient).toHaveBeenCalledWith(
-        expect.objectContaining({
-          host: "https://runtime.example.test",
-          apiKey: "session-key",
-        }),
-      );
     });
 
     it("renames Cloud conversations through the Cloud resource", async () => {
@@ -502,9 +478,10 @@ describe("AgentServerConversationService", () => {
         workingDir: "/workspace/project/agent-canvas",
       });
       expect(FileClient).toHaveBeenCalledWith({
+        conversationId: "conv-123",
         host: "http://localhost:54928",
         apiKey: "test-api-key",
-        workingDir: "/workspace/project/agent-canvas",
+        workingDir: "/workspace/project/agent-canvas/conv-123",
       });
       expect(mockHttpGet).toHaveBeenCalledWith(
         "/api/file/download",
@@ -552,6 +529,146 @@ describe("AgentServerConversationService", () => {
   });
 
   describe("createConversation", () => {
+    // #16885 — A named agent profile's pinned LLM (llm_profile_ref) must reach
+    // the agent-server as `title_llm_profile` when no explicit preference is
+    // set, so the title uses the same model as the running agent. These cover
+    // the conversation-creation integration criterion at the service boundary
+    // (the POST /api/conversations payload), not just the resolver.
+    it("sends the agent profile's pinned LLM as title_llm_profile when no explicit preference is set", async () => {
+      mockGetSettings.mockResolvedValue({
+        title_llm_profile: null,
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockListProfiles.mockResolvedValue({
+        profiles: [
+          {
+            name: "fast",
+            model: "anthropic/claude-haiku",
+            base_url: null,
+            api_key_set: true,
+          },
+          {
+            name: "powerful",
+            model: "anthropic/claude-sonnet",
+            base_url: null,
+            api_key_set: true,
+          },
+        ],
+        active_profile: "fast",
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "ignored-server-id",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      await AgentServerConversationService.createConversation({
+        agentLlmProfileRef: "powerful",
+      });
+
+      expect(mockHttpPost).toHaveBeenCalledWith(
+        "/api/conversations",
+        expect.objectContaining({ title_llm_profile: "powerful" }),
+      );
+    });
+
+    it("keeps an explicit title_llm_profile preference over the agent profile's pinned LLM", async () => {
+      mockGetSettings.mockResolvedValue({
+        title_llm_profile: "Titles",
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockListProfiles.mockResolvedValue({
+        profiles: [
+          {
+            name: "Titles",
+            model: "anthropic/claude-haiku-3-5",
+            base_url: null,
+            api_key_set: true,
+          },
+          {
+            name: "powerful",
+            model: "anthropic/claude-sonnet",
+            base_url: null,
+            api_key_set: true,
+          },
+        ],
+        active_profile: "powerful",
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "ignored-server-id",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      await AgentServerConversationService.createConversation({
+        agentLlmProfileRef: "powerful",
+      });
+
+      expect(mockHttpPost).toHaveBeenCalledWith(
+        "/api/conversations",
+        expect.objectContaining({ title_llm_profile: "Titles" }),
+      );
+    });
+
+    it("falls back to the active profile when the agent profile's pinned LLM is no longer available", async () => {
+      mockGetSettings.mockResolvedValue({
+        title_llm_profile: null,
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockListProfiles.mockResolvedValue({
+        profiles: [
+          {
+            name: "fast",
+            model: "anthropic/claude-haiku",
+            base_url: null,
+            api_key_set: true,
+          },
+        ],
+        active_profile: "fast",
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "ignored-server-id",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      // "powerful" was deleted since the profile was saved, so the resolver
+      // must degrade to the account-wide active profile instead of sending an
+      // unresolvable name.
+      await AgentServerConversationService.createConversation({
+        agentLlmProfileRef: "powerful",
+      });
+
+      expect(mockHttpPost).toHaveBeenCalledWith(
+        "/api/conversations",
+        expect.objectContaining({ title_llm_profile: "fast" }),
+      );
+    });
+
     it("generates a unique conversation_id and isolated working_dir per call", async () => {
       mockGetSettings.mockResolvedValue({
         agent_settings: { llm: { model: "gpt-4o" } },
@@ -1329,7 +1446,7 @@ describe("AgentServerConversationService", () => {
     it("sends a cloud message with runtime credentials supplied by the caller", async () => {
       setRegisteredBackends([cloudBackend]);
       setActiveSelection({ backendId: cloudBackend.id });
-      const proxyRequests = captureRequests(["post"], {});
+      mockSendEvent.mockResolvedValue(undefined);
 
       const result = await AgentServerConversationService.sendMessage(
         "conv-cloud",
@@ -1342,17 +1459,17 @@ describe("AgentServerConversationService", () => {
       );
 
       // Runtime credentials supplied by the caller: no batch-get is issued,
-      // only the single cloud-proxy POST to the runtime.
-      expect(proxyRequests).toHaveLength(1);
-      const [request] = proxyRequests;
-      expect(request.url).toBe("http://localhost:54928/api/cloud-proxy");
-      expect(request.body).toMatchObject({
-        host: "http://runtime.example",
-        method: "POST",
-        path: "/api/conversations/conv-cloud/events",
-        headers: { "X-Session-API-Key": "session-key" },
-        body: { ...message, run: true },
+      // and the message goes straight to the runtime via ConversationClient
+      // (no /api/cloud-proxy envelope).
+      expect(mockSendEvent).toHaveBeenCalledWith("conv-cloud", message, {
+        run: true,
       });
+      expect(ConversationClient).toHaveBeenCalledWith(
+        expect.objectContaining({
+          host: "http://runtime.example",
+          apiKey: "session-key",
+        }),
+      );
       expect(result).toEqual(message);
     });
 
@@ -1360,6 +1477,7 @@ describe("AgentServerConversationService", () => {
       setRegisteredBackends([cloudBackend]);
       setActiveSelection({ backendId: cloudBackend.id });
       const requests: RecordedRequest[] = [];
+      mockSendEvent.mockResolvedValue(undefined);
       server.use(
         http.get(
           "https://app.all-hands.dev/api/v1/app-conversations",
@@ -1380,27 +1498,23 @@ describe("AgentServerConversationService", () => {
             ]);
           },
         ),
-        http.post("*/api/cloud-proxy", async ({ request }) => {
-          requests.push({
-            method: request.method,
-            url: request.url,
-            headers: Object.fromEntries(request.headers.entries()),
-            body: await readJsonBody(request),
-          });
-          return HttpResponse.json({});
-        }),
       );
 
       await AgentServerConversationService.sendMessage("conv-cloud", message);
 
+      // The batch-get still resolves runtime credentials from the App API...
       const batchGet = requests.find((req) => req.method === "GET");
-      const proxyPost = requests.find(
-        (req) => req.url === "http://localhost:54928/api/cloud-proxy",
-      );
       expect(batchGet?.url).toContain("ids=conv-cloud");
-      expect(proxyPost?.body).toMatchObject({
-        host: "http://runtime.example",
-        headers: { "X-Session-API-Key": "fetched-key" },
+      // ...but the send now targets the runtime host directly with the
+      // fetched session key (no /api/cloud-proxy POST).
+      expect(ConversationClient).toHaveBeenCalledWith(
+        expect.objectContaining({
+          host: "http://runtime.example",
+          apiKey: "fetched-key",
+        }),
+      );
+      expect(mockSendEvent).toHaveBeenCalledWith("conv-cloud", message, {
+        run: true,
       });
     });
 
@@ -1451,31 +1565,6 @@ describe("AgentServerConversationService", () => {
       );
     });
 
-    it("requests a VS Code URL for the conversation workspace", async () => {
-      mockHttpGet.mockResolvedValue({
-        data: [
-          makeDirectConversation({
-            workspace: { working_dir: "/workspace/repos/canvas" },
-          }),
-        ],
-      });
-      mockVSCodeGetUrl.mockResolvedValue("http://localhost:3000/vscode");
-
-      const result = await AgentServerConversationService.getVSCodeUrl(
-        "conv-1",
-        "http://runtime.internal:9000",
-        "runtime-key",
-      );
-
-      expect(mockVSCodeGetUrl).toHaveBeenCalledWith({
-        baseUrl: window.location.origin,
-        workspaceDir: "/workspace/repos/canvas",
-      });
-      expect(result).toEqual({
-        vscode_url: "http://localhost:3000/vscode",
-      });
-    });
-
     it("uses the configured working directory when a conversation has no workspace", async () => {
       mockHttpGet.mockResolvedValue({
         data: [makeDirectConversation({ workspace: null })],
@@ -1494,32 +1583,6 @@ describe("AgentServerConversationService", () => {
           "missing-conv",
         ),
       ).resolves.toBe("/workspace/project/agent-canvas");
-    });
-
-    it("omits the browser origin when requesting a VS Code URL during SSR", async () => {
-      mockHttpGet.mockResolvedValue({
-        data: [makeDirectConversation({ workspace: null })],
-      });
-      mockVSCodeGetUrl.mockResolvedValue("http://localhost:3000/vscode");
-      const browserWindow = window;
-      Object.defineProperty(globalThis, "window", {
-        configurable: true,
-        value: undefined,
-      });
-
-      try {
-        await AgentServerConversationService.getVSCodeUrl("conv-1", undefined);
-      } finally {
-        Object.defineProperty(globalThis, "window", {
-          configurable: true,
-          value: browserWindow,
-        });
-      }
-
-      expect(mockVSCodeGetUrl).toHaveBeenCalledWith({
-        baseUrl: undefined,
-        workspaceDir: "/workspace/project/agent-canvas",
-      });
     });
 
     it("does not contact a backend for an empty conversation batch", async () => {
@@ -1578,8 +1641,24 @@ describe("AgentServerConversationService", () => {
       );
     });
 
+    it("resolves an id the agent server does not know to null", async () => {
+      // The batch endpoint answers `null` for each id it does not have.
+      mockHttpGet.mockResolvedValue({
+        data: [makeDirectConversation({ id: "conv-1" }), null],
+      });
+
+      const conversations =
+        await AgentServerConversationService.batchGetAppConversations([
+          "conv-1",
+          "missing-id",
+        ]);
+
+      expect(conversations).toHaveLength(2);
+      expect(conversations[0]?.id).toBe("conv-1");
+      expect(conversations[1]).toBeNull();
+    });
+
     it.each([
-      ["null item", null],
       ["array item", []],
       ["numeric id", { id: 7 }],
       ["blank id", { id: "   " }],
@@ -1825,6 +1904,7 @@ describe("AgentServerConversationService", () => {
       expect(result.status).toBe("paused");
       expect(mockGetConversation).toHaveBeenCalledWith("conv-cloud");
       expect(ConversationClient).toHaveBeenLastCalledWith({
+        conversationId: "conv-cloud",
         host: "http://runtime.example",
         apiKey: "session-key",
         workingDir: "/workspace/project/agent-canvas",
@@ -2475,23 +2555,7 @@ describe("AgentServerConversationService", () => {
 
       expect(result.title).toBe("Conversation conv-");
       expect(ConversationClient).toHaveBeenLastCalledWith({
-        host: "http://runtime.internal:9000",
-        apiKey: "runtime-key",
-        workingDir: "/workspace/project/agent-canvas",
-      });
-    });
-
-    it("constructs the VS Code client with the supplied runtime coordinates", async () => {
-      mockHttpGet.mockResolvedValue({ data: [makeDirectConversation()] });
-      mockVSCodeGetUrl.mockResolvedValue("http://localhost:3000/vscode");
-
-      await AgentServerConversationService.getVSCodeUrl(
-        "conv-1",
-        "http://runtime.internal:9000/api/conversations/conv-1",
-        "runtime-key",
-      );
-
-      expect(VSCodeClient).toHaveBeenCalledWith({
+        conversationId: "conv-1",
         host: "http://runtime.internal:9000",
         apiKey: "runtime-key",
         workingDir: "/workspace/project/agent-canvas",
@@ -2517,6 +2581,7 @@ describe("AgentServerConversationService", () => {
         setRegisteredBackends([cloudBackend]);
         setActiveSelection({ backendId: cloudBackend.id });
         const requests: RecordedRequest[] = [];
+        mockSendEvent.mockResolvedValue(undefined);
         server.use(
           http.get(
             "https://app.all-hands.dev/api/v1/app-conversations",
@@ -2537,15 +2602,6 @@ describe("AgentServerConversationService", () => {
               ]);
             },
           ),
-          http.post("*/api/cloud-proxy", async ({ request }) => {
-            requests.push({
-              method: request.method,
-              url: request.url,
-              headers: Object.fromEntries(request.headers.entries()),
-              body: await readJsonBody(request),
-            });
-            return HttpResponse.json({});
-          }),
         );
 
         await AgentServerConversationService.sendMessage(
@@ -2554,14 +2610,19 @@ describe("AgentServerConversationService", () => {
           runtime,
         );
 
+        // The missing credential is refreshed from the App API...
         const batchGets = requests.filter((req) => req.method === "GET");
-        const proxyPost = requests.find(
-          (req) => req.url === "http://localhost:54928/api/cloud-proxy",
-        );
         expect(batchGets).toHaveLength(1);
-        expect(proxyPost?.body).toMatchObject({
-          host: "http://fetched-runtime.example",
-          headers: { "X-Session-API-Key": "fetched-key" },
+        // ...then the send targets the fetched runtime host directly with
+        // the fetched session key (no /api/cloud-proxy envelope).
+        expect(ConversationClient).toHaveBeenCalledWith(
+          expect.objectContaining({
+            host: "http://fetched-runtime.example",
+            apiKey: "fetched-key",
+          }),
+        );
+        expect(mockSendEvent).toHaveBeenCalledWith("conv-cloud", message, {
+          run: true,
         });
       },
     );
@@ -2620,6 +2681,7 @@ describe("AgentServerConversationService", () => {
       expect(result.status).toBe("running");
       expect(mockGetConversation).toHaveBeenCalledWith("conv-cloud");
       expect(ConversationClient).toHaveBeenLastCalledWith({
+        conversationId: "conv-cloud",
         host: "http://runtime.example",
         apiKey: "runtime-key",
         workingDir: "/workspace/project/agent-canvas",

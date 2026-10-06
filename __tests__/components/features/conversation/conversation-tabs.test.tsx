@@ -1,9 +1,10 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
 import { ConversationTabs } from "#/components/features/conversation/conversation-tabs/conversation-tabs";
+import { CONVERSATION_TAB_PANEL_ID } from "#/components/features/conversation/conversation-tabs/conversation-tab-ids";
 import { useConversationStore } from "#/stores/conversation-store";
 import { AgentState } from "#/types/agent-state";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
@@ -56,16 +57,6 @@ vi.mock("#/hooks/use-agent-state", () => ({
     localPlanningConversationId: null,
     curPlanningAgentState: AgentState.AWAITING_USER_INPUT,
     isPlanningAgentRunning: false,
-  }),
-}));
-
-vi.mock("#/hooks/query/use-unified-vscode-url", () => ({
-  useUnifiedVSCodeUrl: () => ({
-    data: { url: "http://localhost:8001", error: null },
-    isLoading: false,
-    refetch: vi
-      .fn()
-      .mockResolvedValue({ data: { url: "http://localhost:8001" } }),
   }),
 }));
 
@@ -458,6 +449,24 @@ describe("ConversationTabs localStorage behavior", () => {
       ).toBeDisabled();
     });
 
+    it("leaves the build bar out of the compact tab row, which sits in the fixed-height phone top bar", () => {
+      setActiveTabState("planner");
+      useConversationStore.setState({
+        planContent: "# Plan content",
+      });
+
+      render(<ConversationTabs variant="compact" />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      expect(
+        screen.getByTestId("conversation-tab-planner"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("planner-tab-build-button"),
+      ).not.toBeInTheDocument();
+    });
+
     it("calls the build handler when the build button is clicked", async () => {
       const user = userEvent.setup();
       setActiveTabState("planner");
@@ -523,98 +532,6 @@ describe("ConversationTabs localStorage behavior", () => {
     });
   });
 
-  describe("vscode link visibility by backend kind", () => {
-    beforeEach(() => {
-      mockConversationId = REAL_CONVERSATION_ID;
-    });
-
-    it("should show the vscode link when the active backend is local", () => {
-      // Arrange
-      seedActiveBackend({
-        id: "local-test",
-        name: "Local Test",
-        host: "http://localhost:8000",
-        apiKey: "",
-        kind: "local",
-      });
-
-      // Act
-      render(<ConversationTabs />, {
-        wrapper: createWrapper(REAL_CONVERSATION_ID),
-      });
-
-      // Assert — self-hosted backends serve VSCode too; the URL comes from
-      // the agent server's /api/vscode/url via useUnifiedVSCodeUrl's local
-      // branch, rather than from cloud `exposed_urls`.
-      expect(screen.getByTestId("drawer-vscode-link")).toBeInTheDocument();
-    });
-
-    it("should show the vscode link when the active backend is cloud", () => {
-      // Arrange
-      seedActiveBackend({
-        id: "cloud-test",
-        name: "Cloud Test",
-        host: "https://app.example.com",
-        apiKey: "secret",
-        kind: "cloud",
-      });
-
-      // Act
-      render(<ConversationTabs />, {
-        wrapper: createWrapper(REAL_CONVERSATION_ID),
-      });
-
-      // Assert
-      expect(screen.getByTestId("drawer-vscode-link")).toBeInTheDocument();
-    });
-
-    it("re-measures the tab row when the vscode button's own width changes", () => {
-      // The button's width is folded into how many tabs fit inline, and its
-      // presence is now resolved asynchronously (the hook probes
-      // /api/vscode/status). It sits inside an `ml-auto shrink-0` wrapper, so
-      // it appearing or disappearing leaves the row's own box unchanged —
-      // observing only the row would leave the fit computed against a button
-      // that is no longer on screen, permanently costing an inline tab.
-      const observed: Element[] = [];
-      class RecordingResizeObserver {
-        observe = (el: Element) => {
-          observed.push(el);
-        };
-
-        unobserve = vi.fn();
-
-        disconnect = vi.fn();
-      }
-      // Swap only this global back afterwards: vi.unstubAllGlobals() would
-      // also drop the localStorage/ResizeObserver stubs vitest.setup.ts
-      // installs in beforeAll, breaking every later test in the file.
-      const originalResizeObserver = globalThis.ResizeObserver;
-      globalThis.ResizeObserver =
-        RecordingResizeObserver as unknown as typeof ResizeObserver;
-
-      try {
-        seedActiveBackend({
-          id: "local-test",
-          name: "Local Test",
-          host: "http://localhost:8000",
-          apiKey: "",
-          kind: "local",
-        });
-
-        render(<ConversationTabs />, {
-          wrapper: createWrapper(REAL_CONVERSATION_ID),
-        });
-
-        const vscodeWrapper =
-          screen.getByTestId("drawer-vscode-link").parentElement;
-        expect(vscodeWrapper).not.toBeNull();
-        expect(observed).toContain(vscodeWrapper);
-      } finally {
-        globalThis.ResizeObserver = originalResizeObserver;
-      }
-    });
-  });
-
   describe("ellipsis context menu", () => {
     beforeEach(() => {
       mockConversationId = REAL_CONVERSATION_ID;
@@ -669,6 +586,133 @@ describe("ConversationTabs localStorage behavior", () => {
         useConversationStore.getState();
       expect(selectedTab).toBe("tasklist");
       expect(hasRightPanelToggled).toBe(true);
+    });
+  });
+  describe("accessible tab semantics", () => {
+    beforeEach(() => {
+      mockConversationId = REAL_CONVERSATION_ID;
+    });
+
+    it("exposes the tab strip as a tablist and marks the open tab selected", () => {
+      setActiveTabState("files");
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      const tablist = screen.getByRole("tablist");
+      expect(within(tablist).getAllByRole("tab").length).toBeGreaterThan(1);
+
+      const filesTab = screen.getByTestId("conversation-tab-files");
+      expect(filesTab).toHaveAttribute("aria-selected", "true");
+      expect(filesTab).toHaveAttribute(
+        "aria-controls",
+        CONVERSATION_TAB_PANEL_ID,
+      );
+      expect(screen.getByTestId("conversation-tab-browser")).toHaveAttribute(
+        "aria-selected",
+        "false",
+      );
+    });
+
+    it("keeps the selected tab marked, and on the tab stop, while the drawer is closed", () => {
+      // The strip stays in the accessibility tree when the drawer collapses,
+      // so the tab the drawer will reopen on must still read as selected.
+      seedConversationState(REAL_CONVERSATION_ID, { selectedTab: "terminal" });
+      useConversationStore.setState({
+        selectedTab: "terminal",
+        isRightPanelShown: false,
+        hasRightPanelToggled: false,
+      });
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      const terminalTab = screen.getByTestId("conversation-tab-terminal");
+      expect(terminalTab).toHaveAttribute("aria-selected", "true");
+      expect(terminalTab).toHaveAttribute("tabindex", "0");
+      expect(screen.getByTestId("conversation-tab-files")).toHaveAttribute(
+        "tabindex",
+        "-1",
+      );
+    });
+
+    it("names every tab, including the ones rendering icon-only", () => {
+      setActiveTabState("files");
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      // Inactive tabs hide their label, so without an explicit name they
+      // would be announced as an unlabelled button.
+      expect(
+        screen.getByRole("tab", { name: "COMMON$BROWSER" }),
+      ).toBeInTheDocument();
+    });
+
+    it("gives the open tab the strip's only tab stop", () => {
+      setActiveTabState("files");
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      expect(screen.getByTestId("conversation-tab-files")).toHaveAttribute(
+        "tabindex",
+        "0",
+      );
+      expect(screen.getByTestId("conversation-tab-commits")).toHaveAttribute(
+        "tabindex",
+        "-1",
+      );
+    });
+
+    it("moves focus with the arrow keys without changing the open tab", async () => {
+      setActiveTabState("files");
+      const user = userEvent.setup();
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      screen.getByTestId("conversation-tab-files").focus();
+      await user.keyboard("{ArrowRight}");
+
+      expect(screen.getByTestId("conversation-tab-commits")).toHaveFocus();
+      expect(useConversationStore.getState().selectedTab).toBe("files");
+
+      // Wraps around the start of the strip.
+      await user.keyboard("{ArrowLeft}{ArrowLeft}");
+      expect(screen.getByTestId("conversation-tab-usage")).toHaveFocus();
+    });
+
+    it("activates the focused tab with Enter", async () => {
+      setActiveTabState("files");
+      const user = userEvent.setup();
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      screen.getByTestId("conversation-tab-files").focus();
+      await user.keyboard("{ArrowRight}{Enter}");
+
+      expect(useConversationStore.getState().selectedTab).toBe("commits");
+    });
+
+    it("names the overflow trigger for what it customizes", () => {
+      setActiveTabState("files");
+
+      render(<ConversationTabs />, {
+        wrapper: createWrapper(REAL_CONVERSATION_ID),
+      });
+
+      expect(screen.getByTestId("ellipsis-button")).toHaveAttribute(
+        "aria-label",
+        "CONVERSATION$CUSTOMIZE_TABS",
+      );
     });
   });
 });

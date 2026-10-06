@@ -19,7 +19,6 @@ import {
 } from "./dev-process-utils.mjs";
 
 const DEFAULT_EXTRA_BACKEND_PORT = 18002;
-const DEFAULT_EXTRA_VSCODE_PORT = 18003;
 const DEFAULT_WAIT_TIMEOUT_MS = 30_000;
 
 function parsePort(value, fallback) {
@@ -53,10 +52,10 @@ export function buildExtraBackendConfig(
     env.OH_CANVAS_EXTRA_BACKEND_PORT,
     DEFAULT_EXTRA_BACKEND_PORT,
   );
-  const vscodePort = parsePort(
-    env.OH_CANVAS_EXTRA_VSCODE_PORT,
-    DEFAULT_EXTRA_VSCODE_PORT,
-  );
+  const vscodePort =
+    env.OH_CANVAS_ENABLE_VSCODE === "true"
+      ? parsePort(env.OH_CANVAS_EXTRA_VSCODE_PORT, backendPort + 1)
+      : null;
 
   return {
     ...base,

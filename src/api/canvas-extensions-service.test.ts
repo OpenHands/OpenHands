@@ -1,4 +1,7 @@
-import { AgentServerClient } from "@openhands/typescript-client/clients";
+import {
+  AgentServerClient,
+  CanvasExtensionsClient,
+} from "@openhands/typescript-client/clients";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import CanvasExtensionsService, {
   CanvasExtensionsUnsupportedError,
@@ -13,6 +16,7 @@ import type { InstalledCanvasExtensionInfo } from "#/types/canvas-extension";
 
 vi.mock("@openhands/typescript-client/clients", () => ({
   AgentServerClient: vi.fn(),
+  CanvasExtensionsClient: vi.fn(),
 }));
 
 const get = vi.fn();
@@ -20,6 +24,10 @@ const post = vi.fn();
 const patch = vi.fn();
 const remove = vi.fn();
 const request = vi.fn();
+const getServerInfo = vi.fn();
+const createAppBackendSession = vi.fn();
+const revokeAppBackendSession = vi.fn();
+const closeAppBackendClient = vi.fn();
 
 const localBackend: Backend = {
   id: "local",
@@ -63,9 +71,19 @@ beforeEach(() => {
         patch,
         delete: remove,
         request,
+        server: { getServerInfo },
         close: vi.fn(),
       } as unknown as AgentServerClient;
     } as unknown as typeof AgentServerClient,
+  );
+  vi.mocked(CanvasExtensionsClient).mockImplementation(
+    function MockCanvasExtensionsClient() {
+      return {
+        createAppBackendSession,
+        revokeAppBackendSession,
+        close: closeAppBackendClient,
+      };
+    } as never,
   );
 });
 
@@ -204,5 +222,103 @@ describe("CanvasExtensionsService", () => {
       }),
     ).rejects.toThrow("root-relative path");
     expect(AgentServerClient).not.toHaveBeenCalled();
+  });
+
+  it("returns no app view helper when the captured backend lacks bridge capability", async () => {
+    getServerInfo.mockResolvedValue({ capabilities: [] });
+
+    await expect(
+      CanvasExtensionsService.createAppBackendViewClient(
+        extension.name,
+        localBackend,
+      ),
+    ).resolves.toBeNull();
+    expect(createAppBackendSession).not.toHaveBeenCalled();
+  });
+
+  it("creates and revokes app sessions through the discovered bridge ingress", async () => {
+    getServerInfo.mockResolvedValue({
+      capabilities: ["canvas_app_backend_bridge_v1"],
+      app_backend_ingress_url: "https://apps.example.test",
+    });
+    createAppBackendSession.mockResolvedValue({
+      ingress_url: "https://apps.example.test/app-backends/demo-extension/",
+      expires_at: "2026-09-23T16:00:00Z",
+      iframe_sandbox:
+        "allow-forms allow-modals allow-popups allow-same-origin allow-scripts",
+    });
+
+    const viewClient = await CanvasExtensionsService.createAppBackendViewClient(
+      extension.name,
+      localBackend,
+    );
+
+    expect(viewClient).not.toBeNull();
+    await expect(viewClient!.createSession()).resolves.toEqual({
+      url: "https://apps.example.test/app-backends/demo-extension/",
+      expiresAt: "2026-09-23T16:00:00Z",
+      iframeSandbox:
+        "allow-forms allow-modals allow-popups allow-same-origin allow-scripts",
+    });
+    await viewClient!.revokeSession();
+    viewClient!.dispose();
+    expect(CanvasExtensionsClient).toHaveBeenCalledWith({
+      host: localBackend.host,
+      apiKey: localBackend.apiKey,
+      timeout: 60000,
+      workingDir: expect.any(String),
+      appBackendIngressUrl: "https://apps.example.test/",
+    });
+    expect(createAppBackendSession).toHaveBeenCalledWith(
+      extension.name,
+      undefined,
+    );
+    expect(revokeAppBackendSession).toHaveBeenCalledWith(extension.name);
+    expect(closeAppBackendClient).toHaveBeenCalledTimes(1);
+  });
+
+  it("forwards cancellation to the app session request", async () => {
+    getServerInfo.mockResolvedValue({
+      capabilities: ["canvas_app_backend_bridge_v1"],
+      app_backend_ingress_url: "https://apps.example.test",
+    });
+    createAppBackendSession.mockResolvedValue({
+      ingress_url: "https://apps.example.test/app-backends/demo-extension/",
+      expires_at: "2026-09-23T16:00:00Z",
+      iframe_sandbox: "allow-scripts",
+    });
+    const viewClient = await CanvasExtensionsService.createAppBackendViewClient(
+      extension.name,
+      localBackend,
+    );
+    const controller = new AbortController();
+
+    await viewClient!.createSession(controller.signal);
+
+    expect(createAppBackendSession).toHaveBeenCalledWith(
+      extension.name,
+      controller.signal,
+    );
+  });
+
+  it("rejects and revokes a session outside the discovered ingress origin", async () => {
+    getServerInfo.mockResolvedValue({
+      capabilities: ["canvas_app_backend_bridge_v1"],
+      app_backend_ingress_url: "https://apps.example.test",
+    });
+    createAppBackendSession.mockResolvedValue({
+      ingress_url: "https://attacker.example/app-backends/demo-extension/",
+      expires_at: "2026-09-23T16:00:00Z",
+      iframe_sandbox: "allow-scripts",
+    });
+    const viewClient = await CanvasExtensionsService.createAppBackendViewClient(
+      extension.name,
+      localBackend,
+    );
+
+    await expect(viewClient!.createSession()).rejects.toThrow(
+      "session URL is invalid",
+    );
+    expect(revokeAppBackendSession).toHaveBeenCalledWith(extension.name);
   });
 });

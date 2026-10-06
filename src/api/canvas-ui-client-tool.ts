@@ -19,7 +19,7 @@ export interface ClientToolSpec {
   };
 }
 
-const CANVAS_UI_DESCRIPTION = `The user is interacting with you inside Agent Canvas — a web UI with a chat panel on the left and a tabbed right-side panel (files, terminal, browser, vscode, planner, tasklist). This tool lets you drive that right-side panel so the user sees what you just produced.
+const CANVAS_UI_DESCRIPTION = `The user is interacting with you inside Agent Canvas — a web UI with a chat panel on the left and a tabbed right-side panel (files, terminal, browser, planner, tasklist). This tool lets you drive that right-side panel so the user sees what you just produced.
 
 They will NOT see the files you wrote, the terminal output, or the browser
 unless you call this tool to switch the right-side panel to the relevant
@@ -76,7 +76,7 @@ export const CANVAS_UI_CLIENT_TOOL: ClientToolSpec = {
       },
       tab: {
         type: "string",
-        enum: ["files", "browser", "vscode", "terminal", "planner", "tasklist"],
+        enum: ["files", "browser", "terminal", "planner", "tasklist"],
         description: "Tab to open. Required for open_tab; ignored otherwise.",
       },
     },
