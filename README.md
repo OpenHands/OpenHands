@@ -154,7 +154,9 @@ results, and determines its own exit status. See the
 for an existing example.
 
 The legacy [OpenHands CLI](https://github.com/OpenHands/OpenHands-CLI#project-status),
-including its headless mode, is no longer actively maintained.
+including `--headless`, `-t`/`--file`, `--always-approve`, and
+`--override-with-envs`, is no longer actively maintained. Use the
+Python SDK or Agent Server API for new orchestrator integrations.
 
 For a one-shot task, configure an agent and Docker workspace using the
 guide above. Send one message with `conversation.send_message()`, then
@@ -165,9 +167,15 @@ your program waits; it does not cancel the remote run.
 For example, ask the agent to create `result.txt` containing
 `HEADLESS_OK`. For this small example, use `timeout=60` to wait up to
 60 seconds and `max_iteration_per_run=4` to allow up to four iterations.
-Collect events and workspace files, check
-`conversation.state.execution_status`, and verify the file contents
-before choosing your program's exit code.
+
+The orchestrator collects and checks the results as follows:
+
+| Result | Python SDK approach |
+|---|---|
+| Exit status | Read `conversation.state.execution_status`. For this example, return `0` only when it is `finished` and the expected outputs pass verification; otherwise return non-zero. |
+| Logs/events | Pass `callbacks=[events.append]` when creating the conversation, then save events using `event.model_dump_json()`. Tool events include terminal output. |
+| Artifacts | Download files using `workspace.file_download(source, destination)` and check the returned `.success`. |
+| Workspace diff | Run `workspace.execute_command("git diff", cwd=workspace.working_dir)`, check its `.exit_code`, and save its `.stdout`. |
 
 # Architecture
 
