@@ -100,8 +100,8 @@ function automationMatchesQuery(
   integrations: AutomationIntegration[],
   rawQuery: string,
 ) {
-  const query = rawQuery.trim().toLowerCase();
-  if (!query) return true;
+  const queryTerms = rawQuery.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (queryTerms.length === 0) return true;
   const haystack = [
     automation.name,
     automation.category,
@@ -113,7 +113,7 @@ function automationMatchesQuery(
   ]
     .join(" ")
     .toLowerCase();
-  return haystack.includes(query);
+  return queryTerms.every((term) => haystack.includes(term));
 }
 
 function buildRecommendedAutomationPills(
