@@ -14,6 +14,7 @@ import {
   type CommandMenuItemDefinition,
   commandMenuItemCopy,
   createCommandMenuItems,
+  getCommandMenuShortcutKey,
 } from "./command-menu-items";
 
 const COMMAND_MENU_SEARCH_INPUT_ID = "command-menu-search";
@@ -241,7 +242,7 @@ export function CommandMenu() {
             </button>
           ) : null}
           <kbd className="hidden rounded-md border border-border bg-black/25 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-text-dim sm:inline-flex">
-            {t(I18nKey.COMMAND_MENU$SHORTCUT)}
+            {t(getCommandMenuShortcutKey())}
           </kbd>
         </div>
 
