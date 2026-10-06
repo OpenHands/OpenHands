@@ -177,3 +177,5 @@ The Agent Server API is implemented by the SDK and consumed through the TypeScri
 - [Architecture overview](./docs/architecture.md)
 - [Development guide](./docs/DEVELOPMENT.md)
 - [Self-hosting guide](./docs/SELF_HOSTING.md)
+
+<!-- routine access check -->
