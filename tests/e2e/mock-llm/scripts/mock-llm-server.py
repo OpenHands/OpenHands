@@ -241,6 +241,21 @@ class MockLLMHandler(BaseHTTPRequestHandler):
                     ],
                 }
             )
+            # Assistant content alongside tool calls becomes the ActionEvent's
+            # `thought` on the agent-server, so stream it before the calls.
+            if message.get("content"):
+                chunks.append(
+                    {
+                        **base,
+                        "choices": [
+                            {
+                                "index": 0,
+                                "delta": {"content": message["content"]},
+                                "finish_reason": None,
+                            }
+                        ],
+                    }
+                )
             for i, tool_call in enumerate(tool_calls):
                 function = tool_call.get("function", {})
                 chunks.append(
@@ -411,7 +426,9 @@ def _parse_trajectory_turns(raw_turns: list[dict]) -> list[Message | Exception]:
     """Convert JSON turn descriptors into Message objects.
 
     Each turn is a dict with either:
-      - {"tool_call": {"name": ..., "arguments": ...}}  → tool-call message
+      - {"tool_call": {"name": ..., "arguments": ..., "content": "..."}}
+        → tool-call message, with optional assistant content that becomes the
+          ActionEvent's `thought`
       - {"text": "..."}  → text reply message
     """
     messages: list[Message | Exception] = []
@@ -421,7 +438,7 @@ def _parse_trajectory_turns(raw_turns: list[dict]) -> list[Message | Exception]:
             messages.append(
                 Message(
                     role="assistant",
-                    content=[TextContent(text="")],
+                    content=[TextContent(text=tc.get("content") or "")],
                     tool_calls=[
                         MessageToolCall(
                             id=f"call_dyn_{i:03d}",

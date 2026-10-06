@@ -4,8 +4,15 @@ import userEvent from "@testing-library/user-event";
 import { EventMessage } from "#/components/conversation-events/chat/event-message";
 import { useAgentState } from "#/hooks/use-agent-state";
 import { AgentState } from "#/types/agent-state";
-import { ActionEvent, SecurityRisk } from "#/types/agent-server/core";
-import { ThinkAction, ExecuteBashAction } from "#/types/agent-server/core/base/action";
+import {
+  ActionEvent,
+  ObservationEvent,
+  SecurityRisk,
+} from "#/types/agent-server/core";
+import {
+  ThinkAction,
+  ExecuteBashAction,
+} from "#/types/agent-server/core/base/action";
 import { renderWithProviders } from "test-utils";
 
 // Mock useConfig
@@ -89,6 +96,36 @@ const createBashActionEvent = (
   ...overrides,
 });
 
+const createBashObservationEvent = (
+  id: string,
+  actionId: string,
+): ObservationEvent => ({
+  id,
+  timestamp: new Date().toISOString(),
+  source: "environment",
+  tool_name: "execute_bash",
+  tool_call_id: `call_bash_${actionId}`,
+  observation: {
+    kind: "ExecuteBashObservation",
+    content: [{ type: "text", text: "ok\n" }],
+    command: "echo hello",
+    exit_code: 0,
+    error: false,
+    timeout: false,
+    metadata: {
+      exit_code: 0,
+      pid: 1,
+      username: "u",
+      hostname: "h",
+      working_dir: "/",
+      py_interpreter_path: null,
+      prefix: "",
+      suffix: "",
+    },
+  },
+  action_id: actionId,
+});
+
 describe("EventMessage - ThinkAction rendering", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -117,9 +154,7 @@ describe("EventMessage - ThinkAction rendering", () => {
     );
 
     // The raw tool call text should NOT be displayed
-    expect(
-      screen.queryByText(/think: \{"thought":/),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/think: \{"thought":/)).not.toBeInTheDocument();
   });
 
   it("should render ThinkAction as a collapsible section", () => {
@@ -169,9 +204,7 @@ describe("EventMessage - ThinkAction rendering", () => {
     expect(
       screen.getByTestId("collapsible-thinking-content"),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText("Let me analyze the problem"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Let me analyze the problem")).toBeInTheDocument();
   });
 
   it("should render ThoughtEventMessage for non-ThinkAction events", () => {
@@ -191,9 +224,7 @@ describe("EventMessage - ThinkAction rendering", () => {
     );
 
     // The thought should be displayed for non-think actions
-    expect(
-      screen.getByText("I need to run a command"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("I need to run a command")).toBeInTheDocument();
   });
 
   it("should render reasoning_content as a collapsible section", () => {
@@ -251,5 +282,142 @@ describe("EventMessage - ThinkAction rendering", () => {
 
     // The collapsible thinking wrapper should exist for thinking_blocks
     expect(screen.getByTestId("collapsible-thinking")).toBeInTheDocument();
+  });
+
+  // Regression: a model that emits its reasoning inline in the thought (instead
+  // of via reasoning_content) leaked the raw reasoning block into the bubble.
+  it("routes an inline reasoning block in an action thought to the thinking section", async () => {
+    const user = userEvent.setup();
+    const bashEvent = createBashActionEvent(
+      "bash-inline-think",
+      "echo hello",
+      `<think>Let me check the working directory first.</think>\nRunning the command now.`,
+    );
+
+    renderWithProviders(
+      <EventMessage
+        event={bashEvent}
+        messages={[bashEvent]}
+        isLastMessage={false}
+        isInLast10Actions={false}
+      />,
+    );
+
+    // Reasoning moves to exactly one collapsible section, collapsed by default
+    expect(screen.getAllByTestId("collapsible-thinking")).toHaveLength(1);
+    expect(
+      screen.queryByText("Let me check the working directory first."),
+    ).not.toBeInTheDocument();
+
+    // The bubble keeps only the non-reasoning thought, with no raw tags
+    expect(screen.getByText("Running the command now.")).toBeInTheDocument();
+    expect(screen.getByTestId("agent-message").textContent).not.toContain(
+      "Let me check the working directory first.",
+    );
+
+    await user.click(screen.getByTestId("collapsible-thinking-toggle"));
+    expect(
+      screen.getByText("Let me check the working directory first."),
+    ).toBeInTheDocument();
+  });
+
+  it("renders no bubble when an action thought is inline reasoning only", () => {
+    const bashEvent = createBashActionEvent(
+      "bash-inline-think-only",
+      "echo hello",
+      `<think>Just thinking about the command.</think>`,
+    );
+
+    renderWithProviders(
+      <EventMessage
+        event={bashEvent}
+        messages={[bashEvent]}
+        isLastMessage={false}
+        isInLast10Actions={false}
+      />,
+    );
+
+    expect(screen.getByTestId("collapsible-thinking")).toBeInTheDocument();
+    expect(screen.queryByTestId("agent-message")).not.toBeInTheDocument();
+  });
+
+  it("renders the inline reasoning once when the paired observation row is shown", () => {
+    const bashEvent = createBashActionEvent(
+      "bash-inline-think-obs",
+      "echo hello",
+      `<think>Let me check the working directory first.</think>\nRunning the command now.`,
+    );
+    const observation = createBashObservationEvent(
+      "obs-inline-think",
+      bashEvent.id,
+    );
+
+    renderWithProviders(
+      <EventMessage
+        event={observation}
+        messages={[bashEvent, observation]}
+        isLastMessage={false}
+        isInLast10Actions={false}
+      />,
+    );
+
+    // The thought is rendered through the observation row only — once.
+    expect(screen.getAllByTestId("collapsible-thinking")).toHaveLength(1);
+    expect(
+      screen.queryByText("Let me check the working directory first."),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Running the command now.")).toBeInTheDocument();
+  });
+
+  it("does not treat a non-leading reasoning block as reasoning", () => {
+    const bashEvent = createBashActionEvent(
+      "bash-mid-inline-think",
+      "echo hello",
+      `Quoting <think>literal</think> tags stays visible.`,
+    );
+
+    renderWithProviders(
+      <EventMessage
+        event={bashEvent}
+        messages={[bashEvent]}
+        isLastMessage={false}
+        isInLast10Actions={false}
+      />,
+    );
+
+    // Only a leading block is reasoning; a later occurrence stays in the bubble.
+    expect(
+      screen.queryByTestId("collapsible-thinking"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("agent-message").textContent).toContain(
+      "Quoting",
+    );
+    expect(screen.getByTestId("agent-message").textContent).toContain(
+      "tags stays visible.",
+    );
+  });
+
+  it("keeps an action thought with no inline reasoning in the bubble", () => {
+    const bashEvent = createBashActionEvent(
+      "bash-no-inline-think",
+      "echo hello",
+      "Plain thought with no reasoning block.",
+    );
+
+    renderWithProviders(
+      <EventMessage
+        event={bashEvent}
+        messages={[bashEvent]}
+        isLastMessage={false}
+        isInLast10Actions={false}
+      />,
+    );
+
+    expect(
+      screen.getByText("Plain thought with no reasoning block."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("collapsible-thinking"),
+    ).not.toBeInTheDocument();
   });
 });

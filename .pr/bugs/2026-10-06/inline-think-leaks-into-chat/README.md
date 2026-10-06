@@ -1,55 +1,68 @@
-# Inline thinking leaks into the chat bubble (tool-call actions)
+# Inline reasoning leaks into the chat bubble for tool-call turns
 
-Evidence for the Canvas bug where an agent's inline reasoning
-(`<think>...</think>` / `reasoning_content`) that belongs to a **tool call**
-is rendered verbatim inside the visible chat bubble instead of being hidden
-behind the collapsible thinking section.
+Evidence for github.com/OpenHands/OpenHands#18074.
+
+An agent's inline reasoning that belongs to a **tool call** used to render
+verbatim inside the visible chat bubble instead of behind the collapsible
+thinking section. The same words then read as duplicated once the final reply
+arrived, which is how the bug was reported.
 
 ## How this was produced
 
-Stack: `npm run test:e2e:mock-llm` (the repo's own mock-LLM harness), which
+Stack: `npm run test:e2e:mock-llm` — the repo's own mock-LLM harness, which
 runs the production `bin/agent-canvas.mjs` stack (static frontend + real
 agent-server + ingress) against a scripted OpenAI-compatible mock LLM. No real
-LLM credentials were used.
+LLM credentials are used; the mock only makes the trigger deterministic.
 
-The mock LLM was asked to return an assistant tool call whose content is
+The scripted turn is an assistant tool call whose content is
 
 ```
-<think>The user asked me to run a command and then reply. ...</think>
+<think>Let me check the working directory before running it.</think>
 Running the command now.
 ```
 
-plus a following plain text turn (`MOCK_LLM_E2E_REPLY_OK`). The agent-server
-records the tool-call text as the `ActionEvent.thought`
-(`thought[0].text == "<think>...</think>\nRunning the command now."`).
-
-## What the screenshots show
-
-`leak-page.png` / `leak-full.png` are captured after the conversation settles.
-
-The reasoning text that belongs to the tool call is rendered as a normal
-paragraph inside the agent bubble (`<p class="m-0 leading-6">`), fully visible,
-instead of being collapsed behind "Thinking". The same content is also absent
-from any collapsible thinking region.
-
-## Confirming DOM probe
-
-```json
-{"tag":"P","testid":null,"className":"m-0 leading-6",
- "text":"The user asked me to run a command and then reply. I should first check which shell is available, then run the command. ",
- "width":736,"height":144,"visible":true,"display":"block","visibility":"visible"}
-```
-
-## Backend events (agent-server 1.49.6)
+followed by a plain text reply. The agent-server stores the tool-call content as
+the `ActionEvent.thought`:
 
 ```
 ActionEvent source=agent tool=terminal
-  thought=[{"type":"text","text":"<think>...reasoning...</think>\nRunning the command now."}]
-ObservationEvent source=environment tool=terminal
-MessageEvent source=agent content=["MOCK_LLM_E2E_REPLY_OK"]
+  thought=[{"type":"text","text":"<think>...</think>\nRunning the command now."}]
 ```
 
-The `ActionEvent.thought` carries the inline-think text. Canvas's action
-renderer (`getActionContent` -> `action.message.trim()`) does not run
-`splitInlineThink` on it, so the whole thought — tags and all — reaches the
-bubble.
+## Before / after
+
+| Artifact | Build | Result |
+|---|---|---|
+| `before-fix.png` | `thought-event-message.tsx` unpatched | reasoning text visible in the agent bubble; no thinking section |
+| `after-fix.png` | `thought-event-message.tsx` patched | reasoning inside the collapsible thinking section; bubble shows only "Running the command now." |
+
+Both runs use the same spec (`tests/e2e/mock-llm/regressions/mock-llm-inline-think-leak.spec.ts`)
+and the same scripted trajectory, so the only variable is the fix.
+
+Before the fix the spec fails at `expect(collapsible-thinking).toBeVisible()`,
+and Playwright's ARIA snapshot shows the leaked paragraph in the bubble:
+
+```
+- paragraph: Let me check the working directory before running it. Running the command now.
+```
+
+After the fix the same spec passes, with
+`bubbleHasReasoning=false bubbleHasRawTag=false thinkingBlocks=1`.
+
+`leak-page.png` / `leak-full.png` are the original wider captures from the same
+harness that accompanied the bug report, including the DOM probe below.
+
+## Confirming DOM probe (pre-fix)
+
+```json
+{"tag":"P","testid":null,"className":"m-0 leading-6",
+ "text":"The user asked me to run a command and then reply. ...",
+ "width":736,"height":144,"visible":true,"display":"block","visibility":"visible"}
+```
+
+## Root cause
+
+`ThoughtEventMessage` passed the raw `ActionEvent.thought` straight to
+`ChatMessage`. `splitInlineThink` already existed and was wired into the message
+paths (`user-assistant-event-message.tsx`, and the streaming-delta branch of
+`event-message.tsx`), but not into the action-thought path.
