@@ -303,6 +303,30 @@ describe("CustomServerEditor", () => {
     );
   });
 
+  it("explains a stdio connection failure from Test connection as a command that could not start", async () => {
+    // Arrange: editing an installed stdio server whose command cannot spawn.
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettingsWithMcp(),
+    );
+    vi.spyOn(McpService, "testServer").mockResolvedValue({
+      ok: false,
+      error: "Client failed to connect: [Errno 2] No such file or directory",
+      error_kind: "connection",
+    });
+    renderWith(<EditEditorOnceSettingsLoaded onClose={vi.fn()} />);
+    await screen.findByTestId("mcp-custom-editor");
+
+    // Act
+    fireEvent.click(screen.getByTestId("mcp-test-connection"));
+
+    // Assert: the stdio-specific message, not the URL hint.
+    await waitFor(() =>
+      expect(screen.getByTestId("mcp-test-message")).toHaveTextContent(
+        "MCP$TEST_ERROR_STDIO_START",
+      ),
+    );
+  });
+
   it("offers Test connection for remote servers on cloud backends and shows the result", async () => {
     // Arrange: a cloud backend is active and the probe (routed through the
     // app server) succeeds.

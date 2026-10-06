@@ -32,7 +32,6 @@ export const useResumeConversation = () => {
       queryClient.invalidateQueries({
         queryKey: ["v1-batch-get-app-conversations"],
       });
-      queryClient.invalidateQueries({ queryKey: ["unified", "vscode_url"] });
     },
   });
 };

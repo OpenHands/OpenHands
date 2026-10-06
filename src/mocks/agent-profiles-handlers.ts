@@ -4,6 +4,7 @@ import type {
   AgentProfileSaveInput,
   AgentProfileSummary,
 } from "@openhands/typescript-client";
+import type { ToolCatalogEntry } from "#/api/tool-catalog-service/tool-catalog-service.api";
 
 /**
  * In-memory agent-profile store for the mock agent-server API. Keyed by name
@@ -41,7 +42,12 @@ const DEFAULT_VERIFICATION = {
 };
 
 function makeOpenHandsProfile(
-  overrides: Partial<AgentProfile> & { id: string; name: string },
+  // Untyped in the pinned ts-client.
+  overrides: Partial<AgentProfile> & {
+    id: string;
+    name: string;
+    tools?: { name: string; params: Record<string, unknown> }[];
+  },
 ): AgentProfile {
   return {
     schema_version: 1,
@@ -54,7 +60,6 @@ function makeOpenHandsProfile(
     system_message_suffix: null,
     condenser: null,
     verification: DEFAULT_VERIFICATION,
-    enable_sub_agents: false,
     tool_concurrency_limit: 1,
     ...overrides,
   } as AgentProfile;
@@ -72,7 +77,7 @@ const SEEDED_PROFILES: readonly AgentProfile[] = [
   makeOpenHandsProfile({
     id: "3f1c1b7e-0000-4000-8000-000000000002",
     name: "research",
-    enable_sub_agents: true,
+    tools: [{ name: "task_tool_set", params: {} }],
     tool_concurrency_limit: 4,
   }),
 ];
@@ -126,6 +131,23 @@ function notFound(name: string) {
   );
 }
 
+const MOCK_TOOL_CATALOG: ToolCatalogEntry[] = [
+  ["terminal", true, "Run shell commands in a persistent terminal."],
+  ["file_editor", true, "View, create and edit files."],
+  ["task_tracker", true, "Plan and track multi-step work."],
+  ["browser_tool_set", true, "Browse and interact with web pages."],
+  ["switch_llm", true, "Switch to another configured LLM mid-conversation."],
+  ["task_tool_set", false, "Delegate work to sub-agents."],
+  ["glob", false, "Find files by glob pattern."],
+  ["grep", false, "Search file contents with regular expressions."],
+].map(([name, inDefaultSet, description]) => ({
+  name: name as string,
+  user_selectable: true,
+  usable: true,
+  in_default_set: inDefaultSet as boolean,
+  description: description as string,
+}));
+
 /**
  * Mock handlers for the agent-server `/api/agent-profiles` endpoints (the same
  * contract consumed by `AgentProfilesService` and the cloud proxy).
@@ -135,6 +157,9 @@ function notFound(name: string) {
  * extra path guarding is needed.
  */
 export const AGENT_PROFILES_HANDLERS = [
+  http.get("*/api/tools/catalog", () =>
+    HttpResponse.json({ tools: MOCK_TOOL_CATALOG }),
+  ),
   // GET /api/agent-profiles - List all profiles + the active id.
   http.get("*/api/agent-profiles", async () => {
     const summaries = Array.from(profiles.entries()).map(([name, profile]) =>

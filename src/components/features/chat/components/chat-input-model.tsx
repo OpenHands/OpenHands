@@ -15,6 +15,7 @@ import { Divider } from "#/ui/divider";
 import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
+import { getLockedCloudHost } from "#/api/agent-server-config";
 import { chatInputPillButtonClassName } from "#/utils/form-control-classes";
 import React from "react";
 
@@ -52,6 +53,8 @@ export function ChatInputModelMenuContent({
   const { t } = useTranslation("openhands");
   const switchAcpModel = useSwitchAcpModel();
   const hasModelRows = model.showAcpPicker || Boolean(model.displayModel);
+  // Locked-to-Cloud blocks the Canvas settings pages this links to (OHE-3457).
+  const showSettingsLink = getLockedCloudHost() === null;
 
   const handleSelectAcpModel = (modelId: string) => {
     if (modelId !== model.currentModelId) {
@@ -116,25 +119,27 @@ export function ChatInputModelMenuContent({
           </div>
         </li>
       ) : null}
-      {hasModelRows && <Divider inset={dividerInset} />}
-      <li className="text-sm">
-        <NavigationLink
-          to={model.destinationPath}
-          onClick={onClose}
-          className={cn(
-            "flex h-7.5 items-center gap-2 rounded p-2 leading-5 text-foreground hover:bg-interactive-hover transition-colors",
-            settingsLinkClassName,
-          )}
-        >
-          <SettingsGearIcon
-            width={16}
-            height={16}
-            className={cn("shrink-0", settingsIconClassName)}
-            aria-hidden
-          />
-          <span>{model.destinationLabel}</span>
-        </NavigationLink>
-      </li>
+      {showSettingsLink && hasModelRows && <Divider inset={dividerInset} />}
+      {showSettingsLink && (
+        <li className="text-sm">
+          <NavigationLink
+            to={model.destinationPath}
+            onClick={onClose}
+            className={cn(
+              "flex h-7.5 items-center gap-2 rounded p-2 leading-5 text-foreground hover:bg-interactive-hover transition-colors",
+              settingsLinkClassName,
+            )}
+          >
+            <SettingsGearIcon
+              width={16}
+              height={16}
+              className={cn("shrink-0", settingsIconClassName)}
+              aria-hidden
+            />
+            <span>{model.destinationLabel}</span>
+          </NavigationLink>
+        </li>
+      )}
     </>
   );
 }

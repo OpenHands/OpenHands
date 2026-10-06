@@ -24,6 +24,7 @@ import LLMSubscriptionService from "#/api/llm-subscription-service";
 import ProviderConnectionsService, {
   type ProviderConnection,
 } from "#/api/provider-connections-service/provider-connections-service.api";
+import type { SdkSectionSaveControl } from "#/components/features/settings/sdk-settings/sdk-section-page";
 
 vi.mock("#/hooks/query/use-llm-profiles");
 // The profile manager gates mutate controls on this hook; default to a user
@@ -251,6 +252,53 @@ describe("LlmSettingsScreen", () => {
     ).toBeInTheDocument();
     expect(screen.queryByTestId("llm-api-key-input")).not.toBeInTheDocument();
     expect(screen.queryByTestId("base-url-input")).not.toBeInTheDocument();
+  });
+
+  it("exposes canonical subscription metadata through the save control", async () => {
+    vi.spyOn(LLMSubscriptionService, "getOpenAIStatus").mockResolvedValue({
+      vendor: "openai",
+      connected: true,
+      accountEmail: "graham@example.com",
+      expiresAt: null,
+    });
+    vi.spyOn(LLMSubscriptionService, "getOpenAIModels").mockResolvedValue([
+      "gpt-5.6-luna",
+    ]);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        llm_model: "gpt-5.6-luna",
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          llm: {
+            model: "gpt-5.6-luna",
+            auth_type: "subscription",
+            subscription_vendor: "openai",
+          },
+        },
+      }),
+    );
+    const saveControlRef: { current: SdkSectionSaveControl | null } = {
+      current: null,
+    };
+
+    renderLlmSettingsScreen({
+      onSaveControlChange: (control) => {
+        saveControlRef.current = control;
+      },
+    });
+
+    await screen.findByTestId("llm-subscription-settings");
+    await waitFor(() => expect(saveControlRef.current).not.toBeNull());
+    expect(saveControlRef.current?.getSavePayload()).toEqual({
+      agent_settings_diff: {
+        llm: {
+          auth_type: "subscription",
+          model: "gpt-5.6-luna",
+          subscription_vendor: "openai",
+          temperature: null,
+        },
+      },
+    });
   });
 
   it("disables subscription model controls while models are loading", async () => {

@@ -6,8 +6,8 @@ interface AutomationsFilteredEmptyStateProps {
 }
 
 /**
- * Automations exist but the active search/filters match none. Chrome copy, so
- * it stays the host's translations rather than manifest copy.
+ * The active search or filters match no automations. Chrome copy, so it stays
+ * the host's translations rather than manifest copy.
  */
 export function AutomationsFilteredEmptyState({
   onClear,
