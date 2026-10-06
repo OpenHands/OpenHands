@@ -84,13 +84,24 @@ export function useAutomations(options: UseAutomationsOptions = {}) {
   });
 }
 
-export function useToggleAutomation() {
+interface UseToggleAutomationOptions {
+  /**
+   * Skip the global error toast, for a caller that shows its own. Dashboard
+   * and detail toggles rely on the global toast, so it stays on by default.
+   */
+  disableToast?: boolean;
+}
+
+export function useToggleAutomation({
+  disableToast = false,
+}: UseToggleAutomationOptions = {}) {
   const queryClient = useQueryClient();
   const active = useActiveBackend();
   const { trackAutomationDisableButton } = useTracking();
   return useMutation({
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
       AutomationService.toggleAutomation(id, enabled),
+    meta: { disableToast },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: AUTOMATIONS_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: AUTOMATION_DETAIL_QUERY_KEY });
@@ -108,6 +119,8 @@ export function useImportAutomation() {
   return useMutation({
     mutationFn: (spec: AutomationSpec) =>
       AutomationService.createAutomation({ ...spec, enabled: false }),
+    // Callers toast the API message themselves; skip the generic global toast.
+    meta: { disableToast: true },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: AUTOMATIONS_QUERY_KEY });
       trackAutomationImported({ backendKind: active.backend.kind });
@@ -122,6 +135,8 @@ export function useUpdateAutomation() {
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: Partial<Automation> }) =>
       AutomationService.updateAutomation(id, body),
+    // Callers toast the API message themselves; skip the generic global toast.
+    meta: { disableToast: true },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: AUTOMATIONS_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: AUTOMATION_DETAIL_QUERY_KEY });
@@ -149,6 +164,8 @@ export function useDispatchAutomation() {
   const { trackAutomationExecuted } = useTracking();
   return useMutation({
     mutationFn: (id: string) => AutomationService.dispatchAutomation(id),
+    // Callers toast the API message themselves; skip the generic global toast.
+    meta: { disableToast: true },
     onSuccess: (_run, id) => {
       queryClient.invalidateQueries({ queryKey: AUTOMATIONS_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: AUTOMATION_DETAIL_QUERY_KEY });
@@ -169,6 +186,8 @@ export function useCancelAutomationRun() {
   return useMutation({
     mutationFn: ({ runId }: { automationId: string; runId: string }) =>
       AutomationService.cancelAutomationRun(runId),
+    // Callers toast the API message themselves; skip the generic global toast.
+    meta: { disableToast: true },
     onSuccess: (_run, { automationId }) => {
       queryClient.invalidateQueries({ queryKey: AUTOMATIONS_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: AUTOMATION_DETAIL_QUERY_KEY });

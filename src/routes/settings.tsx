@@ -14,7 +14,10 @@ import { SettingsLayout } from "#/components/features/settings";
 import { WebClientConfig } from "#/api/option-service/option.types";
 import { QUERY_KEYS, CONFIG_CACHE_OPTIONS } from "#/hooks/query/query-keys";
 import { Typography } from "#/ui/typography";
-import { useBreakpoint } from "#/hooks/use-breakpoint";
+import {
+  SETTINGS_COMPACT_MAX_WIDTH,
+  useBreakpoint,
+} from "#/hooks/use-breakpoint";
 import { useSettingsNavItems } from "#/hooks/use-settings-nav-items";
 import {
   LOCKED_CLOUD_SETTINGS_NAV_PATH,
@@ -54,7 +57,7 @@ function SettingsScreen() {
   const location = useLocation();
   const matches = useMatches();
   const navItems = useSettingsNavItems();
-  const isMobile = useBreakpoint(768);
+  const isMobile = useBreakpoint(SETTINGS_COMPACT_MAX_WIDTH);
   const [hideSectionHeader, setHideSectionHeader] = useState(false);
 
   const { currentSectionTitle, currentSectionSubtitle } = useMemo(() => {
