@@ -179,6 +179,33 @@ describe("SuperAdminSetupGuide", () => {
     );
   });
 
+  it("opens the next step from Start", async () => {
+    activateBackend(cloudBackend);
+    serveSetupGuide({
+      setupState: () => HttpResponse.json(guideState({ org_llm: true })),
+    });
+
+    renderGuide();
+
+    expect(
+      await screen.findByTestId("super-admin-setup-guide-start"),
+    ).toHaveAttribute("href", "/automations/templates");
+  });
+
+  it("opens an enterprise step from Start on the guide's organization", async () => {
+    activateBackend(cloudBackend);
+    serveSetupGuide({
+      setupState: () =>
+        HttpResponse.json(guideState({ org_llm: true, automation: true })),
+    });
+
+    renderGuide();
+
+    expect(
+      await screen.findByTestId("super-admin-setup-guide-start"),
+    ).toHaveAttribute("href", `${CLOUD_HOST}/settings/mcp?org=${GUIDE_ORG_ID}`);
+  });
+
   it("re-reads progress when the admin moves to another page", async () => {
     activateBackend(cloudBackend);
     let state = guideState({ org_llm: true });
