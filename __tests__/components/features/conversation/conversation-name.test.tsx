@@ -1,4 +1,4 @@
-import { screen, within, waitFor } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   afterEach,
@@ -91,12 +91,10 @@ vi.mock("react-i18next", async () => {
           BUTTON$EXPORT_CONVERSATION: "Export Conversation",
           BUTTON$EXPORT_TRANSCRIPT: "Export…",
           BUTTON$DOWNLOAD_CONVERSATION_DATA: "Download conversation data",
-          BUTTON$DOWNLOAD_VIA_VSCODE: "Download via VS Code",
           BUTTON$SHOW_AGENT_TOOLS_AND_METADATA: "Show Agent Tools",
           CONVERSATION$SHOW_SKILLS: "Show Skills",
           BUTTON$DISPLAY_COST: "Display Usage and Cost",
-          COMMON$CLOSE_CONVERSATION_STOP_RUNTIME:
-            "Stop Conversation (Runtime)",
+          COMMON$CLOSE_CONVERSATION_STOP_RUNTIME: "Stop Conversation (Runtime)",
           COMMON$STOP_CONVERSATION: "Stop Conversation",
           COMMON$DELETE_CONVERSATION: "Delete Conversation",
           CONVERSATION$SHARE_PUBLICLY: "Share Publicly",

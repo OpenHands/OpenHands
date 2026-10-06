@@ -332,7 +332,9 @@ function startAgentServer(config) {
     ...process.env,
     OH_CANVAS_SAFE_STATE_DIR: config.stateDir,
     OH_CANVAS_SAFE_BACKEND_PORT: config.agentServerPort.toString(),
-    OH_CANVAS_SAFE_VSCODE_PORT: config.vscodePort.toString(),
+    ...(config.vscodePort
+      ? { OH_CANVAS_SAFE_VSCODE_PORT: config.vscodePort.toString() }
+      : {}),
   });
 
   const agentServerEnv = {

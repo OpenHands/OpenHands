@@ -24,7 +24,6 @@ import {
 import type { Backend } from "#/api/backend-registry/types";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { useFreeModelsStore } from "#/stores/free-models-store";
-import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 
 // We'll use the actual i18next implementation but override the translation function
 
@@ -54,10 +53,7 @@ vi.mock("react-i18next", async () => {
 });
 
 vi.mock("#/hooks/use-tracking", () => ({
-  useTracking: () => ({
-    trackDownloadVsCodeButtonClicked: vi.fn(),
-    trackDownloadTrajectoryButtonClicked: vi.fn(),
-  }),
+  useTracking: () => ({}),
 }));
 
 describe("ConversationCard", () => {
@@ -413,36 +409,6 @@ describe("ConversationCard", () => {
 
     expect(onArchive).toHaveBeenCalled();
     expect(onContextMenuToggle).toHaveBeenCalledWith(false);
-  });
-
-  it("closes the context menu when downloading the conversation fails", async () => {
-    const user = userEvent.setup();
-    const onContextMenuToggle = vi.fn();
-    vi.spyOn(
-      AgentServerConversationService,
-      "downloadConversation",
-    ).mockRejectedValue(new Error("HTTP request failed (502 Bad Gateway)"));
-    renderWithProviders(
-      <ConversationCard
-        conversationId="conv-1"
-        onDelete={onDelete}
-        title="Conversation 1"
-        selectedRepository={null}
-        lastUpdatedAt="2021-10-01T12:00:00Z"
-        contextMenuOpen
-        onContextMenuToggle={onContextMenuToggle}
-      />,
-    );
-
-    await user.click(
-      within(screen.getByTestId("context-menu")).getByTestId(
-        "download-trajectory-button",
-      ),
-    );
-
-    await vi.waitFor(() =>
-      expect(onContextMenuToggle).toHaveBeenCalledWith(false),
-    );
   });
 
   test("clicking the selectedRepository should not trigger the onClick handler", async () => {

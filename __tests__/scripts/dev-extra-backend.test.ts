@@ -44,7 +44,10 @@ describe("buildExtraBackendConfig", () => {
   }
 
   it("defaults to ports 18002/18003 distinct from the bundled instance", () => {
-    const env = { OH_SESSION_API_KEY_PATH: isolatedKeyPath() };
+    const env = {
+      OH_CANVAS_ENABLE_VSCODE: "true",
+      OH_SESSION_API_KEY_PATH: isolatedKeyPath(),
+    };
     const bundled = buildSafeDevConfig(repoRoot, env);
     const extra = buildExtraBackendConfig(repoRoot, env);
 
@@ -58,6 +61,7 @@ describe("buildExtraBackendConfig", () => {
 
   it("honors OH_CANVAS_EXTRA_BACKEND_PORT and OH_CANVAS_EXTRA_VSCODE_PORT", () => {
     const config = buildExtraBackendConfig(repoRoot, {
+      OH_CANVAS_ENABLE_VSCODE: "true",
       OH_CANVAS_EXTRA_BACKEND_PORT: "29000",
       OH_CANVAS_EXTRA_VSCODE_PORT: "29001",
       OH_SESSION_API_KEY_PATH: isolatedKeyPath(),
