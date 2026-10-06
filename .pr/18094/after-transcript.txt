@@ -1,0 +1,244 @@
+[after] run 2026-10-06T2341-47ec50, conversation 6a880445-ccbd-475e-a2e8-70c863acd6e2
+[after] base URL http://127.0.0.1:18810, checkout revision 62df7f2cc3
+[after] doctor: served build matches this checkout's build inputs: served=4e42585ede1fee12 run=4e42585ede1fee12 revision=62df7f2cc3fd
+[after] doctor: agent-server reachable: version=1.53.0
+[after] doctor ok: True, failed: []
+[after] conversation: status finished, model deepseek/deepseek-flash, title '✅ Ping Pong Test'
+$ control-openhands browser viewport desktop
+  -> ok
+$ control-openhands browser goto /conversations/6a880445-ccbd-475e-a2e8-70c863acd6e2
+  -> ok
+$ control-openhands browser wait testid=chat-plus-button
+  -> ok
+
+# (1) Composer + tools menu, focus on the + button
+$ control-openhands browser click testid=chat-input
+  -> ok
+$ control-openhands browser click testid=chat-plus-button
+  -> ok
+$ control-openhands browser count testid=tools-context-menu
+  -> 1
+$ control-openhands browser press Escape
+  -> ok
+$ control-openhands browser count testid=tools-context-menu
+  -> 0
+$ control-openhands browser attr testid=chat-plus-button aria-expanded
+  -> "false"
+$ control-openhands browser eval '(() => { const e = document.activeElement; return e.dataset.testid || e.getAttribute("aria-label") || e.tagName; })()'
+  -> "chat-plus-button"
+$ control-openhands browser screenshot --feature F05.plus-menu --name after-tools-menu-escape
+  -> saved after-tools-menu-escape-2.png
+$ control-openhands browser mouse-click 900 300
+  -> ok
+
+# (1b) Composer + tools menu, focus on a menu item
+$ control-openhands browser click testid=chat-plus-button
+  -> ok
+$ control-openhands browser press Tab
+  -> ok
+$ control-openhands browser eval '(() => { const e = document.activeElement; return e.dataset.testid || e.getAttribute("aria-label") || e.tagName; })()'
+  -> "macros-button"
+$ control-openhands browser press Escape
+  -> ok
+$ control-openhands browser count testid=tools-context-menu
+  -> 0
+$ control-openhands browser eval '(() => { const e = document.activeElement; return e.dataset.testid || e.getAttribute("aria-label") || e.tagName; })()'
+  -> "chat-plus-button"
+$ control-openhands browser mouse-click 900 300
+  -> ok
+
+# (2) Status-dot menu opened with Enter, focus on the dot
+$ control-openhands browser focus testid=server-status-menu-trigger
+  -> ok
+$ control-openhands browser press Enter
+  -> ok
+$ control-openhands browser count testid=server-status-context-menu
+  -> 1
+$ control-openhands browser text testid=server-status-context-menu
+  -> "Running\nStop Runtime"
+$ control-openhands browser press Escape
+  -> ok
+$ control-openhands browser count testid=server-status-context-menu
+  -> 0
+$ control-openhands browser eval '(() => { const e = document.activeElement; return e.dataset.testid || e.getAttribute("aria-label") || e.tagName; })()'
+  -> "server-status-menu-trigger"
+$ control-openhands browser screenshot --feature F07.status-menu --name after-status-menu-escape
+  -> saved after-status-menu-escape-2.png
+$ control-openhands browser mouse-click 900 500
+  -> ok
+
+# (2b) Status-dot menu opened with Enter, focus on Stop Runtime
+$ control-openhands browser focus testid=server-status-menu-trigger
+  -> ok
+$ control-openhands browser press Enter
+  -> ok
+$ control-openhands browser press Tab
+  -> ok
+$ control-openhands browser eval '(() => { const e = document.activeElement; return e.dataset.testid || e.getAttribute("aria-label") || e.tagName; })()'
+  -> "stop-server-button"
+$ control-openhands browser press Escape
+  -> ok
+$ control-openhands browser count testid=server-status-context-menu
+  -> 0
+$ control-openhands browser eval '(() => { const e = document.activeElement; return e.dataset.testid || e.getAttribute("aria-label") || e.tagName; })()'
+  -> "server-status-menu-trigger"
+$ control-openhands browser mouse-click 900 500
+  -> ok
+
+# (2c) Status-dot menu opened by hover, focus in the composer
+$ control-openhands browser click testid=chat-input
+  -> ok
+$ control-openhands browser hover testid=server-status-menu-trigger
+  -> ok
+$ control-openhands browser count testid=server-status-context-menu
+  -> 1
+$ control-openhands browser press Escape
+  -> ok
+$ control-openhands browser count testid=server-status-context-menu
+  -> 0
+$ control-openhands browser eval '(() => { const e = document.activeElement; return e.dataset.testid || e.getAttribute("aria-label") || e.tagName; })()'
+  -> "chat-input"
+$ control-openhands browser mouse-click 900 500
+  -> ok
+
+# (3) Drawer tabs menu, focus on the tabs ellipsis
+$ control-openhands browser click testid=right-panel-toggle
+  -> ok
+$ control-openhands browser hover testid=chat-input
+  -> ok
+$ control-openhands browser click 'testid=tabs-pane-header >> testid=ellipsis-button'
+  -> ok
+$ control-openhands browser count '[data-testid^="conversation-tabs-menu-"]'
+  -> 12
+$ control-openhands browser press Escape
+  -> ok
+$ control-openhands browser count '[data-testid^="conversation-tabs-menu-"]'
+  -> 0
+$ control-openhands browser eval 'document.activeElement.getAttribute("aria-label")'
+  -> "Customize tabs"
+$ control-openhands browser screenshot --feature F08.tabs-menu --name after-tabs-menu-escape
+  -> saved after-tabs-menu-escape-2.png
+$ control-openhands browser mouse-click 560 600
+  -> ok
+
+# (3b) Drawer tabs menu, focus on a row
+$ control-openhands browser click 'testid=tabs-pane-header >> testid=ellipsis-button'
+  -> ok
+$ control-openhands browser focus testid=conversation-tabs-menu-open-files
+  -> ok
+$ control-openhands browser eval '(() => { const e = document.activeElement; return e.dataset.testid || e.getAttribute("aria-label") || e.tagName; })()'
+  -> "conversation-tabs-menu-open-files"
+$ control-openhands browser press Escape
+  -> ok
+$ control-openhands browser count '[data-testid^="conversation-tabs-menu-"]'
+  -> 0
+$ control-openhands browser eval '(() => { const e = document.activeElement; return e.dataset.testid || e.getAttribute("aria-label") || e.tagName; })()'
+  -> "ellipsis-button"
+$ control-openhands browser mouse-click 560 600
+  -> ok
+
+# (4) Status menu opened by hover over the context-window popover
+$ control-openhands browser click testid=context-window-meter
+  -> ok
+$ control-openhands browser count testid=context-window-meter-popover
+  -> 1
+$ control-openhands browser hover testid=server-status-menu-trigger
+  -> ok
+$ control-openhands browser count testid=server-status-context-menu
+  -> 1
+$ control-openhands browser press Escape
+  -> ok
+$ control-openhands browser count testid=server-status-context-menu
+  -> 0
+$ control-openhands browser count testid=context-window-meter-popover
+  -> 1
+$ control-openhands browser eval '(() => { const e = document.activeElement; return e.dataset.testid || e.getAttribute("aria-label") || e.tagName; })()'
+  -> "context-window-meter"
+$ control-openhands browser screenshot --feature F07.status-menu --name after-status-over-popover-escape
+  -> saved after-status-over-popover-escape-2.png
+$ control-openhands browser press Escape
+  -> ok
+$ control-openhands browser count testid=server-status-context-menu
+  -> 0
+$ control-openhands browser count testid=context-window-meter-popover
+  -> 0
+$ control-openhands browser eval '(() => { const e = document.activeElement; return e.dataset.testid || e.getAttribute("aria-label") || e.tagName; })()'
+  -> "context-window-meter"
+$ control-openhands browser mouse-click 900 500
+  -> ok
+$ control-openhands browser count testid=server-status-context-menu
+  -> 0
+$ control-openhands browser count testid=context-window-meter-popover
+  -> 0
+
+# (5) Command menu (Ctrl+K) opened over the + tools menu
+$ control-openhands browser click testid=chat-plus-button
+  -> ok
+$ control-openhands browser press Control+k
+  -> ok
+$ control-openhands browser wait testid=command-menu
+  -> ok
+$ control-openhands browser press Escape
+  -> ok
+$ control-openhands browser count testid=command-menu
+  -> 0
+$ control-openhands browser count testid=tools-context-menu
+  -> 1
+$ control-openhands browser press Escape
+  -> ok
+$ control-openhands browser count testid=tools-context-menu
+  -> 0
+$ control-openhands browser eval '(() => { const e = document.activeElement; return e.dataset.testid || e.getAttribute("aria-label") || e.tagName; })()'
+  -> "chat-plus-button"
+$ control-openhands browser mouse-click 900 300
+  -> ok
+
+# (5b) Command menu (Ctrl+K) opened over the drawer tabs menu
+$ control-openhands browser click 'testid=tabs-pane-header >> testid=ellipsis-button'
+  -> ok
+$ control-openhands browser press Control+k
+  -> ok
+$ control-openhands browser wait testid=command-menu
+  -> ok
+$ control-openhands browser press Escape
+  -> ok
+$ control-openhands browser count testid=command-menu
+  -> 0
+$ control-openhands browser count '[data-testid^="conversation-tabs-menu-"]'
+  -> 12
+$ control-openhands browser press Escape
+  -> ok
+$ control-openhands browser count '[data-testid^="conversation-tabs-menu-"]'
+  -> 0
+$ control-openhands browser eval 'document.activeElement.getAttribute("aria-label")'
+  -> "Customize tabs"
+$ control-openhands browser mouse-click 560 600
+  -> ok
+
+# (6) Phone panel page, drawer tabs menu
+$ control-openhands browser viewport phone
+  -> ok
+$ control-openhands browser goto /conversations/6a880445-ccbd-475e-a2e8-70c863acd6e2/panel
+  -> ok
+$ control-openhands browser wait 'testid=tabs-pane-header >> testid=ellipsis-button'
+  -> ok
+$ control-openhands browser click 'testid=tabs-pane-header >> testid=ellipsis-button'
+  -> ok
+$ control-openhands browser count '[data-testid^="conversation-tabs-menu-"]'
+  -> 12
+$ control-openhands browser press Escape
+  -> ok
+$ control-openhands browser count '[data-testid^="conversation-tabs-menu-"]'
+  -> 0
+$ control-openhands browser eval 'document.activeElement.getAttribute("aria-label")'
+  -> "Customize tabs"
+$ control-openhands browser screenshot --feature F08.phone-panel-page --name after-phone-tabs-menu-escape
+  -> saved after-phone-tabs-menu-escape-2.png
+$ control-openhands browser viewport desktop
+  -> ok
+$ control-openhands browser goto /conversations/6a880445-ccbd-475e-a2e8-70c863acd6e2
+  -> ok
+
+# Page and app errors since the start
+$ control-openhands browser errors --app-only
+  -> pageErrors=0 appErrors=0
