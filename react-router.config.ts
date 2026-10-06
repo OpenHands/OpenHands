@@ -7,7 +7,10 @@ const normalizeBasePath = (value?: string) => {
   if (!raw || raw === "/") return undefined;
 
   const withLeadingSlash = raw.startsWith("/") ? raw : `/${raw}`;
-  return withLeadingSlash.replace(/\/+$/, "");
+  // Keep the trailing slash so `basename` matches the Vite `base` (which is
+  // normalized the same way in vite.config.ts). React Router v8's
+  // preview-server prerender requires `basename` to begin with `base`.
+  return `${withLeadingSlash.replace(/\/+$/, "")}/`;
 };
 
 const basename = normalizeBasePath(process.env.VITE_BASE_PATH);
