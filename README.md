@@ -177,3 +177,14 @@ The Agent Server API is implemented by the SDK and consumed through the TypeScri
 - [Architecture overview](./docs/architecture.md)
 - [Development guide](./docs/DEVELOPMENT.md)
 - [Self-hosting guide](./docs/SELF_HOSTING.md)
+## Connecting to OpenHands Cloud
+
+To connect OpenHands to OpenHands Cloud:
+
+1. Open the OpenHands application.
+2. Go to the **Settings** or **Connection** section.
+3. Select **OpenHands Cloud** as the backend or connection option.
+4. Sign in with your OpenHands Cloud account when prompted.
+5. After successful authentication, verify that the cloud connection is active.
+6. You can now use OpenHands with the configured cloud service.
+
