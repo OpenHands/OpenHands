@@ -100,6 +100,26 @@ describe("LaunchRoute", () => {
       expect(input).toHaveValue("整理发布说明 🚀");
     });
 
+    
+    it("should parse valid UTF-8 base64 encoded plugins with Unicode source path", async () => {
+      const plugins = [
+        {
+          source: "github:qa/répo/プラグ/city-weather",
+          parameters: { task: "run" },
+        },
+      ];
+      const bytes = new TextEncoder().encode(JSON.stringify(plugins));
+      const binaryString = Array.from(bytes, (byte) =>
+        String.fromCharCode(byte),
+      ).join("");
+      const encoded = btoa(binaryString);
+
+      renderLaunchRoute(`?plugins=${encodeURIComponent(encoded)}`);
+
+      expect(screen.getByTestId("plugin-launch-modal")).toBeInTheDocument();
+      expect(screen.getByText("qa/répo/プラグ/city-weather")).toBeInTheDocument();
+    });
+
     it("should parse multiple plugins from base64", async () => {
       const plugins = [
         { source: "github:owner/repo1", parameters: { key: "value1" } },

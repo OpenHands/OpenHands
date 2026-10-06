@@ -23,6 +23,24 @@ describe("buildPluginLaunchPath", () => {
     expect(decoded).toEqual(plugins);
   });
 
+  it("correctly encodes plugins with Unicode source paths", () => {
+    const plugins: PluginSpec[] = [
+      {
+        source: "github:qa/répo/プラグ/city-weather",
+      },
+    ];
+
+    const path = buildPluginLaunchPath(plugins);
+    const url = new URL(path, "http://localhost");
+    
+    const decodedB64 = atob(url.searchParams.get("plugins") ?? "");
+    const bytes = Uint8Array.from(decodedB64, (c) => c.charCodeAt(0));
+    const decoded = JSON.parse(new TextDecoder().decode(bytes));
+
+    expect(decoded).toEqual(plugins);
+  });
+
+
   it("correctly encodes plugins with Unicode parameters", () => {
     const plugins: PluginSpec[] = [
       {
