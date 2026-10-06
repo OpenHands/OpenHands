@@ -13,6 +13,10 @@ import { resolvePickerKind } from "./resolve-picker-kind";
 import { ChatAddFileButton } from "../chat-add-file-button";
 import { ChatSendButton } from "../chat-send-button";
 import { ChatDictationButton } from "../chat-dictation-button";
+import {
+  ChatEnhancePromptButton,
+  type ChatEnhancePromptButtonProps,
+} from "../chat-enhance-prompt-button";
 import { ContextWindowMeter } from "./context-window-meter";
 import CarretRightFillIcon from "#/icons/carret-right-fill.svg?react";
 import LessonPlanIcon from "#/icons/lesson-plan.svg?react";
@@ -54,6 +58,8 @@ interface ChatInputActionsProps {
   onDictationTranscript?: (text: string) => void;
   /** Tracks the text field's editability, not submit availability. */
   isDictationDisabled?: boolean;
+  /** Renders the "Enhance prompt" action when provided. */
+  promptEnhancement?: ChatEnhancePromptButtonProps;
 }
 
 export function ChatInputActions({
@@ -66,6 +72,7 @@ export function ChatInputActions({
   handleSubmit = () => {},
   onDictationTranscript,
   isDictationDisabled = false,
+  promptEnhancement,
 }: ChatInputActionsProps) {
   const { t } = useTranslation("openhands");
   const unifiedPauseMutation = useUnifiedPauseConversation();
@@ -524,6 +531,9 @@ export function ChatInputActions({
           />
         )}
         <ContextWindowMeter />
+        {promptEnhancement && (
+          <ChatEnhancePromptButton {...promptEnhancement} />
+        )}
         {onDictationTranscript && (
           <ChatDictationButton
             onTranscript={onDictationTranscript}

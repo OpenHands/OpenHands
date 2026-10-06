@@ -12,6 +12,7 @@ import {
   isPastedClipboardImage,
   normalizePastedFile,
   partitionImagesForUpload,
+  replaceContentEditableText,
 } from "#/components/features/chat/utils/chat-input.utils";
 
 afterEach(() => {
@@ -385,5 +386,47 @@ describe("insertTextAtCaret", () => {
     insertTextAtCaret(element, "world");
 
     expect(execCommand).toHaveBeenCalledWith("insertText", false, " world");
+  });
+});
+
+describe("replaceContentEditableText", () => {
+  afterEach(() => {
+    Reflect.deleteProperty(document, "execCommand");
+    document.body.replaceChildren();
+  });
+
+  it("selects the whole field and inserts each line with plain line breaks", () => {
+    // Arrange
+    const element = document.createElement("div");
+    element.textContent = "old draft";
+    document.body.appendChild(element);
+    let selectedText = "";
+    const execCommand = vi.fn(() => {
+      selectedText ||= window.getSelection()!.toString();
+      return true;
+    });
+    Object.defineProperty(document, "execCommand", {
+      configurable: true,
+      value: execCommand,
+    });
+
+    // Act
+    replaceContentEditableText(
+      element,
+      "Fix it.\n\n```ts\nconst a = 1;\n```\n",
+    );
+
+    // Assert: the old draft is replaced and the trailing break is dropped.
+    expect(selectedText).toBe("old draft");
+    expect(execCommand.mock.calls).toEqual([
+      ["insertText", false, "Fix it."],
+      ["insertLineBreak"],
+      ["insertLineBreak"],
+      ["insertText", false, "```ts"],
+      ["insertLineBreak"],
+      ["insertText", false, "const a = 1;"],
+      ["insertLineBreak"],
+      ["insertText", false, "```"],
+    ]);
   });
 });

@@ -213,3 +213,40 @@ export const insertTextAtCaret = (
   // when the field is read-only.
   document.execCommand("insertText", false, `${lead}${text}${trail}`);
 };
+
+/**
+ * Replace the whole text of a contentEditable input, e.g. with an accepted
+ * prompt enhancement. Attachments live outside the field and are untouched.
+ */
+export const replaceContentEditableText = (
+  element: HTMLElement | null,
+  text: string,
+): void => {
+  if (!element) {
+    return;
+  }
+
+  const selection = window.getSelection();
+  if (!selection) {
+    return;
+  }
+  element.focus();
+  const range = document.createRange();
+  range.selectNodeContents(element);
+  selection.removeAllRanges();
+  selection.addRange(range);
+
+  // Editing commands fire `input` (draft persistence and the send button
+  // follow), keep native undo, and are no-ops when the field is read-only.
+  // One `insertText` with "\n" makes block elements whose innerText adds a
+  // blank line for each line break, so insert each line and a plain line
+  // break between them to keep the text (e.g. code blocks) exact. A trailing
+  // line break would read back as two, so it is dropped.
+  text
+    .replace(/\n+$/, "")
+    .split("\n")
+    .forEach((line, index) => {
+      if (index > 0) document.execCommand("insertLineBreak");
+      if (line) document.execCommand("insertText", false, line);
+    });
+};

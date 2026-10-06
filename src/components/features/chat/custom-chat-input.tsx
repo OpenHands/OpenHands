@@ -5,6 +5,8 @@ import { useGripResize } from "#/hooks/chat/use-grip-resize";
 import { useChatInputEvents } from "#/hooks/chat/use-chat-input-events";
 import { useChatSubmission } from "#/hooks/chat/use-chat-submission";
 import { useSlashCommand } from "#/hooks/chat/use-slash-command";
+import { usePromptEnhancement } from "#/hooks/chat/use-prompt-enhancement";
+import { usePromptEnhancementAvailability } from "#/hooks/query/use-prompt-enhancement-availability";
 import { ChatInputGrip } from "./components/chat-input-grip";
 import { ChatInputContainer } from "./components/chat-input-container";
 import { HiddenFileInput } from "./components/hidden-file-input";
@@ -43,6 +45,7 @@ export function CustomChatInput({
   buttonClassName = "",
 }: CustomChatInputProps) {
   const [canSubmit, setCanSubmit] = React.useState(false);
+  const [hasDraftText, setHasDraftText] = React.useState(false);
   const {
     submittedMessage,
     clearAllFiles,
@@ -91,9 +94,17 @@ export function CustomChatInput({
 
   const syncCanSubmit = React.useCallback(() => {
     const text = chatInputRef.current?.innerText ?? "";
+    const hasText = text.trim().length > 0;
     const hasAttachments = images.length > 0 || files.length > 0;
-    setCanSubmit(text.trim().length > 0 || hasAttachments);
+    setHasDraftText(hasText);
+    setCanSubmit(hasText || hasAttachments);
   }, [chatInputRef, images, files]);
+
+  const promptEnhancementAvailability = usePromptEnhancementAvailability();
+  const promptEnhancement = usePromptEnhancement(
+    chatInputRef,
+    promptEnhancementAvailability,
+  );
 
   const {
     fileInputRef,
@@ -223,6 +234,9 @@ export function CustomChatInput({
           slashItems={slashItems}
           slashSelectedIndex={slashSelectedIndex}
           onSlashSelect={selectSlashItem}
+          promptEnhancement={promptEnhancement}
+          promptEnhancementAvailability={promptEnhancementAvailability}
+          hasDraftText={hasDraftText}
         />
       </div>
     </div>
