@@ -357,7 +357,7 @@
     "tr": "Alt aracı <cmd>{{name}}</cmd> çalıştırıldı",
     "uk": "Запущено підагент <cmd>{{name}}</cmd>",
     "ca": "S'ha executat el subagent <cmd>{{name}}</cmd>",
-    "id": "Menjalankan sub-agen <cmd>{{name}}</cmd>"
+    "id": "Telah menjalankan sub-agen <cmd>{{name}}</cmd>"
   },
   "SETTINGS$AGENT_PROFILE_TOOLS": {
     "en": "Tools",
@@ -645,7 +645,7 @@
     "tr": "Çalışma alanı görünümü güncellendi",
     "uk": "Оновлено вигляд робочої області",
     "ca": "S'ha actualitzat la vista de l'espai de treball",
-    "id": "Memperbarui tampilan ruang kerja"
+    "id": "Telah memperbarui tampilan ruang kerja"
   },
   "ONBOARDING$ACP_SECRETS_SUBSCRIPTION_NOTE": {
     "ar": "هل سجّلت الدخول بالفعل باشتراك أو حساب؟ اترك هذه الحقول فارغة — لا حاجة لمفتاح API.",
@@ -4263,7 +4263,7 @@
     "de": "LiteLLM Extra-Body",
     "uk": "Додатковий вміст LiteLLM",
     "ca": "Cos extra de LiteLLM",
-    "id": "LiteLLM Extra Body"
+    "id": "Body Tambahan LiteLLM"
   },
   "SCHEMA$LLM$LOG_COMPLETIONS$DESCRIPTION": {
     "en": "Enable logging of completions.",
@@ -5289,7 +5289,7 @@
     "de": "Temperatur",
     "uk": "Температура",
     "ca": "Temperatura",
-    "id": "Temperature"
+    "id": "Temperatur"
   },
   "SCHEMA$LLM$TIMEOUT$DESCRIPTION": {
     "en": "HTTP timeout in seconds.",
@@ -5577,7 +5577,7 @@
     "de": "Sicherheitsanalysator",
     "uk": "Аналізатор безпеки",
     "ca": "Analitzador de seguretat",
-    "id": "Security Analyzer"
+    "id": "Penganalisis Keamanan"
   },
   "SCHEMA$TOOLS$DESCRIPTION": {
     "en": "Tools available to the agent.",
@@ -6135,7 +6135,7 @@
     "de": "Sicherheitsanalysator",
     "uk": "Аналізатор безпеки",
     "ca": "Analitzador de seguretat",
-    "id": "Security Analyzer"
+    "id": "Penganalisis Keamanan"
   },
   "SETTINGS$NAV_APPLICATION": {
     "en": "Application",
@@ -11319,7 +11319,7 @@
     "de": "Übrigens:",
     "uk": "До речі:",
     "ca": "Per cert:",
-    "id": "BTW:"
+    "id": "Ngomong-ngomong:"
   },
   "CHAT_INTERFACE$BTW_GOT_IT": {
     "en": "Got it",
@@ -11373,7 +11373,7 @@
     "de": "Bitte gib eine Frage an, z. B. /btw <question>",
     "uk": "Вкажіть запитання, наприклад /btw <question>",
     "ca": "Proporciona una pregunta, p. ex. /btw <question>",
-    "id": "Harap berikan pertanyaan — misalnya /btw <pertanyaan>"
+    "id": "Harap berikan pertanyaan — misalnya /btw <question>"
   },
   "GOAL$PREFIX": {
     "en": "Goal:",
@@ -17529,7 +17529,7 @@
     "de": "Einstiegspunkt",
     "uk": "Точка входу",
     "ca": "Punt d'entrada",
-    "id": "Entrypoint"
+    "id": "Titik Masuk"
   },
   "AUTOMATIONS$DETAIL$SCRIPT_LOADING": {
     "en": "Loading script…",
@@ -20247,7 +20247,7 @@
     "de": "Skill aufgerufen <cmd>{{name}}</cmd>",
     "uk": "Навичку викликано <cmd>{{name}}</cmd>",
     "ca": "Skill invocada <cmd>{{name}}</cmd>",
-    "id": "Memanggil skill <cmd>{{name}}</cmd>"
+    "id": "Telah memanggil skill <cmd>{{name}}</cmd>"
   },
   "OBSERVATION_MESSAGE$RUN": {
     "en": "Ran <cmd>{{command}}</cmd>",
@@ -20265,7 +20265,7 @@
     "tr": "<cmd>{{command}}</cmd> çalıştırıldı",
     "uk": "Запустив <cmd>{{command}}</cmd>",
     "ca": "S'ha executat <cmd>{{command}}</cmd>",
-    "id": "Menjalankan <cmd>{{command}}</cmd>"
+    "id": "Telah menjalankan <cmd>{{command}}</cmd>"
   },
   "OBSERVATION_MESSAGE$RUN_IPYTHON": {
     "en": "Ran a Python command",
@@ -20283,7 +20283,7 @@
     "tr": "Python komutu çalıştırıldı",
     "uk": "Виконав команду Python",
     "ca": "S'ha executat una comanda Python",
-    "id": "Menjalankan perintah Python"
+    "id": "Telah menjalankan perintah Python"
   },
   "OBSERVATION_MESSAGE$READ": {
     "en": "Read <path>{{path}}</path>",
@@ -20301,7 +20301,7 @@
     "tr": "<path>{{path}}</path> okundu",
     "uk": "Прочитав <path>{{path}}</path>",
     "ca": "S'ha llegit <path>{{path}}</path>",
-    "id": "Membaca <path>{{path}}</path>"
+    "id": "Telah membaca <path>{{path}}</path>"
   },
   "OBSERVATION_MESSAGE$EDIT": {
     "en": "Edited <path>{{path}}</path>",
@@ -27699,7 +27699,7 @@
     "de": "LLM-Analysator (Standard)",
     "uk": "Аналізатор LLM (За замовчуванням)",
     "ca": "Analitzador LLM (per defecte)",
-    "id": "LLM Analyzer (Default)"
+    "id": "Penganalisis LLM (Default)"
   },
   "SETTINGS$SECURITY_ANALYZER_NONE": {
     "en": "None (Ask for every command)",
@@ -27735,7 +27735,7 @@
     "de": "Invariant regelbasierter Analysator",
     "uk": "Аналізатор на основі правил Invariant",
     "ca": "Analitzador basat en regles Invariant",
-    "id": "Invariant Rule-based Analyzer"
+    "id": "Penganalisis Berbasis Aturan Invariant"
   },
   "COMMON$HIGH_RISK": {
     "en": "High Risk",
@@ -30939,7 +30939,7 @@
     "tr": "Yazılım mühendisi / geliştirici",
     "uk": "Програмний інженер / розробник",
     "ca": "Enginyer/a de programari / desenvolupador/a",
-    "id": "Software engineer / developer"
+    "id": "Insinyur perangkat lunak / pengembang"
   },
   "ONBOARDING$ENGINEERING_MANAGER": {
     "en": "Engineering manager / tech lead",
@@ -45087,7 +45087,7 @@
     "tr": "Alt sohbet istendi",
     "uk": "Запитано дочірню розмову",
     "ca": "S'ha sol·licitat una conversa filla",
-    "id": "Meminta percakapan anak"
+    "id": "Telah meminta percakapan anak"
   },
   "SIDEBAR$ONBOARDING_CHECKLIST_TITLE": {
     "en": "Getting started",
