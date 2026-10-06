@@ -25,6 +25,7 @@ import {
   buildCreatePayload,
   deriveErrorMap,
   missingCreateEndpoints,
+  supportsAgentProfile,
 } from "#/manifests/automation-setup";
 import {
   actionKinds,
@@ -173,6 +174,9 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
         ),
       )
     : fields;
+  const canSelectAgentProfile =
+    capabilities.capabilities?.features.includes("agentProfiles") === true &&
+    supportsAgentProfile(entry, selectedAction);
   const hasLlmProfileField = useMemo(
     () => Object.values(fields).some((field) => field.type === "llm-profile"),
     [fields],
@@ -269,7 +273,11 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   const setActionValue = (kind: string) => {
     setSelectedAction(kind);
     const defaults = getInitialFormValues(entry.setup, selectedTrigger, kind);
-    valuesRef.current = { ...defaults, ...valuesRef.current };
+    valuesRef.current = {
+      ...defaults,
+      ...valuesRef.current,
+      ...(supportsAgentProfile(entry, kind) ? {} : { agent_profile_id: "" }),
+    };
     setValues(valuesRef.current);
     setLocalErrors({});
     setServiceErrors(NO_SERVICE_ERRORS);
@@ -535,9 +543,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
                   </p>
                 </div>
               )}
-              {capabilities.capabilities?.features.includes(
-                "agentProfiles",
-              ) && (
+              {canSelectAgentProfile && (
                 <AutomationAgentProfileSelector
                   value={
                     typeof values.agent_profile_id === "string"

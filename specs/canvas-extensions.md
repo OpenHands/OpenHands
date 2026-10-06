@@ -155,13 +155,13 @@ This remains additive to schema 1. Self-contained ESM loading, routed page
 registration, and the native editor are unchanged. There is no generic runtime,
 VS Code app, arbitrary URL proxy, mandatory sidecar, or frontend tarball loader.
 
-The pinned `@openhands/typescript-client` `1.50.1` ships the bridge API
+The pinned `@openhands/typescript-client` `1.53.0` ships the bridge API
 (first defined in draft `OpenHands/software-agent-sdk#5272`), so the client
 export requirement above is satisfied by a released client. The helper is
 feature-detected at runtime on the live Agent Server: `server_info.capabilities`
 must advertise `canvas_app_backend_bridge_v1` and `app_backend_ingress_url`
-must be a valid HTTP(S) URL. Canvas requires Agent Server `1.50.1` or newer,
-the first released version exposing this bridge contract.
+must be a valid HTTP(S) URL. Canvas requires Agent Server `1.51.0` or newer,
+which is above the first release exposing this bridge contract.
 
 ## Agent Server API
 
