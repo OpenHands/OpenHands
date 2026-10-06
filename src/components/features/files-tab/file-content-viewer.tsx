@@ -75,9 +75,9 @@ export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
   const isLightTheme = COLOR_THEMES[colorTheme].appearance === "light";
   const query = useWorkspaceFileContent(path);
   // Subscribe to the workspace mutation counter so the iframe / <img> src
-  // changes after every agent-side edit, forcing a fresh fetch even when
-  // the *path* hasn't moved (e.g. agent rewrote `style.css` referenced by
-  // the currently-displayed `index.html`).
+  // changes after every agent-side edit and every Files tab Refresh,
+  // forcing a fresh fetch even when the *path* hasn't moved (e.g. agent
+  // rewrote `style.css` referenced by the currently-displayed `index.html`).
   const mutationCounter = useWorkspaceMutationCounter((state) => state.count);
 
   if (query.isLoading) {
