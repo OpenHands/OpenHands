@@ -76,8 +76,9 @@ export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
   const query = useWorkspaceFileContent(path);
   // Subscribe to the workspace mutation counter so the iframe / <img> src
   // changes after every agent file-editor edit and every Files tab Refresh,
-  // forcing a fresh fetch even when the *path* hasn't moved (e.g. agent
-  // rewrote `style.css` referenced by the currently-displayed `index.html`).
+  // forcing a fresh fetch of the displayed file even when the *path* hasn't
+  // moved. Assets it references (e.g. a `style.css` used by `index.html`)
+  // keep their own URLs, so they are not cache-busted by this.
   const mutationCounter = useWorkspaceMutationCounter((state) => state.count);
 
   if (query.isLoading) {

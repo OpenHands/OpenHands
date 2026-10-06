@@ -11,10 +11,10 @@ import { create } from "zustand";
  *      selected path hasn't moved.
  *   2. It's appended as a `?v=<count>` cache-buster to the static
  *      workspace fileserver URLs used by `<iframe src>` / `<img src>` for
- *      the rich preview, so the browser re-requests a fresh copy after
- *      each edit or Refresh — important because the rendered HTML may
- *      reference sibling assets (CSS, images) that the user can't see
- *      directly but expects to reflect the latest version of the workspace.
+ *      the rich preview, so the browser re-requests a fresh copy of that
+ *      top-level file after each edit or Refresh. Only the top-level URL
+ *      changes: sibling assets the rendered HTML references (CSS, images)
+ *      keep their own URLs and can still come from the browser cache.
  *
  * The count is seeded from `Date.now()` at page load rather than 0, so the
  * first `?v=` URL of a page load never matches one the browser cached

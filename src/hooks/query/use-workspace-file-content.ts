@@ -149,7 +149,8 @@ export function useWorkspaceFileContent(relativePath: string | null) {
   // The iframe / <img> cache-busting for the rich preview is handled at
   // the consumer (FileContentViewer / files-tab) by appending the same
   // counter to the staticUrl, so a single tick refreshes both the
-  // decoded text and the iframe-rendered HTML's sibling assets.
+  // decoded text and the top-level file the iframe / <img> renders (its
+  // sibling assets keep their own URLs and are not cache-busted).
   const workspaceMutationCount = useWorkspaceMutationCounter(
     (state) => state.count,
   );
