@@ -11,8 +11,7 @@ import {
   displayErrorToast,
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
-import { getApiErrorBody, getApiErrorMessage } from "#/utils/api-error-message";
-import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
+import { getApiOrConnectionErrorMessage } from "#/utils/api-error-message";
 
 function useInvalidateCanvasExtensions() {
   const queryClient = useQueryClient();
@@ -25,11 +24,7 @@ function useInvalidateCanvasExtensions() {
 // A transport failure carries no response body, so keep the shared
 // "Disconnected" wording for it and use the server's detail otherwise.
 function displayInstallError(error: unknown, fallback: string) {
-  displayErrorToast(
-    getApiErrorBody(error)
-      ? getApiErrorMessage(error, fallback)
-      : retrieveAxiosErrorMessage(error) || fallback,
-  );
+  displayErrorToast(getApiOrConnectionErrorMessage(error, fallback));
 }
 
 export function useInstallCanvasExtension() {

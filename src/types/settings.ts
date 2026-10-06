@@ -1,6 +1,7 @@
 import type { MCPConfig } from "@openhands/typescript-client";
 export type { MCPConfig } from "@openhands/typescript-client";
 import type { SkillCategoryId } from "@openhands/extensions/skills";
+import type { WorkspaceFileDiscovery } from "#/utils/workspace-file-discovery";
 
 export const ProviderOptions = {
   github: "github",
@@ -110,6 +111,7 @@ export type SettingsScope = "personal";
 export type AgentKind = "openhands" | "acp";
 
 export type Settings = {
+  workspace_file_discovery?: Record<string, WorkspaceFileDiscovery | null>;
   llm_model: string;
   llm_base_url: string;
   agent: string;

@@ -509,6 +509,29 @@ describe("Sidebar", () => {
     );
   });
 
+  it.each(["/customize", "/mcp", "/skills", "/plugins", "/apps"])(
+    "marks the Customize row as the current page on %s",
+    (path) => {
+      renderSidebar(path);
+
+      expect(screen.getByTestId("sidebar-skills-link")).toHaveAttribute(
+        "aria-current",
+        "page",
+      );
+    },
+  );
+
+  it.each(["/conversations", "/automations"])(
+    "does not mark the Customize row as current on %s",
+    (path) => {
+      renderSidebar(path);
+
+      expect(screen.getByTestId("sidebar-skills-link")).not.toHaveAttribute(
+        "aria-current",
+      );
+    },
+  );
+
   it("pins and unpins a sidebar page as the home route without navigating", () => {
     // Arrange: the mocked active backend is `local` with no org.
     const pinKey = getPinnedHomeRouteKey("local", null);

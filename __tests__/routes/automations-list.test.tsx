@@ -131,6 +131,8 @@ beforeEach(() => {
   vi.mocked(AutomationService.getAutomations).mockResolvedValue(listResponse);
   vi.mocked(AutomationService.updateAutomation).mockReset();
   vi.mocked(AutomationService.dispatchAutomation).mockReset();
+  vi.mocked(AutomationService.deleteAutomation).mockReset();
+  vi.mocked(AutomationService.deleteAutomation).mockResolvedValue(undefined);
   vi.mocked(ProfilesService.listProfiles).mockReset();
   vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
     profiles: [],
@@ -199,6 +201,57 @@ describe("AutomationsList — Edit from the row kebab", () => {
       "edit-automation-name",
     )) as HTMLInputElement;
     expect(nameInput.value).toBe(automation.name);
+  });
+});
+
+describe("AutomationsList — delete confirmation", () => {
+  async function openDeleteConfirmation() {
+    const user = userEvent.setup();
+    renderList();
+    await screen.findByText(automation.name);
+    await user.click(screen.getByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU));
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$DELETE }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: I18nKey.AUTOMATIONS$DELETE_CONFIRM_TITLE,
+    });
+    return { user, dialog };
+  }
+
+  it("opens as a named modal dialog with focus inside, and Escape cancels without deleting", async () => {
+    // Arrange — open the confirmation from the row kebab.
+    const { user, dialog } = await openDeleteConfirmation();
+
+    // Assert — exposed as a modal dialog that keyboard users land in.
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
+
+    // Act — dismiss with the keyboard.
+    await user.keyboard("{Escape}");
+
+    // Assert — the dialog is gone and nothing was deleted.
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(AutomationService.deleteAutomation).not.toHaveBeenCalled();
+    expect(screen.getByText(automation.name)).toBeInTheDocument();
+  });
+
+  it("deletes the automation when Delete is confirmed", async () => {
+    // Arrange
+    const { user, dialog } = await openDeleteConfirmation();
+
+    // Act
+    await user.click(
+      within(dialog).getByRole("button", { name: I18nKey.AUTOMATIONS$DELETE }),
+    );
+
+    // Assert
+    await waitFor(() => {
+      expect(AutomationService.deleteAutomation).toHaveBeenCalledWith(
+        automation.id,
+      );
+    });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });
 
