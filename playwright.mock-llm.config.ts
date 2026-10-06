@@ -20,8 +20,10 @@
 
 import { defineConfig, devices } from "@playwright/test";
 import { randomBytes } from "node:crypto";
+import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { findFreePorts } from "./scripts/dev-safe.mjs";
+import { uvCacheEnvForIsolatedHome } from "./tests/e2e/mock-llm/utils/uv-cache-env";
 
 // ── Unique run namespace & directory isolation ─────────────────────────
 const runId =
@@ -51,6 +53,12 @@ const TEST_HOME = resolve(
   process.env.MOCK_LLM_TEST_HOME ?? join(RUN_ROOT, "home"),
 );
 process.env.MOCK_LLM_TEST_HOME = TEST_HOME;
+
+// HOME below is the isolated test home so the agent-server loads user skills
+// from TEST_HOME/.openhands/skills. uv must keep using the runner home, where
+// CI pre-warmed the cache, instead of the empty test home.
+const runnerHome = process.env.HOME ?? homedir();
+const uvCacheEnv = uvCacheEnvForIsolatedHome(runnerHome, process.env);
 
 const SKILL_REPOS_DIR = resolve(
   process.env.MOCK_LLM_SKILL_REPOS_HOST_DIR ?? join(RUN_ROOT, "skill-repos"),
@@ -244,6 +252,11 @@ export default defineConfig({
           envAssignment("OH_CANVAS_SAFE_AUTOMATION_PORT", AUTOMATION_PORT),
           envAssignment("OH_CANVAS_SAFE_VITE_PORT", VITE_PORT),
           envAssignment("HOME", TEST_HOME),
+          envAssignment("UV_CACHE_DIR", uvCacheEnv.UV_CACHE_DIR),
+          envAssignment(
+            "UV_PYTHON_INSTALL_DIR",
+            uvCacheEnv.UV_PYTHON_INSTALL_DIR,
+          ),
           "VITE_DO_NOT_TRACK=1",
           "VITE_ENABLE_BROWSER_TOOLS=false",
           // Bypass npm — exec directly into node so SIGTERM reaches

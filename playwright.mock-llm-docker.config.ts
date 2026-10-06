@@ -280,6 +280,19 @@ export default defineConfig({
     // use -p port mapping and set MOCK_LLM_AGENT_URL=http://host.docker.internal:<port>.
     {
       command: [
+        // Drop this run's fixture tree, then recreate the mount points as
+        // the current user. A reused MOCK_LLM_RUN_DIR can hold a previous
+        // crash; globalTeardown only runs when Playwright exits normally.
+        // Docker would otherwise create missing bind sources as root.
+        `node -e "const fs=require('node:fs'); const dirs=[${[
+          SKILL_REPOS_HOST_DIR,
+          USER_SKILLS_HOST_DIR,
+          FOLDER_WORKSPACE_HOST_DIR,
+        ]
+          .map((dir) => `'${dir.replaceAll("'", "\\'")}'`)
+          .join(
+            ",",
+          )}]; fs.rmSync('${RUN_ROOT}',{recursive:true,force:true}); for (const dir of dirs) fs.mkdirSync(dir,{recursive:true});" &&`,
         // Stop any leftover container from a previous failed run
         `docker rm -f ${CONTAINER_NAME} 2>/dev/null;`,
         "exec docker run",

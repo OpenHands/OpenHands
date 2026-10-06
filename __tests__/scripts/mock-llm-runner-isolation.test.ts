@@ -10,6 +10,7 @@ import {
   rmSync,
 } from "node:fs";
 import globalTeardown from "../../tests/e2e/mock-llm/utils/global-teardown";
+import { uvCacheEnvForIsolatedHome } from "../../tests/e2e/mock-llm/utils/uv-cache-env";
 
 describe("mock-LLM runner isolation", () => {
   const originalEnv = { ...process.env };
@@ -77,6 +78,33 @@ describe("mock-LLM runner isolation", () => {
     });
   });
 
+  describe("uv cache while HOME is isolated", () => {
+    it("keeps uv cache and Python installs on the runner home", () => {
+      expect(uvCacheEnvForIsolatedHome("/home/runner")).toEqual({
+        UV_CACHE_DIR: path.join("/home/runner", ".cache", "uv"),
+        UV_PYTHON_INSTALL_DIR: path.join(
+          "/home/runner",
+          ".local",
+          "share",
+          "uv",
+          "python",
+        ),
+      });
+    });
+
+    it("honors explicit UV_CACHE_DIR and UV_PYTHON_INSTALL_DIR", () => {
+      expect(
+        uvCacheEnvForIsolatedHome("/home/runner", {
+          UV_CACHE_DIR: "/opt/uv-cache",
+          UV_PYTHON_INSTALL_DIR: "  /opt/uv-python  ",
+        }),
+      ).toEqual({
+        UV_CACHE_DIR: "/opt/uv-cache",
+        UV_PYTHON_INSTALL_DIR: "/opt/uv-python",
+      });
+    });
+  });
+
   describe("globalTeardown", () => {
     let tempDir: string;
 
@@ -122,7 +150,9 @@ describe("mock-LLM runner isolation", () => {
 
       await globalTeardown();
       expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining("Refusing to delete unsafe per-run state directory"),
+        expect.stringContaining(
+          "Refusing to delete unsafe per-run state directory",
+        ),
       );
       warnSpy.mockRestore();
     });
