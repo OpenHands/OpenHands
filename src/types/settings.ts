@@ -1,6 +1,7 @@
 import type { MCPConfig } from "@openhands/typescript-client";
 export type { MCPConfig } from "@openhands/typescript-client";
 import type { SkillCategoryId } from "@openhands/extensions/skills";
+import type { WorkspaceFileDiscovery } from "#/utils/workspace-file-discovery";
 
 export const ProviderOptions = {
   github: "github",
@@ -110,6 +111,7 @@ export type SettingsScope = "personal";
 export type AgentKind = "openhands" | "acp";
 
 export type Settings = {
+  workspace_file_discovery?: Record<string, WorkspaceFileDiscovery | null>;
   llm_model: string;
   llm_base_url: string;
   agent: string;
@@ -135,6 +137,13 @@ export type Settings = {
   enable_sound_notifications: boolean;
   enable_proactive_conversation_starters: boolean;
   enable_solvability_analysis: boolean;
+  /**
+   * When true and an active Model Router meta-profile is configured, the first
+   * user message of every new conversation is routed through the router (the
+   * `route_task_to_model` tool) before the agent proceeds. Default false so
+   * conversations behave exactly as before unless the user opts in.
+   */
+  run_router_at_conversation_start: boolean;
   user_consents_to_analytics: boolean | null;
   search_api_key?: string;
   is_new_user?: boolean;

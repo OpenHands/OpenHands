@@ -254,7 +254,11 @@ describe("conversation store", () => {
     store.setMessageToSend("send me");
     store.restoreMessageToInputIfEmpty("restore me");
     expect(useConversationStore.getState()).toMatchObject({
-      messageToSend: { text: "send me", timestamp: 100 },
+      messageToSend: {
+        text: "send me",
+        timestamp: 100,
+        target: "conversation",
+      },
       messageRestoreIfEmpty: { text: "restore me", timestamp: 200 },
     });
 

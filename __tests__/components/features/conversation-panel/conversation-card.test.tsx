@@ -24,6 +24,7 @@ import {
 import type { Backend } from "#/api/backend-registry/types";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { useFreeModelsStore } from "#/stores/free-models-store";
+import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 
 // We'll use the actual i18next implementation but override the translation function
 
@@ -55,6 +56,7 @@ vi.mock("react-i18next", async () => {
 vi.mock("#/hooks/use-tracking", () => ({
   useTracking: () => ({
     trackDownloadVsCodeButtonClicked: vi.fn(),
+    trackDownloadTrajectoryButtonClicked: vi.fn(),
   }),
 }));
 
@@ -365,6 +367,29 @@ describe("ConversationCard", () => {
     expect(onContextMenuToggle).toHaveBeenCalledWith(false);
   });
 
+  it("closes the context menu with Escape and returns focus to its trigger", async () => {
+    const user = userEvent.setup();
+    const onContextMenuToggle = vi.fn();
+    renderWithProviders(
+      <ConversationCard
+        onDelete={onDelete}
+        onChangeTitle={onChangeTitle}
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        contextMenuOpen
+        onContextMenuToggle={onContextMenuToggle}
+      />,
+    );
+    const menu = screen.getByTestId("context-menu");
+    within(menu).getByTestId("delete-button").focus();
+
+    await user.keyboard("{Escape}");
+
+    expect(onContextMenuToggle).toHaveBeenCalledWith(false);
+    expect(screen.getByTestId("ellipsis-button")).toHaveFocus();
+  });
+
   it("should call onDelete when the delete button is clicked", async () => {
     const user = userEvent.setup();
     const onContextMenuToggle = vi.fn();
@@ -411,6 +436,36 @@ describe("ConversationCard", () => {
 
     expect(onArchive).toHaveBeenCalled();
     expect(onContextMenuToggle).toHaveBeenCalledWith(false);
+  });
+
+  it("closes the context menu when downloading the conversation fails", async () => {
+    const user = userEvent.setup();
+    const onContextMenuToggle = vi.fn();
+    vi.spyOn(
+      AgentServerConversationService,
+      "downloadConversation",
+    ).mockRejectedValue(new Error("HTTP request failed (502 Bad Gateway)"));
+    renderWithProviders(
+      <ConversationCard
+        conversationId="conv-1"
+        onDelete={onDelete}
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        contextMenuOpen
+        onContextMenuToggle={onContextMenuToggle}
+      />,
+    );
+
+    await user.click(
+      within(screen.getByTestId("context-menu")).getByTestId(
+        "download-trajectory-button",
+      ),
+    );
+
+    await vi.waitFor(() =>
+      expect(onContextMenuToggle).toHaveBeenCalledWith(false),
+    );
   });
 
   test("clicking the selectedRepository should not trigger the onClick handler", async () => {

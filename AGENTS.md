@@ -3,6 +3,20 @@
 ## General
 
 - This repository is the OpenHands Agent Canvas React/TypeScript frontend.
+
+## i18n workflow
+- After editing `src/i18n/translation.json`, run `npm run make-i18n` to
+  regenerate `src/i18n/declaration.ts` (gitignored, auto-generated) and
+  `scripts/check-translation-completeness.cjs` to confirm full locale coverage.
+- Removing an i18n key: delete the whole locale block from translation.json,
+  then `make-i18n`, then remove any test-mock entries (tests inline a
+  `translations` map in the `useTranslation` vi.mock).
+
+## Commit messages
+- The persistent shell can garble long multi-line `commit -m` bodies (echo
+  loop corrupts the stored message). Use `git commit -F <file>` with a
+  written temp file instead of `-m` for any non-trivial message.
+
 - Primary verification commands are `npm run lint`, `npm test`, `npm run build`, and `npm run build:lib`.
 - Direct dependencies and dev dependencies are exact-pinned. Use the committed `package-lock.json` with `npm ci`, and update `package.json` and `package-lock.json` together through npm.
 - Public skills come from `@openhands/extensions`; project-specific contributor guidance lives under `.agents/skills/`.
@@ -48,6 +62,7 @@ Detailed contributor knowledge is split into skills so it loads only for relevan
 | [`frontend-development`](.agents/skills/frontend-development/SKILL.md) | React/UI work, i18n, named identifiers, MSW mock mode, lazy loading, bundle performance, and feature-specific UI invariants. |
 | [`pr-design-doc`](.agents/skills/pr-design-doc/SKILL.md) | Writing the PR design document stored in the PR body. |
 | [`release`](.agents/skills/release.md) | Cutting and verifying an `@openhands/agent-canvas` release. |
+| [`verify-openhands`](.agents/skills/verify-openhands/SKILL.md) | Driving the real app like a user with `control-openhands`, the feature map of every user-facing behavior, and creating or maintaining that map. |
 
 The detailed rules live in each skill's `references/guide.md`; do not copy them back into this file. Update the owning skill whenever an invariant changes.
 
@@ -60,6 +75,7 @@ Create TDD tests for behavioral changes. Keep tests focused on user behavior and
 - Mock an underlying service rather than the hook that consumes it.
 - Extend an existing test file when it is a natural home; create a new file only when necessary.
 - Avoid brittle presentation-only assertions. Test functional CSS contracts directly when they are behavior.
+- Do not mirror literal source, fixture, translation, or class-string definitions in tests. Assert consumer behavior or an actual build/runtime contract instead, and do not export internals solely to make them testable. Preserve coverage for routing, accessibility, async behavior, behavioral contracts, and functional CSS/build contracts.
 - Use the minimum number of cases that fully cover the intended behavior and edge cases.
 
 Use the `e2e-testing` skill for suite selection and E2E-specific requirements.

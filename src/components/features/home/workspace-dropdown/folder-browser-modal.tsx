@@ -23,6 +23,12 @@ import ChevronLeft from "#/icons/chevron-left-small.svg?react";
 
 const PROJECTS_PATH = "/projects";
 
+// Shared by the column header and every entry row so the columns line up.
+// Below md the Kind track is narrow and the name track may shrink to its
+// share (the name truncates), so folder names stay visible at phone width.
+const FOLDER_BROWSER_COLUMNS_CLASS_NAME =
+  "grid grid-cols-[minmax(0,1fr)_4rem] gap-x-2 md:grid-cols-[1fr_120px] md:gap-x-0";
+
 interface FolderBrowserModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -51,7 +57,7 @@ function SidebarSection({
   if (entries.length === 0) return null;
   return (
     <div className="px-2 pb-3">
-      <div className="px-2 pb-1 text-[11px] uppercase tracking-wide text-muted font-semibold">
+      <div className="px-2 pb-1 text-[11px] uppercase tracking-wide text-muted font-semibold truncate">
         {label}
       </div>
       <ul>
@@ -251,7 +257,7 @@ export function FolderBrowserModal({
           {/* Sidebar */}
           <aside
             data-testid="folder-browser-sidebar"
-            className="w-45 shrink-0 border-r border-border-input bg-surface py-3 overflow-y-auto"
+            className="w-28 md:w-45 shrink-0 border-r border-border-input bg-surface py-3 overflow-y-auto"
           >
             <SidebarSection
               label={t(I18nKey.HOME$FAVORITES)}
@@ -290,7 +296,13 @@ export function FolderBrowserModal({
             </div>
 
             {/* Column headers */}
-            <div className="grid grid-cols-[1fr_120px] px-4 py-1 border-b border-border-input text-xs text-text-secondary font-semibold">
+            <div
+              data-testid="folder-browser-column-headers"
+              className={cn(
+                FOLDER_BROWSER_COLUMNS_CLASS_NAME,
+                "px-4 py-1 border-b border-border-input text-xs text-text-secondary font-semibold",
+              )}
+            >
               <span>{t(I18nKey.HOME$NAME)}</span>
               <span>{t(I18nKey.HOME$KIND)}</span>
             </div>
@@ -333,7 +345,10 @@ export function FolderBrowserModal({
                   <button
                     type="button"
                     onClick={() => setCurrentPath(entry.path)}
-                    className="grid grid-cols-[1fr_120px] items-center w-full text-left px-4 py-1.5 text-sm text-contrast hover:bg-interactive-hover cursor-pointer"
+                    className={cn(
+                      FOLDER_BROWSER_COLUMNS_CLASS_NAME,
+                      "items-center w-full text-left px-4 py-1.5 text-sm text-contrast hover:bg-interactive-hover cursor-pointer",
+                    )}
                     data-testid={`folder-browser-entry-${entry.name}`}
                   >
                     <span className="flex items-center gap-2 min-w-0">

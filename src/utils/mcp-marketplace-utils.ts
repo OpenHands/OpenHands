@@ -201,8 +201,17 @@ function transportMatchesServer(
     );
   }
 
-  // stdio: match on the registered server name.
-  return server.type === "stdio" && server.name === transport.serverName;
+  // stdio: match on what the server runs, not its settings key. A repeated
+  // library install is stored under a suffixed key (`time_1`) and users can
+  // rename a copy, but both keep the catalog command and leading args;
+  // `argFields` tokens (paths, `--repository <path>`) are appended after them.
+  const serverArgs = server.args ?? [];
+  return (
+    server.type === "stdio" &&
+    server.command === transport.command &&
+    transport.args.length <= serverArgs.length &&
+    transport.args.every((arg, index) => serverArgs[index] === arg)
+  );
 }
 
 function normalize(query: string): string {
