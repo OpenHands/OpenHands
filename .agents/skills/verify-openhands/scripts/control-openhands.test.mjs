@@ -775,10 +775,8 @@ test("map affected reads a path list and lists the E2E specs of the hit families
   );
   assert.deepEqual(json.nonUserFacing, ["docs/README.md"]);
   assert.ok(json.e2e.includes("tests/e2e/live-acp/acp-docker-e2e.mts"));
-  const noBase = spawnSync(process.execPath, [cli, "map", "affected"], {
-    encoding: "utf8",
-  });
-  assert.equal(noBase.status, 2);
+  // What `map affected` does with no flags depends on the index's baseline
+  // line; the baseline test below covers both states.
 });
 
 test("map check rejects a Source: path that is gone and an E2E: spec or ID that is unknown", () => {
