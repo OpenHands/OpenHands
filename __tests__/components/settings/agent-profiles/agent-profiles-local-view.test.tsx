@@ -138,6 +138,15 @@ describe("AgentProfilesLocalView save mapping", () => {
     };
   });
 
+  it("describes the add editor with agent copy, not the LLM-profile hint", async () => {
+    render(<AgentProfilesLocalView />);
+    await openCreateAndName("my-agent");
+
+    expect(
+      screen.getByTestId("agent-profile-editor-description"),
+    ).toHaveTextContent("SETTINGS$AGENT_PROFILE_SAVE_HINT");
+  });
+
   it("saves an OpenHands profile with the selected llm_profile_ref", async () => {
     emitControl = {
       agentType: "openhands",
