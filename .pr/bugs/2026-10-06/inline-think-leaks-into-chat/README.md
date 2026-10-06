@@ -83,3 +83,34 @@ harness that accompanied the bug report, including the DOM probe below.
 `ChatMessage`. `splitInlineThink` already existed and was wired into the message
 paths (`user-assistant-event-message.tsx`, and the streaming-delta branch of
 `event-message.tsx`), but not into the action-thought path.
+
+## Follow-up: duplicate thinking sections
+
+Review of the first fix found a second, related defect. `EventMessage` rendered
+explicit `reasoning_content` / `thinking_blocks` as its own `CollapsibleThinking`
+and then invoked `ThoughtEventMessage`, which rendered the inline block as
+another one. An action carrying both therefore produced **two thinking
+controls**, and when the two held the same text it appeared twice — visible in
+`thought-event-message.tsx` around R38.
+
+`ThoughtEventMessage` is now the single owner: `splitActionNarration()` returns
+`{ reasoning, message }` where `reasoning` merges explicit reasoning with a
+leading inline block (`mergeReasoning` drops an exact duplicate), and
+`EventMessage` renders explicit reasoning only when `ThoughtEventMessage` does
+not own it — on the action path, the observation replacement path, and the
+hoisted-thought path in `messages.tsx`. `getActionNarration` uses the same split,
+so a downloaded transcript no longer writes raw `think` tags or repeated
+reasoning.
+
+Verification for this follow-up is deterministic at the component level rather
+than a second screenshot, because the mock trajectory cannot emit
+`reasoning_content`:
+
+- `event-thought-helpers.test.ts` — `splitActionNarration` merges identical
+  explicit + inline reasoning into one fragment and keeps distinct fragments.
+- `event-message-think-action.test.tsx` — a `Messages` render of an action with
+  `reasoning_content: "Check the directory"` plus an identical inline block
+  asserts exactly one `collapsible-thinking` whose text appears once, alongside
+  the `Running ls` bubble.
+- `transcript-export/index.test.ts` — the exported markdown contains no raw tags
+  and the reasoning once.
