@@ -430,7 +430,7 @@ You can create a `.env` file in the project directory with these variables based
 | `VITE_BACKEND_HOST`         | Backend host used by the Vite dev proxy                                                   | `127.0.0.1:8000`       |
 | `VITE_SESSION_API_KEY`      | (Internal) Session API key injected by the launcher — set `LOCAL_BACKEND_API_KEY` instead | -                      |
 | `VITE_WORKING_DIR`          | Workspace path sent when starting new conversations                                       | `workspace/project`    |
-| `VITE_ENABLE_BROWSER_TOOLS` | Set to `false` to omit `BrowserToolSet` from new conversation payloads                    | `true`                 |
+| `VITE_ENABLE_BROWSER_TOOLS` | Set to `false` to start the agent-server with the browser tool set off                    | `true`                 |
 | `VITE_BASE_PATH`            | Build/serve the SPA under a subpath such as `/canvas`                                     | `/`                    |
 | `VITE_MOCK_API`             | Enable/disable API mocking with MSW                                                       | `false`                |
 | `VITE_USE_TLS`              | Use HTTPS/WSS for the Vite proxy target                                                   | `false`                |
