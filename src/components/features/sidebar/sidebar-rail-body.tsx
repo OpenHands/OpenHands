@@ -6,6 +6,7 @@ import {
   Plus,
   Server,
   Settings,
+  Activity,
 } from "lucide-react";
 import { OpenHandsLogoButton } from "#/components/shared/buttons/openhands-logo-button";
 import { NavigationLink } from "#/components/shared/navigation-link";
@@ -19,6 +20,7 @@ import {
   CUSTOMIZE_PATH,
   usePinnedHomeRoute,
 } from "#/hooks/use-pinned-home-route";
+import { ACTIVITY_PATH } from "#/constants/activity";
 import { SidebarCollapsedIconSlot } from "./sidebar-collapsed-icon-slot";
 import { SidebarNavLink } from "./sidebar-nav-link";
 import { I18nKey } from "#/i18n/declaration";
@@ -210,6 +212,17 @@ export function SidebarRailBody({
           testId="sidebar-conversations-link"
           collapsed={collapsed}
           icon={<Plus width={ICON_SIZE} height={ICON_SIZE} />}
+        />
+        <SidebarNavLink
+          to={ACTIVITY_PATH}
+          label={t(I18nKey.ACTIVITY$TITLE)}
+          testId="sidebar-activity-link"
+          collapsed={collapsed}
+          pinAction={buildPinAction(
+            ACTIVITY_PATH,
+            "sidebar-pin-home-toggle-activity",
+          )}
+          icon={<Activity width={ICON_SIZE} height={ICON_SIZE} />}
         />
         <SidebarNavLink
           to={CUSTOMIZE_PATH}

@@ -1,0 +1,197 @@
+import { describe, expect, it } from "vitest";
+import { ExecutionStatus } from "#/types/agent-server/core/base/common";
+import type { OpenHandsEvent } from "#/types/agent-server/core";
+import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
+import {
+  deriveSubagents,
+  getActivityMetrics,
+  getActivityStatusDescriptor,
+  pickLatestActivity,
+  selectActiveConversations,
+} from "#/components/features/activity/activity-view-model";
+
+const taskAction = (toolCallId: string, subagentType: string): OpenHandsEvent =>
+  ({
+    id: `action-${toolCallId}`,
+    timestamp: "2026-10-06T00:00:00Z",
+    source: "agent",
+    action: { kind: "TaskAction", subagent_type: subagentType },
+    tool_name: "task",
+    tool_call_id: toolCallId,
+  }) as unknown as OpenHandsEvent;
+
+const taskObservation = (actionId: string, isError: boolean): OpenHandsEvent =>
+  ({
+    id: `observation-${actionId}`,
+    timestamp: "2026-10-06T00:00:01Z",
+    source: "environment",
+    action_id: actionId,
+    tool_name: "task",
+    tool_call_id: actionId,
+    observation: { kind: "TaskObservation", is_error: isError },
+  }) as unknown as OpenHandsEvent;
+
+const bashAction = (toolCallId: string): OpenHandsEvent =>
+  ({
+    id: `action-${toolCallId}`,
+    timestamp: "2026-10-06T00:00:00Z",
+    source: "agent",
+    action: { kind: "ExecuteBashAction", command: "npm test" },
+    tool_name: "execute_bash",
+    tool_call_id: toolCallId,
+  }) as unknown as OpenHandsEvent;
+
+const assistantMessage = (text: string): OpenHandsEvent =>
+  ({
+    id: `message-${text}`,
+    timestamp: "2026-10-06T00:00:02Z",
+    source: "agent",
+    llm_message: {
+      role: "assistant",
+      content: [{ type: "text", text }],
+    },
+  }) as unknown as OpenHandsEvent;
+
+const conversation = (overrides: Partial<AppConversation>): AppConversation =>
+  ({
+    id: "c1",
+    title: "Conversation",
+    execution_status: ExecutionStatus.RUNNING,
+    metrics: null,
+    ...overrides,
+  }) as AppConversation;
+
+// @spec LAV-002 — A row conveys status, current step, and spend
+describe("getActivityStatusDescriptor", () => {
+  it("flags only states that require user action as needing attention", () => {
+    expect(
+      getActivityStatusDescriptor(ExecutionStatus.WAITING_FOR_CONFIRMATION)
+        .needsAttention,
+    ).toBe(true);
+    expect(
+      getActivityStatusDescriptor(ExecutionStatus.ERROR).needsAttention,
+    ).toBe(true);
+    expect(
+      getActivityStatusDescriptor(ExecutionStatus.STUCK).needsAttention,
+    ).toBe(true);
+
+    expect(
+      getActivityStatusDescriptor(ExecutionStatus.RUNNING).needsAttention,
+    ).toBe(false);
+    expect(
+      getActivityStatusDescriptor(ExecutionStatus.PAUSED).needsAttention,
+    ).toBe(false);
+    expect(
+      getActivityStatusDescriptor(ExecutionStatus.FINISHED).needsAttention,
+    ).toBe(false);
+  });
+});
+
+// @spec LAV-001 — Only actively executing agents are listed
+describe("selectActiveConversations", () => {
+  it("keeps running and waiting conversations and drops the rest", () => {
+    const conversations = [
+      conversation({ id: "run", execution_status: ExecutionStatus.RUNNING }),
+      conversation({
+        id: "wait",
+        execution_status: ExecutionStatus.WAITING_FOR_CONFIRMATION,
+      }),
+      conversation({ id: "done", execution_status: ExecutionStatus.FINISHED }),
+      conversation({ id: "idle", execution_status: ExecutionStatus.IDLE }),
+      conversation({ id: "paused", execution_status: ExecutionStatus.PAUSED }),
+      conversation({ id: "err", execution_status: ExecutionStatus.ERROR }),
+      conversation({ id: "stuck", execution_status: ExecutionStatus.STUCK }),
+    ];
+
+    expect(
+      selectActiveConversations(conversations).map((entry) => entry.id),
+    ).toEqual(["run", "wait"]);
+  });
+});
+
+// @spec LAV-003 — Subagent fan-out is derived from the event stream
+describe("deriveSubagents", () => {
+  it("opens a delegation per task action and keeps unresolved ones running", () => {
+    const subagents = deriveSubagents([
+      taskAction("c1", "explorer"),
+      taskAction("c2", "coder"),
+    ]);
+
+    expect(subagents).toEqual([
+      { id: "c1", name: "explorer", status: "running" },
+      { id: "c2", name: "coder", status: "running" },
+    ]);
+  });
+
+  it("closes a delegation as completed or errored from its observation", () => {
+    const subagents = deriveSubagents([
+      taskAction("c1", "explorer"),
+      taskObservation("c1", false),
+      taskAction("c2", "coder"),
+      taskObservation("c2", true),
+    ]);
+
+    expect(subagents).toEqual([
+      { id: "c1", name: "explorer", status: "completed" },
+      { id: "c2", name: "coder", status: "error" },
+    ]);
+  });
+
+  it("ignores observations that do not pair with a task action", () => {
+    expect(deriveSubagents([taskObservation("missing", false)])).toEqual([]);
+  });
+});
+
+// @spec LAV-002 — A row conveys status, current step, and spend
+describe("pickLatestActivity", () => {
+  it("prefers the newest action over an earlier assistant message", () => {
+    const descriptor = pickLatestActivity([
+      assistantMessage("Let me check"),
+      bashAction("c1"),
+    ]);
+
+    expect(descriptor).toEqual({
+      kind: "translation",
+      key: "ACTION_MESSAGE$RUN",
+      values: { command: "npm test" },
+    });
+  });
+
+  it("falls back to the last assistant message when there is no action", () => {
+    expect(pickLatestActivity([assistantMessage("All done")])).toEqual({
+      kind: "text",
+      text: "All done",
+    });
+  });
+
+  it("returns null when there is nothing to show", () => {
+    expect(pickLatestActivity([])).toBeNull();
+  });
+});
+
+// @spec LAV-002 — A row conveys status, current step, and spend
+describe("getActivityMetrics", () => {
+  it("sums prompt and completion tokens and keeps the cost", () => {
+    expect(
+      getActivityMetrics({
+        accumulated_cost: 0.25,
+        max_budget_per_task: null,
+        accumulated_token_usage: {
+          prompt_tokens: 100,
+          completion_tokens: 20,
+          cache_read_tokens: 0,
+          cache_write_tokens: 0,
+          context_window: 0,
+          per_turn_token: 0,
+        },
+      }),
+    ).toEqual({ cost: 0.25, totalTokens: 120 });
+  });
+
+  it("returns nulls when metrics are missing", () => {
+    expect(getActivityMetrics(null)).toEqual({
+      cost: null,
+      totalTokens: null,
+    });
+  });
+});

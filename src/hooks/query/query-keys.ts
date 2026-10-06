@@ -107,6 +107,7 @@ export const APP_UPDATE_QUERY_KEYS = {
 
 export const CONVERSATION_QUERY_KEYS = {
   subConversations: ["v1", "sub-conversations"] as const,
+  activityTail: ["v1", "conversation-activity-tail"] as const,
 } as const;
 
 export const LOCAL_PLANNER_MUTATION_KEYS = {
