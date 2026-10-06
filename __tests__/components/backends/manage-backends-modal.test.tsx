@@ -18,7 +18,7 @@ import {
 import {
   NavigationProvider,
   type NavigationContextValue,
-} from "#/context/navigation-context";
+} from "#/contexts/navigation-context";
 import { ManageBackendsModal } from "#/components/features/backends/manage-backends-modal";
 import { BackendVersion } from "#/components/features/backends/backend-version";
 import { BackendRow } from "#/components/features/backends/backend-row";
