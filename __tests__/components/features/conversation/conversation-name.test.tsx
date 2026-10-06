@@ -1,4 +1,4 @@
-import { screen, within, waitFor } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   afterEach,
@@ -91,12 +91,10 @@ vi.mock("react-i18next", async () => {
           BUTTON$EXPORT_CONVERSATION: "Export Conversation",
           BUTTON$EXPORT_TRANSCRIPT: "Export…",
           BUTTON$DOWNLOAD_CONVERSATION_DATA: "Download conversation data",
-          BUTTON$DOWNLOAD_VIA_VSCODE: "Download via VS Code",
           BUTTON$SHOW_AGENT_TOOLS_AND_METADATA: "Show Agent Tools",
           CONVERSATION$SHOW_SKILLS: "Show Skills",
           BUTTON$DISPLAY_COST: "Display Usage and Cost",
-          COMMON$CLOSE_CONVERSATION_STOP_RUNTIME:
-            "Stop Conversation (Runtime)",
+          COMMON$CLOSE_CONVERSATION_STOP_RUNTIME: "Stop Conversation (Runtime)",
           COMMON$STOP_CONVERSATION: "Stop Conversation",
           COMMON$DELETE_CONVERSATION: "Delete Conversation",
           CONVERSATION$SHARE_PUBLICLY: "Share Publicly",
@@ -344,6 +342,20 @@ describe("ConversationName", () => {
     expect(
       screen.queryByTestId("conversation-name-llm-model"),
     ).not.toBeInTheDocument();
+  });
+
+  it("closes the more-options menu on Escape and refocuses its trigger", async () => {
+    const user = userEvent.setup();
+    renderConversationNameWithRouter();
+    await user.click(screen.getByTestId("ellipsis-button"));
+    screen.getByTestId("rename-button").focus();
+
+    await user.keyboard("{Escape}");
+
+    expect(
+      screen.queryByTestId("conversation-name-context-menu"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("ellipsis-button")).toHaveFocus();
   });
 
   it("should focus input when entering edit mode", async () => {

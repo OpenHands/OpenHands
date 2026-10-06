@@ -3,7 +3,6 @@ import {
   FileClient,
   ProfilesClient,
   SettingsClient,
-  VSCodeClient,
 } from "@openhands/typescript-client/clients";
 import { http, HttpResponse } from "msw";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
@@ -41,8 +40,6 @@ const {
   mockForkConversation,
   mockGetEvent,
   mockSwitchAcpModel,
-  mockVSCodeGetUrl,
-  mockVSCodeGetStatus,
   mockGetSettings,
   mockGetSettingsForConversation,
   mockGetProfile,
@@ -64,8 +61,6 @@ const {
   mockForkConversation: vi.fn(),
   mockGetEvent: vi.fn(),
   mockSwitchAcpModel: vi.fn(),
-  mockVSCodeGetUrl: vi.fn(),
-  mockVSCodeGetStatus: vi.fn(),
   mockGetSettings: vi.fn(),
   mockGetSettingsForConversation: vi.fn(),
   mockGetProfile: vi.fn(),
@@ -94,9 +89,6 @@ vi.mock("@openhands/typescript-client/clients", async () => {
     }),
     SettingsClient: vi.fn(function SettingsClientMock() {
       return mockSettingsClient();
-    }),
-    VSCodeClient: vi.fn(function VSCodeClientMock() {
-      return { getUrl: mockVSCodeGetUrl, getStatus: mockVSCodeGetStatus };
     }),
   };
 });
@@ -229,13 +221,10 @@ describe("AgentServerConversationService", () => {
     mockForkConversation.mockReset();
     mockGetEvent.mockReset();
     mockSwitchAcpModel.mockReset();
-    mockVSCodeGetUrl.mockReset();
-    mockVSCodeGetStatus.mockReset();
     vi.mocked(ConversationClient).mockClear();
     vi.mocked(FileClient).mockClear();
     vi.mocked(ProfilesClient).mockClear();
     vi.mocked(SettingsClient).mockClear();
-    vi.mocked(VSCodeClient).mockClear();
 
     mockConversationClient.mockReturnValue({
       createConversation: async (payload: unknown) => {
@@ -316,23 +305,6 @@ describe("AgentServerConversationService", () => {
       await expect(
         AgentServerConversationService.updateConversationTags("gone", {}),
       ).rejects.toThrow("gone");
-    });
-
-    it("preserves disabled editor capability and explicit runtime credentials", async () => {
-      const status = { enabled: false, running: false };
-      mockVSCodeGetStatus.mockResolvedValue(status);
-      await expect(
-        AgentServerConversationService.getVSCodeStatus(
-          "https://runtime.example.test/api/conversations/conv-1",
-          "session-key",
-        ),
-      ).resolves.toEqual(status);
-      expect(VSCodeClient).toHaveBeenCalledWith(
-        expect.objectContaining({
-          host: "https://runtime.example.test",
-          apiKey: "session-key",
-        }),
-      );
     });
 
     it("renames Cloud conversations through the Cloud resource", async () => {
@@ -1593,31 +1565,6 @@ describe("AgentServerConversationService", () => {
       );
     });
 
-    it("requests a VS Code URL for the conversation workspace", async () => {
-      mockHttpGet.mockResolvedValue({
-        data: [
-          makeDirectConversation({
-            workspace: { working_dir: "/workspace/repos/canvas" },
-          }),
-        ],
-      });
-      mockVSCodeGetUrl.mockResolvedValue("http://localhost:3000/vscode");
-
-      const result = await AgentServerConversationService.getVSCodeUrl(
-        "conv-1",
-        "http://runtime.internal:9000",
-        "runtime-key",
-      );
-
-      expect(mockVSCodeGetUrl).toHaveBeenCalledWith({
-        baseUrl: window.location.origin,
-        workspaceDir: "/workspace/repos/canvas",
-      });
-      expect(result).toEqual({
-        vscode_url: "http://localhost:3000/vscode",
-      });
-    });
-
     it("uses the configured working directory when a conversation has no workspace", async () => {
       mockHttpGet.mockResolvedValue({
         data: [makeDirectConversation({ workspace: null })],
@@ -1636,32 +1583,6 @@ describe("AgentServerConversationService", () => {
           "missing-conv",
         ),
       ).resolves.toBe("/workspace/project/agent-canvas");
-    });
-
-    it("omits the browser origin when requesting a VS Code URL during SSR", async () => {
-      mockHttpGet.mockResolvedValue({
-        data: [makeDirectConversation({ workspace: null })],
-      });
-      mockVSCodeGetUrl.mockResolvedValue("http://localhost:3000/vscode");
-      const browserWindow = window;
-      Object.defineProperty(globalThis, "window", {
-        configurable: true,
-        value: undefined,
-      });
-
-      try {
-        await AgentServerConversationService.getVSCodeUrl("conv-1", undefined);
-      } finally {
-        Object.defineProperty(globalThis, "window", {
-          configurable: true,
-          value: browserWindow,
-        });
-      }
-
-      expect(mockVSCodeGetUrl).toHaveBeenCalledWith({
-        baseUrl: undefined,
-        workspaceDir: "/workspace/project/agent-canvas",
-      });
     });
 
     it("does not contact a backend for an empty conversation batch", async () => {
@@ -2634,24 +2555,6 @@ describe("AgentServerConversationService", () => {
 
       expect(result.title).toBe("Conversation conv-");
       expect(ConversationClient).toHaveBeenLastCalledWith({
-        conversationId: "conv-1",
-        host: "http://runtime.internal:9000",
-        apiKey: "runtime-key",
-        workingDir: "/workspace/project/agent-canvas",
-      });
-    });
-
-    it("constructs the VS Code client with the supplied runtime coordinates", async () => {
-      mockHttpGet.mockResolvedValue({ data: [makeDirectConversation()] });
-      mockVSCodeGetUrl.mockResolvedValue("http://localhost:3000/vscode");
-
-      await AgentServerConversationService.getVSCodeUrl(
-        "conv-1",
-        "http://runtime.internal:9000/api/conversations/conv-1",
-        "runtime-key",
-      );
-
-      expect(VSCodeClient).toHaveBeenCalledWith({
         conversationId: "conv-1",
         host: "http://runtime.internal:9000",
         apiKey: "runtime-key",
