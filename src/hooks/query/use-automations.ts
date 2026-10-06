@@ -4,6 +4,8 @@ import {
   useMutation,
   useQueryClient,
 } from "@tanstack/react-query";
+import { isAxiosError } from "axios";
+import { isSdkHttpStatusError } from "#/api/agent-server-compatibility";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useTracking } from "#/hooks/use-tracking";
@@ -177,6 +179,16 @@ export function useDispatchAutomation() {
       // explicitly (same prefix all conversation mutations invalidate).
       queryClient.invalidateQueries({ queryKey: ["user", "conversations"] });
       trackAutomationExecuted({ backendKind: active.backend.kind });
+    },
+    onError: (error) => {
+      // A 404 means the automation was deleted elsewhere, so refetch to drop it.
+      // Other failures keep the loaded list and detail as they are.
+      const notFound =
+        isSdkHttpStatusError(error, 404) ||
+        (isAxiosError(error) && error.response?.status === 404);
+      if (!notFound) return;
+      queryClient.invalidateQueries({ queryKey: AUTOMATIONS_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: AUTOMATION_DETAIL_QUERY_KEY });
     },
   });
 }
