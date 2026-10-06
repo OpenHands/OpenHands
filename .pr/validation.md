@@ -185,3 +185,61 @@ does not replace the official OpenHands release or downstream exact pins.
 - The author authorized an AI-assisted HUMAN summary; assistance is disclosed
   and the latest PR description check passed.
 - Remove `.pr/` manually before merging this fork PR.
+
+
+## Onboarding review follow-up — 2026-10-07
+
+Both captures start in a fresh browser context, without the onboarding-complete
+flag, using the built Canvas at source checkout `cefa2a1` and the counterpart
+packaged Agent Server. No application API response is mocked in the browser.
+
+- [Authentication fixture onboarding](onboarding-auth-fixture.webm):
+  select Codex, display a nonfunctional device code, copy/cancel, sign in on a
+  second attempt, observe Connected, advance with the API-key field empty,
+  reach Say hello and close without sending a model request. Only the OpenAI
+  authentication transport is a fixture. A persistent label states this scope.
+- [Real existing-account onboarding](onboarding-existing-login.webm):
+  reuse the original human-authorized Codex credential on the original local
+  server; select Codex, observe Connected, advance with no API key, reach
+  Say hello and close. The provider transport is real; no new device initiation
+  or consent page is recorded, and no model request is sent.
+- Both runs persisted `agent_kind=acp` and `acp_server=codex`, and reported no
+  browser page errors. [Fixture observations](onboarding-auth-fixture-results.json)
+  and [real-server observations](onboarding-existing-login-results.json) contain
+  only safe HTTP method/path/status and acceptance summaries, not headers,
+  request bodies, account identifiers or credentials.
+
+[Credential reuse proposal](credential-reuse.html) ([full written version](credential-reuse.md))
+explains the existing LLM Profile OAuth path, the current separate ACP store,
+the missing persisted ID token, the proposed shared server owner and adapters,
+old-credential migration, consumer-specific disconnect and native ACP refresh
+coordination. It is a proposal: LLM-to-ACP credential reuse is not yet implemented
+or demonstrated. CAS alone is not sufficient to coordinate rotating refresh
+tokens across native Codex and SDK consumers.
+
+### Reproduce the public fixture capture
+
+Use Node >=24 and the installed browser/recording tools, plus a Python environment
+built from the coordinated SDK/Agent Server PR (or its published fork candidate
+artifacts). The official stable server pinned in Canvas does not contain these
+draft ACP authentication endpoints.
+
+First rebuild the checked-out frontend with `npm run build:app`.
+
+1. Run `python .pr/onboarding-demo-server.py` on loopback port 18735.
+2. Serve the real build with:
+   `node scripts/static-server.mjs --port 18736 --dir build --session-api-key fixture-session --route /api=http://127.0.0.1:18735 --route /server_info=http://127.0.0.1:18735 --route /sockets=http://127.0.0.1:18735`.
+3. Run `node .pr/record-onboarding.mjs`. The launcher and recorder use only
+   synthetic test credentials in the public fixture. Test state lives under
+   `.agent_tmp/onboarding-evidence/fixture-state`.
+4. Stop the two task-owned services after recording.
+
+The existing-account capture uses `ONBOARDING_EXISTING_ACCOUNT=1`,
+`ONBOARDING_ORIGIN` and `ONBOARDING_SESSION_API_KEY` supplied locally. Do not
+publish the configured key or real login attempts. It requires an already
+authorized Codex account on that exact server and does not copy credentials
+to a different backend.
+
+Outstanding acceptance remains unchanged: a fresh human-consent onboarding/model
+run, real-account disconnect/natural expiry, remote human authorization/model
+use, official SDK/client/server publication and exact compatibility pins.

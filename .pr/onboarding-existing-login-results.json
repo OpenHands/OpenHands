@@ -1,0 +1,59 @@
+{
+  "canvas_revision": "cefa2a1d49c28c9849fb9a93cd96d811c9cd4cb9",
+  "build_index_sha256": "65656c1186483b4e423d71ea7c14aec08b80b9aff5424718e8f92d4a8d9a6f0a",
+  "build_index_modified_at": "2026-10-06T18:50:38.531Z",
+  "recorded_at": "2026-10-06T18:51:55.079Z",
+  "backend": "Packaged Agent Server from SDK PR #5452",
+  "authentication": "Existing human-authorized Codex account; no login initiation recorded",
+  "first_run_browser_context": true,
+  "stages": [
+    "choose Codex",
+    "connected",
+    "Next enabled",
+    "Say hello ready",
+    "Close without model request"
+  ],
+  "persisted_agent_kind": "acp",
+  "persisted_acp_server": "codex",
+  "entered_api_key": false,
+  "model_requests": 0,
+  "page_errors": [],
+  "http_observations": [
+    {
+      "method": "GET",
+      "path": "/api/agent-profiles",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/acp/codex/auth/status",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/agent-profiles/default",
+      "status": 201
+    },
+    {
+      "method": "GET",
+      "path": "/api/agent-profiles",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/agent-profiles/default",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/agent-profiles/fc36e8f9-88d9-48d7-9832-9a96f3e04d7e/activate",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/agent-profiles",
+      "status": 200
+    }
+  ],
+  "credential_reuse_between_llm_and_acp": "Not implemented; separate proposal"
+}
