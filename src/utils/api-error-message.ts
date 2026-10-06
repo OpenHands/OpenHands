@@ -50,14 +50,22 @@ function getValidationDetailMessage(detail: unknown): string | null {
 }
 
 /**
+ * The fixed `detail` the Agent Server sends with every 5xx (an unhandled
+ * error, or an `HTTPException` with a 5xx status); the reason is under
+ * `exception` instead.
+ */
+const AGENT_SERVER_GENERIC_DETAIL = "Internal Server Error";
+
+/**
  * Extract a human-readable message from a failed API call. Prefers the
- * server-provided `message`/`exception`/`detail`/`error` fields (including a
+ * server-provided `message`/`detail`/`exception`/`error` fields (including a
  * FastAPI validation `detail` array), then the `Error` message, then
- * `fallback`. The Agent Server answers an unhandled error with a fixed
- * `detail: "Internal Server Error"` and the actual reason under `exception`,
- * so that one wins over `detail`. The shared client's `HttpError` message is
- * the raw transport text (`HTTP request failed (status): {json}`), so it is
- * never shown: an `HttpError` without a usable body yields `fallback`.
+ * `fallback`. `exception` is used only when `detail` is missing, empty or the
+ * Agent Server's generic "Internal Server Error", so a specific `detail`
+ * always wins over the technical `exception` text. The shared client's
+ * `HttpError` message is the raw transport text
+ * (`HTTP request failed (status): {json}`), so it is never shown: an
+ * `HttpError` without a usable body yields `fallback`.
  */
 export function getApiErrorMessage(error: unknown, fallback: string): string {
   const body = getApiErrorBody(error);
@@ -75,10 +83,18 @@ export function getApiErrorMessage(error: unknown, fallback: string): string {
       error?: unknown;
     };
     if (typeof message === "string" && message) return message;
-    if (typeof exception === "string" && exception) return exception;
-    if (typeof detail === "string" && detail) return detail;
-    const validationMessage = getValidationDetailMessage(detail);
-    if (validationMessage) return validationMessage;
+    const detailMessage =
+      typeof detail === "string" && detail
+        ? detail
+        : getValidationDetailMessage(detail);
+    if (
+      typeof exception === "string" &&
+      exception &&
+      (!detailMessage || detailMessage === AGENT_SERVER_GENERIC_DETAIL)
+    ) {
+      return exception;
+    }
+    if (detailMessage) return detailMessage;
     if (typeof bodyError === "string" && bodyError) return bodyError;
   }
 

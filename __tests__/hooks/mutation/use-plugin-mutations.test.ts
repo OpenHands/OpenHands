@@ -1,6 +1,7 @@
 import React from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
+import { HttpError as ClientHttpError } from "@openhands/typescript-client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import PluginsManagementService from "#/api/plugins-management-service";
 import { useInstallPlugin } from "#/hooks/mutation/use-install-plugin";
@@ -114,6 +115,22 @@ describe("plugin mutations", () => {
       expect(errorToastMessages()).toEqual([SERVER_DETAIL]);
     },
   );
+
+  it("shows the fallback, not the raw transport text, when the server answers with an empty body", async () => {
+    vi.spyOn(PluginsManagementService, "installPlugin").mockRejectedValue(
+      new ClientHttpError(
+        502,
+        "Bad Gateway",
+        "",
+        'HTTP request failed (502 Bad Gateway): ""',
+      ),
+    );
+
+    const result = failingMutations[0].run();
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(errorToastMessages()).toEqual([I18nKey.ERROR$GENERIC]);
+  });
 
   it("keeps the shared disconnect wording when the request never lands", async () => {
     vi.spyOn(PluginsManagementService, "installPlugin").mockRejectedValue(
