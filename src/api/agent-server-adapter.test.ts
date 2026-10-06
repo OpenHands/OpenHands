@@ -712,6 +712,22 @@ describe("buildStartPlanningConversationRequestWithEncryptedSettings", () => {
 });
 
 describe("buildStartConversationRequest — agentProfileId path", () => {
+  it("appends the saved global suffix to a profile launch", () => {
+    const payload = buildStartConversationRequest({
+      settings: makeSettings({
+        agent_kind: "openhands",
+        agent_context: { system_message_suffix: "MARKER-GLOBAL-RULES" },
+      }),
+      agentProfileId: "profile-xyz",
+      agentProfileKind: "openhands",
+    });
+
+    expect(payload.agent_launch_additions).toEqual({
+      system_message_suffix_append: "MARKER-GLOBAL-RULES",
+    });
+    expect(payload.agent_settings).toBeUndefined();
+  });
+
   it("sends agent_profile_id and omits agent_settings (mutually exclusive)", () => {
     const settings = makeSettings({
       agent_kind: "openhands",
@@ -726,6 +742,7 @@ describe("buildStartConversationRequest — agentProfileId path", () => {
 
     expect(payload.agent_profile_id).toBe("profile-xyz");
     expect(payload.agent_settings).toBeUndefined();
+    expect(payload.agent_launch_additions).toBeUndefined();
     expect(payload.client_tools.map((tool) => tool.name)).toEqual([
       CANVAS_UI_CLIENT_TOOL_NAME,
       LAUNCH_CHILD_CONVERSATION_TOOL_NAME,

@@ -104,6 +104,19 @@ describe("FilesTab", () => {
     ).not.toBeInTheDocument();
   });
 
+  // @spec WFD-001 — Configurable local workspace discovery
+  it("shows an incomplete-tree message when discovery is truncated", () => {
+    useWorkspaceFilesMock.mockReturnValue({
+      data: ["a.txt", "b.txt"],
+      isLoading: false,
+      isTruncated: true,
+    });
+    renderTab();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "FILES$DISCOVERY_TRUNCATED",
+    );
+  });
+
   it("does not open file tabs until a file is selected", () => {
     renderTab();
 

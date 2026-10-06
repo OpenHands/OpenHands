@@ -126,6 +126,7 @@ beforeEach(() => {
     completed_at: null,
   });
 
+  vi.mocked(AutomationService.deleteAutomation).mockReset();
   vi.mocked(AutomationService.getAutomation).mockReset();
   vi.mocked(AutomationService.getAutomation).mockResolvedValue(automation);
   vi.mocked(AutomationService.getAutomationRuns).mockReset();
@@ -187,6 +188,32 @@ describe("AutomationDetail — Edit in the kebab menu", () => {
       "edit-automation-name",
     )) as HTMLInputElement;
     expect(nameInput.value).toBe(automation.name);
+  });
+});
+
+describe("AutomationDetail — delete confirmation", () => {
+  it("opens as a named modal dialog with focus inside, and Escape cancels without deleting", async () => {
+    // Arrange — open the confirmation from the header kebab.
+    const user = userEvent.setup();
+    renderDetail();
+    await user.click(
+      await screen.findByLabelText(I18nKey.AUTOMATIONS$ACTIONS_MENU),
+    );
+    await user.click(
+      screen.getByRole("button", { name: I18nKey.AUTOMATIONS$DELETE }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: I18nKey.AUTOMATIONS$DELETE_CONFIRM_TITLE,
+    });
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
+
+    // Act
+    await user.keyboard("{Escape}");
+
+    // Assert — same behavior as on the dashboard: closed, nothing deleted.
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(AutomationService.deleteAutomation).not.toHaveBeenCalled();
   });
 });
 

@@ -15,6 +15,7 @@ const migrateEnabledSkillsMock = vi.fn();
 const syncTelemetryConsentMock = vi.fn();
 const syncAutomationTelemetryConsentMock = vi.fn();
 const telemetryIdentityMock = vi.fn();
+const syncDocumentLanguageMock = vi.fn();
 
 vi.mock("#/hooks/query/use-config", () => ({
   useConfig: () => useConfigMock(),
@@ -38,6 +39,10 @@ vi.mock("#/hooks/use-sync-automation-telemetry-consent", () => ({
 
 vi.mock("#/hooks/use-telemetry-identity", () => ({
   useTelemetryIdentity: () => telemetryIdentityMock(),
+}));
+
+vi.mock("#/hooks/use-sync-document-language", () => ({
+  useSyncDocumentLanguage: () => syncDocumentLanguageMock(),
 }));
 
 vi.mock("#/hooks/use-ensure-active-profile", () => ({
@@ -258,6 +263,7 @@ describe("root layout", () => {
     expect(syncAutomationTelemetryConsentMock).toHaveBeenCalledOnce();
     expect(telemetryIdentityMock).toHaveBeenCalledOnce();
     expect(ensureActiveProfileMock).toHaveBeenCalledOnce();
+    expect(syncDocumentLanguageMock).toHaveBeenCalledOnce();
     expect(document.title).toBe("OpenHands");
     expect(
       await screen.findByTestId("environment-switch-overlay"),

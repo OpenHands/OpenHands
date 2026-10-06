@@ -16,7 +16,6 @@ import {
 import { getAgentServerClientOptions } from "./agent-server-client-options";
 import {
   getCachedAgentServerInfo,
-  isAgentServerToolAvailable,
   type AgentServerInfo,
 } from "./agent-server-compatibility";
 import { getAgentServerWorkingDir } from "./agent-server-config";
@@ -143,19 +142,12 @@ export interface DirectConversationInfo {
   sub_conversation_ids?: string[] | null;
 }
 
-const DEFAULT_TOOL_NAMES = ["terminal", "file_editor", "task_tracker"];
-const BROWSER_TOOL_SET_NAME = "browser_tool_set";
-const TASK_TOOL_SET_NAME = "task_tool_set";
 // Falls back to the same default the code agent uses when the user has not
 // configured `conversation_settings.max_iterations` (see buildConfiguredConversationSettings).
 const DEFAULT_MAX_ITERATIONS = 500;
 
 function resolveMaxIterations(value: unknown): number {
   return typeof value === "number" ? value : DEFAULT_MAX_ITERATIONS;
-}
-
-function browserToolsEnabled() {
-  return import.meta.env.VITE_ENABLE_BROWSER_TOOLS !== "false";
 }
 
 /**
@@ -773,52 +765,21 @@ function isToolRecord(
   );
 }
 
-function shouldIncludeTool(name: string, agentSettings: SettingsRecord) {
-  if (name === BROWSER_TOOL_SET_NAME) {
-    return browserToolsEnabled() && isAgentServerToolAvailable(name);
-  }
-
-  if (name === TASK_TOOL_SET_NAME) {
-    return (
-      agentSettings.enable_sub_agents === true &&
-      isAgentServerToolAvailable(name)
-    );
-  }
-
-  return true;
-}
-
-function getAgentTools(agentSettings: SettingsRecord): AgentToolSpec[] {
-  const tools = new Map<string, AgentToolSpec>();
-
-  for (const name of DEFAULT_TOOL_NAMES) {
-    if (shouldIncludeTool(name, agentSettings)) {
-      tools.set(name, { name, params: {} });
-    }
-  }
-
-  for (const name of [BROWSER_TOOL_SET_NAME, TASK_TOOL_SET_NAME]) {
-    if (shouldIncludeTool(name, agentSettings)) {
-      tools.set(name, { name, params: {} });
-    }
-  }
-
+/** Unset `tools` is left to the server; a list is sent as given. */
+function getAgentTools(
+  agentSettings: SettingsRecord,
+): AgentToolSpec[] | undefined {
   const configuredTools = agentSettings.tools;
   if (
-    Array.isArray(configuredTools) &&
-    configuredTools.every((tool) => isToolRecord(tool))
+    !Array.isArray(configuredTools) ||
+    !configuredTools.every((tool) => isToolRecord(tool))
   ) {
-    for (const tool of configuredTools) {
-      if (shouldIncludeTool(tool.name, agentSettings)) {
-        tools.set(tool.name, {
-          name: tool.name,
-          params: toRecord(tool.params),
-        });
-      }
-    }
+    return undefined;
   }
-
-  return Array.from(tools.values());
+  return configuredTools.map((tool) => ({
+    name: tool.name,
+    params: toRecord(tool.params),
+  }));
 }
 
 function buildInitialMessage(
@@ -954,7 +915,13 @@ function buildAgentContext(
     disabled_skills: disabledSkills,
     ...(runtimeServicesSuffix || routerAtStartSuffix
       ? {
-          system_message_suffix: [runtimeServicesSuffix, routerAtStartSuffix]
+          system_message_suffix: [
+            typeof existingContext.system_message_suffix === "string"
+              ? existingContext.system_message_suffix
+              : undefined,
+            runtimeServicesSuffix,
+            routerAtStartSuffix,
+          ]
             .filter((s): s is string => Boolean(s))
             .join("\n\n"),
         }
@@ -1208,6 +1175,8 @@ type AgentSettingsStartConversationPayload = StartConversationPayloadBase & {
   // exclusive agent sources; the server resolves the profile server-side.
   agent_settings?: AgentSettingsPayload;
   agent_profile_id?: string;
+  // Appended to the profile-resolved agent's system-message suffix.
+  agent_launch_additions?: { system_message_suffix_append?: string };
   agent?: never;
 };
 
@@ -1308,6 +1277,17 @@ export function buildStartConversationRequest(
     options.query,
     options.hasActiveMetaProfile,
   );
+  const savedSuffix = toRecord(
+    toRecord(sourceAgentSettings.agent_settings).agent_context,
+  ).system_message_suffix;
+  // Router-at-start stays inline-only because profile-resolved agents do not
+  // have the route_task_to_model tool.
+  const profileLaunchSuffix = [
+    typeof savedSuffix === "string" ? savedSuffix : undefined,
+    buildRuntimeServicesSystemSuffix(options.runtimeServicesInfo),
+  ]
+    .filter((suffix): suffix is string => Boolean(suffix))
+    .join("\n\n");
   const acpServerTag = acpMode
     ? getAcpServerTag(sourceAgentSettings)
     : undefined;
@@ -1338,9 +1318,12 @@ export function buildStartConversationRequest(
     // server/SDK's responsibility to restore on the profile path — tracked in
     // software-agent-sdk#3967 (profile resolution must attach the default
     // toolset + public skills, else a profile-launched OpenHands agent has only
-    // Finish/Think). The dev ``RUNTIME_SERVICES`` system-message suffix remains
-    // agent-settings-only; the Canvas UI tool is a top-level client tool and
+    // Finish/Think). The Canvas UI tool is a top-level client tool and
     // therefore works on both inline-agent and profile launch paths.
+    //
+    // The saved global suffix and ``RUNTIME_SERVICES`` are not part of the
+    // stored profile, so the profile path sends them as
+    // ``agent_launch_additions``.
     //
     // Persistent memory is NOT on that boundary: ``load_memory`` is a global
     // user preference, so the agent-server stamps the stored
@@ -1350,7 +1333,16 @@ export function buildStartConversationRequest(
     // re-send it here (``agent_profile_id`` and ``agent_settings`` are
     // mutually exclusive).
     ...(options.agentProfileId
-      ? { agent_profile_id: options.agentProfileId }
+      ? {
+          agent_profile_id: options.agentProfileId,
+          ...(profileLaunchSuffix
+            ? {
+                agent_launch_additions: {
+                  system_message_suffix_append: profileLaunchSuffix,
+                },
+              }
+            : {}),
+        }
       : { agent_settings: agentSettings }),
     workspace: conversationSettings.workspace,
     // The agent-server caches each client tool's schema per tool *name* for the
