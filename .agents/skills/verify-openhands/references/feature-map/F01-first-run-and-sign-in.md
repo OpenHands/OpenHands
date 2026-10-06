@@ -6,10 +6,11 @@ an agent, set up the LLM (or ACP credentials), then say hello, which starts the
 first conversation. In public mode the flow starts with an "Add a backend" step
 that asks for the server's API key, and a browser with no stored key gets a
 full-screen API-key screen instead of the app. A one-time telemetry consent
-modal appears for each local backend. Unknown routes render a bare error page,
-and the tab title follows the open conversation.
+modal appears for each local backend. Unknown routes render an in-app "Page not
+found" page inside the app shell, and the tab title follows the open
+conversation.
 
-Source: `src/root.tsx`, `src/components/features/onboarding/`, `src/components/features/analytics/telemetry-consent-banner.tsx`, `src/components/features/backends/api-key-entry-screen.tsx`, `src/routes/root-layout.tsx`, `src/hooks/use-app-title.ts`.
+Source: `src/root.tsx`, `src/components/features/onboarding/`, `src/components/features/analytics/telemetry-consent-banner.tsx`, `src/components/features/backends/api-key-entry-screen.tsx`, `src/routes/root-layout.tsx`, `src/routes/not-found.tsx`, `src/hooks/use-app-title.ts`.
 
 ## Sub-features
 
@@ -29,7 +30,7 @@ Source: `src/root.tsx`, `src/components/features/onboarding/`, `src/components/f
 - `F01.onboarding-phone`: every onboarding step fits a 390 px viewport without horizontal overflow.
 - `F01.api-key-entry`: in public mode with no usable key (onboarding skipped, the last backend removed, or a stored key the server now rejects), a full-screen "Add a backend" card appears. The host is read-only and set to the origin, and Connect stays disabled until the name and key are filled. A wrong key shows "Invalid API key. Please check the key and try again." The right key opens the app shell, which survives a reload, and the consent modal then names the new backend.
 - `F01.onboarding-cloud-login`: the backend step's "OpenHands Cloud" column has "Connect to OpenHands" (device-flow login) and an "Advanced" toggle. The toggle reveals a Cloud Host field (placeholder `https://app.all-hands.dev`) for self-hosted Cloud deployments. The login itself is blocked: it needs an OpenHands Cloud account.
-- `F01.route-error-boundary`: an unknown URL renders a bare `404 Not Found` page without page errors.
+- `F01.route-error-boundary`: an unknown URL renders a "Page not found" page inside the app shell, with the sidebar and a **Home** link back to `/`, and logs no page errors.
 - `F01.document-title`: the tab title is `OpenHands`. On a conversation it is `<status emoji> <conversation title> | OpenHands`.
 - `F01.bootstrap-loading`: a centered spinner card shows while `/server_info` loads (transient, not-run).
 - `F01.locked-cloud-first-run`: on a canvas locked to an OpenHands Cloud host, first run shows only the Cloud login (Add backend) without a progress bar or close button (blocked).
@@ -42,7 +43,7 @@ Source: `src/root.tsx`, `src/components/features/onboarding/`, `src/components/f
 - Telemetry consent: appears by itself over onboarding or the app. It is changed later in Settings → Application (see F16).
 - Onboarding preview: direct URL with `?previewOnboardingStep=N`, for example `/?previewOnboardingStep=3` or `/settings/app?previewOnboardingStep=3`.
 - Last onboarding step: Close, a recommended-automation card, or the "Skip Getting Started checklist" box below the modal.
-- Error page: any unknown direct URL, such as `/this-route-does-not-exist`.
+- Not-found page: any unknown direct URL, such as `/this-route-does-not-exist`. Its **Home** button returns to `/`.
 - There is no command-menu entry or keyboard shortcut for onboarding.
 
 ## Driving it with control-openhands
@@ -66,8 +67,8 @@ Local run (`launch --new`):
 - **Preview (`F01.onboarding-preview`).** Run `control-openhands browser goto '/?previewOnboardingStep=3'`, then `control-openhands browser attr 'testid=onboarding-modal' data-preview` (`true`) and `control-openhands browser count 'testid=onboarding-step-say-hello'` (`1`). Step `2` shows the LLM slide. Steps `0` and `1` both show "Choose your agent" when the backend is healthy. `/?previewOnboardingStep=9` renders no modal. `control-openhands browser goto '/settings/app?previewOnboardingStep=3'` works too. Run `control-openhands browser goto '/?previewOnboardingStep=1'` and `control-openhands browser click 'testid=onboarding-skip'`; the modal stays (`count` `1`). `control-openhands browser goto /` shows no modal.
 - **Skip checklist box (`F01.onboarding-skip-checklist`).** Run `control-openhands browser goto /conversations` and `control-openhands browser count 'testid=sidebar-onboarding-checklist'` (`1`). Run `control-openhands browser goto '/?previewOnboardingStep=3'`, then `control-openhands browser click 'text=Skip Getting Started checklist'`. `control-openhands browser eval "document.querySelector('[data-testid=onboarding-skip-getting-started-checklist]').checked"` is `true`. Run `control-openhands browser goto /conversations` and `control-openhands browser reload`; the checklist count is `0`. On `/settings/app`, `control-openhands browser eval "document.querySelector('[data-testid=show-getting-started-checklist-switch]').checked"` is `false`. Restore it: go back to `/?previewOnboardingStep=3`, where the box now reads `true`, click the same text again, and the checklist count on `/conversations` is `1`.
 - **Phone (`F01.onboarding-phone`).** Run `control-openhands browser viewport phone`. Then for N in 1, 2 and 3 run `control-openhands browser goto '/?previewOnboardingStep=N'`, `control-openhands browser bbox 'testid=onboarding-modal'` and `control-openhands browser screenshot --feature F01.onboarding-phone --name step-N`. The modal is 351 px wide with `insideViewport` `true` and `pageHorizontalOverflow` `false`, and Back/Next or Back/Close are visible. Return with `control-openhands browser viewport desktop`.
-- **Error page (`F01.route-error-boundary`).** Run `control-openhands browser errors --clear`, `control-openhands browser goto /this-route-does-not-exist`, `control-openhands browser snapshot` (`heading "404 Not Found"`), then `control-openhands browser errors --app-only`. Expected: `pageErrors` `0`. Today it is `1` (React error #418, a hydration mismatch) plus 3 console errors, a known failure; see Gotchas.
-- **Clean up.** Delete the hello conversation from its header menu: `control-openhands browser goto /conversations/<id>` (the hello conversation's `<id>` from Say hello; the Error page bullet left the 404 page), `control-openhands browser click 'testid=chat-pane-header >> testid=ellipsis-button'`, `control-openhands browser click 'testid=conversation-name-context-menu >> testid=delete-button'`, `control-openhands browser click 'role=button[name="Confirm Delete"]'`. `control-openhands conversation list` then shows `count` `0`.
+- **Error page (`F01.route-error-boundary`).** Run `control-openhands browser errors --clear`, `control-openhands browser goto /this-route-does-not-exist` and `control-openhands browser snapshot 'testid=not-found-screen'`. It shows `heading "Page not found"`, the paragraph `This address does not match any page. Check the URL, or go back to the home page.` and `link "Home"` (`/url: /`). `control-openhands browser count 'aside[data-collapsed]'` is `1`: the sidebar stays. `control-openhands browser screenshot --feature F01.route-error-boundary --name not-found` shows the message and the Home button centered beside the sidebar. `control-openhands browser errors --app-only` reports `pageErrors` `0` and `appErrors` `0`. Run `control-openhands browser click 'testid=not-found-home-link' --expect-url '/$'`; `control-openhands browser count 'testid=home-screen'` is `1`.
+- **Clean up.** Delete the hello conversation from its header menu: `control-openhands browser goto /conversations/<id>` (the hello conversation's `<id>` from Say hello; the Error page bullet left `/`), `control-openhands browser click 'testid=chat-pane-header >> testid=ellipsis-button'`, `control-openhands browser click 'testid=conversation-name-context-menu >> testid=delete-button'`, `control-openhands browser click 'role=button[name="Confirm Delete"]'`. `control-openhands conversation list` then shows `count` `0`.
 
 Public run A (`launch --new --public`), backend step walked:
 
@@ -104,4 +105,3 @@ Not reachable locally:
 - Choosing an ACP agent saves `agent_kind: acp` immediately. Re-choose OpenHands before leaving, or later conversations in the run use the ACP agent.
 - In preview mode, Skip and Close are inert. The LLM slide shows `gpt-5.6-sol` even when another model is saved, so do not read it as data loss.
 - Known failure: the public first run and the API-key screen raise an error toast `No backend is configured.` (`NoBackendAvailableError` is not filtered by the global query toast) (#17901).
-- Known failure: a direct load of an unknown route logs React error #418, and the 404 page has no link back to the app (#17904).
