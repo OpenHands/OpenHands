@@ -3,7 +3,6 @@ import type {
   MouseEvent as ReactMouseEvent,
   TouchEvent as ReactTouchEvent,
 } from "react";
-import { useEffect, useRef } from "react";
 import { EPS } from "#/utils/constants";
 import { isMobileDevice } from "#/utils/utils";
 
@@ -56,7 +55,6 @@ export const useDragResize = ({
   onHeightChange,
   onReachedMinHeight,
 }: UseDragResizeOptions) => {
-  const activeCleanupRef = useRef<(() => void) | null>(null);
   const getClientY = (event: MouseEvent | TouchEvent): number => {
     if ("touches" in event && event.touches.length > 0) {
       return event.touches[0].clientY;
@@ -155,9 +153,6 @@ export const useDragResize = ({
           return;
         }
 
-        // Remove both mouse and touch event listeners
-        resizeGrip.removeEventListener("mousemove", handleDragMove);
-        resizeGrip.removeEventListener("mouseup", handleDragEnd);
         resizeGrip.removeEventListener("touchmove", handleDragMove, true);
         resizeGrip.removeEventListener("touchend", handleDragEnd, true);
       } else {
@@ -166,20 +161,15 @@ export const useDragResize = ({
         document.removeEventListener("touchmove", handleDragMove);
         document.removeEventListener("touchend", handleDragEnd);
       }
-      activeCleanupRef.current = null;
     };
 
     // Setup event listeners based on device type
     if (isMobile) {
       resizeGrip = setupMobileEventListeners(handleDragMove, handleDragEnd);
-      activeCleanupRef.current = handleDragEnd;
     } else {
       setupDesktopEventListeners(handleDragMove, handleDragEnd);
-      activeCleanupRef.current = handleDragEnd;
     }
   };
-
-  useEffect(() => () => activeCleanupRef.current?.(), []);
 
   // Handle mouse down on grip for manual resizing
   const handleGripMouseDown = (e: ReactMouseEvent) => {
