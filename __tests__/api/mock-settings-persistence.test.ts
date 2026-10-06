@@ -130,8 +130,6 @@ describe("mock settings schemas and state", () => {
       ],
     };
     const expectedAgent = {
-      enable_sub_agents: contract("general", "boolean", false, "major"),
-      enable_switch_llm_tool: contract("general", "boolean", true, "major"),
       tool_concurrency_limit: contract("general", "integer", 1, "major"),
       "llm.model": contract("llm", "string", "openai/gpt-5.6-sol", "critical", {
         required: true,
@@ -324,7 +322,6 @@ describe("mock settings schemas and state", () => {
       agent_settings: {
         llm: { model: "openai/gpt-5.6-sol" },
         condenser: { enable_default_condenser: true, condenser_max_size: null },
-        enable_sub_agents: false,
         tool_concurrency_limit: 1,
       },
       conversation_settings: { confirmation_mode: false },

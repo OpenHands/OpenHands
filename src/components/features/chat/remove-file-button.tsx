@@ -3,15 +3,21 @@ import { cn, isMobileDevice } from "#/utils/utils";
 
 interface RemoveFileButtonProps {
   onClick: () => void;
+  /** Names the attachment this icon-only button removes. */
+  ariaLabel: string;
 }
 
-export function RemoveFileButton({ onClick }: RemoveFileButtonProps) {
+export function RemoveFileButton({
+  onClick,
+  ariaLabel,
+}: RemoveFileButtonProps) {
   const isMobile = isMobileDevice();
 
   return (
     <button
       type="button"
       onClick={onClick}
+      aria-label={ariaLabel}
       className={cn(
         "z-10 flex w-4 h-4 rounded-full items-center justify-center bg-surface hover:bg-muted cursor-pointer absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200",
         isMobile && "opacity-100",

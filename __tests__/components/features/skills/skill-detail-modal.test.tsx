@@ -1,7 +1,10 @@
 import { render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { renderWithProviders } from "test-utils";
 import { SkillDetailModal } from "#/components/features/skills/skill-detail-modal";
+import { CustomChatInput } from "#/components/features/chat/custom-chat-input";
+import { HOME_PROMPT_DRAFT_KEY } from "#/hooks/chat/use-draft-persistence";
 import {
   ADD_SKILL_EXAMPLE_COMMAND,
   ADD_SKILL_SKILL_NAME,
@@ -40,9 +43,13 @@ function buildSkill(overrides: Partial<SkillInfo> = {}): SkillInfo {
   };
 }
 
+const initialConversationStore = useConversationStore.getState();
+
 describe("SkillDetailModal", () => {
   beforeEach(() => {
     navigateMock.mockReset();
+    useConversationStore.setState(initialConversationStore, true);
+    sessionStorage.clear();
   });
 
   it("renders metadata fields and closes on request", async () => {
@@ -121,9 +128,43 @@ describe("SkillDetailModal", () => {
 
     expect(onClose).toHaveBeenCalled();
     expect(navigateMock).toHaveBeenCalledWith("/conversations");
-    await waitFor(() => {
-      expect(setMessageToSend).toHaveBeenCalledWith(ADD_SKILL_EXAMPLE_COMMAND);
-    });
+    expect(setMessageToSend).toHaveBeenCalledWith(
+      ADD_SKILL_EXAMPLE_COMMAND,
+      "home",
+    );
+  });
+
+  it("pre-fills the Home composer with the skill command, leaving an earlier draft alone until then", async () => {
+    // Arrange: a Home draft from earlier in the session, and a message queued
+    // for a conversation composer that never consumed it.
+    const user = userEvent.setup();
+    sessionStorage.setItem(HOME_PROMPT_DRAFT_KEY, "earlier home draft");
+    useConversationStore.getState().setMessageToSend("for a conversation");
+    const skill = buildSkill({ name: "docker" });
+
+    renderWithProviders(
+      <>
+        <CustomChatInput onSubmit={vi.fn()} />
+        <SkillDetailModal
+          skill={skill}
+          enabled
+          onToggle={vi.fn()}
+          onClose={vi.fn()}
+        />
+      </>,
+    );
+    const composer = screen.getByTestId("chat-input");
+    expect(composer).toHaveTextContent("earlier home draft");
+
+    // Act
+    await user.click(
+      screen.getByTestId(`skill-detail-use-skill-${skill.name}`),
+    );
+
+    // Assert
+    await waitFor(() => expect(composer.textContent).toBe("/docker "));
+    expect(composer).toHaveFocus();
+    expect(useConversationStore.getState().messageToSend).toBeNull();
   });
 
   it("disables Use skill when the skill is turned off", async () => {

@@ -346,6 +346,20 @@ describe("ConversationName", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("closes the more-options menu on Escape and refocuses its trigger", async () => {
+    const user = userEvent.setup();
+    renderConversationNameWithRouter();
+    await user.click(screen.getByTestId("ellipsis-button"));
+    screen.getByTestId("rename-button").focus();
+
+    await user.keyboard("{Escape}");
+
+    expect(
+      screen.queryByTestId("conversation-name-context-menu"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("ellipsis-button")).toHaveFocus();
+  });
+
   it("should focus input when entering edit mode", async () => {
     const user = userEvent.setup();
     renderConversationNameWithRouter();
