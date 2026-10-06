@@ -43,11 +43,11 @@ export const useWorkspaceMutationCounter =
 
 /**
  * Append the current mutation counter as a `v=<n>` query parameter so the
- * browser refetches the URL after every agent-side edit and every Files tab
- * Refresh. The counter is seeded from `Date.now()`, so a page reload never
- * rebuilds a URL the browser cached during an earlier load. Returns `null`
- * if the input is `null` so callers can pass through optional URLs
- * untouched.
+ * browser refetches the URL after every agent file-editor edit and every
+ * Files tab Refresh. The counter is seeded from `Date.now()`, so a page
+ * reload never rebuilds a URL the browser cached during an earlier load.
+ * Returns `null` if the input is `null` so callers can pass through
+ * optional URLs untouched.
  */
 export function withWorkspaceCacheBuster(url: string, version: number): string;
 export function withWorkspaceCacheBuster(
