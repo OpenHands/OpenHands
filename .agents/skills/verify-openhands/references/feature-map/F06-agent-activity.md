@@ -45,6 +45,7 @@ Source: `src/components/features/chat/chat-interface.tsx`, `src/components/conve
 - `F06.llm-not-configured-banner`: with no usable LLM, a conversation shows "Your LLM isn't set up yet..." with Set up LLM; suggestions are hidden and sending is disabled.
 - `F06.critic-result`: with the critic enabled, agent messages carry a critic result (success likelihood, issue categories).
 - `F06.hook-events`: hook executions render as their own rows in the stream.
+- `F06.corrective-nudge`: when the model answers with neither a message nor a tool call, the SDK's nudge (`Your last response did not include a function call or a message. …`) shows as a muted, italic `role=note` line with an info icon (`corrective-nudge-message`), not as a user bubble (#17864).
 - `F06.phone`: at 390 px the transcript fits the viewport; wide tables scroll inside their own container.
 
 ## How to get to it (user POV)
@@ -63,7 +64,7 @@ Preconditions:
 - Baseline state (launched, doctored, `onboard --skip` done) and `control-openhands llm preset deepseek` (deepseek-flash active). Every prompt below is tiny and stays in the conversation's own workspace.
 - Conversation ids are printed as `"id"` by `control-openhands conversation start`, or read from `control-openhands browser url` (`/conversations/<id>`). `<id>` below is always the conversation the step just created or opened.
 - `F06.llm-not-configured-banner` needs a second, fresh `control-openhands launch --new --build never` with no `llm preset` (export its run dir as `OH_VERIFY_RUN` for those commands, then `control-openhands stop` it).
-- `F06.critic-result` is blocked: it needs an OpenHands Cloud critic API key (Settings → Verification → Critic API Key). `F06.hook-events` needs a configured hook; none is set in a fresh run.
+- `F06.critic-result` is blocked: it needs an OpenHands Cloud critic API key (Settings → Verification → Critic API Key). `F06.hook-events` needs a configured hook; none is set in a fresh run. `F06.corrective-nudge` is blocked: the nudge needs a model turn with neither text nor a tool call, which a normal prompt to deepseek-flash does not produce. When one happens, `control-openhands browser count 'testid=corrective-nudge-message'` is `1` and `browser count 'testid=user-message >> has-text=Your last response did not include'` is `0`.
 - The harness browser grants clipboard access: `control-openhands browser clipboard` reads what a Copy button wrote and `browser clipboard --write qa-empty` resets it first.
 - A terminal call can come back as "The terminal session was reset..." after this run's agent server restarts; the model reruns it, which turns one action into a group of two (see Gotchas).
 

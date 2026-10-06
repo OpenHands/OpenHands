@@ -22,7 +22,7 @@ export function launcherEnvFor(saved, current, passNames) {
 // Whether a launch of this checkout with a given environment serves the
 // bundled VS Code editor, and on which port. OpenHands/OpenHands#17660 made
 // the editor opt-in (OH_CANVAS_ENABLE_VSCODE=true) and OpenHands/OpenHands#18048
-// would bundle it again, so neither is assumed: the checkout's own launcher is
+// bundled it again, so neither is assumed: the checkout's own launcher is
 // asked. bin/agent-canvas.mjs runs buildConfig from
 // scripts/dev-with-automation.mjs, whose vscodePort is null when the editor is
 // off.

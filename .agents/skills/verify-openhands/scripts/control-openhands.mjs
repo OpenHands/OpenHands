@@ -684,7 +684,7 @@ async function cmdLaunch({ flags }) {
 
   // 4. Ports. The editor port is reserved only when this checkout's launcher
   // serves VS Code with this environment: opt-in since OpenHands/OpenHands#17660,
-  // bundled before it and again if OpenHands/OpenHands#18048 lands.
+  // bundled before it and again since OpenHands/OpenHands#18048.
   const editor = editorOffset(repoRoot, env);
   if (editor.source === "fallback")
     warnings.push(
@@ -3360,7 +3360,7 @@ encryption key, on a free port block (ingress P, agent-server P+1, automation
 P+2, static frontend P+3). The editor port (P+1001) is reserved, and listed in
 ports, only when the checkout's launcher serves VS Code. Where that is opt-in
 (#17660), --vscode (OH_CANVAS_ENABLE_VSCODE=true) turns it on; where the editor
-is bundled (before #17660, or with #18048), it is always reserved and --vscode
+is bundled (before #17660, or since #18048), it is always reserved and --vscode
 changes nothing. Waits for authenticated settings, automation health and the
 SPA, then starts the browser daemon.
 Idempotent: an alive current run is reused unless --new is given.

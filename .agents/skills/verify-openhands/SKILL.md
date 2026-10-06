@@ -89,7 +89,7 @@ control-openhands stop                         # stops only this run; evidence s
   The block includes the VS Code editor port (`ports.vscode`) only when the
   checkout's launcher sets VS Code up (the port is reserved even if the
   agent-server has no editor binary and nothing listens there). Where that is opt-in (#17660), `--vscode`
-  turns it on; where the editor is bundled (before #17660, or with #18048), it
+  turns it on; where the editor is bundled (before #17660, or since #18048), it
   is always included and `--vscode` changes nothing.
 - **Doctor** checks the launcher's process group, ports, served build revision,
   unauthenticated rejection, authenticated settings, Agent Server pin and the
