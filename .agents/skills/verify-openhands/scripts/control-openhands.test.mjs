@@ -11,13 +11,19 @@ import {
   readdirSync,
   writeFileSync,
 } from "node:fs";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 import { buildIdentity } from "./lib/build-id.mjs";
 import { BUILD_INPUTS } from "./lib/build-inputs.mjs";
-import { launcherEnvFor } from "./lib/launcher-env.mjs";
+import {
+  editorOffset,
+  launcherEnvFor,
+  portsAfterRestart,
+  runPorts,
+} from "./lib/launcher-env.mjs";
 import { redactStorage } from "./lib/redact-storage.mjs";
 import { routePattern } from "./lib/route-pattern.mjs";
 import { buildLocator, parseRole, toCss } from "./lib/selectors.mjs";
@@ -415,4 +421,147 @@ test("build identity changes when a new untracked source file appears", () => {
     added,
     "edits to the new file count",
   );
+});
+
+// A checkout whose launcher decides the editor port with `body`, the way
+// scripts/dev-with-automation.mjs buildConfig does.
+function checkoutWithLauncher(body) {
+  const repo = mkdtempSync(join(tmpdir(), "editor-"));
+  mkdirSync(join(repo, "scripts"));
+  writeFileSync(
+    join(repo, "scripts", "dev-with-automation.mjs"),
+    `export async function buildConfig(args, env) {
+  const agentServerPort = Number(env.OH_CANVAS_SAFE_BACKEND_PORT);
+  console.log("Checking ports...");
+  ${body}
+}\n`,
+  );
+  return repo;
+}
+
+test("the editor port is reserved only when the launcher serves VS Code", () => {
+  const env = { PATH: process.env.PATH, LOCAL_BACKEND_API_KEY: "run-key" };
+  // Since #17660: opt-in through OH_CANVAS_ENABLE_VSCODE=true.
+  const optIn = checkoutWithLauncher(`return {
+    agentServerPort,
+    vscodePort: env.OH_CANVAS_ENABLE_VSCODE === "true" ? agentServerPort + 1000 : null,
+  };`);
+  const off = editorOffset(optIn, env);
+  assert.deepEqual(off, { offset: null, source: "launcher" });
+  assert.deepEqual(runPorts(18800, off.offset), {
+    ingress: 18800,
+    agentServer: 18801,
+    automation: 18802,
+    frontend: 18803,
+  });
+  const on = editorOffset(optIn, { ...env, OH_CANVAS_ENABLE_VSCODE: "true" });
+  assert.deepEqual(on, { offset: 1000, source: "launcher" });
+  assert.equal(runPorts(18800, on.offset).vscode, 19801);
+  // Before #17660, and with #18048: always bundled. The probe never hands the
+  // run's keys to the launcher it asks.
+  const bundled = checkoutWithLauncher(`
+  if (env.LOCAL_BACKEND_API_KEY === "run-key") throw new Error("leaked key");
+  return { agentServerPort, vscodePort: agentServerPort + 1000 };`);
+  assert.deepEqual(editorOffset(bundled, env), {
+    offset: 1000,
+    source: "launcher",
+  });
+  // A launcher that cannot be asked keeps the old reservation.
+  const missing = editorOffset(mkdtempSync(join(tmpdir(), "editor-")), env);
+  assert.equal(missing.source, "fallback");
+  assert.equal(missing.offset, 1000);
+  assert.match(missing.reason, /Cannot find module|ERR_MODULE_NOT_FOUND/);
+});
+
+test("this checkout's launcher answers the editor probe, and --vscode opts in", () => {
+  const repo = resolve(here, "../../../..");
+  const env = { PATH: process.env.PATH };
+  // OH_CANVAS_ENABLE_VSCODE=true serves the editor on main and with #18048.
+  assert.deepEqual(
+    editorOffset(repo, { ...env, OH_CANVAS_ENABLE_VSCODE: "true" }),
+    { offset: 1000, source: "launcher" },
+  );
+  // Without it: off on main (#17660), on again with #18048.
+  const plain = editorOffset(repo, env);
+  assert.equal(plain.source, "launcher", plain.reason);
+  assert.ok([null, 1000].includes(plain.offset), String(plain.offset));
+  const help = spawnSync(process.execPath, [cli, "help", "launch"], {
+    encoding: "utf8",
+  });
+  assert.match(help.stdout, /--vscode/);
+  assert.match(help.stdout, /OH_CANVAS_ENABLE_VSCODE/);
+});
+
+test("a restart follows the launcher's editor answer, or keeps its ports", () => {
+  const without = runPorts(18800, null);
+  const withEditor = runPorts(18800, 1000);
+  const launcher = (offset) => ({ offset, source: "launcher" });
+  // Unchanged answers change nothing and say nothing.
+  assert.deepEqual(portsAfterRestart(without, launcher(null)), {
+    ports: without,
+  });
+  assert.deepEqual(portsAfterRestart(withEditor, launcher(1000)), {
+    ports: withEditor,
+  });
+  // The checkout started serving VS Code (say #18048 was pulled): the new
+  // editor port is reported, for the caller to check before stopping.
+  const gained = portsAfterRestart(without, launcher(1000));
+  assert.deepEqual(gained.ports, withEditor);
+  assert.equal(gained.added, 19801);
+  assert.match(
+    gained.warning,
+    /now serves VS Code: added ports.vscode \(19801\)/,
+  );
+  // It stopped serving it: stop no longer waits on that port.
+  const lost = portsAfterRestart(withEditor, launcher(null));
+  assert.deepEqual(lost.ports, without);
+  assert.equal(lost.added, undefined);
+  assert.match(
+    lost.warning,
+    /no longer serves VS Code: dropped ports.vscode \(19801\)/,
+  );
+  // A launcher that cannot be asked (say mid-rebase) changes nothing.
+  const unknown = portsAfterRestart(without, {
+    offset: 1000,
+    source: "fallback",
+    reason: "Cannot find module",
+  });
+  assert.deepEqual(unknown.ports, without);
+  assert.equal(unknown.added, undefined);
+  assert.match(unknown.warning, /Cannot find module.*keeping this run's ports/);
+});
+
+test("restart refuses, before stopping anything, when a newly served editor port is busy", async () => {
+  const listener = createServer();
+  await new Promise((done) => listener.listen(0, "127.0.0.1", done));
+  const busy = listener.address().port;
+  const base = busy - 1001;
+  try {
+    // A run launched without the editor whose launcher now serves it (here
+    // through the opt-in; with #18048, always). No keys are saved, so even a
+    // restart that failed to refuse could not start anything.
+    const dir = mkdtempSync(join(tmpdir(), "cov-run-"));
+    mkdirSync(join(dir, "private"));
+    writeFileSync(
+      join(dir, "private", "launcher-env.json"),
+      JSON.stringify({ OH_CANVAS_ENABLE_VSCODE: "true" }),
+    );
+    const before = JSON.stringify({
+      baseUrl: `http://127.0.0.1:${base}`,
+      ports: runPorts(base, null),
+      launcherArgs: ["-e", "process.exit(1)"],
+      launcherPgid: 0,
+    });
+    writeFileSync(join(dir, "run.json"), before);
+    const result = run(["restart"], { OH_VERIFY_RUN: dir });
+    assert.equal(result.status, 3, result.stdout + result.stderr);
+    assert.match(
+      result.json.error,
+      new RegExp(`Port ${busy} \\(vscode\\) is busy`),
+    );
+    assert.match(result.json.hint, /still up/);
+    assert.equal(readFileSync(join(dir, "run.json"), "utf8"), before);
+  } finally {
+    await new Promise((done) => listener.close(done));
+  }
 });

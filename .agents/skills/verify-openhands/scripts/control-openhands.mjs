@@ -26,7 +26,12 @@ import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { deflateSync, gunzipSync } from "node:zlib";
 import { buildIdentity } from "./lib/build-id.mjs";
-import { launcherEnvFor } from "./lib/launcher-env.mjs";
+import {
+  editorOffset,
+  launcherEnvFor,
+  portsAfterRestart,
+  runPorts,
+} from "./lib/launcher-env.mjs";
 import { routePattern } from "./lib/route-pattern.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -268,12 +273,13 @@ function releaseClaim(run) {
   }
 }
 
-async function findPortBlock(start, runDir) {
+async function findPortBlock(start, runDir, editor) {
   // The launcher needs ingress P, agent-server P+1, automation P+2, static
-  // frontend P+3, and derives the editor port as agent-server + 1000.
+  // frontend P+3, and the editor port only when it serves VS Code (`editor`
+  // is its offset from the agent-server port, or null; see editorOffset).
   mkdirSync(verifyHome, { recursive: true });
   for (let base = start; base < start + 900; base += 10) {
-    const ports = [base, base + 1, base + 2, base + 3, base + 1001];
+    const ports = Object.values(runPorts(base, editor));
     const busy = await Promise.all(ports.map((p) => portOpen(p)));
     if (busy.some(Boolean)) continue;
     if (tryClaim(base, runDir)) return base;
@@ -590,7 +596,7 @@ async function cmdLaunch({ flags }) {
     });
   }
 
-  // 2. Allocate a run directory and ports.
+  // 2. Allocate a run directory and its keys.
   const runId =
     flags["run-id"] ||
     `${new Date().toISOString().replace(/[:.]/g, "").slice(0, 15)}-${randomBytes(3).toString("hex")}`;
@@ -630,38 +636,14 @@ async function cmdLaunch({ flags }) {
   writeFileSync(join(priv, "encryption-key"), randomBytes(32).toString("hex"), {
     mode: 0o600,
   });
-  const base = flags.port
-    ? intFlag(flags.port)
-    : await findPortBlock(intFlag(flags["port-from"], 18800), dir);
-  if (flags.port) {
-    const busy = await Promise.all(
-      [base, base + 1, base + 2, base + 3, base + 1001].map((p) => portOpen(p)),
-    );
-    if (busy.some(Boolean))
-      throw new CliError(
-        `Ports ${base}..${base + 3} or ${base + 1001} are busy`,
-        { code: 3, hint: "Omit --port to pick a free block." },
-      );
-  }
-  const ports = {
-    ingress: base,
-    agentServer: base + 1,
-    automation: base + 2,
-    frontend: base + 3,
-    vscode: base + 1001,
-  };
 
-  // 3. Start the repository's own production launcher, isolated.
+  // 3. The launcher's environment: only PASS_ENV, run-private paths and keys,
+  // and the flags below reach it.
   const env = {};
   for (const name of PASS_ENV)
     if (process.env[name] !== undefined) env[name] = process.env[name];
   const realHome = process.env.HOME || "";
   Object.assign(env, {
-    // A private tmux server per run (OpenHands/OpenHands#17946: the launcher's
-    // <stateDir>/tmux is never created, so runs would share one server). It
-    // lives under /tmp because a socket below the long run path would exceed
-    // the 108-byte Unix socket limit.
-    TMUX_TMPDIR: tmuxDirFor(dir),
     HOME: join(priv, "home"),
     // Reuse the operator's uv caches so each run does not re-download Python.
     UV_CACHE_DIR: process.env.UV_CACHE_DIR || join(realHome, ".cache", "uv"),
@@ -669,9 +651,6 @@ async function cmdLaunch({ flags }) {
       process.env.UV_PYTHON_INSTALL_DIR ||
       join(realHome, ".local", "share", "uv", "python"),
     OH_CANVAS_SAFE_STATE_DIR: join(priv, "state"),
-    OH_CANVAS_SAFE_BACKEND_PORT: String(ports.agentServer),
-    OH_CANVAS_SAFE_AUTOMATION_PORT: String(ports.automation),
-    OH_CANVAS_SAFE_VITE_PORT: String(ports.frontend),
     LOCAL_BACKEND_API_KEY: readFileSync(join(priv, "session-key"), "utf8"),
     OH_SECRET_KEY: readFileSync(join(priv, "encryption-key"), "utf8"),
     DO_NOT_TRACK: "1",
@@ -688,15 +667,60 @@ async function cmdLaunch({ flags }) {
   if (flags["sdk-version"]) env.OH_AGENT_SERVER_VERSION = flags["sdk-version"];
   if (flags["automation-version"])
     env.OH_AUTOMATION_VERSION = flags["automation-version"];
+  if (flags.vscode) env.OH_CANVAS_ENABLE_VSCODE = "true";
   // Only PASS_ENV and the flags above reach the launcher, so a version pin
   // exported in the caller's shell would be dropped without a word.
   const ignoredEnv = Object.keys(process.env).filter(
-    (k) => /^OH_(AGENT_SERVER|AUTOMATION)_/.test(k) && !(k in env),
+    (k) =>
+      (/^OH_(AGENT_SERVER|AUTOMATION)_/.test(k) ||
+        k === "OH_CANVAS_ENABLE_VSCODE") &&
+      !(k in env),
   );
-  const envWarning = ignoredEnv.length
-    ? `Ignored ${ignoredEnv.join(", ")} from your shell: runs are isolated. Use --sdk-version/--sdk-ref/--sdk-path or --automation-version/--automation-ref/--automation-path.`
-    : undefined;
+  const warnings = [];
+  if (ignoredEnv.length)
+    warnings.push(
+      `Ignored ${ignoredEnv.join(", ")} from your shell: runs are isolated. Use --sdk-version/--sdk-ref/--sdk-path, --automation-version/--automation-ref/--automation-path or --vscode.`,
+    );
 
+  // 4. Ports. The editor port is reserved only when this checkout's launcher
+  // serves VS Code with this environment: opt-in since OpenHands/OpenHands#17660,
+  // bundled before it and again if OpenHands/OpenHands#18048 lands.
+  const editor = editorOffset(repoRoot, env);
+  if (editor.source === "fallback")
+    warnings.push(
+      `Could not ask scripts/dev-with-automation.mjs whether it serves VS Code (${editor.reason}); reserving the editor port as before.`,
+    );
+  const base = flags.port
+    ? intFlag(flags.port)
+    : await findPortBlock(
+        intFlag(flags["port-from"], 18800),
+        dir,
+        editor.offset,
+      );
+  const ports = runPorts(base, editor.offset);
+  if (flags.port) {
+    const busy = [];
+    for (const [name, port] of Object.entries(ports))
+      if (await portOpen(port)) busy.push(`${port} (${name})`);
+    if (busy.length)
+      throw new CliError(`Ports busy: ${busy.join(", ")}`, {
+        code: 3,
+        hint: "Omit --port to pick a free block.",
+      });
+  }
+  Object.assign(env, {
+    OH_CANVAS_SAFE_BACKEND_PORT: String(ports.agentServer),
+    OH_CANVAS_SAFE_AUTOMATION_PORT: String(ports.automation),
+    OH_CANVAS_SAFE_VITE_PORT: String(ports.frontend),
+    // A private tmux server per run (OpenHands/OpenHands#17946: the launcher's
+    // <stateDir>/tmux is never created, so runs would share one server). It
+    // lives under /tmp because a socket below the long run path would exceed
+    // the 108-byte Unix socket limit.
+    TMUX_TMPDIR: tmuxDirFor(dir),
+  });
+  const envWarning = warnings.length ? warnings.join(" ") : undefined;
+
+  // 5. Start the repository's own production launcher, isolated.
   const launcherArgs = [
     join(repoRoot, "bin", "agent-canvas.mjs"),
     "--port",
@@ -725,7 +749,7 @@ async function cmdLaunch({ flags }) {
     pins: defaults().versions,
     overrides: Object.fromEntries(
       Object.entries(env).filter(([k]) =>
-        /^OH_(AGENT_SERVER|AUTOMATION)_/.test(k),
+        /^OH_(AGENT_SERVER_|AUTOMATION_|CANVAS_ENABLE_VSCODE$)/.test(k),
       ),
     ),
   };
@@ -743,7 +767,7 @@ async function cmdLaunch({ flags }) {
   }
   symlinkSync(dir, join(verifyHome, "current"));
 
-  // 4. Wait for readiness: authenticated settings, automation health and SPA.
+  // 6. Wait for readiness: authenticated settings, automation health and SPA.
   await waitForStack(run, intFlag(flags.timeout, 600));
   const info = await http(run, "GET", "/server_info");
   run.versions = {
@@ -900,7 +924,28 @@ async function cmdRestart({ flags }) {
       code: 3,
     });
   }
+  // The checkout may have changed since launch (for example, VS Code bundled
+  // again), so ask its launcher again which ports this run now uses. Asked
+  // before stopping: an editor port the run did not use before cannot move
+  // with the block, so a busy one refuses the restart while the run is still
+  // up, as launch --port would.
+  const saved = JSON.parse(
+    readFileSync(join(run.dir, "private", "launcher-env.json"), "utf8"),
+  );
+  const next = portsAfterRestart(
+    run.ports,
+    editorOffset(repoRoot, launcherEnvFor(saved, process.env, PASS_ENV)),
+  );
+  if (next.added !== undefined && (await portOpen(next.added)))
+    throw new CliError(
+      `Port ${next.added} (vscode) is busy, and the checkout's launcher now serves VS Code there; restart refused, and the run is unchanged.`,
+      {
+        code: 3,
+        hint: "The run is still up. Free that port and restart again, or launch --new for a free block.",
+      },
+    );
   const stopped = await stopLauncher(run);
+  run.ports = next.ports;
   if (flags["rotate-key"]) {
     writeFileSync(
       join(run.dir, "private", "session-key"),
@@ -917,10 +962,12 @@ async function cmdRestart({ flags }) {
     run: run.dir,
     baseUrl: run.baseUrl,
     stopped,
+    ports: run.ports,
     rotatedKey: Boolean(flags["rotate-key"]),
+    ...(next.warning ? { warning: next.warning } : {}),
     note: flags["rotate-key"]
       ? "The browser still holds the old key: reload to reach the stale-key state (public mode shows the API-key prompt)."
-      : "Same state, keys and ports; reload the browser to reconnect.",
+      : "Same state, keys and port block; reload the browser to reconnect.",
   });
 }
 
@@ -3237,9 +3284,12 @@ Host Name when empty). Never prints the key. Local-mode runs need no login.
   restart: `control-openhands restart [--rotate-key] [--timeout SEC]
 
 Stops this run's launcher process group and starts it again with the same
-state directory, ports and keys, then waits for readiness. --rotate-key writes
-a new session key first, so the browser's stored key becomes stale (public
-mode then shows the API-key prompt again). Reload the browser afterwards.
+state directory, port block and keys, then waits for readiness. It asks the
+checkout's launcher again whether it serves VS Code and adds or drops the
+editor port to match, with a warning; when a newly needed editor port is busy
+it refuses before stopping anything. --rotate-key writes a new session key
+first, so the browser's stored key becomes stale (public mode then shows the
+API-key prompt again). Reload the browser afterwards.
 `,
   service: `control-openhands service status
 control-openhands service stop automation|agent-server|frontend
@@ -3302,21 +3352,26 @@ Examples:
 `,
   launch: `control-openhands launch [--public] [--new] [--print-run] [--port N | --port-from N] [--build auto|always|never] [--min-free-mb 2000]
                          [--no-browser] [--timeout SEC] [--sdk-path DIR | --sdk-ref REF | --sdk-version V]
-                         [--automation-path DIR | --automation-ref REF | --automation-version V] [--run-id ID]
+                         [--automation-path DIR | --automation-ref REF | --automation-version V] [--run-id ID] [--vscode]
 
 Builds the checkout when build/verify-revision.txt does not match HEAD, then
 starts bin/agent-canvas.mjs with a private HOME, state dir, session key and
 encryption key, on a free port block (ingress P, agent-server P+1, automation
-P+2, static frontend P+3, editor P+1001). Waits for authenticated settings,
-automation health and the SPA, then starts the browser daemon.
+P+2, static frontend P+3). The editor port (P+1001) is reserved, and listed in
+ports, only when the checkout's launcher serves VS Code. Where that is opt-in
+(#17660), --vscode (OH_CANVAS_ENABLE_VSCODE=true) turns it on; where the editor
+is bundled (before #17660, or with #18048), it is always reserved and --vscode
+changes nothing. Waits for authenticated settings, automation health and the
+SPA, then starts the browser daemon.
 Idempotent: an alive current run is reused unless --new is given.
 --print-run prints only the run directory, for
   export OH_VERIFY_RUN=$(control-openhands launch --new --print-run)
 Every other command uses --run, else $OH_VERIFY_RUN, else the only live run;
 with several live runs it refuses to guess (several agents on one machine).
-Backend versions come only from the flags: OH_AGENT_SERVER_* and OH_AUTOMATION_*
-in your shell are not forwarded (launch warns). An Agent Server below
-config/defaults.json compatibility.minimumAgentServer (1.47.0 today) never gets
+Backend versions and VS Code come only from the flags: OH_AGENT_SERVER_*,
+OH_AUTOMATION_* and OH_CANVAS_ENABLE_VSCODE in your shell are not forwarded
+(launch warns). An Agent Server below
+config/defaults.json compatibility.minimumAgentServer never gets
 past the UI's backend-compatibility gate.
 
 Environment: OH_VERIFY_HOME, CONTROL_OPENHANDS_BROWSER (Chromium path),
