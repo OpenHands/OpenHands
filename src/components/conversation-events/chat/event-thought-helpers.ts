@@ -85,6 +85,38 @@ export const splitInlineThink = (
 };
 
 /**
+ * Joins reasoning fragments, dropping an exact duplicate. Some models emit the
+ * same reasoning both explicitly (`reasoning_content`) and inline in the
+ * thought, and showing it twice is the duplication users report.
+ */
+export const mergeReasoning = (...parts: string[]): string => {
+  const merged: string[] = [];
+  for (const part of parts) {
+    const text = part.trim();
+    if (text && !merged.includes(text)) merged.push(text);
+  }
+  return merged.join("\n\n");
+};
+
+/**
+ * Single owner of how an action's reasoning and remaining message text are
+ * split for display: explicit `reasoning_content` / `thinking_blocks` merged
+ * with a leading inline reasoning block, plus the non-reasoning remainder.
+ * Callers must render `reasoning` in exactly one place per action.
+ */
+export const splitActionNarration = (
+  action: ActionEvent,
+): { reasoning: string; message: string } => {
+  const { reasoning: inline, message } = splitInlineThink(
+    getActionThoughtText(action),
+  );
+  return {
+    reasoning: mergeReasoning(getReasoningContent(action), inline),
+    message,
+  };
+};
+
+/**
  * Find the `ActionEvent` whose thought should be rendered alongside the
  * given UI event. For an `ActionEvent` the thought belongs to itself; for
  * an `ObservationEvent` we look up the matching action in `allEvents`.

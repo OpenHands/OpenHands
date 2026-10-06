@@ -29,6 +29,23 @@ ActionEvent source=agent tool=terminal
   thought=[{"type":"text","text":"<think>...</think>\nRunning the command now."}]
 ```
 
+## Evidence scope (defensive handling)
+
+This reproduction uses the repo's scripted **mock** LLM (OpenAI-compatible
+fixture served by `tests/e2e/mock-llm/scripts/mock-llm-server.py`; the fixture
+identifies itself as model `mock-preflight`). No real LLM credentials are
+available in the development environment, so the trigger is produced by a
+scripted trajectory rather than a live model.
+
+The frontend defect itself is model-independent: once an `ActionEvent.thought`
+contains a leading inline reasoning block, Canvas renders it verbatim. The mock
+only makes that payload deterministic. We therefore describe the fix as
+**defensive handling of inline reasoning in action thoughts** rather than a
+reproduction against a specific production model, and the mock-LLM spec is
+regression coverage, not live-model evidence. The code path is shared by every
+backend/model, so the same input reaches it in production whenever a model emits
+reasoning inline.
+
 ## Before / after
 
 | Artifact | Build | Result |

@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { EventMessage } from "#/components/conversation-events/chat/event-message";
+import { Messages } from "#/components/conversation-events/chat/messages";
 import { useAgentState } from "#/hooks/use-agent-state";
 import { AgentState } from "#/types/agent-state";
 import {
@@ -419,5 +420,53 @@ describe("EventMessage - ThinkAction rendering", () => {
     expect(
       screen.queryByTestId("collapsible-thinking"),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("EventMessage - single thinking section per action", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useAgentState).mockReturnValue({
+      curAgentState: AgentState.INIT,
+    });
+  });
+
+  // Regression (reviewer): an action carrying both reasoning_content and an
+  // identical inline block rendered two thinking controls with repeated text.
+  it("renders one thinking section when explicit and inline reasoning match", async () => {
+    const user = userEvent.setup();
+    const bashEvent = createBashActionEvent(
+      "bash-dup-reasoning",
+      "echo hello",
+      "<think>Check the directory</think>\nRunning ls",
+      { reasoning_content: "Check the directory" },
+    );
+
+    renderWithProviders(
+      <Messages messages={[bashEvent]} allEvents={[bashEvent]} />,
+    );
+
+    expect(screen.getAllByTestId("collapsible-thinking")).toHaveLength(1);
+    expect(screen.getByText("Running ls")).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("collapsible-thinking-toggle"));
+    const content = screen.getByTestId("collapsible-thinking-content");
+    expect(content.textContent?.match(/Check the directory/g)).toHaveLength(1);
+  });
+
+  it("renders one thinking section for distinct explicit and inline reasoning", () => {
+    const bashEvent = createBashActionEvent(
+      "bash-distinct-reasoning",
+      "echo hello",
+      "<think>Inline reasoning</think>\nRunning ls",
+      { reasoning_content: "Explicit reasoning" },
+    );
+
+    renderWithProviders(
+      <Messages messages={[bashEvent]} allEvents={[bashEvent]} />,
+    );
+
+    expect(screen.getAllByTestId("collapsible-thinking")).toHaveLength(1);
+    expect(screen.getByText("Running ls")).toBeInTheDocument();
   });
 });

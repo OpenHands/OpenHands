@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { splitInlineThink } from "#/components/conversation-events/chat/event-thought-helpers";
+import { ActionEvent } from "#/types/agent-server/core";
+import {
+  mergeReasoning,
+  splitActionNarration,
+  splitInlineThink,
+} from "#/components/conversation-events/chat/event-thought-helpers";
 
 describe("splitInlineThink", () => {
   it("returns content unchanged when there is no <think> block", () => {
@@ -81,6 +86,69 @@ describe("splitInlineThink", () => {
     expect(splitInlineThink(content)).toEqual({
       reasoning: "",
       message: content,
+    });
+  });
+});
+
+describe("mergeReasoning", () => {
+  it("drops an exact duplicate fragment", () => {
+    expect(mergeReasoning("Check the directory", "Check the directory")).toBe(
+      "Check the directory",
+    );
+  });
+
+  it("joins distinct fragments and skips blanks", () => {
+    expect(mergeReasoning("First", "", "   ", "Second")).toBe(
+      "First\n\nSecond",
+    );
+  });
+});
+
+describe("splitActionNarration", () => {
+  const action = (overrides: Record<string, unknown>) =>
+    ({
+      thought: [],
+      thinking_blocks: [],
+      ...overrides,
+    }) as unknown as ActionEvent;
+
+  it("merges explicit reasoning with an identical inline block once", () => {
+    const event = action({
+      reasoning_content: "Check the directory",
+      thought: [
+        {
+          type: "text",
+          text: "<think>Check the directory</think>\nRunning ls",
+        },
+      ],
+    });
+    expect(splitActionNarration(event)).toEqual({
+      reasoning: "Check the directory",
+      message: "Running ls",
+    });
+  });
+
+  it("keeps distinct explicit and inline reasoning as two fragments", () => {
+    const event = action({
+      reasoning_content: "Explicit reasoning",
+      thought: [
+        { type: "text", text: "<think>Inline reasoning</think>\nDo it" },
+      ],
+    });
+    expect(splitActionNarration(event)).toEqual({
+      reasoning: "Explicit reasoning\n\nInline reasoning",
+      message: "Do it",
+    });
+  });
+
+  it("falls back to explicit reasoning when there is no inline block", () => {
+    const event = action({
+      reasoning_content: "Only explicit",
+      thought: [{ type: "text", text: "Plain message" }],
+    });
+    expect(splitActionNarration(event)).toEqual({
+      reasoning: "Only explicit",
+      message: "Plain message",
     });
   });
 });
