@@ -4,7 +4,11 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import type { OpenHandsEvent } from "#/types/agent-server/core";
-import { useActivityEventTails } from "#/hooks/query/use-activity-event-tails";
+import {
+  activityTailQueryKey,
+  useActivityEventTails,
+} from "#/hooks/query/use-activity-event-tails";
+import { sessionGeneration } from "#/utils/session-generation";
 import { CONVERSATION_QUERY_KEYS } from "#/hooks/query/query-keys";
 import { deriveSubagents } from "#/components/features/activity/activity-view-model";
 
@@ -214,6 +218,119 @@ describe("useActivityEventTails", () => {
     expect(cachedValues).not.toContain("key-1");
     expect(cachedValues).not.toContain("old");
     expect(cachedValues).not.toContain("new");
+  });
+
+  it("does not carry the previous session's watermark into a fresh tail", async () => {
+    const client = newClient();
+    const url = "http://runtime/conv-1";
+    const key = activityTailQueryKey(
+      conversation({ conversation_url: url }),
+      "local-1",
+      null,
+    );
+    const oldEvent = taskAction("old-action", "2026-10-06T12:00:00Z");
+    // Seed a stale tail left by session A, which stamped its identity and
+    // watermark. `updatedAt: 0` forces a fetch on mount despite staleTime.
+    client.setQueryData(
+      key,
+      {
+        events: [oldEvent],
+        watermark: "2026-10-06T12:00:00Z",
+        sessionId: `${url}#${await sessionGeneration("key-A")}`,
+      },
+      { updatedAt: 0 },
+    );
+
+    // Hold session C's fingerprint pending so the reset effect (which waits for
+    // every conversation's identity) cannot clear session A's tail before the
+    // rotated conversation's own fetch runs. That is the race the fix closes.
+    const held: Array<(value: ArrayBuffer) => void> = [];
+    const realSign = crypto.subtle.sign.bind(crypto.subtle);
+    const signSpy = vi
+      .spyOn(crypto.subtle, "sign")
+      .mockImplementation((...args: Parameters<typeof crypto.subtle.sign>) => {
+        if (new TextDecoder().decode(args[2] as ArrayBuffer) === "key-C") {
+          return new Promise<ArrayBuffer>((resolve) => {
+            held.push(resolve);
+          });
+        }
+        return realSign(...args);
+      });
+
+    // Session B's runtime clock is behind, so its first event predates A's
+    // watermark.
+    const newEvent = bashAction("bash-1", "2026-10-06T11:00:00Z");
+    searchEvents.mockImplementation((conversationId: string) =>
+      Promise.resolve({
+        items: conversationId === "conv-1" ? [newEvent] : [],
+      }),
+    );
+
+    let unmount: (() => void) | undefined;
+    try {
+      const rendered = renderHook(
+        () =>
+          useActivityEventTails([
+            conversation({ session_api_key: "key-B" }),
+            conversation({
+              id: "conv-2",
+              conversation_url: "http://runtime/conv-2",
+              session_api_key: "key-C",
+            }),
+          ]),
+        { wrapper: makeWrapper(client) },
+      );
+      unmount = rendered.unmount;
+
+      await waitFor(() =>
+        expect(rendered.result.current[0]).toEqual([newEvent]),
+      );
+      expect(rendered.result.current[0]).not.toContainEqual(
+        expect.objectContaining({ id: "old-action" }),
+      );
+
+      // A changed session must be fetched without the old watermark: filtering
+      // from 12:00 would permanently hide B's 11:00 events.
+      const firstCall = searchEvents.mock.calls.find(
+        (call) => call[0] === "conv-1",
+      );
+      expect(firstCall?.[3]).not.toHaveProperty("timestampGte");
+      // And the tail must store B's own watermark, not A's later one.
+      expect(client.getQueryData<{ watermark?: string }>(key)?.watermark).toBe(
+        "2026-10-06T11:00:00Z",
+      );
+    } finally {
+      unmount?.();
+      held.forEach((resolve) => resolve(new ArrayBuffer(16)));
+      signSpy.mockRestore();
+    }
+  });
+
+  it("clears a tail when the session credential disappears", async () => {
+    const client = newClient();
+    const task = taskAction("old-action");
+    searchEvents.mockResolvedValueOnce({ items: [task] });
+
+    const { result, rerender } = renderHook(
+      ({ key }: { key: string | null }) =>
+        useActivityEventTails([conversation({ session_api_key: key })]),
+      {
+        initialProps: { key: "key-A" as string | null },
+        wrapper: makeWrapper(client),
+      },
+    );
+    await waitFor(() => expect(result.current[0]).toEqual([task]));
+
+    // The list now reports the same conversation and URL without a credential.
+    // The cached tail belongs to a session that can no longer be verified, so
+    // it must not stay on screen behind the failed unauthenticated polls.
+    searchEvents.mockResolvedValueOnce({ items: [] });
+    rerender({ key: null });
+
+    await waitFor(() => expect(result.current[0]).toEqual([]));
+    expect(result.current[0]).not.toContainEqual(
+      expect.objectContaining({ id: "old-action" }),
+    );
   });
 
   it("paginates the range so a burst larger than one page still closes a delegation", async () => {

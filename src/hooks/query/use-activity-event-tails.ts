@@ -118,11 +118,12 @@ export function useActivityEventTails(
       if (cancelled) return;
 
       for (const { queryKey, conversationUrl, identity } of identities) {
-        if (identity === null || !conversationUrl) continue;
+        if (!conversationUrl) continue;
         const cached = queryClient.getQueryData<ActivityTailBuffer>(queryKey);
-        // A cached tail stamped with a different session belongs to another
-        // credential. Clear it now, before the periodic refetch, so the row
-        // cannot keep showing the previous session's activity.
+        // Any mismatch clears the tail: a different fingerprint is a rotation,
+        // and an absent identity (credential removed, or no Web Crypto) means
+        // the cached tail's credential can no longer be verified. A tail that
+        // was never stamped is already credential-free, so it is left alone.
         if (cached?.sessionId !== undefined && cached.sessionId !== identity) {
           void queryClient.resetQueries({ queryKey });
         }
@@ -163,10 +164,14 @@ export function useActivityEventTails(
           // cannot leak the previous session's activity.
           const sameSession =
             identity !== null && cached?.sessionId === identity;
-          const watermark = sameSession ? cached?.watermark : undefined;
-          const resumePageId = sameSession ? cached?.resumePageId : undefined;
-          const filterSupported =
-            !sameSession || cached?.supportsTimestampFilter !== false;
+          // Never hand the old buffer to the merge when the session changed:
+          // its watermark and filter flag would be carried into the new
+          // session, and a runtime clock behind the old watermark would hide
+          // the new session's earlier events from every later filtered poll.
+          const previous = sameSession ? cached : undefined;
+          const watermark = previous?.watermark;
+          const resumePageId = previous?.resumePageId;
+          const filterSupported = previous?.supportsTimestampFilter !== false;
           const canIncrementallyFetch =
             watermark !== undefined && filterSupported;
 
@@ -255,7 +260,7 @@ export function useActivityEventTails(
             // watermark because older events are never re-requested.
             const page = await fetchPlainPage();
             return withSession(
-              mergeActivityTail(cached, [...page.items].reverse(), {
+              mergeActivityTail(previous, [...page.items].reverse(), {
                 canIncrementallyFetch: false,
                 supportsTimestampFilter: true,
                 rangeComplete: true,
@@ -273,7 +278,7 @@ export function useActivityEventTails(
             // than being reported as running indefinitely.
             const page = await fetchPlainPage();
             return withSession(
-              mergeActivityTail(cached, [...page.items].reverse(), {
+              mergeActivityTail(previous, [...page.items].reverse(), {
                 canIncrementallyFetch: false,
                 supportsTimestampFilter: false,
                 rangeComplete: true,
@@ -285,7 +290,7 @@ export function useActivityEventTails(
           // transiently) keeps the watermark and stores a cursor so the next
           // poll finishes it instead of restarting from the newest page.
           return withSession(
-            mergeActivityTail(cached, [...range.events].reverse(), {
+            mergeActivityTail(previous, [...range.events].reverse(), {
               canIncrementallyFetch: true,
               supportsTimestampFilter: true,
               rangeComplete: range.status === "complete",

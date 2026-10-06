@@ -68,7 +68,14 @@
       reused, so a rotation there cannot leave the previous session's activity
       on screen.
 - [x] A tail shall not be reused across a session change even when a
-      fingerprint was still pending while the key rotated.
+      fingerprint was still pending while the key rotated, and a changed
+      session shall never inherit the previous session's watermark or
+      timestamp-filter state (a runtime clock behind that watermark would hide
+      its earlier events permanently).
+- [x] A cached tail whose session credential disappeared shall be cleared
+      rather than left on screen behind unauthenticated polls; a tail that was
+      never stamped is credential-free and is left alone, so an identity-less
+      origin does not reset on every list update.
 - [x] The view shall never start, stop, pause, or otherwise mutate a
       conversation.
 
