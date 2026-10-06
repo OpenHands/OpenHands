@@ -116,21 +116,30 @@ describe("plugin mutations", () => {
     },
   );
 
-  it("shows the fallback, not the raw transport text, when the server answers with an empty body", async () => {
-    vi.spyOn(PluginsManagementService, "installPlugin").mockRejectedValue(
-      new ClientHttpError(
-        502,
-        "Bad Gateway",
-        "",
-        'HTTP request failed (502 Bad Gateway): ""',
-      ),
-    );
+  it.each([
+    { label: "an empty body", body: "" },
+    {
+      label: "a plain-text body",
+      body: "Bad Gateway: connect ECONNREFUSED 127.0.0.1:18811",
+    },
+  ])(
+    "shows the fallback, not the raw transport text, when the server answers with $label",
+    async ({ body }) => {
+      vi.spyOn(PluginsManagementService, "installPlugin").mockRejectedValue(
+        new ClientHttpError(
+          502,
+          "Bad Gateway",
+          body,
+          `HTTP request failed (502 Bad Gateway): ${JSON.stringify(body)}`,
+        ),
+      );
 
-    const result = failingMutations[0].run();
+      const result = failingMutations[0].run();
 
-    await waitFor(() => expect(result.current.isError).toBe(true));
-    expect(errorToastMessages()).toEqual([I18nKey.ERROR$GENERIC]);
-  });
+      await waitFor(() => expect(result.current.isError).toBe(true));
+      expect(errorToastMessages()).toEqual([I18nKey.ERROR$GENERIC]);
+    },
+  );
 
   it("keeps the shared disconnect wording when the request never lands", async () => {
     vi.spyOn(PluginsManagementService, "installPlugin").mockRejectedValue(
