@@ -402,7 +402,8 @@ describe("ChatInputActions — More input actions overflow menu (#17925)", () =>
   // browser drains React's microtask flush between listeners: the outside-click
   // listener sees the opening click only after the menu has mounted. RTL roots
   // React below `document` and dispatches synchronously, so capture the
-  // document click listeners and deliver the trigger click to them afterwards.
+  // document click listeners and deliver the trigger click to them afterwards,
+  // as they would see it mid-dispatch: with its target and its composedPath().
   let documentClickListeners: EventListener[] = [];
 
   beforeEach(() => {
@@ -445,10 +446,21 @@ describe("ChatInputActions — More input actions overflow menu (#17925)", () =>
 
   const clickTrigger = () => {
     const icon = getTrigger().querySelector("svg") ?? getTrigger();
+    // An event has a path only while it is being dispatched, and a click that
+    // is never dispatched has none, so record the path of the real click.
+    let path: EventTarget[] = [];
+    window.addEventListener(
+      "click",
+      (event) => {
+        path = event.composedPath();
+      },
+      { capture: true, once: true },
+    );
     fireEvent.click(icon);
     act(() => {
       const click = new MouseEvent("click", { bubbles: true });
       Object.defineProperty(click, "target", { value: icon });
+      Object.defineProperty(click, "composedPath", { value: () => path });
       documentClickListeners.forEach((listener) => listener(click));
     });
   };

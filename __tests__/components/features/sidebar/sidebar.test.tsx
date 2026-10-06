@@ -1,4 +1,5 @@
 import {
+  act,
   render,
   screen,
   fireEvent,
@@ -270,6 +271,27 @@ describe("Sidebar", () => {
         screen.queryByTestId("sidebar-mobile-drawer"),
       ).not.toBeInTheDocument();
     });
+  });
+
+  it("leaves the mobile drawer open when a menu inside it already handled Escape", () => {
+    renderSidebar("/conversations");
+    const toggle = screen.getByTestId("sidebar-mobile-menu-toggle");
+    fireEvent.click(toggle);
+
+    const handledEscape = new KeyboardEvent("keydown", {
+      key: "Escape",
+      bubbles: true,
+      cancelable: true,
+    });
+    handledEscape.preventDefault();
+    act(() => {
+      document.body.dispatchEvent(handledEscape);
+    });
+
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
   });
 
   it("toggles between expanded and collapsed states and persists the choice", () => {
